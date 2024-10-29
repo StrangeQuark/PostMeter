@@ -1,5 +1,6 @@
 package com.strangequark.postmeter;
 
+import com.fasterxml.jackson.databind.SerializationFeature;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
@@ -9,6 +10,8 @@ import javafx.scene.layout.VBox;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -95,11 +98,13 @@ public class MainController {
     private void addCollection() {
         TreeItem<String> newCollection = new TreeItem<>("New Collection");
         collectionsTreeView.getRoot().getChildren().add(newCollection);
+        saveCollectionsToJson(); // Save after adding
     }
 
     private void addCollectionChild(TreeItem<String> parent) {
         TreeItem<String> newChild = new TreeItem<>("New Child");
         parent.getChildren().add(newChild);
+        saveCollectionsToJson(); // Save after adding
     }
 
     private void renameCollection(TreeCell<String> cell) {
@@ -135,25 +140,26 @@ public class MainController {
         // Reset the cell graphic to remove the TextField and show the updated text
         cell.setGraphic(null);
         cell.setText(item.getValue());
+
+        saveCollectionsToJson(); // Save after renaming
     }
 
 
     private void duplicateCollection(TreeItem<String> item) {
         if (item != null) {
-            // Duplicate the item and all its children
             TreeItem<String> duplicate = duplicateTreeItem(item);
-
-            // Append "(Copy)" to the top-level duplicated item's name
             duplicate.setValue(item.getValue() + " (Copy)");
 
-            // Add the duplicated item to the same parent as the original item
             if (item.getParent() != null) {
                 item.getParent().getChildren().add(duplicate);
             } else {
                 collectionsTreeView.getRoot().getChildren().add(duplicate);
             }
+
+            saveCollectionsToJson(); // Save after duplicating
         }
     }
+
 
     private TreeItem<String> duplicateTreeItem(TreeItem<String> item) {
         // Create a new TreeItem with the same value as the original item
@@ -164,6 +170,8 @@ public class MainController {
             duplicate.getChildren().add(duplicateTreeItem(child));
         }
 
+        saveCollectionsToJson(); // Save after duplicating
+
         return duplicate;
     }
 
@@ -172,6 +180,7 @@ public class MainController {
         TreeItem<String> parent = item.getParent();
         if (parent != null) {
             parent.getChildren().remove(item);
+            saveCollectionsToJson(); // Save after deleting
         }
     }
 
@@ -184,14 +193,17 @@ public class MainController {
 
     private void loadCollections() {
         try {
-            Map<String, List<Map<String, String>>> data = objectMapper.readValue(new File(COLLECTIONS_PATH), Map.class);
+            // Updated the type to accommodate the new structure
+            Map<String, List<Map<String, Object>>> data = objectMapper.readValue(new File(COLLECTIONS_PATH), Map.class);
             TreeItem<String> root = new TreeItem<>("Hidden root");
 
-            data.get("collections").forEach(item -> {
-                String collectionName = item.get("name");
+            // Populate the root item with collections
+            for (Map<String, Object> item : data.get("collections")) {
+                String collectionName = (String) item.get("name");
                 TreeItem<String> collectionItem = new TreeItem<>(collectionName);
+                addChildren(collectionItem, (List<Map<String, Object>>) item.get("children")); // Add children to the collection
                 root.getChildren().add(collectionItem);
-            });
+            }
 
             collectionsTreeView.setRoot(root);
             collectionsTreeView.setShowRoot(false);
@@ -240,6 +252,20 @@ public class MainController {
         }
     }
 
+    // Utility method to recursively add children to a given TreeItem
+    private void addChildren(TreeItem<String> parent, List<Map<String, Object>> children) {
+        if (children != null) {
+            for (Map<String, Object> child : children) {
+                TreeItem<String> childItem = new TreeItem<>((String) child.get("name"));
+                parent.getChildren().add(childItem);
+                // If this child has children, recursively add them
+                List<Map<String, Object>> grandChildren = (List<Map<String, Object>>) child.get("children");
+                addChildren(childItem, grandChildren); // Recursive call
+            }
+        }
+    }
+
+
     private void loadEnvironments() {
         try {
             Map<String, List<Map<String, String>>> data = objectMapper.readValue(new File(ENVIRONMENTS_PATH), Map.class);
@@ -282,6 +308,55 @@ public class MainController {
             horzPane.setDividerPositions(0.15); // Preferred horizontal divider position
             initialDividerSet = true; // Prevent further adjustments
         }
+    }
+
+    private void saveCollectionsToJson() {
+        try {
+            objectMapper.enable(SerializationFeature.INDENT_OUTPUT); // Enable pretty printing
+
+            Map<String, Object> collectionsData = new HashMap<>();
+            List<Map<String, Object>> collectionsList = new ArrayList<>();
+
+            for (TreeItem<String> collectionItem : collectionsTreeView.getRoot().getChildren()) {
+                Map<String, Object> collectionData = new HashMap<>();
+                collectionData.put("name", collectionItem.getValue());
+                collectionData.put("description", ""); // Set description or modify as needed
+
+                List<Map<String, Object>> childrenList = new ArrayList<>();
+                for (TreeItem<String> childItem : collectionItem.getChildren()) {
+                    Map<String, Object> childData = new HashMap<>();
+                    childData.put("name", childItem.getValue());
+                    childrenList.add(childData);
+                }
+
+                collectionData.put("children", childrenList);
+                collectionsList.add(collectionData);
+            }
+
+            collectionsData.put("collections", collectionsList);
+
+            // Write the collections data to the JSON file with pretty print
+            objectMapper.writeValue(new File(COLLECTIONS_PATH), collectionsData);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private Map<String, Object> serializeTreeItem(TreeItem<String> item) {
+        Map<String, Object> itemData = new HashMap<>();
+
+        // Use item.getValue() to get the collection name
+        itemData.put("name", item.getValue());
+        itemData.put("description", ""); // Add description logic if needed
+
+        // Recursively serialize children
+        List<Map<String, Object>> childrenData = new ArrayList<>();
+        for (TreeItem<String> child : item.getChildren()) {
+            childrenData.add(serializeTreeItem(child));
+        }
+        itemData.put("children", childrenData); // Add children to the itemData
+
+        return itemData;
     }
 }
 
