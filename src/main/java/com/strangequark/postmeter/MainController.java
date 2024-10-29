@@ -102,19 +102,71 @@ public class MainController {
         parent.getChildren().add(newChild);
     }
 
+    private void renameCollection(TreeCell<String> cell) {
+        TreeItem<String> item = cell.getTreeItem();
+        if (item != null) {
+            // Create a TextField with the current name as the initial text
+            TextField textField = new TextField(item.getValue());
+
+            // Set up the TextField to replace the cell's graphic and allow renaming
+            cell.setGraphic(textField);
+            cell.setText(null);
+
+            // Focus on the TextField and select all text for easier editing
+            textField.requestFocus();
+            textField.selectAll();
+
+            // Save changes when the user presses Enter or loses focus
+            textField.setOnAction(event -> commitRename(item, cell, textField));
+            textField.focusedProperty().addListener((obs, wasFocused, isNowFocused) -> {
+                if (!isNowFocused) commitRename(item, cell, textField);
+            });
+        }
+    }
+
+    private void commitRename(TreeItem<String> item, TreeCell<String> cell, TextField textField) {
+        String newName = textField.getText().trim();
+
+        if (!newName.isEmpty()) {
+            // Update the item with the new name
+            item.setValue(newName);
+        }
+
+        // Reset the cell graphic to remove the TextField and show the updated text
+        cell.setGraphic(null);
+        cell.setText(item.getValue());
+    }
+
+
     private void duplicateCollection(TreeItem<String> item) {
         if (item != null) {
-            // Create a new TreeItem with the same name, modifying it to indicate it's a duplicate
-            String originalName = item.getValue();
-            TreeItem<String> newDuplicate = new TreeItem<>(originalName + " (Copy)");
+            // Duplicate the item and all its children
+            TreeItem<String> duplicate = duplicateTreeItem(item);
 
-            // Add the new duplicate to the parent of the original item
-            TreeItem<String> parent = item.getParent();
-            if (parent != null) {
-                parent.getChildren().add(newDuplicate);
+            // Append "(Copy)" to the top-level duplicated item's name
+            duplicate.setValue(item.getValue() + " (Copy)");
+
+            // Add the duplicated item to the same parent as the original item
+            if (item.getParent() != null) {
+                item.getParent().getChildren().add(duplicate);
+            } else {
+                collectionsTreeView.getRoot().getChildren().add(duplicate);
             }
         }
     }
+
+    private TreeItem<String> duplicateTreeItem(TreeItem<String> item) {
+        // Create a new TreeItem with the same value as the original item
+        TreeItem<String> duplicate = new TreeItem<>(item.getValue());
+
+        // Recursively duplicate each child of the original item
+        for (TreeItem<String> child : item.getChildren()) {
+            duplicate.getChildren().add(duplicateTreeItem(child));
+        }
+
+        return duplicate;
+    }
+
 
     private void deleteCollection(TreeItem<String> item) {
         TreeItem<String> parent = item.getParent();
@@ -157,16 +209,18 @@ public class MainController {
                 // Create and set up the context menu
                 ContextMenu contextMenu = new ContextMenu();
                 MenuItem addMenuItem = new MenuItem("Add");
-                MenuItem duplicateMenuItem = new MenuItem("Duplicate"); // Changed to "Duplicate"
+                MenuItem duplicateMenuItem = new MenuItem("Duplicate");
                 MenuItem deleteMenuItem = new MenuItem("Delete");
+                MenuItem renameMenuItem = new MenuItem("Rename"); // New "Rename" option
 
                 addMenuItem.setOnAction(event -> addCollectionChild(cell.getTreeItem()));
-                duplicateMenuItem.setOnAction(event -> duplicateCollection(cell.getTreeItem())); // Implementing duplicate functionality
+                duplicateMenuItem.setOnAction(event -> duplicateCollection(cell.getTreeItem()));
                 deleteMenuItem.setOnAction(event -> deleteCollection(cell.getTreeItem()));
+                renameMenuItem.setOnAction(event -> renameCollection(cell)); // Call rename functionality
 
-                contextMenu.getItems().addAll(addMenuItem, duplicateMenuItem, deleteMenuItem);
+                contextMenu.getItems().addAll(addMenuItem, duplicateMenuItem, deleteMenuItem, renameMenuItem);
 
-                // Show context menu on right-click only for top-level collections
+                // Show context menu on right-click only for appropriate items
                 cell.setOnContextMenuRequested(event -> {
                     TreeItem<String> selectedItem = cell.getTreeItem();
                     if (selectedItem != null && selectedItem.getParent() == collectionsTreeView.getRoot()) {

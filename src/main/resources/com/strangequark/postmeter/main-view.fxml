@@ -20,6 +20,7 @@
 <!-- Root layout -->
 
 <?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.control.ScrollPane?>
 <BorderPane xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml" fx:controller="com.strangequark.postmeter.MainController" fx:id="root">
 
     <!-- Top bar for tabs -->
@@ -79,30 +80,42 @@
                     </HBox>
 
                     <!-- Tabs for Body, Headers, Params, etc. -->
-                    <TabPane>
-                        <Tab text="Params" closable="false">
-                            <VBox spacing="5" fx:id="paramsContainer" style="-fx-padding: 10;">
-                                <Button text="Add Param" onAction="#addParamRow" />
-                                <!-- Each row will be added here dynamically -->
-                            </VBox>
-                        </Tab>
-                        <Tab text="Headers" closable="false">
-                            <VBox spacing="5" fx:id="headersContainer" style="-fx-padding: 10;">
-                                <Button text="Add Header" onAction="#addHeaderRow" />
-                                <!-- Each row will be added here dynamically -->
-                            </VBox>
-                        </Tab>
-                        <Tab text="Body" closable="false">
-                            <VBox>
-                                <TextArea fx:id="bodyTextArea" promptText="Request body" />
-                            </VBox>
-                        </Tab>
-                    </TabPane>
+                    <VBox spacing="5" VBox.vgrow="ALWAYS">
+                        <TabPane VBox.vgrow="ALWAYS">
+                            <Tab text="Params" closable="false">
+                                <VBox>
+                                    <ScrollPane fitToWidth="true" fitToHeight="true" VBox.vgrow="ALWAYS">
+                                        <VBox spacing="5" fx:id="paramsContainer" style="-fx-padding: 10;">
+                                            <Button text="Add Param" onAction="#addParamRow" />
+                                        </VBox>
+                                    </ScrollPane>
+                                </VBox>
+                            </Tab>
+
+                            <Tab text="Headers" closable="false">
+                                <VBox>
+                                    <ScrollPane fitToWidth="true" fitToHeight="true" VBox.vgrow="ALWAYS">
+                                        <VBox spacing="5" fx:id="headersContainer" style="-fx-padding: 10;">
+                                            <Button text="Add Header" onAction="#addHeaderRow" />
+                                        </VBox>
+                                    </ScrollPane>
+                                </VBox>
+                            </Tab>
+
+                            <Tab text="Body" closable="false">
+                                <VBox>
+                                    <ScrollPane fitToWidth="true" fitToHeight="true" VBox.vgrow="ALWAYS">
+                                        <TextArea fx:id="bodyTextArea" promptText="Request body" />
+                                    </ScrollPane>
+                                </VBox>
+                            </Tab>
+                        </TabPane>
+                    </VBox>
                 </VBox>
                 <!-- Response Pane -->
                 <VBox>
                     <Label text="Response" />
-                    <TextArea fx:id="responseTextArea" editable="false" promptText="Response will appear here" />
+                    <TextArea fx:id="responseTextArea" editable="false" promptText="Response will appear here" VBox.vgrow="ALWAYS" />
                 </VBox>
             </SplitPane>
         </SplitPane>
