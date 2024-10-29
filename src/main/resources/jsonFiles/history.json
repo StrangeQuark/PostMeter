@@ -1,0 +1,6 @@
+{
+  "history": [
+    {"request": "GET /example1", "timestamp": "2023-01-01T12:00:00Z"},
+    {"request": "POST /example2", "timestamp": "2023-01-02T13:30:00Z"}
+  ]
+}

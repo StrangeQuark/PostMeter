@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.collections.FXCollections?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ListView?>
+<?import javafx.scene.control.Tab?>
+<?import javafx.scene.control.TabPane?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.control.TreeView?>
+<?import javafx.scene.control.SplitPane?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ChoiceBox?>
+<?import java.lang.String?>
+
+<!-- Root layout -->
+
+<?import javafx.scene.layout.StackPane?>
+<BorderPane xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml" fx:controller="com.strangequark.postmeter.MainController" fx:id="root">
+
+    <!-- Top bar for tabs -->
+    <top>
+        <HBox style="-fx-padding: 10;">
+            <Button text="New Tab" />
+            <Button text="Save" />
+            <!-- More controls like environment settings or preferences can be added here -->
+        </HBox>
+    </top>
+
+    <!-- Main layout with VBox containing SplitPane and bottom area -->
+    <center>
+            <!-- SplitPane for left sidebar and center content -->
+            <SplitPane orientation="HORIZONTAL" fx:id="horzPane">
+                <!-- Left sidebar -->
+                <VBox style="-fx-padding: 10; -fx-spacing: 5; -fx-pref-width: 200;">
+                    <HBox spacing="10">
+                        <HBox spacing="5">
+                            <Button text="Collections" onAction="#showCollections" />
+                            <Button text="Environments" onAction="#showEnvironments" />
+                            <Button text="History" onAction="#showHistory" />
+                        </HBox>
+                        <HBox spacing="5" alignment="CENTER_RIGHT" HBox.hgrow="ALWAYS">
+                            <Button text="Add" onAction="#addCollection"/>
+                            <Button text="Import" onAction="#importCollection"/>
+                        </HBox>
+                    </HBox>
+
+                    <Region style="-fx-pref-height: 10;"/> <!-- Spacer -->
+
+                    <!-- StackPane to hold Collections, Environments, and History lists in the same space -->
+                    <StackPane fx:id="listContainer" style="-fx-pref-width: 200;">
+                        <TreeView fx:id="collectionsTreeView" visible="false" style="-fx-pref-width: 200;" />
+                        <ListView fx:id="environmentsList" visible="false" style="-fx-pref-width: 200;" />
+                        <ListView fx:id="historyList" visible="false" style="-fx-pref-width: 200;" />
+                    </StackPane>
+                </VBox>
+
+                <SplitPane orientation="VERTICAL" fx:id="vertPane">
+                <!-- Center content -->
+                <VBox spacing="5">
+                    <!-- Request input section -->
+                    <HBox spacing="10" style="-fx-padding: 10;">
+                        <ChoiceBox fx:id="methodChoice">
+                            <items>
+                                <FXCollections fx:factory="observableArrayList">
+                                    <String fx:value="GET" />
+                                    <String fx:value="POST" />
+                                    <String fx:value="PUT" />
+                                    <String fx:value="DELETE" />
+                                </FXCollections>
+                            </items>
+                        </ChoiceBox>
+                        <TextField fx:id="urlField" promptText="Enter request URL" />
+                        <Button text="Send" />
+                    </HBox>
+
+                    <!-- Tabs for Body, Headers, Params, etc. -->
+                    <TabPane>
+                        <Tab text="Params" closable="false">
+                            <VBox spacing="5" fx:id="paramsContainer" style="-fx-padding: 10;">
+                                <Button text="Add Param" onAction="#addParamRow" />
+                                <!-- Each row will be added here dynamically -->
+                            </VBox>
+                        </Tab>
+                        <Tab text="Headers" closable="false">
+                            <VBox spacing="5" fx:id="headersContainer" style="-fx-padding: 10;">
+                                <Button text="Add Header" onAction="#addHeaderRow" />
+                                <!-- Each row will be added here dynamically -->
+                            </VBox>
+                        </Tab>
+                        <Tab text="Body" closable="false">
+                            <VBox>
+                                <TextArea fx:id="bodyTextArea" promptText="Request body" />
+                            </VBox>
+                        </Tab>
+                    </TabPane>
+                </VBox>
+                <!-- Response Pane -->
+                <VBox>
+                    <Label text="Response" />
+                    <TextArea fx:id="responseTextArea" editable="false" promptText="Response will appear here" />
+                </VBox>
+            </SplitPane>
+        </SplitPane>
+    </center>
+</BorderPane>

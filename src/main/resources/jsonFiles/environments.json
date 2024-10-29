@@ -1,0 +1,6 @@
+{
+  "environments": [
+    {"name": "Environment1", "baseUrl": "https://example.com"},
+    {"name": "Environment2", "baseUrl": "https://api.example.com"}
+  ]
+}

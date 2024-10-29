@@ -1,0 +1,6 @@
+{
+  "collections": [
+    {"name": "Collection1", "description": "First collection"},
+    {"name": "Collection2", "description": "Second collection"}
+  ]
+}
