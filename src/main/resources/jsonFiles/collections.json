@@ -1,25 +1,9 @@
 {
   "collections" : [ {
-    "children" : [ {
-      "name" : "Subcollection1"
-    } ],
-    "name" : "Collection1",
-    "description" : ""
-  }, {
-    "children" : [ {
-      "name" : "New Child"
-    } ],
-    "name" : "Collection2",
-    "description" : ""
-  }, {
-    "children" : [ {
-      "name" : "taco123"
-    }, {
-      "name" : "taco123"
-    }, {
-      "name" : "taco123 (Copy) (Copy)"
-    } ],
-    "name" : "taco",
-    "description" : ""
+    "name" : "New Collection",
+    "description" : "",
+    "requests" : [ {
+      "name" : "New request"
+    } ]
   } ]
 }

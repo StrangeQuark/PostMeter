@@ -1,6 +1,5 @@
 package com.strangequark.postmeter;
 
-import com.fasterxml.jackson.databind.SerializationFeature;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
@@ -102,8 +101,8 @@ public class MainController {
     }
 
     private void addCollectionChild(TreeItem<String> parent) {
-        TreeItem<String> newChild = new TreeItem<>("New Child");
-        parent.getChildren().add(newChild);
+        TreeItem<String> newRequest = new TreeItem<>("New request");
+        parent.getChildren().add(newRequest);
         saveCollectionsToJson(); // Save after adding
     }
 
@@ -201,7 +200,7 @@ public class MainController {
             for (Map<String, Object> item : data.get("collections")) {
                 String collectionName = (String) item.get("name");
                 TreeItem<String> collectionItem = new TreeItem<>(collectionName);
-                addChildren(collectionItem, (List<Map<String, Object>>) item.get("children")); // Add children to the collection
+                addChildren(collectionItem, (List<Map<String, Object>>) item.get("requests")); // Add requests to the collection
                 root.getChildren().add(collectionItem);
             }
 
@@ -259,7 +258,7 @@ public class MainController {
                 TreeItem<String> childItem = new TreeItem<>((String) child.get("name"));
                 parent.getChildren().add(childItem);
                 // If this child has children, recursively add them
-                List<Map<String, Object>> grandChildren = (List<Map<String, Object>>) child.get("children");
+                List<Map<String, Object>> grandChildren = (List<Map<String, Object>>) child.get("requests");
                 addChildren(childItem, grandChildren); // Recursive call
             }
         }
@@ -312,8 +311,6 @@ public class MainController {
 
     private void saveCollectionsToJson() {
         try {
-            objectMapper.enable(SerializationFeature.INDENT_OUTPUT); // Enable pretty printing
-
             Map<String, Object> collectionsData = new HashMap<>();
             List<Map<String, Object>> collectionsList = new ArrayList<>();
 
@@ -322,41 +319,24 @@ public class MainController {
                 collectionData.put("name", collectionItem.getValue());
                 collectionData.put("description", ""); // Set description or modify as needed
 
-                List<Map<String, Object>> childrenList = new ArrayList<>();
+                List<Map<String, Object>> requestsList = new ArrayList<>();
                 for (TreeItem<String> childItem : collectionItem.getChildren()) {
                     Map<String, Object> childData = new HashMap<>();
                     childData.put("name", childItem.getValue());
-                    childrenList.add(childData);
+                    requestsList.add(childData);
                 }
 
-                collectionData.put("children", childrenList);
+                collectionData.put("requests", requestsList);
                 collectionsList.add(collectionData);
             }
 
             collectionsData.put("collections", collectionsList);
 
             // Write the collections data to the JSON file with pretty print
-            objectMapper.writeValue(new File(COLLECTIONS_PATH), collectionsData);
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(new File(COLLECTIONS_PATH), collectionsData);
         } catch (IOException e) {
             e.printStackTrace();
         }
-    }
-
-    private Map<String, Object> serializeTreeItem(TreeItem<String> item) {
-        Map<String, Object> itemData = new HashMap<>();
-
-        // Use item.getValue() to get the collection name
-        itemData.put("name", item.getValue());
-        itemData.put("description", ""); // Add description logic if needed
-
-        // Recursively serialize children
-        List<Map<String, Object>> childrenData = new ArrayList<>();
-        for (TreeItem<String> child : item.getChildren()) {
-            childrenData.add(serializeTreeItem(child));
-        }
-        itemData.put("children", childrenData); // Add children to the itemData
-
-        return itemData;
     }
 }
 
