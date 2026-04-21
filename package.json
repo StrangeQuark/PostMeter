@@ -34,7 +34,7 @@
     },
     "linux": {
       "category": "Development",
-      "maintainer": "PostMeter contributors <postmeter@example.invalid>",
+      "maintainer": "PostMeter contributors <zacharyzirkle@hotmail.com>",
       "target": [
         "AppImage",
         "deb"

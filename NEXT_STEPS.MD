@@ -4,66 +4,52 @@
 
 Please answer these before the next implementation pass:
 
-1. For secret storage, should the next implementation use Electron `safeStorage`, OS keychain integration through an added dependency, or a user-provided passphrase file encryption model?
-2. For OAuth 2.0, which flow should be completed first: authorization code with PKCE, device code, client credentials, or refresh-token renewal?
-3. Should collection/workspace export redact secrets by default, require a user confirmation, or export exact saved values for portability?
-4. Should Linux release artifacts be AppImage-only for the MVP, or should deb remain a required first-class target?
-5. Should the load-test safety model add a per-host allowlist, a high-concurrency confirmation, or both?
-6. What maintainer email should replace the placeholder `postmeter@example.invalid` in Linux package metadata?
+1. When Electron `safeStorage` is unavailable on a host, should PostMeter fail closed, prompt for a user passphrase, or keep the current plaintext compatibility fallback?
+2. Which OAuth 2.0 flow should be implemented next: authorization code with PKCE, device code, or client credentials?
+3. Should load-test host allowlists remain per-run inputs, or should they become saved workspace/project-level safety policy?
+4. Should exact secret export require a stronger confirmation step, such as typing the workspace name, before public-release hardening?
 
 ## Completed This Iteration
 
-- Removed the tracked JavaFX/Maven application, Maven wrapper, Maven build file, Java resources, and Java tests.
-- Made Electron the only supported runtime in docs and scripts.
-- Enabled Electron renderer sandboxing while preserving context isolation and disabled renderer Node integration.
-- Added runtime IPC input validation for workspace, collection, request, environment, load-test, and export payloads.
-- Added negative tests for malformed IPC payloads.
-- Added request auth support for Bearer token, Basic Auth, API key in header/query, Cookie, and static OAuth 2.0 access-token injection.
-- Added Auth tab controls in the Electron renderer.
-- Masked token/password auth inputs in the renderer.
-- Added auth validation, redaction helpers, and request-time auth tests.
-- Added an Electron startup smoke script.
-- Added Linux packaging scripts using electron-builder.
-- Added a GitHub Actions CI workflow for install, tests, audit, Electron version, and startup smoke under Xvfb.
-- Updated README and TECH_SPECS.MD to match the current Electron-only architecture.
+- Bumped the workspace data model to schema `4` and added a `secret` flag to key/value rows.
+- Added Electron `safeStorage`-backed local secret persistence for known auth secret fields and environment variables marked `Secret`.
+- Added workspace and collection export redaction by default, with an Electron confirmation dialog required before exact saved values are exported.
+- Implemented OAuth 2.0 refresh-token renewal during request execution when refresh metadata is present and the access token is missing or near expiry.
+- Added load-test per-host allowlist enforcement and high-concurrency confirmation at concurrency `50` or higher.
+- Added UI controls for environment secret flags and load-test allowed hosts.
+- Updated Linux package maintainer metadata to `PostMeter contributors <zacharyzirkle@hotmail.com>` while keeping both AppImage and deb targets.
+- Added focused tests for secret encryption/redaction, OAuth refresh, load-test safety, and IPC payload validation updates.
+- Updated README and TECH_SPECS.MD to match the current implementation.
 
 ## Next Highest Priority Steps
 
-1. Secret storage and export safety
-   - Implement the secret-storage approach chosen from the open questions.
-   - Add a `secret` flag to environment variables and auth fields where practical.
-   - Redact secrets from workspace/collection exports unless explicitly allowed.
-   - Add migration and rollback notes for any workspace schema change.
-   - Add tests for encrypted/keychain storage, redaction, and import/export behavior.
+1. Harden secret storage failure behavior.
+   - Decide the `safeStorage` unavailable policy from the open question.
+   - Add migration/recovery tests for encrypted values when the host keyring changes or decryption fails.
+   - Consider a passphrase fallback or OS keychain dependency if Electron `safeStorage` is not enough.
 
-2. Full OAuth 2.0 flows
-   - Implement the selected OAuth flow first.
-   - Store token metadata safely.
-   - Add refresh/expiry handling where the selected flow requires it.
+2. Complete the next OAuth 2.0 flow.
+   - Implement the selected flow from the open question.
    - Add UI states for pending authorization, success, cancellation, and failure.
-   - Add tests with a local OAuth fixture server.
+   - Add local OAuth fixture tests for success, denial, invalid JSON, token endpoint failure, and refresh expiry.
 
-3. Client certificate transport
-   - Replace or extend the request transport so client cert/key/passphrase can be applied safely.
-   - Validate certificate/key file paths in the main process only.
+3. Add Electron UI workflow coverage.
+   - Add Playwright or Electron-compatible tests for create/edit/save/reload/send.
+   - Cover environment secret marking, redacted export path, OAuth refresh state update, and load-test allowlist validation.
+
+4. Implement client-certificate transport.
+   - Move certificate/key path validation into the main process.
+   - Replace or extend the current `fetch` transport so TLS client cert/key/passphrase can be applied safely.
    - Avoid exposing certificate contents to the renderer.
-   - Add local TLS integration tests if practical.
 
-4. Electron UI workflow coverage
-   - Add Playwright or Electron-compatible UI tests for create/edit/save/reload/send.
-   - Add tests for collection/folder operations and Postman import.
-   - Add a load-test UI workflow test with a local HTTP server.
+5. Improve load testing beyond the MVP safety gates.
+   - Add ramp-up, duration mode, per-sample export, latency histograms, and clearer resource-budget limits.
+   - Decide whether host allowlists should be saved as workspace policy.
 
-5. Linux packaging and release pipeline
-   - Decide AppImage-only versus AppImage plus deb.
-   - Add release checksums.
-   - Add signing/notarization plan where applicable.
+6. Release hardening.
+   - Add release checksums and artifact upload automation.
+   - Add signing/notarization plans for Linux first, then Windows and macOS.
    - Add a packaging CI job once artifact size and runtime are acceptable.
-
-6. Load-test safety
-   - Keep execution local-only for now.
-   - Add the selected per-host allowlist and/or high-concurrency confirmation.
-   - Add clearer resource-safety guidance in the UI and docs.
 
 ## Deferred / Larger Follow-Ups
 
@@ -75,7 +61,6 @@ Please answer these before the next implementation pass:
 - Request assertions and collection runner.
 - Request scripting, pre-request hooks, and post-request scripts.
 - CLI mode for CI API testing.
-- Duration-based load tests, ramp-up schedules, histograms, per-sample export, and charts.
 - Distributed/cloud load execution remains deferred until there is explicit product demand.
 - Team collaboration and shared remote workspaces.
 - Plugin system for custom auth, assertions, importers, and reporters.
@@ -83,15 +68,14 @@ Please answer these before the next implementation pass:
 
 ## Risks / Gaps Blocking Production Readiness
 
-- Secrets are still persisted and exported as plain JSON values.
-- Full OAuth 2.0 browser/device-code/PKCE flows are not implemented.
+- `safeStorage` can be unavailable in some Linux sessions; the current fallback preserves data but is not strong secret storage.
+- Full OAuth 2.0 browser/device-code/PKCE/client-credentials flows are not implemented.
 - Client-certificate auth is modeled in the UI but not supported by the current request transport.
 - IPC validation is handwritten and does not yet use shared versioned schemas.
 - Main-process response payloads are not schema-validated.
 - No automated Electron UI workflow tests beyond startup smoke.
-- Linux packaging is configured, but signing, checksums, auto-update, and release automation are incomplete.
-- Linux deb metadata still uses a placeholder maintainer email.
-- Load testing is local-process only and lacks ramp-up, duration mode, per-sample export, and robust resource safety controls.
+- Linux signing, checksums, auto-update, and release automation are incomplete.
+- Load testing is local-process only and lacks ramp-up, duration mode, per-sample export, histograms, and robust resource-budget controls.
 - No request assertions, collection runner, scripts, or CLI runner.
 
 ## Next Iteration Starting Point
@@ -109,4 +93,4 @@ Then inspect the worktree:
 git status --short
 ```
 
-Use the open-question answers to choose between secret storage, full OAuth flow implementation, client certificates, UI automation, Linux release hardening, and load-test safety.
+Use the open-question answers to choose between secret-storage hardening, the next OAuth flow, UI automation, client certificates, load-test policy persistence, and release hardening.

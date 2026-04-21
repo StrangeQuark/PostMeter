@@ -2,15 +2,45 @@ const assert = require('node:assert/strict');
 const http = require('node:http');
 const test = require('node:test');
 const {
+  HIGH_CONCURRENCY_THRESHOLD,
   loadTestResultToCsv,
   runLoadTest,
   validateLoadConfig
 } = require('../../src/core/loadTestRunner');
 
 test('validates load-test limits', () => {
-  assert.deepEqual(validateLoadConfig({ concurrency: 2, totalRequests: 5 }), { concurrency: 2, totalRequests: 5 });
+  assert.deepEqual(validateLoadConfig({ concurrency: 2, totalRequests: 5 }), {
+    concurrency: 2,
+    totalRequests: 5,
+    allowedHosts: [],
+    confirmedHighConcurrency: false
+  });
   assert.throws(() => validateLoadConfig({ concurrency: 0, totalRequests: 5 }), /Concurrency must be between/);
   assert.throws(() => validateLoadConfig({ concurrency: 2, totalRequests: 0 }), /Total requests must be between/);
+  assert.throws(() => validateLoadConfig({ concurrency: HIGH_CONCURRENCY_THRESHOLD, totalRequests: 1 }), /require confirmation/);
+});
+
+test('requires request host to match load-test allowlist', () => {
+  const request = {
+    method: 'GET',
+    url: 'https://api.example.test/load',
+    queryParams: [],
+    headers: [],
+    bodyType: 'NONE',
+    body: ''
+  };
+  assert.throws(
+    () => validateLoadConfig({ concurrency: 2, totalRequests: 5 }, request, null),
+    /at least one allowed host/
+  );
+  assert.throws(
+    () => validateLoadConfig({ concurrency: 2, totalRequests: 5, allowedHosts: ['other.example.test'] }, request, null),
+    /not in the load-test allowlist/
+  );
+  assert.deepEqual(
+    validateLoadConfig({ concurrency: 2, totalRequests: 5, allowedHosts: ['https://api.example.test'] }, request, null).allowedHosts,
+    ['api.example.test']
+  );
 });
 
 test('runs a fixed-size concurrent load test and summarizes metrics', async () => {
@@ -28,7 +58,7 @@ test('runs a fixed-size concurrent load test and summarizes metrics', async () =
       headers: [],
       bodyType: 'NONE',
       body: ''
-    }, null, { concurrency: 3, totalRequests: 7 }, {
+    }, null, { concurrency: 3, totalRequests: 7, allowedHosts: ['127.0.0.1'] }, {
       onProgress: (event) => progress.push(event)
     });
 
@@ -61,7 +91,7 @@ test('supports cancellation and CSV export', async () => {
       headers: [],
       bodyType: 'NONE',
       body: ''
-    }, null, { concurrency: 4, totalRequests: 100 }, { abortController });
+    }, null, { concurrency: 4, totalRequests: 100, allowedHosts: ['127.0.0.1'] }, { abortController });
 
     assert.equal(result.cancelled, true);
     assert.ok(result.totalRequests < 100);

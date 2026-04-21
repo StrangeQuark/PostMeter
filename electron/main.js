@@ -1,9 +1,9 @@
 const path = require('node:path');
-const { app, BrowserWindow, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, safeStorage } = require('electron');
 const { sendRequest, validateRequest } = require('../src/core/httpClient');
 const { loadTestResultToCsv, runLoadTest } = require('../src/core/loadTestRunner');
 const { WorkspaceRecoveryError, WorkspaceStore } = require('../src/core/workspaceStore');
-const { historyEntry } = require('../src/core/models');
+const { historyEntry, walkRequests } = require('../src/core/models');
 const {
   assertCollectionPayload,
   assertExportFormat,
@@ -56,7 +56,7 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
-  workspaceStore = new WorkspaceStore();
+  workspaceStore = new WorkspaceStore(undefined, { secretCodec: createElectronSecretCodec() });
   try {
     const loaded = await workspaceStore.load();
     workspace = loaded.workspace;
@@ -128,7 +128,11 @@ ipcMain.handle('workspace:export', async (_event, nextWorkspace) => {
   if (result.canceled || !result.filePath) {
     return { cancelled: true };
   }
-  const exportedPath = await workspaceStore.exportWorkspace(nextWorkspace || workspace, result.filePath);
+  const includeSecrets = await confirmSecretExport('workspace');
+  if (includeSecrets == null) {
+    return { cancelled: true };
+  }
+  const exportedPath = await workspaceStore.exportWorkspace(nextWorkspace || workspace, result.filePath, { includeSecrets });
   return { cancelled: false, path: exportedPath };
 });
 
@@ -155,7 +159,11 @@ ipcMain.handle('collection:export', async (_event, collection) => {
   if (result.canceled || !result.filePath) {
     return { cancelled: true };
   }
-  const exportedPath = await workspaceStore.exportCollection(collection, result.filePath);
+  const includeSecrets = await confirmSecretExport('collection');
+  if (includeSecrets == null) {
+    return { cancelled: true };
+  }
+  const exportedPath = await workspaceStore.exportCollection(collection, result.filePath, { includeSecrets });
   return { cancelled: false, path: exportedPath };
 });
 
@@ -169,6 +177,9 @@ ipcMain.handle('request:send', async (_event, request, environment) => {
   assertRequestPayload(request);
   assertOptionalEnvironmentPayload(environment);
   const result = await sendRequest(request, environment);
+  if (result.updatedAuth && request.id) {
+    updateWorkspaceRequestAuth(request.id, result.updatedAuth);
+  }
   workspace.history = [
     historyEntry({
       method: request.method,
@@ -181,6 +192,57 @@ ipcMain.handle('request:send', async (_event, request, environment) => {
   await workspaceStore.save(workspace);
   return result;
 });
+
+function createElectronSecretCodec() {
+  return {
+    name: 'electron-safe-storage',
+    encrypt(value) {
+      if (safeStorage.isEncryptionAvailable()) {
+        return {
+          codec: 'electron-safe-storage',
+          value: safeStorage.encryptString(String(value)).toString('base64')
+        };
+      }
+      return { codec: 'plain-text-fallback', value: String(value) };
+    },
+    decrypt(value, codec) {
+      if (codec === 'plain-text-fallback') {
+        return value;
+      }
+      if (!safeStorage.isEncryptionAvailable()) {
+        throw new Error('Encrypted workspace secrets are unavailable because Electron safeStorage is not available.');
+      }
+      return safeStorage.decryptString(Buffer.from(value, 'base64'));
+    }
+  };
+}
+
+async function confirmSecretExport(scope) {
+  const result = await dialog.showMessageBox(mainWindow, {
+    type: 'warning',
+    title: `Export ${capitalize(scope)}`,
+    message: `Export ${scope} secrets?`,
+    detail: 'Exports can include saved tokens, passwords, and secret environment values. Choose redaction unless you need exact values in the exported JSON.',
+    buttons: ['Redact Secrets', 'Export Exact Values', 'Cancel'],
+    defaultId: 0,
+    cancelId: 2,
+    noLink: true
+  });
+  if (result.response === 2) {
+    return null;
+  }
+  return result.response === 1;
+}
+
+function updateWorkspaceRequestAuth(requestId, auth) {
+  for (const collection of workspace.collections || []) {
+    walkRequests(collection, (request) => {
+      if (request.id === requestId) {
+        request.auth = auth;
+      }
+    });
+  }
+}
 
 ipcMain.handle('load:start', async (event, id, request, environment, config) => {
   assertLoadId(id);
@@ -242,4 +304,8 @@ function jsonFilters() {
 function safeFilename(value) {
   const filename = String(value || 'collection').trim().replace(/[^A-Za-z0-9._-]+/g, '-');
   return filename || 'collection';
+}
+
+function capitalize(value) {
+  return String(value || '').charAt(0).toUpperCase() + String(value || '').slice(1);
 }

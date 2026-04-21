@@ -1,7 +1,7 @@
 const { performance } = require('node:perf_hooks');
 const { BODY_METHODS, BODY_TYPES, SUPPORTED_METHODS } = require('./models');
 const { resolveEnvironmentValue } = require('./environmentResolver');
-const { applyAuth, validateAuth } = require('./auth');
+const { applyAuth, maybeRefreshOAuthToken, validateAuth } = require('./auth');
 
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 const MANAGED_HEADERS = new Set(['content-length']);
@@ -39,15 +39,17 @@ function validateRequest(request, environment) {
 }
 
 async function sendRequest(request, environment, options = {}) {
-  const validationErrors = validateRequest(request, environment);
+  const prepared = await prepareRequestForSend(request, environment, options);
+  const requestForSend = prepared.request;
+  const validationErrors = validateRequest(requestForSend, environment);
   if (validationErrors.length > 0) {
     throw new Error(validationErrors.join(' '));
   }
 
-  const url = buildUrl(request, environment);
+  const url = buildUrl(requestForSend, environment);
   const headers = {};
   let hasContentType = false;
-  for (const header of request.headers || []) {
+  for (const header of requestForSend.headers || []) {
     if (header.enabled === false || !hasKey(header)) {
       continue;
     }
@@ -61,10 +63,10 @@ async function sendRequest(request, environment, options = {}) {
     }
     headers[name] = value;
   }
-  applyAuth(request, environment, { url, headers });
+  applyAuth(requestForSend, environment, { url, headers });
 
-  const method = request.method;
-  const bodyType = request.bodyType || BODY_TYPES.NONE;
+  const method = requestForSend.method;
+  const bodyType = requestForSend.bodyType || BODY_TYPES.NONE;
   const shouldSendBody = bodyType !== BODY_TYPES.NONE && BODY_METHODS.has(method);
   const fetchOptions = {
     method,
@@ -77,20 +79,39 @@ async function sendRequest(request, environment, options = {}) {
     if (!hasContentType) {
       headers['Content-Type'] = bodyType === BODY_TYPES.RAW_JSON ? 'application/json' : 'text/plain; charset=utf-8';
     }
-    fetchOptions.body = resolveEnvironmentValue(request.body ?? '', environment);
+    fetchOptions.body = resolveEnvironmentValue(requestForSend.body ?? '', environment);
   }
 
   const started = performance.now();
   const response = await fetch(url, fetchOptions);
   const body = await response.text();
   const durationMillis = Math.max(0, Math.round(performance.now() - started));
-  return {
+  const result = {
     statusCode: response.status,
     headers: headersToObject(response.headers),
     body,
     durationMillis,
     responseBytes: Buffer.byteLength(body, 'utf8'),
     finalUrl: response.url || url.toString()
+  };
+  if (prepared.updatedAuth) {
+    result.updatedAuth = prepared.updatedAuth;
+  }
+  return result;
+}
+
+async function prepareRequestForSend(request, environment, options) {
+  const refreshed = await maybeRefreshOAuthToken(request?.auth, environment, {
+    fetchImpl: options.fetchImpl,
+    signal: options.signal,
+    now: options.now
+  });
+  if (!refreshed.refreshed) {
+    return { request, updatedAuth: null };
+  }
+  return {
+    request: { ...request, auth: refreshed.auth },
+    updatedAuth: refreshed.auth
   };
 }
 
@@ -147,6 +168,7 @@ function headersToObject(headers) {
 
 module.exports = {
   buildUrl,
+  prepareRequestForSend,
   sendRequest,
   validateRequest
 };
