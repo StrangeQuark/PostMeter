@@ -1,123 +1,161 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<?import javafx.collections.FXCollections?>
+<?import javafx.geometry.Insets?>
 <?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ChoiceBox?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Label?>
 <?import javafx.scene.control.ListView?>
+<?import javafx.scene.control.Spinner?>
+<?import javafx.scene.control.SplitPane?>
 <?import javafx.scene.control.Tab?>
 <?import javafx.scene.control.TabPane?>
+<?import javafx.scene.control.TableView?>
 <?import javafx.scene.control.TextArea?>
 <?import javafx.scene.control.TextField?>
+<?import javafx.scene.control.TreeView?>
 <?import javafx.scene.layout.BorderPane?>
 <?import javafx.scene.layout.HBox?>
-<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.Priority?>
 <?import javafx.scene.layout.VBox?>
-<?import javafx.scene.control.TreeView?>
-<?import javafx.scene.control.SplitPane?>
-<?import javafx.scene.control.Label?>
-<?import javafx.scene.control.ChoiceBox?>
-<?import java.lang.String?>
 
-<!-- Root layout -->
-
-<?import javafx.scene.layout.StackPane?>
-<?import javafx.scene.control.ScrollPane?>
-<BorderPane xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml" fx:controller="com.strangequark.postmeter.MainController" fx:id="root">
-
-    <!-- Top bar for tabs -->
+<BorderPane xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml"
+            fx:controller="com.strangequark.postmeter.MainController"
+            fx:id="root"
+            styleClass="app-root">
     <top>
-        <HBox style="-fx-padding: 10;">
-            <Button text="New Tab" />
-            <Button text="Save" />
-            <!-- More controls like environment settings or preferences can be added here -->
-        </HBox>
+        <VBox>
+            <HBox alignment="CENTER_LEFT" spacing="10" styleClass="top-bar">
+                <Label text="PostMeter" styleClass="brand"/>
+                <Label text="Environment"/>
+                <ComboBox fx:id="environmentComboBox" prefWidth="220"/>
+                <Button text="New Collection" onAction="#handleNewCollection"/>
+                <Button text="New Request" onAction="#handleNewRequest"/>
+                <Button text="Save" onAction="#handleSave" styleClass="primary-button"/>
+                <Label fx:id="statusLabel" text="Ready" maxWidth="Infinity" HBox.hgrow="ALWAYS" styleClass="status-label"/>
+            </HBox>
+        </VBox>
     </top>
 
-    <!-- Main layout with VBox containing SplitPane and bottom area -->
     <center>
-            <!-- SplitPane for left sidebar and center content -->
-            <SplitPane orientation="HORIZONTAL" fx:id="horzPane">
-                <!-- Left sidebar -->
-                <VBox style="-fx-padding: 10; -fx-spacing: 5; -fx-pref-width: 200;">
-                    <HBox spacing="10">
-                        <HBox spacing="5">
-                            <Button text="Collections" onAction="#showCollections" />
-                            <Button text="Environments" onAction="#showEnvironments" />
-                            <Button text="History" onAction="#showHistory" />
-                        </HBox>
-                        <HBox spacing="5" alignment="CENTER_RIGHT" HBox.hgrow="ALWAYS">
-                            <Button text="Add" onAction="#addCollection"/>
-                            <Button text="Import" onAction="#importCollection"/>
-                        </HBox>
+        <SplitPane fx:id="mainSplitPane" orientation="HORIZONTAL">
+            <VBox minWidth="260" prefWidth="300" spacing="8" styleClass="sidebar">
+                <HBox spacing="8">
+                    <Button text="Delete" onAction="#handleDeleteSelected"/>
+                </HBox>
+                <TabPane tabClosingPolicy="UNAVAILABLE" VBox.vgrow="ALWAYS">
+                    <Tab text="Collections">
+                        <TreeView fx:id="collectionsTreeView"/>
+                    </Tab>
+                    <Tab text="History">
+                        <ListView fx:id="historyListView"/>
+                    </Tab>
+                    <Tab text="Environment">
+                        <VBox spacing="8" styleClass="panel">
+                            <TextField fx:id="environmentNameField" promptText="Environment name"/>
+                            <HBox spacing="8">
+                                <Button text="New" onAction="#handleNewEnvironment"/>
+                                <Button text="Delete" onAction="#handleDeleteEnvironment"/>
+                            </HBox>
+                            <HBox spacing="8">
+                                <Button text="Add Variable" onAction="#handleAddEnvironmentVariable"/>
+                                <Button text="Remove" onAction="#handleRemoveEnvironmentVariable"/>
+                            </HBox>
+                            <TableView fx:id="environmentTable" editable="true" VBox.vgrow="ALWAYS"/>
+                        </VBox>
+                    </Tab>
+                </TabPane>
+            </VBox>
+
+            <SplitPane fx:id="workSplitPane" orientation="VERTICAL">
+                <VBox spacing="10" styleClass="workspace">
+                    <TextField fx:id="requestNameField" promptText="Request name"/>
+                    <HBox spacing="8" alignment="CENTER_LEFT">
+                        <ChoiceBox fx:id="methodChoice" prefWidth="120"/>
+                        <TextField fx:id="urlField" promptText="https://api.example.com/resource" HBox.hgrow="ALWAYS"/>
+                        <Button fx:id="sendButton" text="Send" onAction="#handleSend" styleClass="primary-button"/>
                     </HBox>
-
-                    <Region style="-fx-pref-height: 10;"/> <!-- Spacer -->
-
-                    <!-- StackPane to hold Collections, Environments, and History lists in the same space -->
-                    <StackPane fx:id="listContainer" style="-fx-pref-width: 200;">
-                        <TreeView fx:id="collectionsTreeView" visible="false" style="-fx-pref-width: 200;" />
-                        <ListView fx:id="environmentsList" visible="false" style="-fx-pref-width: 200;" />
-                        <ListView fx:id="historyList" visible="false" style="-fx-pref-width: 200;" />
-                    </StackPane>
+                    <TabPane tabClosingPolicy="UNAVAILABLE" VBox.vgrow="ALWAYS">
+                        <Tab text="Params">
+                            <VBox spacing="8" styleClass="panel">
+                                <HBox spacing="8">
+                                    <Button text="Add Param" onAction="#handleAddParam"/>
+                                    <Button text="Remove" onAction="#handleRemoveParam"/>
+                                </HBox>
+                                <TableView fx:id="paramsTable" editable="true" VBox.vgrow="ALWAYS"/>
+                            </VBox>
+                        </Tab>
+                        <Tab text="Headers">
+                            <VBox spacing="8" styleClass="panel">
+                                <HBox spacing="8">
+                                    <Button text="Add Header" onAction="#handleAddHeader"/>
+                                    <Button text="Remove" onAction="#handleRemoveHeader"/>
+                                </HBox>
+                                <TableView fx:id="headersTable" editable="true" VBox.vgrow="ALWAYS"/>
+                            </VBox>
+                        </Tab>
+                        <Tab text="Body">
+                            <VBox spacing="8" styleClass="panel">
+                                <HBox spacing="8" alignment="CENTER_LEFT">
+                                    <Label text="Body type"/>
+                                    <ChoiceBox fx:id="bodyTypeChoice" prefWidth="150"/>
+                                </HBox>
+                                <TextArea fx:id="bodyTextArea" promptText="Request body" wrapText="false" VBox.vgrow="ALWAYS"/>
+                            </VBox>
+                        </Tab>
+                    </TabPane>
                 </VBox>
 
-                <SplitPane orientation="VERTICAL" fx:id="vertPane">
-                <!-- Center content -->
-                <VBox spacing="5">
-                    <!-- Request input section -->
-                    <HBox spacing="10" style="-fx-padding: 10;">
-                        <ChoiceBox fx:id="methodChoice">
-                            <items>
-                                <FXCollections fx:factory="observableArrayList">
-                                    <String fx:value="GET" />
-                                    <String fx:value="POST" />
-                                    <String fx:value="PUT" />
-                                    <String fx:value="DELETE" />
-                                </FXCollections>
-                            </items>
-                        </ChoiceBox>
-                        <TextField fx:id="urlField" promptText="Enter request URL" />
-                        <Button text="Send" />
-                    </HBox>
-
-                    <!-- Tabs for Body, Headers, Params, etc. -->
-                    <VBox spacing="5" VBox.vgrow="ALWAYS">
-                        <TabPane VBox.vgrow="ALWAYS">
-                            <Tab text="Params" closable="false">
-                                <VBox>
-                                    <ScrollPane fitToWidth="true" fitToHeight="true" VBox.vgrow="ALWAYS">
-                                        <VBox spacing="5" fx:id="paramsContainer" style="-fx-padding: 10;">
-                                            <Button text="Add Param" onAction="#addParamRow" />
-                                        </VBox>
-                                    </ScrollPane>
-                                </VBox>
-                            </Tab>
-
-                            <Tab text="Headers" closable="false">
-                                <VBox>
-                                    <ScrollPane fitToWidth="true" fitToHeight="true" VBox.vgrow="ALWAYS">
-                                        <VBox spacing="5" fx:id="headersContainer" style="-fx-padding: 10;">
-                                            <Button text="Add Header" onAction="#addHeaderRow" />
-                                        </VBox>
-                                    </ScrollPane>
-                                </VBox>
-                            </Tab>
-
-                            <Tab text="Body" closable="false">
-                                <VBox>
-                                    <ScrollPane fitToWidth="true" fitToHeight="true" VBox.vgrow="ALWAYS">
-                                        <TextArea fx:id="bodyTextArea" promptText="Request body" />
-                                    </ScrollPane>
-                                </VBox>
-                            </Tab>
-                        </TabPane>
-                    </VBox>
-                </VBox>
-                <!-- Response Pane -->
-                <VBox>
-                    <Label text="Response" />
-                    <TextArea fx:id="responseTextArea" editable="false" promptText="Response will appear here" VBox.vgrow="ALWAYS" />
-                </VBox>
+                <TabPane tabClosingPolicy="UNAVAILABLE" styleClass="results-tabs">
+                    <Tab text="Response">
+                        <VBox spacing="8" styleClass="workspace">
+                            <HBox spacing="18" alignment="CENTER_LEFT" styleClass="response-summary">
+                                <Label text="Status"/>
+                                <Label fx:id="responseStatusLabel" text="-" styleClass="metric-value"/>
+                                <Label text="Time"/>
+                                <Label fx:id="responseTimeLabel" text="-" styleClass="metric-value"/>
+                                <Label text="Size"/>
+                                <Label fx:id="responseSizeLabel" text="-" styleClass="metric-value"/>
+                            </HBox>
+                            <HBox spacing="8" alignment="CENTER_LEFT">
+                                <Label text="URL"/>
+                                <Label fx:id="finalUrlLabel" text="-" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
+                            </HBox>
+                            <TabPane tabClosingPolicy="UNAVAILABLE" VBox.vgrow="ALWAYS">
+                                <Tab text="Body">
+                                    <TextArea fx:id="responseBodyArea" editable="false" wrapText="false"/>
+                                </Tab>
+                                <Tab text="Headers">
+                                    <TextArea fx:id="responseHeadersArea" editable="false" wrapText="false"/>
+                                </Tab>
+                            </TabPane>
+                        </VBox>
+                    </Tab>
+                    <Tab text="Load Test">
+                        <VBox spacing="10" styleClass="workspace">
+                            <HBox spacing="10" alignment="CENTER_LEFT">
+                                <Label text="Concurrency"/>
+                                <Spinner fx:id="concurrencySpinner" prefWidth="110"/>
+                                <Label text="Requests"/>
+                                <Spinner fx:id="requestCountSpinner" prefWidth="120"/>
+                                <Button fx:id="runLoadTestButton" text="Run Load Test" onAction="#handleRunLoadTest" styleClass="primary-button"/>
+                            </HBox>
+                            <TextArea fx:id="loadResultsArea" editable="false" wrapText="false" VBox.vgrow="ALWAYS"/>
+                        </VBox>
+                    </Tab>
+                </TabPane>
             </SplitPane>
         </SplitPane>
     </center>
+
+    <bottom>
+        <HBox alignment="CENTER_LEFT" spacing="8" styleClass="footer">
+            <Label text="Workspace"/>
+            <Label fx:id="dataPathLabel" text="-" maxWidth="Infinity" HBox.hgrow="ALWAYS"/>
+        </HBox>
+    </bottom>
+    <padding>
+        <Insets top="0" right="0" bottom="0" left="0"/>
+    </padding>
 </BorderPane>

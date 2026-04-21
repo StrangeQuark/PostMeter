@@ -1,9 +1,0 @@
-{
-  "collections" : [ {
-    "name" : "New Collection",
-    "description" : "",
-    "requests" : [ {
-      "name" : "New request"
-    } ]
-  } ]
-}
