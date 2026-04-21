@@ -1,142 +1,189 @@
 # PostMeter Technical Specifications
 
-## Product Scope
+## Current Migration Status
 
-PostMeter is a JavaFX desktop application intended to become an open-source alternative to Postman with an initial JMeter-like volume-testing workflow.
+PostMeter is now implemented as an Electron desktop MVP. The JavaFX/Maven implementation has been removed from the tracked repository; Electron is the only supported runtime.
 
-The current MVP supports:
+The migration deliberately does not bridge Electron to the Java services. Core behavior was ported into Node modules so the desktop UI, IPC boundary, persistence, request execution, import/export, and load-test logic can evolve together without carrying JavaFX UI coupling forward.
 
-- Creating and organizing request collections.
-- Creating, editing, deleting, and saving requests.
-- Editing HTTP method, URL, query parameters, headers, and raw body.
-- Creating and editing environments with variable substitution.
-- Importing and exporting native PostMeter JSON workspaces and collections.
-- Importing common Postman collection JSON for collection sharing.
-- Sending HTTP requests and viewing response status, headers, body, timing, final URL, and response size.
-- Recording request history.
-- Running a fixed-size concurrent load test against the active request.
+## Product Scope Implemented
+
+- Create, rename, duplicate, delete, and save requests.
+- Organize requests into collections and nested folders.
+- Edit HTTP method, URL, query parameters, headers, raw body type, and body content.
+- Create/edit/delete environments and resolve `{{variableName}}` placeholders.
+- Import/export native PostMeter workspaces.
+- Import/export native PostMeter collections.
+- Import common Postman collection JSON while preserving folder hierarchy.
+- Configure request auth helpers for Bearer token, Basic Auth, API key, Cookie, and static OAuth 2.0 access-token injection.
+- Send HTTP requests and display status, timing, size, final URL, headers, and formatted JSON bodies.
+- Record recent request history.
+- Run fixed-size local concurrent load tests with progress, cancellation, latency percentiles, error summaries, and JSON/CSV export.
 
 ## Technology Stack
 
-- Language: Java 21
-- UI framework: JavaFX
-- Build tool: Maven through the included Maven wrapper
-- HTTP client: Java `java.net.http.HttpClient`
-- JSON serialization: Jackson Databind
-- Tests: JUnit 5 with Maven Surefire
+- Desktop shell: Electron `41.2.1`
+- Main process: CommonJS Node modules under `electron/`
+- Renderer UI: static HTML/CSS/JavaScript under `src/renderer/`
+- Core services: CommonJS Node modules under `src/core/`
+- HTTP client: Node global `fetch`
+- Persistence: JSON file via `node:fs/promises`
+- Packaging: electron-builder with Linux unpacked, AppImage, and deb targets
+- Tests: Node built-in test runner plus an Electron startup smoke script
 
 ## Runtime Requirements
 
-- Java 21 runtime and compiler.
-- Network access for sending requests from the desktop app.
-- Writable user-home directory, unless a custom workspace path is configured.
+- Node.js 22 or newer.
+- npm 10 or newer.
+- Network access for request execution and load tests.
+- Writable user-home directory unless `POSTMETER_DATA_PATH` is set.
 
 ## Build, Run, And Test Commands
 
-Run the desktop app:
+Install Electron dependencies:
 
 ```bash
-./mvnw javafx:run
+npm install
 ```
 
-Run tests:
+Run Electron:
 
 ```bash
-./mvnw test
+npm start
 ```
 
-Build package:
+Run Node tests:
 
 ```bash
-./mvnw package
+npm test
 ```
 
-The Maven wrapper is expected to be executable. If a checkout strips executable bits, use:
+Run Electron startup smoke:
 
 ```bash
-bash ./mvnw javafx:run
+npm run test:smoke
 ```
 
-## Configuration
-
-PostMeter stores workspace data in JSON. The default path is:
-
-```text
-~/.postmeter/workspace.json
-```
-
-The workspace path can be overridden with:
+Check the installed Electron runtime:
 
 ```bash
-POSTMETER_DATA_PATH=/tmp/postmeter-workspace.json ./mvnw javafx:run
+npm run electron:version
 ```
 
-The same behavior can be configured through the Java system property:
+Run the combined local check:
 
-```text
-postmeter.data.path
+```bash
+npm run check
 ```
 
-Configuration precedence:
+Build an unpacked Linux package:
 
-1. Java system property `postmeter.data.path`
-2. Environment variable `POSTMETER_DATA_PATH`
-3. Default path `~/.postmeter/workspace.json`
+```bash
+npm run pack:linux
+```
+
+Build Linux AppImage and deb artifacts:
+
+```bash
+npm run dist:linux
+```
 
 ## Repository Structure
 
 ```text
-src/main/java/com/strangequark/postmeter/
-  MainApplication.java
-  MainController.java
-  model/
-  service/
+electron/
+  main.js
+  preload.js
 
-src/main/resources/com/strangequark/postmeter/
-  main-view.fxml
+src/core/
+  auth.js
+  environmentResolver.js
+  httpClient.js
+  ipcValidation.js
+  loadTestRunner.js
+  models.js
+  postmanImporter.js
+  workspaceStore.js
+
+src/renderer/
+  index.html
+  renderer.js
   styles.css
 
-src/test/java/com/strangequark/postmeter/service/
+test/electron/
+  *.test.js
+.github/workflows/
+  ci.yml
 ```
 
-`model/` contains serializable workspace and request data structures.
+`electron/main.js` owns the desktop lifecycle, window hardening, dialogs, workspace store instance, and IPC handlers.
 
-`service/` contains non-UI logic for persistence, environment resolution, HTTP execution, and load testing.
+`electron/preload.js` exposes a small `window.postmeter` API to the renderer. The renderer has no direct Node access.
 
-The old `src/main/resources/jsonFiles/` files have been removed because packaged applications should not mutate resources.
+`src/core/` contains framework-independent business logic. JavaFX source, Maven wrapper files, and Maven tests are no longer part of the tracked repository.
 
-## UI Architecture
+## Electron Architecture
 
-The UI is defined by:
+Main process responsibilities:
 
-- `MainApplication.java`
-- `MainController.java`
-- `main-view.fxml`
-- `styles.css`
+- Create a single `BrowserWindow`.
+- Disable hardware acceleration for reliable Linux/headless startup.
+- Deny `window.open` and all permission requests.
+- Load and recover workspace data before creating the UI.
+- Own native open/save dialogs.
+- Execute HTTP requests and load tests through core services.
+- Validate renderer-originated IPC payloads before handing them to persistence, request execution, or load testing.
+- Export load-test results to JSON or CSV.
+- Persist request history after sends.
 
-The app shell uses:
+Renderer responsibilities:
 
-- A top toolbar for environment selection, collection/request creation, saving, and status.
-- A top toolbar for native workspace import/export.
-- A left sidebar with tabs for collections, history, and environment editing.
-- Collection controls for native/Postman collection import, native collection export, and delete.
-- Right-click collection/request menus for adding requests, renaming items, duplicating requests, exporting collections, and deleting items.
-- A request editor with method, URL, request name, query params, headers, and body tabs.
-- A request validation label for user-facing URL/header/method errors before send or load-test execution.
-- A lower results area with response and load-test tabs.
-- Load-test controls for run, cancel, progress, and summary output.
+- Render the workspace, collections, folders, requests, environments, response viewer, history, and load-test controls.
+- Maintain the active selection state.
+- Collect editor state before save/send/load.
+- Call only preload-exposed APIs.
+
+Preload API:
+
+```text
+window.postmeter.app.versions()
+window.postmeter.workspace.load()
+window.postmeter.workspace.save(workspace)
+window.postmeter.workspace.importWorkspace()
+window.postmeter.workspace.exportWorkspace(workspace)
+window.postmeter.collection.importCollection()
+window.postmeter.collection.exportCollection(collection)
+window.postmeter.request.validate(request, environment)
+window.postmeter.request.send(request, environment)
+window.postmeter.loadTest.start(id, request, environment, config)
+window.postmeter.loadTest.cancel(id)
+window.postmeter.loadTest.export(result, format)
+window.postmeter.loadTest.onProgress(callback)
+```
+
+Security settings:
+
+- `contextIsolation: true`
+- `nodeIntegration: false`
+- `sandbox: true`
+- `webSecurity: true`
+- `allowRunningInsecureContent: false`
+- Renderer CSP: `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none';`
+
+Known security tradeoffs:
+
+- IPC validation is structural and bounded, but it is not yet a versioned schema contract with generated validators.
+- Auth and environment secret values are masked in the UI but still persisted/exported as plain JSON.
 
 ## Workspace Data Model
-
-The persisted root object is `WorkspaceData`.
 
 Current schema version:
 
 ```text
-2
+3
 ```
 
-Workspace fields:
+Root workspace fields:
 
 - `schemaVersion`
 - `collections`
@@ -149,6 +196,14 @@ Collection fields:
 - `name`
 - `description`
 - `requests`
+- `folders`
+
+Folder fields:
+
+- `id`
+- `name`
+- `requests`
+- `folders`
 
 Request fields:
 
@@ -160,6 +215,17 @@ Request fields:
 - `headers`
 - `bodyType`
 - `body`
+- `auth`
+
+Auth fields vary by `auth.type`:
+
+- `none`
+- `bearer`: `token`
+- `basic`: `username`, `password`
+- `apiKey`: `location`, `key`, `value`
+- `cookie`: `value`
+- `oauth2`: `tokenType`, `accessToken`, `refreshToken`, `authorizationUrl`, `tokenUrl`, `clientId`, `clientSecret`, `scopes`, `grantType`
+- `clientCertificate`: `certPath`, `keyPath`, `passphrase`
 
 Environment fields:
 
@@ -181,67 +247,59 @@ History entry fields:
 - `statusCode`
 - `durationMillis`
 
+Schema `3` adds collection/folder hierarchy support through `folders`.
+
 ## Persistence Specifications
 
 Persistence is handled by `WorkspaceStore`.
 
+Default path:
+
+```text
+~/.postmeter/workspace.json
+```
+
+Override:
+
+```bash
+POSTMETER_DATA_PATH=/tmp/postmeter-workspace.json npm start
+```
+
 Behavior:
 
-- Creates a default workspace when no workspace file exists.
-- Supports schema versioning with current schema version `2`.
-- Migrates schema version `1` workspaces to schema version `2`.
-- Creates a timestamped `pre-migration.backup` sibling file before saving migrated workspace data.
-- Rejects future workspace schema versions that are newer than the app supports.
-- Quarantines unreadable workspace JSON by moving it to a timestamped `corrupt` sibling file, then creates a fresh default workspace and raises a recovery exception for the UI to report.
-- Writes JSON with Jackson indentation enabled.
-- Creates parent directories before saving.
-- Writes through a temporary file and then moves into place.
-- Attempts atomic move first and falls back to normal replace when atomic moves are unsupported.
-- Normalizes loaded data by ensuring required IDs, default names, body types, methods, and list fields exist.
-- Imports and exports native PostMeter workspace JSON.
-- Imports and exports native PostMeter collection JSON through a single-collection workspace wrapper.
+- Creates a default workspace when no file exists.
+- Supports schema versions `1` through `3`.
+- Migrates older schemas to schema `3`.
+- Creates timestamped `pre-migration.backup` sibling files before saving migrated workspaces.
+- Rejects future schema versions.
+- Quarantines unreadable workspace JSON by moving it to a timestamped `corrupt` sibling file, then creates a fresh default workspace and raises a recovery error for the UI.
+- Writes JSON through a temporary file and renames into place.
+- Normalizes IDs, names, body types, methods, arrays, folders, environments, and history.
+- Destructive workspace import creates a current-workspace backup before replacement.
 
-Persistence limitations:
+Limitations:
 
-- Migration logic is intentionally small and only supports schema 1 to 2 at this point.
 - No encryption.
 - No file locking.
 - No multi-window conflict resolution.
+- No atomic move fallback tuning beyond same-directory rename.
+- Auth and environment secret values remain in the workspace JSON.
 
-## Import And Export Specifications
+## Import And Export
 
-Native PostMeter import/export is handled by `WorkspaceStore`.
+Native workspace export writes the full normalized workspace.
 
-Native workspace export:
+Native workspace import reads a PostMeter workspace, migrates it, normalizes it, backs up the current workspace, and replaces the active workspace from the UI.
 
-- Writes the full `WorkspaceData` object.
-- Normalizes and stamps the current schema version before export.
+Native collection export writes one collection inside a valid PostMeter workspace wrapper. Environments are intentionally separate and are not included in collection export.
 
-Native workspace import:
+Native collection import imports the first collection from a PostMeter workspace file, regenerates IDs, and appends it to the active workspace.
 
-- Reads `WorkspaceData`.
-- Applies supported migrations.
-- Normalizes imported data.
-- Replaces the active workspace when used from the UI.
-
-Native collection export:
-
-- Writes a single collection inside a valid PostMeter workspace JSON wrapper.
-
-Native collection import:
-
-- Imports the first collection found in a PostMeter workspace JSON file.
-- Regenerates collection and request IDs to avoid collisions when sharing collections.
-- Appends the imported collection to the active workspace when used from the UI.
-
-Postman collection import is handled by `PostmanCollectionImporter` and is used as a fallback by `WorkspaceStore.importCollection`.
-
-Supported Postman fields:
+Postman collection import supports:
 
 - Collection name from `info.name`.
-- Nested `item` traversal.
-- Request name.
-- HTTP method.
+- Nested `item` folders and requests.
+- Request name and HTTP method.
 - URL from `url.raw` or structured `protocol`, `host`, and `path`.
 - Query parameters from `url.query`.
 - Headers from `request.header`, including disabled state.
@@ -250,13 +308,14 @@ Supported Postman fields:
 
 Postman import limitations:
 
-- No Postman auth import yet.
-- No scripts, tests, events, variables, folders-as-groups, examples, cookies, or protocol profile behavior.
-- Raw URL query strings are split from the request URL and query params are imported from `url.query`.
+- No auth import.
+- No collection variables.
+- No scripts, tests, events, examples, cookies, or protocol profile behavior.
+- Raw URL query strings are split from the request URL; query params are imported from `url.query`.
 
-## Environment Resolution Specifications
+## Environment Resolution
 
-Environment resolution is handled by `EnvironmentResolver`.
+Environment resolution is handled by `environmentResolver.js`.
 
 Syntax:
 
@@ -277,9 +336,38 @@ Behavior:
 - Leaves unknown variables unchanged.
 - Applies to URLs, query parameter keys/values, header names/values, and body content before request execution.
 
-## HTTP Request Execution Specifications
+Password/token inputs are masked in the UI, but values are still saved in plain JSON.
 
-Request execution is handled by `HttpRequestExecutor`.
+## Auth Specifications
+
+Auth normalization and request-time injection are handled by `auth.js` and `httpClient.js`.
+
+Implemented request-time auth:
+
+- Bearer token: sets `Authorization: Bearer <token>`.
+- Basic Auth: sets `Authorization: Basic <base64(username:password)>`.
+- API key in header: sets the configured header name and value.
+- API key in query: appends the configured query parameter name and value.
+- Cookie: sets the `Cookie` header.
+- OAuth 2.0 static access token: sets `<tokenType> <accessToken>` in `Authorization`.
+
+Auth values support environment substitution before use.
+
+Auth validation:
+
+- Requires non-empty configured token/value fields for enabled auth types.
+- Validates header names for API-key header auth.
+- Reports client certificate auth as unsupported by the current request transport.
+
+Auth limitations:
+
+- Full OAuth 2.0 authorization-code, browser, refresh-token, device-code, and PKCE flows are not implemented yet.
+- Client certificate transport is not implemented because Node global `fetch` does not directly expose the TLS client-certificate configuration needed by this UI model.
+- Auth secrets are not stored in OS keychains or encrypted files yet.
+
+## HTTP Request Execution
+
+Request execution is handled by `httpClient.js`.
 
 Supported methods:
 
@@ -300,235 +388,140 @@ Validation:
 
 - Request object is required.
 - URL is required.
-- URL must parse as a URI.
+- URL must parse as a URL.
 - URL must include a host.
 - Scheme must be `http` or `https`.
 - Method must be in the supported method set.
 - Header names must match HTTP token syntax.
-- Validation is available without sending the request and is used by the UI before normal request execution and load-test execution.
+- Auth helper configuration must be complete for selected auth type.
 
-HTTP client behavior:
+HTTP behavior:
 
-- Uses Java `HttpClient`.
-- Connect timeout: 15 seconds.
-- Request timeout: 60 seconds.
-- Redirects: normal redirect following.
-- Response body decoding: UTF-8 string.
-- Ignores user-provided `Content-Length`; Java manages it.
+- Uses Node global `fetch`.
+- Timeout: 60 seconds via `AbortSignal.timeout`.
+- Redirects: follow.
+- Response body decoding: UTF-8 text.
+- Ignores user-provided `Content-Length`; the runtime manages it.
+- Applies request auth after user headers and query parameters are collected.
+- Captures response status, headers, body, final URL, response size, and rounded duration.
 
 Body behavior:
 
-- Body is sent only when body type is not `NONE` and method is one of `POST`, `PUT`, `PATCH`, or `DELETE`.
-- `RAW_JSON` adds `Content-Type: application/json` when no explicit content type is present.
-- `RAW_TEXT` adds `Content-Type: text/plain; charset=utf-8` when no explicit content type is present.
+- `NONE` sends no body.
+- `RAW_JSON` sends body for `POST`, `PUT`, `PATCH`, and `DELETE`; default content type is `application/json`.
+- `RAW_TEXT` sends body for `POST`, `PUT`, `PATCH`, and `DELETE`; default content type is `text/plain; charset=utf-8`.
+- Body content supports environment substitution.
 
-Response data captured:
+## Load Testing
 
-- Status code.
-- Headers.
-- Body.
-- Duration in milliseconds.
-- Response byte count.
-- Final URL.
-
-## Response Viewer Specifications
-
-The response UI displays:
-
-- Status code.
-- Duration.
-- Response size.
-- Final URL.
-- Response headers.
-- Response body.
-
-Body formatting:
-
-- JSON-like bodies or bodies with a JSON content type are pretty-printed.
-- Invalid JSON falls back to raw body display.
-- Non-JSON bodies display as raw text.
-
-## History Specifications
-
-History behavior:
-
-- Request history is stored in the workspace.
-- New entries are added to the top.
-- History is capped at 100 entries.
-- Failed requests are recorded with status `0` and displayed as `ERR`.
-
-History limitations:
-
-- History selection currently loads method, URL, and generated name into the editor but does not restore headers, params, or body.
-- No search, filter, pinning, or cleanup controls.
-
-## Load Testing Specifications
-
-Load testing is handled by `LoadTestRunner`.
+Load testing is handled by `loadTestRunner.js`.
 
 Inputs:
 
 - Active request.
 - Active environment.
-- Concurrency.
-- Total request count.
-- Cancellation token.
-- Optional progress listener.
+- `concurrency`
+- `totalRequests`
 
 Limits:
 
-- Minimum concurrency: 1
-- Maximum concurrency: 512
-- Minimum request count: 1
-- Maximum request count: 100,000
+- Max concurrency: `512`
+- Max total requests: `100000`
 
-Execution behavior:
+Behavior:
 
-- Uses a fixed thread pool sized to configured concurrency.
-- Submits up to the configured number of requests unless cancellation is requested first.
-- Uses the same request execution path as a normal send.
-- Polls completions so cancellation can be observed while requests are running.
-- Cancels outstanding queued work when cancellation is requested.
-- Aggregates completed samples after execution or cancellation.
-- Reports progress as completed request count out of requested request count.
+- Runs a fixed number of requests across a local worker pool.
+- Uses the same HTTP validation and execution path as normal request send.
+- Supports cancellation with `AbortController`.
+- Emits progress events with completed and requested request counts.
+- Records successful status codes and failed request error samples.
+- Summarizes min, average, p50, p90, p95, p99, max latency, throughput, error rate, status counts, and first 10 errors.
+- Exports summary results as JSON or CSV.
 
-Metrics reported:
+Limitations:
 
-- Requested requests.
-- Completed requests.
-- Cancellation status.
-- Successful requests.
-- Failed requests.
-- Error rate.
-- Requests per second.
-- Minimum latency.
-- Average latency.
-- p50 latency.
-- p90 latency.
-- p95 latency.
-- p99 latency.
-- Maximum latency.
-- Status counts.
-- Up to 10 sample errors.
-
-Load-test limitations:
-
-- No ramp-up or duration mode.
+- No ramp-up schedule.
+- No duration mode.
+- No per-sample export.
+- No histogram output.
 - No distributed execution.
-- No charted progress view.
-- No histogram or export.
-- No adaptive resource safety beyond fixed request/concurrency caps.
+- No host allowlist, resource budget, or accidental-abuse guard beyond request/concurrency caps.
 
-## Testing Specifications
+## IPC Validation
 
-Current tests are service-level tests under:
+Renderer-originated IPC inputs are validated in `ipcValidation.js` before reaching main-process handlers.
 
-```text
-src/test/java/com/strangequark/postmeter/service/
-```
+Covered payloads:
 
-A lightweight FXML contract test also exists under:
+- Workspace save/export payloads.
+- Collection export payloads.
+- Request send/validate payloads.
+- Optional active environment payloads.
+- Load-test ID, config, and export result payloads.
+- Load export format.
 
-```text
-src/test/java/com/strangequark/postmeter/
-```
+Validation behavior:
 
-Covered behavior:
+- Requires expected object/array/string/number/boolean shapes.
+- Bounds collection, folder, request, pair, history, string, body, folder-depth, and load-result sizes.
+- Rejects unsupported request methods and body types before core execution.
+
+Limitations:
+
+- Validation is handwritten and should be replaced or backed by shared versioned schemas before plugin APIs or remote collaboration are added.
+- Main-process response payloads are not schema-validated yet.
+
+## Packaging And CI
+
+Packaging is configured through `electron-builder` in `package.json`.
+
+Targets:
+
+- `npm run pack:linux`: unpacked Linux directory build.
+- `npm run dist:linux`: Linux AppImage and deb artifacts.
+- The deb package currently uses `PostMeter contributors <postmeter@example.invalid>` as a placeholder maintainer.
+
+CI is configured in `.github/workflows/ci.yml` for:
+
+- `npm ci`
+- `npm test`
+- `npm audit --audit-level=high`
+- `npm run electron:version`
+- `xvfb-run -a npm run test:smoke`
+
+Packaging limitations:
+
+- Release signing is not configured.
+- A real package maintainer contact is not configured.
+- Checksums and update metadata are not generated as a release pipeline yet.
+- Windows and macOS targets are not configured yet.
+
+## Testing
+
+Node tests cover:
 
 - Environment variable resolution.
-- Workspace creation, save/load, path override, schema 1 to 2 migration, migration backup, corrupt workspace quarantine, future schema rejection, and native import/export.
-- Postman collection import for common request fields.
-- HTTP request execution and validation against a local in-process HTTP server.
-- Load-test result aggregation, cancellation-before-start, and percentile metrics against a local in-process HTTP server.
-- FXML handler contract coverage for core workflow buttons.
+- Auth normalization, redaction, validation, and request-time injection.
+- HTTP validation and request execution against a local server.
+- IPC payload validation.
+- Load-test validation, metrics, cancellation, and CSV export.
+- Workspace default creation, schema `2` to `3` migration, corrupt-file recovery, native import, Postman folder import, and native/Postman format detection.
 
-Current verification status:
+Missing tests:
 
-- `./mvnw test` passes with the current test suite.
-- `./mvnw package` passes and builds the jar.
+- Electron UI automation.
+- Full OAuth 2.0 flow tests.
+- Client certificate transport tests.
+- Packaged installer tests.
+- Cross-platform file-dialog and workspace-path tests.
 
-Testing limitations:
+## Remaining Production Gaps
 
-- No full JavaFX/TestFX UI interaction tests yet.
-- No end-to-end desktop workflow tests.
-- No property-based tests or fuzzing for URL/header parsing.
-- No performance regression tests.
-
-## Security Specifications
-
-Current safeguards:
-
-- Validates URL scheme and host.
-- Shows request validation errors before send and load-test execution.
-- Restricts request execution to `http` and `https`.
-- Validates header names.
-- Ignores `Content-Length` as a user-editable header.
-- Caps load-test concurrency and request count.
-- Stores app data outside application resources.
-- Backs up workspace data before schema migration.
-- Quarantines corrupt workspace files instead of overwriting unreadable data in place.
-- Regenerates IDs on collection import to reduce collision risk.
-
-Known security gaps:
-
-- Workspace JSON is plain text.
-- Saved headers and environment variables may contain secrets and are not encrypted or masked.
-- No secret redaction in UI.
-- No auth-specific handling for OAuth, cookies, client certs, or token refresh.
-- No SSRF protections beyond scheme/host validation. As a desktop API client, users can intentionally request private network targets.
-- No trust-store or certificate pinning controls.
-
-## Dependency Specifications
-
-Primary dependencies:
-
-- `org.openjfx:javafx-controls:21.0.5`
-- `org.openjfx:javafx-fxml:21.0.5`
-- `com.fasterxml.jackson.core:jackson-databind:2.17.2`
-- `org.junit.jupiter:junit-jupiter:5.10.2`
-
-Maven plugins:
-
-- `maven-compiler-plugin`
-- `maven-surefire-plugin`
-- `javafx-maven-plugin`
-
-## Packaging Status
-
-Current packaging:
-
-- Maven jar build works with `./mvnw package`.
-
-Not implemented:
-
-- Native installers.
-- Signed releases.
-- Auto-update.
-- GitHub Actions release pipeline.
-- Runtime image generation verification.
-
-## Production Readiness Status
-
-The current repository is a usable desktop MVP, not a production-complete Postman/JMeter replacement.
-
-Production-ready areas:
-
-- Core request editing and execution.
-- Workspace persistence with schema versioning, migration backup, and corrupt-file quarantine.
-- Native workspace and collection sharing.
-- Common Postman collection import.
-- Basic environment substitution.
-- Basic response viewing.
-- Basic cancellable local load testing with richer percentile metrics.
-- Focused service test coverage.
-
-Not production-ready:
-
-- Secret handling.
-- Auth workflows.
-- OpenAPI, curl, HAR, JMeter, and complete Postman import/export coverage.
-- Test scripting/assertions.
-- Collection runner.
-- Distributed or advanced load testing.
-- Full automated UI interaction coverage.
-- Installer/release automation.
+- Add full OAuth 2.0 browser/device-code/PKCE flows.
+- Add client-certificate request transport.
+- Add encrypted/keychain-backed secret storage and export redaction.
+- Replace handwritten IPC validation with versioned schemas and validate response payloads.
+- Add automated Electron UI workflow tests.
+- Add signing, checksums, and update/release automation.
+- Expand importer/exporter coverage for OpenAPI, curl, HAR, and JMeter.
+- Add request assertions, collection runner, scripts/hooks, and CLI/CI execution mode.

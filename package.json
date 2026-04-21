@@ -1,0 +1,47 @@
+{
+  "name": "postmeter",
+  "version": "0.2.0",
+  "description": "Electron desktop API client and local load-testing tool.",
+  "author": "PostMeter contributors",
+  "main": "electron/main.js",
+  "type": "commonjs",
+  "license": "GPL-3.0-only",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test \"test/electron/**/*.test.js\"",
+    "test:smoke": "node test/electron/startupSmoke.js",
+    "check": "npm test && npm run test:smoke && npm audit --audit-level=high && npm run electron:version",
+    "electron:version": "electron --version",
+    "pack:linux": "electron-builder --linux dir",
+    "dist:linux": "electron-builder --linux AppImage deb"
+  },
+  "devDependencies": {
+    "electron": "^41.2.1",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.strangequark.postmeter",
+    "productName": "PostMeter",
+    "files": [
+      "electron/**/*",
+      "src/**/*",
+      "package.json",
+      "LICENSE",
+      "README.md"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "linux": {
+      "category": "Development",
+      "maintainer": "PostMeter contributors <postmeter@example.invalid>",
+      "target": [
+        "AppImage",
+        "deb"
+      ]
+    }
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

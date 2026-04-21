@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none';">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PostMeter</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">PostMeter</div>
+    <label class="field inline">
+      <span>Environment</span>
+      <select id="environmentSelect"></select>
+    </label>
+    <button id="newCollectionButton">New Collection</button>
+    <button id="newFolderButton">New Folder</button>
+    <button id="newRequestButton">New Request</button>
+    <button id="saveButton" class="primary">Save</button>
+    <button id="importWorkspaceButton">Import Workspace</button>
+    <button id="exportWorkspaceButton">Export Workspace</button>
+    <div id="statusLabel" class="status">Ready</div>
+  </header>
+
+  <main class="app-grid">
+    <aside class="sidebar">
+      <div class="sidebar-actions">
+        <button id="importCollectionButton">Import Collection</button>
+        <button id="exportCollectionButton">Export Collection</button>
+      </div>
+      <section>
+        <h2>Collections</h2>
+        <div id="collectionsTree" class="tree"></div>
+      </section>
+      <section>
+        <h2>History</h2>
+        <div id="historyList" class="history"></div>
+      </section>
+    </aside>
+
+    <section class="workspace">
+      <section class="panel request-panel">
+        <input id="requestNameInput" class="title-input" placeholder="Request name">
+        <div class="request-line">
+          <select id="methodSelect">
+            <option>GET</option>
+            <option>POST</option>
+            <option>PUT</option>
+            <option>PATCH</option>
+            <option>DELETE</option>
+            <option>HEAD</option>
+            <option>OPTIONS</option>
+          </select>
+          <input id="urlInput" placeholder="https://api.example.com/resource">
+          <button id="sendButton" class="primary">Send</button>
+        </div>
+        <div id="validationLabel" class="validation"></div>
+
+        <div class="tabs" data-tab-group="request">
+          <button class="tab active" data-tab-group="request" data-tab="params">Params</button>
+          <button class="tab" data-tab-group="request" data-tab="headers">Headers</button>
+          <button class="tab" data-tab-group="request" data-tab="auth">Auth</button>
+          <button class="tab" data-tab-group="request" data-tab="body">Body</button>
+          <button class="tab" data-tab-group="request" data-tab="environment">Environment</button>
+        </div>
+
+        <div id="paramsTab" class="tab-panel active">
+          <div class="table-actions">
+            <button id="addParamButton">Add Param</button>
+          </div>
+          <div id="paramsTable" class="kv-table"></div>
+        </div>
+
+        <div id="headersTab" class="tab-panel">
+          <div class="table-actions">
+            <button id="addHeaderButton">Add Header</button>
+          </div>
+          <div id="headersTable" class="kv-table"></div>
+        </div>
+
+        <div id="authTab" class="tab-panel">
+          <div class="auth-grid">
+            <label class="field">
+              <span>Auth Type</span>
+              <select id="authTypeSelect">
+                <option value="none">None</option>
+                <option value="bearer">Bearer Token</option>
+                <option value="basic">Basic Auth</option>
+                <option value="apiKey">API Key</option>
+                <option value="cookie">Cookie</option>
+                <option value="oauth2">OAuth 2.0</option>
+                <option value="clientCertificate">Client Certificate</option>
+              </select>
+            </label>
+
+            <div class="auth-section" data-auth-section="bearer">
+              <label class="field">
+                <span>Token</span>
+                <input id="authBearerTokenInput" type="password" autocomplete="off">
+              </label>
+            </div>
+
+            <div class="auth-section" data-auth-section="basic">
+              <label class="field">
+                <span>Username</span>
+                <input id="authBasicUsernameInput" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Password</span>
+                <input id="authBasicPasswordInput" type="password" autocomplete="off">
+              </label>
+            </div>
+
+            <div class="auth-section" data-auth-section="apiKey">
+              <label class="field">
+                <span>Location</span>
+                <select id="authApiKeyLocationSelect">
+                  <option value="header">Header</option>
+                  <option value="query">Query Param</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Name</span>
+                <input id="authApiKeyNameInput" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Value</span>
+                <input id="authApiKeyValueInput" type="password" autocomplete="off">
+              </label>
+            </div>
+
+            <div class="auth-section" data-auth-section="cookie">
+              <label class="field">
+                <span>Cookie</span>
+                <input id="authCookieValueInput" type="password" autocomplete="off">
+              </label>
+            </div>
+
+            <div class="auth-section" data-auth-section="oauth2">
+              <label class="field">
+                <span>Token Type</span>
+                <select id="authOauthTokenTypeSelect">
+                  <option value="Bearer">Bearer</option>
+                  <option value="MAC">MAC</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Access Token</span>
+                <input id="authOauthAccessTokenInput" type="password" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Refresh Token</span>
+                <input id="authOauthRefreshTokenInput" type="password" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Authorization URL</span>
+                <input id="authOauthAuthorizationUrlInput" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Token URL</span>
+                <input id="authOauthTokenUrlInput" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Client ID</span>
+                <input id="authOauthClientIdInput" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Client Secret</span>
+                <input id="authOauthClientSecretInput" type="password" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Scopes</span>
+                <input id="authOauthScopesInput" autocomplete="off">
+              </label>
+            </div>
+
+            <div class="auth-section" data-auth-section="clientCertificate">
+              <label class="field">
+                <span>Certificate Path</span>
+                <input id="authClientCertPathInput" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Key Path</span>
+                <input id="authClientKeyPathInput" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Passphrase</span>
+                <input id="authClientPassphraseInput" type="password" autocomplete="off">
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div id="bodyTab" class="tab-panel">
+          <label class="field">
+            <span>Body Type</span>
+            <select id="bodyTypeSelect">
+              <option value="NONE">None</option>
+              <option value="RAW_JSON">Raw JSON</option>
+              <option value="RAW_TEXT">Raw Text</option>
+            </select>
+          </label>
+          <textarea id="bodyInput" spellcheck="false" placeholder="Request body"></textarea>
+        </div>
+
+        <div id="environmentTab" class="tab-panel">
+          <div class="environment-actions">
+            <input id="environmentNameInput" placeholder="Environment name">
+            <button id="newEnvironmentButton">New Environment</button>
+            <button id="deleteEnvironmentButton">Delete Environment</button>
+            <button id="addVariableButton">Add Variable</button>
+          </div>
+          <div id="environmentTable" class="kv-table"></div>
+        </div>
+      </section>
+
+      <section class="results">
+        <div class="tabs" data-tab-group="results">
+          <button class="tab active" data-tab-group="results" data-tab="response">Response</button>
+          <button class="tab" data-tab-group="results" data-tab="load">Load Test</button>
+        </div>
+
+        <div id="responseTab" class="tab-panel active">
+          <div class="metrics">
+            <span>Status <strong id="responseStatus">-</strong></span>
+            <span>Time <strong id="responseTime">-</strong></span>
+            <span>Size <strong id="responseSize">-</strong></span>
+          </div>
+          <div id="finalUrl" class="final-url">-</div>
+          <div class="response-grid">
+            <textarea id="responseBody" readonly spellcheck="false"></textarea>
+            <textarea id="responseHeaders" readonly spellcheck="false"></textarea>
+          </div>
+        </div>
+
+        <div id="loadTab" class="tab-panel">
+          <div class="load-controls">
+            <label>Concurrency <input id="loadConcurrency" type="number" min="1" max="512" value="5"></label>
+            <label>Requests <input id="loadRequests" type="number" min="1" max="100000" value="25"></label>
+            <button id="runLoadButton" class="primary">Run Load Test</button>
+            <button id="cancelLoadButton" disabled>Cancel</button>
+            <button id="exportLoadJsonButton" disabled>Export JSON</button>
+            <button id="exportLoadCsvButton" disabled>Export CSV</button>
+          </div>
+          <pre id="loadResults" class="load-results">No load test run yet.</pre>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
