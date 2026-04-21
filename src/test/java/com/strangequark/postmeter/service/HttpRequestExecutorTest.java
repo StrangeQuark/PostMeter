@@ -13,8 +13,10 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HttpRequestExecutorTest {
@@ -69,5 +71,17 @@ class HttpRequestExecutorTest {
         assertTrue(result.getBody().contains("search=hello+world"));
         assertTrue(result.getBody().contains("\"header\":\"present\""));
         assertTrue(result.getBody().contains("\\\"ok\\\":true"));
+    }
+
+    @Test
+    void validatesUrlAndHeaderBeforeSending() {
+        RequestModel request = new RequestModel("Invalid", "GET", "ftp://example.com");
+        request.getHeaders().add(new KeyValuePair("Bad Header", "value"));
+
+        List<String> errors = new HttpRequestExecutor().validate(request, null);
+
+        assertFalse(errors.isEmpty());
+        assertTrue(errors.stream().anyMatch(error -> error.contains("Only http and https URLs are supported")));
+        assertTrue(errors.stream().anyMatch(error -> error.contains("Invalid header name")));
     }
 }
