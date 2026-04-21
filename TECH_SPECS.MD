@@ -15,10 +15,12 @@ The migration deliberately does not bridge Electron to the Java services. Core b
 - Import/export native PostMeter workspaces.
 - Import/export native PostMeter collections.
 - Import common Postman collection JSON while preserving folder hierarchy.
-- Configure request auth helpers for Bearer token, Basic Auth, API key, Cookie, and static OAuth 2.0 access-token injection.
+- Configure request auth helpers for Bearer token, Basic Auth, API key, Cookie, static OAuth 2.0 access-token injection, and refresh-token renewal when token metadata is present.
+- Mark environment variables as secret and persist known auth secrets plus marked environment values through Electron `safeStorage` when available.
+- Export workspaces and collections with secrets redacted by default, with explicit confirmation required for exact values.
 - Send HTTP requests and display status, timing, size, final URL, headers, and formatted JSON bodies.
 - Record recent request history.
-- Run fixed-size local concurrent load tests with progress, cancellation, latency percentiles, error summaries, and JSON/CSV export.
+- Run fixed-size local concurrent load tests with per-host allowlists, high-concurrency confirmation, progress, cancellation, latency percentiles, error summaries, and JSON/CSV export.
 
 ## Technology Stack
 
@@ -28,6 +30,7 @@ The migration deliberately does not bridge Electron to the Java services. Core b
 - Core services: CommonJS Node modules under `src/core/`
 - HTTP client: Node global `fetch`
 - Persistence: JSON file via `node:fs/promises`
+- Secret storage: Electron `safeStorage` through a main-process codec injected into core persistence
 - Packaging: electron-builder with Linux unpacked, AppImage, and deb targets
 - Tests: Node built-in test runner plus an Electron startup smoke script
 
@@ -103,6 +106,7 @@ src/core/
   loadTestRunner.js
   models.js
   postmanImporter.js
+  secrets.js
   workspaceStore.js
 
 src/renderer/
@@ -133,6 +137,8 @@ Main process responsibilities:
 - Own native open/save dialogs.
 - Execute HTTP requests and load tests through core services.
 - Validate renderer-originated IPC payloads before handing them to persistence, request execution, or load testing.
+- Own Electron `safeStorage` encryption/decryption for local workspace secrets.
+- Require export confirmation before exact secret values are written to workspace or collection exports.
 - Export load-test results to JSON or CSV.
 - Persist request history after sends.
 
@@ -173,14 +179,14 @@ Security settings:
 Known security tradeoffs:
 
 - IPC validation is structural and bounded, but it is not yet a versioned schema contract with generated validators.
-- Auth and environment secret values are masked in the UI but still persisted/exported as plain JSON.
+- Electron `safeStorage` can be unavailable on some Linux sessions; the current fallback preserves data in a plaintext compatibility wrapper and is not production-grade secret storage.
 
 ## Workspace Data Model
 
 Current schema version:
 
 ```text
-3
+4
 ```
 
 Root workspace fields:
@@ -224,7 +230,7 @@ Auth fields vary by `auth.type`:
 - `basic`: `username`, `password`
 - `apiKey`: `location`, `key`, `value`
 - `cookie`: `value`
-- `oauth2`: `tokenType`, `accessToken`, `refreshToken`, `authorizationUrl`, `tokenUrl`, `clientId`, `clientSecret`, `scopes`, `grantType`
+- `oauth2`: `tokenType`, `accessToken`, `refreshToken`, `authorizationUrl`, `tokenUrl`, `clientId`, `clientSecret`, `scopes`, `grantType`, `expiresAt`
 - `clientCertificate`: `certPath`, `keyPath`, `passphrase`
 
 Environment fields:
@@ -238,6 +244,7 @@ Key/value pair fields:
 - `enabled`
 - `key`
 - `value`
+- `secret`
 
 History entry fields:
 
@@ -248,6 +255,8 @@ History entry fields:
 - `durationMillis`
 
 Schema `3` adds collection/folder hierarchy support through `folders`.
+
+Schema `4` adds the `secret` flag to key/value pairs. Existing pairs migrate with `secret: false`.
 
 ## Persistence Specifications
 
@@ -268,30 +277,32 @@ POSTMETER_DATA_PATH=/tmp/postmeter-workspace.json npm start
 Behavior:
 
 - Creates a default workspace when no file exists.
-- Supports schema versions `1` through `3`.
-- Migrates older schemas to schema `3`.
+- Supports schema versions `1` through `4`.
+- Migrates older schemas to schema `4`.
 - Creates timestamped `pre-migration.backup` sibling files before saving migrated workspaces.
 - Rejects future schema versions.
 - Quarantines unreadable workspace JSON by moving it to a timestamped `corrupt` sibling file, then creates a fresh default workspace and raises a recovery error for the UI.
 - Writes JSON through a temporary file and renames into place.
+- Encrypts known auth secret fields and marked environment variable values before local workspace writes when a secret codec is configured.
+- Decrypts local workspace secrets before returning workspaces to the renderer or core import callers.
 - Normalizes IDs, names, body types, methods, arrays, folders, environments, and history.
 - Destructive workspace import creates a current-workspace backup before replacement.
 
 Limitations:
 
-- No encryption.
 - No file locking.
 - No multi-window conflict resolution.
 - No atomic move fallback tuning beyond same-directory rename.
-- Auth and environment secret values remain in the workspace JSON.
+- Electron `safeStorage` ciphertext is host-specific and not a portable export format.
+- If Electron reports `safeStorage` unavailable, the current main-process codec stores a plaintext fallback wrapper to avoid data loss; this needs stronger keyring failure handling before production release.
 
 ## Import And Export
 
-Native workspace export writes the full normalized workspace.
+Native workspace export writes the normalized workspace with secrets redacted by default. Exact auth secrets and marked environment secret values are exported only after explicit confirmation in the main-process dialog.
 
 Native workspace import reads a PostMeter workspace, migrates it, normalizes it, backs up the current workspace, and replaces the active workspace from the UI.
 
-Native collection export writes one collection inside a valid PostMeter workspace wrapper. Environments are intentionally separate and are not included in collection export.
+Native collection export writes one collection inside a valid PostMeter workspace wrapper. Environments are intentionally separate and are not included in collection export. Collection exports follow the same default redaction and exact-value confirmation rule.
 
 Native collection import imports the first collection from a PostMeter workspace file, regenerates IDs, and appends it to the active workspace.
 
@@ -336,7 +347,7 @@ Behavior:
 - Leaves unknown variables unchanged.
 - Applies to URLs, query parameter keys/values, header names/values, and body content before request execution.
 
-Password/token inputs are masked in the UI, but values are still saved in plain JSON.
+Password/token inputs are masked in the UI. Marked environment variables are rendered as password inputs and are encrypted in the local workspace when Electron `safeStorage` is available.
 
 ## Auth Specifications
 
@@ -350,20 +361,22 @@ Implemented request-time auth:
 - API key in query: appends the configured query parameter name and value.
 - Cookie: sets the `Cookie` header.
 - OAuth 2.0 static access token: sets `<tokenType> <accessToken>` in `Authorization`.
+- OAuth 2.0 refresh-token renewal: when `refreshToken`, `tokenUrl`, and expired/missing token metadata are present, posts `grant_type=refresh_token` to the token URL before request execution and returns updated token metadata.
 
 Auth values support environment substitution before use.
 
 Auth validation:
 
-- Requires non-empty configured token/value fields for enabled auth types.
+- Requires non-empty configured token/value fields for enabled auth types. OAuth 2.0 accepts either an access token or a refresh token plus token URL.
 - Validates header names for API-key header auth.
 - Reports client certificate auth as unsupported by the current request transport.
 
 Auth limitations:
 
-- Full OAuth 2.0 authorization-code, browser, refresh-token, device-code, and PKCE flows are not implemented yet.
+- Full OAuth 2.0 authorization-code/browser/device-code/PKCE flows are not implemented yet.
+- Refresh-token renewal currently sends `client_id` and `client_secret` in the form body when present; it does not yet support alternate OAuth client-auth methods.
 - Client certificate transport is not implemented because Node global `fetch` does not directly expose the TLS client-certificate configuration needed by this UI model.
-- Auth secrets are not stored in OS keychains or encrypted files yet.
+- Auth secrets rely on Electron `safeStorage` availability and do not yet have a robust keyring-unavailable recovery policy.
 
 ## HTTP Request Execution
 
@@ -422,16 +435,22 @@ Inputs:
 - Active environment.
 - `concurrency`
 - `totalRequests`
+- `allowedHosts`
+- `confirmedHighConcurrency`
 
 Limits:
 
 - Max concurrency: `512`
 - Max total requests: `100000`
+- Max allowed hosts: `100`
+- High-concurrency confirmation threshold: `50`
 
 Behavior:
 
 - Runs a fixed number of requests across a local worker pool.
 - Uses the same HTTP validation and execution path as normal request send.
+- Requires the resolved request host to match the configured allowlist.
+- Rejects concurrency `50` or higher unless confirmation is present.
 - Supports cancellation with `AbortController`.
 - Emits progress events with completed and requested request counts.
 - Records successful status codes and failed request error samples.
@@ -445,7 +464,7 @@ Limitations:
 - No per-sample export.
 - No histogram output.
 - No distributed execution.
-- No host allowlist, resource budget, or accidental-abuse guard beyond request/concurrency caps.
+- No resource budget, ramp-up safety model, distributed worker limits, or per-target rate governance beyond host allowlists, confirmation, and request/concurrency caps.
 
 ## IPC Validation
 
@@ -463,7 +482,7 @@ Covered payloads:
 Validation behavior:
 
 - Requires expected object/array/string/number/boolean shapes.
-- Bounds collection, folder, request, pair, history, string, body, folder-depth, and load-result sizes.
+- Bounds collection, folder, request, pair, history, string, body, allowed-host, folder-depth, and load-result sizes.
 - Rejects unsupported request methods and body types before core execution.
 
 Limitations:
@@ -479,7 +498,7 @@ Targets:
 
 - `npm run pack:linux`: unpacked Linux directory build.
 - `npm run dist:linux`: Linux AppImage and deb artifacts.
-- The deb package currently uses `PostMeter contributors <postmeter@example.invalid>` as a placeholder maintainer.
+- The deb package uses `PostMeter contributors <zacharyzirkle@hotmail.com>` as maintainer metadata.
 
 CI is configured in `.github/workflows/ci.yml` for:
 
@@ -492,7 +511,6 @@ CI is configured in `.github/workflows/ci.yml` for:
 Packaging limitations:
 
 - Release signing is not configured.
-- A real package maintainer contact is not configured.
 - Checksums and update metadata are not generated as a release pipeline yet.
 - Windows and macOS targets are not configured yet.
 
@@ -501,16 +519,16 @@ Packaging limitations:
 Node tests cover:
 
 - Environment variable resolution.
-- Auth normalization, redaction, validation, and request-time injection.
+- Auth normalization, redaction, validation, OAuth refresh-token renewal, and request-time injection.
 - HTTP validation and request execution against a local server.
 - IPC payload validation.
-- Load-test validation, metrics, cancellation, and CSV export.
-- Workspace default creation, schema `2` to `3` migration, corrupt-file recovery, native import, Postman folder import, and native/Postman format detection.
+- Load-test validation, host allowlists, high-concurrency confirmation, metrics, cancellation, and CSV export.
+- Workspace default creation, schema `2` to `4` migration, corrupt-file recovery, secret encryption/redaction, native import, Postman folder import, and native/Postman format detection.
 
 Missing tests:
 
 - Electron UI automation.
-- Full OAuth 2.0 flow tests.
+- Full OAuth 2.0 browser/device-code/PKCE flow tests.
 - Client certificate transport tests.
 - Packaged installer tests.
 - Cross-platform file-dialog and workspace-path tests.
@@ -519,7 +537,7 @@ Missing tests:
 
 - Add full OAuth 2.0 browser/device-code/PKCE flows.
 - Add client-certificate request transport.
-- Add encrypted/keychain-backed secret storage and export redaction.
+- Harden Electron `safeStorage` unavailable handling and consider OS keychain/passphrase fallback options.
 - Replace handwritten IPC validation with versioned schemas and validate response payloads.
 - Add automated Electron UI workflow tests.
 - Add signing, checksums, and update/release automation.

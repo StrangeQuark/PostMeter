@@ -39,6 +39,7 @@ window.addEventListener('beforeunload', () => {
 });
 
 function bindUi() {
+  bindToolbarMenus();
   $('newCollectionButton').addEventListener('click', newCollection);
   $('newFolderButton').addEventListener('click', () => newFolder());
   $('newRequestButton').addEventListener('click', newRequest);
@@ -100,6 +101,76 @@ function bindUi() {
   for (const button of document.querySelectorAll('.tab')) {
     button.addEventListener('click', () => activateTab(button.dataset.tabGroup, button.dataset.tab));
   }
+
+  $('contextMenu').addEventListener('click', (event) => event.stopPropagation());
+  document.addEventListener('click', () => {
+    closeContextMenu();
+    closeToolbarMenus();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      closeContextMenu();
+      closeToolbarMenus();
+    }
+  });
+  window.addEventListener('blur', () => {
+    closeContextMenu();
+    closeToolbarMenus();
+  });
+  window.addEventListener('resize', () => {
+    closeContextMenu();
+    closeToolbarMenus();
+  });
+  initResizablePanes();
+}
+
+function bindToolbarMenus() {
+  for (const [buttonId, menuId] of [
+    ['newMenuButton', 'newMenu'],
+    ['importMenuButton', 'importMenu'],
+    ['exportMenuButton', 'exportMenu']
+  ]) {
+    const button = $(buttonId);
+    const menu = $(menuId);
+    button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      toggleToolbarMenu(button, menu);
+    });
+    button.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        openToolbarMenu(button, menu);
+        menu.querySelector('button')?.focus();
+      }
+    });
+    menu.addEventListener('click', (event) => {
+      event.stopPropagation();
+      closeToolbarMenus();
+    });
+  }
+}
+
+function toggleToolbarMenu(button, menu) {
+  if (menu.hidden) {
+    openToolbarMenu(button, menu);
+  } else {
+    closeToolbarMenus();
+  }
+}
+
+function openToolbarMenu(button, menu) {
+  closeToolbarMenus();
+  menu.hidden = false;
+  button.setAttribute('aria-expanded', 'true');
+}
+
+function closeToolbarMenus() {
+  for (const menu of document.querySelectorAll('.toolbar-menu')) {
+    menu.hidden = true;
+  }
+  for (const button of document.querySelectorAll('.menu-trigger')) {
+    button.setAttribute('aria-expanded', 'false');
+  }
 }
 
 function renderAll() {
@@ -116,8 +187,7 @@ function selectInitialWorkspaceItem() {
   if (collection) {
     selectFirstRequest(collection);
   } else {
-    activeFolderId = null;
-    activeRequestId = null;
+    clearActiveWorkspaceItem();
   }
 }
 
@@ -130,6 +200,13 @@ function selectFirstRequest(collection) {
 function renderCollections() {
   const root = $('collectionsTree');
   root.textContent = '';
+  if (!workspace.collections.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.textContent = 'No collections';
+    root.append(empty);
+    return;
+  }
   for (const collection of workspace.collections) {
     root.append(collectionNode(collection));
   }
@@ -137,21 +214,22 @@ function renderCollections() {
 
 function collectionNode(collection) {
   const wrapper = document.createElement('div');
-  const button = treeButton(`Collection: ${collection.name}`, collection.id === activeCollectionId && !activeRequestId);
+  wrapper.className = 'tree-node collection-node';
+  const button = treeButton(collection.name, collection.id === activeCollectionId && !activeRequestId, 'COL');
   button.addEventListener('click', () => {
     collectRequestFromEditor();
     activeCollectionId = collection.id;
     selectFirstRequest(collection);
     renderAll();
   });
-  wrapper.append(button);
-  wrapper.append(actions([
-    ['Add Request', () => newRequest(collection.id)],
+  attachTreeContextMenu(button, [
+    ['Add Request', () => newRequest(collection.id, null)],
     ['Add Folder', () => newFolder(collection.id, null)],
     ['Rename', () => renameCollection(collection)],
     ['Export', () => exportCollection(collection)],
-    ['Delete', () => deleteCollection(collection)]
-  ]));
+    ['Delete', () => deleteCollection(collection), 'danger']
+  ]);
+  wrapper.append(button);
   for (const request of collection.requests || []) {
     wrapper.append(requestNode(collection, null, request));
   }
@@ -163,21 +241,21 @@ function collectionNode(collection) {
 
 function folderNode(collection, folder) {
   const wrapper = document.createElement('div');
-  wrapper.className = 'tree-folder';
-  const button = treeButton(`Folder: ${folder.name}`, folder.id === activeFolderId && !activeRequestId);
+  wrapper.className = 'tree-node tree-folder folder-node';
+  const button = treeButton(folder.name, folder.id === activeFolderId && !activeRequestId, 'DIR');
   button.addEventListener('click', () => {
     activeCollectionId = collection.id;
     activeFolderId = folder.id;
     activeRequestId = firstRequestInFolder(folder)?.request?.id;
     renderAll();
   });
-  wrapper.append(button);
-  wrapper.append(actions([
+  attachTreeContextMenu(button, [
     ['Add Request', () => newRequest(collection.id, folder.id)],
     ['Add Folder', () => newFolder(collection.id, folder.id)],
     ['Rename', () => renameFolder(folder)],
-    ['Delete', () => deleteFolder(collection, folder)]
-  ]));
+    ['Delete', () => deleteFolder(collection, folder), 'danger']
+  ]);
+  wrapper.append(button);
   for (const request of folder.requests || []) {
     wrapper.append(requestNode(collection, folder, request));
   }
@@ -189,41 +267,184 @@ function folderNode(collection, folder) {
 
 function requestNode(collection, folder, request) {
   const wrapper = document.createElement('div');
-  wrapper.className = 'tree-folder';
-  const button = treeButton(`${request.method} ${request.name}`, request.id === activeRequestId);
+  wrapper.className = 'tree-node tree-folder request-node';
+  const button = treeButton(request.name, request.id === activeRequestId, request.method);
   button.addEventListener('click', () => {
     collectRequestFromEditor();
     activeCollectionId = collection.id;
     activeFolderId = folder?.id || null;
     activeRequestId = request.id;
-    renderRequestEditor();
+    renderAll();
   });
-  wrapper.append(button);
-  wrapper.append(actions([
+  attachTreeContextMenu(button, [
     ['Rename', () => renameRequest(request)],
     ['Duplicate', () => duplicateRequest(collection, folder, request)],
-    ['Delete', () => deleteRequest(collection, folder, request)]
-  ]));
+    ['Delete', () => deleteRequest(collection, folder, request), 'danger']
+  ]);
+  wrapper.append(button);
   return wrapper;
 }
 
-function treeButton(text, active) {
+function treeButton(text, active, kind) {
   const button = document.createElement('button');
   button.className = `tree-item${active ? ' active' : ''}`;
-  button.textContent = text;
+  button.type = 'button';
+  button.setAttribute('aria-haspopup', 'menu');
+  const badge = document.createElement('span');
+  badge.className = 'tree-badge';
+  badge.textContent = kind;
+  const label = document.createElement('span');
+  label.className = 'tree-label';
+  label.textContent = text;
+  button.append(badge, label);
   return button;
 }
 
-function actions(items) {
-  const row = document.createElement('div');
-  row.className = 'tree-actions';
-  for (const [label, handler] of items) {
+function attachTreeContextMenu(button, items) {
+  button.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    showContextMenu(event.clientX, event.clientY, items);
+  });
+  button.addEventListener('keydown', (event) => {
+    if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+      event.preventDefault();
+      const rect = button.getBoundingClientRect();
+      showContextMenu(rect.left + 16, rect.bottom + 4, items);
+    }
+  });
+}
+
+function showContextMenu(x, y, items) {
+  const menu = $('contextMenu');
+  menu.textContent = '';
+  for (const [label, handler, variant] of items) {
     const button = document.createElement('button');
+    button.type = 'button';
+    button.setAttribute('role', 'menuitem');
+    button.className = variant === 'danger' ? 'danger' : '';
     button.textContent = label;
-    button.addEventListener('click', handler);
-    row.append(button);
+    button.addEventListener('click', () => {
+      closeContextMenu();
+      handler();
+    });
+    menu.append(button);
   }
-  return row;
+  menu.hidden = false;
+  menu.style.left = '0';
+  menu.style.top = '0';
+  const maxX = window.innerWidth - menu.offsetWidth - 8;
+  const maxY = window.innerHeight - menu.offsetHeight - 8;
+  menu.style.left = `${Math.max(8, Math.min(x, maxX))}px`;
+  menu.style.top = `${Math.max(8, Math.min(y, maxY))}px`;
+}
+
+function closeContextMenu() {
+  const menu = $('contextMenu');
+  if (!menu || menu.hidden) {
+    return;
+  }
+  menu.hidden = true;
+  menu.textContent = '';
+}
+
+function initResizablePanes() {
+  restoreLayout();
+  setupDragResize('mainPaneResize', (event) => {
+    const maxWidth = Math.max(260, Math.min(560, window.innerWidth - 520));
+    setLayoutVar('--sidebar-width', `${clamp(event.clientX, 220, maxWidth)}px`);
+  }, '--sidebar-width');
+  setupDragResize('sidebarPaneResize', (event) => {
+    const sidebar = document.querySelector('.sidebar');
+    const rect = sidebar.getBoundingClientRect();
+    const maxHeight = Math.max(140, rect.height - 190);
+    setLayoutVar('--history-height', `${clamp(rect.bottom - event.clientY - 10, 120, maxHeight)}px`);
+  }, '--history-height');
+  setupDragResize('workspacePaneResize', (event) => {
+    const workspaceElement = document.querySelector('.workspace');
+    const rect = workspaceElement.getBoundingClientRect();
+    const maxHeight = Math.max(260, rect.height - 220);
+    setLayoutVar('--request-height', `${clamp(event.clientY - rect.top - 10, 240, maxHeight)}px`);
+  }, '--request-height');
+  setupDragResize('responsePaneResize', (event) => {
+    const grid = document.querySelector('.response-grid');
+    const rect = grid.getBoundingClientRect();
+    setLayoutVar('--response-body-width', `${clamp(event.clientX - rect.left, 220, Math.max(220, rect.width - 220))}px`);
+  }, '--response-body-width');
+}
+
+function setupDragResize(id, update, cssVariable) {
+  const handle = $(id);
+  if (!handle) {
+    return;
+  }
+  handle.addEventListener('mousedown', (event) => {
+    if (event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+    const resizeClass = handle.classList.contains('horizontal') ? 'is-resizing-row' : 'is-resizing-col';
+    document.body.classList.add('is-resizing', resizeClass);
+    const onMouseMove = (moveEvent) => update(moveEvent);
+    const onMouseUp = () => {
+      document.body.classList.remove('is-resizing', resizeClass);
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  });
+  handle.addEventListener('dblclick', () => resetLayoutVar(cssVariable));
+}
+
+function restoreLayout() {
+  for (const [name, fallback] of Object.entries(defaultLayoutVars())) {
+    const value = readLayoutVar(name) || fallback;
+    document.documentElement.style.setProperty(name, value);
+  }
+}
+
+function setLayoutVar(name, value) {
+  document.documentElement.style.setProperty(name, value);
+  try {
+    localStorage.setItem(layoutStorageKey(name), value);
+  } catch {
+    // Ignore storage failures; resizing still works for the current session.
+  }
+}
+
+function resetLayoutVar(name) {
+  const fallback = defaultLayoutVars()[name];
+  if (!fallback) {
+    return;
+  }
+  document.documentElement.style.setProperty(name, fallback);
+  try {
+    localStorage.removeItem(layoutStorageKey(name));
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+function readLayoutVar(name) {
+  try {
+    return localStorage.getItem(layoutStorageKey(name));
+  } catch {
+    return null;
+  }
+}
+
+function defaultLayoutVars() {
+  return {
+    '--sidebar-width': '300px',
+    '--history-height': '210px',
+    '--request-height': '52%',
+    '--response-body-width': '1.25fr'
+  };
+}
+
+function layoutStorageKey(name) {
+  return `postmeter.layout.${name}`;
 }
 
 function renderRequestEditor() {
@@ -335,7 +556,7 @@ function renderEnvironmentPairs(pairs) {
   container.textContent = '';
   pairs.forEach((pair, index) => {
     const row = document.createElement('div');
-    row.className = 'kv-row';
+    row.className = 'kv-row env-row';
     const enabled = document.createElement('input');
     enabled.type = 'checkbox';
     enabled.checked = pair.enabled !== false;
@@ -346,15 +567,28 @@ function renderEnvironmentPairs(pairs) {
     key.addEventListener('input', () => { pair.key = key.value; });
     const value = document.createElement('input');
     value.placeholder = 'Value';
+    value.type = pair.secret ? 'password' : 'text';
     value.value = pair.value || '';
     value.addEventListener('input', () => { pair.value = value.value; });
+    const secretLabel = document.createElement('label');
+    secretLabel.className = 'secret-toggle';
+    const secret = document.createElement('input');
+    secret.type = 'checkbox';
+    secret.checked = pair.secret === true;
+    secret.addEventListener('change', () => {
+      pair.secret = secret.checked;
+      value.type = pair.secret ? 'password' : 'text';
+    });
+    const secretText = document.createElement('span');
+    secretText.textContent = 'Secret';
+    secretLabel.append(secret, secretText);
     const remove = document.createElement('button');
     remove.textContent = 'Remove';
     remove.addEventListener('click', () => {
       pairs.splice(index, 1);
       renderEnvironmentEditor();
     });
-    row.append(enabled, key, value, remove);
+    row.append(enabled, key, value, secretLabel, remove);
     container.append(row);
   });
 }
@@ -396,6 +630,10 @@ async function sendActiveRequest() {
   setStatus('Sending request...');
   try {
     const response = await window.postmeter.request.send(request, environment);
+    if (response.updatedAuth) {
+      request.auth = response.updatedAuth;
+      renderAuthEditor(request.auth);
+    }
     displayResponse(response);
     workspace.history = [
       {
@@ -454,6 +692,18 @@ async function runLoadTest() {
     $('validationLabel').textContent = errors.join(' ');
     return setStatus('Fix validation errors.');
   }
+  const concurrency = Number($('loadConcurrency').value);
+  const allowedHosts = loadAllowedHostsForRequest(request);
+  if (!allowedHosts.length) {
+    return setStatus('Add at least one allowed host before running a load test.');
+  }
+  let confirmedHighConcurrency = false;
+  if (concurrency >= 50) {
+    confirmedHighConcurrency = confirm(`Run load test with concurrency ${concurrency}?`);
+    if (!confirmedHighConcurrency) {
+      return setStatus('Load test cancelled.');
+    }
+  }
   activeLoadId = crypto.randomUUID();
   $('runLoadButton').disabled = true;
   $('cancelLoadButton').disabled = false;
@@ -462,8 +712,10 @@ async function runLoadTest() {
   $('loadResults').textContent = 'Starting load test...';
   try {
     lastLoadResult = await window.postmeter.loadTest.start(activeLoadId, request, environment, {
-      concurrency: Number($('loadConcurrency').value),
-      totalRequests: Number($('loadRequests').value)
+      concurrency,
+      totalRequests: Number($('loadRequests').value),
+      allowedHosts,
+      confirmedHighConcurrency
     });
     $('loadResults').textContent = formatLoadResult(lastLoadResult);
     $('exportLoadJsonButton').disabled = false;
@@ -642,7 +894,7 @@ function newEnvironment() {
   const environment = {
     id: crypto.randomUUID(),
     name: uniqueName('New Environment', workspace.environments.map((item) => item.name)),
-    variables: [{ enabled: true, key: 'baseUrl', value: 'https://example.com' }]
+    variables: [{ enabled: true, key: 'baseUrl', value: 'https://example.com', secret: false }]
   };
   workspace.environments.push(environment);
   activeEnvironmentId = environment.id;
@@ -664,7 +916,7 @@ function deleteEnvironment() {
 function addVariable() {
   const environment = activeEnvironment();
   if (environment) {
-    environment.variables.push({ enabled: true, key: '', value: '' });
+    environment.variables.push({ enabled: true, key: '', value: '', secret: false });
     renderEnvironmentEditor();
   }
 }
@@ -729,11 +981,18 @@ function deleteCollection(collection) {
   }
   workspace.collections = workspace.collections.filter((item) => item.id !== collection.id);
   if (!workspace.collections.length) {
-    newCollection();
+    clearActiveWorkspaceItem();
+    renderAll();
   } else {
     selectInitialWorkspaceItem();
     renderAll();
   }
+}
+
+function clearActiveWorkspaceItem() {
+  activeCollectionId = null;
+  activeFolderId = null;
+  activeRequestId = null;
 }
 
 function deleteRequest(collection, folder, request) {
@@ -764,6 +1023,7 @@ function collectRequestFromEditor() {
 
 function collectAuthFromEditor() {
   const type = $('authTypeSelect').value;
+  const existingAuth = activeRequest()?.auth || {};
   if (type === 'bearer') {
     return { type, token: $('authBearerTokenInput').value };
   }
@@ -796,7 +1056,8 @@ function collectAuthFromEditor() {
       clientId: $('authOauthClientIdInput').value,
       clientSecret: $('authOauthClientSecretInput').value,
       scopes: $('authOauthScopesInput').value,
-      grantType: 'authorizationCode'
+      grantType: 'authorizationCode',
+      expiresAt: existingAuth.type === 'oauth2' ? existingAuth.expiresAt || '' : ''
     };
   }
   if (type === 'clientCertificate') {
@@ -1007,4 +1268,32 @@ function formatBytes(bytes) {
 
 function setStatus(message) {
   $('statusLabel').textContent = message;
+}
+
+function loadAllowedHostsForRequest(request) {
+  const hosts = $('loadAllowedHosts').value
+    .split(/[,\n]/)
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (hosts.length) {
+    return hosts;
+  }
+  const host = hostFromRawUrl(request.url);
+  if (host) {
+    $('loadAllowedHosts').value = host;
+    return [host];
+  }
+  return [];
+}
+
+function hostFromRawUrl(rawUrl) {
+  try {
+    return new URL(rawUrl).hostname;
+  } catch {
+    return '';
+  }
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
 }

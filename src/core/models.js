@@ -1,6 +1,6 @@
 const crypto = require('node:crypto');
 
-const CURRENT_SCHEMA_VERSION = 3;
+const CURRENT_SCHEMA_VERSION = 4;
 const MIN_SUPPORTED_SCHEMA_VERSION = 1;
 const SUPPORTED_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']);
 const BODY_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -15,8 +15,8 @@ function newId() {
   return crypto.randomUUID();
 }
 
-function keyValue(key = '', value = '', enabled = true) {
-  return { enabled, key: key ?? '', value: value ?? '' };
+function keyValue(key = '', value = '', enabled = true, secret = false) {
+  return { enabled, key: key ?? '', value: value ?? '', secret: secret === true };
 }
 
 function requestModel({ id, name, method, url, queryParams, headers, bodyType, body, auth } = {}) {
@@ -84,7 +84,7 @@ function normalizePairs(pairs) {
   if (!Array.isArray(pairs)) {
     return [];
   }
-  return pairs.map((pair) => keyValue(pair.key, pair.value, pair.enabled !== false));
+  return pairs.map((pair) => keyValue(pair.key, pair.value, pair.enabled !== false, pair.secret === true));
 }
 
 function normalizeAuth(auth) {
@@ -106,26 +106,8 @@ function normalizeName(name, fallback) {
 function defaultWorkspace() {
   return workspaceModel({
     schemaVersion: CURRENT_SCHEMA_VERSION,
-    collections: [
-      collectionModel({
-        name: 'Getting Started',
-        requests: [
-          requestModel({
-            name: 'Echo GET',
-            method: 'GET',
-            url: 'https://postman-echo.com/get',
-            queryParams: [keyValue('source', 'postmeter')],
-            headers: [keyValue('Accept', 'application/json')]
-          })
-        ]
-      })
-    ],
-    environments: [
-      environmentModel({
-        name: 'Local Example',
-        variables: [keyValue('baseUrl', 'https://postman-echo.com')]
-      })
-    ],
+    collections: [],
+    environments: [],
     history: []
   });
 }

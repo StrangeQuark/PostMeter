@@ -9,35 +9,55 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">PostMeter</div>
-    <label class="field inline">
+    <div class="brand-wrap">
+      <div class="brand">PostMeter</div>
+    </div>
+    <div class="toolbar-group menu-group" aria-label="Create">
+      <button id="newMenuButton" class="primary menu-trigger" aria-haspopup="menu" aria-expanded="false">New</button>
+      <div id="newMenu" class="toolbar-menu" role="menu" hidden>
+        <button id="newRequestButton" role="menuitem">Request</button>
+        <button id="newCollectionButton" role="menuitem">Collection</button>
+        <button id="newFolderButton" role="menuitem">Folder</button>
+      </div>
+    </div>
+    <div class="toolbar-group workspace-group" aria-label="Workspace">
+      <button id="saveButton">Save</button>
+    </div>
+    <div class="toolbar-group menu-group" aria-label="Import">
+      <button id="importMenuButton" class="menu-trigger" aria-haspopup="menu" aria-expanded="false">Import</button>
+      <div id="importMenu" class="toolbar-menu" role="menu" hidden>
+        <button id="importWorkspaceButton" role="menuitem">Workspace</button>
+        <button id="importCollectionButton" role="menuitem">Collection</button>
+      </div>
+    </div>
+    <div class="toolbar-group menu-group" aria-label="Export">
+      <button id="exportMenuButton" class="menu-trigger" aria-haspopup="menu" aria-expanded="false">Export</button>
+      <div id="exportMenu" class="toolbar-menu" role="menu" hidden>
+        <button id="exportWorkspaceButton" role="menuitem">Workspace</button>
+        <button id="exportCollectionButton" role="menuitem">Collection</button>
+      </div>
+    </div>
+    <label class="field inline environment-control">
       <span>Environment</span>
       <select id="environmentSelect"></select>
     </label>
-    <button id="newCollectionButton">New Collection</button>
-    <button id="newFolderButton">New Folder</button>
-    <button id="newRequestButton">New Request</button>
-    <button id="saveButton" class="primary">Save</button>
-    <button id="importWorkspaceButton">Import Workspace</button>
-    <button id="exportWorkspaceButton">Export Workspace</button>
     <div id="statusLabel" class="status">Ready</div>
   </header>
 
-  <main class="app-grid">
+  <main id="appGrid" class="app-grid">
     <aside class="sidebar">
-      <div class="sidebar-actions">
-        <button id="importCollectionButton">Import Collection</button>
-        <button id="exportCollectionButton">Export Collection</button>
-      </div>
       <section>
         <h2>Collections</h2>
         <div id="collectionsTree" class="tree"></div>
       </section>
+      <div id="sidebarPaneResize" class="splitter horizontal" role="separator" aria-orientation="horizontal" tabindex="0"></div>
       <section>
         <h2>History</h2>
         <div id="historyList" class="history"></div>
       </section>
     </aside>
+
+    <div id="mainPaneResize" class="splitter vertical" role="separator" aria-orientation="vertical" tabindex="0"></div>
 
     <section class="workspace">
       <section class="panel request-panel">
@@ -215,6 +235,8 @@
         </div>
       </section>
 
+      <div id="workspacePaneResize" class="splitter horizontal" role="separator" aria-orientation="horizontal" tabindex="0"></div>
+
       <section class="results">
         <div class="tabs" data-tab-group="results">
           <button class="tab active" data-tab-group="results" data-tab="response">Response</button>
@@ -230,6 +252,7 @@
           <div id="finalUrl" class="final-url">-</div>
           <div class="response-grid">
             <textarea id="responseBody" readonly spellcheck="false"></textarea>
+            <div id="responsePaneResize" class="splitter vertical" role="separator" aria-orientation="vertical" tabindex="0"></div>
             <textarea id="responseHeaders" readonly spellcheck="false"></textarea>
           </div>
         </div>
@@ -238,6 +261,7 @@
           <div class="load-controls">
             <label>Concurrency <input id="loadConcurrency" type="number" min="1" max="512" value="5"></label>
             <label>Requests <input id="loadRequests" type="number" min="1" max="100000" value="25"></label>
+            <label>Allowed Hosts <input id="loadAllowedHosts" placeholder="api.example.com, localhost"></label>
             <button id="runLoadButton" class="primary">Run Load Test</button>
             <button id="cancelLoadButton" disabled>Cancel</button>
             <button id="exportLoadJsonButton" disabled>Export JSON</button>
@@ -248,6 +272,8 @@
       </section>
     </section>
   </main>
+
+  <div id="contextMenu" class="context-menu" role="menu" hidden></div>
 
   <script src="renderer.js"></script>
 </body>

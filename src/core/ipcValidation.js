@@ -14,7 +14,9 @@ const LIMITS = {
   key: 512,
   value: 32768,
   body: 10 * 1024 * 1024,
-  loadResultJson: 10 * 1024 * 1024
+  loadResultJson: 10 * 1024 * 1024,
+  allowedHosts: 100,
+  host: 253
 };
 
 function assertWorkspacePayload(value, field = 'workspace') {
@@ -82,6 +84,12 @@ function assertLoadConfigPayload(value, field = 'config') {
   object(value, field);
   number(value.concurrency, `${field}.concurrency`);
   number(value.totalRequests, `${field}.totalRequests`);
+  optionalBoolean(value.confirmedHighConcurrency, `${field}.confirmedHighConcurrency`);
+  if (value.allowedHosts != null) {
+    array(value.allowedHosts, `${field}.allowedHosts`, LIMITS.allowedHosts).forEach((host, index) => {
+      string(host, `${field}.allowedHosts[${index}]`, LIMITS.host);
+    });
+  }
 }
 
 function assertLoadResultPayload(value, field = 'result') {
@@ -112,7 +120,7 @@ function assertAuthPayload(value, field = 'auth') {
   if ((value.type ?? 'none') === 'clientCertificate' && authErrors.length) {
     return;
   }
-  for (const key of ['token', 'username', 'password', 'key', 'value', 'accessToken', 'refreshToken', 'tokenUrl', 'authorizationUrl', 'clientId', 'clientSecret', 'scopes', 'grantType', 'certPath', 'keyPath', 'passphrase']) {
+  for (const key of ['token', 'username', 'password', 'key', 'value', 'accessToken', 'refreshToken', 'tokenUrl', 'authorizationUrl', 'clientId', 'clientSecret', 'scopes', 'grantType', 'expiresAt', 'certPath', 'keyPath', 'passphrase']) {
     optionalString(value[key], `${field}.${key}`, LIMITS.value);
   }
   optionalString(value.location, `${field}.location`, 16);
@@ -144,6 +152,7 @@ function assertPairs(values, field) {
     const itemField = `${field}[${index}]`;
     object(pair, itemField);
     optionalBoolean(pair.enabled, `${itemField}.enabled`);
+    optionalBoolean(pair.secret, `${itemField}.secret`);
     optionalString(pair.key, `${itemField}.key`, LIMITS.key);
     optionalString(pair.value, `${itemField}.value`, LIMITS.value);
   });

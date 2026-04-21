@@ -1,10 +1,12 @@
 const { performance } = require('node:perf_hooks');
-const { sendRequest } = require('./httpClient');
+const { buildUrl, sendRequest } = require('./httpClient');
 
 const MAX_CONCURRENCY = 512;
 const MAX_TOTAL_REQUESTS = 100_000;
+const HIGH_CONCURRENCY_THRESHOLD = 50;
+const MAX_ALLOWED_HOSTS = 100;
 
-function validateLoadConfig(config) {
+function validateLoadConfig(config, request, environment) {
   const concurrency = Number(config?.concurrency);
   const totalRequests = Number(config?.totalRequests);
   if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > MAX_CONCURRENCY) {
@@ -13,11 +15,24 @@ function validateLoadConfig(config) {
   if (!Number.isInteger(totalRequests) || totalRequests < 1 || totalRequests > MAX_TOTAL_REQUESTS) {
     throw new Error(`Total requests must be between 1 and ${MAX_TOTAL_REQUESTS}.`);
   }
-  return { concurrency, totalRequests };
+  if (concurrency >= HIGH_CONCURRENCY_THRESHOLD && config?.confirmedHighConcurrency !== true) {
+    throw new Error(`Load tests with concurrency ${HIGH_CONCURRENCY_THRESHOLD} or higher require confirmation.`);
+  }
+  const allowedHosts = normalizeAllowedHosts(config?.allowedHosts || []);
+  if (request) {
+    if (!allowedHosts.length) {
+      throw new Error('Load tests require at least one allowed host.');
+    }
+    const requestHost = buildUrl(request, environment).hostname.toLowerCase();
+    if (!allowedHosts.includes(requestHost)) {
+      throw new Error(`Request host ${requestHost} is not in the load-test allowlist.`);
+    }
+  }
+  return { concurrency, totalRequests, allowedHosts, confirmedHighConcurrency: config?.confirmedHighConcurrency === true };
 }
 
 async function runLoadTest(request, environment, config, options = {}) {
-  const normalizedConfig = validateLoadConfig(config);
+  const normalizedConfig = validateLoadConfig(config, request, environment);
   const abortController = options.abortController || new AbortController();
   const progress = typeof options.onProgress === 'function' ? options.onProgress : () => {};
   const samples = [];
@@ -56,6 +71,40 @@ async function runLoadTest(request, environment, config, options = {}) {
   const workerCount = Math.min(normalizedConfig.concurrency, normalizedConfig.totalRequests);
   await Promise.all(Array.from({ length: workerCount }, () => worker()));
   return summarize(samples, performance.now() - started, normalizedConfig.totalRequests, abortController.signal.aborted);
+}
+
+function normalizeAllowedHosts(values) {
+  if (!Array.isArray(values)) {
+    throw new Error('Load-test allowed hosts must be an array.');
+  }
+  if (values.length > MAX_ALLOWED_HOSTS) {
+    throw new Error(`Load-test allowed hosts cannot contain more than ${MAX_ALLOWED_HOSTS} entries.`);
+  }
+  const hosts = [];
+  for (const value of values) {
+    const host = normalizeHost(value);
+    if (host && !hosts.includes(host)) {
+      hosts.push(host);
+    }
+  }
+  return hosts;
+}
+
+function normalizeHost(value) {
+  const text = String(value ?? '').trim();
+  if (!text) {
+    return '';
+  }
+  let url;
+  try {
+    url = text.includes('://') ? new URL(text) : new URL(`http://${text}`);
+  } catch {
+    throw new Error(`Invalid load-test allowed host: ${text}.`);
+  }
+  if (!url.hostname || url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
+    throw new Error(`Invalid load-test allowed host: ${text}.`);
+  }
+  return url.hostname.toLowerCase();
 }
 
 function summarize(samples, elapsedMillis, requestedRequests, cancelled) {
@@ -155,9 +204,12 @@ function csvValue(value) {
 }
 
 module.exports = {
+  HIGH_CONCURRENCY_THRESHOLD,
   MAX_CONCURRENCY,
+  MAX_ALLOWED_HOSTS,
   MAX_TOTAL_REQUESTS,
   loadTestResultToCsv,
+  normalizeAllowedHosts,
   runLoadTest,
   summarize,
   validateLoadConfig
