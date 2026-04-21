@@ -9,6 +9,7 @@ import com.strangequark.postmeter.model.EnvironmentModel;
 import com.strangequark.postmeter.model.HistoryEntry;
 import com.strangequark.postmeter.model.HttpExchangeResult;
 import com.strangequark.postmeter.model.KeyValuePair;
+import com.strangequark.postmeter.model.LoadTestCancellationToken;
 import com.strangequark.postmeter.model.LoadTestConfig;
 import com.strangequark.postmeter.model.LoadTestResult;
 import com.strangequark.postmeter.model.RequestModel;
@@ -24,8 +25,11 @@ import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.control.cell.TextFieldTableCell;
+import javafx.stage.FileChooser;
+import javafx.stage.Window;
 import javafx.util.StringConverter;
 
+import java.io.File;
 import java.io.IOException;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -102,6 +106,10 @@ public class MainController {
     private Button sendButton;
     @FXML
     private Button runLoadTestButton;
+    @FXML
+    private Button cancelLoadTestButton;
+    @FXML
+    private Label validationLabel;
 
     private final WorkspaceStore workspaceStore = new WorkspaceStore();
     private final HttpRequestExecutor requestExecutor = new HttpRequestExecutor();
@@ -114,6 +122,8 @@ public class MainController {
     private WorkspaceData workspace;
     private RequestModel activeRequest;
     private CollectionModel activeCollection;
+    private LoadTestCancellationToken activeLoadTestCancellation;
+    private CompletableFuture<LoadTestResult> activeLoadTestFuture;
     private boolean loadingSelection;
 
     @FXML
@@ -130,6 +140,11 @@ public class MainController {
             refreshWorkspaceViews();
             selectFirstRequest();
             setStatus("Workspace loaded.");
+        } catch (WorkspaceStore.WorkspaceRecoveryException e) {
+            workspace = e.getRecoveredWorkspace();
+            refreshWorkspaceViews();
+            selectFirstRequest();
+            showError("Workspace Recovered", e.getMessage());
         } catch (IOException | RuntimeException e) {
             workspace = WorkspaceStore.defaultWorkspace();
             refreshWorkspaceViews();
@@ -184,26 +199,12 @@ public class MainController {
             setStatus("Select a collection or request to delete.");
             return;
         }
-
-        WorkspaceNode node = selected.getValue();
-        if (node.type == NodeType.COLLECTION) {
-            workspace.getCollections().remove(node.collection);
-            if (workspace.getCollections().isEmpty()) {
-                workspace.getCollections().addAll(WorkspaceStore.defaultWorkspace().getCollections());
-            }
-            activeCollection = null;
-            activeRequest = null;
-        } else if (node.type == NodeType.REQUEST) {
-            node.collection.getRequests().remove(node.request);
-            if (node.collection.getRequests().isEmpty()) {
-                node.collection.getRequests().add(new RequestModel("New Request", "GET", ""));
-            }
-            activeRequest = null;
+        if (!confirm("Delete Selection", "Delete " + selected.getValue().displayName() + "?")) {
+            return;
         }
 
-        refreshCollectionsTree();
-        selectFirstRequest();
-        saveWorkspace("Deleted selection.");
+        WorkspaceNode node = selected.getValue();
+        deleteNode(node);
     }
 
     @FXML
@@ -220,6 +221,96 @@ public class MainController {
     }
 
     @FXML
+    private void handleImportWorkspace() {
+        File file = workspaceFileChooser("Import PostMeter Workspace").showOpenDialog(ownerWindow());
+        if (file == null) {
+            return;
+        }
+        if (!confirm("Replace Workspace", "Importing a workspace replaces the current workspace. Continue?")) {
+            return;
+        }
+
+        try {
+            WorkspaceData imported = workspaceStore.importWorkspace(file.toPath());
+            workspace = imported;
+            activeCollection = null;
+            activeRequest = null;
+            workspaceStore.save(workspace);
+            refreshWorkspaceViews();
+            selectFirstRequest();
+            setStatus("Workspace imported.");
+        } catch (IOException | RuntimeException e) {
+            showError("Import Failed", "Could not import workspace: " + rootMessage(e));
+        }
+    }
+
+    @FXML
+    private void handleExportWorkspace() {
+        if (activeRequest != null) {
+            collectRequestFromEditor(activeRequest);
+        }
+        collectEnvironmentFromEditor();
+
+        File file = workspaceFileChooser("Export PostMeter Workspace").showSaveDialog(ownerWindow());
+        if (file == null) {
+            return;
+        }
+
+        try {
+            workspaceStore.exportWorkspace(workspace, file.toPath());
+            setStatus("Workspace exported to " + file.toPath() + ".");
+        } catch (IOException | RuntimeException e) {
+            showError("Export Failed", "Could not export workspace: " + rootMessage(e));
+        }
+    }
+
+    @FXML
+    private void handleImportCollection() {
+        File file = workspaceFileChooser("Import PostMeter Collection").showOpenDialog(ownerWindow());
+        if (file == null) {
+            return;
+        }
+
+        try {
+            CollectionModel imported = workspaceStore.importCollection(file.toPath());
+            imported.setName(uniqueName(imported.getName(), workspace.getCollections().stream()
+                    .map(CollectionModel::getName)
+                    .toList()));
+            workspace.getCollections().add(imported);
+            refreshCollectionsTree();
+            if (!imported.getRequests().isEmpty()) {
+                selectRequest(imported.getRequests().getFirst().getId());
+            }
+            saveWorkspace("Collection imported.");
+        } catch (IOException | RuntimeException e) {
+            showError("Import Failed", "Could not import collection: " + rootMessage(e));
+        }
+    }
+
+    @FXML
+    private void handleExportSelectedCollection() {
+        CollectionModel collection = selectedCollection();
+        if (collection == null) {
+            setStatus("Select a collection to export.");
+            return;
+        }
+
+        FileChooser fileChooser = workspaceFileChooser("Export PostMeter Collection");
+        fileChooser.setInitialFileName(safeFilename(collection.getName()) + ".postmeter.json");
+        File file = fileChooser.showSaveDialog(ownerWindow());
+        if (file == null) {
+            return;
+        }
+
+        try {
+            workspaceStore.exportCollection(collection, file.toPath());
+            setStatus("Collection exported to " + file.toPath() + ".");
+        } catch (IOException | RuntimeException e) {
+            showError("Export Failed", "Could not export collection: " + rootMessage(e));
+        }
+    }
+
+    @FXML
     private void handleSend() {
         if (activeRequest == null) {
             setStatus("Create or select a request before sending.");
@@ -230,6 +321,9 @@ public class MainController {
         collectEnvironmentFromEditor();
         RequestModel requestToSend = copyRequest(activeRequest);
         EnvironmentModel environment = activeEnvironment();
+        if (!validateRequestForExecution(requestToSend, environment)) {
+            return;
+        }
 
         sendButton.setDisable(true);
         clearResponse();
@@ -325,6 +419,9 @@ public class MainController {
         collectEnvironmentFromEditor();
         RequestModel requestToSend = copyRequest(activeRequest);
         EnvironmentModel environment = activeEnvironment();
+        if (!validateRequestForExecution(requestToSend, environment)) {
+            return;
+        }
         LoadTestConfig config;
         try {
             config = new LoadTestConfig(concurrencySpinner.getValue(), requestCountSpinner.getValue());
@@ -334,22 +431,42 @@ public class MainController {
         }
 
         runLoadTestButton.setDisable(true);
+        cancelLoadTestButton.setDisable(false);
+        activeLoadTestCancellation = new LoadTestCancellationToken();
         loadResultsArea.setText("Running " + config.getTotalRequests() + " requests with concurrency "
                 + config.getConcurrency() + "...\n");
         setStatus("Running load test...");
 
-        CompletableFuture
-                .supplyAsync(() -> loadTestRunner.run(requestToSend, environment, config))
+        activeLoadTestFuture = CompletableFuture
+                .supplyAsync(() -> loadTestRunner.run(
+                        requestToSend,
+                        environment,
+                        config,
+                        activeLoadTestCancellation,
+                        progress -> Platform.runLater(() -> updateLoadProgress(progress.getCompletedRequests(), progress.getRequestedRequests()))
+                ))
                 .whenComplete((result, error) -> Platform.runLater(() -> {
                     runLoadTestButton.setDisable(false);
+                    cancelLoadTestButton.setDisable(true);
+                    activeLoadTestCancellation = null;
+                    activeLoadTestFuture = null;
                     if (error != null) {
                         loadResultsArea.setText("Load test failed:\n" + rootMessage(error));
                         setStatus("Load test failed.");
                         return;
                     }
                     loadResultsArea.setText(formatLoadTestResult(result));
-                    setStatus("Load test completed.");
+                    setStatus(result.isCancelled() ? "Load test cancelled." : "Load test completed.");
                 }));
+    }
+
+    @FXML
+    private void handleCancelLoadTest() {
+        if (activeLoadTestCancellation != null) {
+            activeLoadTestCancellation.cancel();
+            cancelLoadTestButton.setDisable(true);
+            setStatus("Cancelling load test...");
+        }
     }
 
     private void configureTables() {
@@ -388,7 +505,13 @@ public class MainController {
             @Override
             protected void updateItem(WorkspaceNode item, boolean empty) {
                 super.updateItem(item, empty);
-                setText(empty || item == null ? null : item.displayName());
+                if (empty || item == null) {
+                    setText(null);
+                    setContextMenu(null);
+                    return;
+                }
+                setText(item.displayName());
+                setContextMenu(collectionsContextMenu(item));
             }
         });
 
@@ -410,6 +533,51 @@ public class MainController {
                 loadRequestIntoEditor(node.collection, node.request);
             }
         });
+    }
+
+    private ContextMenu collectionsContextMenu(WorkspaceNode node) {
+        ContextMenu contextMenu = new ContextMenu();
+        if (node.type == NodeType.COLLECTION) {
+            MenuItem newRequest = new MenuItem("Add Request");
+            newRequest.setOnAction(event -> {
+                activeCollection = node.collection;
+                handleNewRequest();
+            });
+
+            MenuItem renameCollection = new MenuItem("Rename Collection");
+            renameCollection.setOnAction(event -> renameCollection(node.collection));
+
+            MenuItem exportCollection = new MenuItem("Export Collection");
+            exportCollection.setOnAction(event -> {
+                selectCollection(node.collection);
+                handleExportSelectedCollection();
+            });
+
+            MenuItem deleteCollection = new MenuItem("Delete Collection");
+            deleteCollection.setOnAction(event -> {
+                if (confirm("Delete Collection", "Delete " + node.collection.getName() + "?")) {
+                    deleteNode(node);
+                }
+            });
+
+            contextMenu.getItems().addAll(newRequest, renameCollection, exportCollection, deleteCollection);
+        } else if (node.type == NodeType.REQUEST) {
+            MenuItem renameRequest = new MenuItem("Rename Request");
+            renameRequest.setOnAction(event -> renameRequest(node.collection, node.request));
+
+            MenuItem duplicateRequest = new MenuItem("Duplicate Request");
+            duplicateRequest.setOnAction(event -> duplicateRequest(node.collection, node.request));
+
+            MenuItem deleteRequest = new MenuItem("Delete Request");
+            deleteRequest.setOnAction(event -> {
+                if (confirm("Delete Request", "Delete " + node.request.getName() + "?")) {
+                    deleteNode(node);
+                }
+            });
+
+            contextMenu.getItems().addAll(renameRequest, duplicateRequest, deleteRequest);
+        }
+        return contextMenu;
     }
 
     private void configureHistory() {
@@ -471,6 +639,7 @@ public class MainController {
         requestCountSpinner.setValueFactory(new SpinnerValueFactory.IntegerSpinnerValueFactory(1, LoadTestConfig.MAX_TOTAL_REQUESTS, 25));
         concurrencySpinner.setEditable(true);
         requestCountSpinner.setEditable(true);
+        cancelLoadTestButton.setDisable(true);
     }
 
     private void refreshWorkspaceViews() {
@@ -490,6 +659,20 @@ public class MainController {
             rootItem.getChildren().add(collectionItem);
         }
         collectionsTreeView.setRoot(rootItem);
+    }
+
+    private void selectCollection(CollectionModel collection) {
+        if (collection == null || collectionsTreeView.getRoot() == null) {
+            return;
+        }
+        for (TreeItem<WorkspaceNode> item : collectionsTreeView.getRoot().getChildren()) {
+            WorkspaceNode node = item.getValue();
+            if (node != null && node.collection == collection) {
+                collectionsTreeView.getSelectionModel().select(item);
+                activeCollection = collection;
+                return;
+            }
+        }
     }
 
     private void refreshEnvironmentCombo() {
@@ -629,9 +812,109 @@ public class MainController {
         }
     }
 
+    private void deleteNode(WorkspaceNode node) {
+        if (node.type == NodeType.COLLECTION) {
+            workspace.getCollections().remove(node.collection);
+            if (workspace.getCollections().isEmpty()) {
+                workspace.getCollections().addAll(WorkspaceStore.defaultWorkspace().getCollections());
+            }
+            activeCollection = null;
+            activeRequest = null;
+        } else if (node.type == NodeType.REQUEST) {
+            node.collection.getRequests().remove(node.request);
+            if (node.collection.getRequests().isEmpty()) {
+                node.collection.getRequests().add(new RequestModel("New Request", "GET", ""));
+            }
+            activeRequest = null;
+        }
+
+        refreshCollectionsTree();
+        selectFirstRequest();
+        saveWorkspace("Deleted selection.");
+    }
+
+    private void duplicateRequest(CollectionModel collection, RequestModel request) {
+        if (collection == null || request == null) {
+            return;
+        }
+        RequestModel duplicate = copyRequest(request);
+        duplicate.setId("");
+        duplicate.setName(uniqueName(request.getName() + " Copy", collection.getRequests().stream()
+                .map(RequestModel::getName)
+                .toList()));
+        collection.getRequests().add(duplicate);
+        refreshCollectionsTree();
+        selectRequest(duplicate.getId());
+        saveWorkspace("Request duplicated.");
+    }
+
+    private void renameCollection(CollectionModel collection) {
+        if (collection == null) {
+            return;
+        }
+        promptForName("Rename Collection", "Collection name", collection.getName()).ifPresent(newName -> {
+            collection.setName(uniqueName(newName, workspace.getCollections().stream()
+                    .filter(existing -> existing != collection)
+                    .map(CollectionModel::getName)
+                    .toList()));
+            refreshCollectionsTree();
+            selectCollection(collection);
+            saveWorkspace("Collection renamed.");
+        });
+    }
+
+    private void renameRequest(CollectionModel collection, RequestModel request) {
+        if (collection == null || request == null) {
+            return;
+        }
+        promptForName("Rename Request", "Request name", request.getName()).ifPresent(newName -> {
+            request.setName(uniqueName(newName, collection.getRequests().stream()
+                    .filter(existing -> existing != request)
+                    .map(RequestModel::getName)
+                    .toList()));
+            refreshCollectionsTree();
+            selectRequest(request.getId());
+            saveWorkspace("Request renamed.");
+        });
+    }
+
+    private CollectionModel selectedCollection() {
+        TreeItem<WorkspaceNode> selected = collectionsTreeView.getSelectionModel().getSelectedItem();
+        if (selected == null || selected.getValue() == null) {
+            return activeCollection;
+        }
+        WorkspaceNode node = selected.getValue();
+        return node.collection;
+    }
+
+    private FileChooser workspaceFileChooser(String title) {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle(title);
+        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PostMeter JSON", "*.postmeter.json", "*.json"));
+        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("JSON", "*.json"));
+        fileChooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("All Files", "*.*"));
+        return fileChooser;
+    }
+
+    private Window ownerWindow() {
+        return root == null || root.getScene() == null ? null : root.getScene().getWindow();
+    }
+
     private EnvironmentModel activeEnvironment() {
         EnvironmentModel environment = environmentComboBox.getSelectionModel().getSelectedItem();
         return isNoEnvironment(environment) ? null : environment;
+    }
+
+    private boolean validateRequestForExecution(RequestModel request, EnvironmentModel environment) {
+        List<String> validationErrors = requestExecutor.validate(request, environment);
+        if (validationErrors.isEmpty()) {
+            validationLabel.setText("");
+            return true;
+        }
+        String message = String.join(" ", validationErrors);
+        validationLabel.setText(message);
+        setStatus("Fix request validation errors.");
+        return false;
     }
 
     private boolean isNoEnvironment(EnvironmentModel environment) {
@@ -701,14 +984,20 @@ public class MainController {
 
     private String formatLoadTestResult(LoadTestResult result) {
         StringBuilder builder = new StringBuilder();
-        builder.append("Total requests: ").append(result.getTotalRequests()).append('\n');
+        builder.append("Requested requests: ").append(result.getRequestedRequests()).append('\n');
+        builder.append("Completed requests: ").append(result.getTotalRequests()).append('\n');
+        builder.append("Cancelled: ").append(result.isCancelled()).append('\n');
         builder.append("Successful: ").append(result.getSuccessfulRequests()).append('\n');
         builder.append("Failed: ").append(result.getFailedRequests()).append('\n');
+        builder.append("Error rate: ").append(String.format("%.2f%%", result.getErrorRate() * 100)).append('\n');
         builder.append("Requests/sec: ").append(String.format("%.2f", result.getRequestsPerSecond())).append('\n');
-        builder.append("Latency min/avg/p95/max: ")
+        builder.append("Latency min/avg/p50/p90/p95/p99/max: ")
                 .append(result.getMinMillis()).append(" ms / ")
                 .append(String.format("%.2f", result.getAverageMillis())).append(" ms / ")
+                .append(result.getP50Millis()).append(" ms / ")
+                .append(result.getP90Millis()).append(" ms / ")
                 .append(result.getP95Millis()).append(" ms / ")
+                .append(result.getP99Millis()).append(" ms / ")
                 .append(result.getMaxMillis()).append(" ms\n");
         builder.append("Status counts: ").append(result.getStatusCounts()).append('\n');
         if (!result.getErrors().isEmpty()) {
@@ -718,6 +1007,11 @@ public class MainController {
             }
         }
         return builder.toString();
+    }
+
+    private void updateLoadProgress(int completedRequests, int requestedRequests) {
+        loadResultsArea.setText("Running load test...\nCompleted " + completedRequests + " of "
+                + requestedRequests + " requests.");
     }
 
     private String formatHistoryEntry(HistoryEntry entry) {
@@ -801,6 +1095,31 @@ public class MainController {
         alert.setHeaderText(null);
         alert.setContentText(message);
         alert.showAndWait();
+    }
+
+    private boolean confirm(String title, String message) {
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.setTitle(title);
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        return alert.showAndWait()
+                .filter(buttonType -> buttonType == ButtonType.OK)
+                .isPresent();
+    }
+
+    private Optional<String> promptForName(String title, String label, String currentValue) {
+        TextInputDialog dialog = new TextInputDialog(currentValue);
+        dialog.setTitle(title);
+        dialog.setHeaderText(null);
+        dialog.setContentText(label);
+        return dialog.showAndWait()
+                .map(String::trim)
+                .filter(value -> !value.isEmpty());
+    }
+
+    private String safeFilename(String value) {
+        String filename = value == null ? "collection" : value.trim().replaceAll("[^A-Za-z0-9._-]+", "-");
+        return filename.isBlank() ? "collection" : filename;
     }
 
     private void setStatus(String message) {

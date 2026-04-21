@@ -6,16 +6,30 @@ import java.util.List;
 import java.util.Map;
 
 public class LoadTestResult {
+    private int requestedRequests;
     private int totalRequests;
     private int successfulRequests;
     private int failedRequests;
+    private boolean cancelled;
     private long minMillis;
     private long maxMillis;
     private double averageMillis;
+    private long p50Millis;
+    private long p90Millis;
     private long p95Millis;
+    private long p99Millis;
+    private double errorRate;
     private double requestsPerSecond;
     private Map<Integer, Integer> statusCounts = new LinkedHashMap<>();
     private List<String> errors = new ArrayList<>();
+
+    public int getRequestedRequests() {
+        return requestedRequests;
+    }
+
+    public void setRequestedRequests(int requestedRequests) {
+        this.requestedRequests = requestedRequests;
+    }
 
     public int getTotalRequests() {
         return totalRequests;
@@ -39,6 +53,14 @@ public class LoadTestResult {
 
     public void setFailedRequests(int failedRequests) {
         this.failedRequests = failedRequests;
+    }
+
+    public boolean isCancelled() {
+        return cancelled;
+    }
+
+    public void setCancelled(boolean cancelled) {
+        this.cancelled = cancelled;
     }
 
     public long getMinMillis() {
@@ -65,12 +87,44 @@ public class LoadTestResult {
         this.averageMillis = averageMillis;
     }
 
+    public long getP50Millis() {
+        return p50Millis;
+    }
+
+    public void setP50Millis(long p50Millis) {
+        this.p50Millis = p50Millis;
+    }
+
+    public long getP90Millis() {
+        return p90Millis;
+    }
+
+    public void setP90Millis(long p90Millis) {
+        this.p90Millis = p90Millis;
+    }
+
     public long getP95Millis() {
         return p95Millis;
     }
 
     public void setP95Millis(long p95Millis) {
         this.p95Millis = p95Millis;
+    }
+
+    public long getP99Millis() {
+        return p99Millis;
+    }
+
+    public void setP99Millis(long p99Millis) {
+        this.p99Millis = p99Millis;
+    }
+
+    public double getErrorRate() {
+        return errorRate;
+    }
+
+    public void setErrorRate(double errorRate) {
+        this.errorRate = errorRate;
     }
 
     public double getRequestsPerSecond() {

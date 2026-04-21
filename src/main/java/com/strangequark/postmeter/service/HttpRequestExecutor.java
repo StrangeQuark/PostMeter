@@ -14,6 +14,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -56,7 +57,10 @@ public class HttpRequestExecutor {
 
     public HttpExchangeResult send(RequestModel request, EnvironmentModel environment)
             throws IOException, InterruptedException {
-        validateRequest(request);
+        List<String> validationErrors = validate(request, environment);
+        if (!validationErrors.isEmpty()) {
+            throw new IllegalArgumentException(String.join(" ", validationErrors));
+        }
         URI uri = buildUri(request, environment);
         HttpRequest httpRequest = buildRequest(request, environment, uri);
 
@@ -74,6 +78,39 @@ public class HttpRequestExecutor {
                 bytes,
                 uri.toString()
         );
+    }
+
+    public List<String> validate(RequestModel request, EnvironmentModel environment) {
+        List<String> errors = new ArrayList<>();
+        if (request == null) {
+            errors.add("Request is required.");
+            return errors;
+        }
+        if (!RequestModel.SUPPORTED_METHODS.contains(request.getMethod())) {
+            errors.add("Unsupported HTTP method: " + request.getMethod() + ".");
+        }
+        if (request.getUrl() == null || request.getUrl().isBlank()) {
+            errors.add("Request URL is required.");
+        } else {
+            try {
+                buildUri(request, environment);
+            } catch (IllegalArgumentException e) {
+                errors.add(e.getMessage());
+            }
+        }
+
+        for (KeyValuePair header : request.getHeaders()) {
+            if (!header.isEnabled() || !header.hasKey()) {
+                continue;
+            }
+            String name = environmentResolver.resolve(header.getKey().trim(), environment);
+            try {
+                validateHeader(name);
+            } catch (IllegalArgumentException e) {
+                errors.add(e.getMessage());
+            }
+        }
+        return errors;
     }
 
     public URI buildUri(RequestModel request, EnvironmentModel environment) {
@@ -154,18 +191,6 @@ public class HttpRequestExecutor {
                 : HttpRequest.BodyPublishers.noBody();
         builder.method(method, publisher);
         return builder.build();
-    }
-
-    private void validateRequest(RequestModel request) {
-        if (request == null) {
-            throw new IllegalArgumentException("Request is required.");
-        }
-        if (!RequestModel.SUPPORTED_METHODS.contains(request.getMethod())) {
-            throw new IllegalArgumentException("Unsupported HTTP method: " + request.getMethod());
-        }
-        if (request.getUrl() == null || request.getUrl().isBlank()) {
-            throw new IllegalArgumentException("Request URL is required.");
-        }
     }
 
     private void validateHeader(String name) {

@@ -1,5 +1,6 @@
 package com.strangequark.postmeter.service;
 
+import com.strangequark.postmeter.model.LoadTestCancellationToken;
 import com.strangequark.postmeter.model.LoadTestConfig;
 import com.strangequark.postmeter.model.LoadTestResult;
 import com.strangequark.postmeter.model.RequestModel;
@@ -50,6 +51,26 @@ class LoadTestRunnerTest {
         assertEquals(5, result.getSuccessfulRequests());
         assertEquals(0, result.getFailedRequests());
         assertEquals(5, result.getStatusCounts().get(200));
+        assertEquals(5, result.getRequestedRequests());
+        assertEquals(0.0, result.getErrorRate());
+        assertTrue(result.getP50Millis() >= 0);
+        assertTrue(result.getP90Millis() >= 0);
+        assertTrue(result.getP95Millis() >= 0);
+        assertTrue(result.getP99Millis() >= 0);
         assertTrue(result.getRequestsPerSecond() > 0);
+    }
+
+    @Test
+    void returnsCancelledResultWhenCancelledBeforeStart() {
+        RequestModel request = new RequestModel("Load", "GET", url);
+        LoadTestCancellationToken cancellationToken = new LoadTestCancellationToken();
+        cancellationToken.cancel();
+
+        LoadTestResult result = new LoadTestRunner(new HttpRequestExecutor())
+                .run(request, null, new LoadTestConfig(2, 5), cancellationToken, LoadTestProgressListener.noop());
+
+        assertEquals(5, result.getRequestedRequests());
+        assertEquals(0, result.getTotalRequests());
+        assertTrue(result.isCancelled());
     }
 }

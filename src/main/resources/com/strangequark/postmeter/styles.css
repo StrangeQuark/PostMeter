@@ -47,6 +47,11 @@
     -fx-text-fill: #111827;
 }
 
+.validation-label {
+    -fx-text-fill: #b42318;
+    -fx-font-weight: 700;
+}
+
 .text-area,
 .table-view {
     -fx-font-family: "JetBrains Mono", "Cascadia Mono", "Consolas", monospace;

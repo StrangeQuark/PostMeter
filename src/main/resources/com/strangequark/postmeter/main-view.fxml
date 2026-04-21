@@ -33,6 +33,8 @@
                 <Button text="New Collection" onAction="#handleNewCollection"/>
                 <Button text="New Request" onAction="#handleNewRequest"/>
                 <Button text="Save" onAction="#handleSave" styleClass="primary-button"/>
+                <Button text="Import Workspace" onAction="#handleImportWorkspace"/>
+                <Button text="Export Workspace" onAction="#handleExportWorkspace"/>
                 <Label fx:id="statusLabel" text="Ready" maxWidth="Infinity" HBox.hgrow="ALWAYS" styleClass="status-label"/>
             </HBox>
         </VBox>
@@ -43,6 +45,8 @@
             <VBox minWidth="260" prefWidth="300" spacing="8" styleClass="sidebar">
                 <HBox spacing="8">
                     <Button text="Delete" onAction="#handleDeleteSelected"/>
+                    <Button text="Import Collection" onAction="#handleImportCollection"/>
+                    <Button text="Export Collection" onAction="#handleExportSelectedCollection"/>
                 </HBox>
                 <TabPane tabClosingPolicy="UNAVAILABLE" VBox.vgrow="ALWAYS">
                     <Tab text="Collections">
@@ -76,6 +80,7 @@
                         <TextField fx:id="urlField" promptText="https://api.example.com/resource" HBox.hgrow="ALWAYS"/>
                         <Button fx:id="sendButton" text="Send" onAction="#handleSend" styleClass="primary-button"/>
                     </HBox>
+                    <Label fx:id="validationLabel" text="" wrapText="true" styleClass="validation-label"/>
                     <TabPane tabClosingPolicy="UNAVAILABLE" VBox.vgrow="ALWAYS">
                         <Tab text="Params">
                             <VBox spacing="8" styleClass="panel">
@@ -140,6 +145,7 @@
                                 <Label text="Requests"/>
                                 <Spinner fx:id="requestCountSpinner" prefWidth="120"/>
                                 <Button fx:id="runLoadTestButton" text="Run Load Test" onAction="#handleRunLoadTest" styleClass="primary-button"/>
+                                <Button fx:id="cancelLoadTestButton" text="Cancel" onAction="#handleCancelLoadTest"/>
                             </HBox>
                             <TextArea fx:id="loadResultsArea" editable="false" wrapText="false" VBox.vgrow="ALWAYS"/>
                         </VBox>
