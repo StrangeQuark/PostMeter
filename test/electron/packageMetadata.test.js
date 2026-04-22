@@ -1,0 +1,33 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const test = require('node:test');
+
+test('package metadata points to a valid production PNG icon', async () => {
+  const root = path.join(__dirname, '..', '..');
+  const packageJson = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
+  const iconPath = packageJson.build?.icon;
+  assert.equal(iconPath, 'build/icon.png');
+
+  const icon = await fs.readFile(path.join(root, iconPath));
+  assert.equal(icon.readUInt32BE(0), 0x89504e47);
+  assert.equal(icon.toString('ascii', 1, 4), 'PNG');
+  const width = icon.readUInt32BE(16);
+  const height = icon.readUInt32BE(20);
+  assert.ok(width >= 512, `Icon width should be at least 512px, got ${width}.`);
+  assert.ok(height >= 512, `Icon height should be at least 512px, got ${height}.`);
+});
+
+test('package metadata declares canonical release repository and desktop protocol', async () => {
+  const root = path.join(__dirname, '..', '..');
+  const packageJson = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
+
+  assert.equal(packageJson.repository.url, 'git+https://github.com/StrangeQuark/PostMeter.git');
+  assert.equal(packageJson.homepage, 'https://github.com/StrangeQuark/PostMeter#readme');
+  assert.equal(packageJson.bugs.url, 'https://github.com/StrangeQuark/PostMeter/issues');
+  assert.equal(packageJson.author, 'StrangeQuark <support@qrksw.com>');
+  assert.equal(packageJson.build.linux.maintainer, 'StrangeQuark <support@qrksw.com>');
+  assert.ok(packageJson.build.files.includes('src/**/*'));
+  assert.ok(packageJson.build.files.includes('electron/**/*'));
+  assert.ok(packageJson.build.protocols.some((protocol) => protocol.schemes.includes('postmeter')));
+});

@@ -1,5 +1,35 @@
-const { BODY_TYPES, SUPPORTED_METHODS } = require('./models');
-const { AUTH_TYPES, validateAuth } = require('./auth');
+const {
+  API_KEY_LOCATIONS,
+  ASSERTION_OPERATORS,
+  ASSERTION_TYPES,
+  AUTH_TYPE_VALUES,
+  BODY_TYPE_VALUES,
+  COLLECTION_EXPORT_FORMATS,
+  HTTP_METHODS,
+  LOAD_EXECUTION_MODES,
+  LOAD_EXPORT_FORMATS,
+  OAUTH2_GRANT_TYPES,
+  OAUTH2_REDIRECT_STRATEGIES,
+  OAUTH2_TOKEN_TYPES,
+  oneOf,
+  payloadSchemas
+} = require('./payloadSchemas');
+
+const SUPPORTED_METHODS = new Set(HTTP_METHODS);
+const BODY_TYPES = new Set(BODY_TYPE_VALUES);
+const FIELD_ENUMS = {
+  assertionTypes: ASSERTION_TYPES,
+  assertionOperators: ASSERTION_OPERATORS,
+  authTypes: AUTH_TYPE_VALUES,
+  apiKeyLocations: API_KEY_LOCATIONS,
+  bodyTypes: BODY_TYPE_VALUES,
+  cookiePriorities: ['', 'Low', 'Medium', 'High'],
+  loadExecutionModes: LOAD_EXECUTION_MODES,
+  oauth2GrantTypes: OAUTH2_GRANT_TYPES,
+  oauth2RedirectStrategies: OAUTH2_REDIRECT_STRATEGIES,
+  oauth2TokenTypes: OAUTH2_TOKEN_TYPES,
+  sameSiteValues: ['', 'Lax', 'Strict', 'None']
+};
 
 const LIMITS = {
   collections: 500,
@@ -8,6 +38,9 @@ const LIMITS = {
   environments: 500,
   history: 1000,
   pairs: 1000,
+  cookies: 2000,
+  loadSamples: 50000,
+  histogramBuckets: 100,
   folderDepth: 20,
   name: 256,
   url: 8192,
@@ -16,25 +49,23 @@ const LIMITS = {
   body: 10 * 1024 * 1024,
   loadResultJson: 10 * 1024 * 1024,
   allowedHosts: 100,
-  host: 253
+  host: 253,
+  method: 12,
+  short: 64,
+  tiny: 16
 };
 
 function assertWorkspacePayload(value, field = 'workspace') {
   object(value, field);
   optionalNumber(value.schemaVersion, `${field}.schemaVersion`);
-  array(value.collections, `${field}.collections`, LIMITS.collections).forEach((collection, index) => {
-    assertCollectionPayload(collection, `${field}.collections[${index}]`);
-  });
-  array(value.environments, `${field}.environments`, LIMITS.environments).forEach((environment, index) => {
-    assertEnvironmentPayload(environment, `${field}.environments[${index}]`);
-  });
-  array(value.history, `${field}.history`, LIMITS.history).forEach((entry, index) => {
-    object(entry, `${field}.history[${index}]`);
-    optionalString(entry.timestamp, `${field}.history[${index}].timestamp`, LIMITS.name);
-    optionalString(entry.method, `${field}.history[${index}].method`, 12);
-    optionalString(entry.url, `${field}.history[${index}].url`, LIMITS.url);
-    optionalNumber(entry.statusCode, `${field}.history[${index}].statusCode`);
-    optionalNumber(entry.durationMillis, `${field}.history[${index}].durationMillis`);
+  assertSchemaNested('workspace', value, field, {
+    settings: assertSettingsPayload
+  }, { settings: {} });
+  assertSchemaArrays('workspace', value, field, {
+    collections: assertCollectionArray,
+    environments: assertEnvironmentArray,
+    cookies: assertCookies,
+    history: assertHistory
   });
 }
 
@@ -43,6 +74,8 @@ function assertCollectionPayload(value, field = 'collection') {
   optionalString(value.id, `${field}.id`, LIMITS.name);
   optionalString(value.name, `${field}.name`, LIMITS.name);
   optionalString(value.description, `${field}.description`, LIMITS.value);
+  assertPairs(value.variables || [], `${field}.variables`);
+  assertCertificates(value.certificates || [], `${field}.certificates`);
   assertRequestArray(value.requests || [], `${field}.requests`);
   assertFolderArray(value.folders || [], `${field}.folders`, 0);
 }
@@ -59,11 +92,34 @@ function assertRequestPayload(value, field = 'request') {
   assertPairs(value.queryParams || [], `${field}.queryParams`);
   assertPairs(value.headers || [], `${field}.headers`);
   optionalString(value.bodyType, `${field}.bodyType`, 32);
-  if (value.bodyType && !Object.values(BODY_TYPES).includes(value.bodyType)) {
+  if (value.bodyType && !BODY_TYPES.has(value.bodyType)) {
     fail(`${field}.bodyType is not supported.`);
   }
   optionalString(value.body, `${field}.body`, LIMITS.body);
-  assertAuthPayload(value.auth || { type: 'none' }, `${field}.auth`);
+  assertSchemaArrays('request', value, field, {
+    queryParams: assertPairs,
+    headers: assertPairs,
+    assertions: assertAssertions,
+    variables: assertPairs,
+    examples: assertExamples
+  });
+  assertSchemaNested('request', value, field, {
+    auth: assertAuthPayload,
+    scripts: assertScripts,
+    cookieJar: assertRequestCookieJar
+  }, {
+    auth: { type: 'none' },
+    cookieJar: {},
+    scripts: undefined
+  });
+}
+
+function assertSettingsPayload(value, field) {
+  object(value || {}, field);
+  if (value.updates != null) {
+    object(value.updates, `${field}.updates`);
+    optionalBoolean(value.updates.includePrereleases, `${field}.updates.includePrereleases`);
+  }
 }
 
 function assertEnvironmentPayload(value, field = 'environment') {
@@ -81,10 +137,7 @@ function assertOptionalEnvironmentPayload(value, field = 'environment') {
 }
 
 function assertLoadConfigPayload(value, field = 'config') {
-  object(value, field);
-  number(value.concurrency, `${field}.concurrency`);
-  number(value.totalRequests, `${field}.totalRequests`);
-  optionalBoolean(value.confirmedHighConcurrency, `${field}.confirmedHighConcurrency`);
+  assertSchemaFields('loadConfig', value, field);
   if (value.allowedHosts != null) {
     array(value.allowedHosts, `${field}.allowedHosts`, LIMITS.allowedHosts).forEach((host, index) => {
       string(host, `${field}.allowedHosts[${index}]`, LIMITS.host);
@@ -98,11 +151,117 @@ function assertLoadResultPayload(value, field = 'result') {
   if (size > LIMITS.loadResultJson) {
     fail(`${field} is too large to export.`);
   }
+  assertSchemaFields('loadResult', value, field);
+  if (value.statusCounts != null) {
+    object(value.statusCounts, `${field}.statusCounts`);
+    for (const [statusCode, count] of Object.entries(value.statusCounts)) {
+      string(statusCode, `${field}.statusCounts key`, LIMITS.tiny);
+      number(count, `${field}.statusCounts.${statusCode}`);
+    }
+  }
+  if (value.errors != null) {
+    assertStringArray(value.errors, `${field}.errors`, LIMITS.pairs, LIMITS.value);
+  }
+  if (value.latencyHistogram != null) {
+    array(value.latencyHistogram, `${field}.latencyHistogram`, LIMITS.histogramBuckets).forEach((bucket, index) => {
+      assertSchemaFields('loadHistogramBucket', bucket, `${field}.latencyHistogram[${index}]`);
+    });
+  }
+  if (value.samples != null) {
+    array(value.samples, `${field}.samples`, LIMITS.loadSamples).forEach((sample, index) => {
+      assertSchemaFields('loadSample', sample, `${field}.samples[${index}]`);
+    });
+  }
+}
+
+function assertCollectionRunResultPayload(value, field = 'result') {
+  object(value, field);
+  const size = Buffer.byteLength(JSON.stringify(value), 'utf8');
+  if (size > LIMITS.loadResultJson) {
+    fail(`${field} is too large to export.`);
+  }
+  assertSchemaFields('collectionRunResult', value, field);
+  if (value.results != null) {
+    array(value.results, `${field}.results`, LIMITS.history).forEach((result, index) => {
+      const itemField = `${field}.results[${index}]`;
+      assertSchemaFields('collectionRunRequestResult', result, itemField);
+      if (result.assertionResults != null) {
+        array(result.assertionResults, `${itemField}.assertionResults`, LIMITS.pairs).forEach((assertionResult, assertionIndex) => {
+          const assertionField = `${itemField}.assertionResults[${assertionIndex}]`;
+          assertSchemaFields('assertionResult', assertionResult, assertionField);
+        });
+      }
+      if (result.preRequestScriptResult != null) {
+        assertScriptResult(result.preRequestScriptResult, `${itemField}.preRequestScriptResult`);
+      }
+      if (result.testScriptResult != null) {
+        assertScriptResult(result.testScriptResult, `${itemField}.testScriptResult`);
+      }
+      if (result.extractedVariables != null) {
+        assertPairs(result.extractedVariables, `${itemField}.extractedVariables`);
+      }
+      if (result.localVariables != null) {
+        assertPairs(result.localVariables, `${itemField}.localVariables`);
+      }
+    });
+  }
+  if (value.environment != null) {
+    assertEnvironmentPayload(value.environment, `${field}.environment`);
+  }
+  if (value.collectionVariables != null) {
+    assertPairs(value.collectionVariables, `${field}.collectionVariables`);
+  }
+  if (value.cookies != null) {
+    assertCookies(value.cookies, `${field}.cookies`);
+  }
+}
+
+function assertResponsePayload(value, field = 'response') {
+  assertSchemaFields('response', value, field);
+  object(value.headers || {}, `${field}.headers`);
+  for (const [key, values] of Object.entries(value.headers || {})) {
+    string(key, `${field}.headers key`, LIMITS.key);
+    array(values, `${field}.headers.${key}`, 100).forEach((headerValue, index) => {
+      string(headerValue, `${field}.headers.${key}[${index}]`, LIMITS.value);
+    });
+  }
+  if (value.updatedAuth != null) {
+    assertAuthPayload(value.updatedAuth, `${field}.updatedAuth`);
+  }
+  if (value.updatedCookies != null) {
+    assertCookies(value.updatedCookies, `${field}.updatedCookies`);
+  }
+}
+
+function assertWorkspaceLoadResultPayload(value, field = 'result') {
+  object(value, field);
+  assertWorkspacePayload(value.workspace, `${field}.workspace`);
+  optionalString(value.path, `${field}.path`, LIMITS.value);
+  optionalBoolean(value.recovered, `${field}.recovered`);
+  optionalString(value.recoveredPath, `${field}.recoveredPath`, LIMITS.value);
+}
+
+function assertUpdateCheckOptionsPayload(value, field = 'options') {
+  assertSchemaFields('updateCheckOptions', value || {}, field);
+}
+
+function assertExternalUrlPayload(value, field = 'external') {
+  assertSchemaFields('externalUrl', { url: value }, field);
 }
 
 function assertExportFormat(value, field = 'format') {
-  if (value !== 'json' && value !== 'csv') {
-    fail(`${field} must be json or csv.`);
+  try {
+    oneOf(value, LOAD_EXPORT_FORMATS, field);
+  } catch (error) {
+    fail(error.message);
+  }
+}
+
+function assertCollectionExportFormat(value, field = 'format') {
+  try {
+    oneOf(value || 'postmeter', COLLECTION_EXPORT_FORMATS, field);
+  } catch (error) {
+    fail(error.message);
   }
 }
 
@@ -112,19 +271,7 @@ function assertLoadId(value, field = 'id') {
 
 function assertAuthPayload(value, field = 'auth') {
   object(value, field);
-  string(value.type ?? 'none', `${field}.type`, 64);
-  if (!AUTH_TYPES.has(value.type ?? 'none')) {
-    fail(`${field}.type is not supported.`);
-  }
-  const authErrors = validateAuth(value, null);
-  if ((value.type ?? 'none') === 'clientCertificate' && authErrors.length) {
-    return;
-  }
-  for (const key of ['token', 'username', 'password', 'key', 'value', 'accessToken', 'refreshToken', 'tokenUrl', 'authorizationUrl', 'clientId', 'clientSecret', 'scopes', 'grantType', 'expiresAt', 'certPath', 'keyPath', 'passphrase']) {
-    optionalString(value[key], `${field}.${key}`, LIMITS.value);
-  }
-  optionalString(value.location, `${field}.location`, 16);
-  optionalString(value.tokenType, `${field}.tokenType`, 16);
+  assertSchemaFields('auth', { ...value, type: value.type ?? 'none' }, field);
 }
 
 function assertRequestArray(values, field) {
@@ -133,15 +280,57 @@ function assertRequestArray(values, field) {
   });
 }
 
+function assertCollectionArray(values, field) {
+  array(values, field, LIMITS.collections).forEach((collection, index) => {
+    assertCollectionPayload(collection, `${field}[${index}]`);
+  });
+}
+
+function assertEnvironmentArray(values, field) {
+  array(values, field, LIMITS.environments).forEach((environment, index) => {
+    assertEnvironmentPayload(environment, `${field}[${index}]`);
+  });
+}
+
+function assertHistory(values, field) {
+  array(values, field, LIMITS.history).forEach((entry, index) => {
+    assertSchemaFields('historyEntry', entry, `${field}[${index}]`);
+  });
+}
+
+function assertSchemaArrays(entityName, value, field, validators) {
+  const schema = payloadSchemas.entities[entityName];
+  for (const name of schema?.arrays || []) {
+    const validator = validators[name];
+    if (!validator) {
+      fail(`${field}.${name} does not have an IPC validator.`);
+    }
+    validator(value[name] || [], `${field}.${name}`);
+  }
+}
+
+function assertSchemaNested(entityName, value, field, validators, defaults = {}) {
+  const schema = payloadSchemas.entities[entityName];
+  for (const name of schema?.nested || []) {
+    const validator = validators[name];
+    if (!validator) {
+      fail(`${field}.${name} does not have an IPC validator.`);
+    }
+    if (value[name] != null) {
+      validator(value[name], `${field}.${name}`);
+    } else if (Object.hasOwn(defaults, name) && defaults[name] !== undefined) {
+      validator(defaults[name], `${field}.${name}`);
+    }
+  }
+}
+
 function assertFolderArray(values, field, depth) {
   if (depth > LIMITS.folderDepth) {
     fail(`${field} exceeds maximum folder depth.`);
   }
   array(values, field, LIMITS.foldersPerLevel).forEach((folder, index) => {
     const itemField = `${field}[${index}]`;
-    object(folder, itemField);
-    optionalString(folder.id, `${itemField}.id`, LIMITS.name);
-    optionalString(folder.name, `${itemField}.name`, LIMITS.name);
+    assertSchemaFields('folder', folder, itemField);
     assertRequestArray(folder.requests || [], `${itemField}.requests`);
     assertFolderArray(folder.folders || [], `${itemField}.folders`, depth + 1);
   });
@@ -150,12 +339,114 @@ function assertFolderArray(values, field, depth) {
 function assertPairs(values, field) {
   array(values, field, LIMITS.pairs).forEach((pair, index) => {
     const itemField = `${field}[${index}]`;
-    object(pair, itemField);
-    optionalBoolean(pair.enabled, `${itemField}.enabled`);
-    optionalBoolean(pair.secret, `${itemField}.secret`);
-    optionalString(pair.key, `${itemField}.key`, LIMITS.key);
-    optionalString(pair.value, `${itemField}.value`, LIMITS.value);
+    assertSchemaFields('keyValue', pair, itemField);
   });
+}
+
+function assertAssertions(values, field) {
+  array(values, field, LIMITS.pairs).forEach((assertion, index) => {
+    const itemField = `${field}[${index}]`;
+    assertSchemaFields('assertion', assertion, itemField);
+  });
+}
+
+function assertScripts(value, field) {
+  assertSchemaFields('scripts', value, field);
+}
+
+function assertExamples(values, field) {
+  array(values, field, LIMITS.pairs).forEach((example, index) => {
+    const itemField = `${field}[${index}]`;
+    assertSchemaFields('example', example, itemField);
+    assertPairs(example.headers || [], `${itemField}.headers`);
+  });
+}
+
+function assertCertificates(values, field) {
+  array(values, field, LIMITS.pairs).forEach((certificate, index) => {
+    const itemField = `${field}[${index}]`;
+    assertSchemaFields('certificate', certificate, itemField);
+    array(certificate.matches || [], `${itemField}.matches`, LIMITS.pairs).forEach((match, matchIndex) => {
+      string(match, `${itemField}.matches[${matchIndex}]`, LIMITS.url);
+    });
+  });
+}
+
+function assertRequestCookieJar(value, field) {
+  assertSchemaFields('requestCookieJar', value || {}, field);
+}
+
+function assertCookies(values, field) {
+  array(values, field, LIMITS.cookies).forEach((cookie, index) => {
+    const itemField = `${field}[${index}]`;
+    assertSchemaFields('cookie', cookie, itemField);
+    if (cookie.extensions != null) {
+      assertStringArray(cookie.extensions, `${itemField}.extensions`, LIMITS.pairs, LIMITS.value);
+    }
+  });
+}
+
+function assertScriptResult(value, field) {
+  assertSchemaFields('scriptRunResult', value, field);
+  if (value.tests != null) {
+    array(value.tests, `${field}.tests`, LIMITS.pairs).forEach((testResult, index) => {
+      assertSchemaFields('scriptTestResult', testResult, `${field}.tests[${index}]`);
+    });
+  }
+  if (value.logs != null) {
+    assertStringArray(value.logs, `${field}.logs`, LIMITS.pairs, LIMITS.value);
+  }
+}
+
+function assertStringArray(values, field, maxItems, maxLength) {
+  array(values, field, maxItems).forEach((value, index) => {
+    string(value, `${field}[${index}]`, maxLength);
+  });
+}
+
+function assertSchemaFields(schemaName, value, field) {
+  object(value, field);
+  const schema = payloadSchemas.fields?.[schemaName];
+  if (!schema) {
+    fail(`${field} does not have a shared field schema.`);
+  }
+  for (const [name, spec] of Object.entries(schema)) {
+    const nextField = `${field}.${name}`;
+    const nextValue = value[name];
+    if (nextValue == null) {
+      if (!spec.optional) {
+        fail(`${nextField} is required.`);
+      }
+      continue;
+    }
+    if (spec.type === 'string') {
+      string(nextValue, nextField, limitForField(spec.limit));
+    } else if (spec.type === 'number') {
+      number(nextValue, nextField);
+    } else if (spec.type === 'boolean') {
+      optionalBoolean(nextValue, nextField);
+    } else {
+      fail(`${nextField} has an unsupported schema type.`);
+    }
+    if (spec.enum) {
+      const allowed = FIELD_ENUMS[spec.enum];
+      if (!allowed) {
+        fail(`${nextField} references an unknown enum.`);
+      }
+      const candidate = spec.type === 'string' ? nextValue : String(nextValue);
+      if (!allowed.includes(candidate)) {
+        fail(`${nextField} must be one of: ${allowed.join(', ')}.`);
+      }
+    }
+  }
+}
+
+function limitForField(name) {
+  const limit = LIMITS[name];
+  if (!Number.isFinite(limit)) {
+    fail(`Unknown IPC field limit: ${name}.`);
+  }
+  return limit;
 }
 
 function object(value, field) {
@@ -218,13 +509,20 @@ function fail(message) {
 
 module.exports = {
   LIMITS,
+  assertAuthPayload,
   assertCollectionPayload,
+  assertCollectionRunResultPayload,
+  assertCollectionExportFormat,
   assertEnvironmentPayload,
   assertExportFormat,
   assertLoadConfigPayload,
   assertLoadId,
   assertLoadResultPayload,
   assertOptionalEnvironmentPayload,
+  assertExternalUrlPayload,
+  assertResponsePayload,
   assertRequestPayload,
+  assertUpdateCheckOptionsPayload,
+  assertWorkspaceLoadResultPayload,
   assertWorkspacePayload
 };

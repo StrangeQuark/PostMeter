@@ -2,7 +2,15 @@
   "name": "postmeter",
   "version": "0.2.0",
   "description": "Electron desktop API client and local load-testing tool.",
-  "author": "PostMeter contributors",
+  "author": "StrangeQuark <support@qrksw.com>",
+  "homepage": "https://github.com/StrangeQuark/PostMeter#readme",
+  "bugs": {
+    "url": "https://github.com/StrangeQuark/PostMeter/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/StrangeQuark/PostMeter.git"
+  },
   "main": "electron/main.js",
   "type": "commonjs",
   "license": "GPL-3.0-only",
@@ -10,10 +18,23 @@
     "start": "electron .",
     "test": "node --test \"test/electron/**/*.test.js\"",
     "test:smoke": "node test/electron/startupSmoke.js",
-    "check": "npm test && npm run test:smoke && npm audit --audit-level=high && npm run electron:version",
+    "test:ui": "node test/electron/uiWorkflowSmoke.js",
+    "test:ui:regression": "node test/electron/uiRegressionSmoke.js",
+    "test:ui:oauth": "node test/electron/uiOauthSmoke.js",
+    "test:ui:snapshot": "node test/electron/uiSnapshotSmoke.js",
+    "cli": "node scripts/postmeter-cli.js",
+    "check": "npm test && npm run test:smoke && npm run test:ui && npm run test:ui:regression && npm run test:ui:oauth && npm run test:ui:snapshot && npm audit --audit-level=high && npm run electron:version",
     "electron:version": "electron --version",
     "pack:linux": "electron-builder --linux dir",
-    "dist:linux": "electron-builder --linux AppImage deb"
+    "dist:linux": "electron-builder --linux AppImage deb",
+    "dist:win": "electron-builder --win nsis",
+    "dist:mac": "electron-builder --mac dmg zip",
+    "release:checksums": "node scripts/writeReleaseChecksums.js",
+    "release:manifest": "node scripts/writeReleaseManifest.js",
+    "release:prepare": "npm run release:checksums && npm run release:manifest",
+    "release:validate": "node scripts/validateReleaseArtifacts.js",
+    "release:validate:win-protocol": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/validateWindowsProtocolRegistration.ps1",
+    "release:validate:mac-protocol": "bash scripts/validateMacProtocolRegistration.sh"
   },
   "devDependencies": {
     "electron": "^41.2.1",
@@ -22,6 +43,15 @@
   "build": {
     "appId": "com.strangequark.postmeter",
     "productName": "PostMeter",
+    "icon": "build/icon.png",
+    "protocols": [
+      {
+        "name": "PostMeter OAuth Callback",
+        "schemes": [
+          "postmeter"
+        ]
+      }
+    ],
     "files": [
       "electron/**/*",
       "src/**/*",
@@ -34,14 +64,32 @@
     },
     "linux": {
       "category": "Development",
-      "maintainer": "PostMeter contributors <zacharyzirkle@hotmail.com>",
+      "maintainer": "StrangeQuark <support@qrksw.com>",
       "target": [
         "AppImage",
         "deb"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dmg",
+        "zip"
       ]
     }
   },
   "engines": {
     "node": ">=22"
+  },
+  "dependencies": {
+    "@xmldom/xmldom": "^0.9.10",
+    "node-html-parser": "^7.1.0",
+    "xpath": "^0.0.34",
+    "yaml": "^2.8.3"
   }
 }

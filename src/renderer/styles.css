@@ -234,14 +234,6 @@ button:focus-visible {
   white-space: nowrap;
 }
 
-.status {
-  color: var(--muted);
-  max-width: 320px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .app-grid {
   display: grid;
   grid-template-columns: var(--sidebar-width) 6px minmax(0, 1fr);
@@ -489,6 +481,11 @@ h2 {
   font-weight: 700;
 }
 
+.invalid-input {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--danger) 30%, transparent);
+}
+
 .tabs {
   display: flex;
   gap: 2px;
@@ -561,13 +558,28 @@ h2 {
   grid-template-columns: 28px minmax(120px, 1fr) minmax(180px, 1.35fr) 86px 74px;
 }
 
+.assertion-row {
+  display: grid;
+  grid-template-columns: 28px minmax(112px, 0.9fr) minmax(130px, 1fr) minmax(130px, 1fr) minmax(92px, 0.7fr) minmax(130px, 1fr) 74px;
+  gap: 6px;
+  align-items: center;
+}
+
 .kv-row input {
   width: 100%;
   min-height: 32px;
   padding: 7px 9px;
 }
 
+.assertion-row input,
+.assertion-row select {
+  width: 100%;
+  min-height: 32px;
+  padding: 7px 9px;
+}
+
 .kv-row input[type="checkbox"],
+.assertion-row input[type="checkbox"],
 .secret-toggle input {
   width: 16px;
   min-height: 16px;
@@ -576,6 +588,11 @@ h2 {
 }
 
 .kv-row button {
+  min-height: 30px;
+  padding: 4px 8px;
+}
+
+.assertion-row button {
   min-height: 30px;
   padding: 4px 8px;
 }
@@ -602,6 +619,21 @@ h2 {
 
 #bodyInput {
   margin-top: 8px;
+}
+
+.script-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(260px, 1fr);
+  gap: 10px;
+  min-height: 0;
+}
+
+.script-field textarea {
+  min-height: 220px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.45;
+  resize: vertical;
 }
 
 .response-grid {
@@ -652,12 +684,34 @@ h2 {
 }
 
 #loadConcurrency,
-#loadRequests {
+#loadRequests,
+#loadDurationSeconds,
+#loadRampUpSeconds {
   width: 96px;
 }
 
 #loadAllowedHosts {
   min-width: 240px;
+}
+
+.checkbox-field {
+  min-height: 32px;
+}
+
+.compact-setting {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 6px;
+  color: var(--muted);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.checkbox-field input {
+  min-height: auto;
+  width: auto;
 }
 
 .load-results {
@@ -671,6 +725,94 @@ h2 {
   background: #222222;
   color: #f2f2ef;
   font-family: var(--mono);
+}
+
+.variable-preview {
+  margin: 10px 0 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-family: var(--mono);
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.examples-list {
+  display: grid;
+  gap: 10px;
+}
+
+.example-item {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-muted);
+}
+
+.example-heading {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) 88px 120px auto auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.example-item pre,
+.example-item textarea {
+  width: 100%;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  font-family: var(--mono);
+}
+
+.example-item textarea {
+  min-height: 140px;
+  resize: vertical;
+}
+
+.cookie-jar-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+
+.muted-inline {
+  color: var(--muted);
+  font-size: 12px;
+  align-self: center;
+}
+
+.cookies-table {
+  display: grid;
+  gap: 8px;
+}
+
+.cookie-row {
+  display: grid;
+  grid-template-columns: 22px minmax(110px, 1fr) minmax(130px, 1.2fr) minmax(130px, 1fr) 80px minmax(150px, 1fr) auto auto auto 100px auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.section-heading {
+  margin: 14px 0 8px;
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+@media (max-width: 1180px) {
+  .example-heading,
+  .cookie-row {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 .field.inline {
@@ -709,6 +851,43 @@ h2 {
 
 .auth-section.active {
   display: grid;
+}
+
+.oauth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: end;
+}
+
+.oauth-progress {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-muted);
+}
+
+.oauth-progress[hidden] {
+  display: none;
+}
+
+.oauth-progress-title {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.oauth-progress-status {
+  font-weight: 700;
+}
+
+.oauth-progress-detail {
+  color: var(--muted);
+  line-height: 1.45;
+  white-space: pre-wrap;
 }
 
 .context-menu {

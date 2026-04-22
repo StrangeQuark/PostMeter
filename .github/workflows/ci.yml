@@ -31,3 +31,18 @@ jobs:
 
       - name: Startup smoke
         run: xvfb-run -a npm run test:smoke
+
+      - name: UI workflow smoke
+        run: xvfb-run -a npm run test:ui
+
+      - name: UI regression smoke
+        run: xvfb-run -a npm run test:ui:regression
+
+      - name: UI OAuth smoke
+        run: xvfb-run -a npm run test:ui:oauth
+
+      - name: UI snapshot smoke
+        run: xvfb-run -a npm run test:ui:snapshot
+
+      - name: Linux package smoke
+        run: npm run pack:linux
