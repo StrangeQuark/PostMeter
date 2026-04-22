@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:;">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Workspace Secret Passphrase</title>
+  <link rel="stylesheet" href="passphrasePrompt.css">
+</head>
+<body>
+  <main>
+    <h1>Workspace Secret Passphrase</h1>
+    <p id="message">Enter the fallback passphrase for this workspace.</p>
+    <form id="passphraseForm">
+      <label>
+        <span>Passphrase</span>
+        <input id="passphraseInput" type="password" autocomplete="current-password" minlength="8" required autofocus>
+      </label>
+      <div id="error" class="error" role="status"></div>
+      <div class="actions">
+        <button id="cancelButton" type="button">Cancel</button>
+        <button id="submitButton" type="submit">Unlock</button>
+      </div>
+    </form>
+  </main>
+  <script src="passphrasePromptRenderer.js"></script>
+</body>
+</html>

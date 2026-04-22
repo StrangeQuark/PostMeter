@@ -1,6 +1,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
+const YAML = require('yaml');
 const {
   CURRENT_SCHEMA_VERSION,
   MIN_SUPPORTED_SCHEMA_VERSION,
@@ -12,6 +13,18 @@ const {
   workspaceModel
 } = require('./models');
 const { importPostmanCollection } = require('./postmanImporter');
+const {
+  exportCurlCollection,
+  exportHarCollection,
+  exportJMeterPlan,
+  exportOpenApiCollection,
+  importCurlCommand,
+  importHarDocument,
+  importJMeterPlan,
+  importOpenApiDocument,
+  looksLikeHarDocument,
+  looksLikeOpenApiDocument
+} = require('./collectionFormats');
 const {
   decryptWorkspaceSecrets,
   encryptWorkspaceSecrets,
@@ -108,7 +121,8 @@ class WorkspaceStore {
   }
 
   async importCollection(importPath) {
-    const parsed = JSON.parse(await fs.readFile(importPath, 'utf8'));
+    const content = await fs.readFile(importPath, 'utf8');
+    const parsed = parseStructuredCollectionContent(content);
     if (looksLikeNativeWorkspace(parsed)) {
       migrate(parsed);
       const workspace = normalizeWorkspace(decryptWorkspaceSecrets(parsed, this.secretCodec));
@@ -120,12 +134,36 @@ class WorkspaceStore {
       return collection;
     }
 
+    if (looksLikeOpenApiDocument(parsed)) {
+      const collection = importOpenApiDocument(parsed);
+      regenerateCollectionIds(collection);
+      return collection;
+    }
+
+    if (looksLikeHarDocument(parsed)) {
+      const collection = importHarDocument(parsed);
+      regenerateCollectionIds(collection);
+      return collection;
+    }
+
+    if (content.trim().startsWith('curl')) {
+      const collection = importCurlCommand(content);
+      regenerateCollectionIds(collection);
+      return collection;
+    }
+
+    if (content.includes('<jmeterTestPlan') || content.includes('<HTTPSamplerProxy')) {
+      const collection = importJMeterPlan(content);
+      regenerateCollectionIds(collection);
+      return collection;
+    }
+
     try {
       const collection = importPostmanCollection(parsed);
       regenerateCollectionIds(collection);
       return collection;
     } catch (postmanError) {
-      const error = new Error('File is not a supported PostMeter or Postman collection.');
+      const error = new Error('File is not a supported PostMeter, Postman, OpenAPI, HAR, curl, or JMeter collection.');
       error.cause = postmanError;
       throw error;
     }
@@ -135,7 +173,19 @@ class WorkspaceStore {
     const workspace = normalizeWorkspace({ collections: [collection], environments: [], history: [] });
     const exportable = options.includeSecrets === true ? workspace : redactWorkspaceSecrets(workspace);
     await fs.mkdir(path.dirname(exportPath), { recursive: true });
-    await fs.writeFile(exportPath, JSON.stringify(exportable, null, 2));
+    const normalizedCollection = exportable.collections[0];
+    const format = options.format || 'postmeter';
+    if (format === 'openapi') {
+      await fs.writeFile(exportPath, JSON.stringify(exportOpenApiCollection(normalizedCollection), null, 2));
+    } else if (format === 'har') {
+      await fs.writeFile(exportPath, JSON.stringify(exportHarCollection(normalizedCollection), null, 2));
+    } else if (format === 'curl') {
+      await fs.writeFile(exportPath, exportCurlCollection(normalizedCollection));
+    } else if (format === 'jmeter') {
+      await fs.writeFile(exportPath, exportJMeterPlan(normalizedCollection));
+    } else {
+      await fs.writeFile(exportPath, JSON.stringify(exportable, null, 2));
+    }
     return exportPath;
   }
 
@@ -150,6 +200,25 @@ class WorkspaceStore {
     await fs.rename(this.workspacePath, recoveredPath);
     return recoveredPath;
   }
+}
+
+function parseStructuredCollectionContent(content) {
+  try {
+    return JSON.parse(content);
+  } catch {
+    if (!looksLikeYamlOpenApi(content)) {
+      return null;
+    }
+    try {
+      return YAML.parse(content);
+    } catch {
+      return null;
+    }
+  }
+}
+
+function looksLikeYamlOpenApi(content) {
+  return /^\s*(openapi|swagger)\s*:/m.test(content || '');
 }
 
 function migrate(workspace) {
@@ -182,7 +251,109 @@ function migrate(workspace) {
     workspace.schemaVersion = 4;
     migrated = true;
   }
+  if (schemaVersion < 5) {
+    for (const collection of workspace.collections || []) {
+      if (!Array.isArray(collection.variables)) {
+        collection.variables = [];
+      }
+    }
+    workspace.schemaVersion = 5;
+    migrated = true;
+  }
+  if (schemaVersion < 6) {
+    for (const collection of workspace.collections || []) {
+      ensureRequestScripts(collection.requests);
+      ensureFolderRequestScripts(collection.folders);
+    }
+    workspace.schemaVersion = 6;
+    migrated = true;
+  }
+  if (schemaVersion < 7) {
+    workspace.settings ||= { updates: { includePrereleases: false } };
+    workspace.settings.updates ||= { includePrereleases: false };
+    for (const collection of workspace.collections || []) {
+      ensureCollectionCompatibilityFields(collection);
+    }
+    workspace.schemaVersion = 7;
+    migrated = true;
+  }
+  if (schemaVersion < 8) {
+    if (!Array.isArray(workspace.cookies)) {
+      workspace.cookies = [];
+    }
+    for (const collection of workspace.collections || []) {
+      ensureCollectionCookieJarFields(collection);
+    }
+    workspace.schemaVersion = 8;
+    migrated = true;
+  }
   return migrated;
+}
+
+function ensureCollectionCompatibilityFields(collection) {
+  if (!Array.isArray(collection.certificates)) {
+    collection.certificates = [];
+  }
+  ensureRequestCompatibilityFields(collection.requests);
+  for (const folder of collection.folders || []) {
+    ensureFolderCompatibilityFields(folder);
+  }
+}
+
+function ensureFolderCompatibilityFields(folder) {
+  ensureRequestCompatibilityFields(folder.requests);
+  for (const child of folder.folders || []) {
+    ensureFolderCompatibilityFields(child);
+  }
+}
+
+function ensureRequestCompatibilityFields(requests = []) {
+  for (const request of requests || []) {
+    if (!Array.isArray(request.variables)) {
+      request.variables = [];
+    }
+    if (!Array.isArray(request.examples)) {
+      request.examples = [];
+    }
+  }
+}
+
+function ensureCollectionCookieJarFields(collection) {
+  ensureRequestCookieJarFields(collection.requests);
+  for (const folder of collection.folders || []) {
+    ensureFolderCookieJarFields(folder);
+  }
+}
+
+function ensureFolderCookieJarFields(folder) {
+  ensureRequestCookieJarFields(folder.requests);
+  for (const child of folder.folders || []) {
+    ensureFolderCookieJarFields(child);
+  }
+}
+
+function ensureRequestCookieJarFields(requests = []) {
+  for (const request of requests || []) {
+    request.cookieJar ||= { enabled: false, storeResponses: true };
+  }
+}
+
+function ensureFolderRequestScripts(folders = []) {
+  for (const folder of folders || []) {
+    ensureRequestScripts(folder.requests);
+    ensureFolderRequestScripts(folder.folders);
+  }
+}
+
+function ensureRequestScripts(requests = []) {
+  for (const request of requests || []) {
+    if (!request.scripts || typeof request.scripts !== 'object') {
+      request.scripts = { preRequest: '', tests: '' };
+    } else {
+      request.scripts.preRequest = typeof request.scripts.preRequest === 'string' ? request.scripts.preRequest : '';
+      request.scripts.tests = typeof request.scripts.tests === 'string' ? request.scripts.tests : '';
+    }
+  }
 }
 
 function normalizeWorkspace(workspace) {
@@ -193,6 +364,7 @@ function normalizeWorkspace(workspace) {
       ? workspace.collections.map(collectionModel)
       : defaultWorkspace().collections,
     environments: Array.isArray(workspace?.environments) ? workspace.environments : [],
+    cookies: Array.isArray(workspace?.cookies) ? workspace.cookies : [],
     history: Array.isArray(workspace?.history) ? workspace.history : []
   });
   return normalized;
@@ -254,8 +426,11 @@ function looksLikeNativeWorkspace(value) {
 
 function regenerateCollectionIds(collection) {
   collection.id = newId();
+  for (const certificate of collection.certificates || []) {
+    certificate.id = newId();
+  }
   for (const request of collection.requests || []) {
-    request.id = newId();
+    regenerateRequestIds(request);
   }
   for (const folder of collection.folders || []) {
     regenerateFolderIds(folder);
@@ -264,12 +439,23 @@ function regenerateCollectionIds(collection) {
 
 function regenerateFolderIds(folder) {
   folder.id = newId();
-  folder.requests = (folder.requests || []).map((request) => requestModel({ ...request, id: newId() }));
+  folder.requests = (folder.requests || []).map((request) => {
+    const normalized = requestModel(request);
+    regenerateRequestIds(normalized);
+    return normalized;
+  });
   folder.folders = (folder.folders || []).map((child) => {
     const normalized = folderModel(child);
     regenerateFolderIds(normalized);
     return normalized;
   });
+}
+
+function regenerateRequestIds(request) {
+  request.id = newId();
+  for (const example of request.examples || []) {
+    example.id = newId();
+  }
 }
 
 function siblingPath(sourcePath, label) {

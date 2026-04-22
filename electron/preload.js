@@ -2,7 +2,41 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('postmeter', {
   app: {
-    versions: () => ipcRenderer.invoke('app:versions')
+    versions: () => ipcRenderer.invoke('app:versions'),
+    checkForUpdates: (options) => ipcRenderer.invoke('app:check-updates', options),
+    openExternal: (url) => ipcRenderer.invoke('app:open-external', url),
+    onMenuAction: (callback) => {
+      const allowedStringActions = new Set([
+        'new-request',
+        'new-collection',
+        'new-folder',
+        'save-workspace',
+        'import-workspace',
+        'import-collection',
+        'export-workspace',
+        'export-collection',
+        'check-updates'
+      ]);
+      const allowedPayloadActions = new Set(['set-prereleases']);
+      const listener = (_event, action) => {
+        if (typeof action === 'string' && allowedStringActions.has(action)) {
+          callback(action);
+          return;
+        }
+        if (action
+          && typeof action === 'object'
+          && allowedPayloadActions.has(action.type)
+          && action.type === 'set-prereleases'
+          && typeof action.includePrereleases === 'boolean') {
+          callback({
+            type: action.type,
+            includePrereleases: action.includePrereleases
+          });
+        }
+      };
+      ipcRenderer.on('menu:action', listener);
+      return () => ipcRenderer.removeListener('menu:action', listener);
+    }
   },
   workspace: {
     load: () => ipcRenderer.invoke('workspace:load'),
@@ -12,11 +46,23 @@ contextBridge.exposeInMainWorld('postmeter', {
   },
   collection: {
     importCollection: () => ipcRenderer.invoke('collection:import'),
-    exportCollection: (collection) => ipcRenderer.invoke('collection:export', collection)
+    exportCollection: (collection, format) => ipcRenderer.invoke('collection:export', collection, format)
   },
   request: {
     validate: (request, environment) => ipcRenderer.invoke('request:validate', request, environment),
-    send: (request, environment) => ipcRenderer.invoke('request:send', request, environment)
+    send: (request, environment) => ipcRenderer.invoke('request:send', request, environment),
+    exportExamples: (request) => ipcRenderer.invoke('request:examples:export', request)
+  },
+  oauth: {
+    startPkceFlow: (id, auth, environment, strategy) => ipcRenderer.invoke('oauth:pkce:start', id, auth, environment, strategy),
+    startDeviceFlow: (id, auth, environment) => ipcRenderer.invoke('oauth:device:start', id, auth, environment),
+    cancelDeviceFlow: (id) => ipcRenderer.invoke('oauth:device:cancel', id),
+    cancelFlow: (id) => ipcRenderer.invoke('oauth:cancel', id),
+    onProgress: (callback) => {
+      const listener = (_event, payload) => callback(payload);
+      ipcRenderer.on('oauth:progress', listener);
+      return () => ipcRenderer.removeListener('oauth:progress', listener);
+    }
   },
   loadTest: {
     start: (id, request, environment, config) => ipcRenderer.invoke('load:start', id, request, environment, config),
@@ -26,6 +72,16 @@ contextBridge.exposeInMainWorld('postmeter', {
       const listener = (_event, payload) => callback(payload);
       ipcRenderer.on('load:progress', listener);
       return () => ipcRenderer.removeListener('load:progress', listener);
+    }
+  },
+  runner: {
+    start: (id, collection, environment, config) => ipcRenderer.invoke('runner:start', id, collection, environment, config),
+    cancel: (id) => ipcRenderer.invoke('runner:cancel', id),
+    export: (result, format) => ipcRenderer.invoke('runner:export', result, format),
+    onProgress: (callback) => {
+      const listener = (_event, payload) => callback(payload);
+      ipcRenderer.on('runner:progress', listener);
+      return () => ipcRenderer.removeListener('runner:progress', listener);
     }
   }
 });

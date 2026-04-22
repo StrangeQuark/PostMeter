@@ -9,6 +9,7 @@ const AUTH_SECRET_FIELDS = new Set([
   'accessToken',
   'refreshToken',
   'clientSecret',
+  'deviceCode',
   'passphrase'
 ]);
 
@@ -85,9 +86,24 @@ function transformWorkspaceSecrets(workspace, transformer, includePlainSecrets) 
       }
     }
   }
+  for (const cookie of workspace.cookies || []) {
+    if (cookie.value && (includePlainSecrets || cookie.value)) {
+      cookie.value = transformer(cookie.value);
+    }
+  }
 }
 
 function transformCollectionSecrets(collection, transformer, includePlainSecrets) {
+  for (const variable of collection.variables || []) {
+    if (variable.secret === true && (includePlainSecrets || variable.value)) {
+      variable.value = transformer(variable.value);
+    }
+  }
+  for (const certificate of collection.certificates || []) {
+    if (certificate.passphrase && (includePlainSecrets || certificate.passphrase)) {
+      certificate.passphrase = transformer(certificate.passphrase);
+    }
+  }
   for (const request of collection.requests || []) {
     transformRequestSecrets(request, transformer, includePlainSecrets);
   }
@@ -106,6 +122,11 @@ function transformFolderSecrets(folder, transformer, includePlainSecrets) {
 }
 
 function transformRequestSecrets(request, transformer, includePlainSecrets) {
+  for (const variable of request.variables || []) {
+    if (variable.secret === true && (includePlainSecrets || variable.value)) {
+      variable.value = transformer(variable.value);
+    }
+  }
   if (!request.auth || typeof request.auth !== 'object') {
     return;
   }

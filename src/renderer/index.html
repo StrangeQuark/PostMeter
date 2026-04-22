@@ -35,13 +35,16 @@
       <div id="exportMenu" class="toolbar-menu" role="menu" hidden>
         <button id="exportWorkspaceButton" role="menuitem">Workspace</button>
         <button id="exportCollectionButton" role="menuitem">Collection</button>
+        <button id="exportOpenApiButton" role="menuitem">OpenAPI</button>
+        <button id="exportJMeterButton" role="menuitem">JMeter</button>
+        <button id="exportCurlButton" role="menuitem">curl</button>
+        <button id="exportHarButton" role="menuitem">HAR</button>
       </div>
     </div>
     <label class="field inline environment-control">
       <span>Environment</span>
       <select id="environmentSelect"></select>
     </label>
-    <div id="statusLabel" class="status">Ready</div>
   </header>
 
   <main id="appGrid" class="app-grid">
@@ -81,7 +84,12 @@
           <button class="tab active" data-tab-group="request" data-tab="params">Params</button>
           <button class="tab" data-tab-group="request" data-tab="headers">Headers</button>
           <button class="tab" data-tab-group="request" data-tab="auth">Auth</button>
+          <button class="tab" data-tab-group="request" data-tab="cookies">Cookies</button>
           <button class="tab" data-tab-group="request" data-tab="body">Body</button>
+          <button class="tab" data-tab-group="request" data-tab="tests">Tests</button>
+          <button class="tab" data-tab-group="request" data-tab="scripts">Scripts</button>
+          <button class="tab" data-tab-group="request" data-tab="examples">Examples</button>
+          <button class="tab" data-tab-group="request" data-tab="collectionVariables">Variables</button>
           <button class="tab" data-tab-group="request" data-tab="environment">Environment</button>
         </div>
 
@@ -109,7 +117,7 @@
                 <option value="basic">Basic Auth</option>
                 <option value="apiKey">API Key</option>
                 <option value="cookie">Cookie</option>
-                <option value="oauth2">OAuth 2.0</option>
+                <option value="oauth2">OAuth 2.0 Request Auth</option>
                 <option value="clientCertificate">Client Certificate</option>
               </select>
             </label>
@@ -159,6 +167,14 @@
 
             <div class="auth-section" data-auth-section="oauth2">
               <label class="field">
+                <span>Grant Type</span>
+                <select id="authOauthGrantTypeSelect">
+                  <option value="authorizationCode">Authorization Code</option>
+                  <option value="clientCredentials">Client Credentials</option>
+                  <option value="deviceCode">Device Code</option>
+                </select>
+              </label>
+              <label class="field">
                 <span>Token Type</span>
                 <select id="authOauthTokenTypeSelect">
                   <option value="Bearer">Bearer</option>
@@ -178,6 +194,17 @@
                 <input id="authOauthAuthorizationUrlInput" autocomplete="off">
               </label>
               <label class="field">
+                <span>Redirect Strategy</span>
+                <select id="authOauthRedirectStrategySelect">
+                  <option value="loopback">Loopback</option>
+                  <option value="customScheme">Custom URI Scheme</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Device Authorization URL</span>
+                <input id="authOauthDeviceAuthorizationUrlInput" autocomplete="off">
+              </label>
+              <label class="field">
                 <span>Token URL</span>
                 <input id="authOauthTokenUrlInput" autocomplete="off">
               </label>
@@ -193,16 +220,42 @@
                 <span>Scopes</span>
                 <input id="authOauthScopesInput" autocomplete="off">
               </label>
+              <div class="oauth-actions">
+                <button id="startPkceFlowButton" type="button">Start Authorization</button>
+                <button id="startDeviceFlowButton" type="button">Start Device Flow</button>
+                <button id="cancelOauthFlowButton" type="button" disabled>Cancel OAuth</button>
+              </div>
+              <div id="oauthProgressPanel" class="oauth-progress" hidden>
+                <div class="oauth-progress-title">OAuth progress</div>
+                <div id="oauthProgressStatus" class="oauth-progress-status">Idle</div>
+                <div id="oauthProgressDetail" class="oauth-progress-detail"></div>
+              </div>
+              <label class="field">
+                <span>User Code</span>
+                <input id="authOauthUserCodeInput" readonly>
+              </label>
+              <label class="field">
+                <span>Verification URL</span>
+                <input id="authOauthVerificationUriInput" readonly>
+              </label>
             </div>
 
             <div class="auth-section" data-auth-section="clientCertificate">
               <label class="field">
-                <span>Certificate Path</span>
+                <span>PFX/P12 Bundle Path</span>
+                <input id="authClientPfxPathInput" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>PEM Certificate Path</span>
                 <input id="authClientCertPathInput" autocomplete="off">
               </label>
               <label class="field">
-                <span>Key Path</span>
+                <span>PEM Key Path</span>
                 <input id="authClientKeyPathInput" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>CA Certificate Path</span>
+                <input id="authClientCaPathInput" autocomplete="off">
               </label>
               <label class="field">
                 <span>Passphrase</span>
@@ -224,6 +277,84 @@
           <textarea id="bodyInput" spellcheck="false" placeholder="Request body"></textarea>
         </div>
 
+        <div id="testsTab" class="tab-panel">
+          <div class="table-actions">
+            <button id="addAssertionButton">Add Assertion</button>
+            <select id="assertionTemplateSelect" aria-label="Assertion template">
+              <option value="status200">Status 200</option>
+              <option value="jsonPathExists">JSON path exists</option>
+              <option value="xmlPathExists">XML XPath exists</option>
+              <option value="htmlSelectorExists">HTML selector exists</option>
+              <option value="headerContains">Header contains</option>
+              <option value="responseUnderOneSecond">Response under 1s</option>
+              <option value="responseUnder10Kb">Response under 10 KB</option>
+              <option value="bodyContains">Body contains</option>
+              <option value="extractVariable">Extract variable</option>
+              <option value="extractXml">Extract XML</option>
+              <option value="extractHtml">Extract HTML</option>
+              <option value="extractRegex">Extract regex</option>
+            </select>
+            <button id="addAssertionTemplateButton">Add Template</button>
+          </div>
+          <div id="assertionsTable" class="kv-table assertions-table"></div>
+        </div>
+
+        <div id="scriptsTab" class="tab-panel">
+          <div class="script-grid">
+            <label class="field script-field">
+              <span>Pre-request Script</span>
+              <textarea id="preRequestScriptInput" spellcheck="false" placeholder="pm.environment.set('token', 'value');"></textarea>
+            </label>
+            <label class="field script-field">
+              <span>Test Script</span>
+              <textarea id="testScriptInput" spellcheck="false" placeholder="pm.test('status is 200', function () { pm.response.to.have.status(200); });"></textarea>
+            </label>
+          </div>
+        </div>
+
+        <div id="examplesTab" class="tab-panel">
+          <div class="table-actions">
+            <button id="addExampleButton">Add Example</button>
+            <button id="captureResponseExampleButton">Capture Response</button>
+            <button id="exportExamplesButton">Export Examples</button>
+          </div>
+          <div id="examplesList" class="examples-list"></div>
+        </div>
+
+        <div id="cookiesTab" class="tab-panel">
+          <div class="cookie-jar-options">
+            <label class="field inline">
+              <input id="requestCookieJarEnabledInput" type="checkbox">
+              <span>Use cookie jar for this request</span>
+            </label>
+            <label class="field inline">
+              <input id="requestCookieJarStoreInput" type="checkbox">
+              <span>Store response cookies</span>
+            </label>
+            <label class="field inline">
+              <input id="filterCookiesToRequestHostInput" type="checkbox">
+              <span>Active host only</span>
+            </label>
+            <span id="cookieHostFilterLabel" class="muted-inline"></span>
+          </div>
+          <div class="environment-actions">
+            <button id="addCookieButton">Add Cookie</button>
+            <button id="clearExpiredCookiesButton">Clear Expired</button>
+          </div>
+          <div id="cookiesTable" class="kv-table cookies-table"></div>
+        </div>
+
+        <div id="collectionVariablesTab" class="tab-panel">
+          <div class="environment-actions">
+            <button id="addRequestVariableButton">Add Request Variable</button>
+            <button id="addCollectionVariableButton">Add Variable</button>
+          </div>
+          <div id="requestVariablesTable" class="kv-table"></div>
+          <h3 class="section-heading">Collection Variables</h3>
+          <div id="collectionVariablesTable" class="kv-table"></div>
+          <pre id="variablePreview" class="variable-preview">No variables</pre>
+        </div>
+
         <div id="environmentTab" class="tab-panel">
           <div class="environment-actions">
             <input id="environmentNameInput" placeholder="Environment name">
@@ -241,6 +372,7 @@
         <div class="tabs" data-tab-group="results">
           <button class="tab active" data-tab-group="results" data-tab="response">Response</button>
           <button class="tab" data-tab-group="results" data-tab="load">Load Test</button>
+          <button class="tab" data-tab-group="results" data-tab="runner">Runner</button>
         </div>
 
         <div id="responseTab" class="tab-panel active">
@@ -260,14 +392,36 @@
         <div id="loadTab" class="tab-panel">
           <div class="load-controls">
             <label>Concurrency <input id="loadConcurrency" type="number" min="1" max="512" value="5"></label>
-            <label>Requests <input id="loadRequests" type="number" min="1" max="100000" value="25"></label>
+            <label>Max Requests <input id="loadRequests" type="number" min="1" max="100000" value="25"></label>
+            <label>Duration (s) <input id="loadDurationSeconds" type="number" min="0" max="3600" step="0.1" value="0"></label>
+            <label>Ramp-up (s) <input id="loadRampUpSeconds" type="number" min="0" max="3600" step="0.1" value="0"></label>
+            <label>Target RPS <input id="loadTargetRate" type="number" min="0" max="10000" step="0.1" value="0"></label>
+            <label>Execution
+              <select id="loadExecutionMode">
+                <option value="singleProcess">Single process</option>
+                <option value="multiProcess">Multi-process</option>
+              </select>
+            </label>
+            <label>Processes <input id="loadWorkerProcesses" type="number" min="1" max="8" value="2"></label>
             <label>Allowed Hosts <input id="loadAllowedHosts" placeholder="api.example.com, localhost"></label>
+            <label class="checkbox-field"><input id="loadRecordSamples" type="checkbox"> Samples</label>
             <button id="runLoadButton" class="primary">Run Load Test</button>
             <button id="cancelLoadButton" disabled>Cancel</button>
             <button id="exportLoadJsonButton" disabled>Export JSON</button>
             <button id="exportLoadCsvButton" disabled>Export CSV</button>
           </div>
           <pre id="loadResults" class="load-results">No load test run yet.</pre>
+        </div>
+
+        <div id="runnerTab" class="tab-panel">
+          <div class="load-controls">
+            <label class="checkbox-field"><input id="runnerStopOnFailure" type="checkbox"> Stop on failure</label>
+            <button id="runCollectionButton" class="primary">Run Collection</button>
+            <button id="cancelRunnerButton" disabled>Cancel</button>
+            <button id="exportRunnerJsonButton" disabled>Export JSON</button>
+            <button id="exportRunnerCsvButton" disabled>Export CSV</button>
+          </div>
+          <pre id="runnerResults" class="load-results">No collection run yet.</pre>
         </div>
       </section>
     </section>
