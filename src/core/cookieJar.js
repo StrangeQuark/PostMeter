@@ -1,11 +1,19 @@
 const net = require('node:net');
-const { newId, normalizeCookies } = require('./models');
+const { newId } = require('./models');
+const {
+  isExpiredCookie,
+  normalizeCookieDomain,
+  normalizeCookiePath,
+  normalizeCookiePriority,
+  normalizeCookieSameSite,
+  normalizeCookies
+} = require('./cookieModel');
 
 function cookiesForRequest(cookies, url) {
   const now = Date.now();
-  return normalizeCookies(cookies)
+  return normalizeCookies(cookies, { createId: newId })
     .filter((cookie) => cookie.enabled !== false)
-    .filter((cookie) => !isExpired(cookie, now))
+    .filter((cookie) => !isExpiredCookie(cookie, now))
     .filter((cookie) => domainMatches(cookie, url.hostname))
     .filter((cookie) => pathMatches(cookie, url.pathname || '/'))
     .filter((cookie) => !cookie.secure || url.protocol === 'https:')
@@ -25,18 +33,18 @@ function mergeCookieHeader(existingHeader, cookies) {
 }
 
 function updateCookiesFromResponse(cookies, setCookieHeaders, url) {
-  let jar = normalizeCookies(cookies).filter((cookie) => !isExpired(cookie));
+  let jar = normalizeCookies(cookies, { createId: newId }).filter((cookie) => !isExpiredCookie(cookie));
   for (const header of normalizeSetCookieHeaders(setCookieHeaders)) {
     const parsed = parseSetCookie(header, url);
     if (!parsed) {
       continue;
     }
     jar = jar.filter((cookie) => !sameCookieIdentity(cookie, parsed));
-    if (!isExpired(parsed)) {
+    if (!isExpiredCookie(parsed)) {
       jar.push(parsed);
     }
   }
-  return normalizeCookies(jar);
+  return normalizeCookies(jar, { createId: newId });
 }
 
 function parseCookieHeader(value) {
@@ -63,14 +71,14 @@ function cookieFromHeader(cookie, url, options = {}) {
     enabled: options.enabled !== false,
     name: cookie.name || '',
     value: cookie.value || '',
-    domain: normalizeDomain(options.domain || url.hostname),
-    path: normalizePath(options.path || '/'),
+    domain: normalizeCookieDomain(options.domain || url.hostname),
+    path: normalizeCookiePath(options.path || '/'),
     expiresAt: options.expiresAt || '',
     secure: options.secure === true,
     httpOnly: options.httpOnly === true,
-    sameSite: normalizeSameSite(options.sameSite),
+    sameSite: normalizeCookieSameSite(options.sameSite),
     hostOnly: options.hostOnly !== false,
-    priority: normalizePriority(options.priority),
+    priority: normalizeCookiePriority(options.priority),
     partitioned: options.partitioned === true,
     source: options.source == null ? '' : String(options.source),
     extensions: Array.isArray(options.extensions) ? options.extensions.map(String).filter(Boolean).slice(0, 25) : []
@@ -118,7 +126,7 @@ function parseSetCookie(header, url) {
       cookie.domain = domain;
       cookie.hostOnly = false;
     } else if (name === 'path' && value) {
-      cookie.path = normalizePath(value);
+      cookie.path = normalizeCookiePath(value);
     } else if (name === 'expires' && value && !maxAgeSeen) {
       const date = new Date(value);
       if (!Number.isNaN(date.getTime())) {
@@ -135,9 +143,9 @@ function parseSetCookie(header, url) {
     } else if (name === 'httponly') {
       cookie.httpOnly = true;
     } else if (name === 'samesite') {
-      cookie.sameSite = normalizeSameSite(value);
+      cookie.sameSite = normalizeCookieSameSite(value);
     } else if (name === 'priority') {
-      cookie.priority = normalizePriority(value);
+      cookie.priority = normalizeCookiePriority(value);
     } else if (name === 'partitioned') {
       cookie.partitioned = true;
     }
@@ -164,15 +172,7 @@ function normalizeSetCookieHeaders(headers) {
 function sameCookieIdentity(left, right) {
   return left.name.toLowerCase() === right.name.toLowerCase()
     && normalizeDomain(left.domain) === normalizeDomain(right.domain)
-    && normalizePath(left.path) === normalizePath(right.path);
-}
-
-function isExpired(cookie, now = Date.now()) {
-  if (!cookie.expiresAt) {
-    return false;
-  }
-  const expires = new Date(cookie.expiresAt).getTime();
-  return Number.isFinite(expires) && expires <= now;
+    && normalizeCookiePath(left.path) === normalizeCookiePath(right.path);
 }
 
 function domainMatches(cookie, hostname) {
@@ -224,13 +224,13 @@ function isPublicSuffixLikeDomain(domain) {
 }
 
 function pathMatches(cookie, requestPath) {
-  const cookiePath = normalizePath(cookie.path);
-  const path = normalizePath(requestPath);
+  const cookiePath = normalizeCookiePath(cookie.path);
+  const path = normalizeCookiePath(requestPath);
   return path === cookiePath || path.startsWith(cookiePath.endsWith('/') ? cookiePath : `${cookiePath}/`);
 }
 
 function defaultCookiePath(pathname) {
-  const path = normalizePath(pathname);
+  const path = normalizeCookiePath(pathname);
   if (path === '/') {
     return '/';
   }
@@ -239,40 +239,7 @@ function defaultCookiePath(pathname) {
 }
 
 function normalizeDomain(domain) {
-  return String(domain || '').trim().replace(/^\./, '').replace(/\.$/, '').toLowerCase();
-}
-
-function normalizePath(path) {
-  const value = String(path || '/').trim();
-  return value.startsWith('/') ? value : `/${value}`;
-}
-
-function normalizeSameSite(value) {
-  const normalized = String(value || '').trim().toLowerCase();
-  if (normalized === 'strict') {
-    return 'Strict';
-  }
-  if (normalized === 'lax') {
-    return 'Lax';
-  }
-  if (normalized === 'none') {
-    return 'None';
-  }
-  return '';
-}
-
-function normalizePriority(value) {
-  const normalized = String(value || '').trim().toLowerCase();
-  if (normalized === 'low') {
-    return 'Low';
-  }
-  if (normalized === 'medium') {
-    return 'Medium';
-  }
-  if (normalized === 'high') {
-    return 'High';
-  }
-  return '';
+  return normalizeCookieDomain(domain);
 }
 
 function hasValidCookiePrefixSemantics(cookie) {
@@ -280,7 +247,7 @@ function hasValidCookiePrefixSemantics(cookie) {
     return false;
   }
   if (cookie.name.startsWith('__Host-')) {
-    return cookie.secure === true && cookie.hostOnly !== false && normalizePath(cookie.path) === '/';
+    return cookie.secure === true && cookie.hostOnly !== false && normalizeCookiePath(cookie.path) === '/';
   }
   return true;
 }
@@ -289,7 +256,7 @@ module.exports = {
   cookieFromHeader,
   cookiesForRequest,
   domainMatchesHost,
-  isExpired,
+  isExpired: isExpiredCookie,
   mergeCookieHeader,
   parseCookieHeader,
   parseSetCookie,

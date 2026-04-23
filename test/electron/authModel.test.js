@@ -1,0 +1,135 @@
+const assert = require('node:assert/strict');
+const test = require('node:test');
+const {
+  authEditorState,
+  authFromEditorState,
+  normalizeAuth,
+  normalizePersistedAuth
+} = require('../../src/core/authModel');
+
+test('shared auth model normalizes runtime auth values by type', () => {
+  assert.deepEqual(normalizeAuth({ type: 'unsupported', token: 'secret' }), { type: 'none' });
+  assert.deepEqual(normalizeAuth({ type: 'apiKey', location: 'bad', key: 'X-API-Key' }), {
+    type: 'apiKey',
+    location: 'header',
+    key: 'X-API-Key',
+    value: ''
+  });
+  assert.deepEqual(normalizeAuth({ type: 'oauth2', tokenType: 'Unknown', grantType: 'bad', redirectStrategy: 'bad' }), {
+    type: 'oauth2',
+    tokenType: 'Bearer',
+    accessToken: '',
+    refreshToken: '',
+    tokenUrl: '',
+    authorizationUrl: '',
+    deviceAuthorizationUrl: '',
+    clientId: '',
+    clientSecret: '',
+    scopes: '',
+    grantType: 'authorizationCode',
+    redirectStrategy: 'loopback',
+    redirectUri: '',
+    expiresAt: '',
+    deviceCode: '',
+    userCode: '',
+    verificationUri: '',
+    verificationUriComplete: '',
+    deviceCodeExpiresAt: '',
+    devicePollIntervalSeconds: ''
+  });
+});
+
+test('shared auth model keeps persisted auth shallow for workspace compatibility', () => {
+  assert.deepEqual(normalizePersistedAuth({ type: 'basic', username: 'alice' }), {
+    type: 'basic',
+    username: 'alice'
+  });
+  assert.deepEqual(normalizePersistedAuth({ type: 'unsupported', token: 'secret' }), { type: 'none' });
+});
+
+test('shared auth model maps runtime auth to renderer editor fields', () => {
+  assert.deepEqual(authEditorState({
+    type: 'oauth2',
+    grantType: 'deviceCode',
+    tokenType: 'MAC',
+    clientId: 'client-id',
+    userCode: 'ABCD-EFGH',
+    verificationUriComplete: 'https://example.test/device?code=ABCD-EFGH'
+  }), {
+    type: 'oauth2',
+    bearerToken: '',
+    basicUsername: '',
+    basicPassword: '',
+    apiKeyLocation: 'header',
+    apiKeyName: '',
+    apiKeyValue: '',
+    cookieValue: '',
+    oauthGrantType: 'deviceCode',
+    oauthTokenType: 'MAC',
+    oauthAccessToken: '',
+    oauthRefreshToken: '',
+    oauthAuthorizationUrl: '',
+    oauthRedirectStrategy: 'loopback',
+    oauthDeviceAuthorizationUrl: '',
+    oauthTokenUrl: '',
+    oauthClientId: 'client-id',
+    oauthClientSecret: '',
+    oauthScopes: '',
+    oauthUserCode: 'ABCD-EFGH',
+    oauthVerificationUri: 'https://example.test/device?code=ABCD-EFGH',
+    clientPfxPath: '',
+    clientCertPath: '',
+    clientKeyPath: '',
+    clientCaPath: '',
+    clientPassphrase: ''
+  });
+});
+
+test('shared auth model rebuilds OAuth editor state while preserving runtime-only device values', () => {
+  assert.deepEqual(authFromEditorState({
+    type: 'oauth2',
+    oauthGrantType: 'deviceCode',
+    oauthTokenType: 'MAC',
+    oauthAccessToken: 'access-token',
+    oauthRefreshToken: 'refresh-token',
+    oauthAuthorizationUrl: 'https://auth.example.test/authorize',
+    oauthRedirectStrategy: 'customScheme',
+    oauthDeviceAuthorizationUrl: 'https://auth.example.test/device',
+    oauthTokenUrl: 'https://auth.example.test/token',
+    oauthClientId: 'client-id',
+    oauthClientSecret: 'client-secret',
+    oauthScopes: 'openid profile',
+    oauthUserCode: 'NEXT-CODE'
+  }, {
+    type: 'oauth2',
+    grantType: 'deviceCode',
+    redirectUri: 'postmeter://oauth/callback',
+    expiresAt: '2030-01-01T00:00:00.000Z',
+    deviceCode: 'device-code',
+    verificationUri: 'https://auth.example.test/device',
+    verificationUriComplete: 'https://auth.example.test/device?user_code=PREV',
+    deviceCodeExpiresAt: '2030-01-01T00:10:00.000Z',
+    devicePollIntervalSeconds: '5'
+  }), {
+    type: 'oauth2',
+    tokenType: 'MAC',
+    accessToken: 'access-token',
+    refreshToken: 'refresh-token',
+    tokenUrl: 'https://auth.example.test/token',
+    authorizationUrl: 'https://auth.example.test/authorize',
+    deviceAuthorizationUrl: 'https://auth.example.test/device',
+    clientId: 'client-id',
+    clientSecret: 'client-secret',
+    scopes: 'openid profile',
+    grantType: 'deviceCode',
+    redirectStrategy: 'customScheme',
+    redirectUri: 'postmeter://oauth/callback',
+    expiresAt: '2030-01-01T00:00:00.000Z',
+    deviceCode: 'device-code',
+    userCode: 'NEXT-CODE',
+    verificationUri: 'https://auth.example.test/device',
+    verificationUriComplete: 'https://auth.example.test/device?user_code=PREV',
+    deviceCodeExpiresAt: '2030-01-01T00:10:00.000Z',
+    devicePollIntervalSeconds: '5'
+  });
+});

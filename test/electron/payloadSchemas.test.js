@@ -6,10 +6,14 @@ const {
   ASSERTION_OPERATORS,
   ASSERTION_TYPES,
   COLLECTION_EXPORT_FORMATS,
+  fieldLimit,
+  hasSchemaEnumValue,
   HTTP_METHODS,
+  normalizeSchemaEnumValue,
   PAYLOAD_SCHEMA_VERSION,
   oneOf,
-  payloadSchemas
+  payloadSchemas,
+  schemaEnum
 } = require('../../src/core/payloadSchemas');
 
 test('defines shared payload schema metadata for IPC and contributors', () => {
@@ -26,6 +30,7 @@ test('defines shared payload schema metadata for IPC and contributors', () => {
   assert.ok(ASSERTION_TYPES.includes('extractHtml'));
   assert.ok(ASSERTION_OPERATORS.includes('lessThan'));
   assert.equal(payloadSchemas.fields.keyValue.value.limit, 'value');
+  assert.equal(payloadSchemas.fields.appearance.theme.enum, 'themeValues');
   assert.equal(payloadSchemas.fields.cookie.sameSite.enum, 'sameSiteValues');
   assert.equal(payloadSchemas.fields.cookie.priority.enum, 'cookiePriorities');
   assert.equal(payloadSchemas.fields.cookie.source.limit, 'short');
@@ -58,9 +63,19 @@ test('defines shared payload schema metadata for IPC and contributors', () => {
   assert.equal(payloadSchemas.entities.request.nested[0], 'auth');
   assert.equal(payloadSchemas.auth.oauth2GrantTypes[0], 'authorizationCode');
   assert.deepEqual(payloadSchemas.load.executionModes, ['singleProcess', 'multiProcess']);
+  assert.deepEqual(payloadSchemas.enums.sameSiteValues, ['', 'Lax', 'Strict', 'None']);
+  assert.equal(payloadSchemas.limits.url, 8192);
 });
 
 test('validates enum values through shared schema helper', () => {
   assert.equal(oneOf('har', COLLECTION_EXPORT_FORMATS, 'format'), 'har');
+  assert.deepEqual(schemaEnum('collectionExportFormats'), COLLECTION_EXPORT_FORMATS);
+  assert.equal(fieldLimit('name'), 256);
+  assert.equal(hasSchemaEnumValue('httpMethods', 'PATCH'), true);
+  assert.equal(normalizeSchemaEnumValue('httpMethods', 'patch', 'GET', {
+    trim: true,
+    transform: (value) => value.toUpperCase()
+  }), 'PATCH');
   assert.throws(() => oneOf('bad', COLLECTION_EXPORT_FORMATS, 'format'), /must be one of/);
+  assert.throws(() => schemaEnum('unknownEnum'), /Unknown payload schema enum/);
 });

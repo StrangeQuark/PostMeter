@@ -1,0 +1,93 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  font-size: 13px;
+}
+
+body.is-resizing {
+  user-select: none;
+}
+
+body.is-resizing-col {
+  cursor: col-resize;
+}
+
+body.is-resizing-row {
+  cursor: row-resize;
+}
+
+body.is-resizing * {
+  user-select: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+select,
+input,
+textarea {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+}
+
+button {
+  min-height: 30px;
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  background: var(--button-hover);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+button.primary {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #ffffff;
+  font-weight: 700;
+}
+
+button.primary:hover:not(:disabled) {
+  border-color: var(--primary-strong);
+  background: var(--primary-strong);
+}
+
+input,
+select,
+textarea {
+  border-radius: 6px;
+  outline: none;
+}
+
+input:focus,
+select:focus,
+textarea:focus,
+button:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(255, 108, 55, 0.18);
+}

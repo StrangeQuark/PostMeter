@@ -35,7 +35,6 @@ function mergeVariables(target, source, override) {
       if (override) {
         existing.value = variable.value ?? '';
         existing.enabled = true;
-        delete existing.secret;
       }
       continue;
     }
@@ -65,7 +64,6 @@ function setVariable(variables, key, value, options = {}) {
   if (existing) {
     existing.value = value == null ? '' : String(value);
     existing.enabled = true;
-    delete existing.secret;
     return;
   }
   variables.push({

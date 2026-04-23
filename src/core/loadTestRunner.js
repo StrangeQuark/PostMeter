@@ -2,6 +2,7 @@ const { fork } = require('node:child_process');
 const path = require('node:path');
 const { performance } = require('node:perf_hooks');
 const { buildUrl, sendRequest } = require('./httpClient');
+const { LOAD_EXECUTION_MODES } = require('./payloadSchemas');
 
 const MAX_CONCURRENCY = 512;
 const MAX_TOTAL_REQUESTS = 100_000;
@@ -12,7 +13,6 @@ const HIGH_CONCURRENCY_THRESHOLD = 50;
 const MAX_TARGET_RATE_PER_SECOND = 10_000;
 const MAX_WORKER_PROCESSES = 8;
 const MAX_MULTIPROCESS_AGGREGATED_SAMPLES = MAX_TOTAL_REQUESTS;
-const LOAD_EXECUTION_MODES = ['singleProcess', 'multiProcess'];
 const HISTOGRAM_BUCKETS_MILLIS = [50, 100, 200, 500, 1000, 2000, 5000, 10000];
 
 function validateLoadConfig(config, request, environment) {

@@ -145,7 +145,7 @@ test('imports native collection exports and Postman collections without confusin
     },
     variable: [
       { key: 'baseUrl', value: 'https://api.example.test' },
-      { key: 'token', value: 'secret-token', type: 'secret' }
+      { key: 'token', value: 'collection-token', type: 'string' }
     ],
     event: [{
       listen: 'prerequest',
@@ -184,7 +184,6 @@ test('imports native collection exports and Postman collections without confusin
   assert.equal(postman.requests.length, 0);
   assert.equal(postman.variables.length, 2);
   assert.equal(postman.variables[0].key, 'baseUrl');
-  assert.equal(Object.hasOwn(postman.variables[1], 'secret'), false);
   assert.equal(postman.folders[0].name, 'Folder A');
   const nestedRequest = postman.folders[0].folders[0].requests[0];
   assert.equal(nestedRequest.name, 'Nested Request');

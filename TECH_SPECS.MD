@@ -164,8 +164,18 @@ npm run release:validate
 
 ```text
 electron/
+  appIpc.js
+  appMenu.js
+  fileDialogs.js
   main.js
+  mainWindow.js
+  oauthIpc.js
+  oauthFlows.js
   preload.js
+  requestIpc.js
+  runtimeIpc.js
+  workspaceIpc.js
+  workspaceMutations.js
 
 src/core/
   assertions.js
@@ -181,17 +191,33 @@ src/core/
   models.js
   payloadSchemas.js
   postmanImporter.js
+  requestScriptRunner.js
   scriptSandbox.js
   scriptRuntime.js
   scriptWorker.js
-  secrets.js
   updateChecker.js
+  workspaceMigrations.js
   workspaceStore.js
 
 src/renderer/
+  assertionModel.js
+  base.css
+  chrome.css
+  collectionModel.js
+  contextMenu.js
+  cookieModel.js
+  editorPanels.css
+  exampleModel.js
   index.html
+  layoutControls.js
+  loadPolicy.js
+  overlays.css
+  responseFormatting.js
   renderer.js
+  runResultFormatting.js
   styles.css
+  theme.css
+  uiSmoke.js
 
 test/electron/
   *.test.js

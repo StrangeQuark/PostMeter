@@ -39,8 +39,53 @@ const ASSERTION_TYPES = [
 ];
 const ASSERTION_OPERATORS = ['equals', 'notEquals', 'contains', 'exists', 'lessThan', 'greaterThan'];
 const LOAD_EXECUTION_MODES = ['singleProcess', 'multiProcess'];
+const LIMITS = {
+  collections: 500,
+  foldersPerLevel: 500,
+  requestsPerLevel: 1000,
+  environments: 500,
+  history: 1000,
+  pairs: 1000,
+  cookies: 2000,
+  loadSamples: 50000,
+  histogramBuckets: 100,
+  folderDepth: 20,
+  name: 256,
+  url: 8192,
+  key: 512,
+  value: 32768,
+  body: 10 * 1024 * 1024,
+  loadResultJson: 10 * 1024 * 1024,
+  host: 253,
+  method: 12,
+  short: 64,
+  tiny: 16
+};
+const SCHEMA_ENUMS = {
+  apiKeyLocations: API_KEY_LOCATIONS,
+  assertionOperators: ASSERTION_OPERATORS,
+  assertionTypes: ASSERTION_TYPES,
+  authTypes: AUTH_TYPE_VALUES,
+  bodyMethods: BODY_METHODS,
+  bodyTypes: BODY_TYPE_VALUES,
+  collectionExportFormats: COLLECTION_EXPORT_FORMATS,
+  cookiePriorities: ['', 'Low', 'Medium', 'High'],
+  httpMethods: HTTP_METHODS,
+  loadExecutionModes: LOAD_EXECUTION_MODES,
+  loadExportFormats: LOAD_EXPORT_FORMATS,
+  oauth2GrantTypes: OAUTH2_GRANT_TYPES,
+  oauth2RedirectStrategies: OAUTH2_REDIRECT_STRATEGIES,
+  oauth2TokenTypes: OAUTH2_TOKEN_TYPES,
+  oauthProgressStatuses: OAUTH_PROGRESS_STATUSES,
+  oauthProgressTypes: OAUTH_PROGRESS_TYPES,
+  sameSiteValues: ['', 'Lax', 'Strict', 'None'],
+  themeValues: THEME_VALUES
+};
 
 const FIELD_SCHEMAS = {
+  appearance: {
+    theme: { type: 'string', limit: 'tiny', enum: 'themeValues', optional: true }
+  },
   keyValue: {
     enabled: { type: 'boolean', optional: true },
     key: { type: 'string', limit: 'key', optional: true },
@@ -318,6 +363,8 @@ const payloadSchemas = {
   load: {
     executionModes: LOAD_EXECUTION_MODES
   },
+  enums: SCHEMA_ENUMS,
+  limits: LIMITS,
   fields: FIELD_SCHEMAS,
   entities: {
     request: {
@@ -345,15 +392,52 @@ const payloadSchemas = {
   }
 };
 
-function oneOf(value, allowed, field) {
-  const normalized = value == null ? '' : String(value);
-  if (!allowed.includes(normalized)) {
-    throw new Error(`${field} must be one of: ${allowed.join(', ')}.`);
+function oneOf(value, allowed, field, options = {}) {
+  const normalized = normalizeSchemaString(value, options);
+  const allowedValues = Array.isArray(allowed) ? allowed : schemaEnum(allowed);
+  if (!allowedValues.includes(normalized)) {
+    throw new Error(`${field} must be one of: ${allowedValues.join(', ')}.`);
   }
   return normalized;
 }
 
-module.exports = {
+function schemaEnum(name) {
+  const allowed = payloadSchemas.enums?.[name];
+  if (!Array.isArray(allowed)) {
+    throw new Error(`Unknown payload schema enum: ${name}.`);
+  }
+  return allowed;
+}
+
+function fieldLimit(name) {
+  const limit = payloadSchemas.limits?.[name];
+  if (!Number.isFinite(limit)) {
+    throw new Error(`Unknown payload schema limit: ${name}.`);
+  }
+  return limit;
+}
+
+function hasSchemaEnumValue(name, value, options = {}) {
+  return schemaEnum(name).includes(normalizeSchemaString(value, options));
+}
+
+function normalizeSchemaEnumValue(name, value, fallback, options = {}) {
+  const normalized = normalizeSchemaString(value, options);
+  return schemaEnum(name).includes(normalized) ? normalized : fallback;
+}
+
+function normalizeSchemaString(value, options = {}) {
+  let normalized = value == null ? '' : String(value);
+  if (options.trim === true) {
+    normalized = normalized.trim();
+  }
+  if (typeof options.transform === 'function') {
+    normalized = options.transform(normalized);
+  }
+  return normalized;
+}
+
+const exported = {
   API_KEY_LOCATIONS,
   ASSERTION_OPERATORS,
   ASSERTION_TYPES,
@@ -363,6 +447,7 @@ module.exports = {
   COLLECTION_EXPORT_FORMATS,
   FIELD_SCHEMAS,
   HTTP_METHODS,
+  LIMITS,
   LOAD_EXECUTION_MODES,
   LOAD_EXPORT_FORMATS,
   OAUTH2_GRANT_TYPES,
@@ -371,7 +456,20 @@ module.exports = {
   OAUTH_PROGRESS_STATUSES,
   OAUTH_PROGRESS_TYPES,
   PAYLOAD_SCHEMA_VERSION,
+  SCHEMA_ENUMS,
   THEME_VALUES,
+  fieldLimit,
+  hasSchemaEnumValue,
+  normalizeSchemaEnumValue,
   oneOf,
-  payloadSchemas
+  payloadSchemas,
+  schemaEnum
 };
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = exported;
+}
+
+if (typeof globalThis !== 'undefined') {
+  globalThis.PostMeterPayloadSchemas = exported;
+}

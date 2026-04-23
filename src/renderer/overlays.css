@@ -1,0 +1,168 @@
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--overlay);
+}
+
+.modal-backdrop[hidden] {
+  display: none;
+}
+
+.modal {
+  width: min(520px, 100%);
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--modal-shadow);
+}
+
+.modal[hidden] {
+  display: none;
+}
+
+.modal h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.modal p {
+  margin: 0 0 14px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.danger-button {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--line));
+  color: var(--danger);
+}
+
+.danger-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 10%, var(--surface));
+}
+
+.collection-pick-list {
+  display: grid;
+  gap: 6px;
+  max-height: 260px;
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-muted);
+}
+
+.collection-pick-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.collection-pick-option:hover {
+  border-color: var(--primary);
+}
+
+.collection-pick-option input {
+  flex: 0 0 auto;
+}
+
+.context-menu {
+  position: fixed;
+  z-index: 1000;
+  display: grid;
+  min-width: 180px;
+  padding: 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.context-menu[hidden] {
+  display: none;
+}
+
+.context-menu button {
+  display: block;
+  width: 100%;
+  min-height: 30px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  text-align: left;
+}
+
+.context-menu button:hover {
+  background: var(--surface-muted);
+}
+
+.context-menu button.danger {
+  color: var(--danger);
+}
+
+.variable-autocomplete {
+  position: fixed;
+  z-index: 1001;
+  display: grid;
+  gap: 2px;
+  max-height: 280px;
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.variable-autocomplete[hidden] {
+  display: none;
+}
+
+.variable-autocomplete-option {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  min-height: 38px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  text-align: left;
+}
+
+.variable-autocomplete-option:hover,
+.variable-autocomplete-option.active {
+  background: var(--surface-muted);
+}
+
+.variable-autocomplete-key {
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.variable-autocomplete-value {
+  overflow: hidden;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

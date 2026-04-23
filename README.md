@@ -178,6 +178,10 @@ Workspace schema migrations create a timestamped `pre-migration.backup` sibling 
 
 See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) for the current native PostMeter, Postman, OpenAPI, JMeter, curl, HAR, scripting, and load-testing compatibility matrix.
 
+## Architecture
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the current renderer, Electron main-process, and core module boundaries.
+
 See [docs/OAUTH_PROVIDER_CERTIFICATION.md](docs/OAUTH_PROVIDER_CERTIFICATION.md) for the manual outbound OAuth provider certification plan. OAuth support is for authenticating requests to target APIs only; PostMeter must not add a user account, app login, or cloud sign-in requirement.
 
 ## Electron Security Posture

@@ -1,9 +1,10 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { evaluateAssertions, readHtmlSelector, readJsonPath, readXmlPath } = require('../../src/core/assertions');
-const { collectionRunResultToCsv, runCollection, runRequestWithScripts } = require('../../src/core/collectionRunner');
+const { collectionRunResultToCsv, runCollection } = require('../../src/core/collectionRunner');
 const { collectionModel, requestModel } = require('../../src/core/models');
 const { importPostmanCollection } = require('../../src/core/postmanImporter');
+const { runRequestWithScripts } = require('../../src/core/requestScriptRunner');
 
 test('evaluates status, header, JSON path, timing, body, and extraction assertions', () => {
   const response = {

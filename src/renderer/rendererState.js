@@ -1,0 +1,137 @@
+(function attachRendererState(global) {
+  function createRendererState() {
+    return {
+      workspace: null,
+      workspacePath: '',
+      activeCollectionId: null,
+      activeFolderId: null,
+      activeRequestId: null,
+      activeEnvironmentId: 'none',
+      activeWorkspaceId: 'current',
+      activeSidebarPanel: 'collections',
+      activeMainPanel: 'request',
+      draftRequests: new Map(),
+      openRequestTabs: [],
+      openEnvironmentTabs: [],
+      openWorkspaceTabs: [],
+      activeLoadId: null,
+      activeOauthFlowId: null,
+      activeRunnerId: null,
+      lastLoadResult: null,
+      lastRunnerResult: null,
+      lastResponse: null,
+      lastStatusMessage: 'Ready',
+      lastUserNotification: null,
+      activeModalId: null,
+      activeModalResolver: null,
+      selectedDraftSaveCollectionId: '',
+      maxOpenRequestTabs: 12
+    };
+  }
+
+  function activeRequestTabKey(state) {
+    if (!state?.activeRequestId) {
+      return '';
+    }
+    return state.activeCollectionId
+      ? `request:${state.activeCollectionId}:${state.activeRequestId}`
+      : `draft:${state.activeRequestId}`;
+  }
+
+  function activeEnvironmentTabKey(state) {
+    return state?.activeEnvironmentId && state.activeEnvironmentId !== 'none'
+      ? `environment:${state.activeEnvironmentId}`
+      : '';
+  }
+
+  function activeWorkspaceTabKey(state) {
+    return state?.activeWorkspaceId ? `workspace:${state.activeWorkspaceId}` : '';
+  }
+
+  function isActiveRequestTab(state, tab) {
+    return state?.activeMainPanel === 'request' && tab?.key === activeRequestTabKey(state);
+  }
+
+  function isActiveEnvironmentTab(state, tab) {
+    return state?.activeMainPanel === 'environment' && tab?.key === activeEnvironmentTabKey(state);
+  }
+
+  function isActiveWorkspaceTab(state, tab) {
+    return state?.activeMainPanel === 'workspace' && tab?.key === activeWorkspaceTabKey(state);
+  }
+
+  function requestSnapshot(request) {
+    try {
+      return JSON.stringify(request);
+    } catch {
+      return '{}';
+    }
+  }
+
+  function clearSavedRequestDirtyState(state, options = {}) {
+    const requestForTab = options.requestForTab || (() => null);
+    for (const tab of state?.openRequestTabs || []) {
+      if (tab.draft) {
+        continue;
+      }
+      const request = requestForTab(tab);
+      tab.dirty = false;
+      tab.createdUnsaved = false;
+      if (request) {
+        tab.snapshot = requestSnapshot(request);
+      }
+    }
+    options.onAfterClear?.();
+  }
+
+  function resetTabState(state, options = {}) {
+    if (!state) {
+      return;
+    }
+    state.openRequestTabs = [];
+    state.openEnvironmentTabs = [];
+    state.openWorkspaceTabs = [];
+    if (options.clearDrafts !== false) {
+      state.draftRequests = new Map();
+    }
+  }
+
+  function openModalState(state, modalId, resolver) {
+    if (!state) {
+      return;
+    }
+    state.activeModalId = modalId;
+    state.activeModalResolver = resolver;
+  }
+
+  function resolveModalState(state) {
+    if (!state) {
+      return null;
+    }
+    const resolver = state.activeModalResolver;
+    state.activeModalResolver = null;
+    state.activeModalId = null;
+    return resolver;
+  }
+
+  const exported = {
+    activeEnvironmentTabKey,
+    activeRequestTabKey,
+    activeWorkspaceTabKey,
+    clearSavedRequestDirtyState,
+    createRendererState,
+    isActiveEnvironmentTab,
+    isActiveRequestTab,
+    isActiveWorkspaceTab,
+    openModalState,
+    requestSnapshot,
+    resetTabState,
+    resolveModalState
+  };
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = exported;
+  }
+
+  global.PostMeterRendererState = exported;
+})(typeof window === 'undefined' ? globalThis : window);
