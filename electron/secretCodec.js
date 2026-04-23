@@ -72,7 +72,8 @@ function safeStorageRecoveryMessage(reason) {
   return [
     `Encrypted workspace secrets could not be decrypted: ${reason}`,
     'The OS keyring, login session, or desktop secret-service configuration may have changed.',
-    'PostMeter cannot recover these exact secret values. Restore access to the original keyring/session or use a redacted/exported backup.'
+    'PostMeter cannot recover these exact secret values. Restore access to the original keyring/session or use a redacted/exported backup.',
+    'See docs/SECRETS.md for local secret storage and recovery guidance.'
   ].join(' ');
 }
 
@@ -107,7 +108,7 @@ function decryptWithPassphrase(value, passphrase) {
   try {
     payload = JSON.parse(Buffer.from(value, 'base64').toString('utf8'));
   } catch {
-    throw new PassphraseRequiredError('Secret value could not be decoded. Enter the fallback passphrase used to protect this workspace.');
+    throw new PassphraseRequiredError('Secret value could not be decoded. Enter the fallback passphrase used to protect this workspace. See docs/SECRETS.md for recovery guidance.');
   }
   if (!payload || payload.version !== 1 || payload.kdf !== PASSPHRASE_KDF) {
     throw new Error('Unsupported passphrase-protected secret payload.');
@@ -126,13 +127,13 @@ function decryptWithPassphrase(value, passphrase) {
       decipher.final()
     ]).toString('utf8');
   } catch {
-    throw new PassphraseRequiredError('Secret value could not be decrypted. Enter the correct fallback passphrase.');
+    throw new PassphraseRequiredError('Secret value could not be decrypted. Enter the correct fallback passphrase. See docs/SECRETS.md for recovery guidance.');
   }
 }
 
 function assertPassphrase(passphrase) {
   if (!passphrase || String(passphrase).length < 8) {
-    throw new PassphraseRequiredError('Enter a fallback passphrase with at least 8 characters to protect workspace secrets.');
+    throw new PassphraseRequiredError('Enter a fallback passphrase with at least 8 characters to protect workspace secrets. See docs/SECRETS.md for recovery guidance.');
   }
 }
 

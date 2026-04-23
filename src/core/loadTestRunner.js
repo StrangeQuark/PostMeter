@@ -9,7 +9,6 @@ const MAX_DURATION_SECONDS = 60 * 60;
 const MAX_RAMP_UP_SECONDS = 60 * 60;
 const MAX_RECORDED_SAMPLES = 50_000;
 const HIGH_CONCURRENCY_THRESHOLD = 50;
-const MAX_ALLOWED_HOSTS = 100;
 const MAX_TARGET_RATE_PER_SECOND = 10_000;
 const MAX_WORKER_PROCESSES = 8;
 const MAX_MULTIPROCESS_AGGREGATED_SAMPLES = MAX_TOTAL_REQUESTS;
@@ -21,9 +20,11 @@ function validateLoadConfig(config, request, environment) {
   const totalRequests = Number(config?.totalRequests);
   const durationSeconds = Number(config?.durationSeconds || 0);
   const rampUpSeconds = Number(config?.rampUpSeconds || 0);
-  const targetRatePerSecond = Number(config?.targetRatePerSecond || 0);
+  let targetRatePerSecond = Number(config?.targetRatePerSecond || 0);
+  let maxRatePerSecond = Number(config?.maxRatePerSecond || 0);
   const executionMode = config?.executionMode == null ? 'singleProcess' : String(config.executionMode);
   const workerProcesses = config?.workerProcesses == null ? 1 : Number(config.workerProcesses);
+  const policyDecisions = [];
   if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > MAX_CONCURRENCY) {
     throw new Error(`Concurrency must be between 1 and ${MAX_CONCURRENCY}.`);
   }
@@ -39,6 +40,7 @@ function validateLoadConfig(config, request, environment) {
   if (!Number.isFinite(targetRatePerSecond) || targetRatePerSecond < 0 || targetRatePerSecond > MAX_TARGET_RATE_PER_SECOND) {
     throw new Error(`Target rate must be between 0 and ${MAX_TARGET_RATE_PER_SECOND} requests per second.`);
   }
+  assertRateCap(maxRatePerSecond);
   if (!LOAD_EXECUTION_MODES.includes(executionMode)) {
     throw new Error(`Execution mode must be one of: ${LOAD_EXECUTION_MODES.join(', ')}.`);
   }
@@ -48,29 +50,50 @@ function validateLoadConfig(config, request, environment) {
   if (concurrency >= HIGH_CONCURRENCY_THRESHOLD && config?.confirmedHighConcurrency !== true) {
     throw new Error(`Load tests with concurrency ${HIGH_CONCURRENCY_THRESHOLD} or higher require confirmation.`);
   }
-  const allowedHosts = normalizeAllowedHosts(config?.allowedHosts || []);
   if (request) {
-    if (!allowedHosts.length) {
-      throw new Error('Load tests require at least one allowed host.');
-    }
-    const requestHost = buildUrl(request, environment).hostname.toLowerCase();
-    if (!allowedHosts.includes(requestHost)) {
-      throw new Error(`Request host ${requestHost} is not in the load-test allowlist.`);
-    }
+    buildUrl(request, environment);
+  }
+  if (maxRatePerSecond > 0 && targetRatePerSecond > maxRatePerSecond) {
+    throw new Error('Target rate cannot exceed the configured rate cap.');
+  }
+  if (targetRatePerSecond <= 0 && maxRatePerSecond > 0) {
+    addPolicyDecision(policyDecisions, {
+      scope: 'rate',
+      host: '',
+      message: `Effective target rate defaults to the configured rate cap of ${maxRatePerSecond} requests per second.`
+    });
   }
   return {
     concurrency,
     totalRequests,
     durationSeconds,
     rampUpSeconds,
-    targetRatePerSecond,
+    targetRatePerSecond: targetRatePerSecond > 0 ? targetRatePerSecond : maxRatePerSecond,
+    maxRatePerSecond,
     executionMode,
     workerProcesses: executionMode === 'multiProcess' ? workerProcesses : 1,
     mode: durationSeconds > 0 ? 'duration' : 'requestCount',
     recordSamples: config?.recordSamples === true,
-    allowedHosts,
+    policyDecisions,
     confirmedHighConcurrency: config?.confirmedHighConcurrency === true
   };
+}
+
+function assertRateCap(value) {
+  if (!Number.isFinite(value) || value < 0 || value > MAX_TARGET_RATE_PER_SECOND) {
+    throw new Error(`Rate cap must be between 0 and ${MAX_TARGET_RATE_PER_SECOND} requests per second.`);
+  }
+}
+
+function addPolicyDecision(decisions, decision) {
+  if (!decision?.message || decisions.length >= 25) {
+    return;
+  }
+  decisions.push({
+    scope: decision.scope || 'policy',
+    host: decision.host || '',
+    message: decision.message
+  });
 }
 
 async function runLoadTest(request, environment, config, options = {}) {
@@ -327,8 +350,10 @@ function aggregateWorkerProgress(workerProgress, config, started) {
     mode: config.mode,
     durationSeconds: config.durationSeconds,
     targetRatePerSecond: config.targetRatePerSecond,
+    maxRatePerSecond: config.maxRatePerSecond,
     executionMode: config.executionMode,
     workerProcesses: config.workerProcesses,
+    policyDecisions: config.policyDecisions || [],
     elapsedMillis: Math.max(0, Math.round(performance.now() - started)),
     activeWorkers
   };
@@ -341,8 +366,10 @@ function progressEvent(completed, config, started, activeWorkers) {
     mode: config.mode,
     durationSeconds: config.durationSeconds,
     targetRatePerSecond: config.targetRatePerSecond,
+    maxRatePerSecond: config.maxRatePerSecond,
     executionMode: config.executionMode,
     workerProcesses: config.workerProcesses,
+    policyDecisions: config.policyDecisions || [],
     elapsedMillis: Math.max(0, Math.round(performance.now() - started)),
     activeWorkers
   };
@@ -375,40 +402,6 @@ function sleep(milliseconds, signal) {
     signal?.addEventListener('abort', onAbort, { once: true });
     timeout = setTimeout(finish, milliseconds);
   });
-}
-
-function normalizeAllowedHosts(values) {
-  if (!Array.isArray(values)) {
-    throw new Error('Load-test allowed hosts must be an array.');
-  }
-  if (values.length > MAX_ALLOWED_HOSTS) {
-    throw new Error(`Load-test allowed hosts cannot contain more than ${MAX_ALLOWED_HOSTS} entries.`);
-  }
-  const hosts = [];
-  for (const value of values) {
-    const host = normalizeHost(value);
-    if (host && !hosts.includes(host)) {
-      hosts.push(host);
-    }
-  }
-  return hosts;
-}
-
-function normalizeHost(value) {
-  const text = String(value ?? '').trim();
-  if (!text) {
-    return '';
-  }
-  let url;
-  try {
-    url = text.includes('://') ? new URL(text) : new URL(`http://${text}`);
-  } catch {
-    throw new Error(`Invalid load-test allowed host: ${text}.`);
-  }
-  if (!url.hostname || url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
-    throw new Error(`Invalid load-test allowed host: ${text}.`);
-  }
-  return url.hostname.toLowerCase();
 }
 
 function createLoadStats(config) {
@@ -532,8 +525,10 @@ function summarizeStats(stats, elapsedMillis, configOrRequestedRequests, cancell
     durationSeconds: config.durationSeconds || 0,
     rampUpSeconds: config.rampUpSeconds || 0,
     targetRatePerSecond: config.targetRatePerSecond || 0,
+    maxRatePerSecond: config.maxRatePerSecond || 0,
     executionMode: config.executionMode || 'singleProcess',
     workerProcesses: config.workerProcesses || 1,
+    policyDecisions: Array.isArray(config.policyDecisions) ? [...config.policyDecisions] : [],
     elapsedMillis: Math.max(0, Math.round(elapsedMillis)),
     minMillis: 0,
     maxMillis: 0,
@@ -648,8 +643,10 @@ function loadTestResultToCsv(result) {
     ['durationSeconds', result.durationSeconds || 0],
     ['rampUpSeconds', result.rampUpSeconds || 0],
     ['targetRatePerSecond', result.targetRatePerSecond || 0],
+    ['maxRatePerSecond', result.maxRatePerSecond || 0],
     ['executionMode', result.executionMode || 'singleProcess'],
     ['workerProcesses', result.workerProcesses || 1],
+    ['policyDecisions', Array.isArray(result.policyDecisions) ? result.policyDecisions.map((decision) => decision.message || '').filter(Boolean).join(' | ') : ''],
     ['elapsedMillis', result.elapsedMillis || 0],
     ['errorRate', result.errorRate],
     ['requestsPerSecond', result.requestsPerSecond],
@@ -695,7 +692,6 @@ module.exports = {
   HIGH_CONCURRENCY_THRESHOLD,
   LOAD_EXECUTION_MODES,
   MAX_CONCURRENCY,
-  MAX_ALLOWED_HOSTS,
   MAX_DURATION_SECONDS,
   MAX_MULTIPROCESS_AGGREGATED_SAMPLES,
   MAX_RAMP_UP_SECONDS,
@@ -704,7 +700,6 @@ module.exports = {
   MAX_TOTAL_REQUESTS,
   MAX_WORKER_PROCESSES,
   loadTestResultToCsv,
-  normalizeAllowedHosts,
   runLoadTest,
   summarize,
   validateLoadConfig

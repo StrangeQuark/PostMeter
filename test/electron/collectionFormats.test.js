@@ -182,6 +182,14 @@ test('imports and exports JMeter plans', async () => {
     <stringProp name="throughput">120</stringProp>
     <stringProp name="calcMode">1</stringProp>
   </ConstantThroughputTimer>
+  <UniformRandomTimer testname="Random Pause">
+    <stringProp name="RandomTimer.range">500</stringProp>
+    <stringProp name="ConstantTimer.delay">100</stringProp>
+  </UniformRandomTimer>
+  <GaussianRandomTimer testname="Gaussian Pause">
+    <stringProp name="GaussianRandomTimer.range">750</stringProp>
+    <stringProp name="ConstantTimer.delay">125</stringProp>
+  </GaussianRandomTimer>
   <ResultCollector testname="Summary Report">
     <stringProp name="filename">results.jtl</stringProp>
   </ResultCollector>
@@ -227,6 +235,12 @@ test('imports and exports JMeter plans', async () => {
       </collectionProp>
       <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
     </ResponseAssertion>
+    <ResponseAssertion testname="Disabled Body Match" enabled="false">
+      <collectionProp name="Assertion.test_strings">
+        <stringProp name="ready">ready</stringProp>
+      </collectionProp>
+      <stringProp name="Assertion.test_field">Assertion.response_data</stringProp>
+    </ResponseAssertion>
     <DurationAssertion testname="Under 1s">
       <stringProp name="DurationAssertion.duration">1000</stringProp>
     </DurationAssertion>
@@ -237,6 +251,10 @@ test('imports and exports JMeter plans', async () => {
     <JSONPathAssertion testname="Has data">
       <stringProp name="JSON_PATH">$.data.id</stringProp>
       <stringProp name="EXPECTED_VALUE">w1</stringProp>
+    </JSONPathAssertion>
+    <JSONPathAssertion testname="Disabled JSON" enabled="false">
+      <stringProp name="JSON_PATH">$.disabled</stringProp>
+      <stringProp name="EXPECTED_VALUE">true</stringProp>
     </JSONPathAssertion>
     <XPathAssertion testname="Has XML title">
       <stringProp name="XPath.xpath">/response/title</stringProp>
@@ -252,6 +270,9 @@ test('imports and exports JMeter plans', async () => {
       <stringProp name="RegexExtractor.regex">"token":"([^"]+)"</stringProp>
       <stringProp name="RegexExtractor.template">$1$</stringProp>
     </RegexExtractor>
+    <MD5HexAssertion testname="Legacy MD5">
+      <stringProp name="MD5HexAssertion.size">32</stringProp>
+    </MD5HexAssertion>
   </hashTree>
 </jmeterTestPlan>`);
 
@@ -266,6 +287,8 @@ test('imports and exports JMeter plans', async () => {
   assert.equal(collection.variables.find((variable) => variable.key === 'jmeter.timer.Think Time.constantDelayMillis').value, '250');
   assert.equal(collection.variables.find((variable) => variable.key === 'jmeter.timer.Target Throughput.throughput').value, '120');
   assert.equal(collection.variables.find((variable) => variable.key === 'jmeter.timer.Target Throughput.calcMode').value, '1');
+  assert.equal(collection.variables.find((variable) => variable.key === 'jmeter.timer.Random Pause.RandomTimer.range').value, '500');
+  assert.equal(collection.variables.find((variable) => variable.key === 'jmeter.timer.Gaussian Pause.GaussianRandomTimer.range').value, '750');
   assert.equal(collection.variables.find((variable) => variable.key === 'jmeter.controller.Retry Loop.class').value, 'LoopController');
   assert.equal(collection.variables.find((variable) => variable.key === 'jmeter.controller.Account Transaction.class').value, 'TransactionController');
   assert.equal(collection.variables.find((variable) => variable.key === 'jmeter.controller.Half Traffic.class').value, 'ThroughputController');
@@ -273,12 +296,15 @@ test('imports and exports JMeter plans', async () => {
   assert.equal(collection.variables.find((variable) => variable.key === 'jmeter.controller.Short Run.class').value, 'RuntimeController');
   assert.equal(collection.variables.find((variable) => variable.key === 'jmeter.controller.Short Run.seconds').value, '30');
   assert.equal(collection.variables.find((variable) => variable.key === 'jmeter.listener.Summary Report.filename').value, 'results.jtl');
+  assert.equal(collection.variables.find((variable) => variable.key === 'jmeter.unsupported.Legacy MD5.class').value, 'MD5HexAssertion');
   assert.equal(collection.requests[0].headers.find((header) => header.key === 'X-Trace').value, 'from-jmeter');
   assert.equal(collection.requests[0].assertions[0].type, 'statusCode');
   assert.equal(collection.requests[0].assertions[0].expected, '200');
   assert.equal(collection.requests[0].assertions.find((assertion) => assertion.type === 'responseTime').expected, '1000');
+  assert.equal(collection.requests[0].assertions.find((assertion) => assertion.name === 'Disabled Body Match').enabled, false);
   assert.equal(collection.requests[0].assertions.find((assertion) => assertion.type === 'responseSize').expected, '4096');
   assert.equal(collection.requests[0].assertions.find((assertion) => assertion.type === 'jsonPath').path, '$.data.id');
+  assert.equal(collection.requests[0].assertions.find((assertion) => assertion.name === 'Disabled JSON').enabled, false);
   assert.equal(collection.requests[0].assertions.find((assertion) => assertion.type === 'xmlPath').path, '/response/title');
   assert.equal(collection.requests[0].assertions.find((assertion) => assertion.type === 'extractVariable').variableName, 'jsonToken');
   assert.equal(collection.requests[0].assertions.find((assertion) => assertion.type === 'extractRegex').variableName, 'regexToken');
@@ -311,6 +337,8 @@ test('imports and exports JMeter plans', async () => {
   assert.match(exported, /User Defined Variables/);
   assert.match(exported, /ConstantTimer/);
   assert.match(exported, /ConstantThroughputTimer/);
+  assert.match(exported, /UniformRandomTimer/);
+  assert.match(exported, /GaussianRandomTimer/);
   assert.match(exported, /TransactionController/);
   assert.match(exported, /ThroughputController/);
   assert.match(exported, /RuntimeController/);
@@ -321,6 +349,7 @@ test('imports and exports JMeter plans', async () => {
   assert.match(exported, /XPathAssertion/);
   assert.match(exported, /JSONPostProcessor/);
   assert.match(exported, /RegexExtractor/);
+  assert.match(exported, /MD5HexAssertion/);
 });
 
 test('imports realistic JMeter fixtures while preserving unsupported metadata', async () => {
@@ -350,6 +379,82 @@ test('imports realistic JMeter fixtures while preserving unsupported metadata', 
   assert.doesNotMatch(exported, /jmeter\.unsupported\./);
   assert.match(exported, /<JSR223PostProcessor/);
   assert.match(exported, /scriptLanguage/);
+});
+
+test('imports nested JMeter controller plans with XPath assertion variants', async () => {
+  const { store, dir } = await tempStore();
+  const fixturePath = path.join(__dirname, '..', 'fixtures', 'jmeter', 'nested-xpath-plan.jmx');
+  const importPath = path.join(dir, 'nested-xpath-plan.jmx');
+  await fs.copyFile(fixturePath, importPath);
+
+  const collection = await store.importCollection(importPath);
+
+  assert.equal(collection.requests.length, 2);
+  assert.deepEqual(collection.requests.map((request) => request.name), ['Get XML Account', 'Get XML Orders']);
+  assert.equal(collection.requests[0].url, 'https://xml.example.test/v2/account');
+  assert.equal(collection.requests[1].url, 'https://xml.example.test/v2/orders');
+  assert.equal(collection.variables.find((variable) => variable.key === 'jmeter.controller.Outer Loop.class').value, 'LoopController');
+  assert.equal(collection.variables.find((variable) => variable.key === 'jmeter.controller.Outer Loop.loops').value, '4');
+  assert.equal(collection.variables.find((variable) => variable.key === 'jmeter.controller.Only XML.class').value, 'IfController');
+  assert.equal(collection.variables.find((variable) => variable.key === 'jmeter.controller.Only XML.condition').value, '${runXml}');
+  assert.equal(collection.variables.find((variable) => variable.key === 'jmeter.controller.Twenty Percent.class').value, 'ThroughputController');
+  assert.equal(collection.variables.find((variable) => variable.key === 'jmeter.controller.Twenty Percent.percentThroughput').value, '20.0');
+
+  const accountAssertions = collection.requests[0].assertions.filter((assertion) => assertion.type === 'xmlPath');
+  assert.equal(accountAssertions.length, 2);
+  assert.deepEqual(accountAssertions.map((assertion) => assertion.path), ['exists(/account/id)', '/account/name']);
+  assert.ok(accountAssertions.every((assertion) => assertion.enabled === true));
+
+  const ordersXmlAssertion = collection.requests[1].assertions.find((assertion) => assertion.type === 'xmlPath');
+  assert.equal(ordersXmlAssertion.path, 'exists(/orders/order)');
+  assert.equal(ordersXmlAssertion.enabled, false);
+
+  const exportPath = path.join(dir, 'nested-export.jmx');
+  await store.exportCollection(collection, exportPath, { format: 'jmeter' });
+  const exported = await fs.readFile(exportPath, 'utf8');
+  assert.match(exported, /LoopController/);
+  assert.match(exported, /IfController/);
+  assert.match(exported, /ThroughputController/);
+  assert.match(exported, /XPathAssertion/);
+  assert.match(exported, /exists\(\/account\/id\)/);
+});
+
+test('imports representative JMeter timer and assertion matrix without claiming unsupported execution parity', async () => {
+  const { store, dir } = await tempStore();
+  const fixturePath = path.join(__dirname, '..', 'fixtures', 'jmeter', 'timer-assertion-matrix.jmx');
+  const importPath = path.join(dir, 'timer-assertion-matrix.jmx');
+  await fs.copyFile(fixturePath, importPath);
+
+  const collection = await store.importCollection(importPath);
+  const request = collection.requests[0];
+
+  assert.equal(request.name, 'Matrix Request');
+  assert.equal(request.url, 'https://matrix.example.test/v1/matrix');
+  assert.equal(collection.variables.find((variable) => variable.key === 'jmeter.timer.Precise Arrival.class').value, 'PreciseThroughputTimer');
+  assert.equal(collection.variables.find((variable) => variable.key === 'jmeter.timer.Precise Arrival.throughput').value, '30');
+  assert.equal(collection.variables.find((variable) => variable.key === 'jmeter.timer.Poisson Pause.class').value, 'PoissonRandomTimer');
+  assert.equal(collection.variables.find((variable) => variable.key === 'jmeter.timer.Poisson Pause.RandomTimer.range').value, '250');
+  assert.equal(request.assertions.find((assertion) => assertion.name === 'Header Message').enabled, false);
+  assert.equal(request.assertions.find((assertion) => assertion.name === 'Header Message').type, 'bodyContains');
+  assert.equal(request.assertions.find((assertion) => assertion.name === 'Disabled Duration').enabled, false);
+  assert.equal(request.assertions.find((assertion) => assertion.name === 'Disabled Size').operator, 'greaterThan');
+  assert.equal(request.assertions.find((assertion) => assertion.name === 'Disabled JSON Path').enabled, false);
+  assert.equal(collection.variables.find((variable) => variable.key === 'jmeter.unsupported.HTML Validity.class').value, 'HTMLAssertion');
+  assert.equal(collection.variables.find((variable) => variable.key === 'jmeter.unsupported.HTML Validity.enabled').value, 'true');
+  assert.equal(collection.variables.find((variable) => variable.key === 'jmeter.unsupported.Schema Check.class').value, 'XMLSchemaAssertion');
+  assert.equal(collection.variables.find((variable) => variable.key === 'jmeter.unsupported.Compare Previous.enabled').value, 'false');
+  assert.equal(collection.variables.find((variable) => variable.key === 'jmeter.unsupported.Signed MIME.class').value, 'SMIMEAssertion');
+
+  const exportPath = path.join(dir, 'timer-assertion-matrix-export.jmx');
+  await store.exportCollection(collection, exportPath, { format: 'jmeter' });
+  const exported = await fs.readFile(exportPath, 'utf8');
+  assert.match(exported, /PreciseThroughputTimer/);
+  assert.match(exported, /PoissonRandomTimer/);
+  assert.match(exported, /HTMLAssertion/);
+  assert.match(exported, /XMLSchemaAssertion/);
+  assert.match(exported, /CompareAssertion/);
+  assert.match(exported, /SMIMEAssertion/);
+  assert.match(exported, /testname="HTML Validity" enabled="false"/);
 });
 
 async function tempStore() {

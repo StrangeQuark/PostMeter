@@ -17,11 +17,12 @@ test('validates load-test limits', () => {
     durationSeconds: 0,
     rampUpSeconds: 0,
     targetRatePerSecond: 0,
+    maxRatePerSecond: 0,
     executionMode: 'singleProcess',
     workerProcesses: 1,
     mode: 'requestCount',
     recordSamples: false,
-    allowedHosts: [],
+    policyDecisions: [],
     confirmedHighConcurrency: false
   });
   assert.throws(() => validateLoadConfig({ concurrency: 0, totalRequests: 5 }), /Concurrency must be between/);
@@ -29,6 +30,9 @@ test('validates load-test limits', () => {
   assert.throws(() => validateLoadConfig({ concurrency: 2, totalRequests: 1, durationSeconds: -1 }), /Duration must be between/);
   assert.throws(() => validateLoadConfig({ concurrency: 2, totalRequests: 1, rampUpSeconds: -1 }), /Ramp-up must be between/);
   assert.throws(() => validateLoadConfig({ concurrency: 2, totalRequests: 1, targetRatePerSecond: -1 }), /Target rate must be between/);
+  assert.throws(() => validateLoadConfig({ concurrency: 2, totalRequests: 1, maxRatePerSecond: -1 }), /Rate cap must be between/);
+  assert.throws(() => validateLoadConfig({ concurrency: 2, totalRequests: 1, targetRatePerSecond: 20, maxRatePerSecond: 10 }), /Target rate cannot exceed/);
+  assert.equal(validateLoadConfig({ concurrency: 2, totalRequests: 1, maxRatePerSecond: 10 }).targetRatePerSecond, 10);
   assert.throws(() => validateLoadConfig({ concurrency: 2, totalRequests: 1, executionMode: 'cluster' }), /Execution mode must be one of/);
   assert.throws(() => validateLoadConfig({ concurrency: 2, totalRequests: 1, workerProcesses: 0 }), /Worker processes must be between/);
   assert.equal(MAX_MULTIPROCESS_AGGREGATED_SAMPLES, 100000);
@@ -39,7 +43,7 @@ test('validates load-test limits', () => {
   assert.throws(() => validateLoadConfig({ concurrency: HIGH_CONCURRENCY_THRESHOLD, totalRequests: 1 }), /require confirmation/);
 });
 
-test('requires request host to match load-test allowlist', () => {
+test('validates request URLs without requiring an allowlist', () => {
   const request = {
     method: 'GET',
     url: 'https://api.example.test/load',
@@ -48,18 +52,45 @@ test('requires request host to match load-test allowlist', () => {
     bodyType: 'NONE',
     body: ''
   };
+  const config = validateLoadConfig({ concurrency: 2, totalRequests: 5 }, request, null);
+  assert.equal(config.totalRequests, 5);
+  assert.equal(config.policyDecisions.length, 0);
   assert.throws(
-    () => validateLoadConfig({ concurrency: 2, totalRequests: 5 }, request, null),
-    /at least one allowed host/
+    () => validateLoadConfig({ concurrency: 2, totalRequests: 5 }, { ...request, url: 'not-a-url' }, null),
+    /valid URI/
   );
-  assert.throws(
-    () => validateLoadConfig({ concurrency: 2, totalRequests: 5, allowedHosts: ['other.example.test'] }, request, null),
-    /not in the load-test allowlist/
-  );
-  assert.deepEqual(
-    validateLoadConfig({ concurrency: 2, totalRequests: 5, allowedHosts: ['https://api.example.test'] }, request, null).allowedHosts,
-    ['api.example.test']
-  );
+});
+
+test('supports rate-cap governance when target rate is omitted', async () => {
+  const server = await createServer((_request, response) => {
+    response.statusCode = 204;
+    response.end();
+  });
+
+  try {
+    const result = await runLoadTest({
+      method: 'GET',
+      url: `${server.baseUrl}/rate-cap`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: ''
+    }, null, {
+      concurrency: 3,
+      totalRequests: 3,
+      maxRatePerSecond: 6
+    });
+
+    assert.equal(result.totalRequests, 3);
+    assert.equal(result.targetRatePerSecond, 6);
+    assert.equal(result.maxRatePerSecond, 6);
+    assert.ok(result.policyDecisions.some((decision) => /defaults to the configured rate cap/.test(decision.message)));
+    assert.ok(result.elapsedMillis >= 250, `Expected rate cap to delay starts, got ${result.elapsedMillis}ms.`);
+    assert.match(loadTestResultToCsv(result), /maxRatePerSecond,6/);
+    assert.match(loadTestResultToCsv(result), /policyDecisions,/);
+  } finally {
+    await server.close();
+  }
 });
 
 test('runs a request-count concurrent load test and summarizes metrics', async () => {
@@ -77,7 +108,7 @@ test('runs a request-count concurrent load test and summarizes metrics', async (
       headers: [],
       bodyType: 'NONE',
       body: ''
-    }, null, { concurrency: 3, totalRequests: 7, allowedHosts: ['127.0.0.1'] }, {
+    }, null, { concurrency: 3, totalRequests: 7 }, {
       onProgress: (event) => progress.push(event)
     });
 
@@ -120,8 +151,7 @@ test('supports duration mode, ramp-up, samples, histograms, and sample CSV expor
       totalRequests: 1000,
       durationSeconds: 0.06,
       rampUpSeconds: 0.02,
-      recordSamples: true,
-      allowedHosts: ['127.0.0.1']
+      recordSamples: true
     });
 
     assert.equal(result.mode, 'duration');
@@ -156,8 +186,7 @@ test('supports target arrival-rate scheduling', async () => {
     }, null, {
       concurrency: 3,
       totalRequests: 3,
-      targetRatePerSecond: 8,
-      allowedHosts: ['127.0.0.1']
+      targetRatePerSecond: 8
     });
 
     assert.equal(result.totalRequests, 3);
@@ -189,8 +218,7 @@ test('supports bounded multi-process load execution', async () => {
       totalRequests: 6,
       executionMode: 'multiProcess',
       workerProcesses: 2,
-      recordSamples: true,
-      allowedHosts: ['127.0.0.1']
+      recordSamples: true
     });
 
     assert.equal(result.executionMode, 'multiProcess');
@@ -222,8 +250,7 @@ test('summarizes multi-process results without recording raw samples', async () 
       concurrency: 6,
       totalRequests: 12,
       executionMode: 'multiProcess',
-      workerProcesses: 3,
-      allowedHosts: ['127.0.0.1']
+      workerProcesses: 3
     });
 
     assert.equal(result.executionMode, 'multiProcess');
@@ -259,8 +286,7 @@ test('supports sustained target-rate scheduling in multi-process mode', async ()
       totalRequests: 6,
       executionMode: 'multiProcess',
       workerProcesses: 2,
-      targetRatePerSecond: 12,
-      allowedHosts: ['127.0.0.1']
+      targetRatePerSecond: 12
     });
 
     assert.equal(result.executionMode, 'multiProcess');
@@ -292,8 +318,7 @@ test('supports multi-process cancellation', async () => {
       concurrency: 4,
       totalRequests: 40,
       executionMode: 'multiProcess',
-      workerProcesses: 2,
-      allowedHosts: ['127.0.0.1']
+      workerProcesses: 2
     }, { abortController });
 
     assert.equal(result.executionMode, 'multiProcess');
@@ -324,8 +349,7 @@ test('supports longer-running multi-process cancellation', async () => {
       totalRequests: 100,
       executionMode: 'multiProcess',
       workerProcesses: 3,
-      targetRatePerSecond: 30,
-      allowedHosts: ['127.0.0.1']
+      targetRatePerSecond: 30
     }, { abortController });
 
     assert.equal(result.executionMode, 'multiProcess');
@@ -352,7 +376,7 @@ test('supports cancellation and CSV export', async () => {
       headers: [],
       bodyType: 'NONE',
       body: ''
-    }, null, { concurrency: 4, totalRequests: 100, allowedHosts: ['127.0.0.1'] }, { abortController });
+    }, null, { concurrency: 4, totalRequests: 100 }, { abortController });
 
     assert.equal(result.cancelled, true);
     assert.ok(result.totalRequests < 100);

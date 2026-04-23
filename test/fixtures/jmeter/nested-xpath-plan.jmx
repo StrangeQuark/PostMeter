@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
+  <hashTree>
+    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="Nested XPath Plan" enabled="true"/>
+    <hashTree>
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Nested Users" enabled="true">
+        <stringProp name="ThreadGroup.num_threads">3</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">5</stringProp>
+      </ThreadGroup>
+      <hashTree>
+        <LoopController guiclass="LoopControlPanel" testclass="LoopController" testname="Outer Loop" enabled="true">
+          <stringProp name="LoopController.loops">4</stringProp>
+        </LoopController>
+        <hashTree>
+          <IfController guiclass="IfControllerPanel" testclass="IfController" testname="Only XML" enabled="true">
+            <stringProp name="IfController.condition">${runXml}</stringProp>
+            <boolProp name="IfController.evaluateAll">false</boolProp>
+          </IfController>
+          <hashTree>
+            <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Get XML Account" enabled="true">
+              <stringProp name="HTTPSampler.domain">xml.example.test</stringProp>
+              <stringProp name="HTTPSampler.protocol">https</stringProp>
+              <stringProp name="HTTPSampler.path">/v2/account</stringProp>
+              <stringProp name="HTTPSampler.method">GET</stringProp>
+            </HTTPSamplerProxy>
+            <hashTree>
+              <XPath2Assertion guiclass="XPath2AssertionGui" testclass="XPath2Assertion" testname="Account id XPath2" enabled="true">
+                <stringProp name="XPath2.xpath">exists(/account/id)</stringProp>
+              </XPath2Assertion>
+              <hashTree/>
+              <XPathAssertion guiclass="XPathAssertionGui" testclass="XPathAssertion" testname="Legacy name XPath" enabled="true">
+                <stringProp name="XPath.xpath">/account/name</stringProp>
+              </XPathAssertion>
+              <hashTree/>
+            </hashTree>
+            <ThroughputController guiclass="ThroughputControllerGui" testclass="ThroughputController" testname="Twenty Percent" enabled="true">
+              <stringProp name="ThroughputController.style">1</stringProp>
+              <stringProp name="ThroughputController.percentThroughput">20.0</stringProp>
+            </ThroughputController>
+            <hashTree>
+              <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Get XML Orders" enabled="true">
+                <stringProp name="HTTPSampler.domain">xml.example.test</stringProp>
+                <stringProp name="HTTPSampler.protocol">https</stringProp>
+                <stringProp name="HTTPSampler.path">/v2/orders</stringProp>
+                <stringProp name="HTTPSampler.method">GET</stringProp>
+              </HTTPSamplerProxy>
+              <hashTree>
+                <XPath2Assertion guiclass="XPath2AssertionGui" testclass="XPath2Assertion" testname="Orders XPath2" enabled="false">
+                  <stringProp name="XPath2.xpath">exists(/orders/order)</stringProp>
+                </XPath2Assertion>
+                <hashTree/>
+              </hashTree>
+            </hashTree>
+          </hashTree>
+        </hashTree>
+      </hashTree>
+    </hashTree>
+  </hashTree>
+</jmeterTestPlan>

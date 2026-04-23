@@ -16,7 +16,7 @@ The migration deliberately does not bridge Electron to the Java services. Core b
 - Import/export native PostMeter workspaces.
 - Import/export native PostMeter collections.
 - Import common Postman collection JSON while preserving folder hierarchy, variables, auth inheritance, scripts, editable examples, cookies and richer cookie metadata including newer priority/partitioning hints where present, and supported collection certificate metadata.
-- Import/export OpenAPI, JMeter, curl, and HAR collection formats for compatibility workflows, including OpenAPI JSON/YAML input, OpenAPI security scheme import/export, OpenAPI response examples and disabled generated response assertions, JMeter variables/assertions/headers/listeners/CSV/thread/timer/controller/extractor metadata where mappable, JMeter XPath and Size Assertion mapping, unsupported JMeter metadata preservation, HAR response examples/timing metadata, and common curl cookie/proxy/retry/TLS flags.
+- Import/export OpenAPI, JMeter, curl, and HAR collection formats for compatibility workflows, including OpenAPI JSON/YAML input, OpenAPI security scheme import/export, OpenAPI response examples and disabled generated response assertions, JMeter variables/assertions/headers/listeners/CSV/thread/timer/controller/extractor metadata where mappable, JMeter XPath and Size Assertion mapping, mapped JMeter assertion enabled-state preservation, representative timer metadata preservation, unsupported JMeter metadata preservation, HAR response examples/timing metadata, and common curl cookie/proxy/retry/TLS flags.
 - Define request assertions for status, headers, JSON paths, XML XPath, HTML CSS selectors, response time, response size, body text, JSON/XML/HTML variable extraction, and regex variable extraction.
 - Run active collections locally through the desktop Runner tab, including stop-on-failure, extracted-variable/script-mutation propagation, runtime variable display, progress events, and JSON/CSV result export.
 - Run collections headlessly through `npm run cli -- run ...` for CI usage with non-zero exits on failed assertions.
@@ -28,7 +28,7 @@ The migration deliberately does not bridge Electron to the Java services. Core b
 - Send HTTP requests and display status, timing, size, final URL, headers, and formatted JSON bodies.
 - Record recent request history.
 - Check GitHub Releases for newer PostMeter versions and prompt before opening release pages. Stable releases are checked by default; prereleases are checked only when the user enables the opt-in setting.
-- Run bounded local concurrent load tests with request-count or duration modes, ramp-up scheduling, target arrival-rate scheduling, optional multi-process execution, per-host allowlists, high-concurrency confirmation, progress, cancellation, streamed worker summary aggregation, latency percentiles, latency histograms, optional capped per-sample capture, error summaries, and JSON/CSV export.
+- Run bounded local concurrent load tests with request-count or duration modes, ramp-up scheduling, target arrival-rate scheduling, Load Test panel run configuration, global rate caps, policy-decision reporting, optional multi-process execution, high-concurrency confirmation, progress, cancellation, streamed worker summary aggregation, latency percentiles, latency histograms, optional capped per-sample capture, error summaries, and JSON/CSV export.
 
 ## Product Account Policy
 
@@ -303,7 +303,7 @@ Security settings:
 
 Known security tradeoffs:
 
-- IPC validation is structural and bounded, with shared versioned enum contracts in `payloadSchemas.js`. Request/workspace array, nested-field validation, common key/value/assertion/cookie/example/history/certificate/auth checks, load-result histogram/sample checks, and collection-run script result checks are driven by shared schema metadata, but some payload-specific nested checks are still maintained manually.
+- IPC validation is structural and bounded, with shared versioned enum contracts in `payloadSchemas.js`. Request/workspace array, nested-field validation, common key/value/assertion/cookie/example/history/certificate/auth checks, OAuth progress payloads, runner config/progress payloads, load progress/result histogram/sample/policy-decision checks, file-operation results, and collection-run script result checks are driven by shared schema metadata or schema-backed validators, but some payload-specific nested checks are still maintained manually.
 - Electron `safeStorage` can be unavailable on some Linux sessions; PostMeter has a passphrase fallback, but it does not yet have passphrase reset/recovery flows or guided host-keyring repair.
 - The passphrase fallback passphrase is cached in process memory for the current app session and is never written to disk by PostMeter.
 - Custom URI-scheme OAuth redirects depend on OS protocol registration. Loopback redirect is the more reliable default during development and on platforms where protocol registration is restricted.
@@ -313,7 +313,7 @@ Known security tradeoffs:
 Current schema version:
 
 ```text
-8
+10
 ```
 
 Root workspace fields:
@@ -362,6 +362,20 @@ Request fields:
 - `variables`
 - `examples`
 - `cookieJar`
+- `loadTestPolicy`
+
+Request load-test compatibility policy fields:
+
+- `enabled` on request policies only
+- `concurrency`
+- `totalRequests`
+- `durationSeconds`
+- `rampUpSeconds`
+- `targetRatePerSecond`
+- `maxRatePerSecond`
+- `executionMode`
+- `workerProcesses`
+- `recordSamples`
 
 Request cookie jar fields:
 
@@ -455,6 +469,10 @@ Schema `7` adds workspace settings, request-local variables, request examples, a
 
 Schema `8` adds workspace cookies and per-request cookie jar options.
 
+Schema `9` adds request load-test policy compatibility fields.
+
+Schema `10` removes workspace-level load-test defaults. Load-test run settings are configured from the Load Test panel instead of being stored on the workspace.
+
 ## Persistence Specifications
 
 Persistence is handled by `WorkspaceStore`.
@@ -474,15 +492,15 @@ POSTMETER_DATA_PATH=/tmp/postmeter-workspace.json npm start
 Behavior:
 
 - Creates a default workspace when no file exists.
-- Supports schema versions `1` through `8`.
-- Migrates older schemas to schema `8`.
+- Supports schema versions `1` through `10`.
+- Migrates older schemas to schema `9`.
 - Creates timestamped `pre-migration.backup` sibling files before saving migrated workspaces.
 - Rejects future schema versions.
 - Quarantines unreadable workspace JSON by moving it to a timestamped `corrupt` sibling file, then creates a fresh default workspace and raises a recovery error for the UI.
 - Writes JSON through a temporary file and renames into place.
 - Encrypts known auth secret fields plus marked collection, environment, request-local variable values, workspace cookie values, and collection certificate passphrases before local workspace writes when a secret codec is configured.
 - Decrypts local workspace secrets before returning workspaces to the renderer or core import callers.
-- Normalizes IDs, names, body types, methods, arrays, settings, collection variables, collection certificates, request variables, request examples, request cookie jar settings, workspace cookies, folders, environments, and history.
+- Normalizes IDs, names, body types, methods, arrays, settings, request load-test compatibility policies, collection variables, collection certificates, request variables, request examples, request cookie jar settings, workspace cookies, folders, environments, and history.
 - Destructive workspace import creates a current-workspace backup before replacement.
 
 Limitations:
@@ -524,11 +542,11 @@ JMeter import/export:
 - Imports and exports Header Manager values as request headers.
 - Imports and exports User Defined Variables where they map to collection variables.
 - Imports CSV Data Set Config, thread group, timer, listener, and simple controller metadata as collection variables.
-- Imports simple response-code, response-body, duration, size, JSON-path, and XPath assertions into PostMeter assertions, and exports the mappable assertion types back to JMeter XML.
+- Imports simple response-code, response-body, duration, size, JSON-path, and XPath assertions into PostMeter assertions, preserving disabled state for mapped assertion types, and exports enabled mappable assertion types back to JMeter XML.
 - Imports Regex Extractor as PostMeter regex variable extraction and exports mappable regex extraction assertions back to JMeter `RegexExtractor`.
 - Imports JSON Extractor as PostMeter JSON variable extraction and exports mappable JSON extraction assertions back to JMeter `JSONPostProcessor`.
-- Exports preserved Constant Timer, Constant Throughput Timer, Loop Controller, Transaction Controller, Throughput Controller, and Runtime Controller metadata back into JMX elements.
-- Preserves unsupported JMeter assertions, including HTML Assertion validity checks, pre/post processors, and sampler/script elements as `jmeter.unsupported.*` collection variables and re-exports preserved JMeter element metadata as disabled JMX elements where the original class can be represented safely.
+- Exports preserved Constant Timer, Constant Throughput Timer, generic timers such as Uniform/Gaussian/Poisson random timers and Precise Throughput Timer, Loop Controller, Transaction Controller, Throughput Controller, and Runtime Controller metadata back into JMX elements.
+- Preserves unsupported JMeter assertions, including HTML Assertion validity checks, MD5/XML schema/compare/SMIME assertions, pre/post processors, and sampler/script elements as `jmeter.unsupported.*` collection variables and re-exports preserved JMeter element metadata as disabled JMX elements where the original class can be represented safely.
 - Current support targets common HTTP sampler and metadata fields and is not a full JMeter feature clone.
 
 curl import/export:
@@ -629,7 +647,7 @@ Auth validation:
 Auth limitations:
 
 - Refresh-token renewal, authorization-code exchange, client-credentials retrieval, and device-code polling currently send `client_id` and `client_secret` in the form body when present; they do not yet support alternate OAuth client-auth methods such as HTTP Basic client authentication or private-key JWT.
-- OAuth progress is represented in a persistent in-app panel. Renderer regression smoke validates key progress states, and mocked Electron OAuth smoke covers loopback PKCE success, PKCE state-mismatch failure, and device-code success.
+- OAuth progress is represented in a persistent in-app panel and validated by schema-backed main-to-renderer IPC checks. Renderer regression smoke validates key progress states, and mocked Electron OAuth smoke covers loopback PKCE success, PKCE state-mismatch failure, and device-code success.
 - Custom URI-scheme PKCE is implemented. Release validation now checks Linux deb/AppImage metadata and macOS zip app-bundle metadata where present, but installed-app Windows/macOS behavior still needs native-runner validation.
 - Client-certificate requests use the Node `https` transport path instead of global `fetch`; that path intentionally follows redirects only when they stay on the original HTTPS origin to avoid leaking client certificate material to redirected hosts.
 - Auth secrets rely on Electron `safeStorage` or the fallback passphrase; passphrase reset/recovery is not available.
@@ -778,15 +796,15 @@ Implemented runtime behavior:
 - Starts script workers with a minimal environment instead of inheriting the full PostMeter/Electron process environment.
 - Starts script workers with Node permission flags when the pinned runtime supports them, allowing filesystem read access only to `src/core` script worker modules.
 - Starts script workers with a bounded V8 old-space limit. The default is `64` MB, tunable with `POSTMETER_SCRIPT_WORKER_MAX_OLD_SPACE_MB` or internal test options between `16` and `512` MB.
-- Runs scripts inside a Node `vm` context with `require`, `process`, renderer APIs, and Node globals unavailable.
+- Runs scripts inside a Node `vm` context with renderer APIs unavailable and unsupported Node/network-like globals such as `require`, `process`, `fetch`, timers, `XMLHttpRequest`, `WebSocket`, and `Buffer` represented by explicit unsupported-API guards.
 - Disables dynamic string and WebAssembly code generation inside the script context.
 - Enforces a default synchronous timeout of `1000` ms and a max script length of `256 KiB`.
 - Terminates the child process if the parent safety timeout is exceeded.
 - Captures bounded console output in the script result instead of writing directly to the app console. Script results keep at most 100 captured log entries, and each captured line is capped at 4096 characters.
 - Supports synchronous `pm.test`.
-- Supports a practical `pm.expect` subset: equality, deep equality, include/contain, type checks, length, one-of, above/below/within, match, property, existence, null/empty/truthy, true, false, undefined, and negated equality/include/existence checks.
-- Supports `pm.environment`, `pm.collectionVariables`, request-local `pm.variables`, request URL/header/body inspection, response status/header/body helpers, status-category response helpers, JSON-body response helpers, and `pm.response.to.have.status`.
-- Provides explicit unsupported-API errors for unsupported Postman sandbox APIs including `pm.sendRequest`, `pm.vault`, `pm.cookies`, `pm.execution`, `pm.iterationData`, and `pm.visualizer`.
+- Supports a practical `pm.expect` subset: equality, deep equality, string/array/object include/contain, array members, object keys, type checks, length, one-of, above/below/within, match, property, existence, null/empty/truthy, true, false, undefined, and negated equality/include/existence/member checks.
+- Supports `pm.environment`, `pm.collectionVariables`, request-local `pm.variables`, `pm.info` request metadata, request URL/header/body inspection, response status/header/body helpers, status-category response helpers, JSON-body response helpers, and `pm.response.to.have.status`.
+- Provides explicit unsupported-API errors for unsupported Postman sandbox APIs and unsupported globals including `pm.sendRequest`, `pm.vault`, `pm.cookies`, `pm.execution`, `pm.iterationData`, `pm.visualizer`, `fetch`, timers, `XMLHttpRequest`, `WebSocket`, `process`, `require`, and `Buffer`.
 
 Limitations:
 
@@ -832,10 +850,10 @@ Inputs:
 - `durationSeconds`
 - `rampUpSeconds`
 - `targetRatePerSecond`
+- `maxRatePerSecond`
 - `executionMode`: `singleProcess` or `multiProcess`
 - `workerProcesses`
 - `recordSamples`
-- `allowedHosts`
 - `confirmedHighConcurrency`
 
 Limits:
@@ -845,9 +863,9 @@ Limits:
 - Max duration: `3600` seconds
 - Max ramp-up: `3600` seconds
 - Max target rate: `10000` requests per second
+- Max rate cap: `10000` requests per second
 - Max worker processes: `8`
 - Max recorded samples in result payload: `50000`
-- Max allowed hosts: `100`
 - High-concurrency confirmation threshold: `50`
 
 Behavior:
@@ -856,23 +874,25 @@ Behavior:
 - Runs until the duration expires or `totalRequests` is reached when `durationSeconds` is greater than `0`.
 - Starts workers gradually across the configured ramp-up window.
 - When `targetRatePerSecond` is greater than `0`, schedules request starts against that target arrival rate instead of letting workers start as fast as possible.
+- When `maxRatePerSecond` is greater than `0`, rejects target rates above that cap and uses the cap as the effective local arrival rate when no target rate is set.
+- Load-test settings are read from the active Load Test panel controls for each run. Workspace-level defaults are intentionally not persisted.
+- Policy decisions explain cap-derived effective target rates in progress/result payloads and CSV export.
 - Defaults to single-process execution and can use bounded multi-process execution for heavier local tests when `executionMode` is `multiProcess`.
 - Starts load-test worker child processes with a minimal inherited environment instead of passing the full Electron process environment.
 - Merges multi-process worker summaries, status counts, latency histograms, first errors, and integer-millisecond latency distributions without requiring every raw sample in the parent process.
 - Uses the same HTTP validation and execution path as normal request send.
-- Requires the resolved request host to match the configured allowlist.
 - Rejects concurrency `50` or higher unless confirmation is present.
 - Supports cancellation with `AbortController` in single-process and multi-process execution.
-- Emits progress events with completed count, max request count, mode, duration, elapsed time, and active worker count.
+- Emits progress events with completed count, max request count, mode, duration, target rate, rate cap, policy decisions, elapsed time, and active worker count.
 - Records successful status codes and failed request error samples.
 - Summarizes min, average, p50, p90, p95, p99, max latency, throughput, error rate, status counts, latency histogram buckets, elapsed time, and first 10 errors.
 - Optionally records per-sample index, worker, start offset, duration, success, status, and error details up to the recorded-sample cap.
-- Exports summary, histogram, and recorded samples as JSON or CSV.
+- Exports summary, rate-cap metadata, policy decisions, histogram, and recorded samples as JSON or CSV.
 
 Limitations:
 
 - No distributed execution.
-- No per-target rate governance beyond host allowlists, target arrival-rate scheduling, confirmation, and request/concurrency/duration/process caps.
+- No distributed or cross-machine policy governance beyond target arrival-rate scheduling, local rate caps, confirmation, and request/concurrency/duration/process caps.
 - Optional sample capture is capped at `50000` samples per exported result; summaries and percentiles do not depend on retaining every raw sample.
 
 ## IPC Validation
@@ -891,9 +911,11 @@ Covered payloads:
 - Request assertion payloads.
 - Request-local variable and example payloads.
 - Request cookie jar option payloads.
+- Request load-test policy compatibility payloads and Load Test panel config payloads, including host-policy rows.
 - Optional active environment payloads.
 - Load-test ID, config, and export result payloads.
 - Load-result status counts, error lists, latency histogram buckets, and recorded sample arrays.
+- File-operation result payloads returned by import/export handlers, including optional workspace and collection results.
 - Collection-run result export payloads.
 - Collection-run nested assertion results, pre-request/test script result shapes, extracted variable rows, local variable rows, environment output, collection variable output, and cookie output.
 - Load export format.
@@ -971,15 +993,15 @@ Node tests cover:
 - Auth normalization, redaction, validation, OAuth refresh-token renewal, OAuth client-credentials retrieval, OAuth authorization-code PKCE, OAuth device-code authorization/polling, client-certificate field validation, and request-time injection.
 - Electron secret codec safeStorage behavior, safeStorage recovery guidance, passphrase fallback behavior, legacy fallback re-encryption, and exact-export confirmation phrase matching.
 - HTTP validation, request execution against a local server, client-certificate path material loading for PEM/PFX/P12/CA inputs, and end-to-end local mTLS handshakes with PEM and PFX/P12 client certificates.
-- IPC request, response, auth, cookie, request example, workspace, update-check option, external URL open, load-result, and collection-run result payload validation.
-- Load-test validation, host allowlists, high-concurrency confirmation, request-count mode, duration mode, ramp-up, target arrival-rate scheduling, bounded multi-process execution, child-worker environment filtering, streamed worker summary aggregation, metrics, histograms, sample capture caps, cancellation, cookie jar send support, and CSV export.
-- Collection format import/export for OpenAPI, JMeter, curl, and HAR, including OpenAPI YAML/security import-export, OpenAPI response examples/generated disabled assertions, JMeter variables/assertions/headers/listeners/CSV/timer/controller/extractor metadata, JMeter XPath and Size Assertion mapping, realistic JMeter fixture import, unsupported JMeter metadata preservation with disabled-element re-export, HAR example/timing preservation, and common curl compatibility flags.
-- Postman import for common inherited and request-level auth helpers, scripts, examples, cookies, variables, and collection certificates.
+- IPC request, response, auth, cookie, request example, workspace, file-operation result, update-check option, external URL open, load-result, and collection-run result payload validation.
+- Load-test validation, high-concurrency confirmation, request-count mode, duration mode, ramp-up, target arrival-rate scheduling, Load Test panel configuration, global rate caps, bounded multi-process execution, child-worker environment filtering, streamed worker summary aggregation, metrics, histograms, sample capture caps, cancellation, cookie jar send support, and CSV export.
+- Collection format import/export for OpenAPI, JMeter, curl, and HAR, including OpenAPI YAML/security import-export, OpenAPI response examples/generated disabled assertions, JMeter variables/assertions/headers/listeners/CSV/timer/controller/extractor metadata, JMeter XPath and Size Assertion mapping, realistic and nested JMeter fixture import, mapped JMeter assertion enabled-state preservation, broader unsupported JMeter assertion preservation, unsupported JMeter metadata preservation with disabled-element re-export, HAR example/timing preservation, and common curl compatibility flags.
+- Postman import for common inherited and request-level auth helpers, scripts, examples, cookies, prefix-constrained cookie metadata, variables, and collection certificates.
 - Assertion evaluation, collection-run sequencing, request-local variables, cookie jar propagation, JSON/XML/HTML/regex extracted-variable propagation, script-mutation propagation, stop-on-failure, isolated request script execution, Node permission worker flags, minimal worker environments, bounded worker heap settings, bounded script console capture, explicit unsupported script API errors, and collection-run CSV export.
 - CLI collection execution with passing/failing exit codes and JSON/CSV report output.
 - Release manifest generation, release artifact validation, release workflow metadata, CI workflow validation, and GitHub release update checks.
-- Workspace default creation, schema `2` through `8` migration, corrupt-file recovery, secret encryption/redaction, settings normalization, cookie encryption/redaction, native import, Postman folder/script import, and native/Postman/OpenAPI YAML format detection.
-- Electron UI workflow smoke coverage for create/edit/save/reload/send, context menus, pane resizing, collection variables, request variables, editable examples, cookie jar capture, secret environment variables, Help-menu prerelease setting persistence, load-test sample controls, assertions, collection runner, runtime variable output, and runner export-control state.
+- Workspace default creation, schema `2` through `10` migration, corrupt-file recovery, secret encryption/redaction, settings normalization, workspace-level load-test policy removal, cookie encryption/redaction, native import, Postman folder/script import, and native/Postman/OpenAPI YAML format detection.
+- Electron UI workflow smoke coverage for create/edit/save/reload/send, context menus, pane resizing, collection variables, request variables, editable examples, cookie jar capture, secret environment variables, Help-menu prerelease setting persistence, Load Test panel controls, assertions, collection runner, runtime variable output, and runner export-control state.
 - Electron UI regression smoke coverage for toolbar dropdowns, Help-menu update state, import/export menu options/cancellation, invalid-request error rendering, XML/HTML response formatting, mocked OAuth flow completion/failure, cookie/example/request-variable editor creation, active-host cookie filtering, assertion-template rendering, runner pre-run export state, and no app-account/login language.
 - Electron UI OAuth smoke coverage for mocked loopback PKCE success, custom-scheme callback success, state-mismatch failure, token exchange failure, PKCE cancellation, device-code success, access denial, timeout, and cancellation.
 - Electron UI screenshot smoke coverage for request builder, context menu, cookies, auth/OAuth, response viewer, runner, load testing, and export menu states.
@@ -998,4 +1020,5 @@ Missing tests:
 - Harden request scripting with stronger OS-level sandboxing and broader Postman sandbox compatibility.
 - Add a more complete Postman variable-scope model and protocol profile behavior.
 - Deepen cookie-jar behavior toward browser parity for remaining edge cases and any source-format cookie metadata not yet represented by explicit fields or extension hints.
+- Extend local load-test governance only where it adds clear safety beyond current Load Test panel controls and global rate caps, such as run-budget presets or richer reporting around policy decisions.
 - Continue expanding JMeter import/export beyond common sampler, header, variable, CSV metadata, listener, timer/controller/extractor, thread, XPath, and simple response/duration/size/JSON-path assertion mappings.

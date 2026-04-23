@@ -82,11 +82,15 @@ test('supports request-local pm.variables overrides', () => {
 test('blocks Node access and dynamic code generation', () => {
   const requireResult = runPostmanScript('require("node:fs");');
   assert.equal(requireResult.passed, false);
-  assert.match(requireResult.error, /require is not defined/);
+  assert.match(requireResult.error, /require is not supported/);
 
   const functionResult = runPostmanScript('Function("return 1")();');
   assert.equal(functionResult.passed, false);
   assert.match(functionResult.error, /Code generation/);
+
+  const fetchResult = runPostmanScript('fetch("https://example.test");');
+  assert.equal(fetchResult.passed, false);
+  assert.match(fetchResult.error, /fetch is not supported/);
 });
 
 test('reports explicit errors for unsupported Postman sandbox APIs', () => {
@@ -124,11 +128,18 @@ test('supports broader Postman-style request, response, and expectation helpers'
       pm.expect(pm.response.json()).to.deep.include({ ok: true });
       pm.expect(pm.response.responseTime).to.be.within(1, 100);
       pm.expect(pm.response.code).to.be.oneOf([200, 201]);
+      pm.expect(pm.info.requestName).to.equal('Create widget');
+      pm.expect(['red', 'green', 'blue']).to.have.members(['red', 'blue']);
+      pm.expect({ ok: true, count: 2 }).to.include({ ok: true });
+      pm.expect({ ok: true, count: 2 }).to.have.keys('ok', 'count');
+      pm.expect('abc').to.have.length(3);
       pm.expect(null).to.be.null;
       pm.expect(undefined).to.not.exist;
     });
   `, {
     request: {
+      id: 'req-1',
+      name: 'Create widget',
       method: 'POST',
       url: 'https://api.example.test/widgets?trace=abc',
       headers: [{ enabled: true, key: 'X-Trace', value: 'abc' }],
