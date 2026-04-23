@@ -126,15 +126,7 @@ async function loadCollectionInput(filePath, options = {}) {
   }
 
   if (looksLikeNativeWorkspace(parsed)) {
-    let workspace;
-    try {
-      workspace = await store.importWorkspace(absolutePath);
-    } catch (error) {
-      if (String(error.message || '').includes('encrypted secrets')) {
-        throw new Error('CLI cannot decrypt Electron safeStorage/passphrase workspace secrets. Export an exact local test collection or use unencrypted CI variables.');
-      }
-      throw error;
-    }
+    const workspace = await store.importWorkspace(absolutePath);
     const collection = selectByIdOrName(workspace.collections, options.collectionSelector, 'collection');
     const environment = options.environmentSelector
       ? selectByIdOrName(workspace.environments, options.environmentSelector, 'environment')

@@ -1,8 +1,8 @@
 const http = require('node:http');
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { app, BrowserWindow, dialog, ipcMain, Menu, safeStorage, shell } = require('electron');
-const { sendRequest, validateRequest } = require('../src/core/httpClient');
+const { app, BrowserWindow, dialog, ipcMain, Menu, shell } = require('electron');
+const { validateRequest } = require('../src/core/httpClient');
 const {
   createOAuthPkceSession,
   exchangeOAuthAuthorizationCode,
@@ -10,17 +10,10 @@ const {
   requestOAuthDeviceAuthorization
 } = require('../src/core/auth');
 const { loadTestResultToCsv, runLoadTest } = require('../src/core/loadTestRunner');
-const { collectionRunResultToCsv, runCollection } = require('../src/core/collectionRunner');
+const { collectionRunResultToCsv, runCollection, runRequestWithScripts } = require('../src/core/collectionRunner');
 const { checkForUpdates } = require('../src/core/updateChecker');
 const { WorkspaceRecoveryError, WorkspaceStore } = require('../src/core/workspaceStore');
 const { historyEntry, walkRequests } = require('../src/core/models');
-const { PassphraseRequiredError, createElectronSecretCodec } = require('./secretCodec');
-const {
-  exportSecretConfirmationPhrase,
-  matchesExportSecretConfirmation
-} = require('./exportConfirmation');
-const { promptForPassphrase } = require('./passphrasePrompt');
-const { promptForSecretExportConfirmation } = require('./secretExportPrompt');
 const {
   assertAuthPayload,
   assertCollectionExportFormat,
@@ -47,7 +40,6 @@ const {
 let mainWindow;
 let workspaceStore;
 let workspace;
-let secretCodec;
 const activeLoadTests = new Map();
 const activeCollectionRuns = new Map();
 const activeOAuthFlows = new Map();
@@ -379,13 +371,9 @@ function createApplicationMenuTemplate() {
 
 app.whenReady().then(async () => {
   registerOAuthProtocol();
-  secretCodec = createElectronSecretCodec(safeStorage);
-  workspaceStore = new WorkspaceStore(undefined, { secretCodec });
+  workspaceStore = new WorkspaceStore();
   try {
-    const loaded = await runWithSecretPassphrase(
-      () => workspaceStore.load(),
-      'Load workspace'
-    );
+    const loaded = await workspaceStore.load();
     workspace = loaded.workspace;
   } catch (error) {
     if (error instanceof WorkspaceRecoveryError) {
@@ -480,10 +468,7 @@ ipcMain.handle('workspace:import', async () => {
     return fileOperationResult({ cancelled: true });
   }
   const backupPath = await workspaceStore.backupCurrentWorkspace('pre-workspace-import.backup');
-  workspace = await runWithSecretPassphrase(
-    () => workspaceStore.importWorkspace(result.filePaths[0]),
-    'Import workspace'
-  );
+  workspace = await workspaceStore.importWorkspace(result.filePaths[0]);
   workspace = await saveWorkspace(workspace);
   installApplicationMenu();
   return fileOperationResult({ cancelled: false, workspace, backupPath });
@@ -501,11 +486,7 @@ ipcMain.handle('workspace:export', async (_event, nextWorkspace) => {
   if (result.canceled || !result.filePath) {
     return fileOperationResult({ cancelled: true });
   }
-  const includeSecrets = await confirmSecretExport('workspace');
-  if (includeSecrets == null) {
-    return fileOperationResult({ cancelled: true });
-  }
-  const exportedPath = await workspaceStore.exportWorkspace(nextWorkspace || workspace, result.filePath, { includeSecrets });
+  const exportedPath = await workspaceStore.exportWorkspace(nextWorkspace || workspace, result.filePath);
   return fileOperationResult({ cancelled: false, path: exportedPath });
 });
 
@@ -518,10 +499,7 @@ ipcMain.handle('collection:import', async () => {
   if (result.canceled || !result.filePaths.length) {
     return fileOperationResult({ cancelled: true });
   }
-  const collection = await runWithSecretPassphrase(
-    () => workspaceStore.importCollection(result.filePaths[0]),
-    'Import collection'
-  );
+  const collection = await workspaceStore.importCollection(result.filePaths[0]);
   return fileOperationResult({ cancelled: false, collection });
 });
 
@@ -537,11 +515,7 @@ ipcMain.handle('collection:export', async (_event, collection, format = 'postmet
   if (result.canceled || !result.filePath) {
     return fileOperationResult({ cancelled: true });
   }
-  const includeSecrets = await confirmSecretExport('collection');
-  if (includeSecrets == null) {
-    return fileOperationResult({ cancelled: true });
-  }
-  const exportedPath = await workspaceStore.exportCollection(collection, result.filePath, { includeSecrets, format });
+  const exportedPath = await workspaceStore.exportCollection(collection, result.filePath, { format });
   return fileOperationResult({ cancelled: false, path: exportedPath });
 });
 
@@ -554,13 +528,28 @@ ipcMain.handle('request:validate', (_event, request, environment) => {
 ipcMain.handle('request:send', async (_event, request, environment) => {
   assertRequestPayload(request);
   assertOptionalEnvironmentPayload(environment);
-  const result = await sendRequest(request, environment, { cookieJar: workspace.cookies || [] });
+  const requestContext = request.id ? findWorkspaceRequestContext(request.id) : null;
+  const { response: result, environment: nextEnvironment, collectionVariables, localVariables } = await runRequestWithScripts(request, environment, {
+    collectionVariables: requestContext?.collection?.variables || [],
+    cookieJar: workspace.cookies || []
+  });
   if (result.updatedAuth && request.id) {
-    updateWorkspaceRequestAuth(request.id, result.updatedAuth);
+    if (requestContext?.request) {
+      requestContext.request.auth = result.updatedAuth;
+    } else {
+      updateWorkspaceRequestAuth(request.id, result.updatedAuth);
+    }
   }
   if (Array.isArray(result.updatedCookies)) {
     workspace.cookies = result.updatedCookies;
   }
+  applyScriptVariableMutationsToWorkspace({
+    collection: requestContext?.collection,
+    request: requestContext?.request,
+    environment: nextEnvironment,
+    collectionVariables,
+    localVariables
+  });
   workspace.history = [
     historyEntry({
       method: request.method,
@@ -570,7 +559,7 @@ ipcMain.handle('request:send', async (_event, request, environment) => {
     }),
     ...(workspace.history || [])
   ].slice(0, 100);
-  await saveWorkspace(workspace);
+  workspace = await saveWorkspace(workspace);
   assertResponsePayload(result);
   return result;
 });
@@ -751,66 +740,7 @@ function cancelOAuthFlow(id) {
 }
 
 async function saveWorkspace(nextWorkspace) {
-  return runWithSecretPassphrase(
-    () => workspaceStore.save(nextWorkspace),
-    'Save workspace'
-  );
-}
-
-async function runWithSecretPassphrase(operation, action) {
-  let lastError;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      return await operation();
-    } catch (error) {
-      if (!(error instanceof PassphraseRequiredError)) {
-        throw error;
-      }
-      lastError = error;
-      const passphrase = await promptForPassphrase({
-        parent: mainWindow,
-        title: 'Workspace Secret Passphrase',
-        message: `${error.message} ${action} cannot continue without the fallback passphrase. PostMeter cannot recover forgotten fallback passphrases; restore a backup if you no longer know it. See docs/SECRETS.md for recovery guidance.`,
-        confirmLabel: attempt === 0 ? 'Continue' : 'Retry'
-      });
-      if (!passphrase) {
-        throw new Error(`${action} cancelled because a workspace secret passphrase is required.`);
-      }
-      secretCodec.setPassphrase(passphrase);
-    }
-  }
-  throw new Error(`${action} failed because the fallback passphrase could not decrypt workspace secrets. PostMeter cannot recover forgotten fallback passphrases. See docs/SECRETS.md for recovery guidance. ${lastError?.message || ''}`.trim());
-}
-
-async function confirmSecretExport(scope) {
-  const result = await dialog.showMessageBox(mainWindow, {
-    type: 'warning',
-    title: `Export ${capitalize(scope)}`,
-    message: `Export ${scope} secrets?`,
-    detail: 'Redacted exports are portable and safe to share. Exact exports write saved tokens, passwords, cookie values, certificate passphrases, and marked secret variables into plaintext JSON. PostMeter cannot recover exact values from a redacted export.',
-    buttons: ['Redact Secrets', 'Export Exact Values', 'Cancel'],
-    defaultId: 0,
-    cancelId: 2,
-    noLink: true
-  });
-  if (result.response === 2) {
-    return null;
-  }
-  if (result.response === 0) {
-    return false;
-  }
-  return await confirmExactSecretExport(scope) ? true : null;
-}
-
-async function confirmExactSecretExport(scope) {
-  const phrase = exportSecretConfirmationPhrase(scope);
-  const typed = await promptForSecretExportConfirmation({
-    parent: mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined,
-    heading: `Export exact ${scope} secrets`,
-    message: 'Exact exports are plaintext JSON containing saved tokens, passwords, client secrets, cookie values, certificate passphrases, and marked secret variables.',
-    phrase
-  });
-  return matchesExportSecretConfirmation(scope, typed);
+  return workspaceStore.save(nextWorkspace);
 }
 
 function updateWorkspaceRequestAuth(requestId, auth) {
@@ -821,6 +751,67 @@ function updateWorkspaceRequestAuth(requestId, auth) {
       }
     });
   }
+}
+
+function findWorkspaceRequestContext(requestId) {
+  for (const collection of workspace.collections || []) {
+    const request = findRequestInCollection(collection, requestId);
+    if (request) {
+      return { collection, request };
+    }
+  }
+  return null;
+}
+
+function findRequestInCollection(collection, requestId) {
+  let match = null;
+  walkRequests(collection, (request) => {
+    if (!match && request.id === requestId) {
+      match = request;
+    }
+  });
+  return match;
+}
+
+function applyScriptVariableMutationsToWorkspace({ collection, request, environment, collectionVariables, localVariables }) {
+  applyEnvironmentVariablesToWorkspace(environment);
+  if (collection && Array.isArray(collectionVariables)) {
+    collection.variables = clonePairs(collectionVariables);
+  }
+  if (request && Array.isArray(localVariables)) {
+    request.variables = clonePairs(localVariables);
+  }
+}
+
+function applyCollectionRunMutationsToWorkspace(result) {
+  applyEnvironmentVariablesToWorkspace(result.environment);
+  const collection = (workspace.collections || []).find((candidate) => candidate.id === result.collectionId);
+  if (!collection) {
+    return;
+  }
+  if (Array.isArray(result.collectionVariables)) {
+    collection.variables = clonePairs(result.collectionVariables);
+  }
+  for (const item of result.results || []) {
+    const request = item.requestId ? findRequestInCollection(collection, item.requestId) : null;
+    if (request && Array.isArray(item.localVariables)) {
+      request.variables = clonePairs(item.localVariables);
+    }
+  }
+}
+
+function applyEnvironmentVariablesToWorkspace(environment) {
+  if (!environment?.id || environment.id === 'runtime' || !Array.isArray(environment.variables)) {
+    return;
+  }
+  const workspaceEnvironment = (workspace.environments || []).find((candidate) => candidate.id === environment.id);
+  if (workspaceEnvironment) {
+    workspaceEnvironment.variables = clonePairs(environment.variables);
+  }
+}
+
+function clonePairs(pairs) {
+  return Array.isArray(pairs) ? pairs.map((pair) => ({ ...pair })) : [];
 }
 
 function emitOAuthProgress(id, progress) {
@@ -1069,8 +1060,9 @@ ipcMain.handle('runner:start', async (event, id, collection, environment, config
     });
     if (Array.isArray(result.cookies)) {
       workspace.cookies = result.cookies;
-      await saveWorkspace(workspace);
     }
+    applyCollectionRunMutationsToWorkspace(result);
+    workspace = await saveWorkspace(workspace);
     assertCollectionRunResultPayload(result);
     return result;
   } finally {
@@ -1165,8 +1157,4 @@ function collectionExportFilters(format) {
 function safeFilename(value) {
   const filename = String(value || 'collection').trim().replace(/[^A-Za-z0-9._-]+/g, '-');
   return filename || 'collection';
-}
-
-function capitalize(value) {
-  return String(value || '').charAt(0).toUpperCase() + String(value || '').slice(1);
 }

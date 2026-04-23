@@ -1,8 +1,10 @@
 :root {
+  color-scheme: light;
   --bg: #f6f6f4;
   --surface: #ffffff;
   --surface-muted: #f1f1ef;
   --sidebar: #f7f7f5;
+  --sidebar-rail: #efefec;
   --line: #d9d9d4;
   --line-strong: #c8c8c2;
   --text: #1f2328;
@@ -13,12 +15,129 @@
   --blue: #0969da;
   --green: #1a7f37;
   --danger: #b42318;
+  --method-get: #198754;
+  --method-get-bg: #e9f7ef;
+  --method-post: #b76e00;
+  --method-post-bg: #fff4de;
+  --method-put: #0969da;
+  --method-put-bg: #e9f2ff;
+  --method-patch: #7e57c2;
+  --method-patch-bg: #f1ebff;
+  --method-delete: #d1242f;
+  --method-delete-bg: #ffebe9;
+  --method-head: #008a93;
+  --method-head-bg: #e4f7f8;
+  --method-options: #c8479f;
+  --method-options-bg: #fdebf7;
+  --button-hover: #fafafa;
+  --sidebar-tab-hover: #e5e5e1;
+  --tree-hover: #ececea;
+  --badge-bg: #eeeeea;
+  --request-badge-bg: #e9f3ee;
+  --tabbar-bg: #fbfbfa;
+  --tab-hover: #f2f2ef;
+  --overlay: rgb(17 24 39 / 36%);
+  --modal-shadow: 0 18px 45px rgb(17 24 39 / 18%);
+  --pre-bg: #222222;
+  --pre-text: #f2f2ef;
   --shadow: 0 14px 34px rgba(31, 35, 40, 0.16);
   --mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
   --sidebar-width: 300px;
   --history-height: 210px;
   --request-height: 52%;
   --response-body-width: 1.25fr;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #101112;
+  --surface: #181a1c;
+  --surface-muted: #222426;
+  --sidebar: #151718;
+  --sidebar-rail: #111314;
+  --line: #34383c;
+  --line-strong: #4a5056;
+  --text: #f3f1ec;
+  --muted: #adb4bc;
+  --primary: #ff7846;
+  --primary-strong: #ff8b5f;
+  --primary-soft: #37241c;
+  --blue: #78b7ff;
+  --green: #66d08a;
+  --danger: #ff7b72;
+  --method-get: #68d391;
+  --method-get-bg: #163823;
+  --method-post: #f4b740;
+  --method-post-bg: #3a2b12;
+  --method-put: #79b8ff;
+  --method-put-bg: #16304f;
+  --method-patch: #c49cff;
+  --method-patch-bg: #2d2148;
+  --method-delete: #ff7b72;
+  --method-delete-bg: #3d1f1d;
+  --method-head: #57d7df;
+  --method-head-bg: #14383b;
+  --method-options: #f18ad0;
+  --method-options-bg: #3a1f32;
+  --button-hover: #25282b;
+  --sidebar-tab-hover: #26292b;
+  --tree-hover: #24272a;
+  --badge-bg: #26292c;
+  --request-badge-bg: #1d3427;
+  --tabbar-bg: #141617;
+  --tab-hover: #26292b;
+  --overlay: rgb(0 0 0 / 58%);
+  --modal-shadow: 0 18px 45px rgb(0 0 0 / 52%);
+  --pre-bg: #0c0d0e;
+  --pre-text: #efede7;
+  --shadow: 0 14px 34px rgb(0 0 0 / 45%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #101112;
+    --surface: #181a1c;
+    --surface-muted: #222426;
+    --sidebar: #151718;
+    --sidebar-rail: #111314;
+    --line: #34383c;
+    --line-strong: #4a5056;
+    --text: #f3f1ec;
+    --muted: #adb4bc;
+    --primary: #ff7846;
+    --primary-strong: #ff8b5f;
+    --primary-soft: #37241c;
+    --blue: #78b7ff;
+    --green: #66d08a;
+    --danger: #ff7b72;
+    --method-get: #68d391;
+    --method-get-bg: #163823;
+    --method-post: #f4b740;
+    --method-post-bg: #3a2b12;
+    --method-put: #79b8ff;
+    --method-put-bg: #16304f;
+    --method-patch: #c49cff;
+    --method-patch-bg: #2d2148;
+    --method-delete: #ff7b72;
+    --method-delete-bg: #3d1f1d;
+    --method-head: #57d7df;
+    --method-head-bg: #14383b;
+    --method-options: #f18ad0;
+    --method-options-bg: #3a1f32;
+    --button-hover: #25282b;
+    --sidebar-tab-hover: #26292b;
+    --tree-hover: #24272a;
+    --badge-bg: #26292c;
+    --request-badge-bg: #1d3427;
+    --tabbar-bg: #141617;
+    --tab-hover: #26292b;
+    --overlay: rgb(0 0 0 / 58%);
+    --modal-shadow: 0 18px 45px rgb(0 0 0 / 52%);
+    --pre-bg: #0c0d0e;
+    --pre-text: #efede7;
+    --shadow: 0 14px 34px rgb(0 0 0 / 45%);
+  }
 }
 
 * {
@@ -80,7 +199,7 @@ button {
 
 button:hover:not(:disabled) {
   border-color: var(--line-strong);
-  background: #fafafa;
+  background: var(--button-hover);
 }
 
 button:disabled {
@@ -226,6 +345,23 @@ button:focus-visible {
   margin-left: auto;
 }
 
+.theme-control {
+  gap: 2px;
+}
+
+.theme-control button {
+  min-width: 58px;
+  padding: 5px 8px;
+  color: var(--muted);
+}
+
+.theme-control button[aria-pressed="true"] {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--primary);
+  box-shadow: inset 0 -2px 0 var(--primary);
+}
+
 .environment-control select {
   min-width: 138px;
 }
@@ -242,7 +378,7 @@ button:focus-visible {
 
 .sidebar {
   display: grid;
-  grid-template-columns: 82px minmax(0, 1fr);
+  grid-template-columns: 102px minmax(0, 1fr);
   min-width: 0;
   border-right: 1px solid var(--line);
   background: var(--sidebar);
@@ -256,7 +392,7 @@ button:focus-visible {
   min-width: 0;
   padding: 8px 6px;
   border-right: 1px solid var(--line);
-  background: #efefec;
+  background: var(--sidebar-rail);
 }
 
 .sidebar-tab {
@@ -278,7 +414,7 @@ button:focus-visible {
 }
 
 .sidebar-tab:hover:not(:disabled) {
-  background: #e5e5e1;
+  background: var(--sidebar-tab-hover);
 }
 
 .sidebar-tab.active {
@@ -474,7 +610,7 @@ h2 {
 
 .tree-item:hover,
 .history-item:hover {
-  background: #ececea;
+  background: var(--tree-hover);
 }
 
 .tree-item.active {
@@ -490,7 +626,7 @@ h2 {
   height: 19px;
   padding: 0 5px;
   border-radius: 4px;
-  background: #eeeeea;
+  background: var(--badge-bg);
   color: var(--muted);
   font-family: var(--mono);
   font-size: 10px;
@@ -498,8 +634,70 @@ h2 {
 }
 
 .request-node .tree-badge {
-  background: #e9f3ee;
-  color: var(--green);
+  background: var(--request-badge-bg);
+}
+
+.method-get {
+  color: var(--method-get);
+}
+
+.method-post {
+  color: var(--method-post);
+}
+
+.method-put {
+  color: var(--method-put);
+}
+
+.method-patch {
+  color: var(--method-patch);
+}
+
+.method-delete {
+  color: var(--method-delete);
+}
+
+.method-head {
+  color: var(--method-head);
+}
+
+.method-options {
+  color: var(--method-options);
+}
+
+.tree-badge.method-get {
+  background: var(--method-get-bg);
+  color: var(--method-get);
+}
+
+.tree-badge.method-post {
+  background: var(--method-post-bg);
+  color: var(--method-post);
+}
+
+.tree-badge.method-put {
+  background: var(--method-put-bg);
+  color: var(--method-put);
+}
+
+.tree-badge.method-patch {
+  background: var(--method-patch-bg);
+  color: var(--method-patch);
+}
+
+.tree-badge.method-delete {
+  background: var(--method-delete-bg);
+  color: var(--method-delete);
+}
+
+.tree-badge.method-head {
+  background: var(--method-head-bg);
+  color: var(--method-head);
+}
+
+.tree-badge.method-options {
+  background: var(--method-options-bg);
+  color: var(--method-options);
 }
 
 .tree-label {
@@ -696,7 +894,7 @@ h2 {
   padding: 0 8px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: #fbfbfa;
+  background: var(--tabbar-bg);
   overflow-x: auto;
   overflow-y: hidden;
 }
@@ -790,7 +988,7 @@ h2 {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: rgb(17 24 39 / 36%);
+  background: var(--overlay);
 }
 
 .modal-backdrop[hidden] {
@@ -803,7 +1001,7 @@ h2 {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
-  box-shadow: 0 18px 45px rgb(17 24 39 / 18%);
+  box-shadow: var(--modal-shadow);
 }
 
 .modal[hidden] {
@@ -888,7 +1086,6 @@ h2 {
 #methodSelect {
   width: 118px;
   min-height: 36px;
-  color: var(--green);
   font-weight: 800;
 }
 
@@ -945,7 +1142,7 @@ h2 {
 }
 
 .tab:hover:not(:disabled) {
-  background: #f2f2ef;
+  background: var(--tab-hover);
 }
 
 .tab.active {
@@ -990,10 +1187,6 @@ h2 {
   align-items: center;
 }
 
-.kv-row.env-row {
-  grid-template-columns: 28px minmax(120px, 1fr) minmax(180px, 1.35fr) 86px 74px;
-}
-
 .assertion-row {
   display: grid;
   grid-template-columns: 28px minmax(112px, 0.9fr) minmax(130px, 1fr) minmax(130px, 1fr) minmax(92px, 0.7fr) minmax(130px, 1fr) 74px;
@@ -1016,7 +1209,7 @@ h2 {
 
 .kv-row input[type="checkbox"],
 .assertion-row input[type="checkbox"],
-.secret-toggle input {
+.inline-toggle input {
   width: 16px;
   min-height: 16px;
   margin: 0 auto;
@@ -1033,7 +1226,7 @@ h2 {
   padding: 4px 8px;
 }
 
-.secret-toggle {
+.inline-toggle {
   display: flex;
   align-items: center;
   gap: 5px;
@@ -1161,8 +1354,8 @@ h2 {
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: #222222;
-  color: #f2f2ef;
+  background: var(--pre-bg);
+  color: var(--pre-text);
   font-family: var(--mono);
 }
 

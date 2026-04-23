@@ -125,6 +125,62 @@ async function runCollection(collection, environment, options = {}) {
   };
 }
 
+async function runRequestWithScripts(request, environment, options = {}) {
+  const send = options.sendRequest || sendRequest;
+  const runScript = options.scriptRunner || runPostmanScriptIsolated;
+  const runnerEnvironment = cloneEnvironment(environment) || { id: 'runtime', name: 'Runtime', variables: [] };
+  const runnerCollectionVariables = cloneVariables(options.collectionVariables || []);
+  const localVariables = cloneVariables(request?.variables || []);
+
+  const preRequestScriptExecution = await runScript(request?.scripts?.preRequest, {
+    collectionVariables: runnerCollectionVariables,
+    localVariables,
+    environment: runnerEnvironment,
+    request
+  }, { ...(options.scriptOptions || {}), signal: options.signal });
+  applyScriptMutations(runnerEnvironment, runnerCollectionVariables, localVariables, preRequestScriptExecution);
+  const preRequestScriptResult = scriptResultOnly(preRequestScriptExecution);
+  if (!preRequestScriptResult.passed) {
+    const error = new Error(preRequestScriptResult.error || 'Pre-request script failed.');
+    error.preRequestScriptResult = preRequestScriptResult;
+    error.environment = runnerEnvironment;
+    error.collectionVariables = runnerCollectionVariables;
+    error.localVariables = localVariables;
+    throw error;
+  }
+
+  const response = await send(
+    request,
+    runtimeEnvironment(runnerCollectionVariables, runnerEnvironment, localVariables),
+    { signal: options.signal, cookieJar: options.cookieJar || [] }
+  );
+  const testScriptExecution = await runScript(request?.scripts?.tests, {
+    collectionVariables: runnerCollectionVariables,
+    localVariables,
+    environment: runnerEnvironment,
+    request,
+    response
+  }, { ...(options.scriptOptions || {}), signal: options.signal });
+  applyScriptMutations(runnerEnvironment, runnerCollectionVariables, localVariables, testScriptExecution);
+  const testScriptResult = scriptResultOnly(testScriptExecution);
+
+  return {
+    response: {
+      ...response,
+      preRequestScriptResult,
+      testScriptResult,
+      environment: runnerEnvironment,
+      collectionVariables: runnerCollectionVariables,
+      localVariables
+    },
+    environment: runnerEnvironment,
+    collectionVariables: runnerCollectionVariables,
+    localVariables,
+    preRequestScriptResult,
+    testScriptResult
+  };
+}
+
 function applyScriptMutations(environment, collectionVariables, localVariables, execution) {
   if (!execution || execution.result) {
     const environmentVariables = execution?.environmentVariables;
@@ -246,7 +302,7 @@ function collectionRunResultToCsv(result) {
   }
 
   rows.push([]);
-  rows.push(['runtimeScope', 'requestId', 'key', 'value', 'secret']);
+  rows.push(['runtimeScope', 'requestId', 'key', 'value']);
   for (const variable of result.collectionVariables || []) {
     appendRuntimeVariableRow(rows, 'collection', '', variable);
   }
@@ -270,8 +326,7 @@ function appendRuntimeVariableRow(rows, scope, requestId, variable) {
     scope,
     requestId,
     variable.key,
-    variable.secret ? '[secret]' : variable.value ?? '',
-    variable.secret === true
+    variable.value ?? ''
   ]);
 }
 
@@ -295,5 +350,6 @@ function csvValue(value) {
 module.exports = {
   applyExtractedVariables,
   collectionRunResultToCsv,
-  runCollection
+  runCollection,
+  runRequestWithScripts
 };

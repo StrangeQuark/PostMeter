@@ -2,7 +2,7 @@
 
 PostMeter is an open-source Electron desktop API client and local load-testing tool.
 
-The MVP supports saved request collections, folder organization, collection/request/environment variables, editable request examples, a local cookie jar, PostMeter collection import/export, Postman collection import, OpenAPI/JMeter/curl/HAR collection import and export, workspace import/export, request editing, JSON/XML/HTML-aware assertions, permission-constrained child-process request scripts, collection runs, response inspection, history, HTTPS client certificates, a CI-friendly CLI runner, GitHub Releases update checks, and bounded local load tests with Load Test panel run configuration, global rate caps, policy-decision reporting, and optional multi-process execution against the active request.
+The MVP supports saved request collections, folder organization, collection/request/environment variables, editable request examples, a local cookie jar, PostMeter collection import/export, Postman collection import, OpenAPI/JMeter/curl/HAR collection import and export, workspace import/export, request editing, JSON/XML/HTML-aware assertions, permission-constrained child-process request scripts, collection runs, response inspection, history, HTTPS client certificates, light/dark/system theme modes, a CI-friendly CLI runner, GitHub Releases update checks, and bounded local load tests with Load Test panel run configuration, global rate caps, policy-decision reporting, and optional multi-process execution against the active request.
 
 PostMeter is standalone local software. It does not require a PostMeter account, app login, cloud sign-in, or user registration to use the core product. OAuth support is only for authenticating outbound API requests.
 
@@ -137,9 +137,7 @@ Run a workspace or collection file headlessly:
 npm run cli -- run --file ./workspace.json --collection "Smoke" --environment "Local" --var token="$API_TOKEN" --report ./runner-report.json
 ```
 
-The CLI accepts native PostMeter workspace/collection files and the same import pipeline used by the desktop app for Postman, OpenAPI, JMeter, curl, and HAR inputs. It returns exit code `0` only when all executed requests pass their assertions and scripts. JSON and CSV reports are supported through `--report` and `--format json|csv`. Use `--var key=value` and `--collection-var key=value` to inject CI-safe values at runtime.
-
-The CLI does not have access to Electron `safeStorage`; encrypted desktop workspace secrets cannot be decrypted headlessly. Use explicit CI environment values or an exact local test export when running in automation.
+The CLI accepts native PostMeter workspace/collection files and the same import pipeline used by the desktop app for Postman, OpenAPI, JMeter, curl, and HAR inputs. It returns exit code `0` only when all executed requests pass their assertions and scripts. JSON and CSV reports are supported through `--report` and `--format json|csv`. Use `--var key=value` and `--collection-var key=value` to inject CI values at runtime.
 
 ## Workspace Data
 
@@ -155,13 +153,9 @@ For tests or isolated local runs, override the location:
 POSTMETER_DATA_PATH=/tmp/postmeter-workspace.json npm start
 ```
 
-No API keys or secrets are required to run the app. Password/token inputs are masked in the UI. PostMeter encrypts known auth secret fields plus collection, environment, and request-local variables marked `Secret`, local cookie values, and collection certificate passphrases in the local workspace file through Electron `safeStorage`. If `safeStorage` is unavailable on the host, PostMeter prompts for a fallback passphrase and encrypts secrets with AES-256-GCM using a PBKDF2-SHA-256 derived key. Legacy plaintext fallback wrappers from earlier builds remain readable and are silently re-encrypted on the next successful save.
+No API keys are required to run the app. PostMeter stores workspace data as plain JSON, including auth fields, variables, cookies, and certificate passphrases. Text inputs are shown as normal visible text fields, and workspace/collection exports write the normalized data directly without redaction or export confirmation.
 
-Workspace and collection exports redact known auth secrets, marked variables, cookie values, and certificate passphrases by default. Exporting exact values requires an explicit export warning plus an exact typed confirmation phrase.
-
-See [docs/SECRETS.md](docs/SECRETS.md) for secret storage, fallback passphrase, redacted export, exact export, and unrecoverable-value guidance.
-
-Workspace schema migrations create a timestamped `pre-migration.backup` sibling file before saving migrated data. Schema `4` adds the `secret` flag to key/value rows for environment variables and request pairs, schema `5` adds collection variables, schema `6` adds request script containers, schema `7` adds app settings, request-local variables, request examples, and collection certificate metadata, schema `8` adds workspace cookies plus per-request cookie jar settings, schema `9` adds request load-test policy compatibility fields, and schema `10` removes workspace-level load-test defaults so load tests are configured from the Load Test panel. If the workspace JSON cannot be parsed, PostMeter moves the unreadable file to a timestamped `corrupt` sibling file, creates a fresh default workspace, and reports the recovery path. Destructive workspace import creates a current-workspace backup before replacement.
+Workspace schema migrations create a timestamped `pre-migration.backup` sibling file before saving migrated data. Schema `5` adds collection variables, schema `6` adds request script containers, schema `7` adds app settings including theme preference, request-local variables, request examples, and collection certificate metadata, schema `8` adds workspace cookies plus per-request cookie jar settings, schema `9` adds request load-test policy compatibility fields, and schema `10` removes workspace-level load-test defaults so load tests are configured from the Load Test panel. If the workspace JSON cannot be parsed, PostMeter moves the unreadable file to a timestamped `corrupt` sibling file, creates a fresh default workspace, and reports the recovery path. Destructive workspace import creates a current-workspace backup before replacement.
 
 ## MVP Usage
 
@@ -170,10 +164,10 @@ Workspace schema migrations create a timestamped `pre-migration.backup` sibling 
 3. Add query params and headers in the request tabs.
 4. Select a body type for `POST`, `PUT`, `PATCH`, or `DELETE` requests and enter raw JSON or text.
 5. Add request auth in the Auth tab when needed.
-6. Optionally add collection variables, request-local variables, create an environment, mark sensitive variables as `Secret`, and reference variables with `{{variableName}}`.
+6. Optionally add collection variables, request-local variables, create an environment, and reference variables with `{{variableName}}`.
 7. Send the request and inspect status, response time, response size, final URL, headers, and formatted JSON response bodies.
 8. Add Tests assertions for status, headers, JSON paths, XML XPath, HTML CSS selectors, response time, response size, body text, JSON/XML/HTML extraction, or regex extraction.
-9. Add optional pre-request and test scripts in the Scripts tab for collection-run workflows.
+9. Add optional pre-request and test scripts in the Scripts tab for single sends and collection-run workflows.
 10. Use the Runner tab to execute the active collection locally, optionally stop on failure, and export JSON/CSV run results.
 11. Use the Load Test tab to run request-count or duration-based local load tests with configurable concurrency, ramp-up, target requests per second, global rate caps, single-process or multi-process execution, high-concurrency confirmation, progress updates, cancellation, percentile summaries, histograms, optional sample capture, and JSON/CSV export.
 12. Use the Cookies tab to opt requests into the local cookie jar, inspect stored cookies, and clear expired cookies.
@@ -198,9 +192,7 @@ Implemented now:
 - Renderer has a restrictive Content Security Policy.
 - Renderer-originated IPC payloads are structurally validated before reaching core services, with shared versioned enum contracts and shared field schemas for common request/workspace/auth primitives plus bounded validation for load-test config/progress/result payloads, OAuth progress payloads, runner config/progress/result payloads, file-operation results, and collection-run script result payloads.
 - Request scripts run in forked child processes and constrained Node `vm` contexts, with Node permission flags when supported by the runtime, a minimal worker environment, bounded worker heap size, execution timeouts, script length limits, bounded console capture, dynamic-code-generation blocking, and explicit unsupported errors for unsupported network/Node-like globals.
-- Local auth secrets, marked variable secrets, cookie values, and certificate passphrases are encrypted through Electron `safeStorage`, with a passphrase-encrypted fallback when host-backed storage is unavailable.
-- Workspace and collection exports redact secrets unless exact-value export is explicitly confirmed with a typed phrase.
-- Exact-value export confirmation is collected in a main-owned modal with isolated preload bindings.
+- Workspace data is stored as plain JSON without local encryption or redacted export modes.
 - High-concurrency load tests require confirmation.
 - Hardware acceleration is disabled to avoid GPU startup failures in common Linux/headless environments.
 - Update checks fetch GitHub Releases metadata from the main process and require user confirmation before opening a GitHub release page.
@@ -209,7 +201,6 @@ Implemented now:
 Known hardening gaps:
 
 - IPC validation is structural and uses shared versioned enum contracts; request/workspace array, nested-field validation, common primitive groups, OAuth progress, runner config/progress, load progress/result, and file-operation result validation are schema-driven or schema-backed, while some complex nested payload checks are still manually maintained.
-- Electron `safeStorage` can be unavailable on some Linux sessions; PostMeter has a passphrase fallback and recovery guidance, but forgotten passphrases and lost OS keyring secrets cannot be recovered.
 - Script child-process isolation uses Node permission flags and bounded worker heap settings where available, but it is still not a full OS sandbox with syscall policy.
 
 ## Production-Readiness Notes
@@ -231,11 +222,10 @@ Implemented:
 - Local load testing with request-count mode, duration mode, ramp-up scheduling, target arrival-rate scheduling, global rate-cap governance, policy-decision reporting, optional bounded multi-process execution, streamed worker summary aggregation, cancellation, progress updates, concurrency, high-concurrency confirmation, status counts, percentile latency summary, latency histograms, throughput, error rate, optional capped sample capture, sample errors, and JSON/CSV export.
 - Focused Node tests for core services, auth injection, mTLS, and IPC validation.
 - Electron startup smoke, Electron UI workflow smoke, Electron UI regression smoke, mocked OAuth UI smoke, screenshot-level UI smoke, Linux package smoke in CI, release checksum generation, release manifest generation, and release workflow metadata checks.
-- In-app GitHub Releases update checks with explicit user prompt before opening the release page and a settings opt-in for prerelease checks.
+- In-app GitHub Releases update checks with explicit user prompt before opening the release page, light/dark/system theme settings, and a settings opt-in for prerelease checks.
 
 Known gaps before true production readiness:
 
-- Electron `safeStorage` unavailable and host-keyring-change scenarios now produce recovery guidance, but there is no passphrase reset or exact-secret recovery path.
 - OAuth 2.0 flows still need broader provider compatibility testing, but loopback PKCE success, state-mismatch failure, and device-code success are covered by mocked Electron UI smoke tests. Linux deb/AppImage protocol registration and macOS zip app-bundle URL-scheme registration are validated from packaged artifacts where present; native CI-only Windows installer and macOS app/DMG protocol checks are wired into the release workflow but still need to run on GitHub-hosted native release runners.
 - Postman import supports common collection request fields, auth helpers, scripts, editable examples, cookies, request variables, and collection certificate metadata, but not every Postman feature.
 - Request scripting is available for collection runs through the Scripts tab and runs in a bounded child process. Unsupported Postman sandbox APIs and unsupported Node/network-like globals now fail with explicit PostMeter unsupported-API messages, but the compatibility surface is still intentionally limited.

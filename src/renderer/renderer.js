@@ -1,5 +1,6 @@
 const BODY_TYPES = ['NONE', 'RAW_JSON', 'RAW_TEXT'];
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
+const THEME_OPTIONS = ['system', 'light', 'dark'];
 const TAB_PANEL_IDS = {
   request: ['paramsTab', 'headersTab', 'authTab', 'cookiesTab', 'bodyTab', 'testsTab', 'scriptsTab', 'examplesTab', 'collectionVariablesTab'],
   results: ['responseTab', 'loadTab', 'runnerTab']
@@ -50,6 +51,12 @@ let selectedDraftSaveCollectionId = '';
 const MAX_OPEN_REQUEST_TABS = 12;
 
 const $ = (id) => document.getElementById(id);
+
+try {
+  applyThemePreference(localStorage.getItem('postmeter.theme') || 'system');
+} catch {
+  applyThemePreference('system');
+}
 
 document.addEventListener('DOMContentLoaded', async () => {
   bindUi();
@@ -113,6 +120,9 @@ function bindUi() {
   $('exportJMeterButton').addEventListener('click', () => exportCollection(activeCollection(), 'jmeter'));
   $('exportCurlButton').addEventListener('click', () => exportCollection(activeCollection(), 'curl'));
   $('exportHarButton').addEventListener('click', () => exportCollection(activeCollection(), 'har'));
+  for (const button of document.querySelectorAll('[data-theme-option]')) {
+    button.addEventListener('click', () => setThemePreference(button.dataset.themeOption, { save: true }));
+  }
   $('sendButton').addEventListener('click', sendActiveRequest);
   $('addParamButton').addEventListener('click', () => addPair('queryParams'));
   $('addHeaderButton').addEventListener('click', () => addPair('headers'));
@@ -147,7 +157,10 @@ function bindUi() {
     renderEnvironmentEditor();
   });
   $('requestNameInput').addEventListener('input', collectRequestAndMarkDirty);
-  $('methodSelect').addEventListener('change', collectRequestAndMarkDirty);
+  $('methodSelect').addEventListener('change', () => {
+    updateMethodSelectClass();
+    collectRequestAndMarkDirty();
+  });
   $('urlInput').addEventListener('input', () => {
     collectRequestAndMarkDirty();
     renderCookieJarEditor();
@@ -418,14 +431,14 @@ async function runUiWorkflowSmoke(params) {
   activateTab('request', 'scripts');
   $('preRequestScriptInput').value = "pm.environment.set('scriptToken', 'ui-script');";
   dispatchInput($('preRequestScriptInput'));
-  $('testScriptInput').value = "pm.test('script token exists', function () { pm.expect(pm.environment.get('scriptToken')).to.equal('ui-script'); pm.expect(pm.collectionVariables.get('collectionToken')).to.equal('from-collection'); pm.response.to.have.status(200); });";
+  $('testScriptInput').value = "pm.environment.set('responseMethod', pm.response.json().method); pm.test('script token exists', function () { pm.expect(pm.environment.get('scriptToken')).to.equal('ui-script'); pm.expect(pm.collectionVariables.get('collectionToken')).to.equal('from-collection'); pm.response.to.have.status(200); });";
   dispatchInput($('testScriptInput'));
 
   newEnvironment();
   const environment = activeEnvironment();
   assertUiSmoke(environment, 'New environment was not created.');
   environment.name = 'Smoke Environment';
-  environment.variables = [{ enabled: true, key: 'secretToken', value: 'local-secret', secret: true }];
+  environment.variables = [{ enabled: true, key: 'localToken', value: 'local-value' }];
   renderAll();
 
   assertContextMenuSmoke();
@@ -442,6 +455,7 @@ async function runUiWorkflowSmoke(params) {
   await sendActiveRequest();
   assertUiSmoke($('responseStatus').textContent === '200', 'Smoke request did not receive HTTP 200.');
   assertUiSmoke($('responseBody').value.includes('"method": "POST"'), 'Smoke response body was not rendered.');
+  assertUiSmoke(activeEnvironment().variables.some((variable) => variable.key === 'responseMethod' && variable.value === 'POST'), 'Single request test script did not update the active environment.');
   assertUiSmoke(workspace.history.length > 0, 'Smoke request did not add history.');
   assertUiSmoke(workspace.cookies.some((cookie) => cookie.name === 'uiSession'), 'Smoke response cookie was not stored.');
   captureResponseExample();
@@ -480,6 +494,11 @@ async function runUiRegressionSmoke() {
   assertToolbarMenuSmoke('newMenuButton', 'newMenu', ['Request', 'Collection', 'Folder', 'Environment']);
   assertToolbarMenuSmoke('importMenuButton', 'importMenu', ['Workspace', 'Collection']);
   assertToolbarMenuSmoke('exportMenuButton', 'exportMenu', ['Workspace', 'Collection', 'OpenAPI', 'JMeter', 'curl', 'HAR']);
+  await setThemePreference('dark', { save: false, showStatus: false });
+  assertUiSmoke(document.documentElement.dataset.theme === 'dark', 'Dark theme was not applied.');
+  assertUiSmoke($('themeDarkButton').getAttribute('aria-pressed') === 'true', 'Dark theme control did not show active state.');
+  await setThemePreference('system', { save: false, showStatus: false });
+  assertUiSmoke(document.documentElement.dataset.theme === 'system', 'System theme was not restored.');
   assertSidebarPanelSmoke();
   assertUiSmoke(!$('statusLabel'), 'Topbar status message should not render.');
   assertUiSmoke(!$('checkUpdatesButton'), 'Updates toolbar button should be handled by the Help menu.');
@@ -491,6 +510,7 @@ async function runUiRegressionSmoke() {
 
   newCollection();
   newRequest();
+  assertMethodColorSmoke();
   $('urlInput').value = 'https://api.example.test/v1/users';
   dispatchInput($('urlInput'));
   activateTab('request', 'cookies');
@@ -577,7 +597,7 @@ async function runUiSnapshotSmoke() {
   const request = activeRequest();
   assertUiSmoke(request, 'Snapshot request was not created.');
   collection.name = 'Snapshot Collection';
-  collection.variables.push({ enabled: true, key: 'baseUrl', value: 'https://api.snapshot.test', secret: false });
+  collection.variables.push({ enabled: true, key: 'baseUrl', value: 'https://api.snapshot.test' });
   request.name = 'List Widgets';
   request.method = 'POST';
   request.url = 'https://api.snapshot.test/widgets?expand=owner';
@@ -979,6 +999,23 @@ function assertToolbarMenuSmoke(buttonId, menuId, expectedLabels) {
   assertUiSmoke(menu.hidden === true, `${menuId} did not close.`);
 }
 
+function assertMethodColorSmoke() {
+  const rootStyle = getComputedStyle(document.documentElement);
+  const methodColors = METHODS.map((method) => rootStyle.getPropertyValue(`--method-${method.toLowerCase()}`).trim());
+  assertUiSmoke(new Set(methodColors).size === METHODS.length, 'HTTP method colors should be unique.');
+  assertUiSmoke(rootStyle.getPropertyValue('--method-delete').trim(), 'DELETE method color is missing.');
+  for (const method of METHODS) {
+    $('methodSelect').value = method;
+    dispatchChange($('methodSelect'));
+    assertUiSmoke(
+      $('methodSelect').classList.contains(methodClassName(method)),
+      `${method} did not apply a method color class.`
+    );
+  }
+  $('methodSelect').value = 'GET';
+  dispatchChange($('methodSelect'));
+}
+
 function assertSidebarPanelSmoke() {
   const originalEnvironments = structuredClone(workspace.environments || []);
   const originalActiveEnvironmentId = activeEnvironmentId;
@@ -1316,8 +1353,9 @@ function renderRequestTabs() {
     dirty.setAttribute('aria-label', 'Unsaved changes');
 
     const method = document.createElement('span');
-    method.className = 'request-tab-method';
-    method.textContent = request.method || 'GET';
+    const methodText = request.method || 'GET';
+    method.className = `request-tab-method ${methodClassName(methodText)}`;
+    method.textContent = methodText;
 
     const title = document.createElement('span');
     title.className = 'request-tab-title';
@@ -2086,12 +2124,53 @@ function renderToolbarState() {
 
 function renderSettings() {
   ensureSettings();
+  applyThemePreference(workspace.settings.appearance.theme);
+  renderThemeControl();
 }
 
 function ensureSettings() {
-  workspace.settings ||= { updates: { includePrereleases: false } };
+  workspace.settings ||= {};
   workspace.settings.updates ||= { includePrereleases: false };
+  workspace.settings.appearance ||= { theme: 'system' };
+  workspace.settings.appearance.theme = normalizeThemeOption(workspace.settings.appearance.theme);
   delete workspace.settings.loadTestPolicy;
+}
+
+function normalizeThemeOption(value) {
+  const theme = String(value || '').trim();
+  return THEME_OPTIONS.includes(theme) ? theme : 'system';
+}
+
+function applyThemePreference(theme) {
+  const normalizedTheme = normalizeThemeOption(theme);
+  document.documentElement.dataset.theme = normalizedTheme;
+  try {
+    localStorage.setItem('postmeter.theme', normalizedTheme);
+  } catch {
+    // Theme still applies for this session when storage is unavailable.
+  }
+}
+
+function renderThemeControl() {
+  const activeTheme = normalizeThemeOption(workspace.settings?.appearance?.theme);
+  for (const button of document.querySelectorAll('[data-theme-option]')) {
+    const isActive = button.dataset.themeOption === activeTheme;
+    button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+  }
+}
+
+async function setThemePreference(theme, options = {}) {
+  ensureSettings();
+  const normalizedTheme = normalizeThemeOption(theme);
+  workspace.settings.appearance.theme = normalizedTheme;
+  applyThemePreference(normalizedTheme);
+  renderThemeControl();
+  if (options.save === true) {
+    await saveWorkspace(false);
+  }
+  if (options.showStatus !== false) {
+    setStatus(`Theme set to ${normalizedTheme}.`);
+  }
 }
 
 async function setIncludePrereleases(includePrereleases, options = {}) {
@@ -2215,6 +2294,7 @@ function renderWorkspacePanel() {
     ['Name', workspaceDisplayName()],
     ['Workspace File', workspacePath || 'Default local workspace'],
     ['Schema Version', String(workspace.schemaVersion || '-')],
+    ['Theme', titleCaseTheme(workspace.settings?.appearance?.theme)],
     ['Collections', String(workspace.collections?.length || 0)],
     ['Folders', String(folderCount)],
     ['Requests', String(requestCount)],
@@ -2234,6 +2314,11 @@ function renderWorkspacePanel() {
     row.append(labelElement, valueElement);
     container.append(row);
   }
+}
+
+function titleCaseTheme(theme) {
+  const normalizedTheme = normalizeThemeOption(theme);
+  return normalizedTheme.charAt(0).toUpperCase() + normalizedTheme.slice(1);
 }
 
 function workspaceListItems() {
@@ -2374,13 +2459,30 @@ function treeButton(text, active, kind) {
   button.type = 'button';
   button.setAttribute('aria-haspopup', 'menu');
   const badge = document.createElement('span');
-  badge.className = 'tree-badge';
+  badge.className = `tree-badge ${methodClassName(kind)}`;
   badge.textContent = kind;
   const label = document.createElement('span');
   label.className = 'tree-label';
   label.textContent = text;
   button.append(badge, label);
   return button;
+}
+
+function methodClassName(method) {
+  const normalizedMethod = String(method || '').trim().toLowerCase();
+  return METHODS.map((item) => item.toLowerCase()).includes(normalizedMethod)
+    ? `method-${normalizedMethod}`
+    : '';
+}
+
+function updateMethodSelectClass() {
+  const select = $('methodSelect');
+  if (!select) {
+    return;
+  }
+  for (const method of METHODS) {
+    select.classList.toggle(`method-${method.toLowerCase()}`, select.value === method);
+  }
 }
 
 function attachTreeContextMenu(button, items) {
@@ -2535,6 +2637,7 @@ function renderRequestEditor() {
   if (!request) {
     $('requestNameInput').value = '';
     $('methodSelect').value = 'GET';
+    updateMethodSelectClass();
     $('urlInput').value = '';
     $('bodyTypeSelect').value = 'NONE';
     $('bodyInput').value = '';
@@ -2561,6 +2664,7 @@ function renderRequestEditor() {
   $('exportExamplesButton').disabled = !(request.examples || []).length;
   $('requestNameInput').value = request.name;
   $('methodSelect').value = request.method;
+  updateMethodSelectClass();
   $('urlInput').value = request.url;
   $('bodyTypeSelect').value = request.bodyType || 'NONE';
   $('bodyInput').value = request.body || '';
@@ -2996,25 +3100,12 @@ function renderVariablePairs(containerId, pairs, onChange) {
     });
     const value = document.createElement('input');
     value.placeholder = 'Value';
-    value.type = pair.secret ? 'password' : 'text';
+    value.type = 'text';
     value.value = pair.value || '';
     value.addEventListener('input', () => {
       pair.value = value.value;
       onChange();
     });
-    const secretLabel = document.createElement('label');
-    secretLabel.className = 'secret-toggle';
-    const secret = document.createElement('input');
-    secret.type = 'checkbox';
-    secret.checked = pair.secret === true;
-    secret.addEventListener('change', () => {
-      pair.secret = secret.checked;
-      value.type = pair.secret ? 'password' : 'text';
-      onChange();
-    });
-    const secretText = document.createElement('span');
-    secretText.textContent = 'Secret';
-    secretLabel.append(secret, secretText);
     const remove = document.createElement('button');
     remove.textContent = 'Remove';
     remove.addEventListener('click', () => {
@@ -3022,7 +3113,7 @@ function renderVariablePairs(containerId, pairs, onChange) {
       renderRequestEditor();
       renderCollectionVariablesEditor();
     });
-    row.append(enabled, key, value, secretLabel, remove);
+    row.append(enabled, key, value, remove);
     container.append(row);
   });
 }
@@ -3039,9 +3130,8 @@ function renderVariablePreview() {
     }
     effective.set(pair.key, {
       key: pair.key,
-      value: pair.secret ? '••••••' : pair.value ?? '',
-      source: 'Collection',
-      secret: pair.secret === true
+      value: pair.value ?? '',
+      source: 'Collection'
     });
   }
   for (const pair of environment?.variables || []) {
@@ -3050,9 +3140,8 @@ function renderVariablePreview() {
     }
     effective.set(pair.key, {
       key: pair.key,
-      value: pair.secret ? '••••••' : pair.value ?? '',
-      source: 'Environment',
-      secret: pair.secret === true
+      value: pair.value ?? '',
+      source: 'Environment'
     });
   }
   for (const pair of request?.variables || []) {
@@ -3061,13 +3150,12 @@ function renderVariablePreview() {
     }
     effective.set(pair.key, {
       key: pair.key,
-      value: pair.secret ? '••••••' : pair.value ?? '',
-      source: 'Request',
-      secret: pair.secret === true
+      value: pair.value ?? '',
+      source: 'Request'
     });
   }
   for (const item of [...effective.values()].sort((left, right) => left.key.localeCompare(right.key))) {
-    rows.push(`${item.key} = ${item.value} (${item.source}${item.secret ? ', Secret' : ''})`);
+    rows.push(`${item.key} = ${item.value} (${item.source})`);
   }
   $('variablePreview').textContent = rows.length ? rows.join('\n') : 'No variables';
 }
@@ -3109,7 +3197,7 @@ function renderCookieJarEditor() {
       cookie.enabled = enabled.checked;
     });
     const name = cookieInput(cookie.name || '', 'Name', (value) => { cookie.name = value; });
-    const value = cookieInput(cookie.value || '', 'Value', (next) => { cookie.value = next; }, 'password');
+    const value = cookieInput(cookie.value || '', 'Value', (next) => { cookie.value = next; });
     const domain = cookieInput(cookie.domain || '', 'Domain', (next) => { cookie.domain = next; });
     const path = cookieInput(cookie.path || '/', 'Path', (next) => { cookie.path = next || '/'; });
     const expires = cookieInput(cookie.expiresAt || '', 'Expires ISO', (next) => { cookie.expiresAt = next; });
@@ -3211,7 +3299,7 @@ function rendererIsIpAddressLike(hostname) {
 
 function checkboxLabel(label, checked, onChange) {
   const wrapper = document.createElement('label');
-  wrapper.className = 'secret-toggle';
+  wrapper.className = 'inline-toggle';
   const input = document.createElement('input');
   input.type = 'checkbox';
   input.checked = checked;
@@ -3222,8 +3310,8 @@ function checkboxLabel(label, checked, onChange) {
   return wrapper;
 }
 
-function redactedVariableValue(pair) {
-  return pair?.secret ? '••••••' : pair?.value ?? '';
+function variableValue(pair) {
+  return pair?.value ?? '';
 }
 
 function renderEnvironmentPairs(pairs) {
@@ -3248,32 +3336,19 @@ function renderEnvironmentPairs(pairs) {
     });
     const value = document.createElement('input');
     value.placeholder = 'Value';
-    value.type = pair.secret ? 'password' : 'text';
+    value.type = 'text';
     value.value = pair.value || '';
     value.addEventListener('input', () => {
       pair.value = value.value;
       renderVariablePreview();
     });
-    const secretLabel = document.createElement('label');
-    secretLabel.className = 'secret-toggle';
-    const secret = document.createElement('input');
-    secret.type = 'checkbox';
-    secret.checked = pair.secret === true;
-    secret.addEventListener('change', () => {
-      pair.secret = secret.checked;
-      value.type = pair.secret ? 'password' : 'text';
-      renderVariablePreview();
-    });
-    const secretText = document.createElement('span');
-    secretText.textContent = 'Secret';
-    secretLabel.append(secret, secretText);
     const remove = document.createElement('button');
     remove.textContent = 'Remove';
     remove.addEventListener('click', () => {
       pairs.splice(index, 1);
       renderEnvironmentEditor();
     });
-    row.append(enabled, key, value, secretLabel, remove);
+    row.append(enabled, key, value, remove);
     container.append(row);
   });
 }
@@ -3307,10 +3382,12 @@ async function sendActiveRequest() {
   collectRequestFromEditor();
   await saveWorkspace(false);
   const environment = activeEnvironment();
-  const errors = await window.postmeter.request.validate(request, environment);
-  if (errors.length) {
-    $('validationLabel').textContent = errors.join(' ');
-    return setStatus('Fix validation errors.');
+  if (!request.scripts?.preRequest?.trim()) {
+    const errors = await window.postmeter.request.validate(request, environment);
+    if (errors.length) {
+      $('validationLabel').textContent = errors.join(' ');
+      return setStatus('Fix validation errors.');
+    }
   }
   $('validationLabel').textContent = '';
   setStatus('Sending request...');
@@ -3324,6 +3401,7 @@ async function sendActiveRequest() {
       workspace.cookies = response.updatedCookies;
       renderCookieJarEditor();
     }
+    applySingleRequestScriptMutations(response, request);
     lastResponse = response;
     $('captureResponseExampleButton').disabled = false;
     displayResponse(response);
@@ -3519,6 +3597,7 @@ async function runActiveCollection() {
       workspace.cookies = result.cookies;
       renderCookieJarEditor();
     }
+    applyRunnerScriptMutations(result, collection);
     lastRunnerResult = result;
     $('runnerResults').textContent = formatRunnerResult(result);
     $('exportRunnerJsonButton').disabled = false;
@@ -3578,7 +3657,7 @@ function formatRunnerResult(result) {
     }
     const localVariables = visibleVariables(item.localVariables || []);
     for (const variable of localVariables) {
-      lines.push(`- Request variable ${variable.key} = ${redactedVariableValue(variable)}`);
+      lines.push(`- Request variable ${variable.key} = ${variableValue(variable)}`);
     }
   }
   appendRuntimeVariableLines(lines, result);
@@ -3594,10 +3673,10 @@ function appendRuntimeVariableLines(lines, result) {
   lines.push('');
   lines.push('Runtime Variables');
   for (const variable of collectionVariables) {
-    lines.push(`- Collection ${variable.key} = ${redactedVariableValue(variable)}`);
+    lines.push(`- Collection ${variable.key} = ${variableValue(variable)}`);
   }
   for (const variable of environmentVariables) {
-    lines.push(`- Environment ${variable.key} = ${redactedVariableValue(variable)}`);
+    lines.push(`- Environment ${variable.key} = ${variableValue(variable)}`);
   }
 }
 
@@ -4014,6 +4093,62 @@ function walkFolderRequests(folder, visitor) {
   }
 }
 
+function applySingleRequestScriptMutations(result, request) {
+  applyEnvironmentScriptMutations(result.environment);
+  const collection = activeCollection();
+  if (collection && Array.isArray(result.collectionVariables)) {
+    collection.variables = cloneVariablePairs(result.collectionVariables);
+  }
+  if (request && Array.isArray(result.localVariables)) {
+    request.variables = cloneVariablePairs(result.localVariables);
+  }
+  renderScriptMutationEditors();
+}
+
+function applyRunnerScriptMutations(result, collection) {
+  applyEnvironmentScriptMutations(result.environment);
+  if (!collection) {
+    renderScriptMutationEditors();
+    return;
+  }
+  if (Array.isArray(result.collectionVariables)) {
+    collection.variables = cloneVariablePairs(result.collectionVariables);
+  }
+  const variablesByRequestId = new Map();
+  for (const item of result.results || []) {
+    if (item.requestId && Array.isArray(item.localVariables)) {
+      variablesByRequestId.set(item.requestId, cloneVariablePairs(item.localVariables));
+    }
+  }
+  walkCollectionRequests(collection, (request) => {
+    if (variablesByRequestId.has(request.id)) {
+      request.variables = variablesByRequestId.get(request.id);
+    }
+  });
+  renderScriptMutationEditors();
+}
+
+function applyEnvironmentScriptMutations(environment) {
+  const active = activeEnvironment();
+  if (active && environment?.id === active.id && Array.isArray(environment.variables)) {
+    active.variables = cloneVariablePairs(environment.variables);
+  }
+}
+
+function renderScriptMutationEditors() {
+  renderEnvironmentEditor();
+  renderCollectionVariablesEditor();
+  const request = activeRequest();
+  if (request) {
+    renderRequestVariablePairs(request.variables || []);
+  }
+  renderVariablePreview();
+}
+
+function cloneVariablePairs(pairs) {
+  return Array.isArray(pairs) ? pairs.map((pair) => ({ ...pair })) : [];
+}
+
 function collectSettingsFromEditor() {
   ensureSettings();
 }
@@ -4227,7 +4362,7 @@ function newEnvironment() {
   const environment = {
     id: crypto.randomUUID(),
     name: uniqueName('New Environment', workspace.environments.map((item) => item.name)),
-    variables: [{ enabled: true, key: 'baseUrl', value: 'https://example.com', secret: false }]
+    variables: [{ enabled: true, key: 'baseUrl', value: 'https://example.com' }]
   };
   workspace.environments.push(environment);
   activeEnvironmentId = environment.id;
@@ -4268,7 +4403,7 @@ function renameEnvironment(environment) {
 function addVariable() {
   const environment = activeEnvironment();
   if (environment) {
-    environment.variables.push({ enabled: true, key: '', value: '', secret: false });
+    environment.variables.push({ enabled: true, key: '', value: '' });
     renderEnvironmentEditor();
   }
 }
@@ -4277,7 +4412,7 @@ function addCollectionVariable() {
   const collection = activeCollection();
   if (collection) {
     collection.variables ||= [];
-    collection.variables.push({ enabled: true, key: '', value: '', secret: false });
+    collection.variables.push({ enabled: true, key: '', value: '' });
     renderCollectionVariablesEditor();
   }
 }
@@ -4286,7 +4421,7 @@ function addRequestVariable() {
   const request = activeRequest();
   if (request) {
     request.variables ||= [];
-    request.variables.push({ enabled: true, key: '', value: '', secret: false });
+    request.variables.push({ enabled: true, key: '', value: '' });
     markActiveRequestDirty();
     renderRequestEditor();
   }

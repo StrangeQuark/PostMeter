@@ -543,20 +543,6 @@ function applyAuth(request, environment, target) {
   }
 }
 
-function redactAuth(auth = {}) {
-  const normalized = normalizeAuth(auth);
-  if (normalized.type === 'none') {
-    return normalized;
-  }
-  const redacted = { ...normalized };
-  for (const key of ['token', 'password', 'value', 'accessToken', 'refreshToken', 'clientSecret', 'deviceCode', 'passphrase']) {
-    if (Object.hasOwn(redacted, key) && redacted[key]) {
-      redacted[key] = '<redacted>';
-    }
-  }
-  return redacted;
-}
-
 function requireResolved(value, environment, label, errors) {
   const resolved = resolveEnvironmentValue(value, environment).trim();
   if (!resolved) {
@@ -707,7 +693,6 @@ module.exports = {
   normalizeAuth,
   pkceChallengeForVerifier,
   pollOAuthDeviceToken,
-  redactAuth,
   refreshOAuthToken,
   requestOAuthClientCredentialsToken,
   requestOAuthDeviceAuthorization,

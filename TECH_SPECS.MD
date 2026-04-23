@@ -12,7 +12,7 @@ The migration deliberately does not bridge Electron to the Java services. Core b
 - Organize requests into collections and nested folders.
 - Edit HTTP method, URL, query parameters, headers, raw body type, and body content.
 - Create/edit/delete collection variables, request-local variables, and environments, then resolve `{{variableName}}` placeholders in supported workflows.
-- Persist app settings, currently including prerelease update-check opt-in.
+- Persist app settings, currently including theme preference and prerelease update-check opt-in.
 - Import/export native PostMeter workspaces.
 - Import/export native PostMeter collections.
 - Import common Postman collection JSON while preserving folder hierarchy, variables, auth inheritance, scripts, editable examples, cookies and richer cookie metadata including newer priority/partitioning hints where present, and supported collection certificate metadata.
@@ -21,10 +21,8 @@ The migration deliberately does not bridge Electron to the Java services. Core b
 - Run active collections locally through the desktop Runner tab, including stop-on-failure, extracted-variable/script-mutation propagation, runtime variable display, progress events, and JSON/CSV result export.
 - Run collections headlessly through `npm run cli -- run ...` for CI usage with non-zero exits on failed assertions.
 - Configure request auth helpers for Bearer token, Basic Auth, API key, Cookie, static OAuth 2.0 access-token injection, refresh-token renewal, client-credentials token retrieval, authorization-code PKCE, device-code flow, and HTTPS client certificates using PEM certificate/key pairs or PFX/P12 bundles with optional CA certificate paths.
-- Mark collection, environment, and request-local variables as secret and persist known auth secrets plus marked secret values through Electron `safeStorage`.
-- Persist workspace cookies in a local cookie jar, encrypt cookie values, allow per-request cookie jar opt-in/out, capture response cookies when enabled, and validate common browser-parity edge cases.
-- Encrypt secrets with a passphrase fallback when Electron `safeStorage` is unavailable, while keeping legacy plaintext fallback wrappers readable for migration.
-- Export workspaces and collections with secrets redacted by default, with explicit warning and typed confirmation required for exact values.
+- Persist workspace cookies in a local cookie jar, allow per-request cookie jar opt-in/out, capture response cookies when enabled, and validate common browser-parity edge cases.
+- Store workspace data as plain JSON without local encryption, redaction, or credential-specific export modes.
 - Send HTTP requests and display status, timing, size, final URL, headers, and formatted JSON bodies.
 - Record recent request history.
 - Check GitHub Releases for newer PostMeter versions and prompt before opening release pages. Stable releases are checked by default; prereleases are checked only when the user enables the opt-in setting.
@@ -44,7 +42,6 @@ OAuth support in PostMeter is only for outbound API request authentication, matc
 - Core services: CommonJS Node modules under `src/core/`
 - HTTP client: Node global `fetch` for normal requests; Node `http`/`https` transport for HTTPS client-certificate requests.
 - Persistence: JSON file via `node:fs/promises`
-- Secret storage: Electron `safeStorage` through a main-process codec, with AES-256-GCM/PBKDF2-SHA-256 passphrase fallback
 - OpenAPI YAML parsing: `yaml`
 - XML parsing and XPath evaluation: `@xmldom/xmldom` and `xpath`
 - HTML parsing and selector evaluation: `node-html-parser`
@@ -169,18 +166,6 @@ npm run release:validate
 electron/
   main.js
   preload.js
-  exportConfirmation.js
-  passphrasePrompt.css
-  passphrasePrompt.html
-  passphrasePrompt.js
-  passphrasePromptPreload.js
-  passphrasePromptRenderer.js
-  secretCodec.js
-  secretExportPrompt.css
-  secretExportPrompt.html
-  secretExportPrompt.js
-  secretExportPromptPreload.js
-  secretExportPromptRenderer.js
 
 src/core/
   assertions.js
@@ -220,7 +205,6 @@ scripts/
   release.yml
 docs/
   COMPATIBILITY.md
-  SECRETS.md
 ```
 
 `electron/main.js` owns the desktop lifecycle, window hardening, dialogs, workspace store instance, and IPC handlers.
@@ -243,10 +227,7 @@ Main process responsibilities:
 - Start and cancel OAuth 2.0 authorization-code PKCE using loopback or custom URI-scheme redirects.
 - Start and cancel OAuth 2.0 device-code polling.
 - Validate renderer-originated IPC payloads before handing them to persistence, request execution, or load testing.
-- Own Electron `safeStorage` encryption/decryption for local workspace secrets.
-- Prompt for a fallback passphrase when `safeStorage` is unavailable or passphrase-encrypted values must be decrypted.
-- Keep legacy plaintext fallback secret wrappers readable for migration from earlier builds.
-- Require export warning plus a main-owned typed-confirmation modal before exact secret values are written to workspace or collection exports.
+- Persist and export normalized workspace data as plain JSON.
 - Export load-test and collection-run results to JSON or CSV.
 - Persist request history after sends.
 - Check GitHub Releases for update metadata and open approved release URLs in the external browser. The Help menu owns update checks and the prerelease opt-in checkbox.
@@ -304,8 +285,6 @@ Security settings:
 Known security tradeoffs:
 
 - IPC validation is structural and bounded, with shared versioned enum contracts in `payloadSchemas.js`. Request/workspace array, nested-field validation, common key/value/assertion/cookie/example/history/certificate/auth checks, OAuth progress payloads, runner config/progress payloads, load progress/result histogram/sample/policy-decision checks, file-operation results, and collection-run script result checks are driven by shared schema metadata or schema-backed validators, but some payload-specific nested checks are still maintained manually.
-- Electron `safeStorage` can be unavailable on some Linux sessions; PostMeter has a passphrase fallback, but it does not yet have passphrase reset/recovery flows or guided host-keyring repair.
-- The passphrase fallback passphrase is cached in process memory for the current app session and is never written to disk by PostMeter.
 - Custom URI-scheme OAuth redirects depend on OS protocol registration. Loopback redirect is the more reliable default during development and on platforms where protocol registration is restricted.
 
 ## Workspace Data Model
@@ -327,6 +306,7 @@ Root workspace fields:
 
 Settings fields:
 
+- `appearance.theme`
 - `updates.includePrereleases`
 
 Collection fields:
@@ -417,7 +397,6 @@ Key/value pair fields:
 - `enabled`
 - `key`
 - `value`
-- `secret`
 
 Assertion fields:
 
@@ -459,13 +438,13 @@ Request example fields:
 
 Schema `3` adds collection/folder hierarchy support through `folders`.
 
-Schema `4` adds the `secret` flag to key/value pairs. Existing pairs migrate with `secret: false`.
+Schema `4` is retained for historical workspace compatibility.
 
 Schema `5` adds collection-level variables. Existing collections migrate with an empty `variables` array.
 
 Schema `6` adds request script containers with `preRequest` and `tests` strings.
 
-Schema `7` adds workspace settings, request-local variables, request examples, and collection certificate metadata.
+Schema `7` adds workspace settings, request-local variables, request examples, and collection certificate metadata. Workspace settings currently include `appearance.theme` (`system`, `light`, or `dark`) and `updates.includePrereleases`.
 
 Schema `8` adds workspace cookies and per-request cookie jar options.
 
@@ -498,8 +477,7 @@ Behavior:
 - Rejects future schema versions.
 - Quarantines unreadable workspace JSON by moving it to a timestamped `corrupt` sibling file, then creates a fresh default workspace and raises a recovery error for the UI.
 - Writes JSON through a temporary file and renames into place.
-- Encrypts known auth secret fields plus marked collection, environment, request-local variable values, workspace cookie values, and collection certificate passphrases before local workspace writes when a secret codec is configured.
-- Decrypts local workspace secrets before returning workspaces to the renderer or core import callers.
+- Writes normalized workspace values directly to local JSON.
 - Normalizes IDs, names, body types, methods, arrays, settings, request load-test compatibility policies, collection variables, collection certificates, request variables, request examples, request cookie jar settings, workspace cookies, folders, environments, and history.
 - Destructive workspace import creates a current-workspace backup before replacement.
 
@@ -508,18 +486,14 @@ Limitations:
 - No file locking.
 - No multi-window conflict resolution.
 - No atomic move fallback tuning beyond same-directory rename.
-- Electron `safeStorage` ciphertext is host-specific and not a portable export format.
-- If Electron reports `safeStorage` unavailable, the current main-process codec encrypts new secret writes using the fallback passphrase.
-- Legacy `plain-text-fallback` wrappers from earlier builds remain readable and are silently re-encrypted on the next successful save.
-- The fallback passphrase is required to decrypt `postmeter-passphrase-v1` values; forgotten passphrases cannot be recovered by PostMeter.
 
 ## Import And Export
 
-Native workspace export writes the normalized workspace with secrets redacted by default. Exact auth secrets, marked collection/environment/request-local secret values, cookie values, and certificate passphrases are exported only after an explicit warning and exact typed confirmation phrase.
+Native workspace export writes the normalized workspace directly.
 
 Native workspace import reads a PostMeter workspace, migrates it, normalizes it, backs up the current workspace, and replaces the active workspace from the UI.
 
-Native collection export writes one collection inside a valid PostMeter workspace wrapper. Environments are intentionally separate and are not included in collection export. Collection exports follow the same default redaction and exact-value confirmation rule for auth secrets, marked collection/request-local secrets, and certificate passphrases.
+Native collection export writes one collection inside a valid PostMeter workspace wrapper. Environments are intentionally separate and are not included in collection export.
 
 Native collection import imports the first collection from a PostMeter workspace file, regenerates IDs, and appends it to the active workspace.
 
@@ -613,7 +587,7 @@ Behavior:
 - Leaves unknown variables unchanged.
 - Applies to URLs, query parameter keys/values, header names/values, and body content before request execution.
 
-Password/token inputs are masked in the UI. Marked collection, environment, and request-local variables plus local cookie values are rendered or exported with redaction where applicable and are encrypted in the local workspace through Electron `safeStorage` or the passphrase fallback when host-backed secret storage is unavailable.
+Password, token, cookie, OAuth, and certificate passphrase inputs are normal visible text fields. Workspace values are rendered, saved, and exported directly.
 
 ## Auth Specifications
 
@@ -650,8 +624,6 @@ Auth limitations:
 - OAuth progress is represented in a persistent in-app panel and validated by schema-backed main-to-renderer IPC checks. Renderer regression smoke validates key progress states, and mocked Electron OAuth smoke covers loopback PKCE success, PKCE state-mismatch failure, and device-code success.
 - Custom URI-scheme PKCE is implemented. Release validation now checks Linux deb/AppImage metadata and macOS zip app-bundle metadata where present, but installed-app Windows/macOS behavior still needs native-runner validation.
 - Client-certificate requests use the Node `https` transport path instead of global `fetch`; that path intentionally follows redirects only when they stay on the original HTTPS origin to avoid leaking client certificate material to redirected hosts.
-- Auth secrets rely on Electron `safeStorage` or the fallback passphrase; passphrase reset/recovery is not available.
-
 ## Cookie Jar
 
 Cookie jar handling is implemented in `cookieJar.js` and integrated into `httpClient.js`, the Electron request send path, collection runs, load tests, and the renderer Cookies tab.
@@ -659,7 +631,7 @@ Cookie jar handling is implemented in `cookieJar.js` and integrated into `httpCl
 Implemented behavior:
 
 - Workspace cookies are stored under `workspace.cookies`.
-- Cookie values are encrypted locally and redacted from default exports.
+- Cookie values are stored directly in the workspace JSON.
 - Each request has `cookieJar.enabled` and `cookieJar.storeResponses` settings.
 - When enabled, matching unexpired cookies are sent by domain, path, and secure flag.
 - Cookie domains are normalized, invalid cross-domain `Set-Cookie` values are rejected, and `SameSite=None` without `Secure` is not retained as `None`.
@@ -778,7 +750,7 @@ Runner behavior:
 - Emits progress events to the renderer.
 - Supports cancellation and stop-on-failure.
 - Reports per-request status, timing, pass/fail state, assertion results, script results, extracted variable names, and request errors.
-- Reports final runtime collection/environment variables plus per-request local variables in the desktop runner output and CSV export, with marked secrets redacted in CSV/UI text.
+- Reports final runtime collection/environment variables plus per-request local variables in the desktop runner output and CSV export.
 - Returns the final cookie jar to the Electron main process so it can be saved with the workspace.
 - Exports runner results as JSON or CSV through desktop IPC.
 
@@ -788,11 +760,13 @@ Limitations:
 
 ## Script Runtime
 
-Postman-style script execution is implemented in `scriptRuntime.js`, isolated through `scriptSandbox.js`/`scriptWorker.js`, and wired into collection runner pre-request and test phases.
+Postman-style script execution is implemented in `scriptRuntime.js`, isolated through `scriptSandbox.js`/`scriptWorker.js`, and wired into single-request sends plus collection runner pre-request and test phases.
 
 Implemented runtime behavior:
 
 - Runs scripts in a forked child process so user scripts do not execute in the Electron main process.
+- Runs pre-request scripts before a single request is sent and test scripts after the response is received.
+- Persists `pm.environment`, `pm.collectionVariables`, and request-local `pm.variables` mutations back to the active workspace scopes for single sends and collection runs.
 - Starts script workers with a minimal environment instead of inheriting the full PostMeter/Electron process environment.
 - Starts script workers with Node permission flags when the pinned runtime supports them, allowing filesystem read access only to `src/core` script worker modules.
 - Starts script workers with a bounded V8 old-space limit. The default is `64` MB, tunable with `POSTMETER_SCRIPT_WORKER_MAX_OLD_SPACE_MB` or internal test options between `16` and `512` MB.
@@ -833,9 +807,7 @@ Behavior:
 
 Limitations:
 
-- The CLI cannot decrypt Electron `safeStorage` ciphertext because it does not run inside Electron.
-- Passphrase-encrypted desktop workspace secrets are not prompted for in CLI mode.
-- CI usage should provide plain CI variables, unencrypted local test workspaces, or exact-value exports created intentionally for automation.
+- CI usage can provide variables with `--var` and `--collection-var`, or run against local test workspaces directly.
 
 ## Load Testing
 
@@ -902,7 +874,7 @@ Renderer-originated IPC inputs are validated in `ipcValidation.js` before reachi
 Covered payloads:
 
 - Workspace save/export payloads.
-- Workspace settings payloads, including prerelease update-check opt-in.
+- Workspace settings payloads, including theme preference and prerelease update-check opt-in.
 - Workspace cookie payloads.
 - Collection export payloads.
 - Collection certificate payloads.
@@ -990,8 +962,7 @@ Packaging limitations:
 Node tests cover:
 
 - Environment variable resolution.
-- Auth normalization, redaction, validation, OAuth refresh-token renewal, OAuth client-credentials retrieval, OAuth authorization-code PKCE, OAuth device-code authorization/polling, client-certificate field validation, and request-time injection.
-- Electron secret codec safeStorage behavior, safeStorage recovery guidance, passphrase fallback behavior, legacy fallback re-encryption, and exact-export confirmation phrase matching.
+- Auth normalization, validation, OAuth refresh-token renewal, OAuth client-credentials retrieval, OAuth authorization-code PKCE, OAuth device-code authorization/polling, client-certificate field validation, and request-time injection.
 - HTTP validation, request execution against a local server, client-certificate path material loading for PEM/PFX/P12/CA inputs, and end-to-end local mTLS handshakes with PEM and PFX/P12 client certificates.
 - IPC request, response, auth, cookie, request example, workspace, file-operation result, update-check option, external URL open, load-result, and collection-run result payload validation.
 - Load-test validation, high-concurrency confirmation, request-count mode, duration mode, ramp-up, target arrival-rate scheduling, Load Test panel configuration, global rate caps, bounded multi-process execution, child-worker environment filtering, streamed worker summary aggregation, metrics, histograms, sample capture caps, cancellation, cookie jar send support, and CSV export.
@@ -1000,8 +971,8 @@ Node tests cover:
 - Assertion evaluation, collection-run sequencing, request-local variables, cookie jar propagation, JSON/XML/HTML/regex extracted-variable propagation, script-mutation propagation, stop-on-failure, isolated request script execution, Node permission worker flags, minimal worker environments, bounded worker heap settings, bounded script console capture, explicit unsupported script API errors, and collection-run CSV export.
 - CLI collection execution with passing/failing exit codes and JSON/CSV report output.
 - Release manifest generation, release artifact validation, release workflow metadata, CI workflow validation, and GitHub release update checks.
-- Workspace default creation, schema `2` through `10` migration, corrupt-file recovery, secret encryption/redaction, settings normalization, workspace-level load-test policy removal, cookie encryption/redaction, native import, Postman folder/script import, and native/Postman/OpenAPI YAML format detection.
-- Electron UI workflow smoke coverage for create/edit/save/reload/send, context menus, pane resizing, collection variables, request variables, editable examples, cookie jar capture, secret environment variables, Help-menu prerelease setting persistence, Load Test panel controls, assertions, collection runner, runtime variable output, and runner export-control state.
+- Workspace default creation, schema `2` through `10` migration, corrupt-file recovery, settings normalization, workspace-level load-test policy removal, native import, Postman folder/script import, and native/Postman/OpenAPI YAML format detection.
+- Electron UI workflow smoke coverage for create/edit/save/reload/send, context menus, pane resizing, collection variables, request variables, editable examples, cookie jar capture, environment variables, Help-menu prerelease setting persistence, Load Test panel controls, assertions, collection runner, runtime variable output, and runner export-control state.
 - Electron UI regression smoke coverage for toolbar dropdowns, Help-menu update state, import/export menu options/cancellation, invalid-request error rendering, XML/HTML response formatting, mocked OAuth flow completion/failure, cookie/example/request-variable editor creation, active-host cookie filtering, assertion-template rendering, runner pre-run export state, and no app-account/login language.
 - Electron UI OAuth smoke coverage for mocked loopback PKCE success, custom-scheme callback success, state-mismatch failure, token exchange failure, PKCE cancellation, device-code success, access denial, timeout, and cancellation.
 - Electron UI screenshot smoke coverage for request builder, context menu, cookies, auth/OAuth, response viewer, runner, load testing, and export menu states.

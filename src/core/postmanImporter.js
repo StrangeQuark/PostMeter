@@ -100,8 +100,7 @@ function importVariables(variables) {
     .map((variable) => keyValue(
       variable.key,
       variable.value ?? variable.initial ?? '',
-      variable.disabled !== true,
-      variable.type === 'secret'
+      variable.disabled !== true
     ));
 }
 

@@ -25,12 +25,6 @@ const {
   looksLikeHarDocument,
   looksLikeOpenApiDocument
 } = require('./collectionFormats');
-const {
-  decryptWorkspaceSecrets,
-  encryptWorkspaceSecrets,
-  redactWorkspaceSecrets
-} = require('./secrets');
-
 function defaultWorkspacePath() {
   if (process.env.POSTMETER_DATA_PATH && process.env.POSTMETER_DATA_PATH.trim()) {
     return process.env.POSTMETER_DATA_PATH;
@@ -49,9 +43,8 @@ class WorkspaceRecoveryError extends Error {
 }
 
 class WorkspaceStore {
-  constructor(workspacePath = defaultWorkspacePath(), options = {}) {
+  constructor(workspacePath = defaultWorkspacePath()) {
     this.workspacePath = workspacePath;
-    this.secretCodec = options.secretCodec || null;
   }
 
   getWorkspacePath() {
@@ -81,7 +74,7 @@ class WorkspaceStore {
     }
 
     const migrated = migrate(parsed);
-    const workspace = normalizeWorkspace(decryptWorkspaceSecrets(parsed, this.secretCodec));
+    const workspace = normalizeWorkspace(parsed);
     if (migrated) {
       await this.createBackup('pre-migration.backup');
       await this.save(workspace);
@@ -91,10 +84,9 @@ class WorkspaceStore {
 
   async save(workspace) {
     const normalized = normalizeWorkspace(workspace);
-    const persisted = encryptWorkspaceSecrets(normalized, this.secretCodec);
     await fs.mkdir(path.dirname(this.workspacePath), { recursive: true });
     const tempPath = path.join(path.dirname(this.workspacePath), `postmeter-workspace-${process.pid}-${Date.now()}.json.tmp`);
-    await fs.writeFile(tempPath, JSON.stringify(persisted, null, 2));
+    await fs.writeFile(tempPath, JSON.stringify(normalized, null, 2));
     await fs.rename(tempPath, this.workspacePath);
     return normalized;
   }
@@ -109,14 +101,13 @@ class WorkspaceStore {
   async importWorkspace(importPath) {
     const parsed = JSON.parse(await fs.readFile(importPath, 'utf8'));
     migrate(parsed);
-    return normalizeWorkspace(decryptWorkspaceSecrets(parsed, this.secretCodec));
+    return normalizeWorkspace(parsed);
   }
 
-  async exportWorkspace(workspace, exportPath, options = {}) {
+  async exportWorkspace(workspace, exportPath) {
     const normalized = normalizeWorkspace(workspace);
-    const exportable = options.includeSecrets === true ? normalized : redactWorkspaceSecrets(normalized);
     await fs.mkdir(path.dirname(exportPath), { recursive: true });
-    await fs.writeFile(exportPath, JSON.stringify(exportable, null, 2));
+    await fs.writeFile(exportPath, JSON.stringify(normalized, null, 2));
     return exportPath;
   }
 
@@ -125,7 +116,7 @@ class WorkspaceStore {
     const parsed = parseStructuredCollectionContent(content);
     if (looksLikeNativeWorkspace(parsed)) {
       migrate(parsed);
-      const workspace = normalizeWorkspace(decryptWorkspaceSecrets(parsed, this.secretCodec));
+      const workspace = normalizeWorkspace(parsed);
       if (!workspace.collections.length) {
         throw new Error('Imported file does not contain any collections.');
       }
@@ -171,9 +162,8 @@ class WorkspaceStore {
 
   async exportCollection(collection, exportPath, options = {}) {
     const workspace = normalizeWorkspace({ collections: [collection], environments: [], history: [] });
-    const exportable = options.includeSecrets === true ? workspace : redactWorkspaceSecrets(workspace);
     await fs.mkdir(path.dirname(exportPath), { recursive: true });
-    const normalizedCollection = exportable.collections[0];
+    const normalizedCollection = workspace.collections[0];
     const format = options.format || 'postmeter';
     if (format === 'openapi') {
       await fs.writeFile(exportPath, JSON.stringify(exportOpenApiCollection(normalizedCollection), null, 2));
@@ -184,7 +174,7 @@ class WorkspaceStore {
     } else if (format === 'jmeter') {
       await fs.writeFile(exportPath, exportJMeterPlan(normalizedCollection));
     } else {
-      await fs.writeFile(exportPath, JSON.stringify(exportable, null, 2));
+      await fs.writeFile(exportPath, JSON.stringify(workspace, null, 2));
     }
     return exportPath;
   }
@@ -247,7 +237,6 @@ function migrate(workspace) {
     migrated = true;
   }
   if (schemaVersion < 4) {
-    markPairSecrets(workspace, false);
     workspace.schemaVersion = 4;
     migrated = true;
   }
@@ -402,47 +391,6 @@ function normalizeWorkspace(workspace) {
     history: Array.isArray(workspace?.history) ? workspace.history : []
   });
   return normalized;
-}
-
-function markPairSecrets(workspace, secret) {
-  for (const collection of workspace.collections || []) {
-    markCollectionPairSecrets(collection, secret);
-  }
-  for (const environment of workspace.environments || []) {
-    for (const variable of environment.variables || []) {
-      if (variable && typeof variable === 'object' && !Object.hasOwn(variable, 'secret')) {
-        variable.secret = secret;
-      }
-    }
-  }
-}
-
-function markCollectionPairSecrets(collection, secret) {
-  for (const request of collection.requests || []) {
-    markPairs(request.queryParams, secret);
-    markPairs(request.headers, secret);
-  }
-  for (const folder of collection.folders || []) {
-    markFolderPairSecrets(folder, secret);
-  }
-}
-
-function markFolderPairSecrets(folder, secret) {
-  for (const request of folder.requests || []) {
-    markPairs(request.queryParams, secret);
-    markPairs(request.headers, secret);
-  }
-  for (const child of folder.folders || []) {
-    markFolderPairSecrets(child, secret);
-  }
-}
-
-function markPairs(pairs, secret) {
-  for (const pair of pairs || []) {
-    if (pair && typeof pair === 'object' && !Object.hasOwn(pair, 'secret')) {
-      pair.secret = secret;
-    }
-  }
 }
 
 function looksLikeNativeWorkspace(value) {

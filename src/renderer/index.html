@@ -42,6 +42,11 @@
         <button id="exportHarButton" role="menuitem">HAR</button>
       </div>
     </div>
+    <div class="toolbar-group theme-control" role="group" aria-label="Theme">
+      <button id="themeSystemButton" type="button" data-theme-option="system" aria-pressed="true">System</button>
+      <button id="themeLightButton" type="button" data-theme-option="light" aria-pressed="false">Light</button>
+      <button id="themeDarkButton" type="button" data-theme-option="dark" aria-pressed="false">Dark</button>
+    </div>
     <label class="field inline environment-control">
       <span>Environment</span>
       <select id="environmentSelect"></select>
@@ -104,13 +109,13 @@
         <input id="requestNameInput" class="title-input" placeholder="Request name">
         <div class="request-line">
           <select id="methodSelect">
-            <option>GET</option>
-            <option>POST</option>
-            <option>PUT</option>
-            <option>PATCH</option>
-            <option>DELETE</option>
-            <option>HEAD</option>
-            <option>OPTIONS</option>
+            <option class="method-get">GET</option>
+            <option class="method-post">POST</option>
+            <option class="method-put">PUT</option>
+            <option class="method-patch">PATCH</option>
+            <option class="method-delete">DELETE</option>
+            <option class="method-head">HEAD</option>
+            <option class="method-options">OPTIONS</option>
           </select>
           <input id="urlInput" placeholder="https://api.example.com/resource">
           <button id="sendButton" class="primary">Send</button>
@@ -161,7 +166,7 @@
             <div class="auth-section" data-auth-section="bearer">
               <label class="field">
                 <span>Token</span>
-                <input id="authBearerTokenInput" type="password" autocomplete="off">
+                <input id="authBearerTokenInput" type="text" autocomplete="off">
               </label>
             </div>
 
@@ -172,7 +177,7 @@
               </label>
               <label class="field">
                 <span>Password</span>
-                <input id="authBasicPasswordInput" type="password" autocomplete="off">
+                <input id="authBasicPasswordInput" type="text" autocomplete="off">
               </label>
             </div>
 
@@ -190,14 +195,14 @@
               </label>
               <label class="field">
                 <span>Value</span>
-                <input id="authApiKeyValueInput" type="password" autocomplete="off">
+                <input id="authApiKeyValueInput" type="text" autocomplete="off">
               </label>
             </div>
 
             <div class="auth-section" data-auth-section="cookie">
               <label class="field">
                 <span>Cookie</span>
-                <input id="authCookieValueInput" type="password" autocomplete="off">
+                <input id="authCookieValueInput" type="text" autocomplete="off">
               </label>
             </div>
 
@@ -219,11 +224,11 @@
               </label>
               <label class="field">
                 <span>Access Token</span>
-                <input id="authOauthAccessTokenInput" type="password" autocomplete="off">
+                <input id="authOauthAccessTokenInput" type="text" autocomplete="off">
               </label>
               <label class="field">
                 <span>Refresh Token</span>
-                <input id="authOauthRefreshTokenInput" type="password" autocomplete="off">
+                <input id="authOauthRefreshTokenInput" type="text" autocomplete="off">
               </label>
               <label class="field">
                 <span>Authorization URL</span>
@@ -250,7 +255,7 @@
               </label>
               <label class="field">
                 <span>Client Secret</span>
-                <input id="authOauthClientSecretInput" type="password" autocomplete="off">
+                <input id="authOauthClientSecretInput" type="text" autocomplete="off">
               </label>
               <label class="field">
                 <span>Scopes</span>
@@ -295,7 +300,7 @@
               </label>
               <label class="field">
                 <span>Passphrase</span>
-                <input id="authClientPassphraseInput" type="password" autocomplete="off">
+                <input id="authClientPassphraseInput" type="text" autocomplete="off">
               </label>
             </div>
           </div>

@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { evaluateAssertions, readHtmlSelector, readJsonPath, readXmlPath } = require('../../src/core/assertions');
-const { collectionRunResultToCsv, runCollection } = require('../../src/core/collectionRunner');
+const { collectionRunResultToCsv, runCollection, runRequestWithScripts } = require('../../src/core/collectionRunner');
 const { collectionModel, requestModel } = require('../../src/core/models');
 const { importPostmanCollection } = require('../../src/core/postmanImporter');
 
@@ -256,19 +256,19 @@ test('exports collection runner results to CSV', () => {
         expected: 200,
         message: 'Status code 200 assertion passed.'
       }],
-      extractedVariables: [{ key: 'token', value: 'redacted in report body' }]
+      extractedVariables: [{ key: 'token', value: 'captured in report body' }]
     }],
-    collectionVariables: [{ enabled: true, key: 'baseUrl', value: 'https://api.example.test', secret: false }],
-    environment: { variables: [{ enabled: true, key: 'token', value: 'secret', secret: true }] }
+    collectionVariables: [{ enabled: true, key: 'baseUrl', value: 'https://api.example.test' }],
+    environment: { variables: [{ enabled: true, key: 'token', value: 'secret' }] }
   });
 
   assert.match(csv, /collectionName,Exports/);
   assert.match(csv, /requestId,requestName,folderName/);
   assert.match(csv, /statusCode/);
   assert.match(csv, /variableName,requestId/);
-  assert.match(csv, /runtimeScope,requestId,key,value,secret/);
-  assert.match(csv, /collection,,baseUrl,https:\/\/api.example.test,false/);
-  assert.match(csv, /environment,,token,\[secret\],true/);
+  assert.match(csv, /runtimeScope,requestId,key,value/);
+  assert.match(csv, /collection,,baseUrl,https:\/\/api.example.test/);
+  assert.match(csv, /environment,,token,secret/);
 });
 
 test('runs pre-request and test scripts during collection runs', async () => {
@@ -313,6 +313,49 @@ test('runs pre-request and test scripts during collection runs', async () => {
   assert.equal(result.results[0].testScriptResult.tests[0].passed, true);
   assert.equal(result.results[0].localVariables.find((item) => item.key === 'requestToken').value, 'local-token');
   assert.equal(result.collectionVariables.find((item) => item.key === 'fromTests').value, 'done');
+});
+
+test('runs pre-request and test scripts around single requests', async () => {
+  const request = requestModel({
+    id: 'single',
+    name: 'Single Scripted',
+    method: 'GET',
+    url: '{{dynamicBaseUrl}}/session',
+    variables: [{ enabled: true, key: 'requestToken', value: 'local-token' }],
+    scripts: {
+      preRequest: "pm.environment.set('beforeSend', 'ready'); pm.environment.set('dynamicBaseUrl', 'https://single.example.test');",
+      tests: `
+        pm.environment.set("REFRESH_TOKEN", pm.response.json().jwtToken);
+        pm.collectionVariables.set('afterSend', 'done');
+        pm.variables.set('requestToken', 'updated-local-token');
+        pm.test('captured token', function () {
+          pm.expect(pm.environment.get('REFRESH_TOKEN')).to.equal('refresh-123');
+        });
+      `
+    }
+  });
+  const sends = [];
+
+  const result = await runRequestWithScripts(request, { id: 'env', name: 'Env', variables: [] }, {
+    collectionVariables: [],
+    sendRequest: async (_request, environment) => {
+      sends.push({
+        dynamicBaseUrl: environment.variables.find((item) => item.key === 'dynamicBaseUrl')?.value,
+        beforeSend: environment.variables.find((item) => item.key === 'beforeSend')?.value
+      });
+      return response(200, '{"jwtToken":"refresh-123"}');
+    }
+  });
+
+  assert.equal(result.preRequestScriptResult.passed, true);
+  assert.equal(result.testScriptResult.passed, true);
+  assert.equal(sends[0].dynamicBaseUrl, 'https://single.example.test');
+  assert.equal(sends[0].beforeSend, 'ready');
+  assert.equal(result.environment.variables.find((item) => item.key === 'REFRESH_TOKEN').value, 'refresh-123');
+  assert.equal(result.collectionVariables.find((item) => item.key === 'afterSend').value, 'done');
+  assert.equal(result.localVariables.find((item) => item.key === 'requestToken').value, 'updated-local-token');
+  assert.equal(result.response.environment.variables.find((item) => item.key === 'REFRESH_TOKEN').value, 'refresh-123');
+  assert.equal(result.response.testScriptResult.tests[0].passed, true);
 });
 
 test('fails collection runs when scripts fail', async () => {

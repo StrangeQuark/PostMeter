@@ -8,13 +8,11 @@ Supported:
 
 - Workspace import/export.
 - Collection import/export.
-- Collections, folders, requests, assertions, scripts, auth metadata, environments, history, cookies, request examples, and variables.
-- Secret redaction by default on export.
+- Collections, folders, requests, assertions, scripts, auth metadata, environments, history, cookies, request examples, variables, and light/dark/system theme preference.
 
 Known gaps:
 
 - Native files are JSON only.
-- Portable exact-secret exports are intentionally gated by explicit warning and typed confirmation.
 
 ## Postman Collections
 
@@ -124,7 +122,7 @@ Known gaps:
 
 Supported:
 
-- Synchronous pre-request and test scripts in collection runs.
+- Synchronous pre-request and test scripts in single request sends and collection runs.
 - `pm.test`, a practical `pm.expect` subset, `pm.environment`, `pm.collectionVariables`, `pm.variables`, request URL/header/body inspection, response JSON/text/header/body helpers, status-category response helpers, and JSON-body response helpers.
 - Runtime timeouts, script length limits, bounded console capture, and blocked dynamic code generation.
 - Node permission flags are enabled for script workers when supported by the pinned Node runtime, with filesystem read access restricted to the core script worker modules.

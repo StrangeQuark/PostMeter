@@ -3,7 +3,8 @@ const {
   AUTH_TYPE_VALUES,
   BODY_METHODS: BODY_METHOD_VALUES,
   BODY_TYPE_VALUES,
-  HTTP_METHODS
+  HTTP_METHODS,
+  THEME_VALUES
 } = require('./payloadSchemas');
 
 const CURRENT_SCHEMA_VERSION = 10;
@@ -17,8 +18,8 @@ function newId() {
   return crypto.randomUUID();
 }
 
-function keyValue(key = '', value = '', enabled = true, secret = false) {
-  return { enabled, key: key ?? '', value: value ?? '', secret: secret === true };
+function keyValue(key = '', value = '', enabled = true) {
+  return { enabled, key: key ?? '', value: value ?? '' };
 }
 
 function requestModel({ id, name, method, url, queryParams, headers, bodyType, body, auth, assertions, scripts, variables, examples, cookieJar, loadTestPolicy } = {}) {
@@ -94,10 +95,18 @@ function workspaceModel({ schemaVersion, collections, environments, history, set
 
 function normalizeSettings(settings) {
   return {
+    appearance: {
+      theme: normalizeTheme(settings?.appearance?.theme)
+    },
     updates: {
       includePrereleases: settings?.updates?.includePrereleases === true
     }
   };
+}
+
+function normalizeTheme(value) {
+  const theme = String(value || '').trim();
+  return THEME_VALUES.includes(theme) ? theme : 'system';
 }
 
 function normalizeLoadTestPolicy(policy) {
@@ -141,7 +150,7 @@ function normalizePairs(pairs) {
   if (!Array.isArray(pairs)) {
     return [];
   }
-  return pairs.map((pair) => keyValue(pair.key, pair.value, pair.enabled !== false, pair.secret === true));
+  return pairs.map((pair) => keyValue(pair.key, pair.value, pair.enabled !== false));
 }
 
 function normalizeAuth(auth) {

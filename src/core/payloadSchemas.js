@@ -22,6 +22,7 @@ const OAUTH_PROGRESS_STATUSES = [
 ];
 const LOAD_EXPORT_FORMATS = ['json', 'csv'];
 const COLLECTION_EXPORT_FORMATS = ['postmeter', 'openapi', 'jmeter', 'curl', 'har'];
+const THEME_VALUES = ['system', 'light', 'dark'];
 const ASSERTION_TYPES = [
   'statusCode',
   'header',
@@ -42,7 +43,6 @@ const LOAD_EXECUTION_MODES = ['singleProcess', 'multiProcess'];
 const FIELD_SCHEMAS = {
   keyValue: {
     enabled: { type: 'boolean', optional: true },
-    secret: { type: 'boolean', optional: true },
     key: { type: 'string', limit: 'key', optional: true },
     value: { type: 'string', limit: 'value', optional: true }
   },
@@ -371,6 +371,7 @@ module.exports = {
   OAUTH_PROGRESS_STATUSES,
   OAUTH_PROGRESS_TYPES,
   PAYLOAD_SCHEMA_VERSION,
+  THEME_VALUES,
   oneOf,
   payloadSchemas
 };

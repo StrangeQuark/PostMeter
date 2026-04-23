@@ -13,6 +13,7 @@ const {
   OAUTH2_TOKEN_TYPES,
   OAUTH_PROGRESS_STATUSES,
   OAUTH_PROGRESS_TYPES,
+  THEME_VALUES,
   oneOf,
   payloadSchemas
 } = require('./payloadSchemas');
@@ -32,6 +33,7 @@ const FIELD_ENUMS = {
   oauth2TokenTypes: OAUTH2_TOKEN_TYPES,
   oauthProgressStatuses: OAUTH_PROGRESS_STATUSES,
   oauthProgressTypes: OAUTH_PROGRESS_TYPES,
+  themeValues: THEME_VALUES,
   sameSiteValues: ['', 'Lax', 'Strict', 'None']
 };
 
@@ -124,6 +126,13 @@ function assertSettingsPayload(value, field) {
   if (value.updates != null) {
     object(value.updates, `${field}.updates`);
     optionalBoolean(value.updates.includePrereleases, `${field}.updates.includePrereleases`);
+  }
+  if (value.appearance != null) {
+    object(value.appearance, `${field}.appearance`);
+    optionalString(value.appearance.theme, `${field}.appearance.theme`, LIMITS.tiny);
+    if (value.appearance.theme != null && !THEME_VALUES.includes(value.appearance.theme)) {
+      fail(`${field}.appearance.theme must be one of: ${THEME_VALUES.join(', ')}.`);
+    }
   }
   if (value.loadTestPolicy != null) {
     fail(`${field}.loadTestPolicy is no longer supported; configure load tests from the Load Test panel.`);
@@ -273,6 +282,21 @@ function assertResponsePayload(value, field = 'response') {
   }
   if (value.updatedCookies != null) {
     assertCookies(value.updatedCookies, `${field}.updatedCookies`);
+  }
+  if (value.preRequestScriptResult != null) {
+    assertScriptResult(value.preRequestScriptResult, `${field}.preRequestScriptResult`);
+  }
+  if (value.testScriptResult != null) {
+    assertScriptResult(value.testScriptResult, `${field}.testScriptResult`);
+  }
+  if (value.environment != null) {
+    assertEnvironmentPayload(value.environment, `${field}.environment`);
+  }
+  if (value.collectionVariables != null) {
+    assertPairs(value.collectionVariables, `${field}.collectionVariables`);
+  }
+  if (value.localVariables != null) {
+    assertPairs(value.localVariables, `${field}.localVariables`);
   }
 }
 
