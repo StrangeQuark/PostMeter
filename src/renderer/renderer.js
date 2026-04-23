@@ -1,245 +1,312 @@
 const BODY_TYPES = ['NONE', 'RAW_JSON', 'RAW_TEXT'];
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
+const THEME_OPTIONS = ['system', 'light', 'dark'];
+const RENDERER_STATE_DEFAULTS = PostMeterRendererState.createRendererState();
 const TAB_PANEL_IDS = {
   request: ['paramsTab', 'headersTab', 'authTab', 'cookiesTab', 'bodyTab', 'testsTab', 'scriptsTab', 'examplesTab', 'collectionVariablesTab'],
   results: ['responseTab', 'loadTab', 'runnerTab']
 };
-const ASSERTION_TEMPLATES = {
-  status200: { type: 'statusCode', operator: 'equals', expected: '200', name: '', path: '', variableName: '' },
-  jsonPathExists: { type: 'jsonPath', operator: 'exists', expected: '', name: '', path: '$', variableName: '' },
-  xmlPathExists: { type: 'xmlPath', operator: 'exists', expected: '', name: '', path: '/*', variableName: '' },
-  htmlSelectorExists: { type: 'htmlSelector', operator: 'exists', expected: '', name: '', path: 'body', variableName: '' },
-  headerContains: { type: 'header', operator: 'contains', expected: 'application/json', name: 'Content-Type', path: '', variableName: '' },
-  responseUnderOneSecond: { type: 'responseTime', operator: 'lessThan', expected: '1000', name: '', path: '', variableName: '' },
-  responseUnder10Kb: { type: 'responseSize', operator: 'lessThan', expected: '10240', name: '', path: '', variableName: '' },
-  bodyContains: { type: 'bodyContains', operator: 'contains', expected: '', name: '', path: '', variableName: '' },
-  extractVariable: { type: 'extractVariable', operator: 'exists', expected: '', name: 'token', path: '$.token', variableName: 'token' },
-  extractXml: { type: 'extractXml', operator: 'exists', expected: '', name: 'token', path: 'string(//token)', variableName: 'token' },
-  extractHtml: { type: 'extractHtml', operator: 'exists', expected: '', name: 'title', path: 'title', variableName: 'title' },
-  extractRegex: { type: 'extractRegex', operator: 'exists', expected: '"token"\\s*:\\s*"([^"]+)"', name: 'token', path: '', variableName: 'token' }
-};
 
-let workspace;
-let workspacePath;
-let activeCollectionId;
-let activeFolderId = null;
-let activeRequestId;
-let activeEnvironmentId = 'none';
-let activeWorkspaceId = 'current';
-let activeSidebarPanel = 'collections';
-let activeMainPanel = 'request';
-let draftRequests = new Map();
-let openRequestTabs = [];
-let openEnvironmentTabs = [];
-let openWorkspaceTabs = [];
-let activeLoadId = null;
-let activeOauthFlowId = null;
-let activeRunnerId = null;
-let lastLoadResult = null;
-let lastRunnerResult = null;
-let lastResponse = null;
-let lastStatusMessage = 'Ready';
-let lastUserNotification = null;
-let unsubscribeLoadProgress = null;
-let unsubscribeOauthProgress = null;
-let unsubscribeRunnerProgress = null;
-let unsubscribeMenuActions = null;
-let activeModalId = null;
-let activeModalResolver = null;
-let selectedDraftSaveCollectionId = '';
-const MAX_OPEN_REQUEST_TABS = 12;
+let workspace = RENDERER_STATE_DEFAULTS.workspace;
+let workspacePath = RENDERER_STATE_DEFAULTS.workspacePath;
+let activeCollectionId = RENDERER_STATE_DEFAULTS.activeCollectionId;
+let activeFolderId = RENDERER_STATE_DEFAULTS.activeFolderId;
+let activeRequestId = RENDERER_STATE_DEFAULTS.activeRequestId;
+let activeEnvironmentId = RENDERER_STATE_DEFAULTS.activeEnvironmentId;
+let activeWorkspaceId = RENDERER_STATE_DEFAULTS.activeWorkspaceId;
+let activeSidebarPanel = RENDERER_STATE_DEFAULTS.activeSidebarPanel;
+let activeMainPanel = RENDERER_STATE_DEFAULTS.activeMainPanel;
+let draftRequests = RENDERER_STATE_DEFAULTS.draftRequests;
+let openRequestTabs = RENDERER_STATE_DEFAULTS.openRequestTabs;
+let openEnvironmentTabs = RENDERER_STATE_DEFAULTS.openEnvironmentTabs;
+let openWorkspaceTabs = RENDERER_STATE_DEFAULTS.openWorkspaceTabs;
+let activeLoadId = RENDERER_STATE_DEFAULTS.activeLoadId;
+let activeOauthFlowId = RENDERER_STATE_DEFAULTS.activeOauthFlowId;
+let activeRunnerId = RENDERER_STATE_DEFAULTS.activeRunnerId;
+let lastLoadResult = RENDERER_STATE_DEFAULTS.lastLoadResult;
+let lastRunnerResult = RENDERER_STATE_DEFAULTS.lastRunnerResult;
+let lastResponse = RENDERER_STATE_DEFAULTS.lastResponse;
+let lastStatusMessage = RENDERER_STATE_DEFAULTS.lastStatusMessage;
+let lastUserNotification = RENDERER_STATE_DEFAULTS.lastUserNotification;
+let activeModalId = RENDERER_STATE_DEFAULTS.activeModalId;
+let activeModalResolver = RENDERER_STATE_DEFAULTS.activeModalResolver;
+let selectedDraftSaveCollectionId = RENDERER_STATE_DEFAULTS.selectedDraftSaveCollectionId;
 
 const $ = (id) => document.getElementById(id);
+const ASSERTION_TEMPLATES = PostMeterAssertionModel.assertionTemplates;
+const {
+  newAssertion
+} = PostMeterAssertionModel;
+const {
+  exampleFromResponse,
+  newExampleObject
+} = PostMeterExampleModel;
+const {
+  collectAuthFromEditor: collectRequestAuthFromEditor,
+  renderAuthEditor: renderRequestAuthEditor,
+  renderAssertions: renderRequestAssertions,
+  renderCookieJarEditor: renderRequestCookieJarEditor,
+  renderExamples: renderRequestExamples,
+  renderRequestPairs: renderEditorRequestPairs,
+  renderVariablePairs: renderEditorVariablePairs,
+  renderVariablePreview: renderEditorVariablePreview
+} = PostMeterRequestEditorPanels;
+const {
+  applyPostmanCookieMetadata,
+  domainFromRequestUrl,
+  isExpiredCookie,
+  newWorkspaceCookie,
+  parseCookieHeaderForJar,
+  postmanCookieMetadataByName
+} = PostMeterCookieModel;
+const {
+  bindUi: bindRendererUi,
+  closeToolbarMenus: closeRendererToolbarMenus,
+  initializeRenderer
+} = PostMeterRendererBootstrap;
+const { createVariableAutocomplete } = PostMeterVariableAutocomplete;
+const {
+  activeEnvironmentTabKey: buildActiveEnvironmentTabKey,
+  activeRequestTabKey: buildActiveRequestTabKey,
+  activeWorkspaceTabKey: buildActiveWorkspaceTabKey,
+  clearSavedRequestDirtyState: clearRendererSavedRequestDirtyState,
+  isActiveEnvironmentTab: isRendererActiveEnvironmentTab,
+  isActiveRequestTab: isRendererActiveRequestTab,
+  isActiveWorkspaceTab: isRendererActiveWorkspaceTab,
+  openModalState,
+  requestSnapshot: snapshotRequest,
+  resetTabState: resetRendererTabState,
+  resolveModalState
+} = PostMeterRendererState;
+const { createRequestTabState } = PostMeterRequestTabState;
+const { renderRequestTabs: renderRequestTabBar } = PostMeterRequestTabs;
+const { createRendererWorkflows } = PostMeterRendererWorkflows;
 
-document.addEventListener('DOMContentLoaded', async () => {
-  bindUi();
-  unsubscribeMenuActions = window.postmeter.app.onMenuAction(handleAppMenuAction);
-  unsubscribeLoadProgress = window.postmeter.loadTest.onProgress(({ id, progress }) => {
-    if (id === activeLoadId) {
-      $('loadResults').textContent = formatLoadProgress(progress);
-    }
-  });
-  unsubscribeOauthProgress = window.postmeter.oauth.onProgress((progress) => {
-    if (progress.id === activeOauthFlowId) {
-      renderOauthProgress(progress);
-    }
-  });
-  unsubscribeRunnerProgress = window.postmeter.runner.onProgress(({ id, progress }) => {
-    if (id === activeRunnerId) {
-      $('runnerResults').textContent = `Running collection...\nCompleted ${progress.completedRequests} of ${progress.totalRequests} requests.\nLast: ${progress.requestName} ${progress.passed ? 'passed' : 'failed'}`;
-    }
-  });
-  const loaded = await window.postmeter.workspace.load();
-  workspace = loaded.workspace;
-  workspacePath = loaded.path;
-  selectInitialWorkspaceItem();
-  renderAll();
-  setStatus(`Workspace loaded: ${workspacePath}`);
-  queueUiWorkflowSmoke();
-  queueUiRegressionSmoke();
-  queueUiSnapshotSmoke();
-  queueUiOauthSmoke();
+const state = {
+  get workspace() { return workspace; },
+  set workspace(value) { workspace = value; },
+  get workspacePath() { return workspacePath; },
+  set workspacePath(value) { workspacePath = value; },
+  get activeCollectionId() { return activeCollectionId; },
+  set activeCollectionId(value) { activeCollectionId = value; },
+  get activeFolderId() { return activeFolderId; },
+  set activeFolderId(value) { activeFolderId = value; },
+  get activeRequestId() { return activeRequestId; },
+  set activeRequestId(value) { activeRequestId = value; },
+  get activeEnvironmentId() { return activeEnvironmentId; },
+  set activeEnvironmentId(value) { activeEnvironmentId = value; },
+  get activeWorkspaceId() { return activeWorkspaceId; },
+  set activeWorkspaceId(value) { activeWorkspaceId = value; },
+  get activeSidebarPanel() { return activeSidebarPanel; },
+  set activeSidebarPanel(value) { activeSidebarPanel = value; },
+  get activeMainPanel() { return activeMainPanel; },
+  set activeMainPanel(value) { activeMainPanel = value; },
+  get draftRequests() { return draftRequests; },
+  set draftRequests(value) { draftRequests = value; },
+  get openRequestTabs() { return openRequestTabs; },
+  set openRequestTabs(value) { openRequestTabs = value; },
+  get openEnvironmentTabs() { return openEnvironmentTabs; },
+  set openEnvironmentTabs(value) { openEnvironmentTabs = value; },
+  get openWorkspaceTabs() { return openWorkspaceTabs; },
+  set openWorkspaceTabs(value) { openWorkspaceTabs = value; },
+  get activeLoadId() { return activeLoadId; },
+  set activeLoadId(value) { activeLoadId = value; },
+  get activeOauthFlowId() { return activeOauthFlowId; },
+  set activeOauthFlowId(value) { activeOauthFlowId = value; },
+  get activeRunnerId() { return activeRunnerId; },
+  set activeRunnerId(value) { activeRunnerId = value; },
+  get lastLoadResult() { return lastLoadResult; },
+  set lastLoadResult(value) { lastLoadResult = value; },
+  get lastRunnerResult() { return lastRunnerResult; },
+  set lastRunnerResult(value) { lastRunnerResult = value; },
+  get lastResponse() { return lastResponse; },
+  set lastResponse(value) { lastResponse = value; },
+  get lastStatusMessage() { return lastStatusMessage; },
+  set lastStatusMessage(value) { lastStatusMessage = value; },
+  get lastUserNotification() { return lastUserNotification; },
+  set lastUserNotification(value) { lastUserNotification = value; },
+  get activeModalId() { return activeModalId; },
+  set activeModalId(value) { activeModalId = value; },
+  get activeModalResolver() { return activeModalResolver; },
+  set activeModalResolver(value) { activeModalResolver = value; },
+  get selectedDraftSaveCollectionId() { return selectedDraftSaveCollectionId; },
+  set selectedDraftSaveCollectionId(value) { selectedDraftSaveCollectionId = value; },
+  get maxOpenRequestTabs() { return RENDERER_STATE_DEFAULTS.maxOpenRequestTabs; }
+};
+
+const requestTabState = createRequestTabState({
+  state,
+  activeCollection,
+  activeEnvironment,
+  activeRequest,
+  activeWorkspaceItem,
+  clearActiveWorkspaceItem,
+  collectRequestFromEditor,
+  findRequest,
+  persistWorkspace: (...args) => persistWorkspace(...args),
+  promptUnsavedRequestClose,
+  removeRequestFromCollection,
+  renderAll,
+  renderCollections,
+  renderRequestTabs,
+  saveDraftRequestWithPrompt,
+  selectEnvironmentTab: (tab) => selectEnvironmentTab(tab),
+  selectRequestTab: (tab) => selectRequestTab(tab),
+  selectWorkspaceTab: (tab) => selectWorkspaceTab(tab),
+  workspaceListItems
 });
 
-window.addEventListener('beforeunload', () => {
-  if (unsubscribeLoadProgress) {
-    unsubscribeLoadProgress();
-  }
-  if (unsubscribeOauthProgress) {
-    unsubscribeOauthProgress();
-  }
-  if (unsubscribeRunnerProgress) {
-    unsubscribeRunnerProgress();
-  }
-  if (unsubscribeMenuActions) {
-    unsubscribeMenuActions();
+const rendererWorkflows = createRendererWorkflows({
+  state,
+  doc: document,
+  windowObject: window,
+  activeCollection,
+  activeEnvironment,
+  activeRequest,
+  applyPostmanCookieMetadata,
+  clearSavedRequestDirtyState,
+  collectEnvironmentFromEditor,
+  collectRequestFromEditor,
+  collectSettingsFromEditor,
+  displayResponse,
+  domainFromRequestUrl,
+  loadConfigFromControls: () => PostMeterLoadPolicy.loadConfigFromControls(),
+  notifyUser,
+  parseCookieHeaderForJar,
+  postmanCookieMetadataByName,
+  renderAll,
+  renderAuthEditor,
+  renderCollectionVariablesEditor,
+  renderCollections,
+  renderCookieJarEditor,
+  renderEnvironmentEditor,
+  renderHistory,
+  renderRequestVariablePairs,
+  renderVariablePreview,
+  saveDraftRequestWithPrompt,
+  selectFirstRequest,
+  selectInitialWorkspaceItem,
+  setStatus,
+  uniqueName,
+  walkCollectionRequests
+});
+
+initializeRenderer({
+  doc: document,
+  windowObject: window,
+  applyThemePreference,
+  getStoredThemePreference: () => localStorage.getItem('postmeter.theme') || 'system',
+  onReady: async ({ registerCleanup }) => {
+    bindUi();
+    registerCleanup(createVariableAutocomplete({
+      doc: document,
+      windowObject: window,
+      getVariables: () => activeEnvironment()?.variables || []
+    }).destroy);
+    registerCleanup(window.postmeter.app.onMenuAction(handleAppMenuAction));
+    registerCleanup(window.postmeter.loadTest.onProgress(({ id, progress }) => {
+      if (id === activeLoadId) {
+        $('loadResults').textContent = PostMeterRunFormatting.formatLoadProgress(progress);
+      }
+    }));
+    registerCleanup(window.postmeter.oauth.onProgress((progress) => {
+      if (progress.id === activeOauthFlowId) {
+        renderOauthProgress(progress);
+      }
+    }));
+    registerCleanup(window.postmeter.runner.onProgress(({ id, progress }) => {
+      if (id === activeRunnerId) {
+        $('runnerResults').textContent = `Running collection...\nCompleted ${progress.completedRequests} of ${progress.totalRequests} requests.\nLast: ${progress.requestName} ${progress.passed ? 'passed' : 'failed'}`;
+      }
+    }));
+
+    const loaded = await window.postmeter.workspace.load();
+    workspace = loaded.workspace;
+    workspacePath = loaded.path;
+    selectInitialWorkspaceItem();
+    renderAll();
+    setStatus(`Workspace loaded: ${workspacePath}`);
+    queueUiWorkflowSmoke();
+    queueUiRegressionSmoke();
+    queueUiSnapshotSmoke();
+    queueUiOauthSmoke();
   }
 });
 
 function bindUi() {
-  bindToolbarMenus();
-  $('newCollectionButton').addEventListener('click', newCollection);
-  $('newFolderButton').addEventListener('click', () => newFolder());
-  $('newRequestButton').addEventListener('click', newRequest);
-  $('emptyCreateRequestButton').addEventListener('click', newRequest);
-  $('emptyCreateEnvironmentButton').addEventListener('click', newEnvironment);
-  $('newEnvironmentMenuButton').addEventListener('click', () => newEnvironment());
-  $('saveButton').addEventListener('click', () => saveWorkspace(true, { promptForDraft: true }));
-  $('importWorkspaceButton').addEventListener('click', importWorkspace);
-  $('exportWorkspaceButton').addEventListener('click', exportWorkspace);
-  $('importCollectionButton').addEventListener('click', importCollection);
-  $('exportCollectionButton').addEventListener('click', exportCollection);
-  $('exportOpenApiButton').addEventListener('click', () => exportCollection(activeCollection(), 'openapi'));
-  $('exportJMeterButton').addEventListener('click', () => exportCollection(activeCollection(), 'jmeter'));
-  $('exportCurlButton').addEventListener('click', () => exportCollection(activeCollection(), 'curl'));
-  $('exportHarButton').addEventListener('click', () => exportCollection(activeCollection(), 'har'));
-  $('sendButton').addEventListener('click', sendActiveRequest);
-  $('addParamButton').addEventListener('click', () => addPair('queryParams'));
-  $('addHeaderButton').addEventListener('click', () => addPair('headers'));
-  $('addAssertionButton').addEventListener('click', () => addAssertion());
-  $('addAssertionTemplateButton').addEventListener('click', addAssertionTemplate);
-  $('addExampleButton').addEventListener('click', addExample);
-  $('captureResponseExampleButton').addEventListener('click', captureResponseExample);
-  $('exportExamplesButton').addEventListener('click', exportRequestExamples);
-  $('deleteEnvironmentButton').addEventListener('click', () => deleteEnvironment());
-  $('addVariableButton').addEventListener('click', addVariable);
-  $('saveWorkspacePanelButton').addEventListener('click', () => saveWorkspace(true, { promptForDraft: true }));
-  $('importWorkspacePanelButton').addEventListener('click', importWorkspace);
-  $('exportWorkspacePanelButton').addEventListener('click', exportWorkspace);
-  $('addCollectionVariableButton').addEventListener('click', addCollectionVariable);
-  $('addRequestVariableButton').addEventListener('click', addRequestVariable);
-  $('addCookieButton').addEventListener('click', addCookie);
-  $('clearExpiredCookiesButton').addEventListener('click', clearExpiredCookies);
-  $('runLoadButton').addEventListener('click', runLoadTest);
-  $('cancelLoadButton').addEventListener('click', cancelLoadTest);
-  $('exportLoadJsonButton').addEventListener('click', () => exportLoadResult('json'));
-  $('exportLoadCsvButton').addEventListener('click', () => exportLoadResult('csv'));
-  $('runCollectionButton').addEventListener('click', runActiveCollection);
-  $('cancelRunnerButton').addEventListener('click', cancelCollectionRun);
-  $('exportRunnerJsonButton').addEventListener('click', () => exportRunnerResult('json'));
-  $('exportRunnerCsvButton').addEventListener('click', () => exportRunnerResult('csv'));
-  $('startPkceFlowButton').addEventListener('click', startPkceFlow);
-  $('startDeviceFlowButton').addEventListener('click', startDeviceFlow);
-  $('cancelOauthFlowButton').addEventListener('click', cancelOauthFlow);
-  $('environmentSelect').addEventListener('change', () => {
-    activeEnvironmentId = $('environmentSelect').value;
-    renderEnvironments();
-    renderEnvironmentEditor();
-  });
-  $('requestNameInput').addEventListener('input', collectRequestAndMarkDirty);
-  $('methodSelect').addEventListener('change', collectRequestAndMarkDirty);
-  $('urlInput').addEventListener('input', () => {
-    collectRequestAndMarkDirty();
-    renderCookieJarEditor();
-  });
-  $('bodyTypeSelect').addEventListener('change', collectRequestAndMarkDirty);
-  $('bodyInput').addEventListener('input', collectRequestAndMarkDirty);
-  $('preRequestScriptInput').addEventListener('input', collectRequestAndMarkDirty);
-  $('testScriptInput').addEventListener('input', collectRequestAndMarkDirty);
-  $('requestCookieJarEnabledInput').addEventListener('change', collectRequestAndMarkDirty);
-  $('requestCookieJarStoreInput').addEventListener('change', collectRequestAndMarkDirty);
-  $('filterCookiesToRequestHostInput').addEventListener('change', renderCookieJarEditor);
-  $('environmentNameInput').addEventListener('input', collectEnvironmentFromEditor);
-  for (const id of [
-    'authTypeSelect',
-    'authBearerTokenInput',
-    'authBasicUsernameInput',
-    'authBasicPasswordInput',
-    'authApiKeyLocationSelect',
-    'authApiKeyNameInput',
-    'authApiKeyValueInput',
-    'authCookieValueInput',
-    'authOauthGrantTypeSelect',
-    'authOauthTokenTypeSelect',
-    'authOauthAccessTokenInput',
-    'authOauthRefreshTokenInput',
-    'authOauthAuthorizationUrlInput',
-    'authOauthRedirectStrategySelect',
-    'authOauthDeviceAuthorizationUrlInput',
-    'authOauthTokenUrlInput',
-    'authOauthClientIdInput',
-    'authOauthClientSecretInput',
-    'authOauthScopesInput',
-    'authOauthUserCodeInput',
-    'authOauthVerificationUriInput',
-    'authClientPfxPathInput',
-    'authClientCertPathInput',
-    'authClientKeyPathInput',
-    'authClientCaPathInput',
-    'authClientPassphraseInput'
-  ]) {
-    const input = $(id);
-    input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', () => {
-      if (id === 'authTypeSelect') {
-        showAuthSection(input.value);
-      }
+  bindRendererUi({
+    doc: document,
+    windowObject: window,
+    onNewCollection: newCollection,
+    onNewFolder: () => newFolder(),
+    onNewRequest: newRequest,
+    onNewEnvironment: () => newEnvironment(),
+    onSaveWorkspace: () => saveWorkspace(true, { promptForDraft: true }),
+    onImportWorkspace: importWorkspace,
+    onExportWorkspace: exportWorkspace,
+    onImportCollection: importCollection,
+    onExportCollection: exportCollection,
+    onExportOpenApi: () => exportCollection(activeCollection(), 'openapi'),
+    onExportJMeter: () => exportCollection(activeCollection(), 'jmeter'),
+    onExportCurl: () => exportCollection(activeCollection(), 'curl'),
+    onExportHar: () => exportCollection(activeCollection(), 'har'),
+    onSelectTheme: (themeOption) => setThemePreference(themeOption, { save: true }),
+    onSendRequest: sendActiveRequest,
+    onAddParam: () => addPair('queryParams'),
+    onAddHeader: () => addPair('headers'),
+    onAddAssertion: () => addAssertion(),
+    onAddAssertionTemplate: addAssertionTemplate,
+    onAddExample: addExample,
+    onCaptureResponseExample: captureResponseExample,
+    onExportExamples: exportRequestExamples,
+    onDeleteEnvironment: () => deleteEnvironment(),
+    onAddEnvironmentVariable: addVariable,
+    onAddCollectionVariable: addCollectionVariable,
+    onAddRequestVariable: addRequestVariable,
+    onAddCookie: addCookie,
+    onClearExpiredCookies: clearExpiredCookies,
+    onRunLoadTest: runLoadTest,
+    onCancelLoadTest: cancelLoadTest,
+    onExportLoadJson: () => exportLoadResult('json'),
+    onExportLoadCsv: () => exportLoadResult('csv'),
+    onRunCollection: runActiveCollection,
+    onCancelCollectionRun: cancelCollectionRun,
+    onExportRunnerJson: () => exportRunnerResult('json'),
+    onExportRunnerCsv: () => exportRunnerResult('csv'),
+    onStartPkceFlow: startPkceFlow,
+    onStartDeviceFlow: startDeviceFlow,
+    onCancelOauthFlow: cancelOauthFlow,
+    onEnvironmentSelectChange: (environmentId) => {
+      activeEnvironmentId = environmentId;
+      renderEnvironments();
+      renderEnvironmentEditor();
+    },
+    onRequestNameInput: collectRequestAndMarkDirty,
+    onMethodChange: () => {
+      updateMethodSelectClass();
       collectRequestAndMarkDirty();
-    });
-  }
-
-  for (const button of document.querySelectorAll('.tab')) {
-    button.addEventListener('click', () => activateTab(button.dataset.tabGroup, button.dataset.tab));
-  }
-
-  for (const button of document.querySelectorAll('.sidebar-tab')) {
-    button.addEventListener('click', () => selectSidebarPanel(button.dataset.sidebarPanel));
-  }
-
-  $('contextMenu').addEventListener('click', (event) => event.stopPropagation());
-  $('modalBackdrop').addEventListener('click', (event) => {
-    if (event.target === $('modalBackdrop')) {
-      cancelActiveModal();
-    }
+    },
+    onUrlInput: () => {
+      collectRequestAndMarkDirty();
+      renderCookieJarEditor();
+    },
+    onBodyTypeChange: collectRequestAndMarkDirty,
+    onBodyInput: collectRequestAndMarkDirty,
+    onPreRequestScriptInput: collectRequestAndMarkDirty,
+    onTestScriptInput: collectRequestAndMarkDirty,
+    onRequestCookieJarChange: collectRequestAndMarkDirty,
+    onFilterCookiesChange: renderCookieJarEditor,
+    onEnvironmentNameInput: collectEnvironmentFromEditor,
+    onAuthTypeChange: showAuthSection,
+    onAuthInput: collectRequestAndMarkDirty,
+    onActivateTab: activateTab,
+    onSelectSidebarPanel: selectSidebarPanel,
+    onCancelActiveModal: cancelActiveModal,
+    onResolveActiveModal: resolveActiveModal,
+    getSelectedDraftSaveCollectionId: () => selectedDraftSaveCollectionId,
+    onCloseContextMenu: closeContextMenu,
+    onInitResizablePanes: initResizablePanes
   });
-  $('cancelCloseRequestButton').addEventListener('click', () => resolveActiveModal('cancel'));
-  $('closeWithoutSavingButton').addEventListener('click', () => resolveActiveModal('discard'));
-  $('saveAndCloseRequestButton').addEventListener('click', () => resolveActiveModal('save'));
-  $('cancelSaveDraftButton').addEventListener('click', () => resolveActiveModal(null));
-  $('confirmSaveDraftButton').addEventListener('click', () => {
-    if (selectedDraftSaveCollectionId) {
-      resolveActiveModal(selectedDraftSaveCollectionId);
-    }
-  });
-  document.addEventListener('click', () => {
-    closeContextMenu();
-    closeToolbarMenus();
-  });
-  document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
-      cancelActiveModal();
-      closeContextMenu();
-      closeToolbarMenus();
-    }
-  });
-  window.addEventListener('blur', () => {
-    closeContextMenu();
-    closeToolbarMenus();
-  });
-  window.addEventListener('resize', () => {
-    closeContextMenu();
-    closeToolbarMenus();
-  });
-  initResizablePanes();
 }
 
 async function handleAppMenuAction(action) {
@@ -286,1301 +353,82 @@ async function handleAppMenuAction(action) {
   }
 }
 
-function queueUiWorkflowSmoke() {
-  const params = new URLSearchParams(window.location.search);
-  if (params.get('uiWorkflowSmoke') !== '1') {
-    return;
-  }
-  setTimeout(() => {
-    runUiWorkflowSmoke(params)
-      .then(() => {
-        document.title = 'PostMeter UI Workflow:PASS';
-      })
-      .catch((error) => {
-        document.title = `PostMeter UI Workflow:FAIL:${String(error?.message || error).slice(0, 160)}`;
-      });
-  }, 50);
-}
-
-function queueUiRegressionSmoke() {
-  const params = new URLSearchParams(window.location.search);
-  if (params.get('uiRegressionSmoke') !== '1') {
-    return;
-  }
-  setTimeout(() => {
-    runUiRegressionSmoke()
-      .then(() => {
-        document.title = 'PostMeter UI Regression:PASS';
-      })
-      .catch((error) => {
-        document.title = `PostMeter UI Regression:FAIL:${String(error?.message || error).slice(0, 160)}`;
-      });
-  }, 50);
-}
-
-function queueUiSnapshotSmoke() {
-  const params = new URLSearchParams(window.location.search);
-  if (params.get('uiSnapshotSmoke') !== '1') {
-    return;
-  }
-  setTimeout(() => {
-    runUiSnapshotSmoke()
-      .then(() => {
-        document.title = 'PostMeter UI Snapshot:PASS';
-      })
-      .catch((error) => {
-        document.title = `PostMeter UI Snapshot:FAIL:${String(error?.message || error).slice(0, 160)}`;
-      });
-  }, 50);
-}
-
-function queueUiOauthSmoke() {
-  const params = new URLSearchParams(window.location.search);
-  if (params.get('uiOauthSmoke') !== '1') {
-    return;
-  }
-  setTimeout(() => {
-    runUiOauthSmoke(params)
-      .then(() => {
-        document.title = 'PostMeter UI OAuth:PASS';
-      })
-      .catch((error) => {
-        document.title = `PostMeter UI OAuth:FAIL:${String(error?.message || error).slice(0, 160)}`;
-      });
-  }, 50);
-}
-
-async function runUiWorkflowSmoke(params) {
-  const baseUrl = params.get('uiWorkflowBaseUrl');
-  assertUiSmoke(baseUrl, 'UI workflow smoke requires a fixture base URL.');
-  assertUiSmoke(workspace.collections.length === 0, 'New workspace should start without default collections.');
-
-  newCollection();
-  const collection = activeCollection();
-  assertUiSmoke(collection, 'New collection was not created.');
-  assertUiSmoke(collection.requests.length === 0, 'New collection should start without requests.');
-  assertUiSmoke(!activeRequest(), 'New collection should not auto-select or create a request.');
-  assertUiSmoke(!$('requestEmptyPanel').hidden, 'No-request state should show the create request screen.');
-  assertUiSmoke($('requestEditorPanel').hidden, 'Request editor should be hidden when no request is selected.');
-  assertUiSmoke(document.querySelector('.results').hidden, 'Response panel should be hidden when no request is selected.');
-  collection.name = 'Smoke Collection';
-  newRequest();
-  const request = activeRequest();
-  assertUiSmoke(request, 'New request was not selected.');
-  assertUiSmoke($('requestEmptyPanel').hidden, 'Create request screen should hide once a request is selected.');
-  assertUiSmoke($('requestTabBar').textContent.includes('New Request'), 'New request tab did not render.');
-  assertUiSmoke(!$('requestTabBar').querySelector('.request-tab-dirty').hidden, 'New request tab should show unsaved changes.');
-  request.name = 'Smoke Request';
-  renderAll();
-
-  activateTab('request', 'collectionVariables');
-  $('addRequestVariableButton').click();
-  setPairRow('requestVariablesTable', 'requestToken', 'from-request');
-  $('addCollectionVariableButton').click();
-  setPairRow('collectionVariablesTable', 'collectionToken', 'from-collection');
-  assertUiSmoke($('variablePreview').textContent.includes('requestToken = from-request'), 'Request variable preview did not render.');
-  assertUiSmoke($('variablePreview').textContent.includes('collectionToken = from-collection'), 'Collection variable preview did not render.');
-  await setIncludePrereleases(true, { showStatus: false });
-
-  $('requestNameInput').value = 'Smoke Request';
-  dispatchInput($('requestNameInput'));
-  $('methodSelect').value = 'POST';
-  dispatchChange($('methodSelect'));
-  $('urlInput').value = `${baseUrl}/echo`;
-  dispatchInput($('urlInput'));
-  activateTab('request', 'cookies');
-  $('requestCookieJarEnabledInput').checked = true;
-  dispatchChange($('requestCookieJarEnabledInput'));
-
-  $('addParamButton').click();
-  setPairRow('paramsTable', 'trace', 'ui');
-  $('addHeaderButton').click();
-  setPairRow('headersTable', 'X-PostMeter-UI', 'smoke');
-  $('bodyTypeSelect').value = 'RAW_JSON';
-  dispatchChange($('bodyTypeSelect'));
-  $('bodyInput').value = '{"workflow":"smoke"}';
-  dispatchInput($('bodyInput'));
-  activateTab('request', 'examples');
-  $('addExampleButton').click();
-  const exampleItem = $('examplesList').querySelector('.example-item');
-  assertUiSmoke(exampleItem, 'Example editor did not render.');
-  const exampleInputs = exampleItem.querySelectorAll('input');
-  exampleInputs[0].value = 'Manual Example';
-  dispatchInput(exampleInputs[0]);
-  exampleInputs[1].value = '202';
-  dispatchInput(exampleInputs[1]);
-  activateTab('request', 'tests');
-  $('addAssertionButton').click();
-  setAssertionRow('statusCode', '', '', 'equals', '200');
-  $('assertionTemplateSelect').value = 'jsonPathExists';
-  dispatchChange($('assertionTemplateSelect'));
-  $('addAssertionTemplateButton').click();
-  activateTab('request', 'scripts');
-  $('preRequestScriptInput').value = "pm.environment.set('scriptToken', 'ui-script');";
-  dispatchInput($('preRequestScriptInput'));
-  $('testScriptInput').value = "pm.test('script token exists', function () { pm.expect(pm.environment.get('scriptToken')).to.equal('ui-script'); pm.expect(pm.collectionVariables.get('collectionToken')).to.equal('from-collection'); pm.response.to.have.status(200); });";
-  dispatchInput($('testScriptInput'));
-
-  newEnvironment();
-  const environment = activeEnvironment();
-  assertUiSmoke(environment, 'New environment was not created.');
-  environment.name = 'Smoke Environment';
-  environment.variables = [{ enabled: true, key: 'secretToken', value: 'local-secret', secret: true }];
-  renderAll();
-
-  assertContextMenuSmoke();
-  assertResizeSmoke();
-
-  await saveWorkspace(false);
-  const loaded = await window.postmeter.workspace.load();
-  assertUiSmoke(
-    loaded.workspace.collections.some((item) => item.name === 'Smoke Collection'),
-    'Saved workspace did not contain the smoke collection.'
-  );
-  assertUiSmoke(loaded.workspace.settings?.updates?.includePrereleases === true, 'Update prerelease setting was not saved.');
-
-  await sendActiveRequest();
-  assertUiSmoke($('responseStatus').textContent === '200', 'Smoke request did not receive HTTP 200.');
-  assertUiSmoke($('responseBody').value.includes('"method": "POST"'), 'Smoke response body was not rendered.');
-  assertUiSmoke(workspace.history.length > 0, 'Smoke request did not add history.');
-  assertUiSmoke(workspace.cookies.some((cookie) => cookie.name === 'uiSession'), 'Smoke response cookie was not stored.');
-  captureResponseExample();
-  assertUiSmoke(activeRequest().examples.length >= 2, 'Captured response example was not stored.');
-
-  activateTab('results', 'load');
-  $('loadConcurrency').value = '1';
-  $('loadRequests').value = '2';
-  $('loadDurationSeconds').value = '0';
-  $('loadRampUpSeconds').value = '0';
-  $('loadTargetRate').value = '0';
-  $('loadMaxRate').value = '0';
-  $('loadExecutionMode').value = 'singleProcess';
-  $('loadWorkerProcesses').value = '1';
-  $('loadRecordSamples').checked = true;
-  await runLoadTest();
-  assertUiSmoke($('loadResults').textContent.includes('Completed requests: 2'), 'Load test did not complete two requests.');
-  assertUiSmoke($('loadResults').textContent.includes('Samples recorded: 2'), 'Load test samples were not recorded.');
-  const policyLoaded = await window.postmeter.workspace.load();
-  assertUiSmoke(policyLoaded.workspace.settings?.loadTestPolicy == null, 'Load-test policy should not be stored on the workspace.');
-
-  activateTab('results', 'runner');
-  await runActiveCollection();
-  assertUiSmoke($('runnerResults').textContent.includes('Passed: true'), 'Collection runner did not pass.');
-  assertUiSmoke($('runnerResults').textContent.includes('script token exists'), 'Collection runner did not render script test results.');
-  assertUiSmoke($('runnerResults').textContent.includes('Runtime Variables'), 'Collection runner did not render runtime variables.');
-  assertUiSmoke($('runnerResults').textContent.includes('Collection collectionToken = from-collection'), 'Collection runner did not render collection variables.');
-  assertUiSmoke($('runnerResults').textContent.includes('Request variable requestToken = from-request'), 'Collection runner did not render request variables.');
-  assertUiSmoke(!$('exportRunnerJsonButton').disabled, 'Runner JSON export button was not enabled after a run.');
-  assertUiSmoke(!$('exportRunnerCsvButton').disabled, 'Runner CSV export button was not enabled after a run.');
-}
-
-async function runUiRegressionSmoke() {
-  assertUiSmoke(workspace.collections.length === 0, 'Regression smoke should start with an empty workspace.');
-  assertUiSmoke(!/(sign in|log in|create account|register)/i.test(document.body.textContent), 'Standalone UI should not render app account/login language.');
-  assertToolbarMenuSmoke('newMenuButton', 'newMenu', ['Request', 'Collection', 'Folder', 'Environment']);
-  assertToolbarMenuSmoke('importMenuButton', 'importMenu', ['Workspace', 'Collection']);
-  assertToolbarMenuSmoke('exportMenuButton', 'exportMenu', ['Workspace', 'Collection', 'OpenAPI', 'JMeter', 'curl', 'HAR']);
-  assertSidebarPanelSmoke();
-  assertUiSmoke(!$('statusLabel'), 'Topbar status message should not render.');
-  assertUiSmoke(!$('checkUpdatesButton'), 'Updates toolbar button should be handled by the Help menu.');
-  assertUiSmoke(!$('includePrereleasesInput'), 'Prereleases setting should be handled by the Help menu.');
-  await assertUpdateCheckSmoke();
-  assertOauthProgressSmoke();
-  assertCreationSemanticsSmoke();
-  await assertRequestTabCloseSmoke();
-
-  newCollection();
-  newRequest();
-  $('urlInput').value = 'https://api.example.test/v1/users';
-  dispatchInput($('urlInput'));
-  activateTab('request', 'cookies');
-  assertUiSmoke($('requestCookieJarEnabledInput'), 'Cookie jar request toggle is missing.');
-  $('addCookieButton').click();
-  assertUiSmoke($('cookiesTable').querySelector('.cookie-row'), 'Cookie editor did not create a row.');
-  $('filterCookiesToRequestHostInput').checked = true;
-  dispatchChange($('filterCookiesToRequestHostInput'));
-  assertUiSmoke($('cookiesTable').querySelector('.cookie-row'), 'Cookie active-host filter hid the matching row.');
-  assertUiSmoke($('cookieHostFilterLabel').textContent.includes('api.example.test'), 'Cookie active-host filter did not show the active host.');
-  $('urlInput').value = 'https://other.example.test/v1/users';
-  dispatchInput($('urlInput'));
-  assertUiSmoke(!$('cookiesTable').querySelector('.cookie-row'), 'Cookie active-host filter did not hide non-matching rows.');
-  $('filterCookiesToRequestHostInput').checked = false;
-  dispatchChange($('filterCookiesToRequestHostInput'));
-  activateTab('request', 'examples');
-  $('addExampleButton').click();
-  assertUiSmoke($('examplesList').querySelector('.example-item'), 'Example editor did not create a row.');
-  activateTab('request', 'collectionVariables');
-  $('addRequestVariableButton').click();
-  assertUiSmoke($('requestVariablesTable').querySelector('.kv-row'), 'Request variable editor did not create a row.');
-  activateTab('request', 'tests');
-  $('assertionTemplateSelect').value = 'headerContains';
-  dispatchChange($('assertionTemplateSelect'));
-  $('addAssertionTemplateButton').click();
-  const assertionRow = $('assertionsTable').querySelector('.assertion-row');
-  assertUiSmoke(assertionRow, 'Assertion template did not create a row.');
-  assertUiSmoke(assertionRow.dataset.assertionType === 'header', 'Header assertion template did not mark row type.');
-  const assertionInputs = assertionRow.querySelectorAll('input');
-  assertUiSmoke(assertionInputs[1].placeholder === 'Header name', 'Header assertion did not use header-name placeholder.');
-  assertUiSmoke(assertionInputs[3].placeholder === 'Expected header value', 'Header assertion did not use expected-value placeholder.');
-  $('assertionTemplateSelect').value = 'xmlPathExists';
-  dispatchChange($('assertionTemplateSelect'));
-  $('addAssertionTemplateButton').click();
-  const xmlAssertionRow = Array.from($('assertionsTable').querySelectorAll('.assertion-row')).at(-1);
-  assertUiSmoke(xmlAssertionRow.dataset.assertionType === 'xmlPath', 'XML assertion template did not mark row type.');
-  assertUiSmoke(xmlAssertionRow.querySelectorAll('input')[2].placeholder === 'XPath', 'XML assertion did not use XPath placeholder.');
-  $('assertionTemplateSelect').value = 'htmlSelectorExists';
-  dispatchChange($('assertionTemplateSelect'));
-  $('addAssertionTemplateButton').click();
-  const htmlAssertionRow = Array.from($('assertionsTable').querySelectorAll('.assertion-row')).at(-1);
-  assertUiSmoke(htmlAssertionRow.dataset.assertionType === 'htmlSelector', 'HTML assertion template did not mark row type.');
-  assertUiSmoke(htmlAssertionRow.querySelectorAll('input')[2].placeholder === 'CSS selector', 'HTML assertion did not use selector placeholder.');
-  displayResponse({
-    statusCode: 200,
-    durationMillis: 1,
-    responseBytes: 42,
-    finalUrl: 'https://api.example.test/xml',
-    headers: { 'content-type': ['application/xml'] },
-    body: '<response><title>Smoke</title></response>'
-  });
-  assertUiSmoke($('responseBody').value.includes('\n  <title>Smoke</title>'), `XML response body was not formatted: ${$('responseBody').value}`);
-  displayResponse({
-    statusCode: 200,
-    durationMillis: 1,
-    responseBytes: 64,
-    finalUrl: 'https://api.example.test/html',
-    headers: { 'content-type': ['text/html'] },
-    body: '<!doctype html><html><body><h1>Smoke</h1></body></html>'
-  });
-  assertUiSmoke($('responseBody').value.includes('\n    <h1>Smoke</h1>'), `HTML response body was not formatted: ${$('responseBody').value}`);
-  await assertValidationErrorSmoke();
-  await assertExportCancellationSmoke();
-  await assertOauthFlowSmoke();
-
-  activateTab('results', 'runner');
-  assertUiSmoke($('exportRunnerJsonButton').disabled, 'Runner JSON export should be disabled before a run.');
-  assertUiSmoke($('exportRunnerCsvButton').disabled, 'Runner CSV export should be disabled before a run.');
-  assertUiSmoke($('runnerStopOnFailure'), 'Runner stop-on-failure control is missing.');
-}
-
-async function runUiSnapshotSmoke() {
-  workspace.collections = [];
-  workspace.environments = [];
-  workspace.history = [];
-  workspace.cookies = [];
-  activeEnvironmentId = 'none';
-  clearActiveWorkspaceItem();
-  renderAll();
-
-  newCollection();
-  newRequest();
-  const collection = activeCollection();
-  const request = activeRequest();
-  assertUiSmoke(request, 'Snapshot request was not created.');
-  collection.name = 'Snapshot Collection';
-  collection.variables.push({ enabled: true, key: 'baseUrl', value: 'https://api.snapshot.test', secret: false });
-  request.name = 'List Widgets';
-  request.method = 'POST';
-  request.url = 'https://api.snapshot.test/widgets?expand=owner';
-  request.queryParams.push({ enabled: true, key: 'limit', value: '25' });
-  request.headers.push({ enabled: true, key: 'Accept', value: 'application/json' });
-  request.bodyType = 'RAW_JSON';
-  request.body = '{\n  "name": "hammer"\n}';
-  request.assertions.push(newAssertion(ASSERTION_TEMPLATES.status200));
-  workspace.history.push({
-    timestamp: new Date(0).toISOString(),
-    method: 'POST',
-    url: request.url,
-    statusCode: 200,
-    durationMillis: 42
-  });
-  renderAll();
-  await captureUiSnapshotState('request', () => {
-    activateTab('request', 'body');
-  });
-
-  await captureUiSnapshotState('context-menu', () => {
-    assertContextMenuSmoke({ keepOpen: true });
-  });
-  closeContextMenu();
-
-  await captureUiSnapshotState('cookies', () => {
-    activateTab('request', 'cookies');
-    $('addCookieButton').click();
-    const row = $('cookiesTable').querySelector('.cookie-row');
-    assertUiSmoke(row, 'Snapshot cookie row was not rendered.');
-    const inputs = row.querySelectorAll('input');
-    inputs[1].value = 'snapshotSession';
-    dispatchInput(inputs[1]);
-    inputs[2].value = 'secret';
-    dispatchInput(inputs[2]);
-    $('filterCookiesToRequestHostInput').checked = true;
-    dispatchChange($('filterCookiesToRequestHostInput'));
-  });
-
-  await captureUiSnapshotState('auth-oauth', () => {
-    activateTab('request', 'auth');
-    $('authTypeSelect').value = 'oauth2';
-    dispatchChange($('authTypeSelect'));
-    $('authOauthGrantTypeSelect').value = 'authorizationCode';
-    dispatchChange($('authOauthGrantTypeSelect'));
-    $('authOauthAuthorizationUrlInput').value = 'https://auth.snapshot.test/authorize';
-    dispatchInput($('authOauthAuthorizationUrlInput'));
-    renderOauthProgress({
-      type: 'pkce',
-      status: 'waitingForCallback',
-      message: 'Waiting for authorization callback.',
-      redirectUri: 'http://127.0.0.1:42123/oauth/callback'
-    });
-  });
-
-  await captureUiSnapshotState('response', () => {
-    activateTab('results', 'response');
-    displayResponse({
-      statusCode: 200,
-      durationMillis: 42,
-      responseBytes: 37,
-      finalUrl: 'https://api.snapshot.test/widgets?expand=owner',
-      headers: { 'content-type': ['application/json'], 'x-trace': ['snapshot'] },
-      body: '{"data":{"id":"w1","name":"hammer"}}'
-    });
-  });
-
-  await captureUiSnapshotState('runner', () => {
-    activateTab('results', 'runner');
-    $('runnerResults').textContent = [
-      'Collection: Snapshot Collection',
-      'Passed: true',
-      'Total: 2',
-      'Passed requests: 2',
-      '',
-      'Runtime Variables',
-      'Collection baseUrl = https://api.snapshot.test'
-    ].join('\n');
-    $('exportRunnerJsonButton').disabled = false;
-    $('exportRunnerCsvButton').disabled = false;
-  });
-
-  await captureUiSnapshotState('load', () => {
-    activateTab('results', 'load');
-    $('loadResults').textContent = [
-      'Completed requests: 12',
-      'Successful: 12',
-      'Failed: 0',
-      'Throughput: 24.00 req/s',
-      'Latency histogram: <=50ms:8 <=100ms:4'
-    ].join('\n');
-    $('exportLoadJsonButton').disabled = false;
-    $('exportLoadCsvButton').disabled = false;
-  });
-
-  await captureUiSnapshotState('export-menu', () => {
-    closeContextMenu();
-    activateTab('request', 'headers');
-    $('exportMenuButton').click();
-  });
-  closeToolbarMenus();
-}
-
-async function runUiOauthSmoke(params) {
-  const baseUrl = params.get('uiOauthBaseUrl');
-  assertUiSmoke(baseUrl, 'UI OAuth smoke requires a mock auth server base URL.');
-  workspace.collections = [];
-  workspace.environments = [];
-  workspace.history = [];
-  workspace.cookies = [];
-  clearActiveWorkspaceItem();
-  renderAll();
-  newCollection();
-  newRequest();
-  assertUiSmoke(activeRequest(), 'OAuth smoke request was not created.');
-  activeRequest().name = 'OAuth Smoke Request';
-  activeRequest().url = 'https://api.oauth-smoke.test/me';
-  renderAll();
-
-  activateTab('request', 'auth');
-  $('authTypeSelect').value = 'oauth2';
-  dispatchChange($('authTypeSelect'));
-  $('authOauthGrantTypeSelect').value = 'authorizationCode';
-  dispatchChange($('authOauthGrantTypeSelect'));
-  $('authOauthAuthorizationUrlInput').value = `${baseUrl}/authorize`;
-  dispatchInput($('authOauthAuthorizationUrlInput'));
-  $('authOauthTokenUrlInput').value = `${baseUrl}/token`;
-  dispatchInput($('authOauthTokenUrlInput'));
-  $('authOauthClientIdInput').value = 'postmeter-client';
-  dispatchInput($('authOauthClientIdInput'));
-  await startPkceFlow();
-  assertUiSmoke($('authOauthAccessTokenInput').value === 'pkce-e2e-token', 'PKCE OAuth smoke did not persist the returned access token.');
-  assertUiSmoke(lastStatusMessage.includes('OAuth authorization completed'), 'PKCE OAuth smoke did not complete.');
-
-  $('authOauthAccessTokenInput').value = '';
-  dispatchInput($('authOauthAccessTokenInput'));
-  $('authOauthAuthorizationUrlInput').value = `${baseUrl}/authorize?mode=bad-state`;
-  dispatchInput($('authOauthAuthorizationUrlInput'));
-  await startPkceFlow();
-  assertUiSmoke(lastStatusMessage.includes('OAuth authorization failed'), 'PKCE state mismatch did not fail cleanly.');
-  assertUiSmoke($('validationLabel').textContent.includes('state did not match'), 'PKCE state mismatch did not render useful validation details.');
-
-  $('authOauthAuthorizationUrlInput').value = `${baseUrl}/authorize?mode=token-error`;
-  dispatchInput($('authOauthAuthorizationUrlInput'));
-  await startPkceFlow();
-  assertUiSmoke(lastStatusMessage.includes('OAuth authorization failed'), 'PKCE token exchange failure did not fail cleanly.');
-  assertUiSmoke($('validationLabel').textContent.includes('invalid_grant'), 'PKCE token exchange failure did not render token endpoint details.');
-
-  $('authOauthAuthorizationUrlInput').value = `${baseUrl}/authorize`;
-  dispatchInput($('authOauthAuthorizationUrlInput'));
-  $('authOauthRedirectStrategySelect').value = 'customScheme';
-  dispatchChange($('authOauthRedirectStrategySelect'));
-  await startPkceFlow();
-  assertUiSmoke($('authOauthAccessTokenInput').value === 'pkce-e2e-token', 'Custom-scheme PKCE OAuth smoke did not persist the returned access token.');
-  assertUiSmoke(lastStatusMessage.includes('OAuth authorization completed'), 'Custom-scheme PKCE smoke did not complete.');
-
-  $('authOauthAccessTokenInput').value = '';
-  dispatchInput($('authOauthAccessTokenInput'));
-  $('authOauthRedirectStrategySelect').value = 'loopback';
-  dispatchChange($('authOauthRedirectStrategySelect'));
-  $('authOauthAuthorizationUrlInput').value = `${baseUrl}/authorize?mode=wait-cancel`;
-  dispatchInput($('authOauthAuthorizationUrlInput'));
-  const pkceCancel = startPkceFlow();
-  await waitForUiSmoke(() => !$('cancelOauthFlowButton').disabled, 'PKCE cancel button did not become available.');
-  await cancelOauthFlow();
-  await pkceCancel;
-  assertUiSmoke(lastStatusMessage.includes('OAuth authorization cancelled'), 'PKCE cancellation did not complete cleanly.');
-
-  $('authOauthGrantTypeSelect').value = 'deviceCode';
-  dispatchChange($('authOauthGrantTypeSelect'));
-  $('authOauthAccessTokenInput').value = '';
-  dispatchInput($('authOauthAccessTokenInput'));
-  $('authOauthDeviceAuthorizationUrlInput').value = `${baseUrl}/device`;
-  dispatchInput($('authOauthDeviceAuthorizationUrlInput'));
-  $('authOauthTokenUrlInput').value = `${baseUrl}/token`;
-  dispatchInput($('authOauthTokenUrlInput'));
-  $('authOauthClientIdInput').value = 'postmeter-client';
-  dispatchInput($('authOauthClientIdInput'));
-  await startDeviceFlow();
-  assertUiSmoke($('authOauthAccessTokenInput').value === 'device-e2e-token', 'Device OAuth smoke did not persist the returned access token.');
-  assertUiSmoke(lastStatusMessage.includes('OAuth device authorization completed'), 'Device OAuth smoke did not complete.');
-
-  $('authOauthAccessTokenInput').value = '';
-  dispatchInput($('authOauthAccessTokenInput'));
-  $('authOauthDeviceAuthorizationUrlInput').value = `${baseUrl}/device?mode=denied`;
-  dispatchInput($('authOauthDeviceAuthorizationUrlInput'));
-  await startDeviceFlow();
-  assertUiSmoke(lastStatusMessage.includes('OAuth device authorization failed'), 'Device OAuth access-denied state did not fail cleanly.');
-  assertUiSmoke($('validationLabel').textContent.includes('denied'), 'Device OAuth access-denied state did not render useful validation details.');
-
-  $('authOauthDeviceAuthorizationUrlInput').value = `${baseUrl}/device?mode=timeout`;
-  dispatchInput($('authOauthDeviceAuthorizationUrlInput'));
-  await startDeviceFlow();
-  assertUiSmoke(lastStatusMessage.includes('OAuth device authorization failed'), 'Device OAuth timeout did not fail cleanly.');
-  assertUiSmoke($('validationLabel').textContent.includes('timed out'), 'Device OAuth timeout did not render useful validation details.');
-
-  $('authOauthDeviceAuthorizationUrlInput').value = `${baseUrl}/device?mode=pending`;
-  dispatchInput($('authOauthDeviceAuthorizationUrlInput'));
-  const deviceCancel = startDeviceFlow();
-  await waitForUiSmoke(() => !$('cancelOauthFlowButton').disabled, 'Device cancel button did not become available.');
-  await cancelOauthFlow();
-  await deviceCancel;
-  assertUiSmoke(lastStatusMessage.includes('OAuth device authorization cancelled'), 'Device cancellation did not complete cleanly.');
-}
-
-function waitForUiSmoke(predicate, message, timeoutMillis = 3000) {
-  const start = Date.now();
-  return new Promise((resolve, reject) => {
-    const check = () => {
-      try {
-        if (predicate()) {
-          resolve();
-          return;
-        }
-      } catch (error) {
-        reject(error);
-        return;
-      }
-      if (Date.now() - start > timeoutMillis) {
-        reject(new Error(message));
-        return;
-      }
-      setTimeout(check, 25);
-    };
-    check();
-  });
-}
-
-async function captureUiSnapshotState(label, setup) {
-  setup();
-  await nextPaint();
-  await new Promise((resolve) => {
-    window.__postmeterSnapshotContinue = () => {
-      window.__postmeterSnapshotContinue = null;
-      resolve();
-    };
-    document.title = `PostMeter UI Snapshot:CAPTURE:${label}`;
-  });
-}
-
-function nextPaint() {
-  return new Promise((resolve) => {
-    requestAnimationFrame(() => requestAnimationFrame(resolve));
-  });
-}
-
-async function assertUpdateCheckSmoke() {
-  const originalCheck = window.__postmeterUpdateCheck;
-  const originalOpen = window.__postmeterOpenExternal;
-  const originalConfirm = window.confirm;
-  let checkOptions = null;
-  try {
-    window.__postmeterUpdateCheck = async (options) => {
-      checkOptions = options;
-      return {
-        currentVersion: '0.2.0',
-        latestVersion: '0.3.0',
-        updateAvailable: true,
-        releaseUrl: 'https://github.com/StrangeQuark/PostMeter/releases/tag/v0.3.0',
-        includePrereleases: options?.includePrereleases === true
-      };
-    };
-    window.__postmeterOpenExternal = async () => true;
-    window.confirm = () => false;
-    await handleAppMenuAction({ type: 'set-prereleases', includePrereleases: true });
-    await checkForUpdates();
-    assertUiSmoke(checkOptions?.includePrereleases === true, 'Update check did not pass prerelease opt-in.');
-    assertUiSmoke(lastStatusMessage.includes('0.3.0'), 'Update check did not track latest version.');
-    window.__postmeterUpdateCheck = async () => {
-      throw new Error('network down');
-    };
-    lastUserNotification = null;
-    await checkForUpdates();
-    assertUiSmoke(lastUserNotification?.title === 'Update Check Failed', 'Failed update check did not show a popup notification.');
-    assertUiSmoke(lastUserNotification?.message.includes('network down'), 'Failed update check popup did not include the error message.');
-  } finally {
-    window.__postmeterUpdateCheck = originalCheck;
-    window.__postmeterOpenExternal = originalOpen;
-    window.confirm = originalConfirm;
-  }
-}
-
-function assertOauthProgressSmoke() {
-  activateTab('request', 'auth');
-  $('authTypeSelect').value = 'oauth2';
-  dispatchChange($('authTypeSelect'));
-  renderOauthProgress({
-    type: 'pkce',
-    status: 'waitingForCallback',
-    message: 'Waiting for authorization callback.',
-    redirectUri: 'http://127.0.0.1:12345/oauth/callback'
-  });
-  assertUiSmoke(!$('oauthProgressPanel').hidden, 'OAuth progress panel did not render.');
-  assertUiSmoke($('oauthProgressStatus').textContent.includes('Authorization code'), 'PKCE OAuth status was not rendered.');
-  assertUiSmoke($('oauthProgressDetail').textContent.includes('Redirect URI'), 'PKCE redirect detail was not rendered.');
-  renderOauthProgress({
-    type: 'device',
-    status: 'polling',
-    message: 'Waiting for device authorization.',
-    userCode: 'ABCD-EFGH',
-    verificationUri: 'https://example.test/device'
-  });
-  assertUiSmoke($('oauthProgressStatus').textContent.includes('Device code'), 'Device OAuth status was not rendered.');
-  assertUiSmoke($('oauthProgressDetail').textContent.includes('ABCD-EFGH'), 'Device OAuth user code was not rendered.');
-}
-
-async function assertValidationErrorSmoke() {
-  $('urlInput').value = 'not a url';
-  dispatchInput($('urlInput'));
-  await sendActiveRequest();
-  assertUiSmoke(lastStatusMessage.includes('Fix validation errors'), 'Invalid request did not track validation status.');
-  assertUiSmoke($('validationLabel').textContent.length > 0, 'Invalid request did not render validation details.');
-}
-
-async function assertExportCancellationSmoke() {
-  const originalExportExamples = window.__postmeterExportExamples;
-  const originalExportCollection = window.__postmeterExportCollection;
-  try {
-    let exportedExampleCount = 0;
-    window.__postmeterExportExamples = async (request) => {
-      exportedExampleCount = request.examples?.length || 0;
-      return { cancelled: true };
-    };
-    setStatus('Ready.');
-    await exportRequestExamples();
-    assertUiSmoke(exportedExampleCount > 0, 'Example export did not pass examples to the export boundary.');
-    assertUiSmoke(lastStatusMessage === 'Ready.', 'Cancelled example export should leave the current status unchanged.');
-
-    let exportedFormat = '';
-    window.__postmeterExportCollection = async (_collection, format) => {
-      exportedFormat = format;
-      return { cancelled: true };
-    };
-    setStatus('Ready.');
-    await exportCollection(activeCollection(), 'openapi');
-    assertUiSmoke(exportedFormat === 'openapi', 'Collection export did not pass the selected format.');
-    assertUiSmoke(lastStatusMessage === 'Ready.', 'Cancelled collection export should leave the current status unchanged.');
-  } finally {
-    window.__postmeterExportExamples = originalExportExamples;
-    window.__postmeterExportCollection = originalExportCollection;
-  }
-}
-
-async function assertOauthFlowSmoke() {
-  const originalStartPkce = window.__postmeterStartPkceFlow;
-  const originalStartDevice = window.__postmeterStartDeviceFlow;
-  const originalSaveWorkspace = window.__postmeterSaveWorkspace;
-  try {
-    window.__postmeterSaveWorkspace = async (nextWorkspace) => nextWorkspace;
-    activateTab('request', 'auth');
-    $('authTypeSelect').value = 'oauth2';
-    dispatchChange($('authTypeSelect'));
-    $('authOauthGrantTypeSelect').value = 'authorizationCode';
-    dispatchChange($('authOauthGrantTypeSelect'));
-    $('authOauthAuthorizationUrlInput').value = 'https://auth.example.test/authorize';
-    dispatchInput($('authOauthAuthorizationUrlInput'));
-    $('authOauthTokenUrlInput').value = 'https://auth.example.test/token';
-    dispatchInput($('authOauthTokenUrlInput'));
-    $('authOauthClientIdInput').value = 'client-id';
-    dispatchInput($('authOauthClientIdInput'));
-    window.__postmeterStartPkceFlow = async (id, auth, _environment, strategy) => {
-      assertUiSmoke(Boolean(id), 'PKCE flow did not create an active flow ID.');
-      assertUiSmoke(auth.grantType === 'authorizationCode', 'PKCE flow did not pass authorization-code auth.');
-      assertUiSmoke(strategy === $('authOauthRedirectStrategySelect').value, 'PKCE flow did not pass redirect strategy.');
-      return { auth: { ...auth, accessToken: 'pkce-token', expiresAt: new Date(Date.now() + 60_000).toISOString() } };
-    };
-    await startPkceFlow();
-    assertUiSmoke($('authOauthAccessTokenInput').value === 'pkce-token', 'PKCE completion did not render the returned access token.');
-    assertUiSmoke(lastStatusMessage.includes('OAuth authorization completed'), 'PKCE completion did not complete cleanly.');
-
-    $('authOauthGrantTypeSelect').value = 'deviceCode';
-    dispatchChange($('authOauthGrantTypeSelect'));
-    $('authOauthDeviceAuthorizationUrlInput').value = 'https://auth.example.test/device';
-    dispatchInput($('authOauthDeviceAuthorizationUrlInput'));
-    window.__postmeterStartDeviceFlow = async () => {
-      throw new Error('mocked device failure');
-    };
-    await startDeviceFlow();
-    assertUiSmoke(lastStatusMessage.includes('OAuth device authorization failed'), 'Device-code failure did not fail cleanly.');
-    assertUiSmoke($('validationLabel').textContent.includes('mocked device failure'), 'Device-code failure did not render error details.');
-  } finally {
-    window.__postmeterStartPkceFlow = originalStartPkce;
-    window.__postmeterStartDeviceFlow = originalStartDevice;
-    window.__postmeterSaveWorkspace = originalSaveWorkspace;
-  }
-}
-
-function assertToolbarMenuSmoke(buttonId, menuId, expectedLabels) {
-  const button = $(buttonId);
-  const menu = $(menuId);
-  button.click();
-  assertUiSmoke(menu.hidden === false, `${menuId} did not open.`);
-  assertUiSmoke(button.getAttribute('aria-expanded') === 'true', `${buttonId} did not update aria-expanded.`);
-  const labels = Array.from(menu.querySelectorAll('button')).map((item) => item.textContent.trim());
-  for (const label of expectedLabels) {
-    assertUiSmoke(labels.includes(label), `${menuId} missing ${label}.`);
-  }
-  closeToolbarMenus();
-  assertUiSmoke(menu.hidden === true, `${menuId} did not close.`);
-}
-
-function assertSidebarPanelSmoke() {
-  const originalEnvironments = structuredClone(workspace.environments || []);
-  const originalActiveEnvironmentId = activeEnvironmentId;
-  const originalActiveWorkspaceId = activeWorkspaceId;
-  const originalSidebarPanel = activeSidebarPanel;
-  const originalMainPanel = activeMainPanel;
-  const originalEnvironmentTabs = structuredClone(openEnvironmentTabs);
-  const originalWorkspaceTabs = structuredClone(openWorkspaceTabs);
-  try {
-    assertUiSmoke(!$('environmentTab'), 'Environment request tab panel should be removed from the request editor.');
-    assertUiSmoke(!document.querySelector('.tab[data-tab-group="request"][data-tab="environment"]'), 'Environment should not appear in the request tab row.');
-    assertUiSmoke(!$('newEnvironmentButton'), 'Environments sidebar should not render its own New button.');
-    for (const panel of ['collections', 'environments', 'workspaces', 'history']) {
-      assertUiSmoke(document.querySelector(`.sidebar-tab[data-sidebar-panel="${panel}"]`), `Sidebar tab missing ${panel}.`);
-      selectSidebarPanel(panel);
-      assertUiSmoke(!document.querySelector(`[data-sidebar-panel-content="${panel}"]`).hidden, `Sidebar panel ${panel} did not open.`);
-    }
-    workspace.environments = [];
-    activeEnvironmentId = 'none';
-    selectSidebarPanel('environments');
-    assertUiSmoke(!$('environmentEmptyPanel').hidden, 'Environments without a selection should show the create environment screen.');
-    assertUiSmoke($('environmentMainPanel').hidden, 'Environment editor should be hidden when no environment is selected.');
-    assertUiSmoke($('requestEditorPanel').hidden, 'Request editor should be hidden when no environment is selected.');
-    assertUiSmoke(document.querySelector('.results').hidden, 'Response panel should be hidden when no environment is selected.');
-    const environment = newEnvironment();
-    assertUiSmoke(activeSidebarPanel === 'environments', 'Creating an environment should open the Environments panel.');
-    assertUiSmoke($('environmentEmptyPanel').hidden, 'Create environment screen should hide once an environment exists.');
-    assertUiSmoke(!$('environmentMainPanel').hidden, 'Creating an environment should show the main environment editor.');
-    assertUiSmoke($('requestEditorPanel').hidden, 'Request editor should be hidden while editing an environment.');
-    assertUiSmoke(getComputedStyle($('requestEditorPanel')).display === 'none', 'Request editor should not occupy layout space while editing an environment.');
-    assertUiSmoke($('workspacePaneResize').hidden, 'Workspace response splitter should be hidden while editing an environment.');
-    assertUiSmoke(document.querySelector('.results').hidden, 'Response panel should be hidden while editing an environment.');
-    assertUiSmoke(getComputedStyle(document.querySelector('.results')).display === 'none', 'Response panel should not occupy layout space while editing an environment.');
-    assertUiSmoke($('environmentMainPanel').getBoundingClientRect().bottom > document.querySelector('.workspace').getBoundingClientRect().bottom - 24, 'Environment editor should fill the main workspace area.');
-    assertUiSmoke($('requestTabBar').textContent.includes(environment.name), 'Creating an environment should open an environment tab.');
-    assertUiSmoke(!$('environmentsSidebarPanel').querySelector('#environmentNameInput'), 'Environment editor controls should not render in the sidebar.');
-    assertUiSmoke($('environmentsList').textContent.includes(environment.name), 'Environments panel did not render the new environment.');
-    openRequestTabs = [];
-    openWorkspaceTabs = [];
-    closeEnvironmentTab(openEnvironmentTabs.find((tab) => tab.environmentId === environment.id));
-    assertUiSmoke(activeSidebarPanel === 'environments', 'Closing the last environment tab should keep the Environments sidebar selected.');
-    assertUiSmoke(activeMainPanel === 'environment', 'Closing the last environment tab should keep the main pane in environment mode.');
-    assertUiSmoke(!$('environmentEmptyPanel').hidden, 'Closing the last environment tab should show the create environment screen.');
-    assertUiSmoke($('requestEmptyPanel').hidden, 'Closing the last environment tab should not show the create request screen.');
-    selectEnvironmentTab({ key: `environment:${environment.id}`, environmentId: environment.id });
-    selectSidebarPanel('collections');
-    if (activeRequest()) {
-      assertUiSmoke(!$('requestEditorPanel').hidden, 'Selecting Collections should return the main pane to the request editor.');
-    } else {
-      assertUiSmoke(!$('requestEmptyPanel').hidden, 'Selecting Collections without an active request should show the create request screen.');
-      assertUiSmoke($('requestEditorPanel').hidden, 'Selecting Collections without an active request should keep the request editor hidden.');
-    }
-    selectSidebarPanel('workspaces');
-    assertUiSmoke($('workspacesList').textContent.includes(workspaceDisplayName()), 'Workspaces panel did not render the current workspace list item.');
-    assertUiSmoke(!$('workspaceMainPanel').hidden, 'Selecting Workspaces should show the main workspace editor.');
-    assertUiSmoke($('requestEditorPanel').hidden, 'Request editor should be hidden while viewing workspace details.');
-    assertUiSmoke(document.querySelector('.results').hidden, 'Response panel should be hidden while viewing workspace details.');
-    assertUiSmoke($('workspaceSummary').textContent.includes('Workspace File'), 'Workspace main panel did not render workspace details.');
-    assertUiSmoke($('requestTabBar').textContent.includes(workspaceDisplayName()), 'Selecting Workspaces should open a workspace tab.');
-    openRequestTabs = [];
-    openEnvironmentTabs = [];
-    closeWorkspaceTab(openWorkspaceTabs.find((tab) => tab.workspaceId === 'current'));
-    assertUiSmoke(activeSidebarPanel === 'workspaces', 'Closing the last workspace tab should keep the Workspaces sidebar selected.');
-    assertUiSmoke(activeMainPanel === 'workspace', 'Closing the last workspace tab should keep the main pane in workspace mode.');
-    assertUiSmoke(!$('workspaceEmptyPanel').hidden, 'Closing the last workspace tab should show the select workspace screen.');
-    assertUiSmoke($('workspaceEmptyPanel').textContent.includes('Select a workspace'), 'Workspace empty state should ask the user to select a workspace.');
-    assertUiSmoke($('requestEmptyPanel').hidden, 'Closing the last workspace tab should not show the create request screen.');
-  } finally {
-    workspace.environments = originalEnvironments;
-    activeEnvironmentId = originalActiveEnvironmentId;
-    activeWorkspaceId = originalActiveWorkspaceId;
-    activeSidebarPanel = originalSidebarPanel;
-    activeMainPanel = originalMainPanel;
-    openEnvironmentTabs = originalEnvironmentTabs;
-    openWorkspaceTabs = originalWorkspaceTabs;
-    renderAll();
-  }
-}
-
-function assertCreationSemanticsSmoke() {
-  workspace.collections = [];
-  activeEnvironmentId = 'none';
-  clearActiveWorkspaceItem();
-  resetRequestTabs();
-  renderAll();
-
-  assertUiSmoke($('newFolderButton').disabled, 'New Folder should be disabled without an active collection.');
-  newFolder();
-  assertUiSmoke(workspace.collections.length === 0, 'New Folder without a collection should not create a collection.');
-  assertUiSmoke(!activeRequest(), 'New Folder without a collection should not create a request.');
-
-  const draft = newRequest();
-  assertUiSmoke(draft, 'New Request without collections should create an editable draft request.');
-  assertUiSmoke(workspace.collections.length === 0, 'Draft request should not create or save a collection.');
-  assertUiSmoke(activeRequest() === draft, 'Draft request should be active in the editor.');
-  assertUiSmoke($('requestTabBar').querySelectorAll('.request-tab-button').length === 1, 'Draft request should open a request tab.');
-  assertUiSmoke(!$('requestTabBar').querySelector('.request-tab-dirty').hidden, 'Draft request tab should show an unsaved marker.');
-  selectSidebarPanel('workspaces');
-  const draftTab = openRequestTabs.find((tab) => tab.draft && tab.requestId === draft.id);
-  assertUiSmoke(draftTab, 'Draft request tab should remain available after switching sections.');
-  selectRequestTab(draftTab);
-  assertUiSmoke(activeSidebarPanel === 'collections', 'Selecting a request tab should switch the sidebar to Collections.');
-  assertUiSmoke(activeMainPanel === 'request', 'Selecting a request tab should switch the main pane to request mode.');
-  assertUiSmoke(activeRequest() === draft, 'Selecting a request tab should restore the active request.');
-  $('requestNameInput').value = 'Draft Request';
-  dispatchInput($('requestNameInput'));
-  collectRequestFromEditor();
-  assertUiSmoke(draft.name === 'Draft Request', 'Draft request should be editable before being saved anywhere.');
-
-  const collection = newCollection();
-  assertUiSmoke(collection, 'New collection should be created.');
-  assertUiSmoke(collection.requests.length === 0, 'New collection should not auto-create a request.');
-  assertUiSmoke(!activeRequest(), 'New collection should not auto-select a request.');
-  assertUiSmoke(!$('newFolderButton').disabled, 'New Folder should be enabled when a collection is active.');
-  const folder = newFolder();
-  assertUiSmoke(folder, 'New Folder should create a folder when a collection is active.');
-  assertUiSmoke(collection.folders.length === 1, 'New Folder should be added to the active collection.');
-  const firstRequest = newRequest(collection.id, null);
-  firstRequest.name = 'First Tab Request';
-  renderAll();
-  const secondRequest = newRequest(collection.id, null);
-  secondRequest.name = 'Second Tab Request';
-  renderAll();
-  const firstTab = Array.from($('requestTabBar').querySelectorAll('.request-tab-button'))
-    .find((button) => button.textContent.includes('First Tab Request'));
-  assertUiSmoke(firstTab, 'Opened request tabs should include the first saved request.');
-  firstTab.click();
-  assertUiSmoke(activeRequest()?.id === firstRequest.id, 'Clicking an opened request tab should switch the active request.');
-
-  workspace.collections = [];
-  clearActiveWorkspaceItem();
-  resetRequestTabs();
-  renderAll();
-}
-
-async function assertRequestTabCloseSmoke() {
-  const originalSaveWorkspace = window.__postmeterSaveWorkspace;
-  try {
-    window.__postmeterSaveWorkspace = async (nextWorkspace) => nextWorkspace;
-    workspace.collections = [];
-    clearActiveWorkspaceItem();
-    resetRequestTabs();
-    renderAll();
-
-    const draft = newRequest();
-    $('requestNameInput').value = 'Draft Close Smoke';
-    dispatchInput($('requestNameInput'));
-    const collection = newCollection();
-    const draftTab = openRequestTabs.find((tab) => tab.draft && tab.requestId === draft.id);
-    assertUiSmoke(draftTab, 'Draft request tab should remain open after creating a collection.');
-    const closeDraft = closeRequestTab(draftTab);
-    assertUiSmoke(!$('unsavedRequestModal').hidden, 'Closing an unsaved draft should show the unsaved request modal.');
-    $('saveAndCloseRequestButton').click();
-    await Promise.resolve();
-    assertUiSmoke(!$('saveDraftRequestModal').hidden, 'Saving an unsaved draft should prompt for a collection.');
-    assertUiSmoke($('confirmSaveDraftButton').disabled, 'Draft save button should be disabled until a collection is selected.');
-    $('saveDraftCollectionList').querySelector('input[type="radio"]').click();
-    assertUiSmoke(!$('confirmSaveDraftButton').disabled, 'Draft save button should enable after selecting a collection.');
-    $('confirmSaveDraftButton').click();
-    await closeDraft;
-    assertUiSmoke(!draftRequests.has(draft.id), 'Saved draft should be removed from draft storage.');
-    assertUiSmoke(collection.requests.length === 1, 'Saved draft should be inserted into the selected collection.');
-    assertUiSmoke(collection.requests[0].name === 'Draft Close Smoke', 'Saved draft should preserve edited request fields.');
-    assertUiSmoke(openRequestTabs.length === 0, 'Saved-and-closed draft tab should close.');
-
-    const request = newRequest(collection.id, null);
-    await saveWorkspace(false);
-    const savedRequestName = request.name;
-    $('requestNameInput').value = 'Changed Saved Request';
-    dispatchInput($('requestNameInput'));
-    const savedTab = openRequestTabs.find((tab) => tab.requestId === request.id);
-    const closeSaved = closeRequestTab(savedTab);
-    assertUiSmoke(!$('unsavedRequestModal').hidden, 'Closing a dirty saved request should show the unsaved request modal.');
-    $('closeWithoutSavingButton').click();
-    await closeSaved;
-    assertUiSmoke(collection.requests.some((item) => item.id === request.id && item.name === savedRequestName), 'Closing without saving should restore the saved request snapshot.');
-  } finally {
-    window.__postmeterSaveWorkspace = originalSaveWorkspace;
-    workspace.collections = [];
-    clearActiveWorkspaceItem();
-    resetRequestTabs();
-    renderAll();
-  }
-}
-
-function setPairRow(tableId, key, value) {
-  const row = $(tableId).querySelector('.kv-row:last-child');
-  assertUiSmoke(row, `Missing row in ${tableId}.`);
-  const inputs = row.querySelectorAll('input');
-  inputs[1].value = key;
-  dispatchInput(inputs[1]);
-  inputs[2].value = value;
-  dispatchInput(inputs[2]);
-}
-
-function setAssertionRow(type, name, path, operator, expected) {
-  const row = $('assertionsTable').querySelector('.assertion-row:last-child');
-  assertUiSmoke(row, 'Missing assertion row.');
-  const selects = row.querySelectorAll('select');
-  const inputs = row.querySelectorAll('input');
-  selects[0].value = type;
-  dispatchChange(selects[0]);
-  inputs[1].value = name;
-  dispatchInput(inputs[1]);
-  inputs[2].value = path;
-  dispatchInput(inputs[2]);
-  selects[1].value = operator;
-  dispatchChange(selects[1]);
-  inputs[3].value = expected;
-  dispatchInput(inputs[3]);
-}
-
-function assertContextMenuSmoke(options = {}) {
-  const collectionButton = document.querySelector('.collection-node > .tree-item');
-  assertUiSmoke(collectionButton, 'Collection tree item was not rendered.');
-  collectionButton.dispatchEvent(new MouseEvent('contextmenu', {
-    bubbles: true,
-    cancelable: true,
-    clientX: 40,
-    clientY: 80
-  }));
-  const labels = Array.from($('contextMenu').querySelectorAll('button')).map((button) => button.textContent);
-  assertUiSmoke(!$('contextMenu').hidden, 'Context menu did not open.');
-  for (const label of ['Add Request', 'Add Folder', 'Rename', 'Export', 'Delete']) {
-    assertUiSmoke(labels.includes(label), `Context menu missing ${label}.`);
-  }
-  if (!options.keepOpen) {
-    closeContextMenu();
-  }
-}
-
-function assertResizeSmoke() {
-  const handle = $('mainPaneResize');
-  handle.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, clientX: 300 }));
-  assertUiSmoke(document.body.classList.contains('is-resizing'), 'Main pane resize did not enter resizing state.');
-  document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: 360 }));
-  document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
-  assertUiSmoke(!document.body.classList.contains('is-resizing'), 'Main pane resize did not exit resizing state.');
-}
-
-function dispatchInput(element) {
-  element.dispatchEvent(new Event('input', { bubbles: true }));
-}
-
-function dispatchChange(element) {
-  element.dispatchEvent(new Event('change', { bubbles: true }));
-}
-
-function assertUiSmoke(condition, message) {
-  if (!condition) {
-    throw new Error(message);
-  }
-}
-
-function bindToolbarMenus() {
-  for (const [buttonId, menuId] of [
-    ['newMenuButton', 'newMenu'],
-    ['importMenuButton', 'importMenu'],
-    ['exportMenuButton', 'exportMenu']
-  ]) {
-    const button = $(buttonId);
-    const menu = $(menuId);
-    button.addEventListener('click', (event) => {
-      event.stopPropagation();
-      toggleToolbarMenu(button, menu);
-    });
-    button.addEventListener('keydown', (event) => {
-      if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        openToolbarMenu(button, menu);
-        menu.querySelector('button')?.focus();
-      }
-    });
-    menu.addEventListener('click', (event) => {
-      event.stopPropagation();
-      closeToolbarMenus();
-    });
-  }
-}
-
-function toggleToolbarMenu(button, menu) {
-  if (menu.hidden) {
-    openToolbarMenu(button, menu);
-  } else {
-    closeToolbarMenus();
-  }
-}
-
-function openToolbarMenu(button, menu) {
-  closeToolbarMenus();
-  menu.hidden = false;
-  button.setAttribute('aria-expanded', 'true');
-}
-
 function closeToolbarMenus() {
-  for (const menu of document.querySelectorAll('.toolbar-menu')) {
-    menu.hidden = true;
-  }
-  for (const button of document.querySelectorAll('.menu-trigger')) {
-    button.setAttribute('aria-expanded', 'false');
-  }
+  closeRendererToolbarMenus(document);
 }
 
 function renderRequestTabs() {
-  const bar = $('requestTabBar');
-  pruneOpenRequestTabs();
-  bar.textContent = '';
-  bar.hidden = openRequestTabs.length === 0 && openEnvironmentTabs.length === 0 && openWorkspaceTabs.length === 0;
-  if (bar.hidden) {
-    return;
-  }
-  for (const tab of openRequestTabs) {
-    const request = requestForTab(tab);
-    if (!request) {
-      continue;
-    }
-    const item = document.createElement('div');
-    item.className = 'request-tab-button';
-    item.classList.toggle('active', isActiveRequestTab(tab));
-    item.setAttribute('role', 'tab');
-    item.setAttribute('aria-selected', isActiveRequestTab(tab) ? 'true' : 'false');
-    item.tabIndex = 0;
-    item.title = request.name || 'Untitled Request';
-    item.addEventListener('click', () => selectRequestTab(tab));
-    item.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        selectRequestTab(tab);
+  requestTabState.pruneOpenTabs();
+  renderRequestTabBar({
+    doc: document,
+    groups: [
+      {
+        tabs: openRequestTabs,
+        resolve: requestTabState.requestForTab,
+        isActive: isActiveRequestTab,
+        buttonClassName: 'request-tab-button',
+        methodText: (request) => request.method || 'GET',
+        methodClassName: (request) => methodClassName(request.method || 'GET'),
+        title: (request) => request.name || 'Untitled Request',
+        closeTitle: () => 'Close request',
+        closeAriaLabel: (request) => `Close ${request.name || 'Untitled Request'}`,
+        onSelect: selectRequestTab,
+        onClose: closeRequestTab
+      },
+      {
+        tabs: openEnvironmentTabs,
+        resolve: requestTabState.environmentForTab,
+        isActive: isActiveEnvironmentTab,
+        buttonClassName: 'request-tab-button environment-tab-button',
+        methodText: () => 'ENV',
+        title: (environment) => environment.name || 'Untitled Environment',
+        closeTitle: () => 'Close environment',
+        closeAriaLabel: (environment) => `Close ${environment.name || 'Untitled Environment'}`,
+        onSelect: selectEnvironmentTab,
+        onClose: closeEnvironmentTab
+      },
+      {
+        tabs: openWorkspaceTabs,
+        resolve: workspaceForTab,
+        isActive: isActiveWorkspaceTab,
+        buttonClassName: 'request-tab-button workspace-tab-button',
+        methodText: () => 'WRK',
+        title: (workspaceItem) => workspaceItem.name,
+        closeTitle: () => 'Close workspace',
+        closeAriaLabel: (workspaceItem) => `Close ${workspaceItem.name}`,
+        onSelect: selectWorkspaceTab,
+        onClose: closeWorkspaceTab
       }
-    });
-
-    const dirty = document.createElement('span');
-    dirty.className = 'request-tab-dirty';
-    dirty.hidden = !tab.dirty;
-    dirty.setAttribute('aria-label', 'Unsaved changes');
-
-    const method = document.createElement('span');
-    method.className = 'request-tab-method';
-    method.textContent = request.method || 'GET';
-
-    const title = document.createElement('span');
-    title.className = 'request-tab-title';
-    title.textContent = request.name || 'Untitled Request';
-
-    const close = document.createElement('button');
-    close.type = 'button';
-    close.className = 'request-tab-close';
-    close.textContent = '\u00d7';
-    close.title = 'Close request';
-    close.setAttribute('aria-label', `Close ${request.name || 'Untitled Request'}`);
-    close.addEventListener('click', async (event) => {
-      event.stopPropagation();
-      await closeRequestTab(tab);
-    });
-
-    item.append(dirty, method, title, close);
-    bar.append(item);
-  }
-  for (const tab of openEnvironmentTabs) {
-    const environment = environmentForTab(tab);
-    if (!environment) {
-      continue;
-    }
-    const item = document.createElement('div');
-    item.className = 'request-tab-button environment-tab-button';
-    item.classList.toggle('active', isActiveEnvironmentTab(tab));
-    item.setAttribute('role', 'tab');
-    item.setAttribute('aria-selected', isActiveEnvironmentTab(tab) ? 'true' : 'false');
-    item.tabIndex = 0;
-    item.title = environment.name || 'Untitled Environment';
-    item.addEventListener('click', () => selectEnvironmentTab(tab));
-    item.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        selectEnvironmentTab(tab);
-      }
-    });
-
-    const dirty = document.createElement('span');
-    dirty.className = 'request-tab-dirty';
-    dirty.hidden = !tab.dirty;
-    dirty.setAttribute('aria-label', 'Unsaved changes');
-
-    const method = document.createElement('span');
-    method.className = 'request-tab-method';
-    method.textContent = 'ENV';
-
-    const title = document.createElement('span');
-    title.className = 'request-tab-title';
-    title.textContent = environment.name || 'Untitled Environment';
-
-    const close = document.createElement('button');
-    close.type = 'button';
-    close.className = 'request-tab-close';
-    close.textContent = '\u00d7';
-    close.title = 'Close environment';
-    close.setAttribute('aria-label', `Close ${environment.name || 'Untitled Environment'}`);
-    close.addEventListener('click', (event) => {
-      event.stopPropagation();
-      closeEnvironmentTab(tab);
-    });
-
-    item.append(dirty, method, title, close);
-    bar.append(item);
-  }
-  for (const tab of openWorkspaceTabs) {
-    const workspaceItem = workspaceForTab(tab);
-    if (!workspaceItem) {
-      continue;
-    }
-    const item = document.createElement('div');
-    item.className = 'request-tab-button workspace-tab-button';
-    item.classList.toggle('active', isActiveWorkspaceTab(tab));
-    item.setAttribute('role', 'tab');
-    item.setAttribute('aria-selected', isActiveWorkspaceTab(tab) ? 'true' : 'false');
-    item.tabIndex = 0;
-    item.title = workspaceItem.name;
-    item.addEventListener('click', () => selectWorkspaceTab(tab));
-    item.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        selectWorkspaceTab(tab);
-      }
-    });
-
-    const dirty = document.createElement('span');
-    dirty.className = 'request-tab-dirty';
-    dirty.hidden = !tab.dirty;
-    dirty.setAttribute('aria-label', 'Unsaved changes');
-
-    const method = document.createElement('span');
-    method.className = 'request-tab-method';
-    method.textContent = 'WRK';
-
-    const title = document.createElement('span');
-    title.className = 'request-tab-title';
-    title.textContent = workspaceItem.name;
-
-    const close = document.createElement('button');
-    close.type = 'button';
-    close.className = 'request-tab-close';
-    close.textContent = '\u00d7';
-    close.title = 'Close workspace';
-    close.setAttribute('aria-label', `Close ${workspaceItem.name}`);
-    close.addEventListener('click', (event) => {
-      event.stopPropagation();
-      closeWorkspaceTab(tab);
-    });
-
-    item.append(dirty, method, title, close);
-    bar.append(item);
-  }
+    ]
+  });
 }
 
 function ensureOpenEnvironmentTabForActive(options = {}) {
-  const environment = activeEnvironment();
-  if (!environment || activeEnvironmentId === 'none') {
-    return null;
-  }
-  const key = activeEnvironmentTabKey();
-  let tab = openEnvironmentTabs.find((candidate) => candidate.key === key);
-  if (!tab) {
-    tab = { key, environmentId: activeEnvironmentId, dirty: options.dirty === true };
-    openEnvironmentTabs.push(tab);
-  }
-  tab.environmentId = activeEnvironmentId;
-  if (options.dirty === true) {
-    tab.dirty = true;
-  }
-  trimOpenEnvironmentTabs(key);
-  renderRequestTabs();
-  return tab;
+  return requestTabState.ensureOpenEnvironmentTabForActive(options);
 }
 
 function ensureOpenWorkspaceTabForActive(options = {}) {
-  const workspaceItem = activeWorkspaceItem();
-  if (!workspaceItem) {
-    return null;
-  }
-  const key = activeWorkspaceTabKey();
-  let tab = openWorkspaceTabs.find((candidate) => candidate.key === key);
-  if (!tab) {
-    tab = { key, workspaceId: workspaceItem.id, dirty: options.dirty === true };
-    openWorkspaceTabs.push(tab);
-  }
-  tab.workspaceId = workspaceItem.id;
-  if (options.dirty === true) {
-    tab.dirty = true;
-  }
-  trimOpenWorkspaceTabs(key);
-  renderRequestTabs();
-  return tab;
+  return requestTabState.ensureOpenWorkspaceTabForActive(options);
 }
 
 function ensureOpenRequestTabForActive(options = {}) {
-  const request = activeRequest();
-  if (!request || !activeRequestId) {
-    return null;
-  }
-  const key = activeRequestTabKey();
-  let tab = openRequestTabs.find((candidate) => candidate.key === key);
-  if (!tab) {
-    tab = activeCollectionId
-      ? {
-          key,
-          collectionId: activeCollectionId,
-          requestId: activeRequestId,
-          draft: false,
-          dirty: false,
-          createdUnsaved: options.createdUnsaved === true,
-          snapshot: requestSnapshot(request)
-        }
-      : { key, collectionId: null, requestId: activeRequestId, draft: true, dirty: true };
-    openRequestTabs.push(tab);
-  }
-  if (activeCollectionId) {
-    const found = findRequest(activeCollection(), activeRequestId);
-    tab.collectionId = activeCollectionId;
-    tab.folderId = found?.folder?.id || null;
-    tab.draft = false;
-    tab.snapshot ||= requestSnapshot(request);
-    if (options.createdUnsaved === true) {
-      tab.createdUnsaved = true;
-    }
-  } else {
-    tab.collectionId = null;
-    tab.folderId = null;
-    tab.draft = true;
-  }
-  if (options.dirty === true || tab.draft) {
-    tab.dirty = true;
-  }
-  trimOpenRequestTabs(key);
-  renderRequestTabs();
-  return tab;
+  return requestTabState.ensureOpenRequestTabForActive(options);
 }
 
 function selectRequestTab(tab) {
-  collectRequestFromEditor();
-  activeSidebarPanel = 'collections';
-  activeMainPanel = 'request';
-  if (tab.draft) {
-    const draft = draftRequests.get(tab.requestId);
-    if (!draft) {
-      removeOpenRequestTab(tab.key);
-      renderAll();
-      return;
-    }
-    activeCollectionId = null;
-    activeFolderId = null;
-    activeRequestId = draft.id;
-    renderAll();
-    return;
-  }
-  const collection = workspace.collections.find((item) => item.id === tab.collectionId);
-  const found = collection ? findRequest(collection, tab.requestId) : null;
-  if (!collection || !found) {
-    removeOpenRequestTab(tab.key);
-    renderAll();
-    return;
-  }
-  activeCollectionId = collection.id;
-  activeFolderId = found.folder?.id || null;
-  activeRequestId = found.request.id;
-  ensureOpenRequestTabForActive();
-  renderAll();
+  requestTabState.selectRequestTab(tab);
 }
 
 function selectEnvironmentTab(tab) {
-  const environment = environmentForTab(tab);
-  if (!environment) {
-    removeOpenEnvironmentTab(tab.key);
-    renderAll();
-    return;
-  }
-  activeEnvironmentId = environment.id;
-  activeSidebarPanel = 'environments';
-  activeMainPanel = 'environment';
-  ensureOpenEnvironmentTabForActive();
-  renderAll();
+  requestTabState.selectEnvironmentTab(tab);
 }
 
 function selectWorkspaceTab(tab) {
-  const workspaceItem = workspaceForTab(tab);
-  if (!workspaceItem) {
-    removeOpenWorkspaceTab(tab.key);
-    renderAll();
-    return;
-  }
-  activeWorkspaceId = workspaceItem.id;
-  activeSidebarPanel = 'workspaces';
-  activeMainPanel = 'workspace';
-  ensureOpenWorkspaceTabForActive();
-  renderAll();
+  requestTabState.selectWorkspaceTab(tab);
 }
 
 function markActiveRequestDirty() {
-  const tab = ensureOpenRequestTabForActive({ dirty: true });
-  if (tab) {
-    tab.dirty = true;
-    renderRequestTabs();
-  }
+  requestTabState.markActiveRequestDirty();
 }
 
 function collectRequestAndMarkDirty() {
@@ -1589,278 +437,78 @@ function collectRequestAndMarkDirty() {
 }
 
 function clearSavedRequestDirtyState() {
-  for (const tab of openRequestTabs) {
-    if (!tab.draft) {
-      const request = requestForTab(tab);
-      tab.dirty = false;
-      tab.createdUnsaved = false;
-      if (request) {
-        tab.snapshot = requestSnapshot(request);
-      }
-    }
-  }
-  renderRequestTabs();
+  clearRendererSavedRequestDirtyState(state, {
+    requestForTab: requestTabState.requestForTab,
+    onAfterClear: renderRequestTabs
+  });
 }
 
 function activeRequestTabKey() {
-  if (!activeRequestId) {
-    return '';
-  }
-  return activeCollectionId
-    ? `request:${activeCollectionId}:${activeRequestId}`
-    : `draft:${activeRequestId}`;
+  return buildActiveRequestTabKey(state);
 }
 
 function activeEnvironmentTabKey() {
-  return activeEnvironmentId && activeEnvironmentId !== 'none'
-    ? `environment:${activeEnvironmentId}`
-    : '';
+  return buildActiveEnvironmentTabKey(state);
 }
 
 function activeWorkspaceTabKey() {
-  return activeWorkspaceId ? `workspace:${activeWorkspaceId}` : '';
+  return buildActiveWorkspaceTabKey(state);
 }
 
 function isActiveRequestTab(tab) {
-  return activeMainPanel === 'request' && tab.key === activeRequestTabKey();
+  return isRendererActiveRequestTab(state, tab);
 }
 
 function isActiveEnvironmentTab(tab) {
-  return activeMainPanel === 'environment' && tab.key === activeEnvironmentTabKey();
+  return isRendererActiveEnvironmentTab(state, tab);
 }
 
 function isActiveWorkspaceTab(tab) {
-  return activeMainPanel === 'workspace' && tab.key === activeWorkspaceTabKey();
+  return isRendererActiveWorkspaceTab(state, tab);
 }
 
 function requestForTab(tab) {
-  if (tab.draft) {
-    return draftRequests.get(tab.requestId) || null;
-  }
-  const collection = workspace.collections.find((item) => item.id === tab.collectionId);
-  return collection ? findRequest(collection, tab.requestId)?.request || null : null;
+  return requestTabState.requestForTab(tab);
 }
 
 function environmentForTab(tab) {
-  return workspace.environments?.find((environment) => environment.id === tab.environmentId) || null;
+  return requestTabState.environmentForTab(tab);
 }
 
 function workspaceForTab(tab) {
-  return workspaceListItems().find((item) => item.id === tab?.workspaceId) || null;
+  return requestTabState.workspaceForTab(tab);
 }
 
 function pruneOpenRequestTabs() {
-  openRequestTabs = openRequestTabs.filter((tab) => Boolean(requestForTab(tab)));
-  openEnvironmentTabs = openEnvironmentTabs.filter((tab) => Boolean(environmentForTab(tab)));
-  openWorkspaceTabs = openWorkspaceTabs.filter((tab) => Boolean(workspaceForTab(tab)));
-}
-
-function trimOpenRequestTabs(activeKey) {
-  while (openRequestTabs.length > MAX_OPEN_REQUEST_TABS) {
-    const removableIndex = openRequestTabs.findIndex((tab) => tab.key !== activeKey);
-    openRequestTabs.splice(removableIndex >= 0 ? removableIndex : 0, 1);
-  }
-}
-
-function trimOpenEnvironmentTabs(activeKey) {
-  while (openEnvironmentTabs.length > MAX_OPEN_REQUEST_TABS) {
-    const removableIndex = openEnvironmentTabs.findIndex((tab) => tab.key !== activeKey);
-    openEnvironmentTabs.splice(removableIndex >= 0 ? removableIndex : 0, 1);
-  }
-}
-
-function trimOpenWorkspaceTabs(activeKey) {
-  while (openWorkspaceTabs.length > MAX_OPEN_REQUEST_TABS) {
-    const removableIndex = openWorkspaceTabs.findIndex((tab) => tab.key !== activeKey);
-    openWorkspaceTabs.splice(removableIndex >= 0 ? removableIndex : 0, 1);
-  }
+  requestTabState.pruneOpenTabs();
 }
 
 function removeOpenRequestTab(keyOrCollectionId, requestId) {
-  const key = requestId == null ? keyOrCollectionId : `request:${keyOrCollectionId}:${requestId}`;
-  openRequestTabs = openRequestTabs.filter((tab) => tab.key !== key);
+  requestTabState.removeOpenRequestTab(keyOrCollectionId, requestId);
 }
 
 function removeOpenRequestTabsForCollection(collectionId) {
-  openRequestTabs = openRequestTabs.filter((tab) => tab.collectionId !== collectionId);
+  requestTabState.removeOpenRequestTabsForCollection(collectionId);
 }
 
 function removeOpenEnvironmentTab(keyOrEnvironmentId) {
-  const key = String(keyOrEnvironmentId || '').startsWith('environment:')
-    ? keyOrEnvironmentId
-    : `environment:${keyOrEnvironmentId}`;
-  openEnvironmentTabs = openEnvironmentTabs.filter((tab) => tab.key !== key);
+  requestTabState.removeOpenEnvironmentTab(keyOrEnvironmentId);
 }
 
 function removeOpenWorkspaceTab(keyOrWorkspaceId) {
-  const key = String(keyOrWorkspaceId || '').startsWith('workspace:')
-    ? keyOrWorkspaceId
-    : `workspace:${keyOrWorkspaceId}`;
-  openWorkspaceTabs = openWorkspaceTabs.filter((tab) => tab.key !== key);
+  requestTabState.removeOpenWorkspaceTab(keyOrWorkspaceId);
 }
 
 function closeWorkspaceTab(tab) {
-  if (!tab) {
-    renderRequestTabs();
-    return;
-  }
-  const index = openWorkspaceTabs.findIndex((candidate) => candidate === tab || candidate.key === tab.key);
-  if (index < 0) {
-    renderRequestTabs();
-    return;
-  }
-  const wasActive = isActiveWorkspaceTab(tab);
-  openWorkspaceTabs.splice(index, 1);
-  if (!wasActive) {
-    renderRequestTabs();
-    return;
-  }
-  const fallbackEnvironment = openEnvironmentTabs[openEnvironmentTabs.length - 1] || null;
-  if (fallbackEnvironment) {
-    selectEnvironmentTab(fallbackEnvironment);
-    return;
-  }
-  const fallbackRequest = openRequestTabs[openRequestTabs.length - 1] || null;
-  if (fallbackRequest) {
-    selectRequestTab(fallbackRequest);
-    return;
-  }
-  activeWorkspaceId = null;
-  activeSidebarPanel = 'workspaces';
-  activeMainPanel = 'workspace';
-  renderAll();
+  return requestTabState.closeWorkspaceTab(tab);
 }
 
 function closeEnvironmentTab(tab) {
-  if (!tab) {
-    renderRequestTabs();
-    return;
-  }
-  const index = openEnvironmentTabs.findIndex((candidate) => candidate === tab || candidate.key === tab.key);
-  if (index < 0) {
-    renderRequestTabs();
-    return;
-  }
-  const wasActive = isActiveEnvironmentTab(tab);
-  openEnvironmentTabs.splice(index, 1);
-  if (!wasActive) {
-    renderRequestTabs();
-    return;
-  }
-  const fallbackEnvironment = openEnvironmentTabs[Math.min(index, openEnvironmentTabs.length - 1)] || openEnvironmentTabs[index - 1] || null;
-  if (fallbackEnvironment) {
-    selectEnvironmentTab(fallbackEnvironment);
-    return;
-  }
-  const fallbackWorkspace = openWorkspaceTabs[openWorkspaceTabs.length - 1] || null;
-  if (fallbackWorkspace) {
-    selectWorkspaceTab(fallbackWorkspace);
-    return;
-  }
-  const fallbackRequest = openRequestTabs[openRequestTabs.length - 1] || null;
-  if (fallbackRequest) {
-    selectRequestTab(fallbackRequest);
-    return;
-  }
-  activeEnvironmentId = 'none';
-  activeSidebarPanel = 'environments';
-  activeMainPanel = 'environment';
-  renderAll();
+  return requestTabState.closeEnvironmentTab(tab);
 }
 
 async function closeRequestTab(tab) {
-  if (!tab) {
-    return;
-  }
-  if (isActiveRequestTab(tab)) {
-    collectRequestFromEditor();
-  }
-  const request = requestForTab(tab);
-  if (!request) {
-    closeRequestTabAfterResolved(tab);
-    return;
-  }
-  if (tab.draft || tab.dirty) {
-    const action = await promptUnsavedRequestClose(tab, request);
-    if (action === 'cancel') {
-      return;
-    }
-    if (action === 'save') {
-      if (tab.draft) {
-        const savedTab = await saveDraftRequestWithPrompt(request, { showStatus: false, tab });
-        if (!savedTab) {
-          return;
-        }
-      } else {
-        await persistWorkspace(false);
-      }
-    } else {
-      discardRequestTabChanges(tab);
-    }
-  }
-  closeRequestTabAfterResolved(tab);
-}
-
-function closeRequestTabAfterResolved(tab) {
-  const index = openRequestTabs.findIndex((candidate) => candidate === tab || candidate.key === tab.key);
-  if (index < 0) {
-    renderRequestTabs();
-    return;
-  }
-  const wasActive = isActiveRequestTab(tab);
-  openRequestTabs.splice(index, 1);
-  if (!wasActive) {
-    renderCollections();
-    renderRequestTabs();
-    return;
-  }
-  const fallback = openRequestTabs[Math.min(index, openRequestTabs.length - 1)] || openRequestTabs[index - 1] || null;
-  if (fallback) {
-    selectRequestTab(fallback);
-    return;
-  }
-  clearActiveWorkspaceItem();
-  renderAll();
-}
-
-function discardRequestTabChanges(tab) {
-  if (tab.draft) {
-    draftRequests.delete(tab.requestId);
-    return;
-  }
-  const collection = workspace.collections.find((item) => item.id === tab.collectionId);
-  if (!collection) {
-    return;
-  }
-  if (tab.createdUnsaved) {
-    removeRequestFromCollection(collection, tab.requestId);
-    return;
-  }
-  restoreRequestFromSnapshot(tab);
-}
-
-function restoreRequestFromSnapshot(tab) {
-  const request = requestForTab(tab);
-  if (!request || !tab.snapshot) {
-    return;
-  }
-  try {
-    const snapshot = JSON.parse(tab.snapshot);
-    for (const key of Object.keys(request)) {
-      delete request[key];
-    }
-    Object.assign(request, snapshot);
-  } catch {
-    return;
-  }
-}
-
-function requestSnapshot(request) {
-  try {
-    return JSON.stringify(request);
-  } catch {
-    return '{}';
-  }
+  return requestTabState.closeRequestTab(tab);
 }
 
 function promptUnsavedRequestClose(tab, request) {
@@ -1909,7 +557,7 @@ async function saveDraftRequestToCollection(draftRequest, collectionId, options 
     tab.draft = false;
     tab.dirty = true;
     tab.createdUnsaved = true;
-    tab.snapshot = requestSnapshot(request);
+    tab.snapshot = snapshotRequest(request);
   } else {
     tab = ensureOpenRequestTabForActive({ dirty: true, createdUnsaved: true });
   }
@@ -1955,7 +603,7 @@ function renderSaveDraftCollectionList() {
 }
 
 function showModal(modalId, cancelValue) {
-  if (activeModalResolver) {
+  if (state.activeModalResolver) {
     resolveActiveModal(cancelValue);
   }
   closeContextMenu();
@@ -1964,9 +612,8 @@ function showModal(modalId, cancelValue) {
   for (const modal of $('modalBackdrop').querySelectorAll('.modal')) {
     modal.hidden = modal.id !== modalId;
   }
-  activeModalId = modalId;
   return new Promise((resolve) => {
-    activeModalResolver = resolve;
+    openModalState(state, modalId, resolve);
     if (modalId === 'unsavedRequestModal') {
       $('cancelCloseRequestButton').focus();
     } else {
@@ -1976,9 +623,7 @@ function showModal(modalId, cancelValue) {
 }
 
 function resolveActiveModal(value) {
-  const resolver = activeModalResolver;
-  activeModalResolver = null;
-  activeModalId = null;
+  const resolver = resolveModalState(state);
   $('modalBackdrop').hidden = true;
   for (const modal of $('modalBackdrop').querySelectorAll('.modal')) {
     modal.hidden = true;
@@ -1989,19 +634,14 @@ function resolveActiveModal(value) {
 }
 
 function cancelActiveModal() {
-  if (!activeModalResolver) {
+  if (!state.activeModalResolver) {
     return;
   }
-  resolveActiveModal(activeModalId === 'unsavedRequestModal' ? 'cancel' : null);
+  resolveActiveModal(state.activeModalId === 'unsavedRequestModal' ? 'cancel' : null);
 }
 
 function resetRequestTabs(options = {}) {
-  openRequestTabs = [];
-  openEnvironmentTabs = [];
-  openWorkspaceTabs = [];
-  if (options.clearDrafts !== false) {
-    draftRequests = new Map();
-  }
+  resetRendererTabState(state, options);
 }
 
 function renderAll() {
@@ -2086,12 +726,53 @@ function renderToolbarState() {
 
 function renderSettings() {
   ensureSettings();
+  applyThemePreference(workspace.settings.appearance.theme);
+  renderThemeControl();
 }
 
 function ensureSettings() {
-  workspace.settings ||= { updates: { includePrereleases: false } };
+  workspace.settings ||= {};
   workspace.settings.updates ||= { includePrereleases: false };
+  workspace.settings.appearance ||= { theme: 'system' };
+  workspace.settings.appearance.theme = normalizeThemeOption(workspace.settings.appearance.theme);
   delete workspace.settings.loadTestPolicy;
+}
+
+function normalizeThemeOption(value) {
+  const theme = String(value || '').trim();
+  return THEME_OPTIONS.includes(theme) ? theme : 'system';
+}
+
+function applyThemePreference(theme) {
+  const normalizedTheme = normalizeThemeOption(theme);
+  document.documentElement.dataset.theme = normalizedTheme;
+  try {
+    localStorage.setItem('postmeter.theme', normalizedTheme);
+  } catch {
+    // Theme still applies for this session when storage is unavailable.
+  }
+}
+
+function renderThemeControl() {
+  const activeTheme = normalizeThemeOption(workspace.settings?.appearance?.theme);
+  for (const button of document.querySelectorAll('[data-theme-option]')) {
+    const isActive = button.dataset.themeOption === activeTheme;
+    button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+  }
+}
+
+async function setThemePreference(theme, options = {}) {
+  ensureSettings();
+  const normalizedTheme = normalizeThemeOption(theme);
+  workspace.settings.appearance.theme = normalizedTheme;
+  applyThemePreference(normalizedTheme);
+  renderThemeControl();
+  if (options.save === true) {
+    await saveWorkspace(false);
+  }
+  if (options.showStatus !== false) {
+    setStatus(`Theme set to ${normalizedTheme}.`);
+  }
 }
 
 async function setIncludePrereleases(includePrereleases, options = {}) {
@@ -2215,6 +896,7 @@ function renderWorkspacePanel() {
     ['Name', workspaceDisplayName()],
     ['Workspace File', workspacePath || 'Default local workspace'],
     ['Schema Version', String(workspace.schemaVersion || '-')],
+    ['Theme', titleCaseTheme(workspace.settings?.appearance?.theme)],
     ['Collections', String(workspace.collections?.length || 0)],
     ['Folders', String(folderCount)],
     ['Requests', String(requestCount)],
@@ -2234,6 +916,11 @@ function renderWorkspacePanel() {
     row.append(labelElement, valueElement);
     container.append(row);
   }
+}
+
+function titleCaseTheme(theme) {
+  const normalizedTheme = normalizeThemeOption(theme);
+  return normalizedTheme.charAt(0).toUpperCase() + normalizedTheme.slice(1);
 }
 
 function workspaceListItems() {
@@ -2374,7 +1061,7 @@ function treeButton(text, active, kind) {
   button.type = 'button';
   button.setAttribute('aria-haspopup', 'menu');
   const badge = document.createElement('span');
-  badge.className = 'tree-badge';
+  badge.className = `tree-badge ${methodClassName(kind)}`;
   badge.textContent = kind;
   const label = document.createElement('span');
   label.className = 'tree-label';
@@ -2383,151 +1070,21 @@ function treeButton(text, active, kind) {
   return button;
 }
 
-function attachTreeContextMenu(button, items) {
-  button.addEventListener('contextmenu', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    showContextMenu(event.clientX, event.clientY, items);
-  });
-  button.addEventListener('keydown', (event) => {
-    if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
-      event.preventDefault();
-      const rect = button.getBoundingClientRect();
-      showContextMenu(rect.left + 16, rect.bottom + 4, items);
-    }
-  });
+function methodClassName(method) {
+  const normalizedMethod = String(method || '').trim().toLowerCase();
+  return METHODS.map((item) => item.toLowerCase()).includes(normalizedMethod)
+    ? `method-${normalizedMethod}`
+    : '';
 }
 
-function showContextMenu(x, y, items) {
-  const menu = $('contextMenu');
-  menu.textContent = '';
-  for (const [label, handler, variant] of items) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.setAttribute('role', 'menuitem');
-    button.className = variant === 'danger' ? 'danger' : '';
-    button.textContent = label;
-    button.addEventListener('click', () => {
-      closeContextMenu();
-      handler();
-    });
-    menu.append(button);
-  }
-  menu.hidden = false;
-  menu.style.left = '0';
-  menu.style.top = '0';
-  const maxX = window.innerWidth - menu.offsetWidth - 8;
-  const maxY = window.innerHeight - menu.offsetHeight - 8;
-  menu.style.left = `${Math.max(8, Math.min(x, maxX))}px`;
-  menu.style.top = `${Math.max(8, Math.min(y, maxY))}px`;
-}
-
-function closeContextMenu() {
-  const menu = $('contextMenu');
-  if (!menu || menu.hidden) {
+function updateMethodSelectClass() {
+  const select = $('methodSelect');
+  if (!select) {
     return;
   }
-  menu.hidden = true;
-  menu.textContent = '';
-}
-
-function initResizablePanes() {
-  restoreLayout();
-  setupDragResize('mainPaneResize', (event) => {
-    const maxWidth = Math.max(260, Math.min(560, window.innerWidth - 520));
-    setLayoutVar('--sidebar-width', `${clamp(event.clientX, 220, maxWidth)}px`);
-  }, '--sidebar-width');
-  setupDragResize('sidebarPaneResize', (event) => {
-    const sidebar = document.querySelector('.sidebar');
-    const rect = sidebar.getBoundingClientRect();
-    const maxHeight = Math.max(140, rect.height - 190);
-    setLayoutVar('--history-height', `${clamp(rect.bottom - event.clientY - 10, 120, maxHeight)}px`);
-  }, '--history-height');
-  setupDragResize('workspacePaneResize', (event) => {
-    const workspaceElement = document.querySelector('.workspace');
-    const rect = workspaceElement.getBoundingClientRect();
-    const maxHeight = Math.max(260, rect.height - 220);
-    setLayoutVar('--request-height', `${clamp(event.clientY - rect.top - 10, 240, maxHeight)}px`);
-  }, '--request-height');
-  setupDragResize('responsePaneResize', (event) => {
-    const grid = document.querySelector('.response-grid');
-    const rect = grid.getBoundingClientRect();
-    setLayoutVar('--response-body-width', `${clamp(event.clientX - rect.left, 220, Math.max(220, rect.width - 220))}px`);
-  }, '--response-body-width');
-}
-
-function setupDragResize(id, update, cssVariable) {
-  const handle = $(id);
-  if (!handle) {
-    return;
+  for (const method of METHODS) {
+    select.classList.toggle(`method-${method.toLowerCase()}`, select.value === method);
   }
-  handle.addEventListener('mousedown', (event) => {
-    if (event.button !== 0) {
-      return;
-    }
-    event.preventDefault();
-    const resizeClass = handle.classList.contains('horizontal') ? 'is-resizing-row' : 'is-resizing-col';
-    document.body.classList.add('is-resizing', resizeClass);
-    const onMouseMove = (moveEvent) => update(moveEvent);
-    const onMouseUp = () => {
-      document.body.classList.remove('is-resizing', resizeClass);
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
-    };
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
-  });
-  handle.addEventListener('dblclick', () => resetLayoutVar(cssVariable));
-}
-
-function restoreLayout() {
-  for (const [name, fallback] of Object.entries(defaultLayoutVars())) {
-    const value = readLayoutVar(name) || fallback;
-    document.documentElement.style.setProperty(name, value);
-  }
-}
-
-function setLayoutVar(name, value) {
-  document.documentElement.style.setProperty(name, value);
-  try {
-    localStorage.setItem(layoutStorageKey(name), value);
-  } catch {
-    // Ignore storage failures; resizing still works for the current session.
-  }
-}
-
-function resetLayoutVar(name) {
-  const fallback = defaultLayoutVars()[name];
-  if (!fallback) {
-    return;
-  }
-  document.documentElement.style.setProperty(name, fallback);
-  try {
-    localStorage.removeItem(layoutStorageKey(name));
-  } catch {
-    // Ignore storage failures.
-  }
-}
-
-function readLayoutVar(name) {
-  try {
-    return localStorage.getItem(layoutStorageKey(name));
-  } catch {
-    return null;
-  }
-}
-
-function defaultLayoutVars() {
-  return {
-    '--sidebar-width': '300px',
-    '--history-height': '210px',
-    '--request-height': '52%',
-    '--response-body-width': '1.25fr'
-  };
-}
-
-function layoutStorageKey(name) {
-  return `postmeter.layout.${name}`;
 }
 
 function renderRequestEditor() {
@@ -2535,6 +1092,7 @@ function renderRequestEditor() {
   if (!request) {
     $('requestNameInput').value = '';
     $('methodSelect').value = 'GET';
+    updateMethodSelectClass();
     $('urlInput').value = '';
     $('bodyTypeSelect').value = 'NONE';
     $('bodyInput').value = '';
@@ -2561,6 +1119,7 @@ function renderRequestEditor() {
   $('exportExamplesButton').disabled = !(request.examples || []).length;
   $('requestNameInput').value = request.name;
   $('methodSelect').value = request.method;
+  updateMethodSelectClass();
   $('urlInput').value = request.url;
   $('bodyTypeSelect').value = request.bodyType || 'NONE';
   $('bodyInput').value = request.body || '';
@@ -2580,142 +1139,20 @@ function renderRequestEditor() {
 }
 
 function renderExamples(examples) {
-  const container = $('examplesList');
-  $('exportExamplesButton').disabled = !examples.length;
-  container.textContent = '';
-  if (!examples.length) {
-    const empty = document.createElement('div');
-    empty.className = 'empty-state';
-    empty.textContent = 'No examples';
-    container.append(empty);
-    return;
-  }
-  examples.forEach((example, index) => {
-    const item = document.createElement('section');
-    item.className = 'example-item';
-    const header = document.createElement('div');
-    header.className = 'example-heading';
-    const name = document.createElement('input');
-    name.value = example.name || 'Example Response';
-    name.placeholder = 'Example name';
-    name.addEventListener('input', () => {
-      example.name = name.value;
-      markActiveRequestDirty();
-    });
-    const status = document.createElement('input');
-    status.type = 'number';
-    status.min = '0';
-    status.max = '999';
-    status.value = example.statusCode || '';
-    status.placeholder = 'Status';
-    status.addEventListener('input', () => {
-      example.statusCode = Number(status.value) || 0;
-      markActiveRequestDirty();
-    });
-    const bodyType = document.createElement('select');
-    for (const type of BODY_TYPES) {
-      bodyType.append(new Option(type, type));
-    }
-    bodyType.value = BODY_TYPES.includes(example.bodyType) ? example.bodyType : 'RAW_TEXT';
-    bodyType.addEventListener('change', () => {
-      example.bodyType = bodyType.value;
-      body.value = formatExampleBody(example);
-      markActiveRequestDirty();
-    });
-    const duplicate = document.createElement('button');
-    duplicate.textContent = 'Duplicate';
-    duplicate.addEventListener('click', () => duplicateExample(index));
-    const remove = document.createElement('button');
-    remove.className = 'danger';
-    remove.textContent = 'Delete';
-    remove.addEventListener('click', () => deleteExample(index));
-    header.append(name, status, bodyType, duplicate, remove);
-    const headers = document.createElement('textarea');
-    headers.spellcheck = false;
-    headers.value = exampleHeadersToText(example.headers || []);
-    headers.placeholder = 'Header-Name: value';
-    headers.addEventListener('input', () => {
-      example.headers = parseHeadersText(headers.value);
-      markActiveRequestDirty();
-    });
-    const body = document.createElement('textarea');
-    body.spellcheck = false;
-    body.value = formatExampleBody(example);
-    body.addEventListener('input', () => {
-      example.body = body.value;
-      markActiveRequestDirty();
-    });
-    item.append(header, headers, body);
-    container.append(item);
+  renderRequestExamples(examples, {
+    doc: document,
+    bodyTypes: BODY_TYPES,
+    onDirty: markActiveRequestDirty,
+    onDuplicate: duplicateExample,
+    onDelete: deleteExample
   });
 }
 
-function formatExampleBody(example) {
-  const body = example.body || '';
-  if (example.bodyType !== 'RAW_JSON') {
-    return body;
-  }
-  try {
-    return JSON.stringify(JSON.parse(body), null, 2);
-  } catch {
-    return body;
-  }
-}
-
-function exampleHeadersToText(headers) {
-  return (headers || [])
-    .filter((header) => header.enabled !== false && header.key)
-    .map((header) => `${header.key}: ${header.value ?? ''}`)
-    .join('\n');
-}
-
-function parseHeadersText(value) {
-  return String(value || '')
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const separator = line.indexOf(':');
-      if (separator < 1) {
-        return { enabled: true, key: line, value: '' };
-      }
-      return {
-        enabled: true,
-        key: line.slice(0, separator).trim(),
-        value: line.slice(separator + 1).trim()
-      };
-    });
-}
-
 function renderAuthEditor(auth) {
-  const type = auth?.type || 'none';
-  $('authTypeSelect').value = type;
-  showAuthSection(type);
-  $('authBearerTokenInput').value = auth?.token || '';
-  $('authBasicUsernameInput').value = auth?.username || '';
-  $('authBasicPasswordInput').value = auth?.password || '';
-  $('authApiKeyLocationSelect').value = auth?.location || 'header';
-  $('authApiKeyNameInput').value = auth?.key || '';
-  $('authApiKeyValueInput').value = auth?.value || '';
-  $('authCookieValueInput').value = auth?.value || '';
-  $('authOauthGrantTypeSelect').value = auth?.grantType || 'authorizationCode';
-  $('authOauthTokenTypeSelect').value = auth?.tokenType || 'Bearer';
-  $('authOauthAccessTokenInput').value = auth?.accessToken || '';
-  $('authOauthRefreshTokenInput').value = auth?.refreshToken || '';
-  $('authOauthAuthorizationUrlInput').value = auth?.authorizationUrl || '';
-  $('authOauthRedirectStrategySelect').value = auth?.redirectStrategy || 'loopback';
-  $('authOauthDeviceAuthorizationUrlInput').value = auth?.deviceAuthorizationUrl || '';
-  $('authOauthTokenUrlInput').value = auth?.tokenUrl || '';
-  $('authOauthClientIdInput').value = auth?.clientId || '';
-  $('authOauthClientSecretInput').value = auth?.clientSecret || '';
-  $('authOauthScopesInput').value = auth?.scopes || '';
-  $('authOauthUserCodeInput').value = auth?.userCode || '';
-  $('authOauthVerificationUriInput').value = auth?.verificationUriComplete || auth?.verificationUri || '';
-  $('authClientPfxPathInput').value = auth?.pfxPath || '';
-  $('authClientCertPathInput').value = auth?.certPath || '';
-  $('authClientKeyPathInput').value = auth?.keyPath || '';
-  $('authClientCaPathInput').value = auth?.caPath || '';
-  $('authClientPassphraseInput').value = auth?.passphrase || '';
+  renderRequestAuthEditor(auth, {
+    doc: document,
+    showAuthSection
+  });
 }
 
 function showAuthSection(type) {
@@ -2725,200 +1162,27 @@ function showAuthSection(type) {
 }
 
 function renderPairs(containerId, pairs, fieldName) {
-  const container = $(containerId);
-  container.textContent = '';
-  pairs.forEach((pair, index) => {
-    const row = document.createElement('div');
-    row.className = 'kv-row';
-    const enabled = document.createElement('input');
-    enabled.type = 'checkbox';
-    enabled.checked = pair.enabled !== false;
-    enabled.addEventListener('change', () => {
-      pair.enabled = enabled.checked;
+  renderEditorRequestPairs({
+    doc: document,
+    containerId,
+    pairs,
+    onDirty: () => {
       collectRequestFromEditor();
       markActiveRequestDirty();
-    });
-    const key = document.createElement('input');
-    key.placeholder = 'Key';
-    key.value = pair.key || '';
-    key.addEventListener('input', () => {
-      pair.key = key.value;
-      markActiveRequestDirty();
-    });
-    const value = document.createElement('input');
-    value.placeholder = 'Value';
-    value.value = pair.value || '';
-    value.addEventListener('input', () => {
-      pair.value = value.value;
-      markActiveRequestDirty();
-    });
-    const remove = document.createElement('button');
-    remove.textContent = 'Remove';
-    remove.addEventListener('click', () => {
-      pairs.splice(index, 1);
-      markActiveRequestDirty();
+    },
+    onRemove: () => {
       renderRequestEditor();
-    });
-    row.append(enabled, key, value, remove);
-    container.append(row);
+    }
   });
 }
 
 function renderAssertions(assertions) {
-  const container = $('assertionsTable');
-  container.textContent = '';
-  assertions.forEach((assertion, index) => {
-    const row = document.createElement('div');
-    row.className = 'assertion-row';
-    row.dataset.assertionType = assertion.type || 'statusCode';
-
-    const enabled = document.createElement('input');
-    enabled.type = 'checkbox';
-    enabled.checked = assertion.enabled !== false;
-    enabled.addEventListener('change', () => {
-      assertion.enabled = enabled.checked;
-      markActiveRequestDirty();
-    });
-
-    const type = document.createElement('select');
-    for (const [value, label] of [
-      ['statusCode', 'Status'],
-      ['header', 'Header'],
-      ['jsonPath', 'JSON Path'],
-      ['xmlPath', 'XML XPath'],
-      ['htmlSelector', 'HTML Selector'],
-      ['responseTime', 'Time'],
-      ['responseSize', 'Size'],
-      ['bodyContains', 'Body Contains'],
-      ['extractVariable', 'Extract JSON'],
-      ['extractXml', 'Extract XML'],
-      ['extractHtml', 'Extract HTML'],
-      ['extractRegex', 'Extract Regex']
-    ]) {
-      type.append(new Option(label, value));
-    }
-    type.value = assertion.type || 'statusCode';
-    type.addEventListener('change', () => {
-      assertion.type = type.value;
-      applyAssertionTypeDefaults(assertion);
-      markActiveRequestDirty();
-      renderAssertions(assertions);
-    });
-
-    const name = assertionInput(assertionNamePlaceholder(assertion), assertion.name || assertion.variableName || '', (value) => {
-      assertion.name = value;
-      if (assertion.type === 'extractVariable' || assertion.type === 'extractXml' || assertion.type === 'extractHtml' || assertion.type === 'extractRegex') {
-        assertion.variableName = value;
-      }
-    });
-    const path = assertionInput(assertionPathPlaceholder(assertion), assertion.path || '', (value) => { assertion.path = value; });
-
-    const operator = document.createElement('select');
-    for (const [value, label] of [
-      ['equals', '='],
-      ['notEquals', '!='],
-      ['contains', 'contains'],
-      ['exists', 'exists'],
-      ['lessThan', '<'],
-      ['greaterThan', '>']
-    ]) {
-      operator.append(new Option(label, value));
-    }
-    operator.value = assertion.operator || 'equals';
-    operator.addEventListener('change', () => {
-      assertion.operator = operator.value;
-      markActiveRequestDirty();
-    });
-
-    const expected = assertionInput(assertionExpectedPlaceholder(assertion), assertion.expected ?? '', (value) => { assertion.expected = value; });
-    const remove = document.createElement('button');
-    remove.type = 'button';
-    remove.textContent = 'Remove';
-    remove.addEventListener('click', () => {
-      assertions.splice(index, 1);
-      markActiveRequestDirty();
-      renderAssertions(assertions);
-    });
-    row.append(enabled, type, name, path, operator, expected, remove);
-    container.append(row);
+  renderRequestAssertions({
+    doc: document,
+    assertions,
+    onDirty: markActiveRequestDirty,
+    onRerender: () => renderAssertions(assertions)
   });
-}
-
-function assertionInput(placeholder, value, onInput) {
-  const input = document.createElement('input');
-  input.placeholder = placeholder;
-  input.value = value;
-  input.addEventListener('input', () => {
-    onInput(input.value);
-    markActiveRequestDirty();
-  });
-  return input;
-}
-
-function assertionNamePlaceholder(assertion) {
-  if (assertion.type === 'header') {
-    return 'Header name';
-  }
-  if (assertion.type === 'extractVariable' || assertion.type === 'extractXml' || assertion.type === 'extractHtml' || assertion.type === 'extractRegex') {
-    return 'Variable name';
-  }
-  return 'Name';
-}
-
-function assertionPathPlaceholder(assertion) {
-  if (assertion.type === 'jsonPath' || assertion.type === 'extractVariable') {
-    return 'JSON path';
-  }
-  if (assertion.type === 'xmlPath' || assertion.type === 'extractXml') {
-    return 'XPath';
-  }
-  if (assertion.type === 'htmlSelector' || assertion.type === 'extractHtml') {
-    return 'CSS selector';
-  }
-  if (assertion.type === 'extractRegex') {
-    return 'Unused';
-  }
-  return 'Path';
-}
-
-function assertionExpectedPlaceholder(assertion) {
-  if (assertion.type === 'statusCode') {
-    return 'Expected status';
-  }
-  if (assertion.type === 'responseTime') {
-    return 'Milliseconds';
-  }
-  if (assertion.type === 'responseSize') {
-    return 'Bytes';
-  }
-  if (assertion.type === 'header') {
-    return 'Expected header value';
-  }
-  if (assertion.type === 'bodyContains') {
-    return 'Text to find';
-  }
-  if (assertion.type === 'extractRegex') {
-    return 'Regex pattern';
-  }
-  if (assertion.type === 'xmlPath') {
-    return 'Expected XML value';
-  }
-  if (assertion.type === 'htmlSelector') {
-    return 'Expected text';
-  }
-  return 'Expected';
-}
-
-function applyAssertionTypeDefaults(assertion) {
-  const template = Object.values(ASSERTION_TEMPLATES).find((candidate) => candidate.type === assertion.type);
-  if (!template) {
-    return;
-  }
-  assertion.operator = template.operator;
-  assertion.expected = template.expected;
-  assertion.name = template.name;
-  assertion.path = template.path;
-  assertion.variableName = template.variableName;
 }
 
 function renderEnvironmentSelect() {
@@ -2962,268 +1226,57 @@ function renderCollectionVariablesEditor() {
 }
 
 function renderRequestVariablePairs(pairs) {
-  renderVariablePairs('requestVariablesTable', pairs, () => {
-    markActiveRequestDirty();
-    renderVariablePreview();
+  renderEditorVariablePairs({
+    doc: document,
+    containerId: 'requestVariablesTable',
+    pairs,
+    onChange: () => {
+      markActiveRequestDirty();
+      renderVariablePreview();
+    },
+    onRemove: () => {
+      renderRequestEditor();
+      renderCollectionVariablesEditor();
+    }
   });
 }
 
 function renderCollectionVariablePairs(pairs) {
-  renderVariablePairs('collectionVariablesTable', pairs, () => {
-    renderVariablePreview();
-  });
-}
-
-function renderVariablePairs(containerId, pairs, onChange) {
-  const container = $(containerId);
-  container.textContent = '';
-  pairs.forEach((pair, index) => {
-    const row = document.createElement('div');
-    row.className = 'kv-row env-row';
-    const enabled = document.createElement('input');
-    enabled.type = 'checkbox';
-    enabled.checked = pair.enabled !== false;
-    enabled.addEventListener('change', () => {
-      pair.enabled = enabled.checked;
-      onChange();
-    });
-    const key = document.createElement('input');
-    key.placeholder = 'Variable';
-    key.value = pair.key || '';
-    key.addEventListener('input', () => {
-      pair.key = key.value;
-      onChange();
-    });
-    const value = document.createElement('input');
-    value.placeholder = 'Value';
-    value.type = pair.secret ? 'password' : 'text';
-    value.value = pair.value || '';
-    value.addEventListener('input', () => {
-      pair.value = value.value;
-      onChange();
-    });
-    const secretLabel = document.createElement('label');
-    secretLabel.className = 'secret-toggle';
-    const secret = document.createElement('input');
-    secret.type = 'checkbox';
-    secret.checked = pair.secret === true;
-    secret.addEventListener('change', () => {
-      pair.secret = secret.checked;
-      value.type = pair.secret ? 'password' : 'text';
-      onChange();
-    });
-    const secretText = document.createElement('span');
-    secretText.textContent = 'Secret';
-    secretLabel.append(secret, secretText);
-    const remove = document.createElement('button');
-    remove.textContent = 'Remove';
-    remove.addEventListener('click', () => {
-      pairs.splice(index, 1);
+  renderEditorVariablePairs({
+    doc: document,
+    containerId: 'collectionVariablesTable',
+    pairs,
+    onChange: () => {
+      renderVariablePreview();
+    },
+    onRemove: () => {
       renderRequestEditor();
       renderCollectionVariablesEditor();
-    });
-    row.append(enabled, key, value, secretLabel, remove);
-    container.append(row);
+    }
   });
 }
 
 function renderVariablePreview() {
-  const collection = activeCollection();
-  const environment = activeEnvironment();
-  const request = activeRequest();
-  const rows = [];
-  const effective = new Map();
-  for (const pair of collection?.variables || []) {
-    if (pair.enabled === false || !pair.key) {
-      continue;
-    }
-    effective.set(pair.key, {
-      key: pair.key,
-      value: pair.secret ? '••••••' : pair.value ?? '',
-      source: 'Collection',
-      secret: pair.secret === true
-    });
-  }
-  for (const pair of environment?.variables || []) {
-    if (pair.enabled === false || !pair.key) {
-      continue;
-    }
-    effective.set(pair.key, {
-      key: pair.key,
-      value: pair.secret ? '••••••' : pair.value ?? '',
-      source: 'Environment',
-      secret: pair.secret === true
-    });
-  }
-  for (const pair of request?.variables || []) {
-    if (pair.enabled === false || !pair.key) {
-      continue;
-    }
-    effective.set(pair.key, {
-      key: pair.key,
-      value: pair.secret ? '••••••' : pair.value ?? '',
-      source: 'Request',
-      secret: pair.secret === true
-    });
-  }
-  for (const item of [...effective.values()].sort((left, right) => left.key.localeCompare(right.key))) {
-    rows.push(`${item.key} = ${item.value} (${item.source}${item.secret ? ', Secret' : ''})`);
-  }
-  $('variablePreview').textContent = rows.length ? rows.join('\n') : 'No variables';
-}
-
-function renderCookieJarEditor() {
-  workspace.cookies ||= [];
-  const container = $('cookiesTable');
-  container.textContent = '';
-  const activeHost = domainFromRequestUrl(activeRequest()?.url);
-  const filterInput = $('filterCookiesToRequestHostInput');
-  const filterLabel = $('cookieHostFilterLabel');
-  const filterActive = filterInput?.checked === true && Boolean(activeHost);
-  if (filterInput) {
-    filterInput.disabled = !activeHost;
-    if (!activeHost) {
-      filterInput.checked = false;
-    }
-  }
-  if (filterLabel) {
-    filterLabel.textContent = activeHost ? `Host: ${activeHost}` : 'No active host';
-  }
-  const visibleCookies = workspace.cookies
-    .map((cookie, index) => ({ cookie, index }))
-    .filter(({ cookie }) => !filterActive || rendererCookieMatchesHost(cookie, activeHost));
-  if (!visibleCookies.length) {
-    const empty = document.createElement('div');
-    empty.className = 'empty-state';
-    empty.textContent = workspace.cookies.length && filterActive ? 'No cookies for active host' : 'No cookies';
-    container.append(empty);
-    return;
-  }
-  visibleCookies.forEach(({ cookie, index }) => {
-    const row = document.createElement('div');
-    row.className = 'cookie-row';
-    const enabled = document.createElement('input');
-    enabled.type = 'checkbox';
-    enabled.checked = cookie.enabled !== false;
-    enabled.addEventListener('change', () => {
-      cookie.enabled = enabled.checked;
-    });
-    const name = cookieInput(cookie.name || '', 'Name', (value) => { cookie.name = value; });
-    const value = cookieInput(cookie.value || '', 'Value', (next) => { cookie.value = next; }, 'password');
-    const domain = cookieInput(cookie.domain || '', 'Domain', (next) => { cookie.domain = next; });
-    const path = cookieInput(cookie.path || '/', 'Path', (next) => { cookie.path = next || '/'; });
-    const expires = cookieInput(cookie.expiresAt || '', 'Expires ISO', (next) => { cookie.expiresAt = next; });
-    const secureLabel = checkboxLabel('Secure', cookie.secure === true, (checked) => {
-      cookie.secure = checked;
-      if (!checked && cookie.sameSite === 'None') {
-        cookie.sameSite = '';
-        setStatus('SameSite=None requires Secure.');
-        renderCookieJarEditor();
-      }
-    });
-    const httpOnlyLabel = checkboxLabel('HttpOnly', cookie.httpOnly === true, (checked) => { cookie.httpOnly = checked; });
-    const hostOnlyLabel = checkboxLabel('Host only', cookie.hostOnly !== false, (checked) => {
-      cookie.hostOnly = checked;
-      renderCookieJarEditor();
-    });
-    const sameSite = document.createElement('select');
-    for (const option of ['', 'Lax', 'Strict', 'None']) {
-      sameSite.append(new Option(option || 'SameSite', option));
-    }
-    sameSite.value = cookie.sameSite || '';
-    sameSite.addEventListener('change', () => {
-      if (sameSite.value === 'None' && cookie.secure !== true) {
-        cookie.sameSite = '';
-        sameSite.value = '';
-        setStatus('SameSite=None requires Secure.');
-        return;
-      }
-      cookie.sameSite = sameSite.value;
-    });
-    const remove = document.createElement('button');
-    remove.className = 'danger';
-    remove.textContent = 'Remove';
-    remove.addEventListener('click', () => {
-      workspace.cookies.splice(index, 1);
-      renderCookieJarEditor();
-    });
-    bindCookieFieldValidation(cookie, { domain, path, expires }, activeHost);
-    row.append(enabled, name, value, domain, path, expires, secureLabel, httpOnlyLabel, hostOnlyLabel, sameSite, remove);
-    container.append(row);
+  renderEditorVariablePreview({
+    doc: document,
+    collection: activeCollection(),
+    environment: activeEnvironment(),
+    request: activeRequest()
   });
 }
 
-function cookieInput(initialValue, placeholder, onInput, type = 'text') {
-  const input = document.createElement('input');
-  input.type = type;
-  input.placeholder = placeholder;
-  input.value = initialValue;
-  input.addEventListener('input', () => onInput(input.value));
-  return input;
+function renderCookieJarEditor() {
+  renderRequestCookieJarEditor({
+    doc: document,
+    workspace,
+    activeRequestUrl: activeRequest()?.url || '',
+    rerender: renderCookieJarEditor,
+    setStatus
+  });
 }
 
-function bindCookieFieldValidation(cookie, inputs, activeHost) {
-  const refresh = () => {
-    const issues = cookieFieldIssues(cookie, activeHost);
-    applyCookieInputIssue(inputs.domain, issues.domain);
-    applyCookieInputIssue(inputs.path, issues.path);
-    applyCookieInputIssue(inputs.expires, issues.expires);
-  };
-  for (const input of Object.values(inputs)) {
-    input.addEventListener('input', refresh);
-  }
-  refresh();
-}
-
-function applyCookieInputIssue(input, issue) {
-  input.classList.toggle('invalid-input', Boolean(issue));
-  input.setAttribute('aria-invalid', issue ? 'true' : 'false');
-  input.title = issue || '';
-}
-
-function cookieFieldIssues(cookie, activeHost) {
-  const domain = normalizeCookieDomain(cookie.domain);
-  const path = String(cookie.path || '').trim();
-  const expiresAt = String(cookie.expiresAt || '').trim();
-  const issues = {};
-  if (!domain) {
-    issues.domain = 'Cookie domain is required.';
-  } else if (/[\s/:]/.test(domain)) {
-    issues.domain = 'Cookie domain must be a hostname without spaces, protocol, or path.';
-  } else if (cookie.hostOnly === false && rendererIsIpAddressLike(domain)) {
-    issues.domain = 'IP-address cookies must be host-only.';
-  } else if (activeHost && !rendererCookieMatchesHost({ ...cookie, domain }, activeHost)) {
-    issues.domain = 'Cookie domain does not match the active request host.';
-  }
-  if (!path.startsWith('/')) {
-    issues.path = 'Cookie path must start with /.';
-  }
-  if (expiresAt && Number.isNaN(new Date(expiresAt).getTime())) {
-    issues.expires = 'Cookie expiry must be a valid date or ISO timestamp.';
-  }
-  return issues;
-}
-
-function rendererIsIpAddressLike(hostname) {
-  const host = String(hostname || '').replace(/^\[/, '').replace(/\]$/, '');
-  return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host) || host.includes(':');
-}
-
-function checkboxLabel(label, checked, onChange) {
-  const wrapper = document.createElement('label');
-  wrapper.className = 'secret-toggle';
-  const input = document.createElement('input');
-  input.type = 'checkbox';
-  input.checked = checked;
-  input.addEventListener('change', () => onChange(input.checked));
-  const text = document.createElement('span');
-  text.textContent = label;
-  wrapper.append(input, text);
-  return wrapper;
-}
-
-function redactedVariableValue(pair) {
-  return pair?.secret ? '••••••' : pair?.value ?? '';
+function variableValue(pair) {
+  return pair?.value ?? '';
 }
 
 function renderEnvironmentPairs(pairs) {
@@ -3248,32 +1301,19 @@ function renderEnvironmentPairs(pairs) {
     });
     const value = document.createElement('input');
     value.placeholder = 'Value';
-    value.type = pair.secret ? 'password' : 'text';
+    value.type = 'text';
     value.value = pair.value || '';
     value.addEventListener('input', () => {
       pair.value = value.value;
       renderVariablePreview();
     });
-    const secretLabel = document.createElement('label');
-    secretLabel.className = 'secret-toggle';
-    const secret = document.createElement('input');
-    secret.type = 'checkbox';
-    secret.checked = pair.secret === true;
-    secret.addEventListener('change', () => {
-      pair.secret = secret.checked;
-      value.type = pair.secret ? 'password' : 'text';
-      renderVariablePreview();
-    });
-    const secretText = document.createElement('span');
-    secretText.textContent = 'Secret';
-    secretLabel.append(secret, secretText);
     const remove = document.createElement('button');
     remove.textContent = 'Remove';
     remove.addEventListener('click', () => {
       pairs.splice(index, 1);
       renderEnvironmentEditor();
     });
-    row.append(enabled, key, value, secretLabel, remove);
+    row.append(enabled, key, value, remove);
     container.append(row);
   });
 }
@@ -3300,52 +1340,7 @@ function renderHistory() {
 }
 
 async function sendActiveRequest() {
-  const request = activeRequest();
-  if (!request) {
-    return setStatus('Select a request before sending.');
-  }
-  collectRequestFromEditor();
-  await saveWorkspace(false);
-  const environment = activeEnvironment();
-  const errors = await window.postmeter.request.validate(request, environment);
-  if (errors.length) {
-    $('validationLabel').textContent = errors.join(' ');
-    return setStatus('Fix validation errors.');
-  }
-  $('validationLabel').textContent = '';
-  setStatus('Sending request...');
-  try {
-    const response = await window.postmeter.request.send(request, environment);
-    if (response.updatedAuth) {
-      request.auth = response.updatedAuth;
-      renderAuthEditor(request.auth);
-    }
-    if (Array.isArray(response.updatedCookies)) {
-      workspace.cookies = response.updatedCookies;
-      renderCookieJarEditor();
-    }
-    lastResponse = response;
-    $('captureResponseExampleButton').disabled = false;
-    displayResponse(response);
-    workspace.history = [
-      {
-        timestamp: new Date().toISOString(),
-        method: request.method,
-        url: response.finalUrl,
-        statusCode: response.statusCode,
-        durationMillis: response.durationMillis
-      },
-      ...(workspace.history || [])
-    ].slice(0, 100);
-    renderHistory();
-    setStatus('Request completed.');
-  } catch (error) {
-    $('responseStatus').textContent = 'ERR';
-    const message = error.message || String(error);
-    $('responseBody').value = message;
-    setStatus('Request failed.');
-    notifyUser('Request Failed', message);
-  }
+  return rendererWorkflows.sendActiveRequest();
 }
 
 function displayResponse(response) {
@@ -3356,771 +1351,111 @@ function displayResponse(response) {
   $('responseHeaders').value = Object.entries(response.headers || {})
     .map(([key, values]) => `${key}: ${values.join(', ')}`)
     .join('\n');
-  $('responseBody').value = formatBody(response);
-}
-
-function formatBody(response) {
-  const body = response.body || '';
-  const contentType = Object.entries(response.headers || {})
-    .find(([key]) => key.toLowerCase() === 'content-type')?.[1]?.join(',').toLowerCase() || '';
-  const trimmed = body.trim();
-  if (!trimmed) {
-    return body;
-  }
-  if (trimmed.startsWith('{') || trimmed.startsWith('[') || contentType.includes('json')) {
-    try {
-      return JSON.stringify(JSON.parse(body), null, 2);
-    } catch {
-      return body;
-    }
-  }
-  if (contentType.includes('xml') || trimmed.startsWith('<?xml') || looksLikeXml(trimmed)) {
-    return formatMarkupBody(body, 'application/xml');
-  }
-  if (contentType.includes('html') || looksLikeHtml(trimmed)) {
-    return formatMarkupBody(body, 'text/html');
-  }
-  return body;
-}
-
-function looksLikeXml(value) {
-  return /^<([A-Za-z_][\w:.-]*)(\s|>|\/>)/.test(value) && !looksLikeHtml(value);
-}
-
-function looksLikeHtml(value) {
-  return /<!doctype\s+html/i.test(value) || /^<html[\s>]/i.test(value) || /<(body|head|main|section|article|div|span|h1|p|table|form|script|style)(\s|>)/i.test(value);
-}
-
-function formatMarkupBody(body, mimeType) {
-  try {
-    const document = new DOMParser().parseFromString(body, mimeType);
-    if (document.getElementsByTagName?.('parsererror')?.length) {
-      return body;
-    }
-    const serialized = document.documentElement?.outerHTML
-      || new XMLSerializer().serializeToString(document);
-    return prettyMarkup(serialized);
-  } catch {
-    return prettyMarkup(body) || body;
-  }
-}
-
-function prettyMarkup(markup) {
-  const lines = String(markup || '')
-    .replace(/>\s*</g, '>\n<')
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean);
-  let depth = 0;
-  return lines.map((line) => {
-    if (/^<\//.test(line)) {
-      depth = Math.max(0, depth - 1);
-    }
-    const output = `${'  '.repeat(depth)}${line}`;
-    if (/^<[^!?/][^>]*[^/]>\s*$/.test(line) && !/^<(area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)\b/i.test(line)) {
-      depth++;
-    }
-    if (/<\/[^>]+>\s*$/.test(line) && !/^<\//.test(line) && !/^<[^>]+>[^<]*<\/[^>]+>$/.test(line)) {
-      depth = Math.max(0, depth - 1);
-    }
-    return output;
-  }).join('\n');
+  $('responseBody').value = PostMeterResponseFormatting.formatBody(response);
 }
 
 async function runLoadTest() {
-  const request = activeRequest();
-  if (!request) {
-    return setStatus('Select a request before running a load test.');
-  }
-  collectRequestFromEditor();
-  await saveWorkspace(false);
-  const environment = activeEnvironment();
-  const errors = await window.postmeter.request.validate(request, environment);
-  if (errors.length) {
-    $('validationLabel').textContent = errors.join(' ');
-    return setStatus('Fix validation errors.');
-  }
-  const concurrency = Number($('loadConcurrency').value);
-  let confirmedHighConcurrency = false;
-  if (concurrency >= 50) {
-    confirmedHighConcurrency = confirm(`Run load test with concurrency ${concurrency}?`);
-    if (!confirmedHighConcurrency) {
-      return setStatus('Load test cancelled.');
-    }
-  }
-  activeLoadId = crypto.randomUUID();
-  $('runLoadButton').disabled = true;
-  $('cancelLoadButton').disabled = false;
-  $('exportLoadJsonButton').disabled = true;
-  $('exportLoadCsvButton').disabled = true;
-  $('loadResults').textContent = 'Starting load test...';
-  try {
-    lastLoadResult = await window.postmeter.loadTest.start(activeLoadId, request, environment, {
-      ...loadConfigFromControls(request),
-      concurrency,
-      confirmedHighConcurrency
-    });
-    $('loadResults').textContent = formatLoadResult(lastLoadResult);
-    $('exportLoadJsonButton').disabled = false;
-    $('exportLoadCsvButton').disabled = false;
-    setStatus(lastLoadResult.cancelled ? 'Load test cancelled.' : 'Load test completed.');
-  } catch (error) {
-    const message = error.message || String(error);
-    $('loadResults').textContent = message;
-    setStatus('Load test failed.');
-    notifyUser('Load Test Failed', message);
-  } finally {
-    $('runLoadButton').disabled = false;
-    $('cancelLoadButton').disabled = true;
-    activeLoadId = null;
-  }
-}
-
-function formatLoadProgress(progress) {
-  const lines = [
-    'Running load test...',
-    `Mode: ${progress.mode === 'duration' ? `duration (${progress.durationSeconds}s)` : 'request count'}`,
-    `Completed ${progress.completedRequests} of ${progress.requestedRequests} max requests.`,
-    `Elapsed: ${progress.elapsedMillis || 0} ms`,
-    `Target RPS: ${progress.targetRatePerSecond || 0}`,
-    `Rate cap RPS: ${progress.maxRatePerSecond || 0}`,
-    `Execution: ${progress.executionMode || 'singleProcess'} (${progress.workerProcesses || 1} process${(progress.workerProcesses || 1) === 1 ? '' : 'es'})`,
-    `Active workers: ${progress.activeWorkers || 0}`
-  ];
-  return lines.join('\n');
+  return rendererWorkflows.runLoadTest();
 }
 
 async function cancelLoadTest() {
-  if (activeLoadId) {
-    await window.postmeter.loadTest.cancel(activeLoadId);
-    setStatus('Cancelling load test...');
-  }
+  return rendererWorkflows.cancelLoadTest();
 }
 
 async function runActiveCollection() {
-  const collection = activeCollection();
-  if (!collection) {
-    return setStatus('Select a collection before running it.');
-  }
-  collectRequestFromEditor();
-  await saveWorkspace(false);
-  activeRunnerId = crypto.randomUUID();
-  lastRunnerResult = null;
-  $('runCollectionButton').disabled = true;
-  $('cancelRunnerButton').disabled = false;
-  $('exportRunnerJsonButton').disabled = true;
-  $('exportRunnerCsvButton').disabled = true;
-  $('runnerResults').textContent = 'Starting collection run...';
-  try {
-    const result = await window.postmeter.runner.start(activeRunnerId, collection, activeEnvironment(), {
-      stopOnFailure: $('runnerStopOnFailure').checked
-    });
-    if (Array.isArray(result.cookies)) {
-      workspace.cookies = result.cookies;
-      renderCookieJarEditor();
-    }
-    lastRunnerResult = result;
-    $('runnerResults').textContent = formatRunnerResult(result);
-    $('exportRunnerJsonButton').disabled = false;
-    $('exportRunnerCsvButton').disabled = false;
-    setStatus(result.cancelled ? 'Collection run cancelled.' : 'Collection run completed.');
-  } catch (error) {
-    const message = error.message || String(error);
-    $('runnerResults').textContent = message;
-    setStatus('Collection run failed.');
-    notifyUser('Collection Run Failed', message);
-  } finally {
-    $('runCollectionButton').disabled = false;
-    $('cancelRunnerButton').disabled = true;
-    activeRunnerId = null;
-  }
+  return rendererWorkflows.runActiveCollection();
 }
 
 async function cancelCollectionRun() {
-  if (activeRunnerId) {
-    await window.postmeter.runner.cancel(activeRunnerId);
-    setStatus('Cancelling collection run...');
-  }
+  return rendererWorkflows.cancelCollectionRun();
 }
 
 async function exportRunnerResult(format) {
-  if (!lastRunnerResult) {
-    return;
-  }
-  const result = await window.postmeter.runner.export(lastRunnerResult, format);
-  if (!result.cancelled) {
-    setStatus(`Collection run exported to ${result.path}.`);
-  }
-}
-
-function formatRunnerResult(result) {
-  const lines = [
-    `Collection: ${result.collectionName || '-'}`,
-    `Passed: ${result.passed}`,
-    `Completed requests: ${result.totalRequests}`,
-    `Passed requests: ${result.passedRequests}`,
-    `Failed requests: ${result.failedRequests}`,
-    `Cancelled: ${result.cancelled}`
-  ];
-  for (const item of result.results || []) {
-    lines.push('');
-    lines.push(`${item.passed ? 'PASS' : 'FAIL'} ${item.requestName} ${item.statusCode ? `(${item.statusCode}, ${item.durationMillis} ms)` : ''}`);
-    if (item.error) {
-      lines.push(`Error: ${item.error}`);
-    }
-    for (const assertion of item.assertionResults || []) {
-      lines.push(`- ${assertion.passed ? 'PASS' : 'FAIL'} ${assertion.message}`);
-    }
-    appendScriptResultLines(lines, 'Pre-request', item.preRequestScriptResult);
-    appendScriptResultLines(lines, 'Tests', item.testScriptResult);
-    for (const variable of item.extractedVariables || []) {
-      lines.push(`- Extracted ${variable.key}`);
-    }
-    const localVariables = visibleVariables(item.localVariables || []);
-    for (const variable of localVariables) {
-      lines.push(`- Request variable ${variable.key} = ${redactedVariableValue(variable)}`);
-    }
-  }
-  appendRuntimeVariableLines(lines, result);
-  return lines.join('\n');
-}
-
-function appendRuntimeVariableLines(lines, result) {
-  const collectionVariables = visibleVariables(result.collectionVariables || []);
-  const environmentVariables = visibleVariables(result.environment?.variables || []);
-  if (!collectionVariables.length && !environmentVariables.length) {
-    return;
-  }
-  lines.push('');
-  lines.push('Runtime Variables');
-  for (const variable of collectionVariables) {
-    lines.push(`- Collection ${variable.key} = ${redactedVariableValue(variable)}`);
-  }
-  for (const variable of environmentVariables) {
-    lines.push(`- Environment ${variable.key} = ${redactedVariableValue(variable)}`);
-  }
-}
-
-function visibleVariables(variables) {
-  return (variables || [])
-    .filter((variable) => variable.enabled !== false && variable.key)
-    .sort((left, right) => left.key.localeCompare(right.key));
-}
-
-function appendScriptResultLines(lines, label, scriptResult) {
-  if (!scriptResult) {
-    return;
-  }
-  if (scriptResult.error) {
-    lines.push(`- ${label} script error: ${scriptResult.error}`);
-  }
-  for (const test of scriptResult.tests || []) {
-    lines.push(`- ${test.passed ? 'PASS' : 'FAIL'} ${label}: ${test.name}${test.error ? ` (${test.error})` : ''}`);
-  }
+  return rendererWorkflows.exportRunnerResult(format);
 }
 
 async function exportLoadResult(format) {
-  if (!lastLoadResult) {
-    return;
-  }
-  const result = await window.postmeter.loadTest.export(lastLoadResult, format);
-  if (!result.cancelled) {
-    setStatus(`Load test exported to ${result.path}.`);
-  }
+  return rendererWorkflows.exportLoadResult(format);
 }
 
 async function startDeviceFlow() {
-  const request = activeRequest();
-  if (!request) {
-    return setStatus('Select a request before starting device authorization.');
-  }
-  collectRequestFromEditor();
-  if (request.auth?.type !== 'oauth2' || request.auth?.grantType !== 'deviceCode') {
-    return setStatus('Select OAuth 2.0 Device Code before starting device authorization.');
-  }
-  activeOauthFlowId = crypto.randomUUID();
-  setOauthButtonsBusy(true);
-  setStatus('Starting OAuth device authorization...');
-  renderOauthProgress({
-    type: 'device',
-    status: 'starting',
-    message: 'Starting OAuth device authorization.'
-  });
-  try {
-    const startDevice = window.__postmeterStartDeviceFlow || window.postmeter.oauth.startDeviceFlow;
-    const result = await startDevice(activeOauthFlowId, request.auth, activeEnvironment());
-    if (result.auth) {
-      request.auth = result.auth;
-      renderAuthEditor(request.auth);
-      renderCollections();
-      await saveWorkspace(false);
-    }
-    setStatus(result.cancelled ? 'OAuth device authorization cancelled.' : 'OAuth device authorization completed.');
-  } catch (error) {
-    const message = error.message || String(error);
-    setStatus('OAuth device authorization failed.');
-    $('validationLabel').textContent = message;
-    notifyUser('OAuth Device Authorization Failed', message);
-  } finally {
-    setOauthButtonsBusy(false);
-    activeOauthFlowId = null;
-  }
+  return rendererWorkflows.startDeviceFlow();
 }
 
 async function startPkceFlow() {
-  const request = activeRequest();
-  if (!request) {
-    return setStatus('Select a request before starting authorization.');
-  }
-  collectRequestFromEditor();
-  if (request.auth?.type !== 'oauth2' || request.auth?.grantType !== 'authorizationCode') {
-    return setStatus('Select OAuth 2.0 Authorization Code before starting authorization.');
-  }
-  activeOauthFlowId = crypto.randomUUID();
-  setOauthButtonsBusy(true);
-  setStatus('Starting OAuth authorization...');
-  renderOauthProgress({
-    type: 'pkce',
-    status: 'starting',
-    message: 'Starting OAuth authorization-code flow.'
-  });
-  try {
-    const startPkce = window.__postmeterStartPkceFlow || window.postmeter.oauth.startPkceFlow;
-    const result = await startPkce(
-      activeOauthFlowId,
-      request.auth,
-      activeEnvironment(),
-      $('authOauthRedirectStrategySelect').value
-    );
-    if (result.auth) {
-      request.auth = result.auth;
-      renderAuthEditor(request.auth);
-      renderCollections();
-      await saveWorkspace(false);
-    }
-    setStatus(result.cancelled ? 'OAuth authorization cancelled.' : 'OAuth authorization completed.');
-  } catch (error) {
-    const message = error.message || String(error);
-    setStatus('OAuth authorization failed.');
-    $('validationLabel').textContent = message;
-    notifyUser('OAuth Authorization Failed', message);
-  } finally {
-    setOauthButtonsBusy(false);
-    activeOauthFlowId = null;
-  }
+  return rendererWorkflows.startPkceFlow();
 }
 
 async function cancelOauthFlow() {
-  if (activeOauthFlowId) {
-    await window.postmeter.oauth.cancelFlow(activeOauthFlowId);
-    setStatus('Cancelling OAuth flow...');
-  }
+  return rendererWorkflows.cancelOauthFlow();
 }
 
 function setOauthButtonsBusy(isBusy) {
-  $('startPkceFlowButton').disabled = isBusy;
-  $('startDeviceFlowButton').disabled = isBusy;
-  $('cancelOauthFlowButton').disabled = !isBusy;
+  rendererWorkflows.setOauthButtonsBusy(isBusy);
 }
 
 function renderOauthProgress(progress) {
-  $('oauthProgressPanel').hidden = false;
-  $('oauthProgressStatus').textContent = oauthStatusText(progress);
-  $('oauthProgressDetail').textContent = oauthProgressDetail(progress);
-}
-
-function oauthStatusText(progress) {
-  const type = progress.type === 'device' ? 'Device code' : 'Authorization code';
-  return `${type}: ${progress.status || 'working'}`;
-}
-
-function oauthProgressDetail(progress) {
-  return [
-    progress.message || '',
-    progress.userCode ? `User code: ${progress.userCode}` : '',
-    progress.verificationUriComplete ? `Verification URL: ${progress.verificationUriComplete}` : '',
-    !progress.verificationUriComplete && progress.verificationUri ? `Verification URL: ${progress.verificationUri}` : '',
-    progress.redirectUri ? `Redirect URI: ${progress.redirectUri}` : '',
-    progress.nextAttemptAt ? `Next poll: ${new Date(progress.nextAttemptAt).toLocaleTimeString()}` : '',
-    progress.expiresAt ? `Expires: ${new Date(progress.expiresAt).toLocaleTimeString()}` : ''
-  ].filter(Boolean).join('\n');
-}
-
-function formatLoadResult(result) {
-  return [
-    `Mode: ${result.mode === 'duration' ? `duration (${result.durationSeconds}s)` : 'request count'}`,
-    `Requested requests: ${result.requestedRequests}`,
-    `Completed requests: ${result.totalRequests}`,
-    `Cancelled: ${result.cancelled}`,
-    `Elapsed: ${result.elapsedMillis || 0} ms`,
-    `Ramp-up: ${result.rampUpSeconds || 0} s`,
-    `Target RPS: ${result.targetRatePerSecond || 0}`,
-    `Rate cap RPS: ${result.maxRatePerSecond || 0}`,
-    `Execution: ${result.executionMode || 'singleProcess'} (${result.workerProcesses || 1} process${(result.workerProcesses || 1) === 1 ? '' : 'es'})`,
-    `Successful: ${result.successfulRequests}`,
-    `Failed: ${result.failedRequests}`,
-    `Error rate: ${(result.errorRate * 100).toFixed(2)}%`,
-    `Requests/sec: ${result.requestsPerSecond.toFixed(2)}`,
-    `Latency min/avg/p50/p90/p95/p99/max: ${result.minMillis} / ${result.averageMillis.toFixed(2)} / ${result.p50Millis} / ${result.p90Millis} / ${result.p95Millis} / ${result.p99Millis} / ${result.maxMillis} ms`,
-    `Latency histogram: ${formatLatencyHistogram(result.latencyHistogram)}`,
-    `Status counts: ${JSON.stringify(result.statusCounts)}`,
-    Array.isArray(result.policyDecisions) && result.policyDecisions.length ? `Policy decisions:\n- ${result.policyDecisions.map((decision) => decision.message || '').filter(Boolean).join('\n- ')}` : '',
-    Array.isArray(result.samples) ? `Samples recorded: ${result.samples.length}${result.sampleLimitReached ? ` (capped at ${result.sampleLimit})` : ''}` : '',
-    result.errors?.length ? `Errors:\n- ${result.errors.join('\n- ')}` : ''
-  ].filter(Boolean).join('\n');
-}
-
-function formatLatencyHistogram(histogram) {
-  if (!Array.isArray(histogram) || !histogram.length) {
-    return 'none';
-  }
-  return histogram
-    .map((bucket) => `${bucket.upperBoundMillis == null ? 'overflow' : `<=${bucket.upperBoundMillis}ms`}:${bucket.count}`)
-    .join(' ');
+  rendererWorkflows.renderOauthProgress(progress);
 }
 
 async function saveWorkspace(showStatus = true, options = {}) {
-  collectRequestFromEditor();
-  if (options.promptForDraft === true && !activeCollectionId && activeRequestId) {
-    const request = activeRequest();
-    if (request) {
-      return Boolean(await saveDraftRequestWithPrompt(request, { showStatus }));
-    }
-  }
-  return persistWorkspace(showStatus);
+  return rendererWorkflows.saveWorkspace(showStatus, options);
 }
 
 async function persistWorkspace(showStatus = true, options = {}) {
-  if (options.collectEditors !== false) {
-    collectRequestFromEditor();
-    collectEnvironmentFromEditor();
-    collectSettingsFromEditor();
-  }
-  const save = window.__postmeterSaveWorkspace || window.postmeter.workspace.save;
-  workspace = await save(workspace);
-  clearSavedRequestDirtyState();
-  if (showStatus) {
-    setStatus('Workspace saved.');
-  }
-  return true;
+  return rendererWorkflows.persistWorkspace(showStatus, options);
 }
 
 async function importWorkspace() {
-  if (!confirm('Importing a workspace replaces the current workspace. A backup will be created first. Continue?')) {
-    return;
-  }
-  const result = await window.postmeter.workspace.importWorkspace();
-  if (result.cancelled) {
-    return;
-  }
-  workspace = result.workspace;
-  selectInitialWorkspaceItem();
-  renderAll();
-  setStatus(`Workspace imported. Backup: ${result.backupPath || 'none'}`);
+  return rendererWorkflows.importWorkspace();
 }
 
 async function exportWorkspace() {
-  await saveWorkspace(false);
-  const exportWorkspaceBoundary = window.__postmeterExportWorkspace || window.postmeter.workspace.exportWorkspace;
-  const result = await exportWorkspaceBoundary(workspace);
-  if (!result.cancelled) {
-    setStatus(`Workspace exported to ${result.path}.`);
-  }
+  return rendererWorkflows.exportWorkspace();
 }
 
 async function checkForUpdates() {
-  setStatus('Checking for updates...');
-  try {
-    collectSettingsFromEditor();
-    const updateCheck = window.__postmeterUpdateCheck || window.postmeter.app.checkForUpdates;
-    const result = await updateCheck({
-      includePrereleases: workspace.settings?.updates?.includePrereleases === true
-    });
-    if (!result.updateAvailable) {
-      const message = `PostMeter is up to date (${result.currentVersion}${result.includePrereleases ? ', prereleases included' : ''}).`;
-      setStatus(message);
-      notifyUser('No Updates Available', message);
-      return;
-    }
-    setStatus(`PostMeter ${result.latestVersion} is available.`);
-    if (result.releaseUrl && confirm(`PostMeter ${result.latestVersion} is available. Open GitHub Releases?`)) {
-      const openExternal = window.__postmeterOpenExternal || window.postmeter.app.openExternal;
-      await openExternal(result.releaseUrl);
-    }
-  } catch (error) {
-    const message = error.message || String(error);
-    setStatus(`Update check failed: ${message}`);
-    notifyUser('Update Check Failed', message);
-  }
+  return rendererWorkflows.checkForUpdates();
 }
 
 async function importCollection() {
-  const importCollectionBoundary = window.__postmeterImportCollection || window.postmeter.collection.importCollection;
-  const result = await importCollectionBoundary();
-  if (result.cancelled) {
-    return;
-  }
-  result.collection.name = uniqueName(result.collection.name, workspace.collections.map((collection) => collection.name));
-  promoteCookieHeadersToJar(result.collection);
-  workspace.collections.push(result.collection);
-  activeCollectionId = result.collection.id;
-  selectFirstRequest(result.collection);
-  renderAll();
-  await saveWorkspace();
+  return rendererWorkflows.importCollection();
 }
 
 function promoteCookieHeadersToJar(collection) {
-  workspace.cookies ||= [];
-  walkCollectionRequests(collection, (request) => {
-    const host = domainFromRequestUrl(request.url);
-    if (!host) {
-      return;
-    }
-    const metadataByName = postmanCookieMetadataByName(request.variables);
-    const headers = request.headers || [];
-    const retainedHeaders = [];
-    for (const header of headers) {
-      if (header.enabled !== false && String(header.key || '').toLowerCase() === 'cookie') {
-        for (const cookie of parseCookieHeaderForJar(header.value || '', host)) {
-          upsertWorkspaceCookie(applyPostmanCookieMetadata(cookie, metadataByName.get(cookie.name.toLowerCase())));
-        }
-        request.cookieJar = { enabled: true, storeResponses: true };
-      } else {
-        retainedHeaders.push(header);
-      }
-    }
-    request.headers = retainedHeaders;
-  });
-}
-
-function postmanCookieMetadataByName(variables = []) {
-  const map = new Map();
-  const source = (variables || []).find((variable) => variable.enabled !== false && variable.key === 'postman.cookies');
-  if (!source?.value) {
-    return map;
-  }
-  try {
-    const cookies = JSON.parse(source.value);
-    if (!Array.isArray(cookies)) {
-      return map;
-    }
-    for (const cookie of cookies) {
-      if (cookie?.name) {
-        map.set(String(cookie.name).toLowerCase(), cookie);
-      }
-    }
-  } catch {
-    return map;
-  }
-  return map;
-}
-
-function applyPostmanCookieMetadata(cookie, metadata) {
-  if (!metadata || typeof metadata !== 'object') {
-    return cookie;
-  }
-  const domain = normalizeCookieDomain(metadata.domain);
-  const sameSite = normalizeCookieSameSite(metadata.sameSite);
-  return {
-    ...cookie,
-    value: metadata.value == null ? cookie.value : String(metadata.value),
-    domain: domain || cookie.domain,
-    path: metadata.path ? String(metadata.path) : cookie.path,
-    expiresAt: normalizeCookieExpiresAt(metadata.expiresAt) || cookie.expiresAt,
-    secure: metadata.secure === true,
-    httpOnly: metadata.httpOnly === true,
-    sameSite,
-    hostOnly: domain ? metadata.hostOnly === true : cookie.hostOnly,
-    priority: normalizeCookiePriority(metadata.priority),
-    partitioned: metadata.partitioned === true,
-    source: metadata.source ? String(metadata.source).slice(0, 64) : cookie.source || '',
-    extensions: Array.isArray(metadata.extensions) ? metadata.extensions.map(String).filter(Boolean).slice(0, 25) : cookie.extensions || []
-  };
-}
-
-function parseCookieHeaderForJar(value, domain) {
-  return String(value || '')
-    .split(';')
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .map((part) => {
-      const separator = part.indexOf('=');
-      if (separator < 1) {
-        return null;
-      }
-      return {
-        id: crypto.randomUUID(),
-        enabled: true,
-        name: part.slice(0, separator).trim(),
-        value: part.slice(separator + 1).trim(),
-        domain,
-        path: '/',
-        expiresAt: '',
-        secure: false,
-        httpOnly: false,
-        sameSite: 'Lax',
-        hostOnly: true,
-        priority: '',
-        partitioned: false,
-        source: '',
-        extensions: []
-      };
-    })
-    .filter((cookie) => cookie?.name);
-}
-
-function normalizeCookiePriority(value) {
-  const normalized = String(value || '').trim().toLowerCase();
-  if (normalized === 'high') {
-    return 'High';
-  }
-  if (normalized === 'medium') {
-    return 'Medium';
-  }
-  if (normalized === 'low') {
-    return 'Low';
-  }
-  return '';
+  rendererWorkflows.promoteCookieHeadersToJar(collection);
 }
 
 function upsertWorkspaceCookie(cookie) {
-  const index = (workspace.cookies || []).findIndex((existing) =>
-    existing.name.toLowerCase() === cookie.name.toLowerCase()
-    && existing.domain.toLowerCase() === cookie.domain.toLowerCase()
-    && (existing.path || '/') === (cookie.path || '/')
-  );
-  if (index >= 0) {
-    workspace.cookies[index] = { ...workspace.cookies[index], ...cookie, id: workspace.cookies[index].id };
-  } else {
-    workspace.cookies.push(cookie);
-  }
+  rendererWorkflows.upsertWorkspaceCookie(cookie);
 }
 
-function walkCollectionRequests(collection, visitor) {
-  for (const request of collection.requests || []) {
-    visitor(request);
-  }
-  for (const folder of collection.folders || []) {
-    walkFolderRequests(folder, visitor);
-  }
+function applySingleRequestScriptMutations(result, request) {
+  rendererWorkflows.applySingleRequestScriptMutations(result, request);
 }
 
-function walkFolderRequests(folder, visitor) {
-  for (const request of folder.requests || []) {
-    visitor(request);
-  }
-  for (const child of folder.folders || []) {
-    walkFolderRequests(child, visitor);
-  }
+function applyRunnerScriptMutations(result, collection) {
+  rendererWorkflows.applyRunnerScriptMutations(result, collection);
+}
+
+function applyEnvironmentScriptMutations(environment) {
+  rendererWorkflows.applyEnvironmentScriptMutations(environment);
+}
+
+function renderScriptMutationEditors() {
+  rendererWorkflows.renderScriptMutationEditors();
+}
+
+function cloneVariablePairs(pairs) {
+  return rendererWorkflows.cloneVariablePairs(pairs);
 }
 
 function collectSettingsFromEditor() {
   ensureSettings();
 }
 
-function loadPolicyFromControls() {
-  return normalizeLoadPolicy({
-    concurrency: $('loadConcurrency').value,
-    totalRequests: $('loadRequests').value,
-    durationSeconds: $('loadDurationSeconds').value,
-    rampUpSeconds: $('loadRampUpSeconds').value,
-    targetRatePerSecond: $('loadTargetRate').value,
-    maxRatePerSecond: $('loadMaxRate').value,
-    executionMode: $('loadExecutionMode').value,
-    workerProcesses: $('loadWorkerProcesses').value,
-    recordSamples: $('loadRecordSamples').checked
-  });
-}
-
-function loadConfigFromControls() {
-  const policy = loadPolicyFromControls();
-  return {
-    concurrency: policy.concurrency,
-    totalRequests: policy.totalRequests,
-    durationSeconds: policy.durationSeconds,
-    rampUpSeconds: policy.rampUpSeconds,
-    targetRatePerSecond: policy.targetRatePerSecond,
-    maxRatePerSecond: policy.maxRatePerSecond,
-    executionMode: policy.executionMode,
-    workerProcesses: policy.workerProcesses,
-    recordSamples: policy.recordSamples
-  };
-}
-
-function defaultLoadPolicy() {
-  return {
-    concurrency: 5,
-    totalRequests: 25,
-    durationSeconds: 0,
-    rampUpSeconds: 0,
-    targetRatePerSecond: 0,
-    maxRatePerSecond: 0,
-    executionMode: 'singleProcess',
-    workerProcesses: 2,
-    recordSamples: false
-  };
-}
-
-function defaultRequestLoadPolicy() {
-  return {
-    enabled: false,
-    ...defaultLoadPolicy()
-  };
-}
-
-function normalizeLoadPolicy(policy) {
-  const defaults = defaultLoadPolicy();
-  return {
-    concurrency: boundedInteger(policy?.concurrency, defaults.concurrency, 1, 512),
-    totalRequests: boundedInteger(policy?.totalRequests, defaults.totalRequests, 1, 100000),
-    durationSeconds: boundedNumber(policy?.durationSeconds, defaults.durationSeconds, 0, 3600),
-    rampUpSeconds: boundedNumber(policy?.rampUpSeconds, defaults.rampUpSeconds, 0, 3600),
-    targetRatePerSecond: boundedNumber(policy?.targetRatePerSecond, defaults.targetRatePerSecond, 0, 10000),
-    maxRatePerSecond: boundedNumber(policy?.maxRatePerSecond, defaults.maxRatePerSecond, 0, 10000),
-    executionMode: policy?.executionMode === 'multiProcess' ? 'multiProcess' : 'singleProcess',
-    workerProcesses: boundedInteger(policy?.workerProcesses, defaults.workerProcesses, 1, 8),
-    recordSamples: policy?.recordSamples === true
-  };
-}
-
-function uniqueStrings(values) {
-  const seen = new Set();
-  return values
-    .map((value) => String(value || '').trim().toLowerCase())
-    .filter((value) => {
-      if (!value || seen.has(value)) {
-        return false;
-      }
-      seen.add(value);
-      return true;
-    });
-}
-
-function boundedInteger(value, fallback, min, max) {
-  const number = Number(value);
-  if (!Number.isInteger(number)) {
-    return fallback;
-  }
-  return Math.min(max, Math.max(min, number));
-}
-
-function boundedNumber(value, fallback, min, max) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) {
-    return fallback;
-  }
-  return Math.min(max, Math.max(min, number));
-}
-
 async function exportCollection(collection = activeCollection(), format = 'postmeter') {
-  if (!collection) {
-    return setStatus('Select a collection to export.');
-  }
-  const exportCollectionBoundary = window.__postmeterExportCollection || window.postmeter.collection.exportCollection;
-  const result = await exportCollectionBoundary(collection, format);
-  if (!result.cancelled) {
-    setStatus(`Collection exported to ${result.path}.`);
-  }
+  return rendererWorkflows.exportCollection(collection, format);
 }
 
 function newCollection() {
@@ -4218,7 +1553,7 @@ function newRequestObject(name) {
     variables: [],
     examples: [],
     cookieJar: { enabled: false, storeResponses: true },
-    loadTestPolicy: defaultRequestLoadPolicy()
+    loadTestPolicy: PostMeterLoadPolicy.defaultRequestLoadPolicy()
   };
 }
 
@@ -4227,7 +1562,7 @@ function newEnvironment() {
   const environment = {
     id: crypto.randomUUID(),
     name: uniqueName('New Environment', workspace.environments.map((item) => item.name)),
-    variables: [{ enabled: true, key: 'baseUrl', value: 'https://example.com', secret: false }]
+    variables: [{ enabled: true, key: 'baseUrl', value: 'https://example.com' }]
   };
   workspace.environments.push(environment);
   activeEnvironmentId = environment.id;
@@ -4268,7 +1603,7 @@ function renameEnvironment(environment) {
 function addVariable() {
   const environment = activeEnvironment();
   if (environment) {
-    environment.variables.push({ enabled: true, key: '', value: '', secret: false });
+    environment.variables.push({ enabled: true, key: '', value: '' });
     renderEnvironmentEditor();
   }
 }
@@ -4277,7 +1612,7 @@ function addCollectionVariable() {
   const collection = activeCollection();
   if (collection) {
     collection.variables ||= [];
-    collection.variables.push({ enabled: true, key: '', value: '', secret: false });
+    collection.variables.push({ enabled: true, key: '', value: '' });
     renderCollectionVariablesEditor();
   }
 }
@@ -4286,7 +1621,7 @@ function addRequestVariable() {
   const request = activeRequest();
   if (request) {
     request.variables ||= [];
-    request.variables.push({ enabled: true, key: '', value: '', secret: false });
+    request.variables.push({ enabled: true, key: '', value: '' });
     markActiveRequestDirty();
     renderRequestEditor();
   }
@@ -4296,19 +1631,7 @@ function addCookie() {
   workspace.cookies ||= [];
   const request = activeRequest();
   const domain = domainFromRequestUrl(request?.url) || 'example.com';
-  workspace.cookies.push({
-    id: crypto.randomUUID(),
-    enabled: true,
-    name: '',
-    value: '',
-    domain,
-    path: '/',
-    expiresAt: '',
-    secure: false,
-    httpOnly: false,
-    sameSite: 'Lax',
-    hostOnly: true
-  });
+  workspace.cookies.push(newWorkspaceCookie({ domain }));
   renderCookieJarEditor();
 }
 
@@ -4320,68 +1643,15 @@ function clearExpiredCookies() {
   setStatus(`Removed ${before - workspace.cookies.length} expired cookies.`);
 }
 
-function domainFromRequestUrl(url) {
-  try {
-    return new URL(String(url || '')).hostname.toLowerCase();
-  } catch {
-    return '';
-  }
-}
-
-function rendererCookieMatchesHost(cookie, hostname) {
-  const host = normalizeCookieDomain(hostname);
-  const domain = normalizeCookieDomain(cookie?.domain);
-  if (!host || !domain) {
-    return false;
-  }
-  if (cookie?.hostOnly !== false) {
-    return host === domain;
-  }
-  return host === domain || host.endsWith(`.${domain}`);
-}
-
-function normalizeCookieDomain(domain) {
-  return String(domain || '').trim().replace(/^\./, '').replace(/\.$/, '').toLowerCase();
-}
-
-function normalizeCookieExpiresAt(value) {
-  const text = String(value || '').trim();
-  if (!text) {
-    return '';
-  }
-  const date = new Date(text);
-  return Number.isNaN(date.getTime()) ? '' : date.toISOString();
-}
-
-function normalizeCookieSameSite(value) {
-  const normalized = String(value || '').trim().toLowerCase();
-  if (normalized === 'strict') {
-    return 'Strict';
-  }
-  if (normalized === 'lax') {
-    return 'Lax';
-  }
-  if (normalized === 'none') {
-    return 'None';
-  }
-  return '';
-}
-
-function isExpiredCookie(cookie) {
-  if (!cookie.expiresAt) {
-    return false;
-  }
-  const expires = new Date(cookie.expiresAt).getTime();
-  return Number.isFinite(expires) && expires <= Date.now();
-}
-
 function addExample() {
   const request = activeRequest();
   if (!request) {
     return;
   }
   request.examples ||= [];
-  request.examples.push(newExampleObject());
+  request.examples.push(newExampleObject({
+    existingNames: request.examples.map((example) => example.name)
+  }));
   markActiveRequestDirty();
   renderExamples(request.examples);
 }
@@ -4392,7 +1662,9 @@ function captureResponseExample() {
     return setStatus('Send a request before capturing a response example.');
   }
   request.examples ||= [];
-  request.examples.push(exampleFromResponse(lastResponse));
+  request.examples.push(exampleFromResponse(lastResponse, {
+    existingNames: request.examples.map((example) => example.name)
+  }));
   markActiveRequestDirty();
   renderExamples(request.examples);
   setStatus('Captured response example.');
@@ -4437,40 +1709,6 @@ function deleteExample(index) {
   renderExamples(request.examples);
 }
 
-function newExampleObject() {
-  return {
-    id: crypto.randomUUID(),
-    name: uniqueName('Example Response', activeRequest()?.examples?.map((example) => example.name) || []),
-    statusCode: 200,
-    headers: [],
-    bodyType: 'RAW_JSON',
-    body: '{}'
-  };
-}
-
-function exampleFromResponse(response) {
-  return {
-    id: crypto.randomUUID(),
-    name: uniqueName(`Response ${response.statusCode || ''}`.trim() || 'Example Response', activeRequest()?.examples?.map((example) => example.name) || []),
-    statusCode: response.statusCode || 0,
-    headers: Object.entries(response.headers || {}).flatMap(([key, values]) => (values || []).map((value) => ({ enabled: true, key, value }))),
-    bodyType: looksLikeJson(response.body) ? 'RAW_JSON' : 'RAW_TEXT',
-    body: response.body || ''
-  };
-}
-
-function looksLikeJson(value) {
-  if (!String(value || '').trim()) {
-    return false;
-  }
-  try {
-    JSON.parse(value);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function addPair(fieldName) {
   const request = activeRequest();
   if (request) {
@@ -4493,18 +1731,6 @@ function addAssertion(template = ASSERTION_TEMPLATES.status200) {
 function addAssertionTemplate() {
   const template = ASSERTION_TEMPLATES[$('assertionTemplateSelect').value] || ASSERTION_TEMPLATES.status200;
   addAssertion(template);
-}
-
-function newAssertion(template) {
-  return {
-      enabled: true,
-      type: template.type || 'statusCode',
-      operator: template.operator || 'equals',
-      expected: template.expected ?? '',
-      name: template.name || '',
-      path: template.path || '',
-      variableName: template.variableName || ''
-  };
 }
 
 function renameCollection(collection) {
@@ -4618,66 +1844,10 @@ function collectRequestFromEditor() {
 }
 
 function collectAuthFromEditor() {
-  const type = $('authTypeSelect').value;
-  const existingAuth = activeRequest()?.auth || {};
-  if (type === 'bearer') {
-    return { type, token: $('authBearerTokenInput').value };
-  }
-  if (type === 'basic') {
-    return {
-      type,
-      username: $('authBasicUsernameInput').value,
-      password: $('authBasicPasswordInput').value
-    };
-  }
-  if (type === 'apiKey') {
-    return {
-      type,
-      location: $('authApiKeyLocationSelect').value,
-      key: $('authApiKeyNameInput').value,
-      value: $('authApiKeyValueInput').value
-    };
-  }
-  if (type === 'cookie') {
-    return { type, value: $('authCookieValueInput').value };
-  }
-  if (type === 'oauth2') {
-    const grantType = $('authOauthGrantTypeSelect').value;
-    const keepDeviceState = grantType === 'deviceCode' && existingAuth.type === 'oauth2';
-    return {
-      type,
-      tokenType: $('authOauthTokenTypeSelect').value,
-      accessToken: $('authOauthAccessTokenInput').value,
-      refreshToken: $('authOauthRefreshTokenInput').value,
-      authorizationUrl: $('authOauthAuthorizationUrlInput').value,
-      deviceAuthorizationUrl: $('authOauthDeviceAuthorizationUrlInput').value,
-      tokenUrl: $('authOauthTokenUrlInput').value,
-      clientId: $('authOauthClientIdInput').value,
-      clientSecret: $('authOauthClientSecretInput').value,
-      scopes: $('authOauthScopesInput').value,
-      grantType,
-      redirectStrategy: $('authOauthRedirectStrategySelect').value,
-      redirectUri: existingAuth.type === 'oauth2' ? existingAuth.redirectUri || '' : '',
-      expiresAt: existingAuth.type === 'oauth2' ? existingAuth.expiresAt || '' : '',
-      deviceCode: keepDeviceState ? existingAuth.deviceCode || '' : '',
-      userCode: keepDeviceState ? $('authOauthUserCodeInput').value : '',
-      verificationUri: keepDeviceState ? existingAuth.verificationUri || '' : '',
-      verificationUriComplete: keepDeviceState ? existingAuth.verificationUriComplete || '' : '',
-      deviceCodeExpiresAt: keepDeviceState ? existingAuth.deviceCodeExpiresAt || '' : '',
-      devicePollIntervalSeconds: keepDeviceState ? existingAuth.devicePollIntervalSeconds || '' : ''
-    };
-  }
-  if (type === 'clientCertificate') {
-    return {
-      type,
-      pfxPath: $('authClientPfxPathInput').value,
-      certPath: $('authClientCertPathInput').value,
-      keyPath: $('authClientKeyPathInput').value,
-      caPath: $('authClientCaPathInput').value,
-      passphrase: $('authClientPassphraseInput').value
-    };
-  }
-  return { type: 'none' };
+  return collectRequestAuthFromEditor({
+    doc: document,
+    existingAuth: activeRequest()?.auth || {}
+  });
 }
 
 function collectEnvironmentFromEditor() {
@@ -4708,182 +1878,6 @@ function activeRequest() {
     return null;
   }
   return findRequest(collection, activeRequestId)?.request || null;
-}
-
-function firstRequestInCollection(collection) {
-  if (collection.requests?.length) {
-    return { request: collection.requests[0], folderId: null };
-  }
-  for (const folder of collection.folders || []) {
-    const found = firstRequestInFolder(folder);
-    if (found) {
-      return found;
-    }
-  }
-  return null;
-}
-
-function firstRequestInFolder(folder) {
-  if (folder.requests?.length) {
-    return { request: folder.requests[0], folderId: folder.id };
-  }
-  for (const child of folder.folders || []) {
-    const found = firstRequestInFolder(child);
-    if (found) {
-      return found;
-    }
-  }
-  return null;
-}
-
-function findRequest(collection, requestId) {
-  for (const request of collection.requests || []) {
-    if (request.id === requestId) {
-      return { request, folder: null };
-    }
-  }
-  for (const folder of collection.folders || []) {
-    const found = findRequestInFolder(folder, requestId);
-    if (found) {
-      return found;
-    }
-  }
-  return null;
-}
-
-function findRequestInFolder(folder, requestId) {
-  for (const request of folder.requests || []) {
-    if (request.id === requestId) {
-      return { request, folder };
-    }
-  }
-  for (const child of folder.folders || []) {
-    const found = findRequestInFolder(child, requestId);
-    if (found) {
-      return found;
-    }
-  }
-  return null;
-}
-
-function findFolder(collection, folderId) {
-  for (const folder of collection.folders || []) {
-    const found = findFolderRecursive(folder, folderId);
-    if (found) {
-      return found;
-    }
-  }
-  return null;
-}
-
-function removeFolder(collection, folderId) {
-  const index = (collection.folders || []).findIndex((folder) => folder.id === folderId);
-  if (index >= 0) {
-    collection.folders.splice(index, 1);
-    return true;
-  }
-  for (const folder of collection.folders || []) {
-    if (removeFolderFromParent(folder, folderId)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function removeRequestFromCollection(collection, requestId) {
-  const index = (collection.requests || []).findIndex((request) => request.id === requestId);
-  if (index >= 0) {
-    collection.requests.splice(index, 1);
-    return true;
-  }
-  for (const folder of collection.folders || []) {
-    if (removeRequestFromFolder(folder, requestId)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function removeRequestFromFolder(folder, requestId) {
-  const index = (folder.requests || []).findIndex((request) => request.id === requestId);
-  if (index >= 0) {
-    folder.requests.splice(index, 1);
-    return true;
-  }
-  for (const child of folder.folders || []) {
-    if (removeRequestFromFolder(child, requestId)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function removeFolderFromParent(parent, folderId) {
-  const index = (parent.folders || []).findIndex((folder) => folder.id === folderId);
-  if (index >= 0) {
-    parent.folders.splice(index, 1);
-    return true;
-  }
-  for (const child of parent.folders || []) {
-    if (removeFolderFromParent(child, folderId)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function findFolderRecursive(folder, folderId) {
-  if (folder.id === folderId) {
-    return folder;
-  }
-  for (const child of folder.folders || []) {
-    const found = findFolderRecursive(child, folderId);
-    if (found) {
-      return found;
-    }
-  }
-  return null;
-}
-
-function allRequestNames(collection) {
-  const names = [...(collection.requests || []).map((request) => request.name)];
-  for (const folder of collection.folders || []) {
-    collectFolderRequestNames(folder, names);
-  }
-  return names;
-}
-
-function allFolderNames(collection) {
-  const names = [];
-  for (const folder of collection.folders || []) {
-    collectFolderNames(folder, names);
-  }
-  return names;
-}
-
-function collectFolderNames(folder, names) {
-  names.push(folder.name);
-  for (const child of folder.folders || []) {
-    collectFolderNames(child, names);
-  }
-}
-
-function collectFolderRequestNames(folder, names) {
-  names.push(...(folder.requests || []).map((request) => request.name));
-  for (const child of folder.folders || []) {
-    collectFolderRequestNames(child, names);
-  }
-}
-
-function uniqueName(baseName, existingNames) {
-  if (!existingNames.includes(baseName)) {
-    return baseName;
-  }
-  let suffix = 2;
-  while (existingNames.includes(`${baseName} ${suffix}`)) {
-    suffix++;
-  }
-  return `${baseName} ${suffix}`;
 }
 
 function activateTab(groupName, tabName) {
@@ -4935,8 +1929,4 @@ function isAutomatedUiSmoke() {
     || params.get('uiRegressionSmoke') === '1'
     || params.get('uiSnapshotSmoke') === '1'
     || params.get('uiOauthSmoke') === '1';
-}
-
-function clamp(value, min, max) {
-  return Math.min(Math.max(value, min), max);
 }

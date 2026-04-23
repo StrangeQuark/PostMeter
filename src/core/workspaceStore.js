@@ -1,42 +1,17 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const os = require('node:os');
-const YAML = require('yaml');
+const { defaultWorkspace } = require('./models');
+const { exportCollectionByFormat, importCollectionFromContent } = require('./collectionImportRegistry');
+const { migrate } = require('./workspaceMigrations');
 const {
-  CURRENT_SCHEMA_VERSION,
-  MIN_SUPPORTED_SCHEMA_VERSION,
-  collectionModel,
-  defaultWorkspace,
-  folderModel,
-  newId,
-  requestModel,
-  workspaceModel
-} = require('./models');
-const { importPostmanCollection } = require('./postmanImporter');
-const {
-  exportCurlCollection,
-  exportHarCollection,
-  exportJMeterPlan,
-  exportOpenApiCollection,
-  importCurlCommand,
-  importHarDocument,
-  importJMeterPlan,
-  importOpenApiDocument,
-  looksLikeHarDocument,
-  looksLikeOpenApiDocument
-} = require('./collectionFormats');
-const {
-  decryptWorkspaceSecrets,
-  encryptWorkspaceSecrets,
-  redactWorkspaceSecrets
-} = require('./secrets');
-
-function defaultWorkspacePath() {
-  if (process.env.POSTMETER_DATA_PATH && process.env.POSTMETER_DATA_PATH.trim()) {
-    return process.env.POSTMETER_DATA_PATH;
-  }
-  return path.join(os.homedir(), '.postmeter', 'workspace.json');
-}
+  defaultWorkspacePath,
+  looksLikeNativeWorkspace,
+  normalizeWorkspace,
+  pathExists,
+  siblingPath,
+  writeJsonFile,
+  writeJsonFileAtomic
+} = require('./workspacePersistence');
 
 class WorkspaceRecoveryError extends Error {
   constructor(message, recoveredWorkspace, recoveredPath, cause) {
@@ -49,9 +24,8 @@ class WorkspaceRecoveryError extends Error {
 }
 
 class WorkspaceStore {
-  constructor(workspacePath = defaultWorkspacePath(), options = {}) {
+  constructor(workspacePath = defaultWorkspacePath()) {
     this.workspacePath = workspacePath;
-    this.secretCodec = options.secretCodec || null;
   }
 
   getWorkspacePath() {
@@ -59,7 +33,7 @@ class WorkspaceStore {
   }
 
   async load() {
-    if (!(await exists(this.workspacePath))) {
+    if (!(await pathExists(this.workspacePath))) {
       const workspace = defaultWorkspace();
       await this.save(workspace);
       return { workspace, recovered: false };
@@ -81,7 +55,7 @@ class WorkspaceStore {
     }
 
     const migrated = migrate(parsed);
-    const workspace = normalizeWorkspace(decryptWorkspaceSecrets(parsed, this.secretCodec));
+    const workspace = normalizeWorkspace(parsed);
     if (migrated) {
       await this.createBackup('pre-migration.backup');
       await this.save(workspace);
@@ -91,16 +65,12 @@ class WorkspaceStore {
 
   async save(workspace) {
     const normalized = normalizeWorkspace(workspace);
-    const persisted = encryptWorkspaceSecrets(normalized, this.secretCodec);
-    await fs.mkdir(path.dirname(this.workspacePath), { recursive: true });
-    const tempPath = path.join(path.dirname(this.workspacePath), `postmeter-workspace-${process.pid}-${Date.now()}.json.tmp`);
-    await fs.writeFile(tempPath, JSON.stringify(persisted, null, 2));
-    await fs.rename(tempPath, this.workspacePath);
+    await writeJsonFileAtomic(this.workspacePath, normalized);
     return normalized;
   }
 
   async backupCurrentWorkspace(reason = 'manual.backup') {
-    if (!(await exists(this.workspacePath))) {
+    if (!(await pathExists(this.workspacePath))) {
       return null;
     }
     return this.createBackup(reason);
@@ -109,83 +79,25 @@ class WorkspaceStore {
   async importWorkspace(importPath) {
     const parsed = JSON.parse(await fs.readFile(importPath, 'utf8'));
     migrate(parsed);
-    return normalizeWorkspace(decryptWorkspaceSecrets(parsed, this.secretCodec));
+    return normalizeWorkspace(parsed);
   }
 
-  async exportWorkspace(workspace, exportPath, options = {}) {
+  async exportWorkspace(workspace, exportPath) {
     const normalized = normalizeWorkspace(workspace);
-    const exportable = options.includeSecrets === true ? normalized : redactWorkspaceSecrets(normalized);
-    await fs.mkdir(path.dirname(exportPath), { recursive: true });
-    await fs.writeFile(exportPath, JSON.stringify(exportable, null, 2));
+    await writeJsonFile(exportPath, normalized);
     return exportPath;
   }
 
   async importCollection(importPath) {
     const content = await fs.readFile(importPath, 'utf8');
-    const parsed = parseStructuredCollectionContent(content);
-    if (looksLikeNativeWorkspace(parsed)) {
-      migrate(parsed);
-      const workspace = normalizeWorkspace(decryptWorkspaceSecrets(parsed, this.secretCodec));
-      if (!workspace.collections.length) {
-        throw new Error('Imported file does not contain any collections.');
-      }
-      const collection = workspace.collections[0];
-      regenerateCollectionIds(collection);
-      return collection;
-    }
-
-    if (looksLikeOpenApiDocument(parsed)) {
-      const collection = importOpenApiDocument(parsed);
-      regenerateCollectionIds(collection);
-      return collection;
-    }
-
-    if (looksLikeHarDocument(parsed)) {
-      const collection = importHarDocument(parsed);
-      regenerateCollectionIds(collection);
-      return collection;
-    }
-
-    if (content.trim().startsWith('curl')) {
-      const collection = importCurlCommand(content);
-      regenerateCollectionIds(collection);
-      return collection;
-    }
-
-    if (content.includes('<jmeterTestPlan') || content.includes('<HTTPSamplerProxy')) {
-      const collection = importJMeterPlan(content);
-      regenerateCollectionIds(collection);
-      return collection;
-    }
-
-    try {
-      const collection = importPostmanCollection(parsed);
-      regenerateCollectionIds(collection);
-      return collection;
-    } catch (postmanError) {
-      const error = new Error('File is not a supported PostMeter, Postman, OpenAPI, HAR, curl, or JMeter collection.');
-      error.cause = postmanError;
-      throw error;
-    }
+    return importCollectionFromContent(content);
   }
 
   async exportCollection(collection, exportPath, options = {}) {
     const workspace = normalizeWorkspace({ collections: [collection], environments: [], history: [] });
-    const exportable = options.includeSecrets === true ? workspace : redactWorkspaceSecrets(workspace);
+    const normalizedCollection = workspace.collections[0];
     await fs.mkdir(path.dirname(exportPath), { recursive: true });
-    const normalizedCollection = exportable.collections[0];
-    const format = options.format || 'postmeter';
-    if (format === 'openapi') {
-      await fs.writeFile(exportPath, JSON.stringify(exportOpenApiCollection(normalizedCollection), null, 2));
-    } else if (format === 'har') {
-      await fs.writeFile(exportPath, JSON.stringify(exportHarCollection(normalizedCollection), null, 2));
-    } else if (format === 'curl') {
-      await fs.writeFile(exportPath, exportCurlCollection(normalizedCollection));
-    } else if (format === 'jmeter') {
-      await fs.writeFile(exportPath, exportJMeterPlan(normalizedCollection));
-    } else {
-      await fs.writeFile(exportPath, JSON.stringify(exportable, null, 2));
-    }
+    await fs.writeFile(exportPath, exportCollectionByFormat(normalizedCollection, options.format || 'postmeter', workspace));
     return exportPath;
   }
 
@@ -199,310 +111,6 @@ class WorkspaceStore {
     const recoveredPath = siblingPath(this.workspacePath, 'corrupt');
     await fs.rename(this.workspacePath, recoveredPath);
     return recoveredPath;
-  }
-}
-
-function parseStructuredCollectionContent(content) {
-  try {
-    return JSON.parse(content);
-  } catch {
-    if (!looksLikeYamlOpenApi(content)) {
-      return null;
-    }
-    try {
-      return YAML.parse(content);
-    } catch {
-      return null;
-    }
-  }
-}
-
-function looksLikeYamlOpenApi(content) {
-  return /^\s*(openapi|swagger)\s*:/m.test(content || '');
-}
-
-function migrate(workspace) {
-  if (!workspace || typeof workspace !== 'object') {
-    throw new Error('Workspace data is required.');
-  }
-  const schemaVersion = workspace.schemaVersion || 1;
-  if (schemaVersion > CURRENT_SCHEMA_VERSION) {
-    throw new Error(`Workspace schema version ${schemaVersion} is newer than this app supports (${CURRENT_SCHEMA_VERSION}).`);
-  }
-  if (schemaVersion < MIN_SUPPORTED_SCHEMA_VERSION) {
-    throw new Error(`Workspace schema version ${schemaVersion} is not supported.`);
-  }
-  let migrated = false;
-  if (schemaVersion < 2) {
-    workspace.schemaVersion = 2;
-    migrated = true;
-  }
-  if (schemaVersion < 3) {
-    for (const collection of workspace.collections || []) {
-      if (!Array.isArray(collection.folders)) {
-        collection.folders = [];
-      }
-    }
-    workspace.schemaVersion = 3;
-    migrated = true;
-  }
-  if (schemaVersion < 4) {
-    markPairSecrets(workspace, false);
-    workspace.schemaVersion = 4;
-    migrated = true;
-  }
-  if (schemaVersion < 5) {
-    for (const collection of workspace.collections || []) {
-      if (!Array.isArray(collection.variables)) {
-        collection.variables = [];
-      }
-    }
-    workspace.schemaVersion = 5;
-    migrated = true;
-  }
-  if (schemaVersion < 6) {
-    for (const collection of workspace.collections || []) {
-      ensureRequestScripts(collection.requests);
-      ensureFolderRequestScripts(collection.folders);
-    }
-    workspace.schemaVersion = 6;
-    migrated = true;
-  }
-  if (schemaVersion < 7) {
-    workspace.settings ||= { updates: { includePrereleases: false } };
-    workspace.settings.updates ||= { includePrereleases: false };
-    for (const collection of workspace.collections || []) {
-      ensureCollectionCompatibilityFields(collection);
-    }
-    workspace.schemaVersion = 7;
-    migrated = true;
-  }
-  if (schemaVersion < 8) {
-    if (!Array.isArray(workspace.cookies)) {
-      workspace.cookies = [];
-    }
-    for (const collection of workspace.collections || []) {
-      ensureCollectionCookieJarFields(collection);
-    }
-    workspace.schemaVersion = 8;
-    migrated = true;
-  }
-  if (schemaVersion < 9) {
-    workspace.settings ||= { updates: { includePrereleases: false } };
-    for (const collection of workspace.collections || []) {
-      ensureCollectionLoadTestPolicyFields(collection);
-    }
-    workspace.schemaVersion = 9;
-    migrated = true;
-  }
-  if (schemaVersion < 10) {
-    workspace.settings ||= { updates: { includePrereleases: false } };
-    delete workspace.settings.loadTestPolicy;
-    workspace.schemaVersion = 10;
-    migrated = true;
-  }
-  return migrated;
-}
-
-function ensureCollectionCompatibilityFields(collection) {
-  if (!Array.isArray(collection.certificates)) {
-    collection.certificates = [];
-  }
-  ensureRequestCompatibilityFields(collection.requests);
-  for (const folder of collection.folders || []) {
-    ensureFolderCompatibilityFields(folder);
-  }
-}
-
-function ensureFolderCompatibilityFields(folder) {
-  ensureRequestCompatibilityFields(folder.requests);
-  for (const child of folder.folders || []) {
-    ensureFolderCompatibilityFields(child);
-  }
-}
-
-function ensureRequestCompatibilityFields(requests = []) {
-  for (const request of requests || []) {
-    if (!Array.isArray(request.variables)) {
-      request.variables = [];
-    }
-    if (!Array.isArray(request.examples)) {
-      request.examples = [];
-    }
-  }
-}
-
-function ensureCollectionCookieJarFields(collection) {
-  ensureRequestCookieJarFields(collection.requests);
-  for (const folder of collection.folders || []) {
-    ensureFolderCookieJarFields(folder);
-  }
-}
-
-function ensureFolderCookieJarFields(folder) {
-  ensureRequestCookieJarFields(folder.requests);
-  for (const child of folder.folders || []) {
-    ensureFolderCookieJarFields(child);
-  }
-}
-
-function ensureRequestCookieJarFields(requests = []) {
-  for (const request of requests || []) {
-    request.cookieJar ||= { enabled: false, storeResponses: true };
-  }
-}
-
-function ensureCollectionLoadTestPolicyFields(collection) {
-  ensureRequestLoadTestPolicyFields(collection.requests);
-  for (const folder of collection.folders || []) {
-    ensureFolderLoadTestPolicyFields(folder);
-  }
-}
-
-function ensureFolderLoadTestPolicyFields(folder) {
-  ensureRequestLoadTestPolicyFields(folder.requests);
-  for (const child of folder.folders || []) {
-    ensureFolderLoadTestPolicyFields(child);
-  }
-}
-
-function ensureRequestLoadTestPolicyFields(requests = []) {
-  for (const request of requests || []) {
-    request.loadTestPolicy ||= { enabled: false };
-  }
-}
-
-function ensureFolderRequestScripts(folders = []) {
-  for (const folder of folders || []) {
-    ensureRequestScripts(folder.requests);
-    ensureFolderRequestScripts(folder.folders);
-  }
-}
-
-function ensureRequestScripts(requests = []) {
-  for (const request of requests || []) {
-    if (!request.scripts || typeof request.scripts !== 'object') {
-      request.scripts = { preRequest: '', tests: '' };
-    } else {
-      request.scripts.preRequest = typeof request.scripts.preRequest === 'string' ? request.scripts.preRequest : '';
-      request.scripts.tests = typeof request.scripts.tests === 'string' ? request.scripts.tests : '';
-    }
-  }
-}
-
-function normalizeWorkspace(workspace) {
-  const normalized = workspaceModel({
-    ...workspace,
-    schemaVersion: CURRENT_SCHEMA_VERSION,
-    collections: Array.isArray(workspace?.collections)
-      ? workspace.collections.map(collectionModel)
-      : defaultWorkspace().collections,
-    environments: Array.isArray(workspace?.environments) ? workspace.environments : [],
-    cookies: Array.isArray(workspace?.cookies) ? workspace.cookies : [],
-    history: Array.isArray(workspace?.history) ? workspace.history : []
-  });
-  return normalized;
-}
-
-function markPairSecrets(workspace, secret) {
-  for (const collection of workspace.collections || []) {
-    markCollectionPairSecrets(collection, secret);
-  }
-  for (const environment of workspace.environments || []) {
-    for (const variable of environment.variables || []) {
-      if (variable && typeof variable === 'object' && !Object.hasOwn(variable, 'secret')) {
-        variable.secret = secret;
-      }
-    }
-  }
-}
-
-function markCollectionPairSecrets(collection, secret) {
-  for (const request of collection.requests || []) {
-    markPairs(request.queryParams, secret);
-    markPairs(request.headers, secret);
-  }
-  for (const folder of collection.folders || []) {
-    markFolderPairSecrets(folder, secret);
-  }
-}
-
-function markFolderPairSecrets(folder, secret) {
-  for (const request of folder.requests || []) {
-    markPairs(request.queryParams, secret);
-    markPairs(request.headers, secret);
-  }
-  for (const child of folder.folders || []) {
-    markFolderPairSecrets(child, secret);
-  }
-}
-
-function markPairs(pairs, secret) {
-  for (const pair of pairs || []) {
-    if (pair && typeof pair === 'object' && !Object.hasOwn(pair, 'secret')) {
-      pair.secret = secret;
-    }
-  }
-}
-
-function looksLikeNativeWorkspace(value) {
-  return Boolean(
-    value
-    && typeof value === 'object'
-    && (
-      Object.hasOwn(value, 'schemaVersion')
-      || Array.isArray(value.collections)
-      || Array.isArray(value.environments)
-      || Array.isArray(value.history)
-    )
-  );
-}
-
-function regenerateCollectionIds(collection) {
-  collection.id = newId();
-  for (const certificate of collection.certificates || []) {
-    certificate.id = newId();
-  }
-  for (const request of collection.requests || []) {
-    regenerateRequestIds(request);
-  }
-  for (const folder of collection.folders || []) {
-    regenerateFolderIds(folder);
-  }
-}
-
-function regenerateFolderIds(folder) {
-  folder.id = newId();
-  folder.requests = (folder.requests || []).map((request) => {
-    const normalized = requestModel(request);
-    regenerateRequestIds(normalized);
-    return normalized;
-  });
-  folder.folders = (folder.folders || []).map((child) => {
-    const normalized = folderModel(child);
-    regenerateFolderIds(normalized);
-    return normalized;
-  });
-}
-
-function regenerateRequestIds(request) {
-  request.id = newId();
-  for (const example of request.examples || []) {
-    example.id = newId();
-  }
-}
-
-function siblingPath(sourcePath, label) {
-  const timestamp = new Date().toISOString().replaceAll(':', '-');
-  return path.join(path.dirname(sourcePath), `${path.basename(sourcePath)}.${label}.${timestamp}`);
-}
-
-async function exists(targetPath) {
-  try {
-    await fs.access(targetPath);
-    return true;
-  } catch {
-    return false;
   }
 }
 

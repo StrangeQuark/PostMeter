@@ -1,62 +1,12 @@
 const {
-  API_KEY_LOCATIONS,
-  ASSERTION_OPERATORS,
-  ASSERTION_TYPES,
-  AUTH_TYPE_VALUES,
-  BODY_TYPE_VALUES,
-  COLLECTION_EXPORT_FORMATS,
-  HTTP_METHODS,
-  LOAD_EXECUTION_MODES,
-  LOAD_EXPORT_FORMATS,
-  OAUTH2_GRANT_TYPES,
-  OAUTH2_REDIRECT_STRATEGIES,
-  OAUTH2_TOKEN_TYPES,
-  OAUTH_PROGRESS_STATUSES,
-  OAUTH_PROGRESS_TYPES,
+  fieldLimit,
+  hasSchemaEnumValue,
   oneOf,
   payloadSchemas
 } = require('./payloadSchemas');
 
-const SUPPORTED_METHODS = new Set(HTTP_METHODS);
-const BODY_TYPES = new Set(BODY_TYPE_VALUES);
-const FIELD_ENUMS = {
-  assertionTypes: ASSERTION_TYPES,
-  assertionOperators: ASSERTION_OPERATORS,
-  authTypes: AUTH_TYPE_VALUES,
-  apiKeyLocations: API_KEY_LOCATIONS,
-  bodyTypes: BODY_TYPE_VALUES,
-  cookiePriorities: ['', 'Low', 'Medium', 'High'],
-  loadExecutionModes: LOAD_EXECUTION_MODES,
-  oauth2GrantTypes: OAUTH2_GRANT_TYPES,
-  oauth2RedirectStrategies: OAUTH2_REDIRECT_STRATEGIES,
-  oauth2TokenTypes: OAUTH2_TOKEN_TYPES,
-  oauthProgressStatuses: OAUTH_PROGRESS_STATUSES,
-  oauthProgressTypes: OAUTH_PROGRESS_TYPES,
-  sameSiteValues: ['', 'Lax', 'Strict', 'None']
-};
-
-const LIMITS = {
-  collections: 500,
-  foldersPerLevel: 500,
-  requestsPerLevel: 1000,
-  environments: 500,
-  history: 1000,
-  pairs: 1000,
-  cookies: 2000,
-  loadSamples: 50000,
-  histogramBuckets: 100,
-  folderDepth: 20,
-  name: 256,
-  url: 8192,
-  key: 512,
-  value: 32768,
-  body: 10 * 1024 * 1024,
-  loadResultJson: 10 * 1024 * 1024,
-  host: 253,
-  method: 12,
-  short: 64,
-  tiny: 16
-};
+const FIELD_ENUMS = payloadSchemas.enums;
+const LIMITS = payloadSchemas.limits;
 
 function assertWorkspacePayload(value, field = 'workspace') {
   object(value, field);
@@ -85,20 +35,20 @@ function assertCollectionPayload(value, field = 'collection') {
 
 function assertRequestPayload(value, field = 'request') {
   object(value, field);
-  optionalString(value.id, `${field}.id`, LIMITS.name);
-  optionalString(value.name, `${field}.name`, LIMITS.name);
-  optionalString(value.method, `${field}.method`, 12);
-  if (value.method && !SUPPORTED_METHODS.has(value.method)) {
+  optionalString(value.id, `${field}.id`, fieldLimit('name'));
+  optionalString(value.name, `${field}.name`, fieldLimit('name'));
+  optionalString(value.method, `${field}.method`, fieldLimit('method'));
+  if (value.method && !hasSchemaEnumValue('httpMethods', value.method)) {
     fail(`${field}.method is not supported.`);
   }
-  optionalString(value.url, `${field}.url`, LIMITS.url);
+  optionalString(value.url, `${field}.url`, fieldLimit('url'));
   assertPairs(value.queryParams || [], `${field}.queryParams`);
   assertPairs(value.headers || [], `${field}.headers`);
-  optionalString(value.bodyType, `${field}.bodyType`, 32);
-  if (value.bodyType && !BODY_TYPES.has(value.bodyType)) {
+  optionalString(value.bodyType, `${field}.bodyType`, fieldLimit('short'));
+  if (value.bodyType && !hasSchemaEnumValue('bodyTypes', value.bodyType)) {
     fail(`${field}.bodyType is not supported.`);
   }
-  optionalString(value.body, `${field}.body`, LIMITS.body);
+  optionalString(value.body, `${field}.body`, fieldLimit('body'));
   assertSchemaArrays('request', value, field, {
     queryParams: assertPairs,
     headers: assertPairs,
@@ -122,8 +72,10 @@ function assertRequestPayload(value, field = 'request') {
 function assertSettingsPayload(value, field) {
   object(value || {}, field);
   if (value.updates != null) {
-    object(value.updates, `${field}.updates`);
-    optionalBoolean(value.updates.includePrereleases, `${field}.updates.includePrereleases`);
+    assertSchemaFields('updateCheckOptions', value.updates, `${field}.updates`);
+  }
+  if (value.appearance != null) {
+    assertSchemaFields('appearance', value.appearance, `${field}.appearance`);
   }
   if (value.loadTestPolicy != null) {
     fail(`${field}.loadTestPolicy is no longer supported; configure load tests from the Load Test panel.`);
@@ -274,6 +226,21 @@ function assertResponsePayload(value, field = 'response') {
   if (value.updatedCookies != null) {
     assertCookies(value.updatedCookies, `${field}.updatedCookies`);
   }
+  if (value.preRequestScriptResult != null) {
+    assertScriptResult(value.preRequestScriptResult, `${field}.preRequestScriptResult`);
+  }
+  if (value.testScriptResult != null) {
+    assertScriptResult(value.testScriptResult, `${field}.testScriptResult`);
+  }
+  if (value.environment != null) {
+    assertEnvironmentPayload(value.environment, `${field}.environment`);
+  }
+  if (value.collectionVariables != null) {
+    assertPairs(value.collectionVariables, `${field}.collectionVariables`);
+  }
+  if (value.localVariables != null) {
+    assertPairs(value.localVariables, `${field}.localVariables`);
+  }
 }
 
 function assertWorkspaceLoadResultPayload(value, field = 'result') {
@@ -308,7 +275,7 @@ function assertOAuthProgressPayload(value, field = 'progress') {
 
 function assertExportFormat(value, field = 'format') {
   try {
-    oneOf(value, LOAD_EXPORT_FORMATS, field);
+    oneOf(value, 'loadExportFormats', field);
   } catch (error) {
     fail(error.message);
   }
@@ -316,7 +283,7 @@ function assertExportFormat(value, field = 'format') {
 
 function assertCollectionExportFormat(value, field = 'format') {
   try {
-    oneOf(value || 'postmeter', COLLECTION_EXPORT_FORMATS, field);
+    oneOf(value || 'postmeter', 'collectionExportFormats', field);
   } catch (error) {
     fail(error.message);
   }
@@ -499,11 +466,11 @@ function assertSchemaFields(schemaName, value, field) {
 }
 
 function limitForField(name) {
-  const limit = LIMITS[name];
-  if (!Number.isFinite(limit)) {
-    fail(`Unknown IPC field limit: ${name}.`);
+  try {
+    return fieldLimit(name);
+  } catch (error) {
+    fail(error.message);
   }
-  return limit;
 }
 
 function object(value, field) {

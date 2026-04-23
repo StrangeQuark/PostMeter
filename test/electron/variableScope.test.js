@@ -41,9 +41,8 @@ test('mutates variable arrays predictably', () => {
   setVariable(variables, 'token', 'one');
   assert.equal(getVariable(variables, 'token'), 'one');
 
-  setVariable(variables, 'token', 'two', { secret: true });
+  setVariable(variables, 'token', 'two');
   assert.equal(getVariable(variables, 'token'), 'two');
-  assert.equal(variables[0].secret, true);
 
   unsetVariable(variables, 'token');
   assert.equal(getVariable(variables, 'token'), undefined);

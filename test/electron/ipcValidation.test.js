@@ -29,12 +29,12 @@ test('accepts structurally valid IPC payloads', () => {
     name: 'Request',
     method: 'GET',
     url: 'https://example.test',
-    queryParams: [{ enabled: true, key: 'q', value: '1', secret: false }],
+    queryParams: [{ enabled: true, key: 'q', value: '1' }],
     headers: [{ enabled: true, key: 'Accept', value: 'application/json' }],
     bodyType: 'NONE',
     body: '',
     scripts: { preRequest: "pm.environment.set('x', '1');", tests: "pm.test('ok', function () {});" },
-    variables: [{ enabled: true, key: 'local', value: 'value', secret: false }],
+    variables: [{ enabled: true, key: 'local', value: 'value' }],
     examples: [{ name: 'Example', statusCode: 200, headers: [{ enabled: true, key: 'Content-Type', value: 'application/json' }], bodyType: 'RAW_JSON', body: '{}' }],
     cookieJar: { enabled: true, storeResponses: true },
     loadTestPolicy: { enabled: true, concurrency: 2, totalRequests: 10, maxRatePerSecond: 5 },
@@ -44,16 +44,16 @@ test('accepts structurally valid IPC payloads', () => {
     id: 'c1',
     name: 'Collection',
     description: '',
-    variables: [{ enabled: true, key: 'baseUrl', value: 'https://example.test', secret: false }],
+    variables: [{ enabled: true, key: 'baseUrl', value: 'https://example.test' }],
     certificates: [{ name: 'Client Cert', matches: ['https://example.test/*'], certPath: '/tmp/client.crt', keyPath: '/tmp/client.key', passphrase: 'secret' }],
     requests: [],
     folders: [{ id: 'f1', name: 'Folder', requests: [], folders: [] }]
   }));
   assert.doesNotThrow(() => assertWorkspacePayload({
     schemaVersion: 10,
-    settings: { updates: { includePrereleases: true } },
+    settings: { appearance: { theme: 'dark' }, updates: { includePrereleases: true } },
     collections: [],
-    environments: [{ id: 'e1', name: 'Env', variables: [{ enabled: true, key: 'token', value: 'secret', secret: true }] }],
+    environments: [{ id: 'e1', name: 'Env', variables: [{ enabled: true, key: 'token', value: 'secret' }] }],
     cookies: [{ enabled: true, name: 'sid', value: 'secret', domain: 'example.test', path: '/', secure: true, httpOnly: true, sameSite: 'Lax', hostOnly: true, source: 'postman', extensions: ['SameParty'] }],
     history: []
   }));
@@ -107,7 +107,12 @@ test('accepts structurally valid IPC payloads', () => {
     durationMillis: 10,
     responseBytes: 2,
     finalUrl: 'https://example.test',
-    updatedCookies: [{ enabled: true, name: 'sid', value: 'secret', domain: 'example.test', path: '/', secure: true, httpOnly: true, sameSite: 'Lax', hostOnly: true }]
+    updatedCookies: [{ enabled: true, name: 'sid', value: 'secret', domain: 'example.test', path: '/', secure: true, httpOnly: true, sameSite: 'Lax', hostOnly: true }],
+    preRequestScriptResult: { passed: true, tests: [], logs: [] },
+    testScriptResult: { passed: true, tests: [{ name: 'saved token', passed: true }], logs: ['done'] },
+    environment: { id: 'e1', name: 'Runtime', variables: [{ enabled: true, key: 'REFRESH_TOKEN', value: 'abc' }] },
+    collectionVariables: [{ enabled: true, key: 'baseUrl', value: 'https://example.test' }],
+    localVariables: [{ enabled: true, key: 'local', value: 'value' }]
   }));
   assert.doesNotThrow(() => assertWorkspaceLoadResultPayload({
     workspace: { schemaVersion: 10, settings: { updates: { includePrereleases: false } }, collections: [], environments: [], cookies: [], history: [] },
@@ -179,6 +184,7 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertCollectionPayload({ certificates: [{ matches: [42] }], requests: [], folders: [] }), /collection.certificates\[0\].matches\[0\] must be a string/);
   assert.throws(() => assertWorkspacePayload({ collections: {}, environments: [], history: [] }), /workspace.collections must be an array/);
   assert.throws(() => assertWorkspacePayload({ settings: { updates: { includePrereleases: 'yes' } }, collections: [], environments: [], history: [] }), /workspace.settings.updates.includePrereleases must be a boolean/);
+  assert.throws(() => assertWorkspacePayload({ settings: { appearance: { theme: 'sepia' } }, collections: [], environments: [], history: [] }), /workspace.settings.appearance.theme must be one of/);
   assert.throws(() => assertWorkspacePayload({ settings: { loadTestPolicy: { recordSamples: true } }, collections: [], environments: [], history: [] }), /workspace.settings.loadTestPolicy is no longer supported/);
   assert.throws(() => assertWorkspacePayload({ collections: [], environments: [], cookies: [{ secure: 'yes' }], history: [] }), /workspace.cookies\[0\].secure must be a boolean/);
   assert.throws(() => assertWorkspacePayload({ collections: [], environments: [], cookies: [{ sameSite: 'Loose' }], history: [] }), /workspace.cookies\[0\].sameSite must be one of/);
@@ -207,6 +213,7 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertCollectionRunResultPayload({ results: [{ testScriptResult: { tests: [{ passed: 'yes' }] } }] }), /result.results\[0\].testScriptResult.tests\[0\].passed must be a boolean/);
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: '', durationMillis: 'slow', responseBytes: 0, finalUrl: '', headers: {} }), /response.durationMillis must be a finite number/);
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: 42, durationMillis: 1, responseBytes: 2, finalUrl: 'https://example.test', headers: {} }), /response.body must be a string/);
+  assert.throws(() => assertResponsePayload({ statusCode: 200, body: '{}', durationMillis: 1, responseBytes: 2, finalUrl: 'https://example.test', headers: {}, testScriptResult: { tests: [{ passed: 'yes' }] } }), /response.testScriptResult.tests\[0\].passed must be a boolean/);
   assert.throws(() => assertWorkspaceLoadResultPayload({ workspace: null }), /result.workspace must be an object/);
   assert.throws(() => assertFileOperationResultPayload({ cancelled: 'yes' }), /result.cancelled must be a boolean/);
   assert.throws(() => assertFileOperationResultPayload({ cancelled: false, collection: [] }), /result.collection must be an object/);

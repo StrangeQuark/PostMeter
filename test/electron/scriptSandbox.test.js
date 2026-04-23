@@ -3,8 +3,8 @@ const test = require('node:test');
 const { runPostmanScriptIsolated, scriptWorkerEnv, scriptWorkerExecArgv, scriptWorkerMaxOldSpaceMb } = require('../../src/core/scriptSandbox');
 
 test('runs scripts in an isolated worker and returns variable mutations', async () => {
-  const environment = { variables: [{ enabled: true, key: 'token', value: 'old', secret: false }] };
-  const collectionVariables = [{ enabled: true, key: 'baseUrl', value: 'https://api.example.test', secret: false }];
+  const environment = { variables: [{ enabled: true, key: 'token', value: 'old' }] };
+  const collectionVariables = [{ enabled: true, key: 'baseUrl', value: 'https://api.example.test' }];
 
   const execution = await runPostmanScriptIsolated(`
     pm.environment.set('token', 'new');

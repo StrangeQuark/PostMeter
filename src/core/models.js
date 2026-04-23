@@ -1,24 +1,31 @@
 const crypto = require('node:crypto');
 const {
-  AUTH_TYPE_VALUES,
   BODY_METHODS: BODY_METHOD_VALUES,
   BODY_TYPE_VALUES,
-  HTTP_METHODS
+  HTTP_METHODS,
+  normalizeSchemaEnumValue
 } = require('./payloadSchemas');
+const { normalizePersistedAuth } = require('./authModel');
+const { normalizeCookies: normalizeCookieCollection } = require('./cookieModel');
+const {
+  normalizeLoadPolicy: normalizeLoadTestPolicy,
+  normalizeRequestLoadPolicy: normalizeRequestLoadTestPolicy
+} = require('./loadPolicyModel');
 
 const CURRENT_SCHEMA_VERSION = 10;
 const MIN_SUPPORTED_SCHEMA_VERSION = 1;
 const SUPPORTED_METHODS = new Set(HTTP_METHODS);
 const BODY_METHODS = new Set(BODY_METHOD_VALUES);
-const BODY_TYPES = Object.fromEntries(BODY_TYPE_VALUES.map((type) => [type, type]));
-const AUTH_TYPES = new Set(AUTH_TYPE_VALUES);
+const BODY_TYPES = Object.freeze(Object.fromEntries(BODY_TYPE_VALUES.map((type) => [type, type])));
+const DEFAULT_REQUEST_BODY_TYPE = 'NONE';
+const DEFAULT_EXAMPLE_BODY_TYPE = 'RAW_TEXT';
 
 function newId() {
   return crypto.randomUUID();
 }
 
-function keyValue(key = '', value = '', enabled = true, secret = false) {
-  return { enabled, key: key ?? '', value: value ?? '', secret: secret === true };
+function keyValue(key = '', value = '', enabled = true) {
+  return { enabled, key: key ?? '', value: value ?? '' };
 }
 
 function requestModel({ id, name, method, url, queryParams, headers, bodyType, body, auth, assertions, scripts, variables, examples, cookieJar, loadTestPolicy } = {}) {
@@ -30,9 +37,9 @@ function requestModel({ id, name, method, url, queryParams, headers, bodyType, b
     url: typeof url === 'string' ? url.trim() : '',
     queryParams: normalizePairs(queryParams),
     headers: normalizePairs(headers),
-    bodyType: Object.values(BODY_TYPES).includes(bodyType) ? bodyType : BODY_TYPES.NONE,
+    bodyType: normalizeSchemaEnumValue('bodyTypes', bodyType, DEFAULT_REQUEST_BODY_TYPE),
     body: body ?? '',
-    auth: normalizeAuth(auth),
+    auth: normalizePersistedAuth(auth),
     assertions: normalizeAssertions(assertions),
     scripts: normalizeScripts(scripts),
     variables: normalizePairs(variables),
@@ -94,61 +101,24 @@ function workspaceModel({ schemaVersion, collections, environments, history, set
 
 function normalizeSettings(settings) {
   return {
+    appearance: {
+      theme: normalizeTheme(settings?.appearance?.theme)
+    },
     updates: {
       includePrereleases: settings?.updates?.includePrereleases === true
     }
   };
 }
 
-function normalizeLoadTestPolicy(policy) {
-  return {
-    concurrency: boundedInteger(policy?.concurrency, 5, 1, 512),
-    totalRequests: boundedInteger(policy?.totalRequests, 25, 1, 100000),
-    durationSeconds: boundedNumber(policy?.durationSeconds, 0, 0, 3600),
-    rampUpSeconds: boundedNumber(policy?.rampUpSeconds, 0, 0, 3600),
-    targetRatePerSecond: boundedNumber(policy?.targetRatePerSecond, 0, 0, 10000),
-    maxRatePerSecond: boundedNumber(policy?.maxRatePerSecond, 0, 0, 10000),
-    executionMode: policy?.executionMode === 'multiProcess' ? 'multiProcess' : 'singleProcess',
-    workerProcesses: boundedInteger(policy?.workerProcesses, 2, 1, 8),
-    recordSamples: policy?.recordSamples === true
-  };
-}
-
-function normalizeRequestLoadTestPolicy(policy) {
-  return {
-    enabled: policy?.enabled === true,
-    ...normalizeLoadTestPolicy(policy)
-  };
-}
-
-function boundedInteger(value, fallback, min, max) {
-  const number = Number(value);
-  if (!Number.isInteger(number)) {
-    return fallback;
-  }
-  return Math.min(max, Math.max(min, number));
-}
-
-function boundedNumber(value, fallback, min, max) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) {
-    return fallback;
-  }
-  return Math.min(max, Math.max(min, number));
+function normalizeTheme(value) {
+  return normalizeSchemaEnumValue('themeValues', value, 'system', { trim: true });
 }
 
 function normalizePairs(pairs) {
   if (!Array.isArray(pairs)) {
     return [];
   }
-  return pairs.map((pair) => keyValue(pair.key, pair.value, pair.enabled !== false, pair.secret === true));
-}
-
-function normalizeAuth(auth) {
-  if (!auth || typeof auth !== 'object' || !AUTH_TYPES.has(auth.type)) {
-    return { type: 'none' };
-  }
-  return { ...auth };
+  return pairs.map((pair) => keyValue(pair.key, pair.value, pair.enabled !== false));
 }
 
 function normalizeAssertions(assertions) {
@@ -189,7 +159,7 @@ function normalizeExamples(examples) {
       name: normalizeName(example.name, 'Example Response'),
       statusCode: Number.isFinite(Number(example.statusCode)) ? Number(example.statusCode) : 0,
       headers: normalizePairs(example.headers),
-      bodyType: Object.values(BODY_TYPES).includes(example.bodyType) ? example.bodyType : BODY_TYPES.RAW_TEXT,
+      bodyType: normalizeSchemaEnumValue('bodyTypes', example.bodyType, DEFAULT_EXAMPLE_BODY_TYPE),
       body: example.body == null ? '' : String(example.body)
     }));
 }
@@ -202,85 +172,7 @@ function normalizeRequestCookieJar(cookieJar) {
 }
 
 function normalizeCookies(cookies) {
-  if (!Array.isArray(cookies)) {
-    return [];
-  }
-  return cookies
-    .filter((cookie) => cookie && typeof cookie === 'object')
-    .map((cookie) => ({
-      id: cookie.id || newId(),
-      enabled: cookie.enabled !== false,
-      name: cookie.name == null ? '' : String(cookie.name).trim(),
-      value: cookie.value == null ? '' : String(cookie.value),
-      domain: normalizeCookieDomain(cookie.domain),
-      path: normalizeCookiePath(cookie.path),
-      expiresAt: normalizeCookieExpiresAt(cookie.expiresAt),
-      secure: cookie.secure === true,
-      httpOnly: cookie.httpOnly === true,
-      sameSite: normalizeSameSite(cookie.sameSite),
-      hostOnly: cookie.hostOnly !== false,
-      priority: normalizeCookiePriority(cookie.priority),
-      partitioned: cookie.partitioned === true,
-      source: cookie.source == null ? '' : String(cookie.source).trim().slice(0, 64),
-      extensions: normalizeCookieExtensions(cookie.extensions)
-    }))
-    .filter((cookie) => cookie.name && cookie.domain);
-}
-
-function normalizeCookieExtensions(extensions) {
-  if (!Array.isArray(extensions)) {
-    return [];
-  }
-  return extensions
-    .map((extension) => String(extension ?? '').trim())
-    .filter(Boolean)
-    .slice(0, 25);
-}
-
-function normalizeCookieDomain(domain) {
-  return String(domain || '').trim().replace(/^\./, '').toLowerCase();
-}
-
-function normalizeCookiePath(path) {
-  const value = String(path || '/').trim();
-  return value.startsWith('/') ? value : `/${value}`;
-}
-
-function normalizeCookieExpiresAt(expiresAt) {
-  const value = String(expiresAt || '').trim();
-  if (!value) {
-    return '';
-  }
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? '' : date.toISOString();
-}
-
-function normalizeSameSite(sameSite) {
-  const value = String(sameSite || '').trim().toLowerCase();
-  if (value === 'strict') {
-    return 'Strict';
-  }
-  if (value === 'lax') {
-    return 'Lax';
-  }
-  if (value === 'none') {
-    return 'None';
-  }
-  return '';
-}
-
-function normalizeCookiePriority(priority) {
-  const value = String(priority || '').trim().toLowerCase();
-  if (value === 'low') {
-    return 'Low';
-  }
-  if (value === 'medium') {
-    return 'Medium';
-  }
-  if (value === 'high') {
-    return 'High';
-  }
-  return '';
+  return normalizeCookieCollection(cookies, { createId: newId });
 }
 
 function normalizeCertificates(certificates) {
@@ -302,8 +194,10 @@ function normalizeCertificates(certificates) {
 }
 
 function normalizeMethod(method) {
-  const candidate = typeof method === 'string' ? method.trim().toUpperCase() : 'GET';
-  return SUPPORTED_METHODS.has(candidate) ? candidate : 'GET';
+  return normalizeSchemaEnumValue('httpMethods', method, 'GET', {
+    trim: true,
+    transform: (value) => value.toUpperCase()
+  });
 }
 
 function normalizeName(name, fallback) {

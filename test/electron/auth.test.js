@@ -7,22 +7,14 @@ const {
   normalizeAuth,
   pkceChallengeForVerifier,
   pollOAuthDeviceToken,
-  redactAuth,
   requestOAuthDeviceAuthorization,
   shouldRequestClientCredentialsToken,
   validateAuth
 } = require('../../src/core/auth');
 const { sendRequest } = require('../../src/core/httpClient');
 
-test('normalizes unsupported auth types to none and redacts secret fields', () => {
+test('normalizes unsupported auth types to none', () => {
   assert.deepEqual(normalizeAuth({ type: 'unsupported', token: 'secret' }), { type: 'none' });
-  assert.deepEqual(redactAuth({ type: 'bearer', token: 'secret' }), { type: 'bearer', token: '<redacted>' });
-  assert.deepEqual(redactAuth({ type: 'basic', username: 'user', password: 'secret' }), {
-    type: 'basic',
-    username: 'user',
-    password: '<redacted>'
-  });
-  assert.equal(redactAuth({ type: 'oauth2', grantType: 'deviceCode', deviceCode: 'secret-device-code' }).deviceCode, '<redacted>');
 });
 
 test('validates auth helper required fields', () => {

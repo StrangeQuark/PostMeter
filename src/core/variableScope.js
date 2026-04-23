@@ -35,15 +35,13 @@ function mergeVariables(target, source, override) {
       if (override) {
         existing.value = variable.value ?? '';
         existing.enabled = true;
-        existing.secret = variable.secret === true;
       }
       continue;
     }
     target.push({
       enabled: true,
       key,
-      value: variable.value ?? '',
-      secret: variable.secret === true
+      value: variable.value ?? ''
     });
   }
 }
@@ -66,16 +64,12 @@ function setVariable(variables, key, value, options = {}) {
   if (existing) {
     existing.value = value == null ? '' : String(value);
     existing.enabled = true;
-    if (options.secret != null) {
-      existing.secret = options.secret === true;
-    }
     return;
   }
   variables.push({
     enabled: true,
     key: normalizedKey,
-    value: value == null ? '' : String(value),
-    secret: options.secret === true
+    value: value == null ? '' : String(value)
   });
 }
 

@@ -1,18 +1,14 @@
 const crypto = require('node:crypto');
 const { resolveEnvironmentValue } = require('./environmentResolver');
 const {
-  API_KEY_LOCATIONS: API_KEY_LOCATION_VALUES,
-  AUTH_TYPE_VALUES,
-  OAUTH2_GRANT_TYPES: OAUTH2_GRANT_TYPE_VALUES,
-  OAUTH2_REDIRECT_STRATEGIES: OAUTH2_REDIRECT_STRATEGY_VALUES,
-  OAUTH2_TOKEN_TYPES: OAUTH2_TOKEN_TYPE_VALUES
-} = require('./payloadSchemas');
+  API_KEY_LOCATIONS,
+  AUTH_TYPES,
+  OAUTH2_GRANT_TYPES,
+  OAUTH2_REDIRECT_STRATEGIES,
+  OAUTH2_TOKEN_TYPES,
+  normalizeAuth
+} = require('./authModel');
 
-const AUTH_TYPES = new Set(AUTH_TYPE_VALUES);
-const API_KEY_LOCATIONS = new Set(API_KEY_LOCATION_VALUES);
-const OAUTH2_TOKEN_TYPES = new Set(OAUTH2_TOKEN_TYPE_VALUES);
-const OAUTH2_GRANT_TYPES = new Set(OAUTH2_GRANT_TYPE_VALUES);
-const OAUTH2_REDIRECT_STRATEGIES = new Set(OAUTH2_REDIRECT_STRATEGY_VALUES);
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 const OAUTH_REFRESH_WINDOW_MILLIS = 60_000;
 const OAUTH_DEVICE_DEFAULT_EXPIRES_IN_SECONDS = 900;
@@ -20,62 +16,6 @@ const OAUTH_DEVICE_DEFAULT_INTERVAL_SECONDS = 5;
 const OAUTH_DEVICE_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:device_code';
 const OAUTH_PKCE_CODE_VERIFIER_BYTES = 32;
 const OAUTH_PKCE_STATE_BYTES = 24;
-
-function normalizeAuth(auth = {}) {
-  const type = AUTH_TYPES.has(auth.type) ? auth.type : 'none';
-  if (type === 'none') {
-    return { type: 'none' };
-  }
-  if (type === 'bearer') {
-    return { type, token: auth.token ?? '' };
-  }
-  if (type === 'basic') {
-    return { type, username: auth.username ?? '', password: auth.password ?? '' };
-  }
-  if (type === 'apiKey') {
-    return {
-      type,
-      location: API_KEY_LOCATIONS.has(auth.location) ? auth.location : 'header',
-      key: auth.key ?? '',
-      value: auth.value ?? ''
-    };
-  }
-  if (type === 'cookie') {
-    return { type, value: auth.value ?? '' };
-  }
-  if (type === 'oauth2') {
-    return {
-      type,
-      tokenType: OAUTH2_TOKEN_TYPES.has(auth.tokenType) ? auth.tokenType : 'Bearer',
-      accessToken: auth.accessToken ?? '',
-      refreshToken: auth.refreshToken ?? '',
-      tokenUrl: auth.tokenUrl ?? '',
-      authorizationUrl: auth.authorizationUrl ?? '',
-      deviceAuthorizationUrl: auth.deviceAuthorizationUrl ?? '',
-      clientId: auth.clientId ?? '',
-      clientSecret: auth.clientSecret ?? '',
-      scopes: auth.scopes ?? '',
-      grantType: OAUTH2_GRANT_TYPES.has(auth.grantType) ? auth.grantType : 'authorizationCode',
-      redirectStrategy: OAUTH2_REDIRECT_STRATEGIES.has(auth.redirectStrategy) ? auth.redirectStrategy : 'loopback',
-      redirectUri: auth.redirectUri ?? '',
-      expiresAt: auth.expiresAt ?? '',
-      deviceCode: auth.deviceCode ?? '',
-      userCode: auth.userCode ?? '',
-      verificationUri: auth.verificationUri ?? '',
-      verificationUriComplete: auth.verificationUriComplete ?? '',
-      deviceCodeExpiresAt: auth.deviceCodeExpiresAt ?? '',
-      devicePollIntervalSeconds: auth.devicePollIntervalSeconds ?? ''
-    };
-  }
-  return {
-    type,
-    certPath: auth.certPath ?? '',
-    keyPath: auth.keyPath ?? '',
-    pfxPath: auth.pfxPath ?? '',
-    caPath: auth.caPath ?? '',
-    passphrase: auth.passphrase ?? ''
-  };
-}
 
 function validateAuth(auth = {}, environment) {
   const normalized = normalizeAuth(auth);
@@ -543,20 +483,6 @@ function applyAuth(request, environment, target) {
   }
 }
 
-function redactAuth(auth = {}) {
-  const normalized = normalizeAuth(auth);
-  if (normalized.type === 'none') {
-    return normalized;
-  }
-  const redacted = { ...normalized };
-  for (const key of ['token', 'password', 'value', 'accessToken', 'refreshToken', 'clientSecret', 'deviceCode', 'passphrase']) {
-    if (Object.hasOwn(redacted, key) && redacted[key]) {
-      redacted[key] = '<redacted>';
-    }
-  }
-  return redacted;
-}
-
 function requireResolved(value, environment, label, errors) {
   const resolved = resolveEnvironmentValue(value, environment).trim();
   if (!resolved) {
@@ -707,7 +633,6 @@ module.exports = {
   normalizeAuth,
   pkceChallengeForVerifier,
   pollOAuthDeviceToken,
-  redactAuth,
   refreshOAuthToken,
   requestOAuthClientCredentialsToken,
   requestOAuthDeviceAuthorization,

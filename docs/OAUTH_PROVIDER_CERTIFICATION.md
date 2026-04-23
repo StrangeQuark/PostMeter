@@ -39,13 +39,12 @@ For each provider, certify the flows that the provider supports and document any
    - Polling handles pending authorization without treating it as a fatal error.
    - Access denial, timeout, and cancellation show clear user-facing errors.
 7. Run Client Credentials where supported and confirm:
-   - Client secret inputs remain masked.
+   - Client secret inputs remain editable as normal visible text fields.
    - Token retrieval succeeds.
-   - Token retrieval failures show provider errors without exposing stored secrets.
+   - Token retrieval failures show clear provider errors.
 8. Save and reload the workspace and confirm:
-   - Auth secrets are encrypted or protected by the configured fallback passphrase.
-   - Default workspace/collection export redacts tokens and client secrets.
-   - Exact export requires the explicit typed confirmation phrase.
+   - OAuth auth fields persist in the workspace JSON.
+   - Workspace and collection exports include the normalized auth fields directly.
 9. Remove the temporary provider app registration or rotate credentials after testing.
 
 ## Provider Notes
@@ -78,4 +77,4 @@ For each certified provider, record:
 - Token refresh behavior.
 - Error states tested.
 - Any provider-specific setup required.
-- Screenshots or logs with secrets redacted.
+- Screenshots or logs needed to reproduce provider behavior.

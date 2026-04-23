@@ -1,12 +1,16 @@
 const { evaluateAssertions } = require('./assertions');
 const { sendRequest } = require('./httpClient');
 const { walkRequests } = require('./models');
+const {
+  createScriptedRequestState,
+  emptyScriptResult,
+  runScriptedRequestLifecycle
+} = require('./scriptedRequestLifecycle');
 const { runPostmanScriptIsolated } = require('./scriptSandbox');
 const {
   applyExtractedVariables,
   cloneEnvironment,
-  cloneVariables,
-  runtimeEnvironment
+  cloneVariables
 } = require('./variableScope');
 
 async function runCollection(collection, environment, options = {}) {
@@ -28,17 +32,27 @@ async function runCollection(collection, environment, options = {}) {
     }
     const startedAt = new Date().toISOString();
     try {
-      const localVariables = cloneVariables(entry.request.variables || []);
-      const preRequestScriptExecution = await runScript(entry.request.scripts?.preRequest, {
-        collectionVariables: runnerCollectionVariables,
-        localVariables,
-        environment: runnerEnvironment,
-        request: entry.request
-      }, { ...(options.scriptOptions || {}), signal: options.signal });
-      applyScriptMutations(runnerEnvironment, runnerCollectionVariables, localVariables, preRequestScriptExecution);
-      const preRequestScriptResult = scriptResultOnly(preRequestScriptExecution);
-      if (!preRequestScriptResult.passed) {
-        const result = scriptFailureResult(entry, startedAt, preRequestScriptResult, localVariables);
+      const scriptedRequest = await runScriptedRequestLifecycle(
+        createScriptedRequestState(entry.request, runnerEnvironment, {
+          collectionVariables: runnerCollectionVariables,
+          cloneEnvironment: false,
+          cloneCollectionVariables: false
+        }),
+        {
+          sendRequest: send,
+          scriptRunner: runScript,
+          signal: options.signal,
+          scriptOptions: options.scriptOptions,
+          cookieJar: runnerCookies
+        }
+      );
+      if (!scriptedRequest.preRequestScriptResult.passed) {
+        const result = scriptFailureResult(
+          entry,
+          startedAt,
+          scriptedRequest.preRequestScriptResult,
+          scriptedRequest.localVariables
+        );
         results.push(result);
         progress(progressEvent(index + 1, requests.length, result));
         if (options.stopOnFailure === true) {
@@ -46,26 +60,13 @@ async function runCollection(collection, environment, options = {}) {
         }
         continue;
       }
-      const response = await send(
-        entry.request,
-        runtimeEnvironment(runnerCollectionVariables, runnerEnvironment, localVariables),
-        { signal: options.signal, cookieJar: runnerCookies }
-      );
+      const response = scriptedRequest.response;
       if (Array.isArray(response.updatedCookies)) {
         runnerCookies = response.updatedCookies;
       }
       const assertions = evaluateAssertions(response, entry.request.assertions || []);
-      const testScriptExecution = await runScript(entry.request.scripts?.tests, {
-        collectionVariables: runnerCollectionVariables,
-        localVariables,
-        environment: runnerEnvironment,
-        request: entry.request,
-        response
-      }, { ...(options.scriptOptions || {}), signal: options.signal });
-      applyScriptMutations(runnerEnvironment, runnerCollectionVariables, localVariables, testScriptExecution);
-      const testScriptResult = scriptResultOnly(testScriptExecution);
       applyExtractedVariables(runnerEnvironment, assertions.extractedVariables);
-      const passed = assertions.passed && testScriptResult.passed;
+      const passed = assertions.passed && scriptedRequest.testScriptResult.passed;
       const result = {
         requestId: entry.request.id,
         requestName: entry.request.name,
@@ -75,11 +76,11 @@ async function runCollection(collection, environment, options = {}) {
         durationMillis: response.durationMillis,
         passed,
         assertionResults: assertions.results,
-        preRequestScriptResult,
-        testScriptResult,
+        preRequestScriptResult: scriptedRequest.preRequestScriptResult,
+        testScriptResult: scriptedRequest.testScriptResult,
         extractedVariables: assertions.extractedVariables,
-        localVariables,
-        error: testScriptResult.error || ''
+        localVariables: scriptedRequest.localVariables,
+        error: scriptedRequest.testScriptResult.error || ''
       };
       results.push(result);
       progress(progressEvent(index + 1, requests.length, result));
@@ -125,29 +126,6 @@ async function runCollection(collection, environment, options = {}) {
   };
 }
 
-function applyScriptMutations(environment, collectionVariables, localVariables, execution) {
-  if (!execution || execution.result) {
-    const environmentVariables = execution?.environmentVariables;
-    const nextCollectionVariables = execution?.collectionVariables;
-    if (Array.isArray(environmentVariables)) {
-      environment.variables = environmentVariables;
-    }
-    if (Array.isArray(nextCollectionVariables)) {
-      collectionVariables.splice(0, collectionVariables.length, ...nextCollectionVariables);
-    }
-    if (Array.isArray(execution?.localVariables)) {
-      localVariables.splice(0, localVariables.length, ...execution.localVariables);
-    }
-  }
-}
-
-function scriptResultOnly(execution) {
-  if (!execution) {
-    return emptyScriptResult();
-  }
-  return execution.result || execution;
-}
-
 function scriptFailureResult(entry, startedAt, preRequestScriptResult, localVariables = []) {
   return {
     requestId: entry.request.id,
@@ -163,15 +141,6 @@ function scriptFailureResult(entry, startedAt, preRequestScriptResult, localVari
     extractedVariables: [],
     localVariables,
     error: preRequestScriptResult.error || 'Pre-request script failed.'
-  };
-}
-
-function emptyScriptResult() {
-  return {
-    passed: true,
-    tests: [],
-    error: '',
-    logs: []
   };
 }
 
@@ -246,7 +215,7 @@ function collectionRunResultToCsv(result) {
   }
 
   rows.push([]);
-  rows.push(['runtimeScope', 'requestId', 'key', 'value', 'secret']);
+  rows.push(['runtimeScope', 'requestId', 'key', 'value']);
   for (const variable of result.collectionVariables || []) {
     appendRuntimeVariableRow(rows, 'collection', '', variable);
   }
@@ -270,8 +239,7 @@ function appendRuntimeVariableRow(rows, scope, requestId, variable) {
     scope,
     requestId,
     variable.key,
-    variable.secret ? '[secret]' : variable.value ?? '',
-    variable.secret === true
+    variable.value ?? ''
   ]);
 }
 
@@ -293,7 +261,6 @@ function csvValue(value) {
 }
 
 module.exports = {
-  applyExtractedVariables,
   collectionRunResultToCsv,
   runCollection
 };
