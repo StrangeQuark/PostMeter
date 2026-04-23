@@ -28,12 +28,17 @@ const {
   assertCollectionRunResultPayload,
   assertExternalUrlPayload,
   assertExportFormat,
+  assertFileOperationResultPayload,
   assertLoadConfigPayload,
   assertLoadId,
+  assertLoadProgressPayload,
   assertLoadResultPayload,
+  assertOAuthProgressPayload,
   assertOptionalEnvironmentPayload,
   assertResponsePayload,
   assertRequestPayload,
+  assertRunnerConfigPayload,
+  assertRunnerProgressPayload,
   assertUpdateCheckOptionsPayload,
   assertWorkspaceLoadResultPayload,
   assertWorkspacePayload
@@ -48,6 +53,12 @@ const activeCollectionRuns = new Map();
 const activeOAuthFlows = new Map();
 const OAUTH_CUSTOM_SCHEME = 'postmeter';
 const OAUTH_CALLBACK_TIMEOUT_MILLIS = 5 * 60 * 1000;
+
+if (process.env.POSTMETER_DATA_PATH) {
+  const smokeUserDataPath = path.join(path.dirname(path.resolve(process.env.POSTMETER_DATA_PATH)), 'userData');
+  require('node:fs').mkdirSync(smokeUserDataPath, { recursive: true });
+  app.setPath('userData', smokeUserDataPath);
+}
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
@@ -251,6 +262,11 @@ function sendMenuAction(action) {
     return;
   }
   mainWindow.webContents.send('menu:action', action);
+}
+
+function fileOperationResult(result) {
+  assertFileOperationResultPayload(result);
+  return result;
 }
 
 function installApplicationMenu() {
@@ -461,7 +477,7 @@ ipcMain.handle('workspace:import', async () => {
     filters: jsonFilters()
   });
   if (result.canceled || !result.filePaths.length) {
-    return { cancelled: true };
+    return fileOperationResult({ cancelled: true });
   }
   const backupPath = await workspaceStore.backupCurrentWorkspace('pre-workspace-import.backup');
   workspace = await runWithSecretPassphrase(
@@ -470,7 +486,7 @@ ipcMain.handle('workspace:import', async () => {
   );
   workspace = await saveWorkspace(workspace);
   installApplicationMenu();
-  return { cancelled: false, workspace, backupPath };
+  return fileOperationResult({ cancelled: false, workspace, backupPath });
 });
 
 ipcMain.handle('workspace:export', async (_event, nextWorkspace) => {
@@ -483,14 +499,14 @@ ipcMain.handle('workspace:export', async (_event, nextWorkspace) => {
     filters: jsonFilters()
   });
   if (result.canceled || !result.filePath) {
-    return { cancelled: true };
+    return fileOperationResult({ cancelled: true });
   }
   const includeSecrets = await confirmSecretExport('workspace');
   if (includeSecrets == null) {
-    return { cancelled: true };
+    return fileOperationResult({ cancelled: true });
   }
   const exportedPath = await workspaceStore.exportWorkspace(nextWorkspace || workspace, result.filePath, { includeSecrets });
-  return { cancelled: false, path: exportedPath };
+  return fileOperationResult({ cancelled: false, path: exportedPath });
 });
 
 ipcMain.handle('collection:import', async () => {
@@ -500,13 +516,13 @@ ipcMain.handle('collection:import', async () => {
     filters: collectionImportFilters()
   });
   if (result.canceled || !result.filePaths.length) {
-    return { cancelled: true };
+    return fileOperationResult({ cancelled: true });
   }
   const collection = await runWithSecretPassphrase(
     () => workspaceStore.importCollection(result.filePaths[0]),
     'Import collection'
   );
-  return { cancelled: false, collection };
+  return fileOperationResult({ cancelled: false, collection });
 });
 
 ipcMain.handle('collection:export', async (_event, collection, format = 'postmeter') => {
@@ -519,14 +535,14 @@ ipcMain.handle('collection:export', async (_event, collection, format = 'postmet
     filters: collectionExportFilters(format)
   });
   if (result.canceled || !result.filePath) {
-    return { cancelled: true };
+    return fileOperationResult({ cancelled: true });
   }
   const includeSecrets = await confirmSecretExport('collection');
   if (includeSecrets == null) {
-    return { cancelled: true };
+    return fileOperationResult({ cancelled: true });
   }
   const exportedPath = await workspaceStore.exportCollection(collection, result.filePath, { includeSecrets, format });
-  return { cancelled: false, path: exportedPath };
+  return fileOperationResult({ cancelled: false, path: exportedPath });
 });
 
 ipcMain.handle('request:validate', (_event, request, environment) => {
@@ -567,7 +583,7 @@ ipcMain.handle('request:examples:export', async (_event, request) => {
     filters: jsonFilters()
   });
   if (result.canceled || !result.filePath) {
-    return { cancelled: true };
+    return fileOperationResult({ cancelled: true });
   }
   const payload = {
     requestId: request.id || '',
@@ -576,7 +592,7 @@ ipcMain.handle('request:examples:export', async (_event, request) => {
     examples: request.examples || []
   };
   await require('node:fs/promises').writeFile(result.filePath, JSON.stringify(payload, null, 2));
-  return { cancelled: false, path: result.filePath };
+  return fileOperationResult({ cancelled: false, path: result.filePath });
 });
 
 ipcMain.handle('oauth:pkce:start', async (_event, id, auth, environment, strategy) => {
@@ -754,7 +770,7 @@ async function runWithSecretPassphrase(operation, action) {
       const passphrase = await promptForPassphrase({
         parent: mainWindow,
         title: 'Workspace Secret Passphrase',
-        message: `${error.message} ${action} cannot continue without the fallback passphrase. PostMeter cannot recover forgotten fallback passphrases; restore a backup if you no longer know it.`,
+        message: `${error.message} ${action} cannot continue without the fallback passphrase. PostMeter cannot recover forgotten fallback passphrases; restore a backup if you no longer know it. See docs/SECRETS.md for recovery guidance.`,
         confirmLabel: attempt === 0 ? 'Continue' : 'Retry'
       });
       if (!passphrase) {
@@ -763,7 +779,7 @@ async function runWithSecretPassphrase(operation, action) {
       secretCodec.setPassphrase(passphrase);
     }
   }
-  throw new Error(`${action} failed because the fallback passphrase could not decrypt workspace secrets. PostMeter cannot recover forgotten fallback passphrases. ${lastError?.message || ''}`.trim());
+  throw new Error(`${action} failed because the fallback passphrase could not decrypt workspace secrets. PostMeter cannot recover forgotten fallback passphrases. See docs/SECRETS.md for recovery guidance. ${lastError?.message || ''}`.trim());
 }
 
 async function confirmSecretExport(scope) {
@@ -811,7 +827,9 @@ function emitOAuthProgress(id, progress) {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return;
   }
-  mainWindow.webContents.send('oauth:progress', { id, ...progress });
+  const payload = { id, ...progress };
+  assertOAuthProgressPayload(payload);
+  mainWindow.webContents.send('oauth:progress', payload);
 }
 
 async function openOAuthAuthorizationUrl(url) {
@@ -1010,6 +1028,7 @@ ipcMain.handle('load:start', async (event, id, request, environment, config) => 
       abortController,
       cookieJar: workspace.cookies || [],
       onProgress: (progress) => {
+        assertLoadProgressPayload(progress);
         event.sender.send('load:progress', { id, progress });
       }
     });
@@ -1034,6 +1053,7 @@ ipcMain.handle('runner:start', async (event, id, collection, environment, config
   assertLoadId(id);
   assertCollectionPayload(collection);
   assertOptionalEnvironmentPayload(environment);
+  assertRunnerConfigPayload(config);
   const abortController = new AbortController();
   activeCollectionRuns.set(id, abortController);
   try {
@@ -1043,6 +1063,7 @@ ipcMain.handle('runner:start', async (event, id, collection, environment, config
       cookieJar: workspace.cookies || [],
       stopOnFailure: config.stopOnFailure === true,
       onProgress: (progress) => {
+        assertRunnerProgressPayload(progress);
         event.sender.send('runner:progress', { id, progress });
       }
     });
@@ -1050,6 +1071,7 @@ ipcMain.handle('runner:start', async (event, id, collection, environment, config
       workspace.cookies = result.cookies;
       await saveWorkspace(workspace);
     }
+    assertCollectionRunResultPayload(result);
     return result;
   } finally {
     activeCollectionRuns.delete(id);
@@ -1079,12 +1101,12 @@ ipcMain.handle('runner:export', async (_event, result, format) => {
     ]
   });
   if (saveResult.canceled || !saveResult.filePath) {
-    return { cancelled: true };
+    return fileOperationResult({ cancelled: true });
   }
   const fs = require('node:fs/promises');
   const content = format === 'csv' ? collectionRunResultToCsv(result) : JSON.stringify(result, null, 2);
   await fs.writeFile(saveResult.filePath, content);
-  return { cancelled: false, path: saveResult.filePath };
+  return fileOperationResult({ cancelled: false, path: saveResult.filePath });
 });
 
 ipcMain.handle('load:export', async (_event, result, format) => {
@@ -1100,12 +1122,12 @@ ipcMain.handle('load:export', async (_event, result, format) => {
     ]
   });
   if (saveResult.canceled || !saveResult.filePath) {
-    return { cancelled: true };
+    return fileOperationResult({ cancelled: true });
   }
   const fs = require('node:fs/promises');
   const content = format === 'csv' ? loadTestResultToCsv(result) : JSON.stringify(result, null, 2);
   await fs.writeFile(saveResult.filePath, content);
-  return { cancelled: false, path: saveResult.filePath };
+  return fileOperationResult({ cancelled: false, path: saveResult.filePath });
 });
 
 function jsonFilters() {

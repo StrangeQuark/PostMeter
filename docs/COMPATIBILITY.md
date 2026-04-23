@@ -28,7 +28,7 @@ Supported on import:
 - Common `prerequest` and `test` event scripts from collection, folder, and request scopes.
 - Request examples from `item.response`, editable in the request Examples tab.
 - Request cookies from `request.cookie`; desktop import promotes Cookie headers into the local cookie jar when the request URL has a concrete host.
-- Cookie metadata from Postman cookie objects is preserved in request metadata and used during desktop import promotion for domain/path/expiry/httpOnly/secure/SameSite/host-only/priority/partitioned/source fields and extension hints when provided.
+- Cookie metadata from Postman cookie objects is preserved in request metadata and used during desktop import promotion for domain/path/expiry/httpOnly/secure/SameSite/host-only/priority/partitioned/source fields, prefix-constrained cookie names, and extension hints when provided.
 - Request/item variables as request-local variables.
 - Collection-level certificates where host/path matching can be represented safely and does not overwrite explicit request auth.
 
@@ -68,12 +68,12 @@ Supported:
 - Header Manager import/export for request headers.
 - User Defined Variables import/export as collection variables.
 - CSV Data Set Config metadata import as collection variables.
-- Thread group, timer, listener, and simple controller metadata import as collection variables where practical.
-- Constant Timer, Constant Throughput Timer, Loop Controller, Transaction Controller, Throughput Controller, and Runtime Controller metadata export back to JMX elements when preserved in collection variables.
-- Simple response-code, response-body, duration, size, JSON-path, and XPath assertions mapped to PostMeter assertions where practical.
+- Thread group, timer, listener, and simple or nested controller metadata import as collection variables where practical.
+- Constant Timer, Constant Throughput Timer, and representative generic timer metadata such as Uniform/Gaussian/Poisson random timers and Precise Throughput Timer export back to JMX elements when preserved in collection variables.
+- Simple response-code, response-body, duration, size, JSON-path, and XPath assertions mapped to PostMeter assertions where practical, including disabled-state preservation for mapped assertions and XPath assertion variants in nested-controller fixtures.
 - Regex Extractor import/export as PostMeter regex variable extraction.
 - JSON Extractor import/export as PostMeter JSON variable extraction.
-- Unsupported assertions, pre/post processors, and sampler/script elements such as JSR223 processors are preserved as explicit `jmeter.unsupported.*` collection variables instead of being silently dropped, and are re-exported as disabled JMX elements where the original class can be represented safely.
+- Unsupported assertions, pre/post processors, and sampler/script elements such as JSR223 processors, HTML validity assertions, MD5 assertions, XML schema assertions, compare assertions, and SMIME assertions are preserved as explicit `jmeter.unsupported.*` collection variables instead of being silently dropped, and are re-exported as disabled JMX elements where the original class can be represented safely.
 
 Known gaps:
 
@@ -143,10 +143,10 @@ Known gaps:
 Supported:
 
 - Local request-count and duration modes.
-- Concurrency, ramp-up, target arrival-rate scheduling, single-process or bounded multi-process execution, allowed hosts, high-concurrency confirmation, cancellation, progress, latency summaries, histograms, optional capped samples, JSON/CSV export.
+- Concurrency, ramp-up, target arrival-rate scheduling, global rate caps, policy-decision reporting, single-process or bounded multi-process execution, high-concurrency confirmation, cancellation, progress, latency summaries, histograms, optional capped samples, JSON/CSV export.
 - Multi-process execution merges worker summaries without retaining every raw sample in the parent process, and worker child processes inherit only a minimal environment.
 
 Known gaps:
 
 - No distributed execution.
-- No advanced per-target rate governance beyond allowlists, target arrival-rate scheduling, and bounded request/concurrency/duration/process controls.
+- No distributed execution or advanced cross-machine policy governance beyond target arrival-rate scheduling, local rate caps, local policy-decision reporting, and bounded request/concurrency/duration/process controls.

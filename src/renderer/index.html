@@ -18,6 +18,7 @@
         <button id="newRequestButton" role="menuitem">Request</button>
         <button id="newCollectionButton" role="menuitem">Collection</button>
         <button id="newFolderButton" role="menuitem">Folder</button>
+        <button id="newEnvironmentMenuButton" role="menuitem">Environment</button>
       </div>
     </div>
     <div class="toolbar-group workspace-group" aria-label="Workspace">
@@ -49,21 +50,57 @@
 
   <main id="appGrid" class="app-grid">
     <aside class="sidebar">
-      <section>
-        <h2>Collections</h2>
-        <div id="collectionsTree" class="tree"></div>
-      </section>
-      <div id="sidebarPaneResize" class="splitter horizontal" role="separator" aria-orientation="horizontal" tabindex="0"></div>
-      <section>
-        <h2>History</h2>
-        <div id="historyList" class="history"></div>
-      </section>
+      <nav class="sidebar-tabs" aria-label="Workspace panels">
+        <button id="collectionsPanelTab" class="sidebar-tab active" type="button" data-sidebar-panel="collections" aria-selected="true">Collections</button>
+        <button id="environmentsPanelTab" class="sidebar-tab" type="button" data-sidebar-panel="environments" aria-selected="false">Environments</button>
+        <button id="workspacesPanelTab" class="sidebar-tab" type="button" data-sidebar-panel="workspaces" aria-selected="false">Workspaces</button>
+        <button id="historyPanelTab" class="sidebar-tab" type="button" data-sidebar-panel="history" aria-selected="false">History</button>
+      </nav>
+      <div class="sidebar-content">
+        <section id="collectionsSidebarPanel" class="sidebar-panel active" data-sidebar-panel-content="collections">
+          <div class="sidebar-panel-header">
+            <h2>Collections</h2>
+          </div>
+          <div id="collectionsTree" class="tree"></div>
+        </section>
+
+        <section id="environmentsSidebarPanel" class="sidebar-panel" data-sidebar-panel-content="environments" hidden>
+          <div class="sidebar-panel-header">
+            <h2>Environments</h2>
+          </div>
+          <div id="environmentsList" class="tree environment-list"></div>
+        </section>
+
+        <section id="workspacesSidebarPanel" class="sidebar-panel" data-sidebar-panel-content="workspaces" hidden>
+          <div class="sidebar-panel-header">
+            <h2>Workspaces</h2>
+          </div>
+          <div id="workspacesList" class="tree workspace-list"></div>
+        </section>
+
+        <section id="historySidebarPanel" class="sidebar-panel" data-sidebar-panel-content="history" hidden>
+          <div class="sidebar-panel-header">
+            <h2>History</h2>
+          </div>
+          <div id="historyList" class="history"></div>
+        </section>
+      </div>
     </aside>
 
     <div id="mainPaneResize" class="splitter vertical" role="separator" aria-orientation="vertical" tabindex="0"></div>
 
     <section class="workspace">
-      <section class="panel request-panel">
+      <div id="requestTabBar" class="request-tab-bar" role="tablist" aria-label="Opened requests" hidden></div>
+      <section id="requestEmptyPanel" class="panel request-empty-panel" hidden>
+        <div class="request-empty-content">
+          <div class="request-empty-icon" aria-hidden="true">
+            <img src="../../build/icon.png" alt="">
+          </div>
+          <h2>Create a new request</h2>
+          <button id="emptyCreateRequestButton" type="button" class="primary">New Request</button>
+        </div>
+      </section>
+      <section id="requestEditorPanel" class="panel request-panel">
         <input id="requestNameInput" class="title-input" placeholder="Request name">
         <div class="request-line">
           <select id="methodSelect">
@@ -90,7 +127,6 @@
           <button class="tab" data-tab-group="request" data-tab="scripts">Scripts</button>
           <button class="tab" data-tab-group="request" data-tab="examples">Examples</button>
           <button class="tab" data-tab-group="request" data-tab="collectionVariables">Variables</button>
-          <button class="tab" data-tab-group="request" data-tab="environment">Environment</button>
         </div>
 
         <div id="paramsTab" class="tab-panel active">
@@ -355,14 +391,54 @@
           <pre id="variablePreview" class="variable-preview">No variables</pre>
         </div>
 
-        <div id="environmentTab" class="tab-panel">
+      </section>
+
+      <section id="environmentMainPanel" class="panel environment-main-panel" hidden>
+        <div class="environment-main-header">
+          <div>
+            <h2>Environment</h2>
+            <div id="environmentMainTitle" class="environment-main-title">Select an environment</div>
+          </div>
           <div class="environment-actions">
             <input id="environmentNameInput" placeholder="Environment name">
-            <button id="newEnvironmentButton">New Environment</button>
-            <button id="deleteEnvironmentButton">Delete Environment</button>
+            <button id="deleteEnvironmentButton">Delete</button>
             <button id="addVariableButton">Add Variable</button>
           </div>
-          <div id="environmentTable" class="kv-table"></div>
+        </div>
+        <div id="environmentTable" class="kv-table environment-table"></div>
+      </section>
+
+      <section id="environmentEmptyPanel" class="panel request-empty-panel environment-empty-panel" hidden>
+        <div class="request-empty-content">
+          <div class="request-empty-icon environment-empty-icon" aria-hidden="true">
+            <img src="../../build/icon.png" alt="">
+          </div>
+          <h2>Create a new environment</h2>
+          <button id="emptyCreateEnvironmentButton" type="button" class="primary">New Environment</button>
+        </div>
+      </section>
+
+      <section id="workspaceMainPanel" class="panel workspace-main-panel" hidden>
+        <div class="workspace-main-header">
+          <div>
+            <h2>Workspace</h2>
+            <div id="workspaceMainTitle" class="workspace-main-title">Local Workspace</div>
+          </div>
+          <div class="workspace-actions">
+            <button id="saveWorkspacePanelButton" type="button">Save Workspace</button>
+            <button id="importWorkspacePanelButton" type="button">Import Workspace</button>
+            <button id="exportWorkspacePanelButton" type="button">Export Workspace</button>
+          </div>
+        </div>
+        <div id="workspaceSummary" class="workspace-summary workspace-main-summary"></div>
+      </section>
+
+      <section id="workspaceEmptyPanel" class="panel request-empty-panel workspace-empty-panel" hidden>
+        <div class="request-empty-content">
+          <div class="request-empty-icon workspace-empty-icon" aria-hidden="true">
+            <img src="../../build/icon.png" alt="">
+          </div>
+          <h2>Select a workspace</h2>
         </div>
       </section>
 
@@ -396,6 +472,7 @@
             <label>Duration (s) <input id="loadDurationSeconds" type="number" min="0" max="3600" step="0.1" value="0"></label>
             <label>Ramp-up (s) <input id="loadRampUpSeconds" type="number" min="0" max="3600" step="0.1" value="0"></label>
             <label>Target RPS <input id="loadTargetRate" type="number" min="0" max="10000" step="0.1" value="0"></label>
+            <label>Rate Cap RPS <input id="loadMaxRate" type="number" min="0" max="10000" step="0.1" value="0"></label>
             <label>Execution
               <select id="loadExecutionMode">
                 <option value="singleProcess">Single process</option>
@@ -403,7 +480,6 @@
               </select>
             </label>
             <label>Processes <input id="loadWorkerProcesses" type="number" min="1" max="8" value="2"></label>
-            <label>Allowed Hosts <input id="loadAllowedHosts" placeholder="api.example.com, localhost"></label>
             <label class="checkbox-field"><input id="loadRecordSamples" type="checkbox"> Samples</label>
             <button id="runLoadButton" class="primary">Run Load Test</button>
             <button id="cancelLoadButton" disabled>Cancel</button>
@@ -426,6 +502,28 @@
       </section>
     </section>
   </main>
+
+  <div id="modalBackdrop" class="modal-backdrop" hidden>
+    <section id="unsavedRequestModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="unsavedRequestTitle" hidden>
+      <h2 id="unsavedRequestTitle">Close unsaved request?</h2>
+      <p id="unsavedRequestMessage">This request has unsaved changes. Save it before closing?</p>
+      <div class="modal-actions">
+        <button id="cancelCloseRequestButton">Cancel</button>
+        <button id="closeWithoutSavingButton" class="danger-button">Close Without Saving</button>
+        <button id="saveAndCloseRequestButton" class="primary">Save</button>
+      </div>
+    </section>
+
+    <section id="saveDraftRequestModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="saveDraftRequestTitle" hidden>
+      <h2 id="saveDraftRequestTitle">Save request to collection</h2>
+      <p id="saveDraftRequestMessage">Choose a collection for this request.</p>
+      <div id="saveDraftCollectionList" class="collection-pick-list" role="radiogroup" aria-label="Collections"></div>
+      <div class="modal-actions">
+        <button id="cancelSaveDraftButton">Cancel</button>
+        <button id="confirmSaveDraftButton" class="primary" disabled>Save</button>
+      </div>
+    </section>
+  </div>
 
   <div id="contextMenu" class="context-menu" role="menu" hidden></div>
 

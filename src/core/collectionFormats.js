@@ -486,12 +486,16 @@ function importUnsupportedJMeterMetadata(text, collection) {
     'BeanShellPostProcessor',
     'BeanShellPreProcessor',
     'BoundaryExtractor',
+    'CompareAssertion',
     'DebugSampler',
     'HTMLAssertion',
     'JSR223Assertion',
     'JSR223PostProcessor',
     'JSR223PreProcessor',
     'JSR223Sampler',
+    'MD5HexAssertion',
+    'SMIMEAssertion',
+    'XMLSchemaAssertion',
     'XMLAssertion'
   ];
   for (const elementName of unsupportedElements) {
@@ -502,6 +506,9 @@ function importUnsupportedJMeterMetadata(text, collection) {
       const name = xmlAttribute(attrs, 'testname') || elementName;
       const prefix = `jmeter.unsupported.${name}`;
       collection.variables.push(keyValue(`${prefix}.class`, elementName));
+      if (xmlAttribute(attrs, 'enabled')) {
+        collection.variables.push(keyValue(`${prefix}.enabled`, xmlAttribute(attrs, 'enabled')));
+      }
       for (const prop of xmlStringProps(block).slice(0, 25)) {
         if (prop.name) {
           collection.variables.push(keyValue(`${prefix}.${prop.name}`, prop.value));
@@ -528,9 +535,11 @@ function jmeterHeaderManagerHeaders(text) {
 
 function jmeterResponseAssertions(text) {
   const assertions = [];
-  const pattern = /<ResponseAssertion\b[^>]*testname="([^"]*)"[^>]*>([\s\S]*?)<\/ResponseAssertion>/g;
+  const pattern = /<ResponseAssertion\b([^>]*)>([\s\S]*?)<\/ResponseAssertion>/g;
   for (const match of text.matchAll(pattern)) {
-    const name = xmlUnescape(match[1] || 'JMeter Response Assertion');
+    const attrs = match[1] || '';
+    const name = xmlUnescape(xmlAttribute(attrs, 'testname') || 'JMeter Response Assertion');
+    const enabled = xmlAttribute(attrs, 'enabled') !== 'false';
     const block = match[2] || '';
     const field = xmlStringProp(block, 'Assertion.test_field');
     const patternValue = firstAssertionPattern(block);
@@ -539,7 +548,7 @@ function jmeterResponseAssertions(text) {
     }
     if (field === 'Assertion.response_code') {
       assertions.push({
-        enabled: true,
+        enabled,
         type: 'statusCode',
         name,
         path: '',
@@ -549,7 +558,7 @@ function jmeterResponseAssertions(text) {
       });
     } else if (field === 'Assertion.response_data' || field === 'Assertion.response_message') {
       assertions.push({
-        enabled: true,
+        enabled,
         type: 'bodyContains',
         name,
         path: '',
@@ -564,16 +573,18 @@ function jmeterResponseAssertions(text) {
 
 function jmeterDurationAssertions(text) {
   const assertions = [];
-  const pattern = /<DurationAssertion\b[^>]*testname="([^"]*)"[^>]*>([\s\S]*?)<\/DurationAssertion>/g;
+  const pattern = /<DurationAssertion\b([^>]*)>([\s\S]*?)<\/DurationAssertion>/g;
   for (const match of text.matchAll(pattern)) {
+    const attrs = match[1] || '';
+    const enabled = xmlAttribute(attrs, 'enabled') !== 'false';
     const expected = xmlStringProp(match[2] || '', 'DurationAssertion.duration');
     if (!expected) {
       continue;
     }
     assertions.push({
-      enabled: true,
+      enabled,
       type: 'responseTime',
-      name: xmlUnescape(match[1] || 'JMeter Duration Assertion'),
+      name: xmlUnescape(xmlAttribute(attrs, 'testname') || 'JMeter Duration Assertion'),
       path: '',
       operator: 'lessThan',
       expected,
@@ -585,17 +596,19 @@ function jmeterDurationAssertions(text) {
 
 function jmeterSizeAssertions(text) {
   const assertions = [];
-  const pattern = /<SizeAssertion\b[^>]*testname="([^"]*)"[^>]*>([\s\S]*?)<\/SizeAssertion>/g;
+  const pattern = /<SizeAssertion\b([^>]*)>([\s\S]*?)<\/SizeAssertion>/g;
   for (const match of text.matchAll(pattern)) {
+    const attrs = match[1] || '';
+    const enabled = xmlAttribute(attrs, 'enabled') !== 'false';
     const block = match[2] || '';
     const expected = xmlStringProp(block, 'SizeAssertion.size');
     if (!expected) {
       continue;
     }
     assertions.push({
-      enabled: true,
+      enabled,
       type: 'responseSize',
-      name: xmlUnescape(match[1] || 'JMeter Size Assertion'),
+      name: xmlUnescape(xmlAttribute(attrs, 'testname') || 'JMeter Size Assertion'),
       path: '',
       operator: jmeterSizeOperatorToPostMeter(xmlStringProp(block, 'SizeAssertion.operator')),
       expected,
@@ -607,8 +620,10 @@ function jmeterSizeAssertions(text) {
 
 function jmeterJsonPathAssertions(text) {
   const assertions = [];
-  const pattern = /<JSONPathAssertion\b[^>]*testname="([^"]*)"[^>]*>([\s\S]*?)<\/JSONPathAssertion>/g;
+  const pattern = /<JSONPathAssertion\b([^>]*)>([\s\S]*?)<\/JSONPathAssertion>/g;
   for (const match of text.matchAll(pattern)) {
+    const attrs = match[1] || '';
+    const enabled = xmlAttribute(attrs, 'enabled') !== 'false';
     const block = match[2] || '';
     const path = xmlStringProp(block, 'JSON_PATH');
     if (!path) {
@@ -616,9 +631,9 @@ function jmeterJsonPathAssertions(text) {
     }
     const expected = xmlStringProp(block, 'EXPECTED_VALUE');
     assertions.push({
-      enabled: true,
+      enabled,
       type: 'jsonPath',
-      name: xmlUnescape(match[1] || 'JMeter JSONPath Assertion'),
+      name: xmlUnescape(xmlAttribute(attrs, 'testname') || 'JMeter JSONPath Assertion'),
       path,
       operator: expected ? 'equals' : 'exists',
       expected,

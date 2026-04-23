@@ -39,7 +39,17 @@ function runPostmanScript(scriptText, context = {}, options = {}) {
       response: context.response,
       tests
     }),
-    console: createConsole(logs)
+    console: createConsole(logs),
+    Buffer: unsupportedApi('Buffer'),
+    WebSocket: unsupportedApi('WebSocket'),
+    XMLHttpRequest: unsupportedApi('XMLHttpRequest'),
+    clearInterval: unsupportedApi('clearInterval'),
+    clearTimeout: unsupportedApi('clearTimeout'),
+    fetch: unsupportedApi('fetch'),
+    process: unsupportedApi('process'),
+    require: unsupportedApi('require'),
+    setInterval: unsupportedApi('setInterval'),
+    setTimeout: unsupportedApi('setTimeout')
   };
   const vmContext = vm.createContext(sandbox, {
     codeGeneration: {
@@ -149,7 +159,13 @@ function createPmApi({ collectionVariables, environmentVariables, localVariables
     }
   };
   api.globals = api.collectionVariables;
-  api.info = { eventName: response ? 'test' : 'prerequest' };
+  api.info = {
+    eventName: response ? 'test' : 'prerequest',
+    iteration: 0,
+    iterationCount: 1,
+    requestId: request?.id || '',
+    requestName: request?.name || ''
+  };
   api.console = createConsole(logs);
   return api;
 }
@@ -454,7 +470,7 @@ function expect(actual) {
     equal(expected) { assertCondition(Object.is(actual, expected), `Expected ${actual} to equal ${expected}.`); return chain; },
     equals(expected) { chain.equal(expected); return chain; },
     eql(expected) { assertCondition(deepEqual(actual, expected), 'Expected values to be deeply equal.'); return chain; },
-    include(expected) { assertCondition(String(actual ?? '').includes(String(expected ?? '')), `Expected ${actual} to include ${expected}.`); return chain; },
+    include(expected) { assertIncludes(actual, expected, false); return chain; },
     contain(expected) { chain.include(expected); },
     above(expected) { assertCondition(Number(actual) > Number(expected), `Expected ${actual} to be above ${expected}.`); return chain; },
     below(expected) { assertCondition(Number(actual) < Number(expected), `Expected ${actual} to be below ${expected}.`); return chain; },
@@ -474,6 +490,21 @@ function expect(actual) {
     an(typeName) { assertType(actual, typeName); return chain; },
     lengthOf(expectedLength) {
       assertCondition(actual != null && actual.length === Number(expectedLength), `Expected length ${expectedLength} but received ${actual?.length}.`);
+      return chain;
+    },
+    length(expectedLength) {
+      return chain.lengthOf(expectedLength);
+    },
+    keys(...expectedKeys) {
+      const keys = expectedKeys.flat();
+      assertCondition(actual != null && typeof actual === 'object', 'Expected value to be an object with keys.');
+      for (const key of keys) {
+        assertCondition(Object.hasOwn(actual, key), `Expected object to have key ${key}.`);
+      }
+      return chain;
+    },
+    members(expectedValues) {
+      assertArrayMembers(actual, expectedValues, false);
       return chain;
     },
     property(name, expectedValue) {
@@ -505,12 +536,16 @@ function negatedExpectation(actual) {
     equal(expected) { assertCondition(!Object.is(actual, expected), `Expected ${actual} not to equal ${expected}.`); return chain; },
     equals(expected) { chain.equal(expected); return chain; },
     eql(expected) { assertCondition(!deepEqual(actual, expected), 'Expected values not to be deeply equal.'); return chain; },
-    include(expected) { assertCondition(!String(actual ?? '').includes(String(expected ?? '')), `Expected ${actual} not to include ${expected}.`); return chain; },
+    include(expected) { assertIncludes(actual, expected, true); return chain; },
     contain(expected) { chain.include(expected); },
     match(pattern) { assertCondition(!new RegExp(pattern).test(String(actual ?? '')), `Expected ${actual} not to match ${pattern}.`); return chain; },
     property(name) { assertCondition(actual == null || !Object.hasOwn(actual, name), `Expected object not to have property ${name}.`); return chain; },
     oneOf(values) {
       assertCondition(!Array.isArray(values) || !values.some((value) => Object.is(value, actual)), `Expected ${actual} not to be one of ${JSON.stringify(values)}.`);
+      return chain;
+    },
+    members(expectedValues) {
+      assertArrayMembers(actual, expectedValues, true);
       return chain;
     }
   };
@@ -545,6 +580,31 @@ function deepExpectation(actual) {
 
 function deepEqual(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function assertIncludes(actual, expected, negate) {
+  let includes = false;
+  if (Array.isArray(actual)) {
+    includes = actual.some((value) => deepEqual(value, expected));
+  } else if (actual && typeof actual === 'object') {
+    includes = Object.entries(expected || {}).every(([key, value]) => deepEqual(actual[key], value));
+  } else {
+    includes = String(actual ?? '').includes(String(expected ?? ''));
+  }
+  assertCondition(
+    negate ? !includes : includes,
+    `Expected ${JSON.stringify(actual)} ${negate ? 'not ' : ''}to include ${JSON.stringify(expected)}.`
+  );
+}
+
+function assertArrayMembers(actual, expectedValues, negate) {
+  assertCondition(Array.isArray(actual), 'Expected value to be an array.');
+  assertCondition(Array.isArray(expectedValues), 'Expected members to be provided as an array.');
+  const includesAll = expectedValues.every((expected) => actual.some((value) => deepEqual(value, expected)));
+  assertCondition(
+    negate ? !includesAll : includesAll,
+    `Expected ${JSON.stringify(actual)} ${negate ? 'not ' : ''}to include members ${JSON.stringify(expectedValues)}.`
+  );
 }
 
 function assertType(actual, typeName) {

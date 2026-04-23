@@ -25,7 +25,7 @@ test('requires fallback passphrase instead of writing plaintext when safeStorage
 
   assert.throws(
     () => codec.encrypt('secret-value'),
-    PassphraseRequiredError
+    (error) => error instanceof PassphraseRequiredError && /docs\/SECRETS\.md/.test(error.message)
   );
 });
 
@@ -42,7 +42,7 @@ test('encrypts and decrypts values with passphrase fallback when safeStorage is 
   codec.setPassphrase('wrong horse battery staple');
   assert.throws(
     () => codec.decrypt(encrypted.value, encrypted.codec),
-    PassphraseRequiredError
+    (error) => error instanceof PassphraseRequiredError && /docs\/SECRETS\.md/.test(error.message)
   );
 });
 
@@ -71,6 +71,7 @@ test('reports safeStorage recovery guidance when host decryption is unavailable'
     /keyring changed/
   );
   assert.match(safeStorageRecoveryMessage('reason'), /PostMeter cannot recover these exact secret values/);
+  assert.match(safeStorageRecoveryMessage('reason'), /docs\/SECRETS\.md/);
 });
 
 function fakeSafeStorage(available) {

@@ -1,7 +1,7 @@
 const BODY_TYPES = ['NONE', 'RAW_JSON', 'RAW_TEXT'];
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 const TAB_PANEL_IDS = {
-  request: ['paramsTab', 'headersTab', 'authTab', 'cookiesTab', 'bodyTab', 'testsTab', 'scriptsTab', 'examplesTab', 'collectionVariablesTab', 'environmentTab'],
+  request: ['paramsTab', 'headersTab', 'authTab', 'cookiesTab', 'bodyTab', 'testsTab', 'scriptsTab', 'examplesTab', 'collectionVariablesTab'],
   results: ['responseTab', 'loadTab', 'runnerTab']
 };
 const ASSERTION_TEMPLATES = {
@@ -25,6 +25,13 @@ let activeCollectionId;
 let activeFolderId = null;
 let activeRequestId;
 let activeEnvironmentId = 'none';
+let activeWorkspaceId = 'current';
+let activeSidebarPanel = 'collections';
+let activeMainPanel = 'request';
+let draftRequests = new Map();
+let openRequestTabs = [];
+let openEnvironmentTabs = [];
+let openWorkspaceTabs = [];
 let activeLoadId = null;
 let activeOauthFlowId = null;
 let activeRunnerId = null;
@@ -37,6 +44,10 @@ let unsubscribeLoadProgress = null;
 let unsubscribeOauthProgress = null;
 let unsubscribeRunnerProgress = null;
 let unsubscribeMenuActions = null;
+let activeModalId = null;
+let activeModalResolver = null;
+let selectedDraftSaveCollectionId = '';
+const MAX_OPEN_REQUEST_TABS = 12;
 
 const $ = (id) => document.getElementById(id);
 
@@ -90,7 +101,10 @@ function bindUi() {
   $('newCollectionButton').addEventListener('click', newCollection);
   $('newFolderButton').addEventListener('click', () => newFolder());
   $('newRequestButton').addEventListener('click', newRequest);
-  $('saveButton').addEventListener('click', saveWorkspace);
+  $('emptyCreateRequestButton').addEventListener('click', newRequest);
+  $('emptyCreateEnvironmentButton').addEventListener('click', newEnvironment);
+  $('newEnvironmentMenuButton').addEventListener('click', () => newEnvironment());
+  $('saveButton').addEventListener('click', () => saveWorkspace(true, { promptForDraft: true }));
   $('importWorkspaceButton').addEventListener('click', importWorkspace);
   $('exportWorkspaceButton').addEventListener('click', exportWorkspace);
   $('importCollectionButton').addEventListener('click', importCollection);
@@ -107,9 +121,11 @@ function bindUi() {
   $('addExampleButton').addEventListener('click', addExample);
   $('captureResponseExampleButton').addEventListener('click', captureResponseExample);
   $('exportExamplesButton').addEventListener('click', exportRequestExamples);
-  $('newEnvironmentButton').addEventListener('click', newEnvironment);
-  $('deleteEnvironmentButton').addEventListener('click', deleteEnvironment);
+  $('deleteEnvironmentButton').addEventListener('click', () => deleteEnvironment());
   $('addVariableButton').addEventListener('click', addVariable);
+  $('saveWorkspacePanelButton').addEventListener('click', () => saveWorkspace(true, { promptForDraft: true }));
+  $('importWorkspacePanelButton').addEventListener('click', importWorkspace);
+  $('exportWorkspacePanelButton').addEventListener('click', exportWorkspace);
   $('addCollectionVariableButton').addEventListener('click', addCollectionVariable);
   $('addRequestVariableButton').addEventListener('click', addRequestVariable);
   $('addCookieButton').addEventListener('click', addCookie);
@@ -127,20 +143,21 @@ function bindUi() {
   $('cancelOauthFlowButton').addEventListener('click', cancelOauthFlow);
   $('environmentSelect').addEventListener('change', () => {
     activeEnvironmentId = $('environmentSelect').value;
+    renderEnvironments();
     renderEnvironmentEditor();
   });
-  $('requestNameInput').addEventListener('input', collectRequestFromEditor);
-  $('methodSelect').addEventListener('change', collectRequestFromEditor);
+  $('requestNameInput').addEventListener('input', collectRequestAndMarkDirty);
+  $('methodSelect').addEventListener('change', collectRequestAndMarkDirty);
   $('urlInput').addEventListener('input', () => {
-    collectRequestFromEditor();
+    collectRequestAndMarkDirty();
     renderCookieJarEditor();
   });
-  $('bodyTypeSelect').addEventListener('change', collectRequestFromEditor);
-  $('bodyInput').addEventListener('input', collectRequestFromEditor);
-  $('preRequestScriptInput').addEventListener('input', collectRequestFromEditor);
-  $('testScriptInput').addEventListener('input', collectRequestFromEditor);
-  $('requestCookieJarEnabledInput').addEventListener('change', collectRequestFromEditor);
-  $('requestCookieJarStoreInput').addEventListener('change', collectRequestFromEditor);
+  $('bodyTypeSelect').addEventListener('change', collectRequestAndMarkDirty);
+  $('bodyInput').addEventListener('input', collectRequestAndMarkDirty);
+  $('preRequestScriptInput').addEventListener('input', collectRequestAndMarkDirty);
+  $('testScriptInput').addEventListener('input', collectRequestAndMarkDirty);
+  $('requestCookieJarEnabledInput').addEventListener('change', collectRequestAndMarkDirty);
+  $('requestCookieJarStoreInput').addEventListener('change', collectRequestAndMarkDirty);
   $('filterCookiesToRequestHostInput').addEventListener('change', renderCookieJarEditor);
   $('environmentNameInput').addEventListener('input', collectEnvironmentFromEditor);
   for (const id of [
@@ -176,7 +193,7 @@ function bindUi() {
       if (id === 'authTypeSelect') {
         showAuthSection(input.value);
       }
-      collectRequestFromEditor();
+      collectRequestAndMarkDirty();
     });
   }
 
@@ -184,13 +201,32 @@ function bindUi() {
     button.addEventListener('click', () => activateTab(button.dataset.tabGroup, button.dataset.tab));
   }
 
+  for (const button of document.querySelectorAll('.sidebar-tab')) {
+    button.addEventListener('click', () => selectSidebarPanel(button.dataset.sidebarPanel));
+  }
+
   $('contextMenu').addEventListener('click', (event) => event.stopPropagation());
+  $('modalBackdrop').addEventListener('click', (event) => {
+    if (event.target === $('modalBackdrop')) {
+      cancelActiveModal();
+    }
+  });
+  $('cancelCloseRequestButton').addEventListener('click', () => resolveActiveModal('cancel'));
+  $('closeWithoutSavingButton').addEventListener('click', () => resolveActiveModal('discard'));
+  $('saveAndCloseRequestButton').addEventListener('click', () => resolveActiveModal('save'));
+  $('cancelSaveDraftButton').addEventListener('click', () => resolveActiveModal(null));
+  $('confirmSaveDraftButton').addEventListener('click', () => {
+    if (selectedDraftSaveCollectionId) {
+      resolveActiveModal(selectedDraftSaveCollectionId);
+    }
+  });
   document.addEventListener('click', () => {
     closeContextMenu();
     closeToolbarMenus();
   });
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
+      cancelActiveModal();
       closeContextMenu();
       closeToolbarMenus();
     }
@@ -220,7 +256,7 @@ async function handleAppMenuAction(action) {
         newFolder();
         break;
       case 'save-workspace':
-        await saveWorkspace();
+        await saveWorkspace(true, { promptForDraft: true });
         break;
       case 'import-workspace':
         await importWorkspace();
@@ -322,9 +358,18 @@ async function runUiWorkflowSmoke(params) {
   newCollection();
   const collection = activeCollection();
   assertUiSmoke(collection, 'New collection was not created.');
+  assertUiSmoke(collection.requests.length === 0, 'New collection should start without requests.');
+  assertUiSmoke(!activeRequest(), 'New collection should not auto-select or create a request.');
+  assertUiSmoke(!$('requestEmptyPanel').hidden, 'No-request state should show the create request screen.');
+  assertUiSmoke($('requestEditorPanel').hidden, 'Request editor should be hidden when no request is selected.');
+  assertUiSmoke(document.querySelector('.results').hidden, 'Response panel should be hidden when no request is selected.');
   collection.name = 'Smoke Collection';
+  newRequest();
   const request = activeRequest();
   assertUiSmoke(request, 'New request was not selected.');
+  assertUiSmoke($('requestEmptyPanel').hidden, 'Create request screen should hide once a request is selected.');
+  assertUiSmoke($('requestTabBar').textContent.includes('New Request'), 'New request tab did not render.');
+  assertUiSmoke(!$('requestTabBar').querySelector('.request-tab-dirty').hidden, 'New request tab should show unsaved changes.');
   request.name = 'Smoke Request';
   renderAll();
 
@@ -408,13 +453,15 @@ async function runUiWorkflowSmoke(params) {
   $('loadDurationSeconds').value = '0';
   $('loadRampUpSeconds').value = '0';
   $('loadTargetRate').value = '0';
+  $('loadMaxRate').value = '0';
   $('loadExecutionMode').value = 'singleProcess';
   $('loadWorkerProcesses').value = '1';
-  $('loadAllowedHosts').value = new URL(baseUrl).hostname;
   $('loadRecordSamples').checked = true;
   await runLoadTest();
   assertUiSmoke($('loadResults').textContent.includes('Completed requests: 2'), 'Load test did not complete two requests.');
   assertUiSmoke($('loadResults').textContent.includes('Samples recorded: 2'), 'Load test samples were not recorded.');
+  const policyLoaded = await window.postmeter.workspace.load();
+  assertUiSmoke(policyLoaded.workspace.settings?.loadTestPolicy == null, 'Load-test policy should not be stored on the workspace.');
 
   activateTab('results', 'runner');
   await runActiveCollection();
@@ -430,16 +477,20 @@ async function runUiWorkflowSmoke(params) {
 async function runUiRegressionSmoke() {
   assertUiSmoke(workspace.collections.length === 0, 'Regression smoke should start with an empty workspace.');
   assertUiSmoke(!/(sign in|log in|create account|register)/i.test(document.body.textContent), 'Standalone UI should not render app account/login language.');
-  assertToolbarMenuSmoke('newMenuButton', 'newMenu', ['Request', 'Collection', 'Folder']);
+  assertToolbarMenuSmoke('newMenuButton', 'newMenu', ['Request', 'Collection', 'Folder', 'Environment']);
   assertToolbarMenuSmoke('importMenuButton', 'importMenu', ['Workspace', 'Collection']);
   assertToolbarMenuSmoke('exportMenuButton', 'exportMenu', ['Workspace', 'Collection', 'OpenAPI', 'JMeter', 'curl', 'HAR']);
+  assertSidebarPanelSmoke();
   assertUiSmoke(!$('statusLabel'), 'Topbar status message should not render.');
   assertUiSmoke(!$('checkUpdatesButton'), 'Updates toolbar button should be handled by the Help menu.');
   assertUiSmoke(!$('includePrereleasesInput'), 'Prereleases setting should be handled by the Help menu.');
   await assertUpdateCheckSmoke();
   assertOauthProgressSmoke();
+  assertCreationSemanticsSmoke();
+  await assertRequestTabCloseSmoke();
 
   newCollection();
+  newRequest();
   $('urlInput').value = 'https://api.example.test/v1/users';
   dispatchInput($('urlInput'));
   activateTab('request', 'cookies');
@@ -521,8 +572,10 @@ async function runUiSnapshotSmoke() {
   renderAll();
 
   newCollection();
+  newRequest();
   const collection = activeCollection();
   const request = activeRequest();
+  assertUiSmoke(request, 'Snapshot request was not created.');
   collection.name = 'Snapshot Collection';
   collection.variables.push({ enabled: true, key: 'baseUrl', value: 'https://api.snapshot.test', secret: false });
   request.name = 'List Widgets';
@@ -638,6 +691,8 @@ async function runUiOauthSmoke(params) {
   clearActiveWorkspaceItem();
   renderAll();
   newCollection();
+  newRequest();
+  assertUiSmoke(activeRequest(), 'OAuth smoke request was not created.');
   activeRequest().name = 'OAuth Smoke Request';
   activeRequest().url = 'https://api.oauth-smoke.test/me';
   renderAll();
@@ -924,6 +979,191 @@ function assertToolbarMenuSmoke(buttonId, menuId, expectedLabels) {
   assertUiSmoke(menu.hidden === true, `${menuId} did not close.`);
 }
 
+function assertSidebarPanelSmoke() {
+  const originalEnvironments = structuredClone(workspace.environments || []);
+  const originalActiveEnvironmentId = activeEnvironmentId;
+  const originalActiveWorkspaceId = activeWorkspaceId;
+  const originalSidebarPanel = activeSidebarPanel;
+  const originalMainPanel = activeMainPanel;
+  const originalEnvironmentTabs = structuredClone(openEnvironmentTabs);
+  const originalWorkspaceTabs = structuredClone(openWorkspaceTabs);
+  try {
+    assertUiSmoke(!$('environmentTab'), 'Environment request tab panel should be removed from the request editor.');
+    assertUiSmoke(!document.querySelector('.tab[data-tab-group="request"][data-tab="environment"]'), 'Environment should not appear in the request tab row.');
+    assertUiSmoke(!$('newEnvironmentButton'), 'Environments sidebar should not render its own New button.');
+    for (const panel of ['collections', 'environments', 'workspaces', 'history']) {
+      assertUiSmoke(document.querySelector(`.sidebar-tab[data-sidebar-panel="${panel}"]`), `Sidebar tab missing ${panel}.`);
+      selectSidebarPanel(panel);
+      assertUiSmoke(!document.querySelector(`[data-sidebar-panel-content="${panel}"]`).hidden, `Sidebar panel ${panel} did not open.`);
+    }
+    workspace.environments = [];
+    activeEnvironmentId = 'none';
+    selectSidebarPanel('environments');
+    assertUiSmoke(!$('environmentEmptyPanel').hidden, 'Environments without a selection should show the create environment screen.');
+    assertUiSmoke($('environmentMainPanel').hidden, 'Environment editor should be hidden when no environment is selected.');
+    assertUiSmoke($('requestEditorPanel').hidden, 'Request editor should be hidden when no environment is selected.');
+    assertUiSmoke(document.querySelector('.results').hidden, 'Response panel should be hidden when no environment is selected.');
+    const environment = newEnvironment();
+    assertUiSmoke(activeSidebarPanel === 'environments', 'Creating an environment should open the Environments panel.');
+    assertUiSmoke($('environmentEmptyPanel').hidden, 'Create environment screen should hide once an environment exists.');
+    assertUiSmoke(!$('environmentMainPanel').hidden, 'Creating an environment should show the main environment editor.');
+    assertUiSmoke($('requestEditorPanel').hidden, 'Request editor should be hidden while editing an environment.');
+    assertUiSmoke(getComputedStyle($('requestEditorPanel')).display === 'none', 'Request editor should not occupy layout space while editing an environment.');
+    assertUiSmoke($('workspacePaneResize').hidden, 'Workspace response splitter should be hidden while editing an environment.');
+    assertUiSmoke(document.querySelector('.results').hidden, 'Response panel should be hidden while editing an environment.');
+    assertUiSmoke(getComputedStyle(document.querySelector('.results')).display === 'none', 'Response panel should not occupy layout space while editing an environment.');
+    assertUiSmoke($('environmentMainPanel').getBoundingClientRect().bottom > document.querySelector('.workspace').getBoundingClientRect().bottom - 24, 'Environment editor should fill the main workspace area.');
+    assertUiSmoke($('requestTabBar').textContent.includes(environment.name), 'Creating an environment should open an environment tab.');
+    assertUiSmoke(!$('environmentsSidebarPanel').querySelector('#environmentNameInput'), 'Environment editor controls should not render in the sidebar.');
+    assertUiSmoke($('environmentsList').textContent.includes(environment.name), 'Environments panel did not render the new environment.');
+    openRequestTabs = [];
+    openWorkspaceTabs = [];
+    closeEnvironmentTab(openEnvironmentTabs.find((tab) => tab.environmentId === environment.id));
+    assertUiSmoke(activeSidebarPanel === 'environments', 'Closing the last environment tab should keep the Environments sidebar selected.');
+    assertUiSmoke(activeMainPanel === 'environment', 'Closing the last environment tab should keep the main pane in environment mode.');
+    assertUiSmoke(!$('environmentEmptyPanel').hidden, 'Closing the last environment tab should show the create environment screen.');
+    assertUiSmoke($('requestEmptyPanel').hidden, 'Closing the last environment tab should not show the create request screen.');
+    selectEnvironmentTab({ key: `environment:${environment.id}`, environmentId: environment.id });
+    selectSidebarPanel('collections');
+    if (activeRequest()) {
+      assertUiSmoke(!$('requestEditorPanel').hidden, 'Selecting Collections should return the main pane to the request editor.');
+    } else {
+      assertUiSmoke(!$('requestEmptyPanel').hidden, 'Selecting Collections without an active request should show the create request screen.');
+      assertUiSmoke($('requestEditorPanel').hidden, 'Selecting Collections without an active request should keep the request editor hidden.');
+    }
+    selectSidebarPanel('workspaces');
+    assertUiSmoke($('workspacesList').textContent.includes(workspaceDisplayName()), 'Workspaces panel did not render the current workspace list item.');
+    assertUiSmoke(!$('workspaceMainPanel').hidden, 'Selecting Workspaces should show the main workspace editor.');
+    assertUiSmoke($('requestEditorPanel').hidden, 'Request editor should be hidden while viewing workspace details.');
+    assertUiSmoke(document.querySelector('.results').hidden, 'Response panel should be hidden while viewing workspace details.');
+    assertUiSmoke($('workspaceSummary').textContent.includes('Workspace File'), 'Workspace main panel did not render workspace details.');
+    assertUiSmoke($('requestTabBar').textContent.includes(workspaceDisplayName()), 'Selecting Workspaces should open a workspace tab.');
+    openRequestTabs = [];
+    openEnvironmentTabs = [];
+    closeWorkspaceTab(openWorkspaceTabs.find((tab) => tab.workspaceId === 'current'));
+    assertUiSmoke(activeSidebarPanel === 'workspaces', 'Closing the last workspace tab should keep the Workspaces sidebar selected.');
+    assertUiSmoke(activeMainPanel === 'workspace', 'Closing the last workspace tab should keep the main pane in workspace mode.');
+    assertUiSmoke(!$('workspaceEmptyPanel').hidden, 'Closing the last workspace tab should show the select workspace screen.');
+    assertUiSmoke($('workspaceEmptyPanel').textContent.includes('Select a workspace'), 'Workspace empty state should ask the user to select a workspace.');
+    assertUiSmoke($('requestEmptyPanel').hidden, 'Closing the last workspace tab should not show the create request screen.');
+  } finally {
+    workspace.environments = originalEnvironments;
+    activeEnvironmentId = originalActiveEnvironmentId;
+    activeWorkspaceId = originalActiveWorkspaceId;
+    activeSidebarPanel = originalSidebarPanel;
+    activeMainPanel = originalMainPanel;
+    openEnvironmentTabs = originalEnvironmentTabs;
+    openWorkspaceTabs = originalWorkspaceTabs;
+    renderAll();
+  }
+}
+
+function assertCreationSemanticsSmoke() {
+  workspace.collections = [];
+  activeEnvironmentId = 'none';
+  clearActiveWorkspaceItem();
+  resetRequestTabs();
+  renderAll();
+
+  assertUiSmoke($('newFolderButton').disabled, 'New Folder should be disabled without an active collection.');
+  newFolder();
+  assertUiSmoke(workspace.collections.length === 0, 'New Folder without a collection should not create a collection.');
+  assertUiSmoke(!activeRequest(), 'New Folder without a collection should not create a request.');
+
+  const draft = newRequest();
+  assertUiSmoke(draft, 'New Request without collections should create an editable draft request.');
+  assertUiSmoke(workspace.collections.length === 0, 'Draft request should not create or save a collection.');
+  assertUiSmoke(activeRequest() === draft, 'Draft request should be active in the editor.');
+  assertUiSmoke($('requestTabBar').querySelectorAll('.request-tab-button').length === 1, 'Draft request should open a request tab.');
+  assertUiSmoke(!$('requestTabBar').querySelector('.request-tab-dirty').hidden, 'Draft request tab should show an unsaved marker.');
+  selectSidebarPanel('workspaces');
+  const draftTab = openRequestTabs.find((tab) => tab.draft && tab.requestId === draft.id);
+  assertUiSmoke(draftTab, 'Draft request tab should remain available after switching sections.');
+  selectRequestTab(draftTab);
+  assertUiSmoke(activeSidebarPanel === 'collections', 'Selecting a request tab should switch the sidebar to Collections.');
+  assertUiSmoke(activeMainPanel === 'request', 'Selecting a request tab should switch the main pane to request mode.');
+  assertUiSmoke(activeRequest() === draft, 'Selecting a request tab should restore the active request.');
+  $('requestNameInput').value = 'Draft Request';
+  dispatchInput($('requestNameInput'));
+  collectRequestFromEditor();
+  assertUiSmoke(draft.name === 'Draft Request', 'Draft request should be editable before being saved anywhere.');
+
+  const collection = newCollection();
+  assertUiSmoke(collection, 'New collection should be created.');
+  assertUiSmoke(collection.requests.length === 0, 'New collection should not auto-create a request.');
+  assertUiSmoke(!activeRequest(), 'New collection should not auto-select a request.');
+  assertUiSmoke(!$('newFolderButton').disabled, 'New Folder should be enabled when a collection is active.');
+  const folder = newFolder();
+  assertUiSmoke(folder, 'New Folder should create a folder when a collection is active.');
+  assertUiSmoke(collection.folders.length === 1, 'New Folder should be added to the active collection.');
+  const firstRequest = newRequest(collection.id, null);
+  firstRequest.name = 'First Tab Request';
+  renderAll();
+  const secondRequest = newRequest(collection.id, null);
+  secondRequest.name = 'Second Tab Request';
+  renderAll();
+  const firstTab = Array.from($('requestTabBar').querySelectorAll('.request-tab-button'))
+    .find((button) => button.textContent.includes('First Tab Request'));
+  assertUiSmoke(firstTab, 'Opened request tabs should include the first saved request.');
+  firstTab.click();
+  assertUiSmoke(activeRequest()?.id === firstRequest.id, 'Clicking an opened request tab should switch the active request.');
+
+  workspace.collections = [];
+  clearActiveWorkspaceItem();
+  resetRequestTabs();
+  renderAll();
+}
+
+async function assertRequestTabCloseSmoke() {
+  const originalSaveWorkspace = window.__postmeterSaveWorkspace;
+  try {
+    window.__postmeterSaveWorkspace = async (nextWorkspace) => nextWorkspace;
+    workspace.collections = [];
+    clearActiveWorkspaceItem();
+    resetRequestTabs();
+    renderAll();
+
+    const draft = newRequest();
+    $('requestNameInput').value = 'Draft Close Smoke';
+    dispatchInput($('requestNameInput'));
+    const collection = newCollection();
+    const draftTab = openRequestTabs.find((tab) => tab.draft && tab.requestId === draft.id);
+    assertUiSmoke(draftTab, 'Draft request tab should remain open after creating a collection.');
+    const closeDraft = closeRequestTab(draftTab);
+    assertUiSmoke(!$('unsavedRequestModal').hidden, 'Closing an unsaved draft should show the unsaved request modal.');
+    $('saveAndCloseRequestButton').click();
+    await Promise.resolve();
+    assertUiSmoke(!$('saveDraftRequestModal').hidden, 'Saving an unsaved draft should prompt for a collection.');
+    assertUiSmoke($('confirmSaveDraftButton').disabled, 'Draft save button should be disabled until a collection is selected.');
+    $('saveDraftCollectionList').querySelector('input[type="radio"]').click();
+    assertUiSmoke(!$('confirmSaveDraftButton').disabled, 'Draft save button should enable after selecting a collection.');
+    $('confirmSaveDraftButton').click();
+    await closeDraft;
+    assertUiSmoke(!draftRequests.has(draft.id), 'Saved draft should be removed from draft storage.');
+    assertUiSmoke(collection.requests.length === 1, 'Saved draft should be inserted into the selected collection.');
+    assertUiSmoke(collection.requests[0].name === 'Draft Close Smoke', 'Saved draft should preserve edited request fields.');
+    assertUiSmoke(openRequestTabs.length === 0, 'Saved-and-closed draft tab should close.');
+
+    const request = newRequest(collection.id, null);
+    await saveWorkspace(false);
+    const savedRequestName = request.name;
+    $('requestNameInput').value = 'Changed Saved Request';
+    dispatchInput($('requestNameInput'));
+    const savedTab = openRequestTabs.find((tab) => tab.requestId === request.id);
+    const closeSaved = closeRequestTab(savedTab);
+    assertUiSmoke(!$('unsavedRequestModal').hidden, 'Closing a dirty saved request should show the unsaved request modal.');
+    $('closeWithoutSavingButton').click();
+    await closeSaved;
+    assertUiSmoke(collection.requests.some((item) => item.id === request.id && item.name === savedRequestName), 'Closing without saving should restore the saved request snapshot.');
+  } finally {
+    window.__postmeterSaveWorkspace = originalSaveWorkspace;
+    workspace.collections = [];
+    clearActiveWorkspaceItem();
+    resetRequestTabs();
+    renderAll();
+  }
+}
+
 function setPairRow(tableId, key, value) {
   const row = $(tableId).querySelector('.kv-row:last-child');
   assertUiSmoke(row, `Missing row in ${tableId}.`);
@@ -1042,14 +1282,806 @@ function closeToolbarMenus() {
   }
 }
 
+function renderRequestTabs() {
+  const bar = $('requestTabBar');
+  pruneOpenRequestTabs();
+  bar.textContent = '';
+  bar.hidden = openRequestTabs.length === 0 && openEnvironmentTabs.length === 0 && openWorkspaceTabs.length === 0;
+  if (bar.hidden) {
+    return;
+  }
+  for (const tab of openRequestTabs) {
+    const request = requestForTab(tab);
+    if (!request) {
+      continue;
+    }
+    const item = document.createElement('div');
+    item.className = 'request-tab-button';
+    item.classList.toggle('active', isActiveRequestTab(tab));
+    item.setAttribute('role', 'tab');
+    item.setAttribute('aria-selected', isActiveRequestTab(tab) ? 'true' : 'false');
+    item.tabIndex = 0;
+    item.title = request.name || 'Untitled Request';
+    item.addEventListener('click', () => selectRequestTab(tab));
+    item.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        selectRequestTab(tab);
+      }
+    });
+
+    const dirty = document.createElement('span');
+    dirty.className = 'request-tab-dirty';
+    dirty.hidden = !tab.dirty;
+    dirty.setAttribute('aria-label', 'Unsaved changes');
+
+    const method = document.createElement('span');
+    method.className = 'request-tab-method';
+    method.textContent = request.method || 'GET';
+
+    const title = document.createElement('span');
+    title.className = 'request-tab-title';
+    title.textContent = request.name || 'Untitled Request';
+
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'request-tab-close';
+    close.textContent = '\u00d7';
+    close.title = 'Close request';
+    close.setAttribute('aria-label', `Close ${request.name || 'Untitled Request'}`);
+    close.addEventListener('click', async (event) => {
+      event.stopPropagation();
+      await closeRequestTab(tab);
+    });
+
+    item.append(dirty, method, title, close);
+    bar.append(item);
+  }
+  for (const tab of openEnvironmentTabs) {
+    const environment = environmentForTab(tab);
+    if (!environment) {
+      continue;
+    }
+    const item = document.createElement('div');
+    item.className = 'request-tab-button environment-tab-button';
+    item.classList.toggle('active', isActiveEnvironmentTab(tab));
+    item.setAttribute('role', 'tab');
+    item.setAttribute('aria-selected', isActiveEnvironmentTab(tab) ? 'true' : 'false');
+    item.tabIndex = 0;
+    item.title = environment.name || 'Untitled Environment';
+    item.addEventListener('click', () => selectEnvironmentTab(tab));
+    item.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        selectEnvironmentTab(tab);
+      }
+    });
+
+    const dirty = document.createElement('span');
+    dirty.className = 'request-tab-dirty';
+    dirty.hidden = !tab.dirty;
+    dirty.setAttribute('aria-label', 'Unsaved changes');
+
+    const method = document.createElement('span');
+    method.className = 'request-tab-method';
+    method.textContent = 'ENV';
+
+    const title = document.createElement('span');
+    title.className = 'request-tab-title';
+    title.textContent = environment.name || 'Untitled Environment';
+
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'request-tab-close';
+    close.textContent = '\u00d7';
+    close.title = 'Close environment';
+    close.setAttribute('aria-label', `Close ${environment.name || 'Untitled Environment'}`);
+    close.addEventListener('click', (event) => {
+      event.stopPropagation();
+      closeEnvironmentTab(tab);
+    });
+
+    item.append(dirty, method, title, close);
+    bar.append(item);
+  }
+  for (const tab of openWorkspaceTabs) {
+    const workspaceItem = workspaceForTab(tab);
+    if (!workspaceItem) {
+      continue;
+    }
+    const item = document.createElement('div');
+    item.className = 'request-tab-button workspace-tab-button';
+    item.classList.toggle('active', isActiveWorkspaceTab(tab));
+    item.setAttribute('role', 'tab');
+    item.setAttribute('aria-selected', isActiveWorkspaceTab(tab) ? 'true' : 'false');
+    item.tabIndex = 0;
+    item.title = workspaceItem.name;
+    item.addEventListener('click', () => selectWorkspaceTab(tab));
+    item.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        selectWorkspaceTab(tab);
+      }
+    });
+
+    const dirty = document.createElement('span');
+    dirty.className = 'request-tab-dirty';
+    dirty.hidden = !tab.dirty;
+    dirty.setAttribute('aria-label', 'Unsaved changes');
+
+    const method = document.createElement('span');
+    method.className = 'request-tab-method';
+    method.textContent = 'WRK';
+
+    const title = document.createElement('span');
+    title.className = 'request-tab-title';
+    title.textContent = workspaceItem.name;
+
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'request-tab-close';
+    close.textContent = '\u00d7';
+    close.title = 'Close workspace';
+    close.setAttribute('aria-label', `Close ${workspaceItem.name}`);
+    close.addEventListener('click', (event) => {
+      event.stopPropagation();
+      closeWorkspaceTab(tab);
+    });
+
+    item.append(dirty, method, title, close);
+    bar.append(item);
+  }
+}
+
+function ensureOpenEnvironmentTabForActive(options = {}) {
+  const environment = activeEnvironment();
+  if (!environment || activeEnvironmentId === 'none') {
+    return null;
+  }
+  const key = activeEnvironmentTabKey();
+  let tab = openEnvironmentTabs.find((candidate) => candidate.key === key);
+  if (!tab) {
+    tab = { key, environmentId: activeEnvironmentId, dirty: options.dirty === true };
+    openEnvironmentTabs.push(tab);
+  }
+  tab.environmentId = activeEnvironmentId;
+  if (options.dirty === true) {
+    tab.dirty = true;
+  }
+  trimOpenEnvironmentTabs(key);
+  renderRequestTabs();
+  return tab;
+}
+
+function ensureOpenWorkspaceTabForActive(options = {}) {
+  const workspaceItem = activeWorkspaceItem();
+  if (!workspaceItem) {
+    return null;
+  }
+  const key = activeWorkspaceTabKey();
+  let tab = openWorkspaceTabs.find((candidate) => candidate.key === key);
+  if (!tab) {
+    tab = { key, workspaceId: workspaceItem.id, dirty: options.dirty === true };
+    openWorkspaceTabs.push(tab);
+  }
+  tab.workspaceId = workspaceItem.id;
+  if (options.dirty === true) {
+    tab.dirty = true;
+  }
+  trimOpenWorkspaceTabs(key);
+  renderRequestTabs();
+  return tab;
+}
+
+function ensureOpenRequestTabForActive(options = {}) {
+  const request = activeRequest();
+  if (!request || !activeRequestId) {
+    return null;
+  }
+  const key = activeRequestTabKey();
+  let tab = openRequestTabs.find((candidate) => candidate.key === key);
+  if (!tab) {
+    tab = activeCollectionId
+      ? {
+          key,
+          collectionId: activeCollectionId,
+          requestId: activeRequestId,
+          draft: false,
+          dirty: false,
+          createdUnsaved: options.createdUnsaved === true,
+          snapshot: requestSnapshot(request)
+        }
+      : { key, collectionId: null, requestId: activeRequestId, draft: true, dirty: true };
+    openRequestTabs.push(tab);
+  }
+  if (activeCollectionId) {
+    const found = findRequest(activeCollection(), activeRequestId);
+    tab.collectionId = activeCollectionId;
+    tab.folderId = found?.folder?.id || null;
+    tab.draft = false;
+    tab.snapshot ||= requestSnapshot(request);
+    if (options.createdUnsaved === true) {
+      tab.createdUnsaved = true;
+    }
+  } else {
+    tab.collectionId = null;
+    tab.folderId = null;
+    tab.draft = true;
+  }
+  if (options.dirty === true || tab.draft) {
+    tab.dirty = true;
+  }
+  trimOpenRequestTabs(key);
+  renderRequestTabs();
+  return tab;
+}
+
+function selectRequestTab(tab) {
+  collectRequestFromEditor();
+  activeSidebarPanel = 'collections';
+  activeMainPanel = 'request';
+  if (tab.draft) {
+    const draft = draftRequests.get(tab.requestId);
+    if (!draft) {
+      removeOpenRequestTab(tab.key);
+      renderAll();
+      return;
+    }
+    activeCollectionId = null;
+    activeFolderId = null;
+    activeRequestId = draft.id;
+    renderAll();
+    return;
+  }
+  const collection = workspace.collections.find((item) => item.id === tab.collectionId);
+  const found = collection ? findRequest(collection, tab.requestId) : null;
+  if (!collection || !found) {
+    removeOpenRequestTab(tab.key);
+    renderAll();
+    return;
+  }
+  activeCollectionId = collection.id;
+  activeFolderId = found.folder?.id || null;
+  activeRequestId = found.request.id;
+  ensureOpenRequestTabForActive();
+  renderAll();
+}
+
+function selectEnvironmentTab(tab) {
+  const environment = environmentForTab(tab);
+  if (!environment) {
+    removeOpenEnvironmentTab(tab.key);
+    renderAll();
+    return;
+  }
+  activeEnvironmentId = environment.id;
+  activeSidebarPanel = 'environments';
+  activeMainPanel = 'environment';
+  ensureOpenEnvironmentTabForActive();
+  renderAll();
+}
+
+function selectWorkspaceTab(tab) {
+  const workspaceItem = workspaceForTab(tab);
+  if (!workspaceItem) {
+    removeOpenWorkspaceTab(tab.key);
+    renderAll();
+    return;
+  }
+  activeWorkspaceId = workspaceItem.id;
+  activeSidebarPanel = 'workspaces';
+  activeMainPanel = 'workspace';
+  ensureOpenWorkspaceTabForActive();
+  renderAll();
+}
+
+function markActiveRequestDirty() {
+  const tab = ensureOpenRequestTabForActive({ dirty: true });
+  if (tab) {
+    tab.dirty = true;
+    renderRequestTabs();
+  }
+}
+
+function collectRequestAndMarkDirty() {
+  collectRequestFromEditor();
+  markActiveRequestDirty();
+}
+
+function clearSavedRequestDirtyState() {
+  for (const tab of openRequestTabs) {
+    if (!tab.draft) {
+      const request = requestForTab(tab);
+      tab.dirty = false;
+      tab.createdUnsaved = false;
+      if (request) {
+        tab.snapshot = requestSnapshot(request);
+      }
+    }
+  }
+  renderRequestTabs();
+}
+
+function activeRequestTabKey() {
+  if (!activeRequestId) {
+    return '';
+  }
+  return activeCollectionId
+    ? `request:${activeCollectionId}:${activeRequestId}`
+    : `draft:${activeRequestId}`;
+}
+
+function activeEnvironmentTabKey() {
+  return activeEnvironmentId && activeEnvironmentId !== 'none'
+    ? `environment:${activeEnvironmentId}`
+    : '';
+}
+
+function activeWorkspaceTabKey() {
+  return activeWorkspaceId ? `workspace:${activeWorkspaceId}` : '';
+}
+
+function isActiveRequestTab(tab) {
+  return activeMainPanel === 'request' && tab.key === activeRequestTabKey();
+}
+
+function isActiveEnvironmentTab(tab) {
+  return activeMainPanel === 'environment' && tab.key === activeEnvironmentTabKey();
+}
+
+function isActiveWorkspaceTab(tab) {
+  return activeMainPanel === 'workspace' && tab.key === activeWorkspaceTabKey();
+}
+
+function requestForTab(tab) {
+  if (tab.draft) {
+    return draftRequests.get(tab.requestId) || null;
+  }
+  const collection = workspace.collections.find((item) => item.id === tab.collectionId);
+  return collection ? findRequest(collection, tab.requestId)?.request || null : null;
+}
+
+function environmentForTab(tab) {
+  return workspace.environments?.find((environment) => environment.id === tab.environmentId) || null;
+}
+
+function workspaceForTab(tab) {
+  return workspaceListItems().find((item) => item.id === tab?.workspaceId) || null;
+}
+
+function pruneOpenRequestTabs() {
+  openRequestTabs = openRequestTabs.filter((tab) => Boolean(requestForTab(tab)));
+  openEnvironmentTabs = openEnvironmentTabs.filter((tab) => Boolean(environmentForTab(tab)));
+  openWorkspaceTabs = openWorkspaceTabs.filter((tab) => Boolean(workspaceForTab(tab)));
+}
+
+function trimOpenRequestTabs(activeKey) {
+  while (openRequestTabs.length > MAX_OPEN_REQUEST_TABS) {
+    const removableIndex = openRequestTabs.findIndex((tab) => tab.key !== activeKey);
+    openRequestTabs.splice(removableIndex >= 0 ? removableIndex : 0, 1);
+  }
+}
+
+function trimOpenEnvironmentTabs(activeKey) {
+  while (openEnvironmentTabs.length > MAX_OPEN_REQUEST_TABS) {
+    const removableIndex = openEnvironmentTabs.findIndex((tab) => tab.key !== activeKey);
+    openEnvironmentTabs.splice(removableIndex >= 0 ? removableIndex : 0, 1);
+  }
+}
+
+function trimOpenWorkspaceTabs(activeKey) {
+  while (openWorkspaceTabs.length > MAX_OPEN_REQUEST_TABS) {
+    const removableIndex = openWorkspaceTabs.findIndex((tab) => tab.key !== activeKey);
+    openWorkspaceTabs.splice(removableIndex >= 0 ? removableIndex : 0, 1);
+  }
+}
+
+function removeOpenRequestTab(keyOrCollectionId, requestId) {
+  const key = requestId == null ? keyOrCollectionId : `request:${keyOrCollectionId}:${requestId}`;
+  openRequestTabs = openRequestTabs.filter((tab) => tab.key !== key);
+}
+
+function removeOpenRequestTabsForCollection(collectionId) {
+  openRequestTabs = openRequestTabs.filter((tab) => tab.collectionId !== collectionId);
+}
+
+function removeOpenEnvironmentTab(keyOrEnvironmentId) {
+  const key = String(keyOrEnvironmentId || '').startsWith('environment:')
+    ? keyOrEnvironmentId
+    : `environment:${keyOrEnvironmentId}`;
+  openEnvironmentTabs = openEnvironmentTabs.filter((tab) => tab.key !== key);
+}
+
+function removeOpenWorkspaceTab(keyOrWorkspaceId) {
+  const key = String(keyOrWorkspaceId || '').startsWith('workspace:')
+    ? keyOrWorkspaceId
+    : `workspace:${keyOrWorkspaceId}`;
+  openWorkspaceTabs = openWorkspaceTabs.filter((tab) => tab.key !== key);
+}
+
+function closeWorkspaceTab(tab) {
+  if (!tab) {
+    renderRequestTabs();
+    return;
+  }
+  const index = openWorkspaceTabs.findIndex((candidate) => candidate === tab || candidate.key === tab.key);
+  if (index < 0) {
+    renderRequestTabs();
+    return;
+  }
+  const wasActive = isActiveWorkspaceTab(tab);
+  openWorkspaceTabs.splice(index, 1);
+  if (!wasActive) {
+    renderRequestTabs();
+    return;
+  }
+  const fallbackEnvironment = openEnvironmentTabs[openEnvironmentTabs.length - 1] || null;
+  if (fallbackEnvironment) {
+    selectEnvironmentTab(fallbackEnvironment);
+    return;
+  }
+  const fallbackRequest = openRequestTabs[openRequestTabs.length - 1] || null;
+  if (fallbackRequest) {
+    selectRequestTab(fallbackRequest);
+    return;
+  }
+  activeWorkspaceId = null;
+  activeSidebarPanel = 'workspaces';
+  activeMainPanel = 'workspace';
+  renderAll();
+}
+
+function closeEnvironmentTab(tab) {
+  if (!tab) {
+    renderRequestTabs();
+    return;
+  }
+  const index = openEnvironmentTabs.findIndex((candidate) => candidate === tab || candidate.key === tab.key);
+  if (index < 0) {
+    renderRequestTabs();
+    return;
+  }
+  const wasActive = isActiveEnvironmentTab(tab);
+  openEnvironmentTabs.splice(index, 1);
+  if (!wasActive) {
+    renderRequestTabs();
+    return;
+  }
+  const fallbackEnvironment = openEnvironmentTabs[Math.min(index, openEnvironmentTabs.length - 1)] || openEnvironmentTabs[index - 1] || null;
+  if (fallbackEnvironment) {
+    selectEnvironmentTab(fallbackEnvironment);
+    return;
+  }
+  const fallbackWorkspace = openWorkspaceTabs[openWorkspaceTabs.length - 1] || null;
+  if (fallbackWorkspace) {
+    selectWorkspaceTab(fallbackWorkspace);
+    return;
+  }
+  const fallbackRequest = openRequestTabs[openRequestTabs.length - 1] || null;
+  if (fallbackRequest) {
+    selectRequestTab(fallbackRequest);
+    return;
+  }
+  activeEnvironmentId = 'none';
+  activeSidebarPanel = 'environments';
+  activeMainPanel = 'environment';
+  renderAll();
+}
+
+async function closeRequestTab(tab) {
+  if (!tab) {
+    return;
+  }
+  if (isActiveRequestTab(tab)) {
+    collectRequestFromEditor();
+  }
+  const request = requestForTab(tab);
+  if (!request) {
+    closeRequestTabAfterResolved(tab);
+    return;
+  }
+  if (tab.draft || tab.dirty) {
+    const action = await promptUnsavedRequestClose(tab, request);
+    if (action === 'cancel') {
+      return;
+    }
+    if (action === 'save') {
+      if (tab.draft) {
+        const savedTab = await saveDraftRequestWithPrompt(request, { showStatus: false, tab });
+        if (!savedTab) {
+          return;
+        }
+      } else {
+        await persistWorkspace(false);
+      }
+    } else {
+      discardRequestTabChanges(tab);
+    }
+  }
+  closeRequestTabAfterResolved(tab);
+}
+
+function closeRequestTabAfterResolved(tab) {
+  const index = openRequestTabs.findIndex((candidate) => candidate === tab || candidate.key === tab.key);
+  if (index < 0) {
+    renderRequestTabs();
+    return;
+  }
+  const wasActive = isActiveRequestTab(tab);
+  openRequestTabs.splice(index, 1);
+  if (!wasActive) {
+    renderCollections();
+    renderRequestTabs();
+    return;
+  }
+  const fallback = openRequestTabs[Math.min(index, openRequestTabs.length - 1)] || openRequestTabs[index - 1] || null;
+  if (fallback) {
+    selectRequestTab(fallback);
+    return;
+  }
+  clearActiveWorkspaceItem();
+  renderAll();
+}
+
+function discardRequestTabChanges(tab) {
+  if (tab.draft) {
+    draftRequests.delete(tab.requestId);
+    return;
+  }
+  const collection = workspace.collections.find((item) => item.id === tab.collectionId);
+  if (!collection) {
+    return;
+  }
+  if (tab.createdUnsaved) {
+    removeRequestFromCollection(collection, tab.requestId);
+    return;
+  }
+  restoreRequestFromSnapshot(tab);
+}
+
+function restoreRequestFromSnapshot(tab) {
+  const request = requestForTab(tab);
+  if (!request || !tab.snapshot) {
+    return;
+  }
+  try {
+    const snapshot = JSON.parse(tab.snapshot);
+    for (const key of Object.keys(request)) {
+      delete request[key];
+    }
+    Object.assign(request, snapshot);
+  } catch {
+    return;
+  }
+}
+
+function requestSnapshot(request) {
+  try {
+    return JSON.stringify(request);
+  } catch {
+    return '{}';
+  }
+}
+
+function promptUnsavedRequestClose(tab, request) {
+  $('unsavedRequestTitle').textContent = tab.draft ? 'Close unsaved request?' : 'Close request with unsaved changes?';
+  $('unsavedRequestMessage').textContent = tab.draft
+    ? `"${request.name || 'Untitled Request'}" is not saved to a collection. Save it before closing?`
+    : `"${request.name || 'Untitled Request'}" has unsaved changes. Save those changes before closing?`;
+  return showModal('unsavedRequestModal', 'cancel');
+}
+
+async function saveDraftRequestWithPrompt(request, options = {}) {
+  const collectionId = await promptDraftSaveCollection(request);
+  if (!collectionId) {
+    return null;
+  }
+  return saveDraftRequestToCollection(request, collectionId, options);
+}
+
+async function saveDraftRequestToCollection(draftRequest, collectionId, options = {}) {
+  const collection = workspace.collections.find((item) => item.id === collectionId);
+  if (!collection || !draftRequest) {
+    notifyUser('Save Request Failed', 'Select an existing collection before saving this request.');
+    return null;
+  }
+  const draftId = draftRequest.id;
+  if (!activeCollectionId && activeRequestId === draftId) {
+    collectRequestFromEditor();
+  }
+  const request = structuredClone(draftRequest);
+  request.name = uniqueName(request.name || 'Untitled Request', allRequestNames(collection));
+  collection.requests ||= [];
+  collection.requests.push(request);
+  draftRequests.delete(draftId);
+  activeMainPanel = 'request';
+  activeCollectionId = collection.id;
+  activeFolderId = null;
+  activeRequestId = request.id;
+
+  const oldKey = `draft:${draftId}`;
+  let tab = options.tab || openRequestTabs.find((candidate) => candidate.key === oldKey);
+  if (tab) {
+    tab.key = `request:${collection.id}:${request.id}`;
+    tab.collectionId = collection.id;
+    tab.folderId = null;
+    tab.requestId = request.id;
+    tab.draft = false;
+    tab.dirty = true;
+    tab.createdUnsaved = true;
+    tab.snapshot = requestSnapshot(request);
+  } else {
+    tab = ensureOpenRequestTabForActive({ dirty: true, createdUnsaved: true });
+  }
+  await persistWorkspace(options.showStatus !== false, { collectEditors: false });
+  renderAll();
+  return tab;
+}
+
+function promptDraftSaveCollection(request) {
+  selectedDraftSaveCollectionId = '';
+  $('saveDraftRequestMessage').textContent = `Choose a collection for "${request?.name || 'Untitled Request'}".`;
+  renderSaveDraftCollectionList();
+  return showModal('saveDraftRequestModal', null);
+}
+
+function renderSaveDraftCollectionList() {
+  const list = $('saveDraftCollectionList');
+  list.textContent = '';
+  $('confirmSaveDraftButton').disabled = true;
+  if (!workspace.collections.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.textContent = 'Create a collection before saving this request.';
+    list.append(empty);
+    return;
+  }
+  for (const collection of workspace.collections) {
+    const label = document.createElement('label');
+    label.className = 'collection-pick-option';
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = 'saveDraftCollection';
+    input.value = collection.id;
+    input.addEventListener('change', () => {
+      selectedDraftSaveCollectionId = input.value;
+      $('confirmSaveDraftButton').disabled = false;
+    });
+    const text = document.createElement('span');
+    text.textContent = collection.name || 'Untitled Collection';
+    label.append(input, text);
+    list.append(label);
+  }
+}
+
+function showModal(modalId, cancelValue) {
+  if (activeModalResolver) {
+    resolveActiveModal(cancelValue);
+  }
+  closeContextMenu();
+  closeToolbarMenus();
+  $('modalBackdrop').hidden = false;
+  for (const modal of $('modalBackdrop').querySelectorAll('.modal')) {
+    modal.hidden = modal.id !== modalId;
+  }
+  activeModalId = modalId;
+  return new Promise((resolve) => {
+    activeModalResolver = resolve;
+    if (modalId === 'unsavedRequestModal') {
+      $('cancelCloseRequestButton').focus();
+    } else {
+      $('cancelSaveDraftButton').focus();
+    }
+  });
+}
+
+function resolveActiveModal(value) {
+  const resolver = activeModalResolver;
+  activeModalResolver = null;
+  activeModalId = null;
+  $('modalBackdrop').hidden = true;
+  for (const modal of $('modalBackdrop').querySelectorAll('.modal')) {
+    modal.hidden = true;
+  }
+  if (resolver) {
+    resolver(value);
+  }
+}
+
+function cancelActiveModal() {
+  if (!activeModalResolver) {
+    return;
+  }
+  resolveActiveModal(activeModalId === 'unsavedRequestModal' ? 'cancel' : null);
+}
+
+function resetRequestTabs(options = {}) {
+  openRequestTabs = [];
+  openEnvironmentTabs = [];
+  openWorkspaceTabs = [];
+  if (options.clearDrafts !== false) {
+    draftRequests = new Map();
+  }
+}
+
 function renderAll() {
+  renderToolbarState();
+  renderSidebarPanels();
+  renderMainPanels();
   renderSettings();
   renderEnvironmentSelect();
   renderCollections();
+  renderEnvironments();
+  renderWorkspaces();
+  renderWorkspacePanel();
   renderHistory();
+  renderRequestTabs();
   renderRequestEditor();
   renderCollectionVariablesEditor();
   renderEnvironmentEditor();
+}
+
+function selectSidebarPanel(panel) {
+  if (!['collections', 'environments', 'workspaces', 'history'].includes(panel)) {
+    return;
+  }
+  activeSidebarPanel = panel;
+  if (panel === 'collections') {
+    activeMainPanel = 'request';
+  } else if (panel === 'environments') {
+    if (activeEnvironmentId === 'none' && workspace.environments?.length) {
+      activeEnvironmentId = workspace.environments[0].id;
+    }
+    activeMainPanel = 'environment';
+    ensureOpenEnvironmentTabForActive();
+  } else if (panel === 'workspaces') {
+    activeWorkspaceId ||= workspaceListItems()[0]?.id || null;
+    activeMainPanel = 'workspace';
+    ensureOpenWorkspaceTabForActive();
+  }
+  renderAll();
+}
+
+function renderSidebarPanels() {
+  for (const button of document.querySelectorAll('.sidebar-tab')) {
+    const isActive = button.dataset.sidebarPanel === activeSidebarPanel;
+    button.classList.toggle('active', isActive);
+    button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+  }
+  for (const panel of document.querySelectorAll('[data-sidebar-panel-content]')) {
+    const isActive = panel.dataset.sidebarPanelContent === activeSidebarPanel;
+    panel.hidden = !isActive;
+    panel.classList.toggle('active', isActive);
+  }
+}
+
+function renderMainPanels() {
+  const showEnvironment = activeMainPanel === 'environment';
+  const showWorkspace = activeMainPanel === 'workspace';
+  const showDocument = showEnvironment || showWorkspace;
+  const showRequestEmpty = activeMainPanel === 'request' && !activeRequest();
+  const showEnvironmentEmpty = showEnvironment && !activeEnvironment();
+  const showWorkspaceEmpty = showWorkspace && !activeWorkspaceItem();
+  document.querySelector('.workspace').classList.toggle('document-mode', showDocument);
+  document.querySelector('.workspace').classList.toggle('environment-mode', showEnvironment);
+  document.querySelector('.workspace').classList.toggle('workspace-mode', showWorkspace);
+  document.querySelector('.workspace').classList.toggle('request-empty-mode', showRequestEmpty);
+  document.querySelector('.workspace').classList.toggle('environment-empty-mode', showEnvironmentEmpty);
+  document.querySelector('.workspace').classList.toggle('workspace-empty-mode', showWorkspaceEmpty);
+  $('requestEmptyPanel').hidden = !showRequestEmpty;
+  $('environmentEmptyPanel').hidden = !showEnvironmentEmpty;
+  $('workspaceEmptyPanel').hidden = !showWorkspaceEmpty;
+  $('requestEditorPanel').hidden = showDocument || showRequestEmpty;
+  $('environmentMainPanel').hidden = !showEnvironment || showEnvironmentEmpty;
+  $('workspaceMainPanel').hidden = !showWorkspace || showWorkspaceEmpty;
+  $('workspacePaneResize').hidden = showDocument || showRequestEmpty;
+  document.querySelector('.results').hidden = showDocument || showRequestEmpty;
+}
+
+function renderToolbarState() {
+  const hasActiveCollection = Boolean(activeCollection());
+  $('newFolderButton').disabled = !hasActiveCollection;
+  $('newFolderButton').setAttribute('aria-disabled', hasActiveCollection ? 'false' : 'true');
 }
 
 function renderSettings() {
@@ -1059,6 +2091,7 @@ function renderSettings() {
 function ensureSettings() {
   workspace.settings ||= { updates: { includePrereleases: false } };
   workspace.settings.updates ||= { includePrereleases: false };
+  delete workspace.settings.loadTestPolicy;
 }
 
 async function setIncludePrereleases(includePrereleases, options = {}) {
@@ -1073,10 +2106,13 @@ async function setIncludePrereleases(includePrereleases, options = {}) {
 }
 
 function selectInitialWorkspaceItem() {
+  activeMainPanel = 'request';
+  resetRequestTabs();
   const collection = workspace.collections[0];
   activeCollectionId = collection?.id;
   if (collection) {
     selectFirstRequest(collection);
+    ensureOpenRequestTabForActive();
   } else {
     clearActiveWorkspaceItem();
   }
@@ -1103,14 +2139,165 @@ function renderCollections() {
   }
 }
 
+function renderEnvironments() {
+  const root = $('environmentsList');
+  root.textContent = '';
+  if (!workspace.environments?.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.textContent = 'No environments';
+    root.append(empty);
+    return;
+  }
+  for (const environment of workspace.environments) {
+    root.append(environmentNode(environment));
+  }
+}
+
+function environmentNode(environment) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'tree-node environment-node';
+  const button = treeButton(environment.name || 'Untitled Environment', environment.id === activeEnvironmentId, 'ENV');
+  button.addEventListener('click', () => {
+    activeEnvironmentId = environment.id;
+    activeSidebarPanel = 'environments';
+    activeMainPanel = 'environment';
+    ensureOpenEnvironmentTabForActive();
+    renderAll();
+  });
+  attachTreeContextMenu(button, [
+    ['Rename', () => renameEnvironment(environment)],
+    ['Delete', () => deleteEnvironment(environment), 'danger']
+  ]);
+  wrapper.append(button);
+  return wrapper;
+}
+
+function renderWorkspaces() {
+  const root = $('workspacesList');
+  root.textContent = '';
+  for (const workspaceItem of workspaceListItems()) {
+    root.append(workspaceNode(workspaceItem));
+  }
+}
+
+function workspaceNode(workspaceItem) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'tree-node workspace-node';
+  const button = treeButton(workspaceItem.name, activeMainPanel === 'workspace' && workspaceItem.id === activeWorkspaceId, 'WRK');
+  button.addEventListener('click', () => {
+    activeWorkspaceId = workspaceItem.id;
+    activeSidebarPanel = 'workspaces';
+    activeMainPanel = 'workspace';
+    ensureOpenWorkspaceTabForActive();
+    renderAll();
+  });
+  attachTreeContextMenu(button, [
+    ['Save', () => saveWorkspace(true, { promptForDraft: true })],
+    ['Import', () => importWorkspace()],
+    ['Export', () => exportWorkspace()]
+  ]);
+  wrapper.append(button);
+  return wrapper;
+}
+
+function renderWorkspacePanel() {
+  const workspaceItem = activeWorkspaceItem();
+  $('workspaceMainTitle').textContent = workspaceItem?.name || 'Select a workspace';
+  const container = $('workspaceSummary');
+  container.textContent = '';
+  if (!workspaceItem) {
+    return;
+  }
+  const requestCount = countWorkspaceRequests();
+  const folderCount = countWorkspaceFolders();
+  const rows = [
+    ['Name', workspaceDisplayName()],
+    ['Workspace File', workspacePath || 'Default local workspace'],
+    ['Schema Version', String(workspace.schemaVersion || '-')],
+    ['Collections', String(workspace.collections?.length || 0)],
+    ['Folders', String(folderCount)],
+    ['Requests', String(requestCount)],
+    ['Environments', String(workspace.environments?.length || 0)],
+    ['Cookies', String(workspace.cookies?.length || 0)],
+    ['History Entries', String(workspace.history?.length || 0)]
+  ];
+  for (const [label, value] of rows) {
+    const row = document.createElement('div');
+    row.className = 'workspace-summary-row';
+    const labelElement = document.createElement('div');
+    labelElement.className = 'workspace-summary-label';
+    labelElement.textContent = label;
+    const valueElement = document.createElement('div');
+    valueElement.className = 'workspace-summary-value';
+    valueElement.textContent = value;
+    row.append(labelElement, valueElement);
+    container.append(row);
+  }
+}
+
+function workspaceListItems() {
+  return [{
+    id: 'current',
+    name: workspaceDisplayName(),
+    path: workspacePath || ''
+  }];
+}
+
+function activeWorkspaceItem() {
+  if (!activeWorkspaceId) {
+    return null;
+  }
+  return workspaceListItems().find((item) => item.id === activeWorkspaceId) || null;
+}
+
+function workspaceDisplayName() {
+  if (workspace?.name && String(workspace.name).trim()) {
+    return String(workspace.name).trim();
+  }
+  const filename = String(workspacePath || '').split(/[\\/]/).filter(Boolean).pop();
+  if (!filename || filename === 'workspace.json') {
+    return 'Local Workspace';
+  }
+  return filename.replace(/\.json$/i, '') || 'Local Workspace';
+}
+
+function countWorkspaceRequests() {
+  let count = 0;
+  for (const collection of workspace.collections || []) {
+    walkCollectionRequests(collection, () => {
+      count += 1;
+    });
+  }
+  return count;
+}
+
+function countWorkspaceFolders() {
+  let count = 0;
+  const walk = (folder) => {
+    count += 1;
+    for (const child of folder.folders || []) {
+      walk(child);
+    }
+  };
+  for (const collection of workspace.collections || []) {
+    for (const folder of collection.folders || []) {
+      walk(folder);
+    }
+  }
+  return count;
+}
+
 function collectionNode(collection) {
   const wrapper = document.createElement('div');
   wrapper.className = 'tree-node collection-node';
   const button = treeButton(collection.name, collection.id === activeCollectionId && !activeRequestId, 'COL');
   button.addEventListener('click', () => {
     collectRequestFromEditor();
+    activeMainPanel = 'request';
     activeCollectionId = collection.id;
     selectFirstRequest(collection);
+    ensureOpenRequestTabForActive();
     renderAll();
   });
   attachTreeContextMenu(button, [
@@ -1135,9 +2322,12 @@ function folderNode(collection, folder) {
   wrapper.className = 'tree-node tree-folder folder-node';
   const button = treeButton(folder.name, folder.id === activeFolderId && !activeRequestId, 'DIR');
   button.addEventListener('click', () => {
+    collectRequestFromEditor();
+    activeMainPanel = 'request';
     activeCollectionId = collection.id;
     activeFolderId = folder.id;
     activeRequestId = firstRequestInFolder(folder)?.request?.id;
+    ensureOpenRequestTabForActive();
     renderAll();
   });
   attachTreeContextMenu(button, [
@@ -1162,9 +2352,11 @@ function requestNode(collection, folder, request) {
   const button = treeButton(request.name, request.id === activeRequestId, request.method);
   button.addEventListener('click', () => {
     collectRequestFromEditor();
+    activeMainPanel = 'request';
     activeCollectionId = collection.id;
     activeFolderId = folder?.id || null;
     activeRequestId = request.id;
+    ensureOpenRequestTabForActive();
     renderAll();
   });
   attachTreeContextMenu(button, [
@@ -1408,6 +2600,7 @@ function renderExamples(examples) {
     name.placeholder = 'Example name';
     name.addEventListener('input', () => {
       example.name = name.value;
+      markActiveRequestDirty();
     });
     const status = document.createElement('input');
     status.type = 'number';
@@ -1417,6 +2610,7 @@ function renderExamples(examples) {
     status.placeholder = 'Status';
     status.addEventListener('input', () => {
       example.statusCode = Number(status.value) || 0;
+      markActiveRequestDirty();
     });
     const bodyType = document.createElement('select');
     for (const type of BODY_TYPES) {
@@ -1426,6 +2620,7 @@ function renderExamples(examples) {
     bodyType.addEventListener('change', () => {
       example.bodyType = bodyType.value;
       body.value = formatExampleBody(example);
+      markActiveRequestDirty();
     });
     const duplicate = document.createElement('button');
     duplicate.textContent = 'Duplicate';
@@ -1441,12 +2636,14 @@ function renderExamples(examples) {
     headers.placeholder = 'Header-Name: value';
     headers.addEventListener('input', () => {
       example.headers = parseHeadersText(headers.value);
+      markActiveRequestDirty();
     });
     const body = document.createElement('textarea');
     body.spellcheck = false;
     body.value = formatExampleBody(example);
     body.addEventListener('input', () => {
       example.body = body.value;
+      markActiveRequestDirty();
     });
     item.append(header, headers, body);
     container.append(item);
@@ -1539,19 +2736,27 @@ function renderPairs(containerId, pairs, fieldName) {
     enabled.addEventListener('change', () => {
       pair.enabled = enabled.checked;
       collectRequestFromEditor();
+      markActiveRequestDirty();
     });
     const key = document.createElement('input');
     key.placeholder = 'Key';
     key.value = pair.key || '';
-    key.addEventListener('input', () => { pair.key = key.value; });
+    key.addEventListener('input', () => {
+      pair.key = key.value;
+      markActiveRequestDirty();
+    });
     const value = document.createElement('input');
     value.placeholder = 'Value';
     value.value = pair.value || '';
-    value.addEventListener('input', () => { pair.value = value.value; });
+    value.addEventListener('input', () => {
+      pair.value = value.value;
+      markActiveRequestDirty();
+    });
     const remove = document.createElement('button');
     remove.textContent = 'Remove';
     remove.addEventListener('click', () => {
       pairs.splice(index, 1);
+      markActiveRequestDirty();
       renderRequestEditor();
     });
     row.append(enabled, key, value, remove);
@@ -1570,7 +2775,10 @@ function renderAssertions(assertions) {
     const enabled = document.createElement('input');
     enabled.type = 'checkbox';
     enabled.checked = assertion.enabled !== false;
-    enabled.addEventListener('change', () => { assertion.enabled = enabled.checked; });
+    enabled.addEventListener('change', () => {
+      assertion.enabled = enabled.checked;
+      markActiveRequestDirty();
+    });
 
     const type = document.createElement('select');
     for (const [value, label] of [
@@ -1593,6 +2801,7 @@ function renderAssertions(assertions) {
     type.addEventListener('change', () => {
       assertion.type = type.value;
       applyAssertionTypeDefaults(assertion);
+      markActiveRequestDirty();
       renderAssertions(assertions);
     });
 
@@ -1616,7 +2825,10 @@ function renderAssertions(assertions) {
       operator.append(new Option(label, value));
     }
     operator.value = assertion.operator || 'equals';
-    operator.addEventListener('change', () => { assertion.operator = operator.value; });
+    operator.addEventListener('change', () => {
+      assertion.operator = operator.value;
+      markActiveRequestDirty();
+    });
 
     const expected = assertionInput(assertionExpectedPlaceholder(assertion), assertion.expected ?? '', (value) => { assertion.expected = value; });
     const remove = document.createElement('button');
@@ -1624,6 +2836,7 @@ function renderAssertions(assertions) {
     remove.textContent = 'Remove';
     remove.addEventListener('click', () => {
       assertions.splice(index, 1);
+      markActiveRequestDirty();
       renderAssertions(assertions);
     });
     row.append(enabled, type, name, path, operator, expected, remove);
@@ -1635,7 +2848,10 @@ function assertionInput(placeholder, value, onInput) {
   const input = document.createElement('input');
   input.placeholder = placeholder;
   input.value = value;
-  input.addEventListener('input', () => onInput(input.value));
+  input.addEventListener('input', () => {
+    onInput(input.value);
+    markActiveRequestDirty();
+  });
   return input;
 }
 
@@ -1707,6 +2923,9 @@ function applyAssertionTypeDefaults(assertion) {
 
 function renderEnvironmentSelect() {
   const select = $('environmentSelect');
+  if (activeEnvironmentId !== 'none' && !(workspace.environments || []).some((environment) => environment.id === activeEnvironmentId)) {
+    activeEnvironmentId = 'none';
+  }
   select.textContent = '';
   select.append(new Option('No Environment', 'none'));
   for (const environment of workspace.environments || []) {
@@ -1717,11 +2936,21 @@ function renderEnvironmentSelect() {
 
 function renderEnvironmentEditor() {
   const environment = activeEnvironment();
+  $('environmentMainTitle').textContent = environment?.name || 'Select an environment';
   $('environmentNameInput').value = environment?.name || '';
   $('environmentNameInput').disabled = !environment;
   $('deleteEnvironmentButton').disabled = !environment;
   $('addVariableButton').disabled = !environment;
-  renderEnvironmentPairs(environment?.variables || []);
+  if (!environment) {
+    const container = $('environmentTable');
+    container.textContent = '';
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.textContent = 'Select or create an environment';
+    container.append(empty);
+  } else {
+    renderEnvironmentPairs(environment.variables || []);
+  }
   renderVariablePreview();
 }
 
@@ -1734,6 +2963,7 @@ function renderCollectionVariablesEditor() {
 
 function renderRequestVariablePairs(pairs) {
   renderVariablePairs('requestVariablesTable', pairs, () => {
+    markActiveRequestDirty();
     renderVariablePreview();
   });
 }
@@ -2056,6 +3286,7 @@ function renderHistory() {
     button.className = 'history-item';
     button.textContent = `${item.method} ${item.statusCode || 'ERR'} ${item.url}`;
     button.addEventListener('click', () => {
+      activeMainPanel = 'request';
       const request = activeRequest();
       if (request) {
         request.method = item.method;
@@ -2210,10 +3441,6 @@ async function runLoadTest() {
     return setStatus('Fix validation errors.');
   }
   const concurrency = Number($('loadConcurrency').value);
-  const allowedHosts = loadAllowedHostsForRequest(request);
-  if (!allowedHosts.length) {
-    return setStatus('Add at least one allowed host before running a load test.');
-  }
   let confirmedHighConcurrency = false;
   if (concurrency >= 50) {
     confirmedHighConcurrency = confirm(`Run load test with concurrency ${concurrency}?`);
@@ -2229,15 +3456,8 @@ async function runLoadTest() {
   $('loadResults').textContent = 'Starting load test...';
   try {
     lastLoadResult = await window.postmeter.loadTest.start(activeLoadId, request, environment, {
+      ...loadConfigFromControls(request),
       concurrency,
-      totalRequests: Number($('loadRequests').value),
-      durationSeconds: Number($('loadDurationSeconds').value),
-      rampUpSeconds: Number($('loadRampUpSeconds').value),
-      targetRatePerSecond: Number($('loadTargetRate').value),
-      executionMode: $('loadExecutionMode').value,
-      workerProcesses: Number($('loadWorkerProcesses').value),
-      recordSamples: $('loadRecordSamples').checked,
-      allowedHosts,
       confirmedHighConcurrency
     });
     $('loadResults').textContent = formatLoadResult(lastLoadResult);
@@ -2263,6 +3483,7 @@ function formatLoadProgress(progress) {
     `Completed ${progress.completedRequests} of ${progress.requestedRequests} max requests.`,
     `Elapsed: ${progress.elapsedMillis || 0} ms`,
     `Target RPS: ${progress.targetRatePerSecond || 0}`,
+    `Rate cap RPS: ${progress.maxRatePerSecond || 0}`,
     `Execution: ${progress.executionMode || 'singleProcess'} (${progress.workerProcesses || 1} process${(progress.workerProcesses || 1) === 1 ? '' : 'es'})`,
     `Active workers: ${progress.activeWorkers || 0}`
   ];
@@ -2534,6 +3755,7 @@ function formatLoadResult(result) {
     `Elapsed: ${result.elapsedMillis || 0} ms`,
     `Ramp-up: ${result.rampUpSeconds || 0} s`,
     `Target RPS: ${result.targetRatePerSecond || 0}`,
+    `Rate cap RPS: ${result.maxRatePerSecond || 0}`,
     `Execution: ${result.executionMode || 'singleProcess'} (${result.workerProcesses || 1} process${(result.workerProcesses || 1) === 1 ? '' : 'es'})`,
     `Successful: ${result.successfulRequests}`,
     `Failed: ${result.failedRequests}`,
@@ -2542,6 +3764,7 @@ function formatLoadResult(result) {
     `Latency min/avg/p50/p90/p95/p99/max: ${result.minMillis} / ${result.averageMillis.toFixed(2)} / ${result.p50Millis} / ${result.p90Millis} / ${result.p95Millis} / ${result.p99Millis} / ${result.maxMillis} ms`,
     `Latency histogram: ${formatLatencyHistogram(result.latencyHistogram)}`,
     `Status counts: ${JSON.stringify(result.statusCounts)}`,
+    Array.isArray(result.policyDecisions) && result.policyDecisions.length ? `Policy decisions:\n- ${result.policyDecisions.map((decision) => decision.message || '').filter(Boolean).join('\n- ')}` : '',
     Array.isArray(result.samples) ? `Samples recorded: ${result.samples.length}${result.sampleLimitReached ? ` (capped at ${result.sampleLimit})` : ''}` : '',
     result.errors?.length ? `Errors:\n- ${result.errors.join('\n- ')}` : ''
   ].filter(Boolean).join('\n');
@@ -2556,15 +3779,30 @@ function formatLatencyHistogram(histogram) {
     .join(' ');
 }
 
-async function saveWorkspace(showStatus = true) {
+async function saveWorkspace(showStatus = true, options = {}) {
   collectRequestFromEditor();
-  collectEnvironmentFromEditor();
-  collectSettingsFromEditor();
+  if (options.promptForDraft === true && !activeCollectionId && activeRequestId) {
+    const request = activeRequest();
+    if (request) {
+      return Boolean(await saveDraftRequestWithPrompt(request, { showStatus }));
+    }
+  }
+  return persistWorkspace(showStatus);
+}
+
+async function persistWorkspace(showStatus = true, options = {}) {
+  if (options.collectEditors !== false) {
+    collectRequestFromEditor();
+    collectEnvironmentFromEditor();
+    collectSettingsFromEditor();
+  }
   const save = window.__postmeterSaveWorkspace || window.postmeter.workspace.save;
   workspace = await save(workspace);
+  clearSavedRequestDirtyState();
   if (showStatus) {
     setStatus('Workspace saved.');
   }
+  return true;
 }
 
 async function importWorkspace() {
@@ -2780,6 +4018,100 @@ function collectSettingsFromEditor() {
   ensureSettings();
 }
 
+function loadPolicyFromControls() {
+  return normalizeLoadPolicy({
+    concurrency: $('loadConcurrency').value,
+    totalRequests: $('loadRequests').value,
+    durationSeconds: $('loadDurationSeconds').value,
+    rampUpSeconds: $('loadRampUpSeconds').value,
+    targetRatePerSecond: $('loadTargetRate').value,
+    maxRatePerSecond: $('loadMaxRate').value,
+    executionMode: $('loadExecutionMode').value,
+    workerProcesses: $('loadWorkerProcesses').value,
+    recordSamples: $('loadRecordSamples').checked
+  });
+}
+
+function loadConfigFromControls() {
+  const policy = loadPolicyFromControls();
+  return {
+    concurrency: policy.concurrency,
+    totalRequests: policy.totalRequests,
+    durationSeconds: policy.durationSeconds,
+    rampUpSeconds: policy.rampUpSeconds,
+    targetRatePerSecond: policy.targetRatePerSecond,
+    maxRatePerSecond: policy.maxRatePerSecond,
+    executionMode: policy.executionMode,
+    workerProcesses: policy.workerProcesses,
+    recordSamples: policy.recordSamples
+  };
+}
+
+function defaultLoadPolicy() {
+  return {
+    concurrency: 5,
+    totalRequests: 25,
+    durationSeconds: 0,
+    rampUpSeconds: 0,
+    targetRatePerSecond: 0,
+    maxRatePerSecond: 0,
+    executionMode: 'singleProcess',
+    workerProcesses: 2,
+    recordSamples: false
+  };
+}
+
+function defaultRequestLoadPolicy() {
+  return {
+    enabled: false,
+    ...defaultLoadPolicy()
+  };
+}
+
+function normalizeLoadPolicy(policy) {
+  const defaults = defaultLoadPolicy();
+  return {
+    concurrency: boundedInteger(policy?.concurrency, defaults.concurrency, 1, 512),
+    totalRequests: boundedInteger(policy?.totalRequests, defaults.totalRequests, 1, 100000),
+    durationSeconds: boundedNumber(policy?.durationSeconds, defaults.durationSeconds, 0, 3600),
+    rampUpSeconds: boundedNumber(policy?.rampUpSeconds, defaults.rampUpSeconds, 0, 3600),
+    targetRatePerSecond: boundedNumber(policy?.targetRatePerSecond, defaults.targetRatePerSecond, 0, 10000),
+    maxRatePerSecond: boundedNumber(policy?.maxRatePerSecond, defaults.maxRatePerSecond, 0, 10000),
+    executionMode: policy?.executionMode === 'multiProcess' ? 'multiProcess' : 'singleProcess',
+    workerProcesses: boundedInteger(policy?.workerProcesses, defaults.workerProcesses, 1, 8),
+    recordSamples: policy?.recordSamples === true
+  };
+}
+
+function uniqueStrings(values) {
+  const seen = new Set();
+  return values
+    .map((value) => String(value || '').trim().toLowerCase())
+    .filter((value) => {
+      if (!value || seen.has(value)) {
+        return false;
+      }
+      seen.add(value);
+      return true;
+    });
+}
+
+function boundedInteger(value, fallback, min, max) {
+  const number = Number(value);
+  if (!Number.isInteger(number)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, number));
+}
+
+function boundedNumber(value, fallback, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, number));
+}
+
 async function exportCollection(collection = activeCollection(), format = 'postmeter') {
   if (!collection) {
     return setStatus('Select a collection to export.');
@@ -2792,6 +4124,8 @@ async function exportCollection(collection = activeCollection(), format = 'postm
 }
 
 function newCollection() {
+  collectRequestFromEditor();
+  activeMainPanel = 'request';
   const collection = {
     id: crypto.randomUUID(),
     name: uniqueName('New Collection', workspace.collections.map((existing) => existing.name)),
@@ -2801,19 +4135,28 @@ function newCollection() {
     requests: [],
     folders: []
   };
-  const request = newRequestObject('New Request');
-  collection.requests.push(request);
   workspace.collections.push(collection);
   activeCollectionId = collection.id;
   activeFolderId = null;
-  activeRequestId = request.id;
+  activeRequestId = null;
   renderAll();
+  return collection;
 }
 
 function newRequest(collectionId = activeCollectionId, folderId = activeFolderId) {
+  collectRequestFromEditor();
+  activeMainPanel = 'request';
   const collection = workspace.collections.find((item) => item.id === collectionId);
   if (!collection) {
-    return newCollection();
+    const draftRequest = newRequestObject(uniqueName('New Request', Array.from(draftRequests.values()).map((request) => request.name)));
+    draftRequests.set(draftRequest.id, draftRequest);
+    activeCollectionId = null;
+    activeFolderId = null;
+    activeRequestId = draftRequest.id;
+    ensureOpenRequestTabForActive({ dirty: true });
+    renderAll();
+    setStatus('Created an unsaved request.');
+    return draftRequest;
   }
   const request = newRequestObject(uniqueName('New Request', allRequestNames(collection)));
   const folder = folderId ? findFolder(collection, folderId) : null;
@@ -2826,13 +4169,19 @@ function newRequest(collectionId = activeCollectionId, folderId = activeFolderId
   }
   activeCollectionId = collection.id;
   activeRequestId = request.id;
+  ensureOpenRequestTabForActive({ dirty: true, createdUnsaved: true });
   renderAll();
+  return request;
 }
 
 function newFolder(collectionId = activeCollectionId, parentFolderId = activeFolderId) {
+  collectRequestFromEditor();
+  activeMainPanel = 'request';
   const collection = workspace.collections.find((item) => item.id === collectionId);
   if (!collection) {
-    return newCollection();
+    setStatus('Select a collection before creating a folder.');
+    renderToolbarState();
+    return null;
   }
   const folder = {
     id: crypto.randomUUID(),
@@ -2850,6 +4199,7 @@ function newFolder(collectionId = activeCollectionId, parentFolderId = activeFol
   activeFolderId = folder.id;
   activeRequestId = null;
   renderAll();
+  return folder;
 }
 
 function newRequestObject(name) {
@@ -2867,11 +4217,13 @@ function newRequestObject(name) {
     scripts: { preRequest: '', tests: '' },
     variables: [],
     examples: [],
-    cookieJar: { enabled: false, storeResponses: true }
+    cookieJar: { enabled: false, storeResponses: true },
+    loadTestPolicy: defaultRequestLoadPolicy()
   };
 }
 
 function newEnvironment() {
+  workspace.environments ||= [];
   const environment = {
     id: crypto.randomUUID(),
     name: uniqueName('New Environment', workspace.environments.map((item) => item.name)),
@@ -2879,19 +4231,38 @@ function newEnvironment() {
   };
   workspace.environments.push(environment);
   activeEnvironmentId = environment.id;
-  renderEnvironmentSelect();
-  renderEnvironmentEditor();
+  activeSidebarPanel = 'environments';
+  activeMainPanel = 'environment';
+  ensureOpenEnvironmentTabForActive();
+  renderAll();
+  return environment;
 }
 
-function deleteEnvironment() {
-  const environment = activeEnvironment();
+function deleteEnvironment(environment = activeEnvironment()) {
   if (!environment || !confirm(`Delete ${environment.name}?`)) {
     return;
   }
+  removeOpenEnvironmentTab(environment.id);
   workspace.environments = workspace.environments.filter((item) => item.id !== environment.id);
-  activeEnvironmentId = 'none';
-  renderEnvironmentSelect();
-  renderEnvironmentEditor();
+  if (activeEnvironmentId === environment.id) {
+    activeEnvironmentId = workspace.environments[0]?.id || 'none';
+  }
+  activeSidebarPanel = 'environments';
+  activeMainPanel = 'environment';
+  ensureOpenEnvironmentTabForActive();
+  renderAll();
+}
+
+function renameEnvironment(environment) {
+  const value = prompt('Environment name', environment.name);
+  if (value?.trim()) {
+    environment.name = value.trim();
+    activeEnvironmentId = environment.id;
+    activeSidebarPanel = 'environments';
+    activeMainPanel = 'environment';
+    ensureOpenEnvironmentTabForActive();
+    renderAll();
+  }
 }
 
 function addVariable() {
@@ -2916,6 +4287,7 @@ function addRequestVariable() {
   if (request) {
     request.variables ||= [];
     request.variables.push({ enabled: true, key: '', value: '', secret: false });
+    markActiveRequestDirty();
     renderRequestEditor();
   }
 }
@@ -3010,6 +4382,7 @@ function addExample() {
   }
   request.examples ||= [];
   request.examples.push(newExampleObject());
+  markActiveRequestDirty();
   renderExamples(request.examples);
 }
 
@@ -3020,6 +4393,7 @@ function captureResponseExample() {
   }
   request.examples ||= [];
   request.examples.push(exampleFromResponse(lastResponse));
+  markActiveRequestDirty();
   renderExamples(request.examples);
   setStatus('Captured response example.');
 }
@@ -3049,6 +4423,7 @@ function duplicateExample(index) {
   duplicate.id = crypto.randomUUID();
   duplicate.name = uniqueName(`${duplicate.name || 'Example Response'} Copy`, request.examples.map((example) => example.name));
   request.examples.splice(index + 1, 0, duplicate);
+  markActiveRequestDirty();
   renderExamples(request.examples);
 }
 
@@ -3058,6 +4433,7 @@ function deleteExample(index) {
     return;
   }
   request.examples.splice(index, 1);
+  markActiveRequestDirty();
   renderExamples(request.examples);
 }
 
@@ -3099,6 +4475,7 @@ function addPair(fieldName) {
   const request = activeRequest();
   if (request) {
     request[fieldName].push({ enabled: true, key: '', value: '' });
+    markActiveRequestDirty();
     renderRequestEditor();
   }
 }
@@ -3108,6 +4485,7 @@ function addAssertion(template = ASSERTION_TEMPLATES.status200) {
   if (request) {
     request.assertions ||= [];
     request.assertions.push(newAssertion(template));
+    markActiveRequestDirty();
     renderAssertions(request.assertions);
   }
 }
@@ -3159,7 +4537,12 @@ function renameRequest(request) {
   const value = prompt('Request name', request.name);
   if (value?.trim()) {
     request.name = value.trim();
+    const tab = openRequestTabs.find((candidate) => requestForTab(candidate) === request);
+    if (tab) {
+      tab.dirty = true;
+    }
     renderCollections();
+    renderRequestTabs();
     renderRequestEditor();
   }
 }
@@ -3172,6 +4555,7 @@ function duplicateRequest(collection, folder, request) {
   activeCollectionId = collection.id;
   activeFolderId = folder?.id || null;
   activeRequestId = duplicate.id;
+  ensureOpenRequestTabForActive({ dirty: true, createdUnsaved: true });
   renderAll();
 }
 
@@ -3179,6 +4563,7 @@ function deleteCollection(collection) {
   if (!confirm(`Delete ${collection.name}?`)) {
     return;
   }
+  removeOpenRequestTabsForCollection(collection.id);
   workspace.collections = workspace.collections.filter((item) => item.id !== collection.id);
   if (!workspace.collections.length) {
     clearActiveWorkspaceItem();
@@ -3204,7 +4589,9 @@ function deleteRequest(collection, folder, request) {
   if (index >= 0) {
     list.splice(index, 1);
   }
+  removeOpenRequestTab(collection.id, request.id);
   selectFirstRequest(collection);
+  ensureOpenRequestTabForActive();
   renderAll();
 }
 
@@ -3297,7 +4684,10 @@ function collectEnvironmentFromEditor() {
   const environment = activeEnvironment();
   if (environment) {
     environment.name = $('environmentNameInput').value.trim() || 'Untitled Environment';
+    $('environmentMainTitle').textContent = environment.name;
     renderEnvironmentSelect();
+    renderEnvironments();
+    renderWorkspacePanel();
   }
 }
 
@@ -3310,6 +4700,9 @@ function activeEnvironment() {
 }
 
 function activeRequest() {
+  if (!activeCollectionId && activeRequestId) {
+    return draftRequests.get(activeRequestId) || null;
+  }
   const collection = activeCollection();
   if (!collection || !activeRequestId) {
     return null;
@@ -3391,6 +4784,34 @@ function removeFolder(collection, folderId) {
   }
   for (const folder of collection.folders || []) {
     if (removeFolderFromParent(folder, folderId)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function removeRequestFromCollection(collection, requestId) {
+  const index = (collection.requests || []).findIndex((request) => request.id === requestId);
+  if (index >= 0) {
+    collection.requests.splice(index, 1);
+    return true;
+  }
+  for (const folder of collection.folders || []) {
+    if (removeRequestFromFolder(folder, requestId)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function removeRequestFromFolder(folder, requestId) {
+  const index = (folder.requests || []).findIndex((request) => request.id === requestId);
+  if (index >= 0) {
+    folder.requests.splice(index, 1);
+    return true;
+  }
+  for (const child of folder.folders || []) {
+    if (removeRequestFromFolder(child, requestId)) {
       return true;
     }
   }
@@ -3514,30 +4935,6 @@ function isAutomatedUiSmoke() {
     || params.get('uiRegressionSmoke') === '1'
     || params.get('uiSnapshotSmoke') === '1'
     || params.get('uiOauthSmoke') === '1';
-}
-
-function loadAllowedHostsForRequest(request) {
-  const hosts = $('loadAllowedHosts').value
-    .split(/[,\n]/)
-    .map((value) => value.trim())
-    .filter(Boolean);
-  if (hosts.length) {
-    return hosts;
-  }
-  const host = hostFromRawUrl(request.url);
-  if (host) {
-    $('loadAllowedHosts').value = host;
-    return [host];
-  }
-  return [];
-}
-
-function hostFromRawUrl(rawUrl) {
-  try {
-    return new URL(rawUrl).hostname;
-  } catch {
-    return '';
-  }
 }
 
 function clamp(value, min, max) {

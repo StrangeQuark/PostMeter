@@ -11,6 +11,8 @@ const {
   OAUTH2_GRANT_TYPES,
   OAUTH2_REDIRECT_STRATEGIES,
   OAUTH2_TOKEN_TYPES,
+  OAUTH_PROGRESS_STATUSES,
+  OAUTH_PROGRESS_TYPES,
   oneOf,
   payloadSchemas
 } = require('./payloadSchemas');
@@ -28,6 +30,8 @@ const FIELD_ENUMS = {
   oauth2GrantTypes: OAUTH2_GRANT_TYPES,
   oauth2RedirectStrategies: OAUTH2_REDIRECT_STRATEGIES,
   oauth2TokenTypes: OAUTH2_TOKEN_TYPES,
+  oauthProgressStatuses: OAUTH_PROGRESS_STATUSES,
+  oauthProgressTypes: OAUTH_PROGRESS_TYPES,
   sameSiteValues: ['', 'Lax', 'Strict', 'None']
 };
 
@@ -48,7 +52,6 @@ const LIMITS = {
   value: 32768,
   body: 10 * 1024 * 1024,
   loadResultJson: 10 * 1024 * 1024,
-  allowedHosts: 100,
   host: 253,
   method: 12,
   short: 64,
@@ -106,10 +109,12 @@ function assertRequestPayload(value, field = 'request') {
   assertSchemaNested('request', value, field, {
     auth: assertAuthPayload,
     scripts: assertScripts,
-    cookieJar: assertRequestCookieJar
+    cookieJar: assertRequestCookieJar,
+    loadTestPolicy: assertLoadPolicyPayload
   }, {
     auth: { type: 'none' },
     cookieJar: {},
+    loadTestPolicy: undefined,
     scripts: undefined
   });
 }
@@ -119,6 +124,9 @@ function assertSettingsPayload(value, field) {
   if (value.updates != null) {
     object(value.updates, `${field}.updates`);
     optionalBoolean(value.updates.includePrereleases, `${field}.updates.includePrereleases`);
+  }
+  if (value.loadTestPolicy != null) {
+    fail(`${field}.loadTestPolicy is no longer supported; configure load tests from the Load Test panel.`);
   }
 }
 
@@ -139,9 +147,20 @@ function assertOptionalEnvironmentPayload(value, field = 'environment') {
 function assertLoadConfigPayload(value, field = 'config') {
   assertSchemaFields('loadConfig', value, field);
   if (value.allowedHosts != null) {
-    array(value.allowedHosts, `${field}.allowedHosts`, LIMITS.allowedHosts).forEach((host, index) => {
-      string(host, `${field}.allowedHosts[${index}]`, LIMITS.host);
-    });
+    fail(`${field}.allowedHosts is no longer supported; load tests run against the active request URL.`);
+  }
+  if (value.hostPolicies != null) {
+    fail(`${field}.hostPolicies is no longer supported; use the global rate cap instead.`);
+  }
+}
+
+function assertLoadPolicyPayload(value, field = 'loadTestPolicy') {
+  assertSchemaFields('loadPolicy', value || {}, field);
+  if (value?.allowedHosts != null) {
+    fail(`${field}.allowedHosts is no longer supported.`);
+  }
+  if (value?.hostPolicies != null) {
+    fail(`${field}.hostPolicies is no longer supported.`);
   }
 }
 
@@ -162,6 +181,9 @@ function assertLoadResultPayload(value, field = 'result') {
   if (value.errors != null) {
     assertStringArray(value.errors, `${field}.errors`, LIMITS.pairs, LIMITS.value);
   }
+  if (value.policyDecisions != null) {
+    assertLoadPolicyDecisions(value.policyDecisions, `${field}.policyDecisions`);
+  }
   if (value.latencyHistogram != null) {
     array(value.latencyHistogram, `${field}.latencyHistogram`, LIMITS.histogramBuckets).forEach((bucket, index) => {
       assertSchemaFields('loadHistogramBucket', bucket, `${field}.latencyHistogram[${index}]`);
@@ -172,6 +194,19 @@ function assertLoadResultPayload(value, field = 'result') {
       assertSchemaFields('loadSample', sample, `${field}.samples[${index}]`);
     });
   }
+}
+
+function assertLoadProgressPayload(value, field = 'progress') {
+  assertSchemaFields('loadProgress', value, field);
+  if (value.policyDecisions != null) {
+    assertLoadPolicyDecisions(value.policyDecisions, `${field}.policyDecisions`);
+  }
+}
+
+function assertLoadPolicyDecisions(values, field) {
+  array(values, field, LIMITS.pairs).forEach((decision, index) => {
+    assertSchemaFields('loadPolicyDecision', decision, `${field}[${index}]`);
+  });
 }
 
 function assertCollectionRunResultPayload(value, field = 'result') {
@@ -216,6 +251,14 @@ function assertCollectionRunResultPayload(value, field = 'result') {
   }
 }
 
+function assertRunnerConfigPayload(value, field = 'config') {
+  assertSchemaFields('runnerConfig', value || {}, field);
+}
+
+function assertRunnerProgressPayload(value, field = 'progress') {
+  assertSchemaFields('runnerProgress', value, field);
+}
+
 function assertResponsePayload(value, field = 'response') {
   assertSchemaFields('response', value, field);
   object(value.headers || {}, `${field}.headers`);
@@ -247,6 +290,20 @@ function assertUpdateCheckOptionsPayload(value, field = 'options') {
 
 function assertExternalUrlPayload(value, field = 'external') {
   assertSchemaFields('externalUrl', { url: value }, field);
+}
+
+function assertFileOperationResultPayload(value, field = 'result') {
+  assertSchemaFields('fileOperationResult', value, field);
+  if (value.workspace != null) {
+    assertWorkspacePayload(value.workspace, `${field}.workspace`);
+  }
+  if (value.collection != null) {
+    assertCollectionPayload(value.collection, `${field}.collection`);
+  }
+}
+
+function assertOAuthProgressPayload(value, field = 'progress') {
+  assertSchemaFields('oauthProgress', value, field);
 }
 
 function assertExportFormat(value, field = 'format') {
@@ -517,9 +574,14 @@ module.exports = {
   assertExportFormat,
   assertLoadConfigPayload,
   assertLoadId,
+  assertLoadProgressPayload,
   assertLoadResultPayload,
+  assertOAuthProgressPayload,
   assertOptionalEnvironmentPayload,
+  assertRunnerConfigPayload,
+  assertRunnerProgressPayload,
   assertExternalUrlPayload,
+  assertFileOperationResultPayload,
   assertResponsePayload,
   assertRequestPayload,
   assertUpdateCheckOptionsPayload,

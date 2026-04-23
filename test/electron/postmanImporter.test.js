@@ -54,6 +54,16 @@ test('imports common Postman auth helpers with collection and folder inheritance
             priority: 'high',
             partitioned: true,
             extensions: ['SameParty']
+          }, {
+            name: '__Host-postman',
+            value: 'host-value',
+            path: '/',
+            secure: true,
+            httpOnly: true,
+            hostOnly: true,
+            sameSite: 'lax',
+            priority: 'medium',
+            extensions: ['Postman-Source']
           }],
           variable: [{ key: 'requestScope', value: 'local' }],
           auth: {
@@ -92,7 +102,7 @@ test('imports common Postman auth helpers with collection and folder inheritance
   assert.equal(collection.folders[0].requests[0].auth.username, 'user');
   assert.equal(collection.requests[1].auth.type, 'apiKey');
   assert.equal(collection.requests[1].auth.location, 'query');
-  assert.equal(collection.requests[1].headers.find((header) => header.key === 'Cookie').value, 'session=abc');
+  assert.equal(collection.requests[1].headers.find((header) => header.key === 'Cookie').value, 'session=abc; __Host-postman=host-value');
   const cookieMetadata = JSON.parse(collection.requests[1].variables.find((variable) => variable.key === 'postman.cookies').value);
   assert.equal(cookieMetadata[0].source, 'postman');
   assert.equal(cookieMetadata[0].domain, '.example.test');
@@ -104,6 +114,14 @@ test('imports common Postman auth helpers with collection and folder inheritance
   assert.equal(cookieMetadata[0].partitioned, true);
   assert.deepEqual(cookieMetadata[0].extensions, ['SameParty']);
   assert.equal(new Date(cookieMetadata[0].expiresAt).getUTCFullYear(), 2099);
+  assert.equal(cookieMetadata[1].source, 'postman');
+  assert.equal(cookieMetadata[1].name, '__Host-postman');
+  assert.equal(cookieMetadata[1].secure, true);
+  assert.equal(cookieMetadata[1].hostOnly, true);
+  assert.equal(cookieMetadata[1].path, '/');
+  assert.equal(cookieMetadata[1].sameSite, 'Lax');
+  assert.equal(cookieMetadata[1].priority, 'Medium');
+  assert.deepEqual(cookieMetadata[1].extensions, ['Postman-Source']);
   assert.equal(collection.requests[1].variables.find((variable) => variable.key === 'requestScope').value, 'local');
   assert.equal(collection.requests[2].auth.type, 'oauth2');
   assert.equal(collection.requests[2].auth.grantType, 'clientCredentials');

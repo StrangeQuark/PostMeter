@@ -63,7 +63,7 @@ async function promptForPassphrase(options = {}) {
   });
   await promptWindow.loadFile(path.join(__dirname, 'passphrasePrompt.html'), {
     query: {
-      message: options.message || 'Enter the fallback passphrase for this workspace.',
+      message: options.message || 'Enter the fallback passphrase for this workspace. See docs/SECRETS.md for recovery guidance.',
       confirmLabel: options.confirmLabel || 'Unlock'
     }
   });

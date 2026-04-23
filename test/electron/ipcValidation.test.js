@@ -6,12 +6,17 @@ const {
   assertCollectionRunResultPayload,
   assertExternalUrlPayload,
   assertExportFormat,
+  assertFileOperationResultPayload,
   assertLoadConfigPayload,
   assertLoadId,
+  assertLoadProgressPayload,
   assertLoadResultPayload,
+  assertOAuthProgressPayload,
   assertOptionalEnvironmentPayload,
   assertResponsePayload,
   assertRequestPayload,
+  assertRunnerConfigPayload,
+  assertRunnerProgressPayload,
   assertUpdateCheckOptionsPayload,
   assertWorkspaceLoadResultPayload,
   assertWorkspacePayload
@@ -32,6 +37,7 @@ test('accepts structurally valid IPC payloads', () => {
     variables: [{ enabled: true, key: 'local', value: 'value', secret: false }],
     examples: [{ name: 'Example', statusCode: 200, headers: [{ enabled: true, key: 'Content-Type', value: 'application/json' }], bodyType: 'RAW_JSON', body: '{}' }],
     cookieJar: { enabled: true, storeResponses: true },
+    loadTestPolicy: { enabled: true, concurrency: 2, totalRequests: 10, maxRatePerSecond: 5 },
     auth: { type: 'bearer', token: 'secret' }
   }));
   assert.doesNotThrow(() => assertCollectionPayload({
@@ -44,7 +50,7 @@ test('accepts structurally valid IPC payloads', () => {
     folders: [{ id: 'f1', name: 'Folder', requests: [], folders: [] }]
   }));
   assert.doesNotThrow(() => assertWorkspacePayload({
-    schemaVersion: 8,
+    schemaVersion: 10,
     settings: { updates: { includePrereleases: true } },
     collections: [],
     environments: [{ id: 'e1', name: 'Env', variables: [{ enabled: true, key: 'token', value: 'secret', secret: true }] }],
@@ -58,14 +64,16 @@ test('accepts structurally valid IPC payloads', () => {
     durationSeconds: 0,
     rampUpSeconds: 0,
     targetRatePerSecond: 10,
+    maxRatePerSecond: 10,
     executionMode: 'multiProcess',
     workerProcesses: 2,
     recordSamples: true,
-    allowedHosts: ['example.test'],
     confirmedHighConcurrency: false
   }));
   assert.doesNotThrow(() => assertLoadResultPayload({
     totalRequests: 1,
+    maxRatePerSecond: 10,
+    policyDecisions: [{ scope: 'rate', message: 'Effective target rate defaults to the configured rate cap.' }],
     statusCounts: { 200: 1 },
     errors: [],
     latencyHistogram: [{ upperBoundMillis: 50, count: 1 }, { upperBoundMillis: null, count: 0 }],
@@ -102,10 +110,54 @@ test('accepts structurally valid IPC payloads', () => {
     updatedCookies: [{ enabled: true, name: 'sid', value: 'secret', domain: 'example.test', path: '/', secure: true, httpOnly: true, sameSite: 'Lax', hostOnly: true }]
   }));
   assert.doesNotThrow(() => assertWorkspaceLoadResultPayload({
-    workspace: { schemaVersion: 8, settings: { updates: { includePrereleases: false } }, collections: [], environments: [], cookies: [], history: [] },
+    workspace: { schemaVersion: 10, settings: { updates: { includePrereleases: false } }, collections: [], environments: [], cookies: [], history: [] },
     path: '/tmp/workspace.json'
   }));
+  assert.doesNotThrow(() => assertFileOperationResultPayload({
+    cancelled: false,
+    path: '/tmp/export.json'
+  }));
+  assert.doesNotThrow(() => assertFileOperationResultPayload({
+    cancelled: false,
+    backupPath: '/tmp/workspace.backup',
+    workspace: { schemaVersion: 10, settings: { updates: { includePrereleases: false } }, collections: [], environments: [], cookies: [], history: [] }
+  }));
+  assert.doesNotThrow(() => assertFileOperationResultPayload({
+    cancelled: false,
+    collection: { id: 'c1', name: 'Collection', requests: [], folders: [] }
+  }));
   assert.doesNotThrow(() => assertLoadId('load-1'));
+  assert.doesNotThrow(() => assertLoadProgressPayload({
+    completedRequests: 1,
+    requestedRequests: 2,
+    mode: 'requestCount',
+    targetRatePerSecond: 5,
+    maxRatePerSecond: 10,
+    executionMode: 'singleProcess',
+    workerProcesses: 1,
+    elapsedMillis: 25,
+    activeWorkers: 1,
+    policyDecisions: [{ scope: 'rate', message: 'Rate cap applied.' }]
+  }));
+  assert.doesNotThrow(() => assertRunnerConfigPayload({ stopOnFailure: true }));
+  assert.doesNotThrow(() => assertRunnerProgressPayload({
+    completedRequests: 1,
+    totalRequests: 2,
+    requestId: 'r1',
+    requestName: 'Request',
+    passed: true
+  }));
+  assert.doesNotThrow(() => assertOAuthProgressPayload({
+    id: 'oauth-1',
+    type: 'device',
+    status: 'polling',
+    message: 'Waiting for OAuth device authorization.',
+    userCode: 'ABCD-EFGH',
+    verificationUri: 'https://example.test/device',
+    verificationUriComplete: 'https://example.test/device?user_code=ABCD-EFGH',
+    nextAttemptAt: new Date(0).toISOString(),
+    expiresAt: new Date(60000).toISOString()
+  }));
   assert.doesNotThrow(() => assertExportFormat('json'));
   assert.doesNotThrow(() => assertUpdateCheckOptionsPayload({ includePrereleases: true }));
   assert.doesNotThrow(() => assertExternalUrlPayload('https://github.com/StrangeQuark/PostMeter/releases'));
@@ -120,12 +172,14 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', scripts: { tests: 42 } }), /request.scripts.tests must be a string/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', examples: [{ statusCode: 200, bodyType: 'bad' }] }), /request.examples\[0\].bodyType must be one of/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', cookieJar: { enabled: 'yes' } }), /request.cookieJar.enabled must be a boolean/);
+  assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', loadTestPolicy: { hostPolicies: [{ host: 42 }] } }), /request.loadTestPolicy.hostPolicies is no longer supported/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', auth: { type: 'oauth2', grantType: 'password' } }), /request.auth.grantType must be one of/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', auth: { type: 'apiKey', location: 'body' } }), /request.auth.location must be one of/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', auth: { type: 'oauth2', redirectStrategy: 'embeddedWebView' } }), /request.auth.redirectStrategy must be one of/);
   assert.throws(() => assertCollectionPayload({ certificates: [{ matches: [42] }], requests: [], folders: [] }), /collection.certificates\[0\].matches\[0\] must be a string/);
   assert.throws(() => assertWorkspacePayload({ collections: {}, environments: [], history: [] }), /workspace.collections must be an array/);
   assert.throws(() => assertWorkspacePayload({ settings: { updates: { includePrereleases: 'yes' } }, collections: [], environments: [], history: [] }), /workspace.settings.updates.includePrereleases must be a boolean/);
+  assert.throws(() => assertWorkspacePayload({ settings: { loadTestPolicy: { recordSamples: true } }, collections: [], environments: [], history: [] }), /workspace.settings.loadTestPolicy is no longer supported/);
   assert.throws(() => assertWorkspacePayload({ collections: [], environments: [], cookies: [{ secure: 'yes' }], history: [] }), /workspace.cookies\[0\].secure must be a boolean/);
   assert.throws(() => assertWorkspacePayload({ collections: [], environments: [], cookies: [{ sameSite: 'Loose' }], history: [] }), /workspace.cookies\[0\].sameSite must be one of/);
   assert.throws(() => assertWorkspacePayload({ collections: [], environments: [], cookies: [{ priority: 'Urgent' }], history: [] }), /workspace.cookies\[0\].priority must be one of/);
@@ -135,11 +189,18 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertUpdateCheckOptionsPayload({ includePrereleases: 'yes' }), /options.includePrereleases must be a boolean/);
   assert.throws(() => assertExternalUrlPayload(42), /external.url must be a string/);
   assert.throws(() => assertLoadConfigPayload({ concurrency: 1, totalRequests: 1, executionMode: 'cluster' }), /config.executionMode must be one of/);
-  assert.throws(() => assertLoadConfigPayload({ concurrency: 1, totalRequests: 1, allowedHosts: [42] }), /config.allowedHosts\[0\] must be a string/);
+  assert.throws(() => assertLoadConfigPayload({ concurrency: 1, totalRequests: 1, allowedHosts: ['example.test'] }), /config.allowedHosts is no longer supported/);
+  assert.throws(() => assertLoadConfigPayload({ concurrency: 1, totalRequests: 1, hostPolicies: [{ host: 'example.test', enabled: true }] }), /config.hostPolicies is no longer supported/);
   assert.throws(() => assertLoadResultPayload({ executionMode: 'cluster' }), /result.executionMode must be one of/);
   assert.throws(() => assertLoadResultPayload({ statusCounts: { 200: 'one' } }), /result.statusCounts.200 must be a finite number/);
+  assert.throws(() => assertLoadResultPayload({ policyDecisions: [{ message: 42 }] }), /result.policyDecisions\[0\].message must be a string/);
   assert.throws(() => assertLoadResultPayload({ latencyHistogram: [{ count: 'one' }] }), /result.latencyHistogram\[0\].count must be a finite number/);
   assert.throws(() => assertLoadResultPayload({ samples: [{ success: 'yes' }] }), /result.samples\[0\].success must be a boolean/);
+  assert.throws(() => assertLoadProgressPayload({ executionMode: 'cluster' }), /progress.executionMode must be one of/);
+  assert.throws(() => assertRunnerConfigPayload({ stopOnFailure: 'yes' }), /config.stopOnFailure must be a boolean/);
+  assert.throws(() => assertRunnerProgressPayload({ passed: 'yes' }), /progress.passed must be a boolean/);
+  assert.throws(() => assertOAuthProgressPayload({ id: 'flow', type: 'password', status: 'starting' }), /progress.type must be one of/);
+  assert.throws(() => assertOAuthProgressPayload({ id: 'flow', type: 'pkce', status: 'unknown' }), /progress.status must be one of/);
   assert.throws(() => assertCollectionRunResultPayload({ collectionName: 42 }), /result.collectionName must be a string/);
   assert.throws(() => assertCollectionRunResultPayload({ results: [{ assertionResults: 'bad' }] }), /result.results\[0\].assertionResults must be an array/);
   assert.throws(() => assertCollectionRunResultPayload({ results: [{ assertionResults: [{ passed: 'yes' }] }] }), /result.results\[0\].assertionResults\[0\].passed must be a boolean/);
@@ -147,6 +208,8 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: '', durationMillis: 'slow', responseBytes: 0, finalUrl: '', headers: {} }), /response.durationMillis must be a finite number/);
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: 42, durationMillis: 1, responseBytes: 2, finalUrl: 'https://example.test', headers: {} }), /response.body must be a string/);
   assert.throws(() => assertWorkspaceLoadResultPayload({ workspace: null }), /result.workspace must be an object/);
+  assert.throws(() => assertFileOperationResultPayload({ cancelled: 'yes' }), /result.cancelled must be a boolean/);
+  assert.throws(() => assertFileOperationResultPayload({ cancelled: false, collection: [] }), /result.collection must be an object/);
   assert.throws(() => assertLoadId({ bad: true }), /id must be a string/);
   assert.throws(() => assertExportFormat('xml'), /format must be one of/);
   assert.throws(() => assertCollectionExportFormat('bad'), /format must be one of/);
@@ -171,7 +234,7 @@ test('request and workspace IPC validators follow shared entity schema arrays', 
   }
 
   const workspaceBase = {
-    schemaVersion: 8,
+    schemaVersion: 10,
     settings: { updates: { includePrereleases: false } },
     collections: [],
     environments: [],

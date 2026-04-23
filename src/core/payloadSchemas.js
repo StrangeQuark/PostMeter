@@ -8,6 +8,18 @@ const API_KEY_LOCATIONS = ['header', 'query'];
 const OAUTH2_TOKEN_TYPES = ['Bearer', 'MAC'];
 const OAUTH2_GRANT_TYPES = ['authorizationCode', 'clientCredentials', 'deviceCode'];
 const OAUTH2_REDIRECT_STRATEGIES = ['loopback', 'customScheme'];
+const OAUTH_PROGRESS_TYPES = ['pkce', 'device'];
+const OAUTH_PROGRESS_STATUSES = [
+  'starting',
+  'waitingForAuthorization',
+  'waitingForUser',
+  'polling',
+  'callbackReceived',
+  'exchangingToken',
+  'completed',
+  'cancelled',
+  'failed'
+];
 const LOAD_EXPORT_FORMATS = ['json', 'csv'];
 const COLLECTION_EXPORT_FORMATS = ['postmeter', 'openapi', 'jmeter', 'curl', 'har'];
 const ASSERTION_TYPES = [
@@ -89,12 +101,25 @@ const FIELD_SCHEMAS = {
     enabled: { type: 'boolean', optional: true },
     storeResponses: { type: 'boolean', optional: true }
   },
+  loadPolicy: {
+    enabled: { type: 'boolean', optional: true },
+    concurrency: { type: 'number', optional: true },
+    totalRequests: { type: 'number', optional: true },
+    durationSeconds: { type: 'number', optional: true },
+    rampUpSeconds: { type: 'number', optional: true },
+    targetRatePerSecond: { type: 'number', optional: true },
+    maxRatePerSecond: { type: 'number', optional: true },
+    executionMode: { type: 'string', limit: 'short', enum: 'loadExecutionModes', optional: true },
+    workerProcesses: { type: 'number', optional: true },
+    recordSamples: { type: 'boolean', optional: true }
+  },
   loadConfig: {
     concurrency: { type: 'number' },
     totalRequests: { type: 'number' },
     durationSeconds: { type: 'number', optional: true },
     rampUpSeconds: { type: 'number', optional: true },
     targetRatePerSecond: { type: 'number', optional: true },
+    maxRatePerSecond: { type: 'number', optional: true },
     executionMode: { type: 'string', limit: 'short', enum: 'loadExecutionModes', optional: true },
     workerProcesses: { type: 'number', optional: true },
     recordSamples: { type: 'boolean', optional: true },
@@ -110,6 +135,7 @@ const FIELD_SCHEMAS = {
     durationSeconds: { type: 'number', optional: true },
     rampUpSeconds: { type: 'number', optional: true },
     targetRatePerSecond: { type: 'number', optional: true },
+    maxRatePerSecond: { type: 'number', optional: true },
     executionMode: { type: 'string', limit: 'short', enum: 'loadExecutionModes', optional: true },
     workerProcesses: { type: 'number', optional: true },
     elapsedMillis: { type: 'number', optional: true },
@@ -122,6 +148,23 @@ const FIELD_SCHEMAS = {
     p99Millis: { type: 'number', optional: true },
     errorRate: { type: 'number', optional: true },
     requestsPerSecond: { type: 'number', optional: true }
+  },
+  loadPolicyDecision: {
+    scope: { type: 'string', limit: 'short', optional: true },
+    host: { type: 'string', limit: 'host', optional: true },
+    message: { type: 'string', limit: 'value' }
+  },
+  loadProgress: {
+    completedRequests: { type: 'number', optional: true },
+    requestedRequests: { type: 'number', optional: true },
+    mode: { type: 'string', limit: 'short', optional: true },
+    durationSeconds: { type: 'number', optional: true },
+    targetRatePerSecond: { type: 'number', optional: true },
+    maxRatePerSecond: { type: 'number', optional: true },
+    executionMode: { type: 'string', limit: 'short', enum: 'loadExecutionModes', optional: true },
+    workerProcesses: { type: 'number', optional: true },
+    elapsedMillis: { type: 'number', optional: true },
+    activeWorkers: { type: 'number', optional: true }
   },
   loadHistogramBucket: {
     upperBoundMillis: { type: 'number', optional: true },
@@ -149,8 +192,35 @@ const FIELD_SCHEMAS = {
   updateCheckOptions: {
     includePrereleases: { type: 'boolean', optional: true }
   },
+  runnerConfig: {
+    stopOnFailure: { type: 'boolean', optional: true }
+  },
+  runnerProgress: {
+    completedRequests: { type: 'number', optional: true },
+    totalRequests: { type: 'number', optional: true },
+    requestId: { type: 'string', limit: 'name', optional: true },
+    requestName: { type: 'string', limit: 'name', optional: true },
+    passed: { type: 'boolean', optional: true }
+  },
+  oauthProgress: {
+    id: { type: 'string', limit: 'name' },
+    type: { type: 'string', limit: 'short', enum: 'oauthProgressTypes' },
+    status: { type: 'string', limit: 'short', enum: 'oauthProgressStatuses', optional: true },
+    message: { type: 'string', limit: 'value', optional: true },
+    userCode: { type: 'string', limit: 'value', optional: true },
+    verificationUri: { type: 'string', limit: 'value', optional: true },
+    verificationUriComplete: { type: 'string', limit: 'value', optional: true },
+    redirectUri: { type: 'string', limit: 'value', optional: true },
+    nextAttemptAt: { type: 'string', limit: 'name', optional: true },
+    expiresAt: { type: 'string', limit: 'name', optional: true }
+  },
   externalUrl: {
     url: { type: 'string', limit: 'url' }
+  },
+  fileOperationResult: {
+    cancelled: { type: 'boolean' },
+    path: { type: 'string', limit: 'value', optional: true },
+    backupPath: { type: 'string', limit: 'value', optional: true }
   },
   response: {
     statusCode: { type: 'number' },
@@ -237,7 +307,9 @@ const payloadSchemas = {
     apiKeyLocations: API_KEY_LOCATIONS,
     oauth2TokenTypes: OAUTH2_TOKEN_TYPES,
     oauth2GrantTypes: OAUTH2_GRANT_TYPES,
-    oauth2RedirectStrategies: OAUTH2_REDIRECT_STRATEGIES
+    oauth2RedirectStrategies: OAUTH2_REDIRECT_STRATEGIES,
+    oauthProgressTypes: OAUTH_PROGRESS_TYPES,
+    oauthProgressStatuses: OAUTH_PROGRESS_STATUSES
   },
   assertions: {
     types: ASSERTION_TYPES,
@@ -251,7 +323,7 @@ const payloadSchemas = {
     request: {
       required: ['method', 'url'],
       arrays: ['queryParams', 'headers', 'assertions', 'variables', 'examples'],
-      nested: ['auth', 'scripts', 'cookieJar']
+      nested: ['auth', 'scripts', 'cookieJar', 'loadTestPolicy']
     },
     workspace: {
       arrays: ['collections', 'environments', 'cookies', 'history'],
@@ -262,7 +334,7 @@ const payloadSchemas = {
     },
     loadConfig: {
       required: ['concurrency', 'totalRequests'],
-      optional: ['durationSeconds', 'rampUpSeconds', 'targetRatePerSecond', 'executionMode', 'workerProcesses', 'recordSamples', 'confirmedHighConcurrency', 'allowedHosts']
+      optional: ['durationSeconds', 'rampUpSeconds', 'targetRatePerSecond', 'maxRatePerSecond', 'executionMode', 'workerProcesses', 'recordSamples', 'confirmedHighConcurrency']
     },
     runnerConfig: {
       optional: ['stopOnFailure']
@@ -296,6 +368,8 @@ module.exports = {
   OAUTH2_GRANT_TYPES,
   OAUTH2_REDIRECT_STRATEGIES,
   OAUTH2_TOKEN_TYPES,
+  OAUTH_PROGRESS_STATUSES,
+  OAUTH_PROGRESS_TYPES,
   PAYLOAD_SCHEMA_VERSION,
   oneOf,
   payloadSchemas

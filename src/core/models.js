@@ -6,7 +6,7 @@ const {
   HTTP_METHODS
 } = require('./payloadSchemas');
 
-const CURRENT_SCHEMA_VERSION = 8;
+const CURRENT_SCHEMA_VERSION = 10;
 const MIN_SUPPORTED_SCHEMA_VERSION = 1;
 const SUPPORTED_METHODS = new Set(HTTP_METHODS);
 const BODY_METHODS = new Set(BODY_METHOD_VALUES);
@@ -21,7 +21,7 @@ function keyValue(key = '', value = '', enabled = true, secret = false) {
   return { enabled, key: key ?? '', value: value ?? '', secret: secret === true };
 }
 
-function requestModel({ id, name, method, url, queryParams, headers, bodyType, body, auth, assertions, scripts, variables, examples, cookieJar } = {}) {
+function requestModel({ id, name, method, url, queryParams, headers, bodyType, body, auth, assertions, scripts, variables, examples, cookieJar, loadTestPolicy } = {}) {
   const normalizedMethod = normalizeMethod(method);
   return {
     id: id || newId(),
@@ -37,7 +37,8 @@ function requestModel({ id, name, method, url, queryParams, headers, bodyType, b
     scripts: normalizeScripts(scripts),
     variables: normalizePairs(variables),
     examples: normalizeExamples(examples),
-    cookieJar: normalizeRequestCookieJar(cookieJar)
+    cookieJar: normalizeRequestCookieJar(cookieJar),
+    loadTestPolicy: normalizeRequestLoadTestPolicy(loadTestPolicy)
   };
 }
 
@@ -97,6 +98,43 @@ function normalizeSettings(settings) {
       includePrereleases: settings?.updates?.includePrereleases === true
     }
   };
+}
+
+function normalizeLoadTestPolicy(policy) {
+  return {
+    concurrency: boundedInteger(policy?.concurrency, 5, 1, 512),
+    totalRequests: boundedInteger(policy?.totalRequests, 25, 1, 100000),
+    durationSeconds: boundedNumber(policy?.durationSeconds, 0, 0, 3600),
+    rampUpSeconds: boundedNumber(policy?.rampUpSeconds, 0, 0, 3600),
+    targetRatePerSecond: boundedNumber(policy?.targetRatePerSecond, 0, 0, 10000),
+    maxRatePerSecond: boundedNumber(policy?.maxRatePerSecond, 0, 0, 10000),
+    executionMode: policy?.executionMode === 'multiProcess' ? 'multiProcess' : 'singleProcess',
+    workerProcesses: boundedInteger(policy?.workerProcesses, 2, 1, 8),
+    recordSamples: policy?.recordSamples === true
+  };
+}
+
+function normalizeRequestLoadTestPolicy(policy) {
+  return {
+    enabled: policy?.enabled === true,
+    ...normalizeLoadTestPolicy(policy)
+  };
+}
+
+function boundedInteger(value, fallback, min, max) {
+  const number = Number(value);
+  if (!Number.isInteger(number)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, number));
+}
+
+function boundedNumber(value, fallback, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, number));
 }
 
 function normalizePairs(pairs) {
@@ -315,7 +353,9 @@ module.exports = {
   keyValue,
   newId,
   normalizeCookies,
+  normalizeLoadTestPolicy,
   normalizeRequestCookieJar,
+  normalizeRequestLoadTestPolicy,
   normalizeSettings,
   requestModel,
   walkRequests,

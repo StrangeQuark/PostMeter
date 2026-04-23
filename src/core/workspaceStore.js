@@ -287,6 +287,20 @@ function migrate(workspace) {
     workspace.schemaVersion = 8;
     migrated = true;
   }
+  if (schemaVersion < 9) {
+    workspace.settings ||= { updates: { includePrereleases: false } };
+    for (const collection of workspace.collections || []) {
+      ensureCollectionLoadTestPolicyFields(collection);
+    }
+    workspace.schemaVersion = 9;
+    migrated = true;
+  }
+  if (schemaVersion < 10) {
+    workspace.settings ||= { updates: { includePrereleases: false } };
+    delete workspace.settings.loadTestPolicy;
+    workspace.schemaVersion = 10;
+    migrated = true;
+  }
   return migrated;
 }
 
@@ -335,6 +349,26 @@ function ensureFolderCookieJarFields(folder) {
 function ensureRequestCookieJarFields(requests = []) {
   for (const request of requests || []) {
     request.cookieJar ||= { enabled: false, storeResponses: true };
+  }
+}
+
+function ensureCollectionLoadTestPolicyFields(collection) {
+  ensureRequestLoadTestPolicyFields(collection.requests);
+  for (const folder of collection.folders || []) {
+    ensureFolderLoadTestPolicyFields(folder);
+  }
+}
+
+function ensureFolderLoadTestPolicyFields(folder) {
+  ensureRequestLoadTestPolicyFields(folder.requests);
+  for (const child of folder.folders || []) {
+    ensureFolderLoadTestPolicyFields(child);
+  }
+}
+
+function ensureRequestLoadTestPolicyFields(requests = []) {
+  for (const request of requests || []) {
+    request.loadTestPolicy ||= { enabled: false };
   }
 }
 
