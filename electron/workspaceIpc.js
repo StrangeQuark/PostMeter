@@ -11,9 +11,18 @@ const {
   assertCollectionExportFormat,
   assertCollectionPayload,
   assertRequestPayload,
+  assertWorkspaceEnvironmentSavePayload,
+  assertWorkspaceEnvironmentSaveResultPayload,
   assertWorkspaceLoadResultPayload,
+  assertWorkspaceRequestSavePayload,
+  assertWorkspaceRequestSaveResultPayload,
   assertWorkspacePayload
 } = require('../src/core/ipcValidation');
+const {
+  applyEnvironmentSaveToWorkspace,
+  applyRequestSaveToWorkspace,
+  findWorkspaceRequestContext
+} = require('./workspaceMutations');
 
 function registerWorkspaceIpc(options = {}) {
   const {
@@ -48,6 +57,38 @@ function registerWorkspaceIpc(options = {}) {
     refreshApplicationMenu();
     assertWorkspaceLoadResultPayload(await getWorkspaceStore().describeCurrent(workspace));
     return workspace;
+  });
+
+  ipcMain.handle('workspace:saveRequest', async (_event, payload) => {
+    assertWorkspaceRequestSavePayload(payload);
+    const nextWorkspace = applyRequestSaveToWorkspace(getWorkspace(), payload);
+    const workspace = await saveWorkspace(nextWorkspace);
+    setWorkspace(workspace);
+    refreshApplicationMenu();
+    const requestContext = findWorkspaceRequestContext(workspace, payload.requestId);
+    const result = {
+      request: requestContext?.request || payload.request
+    };
+    if (Array.isArray(payload.collectionVariables)) {
+      result.collectionVariables = requestContext?.collection?.variables || [];
+    }
+    if (Array.isArray(payload.cookies)) {
+      result.cookies = workspace.cookies || [];
+    }
+    assertWorkspaceRequestSaveResultPayload(result);
+    return result;
+  });
+
+  ipcMain.handle('workspace:saveEnvironment', async (_event, payload) => {
+    assertWorkspaceEnvironmentSavePayload(payload);
+    const nextWorkspace = applyEnvironmentSaveToWorkspace(getWorkspace(), payload);
+    const workspace = await saveWorkspace(nextWorkspace);
+    setWorkspace(workspace);
+    refreshApplicationMenu();
+    const environment = (workspace.environments || []).find((candidate) => candidate.id === payload.environmentId) || payload.environment;
+    const result = { environment };
+    assertWorkspaceEnvironmentSaveResultPayload(result);
+    return result;
   });
 
   ipcMain.on('workspace:saveSync', (event, nextWorkspace) => {

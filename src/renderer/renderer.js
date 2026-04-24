@@ -1118,7 +1118,7 @@ async function setThemePreference(theme, options = {}) {
   applyThemePreference(normalizedTheme);
   renderThemeControl();
   if (options.save === true) {
-    await saveWorkspace(false);
+    await saveWorkspace(false, { scope: 'all' });
   }
   if (options.showStatus !== false) {
     setStatus(`Theme set to ${normalizedTheme}.`);
@@ -1129,7 +1129,7 @@ async function setIncludePrereleases(includePrereleases, options = {}) {
   ensureSettings();
   workspace.settings.updates.includePrereleases = includePrereleases === true;
   if (options.save === true) {
-    await saveWorkspace(false);
+    await saveWorkspace(false, { scope: 'all' });
   }
   if (options.showStatus !== false) {
     setStatus(`Prerelease update checks ${workspace.settings.updates.includePrereleases ? 'enabled' : 'disabled'}.`);

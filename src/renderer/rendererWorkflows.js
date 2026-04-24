@@ -117,7 +117,10 @@
       }
     }
 
-    function cloneJson(value) {
+    function cloneJson(value, fallback = null) {
+      if (value == null) {
+        return fallback;
+      }
       if (typeof structuredClone === 'function') {
         return structuredClone(value);
       }
@@ -204,23 +207,37 @@
     }
 
     function resolveRequestSaveTarget(config = {}) {
+      if (typeof config.requestTabKey === 'string') {
+        return config.requestTabKey;
+      }
       if (config.scope === 'all') {
         return '';
       }
-      if (typeof config.requestTabKey === 'string') {
-        return config.requestTabKey;
+      if (typeof config.environmentTabKey === 'string') {
+        return '';
       }
       return state?.activeMainPanel === 'request' ? currentRequestTabKey() : '';
     }
 
     function resolveEnvironmentSaveTarget(config = {}) {
-      if (config.scope === 'all') {
-        return '';
-      }
       if (typeof config.environmentTabKey === 'string') {
         return config.environmentTabKey;
       }
+      if (config.scope === 'all') {
+        return '';
+      }
+      if (typeof config.requestTabKey === 'string') {
+        return '';
+      }
       return state?.activeMainPanel === 'environment' ? currentEnvironmentTabKey() : '';
+    }
+
+    function requestTabForKey(tabKey) {
+      return (state.openRequestTabs || []).find((tab) => tab.key === tabKey) || null;
+    }
+
+    function environmentTabForKey(tabKey) {
+      return (state.openEnvironmentTabs || []).find((tab) => tab.key === tabKey) || null;
     }
 
     function findRequestLocationInWorkspace(workspaceValue, collectionId, requestId) {
@@ -276,7 +293,7 @@
     }
 
     function requestForTabInWorkspace(workspaceValue, tab) {
-      if (!tab?.collectionId || !tab?.requestId) {
+      if (!workspaceValue || !tab?.collectionId || !tab?.requestId) {
         return null;
       }
       return findRequestLocationInWorkspace(workspaceValue, tab.collectionId, tab.requestId)?.request || null;
@@ -314,70 +331,97 @@
       return index >= 0 ? workspaceValue.environments[index] : null;
     }
 
-    function restoreCollectionVariablesInWorkspace(workspaceValue, collectionId, snapshot) {
-      const collection = (workspaceValue?.collections || []).find((item) => item.id === collectionId);
-      if (!collection) {
-        return false;
+    function replaceObject(target, nextValue) {
+      if (!target || !nextValue) {
+        return;
       }
-      collection.variables = parseSnapshot(snapshot, []);
-      return true;
+      const source = target === nextValue
+        ? cloneJson(nextValue, {})
+        : nextValue;
+      for (const key of Object.keys(target)) {
+        delete target[key];
+      }
+      Object.assign(target, source);
     }
 
-    function restoreCookieJarInWorkspace(workspaceValue, snapshot) {
-      workspaceValue.cookies = parseSnapshot(snapshot, []);
-      return true;
+    function clonePairArray(pairs) {
+      return Array.isArray(pairs) ? pairs.map((pair) => ({ ...pair })) : [];
     }
 
-    function buildWorkspaceForSave(config = {}) {
-      if (config.scope === 'all') {
-        return state.workspace;
-      }
-      const requestTargetKey = resolveRequestSaveTarget(config);
-      const environmentTargetKey = resolveEnvironmentSaveTarget(config);
-      const workspaceToSave = cloneJson(state.workspace);
-
-      for (const tab of state.openRequestTabs || []) {
-        if (tab?.draft) {
-          continue;
-        }
-        if (tab?.key === requestTargetKey) {
-          continue;
-        }
-        if (tab?.dirty || tab?.createdUnsaved) {
-          revertRequestTabInWorkspace(workspaceToSave, tab);
-        }
-      }
-
-      for (const tab of state.openEnvironmentTabs || []) {
-        if (tab?.key === environmentTargetKey) {
-          continue;
-        }
-        if (tab?.dirty || tab?.createdUnsaved) {
-          revertEnvironmentTabInWorkspace(workspaceToSave, tab);
-        }
-      }
-
-      if (state.collectionDirtySnapshots instanceof Map) {
-        for (const [collectionId, snapshot] of state.collectionDirtySnapshots.entries()) {
-          const owner = state.collectionDirtyOwners instanceof Map
-            ? state.collectionDirtyOwners.get(collectionId)
-            : '';
-          if (owner !== requestTargetKey) {
-            restoreCollectionVariablesInWorkspace(workspaceToSave, collectionId, snapshot);
-          }
-        }
-      }
-
-      if (state.cookieJarDirtySnapshot != null && state.cookieJarDirtyOwner !== requestTargetKey) {
-        restoreCookieJarInWorkspace(workspaceToSave, state.cookieJarDirtySnapshot);
-      }
-
-      return workspaceToSave;
+    function cloneValueArray(values) {
+      return Array.isArray(values) ? values.map((value) => ({ ...value })) : [];
     }
 
-    function clearSavedSharedRequestState(requestTabKeyValue) {
+    function findFolderPath(collection, folderId, parentPath = []) {
+      for (const folder of collection?.folders || []) {
+        const nextPath = [...parentPath, { id: folder.id, name: folder.name }];
+        if (folder.id === folderId) {
+          return nextPath;
+        }
+        const nestedPath = findFolderPath(folder, folderId, nextPath);
+        if (nestedPath) {
+          return nestedPath;
+        }
+      }
+      return null;
+    }
+
+    function requestFolderPath(collection, folderId) {
+      if (!collection || !folderId) {
+        return [];
+      }
+      return findFolderPath(collection, folderId) || [];
+    }
+
+    function buildRequestSavePayload(requestTab) {
+      const collection = findWorkspaceCollection(requestTab?.collectionId);
+      const request = requestForTabInWorkspace(state.workspace, requestTab);
+      if (!collection || !request) {
+        throw new Error('The selected request could not be found for saving.');
+      }
+      const payload = {
+        collectionId: requestTab.collectionId,
+        requestId: requestTab.requestId,
+        folderId: requestTab.folderId || '',
+        createdUnsaved: requestTab.createdUnsaved === true,
+        request,
+        settings: cloneJson(state.workspace?.settings, {}),
+        collectionShell: {
+          id: collection.id,
+          name: collection.name,
+          description: collection.description || '',
+          certificates: cloneValueArray(collection.certificates)
+        },
+        folderPath: requestFolderPath(collection, requestTab.folderId)
+      };
+      const collectionOwner = state.collectionDirtyOwners instanceof Map
+        ? state.collectionDirtyOwners.get(collection.id)
+        : '';
+      if (collectionOwner === requestTab.key) {
+        payload.collectionVariables = clonePairArray(collection.variables);
+      }
+      if (state.cookieJarDirtyOwner === requestTab.key) {
+        payload.cookies = cloneValueArray(state.workspace?.cookies);
+      }
+      return payload;
+    }
+
+    function buildEnvironmentSavePayload(environmentTab) {
+      const environment = environmentForTabInWorkspace(state.workspace, environmentTab);
+      if (!environment) {
+        throw new Error('The selected environment could not be found for saving.');
+      }
+      return {
+        environmentId: environmentTab.environmentId,
+        createdUnsaved: environmentTab.createdUnsaved === true,
+        environment,
+        settings: cloneJson(state.workspace?.settings, {})
+      };
+    }
+
+    function clearSavedSharedRequestState(requestTabKeyValue, config = {}) {
       let cleared = false;
-      if (requestTabKeyValue && state.collectionDirtySnapshots instanceof Map && state.collectionDirtyOwners instanceof Map) {
+      if (config.collection === true && requestTabKeyValue && state.collectionDirtySnapshots instanceof Map && state.collectionDirtyOwners instanceof Map) {
         for (const [collectionId, owner] of Array.from(state.collectionDirtyOwners.entries())) {
           if (owner === requestTabKeyValue) {
             state.collectionDirtyOwners.delete(collectionId);
@@ -386,7 +430,7 @@
           }
         }
       }
-      if (requestTabKeyValue && state.cookieJarDirtySnapshot != null && state.cookieJarDirtyOwner === requestTabKeyValue) {
+      if (config.cookies === true && requestTabKeyValue && state.cookieJarDirtySnapshot != null && state.cookieJarDirtyOwner === requestTabKeyValue) {
         state.cookieJarDirtySnapshot = null;
         state.cookieJarDirtyOwner = '';
         cleared = true;
@@ -394,45 +438,57 @@
       return cleared;
     }
 
-    function finalizeSavedWorkspace(savedWorkspace, config = {}) {
-      if (config.scope === 'all') {
-        state.workspace = savedWorkspace;
-        options.clearSavedRequestDirtyState?.();
-        return;
+    function applySavedRequestResult(requestTab, result) {
+      const request = requestForTabInWorkspace(state.workspace, requestTab);
+      if (!request || !result?.request) {
+        return false;
       }
-
-      const requestTargetKey = resolveRequestSaveTarget(config);
-      const environmentTargetKey = resolveEnvironmentSaveTarget(config);
-      let shouldRenderTabs = false;
-
-      if (requestTargetKey) {
-        const requestTab = (state.openRequestTabs || []).find((tab) => tab.key === requestTargetKey);
-        const request = requestForTabInWorkspace(state.workspace, requestTab);
-        if (requestTab && request) {
-          requestTab.dirty = false;
-          requestTab.createdUnsaved = false;
-          requestTab.snapshot = requestSnapshot(request);
-          shouldRenderTabs = true;
-        }
-        if (clearSavedSharedRequestState(requestTargetKey)) {
-          shouldRenderTabs = true;
-        }
+      replaceObject(request, result.request);
+      const collection = findWorkspaceCollection(requestTab.collectionId);
+      if (collection && Array.isArray(result.collectionVariables)) {
+        collection.variables = clonePairArray(result.collectionVariables);
       }
-
-      if (environmentTargetKey) {
-        const environmentTab = (state.openEnvironmentTabs || []).find((tab) => tab.key === environmentTargetKey);
-        const environment = environmentForTabInWorkspace(state.workspace, environmentTab);
-        if (environmentTab && environment) {
-          environmentTab.dirty = false;
-          environmentTab.createdUnsaved = false;
-          environmentTab.snapshot = environmentSnapshot(environment);
-          shouldRenderTabs = true;
-        }
+      if (Array.isArray(result.cookies)) {
+        state.workspace.cookies = cloneValueArray(result.cookies);
       }
-
-      if (shouldRenderTabs) {
-        renderRequestTabs();
+      if (result.settings && typeof result.settings === 'object') {
+        state.workspace.settings = cloneJson(result.settings, {});
       }
+      requestTab.dirty = false;
+      requestTab.createdUnsaved = false;
+      requestTab.snapshot = requestSnapshot(request);
+      clearSavedSharedRequestState(requestTab.key, {
+        collection: Array.isArray(result.collectionVariables),
+        cookies: Array.isArray(result.cookies)
+      });
+      renderAll();
+      return true;
+    }
+
+    function applySavedEnvironmentResult(environmentTab, result) {
+      const environment = environmentForTabInWorkspace(state.workspace, environmentTab);
+      if (!environment || !result?.environment) {
+        return false;
+      }
+      replaceObject(environment, result.environment);
+      if (result.settings && typeof result.settings === 'object') {
+        state.workspace.settings = cloneJson(result.settings, {});
+      }
+      environmentTab.dirty = false;
+      environmentTab.createdUnsaved = false;
+      environmentTab.snapshot = environmentSnapshot(environment);
+      renderAll();
+      return true;
+    }
+
+    async function persistRequestTab(requestTab) {
+      const saveRequest = windowObject.__postmeterSaveRequest || windowObject.postmeter.workspace.saveRequest;
+      return applySavedRequestResult(requestTab, await saveRequest(buildRequestSavePayload(requestTab)));
+    }
+
+    async function persistEnvironmentTab(environmentTab) {
+      const saveEnvironment = windowObject.__postmeterSaveEnvironment || windowObject.postmeter.workspace.saveEnvironment;
+      return applySavedEnvironmentResult(environmentTab, await saveEnvironment(buildEnvironmentSavePayload(environmentTab)));
     }
 
     function isActiveRequestContext(context) {
@@ -822,9 +878,25 @@
         collectEnvironmentFromEditor();
         collectSettingsFromEditor();
       }
-      const save = windowObject.__postmeterSaveWorkspace || windowObject.postmeter.workspace.save;
-      const savedWorkspace = await save(buildWorkspaceForSave(config));
-      finalizeSavedWorkspace(savedWorkspace, config);
+      const requestTargetKey = resolveRequestSaveTarget(config);
+      const environmentTargetKey = resolveEnvironmentSaveTarget(config);
+      if (config.scope === 'all' || (!requestTargetKey && !environmentTargetKey)) {
+        const save = windowObject.__postmeterSaveWorkspace || windowObject.postmeter.workspace.save;
+        state.workspace = await save(state.workspace);
+        options.clearSavedRequestDirtyState?.();
+      } else if (requestTargetKey) {
+        const requestTab = requestTabForKey(requestTargetKey);
+        if (!requestTab || requestTab.draft) {
+          throw new Error('The selected request tab could not be saved.');
+        }
+        await persistRequestTab(requestTab);
+      } else {
+        const environmentTab = environmentTabForKey(environmentTargetKey);
+        if (!environmentTab) {
+          throw new Error('The selected environment tab could not be saved.');
+        }
+        await persistEnvironmentTab(environmentTab);
+      }
       if (showStatus) {
         setStatus('Workspace saved.');
       }
@@ -856,7 +928,7 @@
     }
 
     async function exportWorkspace() {
-      await saveWorkspace(false);
+      await saveWorkspace(false, { scope: 'all' });
       const exportWorkspaceBoundary = windowObject.__postmeterExportWorkspace || windowObject.postmeter.workspace.exportWorkspace;
       const result = await exportWorkspaceBoundary(state.workspace);
       if (!result.cancelled) {
@@ -903,7 +975,7 @@
       state.activeCollectionId = result.collection.id;
       selectFirstRequest(result.collection);
       renderAll();
-      await saveWorkspace();
+      await saveWorkspace(true, { scope: 'all' });
     }
 
     async function exportCollection(collection = null, format = 'postmeter') {

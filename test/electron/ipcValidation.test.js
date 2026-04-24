@@ -18,7 +18,11 @@ const {
   assertRunnerConfigPayload,
   assertRunnerProgressPayload,
   assertUpdateCheckOptionsPayload,
+  assertWorkspaceEnvironmentSavePayload,
+  assertWorkspaceEnvironmentSaveResultPayload,
   assertWorkspaceLoadResultPayload,
+  assertWorkspaceRequestSavePayload,
+  assertWorkspaceRequestSaveResultPayload,
   assertWorkspacePayload
 } = require('../../src/core/ipcValidation');
 const { payloadSchemas } = require('../../src/core/payloadSchemas');
@@ -121,6 +125,53 @@ test('accepts structurally valid IPC payloads', () => {
     activeWorkspaceId: 'workspace.json',
     workspaces: [{ id: 'workspace.json', name: 'Workspace', path: '/tmp/workspace.json', current: true, deletable: false }]
   }));
+  assert.doesNotThrow(() => assertWorkspaceRequestSavePayload({
+    collectionId: 'c1',
+    requestId: 'r1',
+    folderId: 'f1',
+    createdUnsaved: true,
+    request: {
+      id: 'r1',
+      name: 'Request',
+      method: 'GET',
+      url: 'https://example.test',
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE'
+    },
+    collectionShell: {
+      id: 'c1',
+      name: 'Collection',
+      description: '',
+      certificates: []
+    },
+    folderPath: [{ id: 'f1', name: 'Folder' }],
+    collectionVariables: [{ enabled: true, key: 'baseUrl', value: 'https://example.test' }],
+    cookies: [{ enabled: true, name: 'sid', value: 'secret', domain: 'example.test', path: '/' }],
+    settings: { updates: { includePrereleases: true } }
+  }));
+  assert.doesNotThrow(() => assertWorkspaceRequestSaveResultPayload({
+    request: {
+      id: 'r1',
+      name: 'Request',
+      method: 'GET',
+      url: 'https://example.test',
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE'
+    },
+    collectionVariables: [{ enabled: true, key: 'baseUrl', value: 'https://example.test' }],
+    cookies: [{ enabled: true, name: 'sid', value: 'secret', domain: 'example.test', path: '/' }]
+  }));
+  assert.doesNotThrow(() => assertWorkspaceEnvironmentSavePayload({
+    environmentId: 'e1',
+    createdUnsaved: true,
+    environment: { id: 'e1', name: 'Env', variables: [{ enabled: true, key: 'token', value: 'secret' }] },
+    settings: { updates: { includePrereleases: true } }
+  }));
+  assert.doesNotThrow(() => assertWorkspaceEnvironmentSaveResultPayload({
+    environment: { id: 'e1', name: 'Env', variables: [{ enabled: true, key: 'token', value: 'secret' }] }
+  }));
   assert.doesNotThrow(() => assertFileOperationResultPayload({
     cancelled: false,
     path: '/tmp/export.json'
@@ -217,6 +268,9 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: '', durationMillis: 'slow', responseBytes: 0, finalUrl: '', headers: {} }), /response.durationMillis must be a finite number/);
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: 42, durationMillis: 1, responseBytes: 2, finalUrl: 'https://example.test', headers: {} }), /response.body must be a string/);
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: '{}', durationMillis: 1, responseBytes: 2, finalUrl: 'https://example.test', headers: {}, testScriptResult: { tests: [{ passed: 'yes' }] } }), /response.testScriptResult.tests\[0\].passed must be a boolean/);
+  assert.throws(() => assertWorkspaceRequestSavePayload({ requestId: 'r1', request: { method: 'GET', queryParams: [], headers: [], bodyType: 'NONE' } }), /payload.collectionId must be a string/);
+  assert.throws(() => assertWorkspaceRequestSavePayload({ collectionId: 'c1', requestId: 'r1', request: { method: 'GET', queryParams: [], headers: [], bodyType: 'NONE' }, folderPath: 'bad' }), /payload.folderPath must be an array/);
+  assert.throws(() => assertWorkspaceEnvironmentSavePayload({ environment: { id: 'e1', name: 'Env', variables: [] } }), /payload.environmentId must be a string/);
   assert.throws(() => assertWorkspaceLoadResultPayload({ workspace: null }), /result.workspace must be an object/);
   assert.throws(() => assertFileOperationResultPayload({ cancelled: 'yes' }), /result.cancelled must be a boolean/);
   assert.throws(() => assertFileOperationResultPayload({ cancelled: false, collection: [] }), /result.collection must be an object/);

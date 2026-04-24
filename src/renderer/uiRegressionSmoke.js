@@ -516,8 +516,18 @@
 
   async function assertRequestTabCloseSmoke() {
     const originalSaveWorkspace = window.__postmeterSaveWorkspace;
+    const originalSaveRequest = window.__postmeterSaveRequest;
+    const originalSaveEnvironment = window.__postmeterSaveEnvironment;
     try {
       window.__postmeterSaveWorkspace = async (nextWorkspace) => nextWorkspace;
+      window.__postmeterSaveRequest = async (payload) => ({
+        request: payload.request,
+        collectionVariables: payload.collectionVariables,
+        cookies: payload.cookies
+      });
+      window.__postmeterSaveEnvironment = async (payload) => ({
+        environment: payload.environment
+      });
       workspace.collections = [];
       clearActiveWorkspaceItem();
       resetRequestTabs();
@@ -602,6 +612,8 @@
       assertUiSmoke(workspace.environments.some((item) => item.id === environment.id && item.name === savedEnvironmentName), 'Closing an environment without saving should restore the saved snapshot.');
     } finally {
       window.__postmeterSaveWorkspace = originalSaveWorkspace;
+      window.__postmeterSaveRequest = originalSaveRequest;
+      window.__postmeterSaveEnvironment = originalSaveEnvironment;
       workspace.collections = [];
       workspace.environments = [];
       activeEnvironmentId = 'none';

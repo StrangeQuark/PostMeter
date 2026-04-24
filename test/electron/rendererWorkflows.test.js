@@ -103,7 +103,7 @@ test('renderer workflows only persist the active request tab on a normal save', 
     ],
     environments: [],
     cookies: [{ enabled: true, name: 'session', value: 'edited', domain: 'example.test', path: '/' }],
-    settings: {}
+    settings: { updates: { includePrereleases: true } }
   };
   state.activeMainPanel = 'request';
   state.activeCollectionId = 'collection-1';
@@ -130,8 +130,9 @@ test('renderer workflows only persist the active request tab on a normal save', 
   state.collectionDirtyOwners.set('collection-1', 'request:collection-1:request-2');
   state.cookieJarDirtySnapshot = JSON.stringify([{ enabled: true, name: 'session', value: 'saved', domain: 'example.test', path: '/' }]);
   state.cookieJarDirtyOwner = 'request:collection-1:request-2';
-  const savedWorkspaces = [];
-  let tabRenders = 0;
+  let saveRequestPayload = null;
+  let fullSaveCalls = 0;
+  let renders = 0;
 
   const workflows = createRendererWorkflows({
     state,
@@ -142,14 +143,20 @@ test('renderer workflows only persist the active request tab on a normal save', 
     collectRequestFromEditor: () => {},
     collectSettingsFromEditor: () => {},
     doc: createDocument(),
-    renderRequestTabs: () => { tabRenders += 1; },
+    renderAll: () => { renders += 1; },
     runFormatting: createRunFormatting(),
     windowObject: {
       postmeter: {
         workspace: {
-          save: async (workspace) => {
-            savedWorkspaces.push(structuredClone(workspace));
-            return workspace;
+          save: async () => {
+            fullSaveCalls += 1;
+            return state.workspace;
+          },
+          saveRequest: async (payload) => {
+            saveRequestPayload = structuredClone(payload);
+            return {
+              request: { ...payload.request, name: 'Edited Request One Saved' }
+            };
           }
         }
       }
@@ -159,21 +166,24 @@ test('renderer workflows only persist the active request tab on a normal save', 
   const result = await workflows.persistWorkspace(false);
 
   assert.equal(result, true);
-  assert.equal(savedWorkspaces.length, 1);
-  assert.equal(savedWorkspaces[0].collections[0].requests[0].name, 'Edited Request One');
-  assert.equal(savedWorkspaces[0].collections[0].requests[1].name, 'Saved Request Two');
-  assert.deepEqual(savedWorkspaces[0].collections[0].variables, [{ enabled: true, key: 'baseUrl', value: 'https://saved.example.test' }]);
-  assert.deepEqual(savedWorkspaces[0].cookies, [{ enabled: true, name: 'session', value: 'saved', domain: 'example.test', path: '/' }]);
-  assert.equal(state.workspace.collections[0].requests[0].name, 'Edited Request One');
+  assert.equal(fullSaveCalls, 0);
+  assert.equal(saveRequestPayload.collectionId, 'collection-1');
+  assert.equal(saveRequestPayload.requestId, 'request-1');
+  assert.equal(saveRequestPayload.request.name, 'Edited Request One');
+  assert.equal(saveRequestPayload.settings.updates.includePrereleases, true);
+  assert.deepEqual(saveRequestPayload.folderPath, []);
+  assert.equal(saveRequestPayload.collectionVariables, undefined);
+  assert.equal(saveRequestPayload.cookies, undefined);
+  assert.equal(state.workspace.collections[0].requests[0].name, 'Edited Request One Saved');
   assert.equal(state.workspace.collections[0].requests[1].name, 'Edited Request Two');
   assert.equal(state.openRequestTabs[0].dirty, false);
-  assert.equal(state.openRequestTabs[0].snapshot, JSON.stringify(requestOneLive));
+  assert.equal(state.openRequestTabs[0].snapshot, JSON.stringify({ ...requestOneLive, name: 'Edited Request One Saved' }));
   assert.equal(state.openRequestTabs[1].dirty, true);
   assert.equal(state.collectionDirtySnapshots.size, 1);
   assert.equal(state.collectionDirtyOwners.get('collection-1'), 'request:collection-1:request-2');
   assert.notEqual(state.cookieJarDirtySnapshot, null);
   assert.equal(state.cookieJarDirtyOwner, 'request:collection-1:request-2');
-  assert.equal(tabRenders, 1);
+  assert.equal(renders, 1);
 });
 
 test('renderer workflows only persist the active environment tab on a normal save', async () => {
@@ -185,7 +195,7 @@ test('renderer workflows only persist the active environment tab on a normal sav
   state.workspace = {
     collections: [],
     environments: [environmentOneLive, environmentTwoLive],
-    settings: {}
+    settings: { updates: { includePrereleases: true } }
   };
   state.activeMainPanel = 'environment';
   state.activeEnvironmentId = 'environment-1';
@@ -205,8 +215,9 @@ test('renderer workflows only persist the active environment tab on a normal sav
       snapshot: JSON.stringify(environmentTwoSaved)
     }
   ];
-  const savedWorkspaces = [];
-  let tabRenders = 0;
+  let saveEnvironmentPayload = null;
+  let fullSaveCalls = 0;
+  let renders = 0;
 
   const workflows = createRendererWorkflows({
     state,
@@ -217,14 +228,20 @@ test('renderer workflows only persist the active environment tab on a normal sav
     collectRequestFromEditor: () => {},
     collectSettingsFromEditor: () => {},
     doc: createDocument(),
-    renderRequestTabs: () => { tabRenders += 1; },
+    renderAll: () => { renders += 1; },
     runFormatting: createRunFormatting(),
     windowObject: {
       postmeter: {
         workspace: {
-          save: async (workspace) => {
-            savedWorkspaces.push(structuredClone(workspace));
-            return workspace;
+          save: async () => {
+            fullSaveCalls += 1;
+            return state.workspace;
+          },
+          saveEnvironment: async (payload) => {
+            saveEnvironmentPayload = structuredClone(payload);
+            return {
+              environment: { ...payload.environment, name: 'Edited Env One Saved' }
+            };
           }
         }
       }
@@ -234,15 +251,16 @@ test('renderer workflows only persist the active environment tab on a normal sav
   const result = await workflows.persistWorkspace(false);
 
   assert.equal(result, true);
-  assert.equal(savedWorkspaces.length, 1);
-  assert.equal(savedWorkspaces[0].environments[0].name, 'Edited Env One');
-  assert.equal(savedWorkspaces[0].environments[1].name, 'Saved Env Two');
-  assert.equal(state.workspace.environments[0].name, 'Edited Env One');
+  assert.equal(fullSaveCalls, 0);
+  assert.equal(saveEnvironmentPayload.environmentId, 'environment-1');
+  assert.equal(saveEnvironmentPayload.environment.name, 'Edited Env One');
+  assert.equal(saveEnvironmentPayload.settings.updates.includePrereleases, true);
+  assert.equal(state.workspace.environments[0].name, 'Edited Env One Saved');
   assert.equal(state.workspace.environments[1].name, 'Edited Env Two');
   assert.equal(state.openEnvironmentTabs[0].dirty, false);
-  assert.equal(state.openEnvironmentTabs[0].snapshot, JSON.stringify(environmentOneLive));
+  assert.equal(state.openEnvironmentTabs[0].snapshot, JSON.stringify({ ...environmentOneLive, name: 'Edited Env One Saved' }));
   assert.equal(state.openEnvironmentTabs[1].dirty, true);
-  assert.equal(tabRenders, 1);
+  assert.equal(renders, 1);
 });
 
 test('renderer workflows import workspaces as managed entries without destructive confirmation', async () => {
@@ -709,6 +727,16 @@ test('renderer workflows apply single-request completions to the request that st
   state.activeCollectionId = collectionOne.id;
   state.activeRequestId = requestOne.id;
   state.activeEnvironmentId = environmentOne.id;
+  state.openRequestTabs = [
+    {
+      key: `request:${collectionOne.id}:${requestOne.id}`,
+      collectionId: collectionOne.id,
+      requestId: requestOne.id,
+      dirty: true,
+      createdUnsaved: false,
+      snapshot: JSON.stringify(requestOne)
+    }
+  ];
   const doc = createDocument();
   let authRenderCalls = 0;
   let cookieJarRenders = 0;
@@ -756,7 +784,8 @@ test('renderer workflows apply single-request completions to the request that st
           }
         },
         workspace: {
-          save: async (workspace) => workspace
+          save: async (workspace) => workspace,
+          saveRequest: async (payload) => ({ request: payload.request })
         }
       }
     }

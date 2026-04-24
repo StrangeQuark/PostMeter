@@ -90,6 +90,64 @@ function assertEnvironmentPayload(value, field = 'environment') {
   assertPairs(value.variables || [], `${field}.variables`);
 }
 
+function assertWorkspaceRequestSavePayload(value, field = 'payload') {
+  object(value, field);
+  string(value.collectionId, `${field}.collectionId`, LIMITS.name);
+  string(value.requestId, `${field}.requestId`, LIMITS.name);
+  assertRequestPayload(value.request, `${field}.request`);
+  optionalString(value.folderId, `${field}.folderId`, LIMITS.name);
+  optionalBoolean(value.createdUnsaved, `${field}.createdUnsaved`);
+  if (value.collectionShell != null) {
+    object(value.collectionShell, `${field}.collectionShell`);
+    optionalString(value.collectionShell.id, `${field}.collectionShell.id`, LIMITS.name);
+    optionalString(value.collectionShell.name, `${field}.collectionShell.name`, LIMITS.name);
+    optionalString(value.collectionShell.description, `${field}.collectionShell.description`, LIMITS.value);
+    assertCertificates(value.collectionShell.certificates || [], `${field}.collectionShell.certificates`);
+  }
+  if (value.folderPath != null) {
+    array(value.folderPath, `${field}.folderPath`, LIMITS.folderDepth).forEach((folder, index) => {
+      object(folder, `${field}.folderPath[${index}]`);
+      optionalString(folder.id, `${field}.folderPath[${index}].id`, LIMITS.name);
+      optionalString(folder.name, `${field}.folderPath[${index}].name`, LIMITS.name);
+    });
+  }
+  if (value.collectionVariables != null) {
+    assertPairs(value.collectionVariables, `${field}.collectionVariables`);
+  }
+  if (value.cookies != null) {
+    assertCookies(value.cookies, `${field}.cookies`);
+  }
+  if (value.settings != null) {
+    assertSettingsPayload(value.settings, `${field}.settings`);
+  }
+}
+
+function assertWorkspaceRequestSaveResultPayload(value, field = 'result') {
+  object(value, field);
+  assertRequestPayload(value.request, `${field}.request`);
+  if (value.collectionVariables != null) {
+    assertPairs(value.collectionVariables, `${field}.collectionVariables`);
+  }
+  if (value.cookies != null) {
+    assertCookies(value.cookies, `${field}.cookies`);
+  }
+}
+
+function assertWorkspaceEnvironmentSavePayload(value, field = 'payload') {
+  object(value, field);
+  string(value.environmentId, `${field}.environmentId`, LIMITS.name);
+  optionalBoolean(value.createdUnsaved, `${field}.createdUnsaved`);
+  assertEnvironmentPayload(value.environment, `${field}.environment`);
+  if (value.settings != null) {
+    assertSettingsPayload(value.settings, `${field}.settings`);
+  }
+}
+
+function assertWorkspaceEnvironmentSaveResultPayload(value, field = 'result') {
+  object(value, field);
+  assertEnvironmentPayload(value.environment, `${field}.environment`);
+}
+
 function assertOptionalEnvironmentPayload(value, field = 'environment') {
   if (value == null) {
     return;
@@ -577,6 +635,10 @@ module.exports = {
   assertResponsePayload,
   assertRequestPayload,
   assertUpdateCheckOptionsPayload,
+  assertWorkspaceEnvironmentSavePayload,
+  assertWorkspaceEnvironmentSaveResultPayload,
   assertWorkspaceLoadResultPayload,
+  assertWorkspaceRequestSavePayload,
+  assertWorkspaceRequestSaveResultPayload,
   assertWorkspacePayload
 };
