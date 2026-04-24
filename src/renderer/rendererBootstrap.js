@@ -167,6 +167,13 @@
         options.onResolveActiveModal?.(selectedCollectionId);
       }
     });
+    bindClick(doc, 'cancelExportCollectionButton', () => options.onResolveActiveModal?.(null));
+    bindClick(doc, 'confirmExportCollectionButton', () => {
+      const selectedCollectionId = options.getSelectedExportCollectionId?.();
+      if (selectedCollectionId) {
+        options.onResolveActiveModal?.(selectedCollectionId);
+      }
+    });
 
     doc.addEventListener('click', () => {
       options.onCloseContextMenu?.();

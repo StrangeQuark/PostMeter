@@ -96,6 +96,50 @@ test('workspace manager renames managed workspaces using the filename as the can
   await fs.access(path.join(temp, 'Renamed Workspace.json'));
 });
 
+test('workspace manager imports a workspace into the managed set without replacing the current workspace', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-workspace-manager-'));
+  const importTemp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-workspace-import-'));
+  const preferredWorkspacePath = path.join(temp, 'workspace.json');
+  const importPath = path.join(importTemp, 'Imported Workspace.postmeter.json');
+  const manager = new WorkspaceManager(preferredWorkspacePath);
+
+  const loaded = await manager.load();
+  await fs.writeFile(importPath, JSON.stringify({
+    schemaVersion: 10,
+    collections: [{
+      id: 'collection-1',
+      name: 'Imported Collection',
+      description: '',
+      variables: [],
+      certificates: [],
+      requests: [{ id: 'request-1', name: 'Imported Request', method: 'GET', url: 'https://example.com' }],
+      folders: []
+    }],
+    environments: [],
+    cookies: [],
+    history: [],
+    settings: { appearance: { theme: 'system' }, updates: { includePrereleases: false } }
+  }));
+
+  const importedWorkspaceId = await manager.importWorkspace(importPath);
+  const described = await manager.describeCurrent(loaded.workspace);
+
+  assert.equal(importedWorkspaceId, 'Imported Workspace.json');
+  assert.equal(described.activeWorkspaceId, 'Local Workspace.json');
+  assert.equal(described.workspace.collections.length, 0);
+  assert.equal(described.workspaces.length, 2);
+  const importedWorkspaceItem = described.workspaces.find((item) => item.id === importedWorkspaceId);
+  assert.equal(importedWorkspaceItem?.name, 'Imported Workspace');
+  assert.equal(importedWorkspaceItem?.collectionCount, 1);
+  assert.equal(importedWorkspaceItem?.requestCount, 1);
+  await fs.access(path.join(temp, importedWorkspaceId));
+
+  const switched = await manager.switchWorkspace(importedWorkspaceId);
+  assert.equal(switched.activeWorkspaceId, importedWorkspaceId);
+  assert.equal(switched.workspace.collections.length, 1);
+  assert.equal(switched.workspace.collections[0].name, 'Imported Collection');
+});
+
 test('workspace manager regenerates a workspace when all managed workspace files are deleted', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-workspace-manager-'));
   const preferredWorkspacePath = path.join(temp, 'workspace.json');

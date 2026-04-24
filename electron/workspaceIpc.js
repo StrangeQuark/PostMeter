@@ -107,12 +107,10 @@ function registerWorkspaceIpc(options = {}) {
       return fileOperationResult({ cancelled: true });
     }
     const workspaceStore = getWorkspaceStore();
-    const backupPath = await workspaceStore.backupCurrentWorkspace('pre-workspace-import.backup');
-    let workspace = await workspaceStore.importWorkspace(result.filePaths[0]);
-    workspace = await saveWorkspace(workspace);
-    setWorkspace(workspace);
-    refreshApplicationMenu();
-    return fileOperationResult({ cancelled: false, workspace, backupPath });
+    const createdWorkspaceId = await workspaceStore.importWorkspace(result.filePaths[0]);
+    const loaded = await workspaceStore.describeCurrent(getWorkspace(), { createdWorkspaceId });
+    assertWorkspaceLoadResultPayload(loaded);
+    return fileOperationResult({ cancelled: false, ...loaded });
   });
 
   ipcMain.handle('workspace:export', async (_event, nextWorkspace, workspaceId) => {

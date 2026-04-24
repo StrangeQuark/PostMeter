@@ -27,6 +27,7 @@
       activeModalId: null,
       activeModalResolver: null,
       selectedDraftSaveCollectionId: '',
+      selectedExportCollectionId: '',
       maxOpenRequestTabs: 12
     };
   }

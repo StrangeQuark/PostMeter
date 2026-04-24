@@ -14,12 +14,12 @@ function collectionImportFilters() {
 
 function collectionExportExtension(format) {
   return {
-    postmeter: 'postmeter.json',
+    postmeter: 'json',
     openapi: 'openapi.json',
     jmeter: 'jmx',
     curl: 'sh',
     har: 'har'
-  }[format] || 'postmeter.json';
+  }[format] || 'json';
 }
 
 function collectionExportFilters(format) {
