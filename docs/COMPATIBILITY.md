@@ -1,13 +1,15 @@
 # PostMeter Compatibility Matrix
 
+Use this document when you need the exact supported surface for imports, exports, scripting, and load testing.
+
 PostMeter aims for practical compatibility with common API-client and load-test formats without pretending every vendor-specific feature is implemented.
 
 ## Native PostMeter
 
 Supported:
 
-- Workspace import/export.
-- Collection import/export.
+- Workspace import/export, including filesystem-discovered managed workspaces, exporting the current workspace or another managed workspace from the Workspaces list, and non-destructive native workspace import in the desktop UI.
+- Collection import/export, including desktop collection-picker export that still opens with an explicit empty-state warning when no collections exist, and native collection export defaults of `<collection-name>.json`.
 - Collections, folders, requests, assertions, scripts, auth metadata, environments, history, cookies, request examples, variables, and light/dark/system theme preference.
 
 Known gaps:

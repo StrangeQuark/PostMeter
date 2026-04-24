@@ -1,5 +1,7 @@
 # PostMeter Technical Specifications
 
+This document is the detailed implementation reference. For quick setup, common commands, and the top-level product overview, use [README.md](README.md).
+
 ## Current Migration Status
 
 PostMeter is now implemented as an Electron desktop MVP. The JavaFX/Maven implementation has been removed from the tracked repository; Electron is the only supported runtime.
@@ -13,8 +15,8 @@ The migration deliberately does not bridge Electron to the Java services. Core b
 - Edit HTTP method, URL, query parameters, headers, raw body type, and body content.
 - Create/edit/delete collection variables, request-local variables, and environments, then resolve `{{variableName}}` placeholders in supported workflows.
 - Persist app settings, currently including theme preference and prerelease update-check opt-in.
-- Import/export native PostMeter workspaces.
-- Import/export native PostMeter collections.
+- Import/export native PostMeter workspaces, including filesystem-discovered managed workspaces and non-destructive workspace import.
+- Import/export native PostMeter collections, including a desktop collection-picker export modal, an empty-state warning when no collections exist, and `<collection-name>.json` native export defaults.
 - Import common Postman collection JSON while preserving folder hierarchy, variables, auth inheritance, scripts, editable examples, cookies and richer cookie metadata including newer priority/partitioning hints where present, and supported collection certificate metadata.
 - Import/export OpenAPI, JMeter, curl, and HAR collection formats for compatibility workflows, including OpenAPI JSON/YAML input, OpenAPI security scheme import/export, OpenAPI response examples and disabled generated response assertions, JMeter variables/assertions/headers/listeners/CSV/thread/timer/controller/extractor metadata where mappable, JMeter XPath and Size Assertion mapping, mapped JMeter assertion enabled-state preservation, representative timer metadata preservation, unsupported JMeter metadata preservation, HAR response examples/timing metadata, and common curl cookie/proxy/retry/TLS flags.
 - Define request assertions for status, headers, JSON paths, XML XPath, HTML CSS selectors, response time, response size, body text, JSON/XML/HTML variable extraction, and regex variable extraction.
@@ -53,110 +55,45 @@ OAuth support in PostMeter is only for outbound API request authentication, matc
 - Node.js 22 or newer.
 - npm 10 or newer.
 - Network access for request execution and load tests.
-- Writable user-home directory unless `POSTMETER_DATA_PATH` is set.
+- Writable user-home directory, or a writable directory for the path specified by `POSTMETER_DATA_PATH`.
 
 ## Build, Run, And Test Commands
 
-Install Electron dependencies:
+### Development
 
 ```bash
 npm install
-```
-
-Run Electron:
-
-```bash
 npm start
-```
-
-Run Node tests:
-
-```bash
 npm test
+npm run check
+npm run electron:version
 ```
 
-Run Electron startup smoke:
+### UI And Smoke
 
 ```bash
 npm run test:smoke
-```
-
-Run Electron UI workflow smoke:
-
-```bash
 npm run test:ui
-```
-
-Run Electron UI regression smoke:
-
-```bash
 npm run test:ui:regression
-```
-
-Run Electron OAuth UI smoke:
-
-```bash
 npm run test:ui:oauth
-```
-
-Run Electron screenshot UI smoke:
-
-```bash
 npm run test:ui:snapshot
 ```
 
-Run a collection from the CLI:
+### CLI
 
 ```bash
 npm run cli -- run --file ./workspace.json --collection "Smoke" --report ./runner-report.json
 ```
 
-Check the installed Electron runtime:
-
-```bash
-npm run electron:version
-```
-
-Run the combined local check:
-
-```bash
-npm run check
-```
-
-Build an unpacked Linux package:
+### Packaging And Release
 
 ```bash
 npm run pack:linux
-```
-
-Build Linux AppImage and deb artifacts:
-
-```bash
 npm run dist:linux
-```
-
-Build unsigned Windows and macOS artifacts on native runners:
-
-```bash
 npm run dist:win
 npm run dist:mac
-```
-
-Write release checksums:
-
-```bash
 npm run release:checksums
-```
-
-Write release checksums and manifest:
-
-```bash
 npm run release:prepare
-```
-
-Validate release artifacts and manifest metadata:
-
-```bash
 npm run release:validate
 ```
 
@@ -278,7 +215,7 @@ window.postmeter.app.onMenuAction(callback)
 window.postmeter.workspace.load()
 window.postmeter.workspace.save(workspace)
 window.postmeter.workspace.importWorkspace()
-window.postmeter.workspace.exportWorkspace(workspace)
+window.postmeter.workspace.exportWorkspace(workspace, workspaceId)
 window.postmeter.collection.importCollection()
 window.postmeter.collection.exportCollection(collection, format)
 window.postmeter.request.validate(request, environment)
@@ -480,15 +417,15 @@ Schema `10` removes workspace-level load-test defaults. Load-test run settings a
 
 ## Persistence Specifications
 
-Persistence is handled by `WorkspaceStore`.
+Persistence is handled by `WorkspaceStore` and `WorkspaceManager`.
 
-Default path:
+Managed workspace directory:
 
 ```text
-~/.postmeter/workspace.json
+~/.postmeter/
 ```
 
-Override:
+Override the preferred startup workspace path:
 
 ```bash
 POSTMETER_DATA_PATH=/tmp/postmeter-workspace.json npm start
@@ -496,16 +433,17 @@ POSTMETER_DATA_PATH=/tmp/postmeter-workspace.json npm start
 
 Behavior:
 
-- Creates a default workspace when no file exists.
+- Uses `workspace.json` as the preferred startup path and scans the containing directory for native managed workspace JSON files.
+- Creates a default managed workspace such as `Local Workspace.json` when no workspace files exist.
 - Supports schema versions `1` through `10`.
-- Migrates older schemas to schema `9`.
+- Migrates older schemas to schema `10`.
 - Creates timestamped `pre-migration.backup` sibling files before saving migrated workspaces.
 - Rejects future schema versions.
 - Quarantines unreadable workspace JSON by moving it to a timestamped `corrupt` sibling file, then creates a fresh default workspace and raises a recovery error for the UI.
 - Writes JSON through a temporary file and renames into place.
 - Writes normalized workspace values directly to local JSON.
 - Normalizes IDs, names, body types, methods, arrays, settings, request load-test compatibility policies, collection variables, collection certificates, request variables, request examples, request cookie jar settings, workspace cookies, folders, environments, and history.
-- Native workspace import adds another managed workspace without replacing or backing up the current one.
+- Native workspace import adds another managed workspace without replacing, switching away from, or backing up the current one.
 
 Limitations:
 
@@ -515,11 +453,11 @@ Limitations:
 
 ## Import And Export
 
-Native workspace export writes the normalized workspace directly.
+Native workspace export writes the normalized workspace directly. The desktop UI can export the current in-memory workspace or another managed workspace by id from the Workspaces list.
 
-Native workspace import reads a PostMeter workspace, migrates it, normalizes it, writes it as another managed workspace, and keeps the current workspace active until the user switches.
+Native workspace import reads a PostMeter workspace, migrates it, normalizes it, writes it as another managed workspace, refreshes the managed workspace list, and keeps the current workspace active until the user switches.
 
-Native collection export writes one collection inside a valid PostMeter workspace wrapper. Environments are intentionally separate and are not included in collection export.
+Native collection export writes one collection inside a valid PostMeter workspace wrapper. Environments are intentionally separate and are not included in collection export. In the desktop UI, `Export > Collection` opens an in-app collection-picker modal, the modal still opens when no collections exist, the Export button stays disabled while that empty-state warning is shown, and native collection export filenames default to `<collection-name>.json`.
 
 Native collection import imports the first collection from a PostMeter workspace file, regenerates IDs, and appends it to the active workspace.
 
