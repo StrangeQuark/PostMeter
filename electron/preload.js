@@ -38,6 +38,11 @@ contextBridge.exposeInMainWorld('postmeter', {
       return () => ipcRenderer.removeListener('menu:action', listener);
     }
   },
+  session: {
+    load: () => ipcRenderer.invoke('session:load'),
+    save: (session) => ipcRenderer.invoke('session:save', session),
+    saveSync: (session) => ipcRenderer.sendSync('session:saveSync', session)
+  },
   workspace: {
     load: () => ipcRenderer.invoke('workspace:load'),
     save: (workspace) => ipcRenderer.invoke('workspace:save', workspace),

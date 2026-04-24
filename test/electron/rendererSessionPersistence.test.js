@@ -1,0 +1,180 @@
+const assert = require('node:assert/strict');
+const test = require('node:test');
+const { createRendererState } = require('../../src/renderer/rendererState');
+const { findFolder, findRequest } = require('../../src/renderer/collectionModel');
+const {
+  buildRendererSession,
+  restoreRendererSession
+} = require('../../src/renderer/sessionPersistence');
+
+test('renderer session persistence serializes active tabs, drafts, and dirty tab state', () => {
+  const state = createRendererState();
+  state.activeWorkspaceId = 'Workspace.json';
+  state.activeEnvironmentId = 'environment-1';
+  state.activeCollectionId = 'collection-1';
+  state.activeRequestId = 'request-1';
+  state.activeSidebarPanel = 'environments';
+  state.activeMainPanel = 'environment';
+  state.draftRequests.set('draft-1', { id: 'draft-1', name: 'Draft Request', method: 'GET', url: '' });
+  state.openRequestTabs = [
+    {
+      key: 'request:collection-1:request-1',
+      collectionId: 'collection-1',
+      requestId: 'request-1',
+      dirty: true,
+      snapshot: '{"saved":true}'
+    },
+    {
+      key: 'draft:draft-1',
+      requestId: 'draft-1',
+      draft: true,
+      dirty: true
+    }
+  ];
+  state.openEnvironmentTabs = [
+    {
+      key: 'environment:environment-1',
+      environmentId: 'environment-1',
+      dirty: true,
+      snapshot: '{"saved":true}'
+    }
+  ];
+  state.openWorkspaceTabs = [
+    {
+      key: 'workspace:Workspace.json',
+      workspaceId: 'Workspace.json',
+      dirty: false
+    }
+  ];
+
+  const doc = {
+    querySelector(selector) {
+      if (selector.includes('data-tab-group="request"')) {
+        return { dataset: { tab: 'headers' } };
+      }
+      if (selector.includes('data-tab-group="results"')) {
+        return { dataset: { tab: 'runner' } };
+      }
+      return null;
+    }
+  };
+
+  const session = buildRendererSession({
+    state,
+    doc,
+    requestForTab: (tab) => (tab.requestId === 'request-1'
+      ? { id: 'request-1', name: 'Dirty Request', method: 'POST', url: 'https://example.test' }
+      : state.draftRequests.get(tab.requestId)),
+    environmentForTab: () => ({ id: 'environment-1', name: 'Dirty Environment', variables: [] })
+  });
+
+  assert.equal(session.activeRequestTab, 'headers');
+  assert.equal(session.activeResultsTab, 'runner');
+  assert.equal(session.openRequestTabs[0].currentState.url, 'https://example.test');
+  assert.equal(session.openRequestTabs[1].currentState, null);
+  assert.equal(session.openEnvironmentTabs[0].currentState.name, 'Dirty Environment');
+  assert.equal(session.draftRequests.length, 1);
+});
+
+test('renderer session persistence restores dirty saved tabs, created-unsaved entities, and active selection', () => {
+  const state = createRendererState();
+  state.workspace = {
+    collections: [
+      {
+        id: 'collection-1',
+        name: 'Collection',
+        requests: [
+          { id: 'request-1', name: 'Saved Request', method: 'GET', url: 'https://saved.test' }
+        ],
+        folders: [],
+        variables: [],
+        certificates: [],
+        description: ''
+      }
+    ],
+    environments: [
+      { id: 'environment-1', name: 'Saved Environment', variables: [] }
+    ]
+  };
+  state.activeWorkspaceId = 'Workspace.json';
+
+  const session = {
+    activeWorkspaceId: 'Workspace.json',
+    activeEnvironmentId: 'environment-2',
+    activeCollectionId: 'collection-1',
+    activeRequestId: 'request-2',
+    activeSidebarPanel: 'environments',
+    activeMainPanel: 'environment',
+    activeRequestTab: 'auth',
+    activeResultsTab: 'load',
+    draftRequests: [
+      { id: 'draft-1', name: 'Draft Request', method: 'POST', url: 'https://draft.test' }
+    ],
+    openRequestTabs: [
+      {
+        key: 'request:collection-1:request-1',
+        collectionId: 'collection-1',
+        requestId: 'request-1',
+        dirty: true,
+        snapshot: '{"saved":true}',
+        currentState: { id: 'request-1', name: 'Saved Request', method: 'PATCH', url: 'https://dirty.test' }
+      },
+      {
+        key: 'request:collection-1:request-2',
+        collectionId: 'collection-1',
+        requestId: 'request-2',
+        createdUnsaved: true,
+        dirty: true,
+        snapshot: '',
+        currentState: { id: 'request-2', name: 'Unsaved Request', method: 'POST', url: 'https://unsaved.test' }
+      },
+      {
+        key: 'draft:draft-1',
+        requestId: 'draft-1',
+        draft: true,
+        dirty: true
+      }
+    ],
+    openEnvironmentTabs: [
+      {
+        key: 'environment:environment-1',
+        environmentId: 'environment-1',
+        dirty: true,
+        snapshot: '{"saved":true}',
+        currentState: { id: 'environment-1', name: 'Dirty Environment', variables: [] }
+      },
+      {
+        key: 'environment:environment-2',
+        environmentId: 'environment-2',
+        createdUnsaved: true,
+        dirty: true,
+        snapshot: '',
+        currentState: { id: 'environment-2', name: 'Unsaved Environment', variables: [] }
+      }
+    ],
+    openWorkspaceTabs: [
+      { key: 'workspace:Workspace.json', workspaceId: 'Workspace.json' }
+    ]
+  };
+
+  const restored = restoreRendererSession({
+    state,
+    session,
+    workspaceListItems: () => [{ id: 'Workspace.json', name: 'Workspace', path: '/tmp/Workspace.json', current: true, deletable: false }],
+    findFolder,
+    findRequest
+  });
+
+  assert.equal(state.workspace.collections[0].requests[0].method, 'PATCH');
+  assert.equal(state.workspace.collections[0].requests[1].id, 'request-2');
+  assert.equal(state.workspace.environments[0].name, 'Dirty Environment');
+  assert.equal(state.workspace.environments[1].id, 'environment-2');
+  assert.equal(state.draftRequests.has('draft-1'), true);
+  assert.equal(state.activeCollectionId, 'collection-1');
+  assert.equal(state.activeRequestId, 'request-2');
+  assert.equal(state.activeEnvironmentId, 'environment-2');
+  assert.equal(state.activeSidebarPanel, 'environments');
+  assert.equal(state.activeMainPanel, 'environment');
+  assert.equal(restored.activeRequestTab, 'auth');
+  assert.equal(restored.activeResultsTab, 'load');
+});

@@ -104,3 +104,38 @@ test('workspace manager regenerates a workspace when all managed workspace files
   assert.equal(reloaded.workspace.schemaVersion, 10);
   await fs.access(path.join(temp, 'Local Workspace.json'));
 });
+
+test('workspace manager discovers workspaces from disk, prefers the requested startup workspace, and removes the legacy manifest', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-workspace-manager-'));
+  const preferredWorkspacePath = path.join(temp, 'workspace.json');
+  const manager = new WorkspaceManager(preferredWorkspacePath);
+
+  await fs.writeFile(path.join(temp, 'Local Workspace.json'), JSON.stringify({
+    schemaVersion: 10,
+    collections: [],
+    environments: [],
+    cookies: [],
+    history: [],
+    settings: { appearance: { theme: 'system' }, updates: { includePrereleases: false } }
+  }));
+  await fs.writeFile(path.join(temp, 'Workspace.json'), JSON.stringify({
+    schemaVersion: 10,
+    collections: [{ id: 'collection-1', name: 'Collection', description: '', variables: [], certificates: [], requests: [], folders: [] }],
+    environments: [],
+    cookies: [],
+    history: [],
+    settings: { appearance: { theme: 'system' }, updates: { includePrereleases: false } }
+  }));
+  await fs.writeFile(path.join(temp, 'workspace.workspaces.manifest.json'), JSON.stringify({
+    version: 1,
+    currentWorkspaceId: 'Local Workspace.json',
+    files: ['Local Workspace.json', 'Workspace.json']
+  }));
+
+  const loaded = await manager.load({ preferredWorkspaceId: 'Workspace.json' });
+
+  assert.equal(loaded.activeWorkspaceId, 'Workspace.json');
+  assert.equal(loaded.path, path.join(temp, 'Workspace.json'));
+  assert.equal(loaded.workspace.collections.length, 1);
+  await assert.rejects(() => fs.access(path.join(temp, 'workspace.workspaces.manifest.json')));
+});

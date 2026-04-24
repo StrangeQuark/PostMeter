@@ -1,13 +1,12 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { defaultWorkspace } = require('./models');
-const { WorkspaceRecoveryError, WorkspaceStore, defaultWorkspacePath } = require('./workspaceStore');
 const {
-  pathExists,
-  writeJsonFileAtomic
-} = require('./workspacePersistence');
-
-const WORKSPACE_MANIFEST_VERSION = 1;
+  WorkspaceRecoveryError,
+  WorkspaceStore,
+  defaultWorkspacePath,
+  looksLikeNativeWorkspace
+} = require('./workspaceStore');
 
 class WorkspaceManager {
   constructor(preferredWorkspacePath = defaultWorkspacePath()) {
@@ -16,7 +15,7 @@ class WorkspaceManager {
     this.workspaceExtension = path.extname(this.preferredWorkspacePath) || '.json';
     this.workspaceStem = path.basename(this.preferredWorkspacePath, this.workspaceExtension) || 'workspace';
     this.preferredWorkspaceFilename = path.basename(this.preferredWorkspacePath);
-    this.manifestPath = path.join(this.baseDirectory, `${this.workspaceStem}.workspaces.manifest.json`);
+    this.legacyManifestPath = path.join(this.baseDirectory, `${this.workspaceStem}.workspaces.manifest.json`);
     this.currentWorkspaceId = this.preferredWorkspaceFilename;
     this.currentWorkspacePath = this.preferredWorkspacePath;
   }
@@ -29,8 +28,8 @@ class WorkspaceManager {
     return this.currentWorkspaceId;
   }
 
-  async load() {
-    const catalog = await this.ensureCatalog();
+  async load(options = {}) {
+    const catalog = await this.ensureCatalog(options.preferredWorkspaceId);
     this.currentWorkspaceId = catalog.currentWorkspaceId;
     this.currentWorkspacePath = this.absoluteWorkspacePath(catalog.currentWorkspaceId);
     const store = this.currentStore();
@@ -61,7 +60,7 @@ class WorkspaceManager {
   }
 
   async listWorkspaceItems() {
-    const catalog = await this.ensureCatalog();
+    const catalog = await this.ensureCatalog(this.currentWorkspaceId);
     const deletable = catalog.files.length > 1;
     return catalog.files.map((file) => ({
       id: file,
@@ -97,21 +96,19 @@ class WorkspaceManager {
   }
 
   async createWorkspace(options = {}) {
-    const catalog = await this.ensureCatalog();
+    const catalog = await this.ensureCatalog(this.currentWorkspaceId);
     const workspaceName = await this.nextWorkspaceName(options.name);
     const workspace = defaultWorkspace();
     const filename = this.nextWorkspaceFilename(catalog.files, workspaceName);
     await new WorkspaceStore(this.absoluteWorkspacePath(filename)).save(workspace);
-    catalog.files.push(filename);
-    catalog.currentWorkspaceId = filename;
-    await this.writeCatalog(catalog);
+    catalog.files = [...catalog.files, filename].sort((left, right) => left.localeCompare(right));
     this.currentWorkspaceId = filename;
     this.currentWorkspacePath = this.absoluteWorkspacePath(filename);
     return this.describeCurrent(workspace);
   }
 
   async renameWorkspace(workspaceId, nextName) {
-    const catalog = await this.ensureCatalog();
+    const catalog = await this.ensureCatalog(this.currentWorkspaceId);
     if (!catalog.files.includes(workspaceId)) {
       throw new Error(`Workspace "${workspaceId}" was not found.`);
     }
@@ -131,24 +128,21 @@ class WorkspaceManager {
     if (catalog.currentWorkspaceId === workspaceId) {
       catalog.currentWorkspaceId = renamedFilename;
     }
-    await this.writeCatalog(catalog);
     this.currentWorkspaceId = catalog.currentWorkspaceId;
     this.currentWorkspacePath = this.absoluteWorkspacePath(this.currentWorkspaceId);
     return this.load();
   }
 
   async switchWorkspace(workspaceId) {
-    const catalog = await this.ensureCatalog();
+    const catalog = await this.ensureCatalog(this.currentWorkspaceId);
     if (!catalog.files.includes(workspaceId)) {
       throw new Error(`Workspace "${workspaceId}" was not found.`);
     }
-    catalog.currentWorkspaceId = workspaceId;
-    await this.writeCatalog(catalog);
-    return this.load();
+    return this.load({ preferredWorkspaceId: workspaceId });
   }
 
   async deleteWorkspace(workspaceId) {
-    const catalog = await this.ensureCatalog();
+    const catalog = await this.ensureCatalog(this.currentWorkspaceId);
     if (!catalog.files.includes(workspaceId)) {
       throw new Error(`Workspace "${workspaceId}" was not found.`);
     }
@@ -161,7 +155,6 @@ class WorkspaceManager {
     if (catalog.currentWorkspaceId === workspaceId) {
       catalog.currentWorkspaceId = remainingFiles[0] || this.preferredWorkspaceFilename;
     }
-    await this.writeCatalog(catalog);
     this.currentWorkspaceId = catalog.currentWorkspaceId;
     this.currentWorkspacePath = this.absoluteWorkspacePath(this.currentWorkspaceId);
     return this.load();
@@ -175,86 +168,61 @@ class WorkspaceManager {
     return path.join(this.baseDirectory, filename);
   }
 
-  async ensureCatalog() {
-    const manifest = await this.readCatalog();
-    const files = await this.discoverWorkspaceFiles(manifest);
+  async ensureCatalog(preferredWorkspaceId = '') {
+    await this.removeLegacyManifestFile();
+    const files = await this.discoverWorkspaceFiles();
     if (!files.length) {
       const workspace = defaultWorkspace();
       const filename = workspaceFilename('Local Workspace', this.workspaceExtension);
       await new WorkspaceStore(this.absoluteWorkspacePath(filename)).save(workspace);
       files.push(filename);
     }
-    const currentWorkspaceId = files.includes(manifest?.currentWorkspaceId)
-      ? manifest.currentWorkspaceId
-      : files[0];
-    const catalog = {
-      version: WORKSPACE_MANIFEST_VERSION,
-      currentWorkspaceId,
+    const desiredWorkspaceId = String(preferredWorkspaceId || this.currentWorkspaceId || '').trim();
+    return {
+      currentWorkspaceId: files.includes(desiredWorkspaceId) ? desiredWorkspaceId : files[0],
       files
     };
-    if (!this.catalogMatches(manifest, catalog)) {
-      await this.writeCatalog(catalog);
-    }
-    return catalog;
   }
 
-  async readCatalog() {
-    if (!(await pathExists(this.manifestPath))) {
-      return null;
-    }
+  async removeLegacyManifestFile() {
+    await fs.rm(this.legacyManifestPath, { force: true });
+  }
+
+  async discoverWorkspaceFiles() {
+    let entries = [];
     try {
-      const parsed = JSON.parse(await fs.readFile(this.manifestPath, 'utf8'));
-      const files = Array.isArray(parsed?.files)
-        ? parsed.files.filter((file) => typeof file === 'string' && file.trim() && this.isManagedWorkspaceFilename(file))
-        : [];
-      return {
-        version: parsed?.version || WORKSPACE_MANIFEST_VERSION,
-        currentWorkspaceId: typeof parsed?.currentWorkspaceId === 'string' ? parsed.currentWorkspaceId : '',
-        files
-      };
-    } catch {
-      return null;
-    }
-  }
-
-  async writeCatalog(catalog) {
-    await writeJsonFileAtomic(this.manifestPath, {
-      version: WORKSPACE_MANIFEST_VERSION,
-      currentWorkspaceId: catalog.currentWorkspaceId,
-      files: catalog.files
-    });
-  }
-
-  async discoverWorkspaceFiles(manifest) {
-    const files = [];
-    for (const file of manifest?.files || []) {
-      if (await pathExists(this.absoluteWorkspacePath(file)) && !files.includes(file)) {
-        files.push(file);
+      entries = await fs.readdir(this.baseDirectory, { withFileTypes: true });
+    } catch (error) {
+      if (error?.code === 'ENOENT') {
+        return [];
       }
+      throw error;
     }
-    if (await pathExists(this.preferredWorkspacePath) && !files.includes(this.preferredWorkspaceFilename)) {
-      files.push(this.preferredWorkspaceFilename);
+    const files = [];
+    for (const entry of entries) {
+      if (!entry.isFile()) {
+        continue;
+      }
+      if (await this.isManagedWorkspaceFilename(entry.name)) {
+        files.push(entry.name);
+      }
     }
     return files.sort((left, right) => left.localeCompare(right));
   }
 
-  isManagedWorkspaceFilename(filename) {
-    return typeof filename === 'string'
-      && filename.trim().endsWith(this.workspaceExtension)
-      && filename !== path.basename(this.manifestPath);
-  }
-
-  catalogMatches(left, right) {
-    if (!left) {
+  async isManagedWorkspaceFilename(filename) {
+    if (typeof filename !== 'string' || !filename.trim().endsWith(this.workspaceExtension)) {
       return false;
     }
-    if (left.currentWorkspaceId !== right.currentWorkspaceId) {
+    if (filename === path.basename(this.legacyManifestPath)) {
       return false;
     }
-    if (!Array.isArray(left.files) || left.files.length !== right.files.length) {
+    try {
+      const parsed = JSON.parse(await fs.readFile(this.absoluteWorkspacePath(filename), 'utf8'));
+      return looksLikeNativeWorkspace(parsed);
+    } catch {
       return false;
     }
-    return left.files.every((file, index) => file === right.files[index]);
   }
 
   async nextWorkspaceName(baseName = 'Workspace') {

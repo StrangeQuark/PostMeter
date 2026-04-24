@@ -32,6 +32,8 @@ let lastUserNotification = RENDERER_STATE_DEFAULTS.lastUserNotification;
 let activeModalId = RENDERER_STATE_DEFAULTS.activeModalId;
 let activeModalResolver = RENDERER_STATE_DEFAULTS.activeModalResolver;
 let selectedDraftSaveCollectionId = RENDERER_STATE_DEFAULTS.selectedDraftSaveCollectionId;
+let sessionSaveTimer = null;
+let sessionPersistenceEnabled = false;
 
 const $ = (id) => document.getElementById(id);
 const ASSERTION_TEMPLATES = PostMeterAssertionModel.assertionTemplates;
@@ -80,6 +82,10 @@ const {
   resetTabState: resetRendererTabState,
   resolveModalState
 } = PostMeterRendererState;
+const {
+  buildRendererSession,
+  restoreRendererSession
+} = PostMeterRendererSessionPersistence;
 const { createRequestTabState } = PostMeterRequestTabState;
 const { renderRequestTabs: renderRequestTabBar } = PostMeterRequestTabs;
 const { createRendererWorkflows } = PostMeterRendererWorkflows;
@@ -203,6 +209,7 @@ initializeRenderer({
   getStoredThemePreference: () => localStorage.getItem('postmeter.theme') || 'system',
   onReady: async ({ registerCleanup }) => {
     bindUi();
+    registerCleanup(() => { flushSessionSave({ sync: true }); });
     registerCleanup(createVariableAutocomplete({
       doc: document,
       windowObject: window,
@@ -226,7 +233,14 @@ initializeRenderer({
     }));
 
     const loaded = await window.postmeter.workspace.load();
-    applyLoadedWorkspace(loaded, { focus: 'request' });
+    applyLoadedWorkspace(loaded, { focus: 'request', render: false });
+    const session = await window.postmeter.session.load();
+    const restoredTabs = restoreSessionState(session);
+    renderAll();
+    activateTab('request', restoredTabs.activeRequestTab);
+    activateTab('results', restoredTabs.activeResultsTab);
+    sessionPersistenceEnabled = true;
+    scheduleSessionSave({ immediate: true });
     setStatus(`Workspace loaded: ${workspacePath}`);
     queueUiWorkflowSmoke();
     queueUiRegressionSmoke();
@@ -285,6 +299,7 @@ function bindUi() {
       activeEnvironmentId = environmentId;
       renderEnvironments();
       renderEnvironmentEditor();
+      scheduleSessionSave();
     },
     onRequestNameInput: collectRequestAndMarkDirty,
     onMethodChange: () => {
@@ -406,6 +421,7 @@ function renderRequestTabs() {
       }
     ]
   });
+  scheduleSessionSave();
 }
 
 function ensureOpenEnvironmentTabForActive(options = {}) {
@@ -693,7 +709,75 @@ function applyLoadedWorkspace(loaded, options = {}) {
     activeSidebarPanel = 'collections';
     activeMainPanel = 'request';
   }
-  renderAll();
+  if (options.render !== false) {
+    renderAll();
+  }
+}
+
+function restoreSessionState(session) {
+  return restoreRendererSession({
+    state,
+    session,
+    workspaceListItems,
+    findFolder,
+    findRequest
+  });
+}
+
+function buildSessionState() {
+  return buildRendererSession({
+    state,
+    doc: document,
+    requestForTab: requestTabState.requestForTab,
+    environmentForTab: requestTabState.environmentForTab
+  });
+}
+
+async function persistSessionState() {
+  if (!sessionPersistenceEnabled) {
+    return null;
+  }
+  try {
+    const saveSession = window.__postmeterSaveSession || window.postmeter.session.save;
+    return await saveSession(buildSessionState());
+  } catch {
+    return null;
+  }
+}
+
+function scheduleSessionSave(options = {}) {
+  if (!sessionPersistenceEnabled) {
+    return;
+  }
+  if (sessionSaveTimer) {
+    clearTimeout(sessionSaveTimer);
+  }
+  sessionSaveTimer = window.setTimeout(() => {
+    sessionSaveTimer = null;
+    void persistSessionState();
+  }, options.immediate === true ? 0 : 150);
+}
+
+function flushSessionSave(options = {}) {
+  if (sessionSaveTimer) {
+    clearTimeout(sessionSaveTimer);
+    sessionSaveTimer = null;
+  }
+  if (options.sync === true) {
+    if (!sessionPersistenceEnabled) {
+      return null;
+    }
+    try {
+      const saveSessionSync = window.postmeter?.session?.saveSync;
+      if (typeof saveSessionSync === 'function') {
+        return saveSessionSync(buildSessionState());
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  }
+  return persistSessionState();
 }
 
 function renderAll() {
@@ -711,6 +795,7 @@ function renderAll() {
   renderRequestEditor();
   renderCollectionVariablesEditor();
   renderEnvironmentEditor();
+  scheduleSessionSave();
 }
 
 function selectSidebarPanel(panel) {
@@ -2091,6 +2176,7 @@ function activateTab(groupName, tabName) {
     const panel = $(panelId);
     panel.classList.toggle('active', panel.id === `${tabName}Tab`);
   }
+  scheduleSessionSave();
 }
 
 function formatBytes(bytes) {
