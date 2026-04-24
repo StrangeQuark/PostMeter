@@ -20,6 +20,9 @@ test('workspace manager creates and describes a default managed workspace', asyn
   assert.equal(loaded.workspaces[0].current, true);
   assert.equal(loaded.workspaces[0].deletable, false);
   assert.equal(loaded.workspaces[0].name, 'Local Workspace');
+  assert.equal(loaded.workspaces[0].theme, 'system');
+  assert.equal(loaded.workspaces[0].collectionCount, 0);
+  assert.equal(loaded.workspaces[0].requestCount, 0);
   assert.equal(loaded.workspace.schemaVersion, 10);
 });
 
@@ -28,13 +31,16 @@ test('workspace manager creates, switches, and deletes managed workspaces', asyn
   const preferredWorkspacePath = path.join(temp, 'workspace.json');
   const manager = new WorkspaceManager(preferredWorkspacePath);
 
-  await manager.load();
-  const created = await manager.createWorkspace();
-  assert.equal(created.workspaces.length, 2);
-  assert.equal(created.activeWorkspaceId, 'Workspace.json');
-  assert.equal(created.path, path.join(temp, 'Workspace.json'));
+  const loaded = await manager.load();
+  const createdWorkspaceId = await manager.createWorkspace();
+  assert.equal(createdWorkspaceId, 'Workspace.json');
+  const afterCreate = await manager.describeCurrent(loaded.workspace);
+  assert.equal(afterCreate.workspaces.length, 2);
+  assert.equal(afterCreate.activeWorkspaceId, 'Local Workspace.json');
+  assert.equal(afterCreate.path, path.join(temp, 'Local Workspace.json'));
 
-  created.workspace.collections.push({
+  const switchedToCreated = await manager.switchWorkspace(createdWorkspaceId);
+  switchedToCreated.workspace.collections.push({
     id: 'collection-1',
     name: 'Collection',
     description: '',
@@ -43,13 +49,16 @@ test('workspace manager creates, switches, and deletes managed workspaces', asyn
     requests: [],
     folders: []
   });
-  await manager.save(created.workspace);
+  await manager.save(switchedToCreated.workspace);
 
   const switched = await manager.switchWorkspace('Local Workspace.json');
   assert.equal(switched.activeWorkspaceId, 'Local Workspace.json');
   assert.equal(switched.workspaces.length, 2);
   assert.equal(switched.path, path.join(temp, 'Local Workspace.json'));
   assert.deepEqual(switched.workspace.collections, []);
+  const switchedWorkspaceItem = switched.workspaces.find((item) => item.id === 'Workspace.json');
+  assert.equal(switchedWorkspaceItem.collectionCount, 1);
+  assert.equal(switchedWorkspaceItem.requestCount, 0);
 
   const deleted = await manager.deleteWorkspace('Workspace.json');
   assert.equal(deleted.activeWorkspaceId, 'Local Workspace.json');
@@ -64,7 +73,8 @@ test('workspace manager renames managed workspaces using the filename as the can
   const manager = new WorkspaceManager(preferredWorkspacePath);
 
   await manager.load();
-  const created = await manager.createWorkspace();
+  const createdWorkspaceId = await manager.createWorkspace();
+  const created = await manager.switchWorkspace(createdWorkspaceId);
   created.workspace.collections.push({
     id: 'collection-1',
     name: 'Collection',

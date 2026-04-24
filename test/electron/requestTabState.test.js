@@ -178,3 +178,39 @@ test('request tab state keeps environment mode when discarding the last active u
   assert.equal(state.activeMainPanel, 'environment');
   assert.equal(renders, 1);
 });
+
+test('request tab state selects workspace tabs without switching the loaded workspace id', () => {
+  const state = createRendererState();
+  state.activeWorkspaceId = 'Workspace.json';
+  state.selectedWorkspaceId = 'Workspace.json';
+  state.activeSidebarPanel = 'collections';
+  state.activeMainPanel = 'request';
+  state.openWorkspaceTabs = [
+    { key: 'workspace:Workspace 2.json', workspaceId: 'Workspace 2.json', dirty: false }
+  ];
+  let tabRenders = 0;
+  let renders = 0;
+
+  const tabState = createRequestTabState({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => null,
+    activeWorkspaceItem: () => [{ id: 'Workspace.json' }, { id: 'Workspace 2.json' }].find((item) => item.id === state.selectedWorkspaceId) || null,
+    renderAll: () => { renders += 1; },
+    renderRequestTabs: () => { tabRenders += 1; },
+    workspaceListItems: () => [
+      { id: 'Workspace.json', name: 'Workspace', current: true, deletable: true },
+      { id: 'Workspace 2.json', name: 'Workspace 2', current: false, deletable: true }
+    ]
+  });
+
+  tabState.selectWorkspaceTab(state.openWorkspaceTabs[0]);
+
+  assert.equal(state.activeWorkspaceId, 'Workspace.json');
+  assert.equal(state.selectedWorkspaceId, 'Workspace 2.json');
+  assert.equal(state.activeSidebarPanel, 'workspaces');
+  assert.equal(state.activeMainPanel, 'workspace');
+  assert.equal(renders, 1);
+  assert.equal(tabRenders, 1);
+});

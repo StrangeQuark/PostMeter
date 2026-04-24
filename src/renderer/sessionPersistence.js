@@ -14,6 +14,7 @@
 
     return {
       activeWorkspaceId: normalizeId(state.activeWorkspaceId),
+      selectedWorkspaceId: normalizeId(state.selectedWorkspaceId) || normalizeId(state.activeWorkspaceId),
       activeEnvironmentId: normalizeEnvironmentId(state.activeEnvironmentId),
       activeCollectionId: normalizeId(state.activeCollectionId),
       activeFolderId: normalizeId(state.activeFolderId),
@@ -67,6 +68,11 @@
     if (workspaceItems().some((item) => item.id === session.activeWorkspaceId)) {
       state.activeWorkspaceId = session.activeWorkspaceId;
     }
+    if (workspaceItems().some((item) => item.id === session.selectedWorkspaceId)) {
+      state.selectedWorkspaceId = session.selectedWorkspaceId;
+    } else if (workspaceItems().some((item) => item.id === state.activeWorkspaceId)) {
+      state.selectedWorkspaceId = state.activeWorkspaceId;
+    }
     if (session.activeEnvironmentId === 'none' || environmentExists(state, session.activeEnvironmentId)) {
       state.activeEnvironmentId = session.activeEnvironmentId;
     }
@@ -89,8 +95,8 @@
     if (state.activeEnvironmentId !== 'none') {
       ensureEnvironmentTabPresent(state, state.activeEnvironmentId);
     }
-    if (state.activeWorkspaceId) {
-      ensureWorkspaceTabPresent(state, state.activeWorkspaceId);
+    if (state.selectedWorkspaceId) {
+      ensureWorkspaceTabPresent(state, state.selectedWorkspaceId);
     }
 
     if (shouldRestoreMainPanel(session.activeMainPanel, state, workspaceItems(), findRequest)) {
@@ -279,7 +285,7 @@
 
   function shouldRestoreMainPanel(panel, state, workspaceItems, findRequest) {
     if (panel === 'workspace') {
-      return workspaceItems.some((item) => item.id === state.activeWorkspaceId);
+      return workspaceItems.some((item) => item.id === state.selectedWorkspaceId);
     }
     if (panel === 'environment') {
       return state.activeEnvironmentId === 'none' || environmentExists(state, state.activeEnvironmentId);
@@ -295,7 +301,7 @@
 
   function shouldRestoreSidebarPanel(panel, state, workspaceItems) {
     if (panel === 'workspaces') {
-      return workspaceItems.some((item) => item.id === state.activeWorkspaceId);
+      return workspaceItems.some((item) => item.id === state.selectedWorkspaceId);
     }
     if (panel === 'environments') {
       return state.activeEnvironmentId === 'none' || environmentExists(state, state.activeEnvironmentId);
@@ -343,6 +349,7 @@
     const session = isObject(value) ? value : {};
     return {
       activeWorkspaceId: normalizeId(session.activeWorkspaceId),
+      selectedWorkspaceId: normalizeId(session.selectedWorkspaceId),
       activeEnvironmentId: normalizeEnvironmentId(session.activeEnvironmentId),
       activeCollectionId: normalizeId(session.activeCollectionId),
       activeFolderId: normalizeId(session.activeFolderId),

@@ -249,6 +249,7 @@ function assertWorkspaceLoadResultPayload(value, field = 'result') {
   assertWorkspacePayload(value.workspace, `${field}.workspace`);
   optionalString(value.path, `${field}.path`, LIMITS.value);
   optionalString(value.activeWorkspaceId, `${field}.activeWorkspaceId`, LIMITS.value);
+  optionalString(value.createdWorkspaceId, `${field}.createdWorkspaceId`, LIMITS.value);
   if (value.workspaces != null) {
     array(value.workspaces, `${field}.workspaces`, LIMITS.environments).forEach((workspaceItem, index) => {
       assertWorkspaceListItemPayload(workspaceItem, `${field}.workspaces[${index}]`);
@@ -273,6 +274,14 @@ function assertWorkspaceListItemPayload(value, field = 'workspaceItem') {
   optionalString(value.path, `${field}.path`, LIMITS.value);
   optionalBoolean(value.current, `${field}.current`);
   optionalBoolean(value.deletable, `${field}.deletable`);
+  optionalNumber(value.schemaVersion, `${field}.schemaVersion`);
+  optionalString(value.theme, `${field}.theme`, LIMITS.name);
+  optionalNumber(value.collectionCount, `${field}.collectionCount`);
+  optionalNumber(value.folderCount, `${field}.folderCount`);
+  optionalNumber(value.requestCount, `${field}.requestCount`);
+  optionalNumber(value.environmentCount, `${field}.environmentCount`);
+  optionalNumber(value.cookieCount, `${field}.cookieCount`);
+  optionalNumber(value.historyCount, `${field}.historyCount`);
 }
 
 function assertFileOperationResultPayload(value, field = 'result') {

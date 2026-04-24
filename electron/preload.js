@@ -51,7 +51,7 @@ contextBridge.exposeInMainWorld('postmeter', {
     switch: (workspaceId) => ipcRenderer.invoke('workspace:switch', workspaceId),
     delete: (workspaceId) => ipcRenderer.invoke('workspace:delete', workspaceId),
     importWorkspace: () => ipcRenderer.invoke('workspace:import'),
-    exportWorkspace: (workspace) => ipcRenderer.invoke('workspace:export', workspace)
+    exportWorkspace: (workspace, workspaceId) => ipcRenderer.invoke('workspace:export', workspace, workspaceId)
   },
   collection: {
     importCollection: () => ipcRenderer.invoke('collection:import'),

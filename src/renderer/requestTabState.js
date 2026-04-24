@@ -210,7 +210,7 @@
         renderAll();
         return;
       }
-      state.activeWorkspaceId = workspaceItem.id;
+      state.selectedWorkspaceId = workspaceItem.id;
       state.activeSidebarPanel = 'workspaces';
       state.activeMainPanel = 'workspace';
       ensureOpenWorkspaceTabForActive();
@@ -282,7 +282,7 @@
         selectRequestTabCallback(fallbackRequest);
         return;
       }
-      state.activeWorkspaceId = null;
+      state.selectedWorkspaceId = null;
       state.activeSidebarPanel = 'workspaces';
       state.activeMainPanel = 'workspace';
       renderAll();

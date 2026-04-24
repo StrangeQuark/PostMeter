@@ -12,6 +12,7 @@ test('session store returns defaults when no session file exists', async () => {
   const session = await store.load();
 
   assert.equal(session.activeWorkspaceId, '');
+  assert.equal(session.selectedWorkspaceId, '');
   assert.equal(session.activeEnvironmentId, 'none');
   assert.deepEqual(session.openRequestTabs, []);
   assert.deepEqual(session.draftRequests, []);
@@ -24,6 +25,7 @@ test('session store saves normalized renderer session state', async () => {
 
   const saved = await store.save({
     activeWorkspaceId: 'Workspace.json',
+    selectedWorkspaceId: 'Workspace 2.json',
     activeEnvironmentId: 'environment-1',
     activeCollectionId: 'collection-1',
     activeFolderId: 'folder-1',
@@ -63,6 +65,7 @@ test('session store saves normalized renderer session state', async () => {
   });
 
   assert.equal(saved.activeWorkspaceId, 'Workspace.json');
+  assert.equal(saved.selectedWorkspaceId, 'Workspace 2.json');
   assert.equal(saved.openRequestTabs[0].currentState.method, 'POST');
   assert.equal(saved.openRequestTabs[0].currentState.url, ' https://example.test ');
   assert.equal(saved.draftRequests[0].method, 'PATCH');
@@ -79,12 +82,14 @@ test('session store can synchronously save normalized renderer session state', a
 
   const saved = store.saveSync({
     activeWorkspaceId: 'Workspace.json',
+    selectedWorkspaceId: 'Workspace.json',
     activeEnvironmentId: 'environment-1',
     openRequestTabs: [],
     draftRequests: []
   });
 
   assert.equal(saved.activeWorkspaceId, 'Workspace.json');
+  assert.equal(saved.selectedWorkspaceId, 'Workspace.json');
   const raw = JSON.parse(await fs.readFile(sessionPath, 'utf8'));
   assert.equal(raw.activeEnvironmentId, 'environment-1');
 });

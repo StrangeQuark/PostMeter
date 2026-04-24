@@ -1,11 +1,12 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { defaultWorkspace } = require('./models');
+const { defaultWorkspace, walkRequests } = require('./models');
 const {
   WorkspaceRecoveryError,
   WorkspaceStore,
   defaultWorkspacePath,
-  looksLikeNativeWorkspace
+  looksLikeNativeWorkspace,
+  normalizeWorkspace
 } = require('./workspaceStore');
 
 class WorkspaceManager {
@@ -62,13 +63,10 @@ class WorkspaceManager {
   async listWorkspaceItems() {
     const catalog = await this.ensureCatalog(this.currentWorkspaceId);
     const deletable = catalog.files.length > 1;
-    return catalog.files.map((file) => ({
-      id: file,
-      name: this.workspaceDisplayNameFromFilename(file),
-      path: this.absoluteWorkspacePath(file),
+    return Promise.all(catalog.files.map((file) => this.describeWorkspaceItem(file, {
       current: file === catalog.currentWorkspaceId,
       deletable
-    }));
+    })));
   }
 
   async save(workspace) {
@@ -87,6 +85,16 @@ class WorkspaceManager {
     return this.currentStore().exportWorkspace(workspace, exportPath);
   }
 
+  async exportWorkspaceById(workspaceId, exportPath) {
+    const catalog = await this.ensureCatalog(this.currentWorkspaceId);
+    if (!catalog.files.includes(workspaceId)) {
+      throw new Error(`Workspace "${workspaceId}" was not found.`);
+    }
+    const store = new WorkspaceStore(this.absoluteWorkspacePath(workspaceId));
+    const loaded = await store.load();
+    return store.exportWorkspace(loaded.workspace, exportPath);
+  }
+
   async importCollection(importPath) {
     return this.currentStore().importCollection(importPath);
   }
@@ -101,10 +109,7 @@ class WorkspaceManager {
     const workspace = defaultWorkspace();
     const filename = this.nextWorkspaceFilename(catalog.files, workspaceName);
     await new WorkspaceStore(this.absoluteWorkspacePath(filename)).save(workspace);
-    catalog.files = [...catalog.files, filename].sort((left, right) => left.localeCompare(right));
-    this.currentWorkspaceId = filename;
-    this.currentWorkspacePath = this.absoluteWorkspacePath(filename);
-    return this.describeCurrent(workspace);
+    return filename;
   }
 
   async renameWorkspace(workspaceId, nextName) {
@@ -262,6 +267,34 @@ class WorkspaceManager {
     const basename = path.basename(filename, this.workspaceExtension);
     return basename || 'Workspace';
   }
+
+  async describeWorkspaceItem(file, options = {}) {
+    const summary = await this.readWorkspaceSummary(file);
+    return {
+      id: file,
+      name: this.workspaceDisplayNameFromFilename(file),
+      path: this.absoluteWorkspacePath(file),
+      current: options.current === true,
+      deletable: options.deletable === true,
+      schemaVersion: summary.schemaVersion,
+      theme: summary.theme,
+      collectionCount: summary.collectionCount,
+      folderCount: summary.folderCount,
+      requestCount: summary.requestCount,
+      environmentCount: summary.environmentCount,
+      cookieCount: summary.cookieCount,
+      historyCount: summary.historyCount
+    };
+  }
+
+  async readWorkspaceSummary(file) {
+    try {
+      const parsed = JSON.parse(await fs.readFile(this.absoluteWorkspacePath(file), 'utf8'));
+      return workspaceSummary(normalizeWorkspace(parsed));
+    } catch {
+      return workspaceSummary(defaultWorkspace());
+    }
+  }
 }
 
 function workspaceFilename(name, extension) {
@@ -293,6 +326,43 @@ function safeWorkspaceFilenamePart(name) {
     .trim()
     .replace(/[. ]+$/g, '');
   return normalized || 'Workspace';
+}
+
+function workspaceSummary(workspace) {
+  let requestCount = 0;
+  for (const collection of workspace.collections || []) {
+    walkRequests(collection, () => {
+      requestCount += 1;
+    });
+  }
+  return {
+    schemaVersion: Number(workspace?.schemaVersion) || 0,
+    theme: typeof workspace?.settings?.appearance?.theme === 'string' && workspace.settings.appearance.theme.trim()
+      ? workspace.settings.appearance.theme.trim()
+      : 'system',
+    collectionCount: Array.isArray(workspace?.collections) ? workspace.collections.length : 0,
+    folderCount: countWorkspaceFolders(workspace),
+    requestCount,
+    environmentCount: Array.isArray(workspace?.environments) ? workspace.environments.length : 0,
+    cookieCount: Array.isArray(workspace?.cookies) ? workspace.cookies.length : 0,
+    historyCount: Array.isArray(workspace?.history) ? workspace.history.length : 0
+  };
+}
+
+function countWorkspaceFolders(workspace) {
+  let count = 0;
+  const walkFolder = (folder) => {
+    count += 1;
+    for (const child of folder.folders || []) {
+      walkFolder(child);
+    }
+  };
+  for (const collection of workspace.collections || []) {
+    for (const folder of collection.folders || []) {
+      walkFolder(folder);
+    }
+  }
+  return count;
 }
 
 module.exports = {

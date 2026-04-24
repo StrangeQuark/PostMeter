@@ -93,8 +93,7 @@
     bindClick(doc, 'renameWorkspacePanelButton', options.onRenameWorkspace);
     bindClick(doc, 'deleteWorkspacePanelButton', options.onDeleteWorkspace);
     bindClick(doc, 'addVariableButton', options.onAddEnvironmentVariable);
-    bindClick(doc, 'saveWorkspacePanelButton', options.onSaveWorkspace);
-    bindClick(doc, 'importWorkspacePanelButton', options.onImportWorkspace);
+    bindClick(doc, 'switchWorkspacePanelButton', options.onSwitchWorkspace);
     bindClick(doc, 'exportWorkspacePanelButton', options.onExportWorkspace);
     bindClick(doc, 'addCollectionVariableButton', options.onAddCollectionVariable);
     bindClick(doc, 'addRequestVariableButton', options.onAddRequestVariable);

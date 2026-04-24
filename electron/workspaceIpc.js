@@ -44,9 +44,9 @@ function registerWorkspaceIpc(options = {}) {
   });
 
   ipcMain.handle('workspace:create', async () => {
-    const result = await getWorkspaceStore().createWorkspace();
-    setWorkspace(result.workspace);
+    const createdWorkspaceId = await getWorkspaceStore().createWorkspace();
     refreshApplicationMenu();
+    const result = await getWorkspaceStore().describeCurrent(getWorkspace(), { createdWorkspaceId });
     assertWorkspaceLoadResultPayload(result);
     return result;
   });
@@ -115,9 +115,12 @@ function registerWorkspaceIpc(options = {}) {
     return fileOperationResult({ cancelled: false, workspace, backupPath });
   });
 
-  ipcMain.handle('workspace:export', async (_event, nextWorkspace) => {
+  ipcMain.handle('workspace:export', async (_event, nextWorkspace, workspaceId) => {
     if (nextWorkspace) {
       assertWorkspacePayload(nextWorkspace);
+    }
+    if (workspaceId != null && (typeof workspaceId !== 'string' || !workspaceId.trim())) {
+      throw new Error('workspaceId must be a non-empty string when provided.');
     }
     const result = await dialog.showSaveDialog(getMainWindow(), {
       title: 'Export PostMeter Workspace',
@@ -127,7 +130,9 @@ function registerWorkspaceIpc(options = {}) {
     if (result.canceled || !result.filePath) {
       return fileOperationResult({ cancelled: true });
     }
-    const exportedPath = await getWorkspaceStore().exportWorkspace(nextWorkspace || getWorkspace(), result.filePath);
+    const exportedPath = workspaceId
+      ? await getWorkspaceStore().exportWorkspaceById(workspaceId, result.filePath)
+      : await getWorkspaceStore().exportWorkspace(nextWorkspace || getWorkspace(), result.filePath);
     return fileOperationResult({ cancelled: false, path: exportedPath });
   });
 

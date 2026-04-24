@@ -11,6 +11,7 @@ function defaultSessionState() {
   return {
     version: SESSION_VERSION,
     activeWorkspaceId: '',
+    selectedWorkspaceId: '',
     activeEnvironmentId: 'none',
     activeCollectionId: '',
     activeFolderId: '',
@@ -31,6 +32,7 @@ function normalizeSessionState(value = {}) {
   return {
     version: SESSION_VERSION,
     activeWorkspaceId: normalizeId(value.activeWorkspaceId),
+    selectedWorkspaceId: normalizeId(value.selectedWorkspaceId),
     activeEnvironmentId: normalizeEnvironmentId(value.activeEnvironmentId),
     activeCollectionId: normalizeId(value.activeCollectionId),
     activeFolderId: normalizeId(value.activeFolderId),

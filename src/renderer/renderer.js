@@ -10,6 +10,7 @@ const TAB_PANEL_IDS = {
 let workspace = RENDERER_STATE_DEFAULTS.workspace;
 let workspacePath = RENDERER_STATE_DEFAULTS.workspacePath;
 let workspaces = RENDERER_STATE_DEFAULTS.workspaces;
+let selectedWorkspaceId = RENDERER_STATE_DEFAULTS.selectedWorkspaceId;
 let activeCollectionId = RENDERER_STATE_DEFAULTS.activeCollectionId;
 let activeFolderId = RENDERER_STATE_DEFAULTS.activeFolderId;
 let activeRequestId = RENDERER_STATE_DEFAULTS.activeRequestId;
@@ -97,6 +98,8 @@ const state = {
   set workspacePath(value) { workspacePath = value; },
   get workspaces() { return workspaces; },
   set workspaces(value) { workspaces = value; },
+  get selectedWorkspaceId() { return selectedWorkspaceId; },
+  set selectedWorkspaceId(value) { selectedWorkspaceId = value; },
   get activeCollectionId() { return activeCollectionId; },
   set activeCollectionId(value) { activeCollectionId = value; },
   get activeFolderId() { return activeFolderId; },
@@ -279,6 +282,7 @@ function bindUi() {
     onExportExamples: exportRequestExamples,
     onDeleteEnvironment: () => deleteEnvironment(),
     onDeleteWorkspace: () => { void deleteWorkspace(); },
+    onSwitchWorkspace: () => { void switchWorkspace(selectedWorkspaceId || activeWorkspaceId, { focus: 'workspace' }); },
     onAddEnvironmentVariable: addVariable,
     onAddCollectionVariable: addCollectionVariable,
     onAddRequestVariable: addRequestVariable,
@@ -690,6 +694,10 @@ function applyLoadedWorkspace(loaded, options = {}) {
   workspacePath = loaded?.path || '';
   workspaces = Array.isArray(loaded?.workspaces) ? loaded.workspaces : [];
   activeWorkspaceId = loaded?.activeWorkspaceId || workspaces[0]?.id || null;
+  const requestedSelectedWorkspaceId = options.selectedWorkspaceId || selectedWorkspaceId || activeWorkspaceId;
+  selectedWorkspaceId = workspaceListItems().some((item) => item.id === requestedSelectedWorkspaceId)
+    ? requestedSelectedWorkspaceId
+    : activeWorkspaceId || workspaces[0]?.id || null;
   lastResponse = null;
   lastLoadResult = null;
   lastRunnerResult = null;
@@ -812,7 +820,7 @@ function selectSidebarPanel(panel) {
     activeMainPanel = 'environment';
     ensureOpenEnvironmentTabForActive();
   } else if (panel === 'workspaces') {
-    activeWorkspaceId ||= workspaceListItems()[0]?.id || null;
+    selectedWorkspaceId ||= activeWorkspaceId || workspaceListItems()[0]?.id || null;
     activeMainPanel = 'workspace';
     ensureOpenWorkspaceTabForActive();
   }
@@ -924,7 +932,7 @@ async function setIncludePrereleases(includePrereleases, options = {}) {
 }
 
 function selectInitialWorkspaceItem() {
-  activeWorkspaceId ||= workspaceListItems()[0]?.id || null;
+  selectedWorkspaceId ||= activeWorkspaceId || workspaceListItems()[0]?.id || null;
   activeMainPanel = 'request';
   resetRequestTabs();
   const collection = workspace.collections[0];
@@ -1003,14 +1011,17 @@ function renderWorkspaces() {
 function workspaceNode(workspaceItem) {
   const wrapper = document.createElement('div');
   wrapper.className = 'tree-node workspace-node';
-  const button = treeButton(workspaceItem.name, activeMainPanel === 'workspace' && workspaceItem.id === activeWorkspaceId, 'WRK');
+  const button = treeButton(workspaceItem.name, activeMainPanel === 'workspace' && workspaceItem.id === selectedWorkspaceId, 'WRK');
   button.addEventListener('click', () => {
-    void switchWorkspace(workspaceItem.id, { focus: 'workspace' });
+    selectWorkspaceItem(workspaceItem.id);
   });
   const menuItems = [
-    ['Open', () => { void switchWorkspace(workspaceItem.id, { focus: 'workspace' }); }],
+    ['View Details', () => { selectWorkspaceItem(workspaceItem.id); }],
     ['Rename', () => { void renameWorkspace(workspaceItem.id); }]
   ];
+  if (workspaceItem.current !== true) {
+    menuItems.splice(1, 0, ['Switch to This Workspace', () => { void switchWorkspace(workspaceItem.id, { focus: 'workspace' }); }]);
+  }
   if (workspaceItem.deletable !== false) {
     menuItems.push(['Delete', () => { void deleteWorkspace(workspaceItem.id); }, 'danger']);
   }
@@ -1022,27 +1033,29 @@ function workspaceNode(workspaceItem) {
 function renderWorkspacePanel() {
   const workspaceItem = activeWorkspaceItem();
   $('workspaceMainTitle').textContent = workspaceItem ? workspaceDisplayName(workspaceItem) : 'Select a workspace';
+  $('switchWorkspacePanelButton').disabled = !workspaceItem || workspaceItem.current === true;
   $('renameWorkspacePanelButton').disabled = !workspaceItem;
   $('deleteWorkspacePanelButton').disabled = !workspaceItem || workspaceListItems().length <= 1;
+  $('exportWorkspacePanelButton').disabled = !workspaceItem;
   const container = $('workspaceSummary');
   container.textContent = '';
   if (!workspaceItem) {
     return;
   }
-  const requestCount = countWorkspaceRequests();
-  const folderCount = countWorkspaceFolders();
+  const summary = workspaceSummaryForItem(workspaceItem);
   const rows = [
-    ['Name', workspaceDisplayName()],
-    ['Workspace File', workspacePath || 'Default local workspace'],
+    ['Name', workspaceDisplayName(workspaceItem)],
+    ['Workspace File', workspaceItem.path || 'Default local workspace'],
+    ['Current Workspace', workspaceItem.current === true ? 'Yes' : 'No'],
     ['Saved Workspaces', String(workspaceListItems().length || 0)],
-    ['Schema Version', String(workspace.schemaVersion || '-')],
-    ['Theme', titleCaseTheme(workspace.settings?.appearance?.theme)],
-    ['Collections', String(workspace.collections?.length || 0)],
-    ['Folders', String(folderCount)],
-    ['Requests', String(requestCount)],
-    ['Environments', String(workspace.environments?.length || 0)],
-    ['Cookies', String(workspace.cookies?.length || 0)],
-    ['History Entries', String(workspace.history?.length || 0)]
+    ['Schema Version', String(summary.schemaVersion || '-')],
+    ['Theme', titleCaseTheme(summary.theme)],
+    ['Collections', String(summary.collections)],
+    ['Folders', String(summary.folders)],
+    ['Requests', String(summary.requests)],
+    ['Environments', String(summary.environments)],
+    ['Cookies', String(summary.cookies)],
+    ['History Entries', String(summary.historyEntries)]
   ];
   for (const [label, value] of rows) {
     const row = document.createElement('div');
@@ -1071,7 +1084,8 @@ function workspaceListItems() {
       name: workspaceDisplayName({ id: activeWorkspaceId || 'current', path: workspacePath, name: '' }),
       path: workspacePath,
       current: true,
-      deletable: false
+      deletable: false,
+      ...liveWorkspaceSummary()
     }];
   }
   return items.map((item) => (
@@ -1079,17 +1093,19 @@ function workspaceListItems() {
       ? {
           ...item,
           name: workspaceDisplayName(item),
-          path: workspacePath || item.path || ''
+          path: workspacePath || item.path || '',
+          current: true,
+          ...liveWorkspaceSummary()
         }
       : item
   ));
 }
 
 function activeWorkspaceItem() {
-  if (!activeWorkspaceId) {
+  if (!selectedWorkspaceId) {
     return null;
   }
-  return workspaceListItems().find((item) => item.id === activeWorkspaceId) || null;
+  return workspaceListItems().find((item) => item.id === selectedWorkspaceId) || null;
 }
 
 function workspaceDisplayName(workspaceItem = activeWorkspaceItem()) {
@@ -1101,6 +1117,51 @@ function workspaceDisplayName(workspaceItem = activeWorkspaceItem()) {
     return 'Workspace';
   }
   return filename.replace(/\.json$/i, '') || 'Workspace';
+}
+
+function selectWorkspaceItem(workspaceId) {
+  if (!workspaceId) {
+    return null;
+  }
+  const workspaceItem = workspaceListItems().find((item) => item.id === workspaceId);
+  if (!workspaceItem) {
+    return null;
+  }
+  selectedWorkspaceId = workspaceItem.id;
+  activeSidebarPanel = 'workspaces';
+  activeMainPanel = 'workspace';
+  ensureOpenWorkspaceTabForActive();
+  renderAll();
+  return workspaceItem;
+}
+
+function liveWorkspaceSummary() {
+  return {
+    schemaVersion: workspace?.schemaVersion || 0,
+    theme: workspace?.settings?.appearance?.theme || 'system',
+    collections: workspace?.collections?.length || 0,
+    folders: countWorkspaceFolders(),
+    requests: countWorkspaceRequests(),
+    environments: workspace?.environments?.length || 0,
+    cookies: workspace?.cookies?.length || 0,
+    historyEntries: workspace?.history?.length || 0
+  };
+}
+
+function workspaceSummaryForItem(workspaceItem) {
+  if (workspaceItem?.current === true) {
+    return liveWorkspaceSummary();
+  }
+  return {
+    schemaVersion: Number.isFinite(Number(workspaceItem?.schemaVersion)) ? Number(workspaceItem.schemaVersion) : 0,
+    theme: workspaceItem?.theme || 'system',
+    collections: Number.isFinite(Number(workspaceItem?.collectionCount)) ? Number(workspaceItem.collectionCount) : 0,
+    folders: Number.isFinite(Number(workspaceItem?.folderCount)) ? Number(workspaceItem.folderCount) : 0,
+    requests: Number.isFinite(Number(workspaceItem?.requestCount)) ? Number(workspaceItem.requestCount) : 0,
+    environments: Number.isFinite(Number(workspaceItem?.environmentCount)) ? Number(workspaceItem.environmentCount) : 0,
+    cookies: Number.isFinite(Number(workspaceItem?.cookieCount)) ? Number(workspaceItem.cookieCount) : 0,
+    historyEntries: Number.isFinite(Number(workspaceItem?.historyCount)) ? Number(workspaceItem.historyCount) : 0
+  };
 }
 
 function countWorkspaceRequests() {
@@ -1569,6 +1630,19 @@ async function importWorkspace() {
 }
 
 async function exportWorkspace() {
+  const workspaceItem = activeWorkspaceItem();
+  if (!workspaceItem) {
+    setStatus('Select a workspace before exporting.');
+    return null;
+  }
+  if (workspaceItem.current !== true) {
+    const exportWorkspaceBoundary = window.__postmeterExportWorkspace || window.postmeter.workspace.exportWorkspace;
+    const result = await exportWorkspaceBoundary(null, workspaceItem.id);
+    if (!result.cancelled) {
+      setStatus(`Workspace exported to ${result.path}.`);
+    }
+    return result;
+  }
   return rendererWorkflows.exportWorkspace();
 }
 
@@ -1585,13 +1659,21 @@ async function prepareForWorkspaceChange(actionLabel) {
 
 async function newWorkspace() {
   try {
-    if (!(await prepareForWorkspaceChange('creating a workspace'))) {
-      return null;
-    }
+    const previousWorkspaceIds = new Set(workspaceListItems().map((item) => item.id));
     const loaded = await window.postmeter.workspace.create();
-    applyLoadedWorkspace(loaded, { focus: 'request' });
-    setStatus(`Created workspace: ${workspaceDisplayName()}.`);
-    return loaded.workspace;
+    const createdWorkspaceId = loaded.createdWorkspaceId
+      || loaded.workspaces?.find((item) => !previousWorkspaceIds.has(item.id))?.id
+      || null;
+    workspaces = Array.isArray(loaded?.workspaces) ? loaded.workspaces : workspaces;
+    activeWorkspaceId = loaded?.activeWorkspaceId || activeWorkspaceId;
+    workspacePath = loaded?.path || workspacePath;
+    selectedWorkspaceId = createdWorkspaceId || selectedWorkspaceId || activeWorkspaceId;
+    activeSidebarPanel = 'workspaces';
+    activeMainPanel = 'workspace';
+    ensureOpenWorkspaceTabForActive();
+    renderAll();
+    setStatus(`Created workspace: ${workspaceDisplayName(activeWorkspaceItem())}.`);
+    return createdWorkspaceId;
   } catch (error) {
     const message = error.message || String(error);
     setStatus(`Workspace creation failed: ${message}`);
@@ -1610,7 +1692,7 @@ function currentPanelFocus() {
   return 'request';
 }
 
-async function renameWorkspace(workspaceId = activeWorkspaceId) {
+async function renameWorkspace(workspaceId = selectedWorkspaceId || activeWorkspaceId) {
   try {
     const workspaceItem = workspaceListItems().find((item) => item.id === workspaceId);
     if (!workspaceItem) {
@@ -1627,9 +1709,15 @@ async function renameWorkspace(workspaceId = activeWorkspaceId) {
     if (renamingActiveWorkspace) {
       await persistWorkspace(false);
     }
+    const previousWorkspaceIds = new Set(workspaceListItems().map((item) => item.id));
     const renameBoundary = window.__postmeterRenameWorkspace || window.postmeter.workspace.rename;
     const loaded = await renameBoundary(workspaceId, nextName);
-    applyLoadedWorkspace(loaded, { focus: renamingActiveWorkspace ? 'workspace' : currentPanelFocus() });
+    const renamedWorkspaceId = loaded.workspaces?.find((item) => item.id !== workspaceId && !previousWorkspaceIds.has(item.id))?.id
+      || (renamingActiveWorkspace ? loaded.activeWorkspaceId : workspaceId);
+    applyLoadedWorkspace(loaded, {
+      focus: renamingActiveWorkspace || activeMainPanel === 'workspace' ? 'workspace' : currentPanelFocus(),
+      selectedWorkspaceId: workspaceId === selectedWorkspaceId ? renamedWorkspaceId : selectedWorkspaceId
+    });
     setStatus(renamingActiveWorkspace ? `Renamed workspace: ${workspaceDisplayName()}.` : 'Workspace renamed.');
     return loaded.workspace;
   } catch (error) {
@@ -1648,17 +1736,13 @@ async function switchWorkspace(workspaceId, options = {}) {
       return null;
     }
     if (workspaceId === activeWorkspaceId) {
-      activeSidebarPanel = 'workspaces';
-      activeMainPanel = 'workspace';
-      ensureOpenWorkspaceTabForActive();
-      renderAll();
-      return workspaceItem;
+      return selectWorkspaceItem(workspaceId);
     }
     if (!(await prepareForWorkspaceChange('switching workspaces'))) {
       return null;
     }
     const loaded = await window.postmeter.workspace.switch(workspaceId);
-    applyLoadedWorkspace(loaded, { focus: options.focus || 'workspace' });
+    applyLoadedWorkspace(loaded, { focus: options.focus || 'workspace', selectedWorkspaceId: workspaceId });
     setStatus(`Switched to workspace: ${workspaceDisplayName()}.`);
     return loaded.workspace;
   } catch (error) {
@@ -1669,7 +1753,7 @@ async function switchWorkspace(workspaceId, options = {}) {
   }
 }
 
-async function deleteWorkspace(workspaceId = activeWorkspaceId) {
+async function deleteWorkspace(workspaceId = selectedWorkspaceId || activeWorkspaceId) {
   try {
     const workspaceItem = workspaceListItems().find((item) => item.id === workspaceId);
     if (!workspaceItem) {
@@ -1680,14 +1764,17 @@ async function deleteWorkspace(workspaceId = activeWorkspaceId) {
       setStatus('At least one workspace must remain.');
       return null;
     }
-    if (workspaceId !== activeWorkspaceId && !(await prepareForWorkspaceChange('deleting a workspace'))) {
+    if (workspaceId === activeWorkspaceId && !(await prepareForWorkspaceChange('deleting a workspace'))) {
       return null;
     }
     if (!confirm(`Delete "${workspaceItem.name}"? This cannot be recovered.`)) {
       return null;
     }
     const loaded = await window.postmeter.workspace.delete(workspaceId);
-    applyLoadedWorkspace(loaded, { focus: 'workspace' });
+    const nextSelectedWorkspaceId = workspaceId === selectedWorkspaceId
+      ? (loaded.workspaces?.find((item) => item.id !== workspaceId)?.id || loaded.activeWorkspaceId)
+      : selectedWorkspaceId;
+    applyLoadedWorkspace(loaded, { focus: 'workspace', selectedWorkspaceId: nextSelectedWorkspaceId });
     setStatus(`Deleted workspace: ${workspaceItem.name}.`);
     return loaded.workspace;
   } catch (error) {
@@ -1744,6 +1831,7 @@ async function exportCollection(collection = activeCollection(), format = 'postm
 
 function newCollection() {
   collectRequestFromEditor();
+  activeSidebarPanel = 'collections';
   activeMainPanel = 'request';
   const collection = {
     id: crypto.randomUUID(),

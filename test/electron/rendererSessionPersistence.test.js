@@ -10,6 +10,7 @@ const {
 test('renderer session persistence serializes active tabs, drafts, and dirty tab state', () => {
   const state = createRendererState();
   state.activeWorkspaceId = 'Workspace.json';
+  state.selectedWorkspaceId = 'Workspace 2.json';
   state.activeEnvironmentId = 'environment-1';
   state.activeCollectionId = 'collection-1';
   state.activeRequestId = 'request-1';
@@ -70,6 +71,7 @@ test('renderer session persistence serializes active tabs, drafts, and dirty tab
 
   assert.equal(session.activeRequestTab, 'headers');
   assert.equal(session.activeResultsTab, 'runner');
+  assert.equal(session.selectedWorkspaceId, 'Workspace 2.json');
   assert.equal(session.openRequestTabs[0].currentState.url, 'https://example.test');
   assert.equal(session.openRequestTabs[1].currentState, null);
   assert.equal(session.openEnvironmentTabs[0].currentState.name, 'Dirty Environment');
@@ -97,9 +99,11 @@ test('renderer session persistence restores dirty saved tabs, created-unsaved en
     ]
   };
   state.activeWorkspaceId = 'Workspace.json';
+  state.selectedWorkspaceId = 'Workspace 2.json';
 
   const session = {
     activeWorkspaceId: 'Workspace.json',
+    selectedWorkspaceId: 'Workspace 2.json',
     activeEnvironmentId: 'environment-2',
     activeCollectionId: 'collection-1',
     activeRequestId: 'request-2',
@@ -160,7 +164,10 @@ test('renderer session persistence restores dirty saved tabs, created-unsaved en
   const restored = restoreRendererSession({
     state,
     session,
-    workspaceListItems: () => [{ id: 'Workspace.json', name: 'Workspace', path: '/tmp/Workspace.json', current: true, deletable: false }],
+    workspaceListItems: () => [
+      { id: 'Workspace.json', name: 'Workspace', path: '/tmp/Workspace.json', current: true, deletable: false },
+      { id: 'Workspace 2.json', name: 'Workspace 2', path: '/tmp/Workspace 2.json', current: false, deletable: true }
+    ],
     findFolder,
     findRequest
   });
@@ -172,6 +179,7 @@ test('renderer session persistence restores dirty saved tabs, created-unsaved en
   assert.equal(state.draftRequests.has('draft-1'), true);
   assert.equal(state.activeCollectionId, 'collection-1');
   assert.equal(state.activeRequestId, 'request-2');
+  assert.equal(state.selectedWorkspaceId, 'Workspace 2.json');
   assert.equal(state.activeEnvironmentId, 'environment-2');
   assert.equal(state.activeSidebarPanel, 'environments');
   assert.equal(state.activeMainPanel, 'environment');
