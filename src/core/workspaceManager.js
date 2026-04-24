@@ -73,6 +73,10 @@ class WorkspaceManager {
     return this.currentStore().save(workspace);
   }
 
+  saveSync(workspace) {
+    return this.currentStore().saveSync(workspace);
+  }
+
   async backupCurrentWorkspace(reason = 'manual.backup') {
     return this.currentStore().backupCurrentWorkspace(reason);
   }
@@ -180,14 +184,18 @@ class WorkspaceManager {
 
   async ensureCatalog(preferredWorkspaceId = '') {
     await this.removeLegacyManifestFile();
+    const desiredWorkspaceId = String(preferredWorkspaceId || this.currentWorkspaceId || '').trim();
     const files = await this.discoverWorkspaceFiles();
+    if (desiredWorkspaceId && !files.includes(desiredWorkspaceId) && await this.isExistingWorkspaceFileCandidate(desiredWorkspaceId)) {
+      files.push(desiredWorkspaceId);
+      files.sort((left, right) => left.localeCompare(right));
+    }
     if (!files.length) {
       const workspace = defaultWorkspace();
       const filename = workspaceFilename('Local Workspace', this.workspaceExtension);
       await new WorkspaceStore(this.absoluteWorkspacePath(filename)).save(workspace);
       files.push(filename);
     }
-    const desiredWorkspaceId = String(preferredWorkspaceId || this.currentWorkspaceId || '').trim();
     return {
       currentWorkspaceId: files.includes(desiredWorkspaceId) ? desiredWorkspaceId : files[0],
       files
@@ -230,6 +238,24 @@ class WorkspaceManager {
     try {
       const parsed = JSON.parse(await fs.readFile(this.absoluteWorkspacePath(filename), 'utf8'));
       return looksLikeNativeWorkspace(parsed);
+    } catch {
+      return false;
+    }
+  }
+
+  async isExistingWorkspaceFileCandidate(filename) {
+    if (typeof filename !== 'string' || !filename.trim().endsWith(this.workspaceExtension)) {
+      return false;
+    }
+    if (path.basename(filename) !== filename) {
+      return false;
+    }
+    if (filename === path.basename(this.legacyManifestPath)) {
+      return false;
+    }
+    try {
+      const stats = await fs.stat(this.absoluteWorkspacePath(filename));
+      return stats.isFile();
     } catch {
       return false;
     }

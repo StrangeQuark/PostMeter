@@ -43,7 +43,7 @@ test('renderer workflows prompt to save an active draft before saving the worksp
   assert.equal(persisted, 0);
 });
 
-test('renderer workflows persist the workspace and clear dirty state', async () => {
+test('renderer workflows persist the workspace and clear dirty state for explicit full saves', async () => {
   const state = createRendererState();
   state.workspace = {
     collections: [{ id: 'collection-1', name: 'Requests' }],
@@ -75,7 +75,7 @@ test('renderer workflows persist the workspace and clear dirty state', async () 
     }
   });
 
-  const result = await workflows.persistWorkspace(false);
+  const result = await workflows.persistWorkspace(false, { scope: 'all' });
 
   assert.equal(result, true);
   assert.equal(collectedRequest, 1);
@@ -83,6 +83,166 @@ test('renderer workflows persist the workspace and clear dirty state', async () 
   assert.equal(collectedSettings, 1);
   assert.equal(clearedDirty, 1);
   assert.equal(state.workspace.persisted, true);
+});
+
+test('renderer workflows only persist the active request tab on a normal save', async () => {
+  const state = createRendererState();
+  const requestOneSaved = { id: 'request-1', name: 'Saved Request One', method: 'GET', url: 'https://one.example.test' };
+  const requestTwoSaved = { id: 'request-2', name: 'Saved Request Two', method: 'GET', url: 'https://two.example.test' };
+  const requestOneLive = { ...requestOneSaved, name: 'Edited Request One' };
+  const requestTwoLive = { ...requestTwoSaved, name: 'Edited Request Two' };
+  state.workspace = {
+    collections: [
+      {
+        id: 'collection-1',
+        name: 'Requests',
+        variables: [{ enabled: true, key: 'baseUrl', value: 'https://edited.example.test' }],
+        requests: [requestOneLive, requestTwoLive],
+        folders: []
+      }
+    ],
+    environments: [],
+    cookies: [{ enabled: true, name: 'session', value: 'edited', domain: 'example.test', path: '/' }],
+    settings: {}
+  };
+  state.activeMainPanel = 'request';
+  state.activeCollectionId = 'collection-1';
+  state.activeRequestId = 'request-1';
+  state.openRequestTabs = [
+    {
+      key: 'request:collection-1:request-1',
+      collectionId: 'collection-1',
+      requestId: 'request-1',
+      dirty: true,
+      createdUnsaved: false,
+      snapshot: JSON.stringify(requestOneSaved)
+    },
+    {
+      key: 'request:collection-1:request-2',
+      collectionId: 'collection-1',
+      requestId: 'request-2',
+      dirty: true,
+      createdUnsaved: false,
+      snapshot: JSON.stringify(requestTwoSaved)
+    }
+  ];
+  state.collectionDirtySnapshots.set('collection-1', JSON.stringify([{ enabled: true, key: 'baseUrl', value: 'https://saved.example.test' }]));
+  state.collectionDirtyOwners.set('collection-1', 'request:collection-1:request-2');
+  state.cookieJarDirtySnapshot = JSON.stringify([{ enabled: true, name: 'session', value: 'saved', domain: 'example.test', path: '/' }]);
+  state.cookieJarDirtyOwner = 'request:collection-1:request-2';
+  const savedWorkspaces = [];
+  let tabRenders = 0;
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => state.workspace.collections[0],
+    activeEnvironment: () => null,
+    activeRequest: () => state.workspace.collections[0].requests[0],
+    collectEnvironmentFromEditor: () => {},
+    collectRequestFromEditor: () => {},
+    collectSettingsFromEditor: () => {},
+    doc: createDocument(),
+    renderRequestTabs: () => { tabRenders += 1; },
+    runFormatting: createRunFormatting(),
+    windowObject: {
+      postmeter: {
+        workspace: {
+          save: async (workspace) => {
+            savedWorkspaces.push(structuredClone(workspace));
+            return workspace;
+          }
+        }
+      }
+    }
+  });
+
+  const result = await workflows.persistWorkspace(false);
+
+  assert.equal(result, true);
+  assert.equal(savedWorkspaces.length, 1);
+  assert.equal(savedWorkspaces[0].collections[0].requests[0].name, 'Edited Request One');
+  assert.equal(savedWorkspaces[0].collections[0].requests[1].name, 'Saved Request Two');
+  assert.deepEqual(savedWorkspaces[0].collections[0].variables, [{ enabled: true, key: 'baseUrl', value: 'https://saved.example.test' }]);
+  assert.deepEqual(savedWorkspaces[0].cookies, [{ enabled: true, name: 'session', value: 'saved', domain: 'example.test', path: '/' }]);
+  assert.equal(state.workspace.collections[0].requests[0].name, 'Edited Request One');
+  assert.equal(state.workspace.collections[0].requests[1].name, 'Edited Request Two');
+  assert.equal(state.openRequestTabs[0].dirty, false);
+  assert.equal(state.openRequestTabs[0].snapshot, JSON.stringify(requestOneLive));
+  assert.equal(state.openRequestTabs[1].dirty, true);
+  assert.equal(state.collectionDirtySnapshots.size, 1);
+  assert.equal(state.collectionDirtyOwners.get('collection-1'), 'request:collection-1:request-2');
+  assert.notEqual(state.cookieJarDirtySnapshot, null);
+  assert.equal(state.cookieJarDirtyOwner, 'request:collection-1:request-2');
+  assert.equal(tabRenders, 1);
+});
+
+test('renderer workflows only persist the active environment tab on a normal save', async () => {
+  const state = createRendererState();
+  const environmentOneSaved = { id: 'environment-1', name: 'Saved Env One', variables: [{ enabled: true, key: 'baseUrl', value: 'https://saved-one.example.test' }] };
+  const environmentTwoSaved = { id: 'environment-2', name: 'Saved Env Two', variables: [{ enabled: true, key: 'baseUrl', value: 'https://saved-two.example.test' }] };
+  const environmentOneLive = { ...environmentOneSaved, name: 'Edited Env One' };
+  const environmentTwoLive = { ...environmentTwoSaved, name: 'Edited Env Two' };
+  state.workspace = {
+    collections: [],
+    environments: [environmentOneLive, environmentTwoLive],
+    settings: {}
+  };
+  state.activeMainPanel = 'environment';
+  state.activeEnvironmentId = 'environment-1';
+  state.openEnvironmentTabs = [
+    {
+      key: 'environment:environment-1',
+      environmentId: 'environment-1',
+      dirty: true,
+      createdUnsaved: false,
+      snapshot: JSON.stringify(environmentOneSaved)
+    },
+    {
+      key: 'environment:environment-2',
+      environmentId: 'environment-2',
+      dirty: true,
+      createdUnsaved: false,
+      snapshot: JSON.stringify(environmentTwoSaved)
+    }
+  ];
+  const savedWorkspaces = [];
+  let tabRenders = 0;
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => state.workspace.environments[0],
+    activeRequest: () => null,
+    collectEnvironmentFromEditor: () => {},
+    collectRequestFromEditor: () => {},
+    collectSettingsFromEditor: () => {},
+    doc: createDocument(),
+    renderRequestTabs: () => { tabRenders += 1; },
+    runFormatting: createRunFormatting(),
+    windowObject: {
+      postmeter: {
+        workspace: {
+          save: async (workspace) => {
+            savedWorkspaces.push(structuredClone(workspace));
+            return workspace;
+          }
+        }
+      }
+    }
+  });
+
+  const result = await workflows.persistWorkspace(false);
+
+  assert.equal(result, true);
+  assert.equal(savedWorkspaces.length, 1);
+  assert.equal(savedWorkspaces[0].environments[0].name, 'Edited Env One');
+  assert.equal(savedWorkspaces[0].environments[1].name, 'Saved Env Two');
+  assert.equal(state.workspace.environments[0].name, 'Edited Env One');
+  assert.equal(state.workspace.environments[1].name, 'Edited Env Two');
+  assert.equal(state.openEnvironmentTabs[0].dirty, false);
+  assert.equal(state.openEnvironmentTabs[0].snapshot, JSON.stringify(environmentOneLive));
+  assert.equal(state.openEnvironmentTabs[1].dirty, true);
+  assert.equal(tabRenders, 1);
 });
 
 test('renderer workflows import workspaces as managed entries without destructive confirmation', async () => {
@@ -132,6 +292,140 @@ test('renderer workflows import workspaces as managed entries without destructiv
   assert.equal(appliedResult, importedResult);
   assert.deepEqual(appliedOptions, { focus: 'workspace', selectedWorkspaceId: 'Imported Workspace.json' });
   assert.equal(status, 'Workspace imported.');
+});
+
+test('renderer workflows update the workspace catalog without replacing the current workspace when import keeps the active workspace loaded', async () => {
+  const state = createRendererState();
+  const currentWorkspace = { collections: [{ id: 'collection-1', name: 'Current' }], environments: [], settings: {} };
+  state.workspace = currentWorkspace;
+  state.activeWorkspaceId = 'Local Workspace.json';
+  let appliedCatalogResult = null;
+  let appliedCatalogOptions = null;
+  let appliedLoadedCalls = 0;
+
+  const workflows = createRendererWorkflows({
+    state,
+    applyLoadedWorkspace: () => { appliedLoadedCalls += 1; },
+    applyWorkspaceCatalogUpdate: (result, options) => {
+      appliedCatalogResult = result;
+      appliedCatalogOptions = options;
+    },
+    doc: createDocument(),
+    runFormatting: createRunFormatting(),
+    windowObject: {
+      postmeter: {
+        workspace: {
+          importWorkspace: async () => ({
+            cancelled: false,
+            workspace: { collections: [], environments: [], settings: {} },
+            path: '/tmp/Local Workspace.json',
+            activeWorkspaceId: 'Local Workspace.json',
+            createdWorkspaceId: 'Imported Workspace.json',
+            workspaces: [
+              { id: 'Local Workspace.json', name: 'Local Workspace', current: true, deletable: true },
+              { id: 'Imported Workspace.json', name: 'Imported Workspace', current: false, deletable: true }
+            ]
+          })
+        }
+      }
+    }
+  });
+
+  await workflows.importWorkspace();
+
+  assert.equal(appliedLoadedCalls, 0);
+  assert.equal(appliedCatalogResult?.activeWorkspaceId, 'Local Workspace.json');
+  assert.deepEqual(appliedCatalogOptions, { focus: 'workspace', selectedWorkspaceId: 'Imported Workspace.json' });
+  assert.equal(state.workspace, currentWorkspace);
+});
+
+test('renderer workflows collect the active environment editor before importing a workspace catalog update', async () => {
+  const state = createRendererState();
+  state.workspace = { collections: [], environments: [{ id: 'environment-1', name: 'Current Environment', variables: [] }], settings: {} };
+  state.activeWorkspaceId = 'Local Workspace.json';
+  state.activeMainPanel = 'environment';
+  let collectedEnvironment = 0;
+  let appliedCatalogResult = null;
+
+  const workflows = createRendererWorkflows({
+    state,
+    applyWorkspaceCatalogUpdate: (result) => {
+      appliedCatalogResult = result;
+    },
+    collectEnvironmentFromEditor: () => { collectedEnvironment += 1; },
+    doc: createDocument(),
+    runFormatting: createRunFormatting(),
+    windowObject: {
+      postmeter: {
+        workspace: {
+          importWorkspace: async () => ({
+            cancelled: false,
+            workspace: state.workspace,
+            path: '/tmp/Local Workspace.json',
+            activeWorkspaceId: 'Local Workspace.json',
+            createdWorkspaceId: 'Imported Workspace.json',
+            workspaces: [
+              { id: 'Local Workspace.json', name: 'Local Workspace', current: true, deletable: true },
+              { id: 'Imported Workspace.json', name: 'Imported Workspace', current: false, deletable: true }
+            ]
+          })
+        }
+      }
+    }
+  });
+
+  await workflows.importWorkspace();
+
+  assert.equal(collectedEnvironment, 1);
+  assert.equal(appliedCatalogResult?.createdWorkspaceId, 'Imported Workspace.json');
+});
+
+test('renderer workflows collect the active request editor before importing a collection', async () => {
+  const state = createRendererState();
+  const pendingRequest = { id: 'request-1', name: 'Pending Request' };
+  state.workspace = { collections: [], environments: [], settings: {} };
+  state.activeMainPanel = 'request';
+  const collectionCountsAtCollect = [];
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => state.workspace.collections[0] || null,
+    activeEnvironment: () => null,
+    activeRequest: () => state.workspace.collections[0]?.requests?.[0] || pendingRequest,
+    collectRequestFromEditor: () => {
+      collectionCountsAtCollect.push(state.workspace.collections.length);
+    },
+    doc: createDocument(),
+    renderAll: () => {},
+    runFormatting: createRunFormatting(),
+    selectFirstRequest: () => {
+      state.activeRequestId = 'imported-request-1';
+    },
+    uniqueName: (value) => value,
+    windowObject: {
+      postmeter: {
+        collection: {
+          importCollection: async () => ({
+            cancelled: false,
+            collection: {
+              id: 'collection-1',
+              name: 'Imported Collection',
+              requests: [{ id: 'imported-request-1', name: 'Imported Request', url: '', method: 'GET' }],
+              folders: []
+            }
+          })
+        },
+        workspace: {
+          save: async (workspace) => workspace
+        }
+      }
+    }
+  });
+
+  await workflows.importCollection();
+
+  assert.deepEqual(collectionCountsAtCollect, [0, 1, 1]);
+  assert.equal(state.workspace.collections.length, 1);
 });
 
 test('renderer workflows use the collection export modal callback when exporting from the dropdown', async () => {
@@ -314,16 +608,395 @@ test('renderer workflows fall back to prompt text selection when no export modal
   assert.equal(exportedCollection, collectionTwo);
 });
 
+test('renderer workflows scope captured responses to the active request', async () => {
+  const state = createRendererState();
+  const request = {
+    id: 'request-1',
+    name: 'Get Widgets',
+    method: 'GET',
+    url: 'https://example.test/widgets',
+    scripts: { preRequest: '', tests: '' }
+  };
+  state.workspace = { collections: [], environments: [], history: [], settings: {} };
+  const doc = createDocument();
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => request,
+    collectRequestFromEditor: () => {},
+    displayResponse: () => {},
+    doc,
+    renderAuthEditor: () => {},
+    renderCookieJarEditor: () => {},
+    renderHistory: () => {},
+    runFormatting: createRunFormatting(),
+    windowObject: {
+      postmeter: {
+        request: {
+          validate: async () => [],
+          send: async () => ({
+            statusCode: 200,
+            finalUrl: 'https://example.test/widgets',
+            durationMillis: 15
+          })
+        },
+        workspace: {
+          save: async (workspace) => workspace
+        }
+      }
+    }
+  });
+
+  await workflows.sendActiveRequest();
+
+  assert.equal(state.lastResponse.requestId, 'request-1');
+  assert.equal(doc.getElementById('captureResponseExampleButton').disabled, false);
+});
+
+test('renderer workflows apply single-request completions to the request that started the send', async () => {
+  const state = createRendererState();
+  const requestOne = {
+    id: 'request-1',
+    name: 'Get Widgets',
+    method: 'GET',
+    url: 'https://example.test/widgets',
+    auth: { type: 'oauth2', grantType: 'clientCredentials', accessToken: 'stale-token' },
+    variables: [{ enabled: true, key: 'localToken', value: 'old-local' }],
+    scripts: { preRequest: '', tests: '' }
+  };
+  const requestTwo = {
+    id: 'request-2',
+    name: 'Get Billing',
+    method: 'GET',
+    url: 'https://example.test/billing',
+    auth: { type: 'oauth2', grantType: 'clientCredentials', accessToken: 'current-token' },
+    variables: [{ enabled: true, key: 'localToken', value: 'other-local' }],
+    scripts: { preRequest: '', tests: '' }
+  };
+  const collectionOne = {
+    id: 'collection-1',
+    name: 'Widgets',
+    variables: [{ enabled: true, key: 'collectionToken', value: 'old-collection' }],
+    requests: [requestOne],
+    folders: []
+  };
+  const collectionTwo = {
+    id: 'collection-2',
+    name: 'Billing',
+    variables: [{ enabled: true, key: 'collectionToken', value: 'other-collection' }],
+    requests: [requestTwo],
+    folders: []
+  };
+  const environmentOne = {
+    id: 'environment-1',
+    name: 'Widgets Env',
+    variables: [{ enabled: true, key: 'envToken', value: 'old-env' }]
+  };
+  const environmentTwo = {
+    id: 'environment-2',
+    name: 'Billing Env',
+    variables: [{ enabled: true, key: 'envToken', value: 'other-env' }]
+  };
+  state.workspace = {
+    collections: [collectionOne, collectionTwo],
+    environments: [environmentOne, environmentTwo],
+    history: [],
+    cookies: [],
+    settings: {}
+  };
+  state.activeCollectionId = collectionOne.id;
+  state.activeRequestId = requestOne.id;
+  state.activeEnvironmentId = environmentOne.id;
+  const doc = createDocument();
+  let authRenderCalls = 0;
+  let cookieJarRenders = 0;
+  let historyRenders = 0;
+  let displayedResponse = null;
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => activeCollectionForState(state),
+    activeEnvironment: () => activeEnvironmentForState(state),
+    activeRequest: () => activeRequestForState(state),
+    collectRequestFromEditor: () => {},
+    displayResponse: (response) => { displayedResponse = response; },
+    doc,
+    renderAuthEditor: () => { authRenderCalls += 1; },
+    renderCollectionVariablesEditor: () => {},
+    renderCookieJarEditor: () => { cookieJarRenders += 1; },
+    renderEnvironmentEditor: () => {},
+    renderHistory: () => { historyRenders += 1; },
+    renderRequestTabs: () => {},
+    renderRequestVariablePairs: () => {},
+    renderVariablePreview: () => {},
+    runFormatting: createRunFormatting(),
+    windowObject: {
+      postmeter: {
+        request: {
+          validate: async () => [],
+          send: async () => {
+            state.activeCollectionId = collectionTwo.id;
+            state.activeRequestId = requestTwo.id;
+            state.activeEnvironmentId = environmentTwo.id;
+            return {
+              updatedAuth: { type: 'oauth2', grantType: 'clientCredentials', accessToken: 'fresh-token' },
+              updatedCookies: [{ name: 'session', value: 'ready', domain: 'example.test', path: '/' }],
+              environment: {
+                id: environmentOne.id,
+                variables: [{ enabled: true, key: 'envToken', value: 'fresh-env' }]
+              },
+              collectionVariables: [{ enabled: true, key: 'collectionToken', value: 'fresh-collection' }],
+              localVariables: [{ enabled: true, key: 'localToken', value: 'fresh-local' }],
+              statusCode: 200,
+              finalUrl: 'https://example.test/widgets',
+              durationMillis: 21
+            };
+          }
+        },
+        workspace: {
+          save: async (workspace) => workspace
+        }
+      }
+    }
+  });
+
+  await workflows.sendActiveRequest();
+
+  assert.equal(requestOne.auth.accessToken, 'fresh-token');
+  assert.equal(requestTwo.auth.accessToken, 'current-token');
+  assert.equal(collectionOne.variables[0].value, 'fresh-collection');
+  assert.equal(collectionTwo.variables[0].value, 'other-collection');
+  assert.equal(requestOne.variables[0].value, 'fresh-local');
+  assert.equal(requestTwo.variables[0].value, 'other-local');
+  assert.equal(environmentOne.variables[0].value, 'fresh-env');
+  assert.equal(environmentTwo.variables[0].value, 'other-env');
+  assert.equal(authRenderCalls, 0);
+  assert.equal(cookieJarRenders, 1);
+  assert.equal(historyRenders, 1);
+  assert.equal(displayedResponse.statusCode, 200);
+  assert.equal(state.lastResponse.requestId, requestOne.id);
+  assert.equal(doc.getElementById('captureResponseExampleButton').disabled, true);
+  assert.equal(state.workspace.history[0].method, 'GET');
+  assert.equal(state.workspace.history[0].url, 'https://example.test/widgets');
+});
+
+test('renderer workflows persist OAuth results to the request that started the flow without recollecting a different active request', async () => {
+  const state = createRendererState();
+  const requestOne = {
+    id: 'request-1',
+    name: 'Authorize Widgets',
+    method: 'GET',
+    url: 'https://example.test/widgets',
+    auth: {
+      type: 'oauth2',
+      grantType: 'authorizationCode',
+      authorizationUrl: 'https://auth.example.test/authorize',
+      tokenUrl: 'https://auth.example.test/token',
+      clientId: 'widget-client',
+      accessToken: ''
+    },
+    scripts: { preRequest: '', tests: '' }
+  };
+  const requestTwo = {
+    id: 'request-2',
+    name: 'Authorize Billing',
+    method: 'GET',
+    url: 'https://example.test/billing',
+    auth: {
+      type: 'oauth2',
+      grantType: 'authorizationCode',
+      authorizationUrl: 'https://auth.example.test/authorize',
+      tokenUrl: 'https://auth.example.test/token',
+      clientId: 'billing-client',
+      accessToken: 'billing-token'
+    },
+    scripts: { preRequest: '', tests: '' }
+  };
+  const collection = {
+    id: 'collection-1',
+    name: 'OAuth',
+    variables: [],
+    requests: [requestOne, requestTwo],
+    folders: []
+  };
+  const environment = { id: 'environment-1', name: 'OAuth Env', variables: [] };
+  state.workspace = {
+    collections: [collection],
+    environments: [environment],
+    history: [],
+    cookies: [],
+    settings: {}
+  };
+  state.activeCollectionId = collection.id;
+  state.activeRequestId = requestOne.id;
+  state.activeEnvironmentId = environment.id;
+  const doc = createDocument();
+  doc.getElementById('authOauthRedirectStrategySelect').value = 'system';
+  let collectedRequests = 0;
+  let authRenderCalls = 0;
+  const savedWorkspaces = [];
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => activeCollectionForState(state),
+    activeEnvironment: () => activeEnvironmentForState(state),
+    activeRequest: () => activeRequestForState(state),
+    collectRequestFromEditor: () => { collectedRequests += 1; },
+    doc,
+    renderAuthEditor: () => { authRenderCalls += 1; },
+    renderCollections: () => {},
+    renderRequestTabs: () => {},
+    runFormatting: createRunFormatting(),
+    windowObject: {
+      postmeter: {
+        oauth: {
+          startPkceFlow: async () => {
+            state.activeRequestId = requestTwo.id;
+            return {
+              cancelled: false,
+              auth: {
+                ...requestOne.auth,
+                accessToken: 'fresh-oauth-token'
+              }
+            };
+          }
+        },
+        workspace: {
+          save: async (workspace) => {
+            savedWorkspaces.push(structuredClone(workspace));
+            return workspace;
+          }
+        }
+      }
+    }
+  });
+
+  await workflows.startPkceFlow();
+
+  assert.equal(collectedRequests, 1);
+  assert.equal(authRenderCalls, 0);
+  assert.equal(savedWorkspaces.length, 1);
+  assert.equal(requestOne.auth.accessToken, 'fresh-oauth-token');
+  assert.equal(requestTwo.auth.accessToken, 'billing-token');
+  assert.equal(savedWorkspaces[0].collections[0].requests[0].auth.accessToken, 'fresh-oauth-token');
+  assert.equal(savedWorkspaces[0].collections[0].requests[1].auth.accessToken, 'billing-token');
+});
+
+test('renderer workflows apply load-test cookie updates back into the renderer workspace state', async () => {
+  const state = createRendererState();
+  const request = {
+    id: 'request-1',
+    name: 'Load Widgets',
+    method: 'GET',
+    url: 'https://example.test/widgets',
+    cookieJar: { enabled: true, storeResponses: true },
+    scripts: { preRequest: '', tests: '' }
+  };
+  state.workspace = { collections: [], environments: [], history: [], cookies: [], settings: {} };
+  const doc = createDocument();
+  doc.getElementById('loadConcurrency').value = '1';
+  let cookieRenders = 0;
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => request,
+    collectRequestFromEditor: () => {},
+    doc,
+    loadConfigFromControls: () => ({ totalRequests: 2 }),
+    renderCookieJarEditor: () => { cookieRenders += 1; },
+    runFormatting: createRunFormatting(),
+    setStatus: () => {},
+    windowObject: {
+      postmeter: {
+        request: {
+          validate: async () => []
+        },
+        loadTest: {
+          start: async () => ({
+            totalRequests: 2,
+            successfulRequests: 2,
+            failedRequests: 0,
+            cancelled: false,
+            cookies: [{ name: 'loadSession', value: 'ready', domain: 'example.test', path: '/' }]
+          })
+        },
+        workspace: {
+          save: async (workspace) => workspace
+        }
+      }
+    }
+  });
+
+  await workflows.runLoadTest();
+
+  assert.equal(state.workspace.cookies.length, 1);
+  assert.equal(state.workspace.cookies[0].name, 'loadSession');
+  assert.equal(cookieRenders, 1);
+});
+
+test('renderer workflows clear stale captured responses after a send failure', async () => {
+  const state = createRendererState();
+  const request = {
+    id: 'request-1',
+    name: 'Get Widgets',
+    method: 'GET',
+    url: 'https://example.test/widgets',
+    scripts: { preRequest: '', tests: '' }
+  };
+  state.workspace = { collections: [], environments: [], history: [], settings: {} };
+  state.lastResponse = { requestId: 'request-1', statusCode: 200 };
+  const doc = createDocument();
+  doc.getElementById('captureResponseExampleButton').disabled = false;
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => request,
+    collectRequestFromEditor: () => {},
+    doc,
+    notifyUser: () => {},
+    runFormatting: createRunFormatting(),
+    setStatus: () => {},
+    windowObject: {
+      postmeter: {
+        request: {
+          validate: async () => [],
+          send: async () => {
+            throw new Error('network failed');
+          }
+        },
+        workspace: {
+          save: async (workspace) => workspace
+        }
+      }
+    }
+  });
+
+  await workflows.sendActiveRequest();
+
+  assert.equal(state.lastResponse, null);
+  assert.equal(doc.getElementById('captureResponseExampleButton').disabled, true);
+});
+
 function createDocument() {
+  const elements = new Map();
   return {
-    getElementById() {
-      return {
-        disabled: false,
-        hidden: true,
-        textContent: '',
-        value: '',
-        checked: false
-      };
+    getElementById(id) {
+      if (!elements.has(id)) {
+        elements.set(id, {
+          disabled: false,
+          hidden: true,
+          textContent: '',
+          value: '',
+          checked: false
+        });
+      }
+      return elements.get(id);
     }
   };
 }
@@ -335,4 +1008,50 @@ function createRunFormatting() {
     oauthProgressDetail: () => '',
     oauthStatusText: () => ''
   };
+}
+
+function activeCollectionForState(state) {
+  return (state.workspace?.collections || []).find((collection) => collection.id === state.activeCollectionId) || null;
+}
+
+function activeEnvironmentForState(state) {
+  return (state.workspace?.environments || []).find((environment) => environment.id === state.activeEnvironmentId) || null;
+}
+
+function activeRequestForState(state) {
+  const collection = activeCollectionForState(state);
+  if (!collection || !state.activeRequestId) {
+    return null;
+  }
+  return findRequestInCollection(collection, state.activeRequestId);
+}
+
+function findRequestInCollection(collection, requestId) {
+  for (const request of collection.requests || []) {
+    if (request.id === requestId) {
+      return request;
+    }
+  }
+  for (const folder of collection.folders || []) {
+    const found = findRequestInFolder(folder, requestId);
+    if (found) {
+      return found;
+    }
+  }
+  return null;
+}
+
+function findRequestInFolder(folder, requestId) {
+  for (const request of folder.requests || []) {
+    if (request.id === requestId) {
+      return request;
+    }
+  }
+  for (const child of folder.folders || []) {
+    const found = findRequestInFolder(child, requestId);
+    if (found) {
+      return found;
+    }
+  }
+  return null;
 }

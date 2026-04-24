@@ -436,6 +436,7 @@
 
   function renderCookieJarEditor(options = {}) {
     const doc = options.doc || document;
+    const onDirty = options.onDirty || (() => {});
     const workspace = options.workspace;
     const rerender = options.rerender || (() => {});
     const setStatus = options.setStatus || (() => {});
@@ -478,16 +479,33 @@
       enabled.type = 'checkbox';
       enabled.checked = cookie.enabled !== false;
       enabled.addEventListener('change', () => {
+        onDirty();
         cookie.enabled = enabled.checked;
       });
 
-      const name = cookieInput(doc, cookie.name || '', 'Name', (value) => { cookie.name = value; });
-      const value = cookieInput(doc, cookie.value || '', 'Value', (next) => { cookie.value = next; });
-      const domain = cookieInput(doc, cookie.domain || '', 'Domain', (next) => { cookie.domain = next; });
-      const path = cookieInput(doc, cookie.path || '/', 'Path', (next) => { cookie.path = next || '/'; });
-      const expires = cookieInput(doc, cookie.expiresAt || '', 'Expires ISO', (next) => { cookie.expiresAt = next; });
+      const name = cookieInput(doc, cookie.name || '', 'Name', (value) => {
+        onDirty();
+        cookie.name = value;
+      });
+      const value = cookieInput(doc, cookie.value || '', 'Value', (next) => {
+        onDirty();
+        cookie.value = next;
+      });
+      const domain = cookieInput(doc, cookie.domain || '', 'Domain', (next) => {
+        onDirty();
+        cookie.domain = next;
+      });
+      const path = cookieInput(doc, cookie.path || '/', 'Path', (next) => {
+        onDirty();
+        cookie.path = next || '/';
+      });
+      const expires = cookieInput(doc, cookie.expiresAt || '', 'Expires ISO', (next) => {
+        onDirty();
+        cookie.expiresAt = next;
+      });
 
       const secureLabel = checkboxLabel(doc, 'Secure', cookie.secure === true, (checked) => {
+        onDirty();
         cookie.secure = checked;
         if (!checked && cookie.sameSite === 'None') {
           cookie.sameSite = '';
@@ -495,8 +513,12 @@
           rerender();
         }
       });
-      const httpOnlyLabel = checkboxLabel(doc, 'HttpOnly', cookie.httpOnly === true, (checked) => { cookie.httpOnly = checked; });
+      const httpOnlyLabel = checkboxLabel(doc, 'HttpOnly', cookie.httpOnly === true, (checked) => {
+        onDirty();
+        cookie.httpOnly = checked;
+      });
       const hostOnlyLabel = checkboxLabel(doc, 'Host only', cookie.hostOnly !== false, (checked) => {
+        onDirty();
         cookie.hostOnly = checked;
         rerender();
       });
@@ -513,6 +535,7 @@
           setStatus('SameSite=None requires Secure.');
           return;
         }
+        onDirty();
         cookie.sameSite = sameSite.value;
       });
 
@@ -520,6 +543,7 @@
       remove.className = 'danger';
       remove.textContent = 'Remove';
       remove.addEventListener('click', () => {
+        onDirty();
         workspace.cookies.splice(index, 1);
         rerender();
       });

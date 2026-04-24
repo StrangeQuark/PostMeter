@@ -130,6 +130,36 @@ test('runs a request-count concurrent load test and summarizes metrics', async (
   }
 });
 
+test('carries response cookies forward during load tests and returns the final cookie jar', async () => {
+  const seenCookies = [];
+  const server = await createServer((request, response) => {
+    seenCookies.push(request.headers.cookie || '');
+    response.setHeader('Set-Cookie', 'loadSession=ready; Path=/; HttpOnly');
+    response.statusCode = 200;
+    response.end('cookies');
+  });
+
+  try {
+    const result = await runLoadTest({
+      method: 'GET',
+      url: `${server.baseUrl}/cookies`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      cookieJar: { enabled: true, storeResponses: true }
+    }, null, { concurrency: 1, totalRequests: 2 });
+
+    assert.deepEqual(seenCookies, ['', 'loadSession=ready']);
+    assert.equal(result.totalRequests, 2);
+    assert.equal(result.cookies.length, 1);
+    assert.equal(result.cookies[0].name, 'loadSession');
+    assert.equal(result.cookies[0].value, 'ready');
+  } finally {
+    await server.close();
+  }
+});
+
 test('supports duration mode, ramp-up, samples, histograms, and sample CSV export', async () => {
   const server = await createServer((_request, response) => {
     setTimeout(() => {

@@ -1,3 +1,4 @@
+const syncFs = require('node:fs');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
@@ -90,6 +91,14 @@ async function writeJsonFileAtomic(targetPath, value) {
   return targetPath;
 }
 
+function writeJsonFileAtomicSync(targetPath, value) {
+  syncFs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  const tempPath = path.join(path.dirname(targetPath), `postmeter-workspace-${process.pid}-${Date.now()}.json.tmp`);
+  syncFs.writeFileSync(tempPath, JSON.stringify(value, null, 2));
+  syncFs.renameSync(tempPath, targetPath);
+  return targetPath;
+}
+
 module.exports = {
   defaultWorkspacePath,
   looksLikeNativeWorkspace,
@@ -98,5 +107,6 @@ module.exports = {
   pathExists,
   siblingPath,
   writeJsonFile,
-  writeJsonFileAtomic
+  writeJsonFileAtomic,
+  writeJsonFileAtomicSync
 };

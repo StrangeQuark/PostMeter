@@ -183,6 +183,35 @@ test('renderer session persistence restores dirty saved tabs, created-unsaved en
   assert.equal(state.activeEnvironmentId, 'environment-2');
   assert.equal(state.activeSidebarPanel, 'environments');
   assert.equal(state.activeMainPanel, 'environment');
+  assert.equal(state.openWorkspaceTabs.length, 1);
+  assert.equal(state.openWorkspaceTabs[0].workspaceId, 'Workspace.json');
   assert.equal(restored.activeRequestTab, 'auth');
   assert.equal(restored.activeResultsTab, 'load');
+});
+
+test('renderer session persistence does not auto-open a workspace tab for the selected workspace on startup', () => {
+  const state = createRendererState();
+  state.workspace = {
+    collections: [],
+    environments: []
+  };
+
+  restoreRendererSession({
+    state,
+    session: {
+      activeWorkspaceId: 'Local Workspace.json',
+      selectedWorkspaceId: 'Local Workspace.json',
+      activeSidebarPanel: 'collections',
+      activeMainPanel: 'request',
+      openWorkspaceTabs: []
+    },
+    workspaceListItems: () => [
+      { id: 'Local Workspace.json', name: 'Local Workspace', path: '/tmp/Local Workspace.json', current: true, deletable: false }
+    ],
+    findFolder,
+    findRequest
+  });
+
+  assert.equal(state.selectedWorkspaceId, 'Local Workspace.json');
+  assert.deepEqual(state.openWorkspaceTabs, []);
 });

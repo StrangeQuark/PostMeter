@@ -95,10 +95,6 @@
     if (state.activeEnvironmentId !== 'none') {
       ensureEnvironmentTabPresent(state, state.activeEnvironmentId);
     }
-    if (state.selectedWorkspaceId) {
-      ensureWorkspaceTabPresent(state, state.selectedWorkspaceId);
-    }
-
     if (shouldRestoreMainPanel(session.activeMainPanel, state, workspaceItems(), findRequest)) {
       state.activeMainPanel = session.activeMainPanel;
     }
@@ -269,17 +265,6 @@
       dirty: false,
       createdUnsaved: false,
       snapshot: safeSnapshot(environment)
-    });
-  }
-
-  function ensureWorkspaceTabPresent(state, workspaceId) {
-    if ((state.openWorkspaceTabs || []).some((tab) => tab.workspaceId === workspaceId)) {
-      return;
-    }
-    state.openWorkspaceTabs.push({
-      key: `workspace:${workspaceId}`,
-      workspaceId,
-      dirty: false
     });
   }
 

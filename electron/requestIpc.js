@@ -31,39 +31,53 @@ function registerRequestIpc(options = {}) {
     assertOptionalEnvironmentPayload(environment);
     const workspace = getWorkspace();
     const requestContext = request.id ? findWorkspaceRequestContext(workspace, request.id) : null;
-    const { response: result, environment: nextEnvironment, collectionVariables, localVariables } = await runRequestWithScripts(request, environment, {
-      collectionVariables: requestContext?.collection?.variables || [],
-      cookieJar: workspace.cookies || []
-    });
-    if (result.updatedAuth && request.id) {
-      if (requestContext?.request) {
-        requestContext.request.auth = result.updatedAuth;
-      } else {
-        updateWorkspaceRequestAuth(workspace, request.id, result.updatedAuth);
+    try {
+      const { response: result, environment: nextEnvironment, collectionVariables, localVariables } = await runRequestWithScripts(request, environment, {
+        collectionVariables: requestContext?.collection?.variables || [],
+        cookieJar: workspace.cookies || []
+      });
+      if (result.updatedAuth && request.id) {
+        if (requestContext?.request) {
+          requestContext.request.auth = result.updatedAuth;
+        } else {
+          updateWorkspaceRequestAuth(workspace, request.id, result.updatedAuth);
+        }
       }
+      if (Array.isArray(result.updatedCookies)) {
+        workspace.cookies = result.updatedCookies;
+      }
+      applyScriptVariableMutationsToWorkspace(workspace, {
+        collection: requestContext?.collection,
+        request: requestContext?.request,
+        environment: nextEnvironment,
+        collectionVariables,
+        localVariables
+      });
+      workspace.history = [
+        historyEntry({
+          method: request.method,
+          url: result.finalUrl,
+          statusCode: result.statusCode,
+          durationMillis: result.durationMillis
+        }),
+        ...(workspace.history || [])
+      ].slice(0, 100);
+      setWorkspace(await saveWorkspace(workspace));
+      assertResponsePayload(result);
+      return result;
+    } catch (error) {
+      if (error?.preRequestScriptResult) {
+        applyScriptVariableMutationsToWorkspace(workspace, {
+          collection: requestContext?.collection,
+          request: requestContext?.request,
+          environment: error.environment,
+          collectionVariables: error.collectionVariables,
+          localVariables: error.localVariables
+        });
+        setWorkspace(await saveWorkspace(workspace));
+      }
+      throw error;
     }
-    if (Array.isArray(result.updatedCookies)) {
-      workspace.cookies = result.updatedCookies;
-    }
-    applyScriptVariableMutationsToWorkspace(workspace, {
-      collection: requestContext?.collection,
-      request: requestContext?.request,
-      environment: nextEnvironment,
-      collectionVariables,
-      localVariables
-    });
-    workspace.history = [
-      historyEntry({
-        method: request.method,
-        url: result.finalUrl,
-        statusCode: result.statusCode,
-        durationMillis: result.durationMillis
-      }),
-      ...(workspace.history || [])
-    ].slice(0, 100);
-    setWorkspace(await saveWorkspace(workspace));
-    assertResponsePayload(result);
-    return result;
   });
 }
 

@@ -25,11 +25,18 @@ function registerWorkspaceIpc(options = {}) {
     ipcMain,
     refreshApplicationMenu,
     saveWorkspace,
+    saveWorkspaceSync,
     setWorkspace
   } = options;
 
   ipcMain.handle('workspace:load', async () => {
-    const result = await getWorkspaceStore().describeCurrent(getWorkspace());
+    let workspace = getWorkspace();
+    if (!workspace) {
+      const loaded = await getWorkspaceStore().load();
+      workspace = loaded.workspace;
+      setWorkspace(workspace);
+    }
+    const result = await getWorkspaceStore().describeCurrent(workspace);
     assertWorkspaceLoadResultPayload(result);
     return result;
   });
@@ -41,6 +48,16 @@ function registerWorkspaceIpc(options = {}) {
     refreshApplicationMenu();
     assertWorkspaceLoadResultPayload(await getWorkspaceStore().describeCurrent(workspace));
     return workspace;
+  });
+
+  ipcMain.on('workspace:saveSync', (event, nextWorkspace) => {
+    assertWorkspacePayload(nextWorkspace);
+    const workspace = typeof saveWorkspaceSync === 'function'
+      ? saveWorkspaceSync(nextWorkspace)
+      : nextWorkspace;
+    setWorkspace(workspace);
+    refreshApplicationMenu();
+    event.returnValue = workspace;
   });
 
   ipcMain.handle('workspace:create', async () => {

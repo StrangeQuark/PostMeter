@@ -13,10 +13,19 @@
           runtimeGlobal.document.title = `${options.titlePrefix}:PASS`;
         })
         .catch((error) => {
-          runtimeGlobal.document.title = `${options.titlePrefix}:FAIL:${String(error?.message || error).slice(0, 160)}`;
+          runtimeGlobal.document.title = `${options.titlePrefix}:FAIL:${smokeFailureText(error)}`;
         });
     }, options.delayMillis ?? 50);
     return true;
+  }
+
+  function smokeFailureText(error) {
+    const primary = String(error?.message || error || 'UI smoke failed.');
+    const stackLine = String(error?.stack || '')
+      .split('\n')
+      .map((line) => line.trim())
+      .find((line) => line && line !== primary && !line.endsWith(primary) && !line.startsWith('TypeError:') && !line.startsWith('Error:'));
+    return stackLine ? `${primary} @ ${stackLine}`.slice(0, 160) : primary.slice(0, 160);
   }
 
   function waitForUiSmoke(predicate, message, timeoutMillis = 3000, runtimeGlobal = global) {

@@ -215,6 +215,24 @@ test('imports native collection exports and Postman collections without confusin
   assert.equal(openApiYaml.requests[0].url, 'https://yaml.example.test/widgets');
 });
 
+test('rejects workspace import when the file is not a native PostMeter workspace', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-store-'));
+  const store = new WorkspaceStore(path.join(temp, 'workspace.json'));
+  const postmanPath = path.join(temp, 'postman.json');
+  await fs.writeFile(postmanPath, JSON.stringify({
+    info: {
+      name: 'Postman Collection',
+      schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
+    },
+    item: []
+  }));
+
+  await assert.rejects(
+    () => store.importWorkspace(postmanPath),
+    /Selected file is not a native PostMeter workspace\./
+  );
+});
+
 test('detects native workspace shape explicitly', () => {
   assert.equal(looksLikeNativeWorkspace({ schemaVersion: 6 }), true);
   assert.equal(looksLikeNativeWorkspace({ collections: [] }), true);

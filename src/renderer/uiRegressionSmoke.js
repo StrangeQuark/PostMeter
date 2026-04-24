@@ -23,6 +23,7 @@
     await assertUpdateCheckSmoke();
     assertOauthProgressSmoke();
     await assertWorkspaceManagementSmoke();
+    await assertEditorCollectionSmoke();
     assertCreationSemanticsSmoke();
     await assertRequestTabCloseSmoke();
 
@@ -201,6 +202,37 @@
       resetRequestTabs();
       renderAll();
     }
+  }
+
+  async function assertEditorCollectionSmoke() {
+    workspace.collections = [];
+    workspace.environments = [];
+    activeEnvironmentId = 'none';
+    clearActiveWorkspaceItem();
+    resetRequestTabs();
+    renderAll();
+
+    const collection = newCollection();
+    const request = newRequest(collection.id, null);
+    $('requestNameInput').value = 'Pending Navigation Request';
+    selectSidebarPanel('workspaces');
+    assertUiSmoke(request.name === 'Pending Navigation Request', 'Switching sidebar panels should collect the active request editor before rerendering.');
+
+    selectSidebarPanel('collections');
+    const firstEnvironment = newEnvironment();
+    const secondEnvironment = newEnvironment();
+    activeEnvironmentId = firstEnvironment.id;
+    ensureOpenEnvironmentTabForActive();
+    renderAll();
+    $('environmentNameInput').value = 'Pending Environment Rename';
+    const secondEnvironmentButton = Array.from($('environmentsList').querySelectorAll('button'))
+      .find((button) => button.textContent.includes(secondEnvironment.name));
+    assertUiSmoke(secondEnvironmentButton, 'Environment list did not render the second environment for navigation smoke.');
+    secondEnvironmentButton.click();
+    assertUiSmoke(
+      workspace.environments.find((item) => item.id === firstEnvironment.id)?.name === 'Pending Environment Rename',
+      'Selecting a different environment should collect the current environment editor before rerendering.'
+    );
   }
 
   function assertOauthProgressSmoke() {
@@ -523,6 +555,35 @@
       $('closeWithoutSavingButton').click();
       await closeSaved;
       assertUiSmoke(collection.requests.some((item) => item.id === request.id && item.name === savedRequestName), 'Closing without saving should restore the saved request snapshot.');
+
+      activeCollectionId = collection.id;
+      activeFolderId = null;
+      activeRequestId = request.id;
+      ensureOpenRequestTabForActive();
+      renderAll();
+      const savedRequestUrl = request.url;
+      workspace.history = [{
+        timestamp: new Date(0).toISOString(),
+        method: 'POST',
+        url: 'https://history.example.test/widgets',
+        statusCode: 201,
+        durationMillis: 42
+      }];
+      renderHistory();
+      const historyItem = $('historyList').querySelector('.history-item');
+      assertUiSmoke(historyItem, 'History list did not render a request entry for the close smoke.');
+      historyItem.click();
+      assertUiSmoke(activeRequest().method === 'POST', 'Clicking a history entry did not update the active request method.');
+      assertUiSmoke(activeRequest().url === 'https://history.example.test/widgets', 'Clicking a history entry did not update the active request URL.');
+      const historyTab = openRequestTabs.find((tab) => tab.requestId === request.id);
+      assertUiSmoke(historyTab?.dirty === true, 'Selecting a history entry should mark the active request tab as dirty.');
+      const closeHistory = closeRequestTab(historyTab);
+      assertUiSmoke(!$('unsavedRequestModal').hidden, 'Closing a request updated from history should show the unsaved request modal.');
+      $('closeWithoutSavingButton').click();
+      await closeHistory;
+      const restoredHistoryRequest = collection.requests.find((item) => item.id === request.id);
+      assertUiSmoke(restoredHistoryRequest?.name === savedRequestName, 'Closing a history-updated request without saving should restore the saved request name.');
+      assertUiSmoke(restoredHistoryRequest?.url === savedRequestUrl, 'Closing a history-updated request without saving should restore the saved request URL.');
 
       workspace.environments = [];
       activeEnvironmentId = 'none';

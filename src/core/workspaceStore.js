@@ -10,7 +10,8 @@ const {
   pathExists,
   siblingPath,
   writeJsonFile,
-  writeJsonFileAtomic
+  writeJsonFileAtomic,
+  writeJsonFileAtomicSync
 } = require('./workspacePersistence');
 
 class WorkspaceRecoveryError extends Error {
@@ -69,6 +70,12 @@ class WorkspaceStore {
     return normalized;
   }
 
+  saveSync(workspace) {
+    const normalized = normalizeWorkspace(workspace);
+    writeJsonFileAtomicSync(this.workspacePath, normalized);
+    return normalized;
+  }
+
   async backupCurrentWorkspace(reason = 'manual.backup') {
     if (!(await pathExists(this.workspacePath))) {
       return null;
@@ -78,6 +85,9 @@ class WorkspaceStore {
 
   async importWorkspace(importPath) {
     const parsed = JSON.parse(await fs.readFile(importPath, 'utf8'));
+    if (!looksLikeNativeWorkspace(parsed)) {
+      throw new Error('Selected file is not a native PostMeter workspace.');
+    }
     migrate(parsed);
     return normalizeWorkspace(parsed);
   }

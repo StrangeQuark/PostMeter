@@ -10,6 +10,9 @@
     const applyLoadedWorkspace = typeof options.applyLoadedWorkspace === 'function'
       ? options.applyLoadedWorkspace
       : null;
+    const applyWorkspaceCatalogUpdate = typeof options.applyWorkspaceCatalogUpdate === 'function'
+      ? options.applyWorkspaceCatalogUpdate
+      : null;
     const promptForCollectionExport = typeof options.promptForCollectionExport === 'function'
       ? options.promptForCollectionExport
       : null;
@@ -32,12 +35,13 @@
     const renderHistory = options.renderHistory || (() => {});
     const renderRequestVariablePairs = options.renderRequestVariablePairs || (() => {});
     const renderVariablePreview = options.renderVariablePreview || (() => {});
+    const renderRequestTabs = options.renderRequestTabs || (() => {});
     const saveDraftRequestWithPrompt = options.saveDraftRequestWithPrompt || (async () => null);
     const selectFirstRequest = options.selectFirstRequest || (() => {});
     const selectInitialWorkspaceItem = options.selectInitialWorkspaceItem || (() => {});
     const setStatus = options.setStatus || (() => {});
     const uniqueName = options.uniqueName || ((baseName) => baseName);
-    const walkCollectionRequests = options.walkCollectionRequests || (() => {});
+    const walkCollectionRequests = options.walkCollectionRequests || walkRequestsInCollection;
 
     function element(id) {
       return doc.getElementById(id);
@@ -69,6 +73,426 @@
       return defaultValue;
     }
 
+    function collectActiveEditorState() {
+      if (state?.activeMainPanel === 'environment') {
+        collectEnvironmentFromEditor();
+        return;
+      }
+      if (state?.activeMainPanel === 'request') {
+        collectRequestFromEditor();
+      }
+    }
+
+    function walkRequestsInCollection(collection, visitor) {
+      for (const request of collection?.requests || []) {
+        visitor(request);
+      }
+      for (const folder of collection?.folders || []) {
+        walkRequestsInFolder(folder, visitor);
+      }
+    }
+
+    function walkRequestsInFolder(folder, visitor) {
+      for (const request of folder?.requests || []) {
+        visitor(request);
+      }
+      for (const child of folder?.folders || []) {
+        walkRequestsInFolder(child, visitor);
+      }
+    }
+
+    function requestSnapshot(request) {
+      try {
+        return JSON.stringify(request);
+      } catch {
+        return '{}';
+      }
+    }
+
+    function environmentSnapshot(environment) {
+      try {
+        return JSON.stringify(environment);
+      } catch {
+        return '{}';
+      }
+    }
+
+    function cloneJson(value) {
+      if (typeof structuredClone === 'function') {
+        return structuredClone(value);
+      }
+      return JSON.parse(JSON.stringify(value));
+    }
+
+    function parseSnapshot(snapshot, fallback) {
+      try {
+        return JSON.parse(snapshot);
+      } catch {
+        return fallback;
+      }
+    }
+
+    function currentRequestTabKey() {
+      if (!state?.activeRequestId) {
+        return '';
+      }
+      return state.activeCollectionId
+        ? `request:${state.activeCollectionId}:${state.activeRequestId}`
+        : `draft:${state.activeRequestId}`;
+    }
+
+    function currentEnvironmentTabKey() {
+      return state?.activeEnvironmentId && state.activeEnvironmentId !== 'none'
+        ? `environment:${state.activeEnvironmentId}`
+        : '';
+    }
+
+    function createRequestContext(request, environment = null) {
+      return {
+        workspaceId: state.activeWorkspaceId,
+        collectionId: state.activeCollectionId || null,
+        requestId: request?.id || null,
+        environmentId: environment?.id || null
+      };
+    }
+
+    function isActiveWorkspaceContext(context) {
+      return Boolean(context && context.workspaceId === state.activeWorkspaceId);
+    }
+
+    function findWorkspaceCollection(collectionId) {
+      return (state.workspace?.collections || []).find((collection) => collection.id === collectionId) || null;
+    }
+
+    function findWorkspaceEnvironment(environmentId) {
+      return (state.workspace?.environments || []).find((environment) => environment.id === environmentId) || null;
+    }
+
+    function findContextRequest(context) {
+      if (!context?.requestId || !isActiveWorkspaceContext(context)) {
+        return null;
+      }
+      if (!context.collectionId) {
+        return state.draftRequests?.get(context.requestId) || null;
+      }
+      const collection = findWorkspaceCollection(context.collectionId);
+      if (!collection) {
+        return null;
+      }
+      let matchedRequest = null;
+      walkCollectionRequests(collection, (request) => {
+        if (!matchedRequest && request.id === context.requestId) {
+          matchedRequest = request;
+        }
+      });
+      return matchedRequest;
+    }
+
+    function requestTabKey(context) {
+      if (!context?.requestId) {
+        return '';
+      }
+      return context.collectionId
+        ? `request:${context.collectionId}:${context.requestId}`
+        : `draft:${context.requestId}`;
+    }
+
+    function environmentTabKey(context) {
+      return context?.environmentId && context.environmentId !== 'none'
+        ? `environment:${context.environmentId}`
+        : '';
+    }
+
+    function resolveRequestSaveTarget(config = {}) {
+      if (config.scope === 'all') {
+        return '';
+      }
+      if (typeof config.requestTabKey === 'string') {
+        return config.requestTabKey;
+      }
+      return state?.activeMainPanel === 'request' ? currentRequestTabKey() : '';
+    }
+
+    function resolveEnvironmentSaveTarget(config = {}) {
+      if (config.scope === 'all') {
+        return '';
+      }
+      if (typeof config.environmentTabKey === 'string') {
+        return config.environmentTabKey;
+      }
+      return state?.activeMainPanel === 'environment' ? currentEnvironmentTabKey() : '';
+    }
+
+    function findRequestLocationInWorkspace(workspaceValue, collectionId, requestId) {
+      if (!collectionId || !requestId) {
+        return null;
+      }
+      const collection = (workspaceValue?.collections || []).find((item) => item.id === collectionId);
+      if (!collection) {
+        return null;
+      }
+      function search(container) {
+        const requests = Array.isArray(container?.requests) ? container.requests : [];
+        const index = requests.findIndex((request) => request.id === requestId);
+        if (index >= 0) {
+          return {
+            container,
+            index,
+            request: requests[index]
+          };
+        }
+        for (const folder of container?.folders || []) {
+          const found = search(folder);
+          if (found) {
+            return found;
+          }
+        }
+        return null;
+      }
+      return search(collection);
+    }
+
+    function revertRequestTabInWorkspace(workspaceValue, tab) {
+      if (!tab?.collectionId || !tab?.requestId) {
+        return false;
+      }
+      const location = findRequestLocationInWorkspace(workspaceValue, tab.collectionId, tab.requestId);
+      if (!location) {
+        return false;
+      }
+      if (tab.createdUnsaved === true) {
+        location.container.requests.splice(location.index, 1);
+        return true;
+      }
+      if (!tab.snapshot) {
+        return false;
+      }
+      const snapshot = parseSnapshot(tab.snapshot, null);
+      if (!snapshot) {
+        return false;
+      }
+      location.container.requests[location.index] = snapshot;
+      return true;
+    }
+
+    function requestForTabInWorkspace(workspaceValue, tab) {
+      if (!tab?.collectionId || !tab?.requestId) {
+        return null;
+      }
+      return findRequestLocationInWorkspace(workspaceValue, tab.collectionId, tab.requestId)?.request || null;
+    }
+
+    function findEnvironmentIndexInWorkspace(workspaceValue, environmentId) {
+      if (!environmentId) {
+        return -1;
+      }
+      return (workspaceValue?.environments || []).findIndex((environment) => environment.id === environmentId);
+    }
+
+    function revertEnvironmentTabInWorkspace(workspaceValue, tab) {
+      const index = findEnvironmentIndexInWorkspace(workspaceValue, tab?.environmentId);
+      if (index < 0) {
+        return false;
+      }
+      if (tab.createdUnsaved === true) {
+        workspaceValue.environments.splice(index, 1);
+        return true;
+      }
+      if (!tab.snapshot) {
+        return false;
+      }
+      const snapshot = parseSnapshot(tab.snapshot, null);
+      if (!snapshot) {
+        return false;
+      }
+      workspaceValue.environments[index] = snapshot;
+      return true;
+    }
+
+    function environmentForTabInWorkspace(workspaceValue, tab) {
+      const index = findEnvironmentIndexInWorkspace(workspaceValue, tab?.environmentId);
+      return index >= 0 ? workspaceValue.environments[index] : null;
+    }
+
+    function restoreCollectionVariablesInWorkspace(workspaceValue, collectionId, snapshot) {
+      const collection = (workspaceValue?.collections || []).find((item) => item.id === collectionId);
+      if (!collection) {
+        return false;
+      }
+      collection.variables = parseSnapshot(snapshot, []);
+      return true;
+    }
+
+    function restoreCookieJarInWorkspace(workspaceValue, snapshot) {
+      workspaceValue.cookies = parseSnapshot(snapshot, []);
+      return true;
+    }
+
+    function buildWorkspaceForSave(config = {}) {
+      if (config.scope === 'all') {
+        return state.workspace;
+      }
+      const requestTargetKey = resolveRequestSaveTarget(config);
+      const environmentTargetKey = resolveEnvironmentSaveTarget(config);
+      const workspaceToSave = cloneJson(state.workspace);
+
+      for (const tab of state.openRequestTabs || []) {
+        if (tab?.draft) {
+          continue;
+        }
+        if (tab?.key === requestTargetKey) {
+          continue;
+        }
+        if (tab?.dirty || tab?.createdUnsaved) {
+          revertRequestTabInWorkspace(workspaceToSave, tab);
+        }
+      }
+
+      for (const tab of state.openEnvironmentTabs || []) {
+        if (tab?.key === environmentTargetKey) {
+          continue;
+        }
+        if (tab?.dirty || tab?.createdUnsaved) {
+          revertEnvironmentTabInWorkspace(workspaceToSave, tab);
+        }
+      }
+
+      if (state.collectionDirtySnapshots instanceof Map) {
+        for (const [collectionId, snapshot] of state.collectionDirtySnapshots.entries()) {
+          const owner = state.collectionDirtyOwners instanceof Map
+            ? state.collectionDirtyOwners.get(collectionId)
+            : '';
+          if (owner !== requestTargetKey) {
+            restoreCollectionVariablesInWorkspace(workspaceToSave, collectionId, snapshot);
+          }
+        }
+      }
+
+      if (state.cookieJarDirtySnapshot != null && state.cookieJarDirtyOwner !== requestTargetKey) {
+        restoreCookieJarInWorkspace(workspaceToSave, state.cookieJarDirtySnapshot);
+      }
+
+      return workspaceToSave;
+    }
+
+    function clearSavedSharedRequestState(requestTabKeyValue) {
+      let cleared = false;
+      if (requestTabKeyValue && state.collectionDirtySnapshots instanceof Map && state.collectionDirtyOwners instanceof Map) {
+        for (const [collectionId, owner] of Array.from(state.collectionDirtyOwners.entries())) {
+          if (owner === requestTabKeyValue) {
+            state.collectionDirtyOwners.delete(collectionId);
+            state.collectionDirtySnapshots.delete(collectionId);
+            cleared = true;
+          }
+        }
+      }
+      if (requestTabKeyValue && state.cookieJarDirtySnapshot != null && state.cookieJarDirtyOwner === requestTabKeyValue) {
+        state.cookieJarDirtySnapshot = null;
+        state.cookieJarDirtyOwner = '';
+        cleared = true;
+      }
+      return cleared;
+    }
+
+    function finalizeSavedWorkspace(savedWorkspace, config = {}) {
+      if (config.scope === 'all') {
+        state.workspace = savedWorkspace;
+        options.clearSavedRequestDirtyState?.();
+        return;
+      }
+
+      const requestTargetKey = resolveRequestSaveTarget(config);
+      const environmentTargetKey = resolveEnvironmentSaveTarget(config);
+      let shouldRenderTabs = false;
+
+      if (requestTargetKey) {
+        const requestTab = (state.openRequestTabs || []).find((tab) => tab.key === requestTargetKey);
+        const request = requestForTabInWorkspace(state.workspace, requestTab);
+        if (requestTab && request) {
+          requestTab.dirty = false;
+          requestTab.createdUnsaved = false;
+          requestTab.snapshot = requestSnapshot(request);
+          shouldRenderTabs = true;
+        }
+        if (clearSavedSharedRequestState(requestTargetKey)) {
+          shouldRenderTabs = true;
+        }
+      }
+
+      if (environmentTargetKey) {
+        const environmentTab = (state.openEnvironmentTabs || []).find((tab) => tab.key === environmentTargetKey);
+        const environment = environmentForTabInWorkspace(state.workspace, environmentTab);
+        if (environmentTab && environment) {
+          environmentTab.dirty = false;
+          environmentTab.createdUnsaved = false;
+          environmentTab.snapshot = environmentSnapshot(environment);
+          shouldRenderTabs = true;
+        }
+      }
+
+      if (shouldRenderTabs) {
+        renderRequestTabs();
+      }
+    }
+
+    function isActiveRequestContext(context) {
+      return Boolean(
+        context?.requestId
+        && isActiveWorkspaceContext(context)
+        && state.activeRequestId === context.requestId
+        && (state.activeCollectionId || null) === (context.collectionId || null)
+      );
+    }
+
+    function updateCaptureResponseButton() {
+      const request = activeRequest();
+      element('captureResponseExampleButton').disabled = !(request && state.lastResponse && state.lastResponse.requestId === request.id);
+    }
+
+    function syncSavedRequestContext(context) {
+      if (!context?.requestId || !context.collectionId || !isActiveWorkspaceContext(context)) {
+        return false;
+      }
+      const request = findContextRequest(context);
+      const tab = (state.openRequestTabs || []).find((candidate) => candidate.key === requestTabKey(context));
+      if (!request || !tab) {
+        return false;
+      }
+      tab.snapshot = requestSnapshot(request);
+      tab.dirty = false;
+      tab.createdUnsaved = false;
+      return true;
+    }
+
+    function syncSavedEnvironmentContext(context) {
+      if (!context?.environmentId || !isActiveWorkspaceContext(context)) {
+        return false;
+      }
+      const environment = findWorkspaceEnvironment(context.environmentId);
+      const tab = (state.openEnvironmentTabs || []).find((candidate) => candidate.key === environmentTabKey(context));
+      if (!environment || !tab) {
+        return false;
+      }
+      tab.snapshot = environmentSnapshot(environment);
+      tab.dirty = false;
+      tab.createdUnsaved = false;
+      return true;
+    }
+
+    function syncSavedRequestContextTabs(context) {
+      const requestUpdated = syncSavedRequestContext(context);
+      const environmentUpdated = syncSavedEnvironmentContext(context);
+      if (requestUpdated || environmentUpdated) {
+        renderRequestTabs();
+      }
+    }
+
+    async function saveWorkspaceStateOnly() {
+      const save = windowObject.__postmeterSaveWorkspace || windowObject.postmeter.workspace.save;
+      state.workspace = await save(state.workspace);
+      return state.workspace;
+    }
+
     async function sendActiveRequest() {
       const request = activeRequest();
       if (!request) {
@@ -86,36 +510,47 @@
       }
       element('validationLabel').textContent = '';
       setStatus('Sending request...');
+      const requestContext = createRequestContext(request, environment);
       try {
         const response = await windowObject.postmeter.request.send(request, environment);
-        if (response.updatedAuth) {
-          request.auth = response.updatedAuth;
-          renderAuthEditor(request.auth);
+        if (isActiveWorkspaceContext(requestContext)) {
+          const targetRequest = findContextRequest(requestContext);
+          if (response.updatedAuth && targetRequest) {
+            targetRequest.auth = response.updatedAuth;
+            if (isActiveRequestContext(requestContext)) {
+              renderAuthEditor(targetRequest.auth);
+            }
+          }
+          if (Array.isArray(response.updatedCookies)) {
+            state.workspace.cookies = response.updatedCookies;
+            renderCookieJarEditor();
+          }
+          applySingleRequestScriptMutations(response, requestContext);
+          state.lastResponse = { ...response, requestId: requestContext.requestId };
+          updateCaptureResponseButton();
+          displayResponse(response);
+          state.workspace.history = [
+            {
+              timestamp: new Date().toISOString(),
+              method: request.method,
+              url: response.finalUrl,
+              statusCode: response.statusCode,
+              durationMillis: response.durationMillis
+            },
+            ...(state.workspace.history || [])
+          ].slice(0, 100);
+          renderHistory();
+          syncSavedRequestContextTabs(requestContext);
         }
-        if (Array.isArray(response.updatedCookies)) {
-          state.workspace.cookies = response.updatedCookies;
-          renderCookieJarEditor();
-        }
-        applySingleRequestScriptMutations(response, request);
-        state.lastResponse = response;
-        element('captureResponseExampleButton').disabled = false;
-        displayResponse(response);
-        state.workspace.history = [
-          {
-            timestamp: new Date().toISOString(),
-            method: request.method,
-            url: response.finalUrl,
-            statusCode: response.statusCode,
-            durationMillis: response.durationMillis
-          },
-          ...(state.workspace.history || [])
-        ].slice(0, 100);
-        renderHistory();
         setStatus('Request completed.');
       } catch (error) {
-        element('responseStatus').textContent = 'ERR';
         const message = error.message || String(error);
-        element('responseBody').value = message;
+        if (isActiveWorkspaceContext(requestContext)) {
+          state.lastResponse = null;
+          updateCaptureResponseButton();
+          element('responseStatus').textContent = 'ERR';
+          element('responseBody').value = message;
+        }
         setStatus('Request failed.');
         notifyUser('Request Failed', message);
       }
@@ -154,6 +589,10 @@
           concurrency,
           confirmedHighConcurrency
         });
+        if (Array.isArray(state.lastLoadResult.cookies)) {
+          state.workspace.cookies = state.lastLoadResult.cookies;
+          renderCookieJarEditor();
+        }
         element('loadResults').textContent = runFormatting.formatLoadResult(state.lastLoadResult);
         element('exportLoadJsonButton').disabled = false;
         element('exportLoadCsvButton').disabled = false;
@@ -261,14 +700,25 @@
         status: 'starting',
         message: 'Starting OAuth device authorization.'
       });
+      const environment = activeEnvironment();
+      const requestContext = createRequestContext(request, environment);
       try {
         const startDevice = windowObject.__postmeterStartDeviceFlow || windowObject.postmeter.oauth.startDeviceFlow;
-        const result = await startDevice(state.activeOauthFlowId, request.auth, activeEnvironment());
-        if (result.auth) {
-          request.auth = result.auth;
-          renderAuthEditor(request.auth);
-          renderCollections();
-          await saveWorkspace(false);
+        const result = await startDevice(state.activeOauthFlowId, request.auth, environment);
+        if (result.auth && isActiveWorkspaceContext(requestContext)) {
+          const targetRequest = findContextRequest(requestContext);
+          if (targetRequest) {
+            targetRequest.auth = result.auth;
+            if (requestContext.collectionId) {
+              await saveWorkspaceStateOnly();
+              syncSavedRequestContextTabs(requestContext);
+            }
+            if (isActiveRequestContext(requestContext)) {
+              const activeResultRequest = findContextRequest(requestContext) || targetRequest;
+              renderAuthEditor(activeResultRequest.auth);
+            }
+            renderCollections();
+          }
         }
         setStatus(result.cancelled ? 'OAuth device authorization cancelled.' : 'OAuth device authorization completed.');
       } catch (error) {
@@ -299,19 +749,30 @@
         status: 'starting',
         message: 'Starting OAuth authorization-code flow.'
       });
+      const environment = activeEnvironment();
+      const requestContext = createRequestContext(request, environment);
       try {
         const startPkce = windowObject.__postmeterStartPkceFlow || windowObject.postmeter.oauth.startPkceFlow;
         const result = await startPkce(
           state.activeOauthFlowId,
           request.auth,
-          activeEnvironment(),
+          environment,
           element('authOauthRedirectStrategySelect').value
         );
-        if (result.auth) {
-          request.auth = result.auth;
-          renderAuthEditor(request.auth);
-          renderCollections();
-          await saveWorkspace(false);
+        if (result.auth && isActiveWorkspaceContext(requestContext)) {
+          const targetRequest = findContextRequest(requestContext);
+          if (targetRequest) {
+            targetRequest.auth = result.auth;
+            if (requestContext.collectionId) {
+              await saveWorkspaceStateOnly();
+              syncSavedRequestContextTabs(requestContext);
+            }
+            if (isActiveRequestContext(requestContext)) {
+              const activeResultRequest = findContextRequest(requestContext) || targetRequest;
+              renderAuthEditor(activeResultRequest.auth);
+            }
+            renderCollections();
+          }
         }
         setStatus(result.cancelled ? 'OAuth authorization cancelled.' : 'OAuth authorization completed.');
       } catch (error) {
@@ -352,7 +813,7 @@
           return Boolean(await saveDraftRequestWithPrompt(request, { showStatus }));
         }
       }
-      return persistWorkspace(showStatus);
+      return persistWorkspace(showStatus, config);
     }
 
     async function persistWorkspace(showStatus = true, config = {}) {
@@ -362,8 +823,8 @@
         collectSettingsFromEditor();
       }
       const save = windowObject.__postmeterSaveWorkspace || windowObject.postmeter.workspace.save;
-      state.workspace = await save(state.workspace);
-      options.clearSavedRequestDirtyState?.();
+      const savedWorkspace = await save(buildWorkspaceForSave(config));
+      finalizeSavedWorkspace(savedWorkspace, config);
       if (showStatus) {
         setStatus('Workspace saved.');
       }
@@ -371,11 +832,17 @@
     }
 
     async function importWorkspace() {
+      collectActiveEditorState();
       const result = await windowObject.postmeter.workspace.importWorkspace();
       if (result.cancelled) {
         return;
       }
-      if (applyLoadedWorkspace && result.workspace && Array.isArray(result.workspaces)) {
+      if (applyWorkspaceCatalogUpdate && result.workspace && Array.isArray(result.workspaces) && result.activeWorkspaceId === state.activeWorkspaceId) {
+        applyWorkspaceCatalogUpdate(result, {
+          focus: 'workspace',
+          selectedWorkspaceId: result.createdWorkspaceId || null
+        });
+      } else if (applyLoadedWorkspace && result.workspace && Array.isArray(result.workspaces)) {
         applyLoadedWorkspace(result, {
           focus: 'workspace',
           selectedWorkspaceId: result.createdWorkspaceId || null
@@ -424,6 +891,7 @@
     }
 
     async function importCollection() {
+      collectActiveEditorState();
       const importCollectionBoundary = windowObject.__postmeterImportCollection || windowObject.postmeter.collection.importCollection;
       const result = await importCollectionBoundary();
       if (result.cancelled) {
@@ -520,12 +988,13 @@
       }
     }
 
-    function applySingleRequestScriptMutations(result, request) {
-      applyEnvironmentScriptMutations(result.environment);
-      const collection = activeCollection();
+    function applySingleRequestScriptMutations(result, requestContext) {
+      applyEnvironmentScriptMutations(result.environment, requestContext);
+      const collection = requestContext?.collectionId ? findWorkspaceCollection(requestContext.collectionId) : null;
       if (collection && Array.isArray(result.collectionVariables)) {
         collection.variables = cloneVariablePairs(result.collectionVariables);
       }
+      const request = findContextRequest(requestContext);
       if (request && Array.isArray(result.localVariables)) {
         request.variables = cloneVariablePairs(result.localVariables);
       }
@@ -555,10 +1024,13 @@
       renderScriptMutationEditors();
     }
 
-    function applyEnvironmentScriptMutations(environment) {
-      const active = activeEnvironment();
-      if (active && environment?.id === active.id && Array.isArray(environment.variables)) {
-        active.variables = cloneVariablePairs(environment.variables);
+    function applyEnvironmentScriptMutations(environment, requestContext = null) {
+      if (requestContext && !isActiveWorkspaceContext(requestContext)) {
+        return;
+      }
+      const workspaceEnvironment = findWorkspaceEnvironment(environment?.id);
+      if (workspaceEnvironment && Array.isArray(environment.variables)) {
+        workspaceEnvironment.variables = cloneVariablePairs(environment.variables);
       }
     }
 

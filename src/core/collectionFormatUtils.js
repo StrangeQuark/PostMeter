@@ -139,6 +139,9 @@ function splitCommandLine(text) {
     }
     current += char;
   }
+  if (escaped) {
+    current += '\\';
+  }
   if (current) {
     tokens.push(current);
   }
