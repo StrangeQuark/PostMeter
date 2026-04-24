@@ -1,5 +1,7 @@
 # OAuth Provider Certification
 
+Use this document for maintainer-run outbound OAuth certification. It is not end-user login documentation.
+
 PostMeter is a standalone local desktop app. This document covers outbound OAuth 2.0 request authentication for target APIs only. Do not add PostMeter user accounts, PostMeter login, required cloud sign-in, or an account gate for core app usage.
 
 ## First Provider Targets

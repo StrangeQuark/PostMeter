@@ -1,5 +1,7 @@
 # PostMeter Architecture
 
+Use this document when deciding where new behavior belongs or when refactoring ownership across renderer, Electron, and core layers.
+
 PostMeter is split into three runtime layers:
 
 - Electron main process in `electron/`
@@ -12,7 +14,7 @@ The main rule is that product behavior belongs in the lowest layer that can own 
 
 Renderer files are loaded directly from `src/renderer/index.html`.
 
-- `renderer.js` is the renderer shell/orchestrator. It should compose focused helpers rather than owning tab state, workflows, or editor subpanels inline.
+- `renderer.js` is the renderer shell/orchestrator. It should compose focused helpers rather than owning tab state, workflows, or editor subpanels inline, while still hosting shared modal rendering helpers used by flows such as draft-save and collection export selection, including the empty-state warning path when no collections exist.
 - `assertionModel.js` owns assertion templates, default values, and placeholder text.
 - `cookieModel.js` owns renderer-side cookie validation, Postman cookie metadata import, and thin adapters over the shared core cookie model.
 - `contextMenu.js` owns renderer context-menu display and positioning.
@@ -26,7 +28,7 @@ Renderer files are loaded directly from `src/renderer/index.html`.
 - `requestTabState.js` owns request/environment/workspace tab lifecycle, selection, dirty handling, and close/discard flows.
 - `rendererBootstrap.js` owns renderer startup/theme bootstrap, toolbar-menu helpers, and DOM event registration driven by injected callbacks.
 - `sessionPersistence.js` owns renderer-side session serialization/restoration for open tabs, active panels, active selection, drafts, and dirty editor state.
-- `rendererWorkflows.js` owns request send/load/runner/OAuth/workspace import-export-save workflows and script-mutation application.
+- `rendererWorkflows.js` owns request send/load/runner/OAuth/workspace import-export-save workflows, collection-export selection flows, non-destructive workspace import handling, and script-mutation application.
 - `responseFormatting.js` owns renderer-side response body formatting for JSON, XML, and HTML display.
 - `runResultFormatting.js` owns renderer-side text formatting for runner, load-test, and OAuth progress/result displays.
 - `uiSmokeCommon.js` owns shared test-only UI smoke helpers such as queueing, waits, DOM dispatch helpers, assertions, and snapshot capture.
@@ -55,7 +57,7 @@ Keep DOM IDs stable unless tests and IPC-facing workflows are migrated at the sa
 - `runtimeIpc.js` owns load-test and collection-run IPC channels, cancellation maps, progress events, and result exports.
 - `sessionIpc.js` owns renderer session load/save IPC, including the synchronous shutdown flush path.
 - `sessionStore.js` owns persisted UI session state in Electron `userData/session.json`.
-- `workspaceIpc.js` owns workspace import/export, collection import/export, workspace save/load, and request-example export IPC channels.
+- `workspaceIpc.js` owns workspace import/export, collection import/export, workspace save/load, request-example export IPC channels, and the refreshed managed-workspace payloads returned after workspace import.
 - `workspaceMutations.js` owns workspace updates after request sends and collection runs.
 
 Further extraction should be demand-driven. `electron/main.js` is already reduced to app lifecycle, workspace/session-store wiring, and module registration, so more splitting should only happen when those responsibilities materially grow again.

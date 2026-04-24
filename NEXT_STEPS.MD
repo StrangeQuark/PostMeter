@@ -1,5 +1,7 @@
 # PostMeter Next Steps
 
+Use this document as the active backlog and production-readiness tracker after the product/reference docs have answered the implementation questions.
+
 ## Open Questions Before Further Generation
 
 No blocking engineering questions are required for the next local production-hardening pass. Continue assuming:
@@ -33,6 +35,9 @@ PostMeter must remain a standalone local desktop application. Do not add PostMet
 
 ## Completed This Iteration
 
+- Made native workspace import non-destructive for managed multi-workspace mode, so imported workspaces are added to the discovered workspace set without replacing or backing up the current workspace.
+- Added a desktop collection-export picker modal, including an explicit empty-state warning when no collections exist and a native collection export filename default of `<collection-name>.json`.
+- Updated the project docs to describe managed workspace discovery, non-destructive workspace import, exporting a selected managed workspace from the Workspaces list, and the collection export modal/empty-state/filename behavior consistently across the repo.
 - Completed the remaining local `Next Highest Priority Steps` burn-down.
 - Expanded JMeter compatibility with a representative timer/assertion matrix fixture covering Precise Throughput Timer, Poisson Random Timer, disabled mapped assertions with attribute-order variance, and preserve-only unsupported HTML/XML schema/compare/SMIME assertion metadata.
 - Made mapped JMeter assertion import more robust by reading assertion attributes independently of attribute ordering.
