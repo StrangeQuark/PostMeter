@@ -37,6 +37,7 @@ test('creates a default schema 10 workspace when no file exists', async () => {
   assert.deepEqual(workspace.environments, []);
   assert.deepEqual(workspace.cookies, []);
   assert.equal(JSON.parse(await fs.readFile(workspacePath, 'utf8')).schemaVersion, 10);
+  assert.equal(Object.hasOwn(JSON.parse(await fs.readFile(workspacePath, 'utf8')), 'name'), false);
 });
 
 test('migrates schema 2 workspaces to schema 10 and creates a backup', async () => {
@@ -227,6 +228,7 @@ test('persists and exports workspace values as plain JSON', async () => {
   const store = new WorkspaceStore(workspacePath);
   const workspace = {
     schemaVersion: 6,
+    name: 'Legacy Workspace Name',
     collections: [{
       id: 'c1',
       name: 'Secrets',
@@ -286,6 +288,7 @@ test('persists and exports workspace values as plain JSON', async () => {
 
   await store.save(workspace);
   const raw = JSON.parse(await fs.readFile(workspacePath, 'utf8'));
+  assert.equal(Object.hasOwn(raw, 'name'), false);
   assert.equal(raw.collections[0].variables[0].value, 'secret-collection-value');
   assert.equal(raw.collections[0].certificates[0].passphrase, 'cert-secret');
   assert.equal(raw.collections[0].variables[1].value, 'https://collection.example.test');
@@ -296,6 +299,7 @@ test('persists and exports workspace values as plain JSON', async () => {
   assert.equal(raw.environments[0].variables[1].value, 'https://example.test');
 
   const loaded = await store.load();
+  assert.equal(Object.hasOwn(loaded.workspace, 'name'), false);
   assert.equal(loaded.workspace.collections[0].variables[0].value, 'secret-collection-value');
   assert.equal(loaded.workspace.collections[0].certificates[0].passphrase, 'cert-secret');
   assert.equal(loaded.workspace.collections[0].requests[0].variables[0].value, 'secret-request-value');
@@ -309,6 +313,7 @@ test('persists and exports workspace values as plain JSON', async () => {
 
   await store.exportWorkspace(loaded.workspace, exportPath);
   const exported = JSON.parse(await fs.readFile(exportPath, 'utf8'));
+  assert.equal(Object.hasOwn(exported, 'name'), false);
   assert.equal(exported.collections[0].variables[0].value, 'secret-collection-value');
   assert.equal(exported.collections[0].certificates[0].passphrase, 'cert-secret');
   assert.equal(exported.collections[0].variables[1].value, 'https://collection.example.test');

@@ -13,9 +13,12 @@
     assertUiSmoke(baseUrl, 'UI workflow smoke requires a fixture base URL.');
     assertUiSmoke(workspace.collections.length === 0, 'New workspace should start without default collections.');
 
+    selectSidebarPanel('workspaces');
     newCollection();
     const collection = activeCollection();
     assertUiSmoke(collection, 'New collection was not created.');
+    assertUiSmoke(activeSidebarPanel === 'collections', 'Creating a collection should switch the sidebar to Collections.');
+    assertUiSmoke(activeMainPanel === 'request', 'Creating a collection should switch the main pane to request mode.');
     assertUiSmoke(collection.requests.length === 0, 'New collection should start without requests.');
     assertUiSmoke(!activeRequest(), 'New collection should not auto-select or create a request.');
     assertUiSmoke(!$('requestEmptyPanel').hidden, 'No-request state should show the create request screen.');

@@ -1,10 +1,13 @@
 const path = require('node:path');
 const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
-const { WorkspaceRecoveryError, WorkspaceStore } = require('../src/core/workspaceStore');
+const { WorkspaceRecoveryError } = require('../src/core/workspaceStore');
+const { WorkspaceManager } = require('../src/core/workspaceManager');
 const { installApplicationMenu } = require('./appMenu');
 const { registerAppIpc, safeExternalUrl } = require('./appIpc');
 const { createOAuthFlowController } = require('./oauthFlows');
 const { createMainWindow } = require('./mainWindow');
+const { registerSessionIpc } = require('./sessionIpc');
+const { SessionStore, defaultSessionPath } = require('./sessionStore');
 const { registerRuntimeIpc } = require('./runtimeIpc');
 const { registerWorkspaceIpc } = require('./workspaceIpc');
 const { registerRequestIpc } = require('./requestIpc');
@@ -15,6 +18,8 @@ const {
 } = require('../src/core/ipcValidation');
 
 let mainWindow;
+let sessionStore;
+let sessionState;
 let workspaceStore;
 let workspace;
 const oauthFlows = createOAuthFlowController({ app, shell, emitProgress: emitOAuthProgress });
@@ -67,13 +72,17 @@ function refreshApplicationMenu() {
 
 app.whenReady().then(async () => {
   oauthFlows.registerProtocol();
-  workspaceStore = new WorkspaceStore();
+  sessionStore = new SessionStore(defaultSessionPath(app.getPath('userData')));
+  sessionState = await sessionStore.load();
+  workspaceStore = new WorkspaceManager();
   try {
-    const loaded = await workspaceStore.load();
+    const loaded = await workspaceStore.load({ preferredWorkspaceId: sessionState.activeWorkspaceId });
     workspace = loaded.workspace;
+    sessionState = await sessionStore.patch({ activeWorkspaceId: loaded.activeWorkspaceId });
   } catch (error) {
     if (error instanceof WorkspaceRecoveryError) {
       workspace = error.recoveredWorkspace;
+      sessionState = await sessionStore.patch({ activeWorkspaceId: error.activeWorkspaceId || workspaceStore.getWorkspaceId() });
       dialog.showErrorBox('Workspace Recovered', error.message);
     } else {
       dialog.showErrorBox('PostMeter could not open the workspace', error.message || String(error));
@@ -131,6 +140,15 @@ function emitOAuthProgress(id, progress) {
 registerAppIpc({ app, ipcMain, shell });
 
 registerOAuthIpc({ ipcMain, oauthFlows });
+
+registerSessionIpc({
+  getSession: () => sessionState,
+  getSessionStore: () => sessionStore,
+  ipcMain,
+  setSession: (nextSession) => {
+    sessionState = nextSession;
+  }
+});
 
 registerRuntimeIpc({
   dialog,

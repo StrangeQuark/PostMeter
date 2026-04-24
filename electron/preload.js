@@ -38,11 +38,20 @@ contextBridge.exposeInMainWorld('postmeter', {
       return () => ipcRenderer.removeListener('menu:action', listener);
     }
   },
+  session: {
+    load: () => ipcRenderer.invoke('session:load'),
+    save: (session) => ipcRenderer.invoke('session:save', session),
+    saveSync: (session) => ipcRenderer.sendSync('session:saveSync', session)
+  },
   workspace: {
     load: () => ipcRenderer.invoke('workspace:load'),
     save: (workspace) => ipcRenderer.invoke('workspace:save', workspace),
+    create: () => ipcRenderer.invoke('workspace:create'),
+    rename: (workspaceId, name) => ipcRenderer.invoke('workspace:rename', workspaceId, name),
+    switch: (workspaceId) => ipcRenderer.invoke('workspace:switch', workspaceId),
+    delete: (workspaceId) => ipcRenderer.invoke('workspace:delete', workspaceId),
     importWorkspace: () => ipcRenderer.invoke('workspace:import'),
-    exportWorkspace: (workspace) => ipcRenderer.invoke('workspace:export', workspace)
+    exportWorkspace: (workspace, workspaceId) => ipcRenderer.invoke('workspace:export', workspace, workspaceId)
   },
   collection: {
     importCollection: () => ipcRenderer.invoke('collection:import'),

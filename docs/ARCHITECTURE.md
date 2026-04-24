@@ -25,6 +25,7 @@ Renderer files are loaded directly from `src/renderer/index.html`.
 - `requestTabs.js` owns generic request/environment/workspace tab-bar rendering from tab descriptors.
 - `requestTabState.js` owns request/environment/workspace tab lifecycle, selection, dirty handling, and close/discard flows.
 - `rendererBootstrap.js` owns renderer startup/theme bootstrap, toolbar-menu helpers, and DOM event registration driven by injected callbacks.
+- `sessionPersistence.js` owns renderer-side session serialization/restoration for open tabs, active panels, active selection, drafts, and dirty editor state.
 - `rendererWorkflows.js` owns request send/load/runner/OAuth/workspace import-export-save workflows and script-mutation application.
 - `responseFormatting.js` owns renderer-side response body formatting for JSON, XML, and HTML display.
 - `runResultFormatting.js` owns renderer-side text formatting for runner, load-test, and OAuth progress/result displays.
@@ -52,10 +53,12 @@ Keep DOM IDs stable unless tests and IPC-facing workflows are migrated at the sa
 - `oauthFlows.js` owns OAuth authorization-code/device-code orchestration, callback routing, and protocol registration.
 - `requestIpc.js` owns single-request validation/send IPC and persistence of response-side workspace mutations.
 - `runtimeIpc.js` owns load-test and collection-run IPC channels, cancellation maps, progress events, and result exports.
+- `sessionIpc.js` owns renderer session load/save IPC, including the synchronous shutdown flush path.
+- `sessionStore.js` owns persisted UI session state in Electron `userData/session.json`.
 - `workspaceIpc.js` owns workspace import/export, collection import/export, workspace save/load, and request-example export IPC channels.
 - `workspaceMutations.js` owns workspace updates after request sends and collection runs.
 
-Further extraction should be demand-driven. `electron/main.js` is already reduced to app lifecycle, workspace-store wiring, and module registration, so more splitting should only happen when those responsibilities materially grow again.
+Further extraction should be demand-driven. `electron/main.js` is already reduced to app lifecycle, workspace/session-store wiring, and module registration, so more splitting should only happen when those responsibilities materially grow again.
 
 IPC channel names and preload APIs are compatibility contracts. Refactors must preserve them unless a migration is explicitly planned.
 
@@ -79,6 +82,8 @@ Core modules must not depend on Electron or renderer globals.
 - `importedCollectionIds.js` owns imported collection/folder/request/example/certificate ID regeneration.
 - `workspaceStore.js` owns high-level workspace orchestration and file-facing service methods.
 - `workspaceMigrations.js` owns workspace schema migration.
+
+Managed workspace discovery is now filesystem-based. `WorkspaceManager` scans the workspace directory for native workspace JSON files and no longer depends on a separate manifest file for the workspace catalog or startup selection.
 
 Core modules should expose small APIs and have focused unit tests. Shared schema metadata in `payloadSchemas.js` should stay the source of truth for enum membership and basic field limits where practical; handwritten validation should be reserved for nested, size-based, or cross-field checks that need custom logic.
 

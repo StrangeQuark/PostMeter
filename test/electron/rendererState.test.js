@@ -15,10 +15,11 @@ test('renderer state builds active tab keys from the current ids', () => {
   state.activeRequestId = 'request-1';
   state.activeEnvironmentId = 'environment-1';
   state.activeWorkspaceId = 'current';
+  state.selectedWorkspaceId = 'workspace-2';
 
   assert.equal(activeRequestTabKey(state), 'request:collection-1:request-1');
   assert.equal(activeEnvironmentTabKey(state), 'environment:environment-1');
-  assert.equal(activeWorkspaceTabKey(state), 'workspace:current');
+  assert.equal(activeWorkspaceTabKey(state), 'workspace:workspace-2');
 
   state.activeCollectionId = null;
   assert.equal(activeRequestTabKey(state), 'draft:request-1');

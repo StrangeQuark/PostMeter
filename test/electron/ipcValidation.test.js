@@ -51,6 +51,7 @@ test('accepts structurally valid IPC payloads', () => {
   }));
   assert.doesNotThrow(() => assertWorkspacePayload({
     schemaVersion: 10,
+    name: 'Workspace',
     settings: { appearance: { theme: 'dark' }, updates: { includePrereleases: true } },
     collections: [],
     environments: [{ id: 'e1', name: 'Env', variables: [{ enabled: true, key: 'token', value: 'secret' }] }],
@@ -115,8 +116,10 @@ test('accepts structurally valid IPC payloads', () => {
     localVariables: [{ enabled: true, key: 'local', value: 'value' }]
   }));
   assert.doesNotThrow(() => assertWorkspaceLoadResultPayload({
-    workspace: { schemaVersion: 10, settings: { updates: { includePrereleases: false } }, collections: [], environments: [], cookies: [], history: [] },
-    path: '/tmp/workspace.json'
+    workspace: { schemaVersion: 10, name: 'Workspace', settings: { updates: { includePrereleases: false } }, collections: [], environments: [], cookies: [], history: [] },
+    path: '/tmp/workspace.json',
+    activeWorkspaceId: 'workspace.json',
+    workspaces: [{ id: 'workspace.json', name: 'Workspace', path: '/tmp/workspace.json', current: true, deletable: false }]
   }));
   assert.doesNotThrow(() => assertFileOperationResultPayload({
     cancelled: false,

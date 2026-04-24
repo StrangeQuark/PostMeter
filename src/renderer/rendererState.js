@@ -3,6 +3,8 @@
     return {
       workspace: null,
       workspacePath: '',
+      workspaces: [],
+      selectedWorkspaceId: '',
       activeCollectionId: null,
       activeFolderId: null,
       activeRequestId: null,
@@ -45,7 +47,7 @@
   }
 
   function activeWorkspaceTabKey(state) {
-    return state?.activeWorkspaceId ? `workspace:${state.activeWorkspaceId}` : '';
+    return state?.selectedWorkspaceId ? `workspace:${state.selectedWorkspaceId}` : '';
   }
 
   function isActiveRequestTab(state, tab) {

@@ -17,6 +17,7 @@
     <div class="toolbar-group menu-group" aria-label="Create">
       <button id="newMenuButton" class="primary menu-trigger" aria-haspopup="menu" aria-expanded="false">New</button>
       <div id="newMenu" class="toolbar-menu" role="menu" hidden>
+        <button id="newWorkspaceMenuButton" role="menuitem">Workspace</button>
         <button id="newRequestButton" role="menuitem">Request</button>
         <button id="newCollectionButton" role="menuitem">Collection</button>
         <button id="newFolderButton" role="menuitem">Folder</button>
@@ -432,9 +433,10 @@
             <div id="workspaceMainTitle" class="workspace-main-title">Local Workspace</div>
           </div>
           <div class="workspace-actions">
-            <button id="saveWorkspacePanelButton" type="button">Save Workspace</button>
-            <button id="importWorkspacePanelButton" type="button">Import Workspace</button>
+            <button id="switchWorkspacePanelButton" type="button">Switch to this Workspace</button>
+            <button id="renameWorkspacePanelButton" type="button">Rename Workspace</button>
             <button id="exportWorkspacePanelButton" type="button">Export Workspace</button>
+            <button id="deleteWorkspacePanelButton" type="button">Delete Workspace</button>
           </div>
         </div>
         <div id="workspaceSummary" class="workspace-summary workspace-main-summary"></div>
@@ -549,6 +551,7 @@
   <script src="requestEditorPanels.js"></script>
   <script src="variableAutocomplete.js"></script>
   <script src="rendererState.js"></script>
+  <script src="sessionPersistence.js"></script>
   <script src="requestTabs.js"></script>
   <script src="requestTabState.js"></script>
   <script src="rendererBootstrap.js"></script>
