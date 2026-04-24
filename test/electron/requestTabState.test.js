@@ -89,3 +89,92 @@ test('request tab state discards and closes an active draft tab', async () => {
   assert.equal(clearedWorkspace, 1);
   assert.equal(renders, 1);
 });
+
+test('request tab state snapshots environments and restores saved changes when closing a dirty environment tab', async () => {
+  const state = createRendererState();
+  state.workspace = {
+    collections: [],
+    environments: [
+      { id: 'environment-1', name: 'Saved Environment', variables: [{ enabled: true, key: 'baseUrl', value: 'https://example.test' }] }
+    ]
+  };
+  state.activeMainPanel = 'environment';
+  state.activeEnvironmentId = 'environment-1';
+  state.openEnvironmentTabs = [
+    { key: 'environment:environment-1', environmentId: 'environment-1', dirty: true, snapshot: JSON.stringify(state.workspace.environments[0]) }
+  ];
+  let collected = 0;
+  let renders = 0;
+
+  const tabState = createRequestTabState({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => state.workspace.environments[0],
+    activeRequest: () => null,
+    activeWorkspaceItem: () => null,
+    collectEnvironmentFromEditor: () => {
+      collected += 1;
+      state.workspace.environments[0].name = 'Edited Environment';
+    },
+    promptUnsavedRequestClose: async () => 'discard',
+    renderAll: () => { renders += 1; },
+    renderRequestTabs: () => {},
+    workspaceListItems: () => []
+  });
+
+  const ensuredTab = tabState.ensureOpenEnvironmentTabForActive();
+  assert.equal(ensuredTab.snapshot, JSON.stringify({ id: 'environment-1', name: 'Saved Environment', variables: [{ enabled: true, key: 'baseUrl', value: 'https://example.test' }] }));
+
+  await tabState.closeEnvironmentTab(state.openEnvironmentTabs[0]);
+
+  assert.equal(collected, 1);
+  assert.equal(state.workspace.environments[0].name, 'Saved Environment');
+  assert.deepEqual(state.openEnvironmentTabs, []);
+  assert.equal(state.activeEnvironmentId, 'none');
+  assert.equal(renders, 1);
+});
+
+test('request tab state keeps environment mode when discarding the last active unsaved environment tab', async () => {
+  const state = createRendererState();
+  state.workspace = {
+    collections: [],
+    environments: [
+      { id: 'environment-1', name: 'New Environment', variables: [] }
+    ]
+  };
+  state.activeSidebarPanel = 'environments';
+  state.activeMainPanel = 'environment';
+  state.activeEnvironmentId = 'environment-1';
+  state.openEnvironmentTabs = [
+    {
+      key: 'environment:environment-1',
+      environmentId: 'environment-1',
+      dirty: true,
+      createdUnsaved: true,
+      snapshot: JSON.stringify(state.workspace.environments[0])
+    }
+  ];
+  let renders = 0;
+
+  const tabState = createRequestTabState({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => state.workspace.environments[0] || null,
+    activeRequest: () => null,
+    activeWorkspaceItem: () => null,
+    collectEnvironmentFromEditor: () => {},
+    promptUnsavedRequestClose: async () => 'discard',
+    renderAll: () => { renders += 1; },
+    renderRequestTabs: () => {},
+    workspaceListItems: () => []
+  });
+
+  await tabState.closeEnvironmentTab(state.openEnvironmentTabs[0]);
+
+  assert.deepEqual(state.workspace.environments, []);
+  assert.deepEqual(state.openEnvironmentTabs, []);
+  assert.equal(state.activeEnvironmentId, 'none');
+  assert.equal(state.activeSidebarPanel, 'environments');
+  assert.equal(state.activeMainPanel, 'environment');
+  assert.equal(renders, 1);
+});
