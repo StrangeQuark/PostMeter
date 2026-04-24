@@ -7,6 +7,12 @@
     const activeCollection = options.activeCollection || (() => null);
     const activeEnvironment = options.activeEnvironment || (() => null);
     const activeRequest = options.activeRequest || (() => null);
+    const applyLoadedWorkspace = typeof options.applyLoadedWorkspace === 'function'
+      ? options.applyLoadedWorkspace
+      : null;
+    const promptForCollectionExport = typeof options.promptForCollectionExport === 'function'
+      ? options.promptForCollectionExport
+      : null;
     const applyPostmanCookieMetadata = options.applyPostmanCookieMetadata || ((cookie) => cookie);
     const collectEnvironmentFromEditor = options.collectEnvironmentFromEditor || (() => {});
     const collectRequestFromEditor = options.collectRequestFromEditor || (() => {});
@@ -48,6 +54,19 @@
         return globalThis.confirm(message);
       }
       return true;
+    }
+
+    function promptInput(message, defaultValue = '') {
+      if (typeof options.prompt === 'function') {
+        return options.prompt(message, defaultValue);
+      }
+      if (typeof windowObject.prompt === 'function') {
+        return windowObject.prompt(message, defaultValue);
+      }
+      if (typeof globalThis.prompt === 'function') {
+        return globalThis.prompt(message, defaultValue);
+      }
+      return defaultValue;
     }
 
     async function sendActiveRequest() {
@@ -352,17 +371,21 @@
     }
 
     async function importWorkspace() {
-      if (!confirmAction('Importing a workspace replaces the current workspace. A backup will be created first. Continue?')) {
-        return;
-      }
       const result = await windowObject.postmeter.workspace.importWorkspace();
       if (result.cancelled) {
         return;
       }
-      state.workspace = result.workspace;
-      selectInitialWorkspaceItem();
-      renderAll();
-      setStatus(`Workspace imported. Backup: ${result.backupPath || 'none'}`);
+      if (applyLoadedWorkspace && result.workspace && Array.isArray(result.workspaces)) {
+        applyLoadedWorkspace(result, {
+          focus: 'workspace',
+          selectedWorkspaceId: result.createdWorkspaceId || null
+        });
+      } else {
+        state.workspace = result.workspace;
+        selectInitialWorkspaceItem();
+        renderAll();
+      }
+      setStatus('Workspace imported.');
     }
 
     async function exportWorkspace() {
@@ -415,12 +438,46 @@
       await saveWorkspace();
     }
 
-    async function exportCollection(collection = activeCollection(), format = 'postmeter') {
-      if (!collection) {
-        return setStatus('Select a collection to export.');
+    async function exportCollection(collection = null, format = 'postmeter') {
+      let selectedCollection = collection;
+      if (!selectedCollection) {
+        const collections = Array.isArray(state.workspace?.collections) ? state.workspace.collections : [];
+        if (promptForCollectionExport) {
+          const preferredCollection = activeCollection() || collections[0] || null;
+          selectedCollection = await promptForCollectionExport(collections, preferredCollection);
+          if (!selectedCollection) {
+            return;
+          }
+        } else {
+          if (!collections.length) {
+            return setStatus('Create a collection before exporting.');
+          }
+          const preferredCollection = activeCollection() || collections[0];
+          const promptMessage = [
+            'Choose a collection to export:',
+            ...collections.map((candidate, index) => `${index + 1}. ${candidate.name}`),
+            '',
+            'Enter a number or collection name.'
+          ].join('\n');
+          const selection = String(promptInput(promptMessage, preferredCollection?.name || collections[0].name || '') || '').trim();
+          if (!selection) {
+            return;
+          }
+          const numericIndex = Number.parseInt(selection, 10);
+          if (String(numericIndex) === selection && numericIndex >= 1 && numericIndex <= collections.length) {
+            selectedCollection = collections[numericIndex - 1];
+          } else {
+            selectedCollection = collections.find((candidate) => candidate.name === selection)
+              || collections.find((candidate) => candidate.name.toLowerCase() === selection.toLowerCase())
+              || null;
+          }
+        }
+      }
+      if (!selectedCollection) {
+        return setStatus('Select a valid collection to export.');
       }
       const exportCollectionBoundary = windowObject.__postmeterExportCollection || windowObject.postmeter.collection.exportCollection;
-      const result = await exportCollectionBoundary(collection, format);
+      const result = await exportCollectionBoundary(selectedCollection, format);
       if (!result.cancelled) {
         setStatus(`Collection exported to ${result.path}.`);
       }

@@ -33,6 +33,7 @@ let lastUserNotification = RENDERER_STATE_DEFAULTS.lastUserNotification;
 let activeModalId = RENDERER_STATE_DEFAULTS.activeModalId;
 let activeModalResolver = RENDERER_STATE_DEFAULTS.activeModalResolver;
 let selectedDraftSaveCollectionId = RENDERER_STATE_DEFAULTS.selectedDraftSaveCollectionId;
+let selectedExportCollectionId = RENDERER_STATE_DEFAULTS.selectedExportCollectionId;
 let sessionSaveTimer = null;
 let sessionPersistenceEnabled = false;
 
@@ -144,6 +145,8 @@ const state = {
   set activeModalResolver(value) { activeModalResolver = value; },
   get selectedDraftSaveCollectionId() { return selectedDraftSaveCollectionId; },
   set selectedDraftSaveCollectionId(value) { selectedDraftSaveCollectionId = value; },
+  get selectedExportCollectionId() { return selectedExportCollectionId; },
+  set selectedExportCollectionId(value) { selectedExportCollectionId = value; },
   get maxOpenRequestTabs() { return RENDERER_STATE_DEFAULTS.maxOpenRequestTabs; }
 };
 
@@ -174,6 +177,7 @@ const rendererWorkflows = createRendererWorkflows({
   state,
   doc: document,
   windowObject: window,
+  applyLoadedWorkspace,
   activeCollection,
   activeEnvironment,
   activeRequest,
@@ -197,6 +201,7 @@ const rendererWorkflows = createRendererWorkflows({
   renderHistory,
   renderRequestVariablePairs,
   renderVariablePreview,
+  promptForCollectionExport,
   saveDraftRequestWithPrompt,
   selectFirstRequest,
   selectInitialWorkspaceItem,
@@ -266,11 +271,11 @@ function bindUi() {
     onImportWorkspace: importWorkspace,
     onExportWorkspace: exportWorkspace,
     onImportCollection: importCollection,
-    onExportCollection: exportCollection,
-    onExportOpenApi: () => exportCollection(activeCollection(), 'openapi'),
-    onExportJMeter: () => exportCollection(activeCollection(), 'jmeter'),
-    onExportCurl: () => exportCollection(activeCollection(), 'curl'),
-    onExportHar: () => exportCollection(activeCollection(), 'har'),
+    onExportCollection: () => exportCollection(null, 'postmeter'),
+    onExportOpenApi: () => exportCollection(null, 'openapi'),
+    onExportJMeter: () => exportCollection(null, 'jmeter'),
+    onExportCurl: () => exportCollection(null, 'curl'),
+    onExportHar: () => exportCollection(null, 'har'),
     onSelectTheme: (themeOption) => setThemePreference(themeOption, { save: true }),
     onSendRequest: sendActiveRequest,
     onAddParam: () => addPair('queryParams'),
@@ -328,6 +333,7 @@ function bindUi() {
     onCancelActiveModal: cancelActiveModal,
     onResolveActiveModal: resolveActiveModal,
     getSelectedDraftSaveCollectionId: () => selectedDraftSaveCollectionId,
+    getSelectedExportCollectionId: () => selectedExportCollectionId,
     onCloseContextMenu: closeContextMenu,
     onInitResizablePanes: initResizablePanes
   });
@@ -359,7 +365,7 @@ async function handleAppMenuAction(action) {
         await exportWorkspace();
         break;
       case 'export-collection':
-        await exportCollection();
+        await exportCollection(null, 'postmeter');
         break;
       case 'set-prereleases':
         await setIncludePrereleases(action.includePrereleases === true, { save: true });
@@ -618,6 +624,21 @@ function promptDraftSaveCollection(request) {
   return showModal('saveDraftRequestModal', null);
 }
 
+async function promptForCollectionExport(collections, preferredCollection) {
+  const collectionId = await promptCollectionExport(collections, preferredCollection);
+  return (collections || []).find((collection) => collection.id === collectionId) || null;
+}
+
+function promptCollectionExport(collections, preferredCollection) {
+  selectedExportCollectionId = '';
+  const availableCollections = Array.isArray(collections) ? collections : [];
+  $('exportCollectionMessage').textContent = availableCollections.length
+    ? 'Choose a collection to export.'
+    : 'There are no collections present to export.';
+  renderExportCollectionList(availableCollections, preferredCollection);
+  return showModal('exportCollectionModal', null);
+}
+
 function renderSaveDraftCollectionList() {
   const list = $('saveDraftCollectionList');
   list.textContent = '';
@@ -647,6 +668,42 @@ function renderSaveDraftCollectionList() {
   }
 }
 
+function renderExportCollectionList(collections = workspace.collections, preferredCollection = null) {
+  const list = $('exportCollectionList');
+  list.textContent = '';
+  $('confirmExportCollectionButton').disabled = true;
+  const availableCollections = Array.isArray(collections) ? collections : [];
+  if (!availableCollections.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.textContent = 'There are no collections present to export.';
+    list.append(empty);
+    return;
+  }
+  const preferredId = preferredCollection?.id || availableCollections[0]?.id || '';
+  for (const collection of availableCollections) {
+    const label = document.createElement('label');
+    label.className = 'collection-pick-option';
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = 'exportCollection';
+    input.value = collection.id;
+    input.addEventListener('change', () => {
+      selectedExportCollectionId = input.value;
+      $('confirmExportCollectionButton').disabled = false;
+    });
+    if (collection.id === preferredId) {
+      input.checked = true;
+      selectedExportCollectionId = input.value;
+      $('confirmExportCollectionButton').disabled = false;
+    }
+    const text = document.createElement('span');
+    text.textContent = collection.name || 'Untitled Collection';
+    label.append(input, text);
+    list.append(label);
+  }
+}
+
 function showModal(modalId, cancelValue) {
   if (state.activeModalResolver) {
     resolveActiveModal(cancelValue);
@@ -661,6 +718,8 @@ function showModal(modalId, cancelValue) {
     openModalState(state, modalId, resolve);
     if (modalId === 'unsavedRequestModal') {
       $('cancelCloseRequestButton').focus();
+    } else if (modalId === 'exportCollectionModal') {
+      $('cancelExportCollectionButton').focus();
     } else {
       $('cancelSaveDraftButton').focus();
     }

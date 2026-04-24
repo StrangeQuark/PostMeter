@@ -78,7 +78,12 @@ class WorkspaceManager {
   }
 
   async importWorkspace(importPath) {
-    return this.currentStore().importWorkspace(importPath);
+    const catalog = await this.ensureCatalog(this.currentWorkspaceId);
+    const importedWorkspace = await this.currentStore().importWorkspace(importPath);
+    const workspaceName = await this.nextWorkspaceName(importWorkspaceDisplayName(importPath));
+    const filename = this.nextWorkspaceFilename(catalog.files, workspaceName);
+    await new WorkspaceStore(this.absoluteWorkspacePath(filename)).save(importedWorkspace);
+    return filename;
   }
 
   async exportWorkspace(workspace, exportPath) {
@@ -326,6 +331,15 @@ function safeWorkspaceFilenamePart(name) {
     .trim()
     .replace(/[. ]+$/g, '');
   return normalized || 'Workspace';
+}
+
+function importWorkspaceDisplayName(importPath) {
+  const parsed = path.parse(String(importPath || 'Workspace'));
+  const nestedParsed = path.parse(parsed.name || '');
+  const baseName = nestedParsed.ext.toLowerCase() === '.postmeter'
+    ? nestedParsed.name
+    : parsed.name;
+  return normalizeWorkspaceDisplayName(baseName || 'Workspace');
 }
 
 function workspaceSummary(workspace) {

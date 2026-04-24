@@ -505,7 +505,7 @@ Behavior:
 - Writes JSON through a temporary file and renames into place.
 - Writes normalized workspace values directly to local JSON.
 - Normalizes IDs, names, body types, methods, arrays, settings, request load-test compatibility policies, collection variables, collection certificates, request variables, request examples, request cookie jar settings, workspace cookies, folders, environments, and history.
-- Destructive workspace import creates a current-workspace backup before replacement.
+- Native workspace import adds another managed workspace without replacing or backing up the current one.
 
 Limitations:
 
@@ -517,7 +517,7 @@ Limitations:
 
 Native workspace export writes the normalized workspace directly.
 
-Native workspace import reads a PostMeter workspace, migrates it, normalizes it, backs up the current workspace, and replaces the active workspace from the UI.
+Native workspace import reads a PostMeter workspace, migrates it, normalizes it, writes it as another managed workspace, and keeps the current workspace active until the user switches.
 
 Native collection export writes one collection inside a valid PostMeter workspace wrapper. Environments are intentionally separate and are not included in collection export.
 

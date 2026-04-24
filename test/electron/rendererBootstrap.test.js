@@ -95,6 +95,7 @@ test('renderer bootstrap binds auth input and modal draft confirmation events', 
   const elements = new Map([
     ['authTypeSelect', createElement({ tagName: 'SELECT', value: 'oauth2' })],
     ['confirmSaveDraftButton', createElement()],
+    ['confirmExportCollectionButton', createElement()],
     ['contextMenu', createElement()],
     ['modalBackdrop', createElement()]
   ]);
@@ -120,15 +121,17 @@ test('renderer bootstrap binds auth input and modal draft confirmation events', 
     onAuthTypeChange: (value) => calls.authType.push(value),
     onAuthInput: () => { calls.authInput += 1; },
     onResolveActiveModal: (value) => calls.resolveModal.push(value),
-    getSelectedDraftSaveCollectionId: () => 'collection-1'
+    getSelectedDraftSaveCollectionId: () => 'collection-1',
+    getSelectedExportCollectionId: () => 'collection-2'
   });
 
   elements.get('authTypeSelect').dispatch('change');
   elements.get('confirmSaveDraftButton').dispatch('click');
+  elements.get('confirmExportCollectionButton').dispatch('click');
 
   assert.deepEqual(calls.authType, ['oauth2']);
   assert.equal(calls.authInput, 1);
-  assert.deepEqual(calls.resolveModal, ['collection-1']);
+  assert.deepEqual(calls.resolveModal, ['collection-1', 'collection-2']);
 });
 
 function createElement({ tagName = 'BUTTON', value = '' } = {}) {

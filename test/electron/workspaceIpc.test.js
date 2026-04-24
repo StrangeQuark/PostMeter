@@ -121,3 +121,125 @@ test('workspace IPC exports a selected non-current workspace by id', async () =>
   assert.equal(exportedWorkspaceId, 'Workspace.json');
   assert.deepEqual(result, { cancelled: false, path: '/tmp/export.json' });
 });
+
+test('workspace IPC suggests a collection-name json filename for native collection exports', async () => {
+  const handlers = new Map();
+  let saveDialogOptions = null;
+  let exportedCollection = null;
+  let exportedFormat = '';
+  registerWorkspaceIpc({
+    dialog: {
+      showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+      showSaveDialog: async (_window, options) => {
+        saveDialogOptions = options;
+        return { canceled: false, filePath: '/tmp/AuthServiceCollection.json' };
+      }
+    },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => ({ schemaVersion: 10, collections: [], environments: [], history: [], cookies: [], settings: { updates: { includePrereleases: false } } }),
+    getWorkspaceStore: () => ({
+      describeCurrent: async (workspace) => ({ workspace, path: '/tmp/Local Workspace.json', activeWorkspaceId: 'Local Workspace.json', workspaces: [] }),
+      exportCollection: async (collection, _exportPath, options = {}) => {
+        exportedCollection = collection;
+        exportedFormat = options.format || '';
+        return '/tmp/AuthServiceCollection.json';
+      }
+    }),
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    },
+    refreshApplicationMenu: () => {},
+    saveWorkspace: async (workspace) => workspace,
+    setWorkspace: () => {}
+  });
+
+  const collection = { id: 'c1', name: 'AuthServiceCollection', requests: [], folders: [] };
+  const result = await handlers.get('collection:export')(null, collection, 'postmeter');
+
+  assert.equal(saveDialogOptions?.title, 'Export Collection');
+  assert.equal(saveDialogOptions?.defaultPath, 'AuthServiceCollection.json');
+  assert.deepEqual(saveDialogOptions?.filters, [
+    { name: 'POSTMETER Collection', extensions: ['json'] },
+    { name: 'All Files', extensions: ['*'] }
+  ]);
+  assert.equal(exportedCollection, collection);
+  assert.equal(exportedFormat, 'postmeter');
+  assert.deepEqual(result, { cancelled: false, path: '/tmp/AuthServiceCollection.json' });
+});
+
+test('workspace IPC imports a workspace as an additional managed workspace without backing up or replacing the current workspace', async () => {
+  const handlers = new Map();
+  let backupCalls = 0;
+  let importedPath = '';
+  let savedWorkspaceCalls = 0;
+  let setWorkspaceCalls = 0;
+  let refreshCalls = 0;
+  const currentWorkspace = {
+    schemaVersion: 10,
+    collections: [],
+    environments: [],
+    history: [],
+    cookies: [],
+    settings: { updates: { includePrereleases: false } }
+  };
+  const workspaces = [
+    { id: 'Local Workspace.json', name: 'Local Workspace', path: '/tmp/Local Workspace.json', current: true, deletable: true },
+    { id: 'Imported Workspace.json', name: 'Imported Workspace', path: '/tmp/Imported Workspace.json', current: false, deletable: true }
+  ];
+  registerWorkspaceIpc({
+    dialog: {
+      showOpenDialog: async () => ({ canceled: false, filePaths: ['/tmp/Imported Workspace.postmeter.json'] }),
+      showSaveDialog: async () => ({ canceled: true })
+    },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => currentWorkspace,
+    getWorkspaceStore: () => ({
+      describeCurrent: async (workspace, extras = {}) => ({
+        workspace,
+        path: '/tmp/Local Workspace.json',
+        activeWorkspaceId: 'Local Workspace.json',
+        workspaces,
+        ...extras
+      }),
+      importWorkspace: async (filePath) => {
+        importedPath = filePath;
+        return 'Imported Workspace.json';
+      },
+      backupCurrentWorkspace: async () => {
+        backupCalls += 1;
+        return '/tmp/workspace.backup';
+      }
+    }),
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    },
+    refreshApplicationMenu: () => { refreshCalls += 1; },
+    saveWorkspace: async (workspace) => {
+      savedWorkspaceCalls += 1;
+      return workspace;
+    },
+    setWorkspace: () => { setWorkspaceCalls += 1; }
+  });
+
+  const result = await handlers.get('workspace:import')();
+
+  assert.equal(importedPath, '/tmp/Imported Workspace.postmeter.json');
+  assert.equal(backupCalls, 0);
+  assert.equal(savedWorkspaceCalls, 0);
+  assert.equal(setWorkspaceCalls, 0);
+  assert.equal(refreshCalls, 0);
+  assert.deepEqual(result, {
+    cancelled: false,
+    workspace: currentWorkspace,
+    path: '/tmp/Local Workspace.json',
+    activeWorkspaceId: 'Local Workspace.json',
+    createdWorkspaceId: 'Imported Workspace.json',
+    workspaces
+  });
+});
