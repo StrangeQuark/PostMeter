@@ -69,6 +69,7 @@ const {
   activeEnvironmentTabKey: buildActiveEnvironmentTabKey,
   activeRequestTabKey: buildActiveRequestTabKey,
   activeWorkspaceTabKey: buildActiveWorkspaceTabKey,
+  clearSavedEnvironmentDirtyState: clearRendererSavedEnvironmentDirtyState,
   clearSavedRequestDirtyState: clearRendererSavedRequestDirtyState,
   isActiveEnvironmentTab: isRendererActiveEnvironmentTab,
   isActiveRequestTab: isRendererActiveRequestTab,
@@ -141,6 +142,7 @@ const requestTabState = createRequestTabState({
   activeRequest,
   activeWorkspaceItem,
   clearActiveWorkspaceItem,
+  collectEnvironmentFromEditor,
   collectRequestFromEditor,
   findRequest,
   persistWorkspace: (...args) => persistWorkspace(...args),
@@ -296,7 +298,7 @@ function bindUi() {
     onTestScriptInput: collectRequestAndMarkDirty,
     onRequestCookieJarChange: collectRequestAndMarkDirty,
     onFilterCookiesChange: renderCookieJarEditor,
-    onEnvironmentNameInput: collectEnvironmentFromEditor,
+    onEnvironmentNameInput: collectEnvironmentAndMarkDirty,
     onAuthTypeChange: showAuthSection,
     onAuthInput: collectRequestAndMarkDirty,
     onActivateTab: activateTab,
@@ -431,14 +433,27 @@ function markActiveRequestDirty() {
   requestTabState.markActiveRequestDirty();
 }
 
+function markActiveEnvironmentDirty() {
+  requestTabState.markActiveEnvironmentDirty();
+}
+
 function collectRequestAndMarkDirty() {
   collectRequestFromEditor();
   markActiveRequestDirty();
 }
 
+function collectEnvironmentAndMarkDirty() {
+  collectEnvironmentFromEditor();
+  markActiveEnvironmentDirty();
+}
+
 function clearSavedRequestDirtyState() {
   clearRendererSavedRequestDirtyState(state, {
     requestForTab: requestTabState.requestForTab,
+    onAfterClear: () => {}
+  });
+  clearRendererSavedEnvironmentDirtyState(state, {
+    environmentForTab: requestTabState.environmentForTab,
     onAfterClear: renderRequestTabs
   });
 }
@@ -512,6 +527,13 @@ async function closeRequestTab(tab) {
 }
 
 function promptUnsavedRequestClose(tab, request) {
+  if (tab.environmentId) {
+    $('unsavedRequestTitle').textContent = tab.createdUnsaved ? 'Close unsaved environment?' : 'Close environment with unsaved changes?';
+    $('unsavedRequestMessage').textContent = tab.createdUnsaved
+      ? `"${request.name || 'Untitled Environment'}" is not saved to the workspace. Save it before closing?`
+      : `"${request.name || 'Untitled Environment'}" has unsaved changes. Save those changes before closing?`;
+    return showModal('unsavedRequestModal', 'cancel');
+  }
   $('unsavedRequestTitle').textContent = tab.draft ? 'Close unsaved request?' : 'Close request with unsaved changes?';
   $('unsavedRequestMessage').textContent = tab.draft
     ? `"${request.name || 'Untitled Request'}" is not saved to a collection. Save it before closing?`
@@ -1290,6 +1312,7 @@ function renderEnvironmentPairs(pairs) {
     enabled.checked = pair.enabled !== false;
     enabled.addEventListener('change', () => {
       pair.enabled = enabled.checked;
+      markActiveEnvironmentDirty();
       renderVariablePreview();
     });
     const key = document.createElement('input');
@@ -1297,6 +1320,7 @@ function renderEnvironmentPairs(pairs) {
     key.value = pair.key || '';
     key.addEventListener('input', () => {
       pair.key = key.value;
+      markActiveEnvironmentDirty();
       renderVariablePreview();
     });
     const value = document.createElement('input');
@@ -1305,12 +1329,14 @@ function renderEnvironmentPairs(pairs) {
     value.value = pair.value || '';
     value.addEventListener('input', () => {
       pair.value = value.value;
+      markActiveEnvironmentDirty();
       renderVariablePreview();
     });
     const remove = document.createElement('button');
     remove.textContent = 'Remove';
     remove.addEventListener('click', () => {
       pairs.splice(index, 1);
+      markActiveEnvironmentDirty();
       renderEnvironmentEditor();
     });
     row.append(enabled, key, value, remove);
@@ -1568,7 +1594,7 @@ function newEnvironment() {
   activeEnvironmentId = environment.id;
   activeSidebarPanel = 'environments';
   activeMainPanel = 'environment';
-  ensureOpenEnvironmentTabForActive();
+  ensureOpenEnvironmentTabForActive({ dirty: true, createdUnsaved: true });
   renderAll();
   return environment;
 }
@@ -1595,7 +1621,7 @@ function renameEnvironment(environment) {
     activeEnvironmentId = environment.id;
     activeSidebarPanel = 'environments';
     activeMainPanel = 'environment';
-    ensureOpenEnvironmentTabForActive();
+    ensureOpenEnvironmentTabForActive({ dirty: true });
     renderAll();
   }
 }
@@ -1604,6 +1630,7 @@ function addVariable() {
   const environment = activeEnvironment();
   if (environment) {
     environment.variables.push({ enabled: true, key: '', value: '' });
+    markActiveEnvironmentDirty();
     renderEnvironmentEditor();
   }
 }

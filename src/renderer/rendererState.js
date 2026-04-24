@@ -68,6 +68,14 @@
     }
   }
 
+  function environmentSnapshot(environment) {
+    try {
+      return JSON.stringify(environment);
+    } catch {
+      return '{}';
+    }
+  }
+
   function clearSavedRequestDirtyState(state, options = {}) {
     const requestForTab = options.requestForTab || (() => null);
     for (const tab of state?.openRequestTabs || []) {
@@ -79,6 +87,19 @@
       tab.createdUnsaved = false;
       if (request) {
         tab.snapshot = requestSnapshot(request);
+      }
+    }
+    options.onAfterClear?.();
+  }
+
+  function clearSavedEnvironmentDirtyState(state, options = {}) {
+    const environmentForTab = options.environmentForTab || (() => null);
+    for (const tab of state?.openEnvironmentTabs || []) {
+      const environment = environmentForTab(tab);
+      tab.dirty = false;
+      tab.createdUnsaved = false;
+      if (environment) {
+        tab.snapshot = environmentSnapshot(environment);
       }
     }
     options.onAfterClear?.();
@@ -118,8 +139,10 @@
     activeEnvironmentTabKey,
     activeRequestTabKey,
     activeWorkspaceTabKey,
+    clearSavedEnvironmentDirtyState,
     clearSavedRequestDirtyState,
     createRendererState,
+    environmentSnapshot,
     isActiveEnvironmentTab,
     isActiveRequestTab,
     isActiveWorkspaceTab,

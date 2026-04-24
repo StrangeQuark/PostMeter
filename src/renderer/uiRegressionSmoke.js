@@ -16,7 +16,7 @@
     assertUiSmoke($('themeDarkButton').getAttribute('aria-pressed') === 'true', 'Dark theme control did not show active state.');
     await setThemePreference('system', { save: false, showStatus: false });
     assertUiSmoke(document.documentElement.dataset.theme === 'system', 'System theme was not restored.');
-    assertSidebarPanelSmoke();
+    await assertSidebarPanelSmoke();
     assertUiSmoke(!$('statusLabel'), 'Topbar status message should not render.');
     assertUiSmoke(!$('checkUpdatesButton'), 'Updates toolbar button should be handled by the Help menu.');
     assertUiSmoke(!$('includePrereleasesInput'), 'Prereleases setting should be handled by the Help menu.');
@@ -271,7 +271,7 @@
     dispatchChange($('methodSelect'));
   }
 
-  function assertSidebarPanelSmoke() {
+  async function assertSidebarPanelSmoke() {
     const originalEnvironments = structuredClone(workspace.environments || []);
     const originalActiveEnvironmentId = activeEnvironmentId;
     const originalActiveWorkspaceId = activeWorkspaceId;
@@ -310,7 +310,10 @@
       assertUiSmoke($('environmentsList').textContent.includes(environment.name), 'Environments panel did not render the new environment.');
       openRequestTabs = [];
       openWorkspaceTabs = [];
-      closeEnvironmentTab(openEnvironmentTabs.find((tab) => tab.environmentId === environment.id));
+      const closeEnvironment = closeEnvironmentTab(openEnvironmentTabs.find((tab) => tab.environmentId === environment.id));
+      assertUiSmoke(!$('unsavedRequestModal').hidden, 'Closing a new dirty environment should show the unsaved changes modal.');
+      $('closeWithoutSavingButton').click();
+      await closeEnvironment;
       assertUiSmoke(activeSidebarPanel === 'environments', 'Closing the last environment tab should keep the Environments sidebar selected.');
       assertUiSmoke(activeMainPanel === 'environment', 'Closing the last environment tab should keep the main pane in environment mode.');
       assertUiSmoke(!$('environmentEmptyPanel').hidden, 'Closing the last environment tab should show the create environment screen.');
@@ -447,9 +450,27 @@
       $('closeWithoutSavingButton').click();
       await closeSaved;
       assertUiSmoke(collection.requests.some((item) => item.id === request.id && item.name === savedRequestName), 'Closing without saving should restore the saved request snapshot.');
+
+      workspace.environments = [];
+      activeEnvironmentId = 'none';
+      const environment = newEnvironment();
+      await saveWorkspace(false);
+      const savedEnvironmentName = environment.name;
+      $('environmentNameInput').value = 'Changed Saved Environment';
+      dispatchInput($('environmentNameInput'));
+      const environmentTab = openEnvironmentTabs.find((tab) => tab.environmentId === environment.id);
+      assertUiSmoke(environmentTab?.dirty === true, 'Editing an environment should mark its tab as dirty.');
+      assertUiSmoke(!$('requestTabBar').querySelector('.environment-tab-button .request-tab-dirty').hidden, 'Dirty environment tab should show an unsaved marker.');
+      const closeEnvironment = closeEnvironmentTab(environmentTab);
+      assertUiSmoke(!$('unsavedRequestModal').hidden, 'Closing a dirty environment should show the unsaved changes modal.');
+      $('closeWithoutSavingButton').click();
+      await closeEnvironment;
+      assertUiSmoke(workspace.environments.some((item) => item.id === environment.id && item.name === savedEnvironmentName), 'Closing an environment without saving should restore the saved snapshot.');
     } finally {
       window.__postmeterSaveWorkspace = originalSaveWorkspace;
       workspace.collections = [];
+      workspace.environments = [];
+      activeEnvironmentId = 'none';
       clearActiveWorkspaceItem();
       resetRequestTabs();
       renderAll();

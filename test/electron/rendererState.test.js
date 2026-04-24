@@ -4,6 +4,7 @@ const {
   activeEnvironmentTabKey,
   activeRequestTabKey,
   activeWorkspaceTabKey,
+  clearSavedEnvironmentDirtyState,
   clearSavedRequestDirtyState,
   createRendererState
 } = require('../../src/renderer/rendererState');
@@ -39,5 +40,24 @@ test('renderer state clears saved request dirty markers and refreshes snapshots'
   assert.equal(state.openRequestTabs[0].dirty, false);
   assert.equal(state.openRequestTabs[0].createdUnsaved, false);
   assert.equal(state.openRequestTabs[0].snapshot, JSON.stringify(request));
+  assert.equal(cleared, 1);
+});
+
+test('renderer state clears saved environment dirty markers and refreshes snapshots', () => {
+  const state = createRendererState();
+  const environment = { id: 'environment-1', name: 'Changed', variables: [] };
+  state.openEnvironmentTabs = [
+    { key: 'environment:environment-1', environmentId: environment.id, dirty: true, createdUnsaved: true }
+  ];
+  let cleared = 0;
+
+  clearSavedEnvironmentDirtyState(state, {
+    environmentForTab: () => environment,
+    onAfterClear: () => { cleared += 1; }
+  });
+
+  assert.equal(state.openEnvironmentTabs[0].dirty, false);
+  assert.equal(state.openEnvironmentTabs[0].createdUnsaved, false);
+  assert.equal(state.openEnvironmentTabs[0].snapshot, JSON.stringify(environment));
   assert.equal(cleared, 1);
 });

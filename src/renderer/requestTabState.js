@@ -8,6 +8,7 @@
     const activeRequest = options.activeRequest || (() => null);
     const activeWorkspaceItem = options.activeWorkspaceItem || (() => null);
     const clearActiveWorkspaceItem = options.clearActiveWorkspaceItem || (() => {});
+    const collectEnvironmentFromEditor = options.collectEnvironmentFromEditor || (() => {});
     const collectRequestFromEditor = options.collectRequestFromEditor || (() => {});
     const findRequest = options.findRequest || (() => null);
     const persistWorkspace = options.persistWorkspace || (async () => true);
@@ -65,11 +66,17 @@
         tab = {
           key,
           environmentId: state.activeEnvironmentId,
-          dirty: config.dirty === true
+          dirty: config.dirty === true,
+          createdUnsaved: config.createdUnsaved === true,
+          snapshot: rendererState.environmentSnapshot(environment)
         };
         state.openEnvironmentTabs.push(tab);
       }
       tab.environmentId = state.activeEnvironmentId;
+      tab.snapshot ||= rendererState.environmentSnapshot(environment);
+      if (config.createdUnsaved === true) {
+        tab.createdUnsaved = true;
+      }
       if (config.dirty === true) {
         tab.dirty = true;
       }
@@ -218,6 +225,14 @@
       }
     }
 
+    function markActiveEnvironmentDirty() {
+      const tab = ensureOpenEnvironmentTabForActive({ dirty: true });
+      if (tab) {
+        tab.dirty = true;
+        renderRequestTabs();
+      }
+    }
+
     function removeOpenRequestTab(keyOrCollectionId, requestId) {
       const key = requestId == null ? keyOrCollectionId : `request:${keyOrCollectionId}:${requestId}`;
       state.openRequestTabs = state.openRequestTabs.filter((tab) => tab.key !== key);
@@ -278,12 +293,36 @@
         renderRequestTabs();
         return;
       }
+      const wasActive = rendererState.isActiveEnvironmentTab(state, tab);
+      if (rendererState.isActiveEnvironmentTab(state, tab)) {
+        collectEnvironmentFromEditor();
+      }
+      const environment = environmentForTab(tab);
+      if (!environment) {
+        closeEnvironmentTabAfterResolved(tab, { wasActive });
+        return;
+      }
+      if (tab.dirty) {
+        const action = await promptUnsavedRequestClose(tab, environment);
+        if (action === 'cancel') {
+          return;
+        }
+        if (action === 'save') {
+          await persistWorkspace(false);
+        } else {
+          discardEnvironmentTabChanges(tab);
+        }
+      }
+      closeEnvironmentTabAfterResolved(tab, { wasActive });
+    }
+
+    function closeEnvironmentTabAfterResolved(tab, options = {}) {
       const index = state.openEnvironmentTabs.findIndex((candidate) => candidate === tab || candidate.key === tab.key);
       if (index < 0) {
         renderRequestTabs();
         return;
       }
-      const wasActive = rendererState.isActiveEnvironmentTab(state, tab);
+      const wasActive = options.wasActive === true || rendererState.isActiveEnvironmentTab(state, tab);
       state.openEnvironmentTabs.splice(index, 1);
       if (!wasActive) {
         renderRequestTabs();
@@ -308,6 +347,33 @@
       state.activeSidebarPanel = 'environments';
       state.activeMainPanel = 'environment';
       renderAll();
+    }
+
+    function discardEnvironmentTabChanges(tab) {
+      if (tab.createdUnsaved) {
+        state.workspace.environments = (state.workspace.environments || []).filter((environment) => environment.id !== tab.environmentId);
+        if (state.activeEnvironmentId === tab.environmentId) {
+          state.activeEnvironmentId = state.workspace.environments[0]?.id || 'none';
+        }
+        return;
+      }
+      restoreEnvironmentFromSnapshot(tab);
+    }
+
+    function restoreEnvironmentFromSnapshot(tab) {
+      const environment = environmentForTab(tab);
+      if (!environment || !tab.snapshot) {
+        return;
+      }
+      try {
+        const snapshot = JSON.parse(tab.snapshot);
+        for (const key of Object.keys(environment)) {
+          delete environment[key];
+        }
+        Object.assign(environment, snapshot);
+      } catch {
+        return;
+      }
     }
 
     async function closeRequestTab(tab) {
@@ -405,6 +471,7 @@
       ensureOpenRequestTabForActive,
       ensureOpenWorkspaceTabForActive,
       environmentForTab,
+      markActiveEnvironmentDirty,
       markActiveRequestDirty,
       pruneOpenTabs,
       removeOpenEnvironmentTab,
