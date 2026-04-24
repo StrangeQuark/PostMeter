@@ -203,6 +203,7 @@ Renderer responsibilities:
 - Render pre-request and test script editors for each request.
 - Maintain the active selection state.
 - Collect editor state before save/send/load.
+- Route explicit request/environment saves through targeted preload APIs so normal Save persists only the selected request or environment tab item while still carrying current workspace settings.
 - Call only preload-exposed APIs.
 
 Preload API:
@@ -214,6 +215,8 @@ window.postmeter.app.openExternal(url)
 window.postmeter.app.onMenuAction(callback)
 window.postmeter.workspace.load()
 window.postmeter.workspace.save(workspace)
+window.postmeter.workspace.saveRequest(payload)
+window.postmeter.workspace.saveEnvironment(payload)
 window.postmeter.workspace.importWorkspace()
 window.postmeter.workspace.exportWorkspace(workspace, workspaceId)
 window.postmeter.collection.importCollection()
@@ -444,6 +447,8 @@ Behavior:
 - Writes normalized workspace values directly to local JSON.
 - Normalizes IDs, names, body types, methods, arrays, settings, request load-test compatibility policies, collection variables, collection certificates, request variables, request examples, request cookie jar settings, workspace cookies, folders, environments, and history.
 - Native workspace import adds another managed workspace without replacing, switching away from, or backing up the current one.
+- Targeted renderer saves for request and environment tabs send only the selected tab payload, the current workspace settings, and any owned shared request-side state such as collection variables or cookie-jar values; the main process applies that payload into the cached workspace before the normal full-file write.
+- Full workspace saves are still used for shutdown persistence, managed-workspace switching or active-workspace rename, whole-workspace export, and collection import.
 
 Limitations:
 

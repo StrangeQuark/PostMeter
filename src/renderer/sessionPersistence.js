@@ -65,6 +65,11 @@
       .filter((tab) => workspaceItems().some((item) => item.id === tab.workspaceId))
       .map(stripWorkspaceTabState);
 
+    // Session restore should override the default request selection created during workspace load.
+    state.activeCollectionId = null;
+    state.activeFolderId = null;
+    state.activeRequestId = null;
+
     if (workspaceItems().some((item) => item.id === session.activeWorkspaceId)) {
       state.activeWorkspaceId = session.activeWorkspaceId;
     }
@@ -77,26 +82,25 @@
       state.activeEnvironmentId = session.activeEnvironmentId;
     }
 
-    if (state.draftRequests.has(session.activeRequestId)) {
+    const activeDraftTab = (state.openRequestTabs || []).find((tab) => tab.draft === true && tab.requestId === session.activeRequestId);
+    if (activeDraftTab && state.draftRequests.has(session.activeRequestId)) {
       state.activeCollectionId = null;
       state.activeFolderId = null;
       state.activeRequestId = session.activeRequestId;
-      ensureDraftTabPresent(state, session.activeRequestId);
     } else {
-      const restoredRequest = findSavedRequest(state, session.activeCollectionId, session.activeRequestId, findRequest);
+      const activeSavedTab = (state.openRequestTabs || []).find((tab) => (
+        tab.draft !== true
+        && tab.collectionId === session.activeCollectionId
+        && tab.requestId === session.activeRequestId
+      ));
+      const restoredRequest = activeSavedTab
+        ? findSavedRequest(state, session.activeCollectionId, session.activeRequestId, findRequest)
+        : null;
       if (restoredRequest) {
         state.activeCollectionId = session.activeCollectionId;
         state.activeFolderId = restoredRequest.folder?.id || null;
         state.activeRequestId = restoredRequest.request.id;
-        ensureSavedRequestTabPresent(state, restoredRequest, session.activeCollectionId);
       }
-    }
-
-    if (state.activeEnvironmentId !== 'none') {
-      ensureEnvironmentTabPresent(state, state.activeEnvironmentId);
-    }
-    if (state.selectedWorkspaceId) {
-      ensureWorkspaceTabPresent(state, state.selectedWorkspaceId);
     }
 
     if (shouldRestoreMainPanel(session.activeMainPanel, state, workspaceItems(), findRequest)) {
@@ -224,63 +228,6 @@
     }
     collection.requests ||= [];
     collection.requests.push(request);
-  }
-
-  function ensureDraftTabPresent(state, requestId) {
-    if ((state.openRequestTabs || []).some((tab) => tab.requestId === requestId && tab.draft === true)) {
-      return;
-    }
-    state.openRequestTabs.push({
-      key: `draft:${requestId}`,
-      collectionId: null,
-      requestId,
-      draft: true,
-      dirty: true
-    });
-  }
-
-  function ensureSavedRequestTabPresent(state, restoredRequest, collectionId) {
-    if ((state.openRequestTabs || []).some((tab) => tab.requestId === restoredRequest.request.id && tab.collectionId === collectionId && tab.draft !== true)) {
-      return;
-    }
-    state.openRequestTabs.push({
-      key: `request:${collectionId}:${restoredRequest.request.id}`,
-      collectionId,
-      folderId: restoredRequest.folder?.id || null,
-      requestId: restoredRequest.request.id,
-      draft: false,
-      dirty: false,
-      createdUnsaved: false,
-      snapshot: safeSnapshot(restoredRequest.request)
-    });
-  }
-
-  function ensureEnvironmentTabPresent(state, environmentId) {
-    if ((state.openEnvironmentTabs || []).some((tab) => tab.environmentId === environmentId)) {
-      return;
-    }
-    const environment = state.workspace?.environments?.find((item) => item.id === environmentId);
-    if (!environment) {
-      return;
-    }
-    state.openEnvironmentTabs.push({
-      key: `environment:${environmentId}`,
-      environmentId,
-      dirty: false,
-      createdUnsaved: false,
-      snapshot: safeSnapshot(environment)
-    });
-  }
-
-  function ensureWorkspaceTabPresent(state, workspaceId) {
-    if ((state.openWorkspaceTabs || []).some((tab) => tab.workspaceId === workspaceId)) {
-      return;
-    }
-    state.openWorkspaceTabs.push({
-      key: `workspace:${workspaceId}`,
-      workspaceId,
-      dirty: false
-    });
   }
 
   function shouldRestoreMainPanel(panel, state, workspaceItems, findRequest) {

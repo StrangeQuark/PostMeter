@@ -4,6 +4,7 @@ const { registerWorkspaceIpc } = require('../../electron/workspaceIpc');
 
 test('workspace IPC registers stable workspace, collection, and example channels', async () => {
   const handlers = new Map();
+  const syncHandlers = new Map();
   let describeCurrentCalls = 0;
   const workspaceStore = {
     describeCurrent: async (workspace, extras = {}) => {
@@ -63,10 +64,14 @@ test('workspace IPC registers stable workspace, collection, and example channels
     ipcMain: {
       handle(channel, handler) {
         handlers.set(channel, handler);
+      },
+      on(channel, handler) {
+        syncHandlers.set(channel, handler);
       }
     },
     refreshApplicationMenu: () => {},
     saveWorkspace: async (workspace) => workspace,
+    saveWorkspaceSync: (workspace) => workspace,
     setWorkspace: () => {}
   });
 
@@ -81,14 +86,81 @@ test('workspace IPC registers stable workspace, collection, and example channels
     'workspace:load',
     'workspace:rename',
     'workspace:save',
+    'workspace:saveEnvironment',
+    'workspace:saveRequest',
     'workspace:switch'
   ]);
+  assert.deepEqual([...syncHandlers.keys()].sort(), ['workspace:saveSync']);
   assert.deepEqual(await handlers.get('workspace:import')(), { cancelled: true });
   assert.deepEqual(await handlers.get('collection:import')(), { cancelled: true });
 });
 
+test('workspace IPC load falls back to the workspace store when no cached workspace is available', async () => {
+  const handlers = new Map();
+  const syncHandlers = new Map();
+  const loadedWorkspace = {
+    schemaVersion: 10,
+    collections: [],
+    environments: [],
+    history: [],
+    cookies: [],
+    settings: { updates: { includePrereleases: false } }
+  };
+  let loadCalls = 0;
+  let describeWorkspace = null;
+  let cachedWorkspace = null;
+
+  registerWorkspaceIpc({
+    dialog: {
+      showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+      showSaveDialog: async () => ({ canceled: true })
+    },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => null,
+    getWorkspaceStore: () => ({
+      load: async () => {
+        loadCalls += 1;
+        return { workspace: loadedWorkspace };
+      },
+      describeCurrent: async (workspace) => {
+        describeWorkspace = workspace;
+        return {
+          workspace,
+          path: '/tmp/Local Workspace.json',
+          activeWorkspaceId: 'Local Workspace.json',
+          workspaces: [{ id: 'Local Workspace.json', name: 'Local Workspace', path: '/tmp/Local Workspace.json', current: true, deletable: false }]
+        };
+      }
+    }),
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      },
+      on(channel, handler) {
+        syncHandlers.set(channel, handler);
+      }
+    },
+    refreshApplicationMenu: () => {},
+    saveWorkspace: async (workspace) => workspace,
+    saveWorkspaceSync: (workspace) => workspace,
+    setWorkspace: (workspace) => {
+      cachedWorkspace = workspace;
+    }
+  });
+
+  const result = await handlers.get('workspace:load')();
+
+  assert.equal(loadCalls, 1);
+  assert.equal(describeWorkspace, loadedWorkspace);
+  assert.equal(cachedWorkspace, loadedWorkspace);
+  assert.equal(result.workspace, loadedWorkspace);
+  assert.equal(syncHandlers.has('workspace:saveSync'), true);
+});
+
 test('workspace IPC exports a selected non-current workspace by id', async () => {
   const handlers = new Map();
+  const syncHandlers = new Map();
   let exportedWorkspaceId = null;
   registerWorkspaceIpc({
     dialog: {
@@ -109,10 +181,14 @@ test('workspace IPC exports a selected non-current workspace by id', async () =>
     ipcMain: {
       handle(channel, handler) {
         handlers.set(channel, handler);
+      },
+      on(channel, handler) {
+        syncHandlers.set(channel, handler);
       }
     },
     refreshApplicationMenu: () => {},
     saveWorkspace: async (workspace) => workspace,
+    saveWorkspaceSync: (workspace) => workspace,
     setWorkspace: () => {}
   });
 
@@ -120,10 +196,12 @@ test('workspace IPC exports a selected non-current workspace by id', async () =>
 
   assert.equal(exportedWorkspaceId, 'Workspace.json');
   assert.deepEqual(result, { cancelled: false, path: '/tmp/export.json' });
+  assert.equal(syncHandlers.has('workspace:saveSync'), true);
 });
 
 test('workspace IPC suggests a collection-name json filename for native collection exports', async () => {
   const handlers = new Map();
+  const syncHandlers = new Map();
   let saveDialogOptions = null;
   let exportedCollection = null;
   let exportedFormat = '';
@@ -149,10 +227,14 @@ test('workspace IPC suggests a collection-name json filename for native collecti
     ipcMain: {
       handle(channel, handler) {
         handlers.set(channel, handler);
+      },
+      on(channel, handler) {
+        syncHandlers.set(channel, handler);
       }
     },
     refreshApplicationMenu: () => {},
     saveWorkspace: async (workspace) => workspace,
+    saveWorkspaceSync: (workspace) => workspace,
     setWorkspace: () => {}
   });
 
@@ -168,10 +250,12 @@ test('workspace IPC suggests a collection-name json filename for native collecti
   assert.equal(exportedCollection, collection);
   assert.equal(exportedFormat, 'postmeter');
   assert.deepEqual(result, { cancelled: false, path: '/tmp/AuthServiceCollection.json' });
+  assert.equal(syncHandlers.has('workspace:saveSync'), true);
 });
 
 test('workspace IPC imports a workspace as an additional managed workspace without backing up or replacing the current workspace', async () => {
   const handlers = new Map();
+  const syncHandlers = new Map();
   let backupCalls = 0;
   let importedPath = '';
   let savedWorkspaceCalls = 0;
@@ -217,6 +301,9 @@ test('workspace IPC imports a workspace as an additional managed workspace witho
     ipcMain: {
       handle(channel, handler) {
         handlers.set(channel, handler);
+      },
+      on(channel, handler) {
+        syncHandlers.set(channel, handler);
       }
     },
     refreshApplicationMenu: () => { refreshCalls += 1; },
@@ -224,6 +311,7 @@ test('workspace IPC imports a workspace as an additional managed workspace witho
       savedWorkspaceCalls += 1;
       return workspace;
     },
+    saveWorkspaceSync: (workspace) => workspace,
     setWorkspace: () => { setWorkspaceCalls += 1; }
   });
 
@@ -234,6 +322,7 @@ test('workspace IPC imports a workspace as an additional managed workspace witho
   assert.equal(savedWorkspaceCalls, 0);
   assert.equal(setWorkspaceCalls, 0);
   assert.equal(refreshCalls, 0);
+  assert.equal(syncHandlers.has('workspace:saveSync'), true);
   assert.deepEqual(result, {
     cancelled: false,
     workspace: currentWorkspace,
@@ -242,4 +331,213 @@ test('workspace IPC imports a workspace as an additional managed workspace witho
     createdWorkspaceId: 'Imported Workspace.json',
     workspaces
   });
+});
+
+test('workspace IPC saves only the selected request payload through targeted request save', async () => {
+  const handlers = new Map();
+  const syncHandlers = new Map();
+  const currentWorkspace = {
+    schemaVersion: 10,
+    collections: [],
+    environments: [],
+    history: [],
+    cookies: [],
+    settings: { updates: { includePrereleases: false } }
+  };
+  let savedWorkspace = null;
+  let appliedWorkspace = null;
+  let refreshCalls = 0;
+
+  registerWorkspaceIpc({
+    dialog: {
+      showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+      showSaveDialog: async () => ({ canceled: true })
+    },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => currentWorkspace,
+    getWorkspaceStore: () => ({
+      describeCurrent: async (workspace) => ({ workspace, path: '/tmp/Local Workspace.json', activeWorkspaceId: 'Local Workspace.json', workspaces: [] })
+    }),
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      },
+      on(channel, handler) {
+        syncHandlers.set(channel, handler);
+      }
+    },
+    refreshApplicationMenu: () => { refreshCalls += 1; },
+    saveWorkspace: async (workspace) => {
+      savedWorkspace = workspace;
+      return {
+        ...workspace,
+        collections: [{
+          id: 'collection-1',
+          name: 'Saved Collection',
+          description: '',
+          variables: [{ enabled: true, key: 'baseUrl', value: 'https://example.test' }],
+          certificates: [],
+          requests: [{ id: 'request-1', name: 'Saved Request', method: 'GET', url: 'https://example.test', queryParams: [], headers: [], bodyType: 'NONE' }],
+          folders: []
+        }],
+        cookies: [{ enabled: true, name: 'session', value: 'saved', domain: 'example.test', path: '/' }]
+      };
+    },
+    saveWorkspaceSync: (workspace) => workspace,
+    setWorkspace: (workspace) => {
+      appliedWorkspace = workspace;
+    }
+  });
+
+  const result = await handlers.get('workspace:saveRequest')(null, {
+    collectionId: 'collection-1',
+    requestId: 'request-1',
+    request: {
+      id: 'request-1',
+      name: 'Saved Request',
+      method: 'GET',
+      url: 'https://example.test',
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE'
+    },
+    collectionShell: {
+      id: 'collection-1',
+      name: 'Saved Collection',
+      description: '',
+      certificates: []
+    },
+    folderPath: [],
+    collectionVariables: [{ enabled: true, key: 'baseUrl', value: 'https://example.test' }],
+    cookies: [{ enabled: true, name: 'session', value: 'saved', domain: 'example.test', path: '/' }],
+    settings: { updates: { includePrereleases: true } }
+  });
+
+  assert.equal(savedWorkspace.collections[0].requests[0].id, 'request-1');
+  assert.equal(savedWorkspace.settings.updates.includePrereleases, true);
+  assert.equal(appliedWorkspace.collections[0].requests[0].name, 'Saved Request');
+  assert.equal(refreshCalls, 1);
+  assert.deepEqual(result, {
+    request: appliedWorkspace.collections[0].requests[0],
+    collectionVariables: appliedWorkspace.collections[0].variables,
+    cookies: appliedWorkspace.cookies
+  });
+  assert.equal(syncHandlers.has('workspace:saveSync'), true);
+});
+
+test('workspace IPC saves only the selected environment payload through targeted environment save', async () => {
+  const handlers = new Map();
+  const syncHandlers = new Map();
+  const currentWorkspace = {
+    schemaVersion: 10,
+    collections: [],
+    environments: [],
+    history: [],
+    cookies: [],
+    settings: { updates: { includePrereleases: false } }
+  };
+  let appliedWorkspace = null;
+  let refreshCalls = 0;
+
+  registerWorkspaceIpc({
+    dialog: {
+      showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+      showSaveDialog: async () => ({ canceled: true })
+    },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => currentWorkspace,
+    getWorkspaceStore: () => ({
+      describeCurrent: async (workspace) => ({ workspace, path: '/tmp/Local Workspace.json', activeWorkspaceId: 'Local Workspace.json', workspaces: [] })
+    }),
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      },
+      on(channel, handler) {
+        syncHandlers.set(channel, handler);
+      }
+    },
+    refreshApplicationMenu: () => { refreshCalls += 1; },
+    saveWorkspace: async (workspace) => workspace,
+    saveWorkspaceSync: (workspace) => workspace,
+    setWorkspace: (workspace) => {
+      appliedWorkspace = workspace;
+    }
+  });
+
+  const result = await handlers.get('workspace:saveEnvironment')(null, {
+    environmentId: 'environment-1',
+    environment: {
+      id: 'environment-1',
+      name: 'Saved Environment',
+      variables: [{ enabled: true, key: 'baseUrl', value: 'https://example.test' }]
+    },
+    settings: { updates: { includePrereleases: true } }
+  });
+
+  assert.equal(appliedWorkspace.environments[0].id, 'environment-1');
+  assert.equal(appliedWorkspace.settings.updates.includePrereleases, true);
+  assert.equal(refreshCalls, 1);
+  assert.deepEqual(result, {
+    environment: appliedWorkspace.environments[0]
+  });
+  assert.equal(syncHandlers.has('workspace:saveSync'), true);
+});
+
+test('workspace IPC synchronously saves workspace state for shutdown persistence', () => {
+  const handlers = new Map();
+  const syncHandlers = new Map();
+  let savedWorkspace = null;
+  let appliedWorkspace = null;
+  let refreshCalls = 0;
+
+  registerWorkspaceIpc({
+    dialog: {
+      showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+      showSaveDialog: async () => ({ canceled: true })
+    },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => ({ schemaVersion: 10, collections: [], environments: [], history: [], cookies: [], settings: { updates: { includePrereleases: false } } }),
+    getWorkspaceStore: () => ({
+      describeCurrent: async (workspace) => ({ workspace, path: '/tmp/Local Workspace.json', activeWorkspaceId: 'Local Workspace.json', workspaces: [] })
+    }),
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      },
+      on(channel, handler) {
+        syncHandlers.set(channel, handler);
+      }
+    },
+    refreshApplicationMenu: () => {
+      refreshCalls += 1;
+    },
+    saveWorkspace: async (workspace) => workspace,
+    saveWorkspaceSync: (workspace) => {
+      savedWorkspace = { ...workspace, savedSync: true };
+      return savedWorkspace;
+    },
+    setWorkspace: (workspace) => {
+      appliedWorkspace = workspace;
+    }
+  });
+
+  const event = { returnValue: undefined };
+  syncHandlers.get('workspace:saveSync')(event, {
+    schemaVersion: 10,
+    collections: [{ id: 'collection-1', name: 'Unsaved Collection', requests: [], folders: [] }],
+    environments: [],
+    history: [],
+    cookies: [],
+    settings: { updates: { includePrereleases: false } }
+  });
+
+  assert.equal(handlers.has('workspace:save'), true);
+  assert.equal(savedWorkspace.savedSync, true);
+  assert.equal(appliedWorkspace.savedSync, true);
+  assert.equal(event.returnValue.savedSync, true);
+  assert.equal(refreshCalls, 1);
 });

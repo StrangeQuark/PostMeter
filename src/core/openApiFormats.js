@@ -98,12 +98,14 @@ function openApiSecuritySchemeToAuth(scheme) {
     };
   }
   if (type === 'oauth2') {
-    const flow = firstOpenApiOAuthFlow(scheme.flows);
+    const flow = firstOpenApiOAuthFlow(scheme);
+    const isDeviceCode = flow?.grantType === 'deviceCode';
     return {
       type: 'oauth2',
       tokenType: 'Bearer',
       accessToken: '{{accessToken}}',
-      authorizationUrl: flow?.authorizationUrl || '',
+      authorizationUrl: isDeviceCode ? '' : flow?.authorizationUrl || '',
+      deviceAuthorizationUrl: isDeviceCode ? flow?.deviceAuthorizationUrl || flow?.authorizationUrl || '' : '',
       tokenUrl: flow?.tokenUrl || '',
       scopes: Object.keys(flow?.scopes || {}).join(' '),
       grantType: flow?.grantType || 'authorizationCode'
@@ -112,14 +114,22 @@ function openApiSecuritySchemeToAuth(scheme) {
   return null;
 }
 
-function firstOpenApiOAuthFlow(flows = {}) {
+function firstOpenApiOAuthFlow(scheme = {}) {
+  const flows = scheme?.flows || {};
+  const extendedGrantType = String(scheme?.['x-postmeter-grantType'] || '').trim();
+  const deviceAuthorizationUrl = String(scheme?.['x-postmeter-deviceAuthorizationUrl'] || '').trim();
   for (const [key, value] of Object.entries(flows || {})) {
     if (!value || typeof value !== 'object') {
       continue;
     }
     return {
       ...value,
-      grantType: key === 'clientCredentials' ? 'clientCredentials' : 'authorizationCode'
+      deviceAuthorizationUrl,
+      grantType: extendedGrantType === 'deviceCode'
+        ? 'deviceCode'
+        : key === 'clientCredentials'
+          ? 'clientCredentials'
+          : 'authorizationCode'
     };
   }
   return null;

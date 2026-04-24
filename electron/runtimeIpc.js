@@ -34,16 +34,21 @@ function registerRuntimeIpc(options = {}) {
     assertOptionalEnvironmentPayload(environment);
     assertLoadConfigPayload(config);
     const abortController = new AbortController();
+    const workspace = getWorkspace();
     activeLoadTests.set(id, abortController);
     try {
       const result = await runLoadTest(request, environment, config, {
         abortController,
-        cookieJar: getWorkspace().cookies || [],
+        cookieJar: workspace.cookies || [],
         onProgress: (progress) => {
           assertLoadProgressPayload(progress);
           event.sender.send('load:progress', { id, progress });
         }
       });
+      if (Array.isArray(result.cookies)) {
+        workspace.cookies = result.cookies;
+        setWorkspace(await saveWorkspace(workspace));
+      }
       assertLoadResultPayload(result);
       return result;
     } finally {

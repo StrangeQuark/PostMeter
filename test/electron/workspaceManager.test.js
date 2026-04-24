@@ -4,6 +4,7 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const { WorkspaceManager } = require('../../src/core/workspaceManager');
+const { WorkspaceRecoveryError } = require('../../src/core/workspaceStore');
 
 test('workspace manager creates and describes a default managed workspace', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-workspace-manager-'));
@@ -192,4 +193,39 @@ test('workspace manager discovers workspaces from disk, prefers the requested st
   assert.equal(loaded.path, path.join(temp, 'Workspace.json'));
   assert.equal(loaded.workspace.collections.length, 1);
   await assert.rejects(() => fs.access(path.join(temp, 'workspace.workspaces.manifest.json')));
+});
+
+test('workspace manager recovers a corrupt preferred workspace instead of silently switching to another workspace', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-workspace-manager-'));
+  const preferredWorkspacePath = path.join(temp, 'workspace.json');
+  const otherWorkspacePath = path.join(temp, 'Other Workspace.json');
+  const manager = new WorkspaceManager(preferredWorkspacePath);
+
+  await fs.writeFile(preferredWorkspacePath, '{not-json');
+  await fs.writeFile(otherWorkspacePath, JSON.stringify({
+    schemaVersion: 10,
+    collections: [],
+    environments: [],
+    cookies: [],
+    history: [],
+    settings: { appearance: { theme: 'system' }, updates: { includePrereleases: false } }
+  }));
+
+  await assert.rejects(
+    () => manager.load(),
+    (error) => {
+      assert.ok(error instanceof WorkspaceRecoveryError);
+      assert.equal(error.activeWorkspaceId, 'workspace.json');
+      assert.equal(error.path, preferredWorkspacePath);
+      assert.equal(error.workspaces.some((item) => item.id === 'workspace.json'), true);
+      return true;
+    }
+  );
+
+  const loaded = await manager.load();
+  assert.equal(loaded.activeWorkspaceId, 'workspace.json');
+  assert.equal(loaded.path, preferredWorkspacePath);
+  assert.equal(JSON.parse(await fs.readFile(preferredWorkspacePath, 'utf8')).schemaVersion, 10);
+  const quarantined = (await fs.readdir(temp)).filter((entry) => entry.includes('workspace.json.corrupt'));
+  assert.equal(quarantined.length, 1);
 });

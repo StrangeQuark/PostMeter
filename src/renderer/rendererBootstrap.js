@@ -46,7 +46,12 @@
         return cleanup;
       };
 
-      await options.onReady?.({ doc, windowObject, registerCleanup });
+      try {
+        await options.onReady?.({ doc, windowObject, registerCleanup });
+      } catch (error) {
+        reportSmokeInitFailure(doc, windowObject, error);
+        throw error;
+      }
 
       windowObject.addEventListener('beforeunload', () => {
         for (const cleanup of cleanups) {
@@ -58,6 +63,32 @@
         }
       }, { once: true });
     }, { once: true });
+  }
+
+  function reportSmokeInitFailure(doc, windowObject, error) {
+    const search = windowObject?.location?.search || '';
+    const params = new URLSearchParams(search);
+    const message = smokeFailureText(error);
+    for (const [flag, prefix] of [
+      ['uiWorkflowSmoke', 'PostMeter UI Workflow'],
+      ['uiRegressionSmoke', 'PostMeter UI Regression'],
+      ['uiSnapshotSmoke', 'PostMeter UI Snapshot'],
+      ['uiOauthSmoke', 'PostMeter UI OAuth']
+    ]) {
+      if (params.get(flag) === '1') {
+        doc.title = `${prefix}:FAIL:${message}`;
+        break;
+      }
+    }
+  }
+
+  function smokeFailureText(error) {
+    const primary = String(error?.message || error || 'Renderer initialization failed.');
+    const stackLine = String(error?.stack || '')
+      .split('\n')
+      .map((line) => line.trim())
+      .find((line) => line && line !== primary && !line.endsWith(primary) && !line.startsWith('TypeError:') && !line.startsWith('Error:'));
+    return stackLine ? `${primary} @ ${stackLine}`.slice(0, 160) : primary.slice(0, 160);
   }
 
   function bindUi(options = {}) {

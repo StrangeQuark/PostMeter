@@ -23,13 +23,25 @@ function importCurlCommand(text) {
       request.method = token.slice(2).toUpperCase();
     } else if (token === '-H' || token === '--header') {
       addCurlHeader(request, tokens[++index] || '');
+    } else if (token.startsWith('-H') && token.length > 2) {
+      addCurlHeader(request, token.slice(2));
     } else if (token === '-b' || token === '--cookie' || token.startsWith('--cookie=')) {
       const value = token.includes('=') && token.startsWith('--cookie=') ? token.slice('--cookie='.length) : tokens[++index] || '';
       request.headers.push(keyValue('Cookie', value));
+    } else if (token.startsWith('-b') && token.length > 2) {
+      request.headers.push(keyValue('Cookie', token.slice(2)));
     } else if (token === '-F' || token === '--form' || token === '--form-string') {
       appendCurlForm(request, tokens[++index] || '');
+    } else if (token.startsWith('-F') && token.length > 2) {
+      appendCurlForm(request, token.slice(2));
     } else if (token === '-d' || token === '--data' || token === '--data-raw' || token === '--data-binary' || token === '--data-urlencode') {
       request.body = tokens[++index] || '';
+      request.bodyType = looksLikeJson(request.body) ? BODY_TYPES.RAW_JSON : BODY_TYPES.RAW_TEXT;
+      if (request.method === 'GET') {
+        request.method = 'POST';
+      }
+    } else if (token.startsWith('-d') && token.length > 2) {
+      request.body = token.slice(2);
       request.bodyType = looksLikeJson(request.body) ? BODY_TYPES.RAW_JSON : BODY_TYPES.RAW_TEXT;
       if (request.method === 'GET') {
         request.method = 'POST';

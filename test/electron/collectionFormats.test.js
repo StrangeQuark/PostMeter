@@ -3,6 +3,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
+const { splitCommandLine } = require('../../src/core/curlFormats');
 const { WorkspaceStore } = require('../../src/core/workspaceStore');
 
 test('imports and exports OpenAPI collections', async () => {
@@ -152,6 +153,66 @@ test('imports and exports curl collections', async () => {
   const exported = await fs.readFile(exportPath, 'utf8');
   assert.match(exported, /^curl /);
   assert.match(exported, /--data-raw/);
+});
+
+test('preserves PostMeter device-code OAuth metadata across OpenAPI export and import', async () => {
+  const { store, dir } = await tempStore();
+  const exportPath = path.join(dir, 'device-code.openapi.json');
+  const collection = {
+    id: 'collection-1',
+    name: 'OAuth Device Collection',
+    description: '',
+    variables: [],
+    certificates: [],
+    requests: [{
+      id: 'request-1',
+      name: 'Device Request',
+      method: 'GET',
+      url: 'https://api.example.test/me',
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      auth: {
+        type: 'oauth2',
+        grantType: 'deviceCode',
+        tokenType: 'Bearer',
+        accessToken: '',
+        deviceAuthorizationUrl: 'https://auth.example.test/device',
+        tokenUrl: 'https://auth.example.test/token',
+        scopes: 'read'
+      },
+      assertions: [],
+      scripts: { preRequest: '', tests: '' },
+      variables: [],
+      examples: [],
+      cookieJar: { enabled: false, storeResponses: true },
+      loadTestPolicy: { enabled: false }
+    }],
+    folders: []
+  };
+
+  await store.exportCollection(collection, exportPath, { format: 'openapi' });
+  const imported = await store.importCollection(exportPath);
+
+  assert.equal(imported.requests[0].auth.type, 'oauth2');
+  assert.equal(imported.requests[0].auth.grantType, 'deviceCode');
+  assert.equal(imported.requests[0].auth.authorizationUrl, '');
+  assert.equal(imported.requests[0].auth.deviceAuthorizationUrl, 'https://auth.example.test/device');
+  assert.equal(imported.requests[0].auth.tokenUrl, 'https://auth.example.test/token');
+});
+
+test('imports curl commands with attached short-option values and preserves trailing escaped backslashes', async () => {
+  const { store, dir } = await tempStore();
+  const importPath = path.join(dir, 'attached-request.sh');
+  await fs.writeFile(importPath, 'curl -dfoo=bar https://api.example.test/items');
+
+  const collection = await store.importCollection(importPath);
+
+  assert.equal(collection.requests[0].method, 'POST');
+  assert.equal(collection.requests[0].body, 'foo=bar');
+  assert.equal(collection.requests[0].bodyType, 'RAW_TEXT');
+  assert.deepEqual(splitCommandLine('curl http://example.com/foo\\\\'), ['curl', 'http://example.com/foo\\']);
 });
 
 test('imports and exports JMeter plans', async () => {

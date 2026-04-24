@@ -16,6 +16,10 @@
       openRequestTabs: [],
       openEnvironmentTabs: [],
       openWorkspaceTabs: [],
+      collectionDirtySnapshots: new Map(),
+      collectionDirtyOwners: new Map(),
+      cookieJarDirtySnapshot: null,
+      cookieJarDirtyOwner: '',
       activeLoadId: null,
       activeOauthFlowId: null,
       activeRunnerId: null,
@@ -108,6 +112,16 @@
     options.onAfterClear?.();
   }
 
+  function clearSharedRequestDirtyState(state) {
+    if (!state) {
+      return;
+    }
+    state.collectionDirtySnapshots = new Map();
+    state.collectionDirtyOwners = new Map();
+    state.cookieJarDirtySnapshot = null;
+    state.cookieJarDirtyOwner = '';
+  }
+
   function resetTabState(state, options = {}) {
     if (!state) {
       return;
@@ -118,6 +132,7 @@
     if (options.clearDrafts !== false) {
       state.draftRequests = new Map();
     }
+    clearSharedRequestDirtyState(state);
   }
 
   function openModalState(state, modalId, resolver) {
@@ -143,6 +158,7 @@
     activeRequestTabKey,
     activeWorkspaceTabKey,
     clearSavedEnvironmentDirtyState,
+    clearSharedRequestDirtyState,
     clearSavedRequestDirtyState,
     createRendererState,
     environmentSnapshot,

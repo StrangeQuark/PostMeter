@@ -214,3 +214,178 @@ test('request tab state selects workspace tabs without switching the loaded work
   assert.equal(renders, 1);
   assert.equal(tabRenders, 1);
 });
+
+test('request tab state restores shared collection-variable and cookie changes when discarding a saved request tab', async () => {
+  const state = createRendererState();
+  const request = { id: 'request-1', name: 'Saved Request', method: 'GET', url: 'https://saved.example.test' };
+  state.workspace = {
+    collections: [
+      {
+        id: 'collection-1',
+        requests: [request],
+        variables: [{ enabled: true, key: 'baseUrl', value: 'https://edited.example.test' }],
+        folders: []
+      }
+    ],
+    environments: [],
+    cookies: [{ enabled: true, name: 'session', value: 'edited', domain: 'saved.example.test', path: '/' }]
+  };
+  state.collectionDirtySnapshots.set('collection-1', JSON.stringify([{ enabled: true, key: 'baseUrl', value: 'https://saved.example.test' }]));
+  state.collectionDirtyOwners.set('collection-1', 'request:collection-1:request-1');
+  state.cookieJarDirtySnapshot = JSON.stringify([{ enabled: true, name: 'session', value: 'saved', domain: 'saved.example.test', path: '/' }]);
+  state.cookieJarDirtyOwner = 'request:collection-1:request-1';
+  state.activeCollectionId = 'collection-1';
+  state.activeRequestId = 'request-1';
+  state.activeMainPanel = 'request';
+  state.openRequestTabs = [
+    {
+      key: 'request:collection-1:request-1',
+      collectionId: 'collection-1',
+      requestId: 'request-1',
+      dirty: false,
+      createdUnsaved: false,
+      snapshot: JSON.stringify(request)
+    }
+  ];
+  let renders = 0;
+  let prompted = 0;
+
+  const tabState = createRequestTabState({
+    state,
+    activeCollection: () => state.workspace.collections[0],
+    activeEnvironment: () => null,
+    activeRequest: () => state.workspace.collections[0].requests[0],
+    activeWorkspaceItem: () => null,
+    collectRequestFromEditor: () => {},
+    findRequest(collection, requestId) {
+      const found = collection.requests.find((item) => item.id === requestId);
+      return found ? { request: found, folder: null } : null;
+    },
+    promptUnsavedRequestClose: async () => {
+      prompted += 1;
+      return 'discard';
+    },
+    renderAll: () => { renders += 1; },
+    renderCollections: () => {},
+    renderRequestTabs: () => {},
+    workspaceListItems: () => []
+  });
+
+  await tabState.closeRequestTab(state.openRequestTabs[0]);
+
+  assert.equal(prompted, 1);
+  assert.deepEqual(state.openRequestTabs, []);
+  assert.deepEqual(state.workspace.collections[0].variables, [{ enabled: true, key: 'baseUrl', value: 'https://saved.example.test' }]);
+  assert.deepEqual(state.workspace.cookies, [{ enabled: true, name: 'session', value: 'saved', domain: 'saved.example.test', path: '/' }]);
+  assert.equal(state.collectionDirtySnapshots.size, 0);
+  assert.equal(state.cookieJarDirtySnapshot, null);
+  assert.equal(renders, 1);
+});
+
+test('request tab state saves the requested environment tab when closing an inactive dirty environment', async () => {
+  const state = createRendererState();
+  const savedEnvironment = { id: 'environment-1', name: 'Saved Environment', variables: [] };
+  state.workspace = {
+    collections: [],
+    environments: [savedEnvironment]
+  };
+  state.activeMainPanel = 'request';
+  state.activeEnvironmentId = 'none';
+  state.openEnvironmentTabs = [
+    {
+      key: 'environment:environment-1',
+      environmentId: 'environment-1',
+      dirty: true,
+      createdUnsaved: false,
+      snapshot: JSON.stringify(savedEnvironment)
+    }
+  ];
+  const persistCalls = [];
+  let renders = 0;
+
+  const tabState = createRequestTabState({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => null,
+    activeWorkspaceItem: () => null,
+    persistWorkspace: async (showStatus, config) => {
+      persistCalls.push({ showStatus, config });
+      state.openEnvironmentTabs[0].dirty = false;
+      state.openEnvironmentTabs[0].createdUnsaved = false;
+      return true;
+    },
+    promptUnsavedRequestClose: async () => 'save',
+    renderAll: () => {},
+    renderRequestTabs: () => { renders += 1; },
+    workspaceListItems: () => []
+  });
+
+  await tabState.closeEnvironmentTab(state.openEnvironmentTabs[0]);
+
+  assert.deepEqual(persistCalls, [{ showStatus: false, config: { environmentTabKey: 'environment:environment-1' } }]);
+  assert.deepEqual(state.openEnvironmentTabs, []);
+  assert.equal(renders, 1);
+});
+
+test('request tab state saves the requested request tab when closing an inactive dirty request', async () => {
+  const state = createRendererState();
+  const request = { id: 'request-1', name: 'Saved Request', method: 'GET', url: 'https://saved.example.test' };
+  state.workspace = {
+    collections: [
+      {
+        id: 'collection-1',
+        requests: [request],
+        folders: []
+      }
+    ],
+    environments: []
+  };
+  state.activeMainPanel = 'environment';
+  state.activeCollectionId = null;
+  state.activeRequestId = null;
+  state.openRequestTabs = [
+    {
+      key: 'request:collection-1:request-1',
+      collectionId: 'collection-1',
+      requestId: 'request-1',
+      dirty: true,
+      createdUnsaved: false,
+      draft: false,
+      snapshot: JSON.stringify(request)
+    }
+  ];
+  const persistCalls = [];
+  let collectionRenders = 0;
+  let tabRenders = 0;
+
+  const tabState = createRequestTabState({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => null,
+    activeWorkspaceItem: () => null,
+    findRequest(collection, requestId) {
+      const found = collection.requests.find((item) => item.id === requestId);
+      return found ? { request: found, folder: null } : null;
+    },
+    persistWorkspace: async (showStatus, config) => {
+      persistCalls.push({ showStatus, config });
+      state.openRequestTabs[0].dirty = false;
+      state.openRequestTabs[0].createdUnsaved = false;
+      return true;
+    },
+    promptUnsavedRequestClose: async () => 'save',
+    renderAll: () => {},
+    renderCollections: () => { collectionRenders += 1; },
+    renderRequestTabs: () => { tabRenders += 1; },
+    workspaceListItems: () => []
+  });
+
+  await tabState.closeRequestTab(state.openRequestTabs[0]);
+
+  assert.deepEqual(persistCalls, [{ showStatus: false, config: { requestTabKey: 'request:collection-1:request-1' } }]);
+  assert.deepEqual(state.openRequestTabs, []);
+  assert.equal(collectionRenders, 1);
+  assert.equal(tabRenders, 1);
+});

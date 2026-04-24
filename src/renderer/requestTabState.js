@@ -42,6 +42,72 @@
       return workspaceListItems().find((item) => item.id === tab?.workspaceId) || null;
     }
 
+    function requestTabHasSharedDirtyState(tab) {
+      const collectionOwner = tab?.collectionId && state.collectionDirtyOwners instanceof Map
+        ? state.collectionDirtyOwners.get(tab.collectionId)
+        : '';
+      const collectionDirty = Boolean(
+        tab?.collectionId
+        && state.collectionDirtySnapshots instanceof Map
+        && state.collectionDirtySnapshots.has(tab.collectionId)
+        && collectionOwner === tab.key
+      );
+      const cookieDirty = Boolean(
+        state.cookieJarDirtySnapshot != null
+        && state.cookieJarDirtyOwner === tab?.key
+      );
+      return collectionDirty || cookieDirty;
+    }
+
+    function restoreCollectionVariablesSnapshot(collectionId, ownerKey = '') {
+      if (!collectionId || !(state.collectionDirtySnapshots instanceof Map) || !state.collectionDirtySnapshots.has(collectionId)) {
+        return false;
+      }
+      if (ownerKey && state.collectionDirtyOwners instanceof Map && state.collectionDirtyOwners.get(collectionId) !== ownerKey) {
+        return false;
+      }
+      const snapshot = state.collectionDirtySnapshots.get(collectionId);
+      state.collectionDirtySnapshots.delete(collectionId);
+      if (state.collectionDirtyOwners instanceof Map) {
+        state.collectionDirtyOwners.delete(collectionId);
+      }
+      const collection = state.workspace?.collections?.find((item) => item.id === collectionId);
+      if (!collection) {
+        return true;
+      }
+      try {
+        collection.variables = JSON.parse(snapshot);
+      } catch {
+        collection.variables = [];
+      }
+      return true;
+    }
+
+    function restoreCookieJarSnapshot(ownerKey = '') {
+      if (state.cookieJarDirtySnapshot == null) {
+        return false;
+      }
+      if (ownerKey && state.cookieJarDirtyOwner !== ownerKey) {
+        return false;
+      }
+      const snapshot = state.cookieJarDirtySnapshot;
+      state.cookieJarDirtySnapshot = null;
+      state.cookieJarDirtyOwner = '';
+      try {
+        state.workspace.cookies = JSON.parse(snapshot);
+      } catch {
+        state.workspace.cookies = [];
+      }
+      return true;
+    }
+
+    function restoreSharedRequestState(tab) {
+      const ownerKey = tab?.key || '';
+      const restoredCollection = restoreCollectionVariablesSnapshot(tab?.collectionId, ownerKey);
+      const restoredCookies = restoreCookieJarSnapshot(ownerKey);
+      return restoredCollection || restoredCookies;
+    }
+
     function pruneOpenTabs() {
       state.openRequestTabs = state.openRequestTabs.filter((tab) => Boolean(requestForTab(tab)));
       state.openEnvironmentTabs = state.openEnvironmentTabs.filter((tab) => Boolean(environmentForTab(tab)));
@@ -308,7 +374,7 @@
           return;
         }
         if (action === 'save') {
-          await persistWorkspace(false);
+          await persistWorkspace(false, { environmentTabKey: tab.key });
         } else {
           discardEnvironmentTabChanges(tab);
         }
@@ -388,11 +454,12 @@
         closeRequestTabAfterResolved(tab);
         return;
       }
-      if (tab.draft || tab.dirty) {
+      if (tab.draft || tab.dirty || requestTabHasSharedDirtyState(tab)) {
         const action = await promptUnsavedRequestClose(tab, request);
         if (action === 'cancel') {
           return;
         }
+        let restoredSharedState = false;
         if (action === 'save') {
           if (tab.draft) {
             const savedTab = await saveDraftRequestWithPrompt(request, { showStatus: false, tab });
@@ -400,16 +467,18 @@
               return;
             }
           } else {
-            await persistWorkspace(false);
+            await persistWorkspace(false, { requestTabKey: tab.key });
           }
         } else {
-          discardRequestTabChanges(tab);
+          restoredSharedState = discardRequestTabChanges(tab);
         }
+        closeRequestTabAfterResolved(tab, { forceRenderAll: restoredSharedState });
+        return;
       }
       closeRequestTabAfterResolved(tab);
     }
 
-    function closeRequestTabAfterResolved(tab) {
+    function closeRequestTabAfterResolved(tab, options = {}) {
       const index = state.openRequestTabs.findIndex((candidate) => candidate === tab || candidate.key === tab.key);
       if (index < 0) {
         renderRequestTabs();
@@ -418,8 +487,12 @@
       const wasActive = rendererState.isActiveRequestTab(state, tab);
       state.openRequestTabs.splice(index, 1);
       if (!wasActive) {
-        renderCollections();
-        renderRequestTabs();
+        if (options.forceRenderAll === true) {
+          renderAll();
+        } else {
+          renderCollections();
+          renderRequestTabs();
+        }
         return;
       }
       const fallback = state.openRequestTabs[Math.min(index, state.openRequestTabs.length - 1)] || state.openRequestTabs[index - 1] || null;
@@ -432,19 +505,21 @@
     }
 
     function discardRequestTabChanges(tab) {
+      let restoredSharedState = restoreSharedRequestState(tab);
       if (tab.draft) {
         state.draftRequests.delete(tab.requestId);
-        return;
+        return restoredSharedState;
       }
       const collection = state.workspace?.collections?.find((item) => item.id === tab.collectionId);
       if (!collection) {
-        return;
+        return restoredSharedState;
       }
       if (tab.createdUnsaved) {
         removeRequestFromCollection(collection, tab.requestId);
-        return;
+        return true;
       }
       restoreRequestFromSnapshot(tab);
+      return restoredSharedState;
     }
 
     function restoreRequestFromSnapshot(tab) {

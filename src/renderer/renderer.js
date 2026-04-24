@@ -22,6 +22,10 @@ let draftRequests = RENDERER_STATE_DEFAULTS.draftRequests;
 let openRequestTabs = RENDERER_STATE_DEFAULTS.openRequestTabs;
 let openEnvironmentTabs = RENDERER_STATE_DEFAULTS.openEnvironmentTabs;
 let openWorkspaceTabs = RENDERER_STATE_DEFAULTS.openWorkspaceTabs;
+let collectionDirtySnapshots = RENDERER_STATE_DEFAULTS.collectionDirtySnapshots;
+let collectionDirtyOwners = RENDERER_STATE_DEFAULTS.collectionDirtyOwners;
+let cookieJarDirtySnapshot = RENDERER_STATE_DEFAULTS.cookieJarDirtySnapshot;
+let cookieJarDirtyOwner = RENDERER_STATE_DEFAULTS.cookieJarDirtyOwner;
 let activeLoadId = RENDERER_STATE_DEFAULTS.activeLoadId;
 let activeOauthFlowId = RENDERER_STATE_DEFAULTS.activeOauthFlowId;
 let activeRunnerId = RENDERER_STATE_DEFAULTS.activeRunnerId;
@@ -75,6 +79,7 @@ const {
   activeRequestTabKey: buildActiveRequestTabKey,
   activeWorkspaceTabKey: buildActiveWorkspaceTabKey,
   clearSavedEnvironmentDirtyState: clearRendererSavedEnvironmentDirtyState,
+  clearSharedRequestDirtyState: clearRendererSharedRequestDirtyState,
   clearSavedRequestDirtyState: clearRendererSavedRequestDirtyState,
   isActiveEnvironmentTab: isRendererActiveEnvironmentTab,
   isActiveRequestTab: isRendererActiveRequestTab,
@@ -123,6 +128,14 @@ const state = {
   set openEnvironmentTabs(value) { openEnvironmentTabs = value; },
   get openWorkspaceTabs() { return openWorkspaceTabs; },
   set openWorkspaceTabs(value) { openWorkspaceTabs = value; },
+  get collectionDirtySnapshots() { return collectionDirtySnapshots; },
+  set collectionDirtySnapshots(value) { collectionDirtySnapshots = value; },
+  get collectionDirtyOwners() { return collectionDirtyOwners; },
+  set collectionDirtyOwners(value) { collectionDirtyOwners = value; },
+  get cookieJarDirtySnapshot() { return cookieJarDirtySnapshot; },
+  set cookieJarDirtySnapshot(value) { cookieJarDirtySnapshot = value; },
+  get cookieJarDirtyOwner() { return cookieJarDirtyOwner; },
+  set cookieJarDirtyOwner(value) { cookieJarDirtyOwner = value; },
   get activeLoadId() { return activeLoadId; },
   set activeLoadId(value) { activeLoadId = value; },
   get activeOauthFlowId() { return activeOauthFlowId; },
@@ -167,9 +180,9 @@ const requestTabState = createRequestTabState({
   renderCollections,
   renderRequestTabs,
   saveDraftRequestWithPrompt,
-  selectEnvironmentTab: (tab) => selectEnvironmentTab(tab),
-  selectRequestTab: (tab) => selectRequestTab(tab),
-  selectWorkspaceTab: (tab) => selectWorkspaceTab(tab),
+  selectEnvironmentTab: (tab) => selectEnvironmentTabWithoutCollect(tab),
+  selectRequestTab: (tab) => selectRequestTabWithoutCollect(tab),
+  selectWorkspaceTab: (tab) => selectWorkspaceTabWithoutCollect(tab),
   workspaceListItems
 });
 
@@ -178,6 +191,7 @@ const rendererWorkflows = createRendererWorkflows({
   doc: document,
   windowObject: window,
   applyLoadedWorkspace,
+  applyWorkspaceCatalogUpdate,
   activeCollection,
   activeEnvironment,
   activeRequest,
@@ -199,6 +213,7 @@ const rendererWorkflows = createRendererWorkflows({
   renderCookieJarEditor,
   renderEnvironmentEditor,
   renderHistory,
+  renderRequestTabs,
   renderRequestVariablePairs,
   renderVariablePreview,
   promptForCollectionExport,
@@ -217,6 +232,7 @@ initializeRenderer({
   getStoredThemePreference: () => localStorage.getItem('postmeter.theme') || 'system',
   onReady: async ({ registerCleanup }) => {
     bindUi();
+    registerCleanup(() => { flushWorkspaceSave({ sync: true }); });
     registerCleanup(() => { flushSessionSave({ sync: true }); });
     registerCleanup(createVariableAutocomplete({
       doc: document,
@@ -402,7 +418,7 @@ function renderRequestTabs() {
         title: (request) => request.name || 'Untitled Request',
         closeTitle: () => 'Close request',
         closeAriaLabel: (request) => `Close ${request.name || 'Untitled Request'}`,
-        onSelect: selectRequestTab,
+        onSelect: (tab) => selectRequestTab(tab),
         onClose: closeRequestTab
       },
       {
@@ -414,7 +430,7 @@ function renderRequestTabs() {
         title: (environment) => environment.name || 'Untitled Environment',
         closeTitle: () => 'Close environment',
         closeAriaLabel: (environment) => `Close ${environment.name || 'Untitled Environment'}`,
-        onSelect: selectEnvironmentTab,
+        onSelect: (tab) => selectEnvironmentTab(tab),
         onClose: closeEnvironmentTab
       },
       {
@@ -426,7 +442,7 @@ function renderRequestTabs() {
         title: (workspaceItem) => workspaceItem.name,
         closeTitle: () => 'Close workspace',
         closeAriaLabel: (workspaceItem) => `Close ${workspaceItem.name}`,
-        onSelect: selectWorkspaceTab,
+        onSelect: (tab) => selectWorkspaceTab(tab),
         onClose: closeWorkspaceTab
       }
     ]
@@ -447,14 +463,29 @@ function ensureOpenRequestTabForActive(options = {}) {
 }
 
 function selectRequestTab(tab) {
+  collectActiveEditorState();
+  requestTabState.selectRequestTab(tab);
+}
+
+function selectRequestTabWithoutCollect(tab) {
   requestTabState.selectRequestTab(tab);
 }
 
 function selectEnvironmentTab(tab) {
+  collectActiveEditorState();
+  requestTabState.selectEnvironmentTab(tab);
+}
+
+function selectEnvironmentTabWithoutCollect(tab) {
   requestTabState.selectEnvironmentTab(tab);
 }
 
 function selectWorkspaceTab(tab) {
+  collectActiveEditorState();
+  requestTabState.selectWorkspaceTab(tab);
+}
+
+function selectWorkspaceTabWithoutCollect(tab) {
   requestTabState.selectWorkspaceTab(tab);
 }
 
@@ -476,6 +507,16 @@ function collectEnvironmentAndMarkDirty() {
   markActiveEnvironmentDirty();
 }
 
+function collectActiveEditorState() {
+  if (activeMainPanel === 'environment') {
+    collectEnvironmentFromEditor();
+    return;
+  }
+  if (activeMainPanel === 'request') {
+    collectRequestFromEditor();
+  }
+}
+
 function clearSavedRequestDirtyState() {
   clearRendererSavedRequestDirtyState(state, {
     requestForTab: requestTabState.requestForTab,
@@ -485,6 +526,58 @@ function clearSavedRequestDirtyState() {
     environmentForTab: requestTabState.environmentForTab,
     onAfterClear: renderRequestTabs
   });
+  clearRendererSharedRequestDirtyState(state);
+}
+
+function ensureCollectionDirtySnapshots() {
+  if (!(collectionDirtySnapshots instanceof Map)) {
+    collectionDirtySnapshots = new Map();
+  }
+  return collectionDirtySnapshots;
+}
+
+function snapshotCollectionVariables(collection) {
+  try {
+    return JSON.stringify(collection?.variables || []);
+  } catch {
+    return '[]';
+  }
+}
+
+function snapshotCookieJar() {
+  try {
+    return JSON.stringify(workspace?.cookies || []);
+  } catch {
+    return '[]';
+  }
+}
+
+function markActiveCollectionDirty() {
+  const collection = activeCollection();
+  if (!collection) {
+    return;
+  }
+  const snapshots = ensureCollectionDirtySnapshots();
+  if (!snapshots.has(collection.id)) {
+    snapshots.set(collection.id, snapshotCollectionVariables(collection));
+  }
+  if (!(collectionDirtyOwners instanceof Map)) {
+    collectionDirtyOwners = new Map();
+  }
+  collectionDirtyOwners.set(collection.id, activeRequestTabKey());
+  if (activeRequest()) {
+    markActiveRequestDirty();
+  }
+}
+
+function markCookieJarDirty() {
+  if (cookieJarDirtySnapshot == null) {
+    cookieJarDirtySnapshot = snapshotCookieJar();
+  }
+  cookieJarDirtyOwner = activeRequestTabKey();
+  if (activeRequest()) {
+    markActiveRequestDirty();
+  }
 }
 
 function activeRequestTabKey() {
@@ -749,14 +842,8 @@ function resetRequestTabs(options = {}) {
 }
 
 function applyLoadedWorkspace(loaded, options = {}) {
+  updateWorkspaceCatalog(loaded, options);
   workspace = loaded?.workspace || workspace;
-  workspacePath = loaded?.path || '';
-  workspaces = Array.isArray(loaded?.workspaces) ? loaded.workspaces : [];
-  activeWorkspaceId = loaded?.activeWorkspaceId || workspaces[0]?.id || null;
-  const requestedSelectedWorkspaceId = options.selectedWorkspaceId || selectedWorkspaceId || activeWorkspaceId;
-  selectedWorkspaceId = workspaceListItems().some((item) => item.id === requestedSelectedWorkspaceId)
-    ? requestedSelectedWorkspaceId
-    : activeWorkspaceId || workspaces[0]?.id || null;
   lastResponse = null;
   lastLoadResult = null;
   lastRunnerResult = null;
@@ -779,6 +866,28 @@ function applyLoadedWorkspace(loaded, options = {}) {
   if (options.render !== false) {
     renderAll();
   }
+}
+
+function applyWorkspaceCatalogUpdate(loaded, options = {}) {
+  updateWorkspaceCatalog(loaded, options);
+  if (options.focus === 'workspace') {
+    activeSidebarPanel = 'workspaces';
+    activeMainPanel = 'workspace';
+    ensureOpenWorkspaceTabForActive();
+  }
+  if (options.render !== false) {
+    renderAll();
+  }
+}
+
+function updateWorkspaceCatalog(loaded, options = {}) {
+  workspacePath = loaded?.path || workspacePath;
+  workspaces = Array.isArray(loaded?.workspaces) ? loaded.workspaces : workspaces;
+  activeWorkspaceId = loaded?.activeWorkspaceId || activeWorkspaceId || workspaces[0]?.id || null;
+  const requestedSelectedWorkspaceId = options.selectedWorkspaceId || selectedWorkspaceId || activeWorkspaceId;
+  selectedWorkspaceId = workspaceListItems().some((item) => item.id === requestedSelectedWorkspaceId)
+    ? requestedSelectedWorkspaceId
+    : activeWorkspaceId || workspaces[0]?.id || null;
 }
 
 function restoreSessionState(session) {
@@ -810,6 +919,42 @@ async function persistSessionState() {
   } catch {
     return null;
   }
+}
+
+function buildWorkspaceStateForPersistence() {
+  collectRequestFromEditor();
+  collectEnvironmentFromEditor();
+  collectSettingsFromEditor();
+  return workspace;
+}
+
+async function persistWorkspaceState() {
+  try {
+    const save = window.__postmeterSaveWorkspace || window.postmeter.workspace.save;
+    workspace = await save(buildWorkspaceStateForPersistence());
+    return workspace;
+  } catch {
+    return null;
+  }
+}
+
+function flushWorkspaceSave(options = {}) {
+  if (options.sync === true) {
+    try {
+      const saveWorkspaceSync = window.postmeter?.workspace?.saveSync;
+      if (typeof saveWorkspaceSync === 'function') {
+        const saved = saveWorkspaceSync(buildWorkspaceStateForPersistence());
+        if (saved) {
+          workspace = saved;
+        }
+        return saved;
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  }
+  return persistWorkspaceState();
 }
 
 function scheduleSessionSave(options = {}) {
@@ -869,6 +1014,7 @@ function selectSidebarPanel(panel) {
   if (!['collections', 'environments', 'workspaces', 'history'].includes(panel)) {
     return;
   }
+  collectActiveEditorState();
   activeSidebarPanel = panel;
   if (panel === 'collections') {
     activeMainPanel = 'request';
@@ -972,7 +1118,7 @@ async function setThemePreference(theme, options = {}) {
   applyThemePreference(normalizedTheme);
   renderThemeControl();
   if (options.save === true) {
-    await saveWorkspace(false);
+    await saveWorkspace(false, { scope: 'all' });
   }
   if (options.showStatus !== false) {
     setStatus(`Theme set to ${normalizedTheme}.`);
@@ -983,7 +1129,7 @@ async function setIncludePrereleases(includePrereleases, options = {}) {
   ensureSettings();
   workspace.settings.updates.includePrereleases = includePrereleases === true;
   if (options.save === true) {
-    await saveWorkspace(false);
+    await saveWorkspace(false, { scope: 'all' });
   }
   if (options.showStatus !== false) {
     setStatus(`Prerelease update checks ${workspace.settings.updates.includePrereleases ? 'enabled' : 'disabled'}.`);
@@ -1045,6 +1191,7 @@ function environmentNode(environment) {
   wrapper.className = 'tree-node environment-node';
   const button = treeButton(environment.name || 'Untitled Environment', environment.id === activeEnvironmentId, 'ENV');
   button.addEventListener('click', () => {
+    collectActiveEditorState();
     activeEnvironmentId = environment.id;
     activeSidebarPanel = 'environments';
     activeMainPanel = 'environment';
@@ -1186,6 +1333,7 @@ function selectWorkspaceItem(workspaceId) {
   if (!workspaceItem) {
     return null;
   }
+  collectActiveEditorState();
   selectedWorkspaceId = workspaceItem.id;
   activeSidebarPanel = 'workspaces';
   activeMainPanel = 'workspace';
@@ -1225,7 +1373,7 @@ function workspaceSummaryForItem(workspaceItem) {
 
 function countWorkspaceRequests() {
   let count = 0;
-  for (const collection of workspace.collections || []) {
+  for (const collection of workspace?.collections || []) {
     walkCollectionRequests(collection, () => {
       count += 1;
     });
@@ -1241,7 +1389,7 @@ function countWorkspaceFolders() {
       walk(child);
     }
   };
-  for (const collection of workspace.collections || []) {
+  for (const collection of workspace?.collections || []) {
     for (const folder of collection.folders || []) {
       walk(folder);
     }
@@ -1254,7 +1402,7 @@ function collectionNode(collection) {
   wrapper.className = 'tree-node collection-node';
   const button = treeButton(collection.name, collection.id === activeCollectionId && !activeRequestId, 'COL');
   button.addEventListener('click', () => {
-    collectRequestFromEditor();
+    collectActiveEditorState();
     activeMainPanel = 'request';
     activeCollectionId = collection.id;
     selectFirstRequest(collection);
@@ -1283,7 +1431,7 @@ function folderNode(collection, folder) {
   wrapper.className = 'tree-node tree-folder folder-node';
   const button = treeButton(folder.name, folder.id === activeFolderId && !activeRequestId, 'DIR');
   button.addEventListener('click', () => {
-    collectRequestFromEditor();
+    collectActiveEditorState();
     activeMainPanel = 'request';
     activeCollectionId = collection.id;
     activeFolderId = folder.id;
@@ -1312,7 +1460,7 @@ function requestNode(collection, folder, request) {
   wrapper.className = 'tree-node tree-folder request-node';
   const button = treeButton(request.name, request.id === activeRequestId, request.method);
   button.addEventListener('click', () => {
-    collectRequestFromEditor();
+    collectActiveEditorState();
     activeMainPanel = 'request';
     activeCollectionId = collection.id;
     activeFolderId = folder?.id || null;
@@ -1389,7 +1537,7 @@ function renderRequestEditor() {
   }
   $('addRequestVariableButton').disabled = false;
   $('addExampleButton').disabled = false;
-  $('captureResponseExampleButton').disabled = !lastResponse;
+  $('captureResponseExampleButton').disabled = !canCaptureResponseExampleForRequest(request);
   $('exportExamplesButton').disabled = !(request.examples || []).length;
   $('requestNameInput').value = request.name;
   $('methodSelect').value = request.method;
@@ -1521,9 +1669,11 @@ function renderCollectionVariablePairs(pairs) {
     containerId: 'collectionVariablesTable',
     pairs,
     onChange: () => {
+      markActiveCollectionDirty();
       renderVariablePreview();
     },
     onRemove: () => {
+      markActiveCollectionDirty();
       renderRequestEditor();
       renderCollectionVariablesEditor();
     }
@@ -1544,6 +1694,7 @@ function renderCookieJarEditor() {
     doc: document,
     workspace,
     activeRequestUrl: activeRequest()?.url || '',
+    onDirty: markCookieJarDirty,
     rerender: renderCookieJarEditor,
     setStatus
   });
@@ -1610,6 +1761,8 @@ function renderHistory() {
         request.method = item.method;
         request.url = item.url;
         request.name = `${item.method} ${item.url}`;
+        markActiveRequestDirty();
+        renderCollections();
         renderRequestEditor();
       }
     });
@@ -1712,12 +1865,13 @@ async function prepareForWorkspaceChange(actionLabel) {
       return false;
     }
   }
-  await persistWorkspace(false);
+  await persistWorkspace(false, { scope: 'all' });
   return true;
 }
 
 async function newWorkspace() {
   try {
+    collectActiveEditorState();
     const previousWorkspaceIds = new Set(workspaceListItems().map((item) => item.id));
     const loaded = await window.postmeter.workspace.create();
     const createdWorkspaceId = loaded.createdWorkspaceId
@@ -1766,17 +1920,24 @@ async function renameWorkspace(workspaceId = selectedWorkspaceId || activeWorksp
     }
     const renamingActiveWorkspace = workspaceId === activeWorkspaceId;
     if (renamingActiveWorkspace) {
-      await persistWorkspace(false);
+      await persistWorkspace(false, { scope: 'all' });
     }
     const previousWorkspaceIds = new Set(workspaceListItems().map((item) => item.id));
     const renameBoundary = window.__postmeterRenameWorkspace || window.postmeter.workspace.rename;
     const loaded = await renameBoundary(workspaceId, nextName);
     const renamedWorkspaceId = loaded.workspaces?.find((item) => item.id !== workspaceId && !previousWorkspaceIds.has(item.id))?.id
       || (renamingActiveWorkspace ? loaded.activeWorkspaceId : workspaceId);
-    applyLoadedWorkspace(loaded, {
-      focus: renamingActiveWorkspace || activeMainPanel === 'workspace' ? 'workspace' : currentPanelFocus(),
-      selectedWorkspaceId: workspaceId === selectedWorkspaceId ? renamedWorkspaceId : selectedWorkspaceId
-    });
+    if (renamingActiveWorkspace) {
+      applyLoadedWorkspace(loaded, {
+        focus: activeMainPanel === 'workspace' ? 'workspace' : currentPanelFocus(),
+        selectedWorkspaceId: workspaceId === selectedWorkspaceId ? renamedWorkspaceId : selectedWorkspaceId
+      });
+    } else {
+      applyWorkspaceCatalogUpdate(loaded, {
+        focus: 'workspace',
+        selectedWorkspaceId: workspaceId === selectedWorkspaceId ? renamedWorkspaceId : selectedWorkspaceId
+      });
+    }
     setStatus(renamingActiveWorkspace ? `Renamed workspace: ${workspaceDisplayName()}.` : 'Workspace renamed.');
     return loaded.workspace;
   } catch (error) {
@@ -1833,7 +1994,11 @@ async function deleteWorkspace(workspaceId = selectedWorkspaceId || activeWorksp
     const nextSelectedWorkspaceId = workspaceId === selectedWorkspaceId
       ? (loaded.workspaces?.find((item) => item.id !== workspaceId)?.id || loaded.activeWorkspaceId)
       : selectedWorkspaceId;
-    applyLoadedWorkspace(loaded, { focus: 'workspace', selectedWorkspaceId: nextSelectedWorkspaceId });
+    if (workspaceId === activeWorkspaceId) {
+      applyLoadedWorkspace(loaded, { focus: 'workspace', selectedWorkspaceId: nextSelectedWorkspaceId });
+    } else {
+      applyWorkspaceCatalogUpdate(loaded, { focus: 'workspace', selectedWorkspaceId: nextSelectedWorkspaceId });
+    }
     setStatus(`Deleted workspace: ${workspaceItem.name}.`);
     return loaded.workspace;
   } catch (error) {
@@ -1889,7 +2054,7 @@ async function exportCollection(collection = activeCollection(), format = 'postm
 }
 
 function newCollection() {
-  collectRequestFromEditor();
+  collectActiveEditorState();
   activeSidebarPanel = 'collections';
   activeMainPanel = 'request';
   const collection = {
@@ -1910,7 +2075,7 @@ function newCollection() {
 }
 
 function newRequest(collectionId = activeCollectionId, folderId = activeFolderId) {
-  collectRequestFromEditor();
+  collectActiveEditorState();
   activeMainPanel = 'request';
   const collection = workspace.collections.find((item) => item.id === collectionId);
   if (!collection) {
@@ -1941,7 +2106,7 @@ function newRequest(collectionId = activeCollectionId, folderId = activeFolderId
 }
 
 function newFolder(collectionId = activeCollectionId, parentFolderId = activeFolderId) {
-  collectRequestFromEditor();
+  collectActiveEditorState();
   activeMainPanel = 'request';
   const collection = workspace.collections.find((item) => item.id === collectionId);
   if (!collection) {
@@ -1989,6 +2154,7 @@ function newRequestObject(name) {
 }
 
 function newEnvironment() {
+  collectActiveEditorState();
   workspace.environments ||= [];
   const environment = {
     id: crypto.randomUUID(),
@@ -2043,6 +2209,7 @@ function addVariable() {
 function addCollectionVariable() {
   const collection = activeCollection();
   if (collection) {
+    markActiveCollectionDirty();
     collection.variables ||= [];
     collection.variables.push({ enabled: true, key: '', value: '' });
     renderCollectionVariablesEditor();
@@ -2063,6 +2230,7 @@ function addCookie() {
   workspace.cookies ||= [];
   const request = activeRequest();
   const domain = domainFromRequestUrl(request?.url) || 'example.com';
+  markCookieJarDirty();
   workspace.cookies.push(newWorkspaceCookie({ domain }));
   renderCookieJarEditor();
 }
@@ -2070,6 +2238,7 @@ function addCookie() {
 function clearExpiredCookies() {
   workspace.cookies ||= [];
   const before = workspace.cookies.length;
+  markCookieJarDirty();
   workspace.cookies = workspace.cookies.filter((cookie) => !isExpiredCookie(cookie));
   renderCookieJarEditor();
   setStatus(`Removed ${before - workspace.cookies.length} expired cookies.`);
@@ -2090,7 +2259,7 @@ function addExample() {
 
 function captureResponseExample() {
   const request = activeRequest();
-  if (!request || !lastResponse) {
+  if (!request || !canCaptureResponseExampleForRequest(request)) {
     return setStatus('Send a request before capturing a response example.');
   }
   request.examples ||= [];
@@ -2100,6 +2269,10 @@ function captureResponseExample() {
   markActiveRequestDirty();
   renderExamples(request.examples);
   setStatus('Captured response example.');
+}
+
+function canCaptureResponseExampleForRequest(request) {
+  return Boolean(request && lastResponse && lastResponse.requestId === request.id);
 }
 
 async function exportRequestExamples() {
@@ -2221,6 +2394,7 @@ function deleteCollection(collection) {
   if (!confirm(`Delete ${collection.name}?`)) {
     return;
   }
+  collectionDirtySnapshots.delete?.(collection.id);
   removeOpenRequestTabsForCollection(collection.id);
   workspace.collections = workspace.collections.filter((item) => item.id !== collection.id);
   if (!workspace.collections.length) {
@@ -2294,11 +2468,11 @@ function collectEnvironmentFromEditor() {
 }
 
 function activeCollection() {
-  return workspace.collections.find((collection) => collection.id === activeCollectionId);
+  return (workspace?.collections || []).find((collection) => collection.id === activeCollectionId) || null;
 }
 
 function activeEnvironment() {
-  return workspace.environments.find((environment) => environment.id === activeEnvironmentId) || null;
+  return (workspace?.environments || []).find((environment) => environment.id === activeEnvironmentId) || null;
 }
 
 function activeRequest() {

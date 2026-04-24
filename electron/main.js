@@ -128,6 +128,10 @@ async function saveWorkspace(nextWorkspace) {
   return workspaceStore.save(nextWorkspace);
 }
 
+function saveWorkspaceSync(nextWorkspace) {
+  return workspaceStore.saveSync(nextWorkspace);
+}
+
 function emitOAuthProgress(id, progress) {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return;
@@ -171,6 +175,7 @@ registerWorkspaceIpc({
   ipcMain,
   refreshApplicationMenu,
   saveWorkspace,
+  saveWorkspaceSync,
   setWorkspace: (nextWorkspace) => {
     workspace = nextWorkspace;
   }

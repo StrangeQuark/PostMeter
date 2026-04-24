@@ -107,7 +107,10 @@ async function runLoadTest(request, environment, config, options = {}) {
 async function runSingleProcessLoadTest(request, environment, normalizedConfig, options = {}) {
   const abortController = options.abortController || new AbortController();
   const progress = typeof options.onProgress === 'function' ? options.onProgress : () => {};
+  const send = typeof options.sendRequest === 'function' ? options.sendRequest : sendRequest;
   const stats = createLoadStats(normalizedConfig);
+  const trackCookies = request?.cookieJar?.enabled === true;
+  let runnerCookies = trackCookies && Array.isArray(options.cookieJar) ? structuredClone(options.cookieJar) : [];
   let nextIndex = 0;
   let completed = 0;
   let activeWorkers = 0;
@@ -151,7 +154,10 @@ async function runSingleProcessLoadTest(request, environment, normalizedConfig, 
           startedAtMillis: Math.max(0, Math.round(sampleStarted - started))
         };
         try {
-          const result = await sendRequest(request, environment, { signal: abortController.signal, cookieJar: options.cookieJar || [] });
+          const result = await send(request, environment, { signal: abortController.signal, cookieJar: runnerCookies });
+          if (trackCookies && Array.isArray(result.updatedCookies)) {
+            runnerCookies = result.updatedCookies;
+          }
           recordLoadSample(stats, {
             ...sample,
             success: true,
@@ -204,7 +210,10 @@ async function runSingleProcessLoadTest(request, environment, normalizedConfig, 
     performance.now() - started,
     normalizedConfig,
     abortController.signal.aborted,
-    { includeInternalMetrics: options.includeInternalMetrics === true }
+    {
+      cookies: trackCookies ? runnerCookies : null,
+      includeInternalMetrics: options.includeInternalMetrics === true
+    }
   );
 }
 
@@ -212,6 +221,8 @@ async function runMultiProcessLoadTest(request, environment, normalizedConfig, o
   const abortController = options.abortController || new AbortController();
   const progress = typeof options.onProgress === 'function' ? options.onProgress : () => {};
   const started = performance.now();
+  const trackCookies = request?.cookieJar?.enabled === true;
+  const initialCookies = trackCookies && Array.isArray(options.cookieJar) ? structuredClone(options.cookieJar) : [];
   const workerCount = Math.min(normalizedConfig.workerProcesses, normalizedConfig.concurrency, normalizedConfig.totalRequests);
   const childConfigs = splitLoadConfig(normalizedConfig, workerCount);
   const workerProgress = new Map();
@@ -219,7 +230,7 @@ async function runMultiProcessLoadTest(request, environment, normalizedConfig, o
     request,
     environment,
     config: childConfig,
-    cookieJar: options.cookieJar || [],
+    cookieJar: initialCookies,
     abortController,
     workerProcess: index + 1,
     onProgress: (event) => {
@@ -237,9 +248,12 @@ async function runMultiProcessLoadTest(request, environment, normalizedConfig, o
   }
   return summarizeStats(
     stats,
-    performance.now() - started,
-    { ...normalizedConfig, recordSamples: normalizedConfig.recordSamples },
-    abortController.signal.aborted || workerResults.some((result) => result.cancelled)
+      performance.now() - started,
+      { ...normalizedConfig, recordSamples: normalizedConfig.recordSamples },
+      abortController.signal.aborted || workerResults.some((result) => result.cancelled),
+      {
+        cookies: trackCookies ? mergeCookieJars(initialCookies, workerResults.map((result) => result?.cookies)) : null
+      }
   );
 }
 
@@ -545,6 +559,9 @@ function summarizeStats(stats, elapsedMillis, configOrRequestedRequests, cancell
   };
 
   if (stats.totalRequests === 0) {
+    if (Array.isArray(options.cookies)) {
+      result.cookies = structuredClone(options.cookies);
+    }
     if (config.recordSamples) {
       result.samples = [];
       result.sampleLimit = stats.sampleLimit;
@@ -576,7 +593,33 @@ function summarizeStats(stats, elapsedMillis, configOrRequestedRequests, cancell
     result._latencySum = stats.latencySum;
     result._latencyDistribution = Array.from(stats.durationCounts.entries());
   }
+  if (Array.isArray(options.cookies)) {
+    result.cookies = structuredClone(options.cookies);
+  }
   return result;
+}
+
+function mergeCookieJars(baseCookies, cookieJars) {
+  const merged = new Map();
+  for (const cookie of Array.isArray(baseCookies) ? baseCookies : []) {
+    merged.set(cookieIdentity(cookie), structuredClone(cookie));
+  }
+  for (const cookies of cookieJars || []) {
+    if (!Array.isArray(cookies)) {
+      continue;
+    }
+    for (const cookie of cookies) {
+      merged.set(cookieIdentity(cookie), structuredClone(cookie));
+    }
+  }
+  return [...merged.values()];
+}
+
+function cookieIdentity(cookie) {
+  const name = String(cookie?.name || '').toLowerCase();
+  const domain = String(cookie?.domain || '').toLowerCase();
+  const path = String(cookie?.path || '/');
+  return `${name}|${domain}|${path}`;
 }
 
 function summarize(samples, elapsedMillis, configOrRequestedRequests, cancelled) {
