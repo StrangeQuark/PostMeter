@@ -68,6 +68,7 @@
     bindClick(doc, 'newCollectionButton', options.onNewCollection);
     bindClick(doc, 'newFolderButton', options.onNewFolder);
     bindClick(doc, 'newRequestButton', options.onNewRequest);
+    bindClick(doc, 'newWorkspaceMenuButton', options.onNewWorkspace);
     bindClick(doc, 'emptyCreateRequestButton', options.onNewRequest);
     bindClick(doc, 'emptyCreateEnvironmentButton', options.onNewEnvironment);
     bindClick(doc, 'newEnvironmentMenuButton', options.onNewEnvironment);
@@ -89,6 +90,8 @@
     bindClick(doc, 'captureResponseExampleButton', options.onCaptureResponseExample);
     bindClick(doc, 'exportExamplesButton', options.onExportExamples);
     bindClick(doc, 'deleteEnvironmentButton', options.onDeleteEnvironment);
+    bindClick(doc, 'renameWorkspacePanelButton', options.onRenameWorkspace);
+    bindClick(doc, 'deleteWorkspacePanelButton', options.onDeleteWorkspace);
     bindClick(doc, 'addVariableButton', options.onAddEnvironmentVariable);
     bindClick(doc, 'saveWorkspacePanelButton', options.onSaveWorkspace);
     bindClick(doc, 'importWorkspacePanelButton', options.onImportWorkspace);

@@ -8,7 +8,7 @@
   async function runUiRegressionSmoke() {
     assertUiSmoke(workspace.collections.length === 0, 'Regression smoke should start with an empty workspace.');
     assertUiSmoke(!/(sign in|log in|create account|register)/i.test(document.body.textContent), 'Standalone UI should not render app account/login language.');
-    assertToolbarMenuSmoke('newMenuButton', 'newMenu', ['Request', 'Collection', 'Folder', 'Environment']);
+    assertToolbarMenuSmoke('newMenuButton', 'newMenu', ['Workspace', 'Request', 'Collection', 'Folder', 'Environment']);
     assertToolbarMenuSmoke('importMenuButton', 'importMenu', ['Workspace', 'Collection']);
     assertToolbarMenuSmoke('exportMenuButton', 'exportMenu', ['Workspace', 'Collection', 'OpenAPI', 'JMeter', 'curl', 'HAR']);
     await setThemePreference('dark', { save: false, showStatus: false });
@@ -22,6 +22,7 @@
     assertUiSmoke(!$('includePrereleasesInput'), 'Prereleases setting should be handled by the Help menu.');
     await assertUpdateCheckSmoke();
     assertOauthProgressSmoke();
+    await assertWorkspaceManagementSmoke();
     assertCreationSemanticsSmoke();
     await assertRequestTabCloseSmoke();
 
@@ -132,6 +133,54 @@
       window.__postmeterUpdateCheck = originalCheck;
       window.__postmeterOpenExternal = originalOpen;
       window.confirm = originalConfirm;
+    }
+  }
+
+  async function assertWorkspaceManagementSmoke() {
+    const originalConfirm = window.confirm;
+    const originalPrompt = window.prompt;
+    const originalSaveWorkspace = window.__postmeterSaveWorkspace;
+    try {
+      window.confirm = () => true;
+      window.prompt = () => 'Renamed Workspace';
+      window.__postmeterSaveWorkspace = async (nextWorkspace) => nextWorkspace;
+      workspace.collections = [];
+      workspace.environments = [];
+      activeEnvironmentId = 'none';
+      clearActiveWorkspaceItem();
+      resetRequestTabs();
+      renderAll();
+
+      selectSidebarPanel('workspaces');
+      assertUiSmoke($('deleteWorkspacePanelButton').disabled, 'Workspace delete should be disabled when only one workspace exists.');
+      await newWorkspace();
+      selectSidebarPanel('workspaces');
+      assertUiSmoke(workspaceListItems().length === 2, 'Creating a workspace should add a second managed workspace.');
+      assertUiSmoke(!$('deleteWorkspacePanelButton').disabled, 'Workspace delete should enable when multiple workspaces exist.');
+      await renameWorkspace();
+      assertUiSmoke(activeWorkspaceId === 'Renamed Workspace.json', 'Renaming the active workspace should update the active workspace id.');
+      assertUiSmoke(workspaceDisplayName() === 'Renamed Workspace', 'Renaming the active workspace should update the active workspace name.');
+      const createdWorkspaceId = activeWorkspaceId;
+      const originalWorkspaceId = workspaceListItems().find((item) => item.id !== createdWorkspaceId)?.id;
+      assertUiSmoke(Boolean(originalWorkspaceId), 'Workspace switching smoke could not find the original workspace.');
+      newCollection();
+      assertUiSmoke(workspace.collections.length === 1, 'New workspace should accept collection edits before switching away.');
+      await switchWorkspace(originalWorkspaceId, { focus: 'workspace' });
+      assertUiSmoke(activeWorkspaceId === originalWorkspaceId, 'Switching workspaces should update the active workspace id.');
+      assertUiSmoke(workspace.collections.length === 0, 'Switching workspaces should load the selected workspace contents.');
+      await deleteWorkspace(createdWorkspaceId);
+      assertUiSmoke(workspaceListItems().length === 1, 'Deleting a workspace should remove it from the managed workspace list.');
+      assertUiSmoke($('deleteWorkspacePanelButton').disabled, 'Workspace delete should disable again when one workspace remains.');
+    } finally {
+      window.confirm = originalConfirm;
+      window.prompt = originalPrompt;
+      window.__postmeterSaveWorkspace = originalSaveWorkspace;
+      workspace.collections = [];
+      workspace.environments = [];
+      activeEnvironmentId = 'none';
+      clearActiveWorkspaceItem();
+      resetRequestTabs();
+      renderAll();
     }
   }
 
@@ -335,7 +384,7 @@
       assertUiSmoke($('requestTabBar').textContent.includes(workspaceDisplayName()), 'Selecting Workspaces should open a workspace tab.');
       openRequestTabs = [];
       openEnvironmentTabs = [];
-      closeWorkspaceTab(openWorkspaceTabs.find((tab) => tab.workspaceId === 'current'));
+      closeWorkspaceTab(openWorkspaceTabs.find((tab) => tab.workspaceId === activeWorkspaceId));
       assertUiSmoke(activeSidebarPanel === 'workspaces', 'Closing the last workspace tab should keep the Workspaces sidebar selected.');
       assertUiSmoke(activeMainPanel === 'workspace', 'Closing the last workspace tab should keep the main pane in workspace mode.');
       assertUiSmoke(!$('workspaceEmptyPanel').hidden, 'Closing the last workspace tab should show the select workspace screen.');

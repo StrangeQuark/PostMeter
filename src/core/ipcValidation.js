@@ -11,6 +11,7 @@ const LIMITS = payloadSchemas.limits;
 function assertWorkspacePayload(value, field = 'workspace') {
   object(value, field);
   optionalNumber(value.schemaVersion, `${field}.schemaVersion`);
+  optionalString(value.name, `${field}.name`, LIMITS.name);
   assertSchemaNested('workspace', value, field, {
     settings: assertSettingsPayload
   }, { settings: {} });
@@ -247,6 +248,12 @@ function assertWorkspaceLoadResultPayload(value, field = 'result') {
   object(value, field);
   assertWorkspacePayload(value.workspace, `${field}.workspace`);
   optionalString(value.path, `${field}.path`, LIMITS.value);
+  optionalString(value.activeWorkspaceId, `${field}.activeWorkspaceId`, LIMITS.value);
+  if (value.workspaces != null) {
+    array(value.workspaces, `${field}.workspaces`, LIMITS.environments).forEach((workspaceItem, index) => {
+      assertWorkspaceListItemPayload(workspaceItem, `${field}.workspaces[${index}]`);
+    });
+  }
   optionalBoolean(value.recovered, `${field}.recovered`);
   optionalString(value.recoveredPath, `${field}.recoveredPath`, LIMITS.value);
 }
@@ -257,6 +264,15 @@ function assertUpdateCheckOptionsPayload(value, field = 'options') {
 
 function assertExternalUrlPayload(value, field = 'external') {
   assertSchemaFields('externalUrl', { url: value }, field);
+}
+
+function assertWorkspaceListItemPayload(value, field = 'workspaceItem') {
+  object(value, field);
+  string(value.id, `${field}.id`, LIMITS.value);
+  string(value.name, `${field}.name`, LIMITS.name);
+  optionalString(value.path, `${field}.path`, LIMITS.value);
+  optionalBoolean(value.current, `${field}.current`);
+  optionalBoolean(value.deletable, `${field}.deletable`);
 }
 
 function assertFileOperationResultPayload(value, field = 'result') {

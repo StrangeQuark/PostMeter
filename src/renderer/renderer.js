@@ -9,6 +9,7 @@ const TAB_PANEL_IDS = {
 
 let workspace = RENDERER_STATE_DEFAULTS.workspace;
 let workspacePath = RENDERER_STATE_DEFAULTS.workspacePath;
+let workspaces = RENDERER_STATE_DEFAULTS.workspaces;
 let activeCollectionId = RENDERER_STATE_DEFAULTS.activeCollectionId;
 let activeFolderId = RENDERER_STATE_DEFAULTS.activeFolderId;
 let activeRequestId = RENDERER_STATE_DEFAULTS.activeRequestId;
@@ -88,6 +89,8 @@ const state = {
   set workspace(value) { workspace = value; },
   get workspacePath() { return workspacePath; },
   set workspacePath(value) { workspacePath = value; },
+  get workspaces() { return workspaces; },
+  set workspaces(value) { workspaces = value; },
   get activeCollectionId() { return activeCollectionId; },
   set activeCollectionId(value) { activeCollectionId = value; },
   get activeFolderId() { return activeFolderId; },
@@ -223,10 +226,7 @@ initializeRenderer({
     }));
 
     const loaded = await window.postmeter.workspace.load();
-    workspace = loaded.workspace;
-    workspacePath = loaded.path;
-    selectInitialWorkspaceItem();
-    renderAll();
+    applyLoadedWorkspace(loaded, { focus: 'request' });
     setStatus(`Workspace loaded: ${workspacePath}`);
     queueUiWorkflowSmoke();
     queueUiRegressionSmoke();
@@ -242,8 +242,10 @@ function bindUi() {
     onNewCollection: newCollection,
     onNewFolder: () => newFolder(),
     onNewRequest: newRequest,
+    onNewWorkspace: () => { void newWorkspace(); },
     onNewEnvironment: () => newEnvironment(),
     onSaveWorkspace: () => saveWorkspace(true, { promptForDraft: true }),
+    onRenameWorkspace: () => { void renameWorkspace(); },
     onImportWorkspace: importWorkspace,
     onExportWorkspace: exportWorkspace,
     onImportCollection: importCollection,
@@ -262,6 +264,7 @@ function bindUi() {
     onCaptureResponseExample: captureResponseExample,
     onExportExamples: exportRequestExamples,
     onDeleteEnvironment: () => deleteEnvironment(),
+    onDeleteWorkspace: () => { void deleteWorkspace(); },
     onAddEnvironmentVariable: addVariable,
     onAddCollectionVariable: addCollectionVariable,
     onAddRequestVariable: addRequestVariable,
@@ -666,6 +669,33 @@ function resetRequestTabs(options = {}) {
   resetRendererTabState(state, options);
 }
 
+function applyLoadedWorkspace(loaded, options = {}) {
+  workspace = loaded?.workspace || workspace;
+  workspacePath = loaded?.path || '';
+  workspaces = Array.isArray(loaded?.workspaces) ? loaded.workspaces : [];
+  activeWorkspaceId = loaded?.activeWorkspaceId || workspaces[0]?.id || null;
+  lastResponse = null;
+  lastLoadResult = null;
+  lastRunnerResult = null;
+  activeLoadId = null;
+  activeOauthFlowId = null;
+  activeRunnerId = null;
+  selectInitialWorkspaceItem();
+  if (options.focus === 'workspace') {
+    activeSidebarPanel = 'workspaces';
+    activeMainPanel = 'workspace';
+    ensureOpenWorkspaceTabForActive();
+  } else if (options.focus === 'environment') {
+    activeSidebarPanel = 'environments';
+    activeMainPanel = 'environment';
+    ensureOpenEnvironmentTabForActive();
+  } else {
+    activeSidebarPanel = 'collections';
+    activeMainPanel = 'request';
+  }
+  renderAll();
+}
+
 function renderAll() {
   renderToolbarState();
   renderSidebarPanels();
@@ -809,6 +839,7 @@ async function setIncludePrereleases(includePrereleases, options = {}) {
 }
 
 function selectInitialWorkspaceItem() {
+  activeWorkspaceId ||= workspaceListItems()[0]?.id || null;
   activeMainPanel = 'request';
   resetRequestTabs();
   const collection = workspace.collections[0];
@@ -889,24 +920,25 @@ function workspaceNode(workspaceItem) {
   wrapper.className = 'tree-node workspace-node';
   const button = treeButton(workspaceItem.name, activeMainPanel === 'workspace' && workspaceItem.id === activeWorkspaceId, 'WRK');
   button.addEventListener('click', () => {
-    activeWorkspaceId = workspaceItem.id;
-    activeSidebarPanel = 'workspaces';
-    activeMainPanel = 'workspace';
-    ensureOpenWorkspaceTabForActive();
-    renderAll();
+    void switchWorkspace(workspaceItem.id, { focus: 'workspace' });
   });
-  attachTreeContextMenu(button, [
-    ['Save', () => saveWorkspace(true, { promptForDraft: true })],
-    ['Import', () => importWorkspace()],
-    ['Export', () => exportWorkspace()]
-  ]);
+  const menuItems = [
+    ['Open', () => { void switchWorkspace(workspaceItem.id, { focus: 'workspace' }); }],
+    ['Rename', () => { void renameWorkspace(workspaceItem.id); }]
+  ];
+  if (workspaceItem.deletable !== false) {
+    menuItems.push(['Delete', () => { void deleteWorkspace(workspaceItem.id); }, 'danger']);
+  }
+  attachTreeContextMenu(button, menuItems);
   wrapper.append(button);
   return wrapper;
 }
 
 function renderWorkspacePanel() {
   const workspaceItem = activeWorkspaceItem();
-  $('workspaceMainTitle').textContent = workspaceItem?.name || 'Select a workspace';
+  $('workspaceMainTitle').textContent = workspaceItem ? workspaceDisplayName(workspaceItem) : 'Select a workspace';
+  $('renameWorkspacePanelButton').disabled = !workspaceItem;
+  $('deleteWorkspacePanelButton').disabled = !workspaceItem || workspaceListItems().length <= 1;
   const container = $('workspaceSummary');
   container.textContent = '';
   if (!workspaceItem) {
@@ -917,6 +949,7 @@ function renderWorkspacePanel() {
   const rows = [
     ['Name', workspaceDisplayName()],
     ['Workspace File', workspacePath || 'Default local workspace'],
+    ['Saved Workspaces', String(workspaceListItems().length || 0)],
     ['Schema Version', String(workspace.schemaVersion || '-')],
     ['Theme', titleCaseTheme(workspace.settings?.appearance?.theme)],
     ['Collections', String(workspace.collections?.length || 0)],
@@ -946,11 +979,25 @@ function titleCaseTheme(theme) {
 }
 
 function workspaceListItems() {
-  return [{
-    id: 'current',
-    name: workspaceDisplayName(),
-    path: workspacePath || ''
-  }];
+  const items = Array.isArray(workspaces) ? workspaces.map((item) => ({ ...item })) : [];
+  if (!items.length && workspacePath) {
+    return [{
+      id: activeWorkspaceId || 'current',
+      name: workspaceDisplayName({ id: activeWorkspaceId || 'current', path: workspacePath, name: '' }),
+      path: workspacePath,
+      current: true,
+      deletable: false
+    }];
+  }
+  return items.map((item) => (
+    item.id === activeWorkspaceId
+      ? {
+          ...item,
+          name: workspaceDisplayName(item),
+          path: workspacePath || item.path || ''
+        }
+      : item
+  ));
 }
 
 function activeWorkspaceItem() {
@@ -960,15 +1007,15 @@ function activeWorkspaceItem() {
   return workspaceListItems().find((item) => item.id === activeWorkspaceId) || null;
 }
 
-function workspaceDisplayName() {
-  if (workspace?.name && String(workspace.name).trim()) {
-    return String(workspace.name).trim();
+function workspaceDisplayName(workspaceItem = activeWorkspaceItem()) {
+  if (workspaceItem?.name && String(workspaceItem.name).trim()) {
+    return String(workspaceItem.name).trim();
   }
-  const filename = String(workspacePath || '').split(/[\\/]/).filter(Boolean).pop();
-  if (!filename || filename === 'workspace.json') {
-    return 'Local Workspace';
+  const filename = String(workspaceItem?.path || workspacePath || '').split(/[\\/]/).filter(Boolean).pop();
+  if (!filename) {
+    return 'Workspace';
   }
-  return filename.replace(/\.json$/i, '') || 'Local Workspace';
+  return filename.replace(/\.json$/i, '') || 'Workspace';
 }
 
 function countWorkspaceRequests() {
@@ -1438,6 +1485,132 @@ async function importWorkspace() {
 
 async function exportWorkspace() {
   return rendererWorkflows.exportWorkspace();
+}
+
+async function prepareForWorkspaceChange(actionLabel) {
+  if (draftRequests.size > 0) {
+    const draftLabel = draftRequests.size === 1 ? 'draft request' : 'draft requests';
+    if (!confirm(`${draftRequests.size} unsaved ${draftLabel} will be discarded before ${actionLabel}. Continue?`)) {
+      return false;
+    }
+  }
+  await persistWorkspace(false);
+  return true;
+}
+
+async function newWorkspace() {
+  try {
+    if (!(await prepareForWorkspaceChange('creating a workspace'))) {
+      return null;
+    }
+    const loaded = await window.postmeter.workspace.create();
+    applyLoadedWorkspace(loaded, { focus: 'request' });
+    setStatus(`Created workspace: ${workspaceDisplayName()}.`);
+    return loaded.workspace;
+  } catch (error) {
+    const message = error.message || String(error);
+    setStatus(`Workspace creation failed: ${message}`);
+    notifyUser('Workspace Creation Failed', message);
+    return null;
+  }
+}
+
+function currentPanelFocus() {
+  if (activeMainPanel === 'workspace') {
+    return 'workspace';
+  }
+  if (activeMainPanel === 'environment') {
+    return 'environment';
+  }
+  return 'request';
+}
+
+async function renameWorkspace(workspaceId = activeWorkspaceId) {
+  try {
+    const workspaceItem = workspaceListItems().find((item) => item.id === workspaceId);
+    if (!workspaceItem) {
+      setStatus('Select a workspace before renaming.');
+      return null;
+    }
+    const currentName = workspaceDisplayName(workspaceItem);
+    const value = prompt('Workspace name', currentName);
+    const nextName = String(value || '').trim();
+    if (!nextName) {
+      return null;
+    }
+    const renamingActiveWorkspace = workspaceId === activeWorkspaceId;
+    if (renamingActiveWorkspace) {
+      await persistWorkspace(false);
+    }
+    const renameBoundary = window.__postmeterRenameWorkspace || window.postmeter.workspace.rename;
+    const loaded = await renameBoundary(workspaceId, nextName);
+    applyLoadedWorkspace(loaded, { focus: renamingActiveWorkspace ? 'workspace' : currentPanelFocus() });
+    setStatus(renamingActiveWorkspace ? `Renamed workspace: ${workspaceDisplayName()}.` : 'Workspace renamed.');
+    return loaded.workspace;
+  } catch (error) {
+    const message = error.message || String(error);
+    setStatus(`Workspace rename failed: ${message}`);
+    notifyUser('Workspace Rename Failed', message);
+    return null;
+  }
+}
+
+async function switchWorkspace(workspaceId, options = {}) {
+  try {
+    const workspaceItem = workspaceListItems().find((item) => item.id === workspaceId);
+    if (!workspaceItem) {
+      setStatus('Select a workspace before switching.');
+      return null;
+    }
+    if (workspaceId === activeWorkspaceId) {
+      activeSidebarPanel = 'workspaces';
+      activeMainPanel = 'workspace';
+      ensureOpenWorkspaceTabForActive();
+      renderAll();
+      return workspaceItem;
+    }
+    if (!(await prepareForWorkspaceChange('switching workspaces'))) {
+      return null;
+    }
+    const loaded = await window.postmeter.workspace.switch(workspaceId);
+    applyLoadedWorkspace(loaded, { focus: options.focus || 'workspace' });
+    setStatus(`Switched to workspace: ${workspaceDisplayName()}.`);
+    return loaded.workspace;
+  } catch (error) {
+    const message = error.message || String(error);
+    setStatus(`Workspace switch failed: ${message}`);
+    notifyUser('Workspace Switch Failed', message);
+    return null;
+  }
+}
+
+async function deleteWorkspace(workspaceId = activeWorkspaceId) {
+  try {
+    const workspaceItem = workspaceListItems().find((item) => item.id === workspaceId);
+    if (!workspaceItem) {
+      setStatus('Select a workspace before deleting.');
+      return null;
+    }
+    if (workspaceListItems().length <= 1) {
+      setStatus('At least one workspace must remain.');
+      return null;
+    }
+    if (workspaceId !== activeWorkspaceId && !(await prepareForWorkspaceChange('deleting a workspace'))) {
+      return null;
+    }
+    if (!confirm(`Delete "${workspaceItem.name}"? This cannot be recovered.`)) {
+      return null;
+    }
+    const loaded = await window.postmeter.workspace.delete(workspaceId);
+    applyLoadedWorkspace(loaded, { focus: 'workspace' });
+    setStatus(`Deleted workspace: ${workspaceItem.name}.`);
+    return loaded.workspace;
+  } catch (error) {
+    const message = error.message || String(error);
+    setStatus(`Workspace deletion failed: ${message}`);
+    notifyUser('Workspace Deletion Failed', message);
+    return null;
+  }
 }
 
 async function checkForUpdates() {

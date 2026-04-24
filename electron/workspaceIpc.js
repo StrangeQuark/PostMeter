@@ -1,4 +1,5 @@
 const fs = require('node:fs/promises');
+const { fieldLimit } = require('../src/core/payloadSchemas');
 const {
   collectionExportExtension,
   collectionExportFilters,
@@ -27,11 +28,8 @@ function registerWorkspaceIpc(options = {}) {
     setWorkspace
   } = options;
 
-  ipcMain.handle('workspace:load', () => {
-    const result = {
-      workspace: getWorkspace(),
-      path: getWorkspaceStore().getWorkspacePath()
-    };
+  ipcMain.handle('workspace:load', async () => {
+    const result = await getWorkspaceStore().describeCurrent(getWorkspace());
     assertWorkspaceLoadResultPayload(result);
     return result;
   });
@@ -41,8 +39,62 @@ function registerWorkspaceIpc(options = {}) {
     const workspace = await saveWorkspace(nextWorkspace);
     setWorkspace(workspace);
     refreshApplicationMenu();
-    assertWorkspaceLoadResultPayload({ workspace, path: getWorkspaceStore().getWorkspacePath() });
+    assertWorkspaceLoadResultPayload(await getWorkspaceStore().describeCurrent(workspace));
     return workspace;
+  });
+
+  ipcMain.handle('workspace:create', async () => {
+    const result = await getWorkspaceStore().createWorkspace();
+    setWorkspace(result.workspace);
+    refreshApplicationMenu();
+    assertWorkspaceLoadResultPayload(result);
+    return result;
+  });
+
+  ipcMain.handle('workspace:rename', async (_event, workspaceId, nextName) => {
+    if (typeof workspaceId !== 'string' || !workspaceId.trim()) {
+      throw new Error('workspaceId must be a non-empty string.');
+    }
+    const trimmedName = String(nextName || '').trim();
+    if (!trimmedName) {
+      throw new Error('Workspace name must be a non-empty string.');
+    }
+    if (trimmedName.length > fieldLimit('name')) {
+      throw new Error(`Workspace name must be ${fieldLimit('name')} characters or fewer.`);
+    }
+    const workspaceStore = getWorkspaceStore();
+    const currentWorkspaceId = typeof workspaceStore.getWorkspaceId === 'function' ? workspaceStore.getWorkspaceId() : '';
+    if (workspaceId === currentWorkspaceId) {
+      const workspace = await saveWorkspace(getWorkspace());
+      setWorkspace(workspace);
+    }
+    const result = await workspaceStore.renameWorkspace(workspaceId, trimmedName);
+    setWorkspace(result.workspace);
+    refreshApplicationMenu();
+    assertWorkspaceLoadResultPayload(result);
+    return result;
+  });
+
+  ipcMain.handle('workspace:switch', async (_event, workspaceId) => {
+    if (typeof workspaceId !== 'string' || !workspaceId.trim()) {
+      throw new Error('workspaceId must be a non-empty string.');
+    }
+    const result = await getWorkspaceStore().switchWorkspace(workspaceId);
+    setWorkspace(result.workspace);
+    refreshApplicationMenu();
+    assertWorkspaceLoadResultPayload(result);
+    return result;
+  });
+
+  ipcMain.handle('workspace:delete', async (_event, workspaceId) => {
+    if (typeof workspaceId !== 'string' || !workspaceId.trim()) {
+      throw new Error('workspaceId must be a non-empty string.');
+    }
+    const result = await getWorkspaceStore().deleteWorkspace(workspaceId);
+    setWorkspace(result.workspace);
+    refreshApplicationMenu();
+    assertWorkspaceLoadResultPayload(result);
+    return result;
   });
 
   ipcMain.handle('workspace:import', async () => {

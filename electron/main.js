@@ -1,6 +1,7 @@
 const path = require('node:path');
 const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
-const { WorkspaceRecoveryError, WorkspaceStore } = require('../src/core/workspaceStore');
+const { WorkspaceRecoveryError } = require('../src/core/workspaceStore');
+const { WorkspaceManager } = require('../src/core/workspaceManager');
 const { installApplicationMenu } = require('./appMenu');
 const { registerAppIpc, safeExternalUrl } = require('./appIpc');
 const { createOAuthFlowController } = require('./oauthFlows');
@@ -67,7 +68,7 @@ function refreshApplicationMenu() {
 
 app.whenReady().then(async () => {
   oauthFlows.registerProtocol();
-  workspaceStore = new WorkspaceStore();
+  workspaceStore = new WorkspaceManager();
   try {
     const loaded = await workspaceStore.load();
     workspace = loaded.workspace;

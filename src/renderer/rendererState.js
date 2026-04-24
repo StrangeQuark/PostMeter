@@ -3,6 +3,7 @@
     return {
       workspace: null,
       workspacePath: '',
+      workspaces: [],
       activeCollectionId: null,
       activeFolderId: null,
       activeRequestId: null,
