@@ -16,11 +16,14 @@ const {
   assertWorkspaceLoadResultPayload,
   assertWorkspaceRequestSavePayload,
   assertWorkspaceRequestSaveResultPayload,
+  assertWorkspaceSettingsSavePayload,
+  assertWorkspaceSettingsSaveResultPayload,
   assertWorkspacePayload
 } = require('../src/core/ipcValidation');
 const {
   applyEnvironmentSaveToWorkspace,
   applyRequestSaveToWorkspace,
+  applyWorkspaceSettingsSaveToWorkspace,
   findWorkspaceRequestContext
 } = require('./workspaceMutations');
 
@@ -88,6 +91,17 @@ function registerWorkspaceIpc(options = {}) {
     const environment = (workspace.environments || []).find((candidate) => candidate.id === payload.environmentId) || payload.environment;
     const result = { environment };
     assertWorkspaceEnvironmentSaveResultPayload(result);
+    return result;
+  });
+
+  ipcMain.handle('workspace:saveSettings', async (_event, settings) => {
+    assertWorkspaceSettingsSavePayload(settings);
+    const nextWorkspace = applyWorkspaceSettingsSaveToWorkspace(getWorkspace(), settings);
+    const workspace = await saveWorkspace(nextWorkspace);
+    setWorkspace(workspace);
+    refreshApplicationMenu();
+    const result = { settings: workspace.settings || {} };
+    assertWorkspaceSettingsSaveResultPayload(result);
     return result;
   });
 

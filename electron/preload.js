@@ -48,6 +48,7 @@ contextBridge.exposeInMainWorld('postmeter', {
     save: (workspace) => ipcRenderer.invoke('workspace:save', workspace),
     saveRequest: (payload) => ipcRenderer.invoke('workspace:saveRequest', payload),
     saveEnvironment: (payload) => ipcRenderer.invoke('workspace:saveEnvironment', payload),
+    saveSettings: (settings) => ipcRenderer.invoke('workspace:saveSettings', settings),
     saveSync: (workspace) => ipcRenderer.sendSync('workspace:saveSync', workspace),
     create: () => ipcRenderer.invoke('workspace:create'),
     rename: (workspaceId, name) => ipcRenderer.invoke('workspace:rename', workspaceId, name),

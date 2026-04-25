@@ -43,6 +43,125 @@ test('renderer workflows prompt to save an active draft before saving the worksp
   assert.equal(persisted, 0);
 });
 
+test('renderer workflows allow sending an active draft request without forcing a save', async () => {
+  const state = createRendererState();
+  const draftRequest = {
+    id: 'draft-1',
+    name: 'Draft Request',
+    method: 'GET',
+    url: 'https://example.test',
+    scripts: { preRequest: '', tests: '' }
+  };
+  state.workspace = { collections: [], environments: [], history: [], settings: {} };
+  state.activeMainPanel = 'request';
+  state.activeRequestId = draftRequest.id;
+  state.openRequestTabs = [{ key: 'draft:draft-1', requestId: draftRequest.id, draft: true, dirty: true }];
+  state.draftRequests.set(draftRequest.id, draftRequest);
+  let workspaceSaveCalls = 0;
+  let requestSendCalls = 0;
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => draftRequest,
+    collectRequestFromEditor: () => {},
+    displayResponse: () => {},
+    doc: createDocument(),
+    renderAuthEditor: () => {},
+    renderCookieJarEditor: () => {},
+    renderHistory: () => {},
+    runFormatting: createRunFormatting(),
+    windowObject: {
+      postmeter: {
+        request: {
+          validate: async () => [],
+          send: async () => {
+            requestSendCalls += 1;
+            return {
+              statusCode: 200,
+              finalUrl: 'https://example.test',
+              durationMillis: 10
+            };
+          }
+        },
+        workspace: {
+          save: async (workspace) => {
+            workspaceSaveCalls += 1;
+            return workspace;
+          }
+        }
+      }
+    }
+  });
+
+  await workflows.sendActiveRequest();
+
+  assert.equal(requestSendCalls, 1);
+  assert.equal(workspaceSaveCalls, 0);
+});
+
+test('renderer workflows allow running a load test from an active draft request without forcing a save', async () => {
+  const state = createRendererState();
+  const draftRequest = {
+    id: 'draft-1',
+    name: 'Draft Load Request',
+    method: 'GET',
+    url: 'https://example.test',
+    scripts: { preRequest: '', tests: '' }
+  };
+  state.workspace = { collections: [], environments: [], history: [], settings: {} };
+  state.activeMainPanel = 'request';
+  state.activeRequestId = draftRequest.id;
+  state.openRequestTabs = [{ key: 'draft:draft-1', requestId: draftRequest.id, draft: true, dirty: true }];
+  state.draftRequests.set(draftRequest.id, draftRequest);
+  const doc = createDocument();
+  doc.getElementById('loadConcurrency').value = '1';
+  let workspaceSaveCalls = 0;
+  let loadStartCalls = 0;
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => draftRequest,
+    collectRequestFromEditor: () => {},
+    doc,
+    loadConfigFromControls: () => ({ totalRequests: 1 }),
+    runFormatting: createRunFormatting(),
+    setStatus: () => {},
+    windowObject: {
+      postmeter: {
+        request: {
+          validate: async () => []
+        },
+        loadTest: {
+          start: async () => {
+            loadStartCalls += 1;
+            return {
+              totalRequests: 1,
+              successfulRequests: 1,
+              failedRequests: 0,
+              cancelled: false
+            };
+          }
+        },
+        workspace: {
+          save: async (workspace) => {
+            workspaceSaveCalls += 1;
+            return workspace;
+          }
+        }
+      }
+    }
+  });
+
+  await workflows.runLoadTest();
+
+  assert.equal(loadStartCalls, 1);
+  assert.equal(workspaceSaveCalls, 0);
+});
+
 test('renderer workflows persist the workspace and clear dirty state for explicit full saves', async () => {
   const state = createRendererState();
   state.workspace = {
@@ -261,6 +380,94 @@ test('renderer workflows only persist the active environment tab on a normal sav
   assert.equal(state.openEnvironmentTabs[0].snapshot, JSON.stringify({ ...environmentOneLive, name: 'Edited Env One Saved' }));
   assert.equal(state.openEnvironmentTabs[1].dirty, true);
   assert.equal(renders, 1);
+});
+
+test('renderer workflows save only workspace settings when the workspace tab is selected', async () => {
+  const state = createRendererState();
+  const draftRequest = { id: 'draft-1', name: 'Draft Request' };
+  state.workspace = {
+    collections: [],
+    environments: [],
+    settings: { appearance: { theme: 'dark' }, updates: { includePrereleases: true } }
+  };
+  state.activeMainPanel = 'workspace';
+  state.selectedWorkspaceId = 'Local Workspace.json';
+  state.activeRequestId = draftRequest.id;
+  state.draftRequests.set(draftRequest.id, draftRequest);
+  state.openRequestTabs = [
+    {
+      key: 'request:collection-1:request-1',
+      collectionId: 'collection-1',
+      requestId: 'request-1',
+      dirty: true,
+      createdUnsaved: false,
+      snapshot: '{}'
+    }
+  ];
+  state.openEnvironmentTabs = [
+    {
+      key: 'environment:environment-1',
+      environmentId: 'environment-1',
+      dirty: true,
+      createdUnsaved: false,
+      snapshot: '{}'
+    }
+  ];
+  let draftPrompts = 0;
+  let fullSaveCalls = 0;
+  let saveSettingsPayload = null;
+  let status = '';
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => draftRequest,
+    collectRequestFromEditor: () => {
+      throw new Error('request editor should not be collected while saving the workspace tab');
+    },
+    collectEnvironmentFromEditor: () => {
+      throw new Error('environment editor should not be collected while saving the workspace tab');
+    },
+    collectSettingsFromEditor: () => {},
+    doc: createDocument(),
+    runFormatting: createRunFormatting(),
+    saveDraftRequestWithPrompt: async () => {
+      draftPrompts += 1;
+      return null;
+    },
+    setStatus: (value) => { status = value; },
+    windowObject: {
+      postmeter: {
+        workspace: {
+          save: async (workspace) => {
+            fullSaveCalls += 1;
+            return workspace;
+          },
+          saveSettings: async (settings) => {
+            saveSettingsPayload = structuredClone(settings);
+            return {
+              settings: {
+                ...settings,
+                appearance: { theme: 'light' }
+              }
+            };
+          }
+        }
+      }
+    }
+  });
+
+  const result = await workflows.saveWorkspace(true, { promptForDraft: true });
+
+  assert.equal(result, true);
+  assert.equal(draftPrompts, 0);
+  assert.equal(fullSaveCalls, 0);
+  assert.deepEqual(saveSettingsPayload, { appearance: { theme: 'dark' }, updates: { includePrereleases: true } });
+  assert.equal(state.workspace.settings.appearance.theme, 'light');
+  assert.equal(state.openRequestTabs[0].dirty, true);
+  assert.equal(state.openEnvironmentTabs[0].dirty, true);
+  assert.equal(status, 'Workspace saved.');
 });
 
 test('renderer workflows import workspaces as managed entries without destructive confirmation', async () => {

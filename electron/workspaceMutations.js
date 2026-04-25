@@ -145,6 +145,13 @@ function applyEnvironmentSaveToWorkspace(workspace, payload) {
   return nextWorkspace;
 }
 
+function applyWorkspaceSettingsSaveToWorkspace(workspace, settings) {
+  return {
+    ...workspace,
+    settings: cloneJson(settings || {})
+  };
+}
+
 function replaceRequestInCollection(collection, requestId, request) {
   collection.requests ||= [];
   const requestIndex = collection.requests.findIndex((candidate) => candidate.id === requestId);
@@ -202,6 +209,7 @@ module.exports = {
   applyEnvironmentSaveToWorkspace,
   applyCollectionRunMutationsToWorkspace,
   applyRequestSaveToWorkspace,
+  applyWorkspaceSettingsSaveToWorkspace,
   applyScriptVariableMutationsToWorkspace,
   findWorkspaceRequestContext,
   updateWorkspaceRequestAuth

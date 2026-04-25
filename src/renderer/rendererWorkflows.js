@@ -419,6 +419,10 @@
       };
     }
 
+    function buildWorkspaceSettingsSavePayload() {
+      return cloneJson(state.workspace?.settings, {});
+    }
+
     function clearSavedSharedRequestState(requestTabKeyValue, config = {}) {
       let cleared = false;
       if (config.collection === true && requestTabKeyValue && state.collectionDirtySnapshots instanceof Map && state.collectionDirtyOwners instanceof Map) {
@@ -491,6 +495,15 @@
       return applySavedEnvironmentResult(environmentTab, await saveEnvironment(buildEnvironmentSavePayload(environmentTab)));
     }
 
+    async function persistWorkspaceSettings() {
+      const saveSettings = windowObject.__postmeterSaveWorkspaceSettings || windowObject.postmeter.workspace.saveSettings;
+      const result = await saveSettings(buildWorkspaceSettingsSavePayload());
+      if (result?.settings && typeof result.settings === 'object') {
+        state.workspace.settings = cloneJson(result.settings, {});
+      }
+      return true;
+    }
+
     function isActiveRequestContext(context) {
       return Boolean(
         context?.requestId
@@ -555,7 +568,7 @@
         return setStatus('Select a request before sending.');
       }
       collectRequestFromEditor();
-      await saveWorkspace(false);
+      await saveWorkspace(false, { allowDraftBypass: true });
       const environment = activeEnvironment();
       if (!request.scripts?.preRequest?.trim()) {
         const errors = await windowObject.postmeter.request.validate(request, environment);
@@ -618,7 +631,7 @@
         return setStatus('Select a request before running a load test.');
       }
       collectRequestFromEditor();
-      await saveWorkspace(false);
+      await saveWorkspace(false, { allowDraftBypass: true });
       const environment = activeEnvironment();
       const errors = await windowObject.postmeter.request.validate(request, environment);
       if (errors.length) {
@@ -862,8 +875,8 @@
     }
 
     async function saveWorkspace(showStatus = true, config = {}) {
-      collectRequestFromEditor();
-      if (config.promptForDraft === true && !state.activeCollectionId && state.activeRequestId) {
+      collectActiveEditorState();
+      if (config.promptForDraft === true && state.activeMainPanel === 'request' && !state.activeCollectionId && state.activeRequestId) {
         const request = activeRequest();
         if (request) {
           return Boolean(await saveDraftRequestWithPrompt(request, { showStatus }));
@@ -873,19 +886,28 @@
     }
 
     async function persistWorkspace(showStatus = true, config = {}) {
-      if (config.collectEditors !== false) {
-        collectRequestFromEditor();
-        collectEnvironmentFromEditor();
-        collectSettingsFromEditor();
-      }
       const requestTargetKey = resolveRequestSaveTarget(config);
       const environmentTargetKey = resolveEnvironmentSaveTarget(config);
-      if (config.scope === 'all' || (!requestTargetKey && !environmentTargetKey)) {
+      const settingsOnly = config.scope === 'settings'
+        || (state?.activeMainPanel === 'workspace' && config.scope !== 'all' && !requestTargetKey && !environmentTargetKey);
+      if (config.collectEditors !== false) {
+        collectSettingsFromEditor();
+        if (!settingsOnly) {
+          collectRequestFromEditor();
+          collectEnvironmentFromEditor();
+        }
+      }
+      if (config.scope === 'all' || (!settingsOnly && !requestTargetKey && !environmentTargetKey)) {
         const save = windowObject.__postmeterSaveWorkspace || windowObject.postmeter.workspace.save;
         state.workspace = await save(state.workspace);
         options.clearSavedRequestDirtyState?.();
+      } else if (settingsOnly) {
+        await persistWorkspaceSettings();
       } else if (requestTargetKey) {
         const requestTab = requestTabForKey(requestTargetKey);
+        if (requestTab?.draft && config.allowDraftBypass === true) {
+          return true;
+        }
         if (!requestTab || requestTab.draft) {
           throw new Error('The selected request tab could not be saved.');
         }

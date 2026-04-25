@@ -23,7 +23,9 @@ function defaultSessionState() {
     openRequestTabs: [],
     openEnvironmentTabs: [],
     openWorkspaceTabs: [],
-    draftRequests: []
+    draftRequests: [],
+    dirtyCollectionStates: [],
+    dirtyCookieJarState: null
   };
 }
 
@@ -44,7 +46,9 @@ function normalizeSessionState(value = {}) {
     openRequestTabs: normalizeArray(value.openRequestTabs, MAX_OPEN_TABS, normalizeRequestTab),
     openEnvironmentTabs: normalizeArray(value.openEnvironmentTabs, MAX_OPEN_TABS, normalizeEnvironmentTab),
     openWorkspaceTabs: normalizeArray(value.openWorkspaceTabs, MAX_OPEN_TABS, normalizeWorkspaceTab),
-    draftRequests: normalizeArray(value.draftRequests, MAX_OPEN_TABS, normalizeSessionRequest)
+    draftRequests: normalizeArray(value.draftRequests, MAX_OPEN_TABS, normalizeSessionRequest),
+    dirtyCollectionStates: normalizeArray(value.dirtyCollectionStates, MAX_OPEN_TABS, normalizeDirtyCollectionState),
+    dirtyCookieJarState: normalizeDirtyCookieJarState(value.dirtyCookieJarState)
   };
 }
 
@@ -102,6 +106,33 @@ function normalizeWorkspaceTab(value) {
     key: normalizeTabKey(value.key, `workspace:${workspaceId}`),
     workspaceId,
     dirty: value.dirty === true
+  };
+}
+
+function normalizeDirtyCollectionState(value) {
+  if (!isObject(value)) {
+    return null;
+  }
+  const collectionId = normalizeId(value.collectionId);
+  if (!collectionId) {
+    return null;
+  }
+  return {
+    collectionId,
+    ownerKey: normalizeString(value.ownerKey).trim(),
+    snapshot: normalizeSnapshot(value.snapshot),
+    currentState: normalizePairs(value.currentState)
+  };
+}
+
+function normalizeDirtyCookieJarState(value) {
+  if (!isObject(value)) {
+    return null;
+  }
+  return {
+    ownerKey: normalizeString(value.ownerKey).trim(),
+    snapshot: normalizeSnapshot(value.snapshot),
+    currentState: normalizeObjectArray(value.currentState)
   };
 }
 
