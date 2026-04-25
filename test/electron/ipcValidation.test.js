@@ -23,6 +23,8 @@ const {
   assertWorkspaceLoadResultPayload,
   assertWorkspaceRequestSavePayload,
   assertWorkspaceRequestSaveResultPayload,
+  assertWorkspaceSettingsSavePayload,
+  assertWorkspaceSettingsSaveResultPayload,
   assertWorkspacePayload
 } = require('../../src/core/ipcValidation');
 const { payloadSchemas } = require('../../src/core/payloadSchemas');
@@ -172,6 +174,16 @@ test('accepts structurally valid IPC payloads', () => {
   assert.doesNotThrow(() => assertWorkspaceEnvironmentSaveResultPayload({
     environment: { id: 'e1', name: 'Env', variables: [{ enabled: true, key: 'token', value: 'secret' }] }
   }));
+  assert.doesNotThrow(() => assertWorkspaceSettingsSavePayload({
+    appearance: { theme: 'dark' },
+    updates: { includePrereleases: true }
+  }));
+  assert.doesNotThrow(() => assertWorkspaceSettingsSaveResultPayload({
+    settings: {
+      appearance: { theme: 'dark' },
+      updates: { includePrereleases: true }
+    }
+  }));
   assert.doesNotThrow(() => assertFileOperationResultPayload({
     cancelled: false,
     path: '/tmp/export.json'
@@ -271,6 +283,8 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertWorkspaceRequestSavePayload({ requestId: 'r1', request: { method: 'GET', queryParams: [], headers: [], bodyType: 'NONE' } }), /payload.collectionId must be a string/);
   assert.throws(() => assertWorkspaceRequestSavePayload({ collectionId: 'c1', requestId: 'r1', request: { method: 'GET', queryParams: [], headers: [], bodyType: 'NONE' }, folderPath: 'bad' }), /payload.folderPath must be an array/);
   assert.throws(() => assertWorkspaceEnvironmentSavePayload({ environment: { id: 'e1', name: 'Env', variables: [] } }), /payload.environmentId must be a string/);
+  assert.throws(() => assertWorkspaceSettingsSavePayload({ appearance: { theme: 'sepia' } }), /settings.appearance.theme must be one of/);
+  assert.throws(() => assertWorkspaceSettingsSaveResultPayload({ settings: { updates: { includePrereleases: 'yes' } } }), /result.settings.updates.includePrereleases must be a boolean/);
   assert.throws(() => assertWorkspaceLoadResultPayload({ workspace: null }), /result.workspace must be an object/);
   assert.throws(() => assertFileOperationResultPayload({ cancelled: 'yes' }), /result.cancelled must be a boolean/);
   assert.throws(() => assertFileOperationResultPayload({ cancelled: false, collection: [] }), /result.collection must be an object/);

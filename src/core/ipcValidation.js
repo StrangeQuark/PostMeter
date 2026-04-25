@@ -23,6 +23,15 @@ function assertWorkspacePayload(value, field = 'workspace') {
   });
 }
 
+function assertWorkspaceSettingsSavePayload(value, field = 'settings') {
+  assertSettingsPayload(value, field);
+}
+
+function assertWorkspaceSettingsSaveResultPayload(value, field = 'result') {
+  object(value, field);
+  assertSettingsPayload(value.settings || {}, `${field}.settings`);
+}
+
 function assertCollectionPayload(value, field = 'collection') {
   object(value, field);
   optionalString(value.id, `${field}.id`, LIMITS.name);
@@ -640,5 +649,7 @@ module.exports = {
   assertWorkspaceLoadResultPayload,
   assertWorkspaceRequestSavePayload,
   assertWorkspaceRequestSaveResultPayload,
+  assertWorkspaceSettingsSavePayload,
+  assertWorkspaceSettingsSaveResultPayload,
   assertWorkspacePayload
 };

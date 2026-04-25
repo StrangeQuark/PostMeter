@@ -5,6 +5,7 @@ const {
   applyEnvironmentSaveToWorkspace,
   applyCollectionRunMutationsToWorkspace,
   applyRequestSaveToWorkspace,
+  applyWorkspaceSettingsSaveToWorkspace,
   applyScriptVariableMutationsToWorkspace,
   findWorkspaceRequestContext,
   updateWorkspaceRequestAuth
@@ -138,4 +139,23 @@ test('applies environment saves by replacing or appending the selected environme
   assert.equal(updatedWorkspace.settings.updates.includePrereleases, true);
   assert.equal(appendedWorkspace.environments.length, 2);
   assert.equal(appendedWorkspace.environments[1].id, 'environment-2');
+});
+
+test('applies workspace settings saves without touching request or environment data', () => {
+  const workspace = workspaceModel({
+    collections: [collectionModel({ id: 'collection-1', requests: [requestModel({ id: 'request-1', name: 'Saved Request' })] })],
+    environments: [environmentModel({ id: 'environment-1', name: 'Saved Environment', variables: [] })],
+    settings: { updates: { includePrereleases: false } }
+  });
+
+  const updatedWorkspace = applyWorkspaceSettingsSaveToWorkspace(workspace, {
+    appearance: { theme: 'dark' },
+    updates: { includePrereleases: true }
+  });
+
+  assert.equal(workspace.settings.updates.includePrereleases, false);
+  assert.equal(updatedWorkspace.settings.appearance.theme, 'dark');
+  assert.equal(updatedWorkspace.settings.updates.includePrereleases, true);
+  assert.equal(updatedWorkspace.collections[0].requests[0].id, 'request-1');
+  assert.equal(updatedWorkspace.environments[0].id, 'environment-1');
 });

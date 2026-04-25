@@ -88,6 +88,7 @@ test('workspace IPC registers stable workspace, collection, and example channels
     'workspace:save',
     'workspace:saveEnvironment',
     'workspace:saveRequest',
+    'workspace:saveSettings',
     'workspace:switch'
   ]);
   assert.deepEqual([...syncHandlers.keys()].sort(), ['workspace:saveSync']);
@@ -482,6 +483,67 @@ test('workspace IPC saves only the selected environment payload through targeted
   assert.equal(refreshCalls, 1);
   assert.deepEqual(result, {
     environment: appliedWorkspace.environments[0]
+  });
+  assert.equal(syncHandlers.has('workspace:saveSync'), true);
+});
+
+test('workspace IPC saves only workspace settings through targeted settings save', async () => {
+  const handlers = new Map();
+  const syncHandlers = new Map();
+  const currentWorkspace = {
+    schemaVersion: 10,
+    collections: [{ id: 'collection-1', name: 'Collection', requests: [], folders: [] }],
+    environments: [{ id: 'environment-1', name: 'Environment', variables: [] }],
+    history: [],
+    cookies: [],
+    settings: { updates: { includePrereleases: false } }
+  };
+  let savedWorkspace = null;
+  let appliedWorkspace = null;
+  let refreshCalls = 0;
+
+  registerWorkspaceIpc({
+    dialog: {
+      showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+      showSaveDialog: async () => ({ canceled: true })
+    },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => currentWorkspace,
+    getWorkspaceStore: () => ({
+      describeCurrent: async (workspace) => ({ workspace, path: '/tmp/Local Workspace.json', activeWorkspaceId: 'Local Workspace.json', workspaces: [] })
+    }),
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      },
+      on(channel, handler) {
+        syncHandlers.set(channel, handler);
+      }
+    },
+    refreshApplicationMenu: () => { refreshCalls += 1; },
+    saveWorkspace: async (workspace) => {
+      savedWorkspace = workspace;
+      return workspace;
+    },
+    saveWorkspaceSync: (workspace) => workspace,
+    setWorkspace: (workspace) => {
+      appliedWorkspace = workspace;
+    }
+  });
+
+  const result = await handlers.get('workspace:saveSettings')(null, {
+    appearance: { theme: 'dark' },
+    updates: { includePrereleases: true }
+  });
+
+  assert.equal(savedWorkspace.settings.appearance.theme, 'dark');
+  assert.equal(savedWorkspace.settings.updates.includePrereleases, true);
+  assert.equal(savedWorkspace.collections[0].id, 'collection-1');
+  assert.equal(appliedWorkspace.environments[0].id, 'environment-1');
+  assert.equal(refreshCalls, 1);
+  assert.deepEqual(result, {
+    settings: appliedWorkspace.settings
   });
   assert.equal(syncHandlers.has('workspace:saveSync'), true);
 });

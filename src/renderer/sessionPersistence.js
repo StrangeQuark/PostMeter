@@ -34,7 +34,9 @@
         .filter(Boolean),
       draftRequests: Array.from(state.draftRequests instanceof Map ? state.draftRequests.values() : [])
         .map(cloneJson)
-        .filter(Boolean)
+        .filter(Boolean),
+      dirtyCollectionStates: serializeDirtyCollectionStates(state),
+      dirtyCookieJarState: serializeDirtyCookieJarState(state)
     };
   }
 
@@ -64,6 +66,7 @@
     state.openWorkspaceTabs = session.openWorkspaceTabs
       .filter((tab) => workspaceItems().some((item) => item.id === tab.workspaceId))
       .map(stripWorkspaceTabState);
+    restoreSharedRequestStates(state, session);
 
     // Session restore should override the default request selection created during workspace load.
     state.activeCollectionId = null;
@@ -158,6 +161,39 @@
     };
   }
 
+  function serializeDirtyCollectionStates(state) {
+    if (!(state?.collectionDirtySnapshots instanceof Map) || !(state?.collectionDirtyOwners instanceof Map)) {
+      return [];
+    }
+    const dirtyStates = [];
+    for (const [collectionId, snapshot] of state.collectionDirtySnapshots.entries()) {
+      const collection = findCollection(state, collectionId);
+      if (!collection) {
+        continue;
+      }
+      dirtyStates.push({
+        collectionId,
+        ownerKey: normalizeString(state.collectionDirtyOwners.get(collectionId)).trim(),
+        snapshot: typeof snapshot === 'string' ? snapshot : safeSnapshot(collection.variables || []),
+        currentState: cloneJson(collection.variables || [])
+      });
+    }
+    return dirtyStates.filter((entry) => Array.isArray(entry.currentState));
+  }
+
+  function serializeDirtyCookieJarState(state) {
+    if (state?.cookieJarDirtySnapshot == null) {
+      return null;
+    }
+    return {
+      ownerKey: normalizeString(state.cookieJarDirtyOwner).trim(),
+      snapshot: typeof state.cookieJarDirtySnapshot === 'string'
+        ? state.cookieJarDirtySnapshot
+        : safeSnapshot(state.workspace?.cookies || []),
+      currentState: cloneJson(state.workspace?.cookies || [])
+    };
+  }
+
   function restoreRequestStates(state, tabs, helpers) {
     for (const tab of tabs) {
       if (tab.draft || !tab.currentState) {
@@ -192,6 +228,37 @@
       if ((tab.dirty === true || tab.createdUnsaved === true) && existing) {
         replaceObject(existing, cloneJson(tab.currentState));
       }
+    }
+  }
+
+  function restoreSharedRequestStates(state, session) {
+    state.workspace ||= {};
+    state.workspace.cookies ||= [];
+    state.collectionDirtySnapshots = new Map();
+    state.collectionDirtyOwners = new Map();
+    state.cookieJarDirtySnapshot = null;
+    state.cookieJarDirtyOwner = '';
+    for (const entry of session.dirtyCollectionStates || []) {
+      const ownerKey = normalizeString(entry.ownerKey).trim();
+      if (!ownerKey || !(state.openRequestTabs || []).some((tab) => tab.key === ownerKey)) {
+        continue;
+      }
+      const collection = findCollection(state, entry.collectionId);
+      if (!collection) {
+        continue;
+      }
+      collection.variables = cloneJson(entry.currentState || []) || [];
+      state.collectionDirtySnapshots.set(entry.collectionId, typeof entry.snapshot === 'string' ? entry.snapshot : safeSnapshot(collection.variables));
+      state.collectionDirtyOwners.set(entry.collectionId, ownerKey);
+    }
+    const dirtyCookieJarState = isObject(session.dirtyCookieJarState) ? session.dirtyCookieJarState : null;
+    const cookieOwnerKey = normalizeString(dirtyCookieJarState?.ownerKey).trim();
+    if (dirtyCookieJarState && cookieOwnerKey && (state.openRequestTabs || []).some((tab) => tab.key === cookieOwnerKey)) {
+      state.workspace.cookies = cloneJson(dirtyCookieJarState.currentState || []) || [];
+      state.cookieJarDirtySnapshot = typeof dirtyCookieJarState.snapshot === 'string'
+        ? dirtyCookieJarState.snapshot
+        : safeSnapshot(state.workspace.cookies);
+      state.cookieJarDirtyOwner = cookieOwnerKey;
     }
   }
 
@@ -308,7 +375,9 @@
       openRequestTabs: Array.isArray(session.openRequestTabs) ? session.openRequestTabs.filter(isObject) : [],
       openEnvironmentTabs: Array.isArray(session.openEnvironmentTabs) ? session.openEnvironmentTabs.filter(isObject) : [],
       openWorkspaceTabs: Array.isArray(session.openWorkspaceTabs) ? session.openWorkspaceTabs.filter(isObject) : [],
-      draftRequests: Array.isArray(session.draftRequests) ? session.draftRequests.filter(isObject) : []
+      draftRequests: Array.isArray(session.draftRequests) ? session.draftRequests.filter(isObject) : [],
+      dirtyCollectionStates: Array.isArray(session.dirtyCollectionStates) ? session.dirtyCollectionStates.filter(isObject) : [],
+      dirtyCookieJarState: isObject(session.dirtyCookieJarState) ? session.dirtyCookieJarState : null
     };
   }
 

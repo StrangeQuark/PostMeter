@@ -78,6 +78,98 @@ test('renderer session persistence serializes active tabs, drafts, and dirty tab
   assert.equal(session.draftRequests.length, 1);
 });
 
+test('renderer session persistence serializes and restores shared request-owned collection-variable and cookie state', () => {
+  const state = createRendererState();
+  state.workspace = {
+    collections: [
+      {
+        id: 'collection-1',
+        name: 'Collection',
+        requests: [
+          { id: 'request-1', name: 'Saved Request', method: 'GET', url: 'https://saved.test' }
+        ],
+        folders: [],
+        variables: [{ enabled: true, key: 'baseUrl', value: 'https://edited.test' }],
+        certificates: [],
+        description: ''
+      }
+    ],
+    environments: [],
+    cookies: [{ enabled: true, name: 'session', value: 'edited', domain: 'saved.test', path: '/' }]
+  };
+  state.openRequestTabs = [
+    {
+      key: 'request:collection-1:request-1',
+      collectionId: 'collection-1',
+      requestId: 'request-1',
+      dirty: false,
+      createdUnsaved: false,
+      snapshot: JSON.stringify(state.workspace.collections[0].requests[0])
+    }
+  ];
+  state.collectionDirtySnapshots.set('collection-1', JSON.stringify([{ enabled: true, key: 'baseUrl', value: 'https://saved.test' }]));
+  state.collectionDirtyOwners.set('collection-1', 'request:collection-1:request-1');
+  state.cookieJarDirtySnapshot = JSON.stringify([{ enabled: true, name: 'session', value: 'saved', domain: 'saved.test', path: '/' }]);
+  state.cookieJarDirtyOwner = 'request:collection-1:request-1';
+
+  const session = buildRendererSession({
+    state,
+    doc: { querySelector: () => null },
+    requestForTab: () => state.workspace.collections[0].requests[0],
+    environmentForTab: () => null
+  });
+
+  assert.deepEqual(session.dirtyCollectionStates, [
+    {
+      collectionId: 'collection-1',
+      ownerKey: 'request:collection-1:request-1',
+      snapshot: JSON.stringify([{ enabled: true, key: 'baseUrl', value: 'https://saved.test' }]),
+      currentState: [{ enabled: true, key: 'baseUrl', value: 'https://edited.test' }]
+    }
+  ]);
+  assert.deepEqual(session.dirtyCookieJarState, {
+    ownerKey: 'request:collection-1:request-1',
+    snapshot: JSON.stringify([{ enabled: true, name: 'session', value: 'saved', domain: 'saved.test', path: '/' }]),
+    currentState: [{ enabled: true, name: 'session', value: 'edited', domain: 'saved.test', path: '/' }]
+  });
+
+  const restoredState = createRendererState();
+  restoredState.workspace = {
+    collections: [
+      {
+        id: 'collection-1',
+        name: 'Collection',
+        requests: [
+          { id: 'request-1', name: 'Saved Request', method: 'GET', url: 'https://saved.test' }
+        ],
+        folders: [],
+        variables: [{ enabled: true, key: 'baseUrl', value: 'https://saved.test' }],
+        certificates: [],
+        description: ''
+      }
+    ],
+    environments: [],
+    cookies: [{ enabled: true, name: 'session', value: 'saved', domain: 'saved.test', path: '/' }]
+  };
+
+  restoreRendererSession({
+    state: restoredState,
+    session,
+    workspaceListItems: () => [
+      { id: 'Workspace.json', name: 'Workspace', path: '/tmp/Workspace.json', current: true, deletable: false }
+    ],
+    findFolder,
+    findRequest
+  });
+
+  assert.deepEqual(restoredState.workspace.collections[0].variables, [{ enabled: true, key: 'baseUrl', value: 'https://edited.test' }]);
+  assert.deepEqual(restoredState.workspace.cookies, [{ enabled: true, name: 'session', value: 'edited', domain: 'saved.test', path: '/' }]);
+  assert.equal(restoredState.collectionDirtyOwners.get('collection-1'), 'request:collection-1:request-1');
+  assert.equal(restoredState.collectionDirtySnapshots.get('collection-1'), JSON.stringify([{ enabled: true, key: 'baseUrl', value: 'https://saved.test' }]));
+  assert.equal(restoredState.cookieJarDirtyOwner, 'request:collection-1:request-1');
+  assert.equal(restoredState.cookieJarDirtySnapshot, JSON.stringify([{ enabled: true, name: 'session', value: 'saved', domain: 'saved.test', path: '/' }]));
+});
+
 test('renderer session persistence restores dirty saved tabs, created-unsaved entities, and active selection', () => {
   const state = createRendererState();
   state.workspace = {
