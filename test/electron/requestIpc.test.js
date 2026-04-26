@@ -27,7 +27,7 @@ test('request IPC registers stable request channels', () => {
   ]);
 });
 
-test('request IPC persists pre-request script mutations before rethrowing the failure', async () => {
+test('request IPC discards pre-request script mutations when a top-level script error is rethrown', async () => {
   const handlers = new Map();
   const workspace = workspaceModel({
     collections: [
@@ -97,12 +97,11 @@ test('request IPC persists pre-request script mutations before rethrowing the fa
     }
   );
 
-  assert.equal(saveCalls, 1);
-  assert.equal(savedWorkspace.history.length, 0);
-  assert.equal(savedWorkspace.environments[0].variables.find((item) => item.key === 'token').value, 'blocked');
-  assert.equal(savedWorkspace.collections[0].variables.find((item) => item.key === 'fromPre').value, 'yes');
-  assert.equal(savedWorkspace.collections[0].requests[0].variables.find((item) => item.key === 'local').value, 'nope');
-  assert.equal(appliedWorkspace.environments[0].variables.find((item) => item.key === 'token').value, 'blocked');
-  assert.equal(appliedWorkspace.collections[0].variables.find((item) => item.key === 'fromPre').value, 'yes');
-  assert.equal(appliedWorkspace.collections[0].requests[0].variables.find((item) => item.key === 'local').value, 'nope');
+  assert.equal(saveCalls, 0);
+  assert.equal(savedWorkspace, null);
+  assert.equal(appliedWorkspace, null);
+  assert.equal(workspace.history.length, 0);
+  assert.equal(workspace.environments[0].variables.find((item) => item.key === 'token').value, 'old-token');
+  assert.equal(workspace.collections[0].variables.find((item) => item.key === 'fromPre').value, 'old-value');
+  assert.equal(workspace.collections[0].requests[0].variables.find((item) => item.key === 'local').value, 'old-local');
 });

@@ -1,4 +1,8 @@
 const { walkRequests } = require('../src/core/models');
+const {
+  normalizeCookieDomain,
+  normalizeCookiePath
+} = require('../src/core/cookieModel');
 
 function cloneJson(value) {
   if (typeof structuredClone === 'function') {
@@ -37,45 +41,218 @@ function findRequestInCollection(collection, requestId) {
   return match;
 }
 
-function applyScriptVariableMutationsToWorkspace(workspace, { collection, request, environment, collectionVariables, localVariables }) {
-  applyEnvironmentVariablesToWorkspace(workspace, environment);
+function applyScriptVariableMutationsToWorkspace(workspace, {
+  collection,
+  request,
+  environment,
+  collectionVariables,
+  localVariables,
+  globals,
+  baseEnvironment,
+  baseCollectionVariables,
+  baseLocalVariables,
+  baseGlobals
+}) {
+  applyEnvironmentVariablesToWorkspace(workspace, environment, baseEnvironment);
   if (collection && Array.isArray(collectionVariables)) {
-    collection.variables = clonePairs(collectionVariables);
+    collection.variables = baseCollectionVariables
+      ? mergeVariableScopeByDelta(collection.variables, baseCollectionVariables, collectionVariables)
+      : clonePairs(collectionVariables);
   }
   if (request && Array.isArray(localVariables)) {
-    request.variables = clonePairs(localVariables);
+    request.variables = baseLocalVariables
+      ? mergeVariableScopeByDelta(request.variables, baseLocalVariables, localVariables)
+      : clonePairs(localVariables);
+  }
+  if (Array.isArray(globals)) {
+    workspace.globals = baseGlobals
+      ? mergeVariableScopeByDelta(workspace.globals, baseGlobals, globals)
+      : clonePairs(globals);
   }
 }
 
-function applyCollectionRunMutationsToWorkspace(workspace, result) {
-  applyEnvironmentVariablesToWorkspace(workspace, result.environment);
+function applyCollectionRunMutationsToWorkspace(workspace, result, options = {}) {
+  applyEnvironmentVariablesToWorkspace(workspace, result.environment, options.baseEnvironment);
+  if (Array.isArray(result.globals)) {
+    workspace.globals = options.baseGlobals
+      ? mergeVariableScopeByDelta(workspace.globals, options.baseGlobals, result.globals)
+      : clonePairs(result.globals);
+  }
   const collection = (workspace.collections || []).find((candidate) => candidate.id === result.collectionId);
   if (!collection) {
     return;
   }
   if (Array.isArray(result.collectionVariables)) {
-    collection.variables = clonePairs(result.collectionVariables);
+    collection.variables = options.baseCollectionVariables
+      ? mergeVariableScopeByDelta(collection.variables, options.baseCollectionVariables, result.collectionVariables)
+      : clonePairs(result.collectionVariables);
   }
   for (const item of result.results || []) {
     const request = item.requestId ? findRequestInCollection(collection, item.requestId) : null;
     if (request && Array.isArray(item.localVariables)) {
-      request.variables = clonePairs(item.localVariables);
+      const baseLocalVariables = options.baseLocalVariablesByRequestId?.get?.(item.requestId);
+      request.variables = baseLocalVariables
+        ? mergeVariableScopeByDelta(request.variables, baseLocalVariables, item.localVariables)
+        : clonePairs(item.localVariables);
     }
   }
 }
 
-function applyEnvironmentVariablesToWorkspace(workspace, environment) {
+function applyEnvironmentVariablesToWorkspace(workspace, environment, baseEnvironment) {
   if (!environment?.id || environment.id === 'runtime' || !Array.isArray(environment.variables)) {
     return;
   }
   const workspaceEnvironment = (workspace.environments || []).find((candidate) => candidate.id === environment.id);
   if (workspaceEnvironment) {
-    workspaceEnvironment.variables = clonePairs(environment.variables);
+    workspaceEnvironment.variables = baseEnvironment?.id === environment.id
+      ? mergeVariableScopeByDelta(workspaceEnvironment.variables, baseEnvironment.variables, environment.variables)
+      : clonePairs(environment.variables);
   }
 }
 
 function clonePairs(pairs) {
   return Array.isArray(pairs) ? pairs.map((pair) => ({ ...pair })) : [];
+}
+
+function mergeVariableScopeByDelta(currentVariables, baseVariables, finalVariables) {
+  const nextVariables = clonePairs(currentVariables);
+  const baseByKey = variablesByKey(baseVariables);
+  const finalByKey = variablesByKey(finalVariables);
+  const changedKeys = new Set([...baseByKey.keys(), ...finalByKey.keys()]
+    .filter((key) => !sameStructuredValue(baseByKey.get(key), finalByKey.get(key))));
+
+  for (const key of changedKeys) {
+    const finalVariable = finalByKey.get(key);
+    const existingIndex = nextVariables.findIndex((variable) => variable?.key === key);
+    if (!finalVariable) {
+      removeVariablesByKey(nextVariables, key);
+    } else if (existingIndex >= 0) {
+      nextVariables[existingIndex] = { ...finalVariable };
+      removeDuplicateVariablesByKey(nextVariables, key, existingIndex);
+    } else {
+      nextVariables.push({ ...finalVariable });
+    }
+  }
+
+  return nextVariables;
+}
+
+function mergeCookieJarByDelta(currentCookies, baseCookies, finalCookies) {
+  const nextCookies = cloneJson(currentCookies || []);
+  const baseByIdentity = cookiesByIdentity(baseCookies);
+  const finalByIdentity = cookiesByIdentity(finalCookies);
+  const changedIdentities = new Set([...baseByIdentity.keys(), ...finalByIdentity.keys()]
+    .filter((identity) => !sameStructuredValue(
+      comparableCookie(baseByIdentity.get(identity)),
+      comparableCookie(finalByIdentity.get(identity))
+    )));
+
+  for (const identity of changedIdentities) {
+    const finalCookie = finalByIdentity.get(identity);
+    const existingIndex = nextCookies.findIndex((cookie) => cookieIdentity(cookie) === identity);
+    if (!finalCookie) {
+      removeCookiesByIdentity(nextCookies, identity);
+    } else if (existingIndex >= 0) {
+      nextCookies[existingIndex] = cloneJson(finalCookie);
+      removeDuplicateCookiesByIdentity(nextCookies, identity, existingIndex);
+    } else {
+      nextCookies.push(cloneJson(finalCookie));
+    }
+  }
+
+  return nextCookies;
+}
+
+function variablesByKey(variables) {
+  const byKey = new Map();
+  for (const variable of variables || []) {
+    const key = String(variable?.key || '').trim();
+    if (key) {
+      byKey.set(key, { ...variable, key });
+    }
+  }
+  return byKey;
+}
+
+function cookiesByIdentity(cookies) {
+  const byIdentity = new Map();
+  for (const cookie of cookies || []) {
+    const identity = cookieIdentity(cookie);
+    if (identity) {
+      byIdentity.set(identity, cookie);
+    }
+  }
+  return byIdentity;
+}
+
+function cookieIdentity(cookie) {
+  const name = String(cookie?.name || '').trim().toLowerCase();
+  const domain = normalizeCookieDomain(cookie?.domain || '');
+  const path = normalizeCookiePath(cookie?.path || '/');
+  return name && domain ? `${name};${domain};${path}` : '';
+}
+
+function comparableCookie(cookie) {
+  if (!cookie) {
+    return null;
+  }
+  const { id, ...rest } = cookie;
+  return rest;
+}
+
+function sameStructuredValue(left, right) {
+  return JSON.stringify(sortObject(left)) === JSON.stringify(sortObject(right));
+}
+
+function sortObject(value) {
+  if (Array.isArray(value)) {
+    return value.map(sortObject);
+  }
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  return Object.keys(value).sort().reduce((sorted, key) => {
+    sorted[key] = sortObject(value[key]);
+    return sorted;
+  }, {});
+}
+
+function removeVariablesByKey(variables, key) {
+  for (let index = variables.length - 1; index >= 0; index -= 1) {
+    if (variables[index]?.key === key) {
+      variables.splice(index, 1);
+    }
+  }
+}
+
+function removeDuplicateVariablesByKey(variables, key, keepIndex) {
+  for (let index = variables.length - 1; index >= 0; index -= 1) {
+    if (index !== keepIndex && variables[index]?.key === key) {
+      variables.splice(index, 1);
+      if (index < keepIndex) {
+        keepIndex -= 1;
+      }
+    }
+  }
+}
+
+function removeCookiesByIdentity(cookies, identity) {
+  for (let index = cookies.length - 1; index >= 0; index -= 1) {
+    if (cookieIdentity(cookies[index]) === identity) {
+      cookies.splice(index, 1);
+    }
+  }
+}
+
+function removeDuplicateCookiesByIdentity(cookies, identity, keepIndex) {
+  for (let index = cookies.length - 1; index >= 0; index -= 1) {
+    if (index !== keepIndex && cookieIdentity(cookies[index]) === identity) {
+      cookies.splice(index, 1);
+      if (index < keepIndex) {
+        keepIndex -= 1;
+      }
+    }
+  }
 }
 
 function applyRequestSaveToWorkspace(workspace, payload) {
@@ -212,5 +389,7 @@ module.exports = {
   applyWorkspaceSettingsSaveToWorkspace,
   applyScriptVariableMutationsToWorkspace,
   findWorkspaceRequestContext,
+  mergeCookieJarByDelta,
+  mergeVariableScopeByDelta,
   updateWorkspaceRequestAuth
 };

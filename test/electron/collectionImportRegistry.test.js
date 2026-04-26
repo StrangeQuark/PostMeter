@@ -38,7 +38,7 @@ test('collection import registry prefers native workspace imports before generic
 
 test('collection import registry exports postmeter collections through the workspace wrapper', () => {
   const workspace = {
-    schemaVersion: 10,
+    schemaVersion: 11,
     settings: { appearance: { theme: 'system' }, updates: { includePrereleases: false } },
     collections: [{
       id: 'collection-1',

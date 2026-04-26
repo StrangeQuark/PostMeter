@@ -18,13 +18,17 @@ async function main(argv = process.argv.slice(2)) {
     return 2;
   }
 
-  const { collection, environment } = await loadCollectionInput(args.file, {
+  const { collection, environment, globals } = await loadCollectionInput(args.file, {
     collectionSelector: args.collection,
     environmentSelector: args.environment
   });
   const runEnvironment = applyCliVariables(collection, environment, args);
 
   const result = await runCollection(collection, runEnvironment, {
+    globals,
+    scriptOptions: {
+      requireNodePermission: cliShouldRequireNodePermission()
+    },
     stopOnFailure: args.stopOnFailure === true
   });
 
@@ -131,12 +135,13 @@ async function loadCollectionInput(filePath, options = {}) {
     const environment = options.environmentSelector
       ? selectByIdOrName(workspace.environments, options.environmentSelector, 'environment')
       : null;
-    return { collection, environment };
+    return { collection, environment, globals: workspace.globals || [] };
   }
 
   return {
     collection: await store.importCollection(absolutePath),
-    environment: null
+    environment: null,
+    globals: []
   };
 }
 
@@ -168,6 +173,11 @@ function printSummary(result) {
   console.log(`Failed requests: ${result.failedRequests}`);
 }
 
+function cliShouldRequireNodePermission() {
+  const major = Number(String(process.versions.node || '').split('.')[0]);
+  return Number.isFinite(major) && major >= 22;
+}
+
 function printUsage(errorMessage) {
   if (errorMessage) {
     console.error(errorMessage);
@@ -188,6 +198,7 @@ if (require.main === module) {
 
 module.exports = {
   loadCollectionInput,
+  cliShouldRequireNodePermission,
   main,
   parseArgs,
   parseAssignment,

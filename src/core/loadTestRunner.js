@@ -52,6 +52,13 @@ function validateLoadConfig(config, request, environment) {
   }
   if (request) {
     buildUrl(request, environment);
+    if (hasRequestScripts(request)) {
+      addPolicyDecision(policyDecisions, {
+        scope: 'script',
+        host: '',
+        message: 'Load tests skip request pre-request and test scripts; script execution is out of scope for sandbox v1 load testing.'
+      });
+    }
   }
   if (maxRatePerSecond > 0 && targetRatePerSecond > maxRatePerSecond) {
     throw new Error('Target rate cannot exceed the configured rate cap.');
@@ -77,6 +84,13 @@ function validateLoadConfig(config, request, environment) {
     policyDecisions,
     confirmedHighConcurrency: config?.confirmedHighConcurrency === true
   };
+}
+
+function hasRequestScripts(request) {
+  return Boolean(
+    String(request?.scripts?.preRequest || '').trim()
+    || String(request?.scripts?.tests || '').trim()
+  );
 }
 
 function assertRateCap(value) {

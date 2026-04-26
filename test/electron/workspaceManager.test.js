@@ -24,7 +24,7 @@ test('workspace manager creates and describes a default managed workspace', asyn
   assert.equal(loaded.workspaces[0].theme, 'system');
   assert.equal(loaded.workspaces[0].collectionCount, 0);
   assert.equal(loaded.workspaces[0].requestCount, 0);
-  assert.equal(loaded.workspace.schemaVersion, 10);
+  assert.equal(loaded.workspace.schemaVersion, 11);
 });
 
 test('workspace manager creates, switches, and deletes managed workspaces', async () => {
@@ -62,6 +62,7 @@ test('workspace manager creates, switches, and deletes managed workspaces', asyn
   assert.equal(switchedWorkspaceItem.requestCount, 0);
 
   const deleted = await manager.deleteWorkspace('Workspace.json');
+  assert.equal(deleted.deletedWorkspaceId, 'Workspace.json');
   assert.equal(deleted.activeWorkspaceId, 'Local Workspace.json');
   assert.equal(deleted.workspaces.length, 1);
   assert.equal(deleted.workspaces[0].deletable, false);
@@ -89,6 +90,7 @@ test('workspace manager renames managed workspaces using the filename as the can
 
   const renamed = await manager.renameWorkspace('Workspace.json', 'Renamed Workspace');
 
+  assert.equal(renamed.renamedWorkspaceId, 'Renamed Workspace.json');
   assert.equal(renamed.activeWorkspaceId, 'Renamed Workspace.json');
   assert.equal(renamed.path, path.join(temp, 'Renamed Workspace.json'));
   assert.equal(renamed.workspaces.find((item) => item.current)?.name, 'Renamed Workspace');
@@ -106,7 +108,7 @@ test('workspace manager imports a workspace into the managed set without replaci
 
   const loaded = await manager.load();
   await fs.writeFile(importPath, JSON.stringify({
-    schemaVersion: 10,
+    schemaVersion: 11,
     collections: [{
       id: 'collection-1',
       name: 'Imported Collection',
@@ -156,7 +158,7 @@ test('workspace manager regenerates a workspace when all managed workspace files
   assert.equal(reloaded.workspaces.length, 1);
   assert.equal(reloaded.activeWorkspaceId, 'Local Workspace.json');
   assert.equal(reloaded.path, path.join(temp, 'Local Workspace.json'));
-  assert.equal(reloaded.workspace.schemaVersion, 10);
+  assert.equal(reloaded.workspace.schemaVersion, 11);
   await fs.access(path.join(temp, 'Local Workspace.json'));
 });
 
@@ -166,7 +168,7 @@ test('workspace manager discovers workspaces from disk, prefers the requested st
   const manager = new WorkspaceManager(preferredWorkspacePath);
 
   await fs.writeFile(path.join(temp, 'Local Workspace.json'), JSON.stringify({
-    schemaVersion: 10,
+    schemaVersion: 11,
     collections: [],
     environments: [],
     cookies: [],
@@ -174,7 +176,7 @@ test('workspace manager discovers workspaces from disk, prefers the requested st
     settings: { appearance: { theme: 'system' }, updates: { includePrereleases: false } }
   }));
   await fs.writeFile(path.join(temp, 'Workspace.json'), JSON.stringify({
-    schemaVersion: 10,
+    schemaVersion: 11,
     collections: [{ id: 'collection-1', name: 'Collection', description: '', variables: [], certificates: [], requests: [], folders: [] }],
     environments: [],
     cookies: [],
@@ -203,7 +205,7 @@ test('workspace manager recovers a corrupt preferred workspace instead of silent
 
   await fs.writeFile(preferredWorkspacePath, '{not-json');
   await fs.writeFile(otherWorkspacePath, JSON.stringify({
-    schemaVersion: 10,
+    schemaVersion: 11,
     collections: [],
     environments: [],
     cookies: [],
@@ -225,7 +227,7 @@ test('workspace manager recovers a corrupt preferred workspace instead of silent
   const loaded = await manager.load();
   assert.equal(loaded.activeWorkspaceId, 'workspace.json');
   assert.equal(loaded.path, preferredWorkspacePath);
-  assert.equal(JSON.parse(await fs.readFile(preferredWorkspacePath, 'utf8')).schemaVersion, 10);
+  assert.equal(JSON.parse(await fs.readFile(preferredWorkspacePath, 'utf8')).schemaVersion, 11);
   const quarantined = (await fs.readdir(temp)).filter((entry) => entry.includes('workspace.json.corrupt'));
   assert.equal(quarantined.length, 1);
 });

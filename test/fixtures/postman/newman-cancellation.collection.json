@@ -1,0 +1,32 @@
+{
+  "info": {
+    "name": "PostMeter Sandbox Cancellation Newman Corpus",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "00000000-0000-4000-8000-000000000102"
+  },
+  "item": [
+    {
+      "name": "01 Pending Async Work",
+      "request": {
+        "method": "GET",
+        "url": "https://api.example.test/cancelled"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('pending async work is cancellable', function (done) {",
+              "  setTimeout(function () {",
+              "    pm.environment.set('cancelledLateMutation', 'should-not-commit');",
+              "    done();",
+              "  }, 30000);",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

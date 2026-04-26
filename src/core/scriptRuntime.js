@@ -1,3 +1,4 @@
+const crypto = require('node:crypto');
 const vm = require('node:vm');
 const {
   getVariable,
@@ -9,6 +10,23 @@ const DEFAULT_SCRIPT_TIMEOUT_MILLIS = 1000;
 const MAX_SCRIPT_LENGTH = 256 * 1024;
 const MAX_SCRIPT_LOGS = 100;
 const MAX_SCRIPT_LOG_LENGTH = 4096;
+const MAX_SCRIPT_RESULT_BYTES = 1024 * 1024;
+const MAX_PENDING_TIMERS = 64;
+const MAX_TIMER_DELAY_MILLIS = 30_000;
+const MAX_BROKER_REQUESTS = 32;
+const MAX_VISUALIZER_TEMPLATE_LENGTH = 64 * 1024;
+const MAX_VISUALIZER_DATA_BYTES = 256 * 1024;
+const MAX_VISUALIZER_HTML_LENGTH = 256 * 1024;
+const MAX_VISUALIZER_EACH_ITEMS = 500;
+const MAX_VISUALIZER_TEMPLATE_DEPTH = 5;
+const VISUALIZER_VALUE_PATTERN = '[A-Za-z0-9_@.-]+';
+const VISUALIZER_UNSAFE_PATH_PARTS = new Set(['__proto__', 'prototype', 'constructor']);
+const SCRIPT_PACKAGE_NAMES = ['crypto-js', 'lodash', 'uuid'];
+const SCRIPT_PACKAGE_ALIASES = new Map([
+  ['_', 'lodash'],
+  ['cryptojs', 'crypto-js']
+]);
+const WORD_ARRAY_BYTES = new WeakMap();
 
 function runPostmanScript(scriptText, context = {}, options = {}) {
   const source = String(scriptText || '');
@@ -26,19 +44,28 @@ function runPostmanScript(scriptText, context = {}, options = {}) {
 
   const tests = [];
   const logs = [];
+  const visualizer = createVisualizerState();
+  const packageRegistry = createPackageRegistryState();
+  const scriptRequire = packageRequireApi(packageRegistry);
   const environmentVariables = context.environment?.variables || [];
   const collectionVariables = context.collectionVariables || [];
+  const globals = context.globals || [];
   const localVariables = context.localVariables || [];
   const sandbox = {
     pm: createPmApi({
       collectionVariables,
       environmentVariables,
+      globals,
       localVariables,
       logs,
       request: context.request,
       response: context.response,
-      tests
+      tests,
+      packageRegistry,
+      visualizer
     }),
+    _: scriptRequire('lodash'),
+    CryptoJS: scriptRequire('crypto-js'),
     console: createConsole(logs),
     Buffer: unsupportedApi('Buffer'),
     WebSocket: unsupportedApi('WebSocket'),
@@ -47,10 +74,11 @@ function runPostmanScript(scriptText, context = {}, options = {}) {
     clearTimeout: unsupportedApi('clearTimeout'),
     fetch: unsupportedApi('fetch'),
     process: unsupportedApi('process'),
-    require: unsupportedApi('require'),
+    require: scriptRequire,
     setInterval: unsupportedApi('setInterval'),
     setTimeout: unsupportedApi('setTimeout')
   };
+  hardenSandboxValue(sandbox);
   const vmContext = vm.createContext(sandbox, {
     codeGeneration: {
       strings: false,
@@ -79,8 +107,130 @@ function runPostmanScript(scriptText, context = {}, options = {}) {
     passed: tests.every((test) => test.passed),
     tests,
     error: '',
-    logs
+    logs,
+    visualizer: visualizerResult(visualizer)
   };
+}
+
+async function runPostmanScriptAsync(scriptText, context = {}, options = {}) {
+  const source = String(scriptText || '');
+  if (!source.trim()) {
+    return emptyScriptResultWithCommit();
+  }
+  if (source.length > MAX_SCRIPT_LENGTH) {
+    return {
+      passed: false,
+      tests: [],
+      error: `Script cannot exceed ${MAX_SCRIPT_LENGTH} characters.`,
+      logs: [],
+      commitSideEffects: false
+    };
+  }
+
+  const tests = [];
+  const logs = [];
+  const visualizer = createVisualizerState();
+  const packageRegistry = createPackageRegistryState();
+  const scriptRequire = packageRequireApi(packageRegistry);
+  const fatalErrors = [];
+  const execution = {};
+  const mutableRequest = cloneJson(context.request || {});
+  const environmentVariables = context.environment?.variables || [];
+  const collectionVariables = context.collectionVariables || [];
+  const localVariables = context.localVariables || [];
+  const globals = context.globals || [];
+  const iterationData = normalizeIterationData(context.iterationData);
+  const tracker = createAsyncTracker({
+    broker: options.broker,
+    fatalErrors,
+    timeoutMillis: Number(options.timeoutMillis || DEFAULT_SCRIPT_TIMEOUT_MILLIS)
+  });
+  const sandbox = {
+    pm: createAsyncPmApi({
+      broker: options.broker,
+      collectionVariables,
+      environmentVariables,
+      execution,
+      globals,
+      iteration: context.iteration,
+      iterationCount: context.iterationCount,
+      iterationData,
+      localVariables,
+      logs,
+      request: mutableRequest,
+      response: context.response,
+      tests,
+      tracker,
+      packageRegistry,
+      visualizer
+    }),
+    _: scriptRequire('lodash'),
+    CryptoJS: scriptRequire('crypto-js'),
+    console: createConsole(logs),
+    clearInterval: unsupportedApi('clearInterval'),
+    clearTimeout: tracker.clearTimeout,
+    setInterval: unsupportedApi('setInterval'),
+    setTimeout: tracker.setTimeout,
+    Buffer: unsupportedApi('Buffer'),
+    WebSocket: unsupportedApi('WebSocket'),
+    XMLHttpRequest: unsupportedApi('XMLHttpRequest'),
+    fetch: unsupportedApi('fetch'),
+    process: unsupportedApi('process'),
+    require: scriptRequire
+  };
+  hardenSandboxValue(sandbox);
+  const vmContext = vm.createContext(sandbox, {
+    codeGeneration: {
+      strings: false,
+      wasm: false
+    },
+    name: 'postmeter-script'
+  });
+
+  try {
+    const script = new vm.Script(`'use strict';\n${source}`, {
+      filename: options.filename || 'postmeter-script.js'
+    });
+    script.runInContext(vmContext, {
+      timeout: Number(options.timeoutMillis || DEFAULT_SCRIPT_TIMEOUT_MILLIS)
+    });
+    await tracker.waitForIdle();
+  } catch (error) {
+    return boundedScriptResult({
+      passed: false,
+      tests,
+      error: error.message || String(error),
+      logs,
+      commitSideEffects: false,
+      execution,
+      request: mutableRequest,
+      visualizer: visualizerResult(visualizer)
+    });
+  }
+
+  if (fatalErrors.length) {
+    return boundedScriptResult({
+      passed: false,
+      tests,
+      error: fatalErrors[0],
+      logs,
+      commitSideEffects: false,
+      execution,
+      request: mutableRequest,
+      visualizer: visualizerResult(visualizer)
+    });
+  }
+
+  return boundedScriptResult({
+    passed: tests.every((test) => test.passed),
+    tests,
+    error: '',
+    logs,
+    commitSideEffects: true,
+    execution,
+    request: mutableRequest,
+    visualizer: visualizerResult(visualizer)
+  });
 }
 
 function emptyScriptResult() {
@@ -92,32 +242,225 @@ function emptyScriptResult() {
   };
 }
 
-function createPmApi({ collectionVariables, environmentVariables, localVariables, logs, request, response, tests }) {
+function emptyScriptResultWithCommit() {
+  return {
+    ...emptyScriptResult(),
+    commitSideEffects: true,
+    execution: {}
+  };
+}
+
+function createAsyncTracker({ broker, fatalErrors, timeoutMillis }) {
+  const pending = new Set();
+  const timers = new Map();
+  let timerSequence = 0;
+  let brokerRequests = 0;
+  const deadline = Date.now() + Math.max(1, Number(timeoutMillis || DEFAULT_SCRIPT_TIMEOUT_MILLIS));
+
+  const track = (promise) => {
+    pending.add(promise);
+    promise.finally(() => pending.delete(promise)).catch(() => {});
+    return promise;
+  };
+
+  const recordFatal = (error) => {
+    fatalErrors.push(error?.message || String(error));
+  };
+
+  const runCallback = async (callback, args = []) => {
+    try {
+      const value = callback(...args);
+      if (value && typeof value.then === 'function') {
+        await value;
+      }
+    } catch (error) {
+      recordFatal(error);
+    }
+  };
+
+  const setTimeoutForScript = (callback, delay = 0, ...args) => {
+    if (typeof callback !== 'function') {
+      throw sandboxError('setTimeout requires a callback function.');
+    }
+    if (timers.size >= MAX_PENDING_TIMERS) {
+      throw sandboxError(`Scripts cannot schedule more than ${MAX_PENDING_TIMERS} pending timers.`);
+    }
+    const delayMillis = Math.min(MAX_TIMER_DELAY_MILLIS, Math.max(0, Number(delay) || 0));
+    const id = ++timerSequence;
+    const timer = { id, cancelled: false };
+    timers.set(id, timer);
+    const task = brokerRequest('timer', { timerId: id, delayMillis })
+      .then(() => {
+        if (!timer.cancelled) {
+          return runCallback(callback, args);
+        }
+        return undefined;
+      })
+      .catch(recordFatal)
+      .finally(() => {
+        timers.delete(id);
+      });
+    timer.task = track(task);
+    return id;
+  };
+
+  const clearTimeoutForScript = (id) => {
+    const timer = timers.get(Number(id));
+    if (!timer) {
+      return;
+    }
+    timer.cancelled = true;
+    timers.delete(Number(id));
+    brokerRequest('clearTimer', { timerId: timer.id }).catch(() => {});
+  };
+
+  async function brokerRequest(operation, payload = {}) {
+    if (!broker || typeof broker.request !== 'function') {
+      throw sandboxError(`${operation} is not available in this script runtime.`);
+    }
+    brokerRequests += 1;
+    if (brokerRequests > MAX_BROKER_REQUESTS) {
+      throw sandboxError(`Scripts cannot make more than ${MAX_BROKER_REQUESTS} brokered requests.`);
+    }
+    return broker.request(operation, payload);
+  }
+
+  async function waitForIdle() {
+    await Promise.resolve();
+    while (pending.size > 0) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        throw sandboxError('Script async work timed out.');
+      }
+      await Promise.race([
+        Promise.allSettled([...pending]),
+        sleepForRuntime(Math.min(remaining, 25))
+      ]);
+      await Promise.resolve();
+    }
+    await Promise.resolve();
+  }
+
+  return {
+    brokerRequest,
+    clearTimeout: clearTimeoutForScript,
+    recordFatal,
+    setTimeout: setTimeoutForScript,
+    track,
+    waitForIdle
+  };
+}
+
+function sleepForRuntime(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function createAsyncPmApi({
+  broker,
+  collectionVariables,
+  environmentVariables,
+  execution,
+  globals,
+  iteration,
+  iterationCount,
+  iterationData,
+  localVariables,
+  logs,
+  packageRegistry,
+  request,
+  response,
+  tests,
+  tracker,
+  visualizer
+}) {
   const api = {
     collectionVariables: variableApi(collectionVariables),
-    cookies: unsupportedApi('pm.cookies'),
+    cookies: brokerCookieApi({ broker, tracker }),
     environment: variableApi(environmentVariables),
-    execution: unsupportedApi('pm.execution'),
+    execution: executionApi({
+      collectionVariables,
+      environmentVariables,
+      execution,
+      globals,
+      tests,
+      tracker
+    }),
     expect,
-    globals: null,
-    iterationData: unsupportedApi('pm.iterationData'),
-    request: requestApi(request),
+    globals: variableApi(globals),
+    info: {
+      eventName: response ? 'test' : 'prerequest',
+      iteration: Number.isFinite(Number(iteration)) ? Number(iteration) : 0,
+      iterationCount: Number.isFinite(Number(iterationCount)) ? Number(iterationCount) : 1,
+      requestId: request?.id || '',
+      requestName: request?.name || ''
+    },
+    iterationData: readOnlyVariableApi(iterationData),
+    require: packageRequireApi(packageRegistry),
+    request: mutableRequestApi(request),
     response: responseApi(response),
-    sendRequest: unsupportedApi('pm.sendRequest'),
+    sendRequest(input, callback) {
+      const promise = tracker.brokerRequest('sendRequest', { request: input })
+        .then((result) => {
+          const scriptResponse = responseApi(result);
+          if (typeof callback === 'function') {
+            callback(null, scriptResponse);
+          }
+          return scriptResponse;
+        })
+        .catch((error) => {
+          const safeError = sandboxError(errorMessage(error));
+          if (typeof callback === 'function') {
+            callback(safeError);
+            return undefined;
+          }
+          throw safeError;
+        });
+      tracker.track(promise.catch(() => {}));
+      return sandboxThenable(promise);
+    },
     test(name, fn) {
       const testName = String(name || 'Unnamed test');
-      try {
-        if (typeof fn !== 'function') {
-          throw new Error('pm.test requires a callback function.');
-        }
-        const value = fn();
-        if (value && typeof value.then === 'function') {
-          throw new Error('Async pm.test callbacks are not supported yet.');
-        }
-        tests.push({ name: testName, passed: true, error: '' });
-      } catch (error) {
-        tests.push({ name: testName, passed: false, error: error.message || String(error) });
+      if (typeof fn !== 'function') {
+        tests.push({ name: testName, passed: false, error: 'pm.test requires a callback function.' });
+        return;
       }
+      const run = async () => {
+        try {
+          if (fn.length > 0) {
+            await new Promise((resolve, reject) => {
+              let settled = false;
+              const done = (error) => {
+                if (settled) {
+                  return;
+                }
+                settled = true;
+                if (error) {
+                  reject(error);
+                } else {
+                  resolve();
+                }
+              };
+              try {
+                const value = fn(done);
+                if (value && typeof value.then === 'function') {
+                  value.then(() => done(), done);
+                }
+              } catch (error) {
+                reject(error);
+              }
+            });
+          } else {
+            const value = fn();
+            if (value && typeof value.then === 'function') {
+              await value;
+            }
+          }
+          tests.push({ name: testName, passed: true, error: '' });
+        } catch (error) {
+          tests.push({ name: testName, passed: false, error: errorMessage(error) });
+        }
+      };
+      tracker.track(run());
     },
     variables: {
       get(key) {
@@ -125,8 +468,16 @@ function createPmApi({ collectionVariables, environmentVariables, localVariables
         if (localValue != null) {
           return localValue;
         }
+        const iterationValue = getVariable(iterationData, key);
+        if (iterationValue != null) {
+          return iterationValue;
+        }
         const envValue = getVariable(environmentVariables, key);
-        return envValue == null ? getVariable(collectionVariables, key) : envValue;
+        if (envValue != null) {
+          return envValue;
+        }
+        const collectionValue = getVariable(collectionVariables, key);
+        return collectionValue == null ? getVariable(globals, key) : collectionValue;
       },
       set(key, value) {
         setVariable(localVariables, key, value);
@@ -138,27 +489,95 @@ function createPmApi({ collectionVariables, environmentVariables, localVariables
         return this.get(key) != null;
       },
       replaceIn(value) {
-        return replaceVariables(value, collectionVariables, environmentVariables, localVariables);
+        return replaceVariables(value, globals, collectionVariables, environmentVariables, iterationData, localVariables);
       },
       toObject() {
         const object = {};
-        for (const source of [collectionVariables, environmentVariables, localVariables]) {
+        for (const source of [globals, collectionVariables, environmentVariables, iterationData, localVariables]) {
           for (const variable of source || []) {
             if (variable.enabled !== false && variable.key) {
               object[variable.key] = variable.value ?? '';
             }
           }
         }
-        return object;
+        return hardenSandboxValue(object);
+      }
+    },
+    vault: brokerVaultApi({ broker, tracker }),
+    visualizer: visualizerApi(visualizer)
+  };
+  api.console = createConsole(logs);
+  return hardenSandboxValue(api);
+}
+
+function createPmApi({ collectionVariables, environmentVariables, globals = [], localVariables, logs, packageRegistry, request, response, tests, visualizer }) {
+  const api = {
+    collectionVariables: variableApi(collectionVariables),
+    cookies: unsupportedApi('pm.cookies'),
+    environment: variableApi(environmentVariables),
+    execution: unsupportedApi('pm.execution'),
+    expect,
+    globals: variableApi(globals),
+    iterationData: unsupportedApi('pm.iterationData'),
+    require: packageRequireApi(packageRegistry),
+    request: requestApi(request),
+    response: responseApi(response),
+    sendRequest: unsupportedApi('pm.sendRequest'),
+    test(name, fn) {
+      const testName = String(name || 'Unnamed test');
+      try {
+        if (typeof fn !== 'function') {
+          throw sandboxError('pm.test requires a callback function.');
+        }
+        const value = fn();
+        if (value && typeof value.then === 'function') {
+          throw sandboxError('Async pm.test callbacks are not supported yet.');
+        }
+        tests.push({ name: testName, passed: true, error: '' });
+      } catch (error) {
+        tests.push({ name: testName, passed: false, error: errorMessage(error) });
+      }
+    },
+    variables: {
+      get(key) {
+        const localValue = getVariable(localVariables, key);
+        if (localValue != null) {
+          return localValue;
+        }
+        const envValue = getVariable(environmentVariables, key);
+        if (envValue != null) {
+          return envValue;
+        }
+        const collectionValue = getVariable(collectionVariables, key);
+        return collectionValue == null ? getVariable(globals, key) : collectionValue;
+      },
+      set(key, value) {
+        setVariable(localVariables, key, value);
+      },
+      unset(key) {
+        unsetVariable(localVariables, key);
+      },
+      has(key) {
+        return this.get(key) != null;
+      },
+      replaceIn(value) {
+        return replaceVariables(value, globals, collectionVariables, environmentVariables, localVariables);
+      },
+      toObject() {
+        const object = {};
+        for (const source of [globals, collectionVariables, environmentVariables, localVariables]) {
+          for (const variable of source || []) {
+            if (variable.enabled !== false && variable.key) {
+              object[variable.key] = variable.value ?? '';
+            }
+          }
+        }
+        return hardenSandboxValue(object);
       }
     },
     vault: unsupportedApi('pm.vault'),
-    visualizer: {
-      clear: unsupportedApi('pm.visualizer.clear'),
-      set: unsupportedApi('pm.visualizer.set')
-    }
+    visualizer: visualizerApi(visualizer)
   };
-  api.globals = api.collectionVariables;
   api.info = {
     eventName: response ? 'test' : 'prerequest',
     iteration: 0,
@@ -167,31 +586,370 @@ function createPmApi({ collectionVariables, environmentVariables, localVariables
     requestName: request?.name || ''
   };
   api.console = createConsole(logs);
-  return api;
+  return hardenSandboxValue(api);
 }
 
 function unsupportedApi(name) {
   const callable = function unsupportedPostmanApi() {
-    throw new Error(`${name} is not supported by the PostMeter script runtime yet.`);
+    throw sandboxError(`${name} is not supported by the PostMeter script runtime yet.`);
   };
-  return new Proxy(callable, {
+  return hardenSandboxValue(new Proxy(callable, {
     apply() {
-      throw new Error(`${name} is not supported by the PostMeter script runtime yet.`);
+      throw sandboxError(`${name} is not supported by the PostMeter script runtime yet.`);
     },
     get(_target, property) {
       if (property === 'then') {
         return undefined;
       }
       if (property === 'toString') {
-        return () => `[unsupported ${name}]`;
+        return hardenSandboxValue(() => `[unsupported ${name}]`);
       }
       return unsupportedApi(`${name}.${String(property)}`);
     }
+  }));
+}
+
+function createPackageRegistryState() {
+  return {
+    cache: new Map()
+  };
+}
+
+function packageRequireApi(registry = createPackageRegistryState()) {
+  return hardenSandboxValue(function postmeterScriptRequire(packageName) {
+    const name = normalizeScriptPackageName(packageName);
+    if (!registry.cache.has(name)) {
+      registry.cache.set(name, createScriptPackage(name));
+    }
+    return registry.cache.get(name);
   });
 }
 
+function normalizeScriptPackageName(packageName) {
+  const raw = String(packageName == null ? '' : packageName).trim();
+  const lowered = raw.toLowerCase();
+  const alias = SCRIPT_PACKAGE_ALIASES.get(lowered) || lowered;
+  if (!alias) {
+    throw sandboxError('pm.require requires a package name.');
+  }
+  if (
+    alias.startsWith('node:')
+    || alias.startsWith('npm:')
+    || alias.startsWith('http:')
+    || alias.startsWith('https:')
+    || alias.startsWith('.')
+    || alias.startsWith('/')
+    || alias.includes('\\')
+  ) {
+    throw sandboxError('PostMeter package loading only supports bundled sandbox packages, not Node modules or external package specifiers.');
+  }
+  if (!SCRIPT_PACKAGE_NAMES.includes(alias)) {
+    throw sandboxError(`Sandbox package "${raw}" is not available. Supported packages: ${SCRIPT_PACKAGE_NAMES.join(', ')}.`);
+  }
+  return alias;
+}
+
+function createScriptPackage(name) {
+  if (name === 'crypto-js') {
+    return createCryptoJsPackage();
+  }
+  if (name === 'lodash') {
+    return createLodashPackage();
+  }
+  if (name === 'uuid') {
+    return hardenSandboxValue({ v4: () => crypto.randomUUID() });
+  }
+  throw sandboxError(`Sandbox package "${name}" is not available.`);
+}
+
+function createCryptoJsPackage() {
+  const enc = {};
+  enc.Hex = hardenSandboxValue({
+    stringify: (wordArray) => wordArrayToBuffer(wordArray).toString('hex'),
+    parse: (value) => createCryptoWordArray(Buffer.from(String(value || ''), 'hex'))
+  });
+  enc.Base64 = hardenSandboxValue({
+    stringify: (wordArray) => wordArrayToBuffer(wordArray).toString('base64'),
+    parse: (value) => createCryptoWordArray(Buffer.from(String(value || ''), 'base64'))
+  });
+  enc.Utf8 = hardenSandboxValue({
+    stringify: (wordArray) => wordArrayToBuffer(wordArray).toString('utf8'),
+    parse: (value) => createCryptoWordArray(Buffer.from(String(value == null ? '' : value), 'utf8'))
+  });
+
+  return hardenSandboxValue({
+    MD5: (value) => cryptoDigest('md5', value),
+    SHA1: (value) => cryptoDigest('sha1', value),
+    SHA256: (value) => cryptoDigest('sha256', value),
+    SHA512: (value) => cryptoDigest('sha512', value),
+    HmacSHA256: (value, key) => cryptoHmac('sha256', value, key),
+    HmacSHA512: (value, key) => cryptoHmac('sha512', value, key),
+    enc
+  });
+}
+
+function cryptoDigest(algorithm, value) {
+  return createCryptoWordArray(crypto.createHash(algorithm).update(cryptoInputBuffer(value)).digest());
+}
+
+function cryptoHmac(algorithm, value, key) {
+  return createCryptoWordArray(crypto.createHmac(algorithm, cryptoInputBuffer(key)).update(cryptoInputBuffer(value)).digest());
+}
+
+function createCryptoWordArray(bytes) {
+  const wordArray = {
+    sigBytes: Buffer.byteLength(bytes),
+    toString(encoder) {
+      if (encoder?.stringify && typeof encoder.stringify === 'function') {
+        return encoder.stringify(wordArray);
+      }
+      return wordArrayToBuffer(wordArray).toString('hex');
+    }
+  };
+  WORD_ARRAY_BYTES.set(wordArray, Buffer.from(bytes));
+  return hardenSandboxValue(wordArray);
+}
+
+function cryptoInputBuffer(value) {
+  if (WORD_ARRAY_BYTES.has(value)) {
+    return Buffer.from(WORD_ARRAY_BYTES.get(value));
+  }
+  return Buffer.from(String(value == null ? '' : value), 'utf8');
+}
+
+function wordArrayToBuffer(value) {
+  if (!WORD_ARRAY_BYTES.has(value)) {
+    throw sandboxError('CryptoJS encoder requires a PostMeter CryptoJS word array.');
+  }
+  return Buffer.from(WORD_ARRAY_BYTES.get(value));
+}
+
+function createLodashPackage() {
+  const lodash = {
+    assign(target, ...sources) {
+      return hardenSandboxValue(Object.assign(target == null ? {} : target, ...sources.filter((source) => source && typeof source === 'object')));
+    },
+    cloneDeep(value) {
+      return hardenSandboxValue(cloneJson(value));
+    },
+    each(value, callback) {
+      lodashForEach(value, callback);
+      return value;
+    },
+    filter(value, predicate) {
+      const result = [];
+      lodashForEach(value, (item, key) => {
+        if (lodashPredicate(predicate, item, key)) {
+          result.push(item);
+        }
+      });
+      return hardenSandboxValue(result);
+    },
+    find(value, predicate) {
+      let found;
+      lodashForEach(value, (item, key) => {
+        if (found === undefined && lodashPredicate(predicate, item, key)) {
+          found = item;
+        }
+      });
+      return found;
+    },
+    forEach(value, callback) {
+      lodashForEach(value, callback);
+      return value;
+    },
+    get: lodashGet,
+    has(value, pathValue) {
+      return lodashGet(value, pathValue) !== undefined;
+    },
+    includes(value, search) {
+      if (typeof value === 'string') {
+        return value.includes(String(search));
+      }
+      if (Array.isArray(value)) {
+        return value.includes(search);
+      }
+      return value && typeof value === 'object' ? Object.values(value).includes(search) : false;
+    },
+    isArray: Array.isArray,
+    isEmpty,
+    isEqual: lodashIsEqual,
+    isNumber(value) {
+      return typeof value === 'number' && !Number.isNaN(value);
+    },
+    isObject(value) {
+      return value !== null && typeof value === 'object';
+    },
+    isString(value) {
+      return typeof value === 'string';
+    },
+    map(value, iteratee) {
+      const result = [];
+      lodashForEach(value, (item, key) => {
+        result.push(lodashIteratee(iteratee, item, key));
+      });
+      return hardenSandboxValue(result);
+    },
+    omit(value, keys) {
+      const blocked = new Set((Array.isArray(keys) ? keys : [keys]).map(String));
+      const result = {};
+      for (const [key, item] of Object.entries(value || {})) {
+        if (!blocked.has(key)) {
+          result[key] = item;
+        }
+      }
+      return hardenSandboxValue(result);
+    },
+    pick(value, keys) {
+      const result = {};
+      for (const key of Array.isArray(keys) ? keys : [keys]) {
+        if (Object.prototype.hasOwnProperty.call(Object(value || {}), key)) {
+          result[key] = value[key];
+        }
+      }
+      return hardenSandboxValue(result);
+    },
+    reduce(value, iteratee, initial) {
+      let accumulator = initial;
+      let started = arguments.length >= 3;
+      lodashForEach(value, (item, key) => {
+        if (!started) {
+          accumulator = item;
+          started = true;
+          return;
+        }
+        accumulator = iteratee(accumulator, item, key, value);
+      });
+      return accumulator;
+    },
+    set(value, pathValue, nextValue) {
+      return lodashSet(value, pathValue, nextValue);
+    },
+    uniq(value) {
+      return hardenSandboxValue([...new Set(Array.isArray(value) ? value : [])]);
+    },
+    unset(value, pathValue) {
+      return lodashUnset(value, pathValue);
+    }
+  };
+  return hardenSandboxValue(lodash);
+}
+
+function lodashForEach(value, callback) {
+  if (typeof callback !== 'function') {
+    throw sandboxError('lodash callback must be a function.');
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => callback(item, index, value));
+    return;
+  }
+  if (value && typeof value === 'object') {
+    for (const [key, item] of Object.entries(value)) {
+      callback(item, key, value);
+    }
+  }
+}
+
+function lodashPredicate(predicate, item, key) {
+  if (typeof predicate === 'function') {
+    return predicate(item, key);
+  }
+  if (typeof predicate === 'string') {
+    return Boolean(lodashGet(item, predicate));
+  }
+  if (predicate && typeof predicate === 'object') {
+    return Object.entries(predicate).every(([pathValue, expected]) => lodashGet(item, pathValue) === expected);
+  }
+  return Boolean(item);
+}
+
+function lodashIteratee(iteratee, item, key) {
+  if (typeof iteratee === 'function') {
+    return iteratee(item, key);
+  }
+  if (typeof iteratee === 'string') {
+    return lodashGet(item, iteratee);
+  }
+  return item;
+}
+
+function lodashGet(value, pathValue, defaultValue) {
+  let current = value;
+  for (const part of lodashPath(pathValue)) {
+    if (current == null || !Object.prototype.hasOwnProperty.call(Object(current), part)) {
+      return defaultValue;
+    }
+    current = current[part];
+  }
+  return current === undefined ? defaultValue : current;
+}
+
+function lodashSet(value, pathValue, nextValue) {
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  const parts = lodashPath(pathValue);
+  let current = value;
+  for (let index = 0; index < parts.length; index += 1) {
+    const part = parts[index];
+    if (VISUALIZER_UNSAFE_PATH_PARTS.has(part)) {
+      return value;
+    }
+    if (index === parts.length - 1) {
+      current[part] = nextValue;
+      return value;
+    }
+    if (!current[part] || typeof current[part] !== 'object') {
+      current[part] = hardenSandboxValue({});
+    }
+    current = current[part];
+  }
+  return value;
+}
+
+function lodashUnset(value, pathValue) {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const parts = lodashPath(pathValue);
+  const key = parts.pop();
+  const parent = lodashGet(value, parts);
+  if (!parent || typeof parent !== 'object' || VISUALIZER_UNSAFE_PATH_PARTS.has(key)) {
+    return false;
+  }
+  return delete parent[key];
+}
+
+function lodashPath(pathValue) {
+  const parts = Array.isArray(pathValue)
+    ? pathValue
+    : String(pathValue == null ? '' : pathValue).replace(/\[(\w+)\]/g, '.$1').split('.');
+  return parts.map((part) => String(part)).filter((part) => part && !VISUALIZER_UNSAFE_PATH_PARTS.has(part));
+}
+
+function lodashIsEqual(left, right) {
+  if (left === right) {
+    return true;
+  }
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+      return false;
+    }
+    return left.every((item, index) => lodashIsEqual(item, right[index]));
+  }
+  if (left && right && typeof left === 'object' && typeof right === 'object') {
+    const leftKeys = Object.keys(left);
+    const rightKeys = Object.keys(right);
+    if (leftKeys.length !== rightKeys.length) {
+      return false;
+    }
+    return leftKeys.every((key) => Object.prototype.hasOwnProperty.call(right, key) && lodashIsEqual(left[key], right[key]));
+  }
+  return false;
+}
+
 function variableApi(variables) {
-  return {
+  return hardenSandboxValue({
     get(key) {
       return getVariable(variables, key);
     },
@@ -214,18 +972,542 @@ function variableApi(variables) {
           object[variable.key] = variable.value ?? '';
         }
       }
-      return object;
+      return hardenSandboxValue(object);
     }
+  });
+}
+
+function readOnlyVariableApi(variables) {
+  return hardenSandboxValue({
+    get(key) {
+      return getVariable(variables, key);
+    },
+    has(key) {
+      return getVariable(variables, key) != null;
+    },
+    toObject() {
+      const object = {};
+      for (const variable of variables || []) {
+        if (variable.enabled !== false && variable.key) {
+          object[variable.key] = variable.value ?? '';
+        }
+      }
+      return hardenSandboxValue(object);
+    }
+  });
+}
+
+function executionApi({ collectionVariables = [], environmentVariables = [], execution = {}, globals = [], tests = [], tracker } = {}) {
+  return hardenSandboxValue({
+    runRequest(target, options) {
+      const promise = tracker.brokerRequest('execution:runRequest', {
+        options: normalizeExecutionRunRequestOptions(options),
+        scopes: {
+          collectionVariables: cloneVariablePairs(collectionVariables),
+          environmentVariables: cloneVariablePairs(environmentVariables),
+          globals: cloneVariablePairs(globals)
+        },
+        target: String(target || '')
+      }).then((result) => {
+        appendBrokeredTests(tests, result?.tests);
+        replaceVariablePairs(environmentVariables, result?.environmentVariables);
+        replaceVariablePairs(collectionVariables, result?.collectionVariables);
+        replaceVariablePairs(globals, result?.globals);
+        if (!result || result.skipped === true || !result.response) {
+          return null;
+        }
+        return responseApi(result.response);
+      });
+      tracker.track(promise.catch(() => {}));
+      return sandboxThenable(promise);
+    },
+    setNextRequest(target) {
+      execution.nextRequest = target == null ? null : String(target);
+    },
+    skipRequest() {
+      execution.skipRequest = true;
+    }
+  });
+}
+
+function normalizeExecutionRunRequestOptions(options) {
+  if (!options || typeof options !== 'object') {
+    return {};
+  }
+  const normalized = {};
+  const variables = options.variables;
+  if (variables && typeof variables === 'object' && !Array.isArray(variables)) {
+    normalized.variables = {};
+    for (const [key, value] of Object.entries(variables).slice(0, 100)) {
+      normalized.variables[String(key).slice(0, 256)] = value == null ? '' : String(value).slice(0, 4096);
+    }
+  }
+  return normalized;
+}
+
+function appendBrokeredTests(tests, brokeredTests) {
+  if (!Array.isArray(brokeredTests)) {
+    return;
+  }
+  for (const item of brokeredTests.slice(0, MAX_SCRIPT_LOGS)) {
+    tests.push({
+      name: String(item?.name || 'pm.execution.runRequest test').slice(0, 256),
+      passed: item?.passed === true,
+      error: String(item?.error || '').slice(0, MAX_SCRIPT_LOG_LENGTH)
+    });
+  }
+}
+
+function brokerVaultApi({ broker, tracker }) {
+  const request = (operation, payload = {}) => {
+    if (!broker || typeof tracker?.brokerRequest !== 'function') {
+      throw sandboxError('pm.vault is not available in this script runtime.');
+    }
+    const promise = tracker.brokerRequest(operation, payload)
+      .catch((error) => {
+        throw sandboxError(errorMessage(error));
+      });
+    tracker.track(promise.catch(() => {}));
+    return sandboxThenable(promise);
+  };
+  return hardenSandboxValue({
+    get(key) {
+      return request('vault:get', { key }).then((value) => (value == null ? undefined : String(value)));
+    },
+    set(key, value) {
+      return request('vault:set', { key, value }).then(() => undefined);
+    },
+    unset(key) {
+      return request('vault:unset', { key }).then(() => undefined);
+    }
+  });
+}
+
+function cloneVariablePairs(variables) {
+  if (!Array.isArray(variables)) {
+    return [];
+  }
+  return variables.slice(0, 1000).map((variable) => ({
+    enabled: variable?.enabled !== false,
+    key: variable?.key == null ? '' : String(variable.key).slice(0, 256),
+    value: variable?.value == null ? '' : String(variable.value).slice(0, 4096)
+  })).filter((variable) => variable.key);
+}
+
+function replaceVariablePairs(target, source) {
+  if (!Array.isArray(target) || !Array.isArray(source)) {
+    return;
+  }
+  target.splice(0, target.length, ...cloneVariablePairs(source));
+}
+
+function createVisualizerState() {
+  return {
+    data: null,
+    html: '',
+    template: ''
   };
 }
 
-function requestApi(request = {}) {
+function visualizerApi(state = createVisualizerState()) {
+  return hardenSandboxValue({
+    clear() {
+      state.data = null;
+      state.html = '';
+      state.template = '';
+    },
+    set(template, data = {}) {
+      const source = String(template == null ? '' : template);
+      if (source.length > MAX_VISUALIZER_TEMPLATE_LENGTH) {
+        throw sandboxError(`pm.visualizer template cannot exceed ${MAX_VISUALIZER_TEMPLATE_LENGTH} characters.`);
+      }
+      const snapshot = cloneVisualizerData(data);
+      const rendered = sanitizeVisualizerHtml(renderVisualizerTemplate(source, snapshot));
+      if (rendered.length > MAX_VISUALIZER_HTML_LENGTH) {
+        throw sandboxError(`pm.visualizer output cannot exceed ${MAX_VISUALIZER_HTML_LENGTH} characters.`);
+      }
+      state.data = snapshot;
+      state.html = rendered;
+      state.template = source;
+    }
+  });
+}
+
+function cloneVisualizerData(data) {
+  try {
+    const text = JSON.stringify(data == null ? {} : data);
+    if (Buffer.byteLength(text, 'utf8') > MAX_VISUALIZER_DATA_BYTES) {
+      throw sandboxError(`pm.visualizer data cannot exceed ${MAX_VISUALIZER_DATA_BYTES} bytes.`);
+    }
+    return JSON.parse(text);
+  } catch (error) {
+    if (String(error?.message || '').includes('pm.visualizer data cannot exceed')) {
+      throw error;
+    }
+    throw sandboxError(`pm.visualizer data must be JSON-serializable: ${errorMessage(error)}`);
+  }
+}
+
+function renderVisualizerTemplate(template, data, depth = 0) {
+  if (depth > MAX_VISUALIZER_TEMPLATE_DEPTH) {
+    throw sandboxError(`pm.visualizer template block nesting cannot exceed ${MAX_VISUALIZER_TEMPLATE_DEPTH}.`);
+  }
+
+  const source = String(template || '');
+  const eachPattern = new RegExp(`\\{\\{\\s*#each\\s+(${VISUALIZER_VALUE_PATTERN})\\s*\\}\\}`, 'g');
+  let output = '';
+  let index = 0;
+  let match;
+
+  while ((match = eachPattern.exec(source)) !== null) {
+    output = appendVisualizerOutput(output, renderVisualizerValues(source.slice(index, match.index), data));
+    const block = readVisualizerEachBlock(source, eachPattern.lastIndex);
+    if (!block) {
+      throw sandboxError('pm.visualizer template has an unclosed {{#each}} block.');
+    }
+    const value = readVisualizerValue(data, match[1]);
+    const entries = visualizerEachEntries(value);
+    for (const entry of entries) {
+      output = appendVisualizerOutput(
+        output,
+        renderVisualizerTemplate(block.template, visualizerEachContext(data, entry.value, entry.index, entry.key), depth + 1)
+      );
+    }
+    index = block.endIndex;
+    eachPattern.lastIndex = block.endIndex;
+  }
+
+  return appendVisualizerOutput(output, renderVisualizerValues(source.slice(index), data));
+}
+
+function renderVisualizerValues(template, data) {
+  const triplePattern = new RegExp(`\\{\\{\\{\\s*(${VISUALIZER_VALUE_PATTERN})\\s*\\}\\}\\}`, 'g');
+  const doublePattern = new RegExp(`\\{\\{\\s*(${VISUALIZER_VALUE_PATTERN})\\s*\\}\\}`, 'g');
+  return String(template || '')
+    .replace(triplePattern, (_match, key) => {
+      const value = readVisualizerValue(data, key);
+      return value == null ? '' : String(value);
+    })
+    .replace(doublePattern, (_match, key) => escapeHtml(readVisualizerValue(data, key)));
+}
+
+function readVisualizerEachBlock(template, startIndex) {
+  const blockPattern = new RegExp(`\\{\\{\\s*(#each\\s+${VISUALIZER_VALUE_PATTERN}|/each)\\s*\\}\\}`, 'g');
+  blockPattern.lastIndex = startIndex;
+  let depth = 1;
+  let match;
+  while ((match = blockPattern.exec(template)) !== null) {
+    if (match[1].startsWith('#each')) {
+      depth += 1;
+    } else {
+      depth -= 1;
+      if (depth === 0) {
+        return {
+          template: template.slice(startIndex, match.index),
+          endIndex: blockPattern.lastIndex
+        };
+      }
+    }
+  }
+  return null;
+}
+
+function visualizerEachEntries(value) {
+  if (Array.isArray(value)) {
+    return value.slice(0, MAX_VISUALIZER_EACH_ITEMS).map((item, index) => ({ value: item, index }));
+  }
+  if (value && typeof value === 'object') {
+    return Object.entries(value)
+      .slice(0, MAX_VISUALIZER_EACH_ITEMS)
+      .map(([key, item], index) => ({ key, value: item, index }));
+  }
+  return [];
+}
+
+function visualizerEachContext(parent, item, index, key) {
+  const context = {};
+  if (parent && typeof parent === 'object' && !Array.isArray(parent)) {
+    Object.assign(context, parent);
+  }
+  if (item && typeof item === 'object' && !Array.isArray(item)) {
+    Object.assign(context, item);
+  }
+  context.this = item;
+  context['@index'] = index;
+  if (key != null) {
+    context['@key'] = key;
+  }
+  return context;
+}
+
+function appendVisualizerOutput(output, addition) {
+  const next = output + addition;
+  if (next.length > MAX_VISUALIZER_HTML_LENGTH) {
+    throw sandboxError(`pm.visualizer output cannot exceed ${MAX_VISUALIZER_HTML_LENGTH} characters.`);
+  }
+  return next;
+}
+
+function readVisualizerValue(data, path) {
+  const source = String(path || '');
+  if (source === '.') {
+    return data?.this;
+  }
+  let value = data;
+  for (const part of source.split('.')) {
+    if (!part || VISUALIZER_UNSAFE_PATH_PARTS.has(part)) {
+      return undefined;
+    }
+    value = readVisualizerProperty(value, part);
+  }
+  return value;
+}
+
+function readVisualizerProperty(value, part) {
+  if (value == null) {
+    return undefined;
+  }
+  if (part === 'length' && (typeof value === 'string' || Array.isArray(value))) {
+    return value.length;
+  }
+  const target = Object(value);
+  if (!Object.prototype.hasOwnProperty.call(target, part)) {
+    return undefined;
+  }
+  return target[part];
+}
+
+function sanitizeVisualizerHtml(html) {
+  return String(html || '')
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/\s+(src|href)\s*=\s*(["'])(?!data:image\/|#|about:blank)(.*?)\2/gi, '')
+    .replace(/\s+(src|href)\s*=\s*(?!["'])(?!data:image\/|#|about:blank)[^\s>]+/gi, '');
+}
+
+function visualizerResult(state) {
+  if (!state?.html) {
+    return undefined;
+  }
   return {
+    html: state.html,
+    template: state.template.slice(0, MAX_VISUALIZER_TEMPLATE_LENGTH)
+  };
+}
+
+function escapeHtml(value) {
+  return String(value == null ? '' : value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function brokerCookieApi({ broker, tracker }) {
+  const request = async (operation, payload = {}) => {
+    if (!broker || typeof tracker?.brokerRequest !== 'function') {
+      throw sandboxError('pm.cookies is not available in this script runtime.');
+    }
+    const promise = tracker.brokerRequest(operation, payload);
+    tracker.track(promise.catch(() => {}));
+    return promise;
+  };
+  return hardenSandboxValue({
+    get(name) {
+      return sandboxThenable(request('cookies:get', { name: String(name || '') }));
+    },
+    has(name) {
+      return sandboxThenable(request('cookies:get', { name: String(name || '') }).then((value) => value != null));
+    },
+    toObject() {
+      return sandboxThenable(request('cookies:toObject', {}).then((value) => hardenSandboxValue(value)));
+    },
+    set(name, value) {
+      return sandboxThenable(request('cookies:set', { name: String(name || ''), value: value == null ? '' : String(value) }).then(() => undefined));
+    },
+    unset(name) {
+      return sandboxThenable(request('cookies:unset', { name: String(name || '') }).then(() => undefined));
+    },
+    jar() {
+      return brokerCookieJarApi({ request });
+    }
+  });
+}
+
+function brokerCookieJarApi({ request }) {
+  const withCallback = (promise, callback) => {
+    const handled = promise
+      .then((value) => {
+        if (typeof callback === 'function') {
+          callback(null, value);
+        }
+        return value;
+      })
+      .catch((error) => {
+        const safeError = sandboxError(errorMessage(error));
+        if (typeof callback === 'function') {
+          callback(safeError);
+          return undefined;
+        }
+        throw safeError;
+      });
+    return sandboxThenable(handled);
+  };
+  return hardenSandboxValue({
+    get(url, name, callback) {
+      return withCallback(
+        request('cookies.jar:get', { url: String(url || ''), name: String(name || '') }),
+        callback
+      );
+    },
+    getAll(url, callback) {
+      return withCallback(
+        request('cookies.jar:getAll', { url: String(url || '') }).then((value) => hardenSandboxValue(value)),
+        callback
+      );
+    },
+    set(url, name, value, callback) {
+      const payload = { url: String(url || '') };
+      let finalCallback = callback;
+      if (name && typeof name === 'object') {
+        payload.cookie = cookiePayloadForBroker(name);
+        finalCallback = typeof value === 'function' ? value : callback;
+      } else {
+        payload.name = String(name || '');
+        payload.value = value == null ? '' : String(value);
+      }
+      return withCallback(
+        request('cookies.jar:set', payload).then(() => undefined),
+        finalCallback
+      );
+    },
+    unset(url, name, callback) {
+      return withCallback(
+        request('cookies.jar:unset', { url: String(url || ''), name: String(name || '') }).then(() => undefined),
+        callback
+      );
+    },
+    clear(url, callback) {
+      return withCallback(
+        request('cookies.jar:clear', { url: String(url || '') }).then(() => undefined),
+        callback
+      );
+    }
+  });
+}
+
+function cookiePayloadForBroker(cookie) {
+  return hardenSandboxValue({
+    name: cookie?.name == null ? '' : String(cookie.name),
+    value: cookie?.value == null ? '' : String(cookie.value),
+    domain: cookie?.domain == null ? '' : String(cookie.domain),
+    path: cookie?.path == null ? '' : String(cookie.path),
+    expiresAt: cookie?.expiresAt == null
+      ? cookie?.expires == null
+        ? ''
+        : String(cookie.expires)
+      : String(cookie.expiresAt),
+    secure: cookie?.secure === true,
+    sameSite: cookie?.sameSite == null ? '' : String(cookie.sameSite),
+    hostOnly: cookie?.hostOnly === true,
+    priority: cookie?.priority == null ? '' : String(cookie.priority),
+    partitioned: cookie?.partitioned === true
+  });
+}
+
+function requestApi(request = {}) {
+  return hardenSandboxValue({
     method: request.method || '',
     url: requestUrlApi(request.url || ''),
     headers: pairListApi(request.headers || []),
     body: requestBodyApi(request.body || '')
+  });
+}
+
+function mutableRequestApi(request = {}) {
+  const api = {
+    get method() {
+      return request.method || '';
+    },
+    set method(value) {
+      request.method = String(value || '').toUpperCase();
+    },
+    get url() {
+      return mutableRequestUrlApi(request);
+    },
+    set url(value) {
+      request.url = String(value || '');
+    },
+    headers: mutablePairListApi(request.headers ||= []),
+    body: mutableRequestBodyApi(request),
+    toJSON() {
+      return hardenSandboxValue(cloneJson(request));
+    }
   };
+  return hardenSandboxValue(api);
+}
+
+function mutableRequestUrlApi(request) {
+  const read = () => requestUrlApi(request.url || '');
+  return hardenSandboxValue({
+    get raw() { return String(request.url || ''); },
+    set raw(value) { request.url = String(value || ''); },
+    get protocol() { return read().protocol; },
+    get host() { return read().host; },
+    get path() { return read().path; },
+    get query() { return read().query; },
+    toString() {
+      return String(request.url || '');
+    }
+  });
+}
+
+function mutableRequestBodyApi(request) {
+  return hardenSandboxValue({
+    get raw() {
+      return String(request.body || '');
+    },
+    set raw(value) {
+      request.body = value == null ? '' : String(value);
+    },
+    toString() {
+      return String(request.body || '');
+    }
+  });
+}
+
+function mutablePairListApi(pairs) {
+  const api = pairListApi(pairs);
+  return hardenSandboxValue({
+    ...api,
+    add(pair) {
+      if (!pair?.key) {
+        return;
+      }
+      pairs.push({ enabled: pair.enabled !== false, key: String(pair.key), value: pair.value == null ? '' : String(pair.value) });
+    },
+    upsert(pair) {
+      if (!pair?.key) {
+        return;
+      }
+      const target = String(pair.key).toLowerCase();
+      const existing = pairs.find((item) => String(item.key || '').toLowerCase() === target);
+      if (existing) {
+        existing.enabled = pair.enabled !== false;
+        existing.value = pair.value == null ? '' : String(pair.value);
+      } else {
+        this.add(pair);
+      }
+    },
+    remove(name) {
+      const target = String(name || '').toLowerCase();
+      const index = pairs.findIndex((item) => String(item.key || '').toLowerCase() === target);
+      if (index >= 0) {
+        pairs.splice(index, 1);
+      }
+    }
+  });
 }
 
 function requestUrlApi(rawUrl) {
@@ -236,7 +1518,7 @@ function requestUrlApi(rawUrl) {
   } catch {
     // Postman allows unresolved variable URLs; keep raw access working.
   }
-  return {
+  return hardenSandboxValue({
     raw,
     protocol: parsed ? parsed.protocol.replace(/:$/, '') : '',
     host: parsed ? parsed.hostname : '',
@@ -245,30 +1527,34 @@ function requestUrlApi(rawUrl) {
     toString() {
       return raw;
     }
-  };
+  });
 }
 
 function requestBodyApi(rawBody) {
   const raw = String(rawBody || '');
-  return {
+  return hardenSandboxValue({
     raw,
     toString() {
       return raw;
     }
-  };
+  });
 }
 
 function responseApi(response = null) {
   if (!response) {
     return undefined;
   }
-  return {
+  return hardenSandboxValue({
     code: response.statusCode,
     status: String(response.statusCode || ''),
     responseTime: response.durationMillis,
     headers: responseHeaderApi(response.headers || {}),
     json() {
-      return JSON.parse(response.body || '');
+      try {
+        return hardenSandboxValue(JSON.parse(response.body || ''));
+      } catch (error) {
+        throw sandboxError(errorMessage(error));
+      }
     },
     text() {
       return response.body || '';
@@ -303,44 +1589,49 @@ function responseApi(response = null) {
       have: {
         status(expectedStatus) {
           if (Number(response.statusCode) !== Number(expectedStatus)) {
-            throw new Error(`Expected response status ${expectedStatus} but received ${response.statusCode}.`);
+            throw sandboxError(`Expected response status ${expectedStatus} but received ${response.statusCode}.`);
           }
         },
         header(name, expectedValue) {
           const value = responseHeaderValue(response.headers || {}, name);
           if (value == null) {
-            throw new Error(`Expected response header ${name}.`);
+            throw sandboxError(`Expected response header ${name}.`);
           }
           if (arguments.length > 1 && String(value) !== String(expectedValue)) {
-            throw new Error(`Expected response header ${name} to equal ${expectedValue} but received ${value}.`);
+            throw sandboxError(`Expected response header ${name} to equal ${expectedValue} but received ${value}.`);
           }
         },
         body(expectedText) {
           const body = response.body || '';
           if (arguments.length === 0) {
             if (!body) {
-              throw new Error('Expected response body.');
+              throw sandboxError('Expected response body.');
             }
             return;
           }
           if (!body.includes(String(expectedText))) {
-            throw new Error(`Expected response body to include ${expectedText}.`);
+            throw sandboxError(`Expected response body to include ${expectedText}.`);
           }
         },
         jsonBody(path, expectedValue) {
-          const payload = JSON.parse(response.body || '');
+          let payload;
+          try {
+            payload = JSON.parse(response.body || '');
+          } catch (error) {
+            throw sandboxError(errorMessage(error));
+          }
           if (arguments.length === 0) {
             return;
           }
           const value = readJsonPathForScript(payload, path);
           if (arguments.length === 1) {
             if (value == null || value === '') {
-              throw new Error(`Expected JSON body path ${path} to exist.`);
+              throw sandboxError(`Expected JSON body path ${path} to exist.`);
             }
             return;
           }
           if (!deepEqual(value, expectedValue)) {
-            throw new Error(`Expected JSON body path ${path} to equal ${JSON.stringify(expectedValue)}.`);
+            throw sandboxError(`Expected JSON body path ${path} to equal ${safeJsonStringify(expectedValue)}.`);
           }
         }
       }
@@ -348,11 +1639,11 @@ function responseApi(response = null) {
     size() {
       return Buffer.byteLength(response.body || '', 'utf8');
     }
-  };
+  });
 }
 
 function pairListApi(pairs) {
-  return {
+  return hardenSandboxValue({
     get(name) {
       const target = String(name || '').toLowerCase();
       const pair = pairs.find((item) => item.enabled !== false && String(item.key || '').toLowerCase() === target);
@@ -362,7 +1653,7 @@ function pairListApi(pairs) {
       return this.get(name) != null;
     },
     all() {
-      return pairs.filter((item) => item.enabled !== false).map((item) => ({ key: item.key, value: item.value ?? '' }));
+      return hardenSandboxValue(pairs.filter((item) => item.enabled !== false).map((item) => ({ key: item.key, value: item.value ?? '' })));
     },
     each(callback) {
       if (typeof callback !== 'function') {
@@ -377,13 +1668,13 @@ function pairListApi(pairs) {
       for (const pair of this.all()) {
         object[pair.key] = pair.value;
       }
-      return object;
+      return hardenSandboxValue(object);
     }
-  };
+  });
 }
 
 function responseHeaderApi(headers) {
-  return {
+  return hardenSandboxValue({
     get(name) {
       return responseHeaderValue(headers, name);
     },
@@ -391,10 +1682,10 @@ function responseHeaderApi(headers) {
       return responseHeaderValue(headers, name) != null;
     },
     all() {
-      return Object.entries(headers).map(([key, values]) => ({
+      return hardenSandboxValue(Object.entries(headers).map(([key, values]) => ({
         key,
         value: Array.isArray(values) ? values.join(', ') : String(values ?? '')
-      }));
+      })));
     },
     each(callback) {
       if (typeof callback !== 'function') {
@@ -409,9 +1700,9 @@ function responseHeaderApi(headers) {
       for (const header of this.all()) {
         object[header.key] = header.value;
       }
-      return object;
+      return hardenSandboxValue(object);
     }
-  };
+  });
 }
 
 function responseHeaderValue(headers, name) {
@@ -426,14 +1717,14 @@ function responseHeaderValue(headers, name) {
 
 function assertHttpStatus(actualStatus, expectedStatus, label) {
   if (Number(actualStatus) !== Number(expectedStatus)) {
-    throw new Error(`Expected response to be ${label} (${expectedStatus}) but received ${actualStatus}.`);
+    throw sandboxError(`Expected response to be ${label} (${expectedStatus}) but received ${actualStatus}.`);
   }
 }
 
 function assertHttpStatusRange(actualStatus, minimum, maximum, label) {
   const status = Number(actualStatus);
   if (status < minimum || status > maximum) {
-    throw new Error(`Expected response to be ${label} (${minimum}-${maximum}) but received ${actualStatus}.`);
+    throw sandboxError(`Expected response to be ${label} (${minimum}-${maximum}) but received ${actualStatus}.`);
   }
 }
 
@@ -481,7 +1772,7 @@ function expect(actual) {
       assertCondition(number >= Number(minimum) && number <= Number(maximum), `Expected ${actual} to be within ${minimum}..${maximum}.`);
       return chain;
     },
-    match(pattern) { assertCondition(new RegExp(pattern).test(String(actual ?? '')), `Expected ${actual} to match ${pattern}.`); return chain; },
+    match(pattern) { assertCondition(testPattern(pattern, actual), `Expected ${actual} to match ${pattern}.`); return chain; },
     oneOf(values) {
       assertCondition(Array.isArray(values) && values.some((value) => Object.is(value, actual)), `Expected ${actual} to be one of ${JSON.stringify(values)}.`);
       return chain;
@@ -524,7 +1815,7 @@ function expect(actual) {
     null: { get() { assertCondition(actual === null, `Expected ${actual} to be null.`); return true; } },
     empty: { get() { assertCondition(isEmpty(actual), `Expected ${actual} to be empty.`); return true; } }
   });
-  return chain;
+  return hardenSandboxValue(chain);
 }
 
 function negatedExpectation(actual) {
@@ -538,7 +1829,7 @@ function negatedExpectation(actual) {
     eql(expected) { assertCondition(!deepEqual(actual, expected), 'Expected values not to be deeply equal.'); return chain; },
     include(expected) { assertIncludes(actual, expected, true); return chain; },
     contain(expected) { chain.include(expected); },
-    match(pattern) { assertCondition(!new RegExp(pattern).test(String(actual ?? '')), `Expected ${actual} not to match ${pattern}.`); return chain; },
+    match(pattern) { assertCondition(!testPattern(pattern, actual), `Expected ${actual} not to match ${pattern}.`); return chain; },
     property(name) { assertCondition(actual == null || !Object.hasOwn(actual, name), `Expected object not to have property ${name}.`); return chain; },
     oneOf(values) {
       assertCondition(!Array.isArray(values) || !values.some((value) => Object.is(value, actual)), `Expected ${actual} not to be one of ${JSON.stringify(values)}.`);
@@ -555,11 +1846,11 @@ function negatedExpectation(actual) {
     null: { get() { assertCondition(actual !== null, 'Expected value not to be null.'); return true; } },
     undefined: { get() { assertCondition(actual !== undefined, 'Expected value not to be undefined.'); return true; } }
   });
-  return chain;
+  return hardenSandboxValue(chain);
 }
 
 function deepExpectation(actual) {
-  return {
+  return hardenSandboxValue({
     get equal() { return (expected) => expect(actual).eql(expected); },
     get equals() { return (expected) => expect(actual).eql(expected); },
     include(expected) {
@@ -575,11 +1866,11 @@ function deepExpectation(actual) {
       }
       expect(actual).include(expected);
     }
-  };
+  });
 }
 
 function deepEqual(left, right) {
-  return JSON.stringify(left) === JSON.stringify(right);
+  return safeJsonStringify(left) === safeJsonStringify(right);
 }
 
 function assertIncludes(actual, expected, negate) {
@@ -593,7 +1884,7 @@ function assertIncludes(actual, expected, negate) {
   }
   assertCondition(
     negate ? !includes : includes,
-    `Expected ${JSON.stringify(actual)} ${negate ? 'not ' : ''}to include ${JSON.stringify(expected)}.`
+    `Expected ${safeJsonStringify(actual)} ${negate ? 'not ' : ''}to include ${safeJsonStringify(expected)}.`
   );
 }
 
@@ -603,7 +1894,7 @@ function assertArrayMembers(actual, expectedValues, negate) {
   const includesAll = expectedValues.every((expected) => actual.some((value) => deepEqual(value, expected)));
   assertCondition(
     negate ? !includesAll : includesAll,
-    `Expected ${JSON.stringify(actual)} ${negate ? 'not ' : ''}to include members ${JSON.stringify(expectedValues)}.`
+    `Expected ${safeJsonStringify(actual)} ${negate ? 'not ' : ''}to include members ${safeJsonStringify(expectedValues)}.`
   );
 }
 
@@ -628,8 +1919,273 @@ function isEmpty(value) {
 
 function assertCondition(condition, message) {
   if (!condition) {
-    throw new Error(message);
+    throw sandboxError(message);
   }
+}
+
+function sandboxError(message) {
+  return String(message || 'Script runtime error.');
+}
+
+function errorMessage(error) {
+  if (error && typeof error === 'object' && typeof error.message === 'string') {
+    return error.message;
+  }
+  return String(error || 'Script runtime error.');
+}
+
+function safeJsonStringify(value) {
+  try {
+    return JSON.stringify(value);
+  } catch (error) {
+    throw sandboxError(errorMessage(error));
+  }
+}
+
+function testPattern(pattern, actual) {
+  try {
+    return new RegExp(pattern).test(String(actual ?? ''));
+  } catch (error) {
+    throw sandboxError(errorMessage(error));
+  }
+}
+
+function sandboxThenable(promise) {
+  const hostPromise = Promise.resolve(promise);
+  const thenable = {
+    then(onFulfilled, onRejected) {
+      return sandboxThenable(hostPromise.then(
+        (value) => {
+          const safeValue = hardenSandboxValue(value);
+          return typeof onFulfilled === 'function' ? onFulfilled(safeValue) : safeValue;
+        },
+        (reason) => {
+          const safeReason = sandboxError(errorMessage(reason));
+          if (typeof onRejected === 'function') {
+            return onRejected(safeReason);
+          }
+          throw safeReason;
+        }
+      ));
+    },
+    catch(onRejected) {
+      return thenable.then(undefined, onRejected);
+    },
+    finally(onFinally) {
+      return sandboxThenable(hostPromise.finally(() => {
+        if (typeof onFinally === 'function') {
+          return onFinally();
+        }
+        return undefined;
+      }));
+    }
+  };
+  return hardenSandboxValue(thenable);
+}
+
+function hardenSandboxValue(value, seen = new WeakSet()) {
+  if (value == null || (typeof value !== 'object' && typeof value !== 'function')) {
+    return value;
+  }
+  if (seen.has(value)) {
+    return value;
+  }
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    attachSandboxArrayMethods(value);
+  }
+
+  for (const key of Reflect.ownKeys(value)) {
+    let descriptor;
+    try {
+      descriptor = Object.getOwnPropertyDescriptor(value, key);
+    } catch {
+      continue;
+    }
+    if (!descriptor) {
+      continue;
+    }
+    if (Object.hasOwn(descriptor, 'value')) {
+      hardenSandboxValue(descriptor.value, seen);
+    } else {
+      hardenSandboxValue(descriptor.get, seen);
+      hardenSandboxValue(descriptor.set, seen);
+    }
+  }
+
+  if (typeof value === 'function') {
+    const prototypeDescriptor = Object.getOwnPropertyDescriptor(value, 'prototype');
+    if (prototypeDescriptor && Object.hasOwn(prototypeDescriptor, 'value')) {
+      hardenSandboxValue(prototypeDescriptor.value, seen);
+    }
+  }
+
+  try {
+    Object.defineProperty(value, 'constructor', {
+      configurable: false,
+      enumerable: false,
+      value: undefined,
+      writable: false
+    });
+  } catch {
+    // Some built-ins expose non-configurable constructor metadata. They are not
+    // introduced into the sandbox contract directly.
+  }
+  try {
+    Object.setPrototypeOf(value, null);
+  } catch {
+    // Non-extensible built-ins are ignored; ordinary script API values are
+    // still hardened before entering the vm context.
+  }
+  return value;
+}
+
+function attachSandboxArrayMethods(array) {
+  defineSandboxArrayMethod(array, 'forEach', (callback, thisArg) => {
+    assertArrayCallback(callback, 'forEach');
+    for (let index = 0; index < array.length; index++) {
+      if (Object.hasOwn(array, index)) {
+        Reflect.apply(callback, thisArg, [array[index], index, array]);
+      }
+    }
+  });
+  defineSandboxArrayMethod(array, 'map', (callback, thisArg) => {
+    assertArrayCallback(callback, 'map');
+    const result = [];
+    for (let index = 0; index < array.length; index++) {
+      if (Object.hasOwn(array, index)) {
+        result.push(Reflect.apply(callback, thisArg, [array[index], index, array]));
+      }
+    }
+    return hardenSandboxValue(result);
+  });
+  defineSandboxArrayMethod(array, 'filter', (callback, thisArg) => {
+    assertArrayCallback(callback, 'filter');
+    const result = [];
+    for (let index = 0; index < array.length; index++) {
+      if (Object.hasOwn(array, index) && Reflect.apply(callback, thisArg, [array[index], index, array])) {
+        result.push(array[index]);
+      }
+    }
+    return hardenSandboxValue(result);
+  });
+  defineSandboxArrayMethod(array, 'find', (callback, thisArg) => {
+    assertArrayCallback(callback, 'find');
+    for (let index = 0; index < array.length; index++) {
+      if (Object.hasOwn(array, index) && Reflect.apply(callback, thisArg, [array[index], index, array])) {
+        return array[index];
+      }
+    }
+    return undefined;
+  });
+  defineSandboxArrayMethod(array, 'some', (callback, thisArg) => {
+    assertArrayCallback(callback, 'some');
+    for (let index = 0; index < array.length; index++) {
+      if (Object.hasOwn(array, index) && Reflect.apply(callback, thisArg, [array[index], index, array])) {
+        return true;
+      }
+    }
+    return false;
+  });
+  defineSandboxArrayMethod(array, 'every', (callback, thisArg) => {
+    assertArrayCallback(callback, 'every');
+    for (let index = 0; index < array.length; index++) {
+      if (Object.hasOwn(array, index) && !Reflect.apply(callback, thisArg, [array[index], index, array])) {
+        return false;
+      }
+    }
+    return true;
+  });
+  defineSandboxArrayMethod(array, 'reduce', function reduce(callback, initialValue) {
+    assertArrayCallback(callback, 'reduce');
+    let index = 0;
+    let accumulator = initialValue;
+    if (arguments.length < 2) {
+      while (index < array.length && !Object.hasOwn(array, index)) {
+        index++;
+      }
+      if (index >= array.length) {
+        throw sandboxError('Reduce of empty array with no initial value.');
+      }
+      accumulator = array[index++];
+    }
+    for (; index < array.length; index++) {
+      if (Object.hasOwn(array, index)) {
+        accumulator = Reflect.apply(callback, undefined, [accumulator, array[index], index, array]);
+      }
+    }
+    return accumulator;
+  });
+  defineSandboxArrayMethod(array, 'includes', (expected) => {
+    for (let index = 0; index < array.length; index++) {
+      if (Object.is(array[index], expected) || array[index] === expected) {
+        return true;
+      }
+    }
+    return false;
+  });
+  defineSandboxArrayMethod(array, 'indexOf', (expected) => {
+    for (let index = 0; index < array.length; index++) {
+      if (Object.is(array[index], expected) || array[index] === expected) {
+        return index;
+      }
+    }
+    return -1;
+  });
+  defineSandboxArrayMethod(array, 'join', (separator = ',') => {
+    const parts = [];
+    for (let index = 0; index < array.length; index++) {
+      parts.push(array[index] == null ? '' : String(array[index]));
+    }
+    return parts.join(String(separator));
+  });
+  defineSandboxArrayMethod(array, 'slice', (start, end) => hardenSandboxValue(Array.prototype.slice.call(array, start, end)));
+  defineSandboxArrayMethod(array, 'at', (index) => {
+    const offset = Number(index) < 0 ? array.length + Number(index) : Number(index);
+    return array[offset];
+  });
+  defineSandboxArrayMethod(array, 'values', () => sandboxArrayIterator(array));
+  defineSandboxArrayMethod(array, Symbol.iterator, () => sandboxArrayIterator(array));
+}
+
+function defineSandboxArrayMethod(array, name, implementation) {
+  if (Object.hasOwn(array, name)) {
+    return;
+  }
+  Object.defineProperty(array, name, {
+    configurable: true,
+    enumerable: false,
+    value: implementation,
+    writable: true
+  });
+}
+
+function assertArrayCallback(callback, methodName) {
+  if (typeof callback !== 'function') {
+    throw sandboxError(`Array.${methodName} requires a callback function.`);
+  }
+}
+
+function sandboxArrayIterator(array) {
+  let index = 0;
+  const iterator = {
+    next() {
+      if (index >= array.length) {
+        return hardenSandboxValue({ done: true, value: undefined });
+      }
+      return hardenSandboxValue({ done: false, value: array[index++] });
+    }
+  };
+  Object.defineProperty(iterator, Symbol.iterator, {
+    configurable: true,
+    enumerable: false,
+    value() {
+      return iterator;
+    },
+    writable: true
+  });
+  return hardenSandboxValue(iterator);
 }
 
 function createConsole(logs) {
@@ -640,12 +2196,73 @@ function createConsole(logs) {
     const line = values.map(formatLogValue).join(' ');
     logs.push(line.length > MAX_SCRIPT_LOG_LENGTH ? `${line.slice(0, MAX_SCRIPT_LOG_LENGTH)}...` : line);
   };
-  return {
+  return hardenSandboxValue({
     log: write,
     info: write,
     warn: write,
     error: write
+  });
+}
+
+function normalizeIterationData(value) {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => item && typeof item === 'object')
+      .map((item) => ({ enabled: item.enabled !== false, key: String(item.key || ''), value: item.value == null ? '' : String(item.value) }))
+      .filter((item) => item.key);
+  }
+  if (value && typeof value === 'object') {
+    return Object.entries(value).map(([key, itemValue]) => ({
+      enabled: true,
+      key,
+      value: itemValue == null ? '' : String(itemValue)
+    }));
+  }
+  return [];
+}
+
+function boundedScriptResult(result) {
+  const safe = {
+    passed: result.passed === true,
+    tests: Array.isArray(result.tests) ? result.tests.slice(0, MAX_SCRIPT_LOGS).map((test) => ({
+      name: truncate(String(test.name || 'Unnamed test'), 256),
+      passed: test.passed === true,
+      error: truncate(test.error || '', MAX_SCRIPT_LOG_LENGTH)
+    })) : [],
+    error: truncate(result.error || '', MAX_SCRIPT_LOG_LENGTH),
+    logs: Array.isArray(result.logs) ? result.logs.slice(0, MAX_SCRIPT_LOGS).map((line) => truncate(line, MAX_SCRIPT_LOG_LENGTH)) : [],
+    commitSideEffects: result.commitSideEffects !== false,
+    execution: result.execution && typeof result.execution === 'object' ? {
+      nextRequest: Object.hasOwn(result.execution, 'nextRequest') ? result.execution.nextRequest : undefined,
+      skipRequest: result.execution.skipRequest === true
+    } : {},
+    request: result.request && typeof result.request === 'object' ? cloneJson(result.request) : undefined,
+    visualizer: result.visualizer && typeof result.visualizer === 'object' ? {
+      html: truncate(result.visualizer.html || '', MAX_VISUALIZER_HTML_LENGTH),
+      template: truncate(result.visualizer.template || '', MAX_VISUALIZER_TEMPLATE_LENGTH)
+    } : undefined
   };
+  const size = Buffer.byteLength(JSON.stringify(safe), 'utf8');
+  if (size > MAX_SCRIPT_RESULT_BYTES) {
+    return {
+      passed: false,
+      tests: [],
+      error: 'Script result exceeded the maximum allowed size.',
+      logs: [],
+      commitSideEffects: false,
+      execution: {}
+    };
+  }
+  return safe;
+}
+
+function truncate(value, maxLength) {
+  const text = String(value ?? '');
+  return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+}
+
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value || {}));
 }
 
 function formatLogValue(value) {
@@ -673,8 +2290,12 @@ function replaceVariables(value, ...scopes) {
 
 module.exports = {
   DEFAULT_SCRIPT_TIMEOUT_MILLIS,
+  MAX_BROKER_REQUESTS,
   MAX_SCRIPT_LOG_LENGTH,
   MAX_SCRIPT_LOGS,
   MAX_SCRIPT_LENGTH,
-  runPostmanScript
+  MAX_SCRIPT_RESULT_BYTES,
+  MAX_TIMER_DELAY_MILLIS,
+  runPostmanScript,
+  runPostmanScriptAsync
 };

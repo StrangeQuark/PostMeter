@@ -5,6 +5,7 @@ const { collectionRunResultToCsv, runCollection } = require('../../src/core/coll
 const { collectionModel, requestModel } = require('../../src/core/models');
 const { importPostmanCollection } = require('../../src/core/postmanImporter');
 const { runRequestWithScripts } = require('../../src/core/requestScriptRunner');
+const { MemoryVaultStore } = require('../../src/core/vaultStore');
 
 test('evaluates status, header, JSON path, timing, body, and extraction assertions', () => {
   const response = {
@@ -447,6 +448,228 @@ test('runs imported Postman collection, folder, and request scripts through the 
   assert.equal(result.passed, true);
   assert.equal(result.results[0].testScriptResult.tests[0].name, 'postman event scripts ran');
   assert.equal(result.collectionVariables.find((item) => item.key === 'collectionStage').value, 'collection');
+});
+
+test('honors pm.execution.setNextRequest during collection runs', async () => {
+  const collection = collectionModel({
+    name: 'Execution Control',
+    requests: [
+      requestModel({
+        id: 'first',
+        name: 'First',
+        url: 'https://api.example.test/first',
+        scripts: { tests: "pm.execution.setNextRequest('third');" }
+      }),
+      requestModel({
+        id: 'second',
+        name: 'Second',
+        url: 'https://api.example.test/second'
+      }),
+      requestModel({
+        id: 'third',
+        name: 'Third',
+        url: 'https://api.example.test/third',
+        scripts: { tests: "pm.execution.setNextRequest(null);" }
+      })
+    ]
+  });
+  const seen = [];
+
+  const result = await runCollection(collection, null, {
+    sendRequest: async (request) => {
+      seen.push(request.id);
+      return response(200, '{}');
+    }
+  });
+
+  assert.deepEqual(seen, ['first', 'third']);
+  assert.equal(result.totalRequests, 2);
+  assert.equal(result.passed, true);
+});
+
+test('runs pm.execution.runRequest through the collection broker', async () => {
+  const collection = collectionModel({
+    name: 'Run Request Broker',
+    variables: [{ enabled: true, key: 'baseUrl', value: 'https://api.example.test' }],
+    requests: [
+      requestModel({
+        id: 'root',
+        name: 'Root',
+        url: '{{baseUrl}}/root',
+        scripts: {
+          tests: `
+            pm.environment.set('beforeRunRequest', 'from-root');
+            pm.test('root can run another request', async function () {
+              const response = await pm.execution.runRequest('target', {
+                variables: { targetPath: 'from-override' }
+              });
+              pm.expect(response.code).to.equal(202);
+              pm.expect(response.json().target).to.equal('from-override');
+              pm.expect(pm.environment.get('fromTarget')).to.equal('yes');
+            });
+            pm.execution.setNextRequest(null);
+          `
+        }
+      }),
+      requestModel({
+        id: 'target',
+        name: 'Target',
+        url: '{{baseUrl}}/{{targetPath}}',
+        variables: [{ enabled: true, key: 'targetPath', value: 'default-target' }],
+        scripts: {
+          tests: `
+            pm.test('target request tests are reported on caller', function () {
+              pm.expect(pm.environment.get('beforeRunRequest')).to.equal('from-root');
+              pm.expect(pm.response.code).to.equal(202);
+            });
+            pm.environment.set('fromTarget', 'yes');
+            pm.execution.setNextRequest('should-not-affect-root');
+          `
+        }
+      }),
+      requestModel({
+        id: 'should-not-run',
+        name: 'Should Not Run',
+        url: '{{baseUrl}}/should-not-run'
+      })
+    ]
+  });
+  const sent = [];
+
+  const result = await runCollection(collection, { id: 'env', name: 'Env', variables: [] }, {
+    sendRequest: async (request, environment) => {
+      sent.push({
+        id: request.id,
+        targetPath: environment.variables.find((item) => item.key === 'targetPath')?.value || '',
+        beforeRunRequest: environment.variables.find((item) => item.key === 'beforeRunRequest')?.value || ''
+      });
+      if (request.id === 'target') {
+        return response(202, '{"target":"from-override"}');
+      }
+      return response(200, '{"ok":true}');
+    }
+  });
+
+  assert.equal(result.passed, true);
+  assert.deepEqual(sent.map((item) => item.id), ['root', 'target']);
+  assert.equal(sent[1].targetPath, 'from-override');
+  assert.equal(sent[1].beforeRunRequest, 'from-root');
+  assert.equal(result.totalRequests, 1);
+  assert.equal(result.environment.variables.find((item) => item.key === 'fromTarget').value, 'yes');
+  assert.ok(result.results[0].testScriptResult.tests.some((item) => item.name === 'Target: target request tests are reported on caller' && item.passed));
+});
+
+test('runs pm.vault through collection scripts when the workspace grants access', async () => {
+  const collection = collectionModel({
+    name: 'Vault Collection',
+    requests: [
+      requestModel({
+        id: 'vault-request',
+        name: 'Vault Request',
+        url: 'https://api.example.test/vault',
+        scripts: {
+          preRequest: `
+            pm.test('stores vault secret', async function () {
+              await pm.vault.set('collectionToken', 'stored');
+            });
+          `,
+          tests: `
+            pm.test('reads vault secret', async function () {
+              pm.expect(await pm.vault.get('collectionToken')).to.equal('stored');
+              await pm.vault.unset('collectionToken');
+              pm.expect(await pm.vault.get('collectionToken')).to.be.undefined;
+            });
+          `
+        }
+      })
+    ]
+  });
+  const vault = new MemoryVaultStore();
+
+  const result = await runCollection(collection, { id: 'env', name: 'Env', variables: [] }, {
+    sendRequest: async () => response(200, '{}'),
+    trustedCapabilities: { vault: true },
+    vault
+  });
+
+  assert.equal(result.passed, true);
+  assert.equal(await vault.get('collectionToken'), undefined);
+});
+
+test('returns null when pm.execution.runRequest targets a skipped request', async () => {
+  const collection = collectionModel({
+    name: 'Run Request Skip',
+    requests: [
+      requestModel({
+        id: 'root',
+        name: 'Root',
+        url: 'https://api.example.test/root',
+        scripts: {
+          tests: `
+            pm.test('skipped runRequest returns null', async function () {
+              const response = await pm.execution.runRequest('skipped');
+              pm.expect(response).to.be.null;
+            });
+            pm.execution.setNextRequest(null);
+          `
+        }
+      }),
+      requestModel({
+        id: 'skipped',
+        name: 'Skipped',
+        url: 'https://api.example.test/skipped',
+        scripts: { preRequest: 'pm.execution.skipRequest();' }
+      })
+    ]
+  });
+  const sent = [];
+
+  const result = await runCollection(collection, null, {
+    sendRequest: async (request) => {
+      sent.push(request.id);
+      return response(200, '{}');
+    }
+  });
+
+  assert.equal(result.passed, true);
+  assert.deepEqual(sent, ['root']);
+  assert.equal(result.totalRequests, 1);
+});
+
+test('does not commit pm.execution.runRequest side effects when the caller phase aborts', async () => {
+  const collection = collectionModel({
+    name: 'Run Request Rollback',
+    requests: [
+      requestModel({
+        id: 'root',
+        name: 'Root',
+        url: 'https://api.example.test/root',
+        scripts: {
+          tests: `
+            pm.execution.runRequest('target');
+            throw new Error('abort caller phase');
+          `
+        }
+      }),
+      requestModel({
+        id: 'target',
+        name: 'Target',
+        url: 'https://api.example.test/target',
+        scripts: {
+          tests: "pm.environment.set('fromRolledBackTarget', 'should-not-commit');"
+        }
+      })
+    ]
+  });
+
+  const result = await runCollection(collection, { id: 'env', name: 'Env', variables: [] }, {
+    stopOnFailure: true,
+    sendRequest: async () => response(200, '{}')
+  });
+
+  assert.equal(result.passed, false);
+  assert.match(result.results[0].error, /abort caller phase/);
+  assert.equal(result.environment.variables.find((item) => item.key === 'fromRolledBackTarget'), undefined);
 });
 
 function response(statusCode, body) {

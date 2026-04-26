@@ -8,6 +8,8 @@ const {
   applyWorkspaceSettingsSaveToWorkspace,
   applyScriptVariableMutationsToWorkspace,
   findWorkspaceRequestContext,
+  mergeCookieJarByDelta,
+  mergeVariableScopeByDelta,
   updateWorkspaceRequestAuth
 } = require('../../electron/workspaceMutations');
 
@@ -46,6 +48,110 @@ test('applies single request script variable mutations to active workspace scope
   assert.deepEqual(workspace.environments[0].variables, [{ enabled: true, key: 'envToken', value: 'new' }]);
   assert.deepEqual(workspace.collections[0].variables, [{ enabled: true, key: 'collectionToken', value: 'new' }]);
   assert.deepEqual(workspace.collections[0].requests[0].variables, [{ enabled: true, key: 'localToken', value: 'new' }]);
+});
+
+test('applies script variable deltas without overwriting newer unrelated workspace edits', () => {
+  const request = requestModel({
+    id: 'r1',
+    variables: [
+      { enabled: true, key: 'scriptLocal', value: 'old' },
+      { enabled: true, key: 'userLocal', value: 'newer' }
+    ]
+  });
+  const collection = collectionModel({
+    id: 'c1',
+    requests: [request],
+    variables: [
+      { enabled: true, key: 'scriptCollection', value: 'old' },
+      { enabled: true, key: 'userCollection', value: 'newer' }
+    ]
+  });
+  const environment = environmentModel({
+    id: 'e1',
+    variables: [
+      { enabled: true, key: 'scriptEnv', value: 'old' },
+      { enabled: true, key: 'userEnv', value: 'newer' }
+    ]
+  });
+  const workspace = workspaceModel({
+    collections: [collection],
+    environments: [environment],
+    globals: [
+      { enabled: true, key: 'scriptGlobal', value: 'old' },
+      { enabled: true, key: 'userGlobal', value: 'newer' }
+    ]
+  });
+  const context = findWorkspaceRequestContext(workspace, 'r1');
+
+  applyScriptVariableMutationsToWorkspace(workspace, {
+    collection: context.collection,
+    request: context.request,
+    environment: {
+      id: 'e1',
+      name: 'Env',
+      variables: [{ enabled: true, key: 'scriptEnv', value: 'scripted' }]
+    },
+    collectionVariables: [{ enabled: true, key: 'scriptCollection', value: 'scripted' }],
+    localVariables: [{ enabled: true, key: 'scriptLocal', value: 'scripted' }],
+    globals: [{ enabled: true, key: 'scriptGlobal', value: 'scripted' }],
+    baseEnvironment: {
+      id: 'e1',
+      name: 'Env',
+      variables: [{ enabled: true, key: 'scriptEnv', value: 'old' }]
+    },
+    baseCollectionVariables: [{ enabled: true, key: 'scriptCollection', value: 'old' }],
+    baseLocalVariables: [{ enabled: true, key: 'scriptLocal', value: 'old' }],
+    baseGlobals: [{ enabled: true, key: 'scriptGlobal', value: 'old' }]
+  });
+
+  assert.equal(workspace.environments[0].variables.find((variable) => variable.key === 'scriptEnv').value, 'scripted');
+  assert.equal(workspace.environments[0].variables.find((variable) => variable.key === 'userEnv').value, 'newer');
+  assert.equal(workspace.collections[0].variables.find((variable) => variable.key === 'scriptCollection').value, 'scripted');
+  assert.equal(workspace.collections[0].variables.find((variable) => variable.key === 'userCollection').value, 'newer');
+  assert.equal(workspace.collections[0].requests[0].variables.find((variable) => variable.key === 'scriptLocal').value, 'scripted');
+  assert.equal(workspace.collections[0].requests[0].variables.find((variable) => variable.key === 'userLocal').value, 'newer');
+  assert.equal(workspace.globals.find((variable) => variable.key === 'scriptGlobal').value, 'scripted');
+  assert.equal(workspace.globals.find((variable) => variable.key === 'userGlobal').value, 'newer');
+});
+
+test('merges variable and cookie deltas into the latest workspace state', () => {
+  const variables = mergeVariableScopeByDelta(
+    [
+      { enabled: true, key: 'scriptKey', value: 'old' },
+      { enabled: true, key: 'userKey', value: 'newer' },
+      { enabled: true, key: 'removeKey', value: 'old' }
+    ],
+    [
+      { enabled: true, key: 'scriptKey', value: 'old' },
+      { enabled: true, key: 'removeKey', value: 'old' }
+    ],
+    [
+      { enabled: true, key: 'scriptKey', value: 'scripted' }
+    ]
+  );
+  assert.deepEqual(variables, [
+    { enabled: true, key: 'scriptKey', value: 'scripted' },
+    { enabled: true, key: 'userKey', value: 'newer' }
+  ]);
+
+  const cookies = mergeCookieJarByDelta(
+    [
+      { id: 'latest-session', enabled: true, name: 'session', value: 'old', domain: 'example.test', path: '/', httpOnly: true },
+      { id: 'latest-user', enabled: true, name: 'userOnly', value: 'newer', domain: 'example.test', path: '/' },
+      { id: 'latest-remove', enabled: true, name: 'expired', value: 'old', domain: 'example.test', path: '/' }
+    ],
+    [
+      { id: 'base-session', enabled: true, name: 'session', value: 'old', domain: 'example.test', path: '/', httpOnly: true },
+      { id: 'base-remove', enabled: true, name: 'expired', value: 'old', domain: 'example.test', path: '/' }
+    ],
+    [
+      { id: 'final-session', enabled: true, name: 'session', value: 'scripted', domain: 'example.test', path: '/', httpOnly: true }
+    ]
+  );
+
+  assert.equal(cookies.find((cookie) => cookie.name === 'session').value, 'scripted');
+  assert.equal(cookies.find((cookie) => cookie.name === 'userOnly').value, 'newer');
+  assert.equal(cookies.find((cookie) => cookie.name === 'expired'), undefined);
 });
 
 test('applies collection run script mutations to environment, collection, and request scopes', () => {

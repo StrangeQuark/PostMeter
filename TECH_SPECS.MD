@@ -67,6 +67,7 @@ npm start
 npm test
 npm run check
 npm run electron:version
+npm run sandbox:validate
 ```
 
 ### UI And Smoke
@@ -95,6 +96,7 @@ npm run dist:mac
 npm run release:checksums
 npm run release:prepare
 npm run release:validate
+npm run sandbox:validate:packaged
 ```
 
 ## Repository Structure
@@ -259,7 +261,7 @@ Known security tradeoffs:
 Current schema version:
 
 ```text
-10
+11
 ```
 
 Root workspace fields:
@@ -267,6 +269,7 @@ Root workspace fields:
 - `schemaVersion`
 - `collections`
 - `environments`
+- `globals`
 - `cookies`
 - `history`
 - `settings`
@@ -274,6 +277,9 @@ Root workspace fields:
 Settings fields:
 
 - `appearance.theme`
+- `sandbox.trustedCapabilities.sendRequest`
+- `sandbox.trustedCapabilities.cookies`
+- `sandbox.trustedCapabilities.vault`
 - `updates.includePrereleases`
 
 Collection fields:
@@ -418,6 +424,8 @@ Schema `8` adds workspace cookies and per-request cookie jar options.
 Schema `9` adds request load-test policy compatibility fields.
 
 Schema `10` removes workspace-level load-test defaults. Load-test run settings are configured from the Load Test panel instead of being stored on the workspace.
+
+Schema `11` adds workspace-level globals for true `pm.globals` support and workspace settings that can disable brokered script network requests or cookie-helper access. These APIs are enabled by default for Postman import parity. It also carries the optional `sandbox.trustedCapabilities.vault` grant, which defaults to disabled because vault access exposes user-managed secrets.
 
 ## Persistence Specifications
 
@@ -733,28 +741,42 @@ Limitations:
 
 Postman-style script execution is implemented in `scriptRuntime.js`, isolated through `scriptSandbox.js`/`scriptWorker.js`, and wired into single-request sends plus collection runner pre-request and test phases.
 
+The sandbox contract is `docs/SANDBOX_CONTRACT.md`. The behavior below describes the current implementation.
+
 Implemented runtime behavior:
 
 - Runs scripts in a forked child process so user scripts do not execute in the Electron main process.
 - Runs pre-request scripts before a single request is sent and test scripts after the response is received.
-- Persists `pm.environment`, `pm.collectionVariables`, and request-local `pm.variables` mutations back to the active workspace scopes for single sends and collection runs.
+- Persists `pm.environment`, `pm.collectionVariables`, workspace `pm.globals`, and request-local `pm.variables` mutations back to the active workspace scopes for single sends and collection runs.
 - Starts script workers with a minimal environment instead of inheriting the full PostMeter/Electron process environment.
-- Starts script workers with Node permission flags when the pinned runtime supports them, allowing filesystem read access only to `src/core` script worker modules.
+- Starts script workers through `src/core/osSandbox.js` when an OS backend is available or required. The Linux backend uses `bubblewrap` with cleared environment, unshared namespaces including network, dropped capabilities, private writable `/tmp` and `/run`, disabled nested user namespaces, and read-only runtime/app/library bind mounts.
+- Starts script workers with Node permission flags when the pinned runtime supports them, allowing filesystem read access only to the minimum core script worker modules.
+- Fails closed for packaged Electron script execution when Node permission flags are unavailable, and requires the same permission support for CLI script workers on the supported Node 22+ baseline.
 - Starts script workers with a bounded V8 old-space limit. The default is `64` MB, tunable with `POSTMETER_SCRIPT_WORKER_MAX_OLD_SPACE_MB` or internal test options between `16` and `512` MB.
-- Runs scripts inside a Node `vm` context with renderer APIs unavailable and unsupported Node/network-like globals such as `require`, `process`, `fetch`, timers, `XMLHttpRequest`, `WebSocket`, and `Buffer` represented by explicit unsupported-API guards.
+- Hardens host-created script API objects, functions, arrays, caught errors, and promise-like async results so scripts cannot use constructor/prototype paths to reach worker host objects.
+- Runs scripts inside a Node `vm` context with renderer APIs unavailable and unsupported Node/network-like globals such as `require`, `process`, `fetch`, `setInterval`, `XMLHttpRequest`, `WebSocket`, and `Buffer` represented by explicit unsupported-API guards.
 - Disables dynamic string and WebAssembly code generation inside the script context.
 - Enforces a default synchronous timeout of `1000` ms and a max script length of `256 KiB`.
 - Terminates the child process if the parent safety timeout is exceeded.
 - Captures bounded console output in the script result instead of writing directly to the app console. Script results keep at most 100 captured log entries, and each captured line is capped at 4096 characters.
-- Supports synchronous `pm.test`.
+- Supports synchronous, callback-style async, and promise-returning `pm.test` callbacks in the isolated worker runtime.
 - Supports a practical `pm.expect` subset: equality, deep equality, string/array/object include/contain, array members, object keys, type checks, length, one-of, above/below/within, match, property, existence, null/empty/truthy, true, false, undefined, and negated equality/include/existence/member checks.
-- Supports `pm.environment`, `pm.collectionVariables`, request-local `pm.variables`, `pm.info` request metadata, request URL/header/body inspection, response status/header/body helpers, status-category response helpers, JSON-body response helpers, and `pm.response.to.have.status`.
-- Provides explicit unsupported-API errors for unsupported Postman sandbox APIs and unsupported globals including `pm.sendRequest`, `pm.vault`, `pm.cookies`, `pm.execution`, `pm.iterationData`, `pm.visualizer`, `fetch`, timers, `XMLHttpRequest`, `WebSocket`, `process`, `require`, and `Buffer`.
+- Supports `pm.environment`, `pm.collectionVariables`, workspace `pm.globals`, request-local `pm.variables`, `pm.iterationData`, `pm.info` request metadata, request URL/header/body inspection, validated pre-request request mutation helpers, response status/header/body helpers, status-category response helpers, JSON-body response helpers, and `pm.response.to.have.status`.
+- Supports brokered timers, brokered `pm.sendRequest`, bounded brokered `pm.execution.runRequest`, current-URL `pm.cookies`, and `pm.cookies.jar()` helpers in the isolated worker runtime. Script network requests and script cookie access are enabled by default for Postman import parity and can be disabled in workspace settings.
+- Supports bounded `pm.visualizer` capture with JSON-cloned data, a safe Handlebars-style subset, sanitized output, and sandboxed iframe rendering in the desktop UI.
+- Supports explicitly granted `pm.vault` access through the parent broker. Desktop vault values are stored outside workspace JSON in per-workspace encrypted vault files, using Electron `safeStorage` only when OS-backed encryption is available and not the Linux `basic_text` backend.
+- Supports `pm.require()` and sandbox `require()` for bundled allowlisted `crypto-js`, `lodash`, and `uuid` compatibility packages. The loader rejects Node built-ins, external packages, paths, URLs, and any package outside the allowlist.
+- Supports `pm.execution.setNextRequest` and `pm.execution.skipRequest` for collection-run control.
+- Persists script side effects through queued latest-workspace commits with workspace identity guards and per-key/per-cookie delta merges, so overlapping sends/runs do not overwrite unrelated newer workspace edits.
+- Provides explicit unsupported-API errors for remaining unsupported Postman sandbox APIs and unsupported globals including package-library entries outside the allowlist, `fetch`, `setInterval`, `XMLHttpRequest`, `WebSocket`, `process`, Node `require`, and `Buffer`.
+- The Postman/Newman-style fixture corpus in `test/fixtures/postman` runs through the normal Postman importer and collection runner, covering async ordering, nested `pm.sendRequest`, `pm.execution.runRequest`, `pm.visualizer`, brokered `pm.vault`, bundled package loading, iteration data, cookie scope, variable precedence, execution control, cancellation, skipped requests, and mixed `pm.test` pass/fail behavior.
+- `npm run sandbox:validate` runs the pinned Electron runtime, verifies Node permission enforcement for arbitrary filesystem reads and child-process spawning, checks the worker launch allowlist, verifies Linux OS-sandbox filesystem/network denial where applicable, and runs an adversarial script-boundary probe.
+- `npm run sandbox:validate:packaged` runs the same validation entrypoint through a built desktop executable, covering packaged path, ASAR behavior, and Linux OS-backend behavior.
 
 Limitations:
 
-- Async `pm.test` callbacks are rejected.
-- The child process and Node permission flags improve fault isolation, but this is still not a full OS sandbox with syscall policy.
+- Native Windows and macOS syscall-policy backends are not implemented yet; Linux has the `bubblewrap` OS isolation layer described above.
+- Load tests do not execute pre-request or test scripts; sandbox v1 keeps scripted load testing out of scope.
 
 ## CLI Runner
 
@@ -942,7 +964,7 @@ Node tests cover:
 - Assertion evaluation, collection-run sequencing, request-local variables, cookie jar propagation, JSON/XML/HTML/regex extracted-variable propagation, script-mutation propagation, stop-on-failure, isolated request script execution, Node permission worker flags, minimal worker environments, bounded worker heap settings, bounded script console capture, explicit unsupported script API errors, and collection-run CSV export.
 - CLI collection execution with passing/failing exit codes and JSON/CSV report output.
 - Release manifest generation, release artifact validation, release workflow metadata, CI workflow validation, and GitHub release update checks.
-- Workspace default creation, schema `2` through `10` migration, corrupt-file recovery, settings normalization, workspace-level load-test policy removal, native import, Postman folder/script import, and native/Postman/OpenAPI YAML format detection.
+- Workspace default creation, schema `2` through `11` migration, corrupt-file recovery, settings normalization, workspace-level load-test policy removal, native import, Postman folder/script import, and native/Postman/OpenAPI YAML format detection.
 - Electron UI workflow smoke coverage for create/edit/save/reload/send, context menus, pane resizing, collection variables, request variables, editable examples, cookie jar capture, environment variables, Help-menu prerelease setting persistence, Load Test panel controls, assertions, collection runner, runtime variable output, and runner export-control state.
 - Electron UI regression smoke coverage for toolbar dropdowns, Help-menu update state, import/export menu options/cancellation, invalid-request error rendering, XML/HTML response formatting, mocked OAuth flow completion/failure, cookie/example/request-variable editor creation, active-host cookie filtering, assertion-template rendering, runner pre-run export state, and no app-account/login language.
 - Electron UI OAuth smoke coverage for mocked loopback PKCE success, custom-scheme callback success, state-mismatch failure, token exchange failure, PKCE cancellation, device-code success, access denial, timeout, and cancellation.
@@ -959,7 +981,7 @@ Missing tests:
 - Execute and monitor packaged custom-scheme OAuth redirect validation on native Windows and macOS release runners.
 - Replace remaining complex payload-specific IPC shape validation with generated validators from shared schemas.
 - Add signing, notarization, installer execution validation, and update metadata on top of the current unsigned GitHub Releases workflow.
-- Harden request scripting with stronger OS-level sandboxing and broader Postman sandbox compatibility.
+- Add native Windows/macOS OS sandbox backends, decide whether Linux needs a maintained seccomp-BPF allowlist beyond `bubblewrap` namespaces, and broaden Postman sandbox compatibility only within the documented safe subset.
 - Add a more complete Postman variable-scope model and protocol profile behavior.
 - Deepen cookie-jar behavior toward browser parity for remaining edge cases and any source-format cookie metadata not yet represented by explicit fields or extension hints.
 - Extend local load-test governance only where it adds clear safety beyond current Load Test panel controls and global rate caps, such as run-budget presets or richer reporting around policy decisions.

@@ -56,7 +56,7 @@ test('accepts structurally valid IPC payloads', () => {
     folders: [{ id: 'f1', name: 'Folder', requests: [], folders: [] }]
   }));
   assert.doesNotThrow(() => assertWorkspacePayload({
-    schemaVersion: 10,
+    schemaVersion: 11,
     name: 'Workspace',
     settings: { appearance: { theme: 'dark' }, updates: { includePrereleases: true } },
     collections: [],
@@ -100,7 +100,7 @@ test('accepts structurally valid IPC payloads', () => {
       passed: true,
       assertionResults: [],
       preRequestScriptResult: { passed: true, tests: [], logs: [] },
-      testScriptResult: { passed: true, tests: [{ name: 'ok', passed: true }], logs: ['done'] },
+      testScriptResult: { passed: true, tests: [{ name: 'ok', passed: true }], logs: ['done'], visualizer: { html: '<h1>ok</h1>', template: '<h1>{{value}}</h1>' } },
       extractedVariables: [{ enabled: true, key: 'token', value: 'abc' }],
       localVariables: [{ enabled: true, key: 'local', value: 'value' }]
     }],
@@ -116,13 +116,13 @@ test('accepts structurally valid IPC payloads', () => {
     finalUrl: 'https://example.test',
     updatedCookies: [{ enabled: true, name: 'sid', value: 'secret', domain: 'example.test', path: '/', secure: true, httpOnly: true, sameSite: 'Lax', hostOnly: true }],
     preRequestScriptResult: { passed: true, tests: [], logs: [] },
-    testScriptResult: { passed: true, tests: [{ name: 'saved token', passed: true }], logs: ['done'] },
+    testScriptResult: { passed: true, tests: [{ name: 'saved token', passed: true }], logs: ['done'], visualizer: { html: '<h1>ok</h1>', template: '<h1>{{value}}</h1>' } },
     environment: { id: 'e1', name: 'Runtime', variables: [{ enabled: true, key: 'REFRESH_TOKEN', value: 'abc' }] },
     collectionVariables: [{ enabled: true, key: 'baseUrl', value: 'https://example.test' }],
     localVariables: [{ enabled: true, key: 'local', value: 'value' }]
   }));
   assert.doesNotThrow(() => assertWorkspaceLoadResultPayload({
-    workspace: { schemaVersion: 10, name: 'Workspace', settings: { updates: { includePrereleases: false } }, collections: [], environments: [], cookies: [], history: [] },
+    workspace: { schemaVersion: 11, name: 'Workspace', settings: { updates: { includePrereleases: false } }, collections: [], environments: [], cookies: [], history: [] },
     path: '/tmp/workspace.json',
     activeWorkspaceId: 'workspace.json',
     workspaces: [{ id: 'workspace.json', name: 'Workspace', path: '/tmp/workspace.json', current: true, deletable: false }]
@@ -191,7 +191,7 @@ test('accepts structurally valid IPC payloads', () => {
   assert.doesNotThrow(() => assertFileOperationResultPayload({
     cancelled: false,
     backupPath: '/tmp/workspace.backup',
-    workspace: { schemaVersion: 10, settings: { updates: { includePrereleases: false } }, collections: [], environments: [], cookies: [], history: [] }
+    workspace: { schemaVersion: 11, settings: { updates: { includePrereleases: false } }, collections: [], environments: [], cookies: [], history: [] }
   }));
   assert.doesNotThrow(() => assertFileOperationResultPayload({
     cancelled: false,
@@ -280,6 +280,7 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: '', durationMillis: 'slow', responseBytes: 0, finalUrl: '', headers: {} }), /response.durationMillis must be a finite number/);
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: 42, durationMillis: 1, responseBytes: 2, finalUrl: 'https://example.test', headers: {} }), /response.body must be a string/);
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: '{}', durationMillis: 1, responseBytes: 2, finalUrl: 'https://example.test', headers: {}, testScriptResult: { tests: [{ passed: 'yes' }] } }), /response.testScriptResult.tests\[0\].passed must be a boolean/);
+  assert.throws(() => assertResponsePayload({ statusCode: 200, body: '{}', durationMillis: 1, responseBytes: 2, finalUrl: 'https://example.test', headers: {}, testScriptResult: { visualizer: { html: 42 } } }), /response.testScriptResult.visualizer.html must be a string/);
   assert.throws(() => assertWorkspaceRequestSavePayload({ requestId: 'r1', request: { method: 'GET', queryParams: [], headers: [], bodyType: 'NONE' } }), /payload.collectionId must be a string/);
   assert.throws(() => assertWorkspaceRequestSavePayload({ collectionId: 'c1', requestId: 'r1', request: { method: 'GET', queryParams: [], headers: [], bodyType: 'NONE' }, folderPath: 'bad' }), /payload.folderPath must be an array/);
   assert.throws(() => assertWorkspaceEnvironmentSavePayload({ environment: { id: 'e1', name: 'Env', variables: [] } }), /payload.environmentId must be a string/);
@@ -312,7 +313,7 @@ test('request and workspace IPC validators follow shared entity schema arrays', 
   }
 
   const workspaceBase = {
-    schemaVersion: 10,
+    schemaVersion: 11,
     settings: { updates: { includePrereleases: false } },
     collections: [],
     environments: [],

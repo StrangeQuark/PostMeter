@@ -1,0 +1,68 @@
+{
+  "name": "PostMeter Sandbox v1 Newman Corpus",
+  "summary": {
+    "passed": false,
+    "cancelled": false,
+    "totalRequests": 10,
+    "passedRequests": 9,
+    "failedRequests": 1
+  },
+  "sentRequests": [
+    "01 Setup And Variable Precedence",
+    "02 Async Ordering And Nested SendRequest",
+    "03 Iteration Data And Cookie Scope",
+    "03a Bundled Package Loading",
+    "03b Execution RunRequest",
+    "03c RunRequest Target",
+    "04 Execution Jump Start",
+    "07 After Skip",
+    "07b Vault Secrets",
+    "08 Mixed Script Failure"
+  ],
+  "notSentRequests": [
+    "05 Skipped By SetNextRequest",
+    "06 Skip By Prerequest"
+  ],
+  "resultRequests": [
+    "01 Setup And Variable Precedence",
+    "02 Async Ordering And Nested SendRequest",
+    "03 Iteration Data And Cookie Scope",
+    "03a Bundled Package Loading",
+    "03b Execution RunRequest",
+    "04 Execution Jump Start",
+    "06 Skip By Prerequest",
+    "07 After Skip",
+    "07b Vault Secrets",
+    "08 Mixed Script Failure"
+  ],
+  "brokeredSendRequestUrls": [
+    "https://api.example.test/aux/one",
+    "https://api.example.test/aux/two?source=one"
+  ],
+  "environment": {
+    "setupComplete": "yes",
+    "asyncOrder": "sync>timer>one>one",
+    "packageLoading": "yes",
+    "runRequestCaller": "yes",
+    "runRequestTarget": "yes",
+    "skipRequestPreRan": "yes",
+    "afterSkip": "yes",
+    "vaultComplete": "yes",
+    "failureSideEffect": "committed",
+    "shared": "environment-from-pre"
+  },
+  "collectionVariables": {
+    "collectionPreSeen": "yes",
+    "folderPreSeen": "yes",
+    "collectionOnly": "collection-only"
+  },
+  "cookies": {
+    "scripted": "from-corpus",
+    "secret": "secret-cookie",
+    "visible": null
+  },
+  "failedTest": {
+    "requestName": "08 Mixed Script Failure",
+    "testName": "intentional corpus failure"
+  }
+}

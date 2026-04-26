@@ -6,6 +6,8 @@ test('workspace IPC registers stable workspace, collection, and example channels
   const handlers = new Map();
   const syncHandlers = new Map();
   let describeCurrentCalls = 0;
+  let renamedVaultStore = null;
+  let deletedVaultStore = null;
   const workspaceStore = {
     describeCurrent: async (workspace, extras = {}) => {
       describeCurrentCalls += 1;
@@ -26,27 +28,29 @@ test('workspace IPC registers stable workspace, collection, and example channels
     getWorkspacePath: () => '/tmp/Local Workspace.json',
     createWorkspace: async () => 'Workspace.json',
     renameWorkspace: async () => ({
-      workspace: { schemaVersion: 10, collections: [], environments: [], history: [], cookies: [], settings: { updates: { includePrereleases: false } } },
+      workspace: { schemaVersion: 11, collections: [], environments: [], history: [], cookies: [], settings: { updates: { includePrereleases: false } } },
       path: '/tmp/Renamed Workspace.json',
       activeWorkspaceId: 'Renamed Workspace.json',
+      renamedWorkspaceId: 'Renamed Workspace.json',
       workspaces: [
         { id: 'Local Workspace.json', name: 'Local Workspace', path: '/tmp/Local Workspace.json', current: false, deletable: true },
         { id: 'Renamed Workspace.json', name: 'Renamed Workspace', path: '/tmp/Renamed Workspace.json', current: true, deletable: true }
       ]
     }),
     switchWorkspace: async () => ({
-      workspace: { schemaVersion: 10, collections: [], environments: [], history: [], cookies: [], settings: { updates: { includePrereleases: false } } },
+      workspace: { schemaVersion: 11, collections: [], environments: [], history: [], cookies: [], settings: { updates: { includePrereleases: false } } },
       path: '/tmp/Local Workspace.json',
       activeWorkspaceId: 'Local Workspace.json',
       workspaces: [{ id: 'Local Workspace.json', name: 'Local Workspace', path: '/tmp/Local Workspace.json', current: true, deletable: false }]
     }),
     deleteWorkspace: async () => ({
-      workspace: { schemaVersion: 10, collections: [], environments: [], history: [], cookies: [], settings: { updates: { includePrereleases: false } } },
+      workspace: { schemaVersion: 11, collections: [], environments: [], history: [], cookies: [], settings: { updates: { includePrereleases: false } } },
       path: '/tmp/Local Workspace.json',
       activeWorkspaceId: 'Local Workspace.json',
+      deletedWorkspaceId: 'Renamed Workspace.json',
       workspaces: [{ id: 'Local Workspace.json', name: 'Local Workspace', path: '/tmp/Local Workspace.json', current: true, deletable: false }]
     }),
-    importWorkspace: async () => ({ schemaVersion: 10, collections: [], environments: [], history: [], cookies: [], settings: { updates: { includePrereleases: false } } }),
+    importWorkspace: async () => ({ schemaVersion: 11, collections: [], environments: [], history: [], cookies: [], settings: { updates: { includePrereleases: false } } }),
     exportWorkspace: async () => '/tmp/export.json',
     importCollection: async () => ({ id: 'c1', name: 'Collection', requests: [], folders: [] }),
     exportCollection: async () => '/tmp/collection.json',
@@ -59,7 +63,7 @@ test('workspace IPC registers stable workspace, collection, and example channels
     },
     fileOperationResult: (result) => result,
     getMainWindow: () => null,
-    getWorkspace: () => ({ schemaVersion: 10, collections: [], environments: [], history: [], cookies: [], settings: { updates: { includePrereleases: false } } }),
+    getWorkspace: () => ({ schemaVersion: 11, collections: [], environments: [], history: [], cookies: [], settings: { updates: { includePrereleases: false } } }),
     getWorkspaceStore: () => workspaceStore,
     ipcMain: {
       handle(channel, handler) {
@@ -70,9 +74,15 @@ test('workspace IPC registers stable workspace, collection, and example channels
       }
     },
     refreshApplicationMenu: () => {},
+    renameVaultStore: async (previousId, nextId) => {
+      renamedVaultStore = { previousId, nextId };
+    },
     saveWorkspace: async (workspace) => workspace,
     saveWorkspaceSync: (workspace) => workspace,
-    setWorkspace: () => {}
+    setWorkspace: () => {},
+    deleteVaultStore: async (workspaceId) => {
+      deletedVaultStore = workspaceId;
+    }
   });
 
   assert.deepEqual([...handlers.keys()].sort(), [
@@ -92,6 +102,10 @@ test('workspace IPC registers stable workspace, collection, and example channels
     'workspace:switch'
   ]);
   assert.deepEqual([...syncHandlers.keys()].sort(), ['workspace:saveSync']);
+  await handlers.get('workspace:rename')({}, 'Local Workspace.json', 'Renamed Workspace');
+  assert.deepEqual(renamedVaultStore, { previousId: 'Local Workspace.json', nextId: 'Renamed Workspace.json' });
+  await handlers.get('workspace:delete')({}, 'Renamed Workspace.json');
+  assert.equal(deletedVaultStore, 'Renamed Workspace.json');
   assert.deepEqual(await handlers.get('workspace:import')(), { cancelled: true });
   assert.deepEqual(await handlers.get('collection:import')(), { cancelled: true });
 });
@@ -100,7 +114,7 @@ test('workspace IPC load falls back to the workspace store when no cached worksp
   const handlers = new Map();
   const syncHandlers = new Map();
   const loadedWorkspace = {
-    schemaVersion: 10,
+    schemaVersion: 11,
     collections: [],
     environments: [],
     history: [],
@@ -170,7 +184,7 @@ test('workspace IPC exports a selected non-current workspace by id', async () =>
     },
     fileOperationResult: (result) => result,
     getMainWindow: () => null,
-    getWorkspace: () => ({ schemaVersion: 10, collections: [], environments: [], history: [], cookies: [], settings: { updates: { includePrereleases: false } } }),
+    getWorkspace: () => ({ schemaVersion: 11, collections: [], environments: [], history: [], cookies: [], settings: { updates: { includePrereleases: false } } }),
     getWorkspaceStore: () => ({
       describeCurrent: async (workspace) => ({ workspace, path: '/tmp/Local Workspace.json', activeWorkspaceId: 'Local Workspace.json', workspaces: [] }),
       exportWorkspace: async () => '/tmp/current-export.json',
@@ -216,7 +230,7 @@ test('workspace IPC suggests a collection-name json filename for native collecti
     },
     fileOperationResult: (result) => result,
     getMainWindow: () => null,
-    getWorkspace: () => ({ schemaVersion: 10, collections: [], environments: [], history: [], cookies: [], settings: { updates: { includePrereleases: false } } }),
+    getWorkspace: () => ({ schemaVersion: 11, collections: [], environments: [], history: [], cookies: [], settings: { updates: { includePrereleases: false } } }),
     getWorkspaceStore: () => ({
       describeCurrent: async (workspace) => ({ workspace, path: '/tmp/Local Workspace.json', activeWorkspaceId: 'Local Workspace.json', workspaces: [] }),
       exportCollection: async (collection, _exportPath, options = {}) => {
@@ -263,7 +277,7 @@ test('workspace IPC imports a workspace as an additional managed workspace witho
   let setWorkspaceCalls = 0;
   let refreshCalls = 0;
   const currentWorkspace = {
-    schemaVersion: 10,
+    schemaVersion: 11,
     collections: [],
     environments: [],
     history: [],
@@ -338,7 +352,7 @@ test('workspace IPC saves only the selected request payload through targeted req
   const handlers = new Map();
   const syncHandlers = new Map();
   const currentWorkspace = {
-    schemaVersion: 10,
+    schemaVersion: 11,
     collections: [],
     environments: [],
     history: [],
@@ -431,7 +445,7 @@ test('workspace IPC saves only the selected environment payload through targeted
   const handlers = new Map();
   const syncHandlers = new Map();
   const currentWorkspace = {
-    schemaVersion: 10,
+    schemaVersion: 11,
     collections: [],
     environments: [],
     history: [],
@@ -491,7 +505,7 @@ test('workspace IPC saves only workspace settings through targeted settings save
   const handlers = new Map();
   const syncHandlers = new Map();
   const currentWorkspace = {
-    schemaVersion: 10,
+    schemaVersion: 11,
     collections: [{ id: 'collection-1', name: 'Collection', requests: [], folders: [] }],
     environments: [{ id: 'environment-1', name: 'Environment', variables: [] }],
     history: [],
@@ -562,7 +576,7 @@ test('workspace IPC synchronously saves workspace state for shutdown persistence
     },
     fileOperationResult: (result) => result,
     getMainWindow: () => null,
-    getWorkspace: () => ({ schemaVersion: 10, collections: [], environments: [], history: [], cookies: [], settings: { updates: { includePrereleases: false } } }),
+    getWorkspace: () => ({ schemaVersion: 11, collections: [], environments: [], history: [], cookies: [], settings: { updates: { includePrereleases: false } } }),
     getWorkspaceStore: () => ({
       describeCurrent: async (workspace) => ({ workspace, path: '/tmp/Local Workspace.json', activeWorkspaceId: 'Local Workspace.json', workspaces: [] })
     }),
@@ -589,7 +603,7 @@ test('workspace IPC synchronously saves workspace state for shutdown persistence
 
   const event = { returnValue: undefined };
   syncHandlers.get('workspace:saveSync')(event, {
-    schemaVersion: 10,
+    schemaVersion: 11,
     collections: [{ id: 'collection-1', name: 'Unsaved Collection', requests: [], folders: [] }],
     environments: [],
     history: [],

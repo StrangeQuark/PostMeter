@@ -86,6 +86,11 @@ const FIELD_SCHEMAS = {
   appearance: {
     theme: { type: 'string', limit: 'tiny', enum: 'themeValues', optional: true }
   },
+  sandboxSettings: {
+    sendRequest: { type: 'boolean', optional: true },
+    cookies: { type: 'boolean', optional: true },
+    vault: { type: 'boolean', optional: true }
+  },
   keyValue: {
     enabled: { type: 'boolean', optional: true },
     key: { type: 'string', limit: 'key', optional: true },
@@ -234,6 +239,10 @@ const FIELD_SCHEMAS = {
     passed: { type: 'boolean', optional: true },
     error: { type: 'string', limit: 'value', optional: true }
   },
+  scriptVisualizer: {
+    html: { type: 'string', limit: 'body', optional: true },
+    template: { type: 'string', limit: 'body', optional: true }
+  },
   updateCheckOptions: {
     includePrereleases: { type: 'boolean', optional: true }
   },
@@ -372,8 +381,8 @@ const payloadSchemas = {
       arrays: ['queryParams', 'headers', 'assertions', 'variables', 'examples'],
       nested: ['auth', 'scripts', 'cookieJar', 'loadTestPolicy']
     },
-    workspace: {
-      arrays: ['collections', 'environments', 'cookies', 'history'],
+  workspace: {
+      arrays: ['collections', 'environments', 'globals', 'cookies', 'history'],
       nested: ['settings']
     },
     response: {

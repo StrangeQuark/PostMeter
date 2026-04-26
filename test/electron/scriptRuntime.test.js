@@ -82,7 +82,7 @@ test('supports request-local pm.variables overrides', () => {
 test('blocks Node access and dynamic code generation', () => {
   const requireResult = runPostmanScript('require("node:fs");');
   assert.equal(requireResult.passed, false);
-  assert.match(requireResult.error, /require is not supported/);
+  assert.match(requireResult.error, /only supports bundled sandbox packages/);
 
   const functionResult = runPostmanScript('Function("return 1")();');
   assert.equal(functionResult.passed, false);
@@ -93,6 +93,30 @@ test('blocks Node access and dynamic code generation', () => {
   assert.match(fetchResult.error, /fetch is not supported/);
 });
 
+test('supports bundled Postman-style package loading without Node module access', () => {
+  const result = runPostmanScript(`
+    const Crypto = pm.require('crypto-js');
+    const lodash = require('lodash');
+    const uuid = pm.require('uuid');
+    pm.test('bundled packages', function () {
+      pm.expect(Crypto.SHA256('abc').toString(Crypto.enc.Hex)).to.equal('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+      pm.expect(Crypto.enc.Base64.stringify(Crypto.enc.Utf8.parse('hello'))).to.equal('aGVsbG8=');
+      pm.expect(lodash.get({ nested: { value: 42 } }, 'nested.value')).to.equal(42);
+      pm.expect(lodash.map([{ id: 'a' }, { id: 'b' }], 'id').join(',')).to.equal('a,b');
+      const assigned = lodash.assign(null, { ok: true });
+      const created = {};
+      lodash.set(created, 'nested.value', true);
+      pm.expect(uuid.v4()).to.match(/^[0-9a-f-]{36}$/);
+      pm.expect(Crypto.SHA256.constructor).to.be.undefined;
+      pm.expect(lodash.map.constructor).to.be.undefined;
+      pm.expect(assigned.constructor).to.be.undefined;
+      pm.expect(created.nested.constructor).to.be.undefined;
+    });
+  `);
+
+  assert.equal(result.passed, true);
+});
+
 test('reports explicit errors for unsupported Postman sandbox APIs', () => {
   const sendRequestResult = runPostmanScript('pm.sendRequest("https://example.test");');
   assert.equal(sendRequestResult.passed, false);
@@ -101,10 +125,34 @@ test('reports explicit errors for unsupported Postman sandbox APIs', () => {
   const vaultResult = runPostmanScript('pm.vault.get("secret");');
   assert.equal(vaultResult.passed, false);
   assert.match(vaultResult.error, /pm\.vault\.get is not supported by the PostMeter script runtime yet/);
+});
 
-  const visualizerResult = runPostmanScript('pm.visualizer.set("<p>{{x}}</p>", { x: 1 });');
-  assert.equal(visualizerResult.passed, false);
-  assert.match(visualizerResult.error, /pm\.visualizer\.set is not supported by the PostMeter script runtime yet/);
+test('captures bounded pm.visualizer output', () => {
+  const result = runPostmanScript(`
+    pm.visualizer.set('<main onclick="bad()"><h1>{{title}}</h1><div>{{{body}}}</div><ol>{{#each rows}}<li data-index="{{@index}}">{{name}}:{{this.status}}</li>{{/each}}</ol><script>bad()</script></main>', {
+      title: '<Widget>',
+      body: '<strong>ready</strong>',
+      rows: [
+        { name: '<alpha>', status: 'ready' },
+        { name: 'beta', status: 'ok' }
+      ]
+    });
+  `);
+
+  assert.equal(result.passed, true);
+  assert.equal(result.visualizer.html, '<main><h1>&lt;Widget&gt;</h1><div><strong>ready</strong></div><ol><li data-index="0">&lt;alpha&gt;:ready</li><li data-index="1">beta:ok</li></ol></main>');
+});
+
+test('supports primitive and object each blocks in pm.visualizer templates', () => {
+  const result = runPostmanScript(`
+    pm.visualizer.set('<ul>{{#each names}}<li>{{@index}}={{this}}</li>{{/each}}</ul><dl>{{#each totals}}<dt>{{@key}}</dt><dd>{{this}}</dd>{{/each}}</dl>', {
+      names: ['red', '<blue>'],
+      totals: { pass: 2, fail: 0 }
+    });
+  `);
+
+  assert.equal(result.passed, true);
+  assert.equal(result.visualizer.html, '<ul><li>0=red</li><li>1=&lt;blue&gt;</li></ul><dl><dt>pass</dt><dd>2</dd><dt>fail</dt><dd>0</dd></dl>');
 });
 
 test('times out runaway scripts', () => {

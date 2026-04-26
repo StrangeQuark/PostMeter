@@ -1,6 +1,9 @@
 const { loadTestResultToCsv, runLoadTest } = require('../src/core/loadTestRunner');
 const { collectionRunResultToCsv, runCollection } = require('../src/core/collectionRunner');
-const { applyCollectionRunMutationsToWorkspace } = require('./workspaceMutations');
+const {
+  applyCollectionRunMutationsToWorkspace,
+  mergeCookieJarByDelta
+} = require('./workspaceMutations');
 const {
   assertCollectionPayload,
   assertCollectionRunResultPayload,
@@ -21,7 +24,15 @@ function registerRuntimeIpc(options = {}) {
     fileOperationResult,
     getMainWindow = () => undefined,
     getWorkspace,
+    getWorkspaceId = () => '',
+    getVaultStore = () => null,
     ipcMain,
+    mutateWorkspace = async (mutator) => {
+      const nextWorkspace = await mutator(getWorkspace());
+      const savedWorkspace = await saveWorkspace(nextWorkspace);
+      setWorkspace(savedWorkspace);
+      return savedWorkspace;
+    },
     saveWorkspace,
     setWorkspace
   } = options;
@@ -35,6 +46,8 @@ function registerRuntimeIpc(options = {}) {
     assertLoadConfigPayload(config);
     const abortController = new AbortController();
     const workspace = getWorkspace();
+    const workspaceId = getWorkspaceId();
+    const baseCookies = cloneJson(workspace.cookies || []);
     activeLoadTests.set(id, abortController);
     try {
       const result = await runLoadTest(request, environment, config, {
@@ -46,8 +59,10 @@ function registerRuntimeIpc(options = {}) {
         }
       });
       if (Array.isArray(result.cookies)) {
-        workspace.cookies = result.cookies;
-        setWorkspace(await saveWorkspace(workspace));
+        await mutateWorkspace(async (latestWorkspace) => {
+          latestWorkspace.cookies = mergeCookieJarByDelta(latestWorkspace.cookies || [], baseCookies, result.cookies);
+          return latestWorkspace;
+        }, { workspaceId });
       }
       assertLoadResultPayload(result);
       return result;
@@ -72,13 +87,22 @@ function registerRuntimeIpc(options = {}) {
     assertOptionalEnvironmentPayload(environment);
     assertRunnerConfigPayload(config);
     const abortController = new AbortController();
+    const workspaceId = getWorkspaceId();
     activeCollectionRuns.set(id, abortController);
     try {
       const workspace = getWorkspace();
+      const baseEnvironment = cloneJson(environment);
+      const baseCollectionVariables = cloneJson(collection?.variables || []);
+      const baseGlobals = cloneJson(workspace.globals || []);
+      const baseCookies = cloneJson(workspace.cookies || []);
+      const baseLocalVariablesByRequestId = requestLocalVariablesById(collection);
       const result = await runCollection(collection, environment, {
         abortController,
         signal: abortController.signal,
         cookieJar: workspace.cookies || [],
+        globals: workspace.globals || [],
+        trustedCapabilities: workspace.settings?.sandbox?.trustedCapabilities || {},
+        vault: getVaultStore(workspaceId),
         stopOnFailure: config.stopOnFailure === true,
         onProgress: (progress) => {
           assertRunnerProgressPayload(progress);
@@ -86,10 +110,27 @@ function registerRuntimeIpc(options = {}) {
         }
       });
       if (Array.isArray(result.cookies)) {
-        workspace.cookies = result.cookies;
+        await mutateWorkspace(async (latestWorkspace) => {
+          latestWorkspace.cookies = mergeCookieJarByDelta(latestWorkspace.cookies || [], baseCookies, result.cookies);
+          applyCollectionRunMutationsToWorkspace(latestWorkspace, result, {
+            baseEnvironment,
+            baseCollectionVariables,
+            baseGlobals,
+            baseLocalVariablesByRequestId
+          });
+          return latestWorkspace;
+        }, { workspaceId });
+      } else {
+        await mutateWorkspace(async (latestWorkspace) => {
+          applyCollectionRunMutationsToWorkspace(latestWorkspace, result, {
+            baseEnvironment,
+            baseCollectionVariables,
+            baseGlobals,
+            baseLocalVariablesByRequestId
+          });
+          return latestWorkspace;
+        }, { workspaceId });
       }
-      applyCollectionRunMutationsToWorkspace(workspace, result);
-      setWorkspace(await saveWorkspace(workspace));
       assertCollectionRunResultPayload(result);
       return result;
     } finally {
@@ -146,6 +187,29 @@ function registerRuntimeIpc(options = {}) {
     await require('node:fs/promises').writeFile(saveResult.filePath, content);
     return fileOperationResult({ cancelled: false, path: saveResult.filePath });
   });
+}
+
+function requestLocalVariablesById(collection) {
+  const byId = new Map();
+  const visit = (requests = [], folders = []) => {
+    for (const request of requests || []) {
+      if (request?.id) {
+        byId.set(request.id, cloneJson(request.variables || []));
+      }
+    }
+    for (const folder of folders || []) {
+      visit(folder.requests || [], folder.folders || []);
+    }
+  };
+  visit(collection?.requests || [], collection?.folders || []);
+  return byId;
+}
+
+function cloneJson(value) {
+  if (value == null) {
+    return value;
+  }
+  return JSON.parse(JSON.stringify(value));
 }
 
 module.exports = {

@@ -55,6 +55,11 @@ test('validates request URLs without requiring an allowlist', () => {
   const config = validateLoadConfig({ concurrency: 2, totalRequests: 5 }, request, null);
   assert.equal(config.totalRequests, 5);
   assert.equal(config.policyDecisions.length, 0);
+  const scriptedConfig = validateLoadConfig({ concurrency: 2, totalRequests: 5 }, {
+    ...request,
+    scripts: { preRequest: "pm.environment.set('x', 'y');", tests: "pm.test('ok', function () {});" }
+  }, null);
+  assert.ok(scriptedConfig.policyDecisions.some((decision) => /skip request pre-request and test scripts/i.test(decision.message)));
   assert.throws(
     () => validateLoadConfig({ concurrency: 2, totalRequests: 5 }, { ...request, url: 'not-a-url' }, null),
     /valid URI/

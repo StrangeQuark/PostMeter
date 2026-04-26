@@ -118,6 +118,7 @@ POSTMETER_DATA_PATH=/tmp/postmeter-workspace.json npm start
 | [TECH_SPECS.MD](TECH_SPECS.MD) | Detailed product scope, persistence, IPC, schema, and implementation reference. |
 | [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) | Format, scripting, and load-testing compatibility matrix. |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Renderer, Electron, and core ownership boundaries. |
+| [docs/SANDBOX_CONTRACT.md](docs/SANDBOX_CONTRACT.md) | Sandbox contract for script security and compatibility. |
 | [docs/OAUTH_PROVIDER_CERTIFICATION.md](docs/OAUTH_PROVIDER_CERTIFICATION.md) | Manual outbound OAuth provider certification plan. |
 | [NEXT_STEPS.MD](NEXT_STEPS.MD) | Backlog, readiness gaps, and next-iteration priorities. |
 
@@ -133,6 +134,6 @@ POSTMETER_UPDATE_URL=https://api.github.com/repos/OWNER/REPO/releases/latest npm
 
 - Renderer `nodeIntegration` is disabled, `contextIsolation` is enabled, and the renderer is sandboxed.
 - The renderer talks to core logic only through explicit preload IPC bindings.
-- Request scripts run in constrained child processes with timeouts and bounded resources, but this is not a full OS sandbox.
-- Workspace data is stored as plain JSON without local encryption or redacted export modes.
+- Request scripts run in constrained child processes with brokered privileged APIs, hardened script bridges, fail-closed Node permission flags in production runtimes, Linux `bubblewrap` OS isolation when available/required, timeouts, and bounded resources. Native Windows/macOS OS sandbox backends remain future platform work.
+- Workspace data is stored as plain JSON without local encryption or redacted export modes. Script vault secrets are stored separately in encrypted per-workspace vault files when OS-backed desktop encryption is available.
 - Release builds are currently unsigned. Full security and production-readiness detail lives in [TECH_SPECS.MD](TECH_SPECS.MD) and [NEXT_STEPS.MD](NEXT_STEPS.MD).

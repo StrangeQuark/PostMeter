@@ -12,7 +12,7 @@ const {
   normalizeRequestLoadPolicy: normalizeRequestLoadTestPolicy
 } = require('./loadPolicyModel');
 
-const CURRENT_SCHEMA_VERSION = 10;
+const CURRENT_SCHEMA_VERSION = 11;
 const MIN_SUPPORTED_SCHEMA_VERSION = 1;
 const SUPPORTED_METHODS = new Set(HTTP_METHODS);
 const BODY_METHODS = new Set(BODY_METHOD_VALUES);
@@ -88,12 +88,13 @@ function historyEntry({ timestamp, method, url, statusCode, durationMillis } = {
   };
 }
 
-function workspaceModel({ schemaVersion, collections, environments, history, settings, cookies } = {}) {
+function workspaceModel({ schemaVersion, collections, environments, globals, history, settings, cookies } = {}) {
   return {
     schemaVersion: schemaVersion || CURRENT_SCHEMA_VERSION,
     settings: normalizeSettings(settings),
     collections: Array.isArray(collections) ? collections.map(collectionModel) : [],
     environments: Array.isArray(environments) ? environments.map(environmentModel) : [],
+    globals: normalizePairs(globals),
     cookies: normalizeCookies(cookies),
     history: Array.isArray(history) ? history.map(historyEntry) : []
   };
@@ -103,6 +104,13 @@ function normalizeSettings(settings) {
   return {
     appearance: {
       theme: normalizeTheme(settings?.appearance?.theme)
+    },
+    sandbox: {
+      trustedCapabilities: {
+        sendRequest: settings?.sandbox?.trustedCapabilities?.sendRequest !== false,
+        cookies: settings?.sandbox?.trustedCapabilities?.cookies !== false,
+        vault: settings?.sandbox?.trustedCapabilities?.vault === true
+      }
     },
     updates: {
       includePrereleases: settings?.updates?.includePrereleases === true
@@ -210,6 +218,7 @@ function defaultWorkspace() {
     settings: normalizeSettings(),
     collections: [],
     environments: [],
+    globals: [],
     cookies: [],
     history: []
   });

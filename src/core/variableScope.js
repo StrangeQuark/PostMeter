@@ -12,10 +12,12 @@ function cloneVariables(variables) {
   return Array.isArray(variables) ? variables.map((variable) => ({ ...variable })) : [];
 }
 
-function runtimeEnvironment(collectionVariables = [], environment = null, localVariables = []) {
+function runtimeEnvironment(collectionVariables = [], environment = null, localVariables = [], options = {}) {
   const merged = [];
+  mergeVariables(merged, options.globals || [], false);
   mergeVariables(merged, collectionVariables, false);
   mergeVariables(merged, environment?.variables || [], true);
+  mergeVariables(merged, options.iterationData || [], true);
   mergeVariables(merged, localVariables || [], true);
   return {
     id: environment?.id || 'runtime',
@@ -25,6 +27,9 @@ function runtimeEnvironment(collectionVariables = [], environment = null, localV
 }
 
 function mergeVariables(target, source, override) {
+  if (!Array.isArray(source)) {
+    return;
+  }
   for (const variable of source || []) {
     if (!variable || variable.enabled === false || !String(variable.key || '').trim()) {
       continue;
