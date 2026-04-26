@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; frame-src 'self' about: data:; child-src 'self' about: data:; connect-src 'none';">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>PostMeter</title>
   <link rel="stylesheet" href="theme.css">
@@ -440,6 +440,23 @@
           </div>
         </div>
         <div id="workspaceSummary" class="workspace-summary workspace-main-summary"></div>
+        <div class="workspace-sandbox-settings">
+          <div class="workspace-sandbox-note">
+            Enabled for Postman import compatibility. Scripts can read sandbox-visible variables, tokens, and cookies, then send them to broker-approved HTTP(S) endpoints.
+          </div>
+          <label class="checkbox-line">
+            <input id="trustedScriptSendRequestInput" type="checkbox">
+            <span>Script network requests</span>
+          </label>
+          <label class="checkbox-line">
+            <input id="trustedScriptCookiesInput" type="checkbox">
+            <span>Script cookie access</span>
+          </label>
+          <label class="checkbox-line">
+            <input id="trustedScriptVaultInput" type="checkbox">
+            <span>Script vault access</span>
+          </label>
+        </div>
       </section>
 
       <section id="workspaceEmptyPanel" class="panel request-empty-panel workspace-empty-panel" hidden>
@@ -456,6 +473,7 @@
       <section class="results">
         <div class="tabs" data-tab-group="results">
           <button class="tab active" data-tab-group="results" data-tab="response">Response</button>
+          <button class="tab" data-tab-group="results" data-tab="visualizer">Visualizer</button>
           <button class="tab" data-tab-group="results" data-tab="load">Load Test</button>
           <button class="tab" data-tab-group="results" data-tab="runner">Runner</button>
         </div>
@@ -472,6 +490,10 @@
             <div id="responsePaneResize" class="splitter vertical" role="separator" aria-orientation="vertical" tabindex="0"></div>
             <textarea id="responseHeaders" readonly spellcheck="false"></textarea>
           </div>
+        </div>
+
+        <div id="visualizerTab" class="tab-panel">
+          <iframe id="visualizerFrame" class="visualizer-frame" sandbox="" title="Response visualizer"></iframe>
         </div>
 
         <div id="loadTab" class="tab-panel">

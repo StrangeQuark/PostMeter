@@ -35,10 +35,22 @@ function registerWorkspaceIpc(options = {}) {
     getWorkspace,
     getWorkspaceStore,
     ipcMain,
+    mutateWorkspace = async (mutator) => {
+      const nextWorkspace = await mutator(getWorkspace());
+      if (!nextWorkspace) {
+        return getWorkspace();
+      }
+      const workspace = await saveWorkspace(nextWorkspace);
+      setWorkspace(workspace);
+      return workspace;
+    },
+    queueWorkspaceOperation = async (operation) => operation(),
     refreshApplicationMenu,
+    renameVaultStore = async () => {},
     saveWorkspace,
     saveWorkspaceSync,
-    setWorkspace
+    setWorkspace,
+    deleteVaultStore = async () => {}
   } = options;
 
   ipcMain.handle('workspace:load', async () => {
@@ -55,8 +67,7 @@ function registerWorkspaceIpc(options = {}) {
 
   ipcMain.handle('workspace:save', async (_event, nextWorkspace) => {
     assertWorkspacePayload(nextWorkspace);
-    const workspace = await saveWorkspace(nextWorkspace);
-    setWorkspace(workspace);
+    const workspace = await mutateWorkspace(async () => nextWorkspace);
     refreshApplicationMenu();
     assertWorkspaceLoadResultPayload(await getWorkspaceStore().describeCurrent(workspace));
     return workspace;
@@ -64,9 +75,7 @@ function registerWorkspaceIpc(options = {}) {
 
   ipcMain.handle('workspace:saveRequest', async (_event, payload) => {
     assertWorkspaceRequestSavePayload(payload);
-    const nextWorkspace = applyRequestSaveToWorkspace(getWorkspace(), payload);
-    const workspace = await saveWorkspace(nextWorkspace);
-    setWorkspace(workspace);
+    const workspace = await mutateWorkspace(async (currentWorkspace) => applyRequestSaveToWorkspace(currentWorkspace, payload));
     refreshApplicationMenu();
     const requestContext = findWorkspaceRequestContext(workspace, payload.requestId);
     const result = {
@@ -84,9 +93,7 @@ function registerWorkspaceIpc(options = {}) {
 
   ipcMain.handle('workspace:saveEnvironment', async (_event, payload) => {
     assertWorkspaceEnvironmentSavePayload(payload);
-    const nextWorkspace = applyEnvironmentSaveToWorkspace(getWorkspace(), payload);
-    const workspace = await saveWorkspace(nextWorkspace);
-    setWorkspace(workspace);
+    const workspace = await mutateWorkspace(async (currentWorkspace) => applyEnvironmentSaveToWorkspace(currentWorkspace, payload));
     refreshApplicationMenu();
     const environment = (workspace.environments || []).find((candidate) => candidate.id === payload.environmentId) || payload.environment;
     const result = { environment };
@@ -96,9 +103,7 @@ function registerWorkspaceIpc(options = {}) {
 
   ipcMain.handle('workspace:saveSettings', async (_event, settings) => {
     assertWorkspaceSettingsSavePayload(settings);
-    const nextWorkspace = applyWorkspaceSettingsSaveToWorkspace(getWorkspace(), settings);
-    const workspace = await saveWorkspace(nextWorkspace);
-    setWorkspace(workspace);
+    const workspace = await mutateWorkspace(async (currentWorkspace) => applyWorkspaceSettingsSaveToWorkspace(currentWorkspace, settings));
     refreshApplicationMenu();
     const result = { settings: workspace.settings || {} };
     assertWorkspaceSettingsSaveResultPayload(result);
@@ -137,11 +142,14 @@ function registerWorkspaceIpc(options = {}) {
     const workspaceStore = getWorkspaceStore();
     const currentWorkspaceId = typeof workspaceStore.getWorkspaceId === 'function' ? workspaceStore.getWorkspaceId() : '';
     if (workspaceId === currentWorkspaceId) {
-      const workspace = await saveWorkspace(getWorkspace());
-      setWorkspace(workspace);
+      await mutateWorkspace(async (currentWorkspace) => currentWorkspace);
     }
-    const result = await workspaceStore.renameWorkspace(workspaceId, trimmedName);
-    setWorkspace(result.workspace);
+    const result = await queueWorkspaceOperation(async () => {
+      const renamed = await workspaceStore.renameWorkspace(workspaceId, trimmedName);
+      await renameVaultStore(workspaceId, renamed.renamedWorkspaceId || '');
+      setWorkspace(renamed.workspace);
+      return renamed;
+    });
     refreshApplicationMenu();
     assertWorkspaceLoadResultPayload(result);
     return result;
@@ -151,8 +159,11 @@ function registerWorkspaceIpc(options = {}) {
     if (typeof workspaceId !== 'string' || !workspaceId.trim()) {
       throw new Error('workspaceId must be a non-empty string.');
     }
-    const result = await getWorkspaceStore().switchWorkspace(workspaceId);
-    setWorkspace(result.workspace);
+    const result = await queueWorkspaceOperation(async () => {
+      const switched = await getWorkspaceStore().switchWorkspace(workspaceId);
+      setWorkspace(switched.workspace);
+      return switched;
+    });
     refreshApplicationMenu();
     assertWorkspaceLoadResultPayload(result);
     return result;
@@ -162,8 +173,12 @@ function registerWorkspaceIpc(options = {}) {
     if (typeof workspaceId !== 'string' || !workspaceId.trim()) {
       throw new Error('workspaceId must be a non-empty string.');
     }
-    const result = await getWorkspaceStore().deleteWorkspace(workspaceId);
-    setWorkspace(result.workspace);
+    const result = await queueWorkspaceOperation(async () => {
+      const deleted = await getWorkspaceStore().deleteWorkspace(workspaceId);
+      await deleteVaultStore(deleted.deletedWorkspaceId || workspaceId);
+      setWorkspace(deleted.workspace);
+      return deleted;
+    });
     refreshApplicationMenu();
     assertWorkspaceLoadResultPayload(result);
     return result;

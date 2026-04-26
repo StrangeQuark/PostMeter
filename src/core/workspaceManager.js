@@ -144,7 +144,10 @@ class WorkspaceManager {
     }
     this.currentWorkspaceId = catalog.currentWorkspaceId;
     this.currentWorkspacePath = this.absoluteWorkspacePath(this.currentWorkspaceId);
-    return this.load();
+    return {
+      ...(await this.load()),
+      renamedWorkspaceId: renamedFilename
+    };
   }
 
   async switchWorkspace(workspaceId) {
@@ -171,7 +174,10 @@ class WorkspaceManager {
     }
     this.currentWorkspaceId = catalog.currentWorkspaceId;
     this.currentWorkspacePath = this.absoluteWorkspacePath(this.currentWorkspaceId);
-    return this.load();
+    return {
+      ...(await this.load()),
+      deletedWorkspaceId: workspaceId
+    };
   }
 
   currentStore() {

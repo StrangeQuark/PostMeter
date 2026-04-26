@@ -18,6 +18,7 @@ function assertWorkspacePayload(value, field = 'workspace') {
   assertSchemaArrays('workspace', value, field, {
     collections: assertCollectionArray,
     environments: assertEnvironmentArray,
+    globals: assertPairs,
     cookies: assertCookies,
     history: assertHistory
   });
@@ -87,6 +88,12 @@ function assertSettingsPayload(value, field) {
   if (value.appearance != null) {
     assertSchemaFields('appearance', value.appearance, `${field}.appearance`);
   }
+  if (value.sandbox != null) {
+    object(value.sandbox, `${field}.sandbox`);
+    if (value.sandbox.trustedCapabilities != null) {
+      assertSchemaFields('sandboxSettings', value.sandbox.trustedCapabilities, `${field}.sandbox.trustedCapabilities`);
+    }
+  }
   if (value.loadTestPolicy != null) {
     fail(`${field}.loadTestPolicy is no longer supported; configure load tests from the Load Test panel.`);
   }
@@ -123,6 +130,9 @@ function assertWorkspaceRequestSavePayload(value, field = 'payload') {
   if (value.collectionVariables != null) {
     assertPairs(value.collectionVariables, `${field}.collectionVariables`);
   }
+  if (value.globals != null) {
+    assertPairs(value.globals, `${field}.globals`);
+  }
   if (value.cookies != null) {
     assertCookies(value.cookies, `${field}.cookies`);
   }
@@ -136,6 +146,9 @@ function assertWorkspaceRequestSaveResultPayload(value, field = 'result') {
   assertRequestPayload(value.request, `${field}.request`);
   if (value.collectionVariables != null) {
     assertPairs(value.collectionVariables, `${field}.collectionVariables`);
+  }
+  if (value.globals != null) {
+    assertPairs(value.globals, `${field}.globals`);
   }
   if (value.cookies != null) {
     assertCookies(value.cookies, `${field}.cookies`);
@@ -266,6 +279,9 @@ function assertCollectionRunResultPayload(value, field = 'result') {
   if (value.collectionVariables != null) {
     assertPairs(value.collectionVariables, `${field}.collectionVariables`);
   }
+  if (value.globals != null) {
+    assertPairs(value.globals, `${field}.globals`);
+  }
   if (value.cookies != null) {
     assertCookies(value.cookies, `${field}.cookies`);
   }
@@ -305,6 +321,9 @@ function assertResponsePayload(value, field = 'response') {
   }
   if (value.collectionVariables != null) {
     assertPairs(value.collectionVariables, `${field}.collectionVariables`);
+  }
+  if (value.globals != null) {
+    assertPairs(value.globals, `${field}.globals`);
   }
   if (value.localVariables != null) {
     assertPairs(value.localVariables, `${field}.localVariables`);
@@ -511,6 +530,9 @@ function assertScriptResult(value, field) {
   }
   if (value.logs != null) {
     assertStringArray(value.logs, `${field}.logs`, LIMITS.pairs, LIMITS.value);
+  }
+  if (value.visualizer != null) {
+    assertSchemaFields('scriptVisualizer', value.visualizer, `${field}.visualizer`);
   }
 }
 

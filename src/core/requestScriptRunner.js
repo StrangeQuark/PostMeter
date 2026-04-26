@@ -10,7 +10,9 @@ const {
 async function runRequestWithScripts(request, environment, options = {}) {
   const lifecycleResult = await runScriptedRequestLifecycle(
     createScriptedRequestState(request, environment, {
-      collectionVariables: options.collectionVariables || []
+      collectionVariables: options.collectionVariables || [],
+      globals: options.globals || [],
+      cookieJar: options.cookieJar || []
     }),
     options
   );
@@ -25,11 +27,15 @@ async function runRequestWithScripts(request, environment, options = {}) {
       testScriptResult: lifecycleResult.testScriptResult,
       environment: lifecycleResult.environment,
       collectionVariables: lifecycleResult.collectionVariables,
-      localVariables: lifecycleResult.localVariables
+      globals: lifecycleResult.globals,
+      localVariables: lifecycleResult.localVariables,
+      updatedCookies: lifecycleResult.cookies
     },
     environment: lifecycleResult.environment,
     collectionVariables: lifecycleResult.collectionVariables,
+    globals: lifecycleResult.globals,
     localVariables: lifecycleResult.localVariables,
+    cookies: lifecycleResult.cookies,
     preRequestScriptResult: lifecycleResult.preRequestScriptResult,
     testScriptResult: lifecycleResult.testScriptResult
   };

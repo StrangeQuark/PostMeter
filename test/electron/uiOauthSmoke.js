@@ -8,16 +8,18 @@ async function main() {
   const server = await createMockOAuthServer();
   const electronPath = require('electron');
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-ui-oauth-'));
+  const env = {
+    ...process.env,
+    POSTMETER_DATA_PATH: path.join(tempDir, 'workspace.json'),
+    POSTMETER_UI_OAUTH_SMOKE: '1',
+    POSTMETER_UI_OAUTH_BASE_URL: server.baseUrl,
+    POSTMETER_TEST_OAUTH_AUTOCOMPLETE: '1',
+    POSTMETER_TEST_OAUTH_SKIP_EXTERNAL: '1'
+  };
+  delete env.ELECTRON_RUN_AS_NODE;
   const child = spawn(electronPath, ['.'], {
     cwd: path.join(__dirname, '..', '..'),
-    env: {
-      ...process.env,
-      POSTMETER_DATA_PATH: path.join(tempDir, 'workspace.json'),
-      POSTMETER_UI_OAUTH_SMOKE: '1',
-      POSTMETER_UI_OAUTH_BASE_URL: server.baseUrl,
-      POSTMETER_TEST_OAUTH_AUTOCOMPLETE: '1',
-      POSTMETER_TEST_OAUTH_SKIP_EXTERNAL: '1'
-    },
+    env,
     stdio: ['ignore', 'pipe', 'pipe']
   });
 

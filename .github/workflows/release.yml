@@ -36,6 +36,10 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Install Linux sandbox backend
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+
       - name: Install
         run: npm ci
 
@@ -45,10 +49,21 @@ jobs:
       - name: Electron runtime version
         run: npm run electron:version
 
+      - name: Sandbox runtime validation
+        run: npm run sandbox:validate
+
       - name: Build unsigned artifacts
         run: ${{ matrix.command }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Packaged sandbox validation
+        if: matrix.platform != 'linux'
+        run: npm run sandbox:validate:packaged
+
+      - name: Packaged Linux sandbox validation
+        if: matrix.platform == 'linux'
+        run: xvfb-run -a npm run sandbox:validate:packaged
 
       - name: Validate Windows protocol registration
         if: matrix.platform == 'windows'

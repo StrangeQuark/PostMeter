@@ -4,7 +4,7 @@ const THEME_OPTIONS = ['system', 'light', 'dark'];
 const RENDERER_STATE_DEFAULTS = PostMeterRendererState.createRendererState();
 const TAB_PANEL_IDS = {
   request: ['paramsTab', 'headersTab', 'authTab', 'cookiesTab', 'bodyTab', 'testsTab', 'scriptsTab', 'examplesTab', 'collectionVariablesTab'],
-  results: ['responseTab', 'loadTab', 'runnerTab']
+  results: ['responseTab', 'visualizerTab', 'loadTab', 'runnerTab']
 };
 
 let workspace = RENDERER_STATE_DEFAULTS.workspace;
@@ -342,6 +342,7 @@ function bindUi() {
     onRequestCookieJarChange: collectRequestAndMarkDirty,
     onFilterCookiesChange: renderCookieJarEditor,
     onEnvironmentNameInput: collectEnvironmentAndMarkDirty,
+    onTrustedScriptCapabilityChange: setTrustedScriptCapabilitiesFromInputs,
     onAuthTypeChange: showAuthSection,
     onAuthInput: collectRequestAndMarkDirty,
     onActivateTab: activateTab,
@@ -1084,6 +1085,11 @@ function ensureSettings() {
   workspace.settings ||= {};
   workspace.settings.updates ||= { includePrereleases: false };
   workspace.settings.appearance ||= { theme: 'system' };
+  workspace.settings.sandbox ||= { trustedCapabilities: { sendRequest: true, cookies: true, vault: false } };
+  workspace.settings.sandbox.trustedCapabilities ||= { sendRequest: true, cookies: true, vault: false };
+  workspace.settings.sandbox.trustedCapabilities.sendRequest = workspace.settings.sandbox.trustedCapabilities.sendRequest !== false;
+  workspace.settings.sandbox.trustedCapabilities.cookies = workspace.settings.sandbox.trustedCapabilities.cookies !== false;
+  workspace.settings.sandbox.trustedCapabilities.vault = workspace.settings.sandbox.trustedCapabilities.vault === true;
   workspace.settings.appearance.theme = normalizeThemeOption(workspace.settings.appearance.theme);
   delete workspace.settings.loadTestPolicy;
 }
@@ -1134,6 +1140,15 @@ async function setIncludePrereleases(includePrereleases, options = {}) {
   if (options.showStatus !== false) {
     setStatus(`Prerelease update checks ${workspace.settings.updates.includePrereleases ? 'enabled' : 'disabled'}.`);
   }
+}
+
+async function setTrustedScriptCapabilitiesFromInputs() {
+  ensureSettings();
+  workspace.settings.sandbox.trustedCapabilities.sendRequest = $('trustedScriptSendRequestInput').checked === true;
+  workspace.settings.sandbox.trustedCapabilities.cookies = $('trustedScriptCookiesInput').checked === true;
+  workspace.settings.sandbox.trustedCapabilities.vault = $('trustedScriptVaultInput').checked === true;
+  await saveWorkspace(false, { scope: 'settings' });
+  renderWorkspacePanel();
 }
 
 function selectInitialWorkspaceItem() {
@@ -1243,6 +1258,15 @@ function renderWorkspacePanel() {
   $('renameWorkspacePanelButton').disabled = !workspaceItem;
   $('deleteWorkspacePanelButton').disabled = !workspaceItem || workspaceListItems().length <= 1;
   $('exportWorkspacePanelButton').disabled = !workspaceItem;
+  if ($('trustedScriptSendRequestInput')) {
+    $('trustedScriptSendRequestInput').checked = workspace.settings?.sandbox?.trustedCapabilities?.sendRequest === true;
+  }
+  if ($('trustedScriptCookiesInput')) {
+    $('trustedScriptCookiesInput').checked = workspace.settings?.sandbox?.trustedCapabilities?.cookies === true;
+  }
+  if ($('trustedScriptVaultInput')) {
+    $('trustedScriptVaultInput').checked = workspace.settings?.sandbox?.trustedCapabilities?.vault === true;
+  }
   const container = $('workspaceSummary');
   container.textContent = '';
   if (!workspaceItem) {
@@ -1783,6 +1807,20 @@ function displayResponse(response) {
     .map(([key, values]) => `${key}: ${values.join(', ')}`)
     .join('\n');
   $('responseBody').value = PostMeterResponseFormatting.formatBody(response);
+  displayVisualizer(response.testScriptResult?.visualizer);
+}
+
+function displayVisualizer(visualizer) {
+  const frame = $('visualizerFrame');
+  if (!frame) {
+    return;
+  }
+  const html = typeof visualizer?.html === 'string' ? visualizer.html : '';
+  frame.srcdoc = visualizerDocument(html);
+}
+
+function visualizerDocument(html) {
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline';"><style>html,body{margin:0;min-height:100%;font:13px system-ui,sans-serif;color:#1f2937;background:#fff;}body{padding:12px;box-sizing:border-box;}</style></head><body>${html}</body></html>`;
 }
 
 async function runLoadTest() {

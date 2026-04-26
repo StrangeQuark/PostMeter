@@ -18,14 +18,16 @@ async function main() {
   const electronPath = require('electron');
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-ui-snapshot-'));
   const snapshotDir = path.join(tempDir, 'snapshots');
+  const env = {
+    ...process.env,
+    POSTMETER_DATA_PATH: path.join(tempDir, 'workspace.json'),
+    POSTMETER_UI_SNAPSHOT_SMOKE: '1',
+    POSTMETER_UI_SNAPSHOT_DIR: snapshotDir
+  };
+  delete env.ELECTRON_RUN_AS_NODE;
   const child = spawn(electronPath, ['.'], {
     cwd: path.join(__dirname, '..', '..'),
-    env: {
-      ...process.env,
-      POSTMETER_DATA_PATH: path.join(tempDir, 'workspace.json'),
-      POSTMETER_UI_SNAPSHOT_SMOKE: '1',
-      POSTMETER_UI_SNAPSHOT_DIR: snapshotDir
-    },
+    env,
     stdio: ['ignore', 'pipe', 'pipe']
   });
 

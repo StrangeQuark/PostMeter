@@ -9,14 +9,17 @@ test('CI workflow runs the Electron UI and packaging validation suite', async ()
 
   assert.match(workflow, /node-version:\s*22/);
   assert.match(workflow, /npm ci/);
+  assert.match(workflow, /apt-get install -y bubblewrap/);
   assert.match(workflow, /npm test/);
   assert.match(workflow, /npm audit --audit-level=high/);
+  assert.match(workflow, /npm run sandbox:validate/);
   assert.match(workflow, /xvfb-run -a npm run test:smoke/);
   assert.match(workflow, /xvfb-run -a npm run test:ui\b/);
   assert.match(workflow, /xvfb-run -a npm run test:ui:regression/);
   assert.match(workflow, /xvfb-run -a npm run test:ui:oauth/);
   assert.match(workflow, /xvfb-run -a npm run test:ui:snapshot/);
   assert.match(workflow, /npm run pack:linux/);
+  assert.match(workflow, /xvfb-run -a npm run sandbox:validate:packaged/);
 });
 
 test('release workflow builds unsigned artifacts for all tier-one desktop platforms', async () => {
@@ -32,7 +35,11 @@ test('release workflow builds unsigned artifacts for all tier-one desktop platfo
   assert.match(workflow, /npm run dist:mac/);
   assert.match(workflow, /npm test/);
   assert.match(workflow, /npm run electron:version/);
+  assert.match(workflow, /apt-get install -y bubblewrap/);
+  assert.match(workflow, /npm run sandbox:validate/);
   assert.match(workflow, /CSC_IDENTITY_AUTO_DISCOVERY:\s*"false"/);
+  assert.match(workflow, /npm run sandbox:validate:packaged/);
+  assert.match(workflow, /xvfb-run -a npm run sandbox:validate:packaged/);
   assert.match(workflow, /Validate Windows protocol registration/);
   assert.match(workflow, /npm run release:validate:win-protocol/);
   assert.match(workflow, /Validate macOS protocol registration/);

@@ -60,6 +60,14 @@
       return true;
     }
 
+    function runtimeId() {
+      const cryptoApi = windowObject.crypto || globalThis.crypto;
+      if (typeof cryptoApi?.randomUUID === 'function') {
+        return cryptoApi.randomUUID();
+      }
+      return `runtime-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    }
+
     function promptInput(message, defaultValue = '') {
       if (typeof options.prompt === 'function') {
         return options.prompt(message, defaultValue);
@@ -619,6 +627,9 @@
           updateCaptureResponseButton();
           element('responseStatus').textContent = 'ERR';
           element('responseBody').value = message;
+          if (element('visualizerFrame')) {
+            element('visualizerFrame').srcdoc = '';
+          }
         }
         setStatus('Request failed.');
         notifyUser('Request Failed', message);
@@ -646,7 +657,7 @@
           return setStatus('Load test cancelled.');
         }
       }
-      state.activeLoadId = crypto.randomUUID();
+      state.activeLoadId = runtimeId();
       element('runLoadButton').disabled = true;
       element('cancelLoadButton').disabled = false;
       element('exportLoadJsonButton').disabled = true;
@@ -692,7 +703,7 @@
       }
       collectRequestFromEditor();
       await saveWorkspace(false);
-      state.activeRunnerId = crypto.randomUUID();
+      state.activeRunnerId = runtimeId();
       state.lastRunnerResult = null;
       element('runCollectionButton').disabled = true;
       element('cancelRunnerButton').disabled = false;
@@ -761,7 +772,7 @@
       if (request.auth?.type !== 'oauth2' || request.auth?.grantType !== 'deviceCode') {
         return setStatus('Select OAuth 2.0 Device Code before starting device authorization.');
       }
-      state.activeOauthFlowId = crypto.randomUUID();
+      state.activeOauthFlowId = runtimeId();
       setOauthButtonsBusy(true);
       setStatus('Starting OAuth device authorization...');
       renderOauthProgress({
@@ -810,7 +821,7 @@
       if (request.auth?.type !== 'oauth2' || request.auth?.grantType !== 'authorizationCode') {
         return setStatus('Select OAuth 2.0 Authorization Code before starting authorization.');
       }
-      state.activeOauthFlowId = crypto.randomUUID();
+      state.activeOauthFlowId = runtimeId();
       setOauthButtonsBusy(true);
       setStatus('Starting OAuth authorization...');
       renderOauthProgress({

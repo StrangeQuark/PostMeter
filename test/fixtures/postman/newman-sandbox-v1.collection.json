@@ -1,0 +1,371 @@
+{
+  "info": {
+    "name": "PostMeter Sandbox v1 Newman Corpus",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "00000000-0000-4000-8000-000000000101"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://api.example.test" },
+    { "key": "shared", "value": "collection-shared" },
+    { "key": "collectionOnly", "value": "collection-only" }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.collectionVariables.set('collectionPreSeen', 'yes');"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Sandbox v1",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.collectionVariables.set('folderPreSeen', 'yes');"
+            ]
+          }
+        }
+      ],
+      "item": [
+        {
+          "name": "01 Setup And Variable Precedence",
+          "variable": [
+            { "key": "shared", "value": "request-shared" }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/setup"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('shared', 'environment-from-pre');",
+                  "pm.variables.set('localOnly', 'local-from-pre');",
+                  "pm.request.headers.upsert({ key: 'X-Pre', value: pm.variables.get('collectionOnly') });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('variable precedence follows Postman order', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.variables.get('shared')).to.equal('request-shared');",
+                  "  pm.expect(pm.variables.get('localOnly')).to.equal('local-from-pre');",
+                  "  pm.expect(pm.variables.get('rowId')).to.equal('row-42');",
+                  "  pm.expect(pm.variables.get('envOnly')).to.equal('environment-only');",
+                  "  pm.expect(pm.variables.get('collectionOnly')).to.equal('collection-only');",
+                  "  pm.expect(pm.variables.get('globalOnly')).to.equal('global-only');",
+                  "  pm.expect(pm.request.headers.get('X-Pre')).to.equal('collection-only');",
+                  "});",
+                  "pm.visualizer.set('<section><h1>{{title}}</h1><p>{{status}}</p></section>', { title: 'Setup', status: pm.response.code });",
+                  "pm.environment.set('setupComplete', 'yes');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02 Async Ordering And Nested SendRequest",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/async"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('async ordering and nested sendRequest', async function () {",
+                  "  const steps = ['sync'];",
+                  "  await new Promise(function (resolve) {",
+                  "    setTimeout(function () { steps.push('timer'); resolve(); }, 5);",
+                  "  });",
+                  "  const first = await pm.sendRequest({ method: 'GET', url: pm.variables.replaceIn('{{baseUrl}}/aux/one') });",
+                  "  steps.push(first.json().id);",
+                  "  const second = await pm.sendRequest(pm.variables.replaceIn('{{baseUrl}}/aux/two?source=' + first.json().id));",
+                  "  steps.push(second.json().source);",
+                  "  pm.environment.set('asyncOrder', steps.join('>'));",
+                  "  pm.expect(steps.join('>')).to.equal('sync>timer>one>one');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03 Iteration Data And Cookie Scope",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/cookies"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.request.headers.upsert({ key: 'X-Row', value: pm.iterationData.get('rowId') });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('iteration data and cookie scope', async function () {",
+                  "  pm.expect(pm.info.iteration).to.equal(0);",
+                  "  pm.expect(pm.info.iterationCount).to.equal(1);",
+                  "  pm.expect(pm.iterationData.get('rowId')).to.equal('row-42');",
+                  "  pm.expect(await pm.cookies.get('visible')).to.equal('visible-cookie');",
+                  "  pm.expect(await pm.cookies.get('secret')).to.be.undefined;",
+                  "  await pm.cookies.set('scripted', 'from-corpus');",
+                  "  await pm.cookies.unset('visible');",
+                  "  const jar = pm.cookies.jar();",
+                  "  await jar.set('https://api.example.test/path', 'jarred', 'from-jar');",
+                  "  pm.expect(await jar.get('https://api.example.test/path', 'jarred')).to.equal('from-jar');",
+                  "  await jar.set('api.example.test/path', { name: 'jarObject', value: 'from-object', path: '/path' });",
+                  "  pm.expect(await jar.get('api.example.test/path', 'jarObject')).to.equal('from-object');",
+                  "  const jarCookies = await jar.getAll('https://api.example.test/path');",
+                  "  pm.expect(jarCookies.secret).to.be.undefined;",
+                  "  await jar.unset('https://api.example.test/path', 'jarred');",
+                  "  await jar.unset('api.example.test/path', 'jarObject');",
+                  "  const cookies = await pm.cookies.toObject();",
+                  "  pm.expect(cookies.scripted).to.equal('from-corpus');",
+                  "  pm.expect(cookies.visible).to.be.undefined;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03a Bundled Package Loading",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/packages"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('bundled package loading', function () {",
+                  "  const Crypto = pm.require('crypto-js');",
+                  "  const lodash = require('lodash');",
+                  "  const uuid = pm.require('uuid');",
+                  "  pm.expect(Crypto.SHA256('abc').toString(Crypto.enc.Hex)).to.equal('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');",
+                  "  pm.expect(Crypto.enc.Base64.stringify(Crypto.enc.Utf8.parse('hello'))).to.equal('aGVsbG8=');",
+                  "  pm.expect(lodash.get({ nested: { value: 'ok' } }, 'nested.value')).to.equal('ok');",
+                  "  pm.expect(uuid.v4()).to.match(/^[0-9a-f-]{36}$/);",
+                  "});",
+                  "pm.environment.set('packageLoading', 'yes');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03b Execution RunRequest",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/run-request-caller"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('runRequestCaller', 'yes');",
+                  "pm.test('execution runRequest returns response and target side effects', async function () {",
+                  "  const response = await pm.execution.runRequest('03c RunRequest Target', { variables: { runRequestPath: 'run-request-target' } });",
+                  "  pm.expect(response.code).to.equal(202);",
+                  "  pm.expect(response.json().target).to.equal('run-request-target');",
+                  "  pm.expect(pm.environment.get('runRequestTarget')).to.equal('yes');",
+                  "});",
+                  "pm.execution.setNextRequest('04 Execution Jump Start');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03c RunRequest Target",
+          "variable": [
+            { "key": "runRequestPath", "value": "default-run-request-target" }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/{{runRequestPath}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('runRequest target test is reported on caller', function () {",
+                  "  pm.expect(pm.environment.get('runRequestCaller')).to.equal('yes');",
+                  "  pm.expect(pm.response.code).to.equal(202);",
+                  "});",
+                  "pm.environment.set('runRequestTarget', 'yes');",
+                  "pm.execution.setNextRequest('05 Skipped By SetNextRequest');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04 Execution Jump Start",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/jump"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('execution jump starts', function () {",
+                  "  pm.execution.setNextRequest('06 Skip By Prerequest');",
+                  "  pm.environment.set('jumped', 'yes');",
+                  "  pm.expect(pm.response.code).to.equal(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "05 Skipped By SetNextRequest",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/must-not-send"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('should not run', function () {",
+                  "  pm.expect(true).to.equal(false);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "06 Skip By Prerequest",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/skip-request"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('skipRequestPreRan', 'yes');",
+                  "pm.execution.skipRequest();"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "07 After Skip",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/after-skip"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('request after skip still runs', function () {",
+                  "  pm.expect(pm.environment.get('jumped')).to.equal('yes');",
+                  "  pm.expect(pm.environment.get('skipRequestPreRan')).to.equal('yes');",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.environment.set('afterSkip', 'yes');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "07b Vault Secrets",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/vault"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('vault secrets stay brokered', async function () {",
+                  "  await pm.vault.set('corpusToken', 'vault-value');",
+                  "  pm.expect(await pm.vault.get('seededToken')).to.equal('seeded-value');",
+                  "  pm.expect(await pm.vault.get('corpusToken')).to.equal('vault-value');",
+                  "  await pm.vault.unset('corpusToken');",
+                  "  pm.expect(await pm.vault.get('corpusToken')).to.be.undefined;",
+                  "});",
+                  "pm.environment.set('vaultComplete', 'yes');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "08 Mixed Script Failure",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/mixed-failure"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set('failureSideEffect', 'committed');",
+                  "pm.test('intentional corpus pass', function () {",
+                  "  pm.expect(pm.response.code).to.equal(200);",
+                  "});",
+                  "pm.test('intentional corpus failure', function () {",
+                  "  pm.expect(pm.response.json().state).to.equal('expected');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

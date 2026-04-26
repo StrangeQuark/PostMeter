@@ -5,6 +5,12 @@ const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
+const { cliShouldRequireNodePermission } = require('../../scripts/postmeter-cli');
+
+test('requires Node permission flags for CLI script workers on supported Node baselines', () => {
+  const major = Number(String(process.versions.node || '').split('.')[0]);
+  assert.equal(cliShouldRequireNodePermission(), Number.isFinite(major) && major >= 22);
+});
 
 test('runs collections headlessly and writes reports', async () => {
   const server = await createServer();

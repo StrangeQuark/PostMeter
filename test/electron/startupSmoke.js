@@ -6,13 +6,15 @@ const path = require('node:path');
 async function main() {
   const electronPath = require('electron');
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-smoke-'));
+  const env = {
+    ...process.env,
+    POSTMETER_DATA_PATH: path.join(tempDir, 'workspace.json'),
+    POSTMETER_STARTUP_SMOKE: '1'
+  };
+  delete env.ELECTRON_RUN_AS_NODE;
   const child = spawn(electronPath, ['.'], {
     cwd: path.join(__dirname, '..', '..'),
-    env: {
-      ...process.env,
-      POSTMETER_DATA_PATH: path.join(tempDir, 'workspace.json'),
-      POSTMETER_STARTUP_SMOKE: '1'
-    },
+    env,
     stdio: ['ignore', 'pipe', 'pipe']
   });
 

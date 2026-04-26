@@ -160,6 +160,9 @@
     bindChange(doc, 'requestCookieJarStoreInput', options.onRequestCookieJarChange);
     bindChange(doc, 'filterCookiesToRequestHostInput', options.onFilterCookiesChange);
     bindInput(doc, 'environmentNameInput', options.onEnvironmentNameInput);
+    bindChange(doc, 'trustedScriptSendRequestInput', options.onTrustedScriptCapabilityChange);
+    bindChange(doc, 'trustedScriptCookiesInput', options.onTrustedScriptCapabilityChange);
+    bindChange(doc, 'trustedScriptVaultInput', options.onTrustedScriptCapabilityChange);
 
     for (const id of AUTH_EDITOR_INPUT_IDS) {
       const input = getElement(doc, id);

@@ -23,7 +23,7 @@ function defaultLoadTestPolicy() {
   };
 }
 
-test('creates a default schema 10 workspace when no file exists', async () => {
+test('creates a default schema 11 workspace when no file exists', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-store-'));
   const workspacePath = path.join(temp, 'workspace.json');
   const store = new WorkspaceStore(workspacePath);
@@ -31,16 +31,20 @@ test('creates a default schema 10 workspace when no file exists', async () => {
   const { workspace } = await store.load();
 
   assert.equal(store.getWorkspacePath(), workspacePath);
-  assert.equal(workspace.schemaVersion, 10);
-  assert.deepEqual(workspace.settings, { appearance: { theme: 'system' }, updates: { includePrereleases: false } });
+  assert.equal(workspace.schemaVersion, 11);
+  assert.deepEqual(workspace.settings, {
+    appearance: { theme: 'system' },
+    sandbox: { trustedCapabilities: { sendRequest: true, cookies: true, vault: false } },
+    updates: { includePrereleases: false }
+  });
   assert.deepEqual(workspace.collections, []);
   assert.deepEqual(workspace.environments, []);
   assert.deepEqual(workspace.cookies, []);
-  assert.equal(JSON.parse(await fs.readFile(workspacePath, 'utf8')).schemaVersion, 10);
+  assert.equal(JSON.parse(await fs.readFile(workspacePath, 'utf8')).schemaVersion, 11);
   assert.equal(Object.hasOwn(JSON.parse(await fs.readFile(workspacePath, 'utf8')), 'name'), false);
 });
 
-test('migrates schema 2 workspaces to schema 10 and creates a backup', async () => {
+test('migrates schema 2 workspaces to schema 11 and creates a backup', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-store-'));
   const workspacePath = path.join(temp, 'workspace.json');
   await fs.writeFile(workspacePath, JSON.stringify({
@@ -54,7 +58,7 @@ test('migrates schema 2 workspaces to schema 10 and creates a backup', async () 
   const { workspace } = await store.load();
   const backups = (await fs.readdir(temp)).filter((entry) => entry.includes('pre-migration.backup'));
 
-  assert.equal(workspace.schemaVersion, 10);
+  assert.equal(workspace.schemaVersion, 11);
   assert.equal(workspace.settings.updates.includePrereleases, false);
   assert.equal(workspace.settings.appearance.theme, 'system');
   assert.equal(workspace.settings.loadTestPolicy, undefined);
@@ -81,13 +85,13 @@ test('quarantines unreadable workspace JSON and recovers a default workspace', a
     () => store.load(),
     (error) => {
       assert.ok(error instanceof WorkspaceRecoveryError);
-      assert.equal(error.recoveredWorkspace.schemaVersion, 10);
+      assert.equal(error.recoveredWorkspace.schemaVersion, 11);
       assert.ok(error.recoveredPath.includes('corrupt'));
       return true;
     }
   );
 
-  assert.equal(JSON.parse(await fs.readFile(workspacePath, 'utf8')).schemaVersion, 10);
+  assert.equal(JSON.parse(await fs.readFile(workspacePath, 'utf8')).schemaVersion, 11);
   const quarantined = (await fs.readdir(temp)).filter((entry) => entry.includes('corrupt'));
   assert.equal(quarantined.length, 1);
 });
@@ -98,7 +102,7 @@ test('preserves an intentionally empty collection list on save and reload', asyn
   const store = new WorkspaceStore(workspacePath);
 
   await store.save({
-    schemaVersion: 10,
+    schemaVersion: 11,
     settings: { appearance: { theme: 'dark' }, updates: { includePrereleases: true }, loadTestPolicy: { concurrency: 42 } },
     collections: [],
     environments: [],
@@ -107,7 +111,7 @@ test('preserves an intentionally empty collection list on save and reload', asyn
   });
 
   const { workspace } = await store.load();
-  assert.equal(workspace.schemaVersion, 10);
+  assert.equal(workspace.schemaVersion, 11);
   assert.equal(workspace.settings.updates.includePrereleases, true);
   assert.equal(workspace.settings.appearance.theme, 'dark');
   assert.equal(workspace.settings.loadTestPolicy, undefined);

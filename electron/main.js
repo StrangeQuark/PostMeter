@@ -1,7 +1,10 @@
+const crypto = require('node:crypto');
+const fs = require('node:fs/promises');
 const path = require('node:path');
-const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } = require('electron');
 const { WorkspaceRecoveryError } = require('../src/core/workspaceStore');
 const { WorkspaceManager } = require('../src/core/workspaceManager');
+const { EncryptedVaultStore } = require('../src/core/vaultStore');
 const { installApplicationMenu } = require('./appMenu');
 const { registerAppIpc, safeExternalUrl } = require('./appIpc');
 const { createOAuthFlowController } = require('./oauthFlows');
@@ -22,6 +25,7 @@ let sessionStore;
 let sessionState;
 let workspaceStore;
 let workspace;
+const vaultStores = new Map();
 const oauthFlows = createOAuthFlowController({ app, shell, emitProgress: emitOAuthProgress });
 
 if (process.env.POSTMETER_DATA_PATH) {
@@ -39,6 +43,18 @@ app.disableHardwareAcceleration();
 if (process.env.POSTMETER_STARTUP_SMOKE === '1') {
   app.commandLine.appendSwitch('disable-gpu');
   app.commandLine.appendSwitch('disable-software-rasterizer');
+}
+
+async function runSandboxRuntimeValidation() {
+  try {
+    const { validateSandboxRuntime } = require('../src/core/sandboxRuntimeValidation');
+    await validateSandboxRuntime();
+    console.log('PostMeter packaged sandbox runtime validation passed.');
+    app.exit(0);
+  } catch (error) {
+    console.error(error.message || String(error));
+    app.exit(1);
+  }
 }
 
 function createWindow() {
@@ -70,7 +86,10 @@ function refreshApplicationMenu() {
   });
 }
 
-app.whenReady().then(async () => {
+if (process.env.POSTMETER_VALIDATE_SANDBOX_RUNTIME === '1') {
+  app.whenReady().then(runSandboxRuntimeValidation);
+} else {
+  app.whenReady().then(async () => {
   oauthFlows.registerProtocol();
   sessionStore = new SessionStore(defaultSessionPath(app.getPath('userData')));
   sessionState = await sessionStore.load();
@@ -92,7 +111,8 @@ app.whenReady().then(async () => {
   }
   refreshApplicationMenu();
   createWindow();
-});
+  });
+}
 
 app.on('second-instance', (_event, argv) => {
   const callbackUrl = oauthFlows.findCallbackArg(argv);
@@ -132,6 +152,35 @@ function saveWorkspaceSync(nextWorkspace) {
   return workspaceStore.saveSync(nextWorkspace);
 }
 
+let workspaceMutationQueue = Promise.resolve();
+
+function enqueueWorkspaceOperation(operation) {
+  const run = workspaceMutationQueue
+    .catch(() => {})
+    .then(operation);
+  workspaceMutationQueue = run.catch(() => {});
+  return run;
+}
+
+function mutateWorkspace(mutator, options = {}) {
+  const expectedWorkspaceId = typeof options.workspaceId === 'string' ? options.workspaceId : '';
+  return enqueueWorkspaceOperation(async () => {
+    if (
+      expectedWorkspaceId &&
+      typeof workspaceStore?.getWorkspaceId === 'function' &&
+      workspaceStore.getWorkspaceId() !== expectedWorkspaceId
+    ) {
+      return workspace;
+    }
+    const nextWorkspace = await mutator(workspace);
+    if (!nextWorkspace) {
+      return workspace;
+    }
+    workspace = await saveWorkspace(nextWorkspace);
+    return workspace;
+  });
+}
+
 function emitOAuthProgress(id, progress) {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return;
@@ -139,6 +188,68 @@ function emitOAuthProgress(id, progress) {
   const payload = { id, ...progress };
   assertOAuthProgressPayload(payload);
   mainWindow.webContents.send('oauth:progress', payload);
+}
+
+function vaultStoreForWorkspace(workspaceId) {
+  const id = String(workspaceId || workspaceStore?.getWorkspaceId?.() || 'workspace');
+  if (!vaultStores.has(id)) {
+    vaultStores.set(id, new EncryptedVaultStore(
+      vaultPathForWorkspace(id),
+      electronSafeStorageProvider()
+    ));
+  }
+  return vaultStores.get(id);
+}
+
+function vaultPathForWorkspace(workspaceId) {
+  return path.join(app.getPath('userData'), 'vaults', `${workspaceVaultFilename(workspaceId)}.vault.json`);
+}
+
+function workspaceVaultFilename(workspaceId) {
+  return crypto.createHash('sha256').update(String(workspaceId || 'workspace')).digest('hex').slice(0, 32);
+}
+
+function electronSafeStorageProvider() {
+  return {
+    isAvailable: () => safeStorage?.isEncryptionAvailable?.() === true
+      && safeStorage?.getSelectedStorageBackend?.() !== 'basic_text',
+    encryptString: (value) => safeStorage.encryptString(String(value || '')),
+    decryptString: (value) => safeStorage.decryptString(Buffer.from(value))
+  };
+}
+
+async function renameVaultStore(previousWorkspaceId, nextWorkspaceId) {
+  const previousId = String(previousWorkspaceId || '');
+  const nextId = String(nextWorkspaceId || '');
+  if (!previousId || !nextId || previousId === nextId) {
+    return;
+  }
+  const previousPath = vaultPathForWorkspace(previousId);
+  const nextPath = vaultPathForWorkspace(nextId);
+  vaultStores.delete(previousId);
+  vaultStores.delete(nextId);
+  try {
+    await fs.mkdir(path.dirname(nextPath), { recursive: true, mode: 0o700 });
+    await fs.rename(previousPath, nextPath);
+    await fs.chmod(nextPath, 0o600).catch(() => {});
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return;
+    }
+    if (error?.code === 'EEXIST') {
+      return;
+    }
+    throw error;
+  }
+}
+
+async function deleteVaultStore(workspaceId) {
+  const id = String(workspaceId || '');
+  if (!id) {
+    return;
+  }
+  vaultStores.delete(id);
+  await fs.rm(vaultPathForWorkspace(id), { force: true });
 }
 
 registerAppIpc({ app, ipcMain, shell });
@@ -159,7 +270,10 @@ registerRuntimeIpc({
   fileOperationResult,
   getMainWindow: () => mainWindow,
   getWorkspace: () => workspace,
+  getWorkspaceId: () => workspaceStore?.getWorkspaceId?.() || '',
+  getVaultStore: () => vaultStoreForWorkspace(workspaceStore?.getWorkspaceId?.() || ''),
   ipcMain,
+  mutateWorkspace,
   saveWorkspace,
   setWorkspace: (nextWorkspace) => {
     workspace = nextWorkspace;
@@ -171,19 +285,26 @@ registerWorkspaceIpc({
   fileOperationResult,
   getMainWindow: () => mainWindow,
   getWorkspace: () => workspace,
+  getWorkspaceId: () => workspaceStore?.getWorkspaceId?.() || '',
   getWorkspaceStore: () => workspaceStore,
   ipcMain,
+  queueWorkspaceOperation: enqueueWorkspaceOperation,
   refreshApplicationMenu,
+  renameVaultStore,
   saveWorkspace,
   saveWorkspaceSync,
   setWorkspace: (nextWorkspace) => {
     workspace = nextWorkspace;
-  }
+  },
+  deleteVaultStore
 });
 
 registerRequestIpc({
   getWorkspace: () => workspace,
+  getWorkspaceId: () => workspaceStore?.getWorkspaceId?.() || '',
+  getVaultStore: () => vaultStoreForWorkspace(workspaceStore?.getWorkspaceId?.() || ''),
   ipcMain,
+  mutateWorkspace,
   saveWorkspace,
   setWorkspace: (nextWorkspace) => {
     workspace = nextWorkspace;

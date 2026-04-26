@@ -82,6 +82,13 @@ function migrate(workspace) {
     workspace.schemaVersion = 10;
     migrated = true;
   }
+  if (schemaVersion < 11) {
+    if (!Array.isArray(workspace.globals)) {
+      workspace.globals = [];
+    }
+    workspace.schemaVersion = 11;
+    migrated = true;
+  }
   return migrated;
 }
 

@@ -44,6 +44,7 @@ function normalizeWorkspace(workspace) {
       ? workspace.collections.map(collectionModel)
       : defaultWorkspace().collections,
     environments: Array.isArray(workspace?.environments) ? workspace.environments : [],
+    globals: Array.isArray(workspace?.globals) ? workspace.globals : [],
     cookies: Array.isArray(workspace?.cookies) ? workspace.cookies : [],
     history: Array.isArray(workspace?.history) ? workspace.history : []
   });

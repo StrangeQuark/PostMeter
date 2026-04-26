@@ -4,6 +4,7 @@ const { historyEntry } = require('../src/core/models');
 const {
   applyScriptVariableMutationsToWorkspace,
   findWorkspaceRequestContext,
+  mergeCookieJarByDelta,
   updateWorkspaceRequestAuth
 } = require('./workspaceMutations');
 const {
@@ -15,7 +16,15 @@ const {
 function registerRequestIpc(options = {}) {
   const {
     getWorkspace,
+    getWorkspaceId = () => '',
+    getVaultStore = () => null,
     ipcMain,
+    mutateWorkspace = async (mutator) => {
+      const nextWorkspace = await mutator(getWorkspace());
+      const savedWorkspace = await saveWorkspace(nextWorkspace);
+      setWorkspace(savedWorkspace);
+      return savedWorkspace;
+    },
     saveWorkspace,
     setWorkspace
   } = options;
@@ -29,56 +38,88 @@ function registerRequestIpc(options = {}) {
   ipcMain.handle('request:send', async (_event, request, environment) => {
     assertRequestPayload(request);
     assertOptionalEnvironmentPayload(environment);
-    const workspace = getWorkspace();
-    const requestContext = request.id ? findWorkspaceRequestContext(workspace, request.id) : null;
+    const workspaceSnapshot = getWorkspace();
+    const workspaceId = getWorkspaceId();
+    const requestContext = request.id ? findWorkspaceRequestContext(workspaceSnapshot, request.id) : null;
+    const baseEnvironment = cloneJson(environment);
+    const baseCollectionVariables = cloneJson(requestContext?.collection?.variables || []);
+    const baseLocalVariables = cloneJson(request.variables || requestContext?.request?.variables || []);
+    const baseGlobals = cloneJson(workspaceSnapshot.globals || []);
+    const baseCookies = cloneJson(workspaceSnapshot.cookies || []);
     try {
-      const { response: result, environment: nextEnvironment, collectionVariables, localVariables } = await runRequestWithScripts(request, environment, {
+      const { response: result, environment: nextEnvironment, collectionVariables, localVariables, globals } = await runRequestWithScripts(request, environment, {
         collectionVariables: requestContext?.collection?.variables || [],
-        cookieJar: workspace.cookies || []
+        globals: workspaceSnapshot.globals || [],
+        cookieJar: workspaceSnapshot.cookies || [],
+        trustedCapabilities: workspaceSnapshot.settings?.sandbox?.trustedCapabilities || {},
+        vault: getVaultStore(workspaceId)
       });
-      if (result.updatedAuth && request.id) {
-        if (requestContext?.request) {
-          requestContext.request.auth = result.updatedAuth;
-        } else {
-          updateWorkspaceRequestAuth(workspace, request.id, result.updatedAuth);
+      await mutateWorkspace(async (latestWorkspace) => {
+        const latestRequestContext = request.id ? findWorkspaceRequestContext(latestWorkspace, request.id) : null;
+        if (result.updatedAuth && request.id) {
+          if (latestRequestContext?.request) {
+            latestRequestContext.request.auth = result.updatedAuth;
+          } else {
+            updateWorkspaceRequestAuth(latestWorkspace, request.id, result.updatedAuth);
+          }
         }
-      }
-      if (Array.isArray(result.updatedCookies)) {
-        workspace.cookies = result.updatedCookies;
-      }
-      applyScriptVariableMutationsToWorkspace(workspace, {
-        collection: requestContext?.collection,
-        request: requestContext?.request,
-        environment: nextEnvironment,
-        collectionVariables,
-        localVariables
-      });
-      workspace.history = [
-        historyEntry({
-          method: request.method,
-          url: result.finalUrl,
-          statusCode: result.statusCode,
-          durationMillis: result.durationMillis
-        }),
-        ...(workspace.history || [])
-      ].slice(0, 100);
-      setWorkspace(await saveWorkspace(workspace));
+        if (Array.isArray(result.updatedCookies)) {
+          latestWorkspace.cookies = mergeCookieJarByDelta(latestWorkspace.cookies || [], baseCookies, result.updatedCookies);
+        }
+        applyScriptVariableMutationsToWorkspace(latestWorkspace, {
+          collection: latestRequestContext?.collection,
+          request: latestRequestContext?.request,
+          environment: nextEnvironment,
+          collectionVariables,
+          localVariables,
+          globals,
+          baseEnvironment,
+          baseCollectionVariables,
+          baseLocalVariables,
+          baseGlobals
+        });
+        latestWorkspace.history = [
+          historyEntry({
+            method: request.method,
+            url: result.finalUrl,
+            statusCode: result.statusCode,
+            durationMillis: result.durationMillis
+          }),
+          ...(latestWorkspace.history || [])
+        ].slice(0, 100);
+        return latestWorkspace;
+      }, { workspaceId });
       assertResponsePayload(result);
       return result;
     } catch (error) {
-      if (error?.preRequestScriptResult) {
-        applyScriptVariableMutationsToWorkspace(workspace, {
-          collection: requestContext?.collection,
-          request: requestContext?.request,
-          environment: error.environment,
-          collectionVariables: error.collectionVariables,
-          localVariables: error.localVariables
-        });
-        setWorkspace(await saveWorkspace(workspace));
+      if (error?.preRequestScriptResult && error.preRequestScriptResult.commitSideEffects !== false) {
+        await mutateWorkspace(async (latestWorkspace) => {
+          const latestRequestContext = request.id ? findWorkspaceRequestContext(latestWorkspace, request.id) : null;
+          applyScriptVariableMutationsToWorkspace(latestWorkspace, {
+            collection: latestRequestContext?.collection,
+            request: latestRequestContext?.request,
+            environment: error.environment,
+            collectionVariables: error.collectionVariables,
+            localVariables: error.localVariables,
+            globals: error.globals,
+            baseEnvironment,
+            baseCollectionVariables,
+            baseLocalVariables,
+            baseGlobals
+          });
+          return latestWorkspace;
+        }, { workspaceId });
       }
       throw error;
     }
   });
+}
+
+function cloneJson(value) {
+  if (value == null) {
+    return value;
+  }
+  return JSON.parse(JSON.stringify(value));
 }
 
 module.exports = {
