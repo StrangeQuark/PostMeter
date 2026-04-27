@@ -75,22 +75,25 @@ PostMeter must remain a standalone local desktop application. Do not add PostMet
 - Added a golden Postman/Newman-style sandbox corpus under `test/fixtures/postman`, covering async ordering, nested `pm.sendRequest`, iteration data, cookie scope, variable precedence, execution control, cancellation, skipped requests, and mixed `pm.test` pass/fail behavior through the normal Postman importer and collection runner.
 - Fixed collection-run brokered `pm.sendRequest` to use the owning runner's injected sender, keeping corpus runs deterministic and aligned with mocked desktop/CLI runner behavior.
 - Added the first OS-level script sandbox backend in `src/core/osSandbox.js`: Linux script workers can launch through `bubblewrap` with cleared environment, unshared namespaces including network, dropped capabilities, private writable `/tmp` and `/run`, disabled nested user namespaces, and read-only runtime/app/library bind mounts while retaining the existing Node permission flags and broker boundary.
+- Added a Linux seccomp cBPF syscall policy layer to the `bubblewrap` backend, denying high-risk kernel APIs such as `bpf`, `ptrace`, keyring calls, module loading, mount APIs, `process_vm_*`, `perf_event_open`, `io_uring`, and nested namespace/mount syscalls; sandbox validation now asserts packaged and source launches carry the policy.
 - Added required-mode OS sandbox validation to `npm run sandbox:validate`, including Linux host filesystem and network denial probes, plus CI/release installation of the `bubblewrap` backend on Linux runners.
 - Resolved the Newman corpus target to the current npm `latest` dist-tag, `newman@6.2.2`.
 - Reoriented `docs/SANDBOX_CONTRACT.md` around Postman import parity as the scripting target: prefer brokered, bounded implementations of Postman APIs over intentionally narrow subsets.
 - Made brokered `pm.sendRequest`, current-URL `pm.cookies`, and `pm.cookies.jar()` default-enabled for Postman compatibility while preserving workspace-level disable switches and the OS/Node/broker sandbox boundary; extended the golden corpus to cover jar-style cookie helpers, including hostname and cookie-object set forms.
 - Implemented bounded brokered `pm.execution.runRequest` for collection runs, including request lookup, variable overrides, referenced test reporting on the caller, skip-to-null behavior, call/depth limits, script-network disable enforcement, transaction-safe side effects, and golden corpus coverage.
 - Implemented the first safe `pm.visualizer` pass with bounded template/data/result sizes, JSON-cloned visualizer data, a Handlebars-style interpolation and `{{#each}}` subset, sanitized output, sandboxed iframe rendering, and golden corpus coverage.
+- Expanded the safe `pm.visualizer` subset with bounded `{{#if}}`, `{{#unless}}`, `{{#with}}`, `{{else}}`, parent lookup, and root lookup support, plus focused tests and golden corpus coverage.
 - Implemented explicitly granted brokered `pm.vault` access with async `get`/`set`/`unset`, per-script operation/value limits, encrypted per-workspace desktop vault storage outside workspace JSON, mutation audit metadata, workspace setting/UI grant wiring, and golden corpus coverage.
-- Implemented a conservative package-loading compatibility pass: `pm.require()` and sandbox `require()` now support bundled allowlisted `crypto-js`, `lodash`, and `uuid` APIs while denying Node modules, external packages, paths, URLs, and non-allowlisted packages; the golden corpus covers these imports.
+- Implemented the initial conservative package-loading compatibility pass: `pm.require()` and sandbox `require()` first supported bundled allowlisted `crypto-js`, `lodash`, and `uuid` APIs while denying Node modules, external packages, paths, URLs, and non-allowlisted packages; the golden corpus covers these imports.
+- Expanded package loading to a manifest-driven bundled Postman built-in facade set for `ajv`, `chai`, `cheerio`, `crypto-js`, `csv-parse/lib/sync`, `lodash`, `moment`, `postman-collection`, `uuid`, and `xml2js`, while keeping Node resolution, package installation, external registry fetching, and team Package Library imports blocked.
 
 ## Highest Priority Steps
 
 The local sandbox v1 burn-down is complete for the brokered subset currently implemented, including the Linux OS isolation backend. The scripting target has shifted to Postman import parity; do not claim full Postman script compatibility until the remaining parity APIs below are implemented and covered by fixtures.
 
 1. Implement the next Postman sandbox parity APIs behind broker/storage/rendering boundaries.
-   - Full `pm.require` / package-library parity needs a signed/bundled/cacheable package model, package size limits, dependency policy, and supply-chain review. Direct Node module loading remains forbidden; the current implementation is an internal bundled allowlist for `crypto-js`, `lodash`, and `uuid`.
-   - Full `pm.visualizer` Handlebars helper/partial parity remains deferred; the supported subset covers escaped/raw interpolation and common each-block imports.
+   - Full `pm.require` / package-library parity still needs signed/cacheable user/team package support, exact external `npm:`/`jsr:` package version support, package size limits, dependency policy, and supply-chain review. Direct Node module loading remains forbidden; the current implementation is a reviewed internal bundled facade allowlist for common Postman built-ins.
+   - Full `pm.visualizer` custom helper/partial/interactive parity remains deferred; the supported subset covers escaped/raw interpolation, `{{#each}}`, `{{#if}}`, `{{#unless}}`, `{{#with}}`, `{{else}}`, parent lookup, and root lookup.
    - Full `pm.vault` grant parity still needs collection/request-level grants plus reset/audit management UX; the implemented safe subset is an explicit workspace-wide grant backed by encrypted local storage.
    - Extend the golden Postman/Newman corpus with each newly supported API.
 
@@ -100,10 +103,10 @@ The local sandbox v1 burn-down is complete for the brokered subset currently imp
    - macOS likely needs a seatbelt/sandbox profile launcher or helper with a hardened runtime/notarization story; `sandbox-exec` availability and deprecation status must be validated on supported macOS releases.
    - Until these exist, Windows/macOS scripting remains protected by the child process, Node permission flags, hardened `vm`, and broker model, but not an OS-level platform sandbox.
 
-3. Decide whether Linux needs a true seccomp-BPF syscall allowlist in addition to the current `bubblewrap` namespace policy.
-   - The current Linux backend is an OS namespace/filesystem/network sandbox. It is stronger than the previous child-process-only model but is not yet a hand-authored syscall allowlist.
+3. Decide whether Linux needs a stricter deny-by-default seccomp-BPF allowlist beyond the current `bubblewrap` namespace plus dangerous-syscall policy.
+   - The current Linux backend now combines OS namespace/filesystem/network isolation with a seccomp cBPF policy that denies high-risk syscall families, but it is intentionally not a broad deny-by-default allowlist because Electron/Node/V8 startup syscall needs are version- and distro-sensitive.
    - A strict syscall allowlist probably requires bundling or building a native helper/libseccomp profile and maintaining it against Electron/Node/V8 syscall changes.
-   - Keep product wording precise until this decision is made.
+   - Keep product wording precise: Linux has a syscall policy layer, but not a maintained strict allowlist.
 
 4. Run packaged sandbox security assertions on native Windows and macOS CI runners.
    - `npm run sandbox:validate` now runs on CI/release runners and checks the pinned Electron runtime before packaging.
@@ -120,10 +123,10 @@ The local sandbox v1 burn-down is complete for the brokered subset currently imp
 No answers are blocking the local implementation pass. Please answer these before expanding the sandbox surface or changing product positioning:
 
 1. Should an unsafe local automation mode, if implemented later, live behind a plugin model, a settings panel with per-capability permissions, a CLI-only flag, or some combination of those?
-2. For Linux, should "full syscall-policy sandbox" require a maintained seccomp-BPF allowlist in addition to the current `bubblewrap` namespace/filesystem/network policy, even if that means adding a native helper and more platform maintenance?
+2. For Linux, is the current `bubblewrap` namespace/filesystem/network sandbox plus dangerous-syscall seccomp policy sufficient for the public claim, or should "full syscall-policy sandbox" require a maintained deny-by-default seccomp-BPF allowlist even if that means adding a native helper and more platform maintenance?
 3. For Windows/macOS, are native helper binaries or native Node addons acceptable for AppContainer/seatbelt-style sandbox launchers, or should PostMeter avoid native helpers and keep the public claim scoped below equivalent OS-level coverage on those platforms?
 4. For the Newman corpus, `newman@6.2.2` is the current npm `latest` target. Do you want checked-in Newman JSON run reports generated by that exact version once a maintainer-approved Newman fixture export workflow exists?
-5. For Postman parity sequencing, should broader package-library support or deeper per-collection vault grant UX be implemented first after the current brokered API compatibility pass?
+5. For Postman parity sequencing, should exact team Package Library / external registry package support or deeper per-collection vault grant UX be implemented first after the current brokered API compatibility pass?
 
 ## Blocked External Validation
 
@@ -154,8 +157,8 @@ These are production-readiness items, but they cannot be completed by local iter
 
 ## Risks / Gaps Blocking Production Readiness
 
-- Request scripts run in child processes with minimal environments, Linux `bubblewrap` OS isolation when available/required, fail-closed Node permission flags in production runtimes, hardened host bridge values, bounded worker heap settings, bounded console/result capture, brokered privileged APIs, explicit unsupported-API errors, and VM timeouts. Native Windows/macOS OS sandbox backends and optional Linux seccomp-BPF allowlisting remain incomplete.
-- Postman import parity is now the scripting contract direction, but full package-library support, collection/request-level vault grant UX, full visualizer helper/partial parity, and full Postman protocol-profile semantics remain incomplete and need broker/storage/package designs before implementation.
+- Request scripts run in child processes with minimal environments, Linux `bubblewrap` OS isolation plus dangerous-syscall seccomp policy when available/required, fail-closed Node permission flags in production runtimes, hardened host bridge values, bounded worker heap settings, bounded console/result capture, brokered privileged APIs, explicit unsupported-API errors, and VM timeouts. Native Windows/macOS OS sandbox backends and optional stricter Linux deny-by-default seccomp-BPF allowlisting remain incomplete.
+- Postman import parity is now the scripting contract direction, but exact team Package Library / external registry package support, collection/request-level vault grant UX, visualizer custom helper/partial/interactive parity, and full Postman protocol-profile semantics remain incomplete and need broker/storage/package designs before implementation.
 - Load tests intentionally skip request scripts under sandbox v1; they use the normal HTTP sender directly and report the skip when scripts are present.
 - Native Windows/macOS packaged OS-sandbox assertions and externally captured Newman JSON run reports for `newman@6.2.2` remain external/future validation work.
 - Live OAuth provider behavior is not certified yet against Google, Microsoft Entra ID / Azure AD, and GitHub provider tenants.

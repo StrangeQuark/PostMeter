@@ -4,7 +4,8 @@ const { BODY_TYPES } = require('./models');
 const {
   OS_SANDBOX_MODES,
   createScriptWorkerLaunch,
-  osSandboxStatus
+  osSandboxStatus,
+  prepareSeccompStdio
 } = require('./osSandbox');
 const { LIMITS } = require('./payloadSchemas');
 const { buildUrl, sendRequest } = require('./httpClient');
@@ -200,11 +201,16 @@ function runPostmanScriptIsolated(scriptText, context = {}, options = {}) {
 
 function startScriptWorkerProcess(launch) {
   if (launch.transport === 'stdio') {
-    return spawn(launch.command, launch.args, {
-      env: launch.env,
-      serialization: 'json',
-      stdio: ['pipe', 'pipe', 'pipe']
-    });
+    const seccomp = prepareSeccompStdio(launch, ['pipe', 'pipe', 'pipe']);
+    try {
+      return spawn(launch.command, launch.args, {
+        env: launch.env,
+        serialization: 'json',
+        stdio: seccomp.stdio
+      });
+    } finally {
+      seccomp.cleanup();
+    }
   }
   return fork(launch.workerPath, [], {
     env: launch.env,

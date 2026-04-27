@@ -19,14 +19,29 @@ const MAX_VISUALIZER_DATA_BYTES = 256 * 1024;
 const MAX_VISUALIZER_HTML_LENGTH = 256 * 1024;
 const MAX_VISUALIZER_EACH_ITEMS = 500;
 const MAX_VISUALIZER_TEMPLATE_DEPTH = 5;
-const VISUALIZER_VALUE_PATTERN = '[A-Za-z0-9_@.-]+';
+const VISUALIZER_VALUE_PATTERN = '[A-Za-z0-9_@./-]+';
 const VISUALIZER_UNSAFE_PATH_PARTS = new Set(['__proto__', 'prototype', 'constructor']);
-const SCRIPT_PACKAGE_NAMES = ['crypto-js', 'lodash', 'uuid'];
+const VISUALIZER_BLOCK_HELPERS = new Set(['each', 'if', 'unless', 'with']);
+const SCRIPT_PACKAGE_DEFINITIONS = Object.freeze({
+  ajv: Object.freeze({ factory: createAjvPackage, maxExportKeys: 4 }),
+  chai: Object.freeze({ factory: createChaiPackage, maxExportKeys: 3 }),
+  cheerio: Object.freeze({ factory: createCheerioPackage, maxExportKeys: 2 }),
+  'crypto-js': Object.freeze({ factory: createCryptoJsPackage, maxExportKeys: 8 }),
+  'csv-parse/lib/sync': Object.freeze({ factory: createCsvParseSyncPackage, maxExportKeys: 2 }),
+  lodash: Object.freeze({ factory: createLodashPackage, maxExportKeys: 32 }),
+  moment: Object.freeze({ factory: createMomentPackage, maxExportKeys: 8 }),
+  'postman-collection': Object.freeze({ factory: createPostmanCollectionPackage, maxExportKeys: 16 }),
+  uuid: Object.freeze({ factory: createUuidPackage, maxExportKeys: 4 }),
+  xml2js: Object.freeze({ factory: createXml2jsPackage, maxExportKeys: 6 })
+});
+const SCRIPT_PACKAGE_NAMES = Object.freeze(Object.keys(SCRIPT_PACKAGE_DEFINITIONS).sort());
 const SCRIPT_PACKAGE_ALIASES = new Map([
   ['_', 'lodash'],
-  ['cryptojs', 'crypto-js']
+  ['cryptojs', 'crypto-js'],
+  ['csv-parse/sync', 'csv-parse/lib/sync']
 ]);
 const WORD_ARRAY_BYTES = new WeakMap();
+const MOMENT_INSTANCES = new WeakSet();
 
 function runPostmanScript(scriptText, context = {}, options = {}) {
   const source = String(scriptText || '');
@@ -492,11 +507,11 @@ function createAsyncPmApi({
         return replaceVariables(value, globals, collectionVariables, environmentVariables, iterationData, localVariables);
       },
       toObject() {
-        const object = {};
+        const object = createSafePlainObject();
         for (const source of [globals, collectionVariables, environmentVariables, iterationData, localVariables]) {
           for (const variable of source || []) {
             if (variable.enabled !== false && variable.key) {
-              object[variable.key] = variable.value ?? '';
+              setSafeObjectProperty(object, variable.key, variable.value ?? '');
             }
           }
         }
@@ -564,11 +579,11 @@ function createPmApi({ collectionVariables, environmentVariables, globals = [], 
         return replaceVariables(value, globals, collectionVariables, environmentVariables, localVariables);
       },
       toObject() {
-        const object = {};
+        const object = createSafePlainObject();
         for (const source of [globals, collectionVariables, environmentVariables, localVariables]) {
           for (const variable of source || []) {
             if (variable.enabled !== false && variable.key) {
-              object[variable.key] = variable.value ?? '';
+              setSafeObjectProperty(object, variable.key, variable.value ?? '');
             }
           }
         }
@@ -632,9 +647,11 @@ function normalizeScriptPackageName(packageName) {
   if (!alias) {
     throw sandboxError('pm.require requires a package name.');
   }
+  if (alias.startsWith('npm:') || alias.startsWith('jsr:')) {
+    throw sandboxError('PostMeter package loading only supports reviewed bundled sandbox packages. External registry packages are not installed or fetched from scripts.');
+  }
   if (
     alias.startsWith('node:')
-    || alias.startsWith('npm:')
     || alias.startsWith('http:')
     || alias.startsWith('https:')
     || alias.startsWith('.')
@@ -650,16 +667,22 @@ function normalizeScriptPackageName(packageName) {
 }
 
 function createScriptPackage(name) {
-  if (name === 'crypto-js') {
-    return createCryptoJsPackage();
+  const definition = SCRIPT_PACKAGE_DEFINITIONS[name];
+  if (!definition || typeof definition.factory !== 'function') {
+    throw sandboxError(`Sandbox package "${name}" is not available.`);
   }
-  if (name === 'lodash') {
-    return createLodashPackage();
+  return validateScriptPackageExport(name, definition.factory(), definition);
+}
+
+function validateScriptPackageExport(name, exported, definition) {
+  if (exported == null || (typeof exported !== 'object' && typeof exported !== 'function')) {
+    throw sandboxError(`Sandbox package "${name}" has an invalid bundled export.`);
   }
-  if (name === 'uuid') {
-    return hardenSandboxValue({ v4: () => crypto.randomUUID() });
+  const maxExportKeys = Number(definition.maxExportKeys || 0);
+  if (maxExportKeys > 0 && Object.keys(exported).length > maxExportKeys) {
+    throw sandboxError(`Sandbox package "${name}" exceeds its bundled export policy.`);
   }
-  throw sandboxError(`Sandbox package "${name}" is not available.`);
+  return hardenSandboxValue(exported);
 }
 
 function createCryptoJsPackage() {
@@ -724,10 +747,183 @@ function wordArrayToBuffer(value) {
   return Buffer.from(WORD_ARRAY_BYTES.get(value));
 }
 
+function createUuidPackage() {
+  return {
+    NIL: '00000000-0000-0000-0000-000000000000',
+    v4: () => crypto.randomUUID(),
+    validate(value) {
+      return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
+    },
+    version(value) {
+      const match = String(value || '').match(/^[0-9a-f]{8}-[0-9a-f]{4}-([1-5])[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+      return match ? Number(match[1]) : undefined;
+    }
+  };
+}
+
+function createAjvPackage() {
+  function Ajv(options = {}) {
+    return createAjvInstance(options);
+  }
+  Ajv.default = Ajv;
+  return Ajv;
+}
+
+function createAjvInstance(options = {}) {
+  let lastErrors = null;
+  const instance = {
+    validate(schema, data) {
+      const result = validateJsonSchema(schema, data, '', options);
+      lastErrors = result.errors.length ? result.errors : null;
+      return result.valid;
+    },
+    compile(schema) {
+      const validate = function compiledAjvValidator(data) {
+        const result = validateJsonSchema(schema, data, '', options);
+        validate.errors = result.errors.length ? hardenSandboxValue(cloneJson(result.errors)) : null;
+        return result.valid;
+      };
+      validate.errors = null;
+      return hardenSandboxValue(validate);
+    },
+    addSchema() {
+      return instance;
+    },
+    errorsText(errors = lastErrors) {
+      return (Array.isArray(errors) ? errors : [])
+        .map((error) => `${error.instancePath || '/'} ${error.message || 'is invalid'}`.trim())
+        .join(', ');
+    },
+    get errors() {
+      return lastErrors ? hardenSandboxValue(cloneJson(lastErrors)) : null;
+    }
+  };
+  return hardenSandboxValue(instance);
+}
+
+function validateJsonSchema(schema, data, pathValue = '', options = {}) {
+  const errors = [];
+  validateJsonSchemaAt(schema, data, pathValue, errors, options);
+  return { valid: errors.length === 0, errors };
+}
+
+function validateJsonSchemaAt(schema, data, pathValue, errors, options) {
+  if (schema === true || schema == null) {
+    return;
+  }
+  if (schema === false) {
+    addJsonSchemaError(errors, pathValue, 'false schema', 'must not validate');
+    return;
+  }
+  if (!schema || typeof schema !== 'object') {
+    return;
+  }
+
+  if (schema.const !== undefined && !deepEqual(data, schema.const)) {
+    addJsonSchemaError(errors, pathValue, 'const', 'must be equal to constant');
+    return;
+  }
+  if (Array.isArray(schema.enum) && !schema.enum.some((item) => deepEqual(item, data))) {
+    addJsonSchemaError(errors, pathValue, 'enum', 'must be equal to one of the allowed values');
+    return;
+  }
+  if (schema.type && !jsonSchemaTypeMatches(data, schema.type)) {
+    addJsonSchemaError(errors, pathValue, 'type', `must be ${Array.isArray(schema.type) ? schema.type.join(',') : schema.type}`);
+    return;
+  }
+
+  if (data && typeof data === 'object' && !Array.isArray(data)) {
+    const required = Array.isArray(schema.required) ? schema.required : [];
+    for (const key of required) {
+      if (!Object.prototype.hasOwnProperty.call(data, key)) {
+        addJsonSchemaError(errors, jsonPointer(pathValue, key), 'required', `must have required property '${key}'`);
+      }
+    }
+    const properties = schema.properties && typeof schema.properties === 'object' ? schema.properties : {};
+    for (const [key, propertySchema] of Object.entries(properties)) {
+      if (Object.prototype.hasOwnProperty.call(data, key)) {
+        validateJsonSchemaAt(propertySchema, data[key], jsonPointer(pathValue, key), errors, options);
+      }
+    }
+    if (schema.additionalProperties === false) {
+      for (const key of Object.keys(data)) {
+        if (!Object.prototype.hasOwnProperty.call(properties, key)) {
+          addJsonSchemaError(errors, jsonPointer(pathValue, key), 'additionalProperties', 'must NOT have additional properties');
+        }
+      }
+    }
+  }
+
+  if (Array.isArray(data) && schema.items) {
+    data.forEach((item, index) => validateJsonSchemaAt(schema.items, item, jsonPointer(pathValue, index), errors, options));
+  }
+  if (typeof data === 'string') {
+    if (schema.minLength != null && data.length < Number(schema.minLength)) {
+      addJsonSchemaError(errors, pathValue, 'minLength', `must NOT have fewer than ${schema.minLength} characters`);
+    }
+    if (schema.maxLength != null && data.length > Number(schema.maxLength)) {
+      addJsonSchemaError(errors, pathValue, 'maxLength', `must NOT have more than ${schema.maxLength} characters`);
+    }
+    if (schema.pattern != null && !(new RegExp(String(schema.pattern)).test(data))) {
+      addJsonSchemaError(errors, pathValue, 'pattern', `must match pattern "${schema.pattern}"`);
+    }
+  }
+  if (typeof data === 'number') {
+    if (schema.minimum != null && data < Number(schema.minimum)) {
+      addJsonSchemaError(errors, pathValue, 'minimum', `must be >= ${schema.minimum}`);
+    }
+    if (schema.maximum != null && data > Number(schema.maximum)) {
+      addJsonSchemaError(errors, pathValue, 'maximum', `must be <= ${schema.maximum}`);
+    }
+  }
+}
+
+function jsonSchemaTypeMatches(value, expectedType) {
+  const expected = Array.isArray(expectedType) ? expectedType : [expectedType];
+  return expected.some((typeName) => {
+    const type = String(typeName || '');
+    if (type === 'array') {
+      return Array.isArray(value);
+    }
+    if (type === 'integer') {
+      return Number.isInteger(value);
+    }
+    if (type === 'number') {
+      return typeof value === 'number' && !Number.isNaN(value);
+    }
+    if (type === 'object') {
+      return value !== null && typeof value === 'object' && !Array.isArray(value);
+    }
+    if (type === 'null') {
+      return value === null;
+    }
+    return typeof value === type;
+  });
+}
+
+function addJsonSchemaError(errors, instancePath, keyword, message) {
+  errors.push({
+    instancePath: instancePath || '',
+    dataPath: instancePath || '',
+    keyword,
+    message,
+    schemaPath: ''
+  });
+}
+
+function jsonPointer(basePath, part) {
+  const escaped = String(part).replace(/~/g, '~0').replace(/\//g, '~1');
+  return `${basePath || ''}/${escaped}`;
+}
+
 function createLodashPackage() {
   const lodash = {
     assign(target, ...sources) {
-      return hardenSandboxValue(Object.assign(target == null ? {} : target, ...sources.filter((source) => source && typeof source === 'object')));
+    const output = target && typeof target === 'object' ? target : createSafePlainObject();
+      for (const source of sources) {
+        assignSafeObjectProperties(output, source);
+      }
+      return hardenSandboxValue(output);
     },
     cloneDeep(value) {
       return hardenSandboxValue(cloneJson(value));
@@ -792,19 +988,19 @@ function createLodashPackage() {
     },
     omit(value, keys) {
       const blocked = new Set((Array.isArray(keys) ? keys : [keys]).map(String));
-      const result = {};
+      const result = createSafePlainObject();
       for (const [key, item] of Object.entries(value || {})) {
         if (!blocked.has(key)) {
-          result[key] = item;
+          setSafeObjectProperty(result, key, item);
         }
       }
       return hardenSandboxValue(result);
     },
     pick(value, keys) {
-      const result = {};
+      const result = createSafePlainObject();
       for (const key of Array.isArray(keys) ? keys : [keys]) {
-        if (Object.prototype.hasOwnProperty.call(Object(value || {}), key)) {
-          result[key] = value[key];
+        if (!VISUALIZER_UNSAFE_PATH_PARTS.has(String(key)) && Object.prototype.hasOwnProperty.call(Object(value || {}), key)) {
+          setSafeObjectProperty(result, key, value[key]);
         }
       }
       return hardenSandboxValue(result);
@@ -848,6 +1044,28 @@ function lodashForEach(value, callback) {
       callback(item, key, value);
     }
   }
+}
+
+function assignSafeObjectProperties(target, source) {
+  if (!source || typeof source !== 'object') {
+    return;
+  }
+  for (const [key, value] of Object.entries(source)) {
+    setSafeObjectProperty(target, key, value);
+  }
+}
+
+function createSafePlainObject() {
+  return Object.create(null);
+}
+
+function setSafeObjectProperty(target, key, value) {
+  const safeKey = String(key || '');
+  if (!safeKey || VISUALIZER_UNSAFE_PATH_PARTS.has(safeKey)) {
+    return false;
+  }
+  target[safeKey] = value;
+  return true;
 }
 
 function lodashPredicate(predicate, item, key) {
@@ -948,6 +1166,742 @@ function lodashIsEqual(left, right) {
   return false;
 }
 
+function createChaiPackage() {
+  return {
+    expect,
+    assert: {
+      equal(actual, expected, message) {
+        assertCondition(actual == expected, message || `Expected ${actual} to equal ${expected}.`);
+      },
+      strictEqual(actual, expected, message) {
+        assertCondition(Object.is(actual, expected), message || `Expected ${actual} to strictly equal ${expected}.`);
+      },
+      deepEqual(actual, expected, message) {
+        assertCondition(deepEqual(actual, expected), message || 'Expected values to be deeply equal.');
+      },
+      isTrue(value, message) {
+        assertCondition(value === true, message || `Expected ${value} to be true.`);
+      },
+      isFalse(value, message) {
+        assertCondition(value === false, message || `Expected ${value} to be false.`);
+      },
+      isOk(value, message) {
+        assertCondition(Boolean(value), message || `Expected ${value} to be truthy.`);
+      },
+      include(actual, expected, message) {
+        try {
+          assertIncludes(actual, expected, false);
+        } catch (error) {
+          throw sandboxError(message || errorMessage(error));
+        }
+      }
+    },
+    should() {
+      return {};
+    }
+  };
+}
+
+function createMomentPackage() {
+  function moment(value) {
+    return createMomentInstance(parseMomentInput(value));
+  }
+  moment.utc = (value) => createMomentInstance(parseMomentInput(value));
+  moment.unix = (seconds) => createMomentInstance(new Date(Number(seconds || 0) * 1000));
+  moment.isMoment = (value) => MOMENT_INSTANCES.has(value);
+  moment.ISO_8601 = 'ISO_8601';
+  return moment;
+}
+
+function createMomentInstance(inputDate) {
+  let date = Number.isNaN(inputDate.getTime()) ? new Date(Number.NaN) : new Date(inputDate.getTime());
+  const instance = {
+    isValid() {
+      return !Number.isNaN(date.getTime());
+    },
+    format(pattern = 'YYYY-MM-DDTHH:mm:ssZ') {
+      if (!instance.isValid()) {
+        return 'Invalid date';
+      }
+      return formatMomentDate(date, pattern);
+    },
+    toISOString() {
+      return instance.isValid() ? date.toISOString() : null;
+    },
+    valueOf() {
+      return date.getTime();
+    },
+    unix() {
+      return Math.floor(date.getTime() / 1000);
+    },
+    clone() {
+      return createMomentInstance(date);
+    },
+    utc() {
+      return instance;
+    },
+    local() {
+      return instance;
+    },
+    add(amount, unit) {
+      date = addMomentDuration(date, Number(amount || 0), unit);
+      return instance;
+    },
+    subtract(amount, unit) {
+      date = addMomentDuration(date, -Number(amount || 0), unit);
+      return instance;
+    },
+    toDate() {
+      return safeDateLike(date);
+    },
+    toString() {
+      return instance.isValid() ? date.toISOString() : 'Invalid date';
+    }
+  };
+  MOMENT_INSTANCES.add(instance);
+  return hardenSandboxValue(instance);
+}
+
+function parseMomentInput(value) {
+  if (value && MOMENT_INSTANCES.has(value) && typeof value.valueOf === 'function') {
+    return new Date(value.valueOf());
+  }
+  if (value instanceof Date) {
+    return new Date(value.getTime());
+  }
+  if (typeof value === 'number') {
+    return new Date(value);
+  }
+  if (value == null || value === '') {
+    return new Date();
+  }
+  return new Date(String(value));
+}
+
+function addMomentDuration(date, amount, unit) {
+  const next = new Date(date.getTime());
+  const normalized = String(unit || 'milliseconds').toLowerCase();
+  if (normalized.startsWith('year')) {
+    next.setUTCFullYear(next.getUTCFullYear() + amount);
+  } else if (normalized.startsWith('month')) {
+    next.setUTCMonth(next.getUTCMonth() + amount);
+  } else if (normalized.startsWith('week')) {
+    next.setUTCDate(next.getUTCDate() + amount * 7);
+  } else if (normalized.startsWith('day')) {
+    next.setUTCDate(next.getUTCDate() + amount);
+  } else if (normalized.startsWith('hour')) {
+    next.setUTCHours(next.getUTCHours() + amount);
+  } else if (normalized.startsWith('minute')) {
+    next.setUTCMinutes(next.getUTCMinutes() + amount);
+  } else if (normalized.startsWith('second')) {
+    next.setUTCSeconds(next.getUTCSeconds() + amount);
+  } else {
+    next.setUTCMilliseconds(next.getUTCMilliseconds() + amount);
+  }
+  return next;
+}
+
+function formatMomentDate(date, pattern) {
+  const pad = (value, length = 2) => String(value).padStart(length, '0');
+  const replacements = {
+    YYYY: String(date.getUTCFullYear()),
+    YY: String(date.getUTCFullYear()).slice(-2),
+    MM: pad(date.getUTCMonth() + 1),
+    DD: pad(date.getUTCDate()),
+    HH: pad(date.getUTCHours()),
+    mm: pad(date.getUTCMinutes()),
+    ss: pad(date.getUTCSeconds()),
+    SSS: pad(date.getUTCMilliseconds(), 3),
+    Z: '+00:00'
+  };
+  return String(pattern || '')
+    .replace(/\[([^\]]*)\]/g, (_match, literal) => `\u0000${literal}\u0000`)
+    .replace(/YYYY|YY|SSS|MM|DD|HH|mm|ss|Z/g, (token) => replacements[token] || token)
+    .replace(/\u0000([^\u0000]*)\u0000/g, (_match, literal) => literal);
+}
+
+function safeDateLike(date) {
+  const millis = date.getTime();
+  return hardenSandboxValue({
+    getTime() {
+      return millis;
+    },
+    valueOf() {
+      return millis;
+    },
+    toISOString() {
+      return Number.isNaN(millis) ? null : new Date(millis).toISOString();
+    },
+    toString() {
+      return Number.isNaN(millis) ? 'Invalid Date' : new Date(millis).toISOString();
+    }
+  });
+}
+
+function createCsvParseSyncPackage() {
+  const parse = (input, options = {}) => parseCsvSync(input, options);
+  parse.parse = parse;
+  return parse;
+}
+
+function parseCsvSync(input, options = {}) {
+  const delimiter = String(options.delimiter || ',');
+  const quote = String(options.quote || '"');
+  const rows = [];
+  let row = [];
+  let field = '';
+  let quoted = false;
+  const source = String(input == null ? '' : input).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    const next = source[index + 1];
+    if (char === quote) {
+      if (quoted && next === quote) {
+        field += quote;
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (!quoted && source.startsWith(delimiter, index)) {
+      row.push(normalizeCsvField(field, options));
+      field = '';
+      index += delimiter.length - 1;
+    } else if (!quoted && char === '\n') {
+      row.push(normalizeCsvField(field, options));
+      pushCsvRow(rows, row, options);
+      row = [];
+      field = '';
+    } else {
+      field += char;
+    }
+  }
+  row.push(normalizeCsvField(field, options));
+  pushCsvRow(rows, row, options);
+  return hardenSandboxValue(applyCsvColumns(rows, options));
+}
+
+function normalizeCsvField(field, options) {
+  return options.trim === true ? String(field).trim() : String(field);
+}
+
+function pushCsvRow(rows, row, options) {
+  if (options.skip_empty_lines === true && row.every((field) => field === '')) {
+    return;
+  }
+  rows.push(row);
+}
+
+function applyCsvColumns(rows, options) {
+  if (!options.columns) {
+    return rows;
+  }
+  const headers = Array.isArray(options.columns)
+    ? options.columns.map(String)
+    : (rows.shift() || []).map(String);
+  return rows.map((row) => {
+    const object = createSafePlainObject();
+    headers.forEach((header, index) => {
+      if (header) {
+        setSafeObjectProperty(object, header, row[index] ?? '');
+      }
+    });
+    return object;
+  });
+}
+
+function createCheerioPackage() {
+  return {
+    load(html) {
+      return createCheerioRoot(html);
+    }
+  };
+}
+
+function createCheerioRoot(html) {
+  const source = String(html == null ? '' : html);
+  const query = function cheerioQuery(selector) {
+    if (selector && typeof selector === 'object' && selector.__postmeterCheerioElement) {
+      return createCheerioCollection([selector]);
+    }
+    return createCheerioCollection(selectCheerioElements(source, String(selector || '')));
+  };
+  query.html = () => source;
+  query.text = () => stripHtml(source);
+  query.root = () => createCheerioCollection([{ __postmeterCheerioElement: true, tag: 'root', attrs: createSafePlainObject(), inner: source, outer: source }]);
+  return hardenSandboxValue(query);
+}
+
+function createCheerioCollection(elements) {
+  const safeElements = elements.slice(0, 500);
+  const collection = {
+    length: safeElements.length,
+    text() {
+      return safeElements.map((element) => stripHtml(element.inner)).join('');
+    },
+    html() {
+      return safeElements[0]?.inner ?? null;
+    },
+    attr(name) {
+      return safeElements[0]?.attrs?.[String(name || '')];
+    },
+    first() {
+      return createCheerioCollection(safeElements.slice(0, 1));
+    },
+    eq(index) {
+      const offset = Number(index || 0);
+      return createCheerioCollection(offset >= 0 && offset < safeElements.length ? [safeElements[offset]] : []);
+    },
+    get(index) {
+      if (index == null) {
+        return hardenSandboxValue(safeElements.map((element) => ({ tagName: element.tag, attribs: cloneJson(element.attrs || {}) })));
+      }
+      const element = safeElements[Number(index)];
+      return element ? hardenSandboxValue({ tagName: element.tag, attribs: cloneJson(element.attrs || {}) }) : undefined;
+    },
+    each(callback) {
+      if (typeof callback === 'function') {
+        safeElements.forEach((element, index) => callback(index, hardenSandboxValue({ tagName: element.tag, attribs: cloneJson(element.attrs || {}) })));
+      }
+      return collection;
+    },
+    map(callback) {
+      const mapped = typeof callback === 'function'
+        ? safeElements.map((element, index) => callback(index, hardenSandboxValue({ tagName: element.tag, attribs: cloneJson(element.attrs || {}) })))
+        : [];
+      return hardenSandboxValue({ get: () => hardenSandboxValue(mapped) });
+    }
+  };
+  return hardenSandboxValue(collection);
+}
+
+function selectCheerioElements(source, selector) {
+  const parts = selector.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) {
+    return [];
+  }
+  let candidates = parseHtmlElementList(source);
+  for (const part of parts) {
+    candidates = candidates.flatMap((candidate) => parseHtmlElementList(candidate.inner).filter((element) => cheerioSelectorMatches(element, part)));
+    if (!candidates.length) {
+      candidates = parseHtmlElementList(source).filter((element) => cheerioSelectorMatches(element, part));
+    }
+  }
+  return candidates.filter((element) => cheerioSelectorMatches(element, parts[parts.length - 1]));
+}
+
+function parseHtmlElementList(source) {
+  const elements = [];
+  const pattern = /<([A-Za-z][A-Za-z0-9:-]*)([^>]*)>([\s\S]*?)<\/\1>/g;
+  let match;
+  while ((match = pattern.exec(String(source || ''))) !== null && elements.length < 1000) {
+    elements.push({
+      __postmeterCheerioElement: true,
+      tag: match[1].toLowerCase(),
+      attrs: parseMarkupAttributes(match[2]),
+      inner: match[3],
+      outer: match[0]
+    });
+  }
+  return elements;
+}
+
+function cheerioSelectorMatches(element, selector) {
+  const source = String(selector || '');
+  if (!source || source === '*') {
+    return true;
+  }
+  const idMatch = source.match(/#([A-Za-z0-9_-]+)/);
+  if (idMatch && element.attrs.id !== idMatch[1]) {
+    return false;
+  }
+  const classMatch = source.match(/\.([A-Za-z0-9_-]+)/);
+  if (classMatch && !String(element.attrs.class || '').split(/\s+/).includes(classMatch[1])) {
+    return false;
+  }
+  const attrMatch = source.match(/\[([A-Za-z0-9_.:-]+)(?:=(["']?)(.*?)\2)?\]/);
+  if (attrMatch) {
+    const actual = element.attrs[attrMatch[1]];
+    if (actual == null || (attrMatch[3] != null && String(actual) !== attrMatch[3])) {
+      return false;
+    }
+  }
+  const tagMatch = source.match(/^[A-Za-z][A-Za-z0-9:-]*/);
+  return !tagMatch || element.tag === tagMatch[0].toLowerCase();
+}
+
+function parseMarkupAttributes(source) {
+  const attrs = createSafePlainObject();
+  const pattern = /([A-Za-z_:][A-Za-z0-9_:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/g;
+  let match;
+  while ((match = pattern.exec(String(source || ''))) !== null) {
+    setSafeObjectProperty(attrs, match[1], match[2] ?? match[3] ?? match[4] ?? '');
+  }
+  return attrs;
+}
+
+function stripHtml(value) {
+  return String(value || '').replace(/<[^>]*>/g, '');
+}
+
+function createXml2jsPackage() {
+  function Parser(options = {}) {
+    return createXml2jsParser(options);
+  }
+  function Builder(options = {}) {
+    return createXml2jsBuilder(options);
+  }
+  return {
+    Parser,
+    Builder,
+    parseString: xml2jsParseString,
+    parseStringPromise: (xml, options = {}) => sandboxThenable(Promise.resolve(parseXmlToObject(xml, options)))
+  };
+}
+
+function createXml2jsParser(options = {}) {
+  return hardenSandboxValue({
+    parseString(xml, callback) {
+      return xml2jsParseString(xml, options, callback);
+    },
+    parseStringPromise(xml) {
+      return sandboxThenable(Promise.resolve(parseXmlToObject(xml, options)));
+    }
+  });
+}
+
+function createXml2jsBuilder(options = {}) {
+  return hardenSandboxValue({
+    buildObject(value) {
+      return buildXmlFromObject(value, options);
+    }
+  });
+}
+
+function xml2jsParseString(xml, options, callback) {
+  let parseOptions = options;
+  let done = callback;
+  if (typeof options === 'function') {
+    done = options;
+    parseOptions = {};
+  }
+  try {
+    const result = parseXmlToObject(xml, parseOptions || {});
+    if (typeof done === 'function') {
+      done(null, result);
+    }
+    return result;
+  } catch (error) {
+    if (typeof done === 'function') {
+      done(error);
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+function parseXmlToObject(xml, options = {}) {
+  const source = String(xml == null ? '' : xml).replace(/<\?xml[\s\S]*?\?>/g, '').trim();
+  const node = parseXmlNode(source);
+  if (!node) {
+    throw sandboxError('xml2js could not parse XML.');
+  }
+  const value = xmlNodeToObject(node, options);
+  if (options.explicitRoot === false) {
+    return hardenSandboxValue(value);
+  }
+  return hardenSandboxValue({ [node.name]: value });
+}
+
+function parseXmlNode(source) {
+  const match = String(source || '').match(/^<([A-Za-z_][A-Za-z0-9_.:-]*)([^>]*)>([\s\S]*)<\/\1>$/);
+  if (!match) {
+    return null;
+  }
+  const name = match[1];
+  const attrs = parseMarkupAttributes(match[2]);
+  const inner = match[3];
+  const children = [];
+  const childPattern = /<([A-Za-z_][A-Za-z0-9_.:-]*)([^>]*)>[\s\S]*?<\/\1>/g;
+  let childMatch;
+  while ((childMatch = childPattern.exec(inner)) !== null && children.length < 1000) {
+    const child = parseXmlNode(childMatch[0]);
+    if (child) {
+      children.push(child);
+    }
+  }
+  const text = children.length ? inner.replace(childPattern, '').trim() : inner.trim();
+  return { name, attrs, children, text };
+}
+
+function xmlNodeToObject(node, options) {
+  const explicitArray = options.explicitArray !== false;
+  const trim = options.trim === true;
+  const output = createSafePlainObject();
+  if (Object.keys(node.attrs).length && options.ignoreAttrs !== true) {
+    if (options.mergeAttrs === true) {
+      assignSafeObjectProperties(output, node.attrs);
+    } else {
+      output.$ = cloneJson(node.attrs);
+    }
+  }
+  for (const child of node.children) {
+    if (VISUALIZER_UNSAFE_PATH_PARTS.has(child.name)) {
+      continue;
+    }
+    const value = xmlNodeToObject(child, options);
+    if (output[child.name] == null) {
+      setSafeObjectProperty(output, child.name, explicitArray ? [value] : value);
+    } else if (Array.isArray(output[child.name])) {
+      output[child.name].push(value);
+    } else {
+      setSafeObjectProperty(output, child.name, [output[child.name], value]);
+    }
+  }
+  const text = trim ? node.text.trim() : node.text;
+  if (text) {
+    if (!node.children.length && !Object.keys(output).length) {
+      return text;
+    }
+    output._ = text;
+  }
+  return output;
+}
+
+function buildXmlFromObject(value, options = {}) {
+  const rootName = Object.keys(value || {})[0] || 'root';
+  return buildXmlNode(rootName, value?.[rootName], options);
+}
+
+function buildXmlNode(name, value, options) {
+  const attrkey = options.attrkey || '$';
+  const charkey = options.charkey || '_';
+  if (value == null || typeof value !== 'object') {
+    return `<${name}>${escapeXml(value == null ? '' : value)}</${name}>`;
+  }
+  const attrs = value[attrkey] && typeof value[attrkey] === 'object'
+    ? Object.entries(value[attrkey]).map(([key, item]) => ` ${key}="${escapeXml(item)}"`).join('')
+    : '';
+  const children = Object.entries(value)
+    .filter(([key]) => key !== attrkey && key !== charkey)
+    .flatMap(([key, item]) => (Array.isArray(item) ? item : [item]).map((entry) => buildXmlNode(key, entry, options)))
+    .join('');
+  const text = value[charkey] == null ? '' : escapeXml(value[charkey]);
+  return `<${name}${attrs}>${text}${children}</${name}>`;
+}
+
+function escapeXml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function createPostmanCollectionPackage() {
+  return {
+    Collection: function Collection(definition = {}) { return createPostmanCollection(definition); },
+    Item: function Item(definition = {}) { return createPostmanItem(definition); },
+    Request: function Request(definition = {}) { return createPostmanRequest(definition); },
+    Response: function Response(definition = {}) { return hardenSandboxValue(cloneJson(definition || {})); },
+    Url: function Url(definition = '') { return createPostmanUrl(definition); },
+    Header: function Header(definition = {}) { return createPostmanHeader(definition); },
+    HeaderList: function HeaderList(_parent, headers = []) { return createPostmanHeaderList(headers); },
+    Variable: function Variable(definition = {}) { return createPostmanVariable(definition); },
+    VariableScope: function VariableScope(definition = {}) { return createPostmanVariableScope(definition); }
+  };
+}
+
+function createPostmanCollection(definition = {}) {
+  const info = definition.info || {};
+  const items = createPostmanPropertyList((definition.item || []).map(createPostmanItem));
+  return hardenSandboxValue({
+    name: info.name || definition.name || '',
+    items,
+    toJSON() {
+      return {
+        info: { name: info.name || definition.name || '' },
+        item: items.all().map((item) => item.toJSON())
+      };
+    }
+  });
+}
+
+function createPostmanItem(definition = {}) {
+  const request = definition.request ? createPostmanRequest(definition.request) : undefined;
+  return hardenSandboxValue({
+    name: definition.name || '',
+    request,
+    items: createPostmanPropertyList((definition.item || []).map(createPostmanItem)),
+    toJSON() {
+      const output = { name: definition.name || '' };
+      if (request) {
+        output.request = request.toJSON();
+      }
+      const childItems = this.items.all();
+      if (childItems.length) {
+        output.item = childItems.map((item) => item.toJSON());
+      }
+      return output;
+    }
+  });
+}
+
+function createPostmanRequest(definition = {}) {
+  const request = typeof definition === 'string' ? { url: definition } : definition || {};
+  const headers = createPostmanHeaderList(request.header || request.headers || []);
+  const url = createPostmanUrl(request.url || '');
+  return hardenSandboxValue({
+    method: String(request.method || 'GET').toUpperCase(),
+    url,
+    headers,
+    body: request.body,
+    toJSON() {
+      return {
+        method: this.method,
+        url: url.toString(),
+        header: headers.all().map((header) => header.toJSON()),
+        body: cloneJson(this.body || {})
+      };
+    }
+  });
+}
+
+function createPostmanUrl(definition = '') {
+  const raw = typeof definition === 'string'
+    ? definition
+    : definition.raw || String(definition.protocol ? `${definition.protocol}://${(definition.host || []).join ? definition.host.join('.') : definition.host || ''}/${(definition.path || []).join ? definition.path.join('/') : definition.path || ''}` : '');
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    parsed = null;
+  }
+  return hardenSandboxValue({
+    raw,
+    protocol: parsed ? parsed.protocol.replace(/:$/, '') : '',
+    host: parsed ? parsed.hostname.split('.') : [],
+    path: parsed ? parsed.pathname.split('/').filter(Boolean) : [],
+    query: parsed ? Array.from(parsed.searchParams.entries()).map(([key, value]) => ({ key, value })) : [],
+    toString() {
+      return raw;
+    },
+    getHost() {
+      return parsed ? parsed.hostname : '';
+    },
+    getPath() {
+      return parsed ? parsed.pathname : '';
+    }
+  });
+}
+
+function createPostmanHeader(definition = {}) {
+  const header = typeof definition === 'string' ? { key: definition.split(':')[0], value: definition.split(':').slice(1).join(':').trim() } : definition || {};
+  return hardenSandboxValue({
+    key: String(header.key || ''),
+    value: header.value == null ? '' : String(header.value),
+    disabled: header.disabled === true,
+    toJSON() {
+      return { key: this.key, value: this.value, disabled: this.disabled };
+    }
+  });
+}
+
+function createPostmanHeaderList(headers = []) {
+  const list = (Array.isArray(headers) ? headers : []).map(createPostmanHeader);
+  const api = {
+    add(header) {
+      list.push(createPostmanHeader(header));
+      return api;
+    },
+    upsert(header) {
+      const next = createPostmanHeader(header);
+      const index = list.findIndex((item) => item.key.toLowerCase() === next.key.toLowerCase());
+      if (index >= 0) {
+        list[index] = next;
+      } else {
+        list.push(next);
+      }
+      return api;
+    },
+    get(name) {
+      return list.find((header) => header.key.toLowerCase() === String(name || '').toLowerCase())?.value;
+    },
+    has(name) {
+      return api.get(name) != null;
+    },
+    all() {
+      return hardenSandboxValue(list.slice());
+    },
+    count() {
+      return list.length;
+    },
+    toObject() {
+      const output = createSafePlainObject();
+      for (const header of list) {
+        setSafeObjectProperty(output, header.key, header.value);
+      }
+      return hardenSandboxValue(output);
+    }
+  };
+  return hardenSandboxValue(api);
+}
+
+function createPostmanVariable(definition = {}) {
+  return hardenSandboxValue({
+    key: String(definition.key || ''),
+    value: definition.value == null ? '' : String(definition.value),
+    type: String(definition.type || 'any'),
+    toJSON() {
+      return { key: this.key, value: this.value, type: this.type };
+    }
+  });
+}
+
+function createPostmanVariableScope(definition = {}) {
+  const values = new Map((definition.values || definition.variable || []).map((item) => [String(item.key || ''), item.value == null ? '' : String(item.value)]));
+  const api = {
+    get(key) {
+      return values.get(String(key || ''));
+    },
+    set(key, value) {
+      values.set(String(key || ''), value == null ? '' : String(value));
+    },
+    unset(key) {
+      values.delete(String(key || ''));
+    },
+    has(key) {
+      return values.has(String(key || ''));
+    },
+    toJSON() {
+      return Array.from(values.entries()).map(([key, value]) => ({ key, value }));
+    }
+  };
+  return hardenSandboxValue(api);
+}
+
+function createPostmanPropertyList(items = []) {
+  const list = items.slice();
+  const api = {
+    all() {
+      return hardenSandboxValue(list.slice());
+    },
+    count() {
+      return list.length;
+    },
+    each(callback) {
+      if (typeof callback === 'function') {
+        list.forEach((item) => callback(item));
+      }
+      return api;
+    },
+    append(item) {
+      list.push(item);
+      return api;
+    }
+  };
+  return hardenSandboxValue(api);
+}
+
 function variableApi(variables) {
   return hardenSandboxValue({
     get(key) {
@@ -966,10 +1920,10 @@ function variableApi(variables) {
       return replaceVariables(value, variables);
     },
     toObject() {
-      const object = {};
+      const object = createSafePlainObject();
       for (const variable of variables || []) {
         if (variable.enabled !== false && variable.key) {
-          object[variable.key] = variable.value ?? '';
+          setSafeObjectProperty(object, variable.key, variable.value ?? '');
         }
       }
       return hardenSandboxValue(object);
@@ -986,10 +1940,10 @@ function readOnlyVariableApi(variables) {
       return getVariable(variables, key) != null;
     },
     toObject() {
-      const object = {};
+      const object = createSafePlainObject();
       for (const variable of variables || []) {
         if (variable.enabled !== false && variable.key) {
-          object[variable.key] = variable.value ?? '';
+          setSafeObjectProperty(object, variable.key, variable.value ?? '');
         }
       }
       return hardenSandboxValue(object);
@@ -1034,12 +1988,12 @@ function normalizeExecutionRunRequestOptions(options) {
   if (!options || typeof options !== 'object') {
     return {};
   }
-  const normalized = {};
+  const normalized = createSafePlainObject();
   const variables = options.variables;
   if (variables && typeof variables === 'object' && !Array.isArray(variables)) {
-    normalized.variables = {};
+    normalized.variables = createSafePlainObject();
     for (const [key, value] of Object.entries(variables).slice(0, 100)) {
-      normalized.variables[String(key).slice(0, 256)] = value == null ? '' : String(value).slice(0, 4096);
+      setSafeObjectProperty(normalized.variables, String(key).slice(0, 256), value == null ? '' : String(value).slice(0, 4096));
     }
   }
   return normalized;
@@ -1154,30 +2108,27 @@ function renderVisualizerTemplate(template, data, depth = 0) {
   }
 
   const source = String(template || '');
-  const eachPattern = new RegExp(`\\{\\{\\s*#each\\s+(${VISUALIZER_VALUE_PATTERN})\\s*\\}\\}`, 'g');
+  const context = depth === 0 ? visualizerRootContext(data) : data;
+  const blockPattern = new RegExp(`\\{\\{\\s*#(${[...VISUALIZER_BLOCK_HELPERS].join('|')})\\s+(${VISUALIZER_VALUE_PATTERN})\\s*\\}\\}`, 'g');
   let output = '';
   let index = 0;
   let match;
 
-  while ((match = eachPattern.exec(source)) !== null) {
-    output = appendVisualizerOutput(output, renderVisualizerValues(source.slice(index, match.index), data));
-    const block = readVisualizerEachBlock(source, eachPattern.lastIndex);
+  while ((match = blockPattern.exec(source)) !== null) {
+    output = appendVisualizerOutput(output, renderVisualizerValues(source.slice(index, match.index), context));
+    const block = readVisualizerBlock(source, blockPattern.lastIndex, match[1]);
     if (!block) {
-      throw sandboxError('pm.visualizer template has an unclosed {{#each}} block.');
+      throw sandboxError(`pm.visualizer template has an unclosed {{#${match[1]}}} block.`);
     }
-    const value = readVisualizerValue(data, match[1]);
-    const entries = visualizerEachEntries(value);
-    for (const entry of entries) {
-      output = appendVisualizerOutput(
-        output,
-        renderVisualizerTemplate(block.template, visualizerEachContext(data, entry.value, entry.index, entry.key), depth + 1)
-      );
-    }
+    output = appendVisualizerOutput(
+      output,
+      renderVisualizerBlock(match[1], match[2], block, context, depth + 1)
+    );
     index = block.endIndex;
-    eachPattern.lastIndex = block.endIndex;
+    blockPattern.lastIndex = block.endIndex;
   }
 
-  return appendVisualizerOutput(output, renderVisualizerValues(source.slice(index), data));
+  return appendVisualizerOutput(output, renderVisualizerValues(source.slice(index), context));
 }
 
 function renderVisualizerValues(template, data) {
@@ -1191,19 +2142,35 @@ function renderVisualizerValues(template, data) {
     .replace(doublePattern, (_match, key) => escapeHtml(readVisualizerValue(data, key)));
 }
 
-function readVisualizerEachBlock(template, startIndex) {
-  const blockPattern = new RegExp(`\\{\\{\\s*(#each\\s+${VISUALIZER_VALUE_PATTERN}|/each)\\s*\\}\\}`, 'g');
+function readVisualizerBlock(template, startIndex, helperName) {
+  const helperPattern = [...VISUALIZER_BLOCK_HELPERS].join('|');
+  const blockPattern = new RegExp(`\\{\\{\\s*(#(${helperPattern})\\s+${VISUALIZER_VALUE_PATTERN}|else|/(${helperPattern}))\\s*\\}\\}`, 'g');
   blockPattern.lastIndex = startIndex;
-  let depth = 1;
+  const stack = [helperName];
+  let elseIndex = -1;
+  let elseEndIndex = -1;
   let match;
   while ((match = blockPattern.exec(template)) !== null) {
-    if (match[1].startsWith('#each')) {
-      depth += 1;
+    if (match[1].startsWith('#')) {
+      stack.push(match[2]);
+    } else if (match[1] === 'else') {
+      if (stack.length === 1) {
+        if (elseIndex !== -1) {
+          throw sandboxError(`pm.visualizer template block {{#${helperName}}} has multiple {{else}} sections.`);
+        }
+        elseIndex = match.index;
+        elseEndIndex = blockPattern.lastIndex;
+      }
     } else {
-      depth -= 1;
-      if (depth === 0) {
+      const closeHelper = match[3] || '';
+      const activeHelper = stack.pop();
+      if (closeHelper !== activeHelper) {
+        throw sandboxError(`pm.visualizer template block {{#${activeHelper || helperName}}} closed with {{/${closeHelper}}}.`);
+      }
+      if (stack.length === 0) {
         return {
-          template: template.slice(startIndex, match.index),
+          template: template.slice(startIndex, elseIndex === -1 ? match.index : elseIndex),
+          elseTemplate: elseIndex === -1 ? '' : template.slice(elseEndIndex, match.index),
           endIndex: blockPattern.lastIndex
         };
       }
@@ -1212,12 +2179,52 @@ function readVisualizerEachBlock(template, startIndex) {
   return null;
 }
 
+function renderVisualizerBlock(helperName, pathValue, block, data, depth) {
+  const value = readVisualizerValue(data, pathValue);
+  if (helperName === 'each') {
+    const entries = visualizerEachEntries(value);
+    if (!entries.length) {
+      return block.elseTemplate ? renderVisualizerTemplate(block.elseTemplate, data, depth) : '';
+    }
+    let output = '';
+    for (const entry of entries) {
+      output = appendVisualizerOutput(
+        output,
+        renderVisualizerTemplate(block.template, visualizerEachContext(data, entry.value, entry.index, entry.key), depth)
+      );
+    }
+    return output;
+  }
+  if (helperName === 'if') {
+    return renderVisualizerTemplate(visualizerTruthy(value) ? block.template : block.elseTemplate, data, depth);
+  }
+  if (helperName === 'unless') {
+    return renderVisualizerTemplate(visualizerTruthy(value) ? block.elseTemplate : block.template, data, depth);
+  }
+  if (helperName === 'with') {
+    if (!visualizerTruthy(value)) {
+      return block.elseTemplate ? renderVisualizerTemplate(block.elseTemplate, data, depth) : '';
+    }
+    return renderVisualizerTemplate(block.template, visualizerWithContext(data, value), depth);
+  }
+  return '';
+}
+
+function visualizerRootContext(data) {
+  const context = createSafePlainObject();
+  assignVisualizerObjectFields(context, data);
+  context.this = data;
+  context['@root'] = data;
+  return context;
+}
+
 function visualizerEachEntries(value) {
   if (Array.isArray(value)) {
     return value.slice(0, MAX_VISUALIZER_EACH_ITEMS).map((item, index) => ({ value: item, index }));
   }
   if (value && typeof value === 'object') {
     return Object.entries(value)
+      .filter(([key]) => !VISUALIZER_UNSAFE_PATH_PARTS.has(key))
       .slice(0, MAX_VISUALIZER_EACH_ITEMS)
       .map(([key, item], index) => ({ key, value: item, index }));
   }
@@ -1225,19 +2232,50 @@ function visualizerEachEntries(value) {
 }
 
 function visualizerEachContext(parent, item, index, key) {
-  const context = {};
-  if (parent && typeof parent === 'object' && !Array.isArray(parent)) {
-    Object.assign(context, parent);
-  }
-  if (item && typeof item === 'object' && !Array.isArray(item)) {
-    Object.assign(context, item);
-  }
+  return visualizerItemContext(parent, item, index, key);
+}
+
+function visualizerWithContext(parent, item) {
+  return visualizerItemContext(parent, item);
+}
+
+function visualizerItemContext(parent, item, index, key) {
+  const context = createSafePlainObject();
+  const root = parent?.['@root'] || parent;
+  assignVisualizerObjectFields(context, parent);
+  assignVisualizerObjectFields(context, item);
   context.this = item;
-  context['@index'] = index;
+  context['@root'] = root;
+  context['@parent'] = parent;
+  if (index != null) {
+    context['@index'] = index;
+  }
   if (key != null) {
     context['@key'] = key;
   }
   return context;
+}
+
+function assignVisualizerObjectFields(target, source) {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) {
+    return;
+  }
+  for (const [key, value] of Object.entries(source)) {
+    setSafeObjectProperty(target, key, value);
+  }
+}
+
+function visualizerTruthy(value) {
+  if (value == null || value === false) {
+    return false;
+  }
+  if (typeof value === 'number') {
+    return value !== 0 && !Number.isNaN(value);
+  }
+  if (typeof value === 'string' || Array.isArray(value)) {
+    return value.length > 0;
+  }
+  return true;
 }
 
 function appendVisualizerOutput(output, addition) {
@@ -1253,8 +2291,20 @@ function readVisualizerValue(data, path) {
   if (source === '.') {
     return data?.this;
   }
+  if (source === '@root') {
+    return data?.['@root'] || data;
+  }
   let value = data;
-  for (const part of source.split('.')) {
+  let remaining = source;
+  while (remaining.startsWith('../')) {
+    value = value?.['@parent'];
+    remaining = remaining.slice(3);
+  }
+  if (remaining.startsWith('@root.')) {
+    value = data?.['@root'] || data;
+    remaining = remaining.slice('@root.'.length);
+  }
+  for (const part of remaining.split('.')) {
     if (!part || VISUALIZER_UNSAFE_PATH_PARTS.has(part)) {
       return undefined;
     }
@@ -1664,9 +2714,9 @@ function pairListApi(pairs) {
       }
     },
     toObject() {
-      const object = {};
+      const object = createSafePlainObject();
       for (const pair of this.all()) {
-        object[pair.key] = pair.value;
+        setSafeObjectProperty(object, pair.key, pair.value);
       }
       return hardenSandboxValue(object);
     }
@@ -1696,9 +2746,9 @@ function responseHeaderApi(headers) {
       }
     },
     toObject() {
-      const object = {};
+      const object = createSafePlainObject();
       for (const header of this.all()) {
-        object[header.key] = header.value;
+        setSafeObjectProperty(object, header.key, header.value);
       }
       return hardenSandboxValue(object);
     }

@@ -71,7 +71,7 @@
                   "  pm.expect(pm.variables.get('globalOnly')).to.equal('global-only');",
                   "  pm.expect(pm.request.headers.get('X-Pre')).to.equal('collection-only');",
                   "});",
-                  "pm.visualizer.set('<section><h1>{{title}}</h1><p>{{status}}</p></section>', { title: 'Setup', status: pm.response.code });",
+                  "pm.visualizer.set('<section><h1>{{title}}</h1><p>{{status}}</p>{{#if ok}}<strong>ready</strong>{{else}}<strong>bad</strong>{{/if}}{{#with detail}}<span>{{name}}/{{@root.title}}</span>{{/with}}<ul>{{#each empty}}<li>{{this}}</li>{{else}}<li>none</li>{{/each}}</ul><ol>{{#each rows}}<li>{{../title}}:{{name}}/{{@root.status}}</li>{{/each}}</ol></section>', { title: 'Setup', status: pm.response.code, ok: true, detail: { name: 'Setup' }, empty: [], rows: [{ name: 'alpha' }, { name: 'beta' }] });",
                   "pm.environment.set('setupComplete', 'yes');"
                 ]
               }
@@ -168,12 +168,33 @@
                 "exec": [
                   "pm.test('bundled package loading', function () {",
                   "  const Crypto = pm.require('crypto-js');",
+                  "  const Ajv = require('ajv');",
+                  "  const chai = require('chai');",
+                  "  const cheerio = require('cheerio');",
+                  "  const parseCsv = require('csv-parse/lib/sync');",
                   "  const lodash = require('lodash');",
+                  "  const moment = require('moment');",
+                  "  const sdk = require('postman-collection');",
                   "  const uuid = pm.require('uuid');",
+                  "  const xml2js = require('xml2js');",
                   "  pm.expect(Crypto.SHA256('abc').toString(Crypto.enc.Hex)).to.equal('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');",
                   "  pm.expect(Crypto.enc.Base64.stringify(Crypto.enc.Utf8.parse('hello'))).to.equal('aGVsbG8=');",
+                  "  const ajv = new Ajv();",
+                  "  pm.expect(ajv.validate({ type: 'object', required: ['name'], properties: { name: { type: 'string' } } }, { name: 'Ada' })).to.equal(true);",
+                  "  chai.expect('PostMeter').to.include('Meter');",
+                  "  const $ = cheerio.load('<ul><li class=\"item\" data-id=\"1\">One</li><li class=\"item\" data-id=\"2\">Two</li></ul>');",
+                  "  pm.expect($('.item').length).to.equal(2);",
+                  "  pm.expect($('[data-id=\"2\"]').text()).to.equal('Two');",
+                  "  pm.expect(parseCsv('name,score\\nAda,2', { columns: true })[0].score).to.equal('2');",
                   "  pm.expect(lodash.get({ nested: { value: 'ok' } }, 'nested.value')).to.equal('ok');",
+                  "  pm.expect(moment.utc('2024-01-02T03:04:05Z').add(1, 'day').format('YYYY-MM-DD')).to.equal('2024-01-03');",
+                  "  const request = new sdk.Request({ method: 'POST', url: 'https://api.example.test/widgets', header: [{ key: 'X-Test', value: 'yes' }] });",
+                  "  pm.expect(request.url.getHost()).to.equal('api.example.test');",
+                  "  pm.expect(request.headers.get('X-Test')).to.equal('yes');",
                   "  pm.expect(uuid.v4()).to.match(/^[0-9a-f-]{36}$/);",
+                  "  let parsedXml;",
+                  "  xml2js.parseString('<root><item id=\"1\">ok</item></root>', { explicitArray: false }, function (error, value) { if (error) { throw error; } parsedXml = value; });",
+                  "  pm.expect(parsedXml.root.item._).to.equal('ok');",
                   "});",
                   "pm.environment.set('packageLoading', 'yes');"
                 ]

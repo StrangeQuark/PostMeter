@@ -2,7 +2,7 @@
 
 This document is the target contract for production-grade request scripting. It is the source of truth for sandbox implementation work; `docs/COMPATIBILITY.md` remains the user-facing current-support matrix.
 
-Status: Postman-import compatibility contract. The current runtime implements the brokered async subset described here in `src/core/scriptRuntime.js`, `src/core/scriptSandbox.js`, and `src/core/scriptWorker.js`, with a Linux `bubblewrap` OS isolation backend layered around script workers when available or required. The product target is for imported Postman pre-request and test scripts to run on the first try wherever PostMeter can provide equivalent behavior without giving scripts direct host filesystem, process, shell, Node, Electron, or renderer access.
+Status: Postman-import compatibility contract. The current runtime implements the brokered async subset described here in `src/core/scriptRuntime.js`, `src/core/scriptSandbox.js`, and `src/core/scriptWorker.js`, with a Linux `bubblewrap` OS isolation backend plus seccomp cBPF syscall policy layered around script workers when available or required. The product target is for imported Postman pre-request and test scripts to run on the first try wherever PostMeter can provide equivalent behavior without giving scripts direct host filesystem, process, shell, Node, Electron, or renderer access.
 
 ## Goals
 
@@ -89,7 +89,7 @@ The production runtime must provide these properties:
 - Host-created bridge objects, functions, arrays, errors, and async results exposed to scripts are hardened so scripts cannot reach the worker's host constructors through `constructor`, prototype, caught-error, or promise paths.
 - Any worker file-read allowlist is the minimum runtime bundle needed for script execution, not the whole repository or all of `src/core`.
 - Packaged Electron script workers require Node permission flags and fail closed when the pinned runtime cannot enforce them. CLI runs require the same on the supported Node 22+ baseline.
-- On Linux, script workers run through a `bubblewrap` backend when available. Required mode fails closed if `bubblewrap` is missing. The backend clears the environment, unshares user, PID, IPC, network, UTS, cgroup, and mount namespaces, disables nested user namespaces, drops capabilities, exposes only private `/tmp` and `/run` writable filesystems, and bind-mounts required runtime/app/library paths read-only.
+- On Linux, script workers run through a `bubblewrap` backend when available. Required mode fails closed if `bubblewrap` is missing. The backend clears the environment, unshares user, PID, IPC, network, UTS, cgroup, and mount namespaces, disables nested user namespaces, drops capabilities, exposes only private `/tmp` and `/run` writable filesystems, bind-mounts required runtime/app/library paths read-only, and installs a seccomp cBPF policy that denies high-risk kernel surfaces such as `bpf`, `ptrace`, keyring calls, module loading, mount APIs, `process_vm_*`, `perf_event_open`, `io_uring`, and nested namespace/mount syscalls.
 - Linux script workers do not receive host network namespace access. All HTTP(S) script traffic must continue to go through the parent-owned broker.
 - Native Windows and macOS syscall-policy backends require separate platform implementations before PostMeter can claim equivalent OS-level coverage on those platforms.
 - If required isolation primitives are unavailable on a platform or packaged runtime, the app must disable production sandbox scripting or downgrade the compatibility claim. It must not silently run with weaker privileges.
@@ -251,7 +251,7 @@ Required behavior:
 - Supports `pm.visualizer.set(template, data)` and `pm.visualizer.clear()`.
 - Clones visualizer data through JSON serialization so script objects and accessors do not cross the host boundary.
 - Enforces caps for template length, serialized data size, rendered HTML length, loop expansion, and template block nesting.
-- Supports escaped `{{value}}`, raw `{{{value}}}`, and common `{{#each value}}...{{/each}}` templates with `{{this}}`, `{{@index}}`, `{{@key}}`, and object-field lookups.
+- Supports escaped `{{value}}`, raw `{{{value}}}`, and a bounded Handlebars-style block subset: `{{#each}}`, `{{#if}}`, `{{#unless}}`, `{{#with}}`, `{{else}}`, `{{this}}`, `{{@index}}`, `{{@key}}`, `{{@root}}`, parent lookup with `../`, and object-field lookups.
 - Captures the latest visualizer output in the script result for the request that produced it.
 - Renders output in a sandboxed iframe with a restrictive document CSP.
 
@@ -288,16 +288,16 @@ Security restrictions:
 
 Required behavior:
 
-- Supports a bundled allowlist for common Postman imports: `crypto-js`, `lodash`, and `uuid`.
+- Supports a manifest-driven bundled allowlist for common Postman imports: `ajv`, `chai`, `cheerio`, `crypto-js`, `csv-parse/lib/sync`, `lodash`, `moment`, `postman-collection`, `uuid`, and `xml2js`.
 - Provides global `CryptoJS` and `_` aliases for legacy Postman scripts.
 - Caches packages per script execution and hardens returned package objects/functions before exposing them to user code.
 - Keeps package loading synchronous and local; it never reaches the filesystem, shell, network, npm registry, or host Node resolver from script code.
 
 Security restrictions:
 
-- Rejects `node:`, `npm:`, relative/absolute paths, URLs, backslash paths, and any package not on the allowlist.
+- Rejects `node:`, `npm:`, `jsr:`, relative/absolute paths, URLs, backslash paths, team Package Library specifiers, and any package not on the allowlist.
 - Does not expose Node `require`, Node built-ins, package installation, package update, transitive dependency loading, or user-controlled package paths.
-- Full Postman package-library parity remains deferred until there is a reviewed signed/bundled/cacheable package model.
+- Full Postman Package Library and external registry parity remains deferred until there is a reviewed signed/cacheable package model for user/team packages and exact external package versions.
 
 ## API Target Matrix
 
@@ -316,9 +316,9 @@ Security restrictions:
 | `pm.cookies` | Brokered current-URL and jar-style cookie helpers enabled by default for Postman import parity; `HttpOnly` values hidden; workspace settings may disable. |
 | `pm.execution` | Support collection-run control such as next-request/skip semantics where applicable, plus bounded brokered `runRequest` in collection runs. No-op or unsupported in single-send/test surfaces where not meaningful. |
 | `pm.iterationData` | Read-only current iteration data in collection/CLI runs; empty in single request sends. |
-| `pm.visualizer` | Supported through bounded template/data capture, a safe Handlebars-style subset, sanitization, and sandboxed iframe rendering. Full helper/partial parity is deferred. |
+| `pm.visualizer` | Supported through bounded template/data capture, a safe Handlebars-style subset, sanitization, and sandboxed iframe rendering. Custom helper/partial/interactive visualizer parity is deferred. |
 | `pm.vault` | Supported through explicit workspace grant, brokered async operations, encrypted per-workspace local storage, bounded values/operations, and mutation audit metadata. Collection/request grants and UI management are deferred. |
-| `pm.require` or package loading | Supports a bundled allowlist for `crypto-js`, `lodash`, and `uuid`; direct Node/external package loading remains forbidden. Full Postman package-library parity is deferred. |
+| `pm.require` or package loading | Supports bundled facades for common Postman built-ins: `ajv`, `chai`, `cheerio`, `crypto-js`, `csv-parse/lib/sync`, `lodash`, `moment`, `postman-collection`, `uuid`, and `xml2js`; direct Node/external package loading remains forbidden. Full team Package Library and external registry parity is deferred. |
 | Timers | Support bounded `setTimeout`/`clearTimeout`; `setInterval` is unsupported unless a future bounded interval contract is written. |
 | Promises and microtasks | Support with bounded drain rules. |
 | `console` | Bounded capture only; never direct process logging. |
@@ -364,7 +364,7 @@ Contract compliance requires:
 - The checked-in Postman/Newman-style sandbox corpus lives under `test/fixtures/postman` and must continue to run through the normal Postman importer and collection runner.
 - Adversarial tests for constructor/prototype escape attempts, dynamic code generation, Node/global access, filesystem/process access, log flooding, large payloads, recursive scheduling, malformed broker messages, duplicate final results, late messages, worker crashes, and oversized results.
 - Desktop single-send, desktop collection-run, CLI, and packaged-runtime coverage.
-- `npm run sandbox:validate` must pass against the pinned Electron runtime, including permission-model probes, Linux OS-sandbox filesystem/network-denial probes where applicable, and adversarial bridge-escape checks.
+- `npm run sandbox:validate` must pass against the pinned Electron runtime, including permission-model probes, Linux OS-sandbox filesystem/network-denial and seccomp-policy launch probes where applicable, and adversarial bridge-escape checks.
 - `npm run sandbox:validate:packaged` must pass against built desktop executables before release, including packaged path and ASAR behavior.
 - Packaged Linux assertions must prove the OS sandbox backend still works after packaging. Windows and macOS assertions must cover their native OS sandbox backends once those backends exist.
 

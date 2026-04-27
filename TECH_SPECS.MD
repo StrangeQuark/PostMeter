@@ -749,7 +749,7 @@ Implemented runtime behavior:
 - Runs pre-request scripts before a single request is sent and test scripts after the response is received.
 - Persists `pm.environment`, `pm.collectionVariables`, workspace `pm.globals`, and request-local `pm.variables` mutations back to the active workspace scopes for single sends and collection runs.
 - Starts script workers with a minimal environment instead of inheriting the full PostMeter/Electron process environment.
-- Starts script workers through `src/core/osSandbox.js` when an OS backend is available or required. The Linux backend uses `bubblewrap` with cleared environment, unshared namespaces including network, dropped capabilities, private writable `/tmp` and `/run`, disabled nested user namespaces, and read-only runtime/app/library bind mounts.
+- Starts script workers through `src/core/osSandbox.js` when an OS backend is available or required. The Linux backend uses `bubblewrap` with cleared environment, unshared namespaces including network, dropped capabilities, private writable `/tmp` and `/run`, disabled nested user namespaces, read-only runtime/app/library bind mounts, and a seccomp cBPF policy that denies high-risk kernel APIs including `bpf`, `ptrace`, keyring, module-loading, mount, process-memory, performance-event, `io_uring`, and nested namespace syscalls.
 - Starts script workers with Node permission flags when the pinned runtime supports them, allowing filesystem read access only to the minimum core script worker modules.
 - Fails closed for packaged Electron script execution when Node permission flags are unavailable, and requires the same permission support for CLI script workers on the supported Node 22+ baseline.
 - Starts script workers with a bounded V8 old-space limit. The default is `64` MB, tunable with `POSTMETER_SCRIPT_WORKER_MAX_OLD_SPACE_MB` or internal test options between `16` and `512` MB.
@@ -763,19 +763,19 @@ Implemented runtime behavior:
 - Supports a practical `pm.expect` subset: equality, deep equality, string/array/object include/contain, array members, object keys, type checks, length, one-of, above/below/within, match, property, existence, null/empty/truthy, true, false, undefined, and negated equality/include/existence/member checks.
 - Supports `pm.environment`, `pm.collectionVariables`, workspace `pm.globals`, request-local `pm.variables`, `pm.iterationData`, `pm.info` request metadata, request URL/header/body inspection, validated pre-request request mutation helpers, response status/header/body helpers, status-category response helpers, JSON-body response helpers, and `pm.response.to.have.status`.
 - Supports brokered timers, brokered `pm.sendRequest`, bounded brokered `pm.execution.runRequest`, current-URL `pm.cookies`, and `pm.cookies.jar()` helpers in the isolated worker runtime. Script network requests and script cookie access are enabled by default for Postman import parity and can be disabled in workspace settings.
-- Supports bounded `pm.visualizer` capture with JSON-cloned data, a safe Handlebars-style subset, sanitized output, and sandboxed iframe rendering in the desktop UI.
+- Supports bounded `pm.visualizer` capture with JSON-cloned data, a safe Handlebars-style subset for interpolation and common blocks, sanitized output, and sandboxed iframe rendering in the desktop UI.
 - Supports explicitly granted `pm.vault` access through the parent broker. Desktop vault values are stored outside workspace JSON in per-workspace encrypted vault files, using Electron `safeStorage` only when OS-backed encryption is available and not the Linux `basic_text` backend.
-- Supports `pm.require()` and sandbox `require()` for bundled allowlisted `crypto-js`, `lodash`, and `uuid` compatibility packages. The loader rejects Node built-ins, external packages, paths, URLs, and any package outside the allowlist.
+- Supports `pm.require()` and sandbox `require()` for bundled allowlisted Postman compatibility facades: `ajv`, `chai`, `cheerio`, `crypto-js`, `csv-parse/lib/sync`, `lodash`, `moment`, `postman-collection`, `uuid`, and `xml2js`. The loader rejects Node built-ins, external registry packages, team Package Library packages, paths, URLs, and any package outside the allowlist.
 - Supports `pm.execution.setNextRequest` and `pm.execution.skipRequest` for collection-run control.
 - Persists script side effects through queued latest-workspace commits with workspace identity guards and per-key/per-cookie delta merges, so overlapping sends/runs do not overwrite unrelated newer workspace edits.
 - Provides explicit unsupported-API errors for remaining unsupported Postman sandbox APIs and unsupported globals including package-library entries outside the allowlist, `fetch`, `setInterval`, `XMLHttpRequest`, `WebSocket`, `process`, Node `require`, and `Buffer`.
 - The Postman/Newman-style fixture corpus in `test/fixtures/postman` runs through the normal Postman importer and collection runner, covering async ordering, nested `pm.sendRequest`, `pm.execution.runRequest`, `pm.visualizer`, brokered `pm.vault`, bundled package loading, iteration data, cookie scope, variable precedence, execution control, cancellation, skipped requests, and mixed `pm.test` pass/fail behavior.
-- `npm run sandbox:validate` runs the pinned Electron runtime, verifies Node permission enforcement for arbitrary filesystem reads and child-process spawning, checks the worker launch allowlist, verifies Linux OS-sandbox filesystem/network denial where applicable, and runs an adversarial script-boundary probe.
+- `npm run sandbox:validate` runs the pinned Electron runtime, verifies Node permission enforcement for arbitrary filesystem reads and child-process spawning, checks the worker launch allowlist, verifies Linux OS-sandbox filesystem/network denial and seccomp-policy launch state where applicable, and runs an adversarial script-boundary probe.
 - `npm run sandbox:validate:packaged` runs the same validation entrypoint through a built desktop executable, covering packaged path, ASAR behavior, and Linux OS-backend behavior.
 
 Limitations:
 
-- Native Windows and macOS syscall-policy backends are not implemented yet; Linux has the `bubblewrap` OS isolation layer described above.
+- Native Windows and macOS syscall-policy backends are not implemented yet; Linux has the `bubblewrap` OS isolation and seccomp syscall-policy layer described above.
 - Load tests do not execute pre-request or test scripts; sandbox v1 keeps scripted load testing out of scope.
 
 ## CLI Runner
@@ -981,7 +981,7 @@ Missing tests:
 - Execute and monitor packaged custom-scheme OAuth redirect validation on native Windows and macOS release runners.
 - Replace remaining complex payload-specific IPC shape validation with generated validators from shared schemas.
 - Add signing, notarization, installer execution validation, and update metadata on top of the current unsigned GitHub Releases workflow.
-- Add native Windows/macOS OS sandbox backends, decide whether Linux needs a maintained seccomp-BPF allowlist beyond `bubblewrap` namespaces, and broaden Postman sandbox compatibility only within the documented safe subset.
+- Add native Windows/macOS OS sandbox backends, decide whether Linux needs a stricter deny-by-default seccomp-BPF allowlist beyond the current `bubblewrap` namespace plus dangerous-syscall policy, and broaden Postman sandbox compatibility only within the documented safe subset.
 - Add a more complete Postman variable-scope model and protocol profile behavior.
 - Deepen cookie-jar behavior toward browser parity for remaining edge cases and any source-format cookie metadata not yet represented by explicit fields or extension hints.
 - Extend local load-test governance only where it adds clear safety beyond current Load Test panel controls and global rate caps, such as run-budget presets or richer reporting around policy decisions.
