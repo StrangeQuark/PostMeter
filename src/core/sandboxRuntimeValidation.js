@@ -42,8 +42,8 @@ function validateWorkerLaunchPolicy(execArgv, env) {
     throw new Error('Script worker must not allow child-process access.');
   }
   const readFlags = execArgv.filter((value) => value.startsWith('--allow-fs-read='));
-  if (readFlags.length !== 3) {
-    throw new Error(`Script worker must allow exactly three runtime files, found ${readFlags.length}.`);
+  if (readFlags.length !== 4) {
+    throw new Error(`Script worker must allow exactly four runtime files, found ${readFlags.length}.`);
   }
   if (readFlags.some((value) => value.includes(','))) {
     throw new Error('Script worker file-read allowlist must use one flag per file.');
@@ -51,7 +51,7 @@ function validateWorkerLaunchPolicy(execArgv, env) {
   const basenames = readFlags
     .map((value) => path.basename(value.slice('--allow-fs-read='.length)))
     .sort();
-  assertDeepEqual(basenames, ['scriptRuntime.js', 'scriptWorker.js', 'variableScope.js']);
+  assertDeepEqual(basenames, ['dynamicVariables.js', 'scriptRuntime.js', 'scriptWorker.js', 'variableScope.js']);
 
   if (env.POSTMETER_SCRIPT_WORKER !== '1') {
     throw new Error('Script worker environment is missing POSTMETER_SCRIPT_WORKER.');
@@ -230,10 +230,17 @@ async function validateScriptBoundary(options = {}) {
 
       let objectEscaped = false;
       try {
-        ({}).constructor.constructor('return process')();
+        ({}).constructor.constructor('return process')().cwd();
         objectEscaped = true;
       } catch (_) {}
       pm.expect(objectEscaped).to.equal(false);
+
+      let functionEscaped = false;
+      try {
+        Function('return process')().cwd();
+        functionEscaped = true;
+      } catch (_) {}
+      pm.expect(functionEscaped).to.equal(false);
 
       let unsupportedWorked = false;
       try {

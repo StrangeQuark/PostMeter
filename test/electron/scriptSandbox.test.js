@@ -65,13 +65,13 @@ test('does not let environment variables disable script worker permission flags'
     const fileReadFlags = execArgv.filter((value) => value.startsWith('--allow-fs-read='));
 
     assert.ok(execArgv.includes('--permission'));
-    assert.equal(fileReadFlags.length, 3);
+    assert.equal(fileReadFlags.length, 4);
     assert.equal(fileReadFlags.some((value) => value.includes(',')), false);
     assert.deepEqual(
       fileReadFlags
         .map((value) => path.basename(value.slice('--allow-fs-read='.length)))
         .sort(),
-      ['scriptRuntime.js', 'scriptWorker.js', 'variableScope.js']
+      ['dynamicVariables.js', 'scriptRuntime.js', 'scriptWorker.js', 'variableScope.js']
     );
   } finally {
     if (originalDisable == null) {
@@ -228,6 +228,41 @@ test('does not expose host constructors, errors, or promises to sandbox scripts'
       pm.expect(headers[0].constructor).to.be.undefined;
       pm.expect(headers.map(function (header) { return header.key; }).join(',')).to.equal('X-Test');
 
+      const sdk = require('postman-collection');
+      const request = new sdk.Request({
+        method: 'POST',
+        url: 'https://api.example.test/current?one=1',
+        header: [{ key: 'X-SDK', value: 'yes' }],
+        body: { mode: 'urlencoded', urlencoded: [{ key: 'a', value: 'b' }] },
+        metadata: [{ key: 'meta', value: 'safe' }],
+        messages: [{ data: 'message', timestamp: '2026-04-27T00:00:00.000Z' }]
+      });
+      const requestJson = request.toJSON();
+      pm.expect(request.constructor).to.be.undefined;
+      pm.expect(request.headers.constructor).to.be.undefined;
+      pm.expect(request.headers.idx(0).constructor).to.be.undefined;
+      pm.expect(request.url.query.all().constructor).to.be.undefined;
+      pm.expect(request.url.query.idx(0).constructor).to.be.undefined;
+      pm.expect(request.body.urlencoded.idx(0).constructor).to.be.undefined;
+      pm.expect(request.metadata.idx(0).constructor).to.be.undefined;
+      pm.expect(request.messages.idx(0).constructor).to.be.undefined;
+      pm.expect(requestJson.constructor).to.be.undefined;
+      pm.expect(requestJson.header.constructor).to.be.undefined;
+
+      const sdkResponse = new sdk.Response({
+        code: 200,
+        header: [{ key: 'Content-Type', value: 'text/plain' }],
+        body: 'ok',
+        metadata: [{ key: 'received', value: 'yes' }],
+        trailers: [{ key: 'grpc-status', value: '0' }],
+        messages: [{ data: 'incoming', timestamp: '2026-04-27T00:00:00.000Z' }]
+      });
+      pm.expect(sdkResponse.constructor).to.be.undefined;
+      pm.expect(sdkResponse.headers.idx(0).constructor).to.be.undefined;
+      pm.expect(sdkResponse.metadata.idx(0).constructor).to.be.undefined;
+      pm.expect(sdkResponse.trailers.idx(0).constructor).to.be.undefined;
+      pm.expect(sdkResponse.messages.idx(0).constructor).to.be.undefined;
+
       let escaped = false;
       try {
         pm.test.constructor.constructor('return process')();
@@ -240,11 +275,18 @@ test('does not expose host constructors, errors, or promises to sandbox scripts'
         pm.expect(false).to.be.true;
       } catch (error) {
         try {
-          error.constructor.constructor('return process')();
+          error.constructor.constructor('return process')().cwd();
           errorEscaped = true;
         } catch (_) {}
       }
       pm.expect(errorEscaped).to.equal(false);
+
+      let functionEscaped = false;
+      try {
+        Function('return process')().cwd();
+        functionEscaped = true;
+      } catch (_) {}
+      pm.expect(functionEscaped).to.equal(false);
 
       const pending = pm.sendRequest('https://api.example.test/secure');
       pm.expect(pending.constructor).to.be.undefined;
@@ -602,6 +644,85 @@ test('rejects oversized brokered pm.sendRequest payloads and response bodies', a
   assert.equal(oversizedResponse.result.passed, false);
   assert.match(oversizedResponse.result.tests[0].error, /response body cannot exceed/);
   assert.equal(calls, 1);
+});
+
+test('normalizes broader Postman pm.sendRequest inputs and commits jar side effects', async () => {
+  const sent = [];
+  const execution = await runPostmanScriptIsolated(`
+    const sdk = require('postman-collection');
+    pm.test('sendRequest object forms and cookie callbacks', async function () {
+      const first = await pm.sendRequest({
+        method: 'POST',
+        url: { raw: 'https://api.example.test/form', query: [{ key: 'fromUrl', value: '1' }] },
+        header: [{ key: 'X-Array', value: 'yes' }],
+        body: { mode: 'urlencoded', urlencoded: [{ key: 'a', value: 'b' }] },
+        auth: { type: 'basic', basic: [{ key: 'username', value: 'ada' }, { key: 'password', value: 'lovelace' }] },
+        followRedirects: false,
+        timeout: 50
+      });
+      pm.expect(first.code).to.equal(200);
+
+      const request = new sdk.Request({
+        method: 'POST',
+        url: 'https://api.example.test/graphql',
+        header: { 'X-SDK': 'yes' },
+        body: { mode: 'graphql', graphql: { query: 'query Ok { ok }', variables: { id: 1 } } },
+        auth: { type: 'bearer', token: 'sdk-token' }
+      });
+      const second = await pm.sendRequest(request);
+      pm.expect(second.url).to.equal('https://api.example.test/graphql');
+
+      const jar = pm.cookies.jar();
+      pm.expect(await jar.get('https://api.example.test/form', 'sendSide')).to.equal('effect');
+      await new Promise(function (resolve, reject) {
+        pm.cookies.get('visible', function (error, value) {
+          if (error) { reject(error); return; }
+          try {
+            pm.expect(value).to.equal('cookie-value');
+            resolve();
+          } catch (assertion) {
+            reject(assertion);
+          }
+        });
+      });
+    });
+  `, {
+    request: { method: 'GET', url: 'https://api.example.test/path' },
+    environment: { id: 'env', name: 'Env', variables: [] },
+    cookieJar: [
+      { enabled: true, name: 'visible', value: 'cookie-value', domain: 'api.example.test', path: '/', secure: false, httpOnly: false, sameSite: 'Lax', hostOnly: true }
+    ]
+  }, {
+    trustedCapabilities: { sendRequest: true, cookies: true },
+    sendRequest: async (request, _environment, options = {}) => {
+      sent.push({ options, request });
+      return {
+        statusCode: 200,
+        headers: { 'content-type': ['application/json'] },
+        body: '{"ok":true}',
+        durationMillis: 2,
+        responseBytes: 11,
+        finalUrl: request.url,
+        updatedCookies: [
+          ...(options.cookieJar || []),
+          { enabled: true, name: 'sendSide', value: 'effect', domain: 'api.example.test', path: '/', secure: false, httpOnly: false, sameSite: 'Lax', hostOnly: true }
+        ]
+      };
+    },
+    timeoutMillis: 1000,
+    workerTimeoutMillis: 1500
+  });
+
+  assert.equal(execution.result.passed, true);
+  assert.equal(sent.length, 2);
+  assert.equal(sent[0].request.body, 'a=b');
+  assert.equal(sent[0].request.auth.type, 'basic');
+  assert.equal(sent[0].request.followRedirects, false);
+  assert.equal(sent[0].request.timeoutMillis, 50);
+  assert.equal(sent[0].options.cookieJar[0].name, 'visible');
+  assert.equal(sent[1].request.bodyType, 'RAW_JSON');
+  assert.match(sent[1].request.body, /query Ok/);
+  assert.equal(execution.cookies.find((item) => item.name === 'sendSide').value, 'effect');
 });
 
 test('discards side effects when aggregate worker result payloads are oversized', async () => {

@@ -32,6 +32,7 @@ let activeRunnerId = RENDERER_STATE_DEFAULTS.activeRunnerId;
 let lastLoadResult = RENDERER_STATE_DEFAULTS.lastLoadResult;
 let lastRunnerResult = RENDERER_STATE_DEFAULTS.lastRunnerResult;
 let lastResponse = RENDERER_STATE_DEFAULTS.lastResponse;
+let lastVaultMetadata = null;
 let lastStatusMessage = RENDERER_STATE_DEFAULTS.lastStatusMessage;
 let lastUserNotification = RENDERER_STATE_DEFAULTS.lastUserNotification;
 let activeModalId = RENDERER_STATE_DEFAULTS.activeModalId;
@@ -288,6 +289,7 @@ function bindUi() {
     onExportWorkspace: exportWorkspace,
     onImportCollection: importCollection,
     onExportCollection: () => exportCollection(null, 'postmeter'),
+    onExportPostman: () => exportCollection(null, 'postman'),
     onExportOpenApi: () => exportCollection(null, 'openapi'),
     onExportJMeter: () => exportCollection(null, 'jmeter'),
     onExportCurl: () => exportCollection(null, 'curl'),
@@ -304,6 +306,11 @@ function bindUi() {
     onDeleteEnvironment: () => deleteEnvironment(),
     onDeleteWorkspace: () => { void deleteWorkspace(); },
     onSwitchWorkspace: () => { void switchWorkspace(selectedWorkspaceId || activeWorkspaceId, { focus: 'workspace' }); },
+    onAddSandboxPackage: () => { void addSandboxPackageFromPrompt(); },
+    onRefreshSandboxPackages: () => renderWorkspacePanel(),
+    onBindVaultSecret: () => { void bindVaultSecretFromPrompt(); },
+    onRefreshVaultMetadata: () => { void refreshVaultMetadata(); },
+    onResetVault: () => { void resetVaultFromWorkspacePanel(); },
     onAddEnvironmentVariable: addVariable,
     onAddCollectionVariable: addCollectionVariable,
     onAddRequestVariable: addRequestVariable,
@@ -1116,6 +1123,61 @@ function normalizeSandboxPackageCache(value) {
     .filter((item) => item.specifier && item.source && item.integrity);
 }
 
+const SANDBOX_REVIEWED_PACKAGE_PATTERN = /^(?:npm:[a-z0-9@._/-]+@\d[\w.+-]*|jsr:[a-z0-9@._/-]+@\d[\w.+-]*|@[a-z0-9._-]+\/[a-z0-9._-]+)$/i;
+const SANDBOX_PACKAGE_REQUIRE_PATTERN = /\b(?:pm\.)?require\s*\(\s*(['"])([^'"]+)\1\s*\)/g;
+
+function sandboxPackageReferencesForWorkspace() {
+  const references = new Map();
+  for (const collection of workspace.collections || []) {
+    collectSandboxPackageReferencesFromScripts(collection, references);
+  }
+  return [...references.values()].sort((left, right) => left.specifier.localeCompare(right.specifier));
+}
+
+function collectSandboxPackageReferencesFromScripts(node, references) {
+  for (const request of node.requests || []) {
+    collectSandboxPackageReferencesFromText(request.scripts?.preRequest || '', references);
+    collectSandboxPackageReferencesFromText(request.scripts?.tests || '', references);
+  }
+  for (const folder of node.folders || []) {
+    collectSandboxPackageReferencesFromScripts(folder, references);
+  }
+}
+
+function collectSandboxPackageReferencesFromText(source, references) {
+  const text = String(source || '');
+  let match;
+  while ((match = SANDBOX_PACKAGE_REQUIRE_PATTERN.exec(text)) !== null) {
+    const specifier = String(match[2] || '').trim();
+    if (!/^(?:npm:|jsr:|@)/i.test(specifier)) {
+      continue;
+    }
+    if (!references.has(specifier)) {
+      references.set(specifier, {
+        pinned: SANDBOX_REVIEWED_PACKAGE_PATTERN.test(specifier),
+        specifier
+      });
+    }
+  }
+}
+
+function sandboxPackageStatusRows() {
+  ensureSettings();
+  const cache = new Map((workspace.settings.sandbox.packageCache || []).map((item) => [item.specifier, item]));
+  return sandboxPackageReferencesForWorkspace().map((reference) => {
+    const cached = cache.get(reference.specifier);
+    return {
+      ...reference,
+      cached: Boolean(cached),
+      status: !reference.pinned
+        ? 'Pin exact npm:/jsr: versions before review'
+        : cached
+          ? 'Reviewed'
+          : 'Missing reviewed package'
+    };
+  });
+}
+
 function normalizeVaultGrants(value, workspaceGrant = false) {
   const grants = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   return {
@@ -1197,6 +1259,129 @@ async function setTrustedScriptCapabilitiesFromInputs() {
   );
   await saveWorkspace(false, { scope: 'settings' });
   renderWorkspacePanel();
+}
+
+async function addSandboxPackageFromPrompt(defaultSpecifier = '') {
+  ensureSettings();
+  const firstMissing = sandboxPackageStatusRows().find((item) => item.pinned && !item.cached)?.specifier || '';
+  const specifier = String(prompt('Package specifier to review:', defaultSpecifier || firstMissing || 'npm:package@1.0.0') || '').trim();
+  if (!specifier) {
+    return;
+  }
+  if (!SANDBOX_REVIEWED_PACKAGE_PATTERN.test(specifier)) {
+    setStatus('Package review requires @team/package, npm:package@version, or jsr:package@version.');
+    return;
+  }
+  const source = String(prompt(`Paste reviewed source for ${specifier}:`, '') || '');
+  if (!source.trim()) {
+    return;
+  }
+  const dependenciesText = String(prompt('Reviewed dependencies, comma separated:', '') || '');
+  const dependencies = dependenciesText.split(',').map((item) => item.trim()).filter(Boolean).slice(0, 32);
+  const integrity = await sha256Integrity(source);
+  const next = normalizeSandboxPackageCache([
+    ...workspace.settings.sandbox.packageCache.filter((item) => item.specifier !== specifier),
+    { dependencies, integrity, source, specifier }
+  ]);
+  workspace.settings.sandbox.packageCache = next;
+  await saveWorkspace(false, { scope: 'settings' });
+  renderWorkspacePanel();
+  setStatus(`Reviewed package ${specifier} added to the sandbox cache.`);
+}
+
+async function sha256Integrity(source) {
+  const bytes = new TextEncoder().encode(String(source || ''));
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  const binary = String.fromCharCode(...new Uint8Array(digest));
+  return `sha256-${btoa(binary)}`;
+}
+
+function removeSandboxPackage(specifier) {
+  ensureSettings();
+  workspace.settings.sandbox.packageCache = workspace.settings.sandbox.packageCache.filter((item) => item.specifier !== specifier);
+  void saveWorkspace(false, { scope: 'settings' }).then(() => {
+    renderWorkspacePanel();
+    setStatus(`Reviewed package ${specifier} removed from the sandbox cache.`);
+  });
+}
+
+async function refreshVaultMetadata() {
+  if (!window.postmeter?.vault?.metadata) {
+    setStatus('Vault metadata is unavailable in this runtime.');
+    return;
+  }
+  try {
+    lastVaultMetadata = await window.postmeter.vault.metadata();
+    renderWorkspacePanel();
+    setStatus('Vault metadata refreshed.');
+  } catch (error) {
+    const message = error.message || String(error);
+    setStatus(`Vault metadata refresh failed: ${message}`);
+    notifyUser('Vault Metadata Failed', message);
+  }
+}
+
+async function bindVaultSecretFromPrompt() {
+  if (!window.postmeter?.vault?.bindSecret) {
+    setStatus('Vault binding is unavailable in this runtime.');
+    return;
+  }
+  const key = String(prompt('Vault secret key', '') || '').trim();
+  if (!key) {
+    return;
+  }
+  const value = prompt(`Local value for vault secret "${key}"`, '');
+  if (value == null) {
+    return;
+  }
+  try {
+    await window.postmeter.vault.bindSecret(key, value);
+    await refreshVaultMetadata();
+    setStatus(`Vault secret ${key} bound locally.`);
+  } catch (error) {
+    const message = error.message || String(error);
+    setStatus(`Vault secret binding failed: ${message}`);
+    notifyUser('Vault Binding Failed', message);
+  }
+}
+
+async function unsetVaultSecret(key) {
+  if (!window.postmeter?.vault?.unsetSecret) {
+    setStatus('Vault secret removal is unavailable in this runtime.');
+    return;
+  }
+  if (!confirm(`Remove vault secret "${key}" from this workspace?`)) {
+    return;
+  }
+  try {
+    await window.postmeter.vault.unsetSecret(key);
+    await refreshVaultMetadata();
+    setStatus(`Vault secret ${key} removed.`);
+  } catch (error) {
+    const message = error.message || String(error);
+    setStatus(`Vault secret removal failed: ${message}`);
+    notifyUser('Vault Removal Failed', message);
+  }
+}
+
+async function resetVaultFromWorkspacePanel() {
+  if (!window.postmeter?.vault?.reset) {
+    setStatus('Vault reset is unavailable in this runtime.');
+    return;
+  }
+  if (!confirm('Reset the local encrypted vault for this workspace? This removes stored local secret bindings.')) {
+    return;
+  }
+  try {
+    await window.postmeter.vault.reset();
+    lastVaultMetadata = { audit: [], available: true, secrets: [] };
+    renderWorkspacePanel();
+    setStatus('Vault reset.');
+  } catch (error) {
+    const message = error.message || String(error);
+    setStatus(`Vault reset failed: ${message}`);
+    notifyUser('Vault Reset Failed', message);
+  }
 }
 
 function selectInitialWorkspaceItem() {
@@ -1315,6 +1500,8 @@ function renderWorkspacePanel() {
   if ($('trustedScriptVaultInput')) {
     $('trustedScriptVaultInput').checked = workspace.settings?.sandbox?.trustedCapabilities?.vault === true;
   }
+  renderVaultMetadataPanel();
+  renderSandboxPackageCachePanel();
   const container = $('workspaceSummary');
   container.textContent = '';
   if (!workspaceItem) {
@@ -1347,6 +1534,117 @@ function renderWorkspacePanel() {
     row.append(labelElement, valueElement);
     container.append(row);
   }
+}
+
+function renderSandboxPackageCachePanel() {
+  const summary = $('sandboxPackageCacheSummary');
+  const missingList = $('sandboxPackageMissingList');
+  const cacheList = $('sandboxPackageCacheList');
+  if (!summary || !missingList || !cacheList) {
+    return;
+  }
+  ensureSettings();
+  const cache = workspace.settings.sandbox.packageCache || [];
+  const statuses = sandboxPackageStatusRows();
+  const missing = statuses.filter((item) => !item.cached || !item.pinned);
+  summary.textContent = `${cache.length} reviewed package${cache.length === 1 ? '' : 's'} cached. ${missing.length} package reference${missing.length === 1 ? '' : 's'} need review.`;
+  missingList.textContent = '';
+  cacheList.textContent = '';
+  for (const item of missing) {
+    missingList.append(packageStatusRow(item.specifier, item.status));
+  }
+  for (const item of cache) {
+    cacheList.append(packageCacheRow(item));
+  }
+}
+
+function packageStatusRow(specifier, status) {
+  const row = document.createElement('div');
+  row.className = 'workspace-package-row';
+  const text = document.createElement('div');
+  const title = document.createElement('strong');
+  title.textContent = specifier;
+  const detail = document.createElement('span');
+  detail.textContent = status;
+  text.append(title, document.createElement('br'), detail);
+  const action = document.createElement('button');
+  action.type = 'button';
+  action.textContent = 'Review';
+  action.addEventListener('click', () => {
+    void addSandboxPackageFromPrompt(specifier);
+  });
+  row.append(text, action);
+  return row;
+}
+
+function packageCacheRow(item) {
+  const row = document.createElement('div');
+  row.className = 'workspace-package-row';
+  const text = document.createElement('div');
+  const title = document.createElement('strong');
+  title.textContent = item.specifier;
+  const detail = document.createElement('span');
+  detail.textContent = item.integrity;
+  text.append(title, document.createElement('br'), detail);
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.textContent = 'Remove';
+  remove.addEventListener('click', () => {
+    removeSandboxPackage(item.specifier);
+  });
+  row.append(text, remove);
+  return row;
+}
+
+function renderVaultMetadataPanel() {
+  const summary = $('sandboxVaultSummary');
+  const secretList = $('sandboxVaultList');
+  const auditList = $('sandboxVaultAuditList');
+  if (!summary || !secretList || !auditList) {
+    return;
+  }
+  secretList.textContent = '';
+  auditList.textContent = '';
+  if (!lastVaultMetadata) {
+    summary.textContent = 'Vault metadata has not been loaded.';
+    return;
+  }
+  if (lastVaultMetadata.available === false) {
+    summary.textContent = 'Vault encryption is unavailable on this machine.';
+    return;
+  }
+  const secrets = Array.isArray(lastVaultMetadata.secrets) ? lastVaultMetadata.secrets : [];
+  const audit = Array.isArray(lastVaultMetadata.audit) ? lastVaultMetadata.audit : [];
+  summary.textContent = `${secrets.length} vault secret${secrets.length === 1 ? '' : 's'} stored. ${audit.length} audit entr${audit.length === 1 ? 'y' : 'ies'} retained.`;
+  for (const secret of secrets) {
+    secretList.append(vaultMetadataRow(secret.key, secret.updatedAt || 'Stored secret', {
+      actionLabel: 'Remove',
+      onAction: () => { void unsetVaultSecret(secret.key); }
+    }));
+  }
+  for (const entry of audit.slice(-5).reverse()) {
+    auditList.append(vaultMetadataRow(`${entry.operation || 'operation'} ${entry.key || ''}`.trim(), entry.at || entry.requestName || 'Vault audit entry'));
+  }
+}
+
+function vaultMetadataRow(titleText, detailText, options = {}) {
+  const row = document.createElement('div');
+  row.className = 'workspace-package-row';
+  const text = document.createElement('div');
+  const title = document.createElement('strong');
+  title.textContent = titleText || 'Vault entry';
+  const detail = document.createElement('span');
+  detail.textContent = detailText || '';
+  text.append(title, document.createElement('br'), detail);
+  row.append(text);
+  if (options.actionLabel && typeof options.onAction === 'function') {
+    const action = document.createElement('button');
+    action.type = 'button';
+    action.textContent = options.actionLabel;
+    action.addEventListener('click', options.onAction);
+    row.append(action);
+  }
+  return row;
 }
 
 function titleCaseTheme(theme) {
@@ -1865,12 +2163,45 @@ function displayVisualizer(visualizer) {
   }
   const html = typeof visualizer?.html === 'string' ? visualizer.html : '';
   frame.setAttribute('sandbox', 'allow-scripts');
-  frame.srcdoc = visualizerDocument(html, visualizer?.data);
+  frame.srcdoc = visualizerDocument(html, visualizer?.data, visualizer?.assets);
 }
 
-function visualizerDocument(html, data = {}) {
+function visualizerDocument(html, data = {}, assets = []) {
   const serializedData = safeScriptJson(data == null ? {} : data);
-  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; object-src 'none'; connect-src 'none'; media-src 'none'; worker-src 'none'; img-src data:; script-src 'unsafe-inline'; style-src 'unsafe-inline';"><style>html,body{margin:0;min-height:100%;font:13px system-ui,sans-serif;color:#1f2937;background:#fff;}body{padding:12px;box-sizing:border-box;}</style><script>window.pm=Object.freeze({getData:function(callback){if(typeof callback==='function'){callback(null,${serializedData});}}});</script></head><body>${html}</body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; object-src 'none'; connect-src 'none'; media-src 'none'; worker-src 'none'; img-src data:; script-src 'unsafe-inline'; style-src 'unsafe-inline';"><style>html,body{margin:0;min-height:100%;font:13px system-ui,sans-serif;color:#1f2937;background:#fff;}body{padding:12px;box-sizing:border-box;}</style><script>window.pm=Object.freeze({getData:function(callback){if(typeof callback==='function'){callback(null,${serializedData});}}});</script>${visualizerAssetMarkup(assets)}</head><body>${html}</body></html>`;
+}
+
+function visualizerAssetMarkup(assets = []) {
+  if (!Array.isArray(assets)) {
+    return '';
+  }
+  return assets.slice(0, 16).map((asset) => {
+    const name = escapeHtmlAttribute(asset?.name || '');
+    const source = String(asset?.source || '');
+    if (!name || !source || !String(asset?.integrity || '').startsWith('sha256-')) {
+      return '';
+    }
+    if (asset?.type === 'style') {
+      return `<style data-postmeter-visualizer-asset="${name}">${escapeStyleSource(source)}</style>`;
+    }
+    return `<script data-postmeter-visualizer-asset="${name}">${escapeScriptSource(source)}</script>`;
+  }).join('');
+}
+
+function escapeScriptSource(source) {
+  return String(source || '').replace(/<\/script/gi, '<\\/script');
+}
+
+function escapeStyleSource(source) {
+  return String(source || '').replace(/<\/style/gi, '<\\/style');
+}
+
+function escapeHtmlAttribute(value) {
+  return String(value == null ? '' : value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
 }
 
 function safeScriptJson(value) {

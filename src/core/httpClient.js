@@ -83,8 +83,8 @@ async function sendRequest(request, environment, options = {}) {
   const fetchOptions = {
     method,
     headers,
-    redirect: 'follow',
-    signal: options.signal || AbortSignal.timeout(REQUEST_TIMEOUT_MILLIS)
+    redirect: requestForSend.followRedirects === false ? 'manual' : 'follow',
+    signal: requestSignal(options.signal, options.timeoutMillis)
   };
 
   if (shouldSendBody) {
@@ -182,7 +182,7 @@ async function readCertificateFile(filePath, label) {
 async function sendNodeRequest(url, requestOptions, tlsOptions, redirectCount = 0, originalOrigin = url.origin) {
   const response = await sendSingleNodeRequest(url, requestOptions, tlsOptions);
   const location = response.headers.location?.[0];
-  if (!REDIRECT_STATUS_CODES.has(response.statusCode) || !location) {
+  if (requestOptions.redirect === 'manual' || !REDIRECT_STATUS_CODES.has(response.statusCode) || !location) {
     return response;
   }
   if (redirectCount >= MAX_REDIRECTS) {
@@ -242,6 +242,26 @@ function sendSingleNodeRequest(url, requestOptions, tlsOptions) {
     }
     request.end();
   });
+}
+
+function requestSignal(parentSignal, timeoutMillis) {
+  const timeout = normalizeTimeoutMillis(timeoutMillis);
+  const timeoutSignal = AbortSignal.timeout(timeout);
+  if (!parentSignal) {
+    return timeoutSignal;
+  }
+  if (typeof AbortSignal.any === 'function') {
+    return AbortSignal.any([parentSignal, timeoutSignal]);
+  }
+  return parentSignal;
+}
+
+function normalizeTimeoutMillis(value) {
+  const timeout = Number(value || REQUEST_TIMEOUT_MILLIS);
+  if (!Number.isFinite(timeout) || timeout <= 0) {
+    return REQUEST_TIMEOUT_MILLIS;
+  }
+  return Math.max(1, Math.min(REQUEST_TIMEOUT_MILLIS, Math.floor(timeout)));
 }
 
 async function prepareRequestForSend(request, environment, options) {

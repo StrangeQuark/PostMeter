@@ -1,0 +1,55 @@
+{
+  "info": {
+    "name": "PostMeter Local Mock Script Parity",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "mock",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const hits = await pm.state.increment('hits');",
+          "if (pm.mock.matchRequest('mock-get-user', req)) {",
+          "  await pm.state.push('seenUsers', req.params.id);",
+          "  if (req.params.id === 'missing') {",
+          "    return { status: 404, body: { error: 'User not found', hits } };",
+          "  }",
+          "  pm.mock.sendExample('mock-user-example', res);",
+          "  return;",
+          "}",
+          "res.status(404).json({ error: 'Route not matched' });"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "id": "mock-get-user",
+      "name": "Get mock user",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "https://api.example.test/users/:id",
+          "protocol": "https",
+          "host": ["api", "example", "test"],
+          "path": ["users", ":id"]
+        }
+      },
+      "response": [
+        {
+          "id": "mock-user-example",
+          "name": "Mock user 200",
+          "code": 200,
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\"id\":\"example\",\"name\":\"Avery\"}"
+        }
+      ]
+    }
+  ]
+}

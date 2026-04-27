@@ -91,72 +91,103 @@ PostMeter must remain a standalone local desktop application. Do not add PostMet
 - Implemented scoped `pm.vault` grants for workspace, collection, and request access with explicit collection/request denial overrides, while keeping all secret operations brokered, bounded, encrypted outside workspace JSON, and audited without secret values.
 - Extended the golden Postman/Newman-style corpus to cover reviewed team/external package imports, visualizer helpers/partials/inline scripts, and the expanded sandbox parity behavior.
 - Hardened the reviewed package-cache policy to fail closed on duplicate packages, missing reviewed dependencies, package-count overflow, dependency-count overflow, and legacy workspace-wide vault grants that conflict with explicit request/collection denials.
+- Completed Step 1 of the Postman import parity plan with a generated official-docs parity matrix source in `src/core/postmanParityMatrix.js` and committed machine-readable output in `docs/postman-sandbox-parity-matrix.json`; the current matrix tracks 293 API, method, property, global, module, protocol, fixture, claim-gate, and security-decision rows against `newman@6.2.2`.
+- Added `src/core/postmanParityHarness.js` plus `scripts/postmanParityHarness.js` for matrix validation, matrix regeneration, local PostMeter differential runs, and optional live Newman comparison.
+- Completed Step 4 of the Postman import parity plan by implementing deterministic `pm.test` result ordering, `pm.test.skip`, `pm.test.index`, chained test registration, mixed callback/promise tests, broader Chai-compatible `pm.expect`/`chai.assert` helpers, response JSON-schema/error helpers, variable `clear`/`toJSON`/metadata handling, iteration-data unset/JSON behavior, the documented Postman dynamic variable catalog, request interpolation for dynamic variables, `pm.execution.location`, and a 10-call per-script `pm.execution.runRequest` limit while preserving the script-worker permission boundary.
+- Added the HTTP-core differential collection fixture and desktop-observation template under `test/fixtures/postman`, then covered the new matrix/harness with focused Node tests and `npm run postman:parity:validate` in `npm run check`.
+- Completed Step 2 of the Postman import parity plan by adding the documented Postman global object surface, sandboxed `Function` support with escape regressions, bounded interval/microtask/timer behavior, richer console capture, Postman-listed NodeJS module facades, and safe array-buffer results for Blob/Web Crypto without exposing host constructors.
+- Expanded the golden Postman/Newman-style corpus and generated parity matrix so runtime globals, built-in package facades, legacy package globals, and Postman-listed NodeJS modules are fixture-covered instead of tracked as unstarted gaps.
+- Completed Step 5 of the Postman import parity plan by expanding brokered `pm.sendRequest` input normalization, callback/promise cookie helper behavior, staged `pm.sendRequest` cookie-jar side effects, reviewed package-cache import/UI workflow, safer Handlebars-compatible visualizer behavior with integrity-checked reviewed assets, and desktop vault binding/reset/audit UX without exposing host filesystem, process, Node, Electron, renderer, or raw network primitives to scripts.
+- Completed Step 6 of the Postman import parity plan by preserving and executing imported GraphQL Before query/After response hooks, preserving and executing imported gRPC Before invoke/On message/After response hooks with protocol metadata/messages/`pm.message`, and recording the current official-docs WebSocket/Socket.IO no-script-hook audit in the generated parity matrix.
+- Completed Step 7 of the Postman import parity plan by adding a core local mock server runner with imported mock script preservation, method/path-only route matching, path variables, saved-example fallback, `pm.mock.matchRequest`, `pm.mock.sendExample`, Express-style `req`/`res` helpers, top-level mock-script `await`/`return`, and bounded transaction-safe `pm.state` storage.
+- Completed Step 8 of the Postman import parity plan by adding bounded Postman metadata preservation on collections/folders/requests/examples/certificates, Postman-compatible collection export, original/deterministic request-ID aliases for `runRequest`/`setNextRequest`/`pm.info`, import-order preservation for mixed request/folder hierarchies, and round-trip coverage for script events, variables, package/cookie/vault/mock/visualizer bindings, protocol profiles, examples, certificates, auth metadata, and file/binary body references.
+- Completed Step 9 of the Postman import parity plan by adding the production claim gate (`npm run postman:parity:claim`), release-gate manifest validation (`npm run release:gate`), a broad real-world-style Postman import corpus, expanded adversarial sandbox tests, and regenerated parity-matrix rows for claim blockers. The claim gate currently fails closed on five remaining default-import blockers: `cookies.httponly-parity`, `sendRequest.advanced-auth-proxy`, `sendRequest.file-binary-bindings`, `require.pm.online-fetch-review`, and `grpc.live-desktop-transport`.
+- Completed Step 10 of the Postman import parity plan by adding a separate OS-sandbox platform completion matrix at `docs/os-sandbox-platform-matrix.json`, generated from `src/core/osSandboxPlatformMatrix.js`, plus `npm run sandbox:platform:validate` and `npm run sandbox:platform:claim`. Normal validation, CI, release workflows, and `npm run release:gate` now require the platform matrix to stay current, while the stronger platform-equivalent full OS sandbox claim intentionally fails closed until native Windows/macOS backends and the Linux deny-by-default seccomp decision are resolved.
 
 ## Highest Priority Steps
 
 The secure brokered sandbox base is in place. The next highest priority is full 1:1 Postman scripting import parity as defined by `docs/SANDBOX_CONTRACT.md`. Do not claim complete Postman script compatibility until every item below is implemented, verified, and reflected in `docs/COMPATIBILITY.md`.
 
-1. Build the Postman parity inventory and differential harness first.
+1. Build the Postman parity inventory and differential harness first. Status: complete for the initial Step 1 implementation; keep extending the matrix and fixtures as later steps move rows from gap to implemented.
    - Generate a machine-readable parity matrix from the official Postman Sandbox API reference, script run-order docs, dynamic-variable docs, package docs, mock docs, vault docs, GraphQL docs, and gRPC docs.
    - Add a status row for every API/method/property/global/module/protocol hook: unsupported, implemented, intentionally stricter, desktop-only, Newman-compatible, fixture-covered, and security-reviewed.
    - Extend the existing `test/fixtures/postman` corpus so each row has at least one fixture before it can be marked complete.
    - Add a differential runner that captures PostMeter output and latest targeted Newman output (`newman@6.2.2`) for supported surfaces, then compares test names/order/results, variables, cookies, request mutations, console output, response objects, and errors.
    - Add a desktop-observation path for APIs Newman does not support, especially `pm.vault`, `pm.mock`, `pm.state`, GraphQL hooks, gRPC hooks, visualizer behavior, and desktop-specific permission prompts.
+   - Implemented artifacts: `docs/postman-sandbox-parity-matrix.json`, `src/core/postmanParityMatrix.js`, `src/core/postmanParityHarness.js`, `scripts/postmanParityHarness.js`, `test/fixtures/postman/differential-http-core.collection.json`, and `test/fixtures/postman/desktop-observations/`.
+   - Verification commands: `npm run postman:parity:validate`, `npm run postman:parity:diff`, and optional live Newman comparison with `npm run postman:parity:diff -- --newman --download-newman`.
 
-2. Replace partial script globals and module facades with Postman-compatible runtime surfaces.
+2. Replace partial script globals and module facades with Postman-compatible runtime surfaces. Status: complete for the Step 2 implementation; keep adding narrower row-level fixtures if future Postman Desktop/Newman observations find package or global edge-case differences.
    - Implement Postman's documented global objects: URL, URLSearchParams, Web Crypto, encoding globals, Blob/File, Web Streams where exposed, structuredClone, queueMicrotask, AbortController/AbortSignal, DOM-style events/errors, typed arrays, and safe dynamic-code behavior where Postman exposes it.
    - Implement bounded `setInterval`/`clearInterval`, richer timer behavior, queueMicrotask ordering, promise/microtask drain parity, and console method/formatting parity.
-   - Add script-safe Postman-listed NodeJS module facades for `path`, `assert`, `buffer`, `util`, `url`, `punycode`, `querystring`, `string-decoder`, `stream`, and `timers`.
+   - Add script-safe Postman-listed NodeJS module facades for `path`, `assert`, `buffer`, `util`, `url`, `punycode`, `querystring`, `string-decoder`, `stream`, `timers`, and `events`.
    - Replace the current lightweight bundled library facades with version-pinned behavior for `ajv`, `chai`, `cheerio`, `csv-parse/lib/sync`, `lodash`, `moment`, `postman-collection`, `uuid`, and `xml2js`.
    - Preserve the security boundary: no host Node resolver, host filesystem, host process, native modules, shell, raw networking, Electron, or renderer DOM access.
+   - Implemented artifacts: `src/core/scriptRuntime.js`, `test/electron/scriptRuntime.test.js`, `test/fixtures/postman/newman-sandbox-v1.collection.json`, `test/fixtures/postman/newman-sandbox-v1.expected.json`, and regenerated `docs/postman-sandbox-parity-matrix.json`.
+   - Verification commands: `node --test test/electron/scriptRuntime.test.js`, `node --test test/electron/postmanSandboxCorpus.test.js`, and `npm run postman:parity:validate`.
 
-3. Implement full Postman Collection SDK object parity for script-facing data.
+3. Implement full Postman Collection SDK object parity for script-facing data. Status: complete for the Step 3 implementation; keep protocol-specific behavior in Step 6 and broader assertion/body/file edge cases in later steps.
    - Use a safely bundled/hardened `postman-collection` SDK where possible, or implement faithful facades for Request, Url, Header/HeaderList, QueryParam/QueryParamList, RequestBody, FormParam, Variable/VariableList, Cookie/CookieList, Response, and PropertyList.
    - Expand `pm.request` mutation and read behavior to match Postman for HTTP, GraphQL, and gRPC, including URL/query/header/body/auth mutation, list methods, clone/toJSON/toString behavior, disabled items, and case-insensitive headers.
    - Expand `pm.response` to full Postman behavior: text/json parsing, code/status/reason, response time/size, headers, cookies where exposed, binary/streaming bodies, metadata, trailers, messages, and response assertion chains.
    - Add adversarial tests for every SDK object crossing the host boundary so constructors, prototypes, accessors, errors, promises, and returned arrays cannot escape the worker sandbox.
+   - Implemented artifacts: hardened Collection SDK facades in `src/core/scriptRuntime.js`, request mutation commit support in `src/core/scriptedRequestLifecycle.js`, expanded runtime/isolation tests in `test/electron/scriptRuntime.test.js` and `test/electron/scriptSandbox.test.js`, SDK object coverage in `test/fixtures/postman/newman-sandbox-v1.collection.json`, and regenerated `docs/postman-sandbox-parity-matrix.json`.
+   - Verification commands: `node --test test/electron/scriptRuntime.test.js`, `node --test test/electron/scriptSandbox.test.js`, `node --test test/electron/postmanSandboxCorpus.test.js`, and `npm run postman:parity:validate`.
 
-4. Finish tests, assertions, variables, dynamic variables, and run-order semantics.
+4. Finish tests, assertions, variables, dynamic variables, and run-order semantics. Status: complete for the Step 4 implementation; keep using Desktop/Newman differential observations to refine exact error-message and obscure Chai edge-case parity if future fixtures expose differences.
    - Implement full `pm.test` parity, including `pm.test.skip`, `pm.test.index`, returned chaining, callback/promise mixing, duplicate names, skipped result shape, nested async tests, and deterministic order.
    - Replace the practical `pm.expect` subset with full Chai-compatible behavior and Postman's response assertion helpers, including JSON schema validation behavior and error-message parity where practical.
    - Complete variable API parity for `pm.variables`, `pm.environment`, `pm.collectionVariables`, `pm.globals`, and `pm.iterationData`, including `clear`, `toJSON`, metadata, current/initial values, disabled variables, sensitive masking, folder/request variables, and exact precedence.
    - Implement the full Postman dynamic variable catalog and per-request generation semantics for `$guid`, `$timestamp`, `$isoTimestamp`, `$randomUUID`, and every documented `$random*` category.
    - Match collection/folder/request pre-request and post-response execution order, `pm.info`, `pm.execution.location`, `setNextRequest`, `skipRequest`, and `runRequest` edge cases.
+   - Implemented artifacts: `src/core/scriptRuntime.js`, `src/core/dynamicVariables.js`, `src/core/environmentResolver.js`, `src/core/scriptedRequestLifecycle.js`, `src/core/collectionRunner.js`, `src/core/scriptSandbox.js`, `src/core/sandboxRuntimeValidation.js`, expanded Step 4 coverage in `test/electron/scriptRuntime.test.js`, `test/electron/scriptSandbox.test.js`, `test/electron/postmanSandboxCorpus.test.js`, `test/fixtures/postman/newman-sandbox-v1.collection.json`, regenerated `docs/postman-sandbox-parity-matrix.json`, and updated compatibility docs.
+   - Verification commands: `node --test test/electron/scriptRuntime.test.js`, `node --test test/electron/scriptSandbox.test.js`, `node --test test/electron/postmanSandboxCorpus.test.js`, `node --test test/electron/scriptedRequestLifecycle.test.js`, `node --test test/electron/postmanParityHarness.test.js`, `npm run sandbox:validate`, and `npm run postman:parity:validate`.
 
-5. Complete HTTP network, cookie, package-cache, visualizer, and vault parity without weakening sandboxing.
+5. Complete HTTP network, cookie, package-cache, visualizer, and vault parity without weakening sandboxing. Status: complete for the Step 5 implementation; keep adding differential fixtures for obscure Postman Desktop/Newman edge cases, especially unsupported auth schemes, file/binary attachment bindings, and visualizer third-party asset behavior.
    - Expand `pm.sendRequest` to all Postman input shapes: string, plain object, Collection SDK Request, headers in object/array/list form, all body modes, auth helpers, redirects, TLS/cert behavior, timeout/cancellation, callback/promise forms, and response/error object compatibility.
    - Match Postman's cookie model for current-request helpers and jar helpers, including callback ordering, domain allowlists, Cookie objects, expiry/max-age, Secure, HttpOnly, SameSite, Priority, Partitioned, host-only, prefixes, replacement, and `pm.sendRequest` jar side effects.
    - Add package-cache management UI/import flow for missing team/external packages so package references are resolved, reviewed, pinned, integrity-checked, and visible before scripts run.
    - Replace the current Handlebars-style visualizer subset with real Postman visualizer behavior, including compile options, helpers, partials, SafeString, block params, inline scripts, `pm.getData`, common chart-library support through reviewed assets, and isolated rendering.
    - Finish vault desktop parity: prompts, denial behavior, reset/audit UX, denied code-after-call behavior, unavailable-encryption behavior, import-time local secret binding, and clear desktop/Newman support boundaries.
+   - Implemented artifacts: `src/core/scriptSandbox.js`, `src/core/scriptRuntime.js`, `src/core/httpClient.js`, `src/core/sandboxPackageCache.js`, `src/core/postmanImporter.js`, `src/core/vaultStore.js`, `electron/main.js`, `electron/preload.js`, workspace package/vault UI in `src/renderer/index.html` and `src/renderer/renderer.js`, focused coverage in `test/electron/scriptSandbox.test.js`, `test/electron/scriptRuntime.test.js`, `test/electron/postmanImporter.test.js`, `test/electron/vaultStore.test.js`, regenerated `docs/postman-sandbox-parity-matrix.json`, and updated compatibility docs.
+   - Verification commands: `node --test test/electron/scriptRuntime.test.js test/electron/scriptSandbox.test.js test/electron/postmanImporter.test.js test/electron/vaultStore.test.js`, `npm run postman:parity:validate`, `npm run sandbox:validate`, and `npm run check`.
 
-6. Add protocol-specific Postman script parity.
+6. Add protocol-specific Postman script parity. Status: complete for the Step 6 implementation; keep broader protocol-profile import/export round-tripping and live desktop gRPC transport wiring in later steps.
    - Preserve and execute GraphQL imports with Before query and After response hooks, query variables, operation name, auth, headers, response parsing, package imports, and variable interpolation.
    - Preserve and execute gRPC imports with Before invoke, On message, and After response hooks, proto/service/method metadata, method path, request metadata, outgoing messages, streaming method type, incoming messages, response metadata, trailers, status, cancellation, and `pm.message`.
    - Audit Postman's current WebSocket or other streaming protocol script support. If scripts are exportable or documented, implement them; if not, record that fact in the generated parity matrix with a source and fixture.
+   - Implemented artifacts: protocol lifecycle dispatch in `src/core/scriptedRequestLifecycle.js`, protocol import preservation in `src/core/postmanImporter.js`, `pm.message` and protocol message/list facades in `src/core/scriptRuntime.js`, gRPC invoker wiring in `src/core/collectionRunner.js`, protocol package-reference scanning in `src/core/sandboxPackageCache.js`, `test/fixtures/postman/protocol-script-hooks.collection.json`, `test/fixtures/postman/desktop-observations/websocket-script-support-audit.json`, `test/electron/postmanProtocolParity.test.js`, expanded importer/runtime coverage, and regenerated `docs/postman-sandbox-parity-matrix.json`.
+   - Verification commands: `node --test test/electron/postmanProtocolParity.test.js test/electron/postmanImporter.test.js test/electron/scriptRuntime.test.js test/electron/scriptedRequestLifecycle.test.js test/electron/collectionRunner.test.js`, `npm run postman:parity:validate`, `npm run sandbox:validate`, and `npm run check`.
 
-7. Add local mock server script parity.
+7. Add local mock server script parity. Status: complete for the Step 7 implementation; keep any broader desktop UI/binding workflow and export round-tripping in Step 8.
    - Implement the mock-only script surface for imported/local Postman mock scripts: `pm.mock.matchRequest`, `pm.mock.sendExample`, saved example response lookup, path variables, route fallback behavior, method/path-only matching, and compatible request/response objects.
    - Implement `pm.state` with `get`, `set`, `delete`, `has`, `keys`, `size`, `clear`, `toObject`, `increment`, `push`, and `addToSet`, using bounded JSON-serializable per-mock-session storage and transaction-safe reset controls.
    - Keep `pm.mock` and `pm.state` unavailable outside the local mock surface, matching Postman's desktop-only boundary.
+   - Implemented artifacts: `src/core/localMockServer.js`, `src/core/scriptRuntime.js`, `src/core/scriptSandbox.js`, `src/core/postmanImporter.js`, `src/core/models.js`, `src/core/payloadSchemas.js`, `src/core/sandboxPackageCache.js`, `test/fixtures/postman/local-mock-scripts.collection.json`, `test/electron/localMockServer.test.js`, expanded importer/runtime tests, and regenerated `docs/postman-sandbox-parity-matrix.json`.
+   - Verification commands: `node --test test/electron/localMockServer.test.js test/electron/scriptRuntime.test.js test/electron/scriptSandbox.test.js test/electron/postmanImporter.test.js`, `npm run postman:parity:validate`, `npm run sandbox:validate`, and `npm run check`.
 
-8. Upgrade Postman import/export data preservation for full scripting parity.
+8. Upgrade Postman import/export data preservation for full scripting parity. Status: complete for the Step 8 implementation; keep adding real-world round-trip fixtures as new Postman export shapes are observed.
    - Preserve collection, nested folder, and request script events without flattening away run-order information needed for exact script execution.
    - Preserve request IDs or provide deterministic mapping/repair for scripts using `pm.execution.runRequest`.
    - Import and bind protocol profiles, GraphQL/gRPC definitions, package references, visualizer assets, cookie allowlists, vault metadata, mock scripts, mock state configuration, examples, certificates, auth inheritance, variables, and file/binary body references.
    - Round-trip Postman-compatible exports without losing script text, script type, event location, request IDs where possible, examples, package references, certificates, variables, and protocol metadata.
+   - Implemented artifacts: bounded optional Postman metadata in `src/core/models.js` and `src/core/ipcValidation.js`, Postman import/export preservation in `src/core/postmanImporter.js`, Postman export wiring in `src/core/collectionImportRegistry.js`, `src/core/collectionFormats.js`, `src/core/payloadSchemas.js`, `electron/fileDialogs.js`, desktop Export > Postman UI wiring in `src/renderer/index.html`, `src/renderer/rendererBootstrap.js`, and `src/renderer/renderer.js`, original-ID alias handling in `src/core/collectionRunner.js` and `src/core/scriptRuntime.js`, and focused coverage in `test/electron/postmanImporter.test.js`, `test/electron/collectionImportRegistry.test.js`, `test/electron/ipcValidation.test.js`, and `test/electron/payloadSchemas.test.js`.
+   - Verification commands: `node --test test/electron/postmanImporter.test.js test/electron/collectionImportRegistry.test.js`, `node --test test/electron/payloadSchemas.test.js test/electron/ipcValidation.test.js`, `node --test test/electron/rendererWorkflows.test.js`, `npm run postman:parity:validate`, `npm run sandbox:validate`, and `npm run check`.
 
-9. Finish production claim verification and docs.
+9. Finish production claim verification and docs. Status: complete for the Step 9 implementation; full 1:1 Postman script compatibility is still blocked until `npm run postman:parity:claim` reports zero default-import blockers.
    - Require the generated parity matrix to have zero unsupported rows for default Postman import mode before claiming 1:1 script compatibility.
    - Expand adversarial tests for prototype/constructor escape, dynamic code generation, package-loader abuse, broker mutation, raw networking, filesystem/process access, hostile visualizer documents, mock-state abuse, protocol-stream floods, oversized output, and infinite async work.
    - Add real-world public/user collection fixtures covering auth-heavy scripts, package-heavy scripts, dynamic variables, cookies, visualizers, vault prompts, GraphQL, gRPC, mocks, and runRequest workflows.
    - Keep `npm run sandbox:validate`, `npm run sandbox:validate:packaged`, `npm run check`, packaged Linux validation, and native Windows/macOS packaged validation in the release gate.
    - Update `docs/COMPATIBILITY.md`, `README.md`, `TECH_SPECS.MD`, and `docs/SANDBOX_CONTRACT.md` as each row moves from gap to implemented behavior.
+   - Implemented artifacts: `npm run postman:parity:claim`, `npm run release:gate`, `scripts/validateSandboxReleaseGate.js`, expanded `.github/workflows/ci.yml` and `.github/workflows/release.yml` gates, `test/fixtures/postman/real-world-import-corpus.collection.json`, `test/electron/postmanSandboxAdversarial.test.js`, expanded parity-matrix claim-scope rows, and regenerated `docs/postman-sandbox-parity-matrix.json`.
+   - Verification commands: `node --test test/electron/postmanParityHarness.test.js test/electron/postmanImporter.test.js test/electron/postmanSandboxAdversarial.test.js`, `npm run postman:parity:validate`, `npm run release:gate`, `npm run sandbox:validate`, and `npm run check`. `npm run postman:parity:claim` is expected to fail until the five remaining default-import blockers above are implemented.
 
-10. Keep platform OS-sandbox completion tracked separately from Postman API parity.
+10. Keep platform OS-sandbox completion tracked separately from Postman API parity. Status: complete for Step 10 tracking and validation; platform-equivalent "full OS sandbox" coverage is intentionally not claim-ready yet.
    - Implement native Windows and macOS OS sandbox backends before claiming platform-equivalent "full OS sandbox" coverage.
-   - Decide later whether Linux needs a maintained deny-by-default seccomp-BPF allowlist beyond the current `bubblewrap` namespace plus dangerous-syscall policy.
    - Scripted load tests remain out of the Postman scripting parity claim unless a separate scripted-load-test contract is written.
+   - Implemented artifacts: generated matrix source `src/core/osSandboxPlatformMatrix.js`, harness `src/core/osSandboxPlatformHarness.js`, CLI `scripts/osSandboxPlatformMatrix.js`, committed matrix `docs/os-sandbox-platform-matrix.json`, `npm run sandbox:platform:validate`, `npm run sandbox:platform:write`, `npm run sandbox:platform:claim`, CI/release workflow validation, release-gate manifest coverage, and focused coverage in `test/electron/osSandboxPlatformMatrix.test.js`.
+   - Verification commands: `node --test test/electron/osSandboxPlatformMatrix.test.js test/electron/releaseWorkflow.test.js`, `npm run sandbox:platform:validate`, `npm run release:gate`, and `npm run check`. `npm run sandbox:platform:claim` is expected to fail until `linux.seccomp-deny-default-allowlist-decision`, `windows.appcontainer-backend`, `windows.packaged-os-sandbox-validation`, `macos.seatbelt-backend`, and `macos.packaged-os-sandbox-validation` are complete.
 
 ## Questions For Maintainer After Implementation
 
@@ -166,8 +197,9 @@ No answers are blocking the local implementation pass. Please answer these befor
 2. For Linux, is the current `bubblewrap` namespace/filesystem/network sandbox plus dangerous-syscall seccomp policy sufficient for the public claim, or should "full syscall-policy sandbox" require a maintained deny-by-default seccomp-BPF allowlist even if that means adding a native helper and more platform maintenance?
 3. For Windows/macOS, are native helper binaries or native Node addons acceptable for AppContainer/seatbelt-style sandbox launchers, or should PostMeter avoid native helpers and keep the public claim scoped below equivalent OS-level coverage on those platforms?
 4. For the Newman corpus, `newman@6.2.2` is the current npm `latest` target. Do you want checked-in Newman JSON run reports generated by that exact version once a maintainer-approved Newman fixture export workflow exists?
-5. For reviewed package cache management, should PostMeter later support a manual package-cache import file, a settings UI for approving package source/integrity, or a brokered online fetch-and-review flow that still never lets scripts fetch/install packages at runtime?
-6. For vault grants, should the first UX expose only workspace/collection/request grant reset and audit review, or should it also support per-request prompts similar to Postman's desktop vault flow?
+5. The first reviewed package cache UX is manual and offline. Should a later version add a brokered online fetch-and-review flow for npm/jsr packages while still preventing scripts from fetching or installing packages at runtime?
+6. The first vault UX supports workspace-level local binding, metadata, reset, and audit review. Should a later version add per-request prompts similar to Postman's desktop vault flow?
+7. Do you have maintainer-approved public or user-provided Postman collections that can be checked into the compatibility corpus? The first Step 9 corpus is representative and intentionally avoids copying third-party copyrighted collection content.
 
 ## Blocked External Validation
 
@@ -198,12 +230,12 @@ These are production-readiness items, but they cannot be completed by local iter
 
 ## Risks / Gaps Blocking Production Readiness
 
-- Request scripts run in child processes with minimal environments, Linux `bubblewrap` OS isolation plus dangerous-syscall seccomp policy when available/required, fail-closed Node permission flags in production runtimes, hardened host bridge values, bounded worker heap settings, bounded console/result capture, brokered privileged APIs, explicit unsupported-API errors, and VM timeouts. Native Windows/macOS OS sandbox backends and optional stricter Linux deny-by-default seccomp-BPF allowlisting remain incomplete.
-- Postman import parity is now the scripting contract direction. The current runtime supports reviewed exact team/external package bundles, scoped vault grants, and interactive visualizers, but package-cache management UI/online review flow, richer vault reset/audit UX, external Newman JSON run reports, and full Postman protocol-profile semantics remain future work.
+- Request scripts run in child processes with minimal environments, Linux `bubblewrap` OS isolation plus dangerous-syscall seccomp policy when available/required, fail-closed Node permission flags in production runtimes, hardened host bridge values, bounded worker heap settings, bounded console/result capture, brokered privileged APIs, explicit unsupported-API errors, and VM timeouts. Native Windows/macOS OS sandbox backends and optional stricter Linux deny-by-default seccomp-BPF allowlisting remain incomplete and are tracked by `docs/os-sandbox-platform-matrix.json`.
+- Postman import parity is now the scripting contract direction. The current runtime supports Postman globals, Postman-listed NodeJS module facades, reviewed exact team/external package bundles with workspace review UI, scoped vault grants with local binding/reset/audit UX, interactive visualizers, imported GraphQL/gRPC script hooks, local mock scripts with `pm.mock`/`pm.state`, Postman-compatible import/export preservation, a generated parity matrix, a broad real-world-style import corpus, adversarial sandbox tests, and an HTTP-core Newman differential harness. The production claim gate currently blocks on five default-import rows: `cookies.httponly-parity`, `sendRequest.advanced-auth-proxy`, `sendRequest.file-binary-bindings`, `require.pm.online-fetch-review`, and `grpc.live-desktop-transport`. Native Windows/macOS OS sandbox backends remain separate platform work.
 - Load tests intentionally skip request scripts under sandbox v1; they use the normal HTTP sender directly and report the skip when scripts are present.
-- Native Windows/macOS packaged OS-sandbox assertions and externally captured Newman JSON run reports for `newman@6.2.2` remain external/future validation work.
+- Native Windows/macOS packaged OS-sandbox assertions and broader externally captured Postman Desktop/Newman reports for `newman@6.2.2` remain external/future validation work.
 - Live OAuth provider behavior is not certified yet against Google, Microsoft Entra ID / Azure AD, and GitHub provider tenants.
-- Postman import covers common auth helpers, variables, scripts, editable examples, cookie metadata, request variables, and collection certificates, but protocol profile behavior and the full Postman variable model remain incomplete.
+- Postman import/export now preserves common auth helpers, variables plus raw Postman variable metadata, HTTP/GraphQL/gRPC scripts, editable examples, cookie metadata, request variables, collection certificates, protocol profiles, mock/vault/visualizer binding metadata, and file/binary body references. The remaining compatibility risk is not the core preservation path but broader real-world fixture coverage for obscure Postman export variants and advanced auth/transport behaviors.
 - Cookie jar handling covers more common behavior and selected newer attributes, but still needs deeper browser-parity and source-format round-trip coverage.
 - JMeter import/export covers common HTTP sampler metadata, assertion mappings including XPath, extractors, selected timer/controller metadata round-tripping, Size Assertion mapping, nested-controller metadata preservation, representative timer metadata, mapped disabled-state preservation, and unsupported metadata preservation, but it is still not a full JMeter test-plan model.
 - Automated Electron UI coverage is broader and includes screenshot, mocked OAuth, and XML/HTML formatting smokes, but it is still Linux/headless focused and not broad cross-platform UI automation.
@@ -220,11 +252,24 @@ Run the current verification baseline first:
 ```bash
 npm run check
 npm run sandbox:validate
+npm run sandbox:platform:validate
+npm run postman:parity:validate
+npm run release:gate
+npm run postman:parity:diff
 npm run pack:linux
 npm run dist:linux
 npm run release:prepare
 POSTMETER_RELEASE_REQUIRED_TYPES=appimage,deb npm run release:validate
 ```
+
+For the full Postman script compatibility claim report, run:
+
+```bash
+npm run postman:parity:claim
+npm run sandbox:platform:claim
+```
+
+Those claim commands are expected to fail until their tracked blockers are resolved.
 
 Then inspect the worktree:
 

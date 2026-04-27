@@ -1,4 +1,4 @@
-const { importPostmanCollection } = require('./postmanImporter');
+const { exportPostmanCollection, importPostmanCollection } = require('./postmanImporter');
 const { exportCurlCollection, importCurlCommand } = require('./curlFormats');
 const { exportHarCollection, importHarDocument, looksLikeHarDocument } = require('./harFormats');
 const { exportJMeterPlan, importJMeterPlan } = require('./jmeterFormats');
@@ -74,6 +74,9 @@ const importHandlers = [
 ];
 
 const exportHandlers = {
+  postman(collection) {
+    return JSON.stringify(exportPostmanCollection(collection), null, 2);
+  },
   openapi(collection) {
     return JSON.stringify(exportOpenApiCollection(collection), null, 2);
   },

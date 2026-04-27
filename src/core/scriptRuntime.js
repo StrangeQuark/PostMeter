@@ -1,19 +1,28 @@
 const crypto = require('node:crypto');
+const nodePath = require('node:path');
+const nodeQuerystring = require('node:querystring');
+const nodeUrl = require('node:url');
 const vm = require('node:vm');
 const {
   getVariable,
   setVariable,
-  unsetVariable
+  unsetVariable,
+  variableObservableValue
 } = require('./variableScope');
+const {
+  resolveDynamicVariable
+} = require('./dynamicVariables');
 
 const DEFAULT_SCRIPT_TIMEOUT_MILLIS = 1000;
 const MAX_SCRIPT_LENGTH = 256 * 1024;
 const MAX_SCRIPT_LOGS = 100;
 const MAX_SCRIPT_LOG_LENGTH = 4096;
 const MAX_SCRIPT_RESULT_BYTES = 1024 * 1024;
+const MAX_MOCK_RESPONSE_BODY_LENGTH = 512 * 1024;
 const MAX_PENDING_TIMERS = 64;
 const MAX_TIMER_DELAY_MILLIS = 30_000;
-const MAX_BROKER_REQUESTS = 32;
+const MAX_BROKER_REQUESTS = 256;
+const MAX_EXECUTION_RUN_REQUESTS_PER_SCRIPT = 10;
 const MAX_VISUALIZER_TEMPLATE_LENGTH = 64 * 1024;
 const MAX_VISUALIZER_DATA_BYTES = 256 * 1024;
 const MAX_VISUALIZER_HTML_LENGTH = 256 * 1024;
@@ -21,8 +30,11 @@ const MAX_VISUALIZER_EACH_ITEMS = 500;
 const MAX_VISUALIZER_TEMPLATE_DEPTH = 5;
 const MAX_VISUALIZER_PARTIALS = 32;
 const MAX_VISUALIZER_HELPERS = 32;
+const MAX_VISUALIZER_DECORATORS = 16;
 const MAX_VISUALIZER_PARTIAL_LENGTH = 32 * 1024;
-const VISUALIZER_VALUE_PATTERN = '[A-Za-z0-9_@./-]+';
+const MAX_VISUALIZER_ASSETS = 16;
+const MAX_VISUALIZER_ASSET_BYTES = 256 * 1024;
+const VISUALIZER_BLOCK_NAME_PATTERN = '[A-Za-z0-9_-]{1,64}';
 const VISUALIZER_UNSAFE_PATH_PARTS = new Set(['__proto__', 'prototype', 'constructor']);
 const VISUALIZER_BLOCK_HELPERS = new Set(['each', 'if', 'unless', 'with']);
 const MAX_SCRIPT_PACKAGE_COUNT = 32;
@@ -33,13 +45,24 @@ const MAX_SCRIPT_PACKAGE_LOAD_DEPTH = 16;
 const SCRIPT_PACKAGE_SPECIFIER_PATTERN = /^(?:npm:[a-z0-9@._/-]+@\d[\w.+-]*|jsr:[a-z0-9@._/-]+@\d[\w.+-]*|@[a-z0-9._-]+\/[a-z0-9._-]+)$/i;
 const SCRIPT_PACKAGE_DEFINITIONS = Object.freeze({
   ajv: Object.freeze({ factory: createAjvPackage, maxExportKeys: 4 }),
+  assert: Object.freeze({ factory: createAssertModuleFacade, maxExportKeys: 16 }),
+  buffer: Object.freeze({ factory: createBufferModuleFacade, maxExportKeys: 4 }),
   chai: Object.freeze({ factory: createChaiPackage, maxExportKeys: 3 }),
   cheerio: Object.freeze({ factory: createCheerioPackage, maxExportKeys: 2 }),
   'crypto-js': Object.freeze({ factory: createCryptoJsPackage, maxExportKeys: 8 }),
   'csv-parse/lib/sync': Object.freeze({ factory: createCsvParseSyncPackage, maxExportKeys: 2 }),
+  events: Object.freeze({ factory: createEventsModuleFacade, maxExportKeys: 2 }),
   lodash: Object.freeze({ factory: createLodashPackage, maxExportKeys: 32 }),
   moment: Object.freeze({ factory: createMomentPackage, maxExportKeys: 8 }),
-  'postman-collection': Object.freeze({ factory: createPostmanCollectionPackage, maxExportKeys: 16 }),
+  path: Object.freeze({ factory: createPathModuleFacade, maxExportKeys: 20 }),
+  'postman-collection': Object.freeze({ factory: createPostmanCollectionPackage, maxExportKeys: 24 }),
+  punycode: Object.freeze({ factory: createPunycodeModuleFacade, maxExportKeys: 8 }),
+  querystring: Object.freeze({ factory: createQuerystringModuleFacade, maxExportKeys: 8 }),
+  stream: Object.freeze({ factory: createStreamModuleFacade, maxExportKeys: 8 }),
+  'string-decoder': Object.freeze({ factory: createStringDecoderModuleFacade, maxExportKeys: 2 }),
+  timers: Object.freeze({ factory: createTimersModuleFacade, maxExportKeys: 8 }),
+  url: Object.freeze({ factory: createUrlModuleFacade, maxExportKeys: 12 }),
+  util: Object.freeze({ factory: createUtilModuleFacade, maxExportKeys: 20 }),
   uuid: Object.freeze({ factory: createUuidPackage, maxExportKeys: 4 }),
   xml2js: Object.freeze({ factory: createXml2jsPackage, maxExportKeys: 6 })
 });
@@ -50,6 +73,7 @@ const SCRIPT_PACKAGE_ALIASES = new Map([
   ['csv-parse/sync', 'csv-parse/lib/sync']
 ]);
 const WORD_ARRAY_BYTES = new WeakMap();
+const SCRIPT_BUFFER_BYTES = new WeakMap();
 const MOMENT_INSTANCES = new WeakSet();
 const VISUALIZER_SAFE_STRING_VALUES = new WeakMap();
 
@@ -82,17 +106,21 @@ function runPostmanScript(scriptText, context = {}, options = {}) {
     };
   }
   const scriptRequire = packageRequireApi(packageRegistry);
+  const vmContextRef = { current: null };
+  const runtimeGlobals = createPostmanRuntimeGlobals({ vmContextRef });
   const environmentVariables = context.environment?.variables || [];
   const collectionVariables = context.collectionVariables || [];
   const globals = context.globals || [];
   const localVariables = context.localVariables || [];
   const sandbox = {
+    ...runtimeGlobals,
     pm: createPmApi({
       collectionVariables,
       environmentVariables,
       globals,
       localVariables,
       logs,
+      message: context.message,
       request: context.request,
       response: context.response,
       tests,
@@ -102,6 +130,7 @@ function runPostmanScript(scriptText, context = {}, options = {}) {
     _: scriptRequire('lodash'),
     CryptoJS: scriptRequire('crypto-js'),
     console: createConsole(logs),
+    eval: unsupportedApi('eval'),
     Handlebars: createVisualizerHandlebarsApi(visualizer),
     Buffer: unsupportedApi('Buffer'),
     WebSocket: unsupportedApi('WebSocket'),
@@ -117,11 +146,12 @@ function runPostmanScript(scriptText, context = {}, options = {}) {
   hardenSandboxValue(sandbox);
   const vmContext = vm.createContext(sandbox, {
     codeGeneration: {
-      strings: false,
+      strings: true,
       wasm: false
     },
     name: 'postmeter-script'
   });
+  vmContextRef.current = vmContext;
   attachPackageRegistryContext(packageRegistry, vmContext, {
     timeoutMillis: Number(options.timeoutMillis || DEFAULT_SCRIPT_TIMEOUT_MILLIS)
   });
@@ -182,9 +212,11 @@ async function runPostmanScriptAsync(scriptText, context = {}, options = {}) {
     };
   }
   const scriptRequire = packageRequireApi(packageRegistry);
+  const vmContextRef = { current: null };
   const fatalErrors = [];
   const execution = {};
   const mutableRequest = cloneJson(context.request || {});
+  const mock = createMockRuntimeState(context.mock);
   const environmentVariables = context.environment?.variables || [];
   const collectionVariables = context.collectionVariables || [];
   const localVariables = context.localVariables || [];
@@ -195,18 +227,25 @@ async function runPostmanScriptAsync(scriptText, context = {}, options = {}) {
     fatalErrors,
     timeoutMillis: Number(options.timeoutMillis || DEFAULT_SCRIPT_TIMEOUT_MILLIS)
   });
+  packageRegistry.tracker = tracker;
+  const runtimeGlobals = createPostmanRuntimeGlobals({ tracker, vmContextRef });
   const sandbox = {
+    ...runtimeGlobals,
     pm: createAsyncPmApi({
       broker: options.broker,
       collectionVariables,
       environmentVariables,
       execution,
+      eventName: context.eventName,
+      executionLocation: context.executionLocation,
       globals,
       iteration: context.iteration,
       iterationCount: context.iterationCount,
       iterationData,
       localVariables,
       logs,
+      message: context.message,
+      mock,
       request: mutableRequest,
       response: context.response,
       tests,
@@ -217,10 +256,11 @@ async function runPostmanScriptAsync(scriptText, context = {}, options = {}) {
     _: scriptRequire('lodash'),
     CryptoJS: scriptRequire('crypto-js'),
     console: createConsole(logs),
+    eval: unsupportedApi('eval'),
     Handlebars: createVisualizerHandlebarsApi(visualizer),
-    clearInterval: unsupportedApi('clearInterval'),
+    clearInterval: tracker.clearInterval,
     clearTimeout: tracker.clearTimeout,
-    setInterval: unsupportedApi('setInterval'),
+    setInterval: tracker.setInterval,
     setTimeout: tracker.setTimeout,
     Buffer: unsupportedApi('Buffer'),
     WebSocket: unsupportedApi('WebSocket'),
@@ -229,25 +269,35 @@ async function runPostmanScriptAsync(scriptText, context = {}, options = {}) {
     process: unsupportedApi('process'),
     require: scriptRequire
   };
+  if (mock) {
+    sandbox.req = mockRequestApi(mock);
+    sandbox.res = mockResponseApi(mock);
+  }
   hardenSandboxValue(sandbox);
   const vmContext = vm.createContext(sandbox, {
     codeGeneration: {
-      strings: false,
+      strings: true,
       wasm: false
     },
     name: 'postmeter-script'
   });
+  vmContextRef.current = vmContext;
   attachPackageRegistryContext(packageRegistry, vmContext, {
     timeoutMillis: Number(options.timeoutMillis || DEFAULT_SCRIPT_TIMEOUT_MILLIS)
   });
 
   try {
-    const script = new vm.Script(`'use strict';\n${source}`, {
+    const script = new vm.Script(scriptSourceForRuntime(source, mock), {
       filename: options.filename || 'postmeter-script.js'
     });
-    script.runInContext(vmContext, {
+    const returned = script.runInContext(vmContext, {
       timeout: Number(options.timeoutMillis || DEFAULT_SCRIPT_TIMEOUT_MILLIS)
     });
+    if (mock && returned && typeof returned.then === 'function') {
+      applyMockReturnedValue(mock, await returned);
+    } else if (mock) {
+      applyMockReturnedValue(mock, returned);
+    }
     await tracker.waitForIdle();
   } catch (error) {
     return boundedScriptResult({
@@ -258,6 +308,7 @@ async function runPostmanScriptAsync(scriptText, context = {}, options = {}) {
       commitSideEffects: false,
       execution,
       request: mutableRequest,
+      mock: mockResult(mock),
       visualizer: visualizerResult(visualizer)
     });
   }
@@ -271,6 +322,7 @@ async function runPostmanScriptAsync(scriptText, context = {}, options = {}) {
       commitSideEffects: false,
       execution,
       request: mutableRequest,
+      mock: mockResult(mock),
       visualizer: visualizerResult(visualizer)
     });
   }
@@ -283,8 +335,16 @@ async function runPostmanScriptAsync(scriptText, context = {}, options = {}) {
     commitSideEffects: true,
     execution,
     request: mutableRequest,
+    mock: mockResult(mock),
     visualizer: visualizerResult(visualizer)
   });
+}
+
+function scriptSourceForRuntime(source, mock) {
+  if (mock) {
+    return `(async function __postmeterMockScript__() {\n'use strict';\n${source}\n}).call(undefined)`;
+  }
+  return `'use strict';\n${source}`;
 }
 
 function emptyScriptResult() {
@@ -358,7 +418,34 @@ function createAsyncTracker({ broker, fatalErrors, timeoutMillis }) {
     return id;
   };
 
-  const clearTimeoutForScript = (id) => {
+  const setIntervalForScript = (callback, delay = 0, ...args) => {
+    if (typeof callback !== 'function') {
+      throw sandboxError('setInterval requires a callback function.');
+    }
+    if (timers.size >= MAX_PENDING_TIMERS) {
+      throw sandboxError(`Scripts cannot schedule more than ${MAX_PENDING_TIMERS} pending timers.`);
+    }
+    const delayMillis = Math.min(MAX_TIMER_DELAY_MILLIS, Math.max(0, Number(delay) || 0));
+    const id = ++timerSequence;
+    const timer = { id, cancelled: false, interval: true };
+    timers.set(id, timer);
+    const task = (async () => {
+      while (!timer.cancelled) {
+        await brokerRequest('timer', { timerId: id, delayMillis });
+        if (!timer.cancelled) {
+          await runCallback(callback, args);
+        }
+      }
+    })()
+      .catch(recordFatal)
+      .finally(() => {
+        timers.delete(id);
+      });
+    timer.task = track(task);
+    return id;
+  };
+
+  const clearTimerForScript = (id) => {
     const timer = timers.get(Number(id));
     if (!timer) {
       return;
@@ -366,6 +453,16 @@ function createAsyncTracker({ broker, fatalErrors, timeoutMillis }) {
     timer.cancelled = true;
     timers.delete(Number(id));
     brokerRequest('clearTimer', { timerId: timer.id }).catch(() => {});
+  };
+
+  const queueMicrotaskForScript = (callback) => {
+    if (typeof callback !== 'function') {
+      throw sandboxError('queueMicrotask requires a callback function.');
+    }
+    const task = Promise.resolve()
+      .then(() => runCallback(callback))
+      .catch(recordFatal);
+    track(task);
   };
 
   async function brokerRequest(operation, payload = {}) {
@@ -397,8 +494,11 @@ function createAsyncTracker({ broker, fatalErrors, timeoutMillis }) {
 
   return {
     brokerRequest,
-    clearTimeout: clearTimeoutForScript,
+    clearInterval: clearTimerForScript,
+    clearTimeout: clearTimerForScript,
+    queueMicrotask: queueMicrotaskForScript,
     recordFatal,
+    setInterval: setIntervalForScript,
     setTimeout: setTimeoutForScript,
     track,
     waitForIdle
@@ -409,17 +509,498 @@ function sleepForRuntime(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
+function createPostmanRuntimeGlobals({ tracker, vmContextRef } = {}) {
+  return {
+    AbortController: createAbortControllerFacade(),
+    AbortSignal: createAbortSignalFacade(),
+    atob: (value) => Buffer.from(String(value || ''), 'base64').toString('binary'),
+    Blob: createBlobFacade(vmContextRef),
+    btoa: (value) => Buffer.from(String(value || ''), 'binary').toString('base64'),
+    ByteLengthQueuingStrategy: createQueuingStrategyFacade((chunk) => chunk?.byteLength ?? chunk?.length ?? 1),
+    CompressionStream: createPassthroughTransformStreamFacade('CompressionStream'),
+    CountQueuingStrategy: createQueuingStrategyFacade(() => 1),
+    crypto: createCryptoFacade(vmContextRef),
+    Crypto: illegalConstructorFacade('Crypto'),
+    CryptoKey: illegalConstructorFacade('CryptoKey'),
+    DecompressionStream: createPassthroughTransformStreamFacade('DecompressionStream'),
+    DOMException: createDomExceptionFacade(),
+    Event: createEventFacade(),
+    EventTarget: createEventTargetFacade(),
+    File: createFileFacade(vmContextRef),
+    queueMicrotask: tracker?.queueMicrotask || ((callback) => {
+      if (typeof callback !== 'function') {
+        throw sandboxError('queueMicrotask requires a callback function.');
+      }
+      Promise.resolve().then(callback).catch(() => {});
+    }),
+    ReadableByteStreamController: class ReadableByteStreamController {},
+    ReadableStream: createReadableStreamFacade(),
+    ReadableStreamBYOBReader: class ReadableStreamBYOBReader {},
+    ReadableStreamBYOBRequest: class ReadableStreamBYOBRequest {},
+    ReadableStreamDefaultController: class ReadableStreamDefaultController {},
+    ReadableStreamDefaultReader: class ReadableStreamDefaultReader {},
+    structuredClone: (value) => hardenSandboxValue(safeStructuredClone(value)),
+    SubtleCrypto: illegalConstructorFacade('SubtleCrypto'),
+    TextDecoder: createTextDecoderFacade(),
+    TextDecoderStream: createPassthroughTransformStreamFacade('TextDecoderStream'),
+    TextEncoder: createTextEncoderFacade(vmContextRef),
+    TextEncoderStream: createPassthroughTransformStreamFacade('TextEncoderStream'),
+    TransformStream: createTransformStreamFacade(),
+    TransformStreamDefaultController: class TransformStreamDefaultController {},
+    URL: createUrlFacade(),
+    URLSearchParams: createUrlSearchParamsFacade(),
+    WritableStream: createWritableStreamFacade(),
+    WritableStreamDefaultController: class WritableStreamDefaultController {},
+    WritableStreamDefaultWriter: class WritableStreamDefaultWriter {}
+  };
+}
+
+function illegalConstructorFacade(name) {
+  return function IllegalPostmanConstructor() {
+    throw sandboxError(`${name} is not directly constructible in the Postman sandbox.`);
+  };
+}
+
+function createUrlFacade() {
+  return function PostmanURL(input, base) {
+    const parsed = new URL(String(input == null ? '' : input), base == null ? undefined : String(base));
+    return createSafeUrlInstance(parsed);
+  };
+}
+
+function createSafeUrlInstance(parsed) {
+  const api = {
+    get hash() { return parsed.hash; },
+    set hash(value) { parsed.hash = String(value || ''); },
+    get host() { return parsed.host; },
+    set host(value) { parsed.host = String(value || ''); },
+    get hostname() { return parsed.hostname; },
+    set hostname(value) { parsed.hostname = String(value || ''); },
+    get href() { return parsed.href; },
+    set href(value) {
+      const next = new URL(String(value || ''));
+      copyUrlFields(parsed, next);
+    },
+    get origin() { return parsed.origin; },
+    get password() { return parsed.password; },
+    set password(value) { parsed.password = String(value || ''); },
+    get pathname() { return parsed.pathname; },
+    set pathname(value) { parsed.pathname = String(value || ''); },
+    get port() { return parsed.port; },
+    set port(value) { parsed.port = String(value || ''); },
+    get protocol() { return parsed.protocol; },
+    set protocol(value) { parsed.protocol = String(value || ''); },
+    get search() { return parsed.search; },
+    set search(value) { parsed.search = String(value || ''); },
+    get searchParams() { return createSafeUrlSearchParamsInstance(parsed.searchParams); },
+    get username() { return parsed.username; },
+    set username(value) { parsed.username = String(value || ''); },
+    toJSON() { return parsed.href; },
+    toString() { return parsed.href; }
+  };
+  return hardenSandboxValue(api);
+}
+
+function copyUrlFields(target, source) {
+  target.hash = source.hash;
+  target.host = source.host;
+  target.password = source.password;
+  target.pathname = source.pathname;
+  target.protocol = source.protocol;
+  target.search = source.search;
+  target.username = source.username;
+}
+
+function createUrlSearchParamsFacade() {
+  return function PostmanURLSearchParams(init = '') {
+    return createSafeUrlSearchParamsInstance(new URLSearchParams(init));
+  };
+}
+
+function createSafeUrlSearchParamsInstance(params) {
+  const api = {
+    append(name, value) { params.append(String(name || ''), String(value == null ? '' : value)); },
+    delete(name) { params.delete(String(name || '')); },
+    entries() { return sandboxArrayIterator(Array.from(params.entries()).map((entry) => hardenSandboxValue(entry))); },
+    forEach(callback, thisArg) {
+      if (typeof callback === 'function') {
+        params.forEach((value, key) => Reflect.apply(callback, thisArg, [value, key, api]));
+      }
+    },
+    get(name) { return params.get(String(name || '')); },
+    getAll(name) { return hardenSandboxValue(params.getAll(String(name || ''))); },
+    has(name) { return params.has(String(name || '')); },
+    keys() { return sandboxArrayIterator(Array.from(params.keys())); },
+    set(name, value) { params.set(String(name || ''), String(value == null ? '' : value)); },
+    sort() { params.sort(); },
+    toString() { return params.toString(); },
+    values() { return sandboxArrayIterator(Array.from(params.values())); }
+  };
+  Object.defineProperty(api, Symbol.iterator, {
+    configurable: true,
+    enumerable: false,
+    value: api.entries,
+    writable: true
+  });
+  return hardenSandboxValue(api);
+}
+
+function createTextEncoderFacade(vmContextRef) {
+  return function PostmanTextEncoder() {
+    return hardenSandboxValue({
+      get encoding() { return 'utf-8'; },
+      encode(value = '') { return createVmUint8Array(Buffer.from(String(value), 'utf8'), vmContextRef); },
+      encodeInto(value, destination) {
+        const encoded = Buffer.from(String(value), 'utf8');
+        const target = destination && typeof destination.length === 'number' ? destination : [];
+        const written = Math.min(target.length || 0, encoded.length);
+        for (let index = 0; index < written; index += 1) {
+          target[index] = encoded[index];
+        }
+        return hardenSandboxValue({ read: Buffer.from(encoded.slice(0, written)).toString('utf8').length, written });
+      }
+    });
+  };
+}
+
+function createTextDecoderFacade() {
+  return function PostmanTextDecoder(label = 'utf-8') {
+    const normalized = normalizeEncoding(label);
+    return hardenSandboxValue({
+      get encoding() { return normalized; },
+      get fatal() { return false; },
+      get ignoreBOM() { return false; },
+      decode(value = new Uint8Array()) {
+        return bufferFromArrayBufferLike(value).toString(normalized === 'utf-16le' ? 'utf16le' : 'utf8');
+      }
+    });
+  };
+}
+
+function normalizeEncoding(label) {
+  const normalized = String(label || 'utf-8').toLowerCase();
+  return normalized === 'utf-16le' || normalized === 'utf-16' ? 'utf-16le' : 'utf-8';
+}
+
+function createBlobFacade(vmContextRef) {
+  return function PostmanBlob(parts = [], options = {}) {
+    return createBlobLike(parts, options, vmContextRef);
+  };
+}
+
+function createFileFacade(vmContextRef) {
+  return function PostmanFile(parts = [], name = '', options = {}) {
+    const blob = createBlobLike(parts, options, vmContextRef);
+    return hardenSandboxValue({
+      ...blob,
+      lastModified: Number(options.lastModified || Date.now()),
+      name: String(name || ''),
+      webkitRelativePath: ''
+    });
+  };
+}
+
+function createBlobLike(parts = [], options = {}, vmContextRef) {
+  const bytes = Buffer.concat((Array.isArray(parts) ? parts : [parts]).map(blobPartToBuffer));
+  const type = String(options.type || '').toLowerCase();
+  const api = {
+    get size() { return bytes.length; },
+    get type() { return type; },
+    arrayBuffer() { return sandboxThenable(Promise.resolve(createVmArrayBuffer(bytes, vmContextRef))); },
+    slice(start = 0, end = bytes.length, sliceType = '') {
+      const from = Math.max(0, Number(start) || 0);
+      const to = Math.max(from, end == null ? bytes.length : Number(end));
+      return createBlobLike([bytes.slice(from, to)], { type: sliceType }, vmContextRef);
+    },
+    text() { return sandboxThenable(Promise.resolve(bytes.toString('utf8'))); }
+  };
+  return hardenSandboxValue(api);
+}
+
+function blobPartToBuffer(part) {
+  if (part == null) {
+    return Buffer.alloc(0);
+  }
+  if (typeof part === 'string') {
+    return Buffer.from(part, 'utf8');
+  }
+  if (SCRIPT_BUFFER_BYTES.has(part)) {
+    return Buffer.from(SCRIPT_BUFFER_BYTES.get(part));
+  }
+  return bufferFromArrayBufferLike(part);
+}
+
+function createCryptoFacade(vmContextRef) {
+  const subtle = hardenSandboxValue({
+    digest(algorithm, data) {
+      const hashName = normalizeWebCryptoHash(algorithm);
+      const digest = crypto.createHash(hashName).update(bufferFromArrayBufferLike(data)).digest();
+      return sandboxThenable(Promise.resolve(createVmArrayBuffer(digest, vmContextRef)));
+    }
+  });
+  return hardenSandboxValue({
+    get subtle() { return subtle; },
+    getRandomValues(array) {
+      if (!array || typeof array.length !== 'number') {
+        throw sandboxError('crypto.getRandomValues requires a typed array.');
+      }
+      if (array.length > 65536) {
+        throw sandboxError('crypto.getRandomValues cannot fill more than 65536 bytes.');
+      }
+      const bytes = crypto.randomBytes(array.length);
+      for (let index = 0; index < array.length; index += 1) {
+        array[index] = bytes[index];
+      }
+      return array;
+    },
+    randomUUID() {
+      return crypto.randomUUID();
+    }
+  });
+}
+
+function normalizeWebCryptoHash(algorithm) {
+  const name = typeof algorithm === 'string' ? algorithm : algorithm?.name;
+  const normalized = String(name || '').toUpperCase().replace(/_/g, '-');
+  if (normalized === 'SHA-1') {
+    return 'sha1';
+  }
+  if (normalized === 'SHA-256') {
+    return 'sha256';
+  }
+  if (normalized === 'SHA-384') {
+    return 'sha384';
+  }
+  if (normalized === 'SHA-512') {
+    return 'sha512';
+  }
+  throw sandboxError(`Unsupported crypto.subtle digest algorithm: ${name}.`);
+}
+
+function createDomExceptionFacade() {
+  return function PostmanDOMException(message = '', name = 'Error') {
+    return hardenSandboxValue({
+      code: 0,
+      message: String(message || ''),
+      name: String(name || 'Error'),
+      toString() { return `${this.name}: ${this.message}`; }
+    });
+  };
+}
+
+function createEventFacade() {
+  return function PostmanEvent(type, options = {}) {
+    return createSafeEvent(type, options);
+  };
+}
+
+function createSafeEvent(type, options = {}) {
+  return hardenSandboxValue({
+    bubbles: options.bubbles === true,
+    cancelable: options.cancelable === true,
+    defaultPrevented: false,
+    target: null,
+    timeStamp: Date.now(),
+    type: String(type || ''),
+    preventDefault() { this.defaultPrevented = this.cancelable; },
+    stopImmediatePropagation() {},
+    stopPropagation() {}
+  });
+}
+
+function createEventTargetFacade() {
+  return function PostmanEventTarget() {
+    return createSafeEventTarget();
+  };
+}
+
+function createSafeEventTarget() {
+  const listeners = new Map();
+  const api = {
+    addEventListener(type, callback) {
+      if (typeof callback !== 'function') {
+        return;
+      }
+      const key = String(type || '');
+      if (!listeners.has(key)) {
+        listeners.set(key, new Set());
+      }
+      listeners.get(key).add(callback);
+    },
+    dispatchEvent(event) {
+      const safeEvent = event && typeof event === 'object' ? event : createSafeEvent(event);
+      const callbacks = [...(listeners.get(String(safeEvent.type || '')) || [])];
+      for (const callback of callbacks) {
+        callback.call(api, safeEvent);
+      }
+      return safeEvent.defaultPrevented !== true;
+    },
+    removeEventListener(type, callback) {
+      listeners.get(String(type || ''))?.delete(callback);
+    }
+  };
+  return hardenSandboxValue(api);
+}
+
+function createAbortSignalFacade() {
+  return illegalConstructorFacade('AbortSignal');
+}
+
+function createAbortControllerFacade() {
+  return function PostmanAbortController() {
+    const target = createSafeEventTarget();
+    const signal = hardenSandboxValue({
+      get aborted() { return signalState.aborted; },
+      get reason() { return signalState.reason; },
+      addEventListener: target.addEventListener,
+      dispatchEvent: target.dispatchEvent,
+      removeEventListener: target.removeEventListener,
+      throwIfAborted() {
+        if (signalState.aborted) {
+          throw signalState.reason || sandboxError('The operation was aborted.');
+        }
+      }
+    });
+    const signalState = { aborted: false, reason: undefined };
+    return hardenSandboxValue({
+      signal,
+      abort(reason) {
+        if (signalState.aborted) {
+          return;
+        }
+        signalState.aborted = true;
+        signalState.reason = reason == null ? 'AbortError' : reason;
+        target.dispatchEvent(createSafeEvent('abort'));
+      }
+    });
+  };
+}
+
+function createQueuingStrategyFacade(sizeFn) {
+  return function PostmanQueuingStrategy(options = {}) {
+    return hardenSandboxValue({
+      highWaterMark: Number(options.highWaterMark || 0),
+      size: sizeFn
+    });
+  };
+}
+
+function createReadableStreamFacade() {
+  return function PostmanReadableStream(source = {}) {
+    const chunks = [];
+    let closed = false;
+    const controller = hardenSandboxValue({
+      close() { closed = true; },
+      enqueue(chunk) { chunks.push(chunk); },
+      error(error) { closed = true; throw sandboxError(errorMessage(error)); }
+    });
+    if (source && typeof source.start === 'function') {
+      source.start(controller);
+    }
+    return hardenSandboxValue({
+      get locked() { return false; },
+      getReader() {
+        return hardenSandboxValue({
+          read() {
+            const value = chunks.shift();
+            return sandboxThenable(Promise.resolve(hardenSandboxValue({ done: value === undefined && closed, value })));
+          },
+          releaseLock() {}
+        });
+      }
+    });
+  };
+}
+
+function createWritableStreamFacade() {
+  return function PostmanWritableStream(sink = {}) {
+    let closed = false;
+    return hardenSandboxValue({
+      get locked() { return false; },
+      getWriter() {
+        return hardenSandboxValue({
+          close() {
+            closed = true;
+            return sandboxThenable(Promise.resolve(typeof sink.close === 'function' ? sink.close() : undefined));
+          },
+          releaseLock() {},
+          write(chunk) {
+            if (closed) {
+              return sandboxThenable(Promise.reject(sandboxError('WritableStream is closed.')));
+            }
+            return sandboxThenable(Promise.resolve(typeof sink.write === 'function' ? sink.write(chunk) : undefined));
+          }
+        });
+      }
+    });
+  };
+}
+
+function createTransformStreamFacade() {
+  return function PostmanTransformStream(transformer = {}) {
+    const chunks = [];
+    const controller = hardenSandboxValue({
+      enqueue(chunk) { chunks.push(chunk); }
+    });
+    return hardenSandboxValue({
+      readable: createReadableFromQueue(chunks),
+      writable: hardenSandboxValue({
+        getWriter() {
+          return hardenSandboxValue({
+            close() { return sandboxThenable(Promise.resolve()); },
+            releaseLock() {},
+            write(chunk) {
+              if (typeof transformer.transform === 'function') {
+                transformer.transform(chunk, controller);
+              } else {
+                chunks.push(chunk);
+              }
+              return sandboxThenable(Promise.resolve());
+            }
+          });
+        }
+      })
+    });
+  };
+}
+
+function createReadableFromQueue(chunks) {
+  return hardenSandboxValue({
+    getReader() {
+      return hardenSandboxValue({
+        read() {
+          return sandboxThenable(Promise.resolve(hardenSandboxValue({
+            done: chunks.length === 0,
+            value: chunks.shift()
+          })));
+        },
+        releaseLock() {}
+      });
+    }
+  });
+}
+
+function createPassthroughTransformStreamFacade() {
+  return function PostmanPassthroughTransformStream() {
+    return createTransformStreamFacade()();
+  };
+}
+
 function createAsyncPmApi({
   broker,
   collectionVariables,
   environmentVariables,
   execution,
+  eventName,
+  executionLocation,
   globals,
   iteration,
   iterationCount,
   iterationData,
   localVariables,
   logs,
+  message,
+  mock,
   packageRegistry,
   request,
   response,
@@ -427,6 +1008,7 @@ function createAsyncPmApi({
   tracker,
   visualizer
 }) {
+  const testApi = createPmTestApi({ tests, tracker });
   const api = {
     collectionVariables: variableApi(collectionVariables),
     cookies: brokerCookieApi({ broker, tracker }),
@@ -435,6 +1017,7 @@ function createAsyncPmApi({
       collectionVariables,
       environmentVariables,
       execution,
+      location: executionLocation,
       globals,
       tests,
       tracker
@@ -442,18 +1025,20 @@ function createAsyncPmApi({
     expect,
     globals: variableApi(globals),
     info: {
-      eventName: response ? 'test' : 'prerequest',
+      eventName: eventName || (response ? 'test' : 'prerequest'),
       iteration: Number.isFinite(Number(iteration)) ? Number(iteration) : 0,
       iterationCount: Number.isFinite(Number(iterationCount)) ? Number(iterationCount) : 1,
-      requestId: request?.id || '',
+      requestId: postmanCompatibleRequestId(request),
       requestName: request?.name || ''
     },
     iterationData: readOnlyVariableApi(iterationData),
+    message: message ? createPostmanMessage(message) : unsupportedApi('pm.message'),
+    mock: mock ? mockApi(mock) : unsupportedApi('pm.mock'),
     require: packageRequireApi(packageRegistry),
     request: mutableRequestApi(request),
     response: responseApi(response),
     sendRequest(input, callback) {
-      const promise = tracker.brokerRequest('sendRequest', { request: input })
+      const promise = tracker.brokerRequest('sendRequest', { request: sendRequestPayloadForBroker(input) })
         .then((result) => {
           const scriptResponse = responseApi(result);
           if (typeof callback === 'function') {
@@ -472,91 +1057,15 @@ function createAsyncPmApi({
       tracker.track(promise.catch(() => {}));
       return sandboxThenable(promise);
     },
-    test(name, fn) {
-      const testName = String(name || 'Unnamed test');
-      if (typeof fn !== 'function') {
-        tests.push({ name: testName, passed: false, error: 'pm.test requires a callback function.' });
-        return;
-      }
-      const run = async () => {
-        try {
-          if (fn.length > 0) {
-            await new Promise((resolve, reject) => {
-              let settled = false;
-              const done = (error) => {
-                if (settled) {
-                  return;
-                }
-                settled = true;
-                if (error) {
-                  reject(error);
-                } else {
-                  resolve();
-                }
-              };
-              try {
-                const value = fn(done);
-                if (value && typeof value.then === 'function') {
-                  value.then(() => done(), done);
-                }
-              } catch (error) {
-                reject(error);
-              }
-            });
-          } else {
-            const value = fn();
-            if (value && typeof value.then === 'function') {
-              await value;
-            }
-          }
-          tests.push({ name: testName, passed: true, error: '' });
-        } catch (error) {
-          tests.push({ name: testName, passed: false, error: errorMessage(error) });
-        }
-      };
-      tracker.track(run());
-    },
-    variables: {
-      get(key) {
-        const localValue = getVariable(localVariables, key);
-        if (localValue != null) {
-          return localValue;
-        }
-        const iterationValue = getVariable(iterationData, key);
-        if (iterationValue != null) {
-          return iterationValue;
-        }
-        const envValue = getVariable(environmentVariables, key);
-        if (envValue != null) {
-          return envValue;
-        }
-        const collectionValue = getVariable(collectionVariables, key);
-        return collectionValue == null ? getVariable(globals, key) : collectionValue;
-      },
-      set(key, value) {
-        setVariable(localVariables, key, value);
-      },
-      unset(key) {
-        unsetVariable(localVariables, key);
-      },
-      has(key) {
-        return this.get(key) != null;
-      },
-      replaceIn(value) {
-        return replaceVariables(value, globals, collectionVariables, environmentVariables, iterationData, localVariables);
-      },
-      toObject() {
-        const object = createSafePlainObject();
-        for (const source of [globals, collectionVariables, environmentVariables, iterationData, localVariables]) {
-          for (const variable of source || []) {
-            if (variable.enabled !== false && variable.key) {
-              setSafeObjectProperty(object, variable.key, variable.value ?? '');
-            }
-          }
-        }
-        return hardenSandboxValue(object);
-      }
-    },
+    test: testApi,
+    variables: pmVariablesApi({
+      collectionVariables,
+      environmentVariables,
+      globals,
+      iterationData,
+      localVariables
+    }),
+    state: mock ? mockStateApi({ tracker }) : unsupportedApi('pm.state'),
     vault: brokerVaultApi({ broker, tracker }),
     visualizer: visualizerApi(visualizer)
   };
@@ -564,7 +1073,21 @@ function createAsyncPmApi({
   return hardenSandboxValue(api);
 }
 
-function createPmApi({ collectionVariables, environmentVariables, globals = [], localVariables, logs, packageRegistry, request, response, tests, visualizer }) {
+function sendRequestPayloadForBroker(input) {
+  if (typeof input === 'string' || input == null) {
+    return input;
+  }
+  if (input && typeof input === 'object') {
+    if (typeof input.toJSON === 'function') {
+      return clonePlainJson(input.toJSON());
+    }
+    return clonePlainJson(input);
+  }
+  return input;
+}
+
+function createPmApi({ collectionVariables, environmentVariables, globals = [], localVariables, logs, message, packageRegistry, request, response, tests, visualizer }) {
+  const testApi = createPmTestApi({ tests });
   const api = {
     collectionVariables: variableApi(collectionVariables),
     cookies: unsupportedApi('pm.cookies'),
@@ -573,62 +1096,21 @@ function createPmApi({ collectionVariables, environmentVariables, globals = [], 
     expect,
     globals: variableApi(globals),
     iterationData: unsupportedApi('pm.iterationData'),
+    message: message ? createPostmanMessage(message) : unsupportedApi('pm.message'),
+    mock: unsupportedApi('pm.mock'),
     require: packageRequireApi(packageRegistry),
     request: requestApi(request),
     response: responseApi(response),
     sendRequest: unsupportedApi('pm.sendRequest'),
-    test(name, fn) {
-      const testName = String(name || 'Unnamed test');
-      try {
-        if (typeof fn !== 'function') {
-          throw sandboxError('pm.test requires a callback function.');
-        }
-        const value = fn();
-        if (value && typeof value.then === 'function') {
-          throw sandboxError('Async pm.test callbacks are not supported yet.');
-        }
-        tests.push({ name: testName, passed: true, error: '' });
-      } catch (error) {
-        tests.push({ name: testName, passed: false, error: errorMessage(error) });
-      }
-    },
-    variables: {
-      get(key) {
-        const localValue = getVariable(localVariables, key);
-        if (localValue != null) {
-          return localValue;
-        }
-        const envValue = getVariable(environmentVariables, key);
-        if (envValue != null) {
-          return envValue;
-        }
-        const collectionValue = getVariable(collectionVariables, key);
-        return collectionValue == null ? getVariable(globals, key) : collectionValue;
-      },
-      set(key, value) {
-        setVariable(localVariables, key, value);
-      },
-      unset(key) {
-        unsetVariable(localVariables, key);
-      },
-      has(key) {
-        return this.get(key) != null;
-      },
-      replaceIn(value) {
-        return replaceVariables(value, globals, collectionVariables, environmentVariables, localVariables);
-      },
-      toObject() {
-        const object = createSafePlainObject();
-        for (const source of [globals, collectionVariables, environmentVariables, localVariables]) {
-          for (const variable of source || []) {
-            if (variable.enabled !== false && variable.key) {
-              setSafeObjectProperty(object, variable.key, variable.value ?? '');
-            }
-          }
-        }
-        return hardenSandboxValue(object);
-      }
-    },
+    state: unsupportedApi('pm.state'),
+    test: testApi,
+    variables: pmVariablesApi({
+      collectionVariables,
+      environmentVariables,
+      globals,
+      iterationData: [],
+      localVariables
+    }),
     vault: unsupportedApi('pm.vault'),
     visualizer: visualizerApi(visualizer)
   };
@@ -636,11 +1118,362 @@ function createPmApi({ collectionVariables, environmentVariables, globals = [], 
     eventName: response ? 'test' : 'prerequest',
     iteration: 0,
     iterationCount: 1,
-    requestId: request?.id || '',
+    requestId: postmanCompatibleRequestId(request),
     requestName: request?.name || ''
   };
   api.console = createConsole(logs);
   return hardenSandboxValue(api);
+}
+
+function postmanCompatibleRequestId(request) {
+  return String(
+    request?.postman?.ids?.original
+    || request?.postman?.ids?.id
+    || request?.postman?.ids?.uid
+    || request?.postman?.ids?._postman_id
+    || request?.postman?.ids?.deterministic
+    || request?.postman?.id
+    || request?.id
+    || ''
+  );
+}
+
+function createMockRuntimeState(definition = null) {
+  if (!definition || typeof definition !== 'object' || definition.enabled !== true) {
+    return null;
+  }
+  return {
+    examples: Array.isArray(definition.examples) ? cloneMockJsonValue(definition.examples) : [],
+    match: definition.match && typeof definition.match === 'object' ? cloneMockJsonValue(definition.match) : {},
+    request: definition.request && typeof definition.request === 'object' ? cloneMockJsonValue(definition.request) : {},
+    response: null,
+    selectedExampleId: ''
+  };
+}
+
+function mockApi(mock) {
+  return hardenSandboxValue({
+    matchRequest(target) {
+      return mockRequestMatchesTarget(mock, target);
+    },
+    sendExample(selector) {
+      const example = findMockExample(mock, selector);
+      if (!example) {
+        throw sandboxError('pm.mock.sendExample could not find a matching saved example.');
+      }
+      mock.selectedExampleId = String(example.id || '');
+      mock.response = mockResponseFromExample(example);
+      return undefined;
+    }
+  });
+}
+
+function mockStateApi({ tracker }) {
+  const request = (operation, payload = {}) => {
+    const promise = tracker.brokerRequest(`mock.state:${operation}`, payload)
+      .then((value) => hardenSandboxValue(value));
+    tracker.track(promise.catch(() => {}));
+    return sandboxThenable(promise);
+  };
+  return hardenSandboxValue({
+    get(key) {
+      return request('get', { key });
+    },
+    set(key, value) {
+      return request('set', { key, value: cloneMockJsonValue(value) });
+    },
+    delete(key) {
+      return request('delete', { key });
+    },
+    has(key) {
+      return request('has', { key });
+    },
+    keys() {
+      return request('keys');
+    },
+    size() {
+      return request('size');
+    },
+    clear() {
+      return request('clear');
+    },
+    toObject() {
+      return request('toObject');
+    },
+    increment(key, delta) {
+      return request('increment', { key, delta });
+    },
+    push(key, ...items) {
+      return request('push', { key, items: cloneMockJsonValue(items) });
+    },
+    addToSet(key, item) {
+      return request('addToSet', { key, item: cloneMockJsonValue(item) });
+    }
+  });
+}
+
+function mockRequestApi(mock) {
+  const request = mock.request || {};
+  return hardenSandboxValue({
+    body: request.body == null ? '' : request.body,
+    headers: cloneMockJsonValue(request.headers || {}),
+    method: String(request.method || mock.match?.method || 'GET').toUpperCase(),
+    params: cloneMockJsonValue(mock.match?.pathVariables || {}),
+    path: String(request.path || mock.match?.path || '/'),
+    query: cloneMockJsonValue(request.query || {}),
+    url: String(request.url || ''),
+    json() {
+      if (request.body == null || request.body === '') {
+        return undefined;
+      }
+      if (typeof request.body === 'object') {
+        return cloneMockJsonValue(request.body);
+      }
+      return JSON.parse(String(request.body));
+    }
+  });
+}
+
+function mockResponseApi(mock) {
+  const state = {
+    body: '',
+    headers: {},
+    statusCode: 200
+  };
+  const api = {
+    get headers() {
+      return hardenSandboxValue(cloneMockJsonValue(state.headers));
+    },
+    get statusCode() {
+      return state.statusCode;
+    },
+    set statusCode(value) {
+      state.statusCode = normalizeMockStatusCode(value);
+      syncMockResponseFromState(mock, state);
+    },
+    status(value) {
+      state.statusCode = normalizeMockStatusCode(value);
+      syncMockResponseFromState(mock, state);
+      return api;
+    },
+    set(name, value) {
+      setMockResponseHeader(state, name, value);
+      syncMockResponseFromState(mock, state);
+      return api;
+    },
+    header(name, value) {
+      return api.set(name, value);
+    },
+    json(value) {
+      state.body = safeJsonStringify(value == null ? null : value);
+      setMockResponseHeader(state, 'Content-Type', 'application/json');
+      syncMockResponseFromState(mock, state);
+      return api;
+    },
+    send(value = '') {
+      state.body = value == null ? '' : typeof value === 'string' ? value : safeJsonStringify(value);
+      syncMockResponseFromState(mock, state);
+      return api;
+    },
+    end(value = '') {
+      if (value !== undefined) {
+        state.body = value == null ? '' : String(value);
+      }
+      syncMockResponseFromState(mock, state);
+      return api;
+    },
+    toJSON() {
+      return cloneMockJsonValue(mockResponseFromState(state));
+    }
+  };
+  return hardenSandboxValue(api);
+}
+
+function syncMockResponseFromState(mock, state) {
+  mock.response = mockResponseFromState(state);
+}
+
+function mockResponseFromState(state) {
+  return {
+    statusCode: normalizeMockStatusCode(state.statusCode),
+    headers: cloneMockJsonValue(state.headers || {}),
+    body: state.body == null ? '' : String(state.body)
+  };
+}
+
+function setMockResponseHeader(state, name, value) {
+  const key = String(name || '').trim();
+  if (!key) {
+    throw sandboxError('Mock response headers require a name.');
+  }
+  state.headers[key] = value == null ? '' : String(value);
+}
+
+function applyMockReturnedValue(mock, returned) {
+  if (!mock || returned == null) {
+    return;
+  }
+  if (returned && typeof returned.toJSON === 'function') {
+    applyMockReturnedValue(mock, returned.toJSON());
+    return;
+  }
+  if (typeof returned !== 'object') {
+    mock.response = {
+      statusCode: 200,
+      headers: {},
+      body: String(returned)
+    };
+    return;
+  }
+  const source = cloneMockJsonValue(returned);
+  if (source && typeof source === 'object') {
+    mock.response = normalizeMockReturnedResponse(source);
+  }
+}
+
+function normalizeMockReturnedResponse(source) {
+  const statusCode = normalizeMockStatusCode(source.statusCode ?? source.status ?? source.code ?? 200);
+  const headers = normalizeMockResponseHeaders(source.headers || source.header || {});
+  const bodyValue = Object.hasOwn(source, 'body') ? source.body : source.data;
+  let body = '';
+  if (bodyValue == null) {
+    body = '';
+  } else if (typeof bodyValue === 'string') {
+    body = bodyValue;
+  } else {
+    body = safeJsonStringify(bodyValue);
+    if (!hasMockHeader(headers, 'Content-Type')) {
+      headers['Content-Type'] = 'application/json';
+    }
+  }
+  return { statusCode, headers, body };
+}
+
+function mockResponseFromExample(example) {
+  return {
+    statusCode: normalizeMockStatusCode(example.statusCode || example.code || 200),
+    headers: normalizeMockResponseHeaders(example.headers || example.header || {}),
+    body: example.body == null ? '' : String(example.body)
+  };
+}
+
+function normalizeMockResponseHeaders(headers) {
+  if (Array.isArray(headers)) {
+    const output = {};
+    for (const header of headers) {
+      const key = String(header?.key || header?.name || '').trim();
+      if (key && header.enabled !== false && header.disabled !== true) {
+        output[key] = header.value == null ? '' : String(header.value);
+      }
+    }
+    return output;
+  }
+  if (headers && typeof headers === 'object') {
+    const output = {};
+    for (const [key, value] of Object.entries(headers)) {
+      if (key) {
+        output[key] = Array.isArray(value) ? value.map((item) => String(item ?? '')).join(', ') : value == null ? '' : String(value);
+      }
+    }
+    return output;
+  }
+  return {};
+}
+
+function hasMockHeader(headers, name) {
+  const target = String(name || '').toLowerCase();
+  return Object.keys(headers || {}).some((key) => key.toLowerCase() === target);
+}
+
+function normalizeMockStatusCode(value) {
+  const status = Number(value);
+  if (!Number.isFinite(status) || status < 100 || status > 599) {
+    return 200;
+  }
+  return Math.floor(status);
+}
+
+function mockRequestMatchesTarget(mock, target) {
+  const match = mock?.match || {};
+  if (target == null || target === '') {
+    return match.matched !== false;
+  }
+  if (typeof target === 'string' || typeof target === 'number') {
+    const text = String(target);
+    return [match.requestId, match.id, match.requestName, match.name, match.path]
+      .map((value) => String(value || ''))
+      .includes(text);
+  }
+  if (target && typeof target === 'object') {
+    const method = String(target.method || '').toUpperCase();
+    const path = String(target.path || target.url || '');
+    const methodMatches = !method || method === String(match.method || '').toUpperCase();
+    const pathMatches = !path || path === String(match.path || '') || path === String(match.routePath || '');
+    return methodMatches && pathMatches && match.matched !== false;
+  }
+  return false;
+}
+
+function findMockExample(mock, selector) {
+  const examples = Array.isArray(mock?.examples) ? mock.examples : [];
+  if (!examples.length) {
+    return null;
+  }
+  if (selector == null || selector === '') {
+    return examples[0];
+  }
+  if (typeof selector === 'number') {
+    return examples[Math.max(0, Math.min(examples.length - 1, Math.floor(selector)))] || null;
+  }
+  if (typeof selector === 'string') {
+    return examples.find((example) => [example.id, example.name]
+      .map((value) => String(value || ''))
+      .includes(selector)) || null;
+  }
+  if (selector && typeof selector === 'object') {
+    if (Number.isFinite(Number(selector.index))) {
+      return findMockExample(mock, Number(selector.index));
+    }
+    const id = selector.id == null ? '' : String(selector.id);
+    const name = selector.name == null ? '' : String(selector.name);
+    const statusCode = Number(selector.statusCode ?? selector.code);
+    return examples.find((example) => {
+      if (id && String(example.id || '') === id) {
+        return true;
+      }
+      if (name && String(example.name || '') === name) {
+        return true;
+      }
+      return Number.isFinite(statusCode) && Number(example.statusCode || example.code || 0) === statusCode;
+    }) || null;
+  }
+  return null;
+}
+
+function mockResult(mock) {
+  if (!mock) {
+    return undefined;
+  }
+  return {
+    match: cloneMockJsonValue(mock.match || {}),
+    response: mock.response ? normalizeMockReturnedResponse(mock.response) : undefined,
+    selectedExampleId: mock.selectedExampleId || ''
+  };
+}
+
+function cloneMockJsonValue(value) {
+  if (value === undefined) {
+    return undefined;
+  }
+  try {
+    const text = JSON.stringify(value);
+    if (text === undefined) {
+      throw new Error('Value is not JSON serializable.');
+    }
+    return JSON.parse(text);
+  } catch (error) {
+    throw sandboxError(`Mock values must be JSON serializable: ${errorMessage(error)}`);
+  }
 }
 
 function unsupportedApi(name) {
@@ -669,6 +1502,7 @@ function createPackageRegistryState(packages = []) {
     loading: [],
     packages: normalizeScriptPackageBundles(packages),
     timeoutMillis: DEFAULT_SCRIPT_TIMEOUT_MILLIS,
+    tracker: null,
     vmContext: null
   };
 }
@@ -723,7 +1557,7 @@ function normalizeScriptPackageName(packageName, registry = createPackageRegistr
 function createScriptPackage(name, registry = createPackageRegistryState()) {
   const definition = SCRIPT_PACKAGE_DEFINITIONS[name];
   if (definition && typeof definition.factory === 'function') {
-    return validateScriptPackageExport(name, definition.factory(), definition);
+    return validateScriptPackageExport(name, definition.factory(registry), definition);
   }
   const packageBundle = registry.packages.get(name);
   if (packageBundle) {
@@ -823,6 +1657,505 @@ function normalizeScriptPackageDependencySpecifier(dependency) {
 
 function scriptPackageIntegrity(source) {
   return `sha256-${crypto.createHash('sha256').update(String(source || ''), 'utf8').digest('base64')}`;
+}
+
+function createPathModuleFacade() {
+  const wrapPath = (source, root) => hardenSandboxValue({
+    basename: (value, suffix) => source.basename(String(value || ''), suffix == null ? undefined : String(suffix)),
+    delimiter: source.delimiter,
+    dirname: (value) => source.dirname(String(value || '')),
+    extname: (value) => source.extname(String(value || '')),
+    format: (value) => source.format(cloneJson(value || {})),
+    isAbsolute: (value) => source.isAbsolute(String(value || '')),
+    join: (...parts) => source.join(...parts.map((part) => String(part || ''))),
+    normalize: (value) => source.normalize(String(value || '')),
+    parse: (value) => hardenSandboxValue(source.parse(String(value || ''))),
+    relative: (from, to) => source.relative(String(from || ''), String(to || '')),
+    resolve: (...parts) => source.resolve(root, ...parts.map((part) => String(part || ''))),
+    sep: source.sep,
+    toNamespacedPath: (value) => String(value || '')
+  });
+  const pathFacade = wrapPath(nodePath.posix, '/');
+  pathFacade.posix = wrapPath(nodePath.posix, '/');
+  pathFacade.win32 = wrapPath(nodePath.win32, 'C:\\');
+  return pathFacade;
+}
+
+function createAssertModuleFacade() {
+  const api = function assertFacade(value, message) {
+    assertCondition(Boolean(value), message || 'Expected value to be truthy.');
+  };
+  api.ok = api;
+  api.equal = (actual, expected, message) => assertCondition(actual == expected, message || `Expected ${actual} to equal ${expected}.`);
+  api.notEqual = (actual, expected, message) => assertCondition(actual != expected, message || `Expected ${actual} not to equal ${expected}.`);
+  api.strictEqual = (actual, expected, message) => assertCondition(Object.is(actual, expected), message || `Expected ${actual} to strictly equal ${expected}.`);
+  api.notStrictEqual = (actual, expected, message) => assertCondition(!Object.is(actual, expected), message || `Expected ${actual} not to strictly equal ${expected}.`);
+  api.deepEqual = (actual, expected, message) => assertCondition(deepEqual(actual, expected), message || 'Expected values to be deeply equal.');
+  api.deepStrictEqual = api.deepEqual;
+  api.notDeepEqual = (actual, expected, message) => assertCondition(!deepEqual(actual, expected), message || 'Expected values not to be deeply equal.');
+  api.fail = (message) => { throw sandboxError(message || 'Assertion failed.'); };
+  api.ifError = (value) => {
+    if (value) {
+      throw sandboxError(errorMessage(value));
+    }
+  };
+  api.throws = (callback, expected, message) => {
+    assertThrows(callback, expected, message, true);
+  };
+  api.doesNotThrow = (callback, expected, message) => {
+    assertThrows(callback, expected, message, false);
+  };
+  api.AssertionError = function AssertionError(options = {}) {
+    return hardenSandboxValue({
+      actual: options.actual,
+      expected: options.expected,
+      message: String(options.message || 'Assertion failed.'),
+      name: 'AssertionError',
+      operator: String(options.operator || '')
+    });
+  };
+  return api;
+}
+
+function assertThrows(callback, expected, message, shouldThrow) {
+  if (typeof callback !== 'function') {
+    throw sandboxError('assert.throws requires a callback function.');
+  }
+  let thrown;
+  try {
+    callback();
+  } catch (error) {
+    thrown = error;
+  }
+  if (shouldThrow && !thrown) {
+    throw sandboxError(message || 'Expected function to throw.');
+  }
+  if (!shouldThrow && thrown) {
+    throw sandboxError(message || `Expected function not to throw: ${errorMessage(thrown)}`);
+  }
+  if (shouldThrow && expected instanceof RegExp) {
+    assertCondition(expected.test(errorMessage(thrown)), message || `Expected error to match ${expected}.`);
+  }
+}
+
+function createBufferModuleFacade() {
+  const BufferFacade = function PostmanBuffer(value = '', encoding = 'utf8') {
+    return createScriptBuffer(Buffer.from(String(value), normalizeBufferEncoding(encoding)));
+  };
+  BufferFacade.from = (value = '', encoding = 'utf8') => createScriptBuffer(bufferInputToBytes(value, encoding));
+  BufferFacade.alloc = (size = 0, fill = 0, encoding = 'utf8') => createScriptBuffer(Buffer.alloc(Math.max(0, Math.min(1024 * 1024, Number(size) || 0)), fill, normalizeBufferEncoding(encoding)));
+  BufferFacade.byteLength = (value = '', encoding = 'utf8') => bufferInputToBytes(value, encoding).length;
+  BufferFacade.compare = (left, right) => Buffer.compare(bufferInputToBytes(left), bufferInputToBytes(right));
+  BufferFacade.concat = (items = [], totalLength) => {
+    const buffers = (Array.isArray(items) ? items : []).map((item) => bufferInputToBytes(item));
+    return createScriptBuffer(Buffer.concat(buffers, totalLength == null ? undefined : Number(totalLength)));
+  };
+  BufferFacade.isBuffer = (value) => SCRIPT_BUFFER_BYTES.has(value);
+  return {
+    Buffer: BufferFacade,
+    constants: hardenSandboxValue({ MAX_LENGTH: 1024 * 1024, MAX_STRING_LENGTH: 1024 * 1024 }),
+    INSPECT_MAX_BYTES: 50,
+    kMaxLength: 1024 * 1024
+  };
+}
+
+function createScriptBuffer(bytes) {
+  const buffer = Buffer.from(bytes || []);
+  const api = {
+    length: buffer.length,
+    byteLength: buffer.length,
+    compare(other) { return Buffer.compare(buffer, bufferInputToBytes(other)); },
+    equals(other) { return buffer.equals(bufferInputToBytes(other)); },
+    fill(value = 0, offset = 0, end = buffer.length, encoding = 'utf8') {
+      buffer.fill(value, Number(offset) || 0, end == null ? buffer.length : Number(end), normalizeBufferEncoding(encoding));
+      syncScriptBufferIndexes(api, buffer);
+      return api;
+    },
+    includes(value, byteOffset = 0, encoding = 'utf8') {
+      return buffer.includes(bufferInputToBytes(value, encoding), Number(byteOffset) || 0);
+    },
+    slice(start, end) { return createScriptBuffer(buffer.slice(start, end)); },
+    subarray(start, end) { return createScriptBuffer(buffer.subarray(start, end)); },
+    toJSON() { return { type: 'Buffer', data: Array.from(buffer) }; },
+    toString(encoding = 'utf8', start = 0, end = buffer.length) {
+      return buffer.toString(normalizeBufferEncoding(encoding), Number(start) || 0, end == null ? buffer.length : Number(end));
+    },
+    valueOf() { return api; }
+  };
+  SCRIPT_BUFFER_BYTES.set(api, buffer);
+  syncScriptBufferIndexes(api, buffer);
+  return hardenSandboxValue(api);
+}
+
+function createScriptArrayBuffer(bytes) {
+  const buffer = Buffer.from(bytes || []);
+  const api = {
+    byteLength: buffer.length,
+    length: buffer.length,
+    slice(start = 0, end = buffer.length) {
+      return createScriptArrayBuffer(buffer.slice(Number(start) || 0, end == null ? buffer.length : Number(end)));
+    }
+  };
+  Object.defineProperty(api, Symbol.toStringTag, {
+    configurable: true,
+    enumerable: false,
+    value: 'ArrayBuffer',
+    writable: false
+  });
+  SCRIPT_BUFFER_BYTES.set(api, buffer);
+  syncScriptBufferIndexes(api, buffer);
+  return hardenSandboxValue(api);
+}
+
+function createVmUint8Array(bytes, vmContextRef) {
+  const buffer = Buffer.from(bytes || []);
+  const context = vmContextRef?.current;
+  if (!context) {
+    return createScriptBuffer(buffer);
+  }
+  try {
+    const Uint8ArrayCtor = vm.runInContext('Uint8Array', context);
+    const output = new Uint8ArrayCtor(buffer.length);
+    for (let index = 0; index < buffer.length; index += 1) {
+      output[index] = buffer[index];
+    }
+    maskSandboxConstructor(output);
+    return output;
+  } catch {
+    return createScriptBuffer(buffer);
+  }
+}
+
+function createVmArrayBuffer(bytes, vmContextRef) {
+  const buffer = Buffer.from(bytes || []);
+  const context = vmContextRef?.current;
+  if (!context) {
+    return createScriptArrayBuffer(buffer);
+  }
+  try {
+    const ArrayBufferCtor = vm.runInContext('ArrayBuffer', context);
+    const Uint8ArrayCtor = vm.runInContext('Uint8Array', context);
+    const output = new ArrayBufferCtor(buffer.length);
+    const view = new Uint8ArrayCtor(output);
+    for (let index = 0; index < buffer.length; index += 1) {
+      view[index] = buffer[index];
+    }
+    maskSandboxConstructor(output);
+    return output;
+  } catch {
+    return createScriptArrayBuffer(buffer);
+  }
+}
+
+function maskSandboxConstructor(value) {
+  try {
+    Object.defineProperty(value, 'constructor', {
+      configurable: false,
+      enumerable: false,
+      value: undefined,
+      writable: false
+    });
+  } catch {
+    // VM-realm typed arrays keep their native prototype. Mask only the direct
+    // constructor property when possible to reduce accidental constructor use.
+  }
+  return value;
+}
+
+function syncScriptBufferIndexes(api, buffer) {
+  for (let index = 0; index < buffer.length; index += 1) {
+    Object.defineProperty(api, index, {
+      configurable: true,
+      enumerable: true,
+      get() { return buffer[index]; },
+      set(value) { buffer[index] = Number(value) & 0xff; }
+    });
+  }
+}
+
+function bufferInputToBytes(value, encoding = 'utf8') {
+  if (SCRIPT_BUFFER_BYTES.has(value)) {
+    return Buffer.from(SCRIPT_BUFFER_BYTES.get(value));
+  }
+  if (value && typeof value === 'object' && value.type === 'Buffer' && Array.isArray(value.data)) {
+    return Buffer.from(value.data.map((item) => Number(item) & 0xff));
+  }
+  if (Array.isArray(value)) {
+    return Buffer.from(value.map((item) => Number(item) & 0xff));
+  }
+  if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer || Object.prototype.toString.call(value) === '[object ArrayBuffer]') {
+    return bufferFromArrayBufferLike(value);
+  }
+  return Buffer.from(String(value == null ? '' : value), normalizeBufferEncoding(encoding));
+}
+
+function normalizeBufferEncoding(value = 'utf8') {
+  const encoding = String(value || 'utf8').toLowerCase();
+  if (encoding === 'utf-8') {
+    return 'utf8';
+  }
+  if (['utf8', 'hex', 'base64', 'base64url', 'latin1', 'ascii', 'utf16le', 'ucs2'].includes(encoding)) {
+    return encoding;
+  }
+  return 'utf8';
+}
+
+function createUtilModuleFacade() {
+  return {
+    format: formatConsoleValues,
+    inherits() {},
+    inspect: (value) => formatLogValue(value),
+    isArray: Array.isArray,
+    isBoolean: (value) => typeof value === 'boolean',
+    isNull: (value) => value === null,
+    isNullOrUndefined: (value) => value == null,
+    isNumber: (value) => typeof value === 'number',
+    isObject: (value) => value !== null && typeof value === 'object',
+    isString: (value) => typeof value === 'string',
+    promisify(callback) {
+      if (typeof callback !== 'function') {
+        throw sandboxError('util.promisify requires a callback function.');
+      }
+      return hardenSandboxValue((...args) => sandboxThenable(new Promise((resolve, reject) => {
+        callback(...args, (error, value) => error ? reject(error) : resolve(value));
+      })));
+    },
+    types: hardenSandboxValue({
+      isArrayBuffer: (value) => value instanceof ArrayBuffer || Object.prototype.toString.call(value) === '[object ArrayBuffer]',
+      isDate: (value) => Object.prototype.toString.call(value) === '[object Date]',
+      isMap: (value) => Object.prototype.toString.call(value) === '[object Map]',
+      isRegExp: (value) => Object.prototype.toString.call(value) === '[object RegExp]',
+      isSet: (value) => Object.prototype.toString.call(value) === '[object Set]',
+      isTypedArray: ArrayBuffer.isView
+    })
+  };
+}
+
+function createUrlModuleFacade() {
+  const URLFacade = createUrlFacade();
+  const URLSearchParamsFacade = createUrlSearchParamsFacade();
+  return {
+    URL: URLFacade,
+    URLSearchParams: URLSearchParamsFacade,
+    domainToASCII: (domain) => nodeUrl.domainToASCII(String(domain || '')),
+    domainToUnicode: (domain) => nodeUrl.domainToUnicode(String(domain || '')),
+    fileURLToPath() { throw sandboxError('url.fileURLToPath is not available in the Postman sandbox.'); },
+    format(value) {
+      if (value && typeof value.toString === 'function' && value.href) {
+        return value.toString();
+      }
+      const protocol = value?.protocol ? `${String(value.protocol).replace(/:$/, '')}:` : '';
+      const host = value?.host || value?.hostname || '';
+      const pathname = value?.pathname || value?.path || '';
+      const search = value?.search || '';
+      return `${protocol}${host ? '//' : ''}${host}${pathname}${search}`;
+    },
+    parse(value, parseQueryString = false) {
+      const parsed = new URL(String(value || ''), 'http://postmeter.invalid');
+      return hardenSandboxValue({
+        auth: parsed.username ? `${parsed.username}${parsed.password ? `:${parsed.password}` : ''}` : null,
+        hash: parsed.hash || null,
+        host: parsed.host,
+        hostname: parsed.hostname,
+        href: parsed.href.replace('http://postmeter.invalid', ''),
+        path: `${parsed.pathname}${parsed.search}`,
+        pathname: parsed.pathname,
+        port: parsed.port || null,
+        protocol: parsed.protocol,
+        query: parseQueryString ? createQuerystringModuleFacade().parse(parsed.search.slice(1)) : parsed.search.slice(1),
+        search: parsed.search || null,
+        slashes: true
+      });
+    },
+    pathToFileURL() { throw sandboxError('url.pathToFileURL is not available in the Postman sandbox.'); },
+    resolve(from, to) { return new URL(String(to || ''), String(from || '')).toString(); }
+  };
+}
+
+function createPunycodeModuleFacade() {
+  return {
+    decode: decodePunycodeLabel,
+    encode: encodePunycodeLabel,
+    toASCII: (value) => nodeUrl.domainToASCII(String(value || '')),
+    toUnicode: (value) => nodeUrl.domainToUnicode(String(value || '')),
+    ucs2: hardenSandboxValue({
+      decode: (value) => hardenSandboxValue(Array.from(String(value || ''), (char) => char.codePointAt(0))),
+      encode: (values) => String.fromCodePoint(...(Array.isArray(values) ? values.map(Number) : []))
+    }),
+    version: '2.1.0-compatible-facade'
+  };
+}
+
+function encodePunycodeLabel(value) {
+  const ascii = nodeUrl.domainToASCII(`x.${String(value || '')}`);
+  const label = ascii.split('.').slice(1).join('.');
+  return label.startsWith('xn--') ? label.slice(4) : label;
+}
+
+function decodePunycodeLabel(value) {
+  return nodeUrl.domainToUnicode(`xn--${String(value || '')}`).replace(/^xn--/i, '');
+}
+
+function createQuerystringModuleFacade() {
+  return {
+    decode: (...args) => createQuerystringModuleFacade().parse(...args),
+    encode: (...args) => createQuerystringModuleFacade().stringify(...args),
+    escape: (value) => nodeQuerystring.escape(String(value == null ? '' : value)),
+    parse(value = '', separator = '&', equals = '=', options = {}) {
+      const parsed = nodeQuerystring.parse(String(value || ''), String(separator || '&'), String(equals || '='), options || {});
+      const output = createSafePlainObject();
+      for (const [key, item] of Object.entries(parsed)) {
+        setSafeObjectProperty(output, key, Array.isArray(item) ? item.map(String) : String(item ?? ''));
+      }
+      return hardenSandboxValue(output);
+    },
+    stringify(value = {}, separator = '&', equals = '=', options = {}) {
+      return nodeQuerystring.stringify(cloneJson(value || {}), String(separator || '&'), String(equals || '='), options || {});
+    },
+    unescape: (value) => nodeQuerystring.unescape(String(value == null ? '' : value))
+  };
+}
+
+function createStringDecoderModuleFacade() {
+  function StringDecoder(encoding = 'utf8') {
+    return hardenSandboxValue({
+      end(value = '') { return bufferInputToBytes(value, encoding).toString(normalizeBufferEncoding(encoding)); },
+      write(value = '') { return bufferInputToBytes(value, encoding).toString(normalizeBufferEncoding(encoding)); }
+    });
+  }
+  return { StringDecoder };
+}
+
+function createEventsModuleFacade() {
+  const EventEmitter = createEventEmitterFacade();
+  return {
+    EventEmitter,
+    defaultMaxListeners: 10
+  };
+}
+
+function createEventEmitterFacade() {
+  function EventEmitter() {
+    const listeners = new Map();
+    const api = {
+      addListener(type, callback) { return api.on(type, callback); },
+      emit(type, ...args) {
+        const callbacks = [...(listeners.get(String(type || '')) || [])];
+        for (const callback of callbacks) {
+          callback.apply(api, args);
+        }
+        return callbacks.length > 0;
+      },
+      eventNames() { return hardenSandboxValue([...listeners.keys()]); },
+      listenerCount(type) { return listeners.get(String(type || ''))?.size || 0; },
+      listeners(type) { return hardenSandboxValue([...(listeners.get(String(type || '')) || [])]); },
+      off(type, callback) { return api.removeListener(type, callback); },
+      on(type, callback) {
+        if (typeof callback !== 'function') {
+          return api;
+        }
+        const key = String(type || '');
+        if (!listeners.has(key)) {
+          listeners.set(key, new Set());
+        }
+        listeners.get(key).add(callback);
+        return api;
+      },
+      once(type, callback) {
+        if (typeof callback !== 'function') {
+          return api;
+        }
+        const wrapped = (...args) => {
+          api.removeListener(type, wrapped);
+          callback.apply(api, args);
+        };
+        return api.on(type, wrapped);
+      },
+      removeAllListeners(type) {
+        if (type == null) {
+          listeners.clear();
+        } else {
+          listeners.delete(String(type || ''));
+        }
+        return api;
+      },
+      removeListener(type, callback) {
+        listeners.get(String(type || ''))?.delete(callback);
+        return api;
+      }
+    };
+    return hardenSandboxValue(api);
+  }
+  EventEmitter.EventEmitter = EventEmitter;
+  return EventEmitter;
+}
+
+function createStreamModuleFacade() {
+  const EventEmitter = createEventEmitterFacade();
+  function PassThrough() {
+    const emitter = new EventEmitter();
+    const chunks = [];
+    emitter.write = (chunk) => {
+      chunks.push(chunk);
+      emitter.emit('data', chunk);
+      return true;
+    };
+    emitter.end = (chunk) => {
+      if (chunk != null) {
+        emitter.write(chunk);
+      }
+      emitter.emit('end');
+    };
+    emitter.read = () => chunks.shift();
+    return hardenSandboxValue(emitter);
+  }
+  return {
+    Duplex: PassThrough,
+    PassThrough,
+    Readable: PassThrough,
+    Stream: EventEmitter,
+    Transform: PassThrough,
+    Writable: PassThrough,
+    finished(stream, callback) {
+      if (typeof callback === 'function') {
+        callback(null, stream);
+      }
+    },
+    pipeline(...args) {
+      const callback = typeof args.at(-1) === 'function' ? args.at(-1) : undefined;
+      if (callback) {
+        callback(null);
+      }
+      return args[0];
+    }
+  };
+}
+
+function createTimersModuleFacade(registry = createPackageRegistryState()) {
+  const tracker = registry.tracker;
+  return {
+    clearImmediate: tracker?.clearTimeout || (() => {}),
+    clearInterval: tracker?.clearInterval || (() => {}),
+    clearTimeout: tracker?.clearTimeout || (() => {}),
+    setImmediate(callback, ...args) {
+      if (!tracker) {
+        throw sandboxError('timers.setImmediate is not available in this script runtime.');
+      }
+      return tracker.setTimeout(callback, 0, ...args);
+    },
+    setInterval(callback, delay, ...args) {
+      if (!tracker) {
+        throw sandboxError('timers.setInterval is not available in this script runtime.');
+      }
+      return tracker.setInterval(callback, delay, ...args);
+    },
+    setTimeout(callback, delay, ...args) {
+      if (!tracker) {
+        throw sandboxError('timers.setTimeout is not available in this script runtime.');
+      }
+      return tracker.setTimeout(callback, delay, ...args);
+    }
+  };
 }
 
 function assertScriptPackageDependencyAllowed(registry, issuer, dependencyName) {
@@ -939,6 +2272,33 @@ function cryptoInputBuffer(value) {
     return Buffer.from(WORD_ARRAY_BYTES.get(value));
   }
   return Buffer.from(String(value == null ? '' : value), 'utf8');
+}
+
+function bufferFromArrayBufferLike(value) {
+  if (value == null) {
+    return Buffer.alloc(0);
+  }
+  if (SCRIPT_BUFFER_BYTES.has(value)) {
+    return Buffer.from(SCRIPT_BUFFER_BYTES.get(value));
+  }
+  if (Buffer.isBuffer(value)) {
+    return Buffer.from(value);
+  }
+  if (ArrayBuffer.isView(value)) {
+    return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
+  }
+  if (value instanceof ArrayBuffer || Object.prototype.toString.call(value) === '[object ArrayBuffer]') {
+    return Buffer.from(value);
+  }
+  if (Array.isArray(value)) {
+    return Buffer.from(value.map((item) => Number(item) & 0xff));
+  }
+  return Buffer.from(String(value), 'utf8');
+}
+
+function bufferToArrayBuffer(value) {
+  const bytes = Buffer.from(value || []);
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 }
 
 function wordArrayToBuffer(value) {
@@ -1368,37 +2728,101 @@ function lodashIsEqual(left, right) {
 }
 
 function createChaiPackage() {
-  return {
-    expect,
-    assert: {
-      equal(actual, expected, message) {
-        assertCondition(actual == expected, message || `Expected ${actual} to equal ${expected}.`);
-      },
-      strictEqual(actual, expected, message) {
-        assertCondition(Object.is(actual, expected), message || `Expected ${actual} to strictly equal ${expected}.`);
-      },
-      deepEqual(actual, expected, message) {
-        assertCondition(deepEqual(actual, expected), message || 'Expected values to be deeply equal.');
-      },
-      isTrue(value, message) {
-        assertCondition(value === true, message || `Expected ${value} to be true.`);
-      },
-      isFalse(value, message) {
-        assertCondition(value === false, message || `Expected ${value} to be false.`);
-      },
-      isOk(value, message) {
-        assertCondition(Boolean(value), message || `Expected ${value} to be truthy.`);
-      },
-      include(actual, expected, message) {
-        try {
-          assertIncludes(actual, expected, false);
-        } catch (error) {
-          throw sandboxError(message || errorMessage(error));
-        }
+  const assert = {
+    ok(value, message) {
+      assertCondition(Boolean(value), message || `Expected ${value} to be truthy.`);
+    },
+    isOk(value, message) {
+      assert.ok(value, message);
+    },
+    isNotOk(value, message) {
+      assertCondition(!value, message || `Expected ${value} to be falsy.`);
+    },
+    equal(actual, expected, message) {
+      assertCondition(actual == expected, message || `Expected ${actual} to equal ${expected}.`);
+    },
+    notEqual(actual, expected, message) {
+      assertCondition(actual != expected, message || `Expected ${actual} not to equal ${expected}.`);
+    },
+    strictEqual(actual, expected, message) {
+      assertCondition(Object.is(actual, expected), message || `Expected ${actual} to strictly equal ${expected}.`);
+    },
+    notStrictEqual(actual, expected, message) {
+      assertCondition(!Object.is(actual, expected), message || `Expected ${actual} not to strictly equal ${expected}.`);
+    },
+    deepEqual(actual, expected, message) {
+      assertCondition(deepEqual(actual, expected), message || 'Expected values to be deeply equal.');
+    },
+    notDeepEqual(actual, expected, message) {
+      assertCondition(!deepEqual(actual, expected), message || 'Expected values not to be deeply equal.');
+    },
+    isTrue(value, message) {
+      assertCondition(value === true, message || `Expected ${value} to be true.`);
+    },
+    isFalse(value, message) {
+      assertCondition(value === false, message || `Expected ${value} to be false.`);
+    },
+    typeOf(value, typeName, message) {
+      try {
+        assertType(value, typeName);
+      } catch (error) {
+        throw sandboxError(message || errorMessage(error));
       }
     },
+    isArray(value, message) {
+      assertCondition(Array.isArray(value), message || 'Expected value to be an array.');
+    },
+    isObject(value, message) {
+      assertCondition(value !== null && typeof value === 'object' && !Array.isArray(value), message || 'Expected value to be an object.');
+    },
+    include(actual, expected, message) {
+      try {
+        assertIncludes(actual, expected, false, { deep: true });
+      } catch (error) {
+        throw sandboxError(message || errorMessage(error));
+      }
+    },
+    notInclude(actual, expected, message) {
+      try {
+        assertIncludes(actual, expected, true, { deep: true });
+      } catch (error) {
+        throw sandboxError(message || errorMessage(error));
+      }
+    },
+    match(actual, pattern, message) {
+      assertCondition(testPattern(pattern, actual), message || `Expected ${actual} to match ${pattern}.`);
+    },
+    notMatch(actual, pattern, message) {
+      assertCondition(!testPattern(pattern, actual), message || `Expected ${actual} not to match ${pattern}.`);
+    },
+    property(object, property, message) {
+      assertCondition(object != null && Object.hasOwn(object, property), message || `Expected object to have property ${property}.`);
+    },
+    notProperty(object, property, message) {
+      assertCondition(object == null || !Object.hasOwn(object, property), message || `Expected object not to have property ${property}.`);
+    },
+    throws(fn, expected, message) {
+      expect(fn).to.throw(expected, message);
+    },
+    doesNotThrow(fn, expected, message) {
+      expect(fn).to.not.throw(expected, message);
+    },
+    fail(message) {
+      throw sandboxError(message || 'Assertion failed.');
+    }
+  };
+  return {
+    expect,
+    assert,
     should() {
-      return {};
+      return hardenSandboxValue({
+        equal(actual, expected, message) {
+          assert.strictEqual(actual, expected, message);
+        },
+        exist(value, message) {
+          assertCondition(value != null, message || 'Expected value to exist.');
+        }
+      });
     }
   };
 }
@@ -1903,18 +3327,26 @@ function createPostmanCollectionPackage() {
     Collection: function Collection(definition = {}) { return createPostmanCollection(definition); },
     Item: function Item(definition = {}) { return createPostmanItem(definition); },
     Request: function Request(definition = {}) { return createPostmanRequest(definition); },
-    Response: function Response(definition = {}) { return hardenSandboxValue(cloneJson(definition || {})); },
+    Response: function Response(definition = {}) { return createPostmanResponse(definition); },
     Url: function Url(definition = '') { return createPostmanUrl(definition); },
     Header: function Header(definition = {}) { return createPostmanHeader(definition); },
     HeaderList: function HeaderList(_parent, headers = []) { return createPostmanHeaderList(headers); },
+    QueryParam: function QueryParam(definition = {}) { return createPostmanQueryParam(definition); },
+    QueryParamList: function QueryParamList(_parent, params = []) { return createPostmanQueryParamList(params); },
+    RequestBody: function RequestBody(definition = {}) { return createPostmanRequestBody(definition); },
+    FormParam: function FormParam(definition = {}) { return createPostmanFormParam(definition); },
     Variable: function Variable(definition = {}) { return createPostmanVariable(definition); },
+    VariableList: function VariableList(_parent, variables = []) { return createPostmanVariableList(variables); },
+    Cookie: function Cookie(definition = {}) { return createPostmanCookie(definition); },
+    CookieList: function CookieList(_parent, cookies = []) { return createPostmanCookieList(cookies); },
+    PropertyList: function PropertyList(_type, _parent, items = []) { return createPostmanPropertyList(items); },
     VariableScope: function VariableScope(definition = {}) { return createPostmanVariableScope(definition); }
   };
 }
 
 function createPostmanCollection(definition = {}) {
   const info = definition.info || {};
-  const items = createPostmanPropertyList((definition.item || []).map(createPostmanItem));
+  const items = createPostmanPropertyList(definition.item || [], { itemFactory: createPostmanItem });
   return hardenSandboxValue({
     name: info.name || definition.name || '',
     items,
@@ -1932,7 +3364,7 @@ function createPostmanItem(definition = {}) {
   return hardenSandboxValue({
     name: definition.name || '',
     request,
-    items: createPostmanPropertyList((definition.item || []).map(createPostmanItem)),
+    items: createPostmanPropertyList(definition.item || [], { itemFactory: createPostmanItem }),
     toJSON() {
       const output = { name: definition.name || '' };
       if (request) {
@@ -1947,115 +3379,1193 @@ function createPostmanItem(definition = {}) {
   });
 }
 
-function createPostmanRequest(definition = {}) {
-  const request = typeof definition === 'string' ? { url: definition } : definition || {};
-  const headers = createPostmanHeaderList(request.header || request.headers || []);
-  const url = createPostmanUrl(request.url || '');
-  return hardenSandboxValue({
-    method: String(request.method || 'GET').toUpperCase(),
-    url,
-    headers,
-    body: request.body,
-    toJSON() {
-      return {
-        method: this.method,
-        url: url.toString(),
-        header: headers.all().map((header) => header.toJSON()),
-        body: cloneJson(this.body || {})
-      };
-    }
+function createPostmanRequest(definition = {}, options = {}) {
+  const mutable = options.mutable === true;
+  const request = mutable
+    ? normalizeMutablePostmanRequestDefinition(definition)
+    : normalizePostmanRequestDefinition(definition);
+  const headers = createPostmanHeaderList(request.header || request.headers || [], {
+    onChange: mutable ? (items) => { request.headers = items.map(sdkPairToPostMeterPair); } : undefined
   });
-}
-
-function createPostmanUrl(definition = '') {
-  const raw = typeof definition === 'string'
-    ? definition
-    : definition.raw || String(definition.protocol ? `${definition.protocol}://${(definition.host || []).join ? definition.host.join('.') : definition.host || ''}/${(definition.path || []).join ? definition.path.join('/') : definition.path || ''}` : '');
-  let parsed;
-  try {
-    parsed = new URL(raw);
-  } catch {
-    parsed = null;
-  }
-  return hardenSandboxValue({
-    raw,
-    protocol: parsed ? parsed.protocol.replace(/:$/, '') : '',
-    host: parsed ? parsed.hostname.split('.') : [],
-    path: parsed ? parsed.pathname.split('/').filter(Boolean) : [],
-    query: parsed ? Array.from(parsed.searchParams.entries()).map(([key, value]) => ({ key, value })) : [],
-    toString() {
-      return raw;
-    },
-    getHost() {
-      return parsed ? parsed.hostname : '';
-    },
-    getPath() {
-      return parsed ? parsed.pathname : '';
-    }
+  const url = createPostmanUrl(request.url || '', {
+    queryParams: request.queryParams,
+    onChange: mutable ? (state) => {
+      request.url = state.raw;
+      request.queryParams = [];
+    } : undefined
   });
-}
-
-function createPostmanHeader(definition = {}) {
-  const header = typeof definition === 'string' ? { key: definition.split(':')[0], value: definition.split(':').slice(1).join(':').trim() } : definition || {};
-  return hardenSandboxValue({
-    key: String(header.key || ''),
-    value: header.value == null ? '' : String(header.value),
-    disabled: header.disabled === true,
-    toJSON() {
-      return { key: this.key, value: this.value, disabled: this.disabled };
-    }
+  const body = createPostmanRequestBody(request.postmanBody || request.bodyDefinition || request.body || '', {
+    bodyType: request.bodyType,
+    onChange: mutable ? (state) => syncPostmanBodyToRequest(request, state) : undefined
   });
-}
-
-function createPostmanHeaderList(headers = []) {
-  const list = (Array.isArray(headers) ? headers : []).map(createPostmanHeader);
+  const metadata = createPostmanPropertyList(request.metadata || [], {
+    onChange: mutable ? (items) => { request.metadata = items.map(sdkPairToPostMeterPair); } : undefined
+  });
+  const messages = createPostmanPropertyList(request.messages || [], {
+    itemFactory: createPostmanMessage,
+    toJSONItem: messageToJSON,
+    onChange: mutable ? (items) => { request.messages = items.map(messageToJSON); } : undefined
+  });
   const api = {
-    add(header) {
-      list.push(createPostmanHeader(header));
-      return api;
-    },
-    upsert(header) {
-      const next = createPostmanHeader(header);
-      const index = list.findIndex((item) => item.key.toLowerCase() === next.key.toLowerCase());
-      if (index >= 0) {
-        list[index] = next;
-      } else {
-        list.push(next);
+    get method() { return String(request.method || 'GET').toUpperCase(); },
+    set method(value) {
+      if (mutable) {
+        request.method = String(value || '').toUpperCase();
       }
-      return api;
     },
-    get(name) {
-      return list.find((header) => header.key.toLowerCase() === String(name || '').toLowerCase())?.value;
+    get url() { return url; },
+    set url(value) {
+      if (mutable) {
+        url.update(value);
+      }
     },
-    has(name) {
-      return api.get(name) != null;
+    headers,
+    body,
+    auth: createPostmanAuth(request.auth || { type: 'none' }, mutable ? (nextAuth) => { request.auth = nextAuth; } : undefined),
+    metadata,
+    messages,
+    get methodPath() { return request.methodPath == null ? '' : String(request.methodPath); },
+    set methodPath(value) {
+      if (mutable) {
+        request.methodPath = String(value || '');
+      }
     },
-    all() {
-      return hardenSandboxValue(list.slice());
+    clone() {
+      return createPostmanRequest(api.toJSON());
     },
-    count() {
-      return list.length;
-    },
-    toObject() {
-      const output = createSafePlainObject();
-      for (const header of list) {
-        setSafeObjectProperty(output, header.key, header.value);
+    toJSON() {
+      const output = {
+        method: api.method,
+        url: url.toJSON(),
+        header: headers.toJSON(),
+        body: body.toJSON()
+      };
+      if (request.auth) {
+        output.auth = clonePlainJson(request.auth);
+      }
+      if (api.methodPath) {
+        output.methodPath = api.methodPath;
+      }
+      if (metadata.count(false)) {
+        output.metadata = metadata.toJSON();
+      }
+      if (messages.count(false)) {
+        output.messages = messages.toJSON();
       }
       return hardenSandboxValue(output);
+    },
+    toString() {
+      return url.toString();
+    }
+  };
+  if (mutable) {
+    request.headers = headers.toJSON().map(sdkPairToPostMeterPair);
+  }
+  return hardenSandboxValue(api);
+}
+
+function normalizePostmanRequestDefinition(definition = {}) {
+  if (typeof definition === 'string') {
+    return { method: 'GET', url: definition, headers: [] };
+  }
+  const source = definition && typeof definition.toJSON === 'function'
+    ? definition.toJSON()
+    : definition || {};
+  return {
+    ...clonePlainJson(source),
+    headers: source.headers || source.header || [],
+    header: source.header || source.headers || [],
+    method: source.method || 'GET',
+    url: source.url || ''
+  };
+}
+
+function normalizeMutablePostmanRequestDefinition(definition = {}) {
+  const request = definition && typeof definition === 'object' ? definition : { url: String(definition || '') };
+  request.method = request.method || 'GET';
+  request.url = request.url || '';
+  request.headers = Array.isArray(request.headers) ? request.headers : Array.isArray(request.header) ? request.header : [];
+  request.header = request.headers;
+  request.queryParams = Array.isArray(request.queryParams) ? request.queryParams : [];
+  request.auth = request.auth && typeof request.auth === 'object' ? request.auth : { type: 'none' };
+  return request;
+}
+
+function createPostmanUrl(definition = '', options = {}) {
+  const state = normalizePostmanUrlState(definition, options.queryParams);
+  const sync = () => {
+    state.raw = buildRawUrlFromState(state);
+    if (typeof options.onChange === 'function') {
+      options.onChange(state);
+    }
+  };
+  const query = createPostmanQueryParamList(state.query, {
+    onChange: (items) => {
+      state.query.splice(0, state.query.length, ...items.map((item) => normalizeSdkPair(item, 'query')));
+      sync();
+    }
+  });
+  const api = {
+    get raw() { return state.raw; },
+    set raw(value) {
+      replaceUrlState(state, normalizePostmanUrlState(value));
+      query.repopulate(state.query);
+    },
+    get protocol() { return state.protocol; },
+    set protocol(value) {
+      state.protocol = String(value || '').replace(/:$/, '');
+      sync();
+    },
+    get host() { return state.host.join('.'); },
+    set host(value) {
+      state.host = normalizeUrlHost(value);
+      sync();
+    },
+    get path() { return hardenSandboxValue(state.path.slice()); },
+    set path(value) {
+      state.path = normalizeUrlPath(value);
+      sync();
+    },
+    get query() { return query; },
+    update(value) {
+      api.raw = urlDefinitionToRaw(value);
+      return api;
+    },
+    addQueryParams(params) {
+      for (const item of Array.isArray(params) ? params : [params]) {
+        query.add(item);
+      }
+      return api;
+    },
+    getHost() {
+      return state.host.join('.');
+    },
+    getPath() {
+      return state.path.length ? `/${state.path.join('/')}` : '';
+    },
+    getQueryString() {
+      return serializeQueryPairs(state.query);
+    },
+    clone() {
+      return createPostmanUrl(api.toJSON());
+    },
+    toJSON() {
+      return hardenSandboxValue({
+        raw: state.raw,
+        protocol: state.protocol,
+        host: state.host.slice(),
+        path: state.path.slice(),
+        query: query.toJSON()
+      });
+    },
+    toString() {
+      return state.raw;
     }
   };
   return hardenSandboxValue(api);
 }
 
+function normalizePostmanUrlState(definition = '', queryParams = []) {
+  const raw = urlDefinitionToRaw(definition);
+  const split = splitRawUrl(raw);
+  const parsed = parseAbsoluteOrRelativeUrl(raw);
+  const host = parsed?.hostname ? parsed.hostname.split('.').filter(Boolean) : normalizeUrlHost(definition?.host);
+  const path = parsed?.pathname ? parsed.pathname.split('/').filter(Boolean).map(decodeQueryComponent) : normalizeUrlPath(definition?.path);
+  const protocol = parsed?.protocol ? parsed.protocol.replace(/:$/, '') : String(definition?.protocol || '').replace(/:$/, '');
+  const query = [
+    ...parseQueryPairs(split.query),
+    ...normalizeSdkPairArray(queryParams, 'query')
+  ];
+  return {
+    base: split.base,
+    hash: split.hash,
+    host,
+    path,
+    protocol,
+    query,
+    raw
+  };
+}
+
+function replaceUrlState(target, next) {
+  target.base = next.base;
+  target.hash = next.hash;
+  target.host = next.host;
+  target.path = next.path;
+  target.protocol = next.protocol;
+  target.query.splice(0, target.query.length, ...next.query);
+  target.raw = next.raw;
+}
+
+function urlDefinitionToRaw(definition = '') {
+  if (typeof definition === 'string') {
+    return definition;
+  }
+  if (definition && typeof definition.toString === 'function' && typeof definition !== 'object') {
+    return String(definition);
+  }
+  if (definition && typeof definition.raw === 'string') {
+    return definition.raw;
+  }
+  const protocol = String(definition?.protocol || '').replace(/:$/, '');
+  const host = normalizeUrlHost(definition?.host).join('.');
+  const path = normalizeUrlPath(definition?.path).join('/');
+  const query = serializeQueryPairs(normalizeSdkPairArray(definition?.query || [], 'query'));
+  const base = `${protocol ? `${protocol}://` : ''}${host}${path ? `/${path}` : ''}`;
+  return `${base}${query ? `?${query}` : ''}`;
+}
+
+function parseAbsoluteOrRelativeUrl(raw) {
+  try {
+    return new URL(String(raw || ''));
+  } catch {
+    try {
+      return new URL(String(raw || ''), 'http://postmeter.invalid');
+    } catch {
+      return null;
+    }
+  }
+}
+
+function splitRawUrl(raw) {
+  const text = String(raw || '');
+  const hashIndex = text.indexOf('#');
+  const beforeHash = hashIndex >= 0 ? text.slice(0, hashIndex) : text;
+  const hash = hashIndex >= 0 ? text.slice(hashIndex) : '';
+  const queryIndex = beforeHash.indexOf('?');
+  return {
+    base: queryIndex >= 0 ? beforeHash.slice(0, queryIndex) : beforeHash,
+    hash,
+    query: queryIndex >= 0 ? beforeHash.slice(queryIndex + 1) : ''
+  };
+}
+
+function buildRawUrlFromState(state) {
+  const base = state.protocol && state.host.length
+    ? `${state.protocol}://${state.host.join('.')}${state.path.length ? `/${state.path.map(encodePathPart).join('/')}` : ''}`
+    : state.base;
+  const query = serializeQueryPairs(state.query);
+  return `${base}${query ? `?${query}` : ''}${state.hash || ''}`;
+}
+
+function normalizeUrlHost(value) {
+  if (Array.isArray(value)) {
+    return value.map((part) => String(part || '')).filter(Boolean);
+  }
+  if (typeof value === 'string') {
+    return value.split('.').map((part) => part.trim()).filter(Boolean);
+  }
+  return [];
+}
+
+function normalizeUrlPath(value) {
+  if (Array.isArray(value)) {
+    return value.map((part) => String(part || '').replace(/^\/+|\/+$/g, '')).filter(Boolean);
+  }
+  if (typeof value === 'string') {
+    return value.split('/').map((part) => part.trim()).filter(Boolean);
+  }
+  return [];
+}
+
+function encodePathPart(value) {
+  return encodeURIComponent(String(value || '')).replace(/%2F/gi, '/');
+}
+
+function parseQueryPairs(queryString = '') {
+  const text = String(queryString || '').replace(/^\?/, '');
+  if (!text) {
+    return [];
+  }
+  return text.split('&').filter((part) => part !== '').map((part) => {
+    const equalsIndex = part.indexOf('=');
+    const key = equalsIndex >= 0 ? part.slice(0, equalsIndex) : part;
+    const value = equalsIndex >= 0 ? part.slice(equalsIndex + 1) : '';
+    return normalizeSdkPair({
+      key: decodeQueryComponent(key),
+      value: decodeQueryComponent(value)
+    }, 'query');
+  });
+}
+
+function serializeQueryPairs(pairs = []) {
+  return (pairs || [])
+    .filter((pair) => pair && pair.disabled !== true && pair.key)
+    .map((pair) => `${encodeURIComponent(String(pair.key))}=${encodeURIComponent(String(pair.value ?? ''))}`)
+    .join('&');
+}
+
+function decodeQueryComponent(value) {
+  try {
+    return decodeURIComponent(String(value || '').replace(/\+/g, ' '));
+  } catch {
+    return String(value || '');
+  }
+}
+
+function createPostmanHeader(definition = {}) {
+  return createSdkPairItem(normalizeSdkPair(definition, 'header'), { caseInsensitive: true, stringSeparator: ': ' });
+}
+
+function createPostmanHeaderList(headers = [], options = {}) {
+  return createSdkPropertyList(headersFromAny(headers), {
+    caseInsensitive: true,
+    itemKind: 'header',
+    normalizeItem: (item) => normalizeSdkPair(item, 'header'),
+    onChange: options.onChange,
+    stringifier: (items) => items.filter((item) => item.disabled !== true).map((item) => `${item.key}: ${item.value ?? ''}`).join('\n')
+  });
+}
+
+function createPostmanQueryParam(definition = {}) {
+  return createSdkPairItem(normalizeSdkPair(definition, 'query'));
+}
+
+function createPostmanQueryParamList(params = [], options = {}) {
+  return createSdkPropertyList(params, {
+    itemKind: 'query',
+    normalizeItem: (item) => normalizeSdkPair(item, 'query'),
+    onChange: options.onChange,
+    stringifier: serializeQueryPairs
+  });
+}
+
+function createPostmanFormParam(definition = {}) {
+  return createSdkPairItem(normalizeSdkPair(definition, 'form'), { includeFormFields: true });
+}
+
+function createPostmanFormParamList(params = [], options = {}) {
+  return createSdkPropertyList(params, {
+    itemKind: 'form',
+    normalizeItem: (item) => normalizeSdkPair(item, 'form'),
+    onChange: options.onChange,
+    stringifier: (items) => items.filter((item) => item.disabled !== true).map((item) => `${item.key}=${item.value ?? item.src ?? ''}`).join('&')
+  });
+}
+
 function createPostmanVariable(definition = {}) {
-  return hardenSandboxValue({
-    key: String(definition.key || ''),
-    value: definition.value == null ? '' : String(definition.value),
-    type: String(definition.type || 'any'),
+  return createSdkPairItem(normalizeSdkPair(definition, 'variable'), { includeType: true });
+}
+
+function createPostmanVariableList(variables = [], options = {}) {
+  return createSdkPropertyList(variables, {
+    itemKind: 'variable',
+    normalizeItem: (item) => normalizeSdkPair(item, 'variable'),
+    onChange: options.onChange
+  });
+}
+
+function createPostmanCookie(definition = {}) {
+  return createSdkCookieItem(normalizeSdkCookie(definition));
+}
+
+function createPostmanCookieList(cookies = [], options = {}) {
+  return createSdkPropertyList(cookies, {
+    itemKind: 'cookie',
+    normalizeItem: normalizeSdkCookie,
+    itemFactory: (item, onChange) => createSdkCookieItem(item, onChange),
+    onChange: options.onChange,
+    stringifier: (items) => items.filter((item) => item.disabled !== true).map(cookieToHeaderValue).join('; ')
+  });
+}
+
+function createPostmanPropertyList(items = [], options = {}) {
+  return createSdkPropertyList(items, {
+    itemKind: 'property',
+    normalizeItem: options.itemFactory ? undefined : (item) => normalizeSdkPair(item, 'property'),
+    itemFactory: options.itemFactory,
+    onChange: options.onChange,
+    toJSONItem: options.toJSONItem
+  });
+}
+
+function createSdkPropertyList(items = [], options = {}) {
+  const state = {
+    items: normalizeSdkListInput(items).map((item) => normalizeSdkListItem(item, options)),
+    options
+  };
+  const notify = () => {
+    if (typeof options.onChange === 'function') {
+      options.onChange(state.items);
+    }
+  };
+  const itemFor = (item) => {
+    if (typeof options.itemFactory === 'function') {
+      return options.itemFactory(item, notify);
+    }
+    return createSdkPairItem(item, itemOptionsForKind(options.itemKind), notify);
+  };
+  const enabledItems = (excludeDisabled = true) => state.items.filter((item) => excludeDisabled !== true || item.disabled !== true);
+  const findIndex = (key) => {
+    const target = String(key || '');
+    const normalizedTarget = options.caseInsensitive === true ? target.toLowerCase() : target;
+    return state.items.findIndex((item) => {
+      const value = String(item.key || item.name || '');
+      return (options.caseInsensitive === true ? value.toLowerCase() : value) === normalizedTarget;
+    });
+  };
+  const addAt = (item, index) => {
+    const normalized = normalizeSdkListItem(item, options);
+    if (!normalized.key && !normalized.name && options.itemKind !== 'property') {
+      return api;
+    }
+    if (Number.isInteger(index)) {
+      state.items.splice(Math.max(0, Math.min(state.items.length, index)), 0, normalized);
+    } else {
+      state.items.push(normalized);
+    }
+    notify();
+    return api;
+  };
+  const api = {
+    add(item) { return addAt(item); },
+    append(item) { return addAt(item); },
+    prepend(item) { return addAt(item, 0); },
+    insert(item, before) {
+      const index = typeof before === 'number' ? before : findIndex(before);
+      return addAt(item, index >= 0 ? index : undefined);
+    },
+    insertAfter(item, after) {
+      const index = typeof after === 'number' ? after : findIndex(after);
+      return addAt(item, index >= 0 ? index + 1 : undefined);
+    },
+    upsert(item) {
+      const normalized = normalizeSdkListItem(item, options);
+      const key = normalized.key || normalized.name;
+      if (!key) {
+        return api;
+      }
+      const index = findIndex(key);
+      if (index >= 0) {
+        state.items[index] = { ...state.items[index], ...normalized };
+      } else {
+        state.items.push(normalized);
+      }
+      notify();
+      return api;
+    },
+    remove(predicate, context) {
+      const before = state.items.length;
+      if (typeof predicate === 'function') {
+        state.items = state.items.filter((item, index) => !Reflect.apply(predicate, context || api, [itemFor(item), index, api]));
+      } else {
+        const index = findIndex(predicate);
+        if (index >= 0) {
+          state.items.splice(index, 1);
+        }
+      }
+      if (state.items.length !== before) {
+        notify();
+      }
+      return api;
+    },
+    clear() {
+      if (state.items.length) {
+        state.items = [];
+        notify();
+      }
+      return api;
+    },
+    repopulate(nextItems = []) {
+      state.items = normalizeSdkListInput(nextItems).map((item) => normalizeSdkListItem(item, options));
+      notify();
+      return api;
+    },
+    populate(nextItems = []) {
+      for (const item of normalizeSdkListInput(nextItems)) {
+        addAt(item);
+      }
+      return api;
+    },
+    get(key) {
+      const index = findIndex(key);
+      if (index < 0 || state.items[index].disabled === true) {
+        return undefined;
+      }
+      return state.items[index].value == null ? '' : String(state.items[index].value);
+    },
+    one(key) {
+      const index = findIndex(key);
+      return index >= 0 && state.items[index].disabled !== true ? itemFor(state.items[index]) : undefined;
+    },
+    has(key) {
+      return api.get(key) != null;
+    },
+    idx(index) {
+      const item = enabledItems(true)[Number(index)];
+      return item ? itemFor(item) : undefined;
+    },
+    indexOf(item) {
+      if (typeof item === 'string') {
+        return findIndex(item);
+      }
+      const normalized = options.normalizeItem ? options.normalizeItem(item) : normalizeSdkPair(item, options.itemKind);
+      return findIndex(normalized.key || normalized.name);
+    },
+    all(excludeDisabled = true) {
+      return hardenSandboxValue(enabledItems(excludeDisabled !== false).map(itemFor));
+    },
+    count(excludeDisabled = true) {
+      return enabledItems(excludeDisabled !== false).length;
+    },
+    each(callback, context) {
+      if (typeof callback !== 'function') {
+        return api;
+      }
+      enabledItems(true).forEach((item, index) => Reflect.apply(callback, context || api, [itemFor(item), index, api]));
+      return api;
+    },
+    map(callback, context) {
+      if (typeof callback !== 'function') {
+        return hardenSandboxValue([]);
+      }
+      return hardenSandboxValue(enabledItems(true).map((item, index) => Reflect.apply(callback, context || api, [itemFor(item), index, api])));
+    },
+    filter(callback, context) {
+      if (typeof callback !== 'function') {
+        return hardenSandboxValue([]);
+      }
+      return hardenSandboxValue(enabledItems(true).filter((item, index) => Reflect.apply(callback, context || api, [itemFor(item), index, api])).map(itemFor));
+    },
+    find(callback, context) {
+      if (typeof callback !== 'function') {
+        return undefined;
+      }
+      const item = enabledItems(true).find((entry, index) => Reflect.apply(callback, context || api, [itemFor(entry), index, api]));
+      return item ? itemFor(item) : undefined;
+    },
+    reduce(callback, initialValue, context) {
+      if (typeof callback !== 'function') {
+        return initialValue;
+      }
+      let accumulator = initialValue;
+      enabledItems(true).forEach((item, index) => {
+        accumulator = Reflect.apply(callback, context || api, [accumulator, itemFor(item), index, api]);
+      });
+      return accumulator;
+    },
+    toObject(excludeDisabled = true, _caseSensitive = false, multiValue = false, sanitizeKeys = true) {
+      const output = createSafePlainObject();
+      for (const item of enabledItems(excludeDisabled !== false)) {
+        const key = item.key || item.name;
+        if (!key || (sanitizeKeys !== false && VISUALIZER_UNSAFE_PATH_PARTS.has(String(key)))) {
+          continue;
+        }
+        const value = item.value == null ? '' : String(item.value);
+        if (multiValue === true) {
+          const existing = output[key];
+          if (Array.isArray(existing)) {
+            existing.push(value);
+          } else if (existing != null) {
+            output[key] = [existing, value];
+          } else {
+            output[key] = [value];
+          }
+        } else {
+          setSafeObjectProperty(output, key, value);
+        }
+      }
+      return hardenSandboxValue(output);
+    },
     toJSON() {
-      return { key: this.key, value: this.value, type: this.type };
+      const mapper = typeof options.toJSONItem === 'function'
+        ? options.toJSONItem
+        : (item) => sdkItemToJson(item, options.itemKind);
+      return hardenSandboxValue(state.items.map((item) => mapper(item)));
+    },
+    toString() {
+      if (typeof options.stringifier === 'function') {
+        return options.stringifier(state.items);
+      }
+      return enabledItems(true).map((item) => `${item.key || item.name || ''}=${item.value ?? ''}`).join('&');
+    },
+    clone() {
+      return createSdkPropertyList(api.toJSON(), options);
+    },
+    valueOf() {
+      return api.all();
+    }
+  };
+  return hardenSandboxValue(api);
+}
+
+function normalizeSdkListItem(item, options = {}) {
+  if (typeof options.normalizeItem === 'function') {
+    return options.normalizeItem(item);
+  }
+  if (typeof options.itemFactory === 'function') {
+    return item;
+  }
+  return normalizeSdkPair(item, options.itemKind);
+}
+
+function normalizeSdkListInput(items = []) {
+  if (!items) {
+    return [];
+  }
+  if (Array.isArray(items)) {
+    return items;
+  }
+  if (typeof items.all === 'function') {
+    return items.all(false);
+  }
+  if (typeof items.toJSON === 'function') {
+    const json = items.toJSON();
+    return Array.isArray(json) ? json : [];
+  }
+  if (typeof items === 'object') {
+    return Object.entries(items).map(([key, value]) => ({ key, value }));
+  }
+  return [];
+}
+
+function normalizeSdkPairArray(items = [], kind = 'property') {
+  return normalizeSdkListInput(items).map((item) => normalizeSdkPair(item, kind));
+}
+
+function normalizeSdkPair(input = {}, kind = 'property') {
+  let source = input;
+  if (source && typeof source.toJSON === 'function') {
+    source = source.toJSON();
+  }
+  if (typeof source === 'string') {
+    if (kind === 'header' && source.includes(':')) {
+      const [key, ...rest] = source.split(':');
+      source = { key, value: rest.join(':').trim() };
+    } else {
+      source = { key: source, value: '' };
+    }
+  }
+  source = source && typeof source === 'object' ? source : {};
+  const key = source.key ?? source.name ?? '';
+  const output = {
+    key: String(key || ''),
+    value: source.value == null ? '' : String(source.value),
+    disabled: source.disabled === true || source.enabled === false
+  };
+  if (source.description != null) {
+    output.description = String(source.description);
+  }
+  if (kind === 'variable') {
+    output.type = source.type == null ? 'any' : String(source.type);
+  }
+  if (kind === 'form') {
+    output.type = source.type == null ? 'text' : String(source.type);
+    if (source.src != null) {
+      output.src = Array.isArray(source.src) ? source.src.map((item) => String(item || '')) : String(source.src);
+    }
+    if (source.contentType != null) {
+      output.contentType = String(source.contentType);
+    }
+  }
+  return output;
+}
+
+function createSdkPairItem(backing, options = {}, onChange = () => {}) {
+  const api = {
+    get key() { return backing.key || ''; },
+    set key(value) { backing.key = String(value || ''); onChange(); },
+    get name() { return backing.key || ''; },
+    set name(value) { backing.key = String(value || ''); onChange(); },
+    get value() { return backing.value == null ? '' : String(backing.value); },
+    set value(value) { backing.value = value == null ? '' : String(value); onChange(); },
+    get disabled() { return backing.disabled === true; },
+    set disabled(value) { backing.disabled = value === true; onChange(); },
+    get enabled() { return backing.disabled !== true; },
+    set enabled(value) { backing.disabled = value === false; onChange(); },
+    get description() { return backing.description || ''; },
+    set description(value) { backing.description = value == null ? '' : String(value); onChange(); },
+    clone() {
+      return createSdkPairItem(clonePlainJson(sdkItemToJson(backing, options.kind || 'property')), options);
+    },
+    toJSON() {
+      return hardenSandboxValue(sdkItemToJson(backing, options.kind || 'property'));
+    },
+    toString() {
+      const separator = options.stringSeparator || '=';
+      return `${backing.key || ''}${separator}${backing.value ?? ''}`;
+    },
+    valueOf() {
+      return backing.value == null ? '' : String(backing.value);
+    }
+  };
+  if (options.includeType === true || options.includeFormFields === true) {
+    Object.defineProperty(api, 'type', {
+      configurable: true,
+      enumerable: true,
+      get() { return backing.type || (options.includeFormFields ? 'text' : 'any'); },
+      set(value) { backing.type = String(value || (options.includeFormFields ? 'text' : 'any')); onChange(); }
+    });
+  }
+  if (options.includeFormFields === true) {
+    Object.defineProperties(api, {
+      src: {
+        configurable: true,
+        enumerable: true,
+        get() { return Array.isArray(backing.src) ? hardenSandboxValue(backing.src.slice()) : backing.src || ''; },
+        set(value) { backing.src = Array.isArray(value) ? value.map((item) => String(item || '')) : String(value || ''); onChange(); }
+      },
+      contentType: {
+        configurable: true,
+        enumerable: true,
+        get() { return backing.contentType || ''; },
+        set(value) { backing.contentType = String(value || ''); onChange(); }
+      }
+    });
+  }
+  return hardenSandboxValue(api);
+}
+
+function itemOptionsForKind(kind) {
+  return {
+    kind,
+    caseInsensitive: kind === 'header',
+    includeFormFields: kind === 'form',
+    includeType: kind === 'variable',
+    stringSeparator: kind === 'header' ? ': ' : '='
+  };
+}
+
+function sdkItemToJson(item = {}, kind = 'property') {
+  if (item && typeof item.toJSON === 'function') {
+    return clonePlainJson(item.toJSON());
+  }
+  const output = createSafePlainObject();
+  const keyName = kind === 'cookie' ? 'name' : 'key';
+  const key = item.key ?? item.name ?? '';
+  if (key) {
+    output[keyName] = String(key);
+  }
+  if (item.value != null) {
+    output.value = String(item.value);
+  }
+  if (item.disabled === true) {
+    output.disabled = true;
+  }
+  if (item.description != null) {
+    output.description = String(item.description);
+  }
+  for (const extra of ['type', 'src', 'contentType', 'domain', 'path', 'expires', 'expiresAt', 'httpOnly', 'secure', 'sameSite', 'hostOnly', 'session', 'maxAge', 'data', 'timestamp']) {
+    if (item[extra] != null) {
+      output[extra] = Array.isArray(item[extra]) ? item[extra].slice() : item[extra];
+    }
+  }
+  return output;
+}
+
+function sdkPairToPostMeterPair(item) {
+  return {
+    enabled: item.disabled !== true,
+    key: String(item.key || item.name || ''),
+    value: item.value == null ? '' : String(item.value)
+  };
+}
+
+function headersFromAny(headers) {
+  if (!headers) {
+    return [];
+  }
+  if (Array.isArray(headers)) {
+    return headers;
+  }
+  if (headers && typeof headers.all === 'function') {
+    return headers.all(false);
+  }
+  if (typeof headers === 'object') {
+    return Object.entries(headers).map(([key, value]) => ({
+      key,
+      value: Array.isArray(value) ? value.join(', ') : String(value ?? '')
+    }));
+  }
+  return [];
+}
+
+function normalizeSdkCookie(input = {}) {
+  let source = input;
+  if (source && typeof source.toJSON === 'function') {
+    source = source.toJSON();
+  }
+  if (typeof source === 'string') {
+    const [nameValue, ...attributes] = source.split(';').map((part) => part.trim());
+    const [name, ...valueParts] = nameValue.split('=');
+    source = { name, value: valueParts.join('=') };
+    for (const attribute of attributes) {
+      const [rawKey, ...rawValue] = attribute.split('=');
+      const key = rawKey.toLowerCase();
+      const value = rawValue.join('=');
+      if (key === 'domain') { source.domain = value; }
+      if (key === 'path') { source.path = value; }
+      if (key === 'expires') { source.expires = value; }
+      if (key === 'max-age') { source.maxAge = value; }
+      if (key === 'httponly') { source.httpOnly = true; }
+      if (key === 'secure') { source.secure = true; }
+      if (key === 'samesite') { source.sameSite = value; }
+    }
+  }
+  source = source && typeof source === 'object' ? source : {};
+  return {
+    name: String(source.name || source.key || ''),
+    key: String(source.name || source.key || ''),
+    value: source.value == null ? '' : String(source.value),
+    domain: source.domain == null ? '' : String(source.domain),
+    path: source.path == null ? '' : String(source.path),
+    expires: source.expiresAt == null ? source.expires == null ? '' : String(source.expires) : String(source.expiresAt),
+    httpOnly: source.httpOnly === true,
+    secure: source.secure === true,
+    sameSite: source.sameSite == null ? '' : String(source.sameSite),
+    hostOnly: source.hostOnly === true,
+    session: source.session === true,
+    disabled: source.disabled === true || source.enabled === false
+  };
+}
+
+function createSdkCookieItem(backing, onChange = () => {}) {
+  const api = {
+    get name() { return backing.name || backing.key || ''; },
+    set name(value) { backing.name = String(value || ''); backing.key = backing.name; onChange(); },
+    get key() { return backing.name || backing.key || ''; },
+    set key(value) { backing.name = String(value || ''); backing.key = backing.name; onChange(); },
+    get value() { return backing.value == null ? '' : String(backing.value); },
+    set value(value) { backing.value = value == null ? '' : String(value); onChange(); },
+    get domain() { return backing.domain || ''; },
+    set domain(value) { backing.domain = String(value || ''); onChange(); },
+    get path() { return backing.path || ''; },
+    set path(value) { backing.path = String(value || ''); onChange(); },
+    get expires() { return backing.expires || ''; },
+    set expires(value) { backing.expires = String(value || ''); onChange(); },
+    get httpOnly() { return backing.httpOnly === true; },
+    set httpOnly(value) { backing.httpOnly = value === true; onChange(); },
+    get secure() { return backing.secure === true; },
+    set secure(value) { backing.secure = value === true; onChange(); },
+    get sameSite() { return backing.sameSite || ''; },
+    set sameSite(value) { backing.sameSite = String(value || ''); onChange(); },
+    get disabled() { return backing.disabled === true; },
+    set disabled(value) { backing.disabled = value === true; onChange(); },
+    clone() { return createSdkCookieItem(clonePlainJson(api.toJSON())); },
+    toJSON() { return hardenSandboxValue(sdkItemToJson(backing, 'cookie')); },
+    toString() { return cookieToHeaderValue(backing); },
+    valueOf() { return backing.value == null ? '' : String(backing.value); }
+  };
+  return hardenSandboxValue(api);
+}
+
+function cookieToHeaderValue(cookie = {}) {
+  const name = cookie.name || cookie.key || '';
+  return name ? `${name}=${cookie.value ?? ''}` : '';
+}
+
+function createPostmanRequestBody(definition = {}, options = {}) {
+  const state = normalizeRequestBodyState(definition, options.bodyType);
+  const sync = () => {
+    if (typeof options.onChange === 'function') {
+      options.onChange(state);
+    }
+  };
+  const urlencoded = createPostmanQueryParamList(state.urlencoded, {
+    onChange: (items) => {
+      state.urlencoded.splice(0, state.urlencoded.length, ...items.map((item) => normalizeSdkPair(item, 'query')));
+      sync();
     }
   });
+  const formdata = createPostmanFormParamList(state.formdata, {
+    onChange: (items) => {
+      state.formdata.splice(0, state.formdata.length, ...items.map((item) => normalizeSdkPair(item, 'form')));
+      sync();
+    }
+  });
+  const api = {
+    get mode() { return state.mode; },
+    set mode(value) { state.mode = normalizeRequestBodyMode(value); sync(); },
+    get raw() { return state.raw; },
+    set raw(value) { state.raw = value == null ? '' : String(value); state.mode = 'raw'; sync(); },
+    urlencoded,
+    formdata,
+    get file() { return hardenSandboxValue(clonePlainJson(state.file || {})); },
+    set file(value) { state.file = normalizeFileBody(value); state.mode = 'file'; sync(); },
+    get graphql() { return hardenSandboxValue(clonePlainJson(state.graphql || {})); },
+    set graphql(value) { state.graphql = normalizeGraphqlBody(value); state.mode = 'graphql'; sync(); },
+    get options() { return hardenSandboxValue(clonePlainJson(state.options || {})); },
+    set options(value) { state.options = clonePlainJson(value || {}); sync(); },
+    get disabled() { return state.disabled === true; },
+    set disabled(value) { state.disabled = value === true; sync(); },
+    update(value) {
+      const next = normalizeRequestBodyState(value);
+      replaceRequestBodyState(state, next);
+      urlencoded.repopulate(state.urlencoded);
+      formdata.repopulate(state.formdata);
+      sync();
+      return api;
+    },
+    isEmpty() {
+      return requestBodyToString(state) === '';
+    },
+    clone() {
+      return createPostmanRequestBody(api.toJSON());
+    },
+    toJSON() {
+      return hardenSandboxValue(requestBodyStateToJSON(state));
+    },
+    toString() {
+      return requestBodyToString(state);
+    }
+  };
+  return hardenSandboxValue(api);
+}
+
+function normalizeRequestBodyState(definition = {}, postMeterBodyType = '') {
+  let source = definition;
+  if (source && typeof source.toJSON === 'function') {
+    source = source.toJSON();
+  }
+  if (typeof source === 'string') {
+    const hasPostMeterBody = postMeterBodyType && String(postMeterBodyType).toUpperCase() !== 'NONE';
+    source = {
+      mode: source || hasPostMeterBody ? 'raw' : 'none',
+      raw: source
+    };
+  }
+  source = source && typeof source === 'object' ? source : {};
+  const mode = normalizeRequestBodyMode(source.mode || (source.raw != null ? 'raw' : 'none'));
+  return {
+    disabled: source.disabled === true,
+    file: normalizeFileBody(source.file),
+    formdata: normalizeSdkPairArray(source.formdata || [], 'form'),
+    graphql: normalizeGraphqlBody(source.graphql),
+    mode,
+    options: clonePlainJson(source.options || {}),
+    raw: source.raw == null ? '' : String(source.raw),
+    urlencoded: typeof source.urlencoded === 'string'
+      ? parseQueryPairs(source.urlencoded)
+      : normalizeSdkPairArray(source.urlencoded || [], 'query')
+  };
+}
+
+function replaceRequestBodyState(target, next) {
+  target.disabled = next.disabled;
+  target.file = next.file;
+  target.formdata.splice(0, target.formdata.length, ...next.formdata);
+  target.graphql = next.graphql;
+  target.mode = next.mode;
+  target.options = next.options;
+  target.raw = next.raw;
+  target.urlencoded.splice(0, target.urlencoded.length, ...next.urlencoded);
+}
+
+function normalizeRequestBodyMode(value) {
+  const mode = String(value || 'none').toLowerCase();
+  return ['file', 'formdata', 'graphql', 'none', 'raw', 'urlencoded'].includes(mode) ? mode : 'raw';
+}
+
+function normalizeFileBody(value) {
+  if (!value) {
+    return {};
+  }
+  if (typeof value === 'string') {
+    return { src: value };
+  }
+  return clonePlainJson(value);
+}
+
+function normalizeGraphqlBody(value) {
+  if (!value || typeof value !== 'object') {
+    return {};
+  }
+  return {
+    query: value.query == null ? '' : String(value.query),
+    operationName: value.operationName == null ? '' : String(value.operationName),
+    variables: value.variables == null ? '' : typeof value.variables === 'string' ? value.variables : safeJsonStringify(value.variables)
+  };
+}
+
+function requestBodyStateToJSON(state) {
+  const output = createSafePlainObject();
+  output.mode = state.mode;
+  if (state.disabled === true) {
+    output.disabled = true;
+  }
+  if (state.mode === 'raw') {
+    output.raw = state.raw || '';
+  }
+  if (state.mode === 'urlencoded') {
+    output.urlencoded = state.urlencoded.map((item) => sdkItemToJson(item, 'query'));
+  }
+  if (state.mode === 'formdata') {
+    output.formdata = state.formdata.map((item) => sdkItemToJson(item, 'form'));
+  }
+  if (state.mode === 'graphql') {
+    output.graphql = clonePlainJson(state.graphql || {});
+  }
+  if (state.mode === 'file') {
+    output.file = clonePlainJson(state.file || {});
+  }
+  if (Object.keys(state.options || {}).length) {
+    output.options = clonePlainJson(state.options);
+  }
+  return output;
+}
+
+function requestBodyToString(state) {
+  if (state.disabled === true || state.mode === 'none') {
+    return '';
+  }
+  if (state.mode === 'raw') {
+    return state.raw || '';
+  }
+  if (state.mode === 'urlencoded') {
+    return serializeQueryPairs(state.urlencoded);
+  }
+  if (state.mode === 'graphql') {
+    return safeJsonStringify(state.graphql || {});
+  }
+  return '';
+}
+
+function syncPostmanBodyToRequest(request, stateOrJson) {
+  const state = stateOrJson?.mode ? normalizeRequestBodyState(stateOrJson) : stateOrJson;
+  const mode = state?.mode || 'none';
+  request.postmanBody = requestBodyStateToJSON(state || normalizeRequestBodyState());
+  if (!state || state.disabled === true || mode === 'none') {
+    request.bodyType = 'NONE';
+    request.body = '';
+    return;
+  }
+  if (mode === 'raw') {
+    request.body = state.raw || '';
+    request.bodyType = looksLikeJsonText(request.body) ? 'RAW_JSON' : 'RAW_TEXT';
+    return;
+  }
+  if (mode === 'graphql') {
+    request.body = requestBodyToString(state);
+    request.bodyType = 'RAW_JSON';
+    return;
+  }
+  request.body = requestBodyToString(state);
+  request.bodyType = request.body ? 'RAW_TEXT' : 'NONE';
+}
+
+function looksLikeJsonText(value) {
+  const text = String(value || '').trim();
+  if (!text || !/^[\[{]/.test(text)) {
+    return false;
+  }
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function createPostmanAuth(auth = {}, onChange) {
+  let state = clonePlainJson(auth || { type: 'none' });
+  const api = {
+    get type() { return state.type || 'none'; },
+    set type(value) { state.type = String(value || 'none'); notifyAuthChange(); },
+    get current() { return hardenSandboxValue(clonePlainJson(state)); },
+    update(value = {}) {
+      state = clonePlainJson(value || { type: 'none' });
+      notifyAuthChange();
+      return api;
+    },
+    toJSON() { return hardenSandboxValue(clonePlainJson(state)); },
+    clone() { return createPostmanAuth(state); }
+  };
+  function notifyAuthChange() {
+    if (typeof onChange === 'function') {
+      onChange(clonePlainJson(state));
+    }
+  }
+  const authKeys = new Set([
+    ...Object.keys(state),
+    'token',
+    'username',
+    'password',
+    'key',
+    'value',
+    'location',
+    'grantType',
+    'tokenType',
+    'accessToken',
+    'refreshToken',
+    'authorizationUrl',
+    'tokenUrl',
+    'clientId',
+    'clientSecret',
+    'scopes'
+  ]);
+  for (const key of authKeys) {
+    if (key === 'type' || VISUALIZER_UNSAFE_PATH_PARTS.has(key)) {
+      continue;
+    }
+    Object.defineProperty(api, key, {
+      configurable: true,
+      enumerable: true,
+      get() { return state[key]; },
+      set(value) { state[key] = value == null ? '' : String(value); notifyAuthChange(); }
+    });
+  }
+  return hardenSandboxValue(api);
+}
+
+function createPostmanMessage(definition = {}, onChange = () => {}) {
+  const source = definition && typeof definition.toJSON === 'function' ? definition.toJSON() : definition || {};
+  const backing = {
+    data: source.data == null ? '' : source.data,
+    name: source.name == null ? '' : String(source.name),
+    timestamp: source.timestamp || new Date(0).toISOString(),
+    type: source.type == null ? '' : String(source.type)
+  };
+  const sync = () => {
+    if (source && typeof source === 'object') {
+      source.data = backing.data;
+      source.name = backing.name;
+      source.timestamp = backing.timestamp;
+      source.type = backing.type;
+    }
+    onChange();
+  };
+  const api = {
+    get data() { return backing.data; },
+    set data(value) { backing.data = value == null ? '' : value; sync(); },
+    get timestamp() { return backing.timestamp; },
+    set timestamp(value) { backing.timestamp = value == null ? '' : String(value); sync(); },
+    get type() { return backing.type; },
+    set type(value) { backing.type = value == null ? '' : String(value); sync(); },
+    get name() { return backing.name; },
+    set name(value) { backing.name = value == null ? '' : String(value); sync(); },
+    toJSON() {
+      return messageToJSON(backing);
+    },
+    clone() {
+      return createPostmanMessage(this.toJSON());
+    }
+  };
+  return hardenSandboxValue(api);
+}
+
+function messageToJSON(message = {}) {
+  const output = {
+    data: message.data == null ? '' : message.data,
+    timestamp: message.timestamp || new Date(0).toISOString()
+  };
+  if (message.type) {
+    output.type = String(message.type);
+  }
+  if (message.name) {
+    output.name = String(message.name);
+  }
+  return output;
+}
+
+function clonePlainJson(value) {
+  if (value == null) {
+    return Array.isArray(value) ? [] : {};
+  }
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return {};
+  }
 }
 
 function createPostmanVariableScope(definition = {}) {
@@ -2080,27 +4590,129 @@ function createPostmanVariableScope(definition = {}) {
   return hardenSandboxValue(api);
 }
 
-function createPostmanPropertyList(items = []) {
-  const list = items.slice();
-  const api = {
-    all() {
-      return hardenSandboxValue(list.slice());
-    },
-    count() {
-      return list.length;
-    },
-    each(callback) {
-      if (typeof callback === 'function') {
-        list.forEach((item) => callback(item));
-      }
-      return api;
-    },
-    append(item) {
-      list.push(item);
-      return api;
+function createPmTestApi({ tests, tracker } = {}) {
+  const testApi = function pmTest(name, fn) {
+    const testName = String(name || 'Unnamed test');
+    const record = {
+      name: testName,
+      passed: false,
+      error: 'pm.test did not finish.',
+      index: tests.length,
+      skipped: false
+    };
+    tests.push(record);
+    if (typeof fn !== 'function') {
+      record.error = 'pm.test requires a callback function.';
+      return testApi;
     }
+    const run = async () => {
+      try {
+        await runTestCallback(fn, tracker);
+        record.passed = true;
+        record.error = '';
+      } catch (error) {
+        record.passed = false;
+        record.error = errorMessage(error);
+      }
+    };
+    if (tracker && typeof tracker.track === 'function') {
+      tracker.track(run());
+    } else {
+      try {
+        const value = fn();
+        if (value && typeof value.then === 'function') {
+          throw sandboxError('Async pm.test callbacks are not supported in this script runtime.');
+        }
+        record.passed = true;
+        record.error = '';
+      } catch (error) {
+        record.passed = false;
+        record.error = errorMessage(error);
+      }
+    }
+    return testApi;
   };
-  return hardenSandboxValue(api);
+  testApi.skip = function skip(name) {
+    tests.push({
+      name: String(name || 'Unnamed test'),
+      passed: true,
+      error: '',
+      index: tests.length,
+      skipped: true
+    });
+    return testApi;
+  };
+  testApi.index = function index() {
+    return tests.length;
+  };
+  return hardenSandboxValue(testApi);
+}
+
+async function runTestCallback(fn) {
+  if (fn.length > 0) {
+    await new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (error) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        if (error) {
+          reject(error);
+        } else {
+          resolve();
+        }
+      };
+      try {
+        const value = fn(finish);
+        if (value && typeof value.then === 'function') {
+          value.then(() => finish(), finish);
+        }
+      } catch (error) {
+        finish(error);
+      }
+    });
+    return;
+  }
+  const value = fn();
+  if (value && typeof value.then === 'function') {
+    await value;
+  }
+}
+
+function pmVariablesApi({ collectionVariables = [], environmentVariables = [], globals = [], iterationData = [], localVariables = [] } = {}) {
+  const broadToNarrow = [globals, collectionVariables, environmentVariables, iterationData, localVariables];
+  const narrowToBroad = [localVariables, iterationData, environmentVariables, collectionVariables, globals];
+  return hardenSandboxValue({
+    get(key) {
+      const variableName = String(key || '').trim();
+      for (const source of narrowToBroad) {
+        const value = getVariable(source, variableName);
+        if (value != null) {
+          return value;
+        }
+      }
+      return resolveDynamicVariable(variableName);
+    },
+    set(key, value) {
+      setVariable(localVariables, key, value);
+    },
+    unset(key) {
+      unsetVariable(localVariables, key);
+    },
+    has(key) {
+      return this.get(key) != null;
+    },
+    replaceIn(value) {
+      return replaceVariables(value, ...broadToNarrow);
+    },
+    toObject() {
+      return variablesToObject(...broadToNarrow);
+    },
+    toJSON() {
+      return variablesToJson(...broadToNarrow);
+    }
+  });
 }
 
 function variableApi(variables) {
@@ -2121,13 +4733,15 @@ function variableApi(variables) {
       return replaceVariables(value, variables);
     },
     toObject() {
-      const object = createSafePlainObject();
-      for (const variable of variables || []) {
-        if (variable.enabled !== false && variable.key) {
-          setSafeObjectProperty(object, variable.key, variable.value ?? '');
-        }
+      return variablesToObject(variables);
+    },
+    toJSON() {
+      return variablesToJson(variables);
+    },
+    clear() {
+      if (Array.isArray(variables)) {
+        variables.splice(0, variables.length);
       }
-      return hardenSandboxValue(object);
     }
   });
 }
@@ -2140,21 +4754,68 @@ function readOnlyVariableApi(variables) {
     has(key) {
       return getVariable(variables, key) != null;
     },
+    unset(key) {
+      unsetVariable(variables, key);
+    },
     toObject() {
-      const object = createSafePlainObject();
-      for (const variable of variables || []) {
-        if (variable.enabled !== false && variable.key) {
-          setSafeObjectProperty(object, variable.key, variable.value ?? '');
-        }
-      }
-      return hardenSandboxValue(object);
+      return variablesToObject(variables);
+    },
+    toJSON() {
+      return variablesToJson(variables);
     }
   });
 }
 
-function executionApi({ collectionVariables = [], environmentVariables = [], execution = {}, globals = [], tests = [], tracker } = {}) {
+function variablesToObject(...scopes) {
+  const object = createSafePlainObject();
+  for (const source of scopes) {
+    for (const variable of source || []) {
+      if (variable?.enabled !== false && variable?.key) {
+        setSafeObjectProperty(object, String(variable.key), variableObservableValue(variable));
+      }
+    }
+  }
+  return hardenSandboxValue(object);
+}
+
+function variablesToJson(...scopes) {
+  const output = [];
+  for (const source of scopes) {
+    for (const variable of source || []) {
+      if (!variable || !variable.key) {
+        continue;
+      }
+      output.push(variableToScriptJson(variable));
+    }
+  }
+  return hardenSandboxValue(output);
+}
+
+function variableToScriptJson(variable) {
+  const output = createSafePlainObject();
+  for (const [key, value] of Object.entries(variable || {})) {
+    if (key === '__proto__' || key === 'prototype' || key === 'constructor') {
+      continue;
+    }
+    setSafeObjectProperty(output, key, safeStructuredClone(value));
+  }
+  if (!Object.hasOwn(output, 'value')) {
+    output.value = variableObservableValue(variable);
+  }
+  if (!Object.hasOwn(output, 'enabled')) {
+    output.enabled = variable.enabled !== false;
+  }
+  return output;
+}
+
+function executionApi({ collectionVariables = [], environmentVariables = [], execution = {}, globals = [], location = {}, tests = [], tracker } = {}) {
+  let runRequestCalls = 0;
   return hardenSandboxValue({
     runRequest(target, options) {
+      runRequestCalls += 1;
+      if (runRequestCalls > MAX_EXECUTION_RUN_REQUESTS_PER_SCRIPT) {
+        throw sandboxError(`pm.execution.runRequest cannot be called more than ${MAX_EXECUTION_RUN_REQUESTS_PER_SCRIPT} times in one script.`);
+      }
       const promise = tracker.brokerRequest('execution:runRequest', {
         options: normalizeExecutionRunRequestOptions(options),
         scopes: {
@@ -2181,7 +4842,25 @@ function executionApi({ collectionVariables = [], environmentVariables = [], exe
     },
     skipRequest() {
       execution.skipRequest = true;
-    }
+    },
+    location: executionLocationApi(location)
+  });
+}
+
+function executionLocationApi(location = {}) {
+  const folderPath = Array.isArray(location.folderPath)
+    ? location.folderPath.map((item) => String(item || '')).filter(Boolean)
+    : [];
+  const current = Array.isArray(location.current)
+    ? location.current.map((item) => String(item || '')).filter(Boolean)
+    : [location.current || location.requestName || ''].filter(Boolean).map(String);
+  return hardenSandboxValue({
+    collectionId: String(location.collectionId || ''),
+    folderPath: hardenSandboxValue(folderPath.slice()),
+    index: Number.isFinite(Number(location.index)) ? Number(location.index) : -1,
+    requestId: String(location.requestId || ''),
+    requestName: String(location.requestName || ''),
+    current: hardenSandboxValue(current.length ? current : folderPath.slice())
   });
 }
 
@@ -2208,7 +4887,8 @@ function appendBrokeredTests(tests, brokeredTests) {
     tests.push({
       name: String(item?.name || 'pm.execution.runRequest test').slice(0, 256),
       passed: item?.passed === true,
-      error: String(item?.error || '').slice(0, MAX_SCRIPT_LOG_LENGTH)
+      error: String(item?.error || '').slice(0, MAX_SCRIPT_LOG_LENGTH),
+      skipped: item?.skipped === true
     });
   }
 }
@@ -2258,11 +4938,14 @@ function replaceVariablePairs(target, source) {
 
 function createVisualizerState() {
   return {
+    compileOptions: {},
     data: null,
+    decorators: new Map(),
     helpers: new Map(),
     html: '',
     interactive: false,
     partials: new Map(),
+    reviewedAssets: new Map(),
     template: ''
   };
 }
@@ -2287,7 +4970,8 @@ function visualizerApi(state = createVisualizerState()) {
       }
       state.data = snapshot;
       state.html = rendered;
-      state.interactive = /<script\b/i.test(rendered);
+      state.interactive = /<script\b/i.test(rendered)
+        || Array.from(state.reviewedAssets.values()).some((asset) => asset.type === 'script');
       state.template = source;
     }
   });
@@ -2305,6 +4989,30 @@ function createVisualizerHandlebarsApi(state = createVisualizerState()) {
   }
   return hardenSandboxValue({
     SafeString,
+    VERSION: '4.7.8-postmeter-safe',
+    compile(template, options = {}) {
+      const source = String(template == null ? '' : template);
+      if (source.length > MAX_VISUALIZER_TEMPLATE_LENGTH) {
+        throw sandboxError(`pm.visualizer template cannot exceed ${MAX_VISUALIZER_TEMPLATE_LENGTH} characters.`);
+      }
+      const compileOptions = normalizeVisualizerCompileOptions(options);
+      return hardenSandboxValue(function compiledVisualizerTemplate(data = {}, runtimeOptions = {}) {
+        const scopedState = visualizerStateWithOptions(state, {
+          ...compileOptions,
+          ...normalizeVisualizerCompileOptions(runtimeOptions)
+        });
+        return renderVisualizerTemplate(source, cloneVisualizerData(data), scopedState);
+      });
+    },
+    escapeExpression(value) {
+      return escapeHtml(value);
+    },
+    createFrame(value = {}) {
+      return hardenSandboxValue(clonePlainJson(value));
+    },
+    template() {
+      throw sandboxError('Handlebars.template precompiled specifications are not supported in the sandbox visualizer.');
+    },
     registerHelper(name, callback) {
       const helperName = normalizeVisualizerExtensionName(name, 'helper');
       if (typeof callback !== 'function') {
@@ -2314,6 +5022,9 @@ function createVisualizerHandlebarsApi(state = createVisualizerState()) {
         throw sandboxError(`pm.visualizer cannot register more than ${MAX_VISUALIZER_HELPERS} helpers.`);
       }
       state.helpers.set(helperName, callback);
+    },
+    unregisterHelper(name) {
+      state.helpers.delete(normalizeVisualizerExtensionName(name, 'helper'));
     },
     registerPartial(name, template) {
       const partialName = normalizeVisualizerExtensionName(name, 'partial');
@@ -2325,14 +5036,58 @@ function createVisualizerHandlebarsApi(state = createVisualizerState()) {
         throw sandboxError(`pm.visualizer cannot register more than ${MAX_VISUALIZER_PARTIALS} partials.`);
       }
       state.partials.set(partialName, source);
-    }
+    },
+    unregisterPartial(name) {
+      state.partials.delete(normalizeVisualizerExtensionName(name, 'partial'));
+    },
+    registerDecorator(name, callback) {
+      const decoratorName = normalizeVisualizerExtensionName(name, 'decorator');
+      if (typeof callback !== 'function') {
+        throw sandboxError('Handlebars.registerDecorator requires a callback function.');
+      }
+      if (!state.decorators.has(decoratorName) && state.decorators.size >= MAX_VISUALIZER_DECORATORS) {
+        throw sandboxError(`pm.visualizer cannot register more than ${MAX_VISUALIZER_DECORATORS} decorators.`);
+      }
+      state.decorators.set(decoratorName, callback);
+    },
+    unregisterDecorator(name) {
+      state.decorators.delete(normalizeVisualizerExtensionName(name, 'decorator'));
+    },
+    Utils: hardenSandboxValue({
+      escapeExpression: escapeHtml,
+      isEmpty(value) {
+        if (value == null || value === false) {
+          return true;
+        }
+        if (Array.isArray(value) || typeof value === 'string') {
+          return value.length === 0;
+        }
+        return typeof value === 'object' && Object.keys(value).length === 0;
+      }
+    }),
+    helpers: hardenSandboxValue({}),
+    partials: hardenSandboxValue({})
   });
+}
+
+function visualizerStateWithOptions(state, compileOptions = {}) {
+  return {
+    ...state,
+    compileOptions: {
+      ...(state.compileOptions || {}),
+      ...(compileOptions || {})
+    }
+  };
 }
 
 function applyVisualizerOptions(state, options = {}) {
   if (!options || typeof options !== 'object') {
     return;
   }
+  state.compileOptions = {
+    ...(state.compileOptions || {}),
+    ...normalizeVisualizerCompileOptions(options)
+  };
   if (options.partials && typeof options.partials === 'object') {
     for (const [name, template] of Object.entries(options.partials).slice(0, MAX_VISUALIZER_PARTIALS)) {
       createVisualizerHandlebarsApi(state).registerPartial(name, template);
@@ -2343,6 +5098,49 @@ function applyVisualizerOptions(state, options = {}) {
       createVisualizerHandlebarsApi(state).registerHelper(name, callback);
     }
   }
+  if (options.assets && typeof options.assets === 'object') {
+    for (const [name, asset] of Object.entries(options.assets).slice(0, MAX_VISUALIZER_ASSETS)) {
+      const assetName = normalizeVisualizerExtensionName(name, 'asset');
+      state.reviewedAssets.set(assetName, normalizeVisualizerAsset(assetName, asset));
+    }
+  }
+}
+
+function normalizeVisualizerAsset(name, asset) {
+  const source = String(asset?.source ?? asset ?? '');
+  const integrity = String(asset?.integrity || '');
+  if (!source || !integrity.startsWith('sha256-')) {
+    throw sandboxError('pm.visualizer reviewed assets require source and sha256 integrity metadata.');
+  }
+  if (integrity !== scriptPackageIntegrity(source)) {
+    throw sandboxError(`pm.visualizer asset "${name}" integrity does not match its reviewed source.`);
+  }
+  if (Buffer.byteLength(source, 'utf8') > MAX_VISUALIZER_ASSET_BYTES) {
+    throw sandboxError(`pm.visualizer asset "${name}" is too large.`);
+  }
+  const type = normalizeVisualizerAssetType(asset);
+  return { integrity, source, type };
+}
+
+function normalizeVisualizerAssetType(asset) {
+  const raw = String(asset?.type || asset?.kind || '').trim().toLowerCase();
+  if (raw === 'style' || raw === 'css' || raw === 'stylesheet') {
+    return 'style';
+  }
+  return 'script';
+}
+
+function normalizeVisualizerCompileOptions(options = {}) {
+  if (!options || typeof options !== 'object') {
+    return {};
+  }
+  const normalized = {};
+  for (const key of ['knownHelpersOnly', 'noEscape', 'preventIndent', 'strict']) {
+    if (options[key] === true) {
+      normalized[key] = true;
+    }
+  }
+  return normalized;
 }
 
 function normalizeVisualizerExtensionName(name, type) {
@@ -2376,9 +5174,11 @@ function renderVisualizerTemplate(template, data, state = createVisualizerState(
     throw sandboxError(`pm.visualizer template block nesting cannot exceed ${MAX_VISUALIZER_TEMPLATE_DEPTH}.`);
   }
 
-  const source = String(template || '');
+  const source = stripVisualizerWhitespaceControls(String(template || ''))
+    .replace(/\{\{!--[\s\S]*?--\}\}/g, '')
+    .replace(/\{\{![\s\S]*?\}\}/g, '');
   const context = depth === 0 ? visualizerRootContext(data) : data;
-  const blockPattern = new RegExp(`\\{\\{\\s*#(${[...VISUALIZER_BLOCK_HELPERS].join('|')})\\s+(${VISUALIZER_VALUE_PATTERN})\\s*\\}\\}`, 'g');
+  const blockPattern = new RegExp(`\\{\\{\\s*#(${VISUALIZER_BLOCK_NAME_PATTERN})(?:\\s+([^}]+?))?\\s*\\}\\}`, 'g');
   let output = '';
   let index = 0;
   let match;
@@ -2389,9 +5189,10 @@ function renderVisualizerTemplate(template, data, state = createVisualizerState(
     if (!block) {
       throw sandboxError(`pm.visualizer template has an unclosed {{#${match[1]}}} block.`);
     }
+    const expression = parseVisualizerBlockExpression(match[2] || '');
     output = appendVisualizerOutput(
       output,
-      renderVisualizerBlock(match[1], match[2], block, context, state, depth + 1)
+      renderVisualizerBlock(match[1], expression, block, context, state, depth + 1)
     );
     index = block.endIndex;
     blockPattern.lastIndex = block.endIndex;
@@ -2419,13 +5220,12 @@ function renderVisualizerValues(template, data, state, depth) {
     })
     .replace(doublePattern, (_match, expression) => {
       const value = readVisualizerExpression(data, expression, state);
-      return visualizerValueToString(value, { escape: true });
+      return visualizerValueToString(value, { escape: state.compileOptions?.noEscape === true ? false : true });
     });
 }
 
 function readVisualizerBlock(template, startIndex, helperName) {
-  const helperPattern = [...VISUALIZER_BLOCK_HELPERS].join('|');
-  const blockPattern = new RegExp(`\\{\\{\\s*(#(${helperPattern})\\s+${VISUALIZER_VALUE_PATTERN}|else|/(${helperPattern}))\\s*\\}\\}`, 'g');
+  const blockPattern = new RegExp(`\\{\\{\\s*(#(${VISUALIZER_BLOCK_NAME_PATTERN})(?:\\s+[^}]+?)?|else|/(${VISUALIZER_BLOCK_NAME_PATTERN}))\\s*\\}\\}`, 'g');
   blockPattern.lastIndex = startIndex;
   const stack = [helperName];
   let elseIndex = -1;
@@ -2460,8 +5260,8 @@ function readVisualizerBlock(template, startIndex, helperName) {
   return null;
 }
 
-function renderVisualizerBlock(helperName, pathValue, block, data, state, depth) {
-  const value = readVisualizerValue(data, pathValue);
+function renderVisualizerBlock(helperName, expression, block, data, state, depth) {
+  const value = readVisualizerValue(data, expression.path || '.');
   if (helperName === 'each') {
     const entries = visualizerEachEntries(value);
     if (!entries.length) {
@@ -2470,8 +5270,8 @@ function renderVisualizerBlock(helperName, pathValue, block, data, state, depth)
     let output = '';
     for (const entry of entries) {
       output = appendVisualizerOutput(
-        output,
-        renderVisualizerTemplate(block.template, visualizerEachContext(data, entry.value, entry.index, entry.key), state, depth)
+      output,
+        renderVisualizerTemplate(block.template, visualizerEachContext(data, entry.value, entry.index, entry.key, entries.length, expression.blockParams), state, depth)
       );
     }
     return output;
@@ -2486,9 +5286,79 @@ function renderVisualizerBlock(helperName, pathValue, block, data, state, depth)
     if (!visualizerTruthy(value)) {
       return block.elseTemplate ? renderVisualizerTemplate(block.elseTemplate, data, state, depth) : '';
     }
-    return renderVisualizerTemplate(block.template, visualizerWithContext(data, value), state, depth);
+    return renderVisualizerTemplate(block.template, visualizerWithContext(data, value, expression.blockParams), state, depth);
+  }
+  const helper = state.helpers.get(helperName);
+  if (helper) {
+    const args = expression.tokens.map((token) => readVisualizerHelperArgument(data, token));
+    const options = visualizerBlockHelperOptions(block, data, state, depth);
+    try {
+      return visualizerValueToString(helper.apply(data?.this ?? data, [...args, options]), { escape: false });
+    } catch (error) {
+      throw sandboxError(`pm.visualizer helper "${helperName}" failed: ${errorMessage(error)}`);
+    }
+  }
+  if (state.compileOptions?.strict === true) {
+    throw sandboxError(`pm.visualizer helper "${helperName}" is not registered.`);
   }
   return '';
+}
+
+function stripVisualizerWhitespaceControls(template) {
+  return String(template || '').replace(/\{\{~/g, '{{').replace(/~\}\}/g, '}}').replace(/\{\{\{~/g, '{{{').replace(/~\}\}\}/g, '}}}');
+}
+
+function parseVisualizerBlockExpression(expression) {
+  const tokens = tokenizeVisualizerExpression(expression);
+  const blockParams = [];
+  const cleanedTokens = [];
+  let readingBlockParams = false;
+  for (const token of tokens) {
+    const raw = typeof token === 'string' ? token : token?.value;
+    if (raw === 'as') {
+      readingBlockParams = true;
+      continue;
+    }
+    if (readingBlockParams) {
+      const names = String(raw || '').replace(/^\|/, '').replace(/\|$/, '').split(/\s+/).filter(Boolean);
+      for (const name of names) {
+        if (/^[A-Za-z_$][\w$]*$/.test(name) && !VISUALIZER_UNSAFE_PATH_PARTS.has(name)) {
+          blockParams.push(name);
+        }
+      }
+      continue;
+    }
+    cleanedTokens.push(token);
+  }
+  return {
+    blockParams: blockParams.slice(0, 4),
+    path: typeof cleanedTokens[0] === 'string' ? cleanedTokens[0] : '.',
+    tokens: cleanedTokens
+  };
+}
+
+function visualizerBlockHelperOptions(block, data, state, depth) {
+  return hardenSandboxValue({
+    data: visualizerHelperData(data),
+    fn(context = data) {
+      return renderVisualizerTemplate(block.template, visualizerPartialContext(data, context), state, depth);
+    },
+    inverse(context = data) {
+      return block.elseTemplate ? renderVisualizerTemplate(block.elseTemplate, visualizerPartialContext(data, context), state, depth) : '';
+    },
+    hash: createSafePlainObject()
+  });
+}
+
+function visualizerHelperData(data) {
+  const output = createSafePlainObject();
+  for (const key of ['@index', '@key', '@first', '@last']) {
+    if (data?.[key] != null) {
+      output[key.slice(1)] = data[key];
+    }
+  }
+  output.root = data?.['@root'] || data;
+  return output;
 }
 
 function visualizerRootContext(data) {
@@ -2512,12 +5382,18 @@ function visualizerEachEntries(value) {
   return [];
 }
 
-function visualizerEachContext(parent, item, index, key) {
-  return visualizerItemContext(parent, item, index, key);
+function visualizerEachContext(parent, item, index, key, length, blockParams = []) {
+  return visualizerItemContext(parent, item, {
+    blockParams,
+    index,
+    isFirst: index === 0,
+    isLast: Number(index) === Number(length) - 1,
+    key
+  });
 }
 
-function visualizerWithContext(parent, item) {
-  return visualizerItemContext(parent, item);
+function visualizerWithContext(parent, item, blockParams = []) {
+  return visualizerItemContext(parent, item, { blockParams });
 }
 
 function visualizerPartialContext(parent, item) {
@@ -2530,7 +5406,7 @@ function visualizerPartialContext(parent, item) {
   return visualizerItemContext(parent, item);
 }
 
-function visualizerItemContext(parent, item, index, key) {
+function visualizerItemContext(parent, item, options = {}) {
   const context = createSafePlainObject();
   const root = parent?.['@root'] || parent;
   assignVisualizerObjectFields(context, parent);
@@ -2538,11 +5414,24 @@ function visualizerItemContext(parent, item, index, key) {
   context.this = item;
   context['@root'] = root;
   context['@parent'] = parent;
-  if (index != null) {
-    context['@index'] = index;
+  if (options.index != null) {
+    context['@index'] = options.index;
   }
-  if (key != null) {
-    context['@key'] = key;
+  if (options.key != null) {
+    context['@key'] = options.key;
+  }
+  if (options.isFirst != null) {
+    context['@first'] = options.isFirst === true;
+  }
+  if (options.isLast != null) {
+    context['@last'] = options.isLast === true;
+  }
+  const blockParams = Array.isArray(options.blockParams) ? options.blockParams : [];
+  if (blockParams[0]) {
+    setSafeObjectProperty(context, blockParams[0], item);
+  }
+  if (blockParams[1] && options.index != null) {
+    setSafeObjectProperty(context, blockParams[1], options.index);
   }
   return context;
 }
@@ -2697,6 +5586,12 @@ function visualizerResult(state) {
     return undefined;
   }
   return {
+    assets: Array.from(state.reviewedAssets || new Map(), ([name, asset]) => ({
+      integrity: asset.integrity,
+      name,
+      source: asset.source,
+      type: asset.type === 'style' ? 'style' : 'script'
+    })),
     data: cloneJson(state.data || {}),
     html: state.html,
     interactive: state.interactive === true,
@@ -2722,21 +5617,37 @@ function brokerCookieApi({ broker, tracker }) {
     tracker.track(promise.catch(() => {}));
     return promise;
   };
+  const withCallback = brokerCallbackThenable;
   return hardenSandboxValue({
-    get(name) {
-      return sandboxThenable(request('cookies:get', { name: String(name || '') }));
+    get(name, callback) {
+      return withCallback(
+        request('cookies:get', { name: String(name || '') }),
+        callback
+      );
     },
-    has(name) {
-      return sandboxThenable(request('cookies:get', { name: String(name || '') }).then((value) => value != null));
+    has(name, callback) {
+      return withCallback(
+        request('cookies:get', { name: String(name || '') }).then((value) => value != null),
+        callback
+      );
     },
-    toObject() {
-      return sandboxThenable(request('cookies:toObject', {}).then((value) => hardenSandboxValue(value)));
+    toObject(callback) {
+      return withCallback(
+        request('cookies:toObject', {}).then((value) => hardenSandboxValue(value)),
+        callback
+      );
     },
-    set(name, value) {
-      return sandboxThenable(request('cookies:set', { name: String(name || ''), value: value == null ? '' : String(value) }).then(() => undefined));
+    set(name, value, callback) {
+      return withCallback(
+        request('cookies:set', { name: String(name || ''), value: value == null ? '' : String(value) }).then(() => undefined),
+        callback
+      );
     },
-    unset(name) {
-      return sandboxThenable(request('cookies:unset', { name: String(name || '') }).then(() => undefined));
+    unset(name, callback) {
+      return withCallback(
+        request('cookies:unset', { name: String(name || '') }).then(() => undefined),
+        callback
+      );
     },
     jar() {
       return brokerCookieJarApi({ request });
@@ -2744,25 +5655,27 @@ function brokerCookieApi({ broker, tracker }) {
   });
 }
 
+function brokerCallbackThenable(promise, callback) {
+  const handled = promise
+    .then((value) => {
+      if (typeof callback === 'function') {
+        callback(null, value);
+      }
+      return value;
+    })
+    .catch((error) => {
+      const safeError = sandboxError(errorMessage(error));
+      if (typeof callback === 'function') {
+        callback(safeError);
+        return undefined;
+      }
+      throw safeError;
+    });
+  return sandboxThenable(handled);
+}
+
 function brokerCookieJarApi({ request }) {
-  const withCallback = (promise, callback) => {
-    const handled = promise
-      .then((value) => {
-        if (typeof callback === 'function') {
-          callback(null, value);
-        }
-        return value;
-      })
-      .catch((error) => {
-        const safeError = sandboxError(errorMessage(error));
-        if (typeof callback === 'function') {
-          callback(safeError);
-          return undefined;
-        }
-        throw safeError;
-      });
-    return sandboxThenable(handled);
-  };
+  const withCallback = brokerCallbackThenable;
   return hardenSandboxValue({
     get(url, name, callback) {
       return withCallback(
@@ -2807,54 +5720,33 @@ function brokerCookieJarApi({ request }) {
 }
 
 function cookiePayloadForBroker(cookie) {
+  const source = cookie && typeof cookie.toJSON === 'function' ? cookie.toJSON() : cookie;
   return hardenSandboxValue({
-    name: cookie?.name == null ? '' : String(cookie.name),
-    value: cookie?.value == null ? '' : String(cookie.value),
-    domain: cookie?.domain == null ? '' : String(cookie.domain),
-    path: cookie?.path == null ? '' : String(cookie.path),
-    expiresAt: cookie?.expiresAt == null
-      ? cookie?.expires == null
+    name: source?.name == null ? source?.key == null ? '' : String(source.key) : String(source.name),
+    value: source?.value == null ? '' : String(source.value),
+    domain: source?.domain == null ? '' : String(source.domain),
+    path: source?.path == null ? '' : String(source.path),
+    expiresAt: source?.expiresAt == null
+      ? source?.expires == null
         ? ''
-        : String(cookie.expires)
-      : String(cookie.expiresAt),
-    secure: cookie?.secure === true,
-    sameSite: cookie?.sameSite == null ? '' : String(cookie.sameSite),
-    hostOnly: cookie?.hostOnly === true,
-    priority: cookie?.priority == null ? '' : String(cookie.priority),
-    partitioned: cookie?.partitioned === true
+        : String(source.expires)
+      : String(source.expiresAt),
+    httpOnly: source?.httpOnly === true,
+    maxAge: source?.maxAge == null ? '' : String(source.maxAge),
+    secure: source?.secure === true,
+    sameSite: source?.sameSite == null ? '' : String(source.sameSite),
+    hostOnly: source?.hostOnly === true,
+    priority: source?.priority == null ? '' : String(source.priority),
+    partitioned: source?.partitioned === true
   });
 }
 
 function requestApi(request = {}) {
-  return hardenSandboxValue({
-    method: request.method || '',
-    url: requestUrlApi(request.url || ''),
-    headers: pairListApi(request.headers || []),
-    body: requestBodyApi(request.body || '')
-  });
+  return createPostmanRequest(request || {});
 }
 
 function mutableRequestApi(request = {}) {
-  const api = {
-    get method() {
-      return request.method || '';
-    },
-    set method(value) {
-      request.method = String(value || '').toUpperCase();
-    },
-    get url() {
-      return mutableRequestUrlApi(request);
-    },
-    set url(value) {
-      request.url = String(value || '');
-    },
-    headers: mutablePairListApi(request.headers ||= []),
-    body: mutableRequestBodyApi(request),
-    toJSON() {
-      return hardenSandboxValue(cloneJson(request));
-    }
-  };
-  return hardenSandboxValue(api);
+  return createPostmanRequest(request || {}, { mutable: true });
 }
 
 function mutableRequestUrlApi(request) {
@@ -2953,56 +5845,60 @@ function responseApi(response = null) {
   if (!response) {
     return undefined;
   }
-  return hardenSandboxValue({
-    code: response.statusCode,
-    status: String(response.statusCode || ''),
-    responseTime: response.durationMillis,
-    headers: responseHeaderApi(response.headers || {}),
-    json() {
-      try {
-        return hardenSandboxValue(JSON.parse(response.body || ''));
-      } catch (error) {
-        throw sandboxError(errorMessage(error));
-      }
-    },
-    text() {
-      return response.body || '';
-    },
+  const postmanResponse = createPostmanResponse(response);
+  const api = {
+    ...postmanResponse,
     to: {
       be: {
         ok() {
-          assertHttpStatusRange(response.statusCode, 200, 299, 'successful');
+          assertHttpStatusRange(postmanResponse.code, 200, 299, 'successful');
         },
         success() {
-          assertHttpStatusRange(response.statusCode, 200, 299, 'successful');
+          assertHttpStatusRange(postmanResponse.code, 200, 299, 'successful');
         },
         clientError() {
-          assertHttpStatusRange(response.statusCode, 400, 499, 'client error');
+          assertHttpStatusRange(postmanResponse.code, 400, 499, 'client error');
         },
         serverError() {
-          assertHttpStatusRange(response.statusCode, 500, 599, 'server error');
+          assertHttpStatusRange(postmanResponse.code, 500, 599, 'server error');
         },
         badRequest() {
-          assertHttpStatus(response.statusCode, 400, 'bad request');
+          assertHttpStatus(postmanResponse.code, 400, 'bad request');
         },
         unauthorized() {
-          assertHttpStatus(response.statusCode, 401, 'unauthorized');
+          assertHttpStatus(postmanResponse.code, 401, 'unauthorized');
         },
         forbidden() {
-          assertHttpStatus(response.statusCode, 403, 'forbidden');
+          assertHttpStatus(postmanResponse.code, 403, 'forbidden');
         },
         notFound() {
-          assertHttpStatus(response.statusCode, 404, 'not found');
+          assertHttpStatus(postmanResponse.code, 404, 'not found');
+        },
+        error() {
+          const status = Number(postmanResponse.code);
+          if (status < 400) {
+            throw sandboxError(`Expected response to be an error but received ${postmanResponse.code}.`);
+          }
+        }
+      },
+      not: {
+        be: {
+          error() {
+            const status = Number(postmanResponse.code);
+            if (status >= 400) {
+              throw sandboxError(`Expected response not to be an error but received ${postmanResponse.code}.`);
+            }
+          }
         }
       },
       have: {
         status(expectedStatus) {
-          if (Number(response.statusCode) !== Number(expectedStatus)) {
-            throw sandboxError(`Expected response status ${expectedStatus} but received ${response.statusCode}.`);
+          if (Number(postmanResponse.code) !== Number(expectedStatus)) {
+            throw sandboxError(`Expected response status ${expectedStatus} but received ${postmanResponse.code}.`);
           }
         },
         header(name, expectedValue) {
-          const value = responseHeaderValue(response.headers || {}, name);
+          const value = postmanResponse.headers.get(name);
           if (value == null) {
             throw sandboxError(`Expected response header ${name}.`);
           }
@@ -3011,7 +5907,7 @@ function responseApi(response = null) {
           }
         },
         body(expectedText) {
-          const body = response.body || '';
+          const body = postmanResponse.text();
           if (arguments.length === 0) {
             if (!body) {
               throw sandboxError('Expected response body.');
@@ -3023,12 +5919,7 @@ function responseApi(response = null) {
           }
         },
         jsonBody(path, expectedValue) {
-          let payload;
-          try {
-            payload = JSON.parse(response.body || '');
-          } catch (error) {
-            throw sandboxError(errorMessage(error));
-          }
+          const payload = postmanResponse.json();
           if (arguments.length === 0) {
             return;
           }
@@ -3042,13 +5933,139 @@ function responseApi(response = null) {
           if (!deepEqual(value, expectedValue)) {
             throw sandboxError(`Expected JSON body path ${path} to equal ${safeJsonStringify(expectedValue)}.`);
           }
+        },
+        jsonSchema(schema, options = {}) {
+          const Ajv = createAjvPackage();
+          const ajv = new Ajv(options);
+          if (!ajv.validate(schema, postmanResponse.json())) {
+            throw sandboxError(`Expected response JSON to match schema: ${ajv.errorsText(ajv.errors)}.`);
+          }
         }
       }
+    }
+  };
+  return hardenSandboxValue(api);
+}
+
+function createPostmanResponse(response = {}) {
+  const normalized = normalizePostmanResponse(response);
+  const headers = createPostmanHeaderList(normalized.headers);
+  const cookies = createPostmanCookieList(normalized.cookies);
+  const metadata = createPostmanPropertyList(normalized.metadata);
+  const trailers = createPostmanPropertyList(normalized.trailers);
+  const messages = createPostmanPropertyList(normalized.messages, { itemFactory: createPostmanMessage, toJSONItem: messageToJSON });
+  const api = {
+    code: normalized.code,
+    status: normalized.status,
+    reason: normalized.reason,
+    responseTime: normalized.responseTime,
+    responseSize: normalized.responseSize,
+    url: normalized.url,
+    headers,
+    cookies,
+    metadata,
+    trailers,
+    messages,
+    json() {
+      try {
+        return hardenSandboxValue(JSON.parse(normalized.body || ''));
+      } catch (error) {
+        throw sandboxError(errorMessage(error));
+      }
+    },
+    text() {
+      return normalized.body;
     },
     size() {
-      return Buffer.byteLength(response.body || '', 'utf8');
+      return normalized.responseSize;
+    },
+    clone() {
+      return createPostmanResponse(api.toJSON());
+    },
+    toJSON() {
+      return hardenSandboxValue({
+        code: normalized.code,
+        status: normalized.status,
+        reason: normalized.reason,
+        header: headers.toJSON(),
+        body: normalized.body,
+        responseTime: normalized.responseTime,
+        responseSize: normalized.responseSize,
+        url: normalized.url,
+        cookie: cookies.toJSON(),
+        metadata: metadata.toJSON(),
+        trailers: trailers.toJSON(),
+        messages: messages.toJSON()
+      });
     }
-  });
+  };
+  return hardenSandboxValue(api);
+}
+
+function normalizePostmanResponse(response = {}) {
+  const code = Number(response.code ?? response.statusCode ?? response.status ?? 0) || 0;
+  const body = response.body == null ? '' : Buffer.isBuffer(response.body) ? response.body.toString('utf8') : String(response.body);
+  const reason = response.reason || response.statusText || httpStatusText(code);
+  const status = response.status && Number(response.status) !== code ? String(response.status) : reason;
+  const headers = headersFromAny(response.header || response.headers || []);
+  const responseSize = Number.isFinite(Number(response.responseSize))
+    ? Number(response.responseSize)
+    : Number.isFinite(Number(response.responseBytes))
+      ? Number(response.responseBytes)
+      : Buffer.byteLength(body, 'utf8');
+  return {
+    body,
+    code,
+    cookies: normalizeResponseCookies(response.cookies || response.cookie || [], headers),
+    headers,
+    messages: normalizeSdkListInput(response.messages || []),
+    metadata: normalizeSdkListInput(response.metadata || []),
+    reason,
+    responseSize,
+    responseTime: Number(response.responseTime ?? response.durationMillis ?? 0) || 0,
+    status,
+    trailers: normalizeSdkListInput(response.trailers || response.trailer || []),
+    url: response.url || response.finalUrl || ''
+  };
+}
+
+function normalizeResponseCookies(cookies, headers) {
+  const existing = normalizeSdkListInput(cookies);
+  const setCookieHeaders = [];
+  for (const header of headers || []) {
+    if (String(header?.key || '').toLowerCase() === 'set-cookie') {
+      for (const value of String(header.value || '').split(/,(?=[^;,]+=)/)) {
+        setCookieHeaders.push(value);
+      }
+    }
+  }
+  return [...existing, ...setCookieHeaders.map(normalizeSdkCookie)].filter((cookie) => cookie.name || cookie.key);
+}
+
+function httpStatusText(code) {
+  const statuses = {
+    100: 'Continue',
+    101: 'Switching Protocols',
+    200: 'OK',
+    201: 'Created',
+    202: 'Accepted',
+    204: 'No Content',
+    301: 'Moved Permanently',
+    302: 'Found',
+    304: 'Not Modified',
+    400: 'Bad Request',
+    401: 'Unauthorized',
+    403: 'Forbidden',
+    404: 'Not Found',
+    409: 'Conflict',
+    422: 'Unprocessable Entity',
+    429: 'Too Many Requests',
+    500: 'Internal Server Error',
+    502: 'Bad Gateway',
+    503: 'Service Unavailable',
+    504: 'Gateway Timeout'
+  };
+  return statuses[Number(code)] || String(code || '');
 }
 
 function pairListApi(pairs) {
@@ -3151,143 +6168,217 @@ function readJsonPathForScript(value, path) {
 }
 
 function expect(actual) {
-  const chain = {
-    get and() { return chain; },
-    get to() { return chain; },
-    get be() { return chain; },
-    get been() { return chain; },
-    get is() { return chain; },
-    get that() { return chain; },
-    get which() { return chain; },
-    get have() { return chain; },
-    get has() { return chain; },
-    get with() { return chain; },
-    get at() { return chain; },
-    get of() { return chain; },
-    get same() { return chain; },
-    get deep() { return deepExpectation(actual); },
-    get not() { return negatedExpectation(actual); },
-    equal(expected) { assertCondition(Object.is(actual, expected), `Expected ${actual} to equal ${expected}.`); return chain; },
-    equals(expected) { chain.equal(expected); return chain; },
-    eql(expected) { assertCondition(deepEqual(actual, expected), 'Expected values to be deeply equal.'); return chain; },
-    include(expected) { assertIncludes(actual, expected, false); return chain; },
-    contain(expected) { chain.include(expected); },
-    above(expected) { assertCondition(Number(actual) > Number(expected), `Expected ${actual} to be above ${expected}.`); return chain; },
-    below(expected) { assertCondition(Number(actual) < Number(expected), `Expected ${actual} to be below ${expected}.`); return chain; },
-    least(expected) { assertCondition(Number(actual) >= Number(expected), `Expected ${actual} to be at least ${expected}.`); return chain; },
-    most(expected) { assertCondition(Number(actual) <= Number(expected), `Expected ${actual} to be at most ${expected}.`); return chain; },
-    within(minimum, maximum) {
-      const number = Number(actual);
-      assertCondition(number >= Number(minimum) && number <= Number(maximum), `Expected ${actual} to be within ${minimum}..${maximum}.`);
-      return chain;
-    },
-    match(pattern) { assertCondition(testPattern(pattern, actual), `Expected ${actual} to match ${pattern}.`); return chain; },
-    oneOf(values) {
-      assertCondition(Array.isArray(values) && values.some((value) => Object.is(value, actual)), `Expected ${actual} to be one of ${JSON.stringify(values)}.`);
-      return chain;
-    },
-    a(typeName) { assertType(actual, typeName); return chain; },
-    an(typeName) { assertType(actual, typeName); return chain; },
-    lengthOf(expectedLength) {
-      assertCondition(actual != null && actual.length === Number(expectedLength), `Expected length ${expectedLength} but received ${actual?.length}.`);
-      return chain;
-    },
-    length(expectedLength) {
-      return chain.lengthOf(expectedLength);
-    },
-    keys(...expectedKeys) {
-      const keys = expectedKeys.flat();
-      assertCondition(actual != null && typeof actual === 'object', 'Expected value to be an object with keys.');
-      for (const key of keys) {
-        assertCondition(Object.hasOwn(actual, key), `Expected object to have key ${key}.`);
-      }
-      return chain;
-    },
-    members(expectedValues) {
-      assertArrayMembers(actual, expectedValues, false);
-      return chain;
-    },
-    property(name, expectedValue) {
-      assertCondition(actual != null && Object.hasOwn(actual, name), `Expected object to have property ${name}.`);
-      if (arguments.length > 1) {
-        assertCondition(deepEqual(actual[name], expectedValue), `Expected property ${name} to equal ${expectedValue}.`);
-      }
-      return expect(actual[name]);
-    }
-  };
-  Object.defineProperties(chain, {
-    exist: { get() { assertCondition(actual != null, `Expected ${actual} to exist.`); return true; } },
-    ok: { get() { assertCondition(Boolean(actual), `Expected ${actual} to be truthy.`); return true; } },
-    true: { get() { assertCondition(actual === true, `Expected ${actual} to be true.`); return true; } },
-    false: { get() { assertCondition(actual === false, `Expected ${actual} to be false.`); return true; } },
-    undefined: { get() { assertCondition(actual === undefined, `Expected ${actual} to be undefined.`); return true; } },
-    null: { get() { assertCondition(actual === null, `Expected ${actual} to be null.`); return true; } },
-    empty: { get() { assertCondition(isEmpty(actual), `Expected ${actual} to be empty.`); return true; } }
-  });
-  return hardenSandboxValue(chain);
+  return createExpectation(actual);
 }
 
-function negatedExpectation(actual) {
-  const chain = {
-    get and() { return chain; },
-    get to() { return chain; },
-    get be() { return chain; },
-    get have() { return chain; },
-    equal(expected) { assertCondition(!Object.is(actual, expected), `Expected ${actual} not to equal ${expected}.`); return chain; },
-    equals(expected) { chain.equal(expected); return chain; },
-    eql(expected) { assertCondition(!deepEqual(actual, expected), 'Expected values not to be deeply equal.'); return chain; },
-    include(expected) { assertIncludes(actual, expected, true); return chain; },
-    contain(expected) { chain.include(expected); },
-    match(pattern) { assertCondition(!testPattern(pattern, actual), `Expected ${actual} not to match ${pattern}.`); return chain; },
-    property(name) { assertCondition(actual == null || !Object.hasOwn(actual, name), `Expected object not to have property ${name}.`); return chain; },
-    oneOf(values) {
-      assertCondition(!Array.isArray(values) || !values.some((value) => Object.is(value, actual)), `Expected ${actual} not to be one of ${JSON.stringify(values)}.`);
-      return chain;
-    },
-    members(expectedValues) {
-      assertArrayMembers(actual, expectedValues, true);
-      return chain;
-    }
+function createExpectation(actual, flags = {}) {
+  const chain = {};
+  const withFlag = (name, value = true) => createExpectation(actual, { ...flags, [name]: value });
+  const assertFlag = (condition, positiveMessage, negativeMessage) => {
+    assertCondition(
+      flags.negate ? !condition : condition,
+      flags.negate ? (negativeMessage || positiveMessage.replace('Expected', 'Expected not')) : positiveMessage
+    );
   };
+  for (const word of ['and', 'to', 'be', 'been', 'is', 'that', 'which', 'have', 'has', 'with', 'at', 'of', 'same', 'but', 'does', 'still', 'also']) {
+    Object.defineProperty(chain, word, { get() { return chain; } });
+  }
   Object.defineProperties(chain, {
-    exist: { get() { assertCondition(actual == null, `Expected ${actual} not to exist.`); return true; } },
-    empty: { get() { assertCondition(!isEmpty(actual), `Expected ${actual} not to be empty.`); return true; } },
-    null: { get() { assertCondition(actual !== null, 'Expected value not to be null.'); return true; } },
-    undefined: { get() { assertCondition(actual !== undefined, 'Expected value not to be undefined.'); return true; } }
+    not: { get() { return createExpectation(actual, { ...flags, negate: !flags.negate }); } },
+    deep: { get() { return withFlag('deep'); } },
+    nested: { get() { return withFlag('nested'); } },
+    own: { get() { return withFlag('own'); } },
+    ordered: { get() { return withFlag('ordered'); } },
+    any: { get() { return withFlag('any'); } },
+    all: { get() { return withFlag('all'); } },
+    exist: { get() { assertFlag(actual != null, `Expected ${formatExpectedValue(actual)} to exist.`, `Expected ${formatExpectedValue(actual)} not to exist.`); return chain; } },
+    ok: { get() { assertFlag(Boolean(actual), `Expected ${formatExpectedValue(actual)} to be truthy.`, `Expected ${formatExpectedValue(actual)} to be falsy.`); return chain; } },
+    true: { get() { assertFlag(actual === true, `Expected ${formatExpectedValue(actual)} to be true.`, `Expected ${formatExpectedValue(actual)} not to be true.`); return chain; } },
+    false: { get() { assertFlag(actual === false, `Expected ${formatExpectedValue(actual)} to be false.`, `Expected ${formatExpectedValue(actual)} not to be false.`); return chain; } },
+    undefined: { get() { assertFlag(actual === undefined, `Expected ${formatExpectedValue(actual)} to be undefined.`, `Expected ${formatExpectedValue(actual)} not to be undefined.`); return chain; } },
+    null: { get() { assertFlag(actual === null, `Expected ${formatExpectedValue(actual)} to be null.`, `Expected ${formatExpectedValue(actual)} not to be null.`); return chain; } },
+    empty: { get() { assertFlag(isEmpty(actual), `Expected ${formatExpectedValue(actual)} to be empty.`, `Expected ${formatExpectedValue(actual)} not to be empty.`); return chain; } }
   });
-  return hardenSandboxValue(chain);
-}
-
-function deepExpectation(actual) {
-  return hardenSandboxValue({
-    get equal() { return (expected) => expect(actual).eql(expected); },
-    get equals() { return (expected) => expect(actual).eql(expected); },
-    include(expected) {
-      if (Array.isArray(actual)) {
-        assertCondition(actual.some((item) => deepEqual(item, expected)), 'Expected array to deeply include value.');
-        return;
-      }
-      if (actual && typeof actual === 'object') {
-        for (const [key, value] of Object.entries(expected || {})) {
-          assertCondition(deepEqual(actual[key], value), `Expected object property ${key} to deeply include value.`);
+  chain.equal = (expected) => {
+    const passed = flags.deep ? deepEqual(actual, expected) : Object.is(actual, expected);
+    assertFlag(passed, `Expected ${formatExpectedValue(actual)} to equal ${formatExpectedValue(expected)}.`, `Expected ${formatExpectedValue(actual)} not to equal ${formatExpectedValue(expected)}.`);
+    return chain;
+  };
+  chain.equals = chain.equal;
+  chain.eq = chain.equal;
+  chain.eql = (expected) => {
+    assertFlag(deepEqual(actual, expected), `Expected ${formatExpectedValue(actual)} to deeply equal ${formatExpectedValue(expected)}.`, `Expected ${formatExpectedValue(actual)} not to deeply equal ${formatExpectedValue(expected)}.`);
+    return chain;
+  };
+  chain.eqls = chain.eql;
+  chain.above = chain.gt = chain.greaterThan = (expected) => {
+    assertFlag(Number(actual) > Number(expected), `Expected ${actual} to be above ${expected}.`, `Expected ${actual} not to be above ${expected}.`);
+    return chain;
+  };
+  chain.below = chain.lt = chain.lessThan = (expected) => {
+    assertFlag(Number(actual) < Number(expected), `Expected ${actual} to be below ${expected}.`, `Expected ${actual} not to be below ${expected}.`);
+    return chain;
+  };
+  chain.least = chain.gte = (expected) => {
+    assertFlag(Number(actual) >= Number(expected), `Expected ${actual} to be at least ${expected}.`, `Expected ${actual} to be below ${expected}.`);
+    return chain;
+  };
+  chain.most = chain.lte = (expected) => {
+    assertFlag(Number(actual) <= Number(expected), `Expected ${actual} to be at most ${expected}.`, `Expected ${actual} to be above ${expected}.`);
+    return chain;
+  };
+  chain.within = (minimum, maximum) => {
+    const number = Number(actual);
+    assertFlag(number >= Number(minimum) && number <= Number(maximum), `Expected ${actual} to be within ${minimum}..${maximum}.`, `Expected ${actual} not to be within ${minimum}..${maximum}.`);
+    return chain;
+  };
+  chain.match = (pattern) => {
+    assertFlag(testPattern(pattern, actual), `Expected ${actual} to match ${pattern}.`, `Expected ${actual} not to match ${pattern}.`);
+    return chain;
+  };
+  chain.oneOf = (values) => {
+    const passed = Array.isArray(values) && values.some((value) => flags.deep ? deepEqual(value, actual) : Object.is(value, actual));
+    assertFlag(passed, `Expected ${formatExpectedValue(actual)} to be one of ${formatExpectedValue(values)}.`, `Expected ${formatExpectedValue(actual)} not to be one of ${formatExpectedValue(values)}.`);
+    return chain;
+  };
+  chain.a = chain.an = (typeName) => {
+    const passed = matchesType(actual, typeName);
+    assertFlag(passed, `Expected type ${String(typeName || '').toLowerCase()} but received ${actualTypeName(actual)}.`, `Expected ${formatExpectedValue(actual)} not to be a ${typeName}.`);
+    return chain;
+  };
+  chain.lengthOf = (expectedLength) => {
+    assertFlag(actual != null && actual.length === Number(expectedLength), `Expected length ${expectedLength} but received ${actual?.length}.`, `Expected length not to be ${expectedLength}.`);
+    return chain;
+  };
+  chain.length = chain.lengthOf;
+  chain.property = function property(name, expectedValue) {
+    const result = readExpectationProperty(actual, name, flags);
+    assertFlag(result.exists, `Expected object to have property ${name}.`, `Expected object not to have property ${name}.`);
+    if (arguments.length > 1 && !flags.negate) {
+      const passed = flags.deep ? deepEqual(result.value, expectedValue) : Object.is(result.value, expectedValue);
+      assertCondition(passed, `Expected property ${name} to equal ${formatExpectedValue(expectedValue)}.`);
+    }
+    return createExpectation(result.value, flags.deep ? { deep: true } : {});
+  };
+  chain.ownProperty = chain.haveOwnProperty = (name) => {
+    const passed = actual != null && Object.hasOwn(actual, name);
+    assertFlag(passed, `Expected object to have own property ${name}.`, `Expected object not to have own property ${name}.`);
+    return createExpectation(passed ? actual[name] : undefined, flags.deep ? { deep: true } : {});
+  };
+  chain.keys = (...expectedKeys) => {
+    const keys = expectedKeys.flat().map(String);
+    const actualKeys = actual && typeof actual === 'object' ? Object.keys(actual) : [];
+    const passed = flags.any
+      ? keys.some((key) => actualKeys.includes(key))
+      : keys.every((key) => actualKeys.includes(key)) && (flags.all ? actualKeys.every((key) => keys.includes(key)) : true);
+    assertFlag(passed, `Expected object to have keys ${keys.join(', ')}.`, `Expected object not to have keys ${keys.join(', ')}.`);
+    return chain;
+  };
+  chain.members = (expectedValues) => {
+    assertArrayMembers(actual, expectedValues, flags.negate, flags);
+    return chain;
+  };
+  chain.satisfy = (predicate) => {
+    assertCondition(typeof predicate === 'function', 'Expected satisfy to receive a predicate function.');
+    const passed = Boolean(predicate(actual));
+    assertFlag(passed, `Expected ${formatExpectedValue(actual)} to satisfy predicate.`, `Expected ${formatExpectedValue(actual)} not to satisfy predicate.`);
+    return chain;
+  };
+  chain.closeTo = chain.approximately = (expected, delta) => {
+    const passed = Math.abs(Number(actual) - Number(expected)) <= Number(delta);
+    assertFlag(passed, `Expected ${actual} to be close to ${expected} +/- ${delta}.`, `Expected ${actual} not to be close to ${expected} +/- ${delta}.`);
+    return chain;
+  };
+  chain.throw = chain.throws = chain.Throw = (expected, message) => {
+    assertCondition(typeof actual === 'function', 'Expected target to be a function.');
+    let thrown;
+    try {
+      actual();
+    } catch (error) {
+      thrown = error;
+    }
+    let passed = thrown !== undefined;
+    if (passed && expected != null) {
+      passed = thrownMatchesExpectation(thrown, expected);
+    }
+    assertFlag(passed, message || `Expected function ${flags.negate ? 'not ' : ''}to throw${expected ? ` ${formatExpectedValue(expected)}` : ''}.`);
+    return thrown === undefined ? chain : createExpectation(thrown, {});
+  };
+  const includeFn = (expected) => {
+    assertIncludes(actual, expected, flags.negate, flags);
+    return chain;
+  };
+  includeFn.members = (expectedValues) => {
+    assertArrayMembers(actual, expectedValues, flags.negate, { ...flags, contains: true });
+    return chain;
+  };
+  includeFn.keys = (...keys) => {
+    return createExpectation(actual, { ...flags }).keys(...keys);
+  };
+  includeFn.property = (...args) => {
+    return createExpectation(actual, { ...flags }).property(...args);
+  };
+  Object.defineProperty(includeFn, 'ordered', {
+    get() {
+      return hardenSandboxValue({
+        members(expectedValues) {
+          assertArrayMembers(actual, expectedValues, flags.negate, { ...flags, contains: true, ordered: true });
+          return chain;
         }
-        return;
-      }
-      expect(actual).include(expected);
+      });
     }
   });
+  chain.include = chain.includes = chain.contain = chain.contains = hardenSandboxValue(includeFn);
+  return hardenSandboxValue(chain);
+}
+
+function readExpectationProperty(actual, name, flags = {}) {
+  if (actual == null) {
+    return { exists: false, value: undefined };
+  }
+  if (flags.nested) {
+    const value = readJsonPathForScript(actual, String(name || ''));
+    return { exists: value !== undefined, value };
+  }
+  const exists = flags.own
+    ? Object.hasOwn(actual, name)
+    : name in Object(actual);
+  return { exists, value: exists ? actual[name] : undefined };
+}
+
+function thrownMatchesExpectation(error, expected) {
+  if (typeof expected === 'string') {
+    return errorMessage(error).includes(expected);
+  }
+  if (expected instanceof RegExp || Object.prototype.toString.call(expected) === '[object RegExp]') {
+    return expected.test(errorMessage(error));
+  }
+  if (typeof expected === 'function') {
+    return error instanceof expected || error?.name === expected.name;
+  }
+  return deepEqual(error, expected);
+}
+
+function formatExpectedValue(value) {
+  if (typeof value === 'string') {
+    return value;
+  }
+  return safeJsonStringify(value);
 }
 
 function deepEqual(left, right) {
-  return safeJsonStringify(left) === safeJsonStringify(right);
+  return lodashIsEqual(left, right);
 }
 
-function assertIncludes(actual, expected, negate) {
+function assertIncludes(actual, expected, negate, flags = {}) {
   let includes = false;
   if (Array.isArray(actual)) {
-    includes = actual.some((value) => deepEqual(value, expected));
+    includes = actual.some((value) => flags.deep ? deepEqual(value, expected) : Object.is(value, expected));
   } else if (actual && typeof actual === 'object') {
-    includes = Object.entries(expected || {}).every(([key, value]) => deepEqual(actual[key], value));
+    includes = Object.entries(expected || {}).every(([key, value]) => {
+      const actualValue = actual[key];
+      return flags.deep ? deepEqual(actualValue, value) : Object.is(actualValue, value);
+    });
   } else {
     includes = String(actual ?? '').includes(String(expected ?? ''));
   }
@@ -3297,20 +6388,73 @@ function assertIncludes(actual, expected, negate) {
   );
 }
 
-function assertArrayMembers(actual, expectedValues, negate) {
+function assertArrayMembers(actual, expectedValues, negate, flags = {}) {
   assertCondition(Array.isArray(actual), 'Expected value to be an array.');
   assertCondition(Array.isArray(expectedValues), 'Expected members to be provided as an array.');
-  const includesAll = expectedValues.every((expected) => actual.some((value) => deepEqual(value, expected)));
+  const compare = flags.deep ? deepEqual : Object.is;
+  let includesAll;
+  if (flags.ordered && flags.contains) {
+    includesAll = expectedValues.every((expected, index) => index < actual.length && compare(actual[index], expected));
+  } else {
+    includesAll = expectedValues.every((expected) => actual.some((value) => compare(value, expected)));
+  }
+  const exact = flags.contains === true
+    ? includesAll
+    : includesAll && actual.every((value) => expectedValues.some((expected) => compare(value, expected)));
   assertCondition(
-    negate ? !includesAll : includesAll,
+    negate ? !exact : exact,
     `Expected ${safeJsonStringify(actual)} ${negate ? 'not ' : ''}to include members ${safeJsonStringify(expectedValues)}.`
   );
 }
 
 function assertType(actual, typeName) {
+  assertCondition(matchesType(actual, typeName), `Expected type ${String(typeName || '').toLowerCase()} but received ${actualTypeName(actual)}.`);
+}
+
+function matchesType(actual, typeName) {
   const expected = String(typeName || '').toLowerCase();
-  const actualType = Array.isArray(actual) ? 'array' : actual === null ? 'null' : typeof actual;
-  assertCondition(actualType === expected, `Expected type ${expected} but received ${actualType}.`);
+  if (expected === 'array') {
+    return Array.isArray(actual);
+  }
+  if (expected === 'regexp' || expected === 'regex') {
+    return actual instanceof RegExp || Object.prototype.toString.call(actual) === '[object RegExp]';
+  }
+  if (expected === 'date') {
+    return actual instanceof Date || Object.prototype.toString.call(actual) === '[object Date]';
+  }
+  if (expected === 'null') {
+    return actual === null;
+  }
+  if (expected === 'undefined') {
+    return actual === undefined;
+  }
+  if (expected === 'error') {
+    return actual instanceof Error || Object.prototype.toString.call(actual).endsWith('Error]');
+  }
+  if (expected === 'promise') {
+    return actual && typeof actual.then === 'function';
+  }
+  if (expected === 'map') {
+    return actual instanceof Map || Object.prototype.toString.call(actual) === '[object Map]';
+  }
+  if (expected === 'set') {
+    return actual instanceof Set || Object.prototype.toString.call(actual) === '[object Set]';
+  }
+  return typeof actual === expected;
+}
+
+function actualTypeName(actual) {
+  if (Array.isArray(actual)) {
+    return 'array';
+  }
+  if (actual === null) {
+    return 'null';
+  }
+  const tag = Object.prototype.toString.call(actual);
+  if (tag !== '[object Object]') {
+    return tag.slice(8, -1).toLowerCase();
+  }
+  return typeof actual;
 }
 
 function isEmpty(value) {
@@ -3401,6 +6545,10 @@ function hardenSandboxValue(value, seen = new WeakSet()) {
   }
   seen.add(value);
 
+  if (isSandboxRealmByteObject(value)) {
+    return maskSandboxConstructor(value);
+  }
+
   if (Array.isArray(value)) {
     attachSandboxArrayMethods(value);
   }
@@ -3448,6 +6596,19 @@ function hardenSandboxValue(value, seen = new WeakSet()) {
     // still hardened before entering the vm context.
   }
   return value;
+}
+
+function isSandboxRealmByteObject(value) {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const isByteObject = ArrayBuffer.isView(value) || value instanceof ArrayBuffer || Object.prototype.toString.call(value) === '[object ArrayBuffer]';
+  if (!isByteObject) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  const constructor = prototype && Object.getOwnPropertyDescriptor(prototype, 'constructor')?.value;
+  return typeof constructor === 'function' && constructor.constructor !== Function;
 }
 
 function attachSandboxArrayMethods(array) {
@@ -3598,18 +6759,46 @@ function sandboxArrayIterator(array) {
 }
 
 function createConsole(logs) {
+  const timers = new Map();
+  let groupDepth = 0;
   const write = (...values) => {
     if (logs.length >= MAX_SCRIPT_LOGS) {
       return;
     }
-    const line = values.map(formatLogValue).join(' ');
+    const line = `${'  '.repeat(Math.min(groupDepth, 10))}${formatConsoleValues(...values)}`;
     logs.push(line.length > MAX_SCRIPT_LOG_LENGTH ? `${line.slice(0, MAX_SCRIPT_LOG_LENGTH)}...` : line);
   };
   return hardenSandboxValue({
-    log: write,
+    debug: write,
+    error: write,
+    group(...values) {
+      if (values.length) {
+        write(...values);
+      }
+      groupDepth += 1;
+    },
+    groupEnd() {
+      groupDepth = Math.max(0, groupDepth - 1);
+    },
     info: write,
-    warn: write,
-    error: write
+    log: write,
+    time(label = 'default') {
+      timers.set(String(label || 'default'), Date.now());
+    },
+    timeEnd(label = 'default') {
+      const key = String(label || 'default');
+      const started = timers.get(key);
+      if (started == null) {
+        write(`${key}: 0ms`);
+        return;
+      }
+      timers.delete(key);
+      write(`${key}: ${Date.now() - started}ms`);
+    },
+    trace(...values) {
+      write('Trace:', ...values);
+    },
+    warn: write
   });
 }
 
@@ -3617,7 +6806,12 @@ function normalizeIterationData(value) {
   if (Array.isArray(value)) {
     return value
       .filter((item) => item && typeof item === 'object')
-      .map((item) => ({ enabled: item.enabled !== false, key: String(item.key || ''), value: item.value == null ? '' : String(item.value) }))
+      .map((item) => ({
+        ...item,
+        enabled: item.enabled !== false,
+        key: String(item.key || ''),
+        value: variableObservableValue(item)
+      }))
       .filter((item) => item.key);
   }
   if (value && typeof value === 'object') {
@@ -3636,7 +6830,9 @@ function boundedScriptResult(result) {
     tests: Array.isArray(result.tests) ? result.tests.slice(0, MAX_SCRIPT_LOGS).map((test) => ({
       name: truncate(String(test.name || 'Unnamed test'), 256),
       passed: test.passed === true,
-      error: truncate(test.error || '', MAX_SCRIPT_LOG_LENGTH)
+      error: truncate(test.error || '', MAX_SCRIPT_LOG_LENGTH),
+      skipped: test.skipped === true,
+      index: Number.isFinite(Number(test.index)) ? Number(test.index) : undefined
     })) : [],
     error: truncate(result.error || '', MAX_SCRIPT_LOG_LENGTH),
     logs: Array.isArray(result.logs) ? result.logs.slice(0, MAX_SCRIPT_LOGS).map((line) => truncate(line, MAX_SCRIPT_LOG_LENGTH)) : [],
@@ -3646,7 +6842,17 @@ function boundedScriptResult(result) {
       skipRequest: result.execution.skipRequest === true
     } : {},
     request: result.request && typeof result.request === 'object' ? cloneJson(result.request) : undefined,
+    mock: result.mock && typeof result.mock === 'object' ? {
+      match: result.mock.match && typeof result.mock.match === 'object' ? cloneJson(result.mock.match) : {},
+      response: result.mock.response && typeof result.mock.response === 'object' ? {
+        statusCode: normalizeMockStatusCode(result.mock.response.statusCode),
+        headers: normalizeMockResponseHeaders(result.mock.response.headers),
+        body: truncate(result.mock.response.body || '', MAX_MOCK_RESPONSE_BODY_LENGTH)
+      } : undefined,
+      selectedExampleId: truncate(result.mock.selectedExampleId || '', 256)
+    } : undefined,
     visualizer: result.visualizer && typeof result.visualizer === 'object' ? {
+      assets: boundedVisualizerAssets(result.visualizer.assets),
       data: result.visualizer.data == null ? {} : cloneJson(result.visualizer.data),
       html: truncate(result.visualizer.html || '', MAX_VISUALIZER_HTML_LENGTH),
       interactive: result.visualizer.interactive === true,
@@ -3665,6 +6871,26 @@ function boundedScriptResult(result) {
     };
   }
   return safe;
+}
+
+function boundedVisualizerAssets(assets) {
+  if (!Array.isArray(assets)) {
+    return [];
+  }
+  return assets.slice(0, MAX_VISUALIZER_ASSETS).map((asset) => {
+    const source = String(asset?.source || '');
+    const integrity = String(asset?.integrity || '');
+    const name = String(asset?.name || '').slice(0, 64);
+    return {
+      integrity,
+      name,
+      source,
+      type: asset?.type === 'style' ? 'style' : 'script'
+    };
+  }).filter((asset) => asset.name
+    && asset.source
+    && Buffer.byteLength(asset.source, 'utf8') <= MAX_VISUALIZER_ASSET_BYTES
+    && asset.integrity === scriptPackageIntegrity(asset.source));
 }
 
 function truncate(value, maxLength) {
@@ -3687,13 +6913,66 @@ function formatLogValue(value) {
   }
 }
 
+function formatConsoleValues(...values) {
+  if (!values.length) {
+    return '';
+  }
+  const first = values[0];
+  if (typeof first !== 'string') {
+    return values.map(formatLogValue).join(' ');
+  }
+  let index = 1;
+  const formatted = first.replace(/%[sdifjoO%]/g, (token) => {
+    if (token === '%%') {
+      return '%';
+    }
+    if (index >= values.length) {
+      return token;
+    }
+    const value = values[index++];
+    if (token === '%d' || token === '%i') {
+      return String(Number.parseInt(value, 10));
+    }
+    if (token === '%f') {
+      return String(Number.parseFloat(value));
+    }
+    if (token === '%j' || token === '%o' || token === '%O') {
+      return formatLogValue(value);
+    }
+    return String(value);
+  });
+  const rest = values.slice(index).map(formatLogValue);
+  return [formatted, ...rest].filter((part) => part !== '').join(' ');
+}
+
+function safeStructuredClone(value) {
+  if (value == null || typeof value !== 'object') {
+    return value;
+  }
+  if (ArrayBuffer.isView(value)) {
+    return new value.constructor(value);
+  }
+  if (value instanceof ArrayBuffer || Object.prototype.toString.call(value) === '[object ArrayBuffer]') {
+    return value.slice(0);
+  }
+  try {
+    return globalThis.structuredClone(value);
+  } catch {
+    return cloneJson(value);
+  }
+}
+
 function replaceVariables(value, ...scopes) {
-  return String(value ?? '').replace(/\{\{\s*([A-Za-z0-9_.-]+)\s*}}/g, (match, key) => {
-    for (const scope of scopes.reverse()) {
+  return String(value ?? '').replace(/\{\{\s*([$A-Za-z0-9_.-]+)\s*}}/g, (match, key) => {
+    for (const scope of scopes.slice().reverse()) {
       const replacement = getVariable(scope, key);
       if (replacement != null) {
         return replacement;
       }
+    }
+    const dynamicValue = resolveDynamicVariable(key);
+    if (dynamicValue != null) {
+      return String(dynamicValue);
     }
     return match;
   });

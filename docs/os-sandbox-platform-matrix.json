@@ -1,0 +1,283 @@
+{
+  "schemaVersion": 1,
+  "generatedFrom": "src/core/osSandboxPlatformMatrix.js",
+  "deterministic": true,
+  "target": {
+    "claim": "Platform-equivalent full OS sandbox coverage for script workers",
+    "separation": "This matrix is separate from Postman API parity and from scripted load-test support.",
+    "postmanParityCommand": "npm run postman:parity:claim",
+    "platformClaimCommand": "npm run sandbox:platform:claim"
+  },
+  "claimSurfaces": {
+    "platform-os-sandbox": "Native OS sandbox coverage and packaged validation across tier-one desktop platforms.",
+    "postman-api-parity": "Postman script API behavior and imported-script observable output.",
+    "load-test-scripting": "Future scripted load-test contract; currently out of scope.",
+    "release-gate": "Validation plumbing required to keep the matrix current."
+  },
+  "statuses": {
+    "implemented": "Implemented and covered by automated validation or source-owned contract checks.",
+    "blocked-native-backend": "Blocked until a native OS sandbox backend and packaged validation exist for this platform.",
+    "deferred-decision": "Security/product decision is intentionally deferred and blocks the stronger public claim.",
+    "out-of-scope": "Explicitly outside the current claim surface.",
+    "validation-hook": "Validation plumbing exists and must stay release-gated."
+  },
+  "sources": {
+    "sandboxContract": {
+      "title": "PostMeter Script Sandbox Contract",
+      "path": "docs/SANDBOX_CONTRACT.md"
+    },
+    "nextSteps": {
+      "title": "PostMeter Next Steps",
+      "path": "NEXT_STEPS.MD"
+    },
+    "osSandbox": {
+      "title": "OS sandbox launch backend",
+      "path": "src/core/osSandbox.js"
+    },
+    "seccompPolicy": {
+      "title": "Linux seccomp syscall policy",
+      "path": "src/core/seccompPolicy.js"
+    },
+    "runtimeValidation": {
+      "title": "Sandbox runtime validation",
+      "path": "src/core/sandboxRuntimeValidation.js"
+    },
+    "releaseGate": {
+      "title": "Sandbox release gate manifest validation",
+      "path": "scripts/validateSandboxReleaseGate.js"
+    },
+    "ciWorkflow": {
+      "title": "CI workflow",
+      "path": ".github/workflows/ci.yml"
+    },
+    "releaseWorkflow": {
+      "title": "Release workflow",
+      "path": ".github/workflows/release.yml"
+    }
+  },
+  "rows": [
+    {
+      "id": "linux.namespace-bubblewrap",
+      "platform": "linux",
+      "area": "namespace/filesystem/network",
+      "target": "Linux script workers launch through bubblewrap with unshared namespaces, no host network namespace, dropped capabilities, cleared environment, and private writable tmpfs mounts.",
+      "status": "implemented",
+      "claimSurface": "platform-os-sandbox",
+      "claimBlocking": true,
+      "securityDecision": "Use bubblewrap as the first OS-level backend and require it for Linux production validation.",
+      "sourceRefs": [
+        "sandboxContract",
+        "osSandbox",
+        "runtimeValidation"
+      ],
+      "verificationRefs": [
+        "npm run sandbox:validate",
+        "npm run sandbox:validate:packaged",
+        "test/electron/scriptSandbox.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "linux.packaged-os-sandbox-validation",
+      "platform": "linux",
+      "area": "packaged-validation",
+      "target": "Packaged Linux artifacts must prove the OS sandbox backend, Node permission flags, ASAR/path behavior, and sandbox worker launch still work after packaging.",
+      "status": "implemented",
+      "claimSurface": "platform-os-sandbox",
+      "claimBlocking": true,
+      "securityDecision": "Keep packaged Linux OS-sandbox validation in CI and release workflows before shipping artifacts.",
+      "sourceRefs": [
+        "sandboxContract",
+        "runtimeValidation",
+        "ciWorkflow",
+        "releaseWorkflow"
+      ],
+      "verificationRefs": [
+        "npm run sandbox:validate:packaged",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "linux.seccomp-dangerous-syscall-policy",
+      "platform": "linux",
+      "area": "syscall-policy",
+      "target": "Linux bubblewrap launches install a seccomp cBPF deny policy for high-risk kernel APIs such as bpf, ptrace, keyring, mount, process_vm_*, perf_event_open, io_uring, and nested namespace syscalls.",
+      "status": "implemented",
+      "claimSurface": "platform-os-sandbox",
+      "claimBlocking": true,
+      "securityDecision": "Keep the dangerous-syscall deny policy in the Linux release gate while the stronger deny-by-default decision is tracked separately.",
+      "sourceRefs": [
+        "sandboxContract",
+        "seccompPolicy",
+        "runtimeValidation"
+      ],
+      "verificationRefs": [
+        "npm run sandbox:validate",
+        "test/electron/scriptSandbox.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "linux.seccomp-deny-default-allowlist-decision",
+      "platform": "linux",
+      "area": "syscall-policy",
+      "target": "Decide whether platform-equivalent \"full syscall-policy sandbox\" requires a maintained deny-by-default seccomp-BPF allowlist instead of the current dangerous-syscall deny policy.",
+      "status": "deferred-decision",
+      "claimSurface": "platform-os-sandbox",
+      "claimBlocking": true,
+      "securityDecision": "Do not claim platform-equivalent full OS sandbox coverage until this Linux syscall-policy standard is decided and implemented if required.",
+      "sourceRefs": [
+        "sandboxContract",
+        "nextSteps",
+        "seccompPolicy"
+      ],
+      "verificationRefs": [
+        "NEXT_STEPS.MD Questions For Maintainer After Implementation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "load-tests.scripted-sandbox-contract",
+      "platform": "all",
+      "area": "claim-boundary",
+      "target": "Scripted load tests remain outside the Postman scripting parity claim unless a separate scripted-load-test contract is written and implemented.",
+      "status": "out-of-scope",
+      "claimSurface": "load-test-scripting",
+      "claimBlocking": false,
+      "securityDecision": "Do not execute request scripts during load tests in sandbox v1; avoid implying partial scripted-load compatibility.",
+      "sourceRefs": [
+        "sandboxContract",
+        "nextSteps"
+      ],
+      "verificationRefs": [
+        "docs/SANDBOX_CONTRACT.md Load-Test Decision",
+        "docs/COMPATIBILITY.md load-test limitation"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "macos.packaged-os-sandbox-validation",
+      "platform": "macos",
+      "area": "packaged-validation",
+      "target": "Packaged macOS artifacts must validate the native OS sandbox backend, Node permission flags, app bundle/ASAR path behavior, and script-worker launch behavior on a macOS runner.",
+      "status": "blocked-native-backend",
+      "claimSurface": "platform-os-sandbox",
+      "claimBlocking": true,
+      "securityDecision": "macOS release validation cannot satisfy the platform-equivalent OS sandbox claim until it proves the native backend in packaged artifacts.",
+      "sourceRefs": [
+        "sandboxContract",
+        "nextSteps",
+        "releaseWorkflow"
+      ],
+      "verificationRefs": [
+        "future npm run sandbox:validate:packaged on macos-latest with native OS backend assertions",
+        ".github/workflows/release.yml"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "macos.seatbelt-backend",
+      "platform": "macos",
+      "area": "native-backend",
+      "target": "Implement a native macOS OS sandbox backend, such as seatbelt/sandbox-exec replacement strategy or an equivalent hardened helper, for script workers.",
+      "status": "blocked-native-backend",
+      "claimSurface": "platform-os-sandbox",
+      "claimBlocking": true,
+      "securityDecision": "Fail closed or downgrade the public claim on macOS until a native OS sandbox backend exists; do not silently rely on node:vm alone.",
+      "sourceRefs": [
+        "sandboxContract",
+        "nextSteps",
+        "osSandbox"
+      ],
+      "verificationRefs": [
+        "future macOS native backend tests",
+        "future npm run sandbox:validate on macos-latest"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "postman-parity.separate-claim",
+      "platform": "all",
+      "area": "claim-boundary",
+      "target": "Postman script API parity is tracked by the Postman parity matrix and claim gate; platform OS sandbox completion is intentionally not part of npm run postman:parity:claim.",
+      "status": "implemented",
+      "claimSurface": "postman-api-parity",
+      "claimBlocking": false,
+      "securityDecision": "Keep compatibility gaps and platform OS sandbox gaps on separate claim gates so one cannot mask the other.",
+      "sourceRefs": [
+        "sandboxContract",
+        "nextSteps"
+      ],
+      "verificationRefs": [
+        "npm run postman:parity:validate",
+        "npm run postman:parity:claim",
+        "docs/postman-sandbox-parity-matrix.json"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "release-gate.platform-matrix-validation",
+      "platform": "all",
+      "area": "release-gating",
+      "target": "The OS-sandbox platform matrix is generated, committed, validated, and wired into check, CI, release workflow, and release-gate manifest validation.",
+      "status": "validation-hook",
+      "claimSurface": "release-gate",
+      "claimBlocking": false,
+      "securityDecision": "Require matrix freshness and structure in normal validation, while keeping the stronger platform-equivalent claim as a separate intentionally failing gate until blockers are resolved.",
+      "sourceRefs": [
+        "releaseGate",
+        "ciWorkflow",
+        "releaseWorkflow",
+        "nextSteps"
+      ],
+      "verificationRefs": [
+        "npm run sandbox:platform:validate",
+        "npm run release:gate",
+        "npm run check"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "windows.appcontainer-backend",
+      "platform": "windows",
+      "area": "native-backend",
+      "target": "Implement a native Windows OS sandbox backend, such as AppContainer or an equivalent restricted-token/job-object launch model, for script workers.",
+      "status": "blocked-native-backend",
+      "claimSurface": "platform-os-sandbox",
+      "claimBlocking": true,
+      "securityDecision": "Fail closed or downgrade the public claim on Windows until a native OS sandbox backend exists; do not silently rely on node:vm alone.",
+      "sourceRefs": [
+        "sandboxContract",
+        "nextSteps",
+        "osSandbox"
+      ],
+      "verificationRefs": [
+        "future Windows native backend tests",
+        "future npm run sandbox:validate on windows-latest"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "windows.packaged-os-sandbox-validation",
+      "platform": "windows",
+      "area": "packaged-validation",
+      "target": "Packaged Windows artifacts must validate the native OS sandbox backend, Node permission flags, packaged path behavior, and script-worker launch behavior on a Windows runner.",
+      "status": "blocked-native-backend",
+      "claimSurface": "platform-os-sandbox",
+      "claimBlocking": true,
+      "securityDecision": "Windows release validation cannot satisfy the platform-equivalent OS sandbox claim until it proves the native backend in packaged artifacts.",
+      "sourceRefs": [
+        "sandboxContract",
+        "nextSteps",
+        "releaseWorkflow"
+      ],
+      "verificationRefs": [
+        "future npm run sandbox:validate:packaged on windows-latest with native OS backend assertions",
+        ".github/workflows/release.yml"
+      ],
+      "notes": ""
+    }
+  ]
+}

@@ -3,6 +3,7 @@ const PAYLOAD_SCHEMA_VERSION = 1;
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 const BODY_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
 const BODY_TYPE_VALUES = ['NONE', 'RAW_JSON', 'RAW_TEXT'];
+const REQUEST_PROTOCOLS = ['http', 'graphql', 'grpc', 'websocket', 'socketio'];
 const AUTH_TYPE_VALUES = ['none', 'bearer', 'basic', 'apiKey', 'cookie', 'oauth2', 'clientCertificate'];
 const API_KEY_LOCATIONS = ['header', 'query'];
 const OAUTH2_TOKEN_TYPES = ['Bearer', 'MAC'];
@@ -21,7 +22,7 @@ const OAUTH_PROGRESS_STATUSES = [
   'failed'
 ];
 const LOAD_EXPORT_FORMATS = ['json', 'csv'];
-const COLLECTION_EXPORT_FORMATS = ['postmeter', 'openapi', 'jmeter', 'curl', 'har'];
+const COLLECTION_EXPORT_FORMATS = ['postmeter', 'postman', 'openapi', 'jmeter', 'curl', 'har'];
 const THEME_VALUES = ['system', 'light', 'dark'];
 const ASSERTION_TYPES = [
   'statusCode',
@@ -78,6 +79,7 @@ const SCHEMA_ENUMS = {
   oauth2TokenTypes: OAUTH2_TOKEN_TYPES,
   oauthProgressStatuses: OAUTH_PROGRESS_STATUSES,
   oauthProgressTypes: OAUTH_PROGRESS_TYPES,
+  requestProtocols: REQUEST_PROTOCOLS,
   sameSiteValues: ['', 'Lax', 'Strict', 'None'],
   themeValues: THEME_VALUES
 };
@@ -145,7 +147,18 @@ const FIELD_SCHEMAS = {
   },
   scripts: {
     preRequest: { type: 'string', limit: 'body', optional: true },
-    tests: { type: 'string', limit: 'body', optional: true }
+    tests: { type: 'string', limit: 'body', optional: true },
+    beforeQuery: { type: 'string', limit: 'body', optional: true },
+    afterResponse: { type: 'string', limit: 'body', optional: true },
+    beforeInvoke: { type: 'string', limit: 'body', optional: true },
+    onMessage: { type: 'string', limit: 'body', optional: true },
+    onIncomingMessage: { type: 'string', limit: 'body', optional: true },
+    mock: { type: 'string', limit: 'body', optional: true }
+  },
+  protocolMessage: {
+    timestamp: { type: 'string', limit: 'name', optional: true },
+    type: { type: 'string', limit: 'short', optional: true },
+    name: { type: 'string', limit: 'name', optional: true }
   },
   requestCookieJar: {
     enabled: { type: 'boolean', optional: true },
@@ -378,7 +391,7 @@ const payloadSchemas = {
   entities: {
     request: {
       required: ['method', 'url'],
-      arrays: ['queryParams', 'headers', 'assertions', 'variables', 'examples'],
+      arrays: ['queryParams', 'headers', 'assertions', 'variables', 'examples', 'metadata', 'messages'],
       nested: ['auth', 'scripts', 'cookieJar', 'loadTestPolicy']
     },
   workspace: {

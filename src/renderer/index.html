@@ -39,6 +39,7 @@
       <div id="exportMenu" class="toolbar-menu" role="menu" hidden>
         <button id="exportWorkspaceButton" role="menuitem">Workspace</button>
         <button id="exportCollectionButton" role="menuitem">Collection</button>
+        <button id="exportPostmanButton" role="menuitem">Postman</button>
         <button id="exportOpenApiButton" role="menuitem">OpenAPI</button>
         <button id="exportJMeterButton" role="menuitem">JMeter</button>
         <button id="exportCurlButton" role="menuitem">curl</button>
@@ -456,6 +457,25 @@
             <input id="trustedScriptVaultInput" type="checkbox">
             <span>Script vault access</span>
           </label>
+          <div class="workspace-vault-panel">
+            <div class="workspace-sandbox-note" id="sandboxVaultSummary">Vault metadata has not been loaded.</div>
+            <div id="sandboxVaultList" class="workspace-package-list"></div>
+            <div id="sandboxVaultAuditList" class="workspace-package-list"></div>
+            <div class="workspace-actions">
+              <button id="bindVaultSecretButton" type="button">Bind Vault Secret</button>
+              <button id="refreshVaultMetadataButton" type="button">Refresh Vault Metadata</button>
+              <button id="resetVaultButton" type="button">Reset Vault</button>
+            </div>
+          </div>
+          <div class="workspace-package-cache">
+            <div class="workspace-sandbox-note" id="sandboxPackageCacheSummary">Reviewed package cache is empty.</div>
+            <div id="sandboxPackageMissingList" class="workspace-package-list"></div>
+            <div id="sandboxPackageCacheList" class="workspace-package-list"></div>
+            <div class="workspace-actions">
+              <button id="addSandboxPackageButton" type="button">Add Reviewed Package</button>
+              <button id="refreshSandboxPackagesButton" type="button">Refresh Package Status</button>
+            </div>
+          </div>
         </div>
       </section>
 

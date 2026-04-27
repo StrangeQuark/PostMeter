@@ -1,6 +1,11 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const test = require('node:test');
-const { importPostmanCollection } = require('../../src/core/postmanImporter');
+const { importCollectionFromContent } = require('../../src/core/collectionImportRegistry');
+const { runCollection } = require('../../src/core/collectionRunner');
+const { walkRequests } = require('../../src/core/models');
+const { exportPostmanCollection, importPostmanCollection } = require('../../src/core/postmanImporter');
 
 test('imports common Postman auth helpers with collection and folder inheritance', () => {
   const collection = importPostmanCollection({
@@ -163,4 +168,401 @@ test('imports Postman examples and collection certificates', () => {
   assert.equal(collection.requests[0].examples.length, 1);
   assert.equal(collection.requests[0].examples[0].statusCode, 200);
   assert.equal(collection.requests[0].examples[0].bodyType, 'RAW_JSON');
+});
+
+test('annotates imported Postman package references for package-cache review', () => {
+  const collection = importPostmanCollection({
+    info: {
+      name: 'Postman Packages',
+      schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
+    },
+    item: [{
+      name: 'Package script',
+      event: [{
+        listen: 'test',
+        script: {
+          exec: [
+            "pm.require('@team/tools');",
+            "require('npm:@scope/pkg@2.0.0');",
+            "require('lodash');"
+          ]
+        }
+      }],
+      request: {
+        method: 'GET',
+        url: 'https://api.example.test/packages'
+      }
+    }]
+  });
+  const metadata = JSON.parse(collection.variables.find((variable) => variable.key === 'postman.packageReferences').value);
+
+  assert.deepEqual(metadata.map((item) => item.specifier), ['@team/tools', 'npm:@scope/pkg@2.0.0']);
+  assert.equal(metadata[0].status, 'missing-review');
+});
+
+test('preserves GraphQL and gRPC protocol hooks and request metadata from Postman imports', () => {
+  const fixture = JSON.parse(fs.readFileSync(
+    path.join(__dirname, '../fixtures/postman/protocol-script-hooks.collection.json'),
+    'utf8'
+  ));
+  const collection = importPostmanCollection(fixture);
+  const graphql = collection.requests[0];
+  const grpc = collection.requests[1];
+
+  assert.equal(graphql.protocol, 'graphql');
+  assert.equal(graphql.method, 'POST');
+  assert.equal(graphql.postmanBody.mode, 'graphql');
+  assert.equal(graphql.graphql.operationName, 'GetUser');
+  assert.match(graphql.scripts.beforeQuery, /pm\.require\('lodash'\)/);
+  assert.match(graphql.scripts.afterResponse, /graphql after response event/);
+  assert.equal(graphql.bodyType, 'RAW_JSON');
+  assert.equal(JSON.parse(graphql.body).operationName, 'GetUser');
+
+  assert.equal(grpc.protocol, 'grpc');
+  assert.equal(grpc.methodPath, 'users.UserService/GetUser');
+  assert.equal(grpc.grpc.methodType, 'server-streaming');
+  assert.equal(grpc.metadata[0].key, 'x-client');
+  assert.equal(grpc.messages[0].name, 'seed');
+  assert.match(grpc.scripts.beforeInvoke, /beforeInvoke/);
+  assert.match(grpc.scripts.onIncomingMessage, /onIncomingMessage/);
+  assert.match(grpc.scripts.afterResponse, /grpc after response event/);
+});
+
+test('annotates package references found in protocol-specific Postman hook scripts', () => {
+  const collection = importPostmanCollection({
+    info: {
+      name: 'Protocol Packages',
+      schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
+    },
+    item: [{
+      name: 'GraphQL package script',
+      protocol: 'graphql',
+      event: [{
+        listen: 'beforeQuery',
+        script: {
+          exec: [
+            "pm.require('@team/protocol-tools');",
+            "require('jsr:@scope/protocol@1.0.0');"
+          ]
+        }
+      }],
+      request: {
+        method: 'POST',
+        url: 'https://api.example.test/graphql',
+        body: {
+          mode: 'graphql',
+          graphql: { query: '{ ok }', variables: '{}', operationName: '' }
+        }
+      }
+    }]
+  });
+  const metadata = JSON.parse(collection.variables.find((variable) => variable.key === 'postman.packageReferences').value);
+
+  assert.deepEqual(metadata.map((item) => item.specifier), ['@team/protocol-tools', 'jsr:@scope/protocol@1.0.0']);
+});
+
+test('preserves imported Postman local mock scripts and saved example IDs', () => {
+  const collection = importPostmanCollection({
+    info: {
+      name: 'Postman Mock Scripts',
+      schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
+    },
+    event: [{
+      listen: 'mock',
+      script: {
+        exec: [
+          "const count = await pm.state.increment('count');",
+          "if (pm.mock.matchRequest('mock-request', req)) {",
+          "  pm.mock.sendExample('mock-example', res);",
+          "}"
+        ]
+      }
+    }],
+    item: [{
+      id: 'mock-request',
+      name: 'Mock request',
+      request: {
+        method: 'GET',
+        url: 'https://api.example.test/users/:id'
+      },
+      response: [{
+        id: 'mock-example',
+        name: 'Mock example',
+        code: 200,
+        body: '{"ok":true}'
+      }]
+    }]
+  });
+
+  assert.match(collection.requests[0].scripts.mock, /pm\.state\.increment/);
+  assert.match(collection.requests[0].scripts.mock, /pm\.mock\.sendExample/);
+  assert.equal(collection.requests[0].examples[0].id, 'mock-example');
+});
+
+test('round-trips Postman hierarchy scripts, IDs, variables, certificates, protocol metadata, and file body references', () => {
+  const collection = importPostmanCollection({
+    info: {
+      name: 'Round Trip',
+      schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json',
+      _postman_id: 'collection-postman-id',
+      description: { content: 'Collection description', type: 'text/plain' }
+    },
+    auth: {
+      type: 'bearer',
+      bearer: [{ key: 'token', value: '{{token}}', type: 'string' }]
+    },
+    variable: [{ key: 'token', value: 'initial', type: 'secret', description: 'token description' }],
+    certificate: [{
+      id: 'certificate-postman-id',
+      name: 'mTLS cert',
+      matches: ['https://api.example.test/*'],
+      cert: { src: '/tmp/client.crt' },
+      key: { src: '/tmp/client.key' },
+      passphrase: '{{certPassphrase}}'
+    }],
+    cookieDomainWhitelist: ['api.example.test'],
+    vaultAccess: { secrets: [{ key: 'token' }] },
+    visualizerAssets: [{ name: 'chartjs', src: 'postman://asset/chartjs' }],
+    mockState: { count: 1 },
+    item: [{
+      id: 'folder-postman-id',
+      name: 'Folder',
+      event: [{
+        listen: 'prerequest',
+        script: { type: 'text/javascript', exec: ['pm.collectionVariables.set("folder", "yes");'] }
+      }],
+      variable: [{ key: 'folderVariable', value: 'folder-value', type: 'string' }],
+      auth: {
+        type: 'basic',
+        basic: [
+          { key: 'username', value: 'user' },
+          { key: 'password', value: '{{password}}' }
+        ]
+      },
+      item: [{
+        id: 'request-postman-id',
+        name: 'Upload',
+        event: [{
+          listen: 'test',
+          script: { type: 'text/javascript', exec: ['pm.test("uploaded", function () {', '  pm.expect(pm.response.code).to.equal(201);', '});'] }
+        }],
+        protocol: 'graphql',
+        request: {
+          method: 'POST',
+          url: {
+            raw: 'https://api.example.test/upload?trace=1',
+            protocol: 'https',
+            host: ['api', 'example', 'test'],
+            path: ['upload'],
+            query: [{ key: 'trace', value: '1', description: 'trace flag' }]
+          },
+          header: [{ key: 'X-Trace', value: 'yes', description: 'trace header' }],
+          auth: {
+            type: 'apikey',
+            apikey: [
+              { key: 'in', value: 'header' },
+              { key: 'key', value: 'X-Api-Key' },
+              { key: 'value', value: '{{apiKey}}' }
+            ]
+          },
+          variable: [{ key: 'requestVariable', value: 'request-value', type: 'string' }],
+          body: {
+            mode: 'formdata',
+            formdata: [{
+              key: 'payload',
+              type: 'file',
+              src: '/tmp/payload.json',
+              contentType: 'application/json'
+            }]
+          },
+          protocolProfileBehavior: { disableBodyPruning: true },
+          graphql: { query: 'query Upload { ok }', variables: '{}', operationName: 'Upload' }
+        },
+        response: [{
+          id: 'example-postman-id',
+          name: 'Created',
+          code: 201,
+          status: 'Created',
+          header: [{ key: 'Content-Type', value: 'application/json' }],
+          body: '{"ok":true}'
+        }]
+      }]
+    }, {
+      id: 'caller-postman-id',
+      name: 'Caller',
+      event: [{
+        listen: 'prerequest',
+        script: { type: 'text/javascript', exec: ["pm.execution.runRequest('request-postman-id');"] }
+      }],
+      request: {
+        method: 'GET',
+        url: 'https://api.example.test/caller'
+      }
+    }]
+  });
+
+  assert.equal(collection.id, 'collection-postman-id');
+  assert.equal(collection.postman.itemOrder[0].id, 'folder-postman-id');
+  assert.equal(collection.postman.bindings.cookieDomainWhitelist[0], 'api.example.test');
+  assert.equal(collection.folders[0].id, 'folder-postman-id');
+  assert.equal(collection.folders[0].postman.events[0].listen, 'prerequest');
+  assert.equal(collection.folders[0].postman.variables[0].type, 'string');
+  const request = collection.folders[0].requests[0];
+  assert.equal(request.id, 'request-postman-id');
+  assert.equal(request.postman.events[0].script.type, 'text/javascript');
+  assert.equal(request.postman.fileReferences[0].src, '/tmp/payload.json');
+  assert.equal(request.postmanBody.mode, 'formdata');
+  assert.equal(request.examples[0].id, 'example-postman-id');
+  assert.equal(collection.certificates[0].id, 'certificate-postman-id');
+
+  const exported = exportPostmanCollection(collection);
+  assert.equal(exported.info._postman_id, 'collection-postman-id');
+  assert.equal(exported.item[0].id, 'folder-postman-id');
+  assert.equal(exported.item[0].event[0].script.exec[0], 'pm.collectionVariables.set("folder", "yes");');
+  assert.equal(exported.item[0].variable[0].type, 'string');
+  assert.equal(exported.item[0].item[0].id, 'request-postman-id');
+  assert.equal(exported.item[0].item[0].event[0].script.type, 'text/javascript');
+  assert.equal(exported.item[0].item[0].request.body.mode, 'formdata');
+  assert.equal(exported.item[0].item[0].request.body.formdata[0].src, '/tmp/payload.json');
+  assert.equal(exported.item[0].item[0].request.protocolProfileBehavior.disableBodyPruning, true);
+  assert.equal(exported.item[0].item[0].response[0].id, 'example-postman-id');
+  assert.equal(exported.item[1].id, 'caller-postman-id');
+  assert.equal(exported.variable[0].type, 'secret');
+  assert.equal(exported.certificate[0].id, 'certificate-postman-id');
+  assert.equal(exported.cookieDomainWhitelist[0], 'api.example.test');
+  assert.equal(exported.vaultAccess.secrets[0].key, 'token');
+  assert.equal(exported.visualizerAssets[0].name, 'chartjs');
+});
+
+test('imports the real-world Postman script compatibility corpus without losing obscure metadata', () => {
+  const fixture = JSON.parse(fs.readFileSync(
+    path.join(__dirname, '../fixtures/postman/real-world-import-corpus.collection.json'),
+    'utf8'
+  ));
+  const collection = importPostmanCollection(fixture);
+  const requests = [];
+  walkRequests(collection, (request) => requests.push(request));
+  const byName = new Map(requests.map((request) => [request.name, request]));
+  const packageReferences = JSON.parse(collection.variables.find((variable) => variable.key === 'postman.packageReferences').value);
+
+  assert.equal(collection.id, 'real-world-import-corpus');
+  assert.equal(collection.postman.bindings.cookieDomainWhitelist[0], 'api.example.test');
+  assert.equal(collection.postman.bindings.vaultAccess.secrets[0].key, 'apiToken');
+  assert.equal(collection.postman.bindings.visualizerAssets[0].name, 'mini-chart');
+  assert.equal(collection.certificates[0].id, 'mtls-certificate-id');
+  assert.deepEqual(
+    packageReferences.map((item) => item.specifier).sort(),
+    ['@team/auth-tools', 'jsr:@scope/audit@1.0.0', 'npm:@scope/signing@1.0.0']
+  );
+
+  assert.match(byName.get('OAuth Token Bootstrap').scripts.preRequest, /pm\.vault\.get\('apiToken'\)/);
+  assert.match(byName.get('OAuth Token Bootstrap').scripts.tests, /pm\.visualizer\.set/);
+  assert.equal(byName.get('Cookie And Dynamic Variables').variables.some((variable) => variable.key === 'postman.cookies'), true);
+  assert.equal(byName.get('GraphQL Account Lookup').protocol, 'graphql');
+  assert.match(byName.get('GraphQL Account Lookup').scripts.beforeQuery, /X-GraphQL-Before/);
+  assert.equal(byName.get('gRPC Stream Account Events').protocol, 'grpc');
+  assert.equal(byName.get('gRPC Stream Account Events').methodPath, 'accounts.AccountService/StreamEvents');
+  assert.match(byName.get('Mock Account').scripts.mock, /pm\.state\.increment/);
+  assert.match(byName.get('RunRequest Caller').scripts.tests, /run-request-target-id/);
+  assert.equal(byName.get('File Upload Binding').postman.fileReferences[0].src, '/Users/example/fixtures/upload.json');
+  assert.equal(byName.get('Binary Body Binding').postman.fileReferences[0].src, '/Users/example/fixtures/blob.bin');
+
+  const exported = exportPostmanCollection(collection);
+  assert.equal(exported.info._postman_id, 'real-world-import-corpus');
+  assert.equal(exported.cookieDomainWhitelist[1], '.example.test');
+  assert.equal(exported.vaultAccess.secrets[1].key, 'clientSecret');
+  assert.equal(exported.visualizerAssets[0].name, 'mini-chart');
+  assert.equal(exported.certificate[0].id, 'mtls-certificate-id');
+});
+
+test('resolves imported Postman request IDs after workspace import regenerates model IDs', async () => {
+  const collection = importCollectionFromContent(JSON.stringify({
+    info: {
+      name: 'RunRequest aliases',
+      schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json',
+      _postman_id: 'collection-alias-id'
+    },
+    item: [{
+      id: 'caller-postman-id',
+      name: 'Caller',
+      event: [{
+        listen: 'prerequest',
+        script: {
+          exec: [
+            "pm.test('caller keeps Postman info id', function () { pm.expect(pm.info.requestId).to.equal('caller-postman-id'); });",
+            "pm.execution.runRequest('target-postman-id').then(function (response) {",
+            "  pm.environment.set('runRequestStatus', String(response.code));",
+            "  pm.execution.setNextRequest('target-postman-id');",
+            "});"
+          ]
+        }
+      }],
+      request: { method: 'GET', url: 'https://api.example.test/caller' }
+    }, {
+      id: 'middle-postman-id',
+      name: 'Middle',
+      event: [{
+        listen: 'test',
+        script: { exec: ["pm.environment.set('middleVisited', 'yes');"] }
+      }],
+      request: { method: 'GET', url: 'https://api.example.test/middle' }
+    }, {
+      id: 'target-postman-id',
+      name: 'Target',
+      event: [{
+        listen: 'test',
+        script: { exec: ["pm.environment.set('targetVisited', pm.info.requestId);"] }
+      }],
+      request: { method: 'GET', url: 'https://api.example.test/target' }
+    }]
+  }));
+
+  assert.notEqual(collection.requests[0].id, 'caller-postman-id');
+  assert.equal(collection.requests[0].postman.ids.original, 'caller-postman-id');
+
+  const result = await runCollection(collection, { id: 'env', name: 'Env', variables: [] }, {
+    sendRequest: async (request) => ({
+      statusCode: 200,
+      headers: {},
+      body: JSON.stringify({ url: request.url }),
+      durationMillis: 1,
+      responseBytes: 2,
+      finalUrl: request.url,
+      updatedCookies: []
+    })
+  });
+
+  const envValue = (name) => result.environment.variables.find((variable) => variable.key === name)?.value;
+  assert.equal(envValue('runRequestStatus'), '200');
+  assert.equal(envValue('targetVisited'), 'target-postman-id');
+  assert.equal(envValue('middleVisited'), undefined);
+  assert.equal(result.results.map((item) => item.requestName).join(','), 'Caller,Target');
+  assert.equal(result.results[0].preRequestScriptResult.tests[0].passed, true);
+});
+
+test('preserves mixed Postman item order even when items have no exported IDs or names', () => {
+  const collection = importPostmanCollection({
+    info: {
+      name: 'Nameless Order',
+      schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
+    },
+    item: [{
+      item: [{
+        request: {
+          method: 'GET',
+          url: 'https://api.example.test/folder-child'
+        }
+      }]
+    }, {
+      request: {
+        method: 'GET',
+        url: 'https://api.example.test/top-level'
+      }
+    }]
+  });
+  const exported = exportPostmanCollection(collection);
+
+  assert.equal(exported.item[0].name, 'Imported Folder');
+  assert.ok(Array.isArray(exported.item[0].item));
+  assert.equal(exported.item[1].name, 'Imported Request');
 });

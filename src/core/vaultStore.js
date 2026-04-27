@@ -44,6 +44,10 @@ class MemoryVaultStore {
   async listMetadata() {
     return [...this.secrets.keys()].sort().map((key) => ({ key }));
   }
+
+  async listAudit() {
+    return [];
+  }
 }
 
 class EncryptedVaultStore {
@@ -106,6 +110,12 @@ class EncryptedVaultStore {
     return Object.entries(document.secrets)
       .map(([key, entry]) => ({ key, updatedAt: entry.updatedAt || '' }))
       .sort((left, right) => left.key.localeCompare(right.key));
+  }
+
+  async listAudit() {
+    this.assertAvailable();
+    const document = await this.load();
+    return (document.audit || []).slice(-MAX_VAULT_AUDIT_ENTRIES).map((entry) => ({ ...entry }));
   }
 
   assertAvailable() {

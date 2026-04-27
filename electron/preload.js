@@ -77,6 +77,12 @@ contextBridge.exposeInMainWorld('postmeter', {
       return () => ipcRenderer.removeListener('oauth:progress', listener);
     }
   },
+  vault: {
+    bindSecret: (key, value) => ipcRenderer.invoke('vault:bind-secret', key, value),
+    metadata: () => ipcRenderer.invoke('vault:metadata'),
+    reset: () => ipcRenderer.invoke('vault:reset'),
+    unsetSecret: (key) => ipcRenderer.invoke('vault:unset-secret', key)
+  },
   loadTest: {
     start: (id, request, environment, config) => ipcRenderer.invoke('load:start', id, request, environment, config),
     cancel: (id) => ipcRenderer.invoke('load:cancel', id),

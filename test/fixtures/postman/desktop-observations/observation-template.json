@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "rowIds": [],
+  "postman": {
+    "app": "Postman Desktop",
+    "version": "",
+    "platform": "",
+    "observedAt": ""
+  },
+  "sourceRefs": [],
+  "fixture": {
+    "name": "",
+    "setup": [],
+    "steps": [],
+    "artifacts": []
+  },
+  "observed": {
+    "testResults": [],
+    "console": [],
+    "variables": [],
+    "cookies": [],
+    "requestMutations": [],
+    "responses": [],
+    "errors": [],
+    "prompts": []
+  },
+  "notes": ""
+}

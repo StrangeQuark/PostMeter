@@ -26,6 +26,12 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      - name: Postman parity matrix validation
+        run: npm run postman:parity:validate
+
+      - name: Sandbox release gate manifest
+        run: npm run release:gate
+
       - name: Audit high severity
         run: npm audit --audit-level=high
 
@@ -34,6 +40,9 @@ jobs:
 
       - name: Sandbox runtime validation
         run: npm run sandbox:validate
+
+      - name: OS sandbox platform matrix validation
+        run: npm run sandbox:platform:validate
 
       - name: Startup smoke
         run: xvfb-run -a npm run test:smoke

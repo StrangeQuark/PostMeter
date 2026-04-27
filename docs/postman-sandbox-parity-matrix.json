@@ -1,0 +1,6148 @@
+{
+  "schemaVersion": 1,
+  "generatedFrom": "src/core/postmanParityMatrix.js",
+  "generatedAtPolicy": "Deterministic. Regenerate with npm run postman:parity:write.",
+  "target": {
+    "postmanDocsVersion": "Latest (v12)",
+    "newman": "6.2.2",
+    "claim": "Full Postman script import parity requires zero unsupported rows in default import mode."
+  },
+  "sources": {
+    "sandboxOverview": {
+      "title": "Postman Sandbox API reference",
+      "url": "https://learning.postman.com/docs/tests-and-scripts/write-scripts/postman-sandbox-reference/overview/"
+    },
+    "scriptRunOrder": {
+      "title": "Use scripts to add logic and tests to Postman requests",
+      "url": "https://learning.postman.com/docs/postman/scripts/intro-to-scripts/"
+    },
+    "variables": {
+      "title": "Reference variables in Postman scripts",
+      "url": "https://learning.postman.com/docs/tests-and-scripts/write-scripts/postman-sandbox-reference/pm-variables/"
+    },
+    "dynamicVariables": {
+      "title": "Use dynamic variables to return randomly generated data",
+      "url": "https://learning.postman.com/docs/tests-and-scripts/write-scripts/variables-list/"
+    },
+    "vault": {
+      "title": "Reference vault secrets in Postman scripts",
+      "url": "https://learning.postman.com/docs/tests-and-scripts/write-scripts/postman-sandbox-reference/pm-vault/"
+    },
+    "cookies": {
+      "title": "Access cookies in Postman scripts",
+      "url": "https://learning.postman.com/docs/tests-and-scripts/write-scripts/postman-sandbox-reference/pm-cookies/"
+    },
+    "request": {
+      "title": "Reference Postman requests in scripts",
+      "url": "https://learning.postman.com/docs/tests-and-scripts/write-scripts/postman-sandbox-reference/pm-request/"
+    },
+    "response": {
+      "title": "Reference Postman responses in scripts",
+      "url": "https://learning.postman.com/docs/tests-and-scripts/write-scripts/postman-sandbox-reference/pm-response/"
+    },
+    "sendRequest": {
+      "title": "Use scripts to send requests in Postman",
+      "url": "https://learning.postman.com/docs/tests-and-scripts/write-scripts/postman-sandbox-reference/pm-send-request/"
+    },
+    "visualizer": {
+      "title": "Script Postman visualizations",
+      "url": "https://learning.postman.com/docs/tests-and-scripts/write-scripts/postman-sandbox-reference/pm-visualizer/"
+    },
+    "testExpect": {
+      "title": "Writing tests and assertions in scripts",
+      "url": "https://learning.postman.com/docs/tests-and-scripts/write-scripts/postman-sandbox-reference/pm-test-expect/"
+    },
+    "require": {
+      "title": "Import packages into your scripts",
+      "url": "https://learning.postman.com/docs/tests-and-scripts/write-scripts/postman-sandbox-reference/pm-require/"
+    },
+    "execution": {
+      "title": "Use scripts in collection runs",
+      "url": "https://learning.postman.com/docs/tests-and-scripts/write-scripts/postman-sandbox-reference/pm-execution/"
+    },
+    "workflows": {
+      "title": "Customize request order in a collection run",
+      "url": "https://learning.postman.com/docs/collections/running-collections/building-workflows/"
+    },
+    "message": {
+      "title": "Reference message data in scripts",
+      "url": "https://learning.postman.com/docs/tests-and-scripts/write-scripts/postman-sandbox-reference/pm-message/"
+    },
+    "info": {
+      "title": "Reference request metadata in scripts",
+      "url": "https://learning.postman.com/docs/tests-and-scripts/write-scripts/postman-sandbox-reference/pm-info/"
+    },
+    "mock": {
+      "title": "Reference requests and examples in local mock servers",
+      "url": "https://learning.postman.com/docs/tests-and-scripts/write-scripts/postman-sandbox-reference/pm-mock/"
+    },
+    "state": {
+      "title": "Persist state across requests in local mock servers",
+      "url": "https://learning.postman.com/docs/tests-and-scripts/write-scripts/postman-sandbox-reference/pm-state/"
+    },
+    "grpcScripts": {
+      "title": "Test and debug values in gRPC requests using JavaScript in Postman",
+      "url": "https://learning.postman.com/docs/sending-requests/grpc/scripting-in-grpc-request/"
+    },
+    "grpcInterface": {
+      "title": "The gRPC client interface",
+      "url": "https://learning.postman.com/docs/sending-requests/grpc/grpc-request-interface/"
+    },
+    "graphqlHttp": {
+      "title": "Make a GraphQL call with an HTTP request",
+      "url": "https://learning.postman.com/docs/sending-requests/graphql/graphql-http/"
+    },
+    "websocketRequests": {
+      "title": "Send WebSocket requests with Postman",
+      "url": "https://learning.postman.com/docs/sending-requests/websocket/websocket-overview/"
+    }
+  },
+  "fixtures": {
+    "newman-sandbox-v1": {
+      "type": "postmeter-golden",
+      "collection": "test/fixtures/postman/newman-sandbox-v1.collection.json",
+      "iterationData": "test/fixtures/postman/newman-sandbox-v1.iteration-data.json",
+      "expected": "test/fixtures/postman/newman-sandbox-v1.expected.json",
+      "notes": "Existing importer and collection-runner corpus for the brokered HTTP sandbox subset."
+    },
+    "newman-cancellation": {
+      "type": "postmeter-golden",
+      "collection": "test/fixtures/postman/newman-cancellation.collection.json",
+      "notes": "Cancellation fixture for pending async sandbox work."
+    },
+    "differential-http-core": {
+      "type": "postmeter-newman-differential",
+      "collection": "test/fixtures/postman/differential-http-core.collection.json",
+      "notes": "HTTP-only fixture intentionally limited to APIs supported by both PostMeter and Newman."
+    },
+    "protocol-script-hooks": {
+      "type": "postmeter-golden",
+      "collection": "test/fixtures/postman/protocol-script-hooks.collection.json",
+      "notes": "GraphQL Before query/After response and gRPC Before invoke/On message/After response fixture for imported protocol scripts."
+    },
+    "local-mock-scripts": {
+      "type": "postmeter-golden",
+      "collection": "test/fixtures/postman/local-mock-scripts.collection.json",
+      "notes": "Local mock script fixture covering pm.mock matching, saved examples, path variables, async pm.state, and imported mock script events."
+    },
+    "websocket-script-audit": {
+      "type": "source-audit",
+      "path": "test/fixtures/postman/desktop-observations/websocket-script-support-audit.json",
+      "notes": "Current official-docs audit recording that WebSocket and Socket.IO request docs do not expose saved/exported script hooks."
+    },
+    "desktop-observation-template": {
+      "type": "desktop-observation-template",
+      "path": "test/fixtures/postman/desktop-observations/observation-template.json",
+      "notes": "Template for manually recorded Postman Desktop observations for non-Newman surfaces."
+    },
+    "real-world-import-corpus": {
+      "type": "postmeter-real-world-style-corpus",
+      "collection": "test/fixtures/postman/real-world-import-corpus.collection.json",
+      "notes": "Broad Postman import corpus covering auth-heavy scripts, reviewed package references, dynamic variables, cookies, visualizers, vault metadata, GraphQL, gRPC, local mocks, runRequest workflows, and file/binary body references."
+    },
+    "adversarial-sandbox-v1": {
+      "type": "postmeter-adversarial-tests",
+      "path": "test/electron/postmanSandboxAdversarial.test.js",
+      "notes": "Security regression tests for constructor/prototype escape, dynamic code confinement, package-loader abuse, broker mutation, raw host access, visualizer isolation, mock-state abuse, protocol-stream floods, oversized output, and infinite async work."
+    }
+  },
+  "statuses": {
+    "implemented": "Implemented for the documented row and covered by at least one fixture.",
+    "partial": "Partially implemented; fixture coverage may only prove the currently supported subset.",
+    "not-started": "Required by the contract but not implemented yet.",
+    "intentional-strict-gap": "Intentionally stricter than Postman for security or product-scope reasons; full parity cannot be claimed while active in default mode.",
+    "needs-desktop-observation": "Needs current Postman Desktop behavior capture before implementation can be considered compatible.",
+    "needs-source-audit": "Needs an official-source audit before implementation scope is final."
+  },
+  "rows": [
+    {
+      "id": "assertion.pm.expect.basic",
+      "area": "tests-assertions",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.expect.basic",
+      "status": "implemented",
+      "sourceRefs": [
+        "testExpect",
+        "response"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-facade",
+      "notes": ""
+    },
+    {
+      "id": "assertion.pm.expect.deep",
+      "area": "tests-assertions",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.expect.deep",
+      "status": "implemented",
+      "sourceRefs": [
+        "testExpect",
+        "response"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-facade",
+      "notes": ""
+    },
+    {
+      "id": "assertion.pm.expect.members",
+      "area": "tests-assertions",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.expect.members",
+      "status": "implemented",
+      "sourceRefs": [
+        "testExpect",
+        "response"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-facade",
+      "notes": ""
+    },
+    {
+      "id": "assertion.pm.expect.negation",
+      "area": "tests-assertions",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.expect.negation",
+      "status": "implemented",
+      "sourceRefs": [
+        "testExpect",
+        "response"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-facade",
+      "notes": ""
+    },
+    {
+      "id": "assertion.pm.expect.throw",
+      "area": "tests-assertions",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.expect.throw",
+      "status": "implemented",
+      "sourceRefs": [
+        "testExpect",
+        "response"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-facade",
+      "notes": ""
+    },
+    {
+      "id": "assertion.pm.response.to.have.body",
+      "area": "tests-assertions",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.response.to.have.body",
+      "status": "implemented",
+      "sourceRefs": [
+        "testExpect",
+        "response"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-facade",
+      "notes": ""
+    },
+    {
+      "id": "assertion.pm.response.to.have.header",
+      "area": "tests-assertions",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.response.to.have.header",
+      "status": "implemented",
+      "sourceRefs": [
+        "testExpect",
+        "response"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-facade",
+      "notes": ""
+    },
+    {
+      "id": "assertion.pm.response.to.have.jsonBody",
+      "area": "tests-assertions",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.response.to.have.jsonBody",
+      "status": "implemented",
+      "sourceRefs": [
+        "testExpect",
+        "response"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-facade",
+      "notes": ""
+    },
+    {
+      "id": "assertion.pm.response.to.have.jsonSchema",
+      "area": "tests-assertions",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.response.to.have.jsonSchema",
+      "status": "implemented",
+      "sourceRefs": [
+        "response"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-facade",
+      "notes": ""
+    },
+    {
+      "id": "assertion.pm.response.to.have.status",
+      "area": "tests-assertions",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.response.to.have.status",
+      "status": "implemented",
+      "sourceRefs": [
+        "testExpect",
+        "response"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-facade",
+      "notes": ""
+    },
+    {
+      "id": "cookies.current.get",
+      "area": "cookies",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.cookies.get",
+      "status": "implemented",
+      "sourceRefs": [
+        "cookies"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "brokered",
+      "notes": ""
+    },
+    {
+      "id": "cookies.current.has",
+      "area": "cookies",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.cookies.has",
+      "status": "implemented",
+      "sourceRefs": [
+        "cookies"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "brokered",
+      "notes": ""
+    },
+    {
+      "id": "cookies.current.set",
+      "area": "cookies",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.cookies.set",
+      "status": "implemented",
+      "sourceRefs": [
+        "cookies"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "brokered",
+      "notes": ""
+    },
+    {
+      "id": "cookies.current.toObject",
+      "area": "cookies",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.cookies.toObject",
+      "status": "implemented",
+      "sourceRefs": [
+        "cookies"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "brokered",
+      "notes": ""
+    },
+    {
+      "id": "cookies.current.unset",
+      "area": "cookies",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.cookies.unset",
+      "status": "implemented",
+      "sourceRefs": [
+        "cookies"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "brokered",
+      "notes": ""
+    },
+    {
+      "id": "cookies.httponly-parity",
+      "area": "cookies",
+      "claimScope": "default-import",
+      "kind": "behavior",
+      "target": "HttpOnly script readability and mutation parity",
+      "status": "needs-desktop-observation",
+      "sourceRefs": [
+        "cookies"
+      ],
+      "fixtureRefs": [
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unknown",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "intentional-strict-review",
+      "notes": ""
+    },
+    {
+      "id": "cookies.jar.clear",
+      "area": "cookies",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.cookies.jar().clear",
+      "status": "implemented",
+      "sourceRefs": [
+        "cookies"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "brokered",
+      "notes": ""
+    },
+    {
+      "id": "cookies.jar.get",
+      "area": "cookies",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.cookies.jar().get",
+      "status": "implemented",
+      "sourceRefs": [
+        "cookies"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "brokered",
+      "notes": ""
+    },
+    {
+      "id": "cookies.jar.getAll",
+      "area": "cookies",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.cookies.jar().getAll",
+      "status": "implemented",
+      "sourceRefs": [
+        "cookies"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "brokered",
+      "notes": ""
+    },
+    {
+      "id": "cookies.jar.set-cookie-object",
+      "area": "cookies",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.cookies.jar().set-cookie-object",
+      "status": "implemented",
+      "sourceRefs": [
+        "cookies"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "brokered",
+      "notes": ""
+    },
+    {
+      "id": "cookies.jar.set-string",
+      "area": "cookies",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.cookies.jar().set-string",
+      "status": "implemented",
+      "sourceRefs": [
+        "cookies"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "brokered",
+      "notes": ""
+    },
+    {
+      "id": "cookies.jar.unset",
+      "area": "cookies",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.cookies.jar().unset",
+      "status": "implemented",
+      "sourceRefs": [
+        "cookies"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "brokered",
+      "notes": ""
+    },
+    {
+      "id": "dynamic.business",
+      "area": "dynamic-variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "Dynamic variables: business",
+      "status": "implemented",
+      "sourceRefs": [
+        "dynamicVariables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "deterministic-facade",
+      "notes": ""
+    },
+    {
+      "id": "dynamic.catchphrases",
+      "area": "dynamic-variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "Dynamic variables: catchphrases",
+      "status": "implemented",
+      "sourceRefs": [
+        "dynamicVariables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "deterministic-facade",
+      "notes": ""
+    },
+    {
+      "id": "dynamic.common",
+      "area": "dynamic-variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "Dynamic variables: common",
+      "status": "implemented",
+      "sourceRefs": [
+        "dynamicVariables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "deterministic-facade",
+      "notes": ""
+    },
+    {
+      "id": "dynamic.databases",
+      "area": "dynamic-variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "Dynamic variables: databases",
+      "status": "implemented",
+      "sourceRefs": [
+        "dynamicVariables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "deterministic-facade",
+      "notes": ""
+    },
+    {
+      "id": "dynamic.dates",
+      "area": "dynamic-variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "Dynamic variables: dates",
+      "status": "implemented",
+      "sourceRefs": [
+        "dynamicVariables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "deterministic-facade",
+      "notes": ""
+    },
+    {
+      "id": "dynamic.domains-emails-usernames",
+      "area": "dynamic-variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "Dynamic variables: domains-emails-usernames",
+      "status": "implemented",
+      "sourceRefs": [
+        "dynamicVariables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "deterministic-facade",
+      "notes": ""
+    },
+    {
+      "id": "dynamic.files-directories",
+      "area": "dynamic-variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "Dynamic variables: files-directories",
+      "status": "implemented",
+      "sourceRefs": [
+        "dynamicVariables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "deterministic-facade",
+      "notes": ""
+    },
+    {
+      "id": "dynamic.finance",
+      "area": "dynamic-variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "Dynamic variables: finance",
+      "status": "implemented",
+      "sourceRefs": [
+        "dynamicVariables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "deterministic-facade",
+      "notes": ""
+    },
+    {
+      "id": "dynamic.grammar",
+      "area": "dynamic-variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "Dynamic variables: grammar",
+      "status": "implemented",
+      "sourceRefs": [
+        "dynamicVariables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "deterministic-facade",
+      "notes": ""
+    },
+    {
+      "id": "dynamic.images",
+      "area": "dynamic-variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "Dynamic variables: images",
+      "status": "implemented",
+      "sourceRefs": [
+        "dynamicVariables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "deterministic-facade",
+      "notes": ""
+    },
+    {
+      "id": "dynamic.internet-ip",
+      "area": "dynamic-variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "Dynamic variables: internet-ip",
+      "status": "implemented",
+      "sourceRefs": [
+        "dynamicVariables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "deterministic-facade",
+      "notes": ""
+    },
+    {
+      "id": "dynamic.lorem-ipsum",
+      "area": "dynamic-variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "Dynamic variables: lorem-ipsum",
+      "status": "implemented",
+      "sourceRefs": [
+        "dynamicVariables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "deterministic-facade",
+      "notes": ""
+    },
+    {
+      "id": "dynamic.names",
+      "area": "dynamic-variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "Dynamic variables: names",
+      "status": "implemented",
+      "sourceRefs": [
+        "dynamicVariables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "deterministic-facade",
+      "notes": ""
+    },
+    {
+      "id": "dynamic.phone-address-location",
+      "area": "dynamic-variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "Dynamic variables: phone-address-location",
+      "status": "implemented",
+      "sourceRefs": [
+        "dynamicVariables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "deterministic-facade",
+      "notes": ""
+    },
+    {
+      "id": "dynamic.profession",
+      "area": "dynamic-variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "Dynamic variables: profession",
+      "status": "implemented",
+      "sourceRefs": [
+        "dynamicVariables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "deterministic-facade",
+      "notes": ""
+    },
+    {
+      "id": "dynamic.stores",
+      "area": "dynamic-variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "Dynamic variables: stores",
+      "status": "implemented",
+      "sourceRefs": [
+        "dynamicVariables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "deterministic-facade",
+      "notes": ""
+    },
+    {
+      "id": "dynamic.text-numbers-colors",
+      "area": "dynamic-variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "Dynamic variables: text-numbers-colors",
+      "status": "implemented",
+      "sourceRefs": [
+        "dynamicVariables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "deterministic-facade",
+      "notes": ""
+    },
+    {
+      "id": "execution.location",
+      "area": "execution",
+      "claimScope": "default-import",
+      "kind": "property",
+      "target": "pm.execution.location",
+      "status": "implemented",
+      "sourceRefs": [
+        "execution",
+        "workflows"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "brokered",
+      "notes": ""
+    },
+    {
+      "id": "execution.location.current",
+      "area": "execution",
+      "claimScope": "default-import",
+      "kind": "property",
+      "target": "pm.execution.location.current",
+      "status": "implemented",
+      "sourceRefs": [
+        "execution",
+        "workflows"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "brokered",
+      "notes": ""
+    },
+    {
+      "id": "execution.runRequest",
+      "area": "execution",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.execution.runRequest",
+      "status": "implemented",
+      "sourceRefs": [
+        "execution",
+        "workflows"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "brokered",
+      "notes": ""
+    },
+    {
+      "id": "execution.setNextRequest",
+      "area": "execution",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.execution.setNextRequest",
+      "status": "implemented",
+      "sourceRefs": [
+        "execution",
+        "workflows"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "brokered",
+      "notes": ""
+    },
+    {
+      "id": "execution.skipRequest",
+      "area": "execution",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.execution.skipRequest",
+      "status": "implemented",
+      "sourceRefs": [
+        "execution",
+        "workflows"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "brokered",
+      "notes": ""
+    },
+    {
+      "id": "global.abortcontroller",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "AbortController",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.abortsignal",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "AbortSignal",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.aggregateerror",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "AggregateError",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.array",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "Array",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.arraybuffer",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "ArrayBuffer",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.atob",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "atob",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.atomics",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "Atomics",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.bigint",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "BigInt",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.bigint64array",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "BigInt64Array",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.biguint64array",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "BigUint64Array",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.blob",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "Blob",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.boolean",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "Boolean",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.btoa",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "btoa",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.bytelengthqueuingstrategy",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "ByteLengthQueuingStrategy",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.compressionstream",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "CompressionStream",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.countqueuingstrategy",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "CountQueuingStrategy",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.crypto-constructor",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "Crypto",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.crypto-property",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "crypto",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.cryptokey",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "CryptoKey",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.dataview",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "DataView",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.date",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "Date",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.decodeuri",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "decodeURI",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.decodeuricomponent",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "decodeURIComponent",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.decompressionstream",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "DecompressionStream",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.domexception",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "DOMException",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.encodeuri",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "encodeURI",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.encodeuricomponent",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "encodeURIComponent",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.error",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "Error",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.escape",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "escape",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.evalerror",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "EvalError",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.event",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "Event",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.eventtarget",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "EventTarget",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.file",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "File",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.float32array",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "Float32Array",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.float64array",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "Float64Array",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.function",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "Function",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "dynamic-code-review",
+      "notes": ""
+    },
+    {
+      "id": "global.infinity",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "Infinity",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.int16array",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "Int16Array",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.int32array",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "Int32Array",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.int8array",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "Int8Array",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.intl",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "Intl",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.isfinite",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "isFinite",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.isnan",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "isNaN",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.json",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "JSON",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.map",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "Map",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.math",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "Math",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.nan",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "NaN",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.number",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "Number",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.object",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "Object",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.parsefloat",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "parseFloat",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.parseint",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "parseInt",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.promise",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "Promise",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.proxy",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "Proxy",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.queuemicrotask",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "queueMicrotask",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.rangeerror",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "RangeError",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.readablebytestreamcontroller",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "ReadableByteStreamController",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.readablestream",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "ReadableStream",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.readablestreambyobreader",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "ReadableStreamBYOBReader",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.readablestreambyobrequest",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "ReadableStreamBYOBRequest",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.readablestreamdefaultcontroller",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "ReadableStreamDefaultController",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.readablestreamdefaultreader",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "ReadableStreamDefaultReader",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.referenceerror",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "ReferenceError",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.reflect",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "Reflect",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.regexp",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "RegExp",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.set",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "Set",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.sharedarraybuffer",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "SharedArrayBuffer",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.string",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "String",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.structuredclone",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "structuredClone",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.subtlecrypto",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "SubtleCrypto",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.symbol",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "Symbol",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.syntaxerror",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "SyntaxError",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.textdecoder",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "TextDecoder",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.textdecoderstream",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "TextDecoderStream",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.textencoder",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "TextEncoder",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.textencoderstream",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "TextEncoderStream",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.transformstream",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "TransformStream",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.transformstreamdefaultcontroller",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "TransformStreamDefaultController",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.typeerror",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "TypeError",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.uint16array",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "Uint16Array",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.uint32array",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "Uint32Array",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.uint8array",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "Uint8Array",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.uint8clampedarray",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "Uint8ClampedArray",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.undefined",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "undefined",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.unescape",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "unescape",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.urierror",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "URIError",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.url",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "URL",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.urlsearchparams",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "URLSearchParams",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.weakmap",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "WeakMap",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.weakset",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "WeakSet",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.writablestream",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "WritableStream",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.writablestreamdefaultcontroller",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "WritableStreamDefaultController",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.writablestreamdefaultwriter",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "global",
+      "target": "WritableStreamDefaultWriter",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "graphql.http-body",
+      "area": "graphql",
+      "claimScope": "default-import",
+      "kind": "import-surface",
+      "target": "GraphQL HTTP body, variables, and scripts",
+      "status": "implemented",
+      "sourceRefs": [
+        "graphqlHttp"
+      ],
+      "fixtureRefs": [
+        "protocol-script-hooks",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unknown",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "brokered-protocol",
+      "notes": ""
+    },
+    {
+      "id": "grpc.hook.afterResponse",
+      "area": "grpc",
+      "claimScope": "default-import",
+      "kind": "protocol-hook",
+      "target": "gRPC After response scripts",
+      "status": "implemented",
+      "sourceRefs": [
+        "grpcScripts"
+      ],
+      "fixtureRefs": [
+        "protocol-script-hooks",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "brokered-protocol",
+      "notes": ""
+    },
+    {
+      "id": "grpc.hook.beforeInvoke",
+      "area": "grpc",
+      "claimScope": "default-import",
+      "kind": "protocol-hook",
+      "target": "gRPC Before invoke scripts",
+      "status": "implemented",
+      "sourceRefs": [
+        "grpcScripts"
+      ],
+      "fixtureRefs": [
+        "protocol-script-hooks",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "brokered-protocol",
+      "notes": ""
+    },
+    {
+      "id": "grpc.hook.onMessage",
+      "area": "grpc",
+      "claimScope": "default-import",
+      "kind": "protocol-hook",
+      "target": "gRPC On message scripts",
+      "status": "implemented",
+      "sourceRefs": [
+        "grpcScripts"
+      ],
+      "fixtureRefs": [
+        "protocol-script-hooks",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "brokered-protocol",
+      "notes": ""
+    },
+    {
+      "id": "grpc.live-desktop-transport",
+      "area": "grpc",
+      "claimScope": "default-import",
+      "kind": "desktop-transport",
+      "target": "Native desktop gRPC transport execution for imported gRPC requests",
+      "status": "partial",
+      "sourceRefs": [
+        "grpcScripts",
+        "grpcInterface"
+      ],
+      "fixtureRefs": [
+        "protocol-script-hooks",
+        "desktop-observation-template",
+        "real-world-import-corpus"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "brokered-protocol",
+      "notes": ""
+    },
+    {
+      "id": "grpc.pm.message",
+      "area": "grpc",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.message",
+      "status": "implemented",
+      "sourceRefs": [
+        "message",
+        "grpcInterface"
+      ],
+      "fixtureRefs": [
+        "protocol-script-hooks",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "hardened-sdk-object",
+      "notes": ""
+    },
+    {
+      "id": "harness.adversarial-corpus",
+      "area": "verification",
+      "claimScope": "default-import",
+      "kind": "fixture",
+      "target": "Adversarial sandbox corpus is release-gated for production claim regressions.",
+      "status": "implemented",
+      "sourceRefs": [
+        "sandboxOverview"
+      ],
+      "fixtureRefs": [
+        "adversarial-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "not-applicable",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "no-host-access",
+      "notes": ""
+    },
+    {
+      "id": "harness.desktop-observation",
+      "area": "verification",
+      "claimScope": "default-import",
+      "kind": "harness",
+      "target": "Desktop-only Postman surfaces have a recording path for manual observations.",
+      "status": "implemented",
+      "sourceRefs": [
+        "vault",
+        "mock",
+        "state",
+        "grpcScripts"
+      ],
+      "fixtureRefs": [
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "process",
+      "notes": ""
+    },
+    {
+      "id": "harness.differential.newman",
+      "area": "verification",
+      "claimScope": "default-import",
+      "kind": "harness",
+      "target": "Differential runner targets newman@6.2.2 for Newman-compatible surfaces.",
+      "status": "implemented",
+      "sourceRefs": [
+        "sandboxOverview"
+      ],
+      "fixtureRefs": [
+        "differential-http-core"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "process",
+      "notes": ""
+    },
+    {
+      "id": "harness.production-claim-zero-unsupported",
+      "area": "verification",
+      "claimScope": "default-import",
+      "kind": "harness",
+      "target": "Full 1:1 Postman script compatibility claim fails until default import mode has zero unsupported rows.",
+      "status": "implemented",
+      "sourceRefs": [
+        "sandboxOverview"
+      ],
+      "fixtureRefs": [
+        "real-world-import-corpus",
+        "adversarial-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "not-applicable",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "process",
+      "notes": ""
+    },
+    {
+      "id": "harness.real-world-import-corpus",
+      "area": "verification",
+      "claimScope": "default-import",
+      "kind": "fixture",
+      "target": "Real-world-style public/user import corpus covers complex imported Postman scripting surfaces.",
+      "status": "implemented",
+      "sourceRefs": [
+        "sandboxOverview",
+        "vault",
+        "mock",
+        "grpcScripts",
+        "graphqlHttp"
+      ],
+      "fixtureRefs": [
+        "real-world-import-corpus",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "not-applicable",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "data-model",
+      "notes": ""
+    },
+    {
+      "id": "import.cookie-allowlists",
+      "area": "import-export",
+      "claimScope": "default-import",
+      "kind": "data-preservation",
+      "target": "Postman import/export preservation: cookie-allowlists",
+      "status": "implemented",
+      "sourceRefs": [
+        "sandboxOverview",
+        "execution"
+      ],
+      "fixtureRefs": [
+        "real-world-import-corpus"
+      ],
+      "differential": {
+        "newman": "not-applicable",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "data-model",
+      "notes": ""
+    },
+    {
+      "id": "import.file-binary-bodies",
+      "area": "import-export",
+      "claimScope": "default-import",
+      "kind": "data-preservation",
+      "target": "Postman import/export preservation: file-binary-bodies",
+      "status": "implemented",
+      "sourceRefs": [
+        "sandboxOverview",
+        "execution"
+      ],
+      "fixtureRefs": [
+        "real-world-import-corpus"
+      ],
+      "differential": {
+        "newman": "not-applicable",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "data-model",
+      "notes": ""
+    },
+    {
+      "id": "import.mock-scripts",
+      "area": "import-export",
+      "claimScope": "default-import",
+      "kind": "data-preservation",
+      "target": "Postman import/export preservation: mock-scripts",
+      "status": "implemented",
+      "sourceRefs": [
+        "sandboxOverview",
+        "execution"
+      ],
+      "fixtureRefs": [
+        "local-mock-scripts",
+        "real-world-import-corpus"
+      ],
+      "differential": {
+        "newman": "not-applicable",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "data-model",
+      "notes": ""
+    },
+    {
+      "id": "import.package-references",
+      "area": "import-export",
+      "claimScope": "default-import",
+      "kind": "data-preservation",
+      "target": "Postman import/export preservation: package-references",
+      "status": "implemented",
+      "sourceRefs": [
+        "sandboxOverview",
+        "execution"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1",
+        "real-world-import-corpus"
+      ],
+      "differential": {
+        "newman": "not-applicable",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "data-model",
+      "notes": ""
+    },
+    {
+      "id": "import.protocol-profiles",
+      "area": "import-export",
+      "claimScope": "default-import",
+      "kind": "data-preservation",
+      "target": "Postman import/export preservation: protocol-profiles",
+      "status": "implemented",
+      "sourceRefs": [
+        "sandboxOverview",
+        "execution"
+      ],
+      "fixtureRefs": [
+        "protocol-script-hooks",
+        "real-world-import-corpus"
+      ],
+      "differential": {
+        "newman": "not-applicable",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "data-model",
+      "notes": ""
+    },
+    {
+      "id": "import.request-ids",
+      "area": "import-export",
+      "claimScope": "default-import",
+      "kind": "data-preservation",
+      "target": "Postman import/export preservation: request-ids",
+      "status": "implemented",
+      "sourceRefs": [
+        "sandboxOverview",
+        "execution"
+      ],
+      "fixtureRefs": [
+        "real-world-import-corpus"
+      ],
+      "differential": {
+        "newman": "not-applicable",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "data-model",
+      "notes": ""
+    },
+    {
+      "id": "import.script-events",
+      "area": "import-export",
+      "claimScope": "default-import",
+      "kind": "data-preservation",
+      "target": "Postman import/export preservation: script-events",
+      "status": "implemented",
+      "sourceRefs": [
+        "sandboxOverview",
+        "execution"
+      ],
+      "fixtureRefs": [
+        "protocol-script-hooks",
+        "real-world-import-corpus"
+      ],
+      "differential": {
+        "newman": "not-applicable",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "data-model",
+      "notes": ""
+    },
+    {
+      "id": "import.vault-metadata",
+      "area": "import-export",
+      "claimScope": "default-import",
+      "kind": "data-preservation",
+      "target": "Postman import/export preservation: vault-metadata",
+      "status": "implemented",
+      "sourceRefs": [
+        "sandboxOverview",
+        "execution"
+      ],
+      "fixtureRefs": [
+        "real-world-import-corpus"
+      ],
+      "differential": {
+        "newman": "not-applicable",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "data-model",
+      "notes": ""
+    },
+    {
+      "id": "import.visualizer-assets",
+      "area": "import-export",
+      "claimScope": "default-import",
+      "kind": "data-preservation",
+      "target": "Postman import/export preservation: visualizer-assets",
+      "status": "implemented",
+      "sourceRefs": [
+        "sandboxOverview",
+        "execution"
+      ],
+      "fixtureRefs": [
+        "real-world-import-corpus"
+      ],
+      "differential": {
+        "newman": "not-applicable",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "data-model",
+      "notes": ""
+    },
+    {
+      "id": "info.eventName.afterResponse",
+      "area": "metadata",
+      "claimScope": "default-import",
+      "kind": "property",
+      "target": "pm.info.eventName:afterResponse",
+      "status": "implemented",
+      "sourceRefs": [
+        "info"
+      ],
+      "fixtureRefs": [
+        "protocol-script-hooks",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "read-only",
+      "notes": ""
+    },
+    {
+      "id": "info.eventName.beforeInvoke",
+      "area": "metadata",
+      "claimScope": "default-import",
+      "kind": "property",
+      "target": "pm.info.eventName:beforeInvoke",
+      "status": "implemented",
+      "sourceRefs": [
+        "info"
+      ],
+      "fixtureRefs": [
+        "protocol-script-hooks",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "read-only",
+      "notes": ""
+    },
+    {
+      "id": "info.eventName.beforeQuery",
+      "area": "metadata",
+      "claimScope": "default-import",
+      "kind": "property",
+      "target": "pm.info.eventName:beforeQuery",
+      "status": "implemented",
+      "sourceRefs": [
+        "info"
+      ],
+      "fixtureRefs": [
+        "protocol-script-hooks",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "read-only",
+      "notes": ""
+    },
+    {
+      "id": "info.eventName.onIncomingMessage",
+      "area": "metadata",
+      "claimScope": "default-import",
+      "kind": "property",
+      "target": "pm.info.eventName:onIncomingMessage",
+      "status": "implemented",
+      "sourceRefs": [
+        "info"
+      ],
+      "fixtureRefs": [
+        "protocol-script-hooks",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "read-only",
+      "notes": ""
+    },
+    {
+      "id": "info.eventName.prerequest",
+      "area": "metadata",
+      "claimScope": "default-import",
+      "kind": "property",
+      "target": "pm.info.eventName:prerequest",
+      "status": "implemented",
+      "sourceRefs": [
+        "info"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "read-only",
+      "notes": ""
+    },
+    {
+      "id": "info.eventName.test",
+      "area": "metadata",
+      "claimScope": "default-import",
+      "kind": "property",
+      "target": "pm.info.eventName:test",
+      "status": "implemented",
+      "sourceRefs": [
+        "info"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "read-only",
+      "notes": ""
+    },
+    {
+      "id": "info.property.iteration",
+      "area": "metadata",
+      "claimScope": "default-import",
+      "kind": "property",
+      "target": "pm.info.iteration",
+      "status": "implemented",
+      "sourceRefs": [
+        "info"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "read-only",
+      "notes": ""
+    },
+    {
+      "id": "info.property.iterationCount",
+      "area": "metadata",
+      "claimScope": "default-import",
+      "kind": "property",
+      "target": "pm.info.iterationCount",
+      "status": "implemented",
+      "sourceRefs": [
+        "info"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "read-only",
+      "notes": ""
+    },
+    {
+      "id": "info.property.requestId",
+      "area": "metadata",
+      "claimScope": "default-import",
+      "kind": "property",
+      "target": "pm.info.requestId",
+      "status": "implemented",
+      "sourceRefs": [
+        "info"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "read-only",
+      "notes": ""
+    },
+    {
+      "id": "info.property.requestName",
+      "area": "metadata",
+      "claimScope": "default-import",
+      "kind": "property",
+      "target": "pm.info.requestName",
+      "status": "implemented",
+      "sourceRefs": [
+        "info"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "read-only",
+      "notes": ""
+    },
+    {
+      "id": "mock.matchRequest",
+      "area": "mock",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.mock.matchRequest",
+      "status": "implemented",
+      "sourceRefs": [
+        "mock"
+      ],
+      "fixtureRefs": [
+        "local-mock-scripts",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "mock-broker",
+      "notes": ""
+    },
+    {
+      "id": "mock.path-variables",
+      "area": "mock",
+      "claimScope": "default-import",
+      "kind": "behavior",
+      "target": "Local mock path variable matching",
+      "status": "implemented",
+      "sourceRefs": [
+        "mock"
+      ],
+      "fixtureRefs": [
+        "local-mock-scripts",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "mock-broker",
+      "notes": ""
+    },
+    {
+      "id": "mock.sendExample",
+      "area": "mock",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.mock.sendExample",
+      "status": "implemented",
+      "sourceRefs": [
+        "mock"
+      ],
+      "fixtureRefs": [
+        "local-mock-scripts",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "mock-broker",
+      "notes": ""
+    },
+    {
+      "id": "request.headers.add",
+      "area": "request",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.request.headers.add",
+      "status": "implemented",
+      "sourceRefs": [
+        "request"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "transactional-state",
+      "notes": ""
+    },
+    {
+      "id": "request.headers.remove",
+      "area": "request",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.request.headers.remove",
+      "status": "implemented",
+      "sourceRefs": [
+        "request"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "transactional-state",
+      "notes": ""
+    },
+    {
+      "id": "request.headers.upsert",
+      "area": "request",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.request.headers.upsert",
+      "status": "implemented",
+      "sourceRefs": [
+        "request"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "transactional-state",
+      "notes": ""
+    },
+    {
+      "id": "request.property.auth",
+      "area": "request",
+      "claimScope": "default-import",
+      "kind": "property",
+      "target": "pm.request.auth",
+      "status": "implemented",
+      "sourceRefs": [
+        "request"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "hardened-sdk-object",
+      "notes": ""
+    },
+    {
+      "id": "request.property.body",
+      "area": "request",
+      "claimScope": "default-import",
+      "kind": "property",
+      "target": "pm.request.body",
+      "status": "implemented",
+      "sourceRefs": [
+        "request"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "hardened-sdk-object",
+      "notes": ""
+    },
+    {
+      "id": "request.property.headers",
+      "area": "request",
+      "claimScope": "default-import",
+      "kind": "property",
+      "target": "pm.request.headers",
+      "status": "implemented",
+      "sourceRefs": [
+        "request"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "hardened-sdk-object",
+      "notes": ""
+    },
+    {
+      "id": "request.property.messages",
+      "area": "request",
+      "claimScope": "default-import",
+      "kind": "property",
+      "target": "pm.request.messages",
+      "status": "implemented",
+      "sourceRefs": [
+        "request"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "hardened-sdk-object",
+      "notes": ""
+    },
+    {
+      "id": "request.property.metadata",
+      "area": "request",
+      "claimScope": "default-import",
+      "kind": "property",
+      "target": "pm.request.metadata",
+      "status": "implemented",
+      "sourceRefs": [
+        "request"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "hardened-sdk-object",
+      "notes": ""
+    },
+    {
+      "id": "request.property.method",
+      "area": "request",
+      "claimScope": "default-import",
+      "kind": "property",
+      "target": "pm.request.method",
+      "status": "implemented",
+      "sourceRefs": [
+        "request"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "hardened-sdk-object",
+      "notes": ""
+    },
+    {
+      "id": "request.property.methodPath",
+      "area": "request",
+      "claimScope": "default-import",
+      "kind": "property",
+      "target": "pm.request.methodPath",
+      "status": "implemented",
+      "sourceRefs": [
+        "request"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "hardened-sdk-object",
+      "notes": ""
+    },
+    {
+      "id": "request.property.url",
+      "area": "request",
+      "claimScope": "default-import",
+      "kind": "property",
+      "target": "pm.request.url",
+      "status": "implemented",
+      "sourceRefs": [
+        "request"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "hardened-sdk-object",
+      "notes": ""
+    },
+    {
+      "id": "require.builtin.ajv",
+      "area": "packages",
+      "claimScope": "default-import",
+      "kind": "module",
+      "target": "require('ajv')",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "facade",
+      "notes": ""
+    },
+    {
+      "id": "require.builtin.chai",
+      "area": "packages",
+      "claimScope": "default-import",
+      "kind": "module",
+      "target": "require('chai')",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "facade",
+      "notes": ""
+    },
+    {
+      "id": "require.builtin.cheerio",
+      "area": "packages",
+      "claimScope": "default-import",
+      "kind": "module",
+      "target": "require('cheerio')",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "facade",
+      "notes": ""
+    },
+    {
+      "id": "require.builtin.csv-parse-lib-sync",
+      "area": "packages",
+      "claimScope": "default-import",
+      "kind": "module",
+      "target": "require('csv-parse/lib/sync')",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "facade",
+      "notes": ""
+    },
+    {
+      "id": "require.builtin.lodash",
+      "area": "packages",
+      "claimScope": "default-import",
+      "kind": "module",
+      "target": "require('lodash')",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "facade",
+      "notes": ""
+    },
+    {
+      "id": "require.builtin.moment",
+      "area": "packages",
+      "claimScope": "default-import",
+      "kind": "module",
+      "target": "require('moment')",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "facade",
+      "notes": ""
+    },
+    {
+      "id": "require.builtin.postman-collection",
+      "area": "packages",
+      "claimScope": "default-import",
+      "kind": "module",
+      "target": "require('postman-collection')",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "facade",
+      "notes": ""
+    },
+    {
+      "id": "require.builtin.uuid",
+      "area": "packages",
+      "claimScope": "default-import",
+      "kind": "module",
+      "target": "require('uuid')",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "facade",
+      "notes": ""
+    },
+    {
+      "id": "require.builtin.xml2js",
+      "area": "packages",
+      "claimScope": "default-import",
+      "kind": "module",
+      "target": "require('xml2js')",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "facade",
+      "notes": ""
+    },
+    {
+      "id": "require.deprecated.crypto-js",
+      "area": "packages",
+      "claimScope": "default-import",
+      "kind": "module",
+      "target": "legacy crypto-js global/package",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "legacy",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "facade",
+      "notes": ""
+    },
+    {
+      "id": "require.node.assert",
+      "area": "packages",
+      "claimScope": "default-import",
+      "kind": "node-module-facade",
+      "target": "require('assert')",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "facade",
+      "notes": ""
+    },
+    {
+      "id": "require.node.buffer",
+      "area": "packages",
+      "claimScope": "default-import",
+      "kind": "node-module-facade",
+      "target": "require('buffer')",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "facade",
+      "notes": ""
+    },
+    {
+      "id": "require.node.events",
+      "area": "packages",
+      "claimScope": "default-import",
+      "kind": "node-module-facade",
+      "target": "require('events')",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "facade",
+      "notes": ""
+    },
+    {
+      "id": "require.node.path",
+      "area": "packages",
+      "claimScope": "default-import",
+      "kind": "node-module-facade",
+      "target": "require('path')",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "facade",
+      "notes": ""
+    },
+    {
+      "id": "require.node.punycode",
+      "area": "packages",
+      "claimScope": "default-import",
+      "kind": "node-module-facade",
+      "target": "require('punycode')",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "facade",
+      "notes": ""
+    },
+    {
+      "id": "require.node.querystring",
+      "area": "packages",
+      "claimScope": "default-import",
+      "kind": "node-module-facade",
+      "target": "require('querystring')",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "facade",
+      "notes": ""
+    },
+    {
+      "id": "require.node.stream",
+      "area": "packages",
+      "claimScope": "default-import",
+      "kind": "node-module-facade",
+      "target": "require('stream')",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "facade",
+      "notes": ""
+    },
+    {
+      "id": "require.node.string-decoder",
+      "area": "packages",
+      "claimScope": "default-import",
+      "kind": "node-module-facade",
+      "target": "require('string-decoder')",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "facade",
+      "notes": ""
+    },
+    {
+      "id": "require.node.timers",
+      "area": "packages",
+      "claimScope": "default-import",
+      "kind": "node-module-facade",
+      "target": "require('timers')",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "facade",
+      "notes": ""
+    },
+    {
+      "id": "require.node.url",
+      "area": "packages",
+      "claimScope": "default-import",
+      "kind": "node-module-facade",
+      "target": "require('url')",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "facade",
+      "notes": ""
+    },
+    {
+      "id": "require.node.util",
+      "area": "packages",
+      "claimScope": "default-import",
+      "kind": "node-module-facade",
+      "target": "require('util')",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "facade",
+      "notes": ""
+    },
+    {
+      "id": "require.pm.jsr-package",
+      "area": "packages",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.require('jsr:package@version')",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "reviewed-cache",
+      "notes": ""
+    },
+    {
+      "id": "require.pm.npm-package",
+      "area": "packages",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.require('npm:package@version')",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "reviewed-cache",
+      "notes": ""
+    },
+    {
+      "id": "require.pm.online-fetch-review",
+      "area": "packages",
+      "claimScope": "default-import",
+      "kind": "desktop-workflow",
+      "target": "Postman Package Library and external package fetch/review workflow can satisfy missing imported package references before first run.",
+      "status": "partial",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1",
+        "real-world-import-corpus",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "reviewed-cache",
+      "notes": ""
+    },
+    {
+      "id": "require.pm.team-package",
+      "area": "packages",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.require('@team/package')",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "reviewed-cache",
+      "notes": ""
+    },
+    {
+      "id": "response.method.json",
+      "area": "response",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.response.json()",
+      "status": "implemented",
+      "sourceRefs": [
+        "response"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "hardened-sdk-object",
+      "notes": ""
+    },
+    {
+      "id": "response.method.text",
+      "area": "response",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.response.text()",
+      "status": "implemented",
+      "sourceRefs": [
+        "response"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "hardened-sdk-object",
+      "notes": ""
+    },
+    {
+      "id": "response.property.code",
+      "area": "response",
+      "claimScope": "default-import",
+      "kind": "property",
+      "target": "pm.response.code",
+      "status": "implemented",
+      "sourceRefs": [
+        "response"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "hardened-sdk-object",
+      "notes": ""
+    },
+    {
+      "id": "response.property.headers",
+      "area": "response",
+      "claimScope": "default-import",
+      "kind": "property",
+      "target": "pm.response.headers",
+      "status": "implemented",
+      "sourceRefs": [
+        "response"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "hardened-sdk-object",
+      "notes": ""
+    },
+    {
+      "id": "response.property.messages",
+      "area": "response",
+      "claimScope": "default-import",
+      "kind": "property",
+      "target": "pm.response.messages",
+      "status": "implemented",
+      "sourceRefs": [
+        "response"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "hardened-sdk-object",
+      "notes": ""
+    },
+    {
+      "id": "response.property.metadata",
+      "area": "response",
+      "claimScope": "default-import",
+      "kind": "property",
+      "target": "pm.response.metadata",
+      "status": "implemented",
+      "sourceRefs": [
+        "response"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "hardened-sdk-object",
+      "notes": ""
+    },
+    {
+      "id": "response.property.responseSize",
+      "area": "response",
+      "claimScope": "default-import",
+      "kind": "property",
+      "target": "pm.response.responseSize",
+      "status": "implemented",
+      "sourceRefs": [
+        "response"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "hardened-sdk-object",
+      "notes": ""
+    },
+    {
+      "id": "response.property.responseTime",
+      "area": "response",
+      "claimScope": "default-import",
+      "kind": "property",
+      "target": "pm.response.responseTime",
+      "status": "implemented",
+      "sourceRefs": [
+        "response"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "hardened-sdk-object",
+      "notes": ""
+    },
+    {
+      "id": "response.property.status",
+      "area": "response",
+      "claimScope": "default-import",
+      "kind": "property",
+      "target": "pm.response.status",
+      "status": "implemented",
+      "sourceRefs": [
+        "response"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "hardened-sdk-object",
+      "notes": ""
+    },
+    {
+      "id": "response.property.trailers",
+      "area": "response",
+      "claimScope": "default-import",
+      "kind": "property",
+      "target": "pm.response.trailers",
+      "status": "implemented",
+      "sourceRefs": [
+        "response"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "hardened-sdk-object",
+      "notes": ""
+    },
+    {
+      "id": "run-order.http.collection-folder-request",
+      "area": "execution-order",
+      "claimScope": "default-import",
+      "kind": "behavior",
+      "target": "HTTP collection, folder, and request scripts run in Postman hierarchy.",
+      "status": "implemented",
+      "sourceRefs": [
+        "scriptRunOrder"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1",
+        "real-world-import-corpus"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "brokered",
+      "notes": ""
+    },
+    {
+      "id": "run-order.load-tests.skip",
+      "area": "execution-order",
+      "claimScope": "out-of-scope",
+      "kind": "policy",
+      "target": "Load tests stay outside sandbox v1 scripting unless a separate contract is written.",
+      "status": "intentional-strict-gap",
+      "sourceRefs": [
+        "scriptRunOrder"
+      ],
+      "fixtureRefs": [],
+      "differential": {
+        "newman": "not-applicable",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "no-host-access",
+      "notes": ""
+    },
+    {
+      "id": "security.adversarial.broker-mutation",
+      "area": "security-adversarial",
+      "claimScope": "default-import",
+      "kind": "regression-test",
+      "target": "Adversarial sandbox regression: broker-mutation",
+      "status": "implemented",
+      "sourceRefs": [
+        "sandboxOverview"
+      ],
+      "fixtureRefs": [
+        "adversarial-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "not-applicable",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "no-host-access",
+      "notes": ""
+    },
+    {
+      "id": "security.adversarial.dynamic-code-confinement",
+      "area": "security-adversarial",
+      "claimScope": "default-import",
+      "kind": "regression-test",
+      "target": "Adversarial sandbox regression: dynamic-code-confinement",
+      "status": "implemented",
+      "sourceRefs": [
+        "sandboxOverview"
+      ],
+      "fixtureRefs": [
+        "adversarial-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "not-applicable",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "no-host-access",
+      "notes": ""
+    },
+    {
+      "id": "security.adversarial.hostile-visualizer-document",
+      "area": "security-adversarial",
+      "claimScope": "default-import",
+      "kind": "regression-test",
+      "target": "Adversarial sandbox regression: hostile-visualizer-document",
+      "status": "implemented",
+      "sourceRefs": [
+        "sandboxOverview"
+      ],
+      "fixtureRefs": [
+        "adversarial-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "not-applicable",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "no-host-access",
+      "notes": ""
+    },
+    {
+      "id": "security.adversarial.infinite-async-work",
+      "area": "security-adversarial",
+      "claimScope": "default-import",
+      "kind": "regression-test",
+      "target": "Adversarial sandbox regression: infinite-async-work",
+      "status": "implemented",
+      "sourceRefs": [
+        "sandboxOverview"
+      ],
+      "fixtureRefs": [
+        "adversarial-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "not-applicable",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "no-host-access",
+      "notes": ""
+    },
+    {
+      "id": "security.adversarial.mock-state-abuse",
+      "area": "security-adversarial",
+      "claimScope": "default-import",
+      "kind": "regression-test",
+      "target": "Adversarial sandbox regression: mock-state-abuse",
+      "status": "implemented",
+      "sourceRefs": [
+        "sandboxOverview"
+      ],
+      "fixtureRefs": [
+        "adversarial-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "not-applicable",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "no-host-access",
+      "notes": ""
+    },
+    {
+      "id": "security.adversarial.oversized-output",
+      "area": "security-adversarial",
+      "claimScope": "default-import",
+      "kind": "regression-test",
+      "target": "Adversarial sandbox regression: oversized-output",
+      "status": "implemented",
+      "sourceRefs": [
+        "sandboxOverview"
+      ],
+      "fixtureRefs": [
+        "adversarial-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "not-applicable",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "no-host-access",
+      "notes": ""
+    },
+    {
+      "id": "security.adversarial.package-loader-abuse",
+      "area": "security-adversarial",
+      "claimScope": "default-import",
+      "kind": "regression-test",
+      "target": "Adversarial sandbox regression: package-loader-abuse",
+      "status": "implemented",
+      "sourceRefs": [
+        "sandboxOverview"
+      ],
+      "fixtureRefs": [
+        "adversarial-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "not-applicable",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "no-host-access",
+      "notes": ""
+    },
+    {
+      "id": "security.adversarial.protocol-stream-flood",
+      "area": "security-adversarial",
+      "claimScope": "default-import",
+      "kind": "regression-test",
+      "target": "Adversarial sandbox regression: protocol-stream-flood",
+      "status": "implemented",
+      "sourceRefs": [
+        "sandboxOverview"
+      ],
+      "fixtureRefs": [
+        "adversarial-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "not-applicable",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "no-host-access",
+      "notes": ""
+    },
+    {
+      "id": "security.adversarial.prototype-constructor-escape",
+      "area": "security-adversarial",
+      "claimScope": "default-import",
+      "kind": "regression-test",
+      "target": "Adversarial sandbox regression: prototype-constructor-escape",
+      "status": "implemented",
+      "sourceRefs": [
+        "sandboxOverview"
+      ],
+      "fixtureRefs": [
+        "adversarial-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "not-applicable",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "no-host-access",
+      "notes": ""
+    },
+    {
+      "id": "security.adversarial.raw-network-filesystem-process",
+      "area": "security-adversarial",
+      "claimScope": "default-import",
+      "kind": "regression-test",
+      "target": "Adversarial sandbox regression: raw-network-filesystem-process",
+      "status": "implemented",
+      "sourceRefs": [
+        "sandboxOverview"
+      ],
+      "fixtureRefs": [
+        "adversarial-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "not-applicable",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "no-host-access",
+      "notes": ""
+    },
+    {
+      "id": "sendRequest.advanced-auth-proxy",
+      "area": "network",
+      "claimScope": "default-import",
+      "kind": "transport-policy",
+      "target": "Advanced Postman auth helpers, proxy, and client-certificate parity for brokered script requests",
+      "status": "partial",
+      "sourceRefs": [
+        "sendRequest",
+        "request"
+      ],
+      "fixtureRefs": [
+        "real-world-import-corpus",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "brokered",
+      "notes": ""
+    },
+    {
+      "id": "sendRequest.callback",
+      "area": "network",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.sendRequest callback form",
+      "status": "implemented",
+      "sourceRefs": [
+        "sendRequest"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "brokered",
+      "notes": ""
+    },
+    {
+      "id": "sendRequest.collection-sdk-request",
+      "area": "network",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.sendRequest(Postman Collection SDK Request)",
+      "status": "implemented",
+      "sourceRefs": [
+        "sendRequest",
+        "request"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "brokered",
+      "notes": ""
+    },
+    {
+      "id": "sendRequest.file-binary-bindings",
+      "area": "network",
+      "claimScope": "default-import",
+      "kind": "transport-policy",
+      "target": "User-granted imported file and binary attachment bindings for brokered script requests",
+      "status": "partial",
+      "sourceRefs": [
+        "sendRequest",
+        "request"
+      ],
+      "fixtureRefs": [
+        "real-world-import-corpus",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "user-granted-file-binding",
+      "notes": ""
+    },
+    {
+      "id": "sendRequest.object-config",
+      "area": "network",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.sendRequest(request object)",
+      "status": "implemented",
+      "sourceRefs": [
+        "sendRequest"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "brokered",
+      "notes": ""
+    },
+    {
+      "id": "sendRequest.promise",
+      "area": "network",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.sendRequest promise form",
+      "status": "implemented",
+      "sourceRefs": [
+        "sendRequest"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "brokered",
+      "notes": ""
+    },
+    {
+      "id": "sendRequest.string-url",
+      "area": "network",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.sendRequest(URL string)",
+      "status": "implemented",
+      "sourceRefs": [
+        "sendRequest"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "brokered",
+      "notes": ""
+    },
+    {
+      "id": "source.inventory.generated",
+      "area": "verification",
+      "claimScope": "default-import",
+      "kind": "artifact",
+      "target": "Generated official-docs parity inventory exists and is validation-gated.",
+      "status": "implemented",
+      "sourceRefs": [
+        "sandboxOverview"
+      ],
+      "fixtureRefs": [
+        "differential-http-core"
+      ],
+      "differential": {
+        "newman": "not-applicable",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "process",
+      "notes": ""
+    },
+    {
+      "id": "state.addToSet",
+      "area": "mock-state",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.state.addToSet",
+      "status": "implemented",
+      "sourceRefs": [
+        "state"
+      ],
+      "fixtureRefs": [
+        "local-mock-scripts",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "bounded-json-store",
+      "notes": ""
+    },
+    {
+      "id": "state.clear",
+      "area": "mock-state",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.state.clear",
+      "status": "implemented",
+      "sourceRefs": [
+        "state"
+      ],
+      "fixtureRefs": [
+        "local-mock-scripts",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "bounded-json-store",
+      "notes": ""
+    },
+    {
+      "id": "state.delete",
+      "area": "mock-state",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.state.delete",
+      "status": "implemented",
+      "sourceRefs": [
+        "state"
+      ],
+      "fixtureRefs": [
+        "local-mock-scripts",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "bounded-json-store",
+      "notes": ""
+    },
+    {
+      "id": "state.get",
+      "area": "mock-state",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.state.get",
+      "status": "implemented",
+      "sourceRefs": [
+        "state"
+      ],
+      "fixtureRefs": [
+        "local-mock-scripts",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "bounded-json-store",
+      "notes": ""
+    },
+    {
+      "id": "state.has",
+      "area": "mock-state",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.state.has",
+      "status": "implemented",
+      "sourceRefs": [
+        "state"
+      ],
+      "fixtureRefs": [
+        "local-mock-scripts",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "bounded-json-store",
+      "notes": ""
+    },
+    {
+      "id": "state.increment",
+      "area": "mock-state",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.state.increment",
+      "status": "implemented",
+      "sourceRefs": [
+        "state"
+      ],
+      "fixtureRefs": [
+        "local-mock-scripts",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "bounded-json-store",
+      "notes": ""
+    },
+    {
+      "id": "state.keys",
+      "area": "mock-state",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.state.keys",
+      "status": "implemented",
+      "sourceRefs": [
+        "state"
+      ],
+      "fixtureRefs": [
+        "local-mock-scripts",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "bounded-json-store",
+      "notes": ""
+    },
+    {
+      "id": "state.push",
+      "area": "mock-state",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.state.push",
+      "status": "implemented",
+      "sourceRefs": [
+        "state"
+      ],
+      "fixtureRefs": [
+        "local-mock-scripts",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "bounded-json-store",
+      "notes": ""
+    },
+    {
+      "id": "state.set",
+      "area": "mock-state",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.state.set",
+      "status": "implemented",
+      "sourceRefs": [
+        "state"
+      ],
+      "fixtureRefs": [
+        "local-mock-scripts",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "bounded-json-store",
+      "notes": ""
+    },
+    {
+      "id": "state.size",
+      "area": "mock-state",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.state.size",
+      "status": "implemented",
+      "sourceRefs": [
+        "state"
+      ],
+      "fixtureRefs": [
+        "local-mock-scripts",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "bounded-json-store",
+      "notes": ""
+    },
+    {
+      "id": "state.toObject",
+      "area": "mock-state",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.state.toObject",
+      "status": "implemented",
+      "sourceRefs": [
+        "state"
+      ],
+      "fixtureRefs": [
+        "local-mock-scripts",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "bounded-json-store",
+      "notes": ""
+    },
+    {
+      "id": "test.pm.test",
+      "area": "tests-assertions",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.test",
+      "status": "implemented",
+      "sourceRefs": [
+        "testExpect"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-facade",
+      "notes": ""
+    },
+    {
+      "id": "test.pm.test.async-done",
+      "area": "tests-assertions",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.test.async-done",
+      "status": "implemented",
+      "sourceRefs": [
+        "testExpect"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-facade",
+      "notes": ""
+    },
+    {
+      "id": "test.pm.test.duplicate-names",
+      "area": "tests-assertions",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.test.duplicate-names",
+      "status": "implemented",
+      "sourceRefs": [
+        "testExpect"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-facade",
+      "notes": ""
+    },
+    {
+      "id": "test.pm.test.index",
+      "area": "tests-assertions",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.test.index",
+      "status": "implemented",
+      "sourceRefs": [
+        "testExpect"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-facade",
+      "notes": ""
+    },
+    {
+      "id": "test.pm.test.promise",
+      "area": "tests-assertions",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.test.promise",
+      "status": "implemented",
+      "sourceRefs": [
+        "testExpect"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-facade",
+      "notes": ""
+    },
+    {
+      "id": "test.pm.test.skip",
+      "area": "tests-assertions",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.test.skip",
+      "status": "implemented",
+      "sourceRefs": [
+        "testExpect"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "vm-facade",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.collectionVariables.clear",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.collectionVariables.clear",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "transactional-state",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.collectionVariables.get",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.collectionVariables.get",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "transactional-state",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.collectionVariables.has",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.collectionVariables.has",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "transactional-state",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.collectionVariables.replaceIn",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.collectionVariables.replaceIn",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "transactional-state",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.collectionVariables.set",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.collectionVariables.set",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "transactional-state",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.collectionVariables.toObject",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.collectionVariables.toObject",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "transactional-state",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.collectionVariables.unset",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.collectionVariables.unset",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "transactional-state",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.environment.clear",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.environment.clear",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "transactional-state",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.environment.get",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.environment.get",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "transactional-state",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.environment.has",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.environment.has",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "transactional-state",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.environment.replaceIn",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.environment.replaceIn",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "transactional-state",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.environment.set",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.environment.set",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "transactional-state",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.environment.toObject",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.environment.toObject",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "transactional-state",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.environment.unset",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.environment.unset",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "transactional-state",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.globals.clear",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.globals.clear",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "transactional-state",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.globals.get",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.globals.get",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "transactional-state",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.globals.has",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.globals.has",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "transactional-state",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.globals.replaceIn",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.globals.replaceIn",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "transactional-state",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.globals.set",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.globals.set",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "transactional-state",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.globals.toObject",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.globals.toObject",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "transactional-state",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.globals.unset",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.globals.unset",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "transactional-state",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.iterationData.get",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.iterationData.get",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "read-only",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.iterationData.has",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.iterationData.has",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "read-only",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.iterationData.toJSON",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.iterationData.toJSON",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "read-only",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.iterationData.toObject",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.iterationData.toObject",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "read-only",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.iterationData.unset",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.iterationData.unset",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "read-only",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.variables.get",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.variables.get",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables",
+        "dynamicVariables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "transactional-state",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.variables.has",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.variables.has",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables",
+        "dynamicVariables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "transactional-state",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.variables.replaceIn",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.variables.replaceIn",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables",
+        "dynamicVariables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "transactional-state",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.variables.set",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.variables.set",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables",
+        "dynamicVariables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "transactional-state",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.variables.toObject",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.variables.toObject",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables",
+        "dynamicVariables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "transactional-state",
+      "notes": ""
+    },
+    {
+      "id": "variables.pm.variables.unset",
+      "area": "variables",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.variables.unset",
+      "status": "implemented",
+      "sourceRefs": [
+        "variables",
+        "dynamicVariables"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "transactional-state",
+      "notes": ""
+    },
+    {
+      "id": "vault.get",
+      "area": "vault",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.vault.get",
+      "status": "implemented",
+      "sourceRefs": [
+        "vault"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "brokered-encrypted-store",
+      "notes": ""
+    },
+    {
+      "id": "vault.prompt-denial-reset-audit",
+      "area": "vault",
+      "claimScope": "default-import",
+      "kind": "ux-policy",
+      "target": "Vault prompt, denial, reset, and audit UX",
+      "status": "implemented",
+      "sourceRefs": [
+        "vault"
+      ],
+      "fixtureRefs": [
+        "desktop-observation-template",
+        "real-world-import-corpus"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "brokered-encrypted-store",
+      "notes": ""
+    },
+    {
+      "id": "vault.set",
+      "area": "vault",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.vault.set",
+      "status": "implemented",
+      "sourceRefs": [
+        "vault"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "brokered-encrypted-store",
+      "notes": ""
+    },
+    {
+      "id": "vault.unset",
+      "area": "vault",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.vault.unset",
+      "status": "implemented",
+      "sourceRefs": [
+        "vault"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "brokered-encrypted-store",
+      "notes": ""
+    },
+    {
+      "id": "visualizer.clear",
+      "area": "visualizer",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.visualizer.clear()",
+      "status": "implemented",
+      "sourceRefs": [
+        "visualizer"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "isolated-renderer",
+      "notes": ""
+    },
+    {
+      "id": "visualizer.external-assets",
+      "area": "visualizer",
+      "claimScope": "default-import",
+      "kind": "asset-policy",
+      "target": "Reviewed external visualizer assets",
+      "status": "implemented",
+      "sourceRefs": [
+        "visualizer"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "reviewed-cache",
+      "notes": ""
+    },
+    {
+      "id": "visualizer.pm.getData",
+      "area": "visualizer",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.getData(callback)",
+      "status": "implemented",
+      "sourceRefs": [
+        "visualizer"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "isolated-renderer",
+      "notes": ""
+    },
+    {
+      "id": "visualizer.set",
+      "area": "visualizer",
+      "claimScope": "default-import",
+      "kind": "api",
+      "target": "pm.visualizer.set(layout, data, options)",
+      "status": "implemented",
+      "sourceRefs": [
+        "visualizer"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "isolated-renderer",
+      "notes": ""
+    },
+    {
+      "id": "websocket.script-hooks.audit",
+      "area": "websocket",
+      "claimScope": "default-import",
+      "kind": "protocol-hook",
+      "target": "Audit current Postman WebSocket script support",
+      "status": "implemented",
+      "sourceRefs": [
+        "websocketRequests"
+      ],
+      "fixtureRefs": [
+        "websocket-script-audit",
+        "desktop-observation-template"
+      ],
+      "differential": {
+        "newman": "unknown",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "no-script-surface",
+      "notes": "Official WebSocket and Socket.IO request docs do not document saved/importable script hooks; PostMeter records this and does not invent an incompatible hook surface."
+    }
+  ]
+}

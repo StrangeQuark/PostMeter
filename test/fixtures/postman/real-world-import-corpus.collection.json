@@ -1,0 +1,448 @@
+{
+  "info": {
+    "_postman_id": "real-world-import-corpus",
+    "name": "Real World Import Corpus",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": {
+      "content": "Representative Postman import fixture covering auth-heavy scripts, package-heavy scripts, dynamic variables, cookies, visualizers, vault metadata, GraphQL, gRPC, mocks, runRequest workflows, and file/binary body references.",
+      "type": "text/plain"
+    }
+  },
+  "auth": {
+    "type": "oauth2",
+    "oauth2": [
+      { "key": "grant_type", "value": "client_credentials", "type": "string" },
+      { "key": "accessTokenUrl", "value": "{{authUrl}}/oauth/token", "type": "string" },
+      { "key": "clientId", "value": "{{clientId}}", "type": "string" },
+      { "key": "clientSecret", "value": "{{vault:clientSecret}}", "type": "string" },
+      { "key": "scope", "value": "accounts.read accounts.write", "type": "string" }
+    ]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://api.example.test", "type": "string" },
+    { "key": "authUrl", "value": "https://auth.example.test", "type": "string" },
+    { "key": "clientId", "value": "postmeter-client", "type": "string" },
+    { "key": "accountId", "value": "acct-001", "type": "string" },
+    { "key": "sessionName", "value": "real-world-session", "type": "string" },
+    { "key": "clientSecret", "value": "", "type": "secret" }
+  ],
+  "cookieDomainWhitelist": [
+    "api.example.test",
+    ".example.test"
+  ],
+  "vaultAccess": {
+    "secrets": [
+      { "key": "apiToken", "description": "Bound locally when imported into PostMeter." },
+      { "key": "clientSecret", "description": "OAuth client secret binding." }
+    ]
+  },
+  "visualizerAssets": [
+    { "name": "mini-chart", "type": "script", "src": "postman://asset/mini-chart.js" },
+    { "name": "dashboard-css", "type": "style", "src": "postman://asset/dashboard.css" }
+  ],
+  "mockState": {
+    "hits": 0
+  },
+  "certificate": [
+    {
+      "id": "mtls-certificate-id",
+      "name": "Customer mTLS",
+      "matches": ["https://api.example.test/mtls/*"],
+      "cert": { "src": "/Users/example/certs/customer.crt" },
+      "key": { "src": "/Users/example/certs/customer.key" },
+      "passphrase": "{{vault:clientSecret}}"
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const trace = pm.variables.replaceIn('{{$guid}}');",
+          "pm.collectionVariables.set('corpusTraceId', trace);",
+          "pm.environment.set('corpusStarted', pm.variables.replaceIn('{{$isoTimestamp}}'));"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "id": "auth-folder-id",
+      "name": "Auth Heavy Flows",
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          { "key": "token", "value": "{{apiToken}}", "type": "string" }
+        ]
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const authTools = pm.require('@team/auth-tools');",
+              "const signer = require('npm:@scope/signing@1.0.0');",
+              "const audit = require('jsr:@scope/audit@1.0.0');",
+              "const lodash = require('lodash');",
+              "pm.environment.set('folderPackageProbe', lodash.isArray([1, 2]) ? 'yes' : 'no');",
+              "pm.request.headers.upsert({ key: 'X-Corpus-Trace', value: pm.collectionVariables.get('corpusTraceId') });",
+              "pm.request.headers.upsert({ key: 'X-Auth-Tool', value: authTools ? 'present' : 'missing' });",
+              "pm.request.headers.upsert({ key: 'X-Signer', value: signer ? 'present' : 'missing' });",
+              "pm.request.headers.upsert({ key: 'X-Audit', value: audit ? 'present' : 'missing' });"
+            ]
+          }
+        }
+      ],
+      "variable": [
+        { "key": "folderScope", "value": "auth", "type": "string" }
+      ],
+      "item": [
+        {
+          "id": "oauth-token-request-id",
+          "name": "OAuth Token Bootstrap",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('vault prompt path is explicit', async function () {",
+                  "  try {",
+                  "    const token = await pm.vault.get('apiToken');",
+                  "    if (token) pm.environment.set('apiToken', token);",
+                  "  } catch (error) {",
+                  "    pm.environment.set('vaultStatus', error.message);",
+                  "  }",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('token bootstrap response', function () {",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+                  "});",
+                  "pm.visualizer.set('<section><h1>{{title}}</h1><ol>{{#each scopes}}<li>{{this}}</li>{{/each}}</ol><script>pm.getData(function (error, data) { window.scopeCount = data.scopes.length; });</script></section>', { title: 'OAuth', scopes: ['accounts.read', 'accounts.write'] }, { assets: [{ name: 'mini-chart', type: 'script', source: 'function render(){return true;}', integrity: 'sha256-placeholder' }] });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{authUrl}}/oauth/token",
+              "host": ["{{authUrl}}"],
+              "path": ["oauth", "token"]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/x-www-form-urlencoded" }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "grant_type", "value": "client_credentials" },
+                { "key": "client_id", "value": "{{clientId}}" },
+                { "key": "client_secret", "value": "{{clientSecret}}" },
+                { "key": "scope", "value": "accounts.read accounts.write" }
+              ]
+            }
+          },
+          "response": [
+            {
+              "id": "oauth-token-response-id",
+              "name": "Token 200",
+              "code": 200,
+              "status": "OK",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\"access_token\":\"fixture-token\",\"expires_in\":3600}"
+            }
+          ]
+        },
+        {
+          "id": "cookie-dynamic-request-id",
+          "name": "Cookie And Dynamic Variables",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const jar = pm.cookies.jar();",
+                  "jar.set(pm.request.url.getHost(), 'session=' + pm.variables.replaceIn('{{$randomUUID}}') + '; Path=/; SameSite=Lax', function () {});",
+                  "pm.request.headers.upsert({ key: 'X-Generated-Email', value: pm.variables.replaceIn('{{$randomEmail}}') });"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('cookies visible to scripts', function () {",
+                  "  pm.expect(pm.cookies.has('visible')).to.equal(true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/accounts/{{accountId}}/cookies",
+            "cookie": [
+              {
+                "name": "visible",
+                "value": "yes",
+                "domain": "api.example.test",
+                "path": "/",
+                "sameSite": "lax",
+                "secure": true
+              },
+              {
+                "name": "httpOnlyProbe",
+                "value": "hidden",
+                "domain": "api.example.test",
+                "path": "/",
+                "httpOnly": true,
+                "secure": true
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "graphql-request-id",
+      "name": "GraphQL Account Lookup",
+      "protocol": "graphql",
+      "event": [
+        {
+          "listen": "beforeQuery",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.request.headers.upsert({ key: 'X-GraphQL-Before', value: pm.info.eventName });",
+              "pm.environment.set('graphqlBefore', pm.info.eventName);"
+            ]
+          }
+        },
+        {
+          "listen": "afterResponse",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('graphql result contains account', function () {",
+              "  pm.expect(pm.response.json().data.account.id).to.equal(pm.environment.get('accountId'));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/graphql",
+        "body": {
+          "mode": "graphql",
+          "graphql": {
+            "query": "query Account($id: ID!) { account(id: $id) { id name } }",
+            "variables": "{\"id\":\"{{accountId}}\"}",
+            "operationName": "Account"
+          }
+        },
+        "protocolProfileBehavior": {
+          "disableBodyPruning": true
+        }
+      }
+    },
+    {
+      "id": "grpc-stream-request-id",
+      "name": "gRPC Stream Account Events",
+      "protocol": "grpc",
+      "event": [
+        {
+          "listen": "beforeInvoke",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.request.metadata.upsert({ key: 'authorization', value: 'Bearer ' + pm.environment.get('apiToken') });",
+              "pm.environment.set('grpcBefore', pm.info.eventName);"
+            ]
+          }
+        },
+        {
+          "listen": "onIncomingMessage",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('grpc message has event type', function () {",
+              "  pm.expect(pm.message.data.type).to.exist;",
+              "});"
+            ]
+          }
+        },
+        {
+          "listen": "afterResponse",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('grpc status ok', function () {",
+              "  pm.expect(pm.response.code).to.equal(0);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "url": "grpcs://grpc.example.test/accounts.AccountService/StreamEvents",
+        "method": "POST",
+        "methodPath": "accounts.AccountService/StreamEvents",
+        "metadata": [
+          { "key": "x-client", "value": "postmeter" }
+        ],
+        "messages": [
+          {
+            "name": "subscribe",
+            "data": { "accountId": "{{accountId}}" }
+          }
+        ],
+        "grpc": {
+          "service": "accounts.AccountService",
+          "method": "StreamEvents",
+          "methodType": "server-streaming",
+          "protoPath": "proto/accounts.proto"
+        }
+      }
+    },
+    {
+      "id": "mock-folder-id",
+      "name": "Local Mock Workflows",
+      "event": [
+        {
+          "listen": "mock",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const hits = await pm.state.increment('hits');",
+              "await pm.state.addToSet('seenAccounts', req.params.accountId);",
+              "if (pm.mock.matchRequest('mock-account-request-id', req)) {",
+              "  pm.mock.sendExample('mock-account-response-id', res);",
+              "} else {",
+              "  res.status(404).json({ hits });",
+              "}"
+            ]
+          }
+        }
+      ],
+      "item": [
+        {
+          "id": "mock-account-request-id",
+          "name": "Mock Account",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/mock/accounts/:accountId"
+          },
+          "response": [
+            {
+              "id": "mock-account-response-id",
+              "name": "Mock Account 200",
+              "code": 200,
+              "status": "OK",
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\"id\":\"acct-001\",\"name\":\"Fixture Account\"}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "run-request-caller-id",
+      "name": "RunRequest Caller",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('calls target by original Postman id', async function () {",
+              "  const response = await pm.execution.runRequest('run-request-target-id');",
+              "  pm.expect(response.code).to.equal(200);",
+              "});",
+              "pm.execution.setNextRequest('file-upload-request-id');"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/workflow/caller"
+      }
+    },
+    {
+      "id": "run-request-target-id",
+      "name": "RunRequest Target",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('target request id is stable', function () {",
+              "  pm.expect(pm.info.requestId).to.equal('run-request-target-id');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/workflow/target"
+      }
+    },
+    {
+      "id": "file-upload-request-id",
+      "name": "File Upload Binding",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/files",
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "metadata",
+              "value": "{\"source\":\"postman\"}",
+              "type": "text"
+            },
+            {
+              "key": "payload",
+              "type": "file",
+              "src": "/Users/example/fixtures/upload.json",
+              "contentType": "application/json"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "binary-upload-request-id",
+      "name": "Binary Body Binding",
+      "request": {
+        "method": "PUT",
+        "url": "{{baseUrl}}/files/binary",
+        "body": {
+          "mode": "file",
+          "file": {
+            "src": "/Users/example/fixtures/blob.bin"
+          }
+        }
+      }
+    }
+  ]
+}

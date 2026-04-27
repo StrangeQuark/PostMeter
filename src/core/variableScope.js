@@ -38,7 +38,7 @@ function mergeVariables(target, source, override) {
     const existing = target.find((item) => item.key === key);
     if (existing) {
       if (override) {
-        existing.value = variable.value ?? '';
+        existing.value = variableObservableValue(variable);
         existing.enabled = true;
       }
       continue;
@@ -46,7 +46,7 @@ function mergeVariables(target, source, override) {
     target.push({
       enabled: true,
       key,
-      value: variable.value ?? ''
+      value: variableObservableValue(variable)
     });
   }
 }
@@ -57,7 +57,7 @@ function getVariable(variables, key) {
     return undefined;
   }
   const variable = (variables || []).find((item) => item.enabled !== false && item.key === normalizedKey);
-  return variable ? variable.value ?? '' : undefined;
+  return variable ? variableObservableValue(variable) : undefined;
 }
 
 function setVariable(variables, key, value, options = {}) {
@@ -86,6 +86,19 @@ function unsetVariable(variables, key) {
   }
 }
 
+function variableObservableValue(variable) {
+  if (!variable || typeof variable !== 'object') {
+    return '';
+  }
+  const value = variable.value
+    ?? variable.currentValue
+    ?? variable.current
+    ?? variable.initialValue
+    ?? variable.initial
+    ?? '';
+  return value == null ? '' : String(value);
+}
+
 function applyExtractedVariables(environment, variables) {
   if (!environment || !Array.isArray(variables)) {
     return;
@@ -103,5 +116,6 @@ module.exports = {
   getVariable,
   runtimeEnvironment,
   setVariable,
-  unsetVariable
+  unsetVariable,
+  variableObservableValue
 };

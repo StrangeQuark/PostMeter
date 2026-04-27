@@ -1,0 +1,138 @@
+{
+  "info": {
+    "name": "Protocol Script Hooks",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://api.example.test"
+    }
+  ],
+  "item": [
+    {
+      "name": "GraphQL user lookup",
+      "protocol": "graphql",
+      "event": [
+        {
+          "listen": "beforeQuery",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const tool = pm.require('lodash');",
+              "const hookName = tool.includes(['beforeQuery'], 'beforeQuery') ? 'beforeQuery' : 'missing';",
+              "pm.request.headers.upsert({ key: 'X-GraphQL-Before', value: hookName });",
+              "const body = pm.request.body.graphql;",
+              "body.variables = JSON.stringify({ id: pm.variables.get('userId') });",
+              "pm.request.body.graphql = body;",
+              "pm.environment.set('graphqlBefore', pm.info.eventName);"
+            ]
+          }
+        },
+        {
+          "listen": "afterResponse",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('graphql after response event', function () {",
+              "  pm.expect(pm.info.eventName).to.equal('afterResponse');",
+              "  pm.expect(pm.response.json().data.user.id).to.equal(pm.variables.get('userId'));",
+              "});",
+              "pm.environment.set('graphqlAfter', pm.response.json().data.user.id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/graphql",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}"
+          }
+        ],
+        "body": {
+          "mode": "graphql",
+          "graphql": {
+            "query": "query GetUser($id: ID!) { user(id: $id) { id name } }",
+            "variables": "{\"id\":\"{{userId}}\"}",
+            "operationName": "GetUser"
+          }
+        }
+      }
+    },
+    {
+      "name": "gRPC user stream",
+      "protocol": "grpc",
+      "event": [
+        {
+          "listen": "beforeInvoke",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.request.metadata.upsert({ key: 'authorization', value: 'Bearer ' + pm.variables.get('token') });",
+              "pm.request.messages.add({ data: { id: pm.variables.get('userId'), source: 'beforeInvoke' }, name: 'lookup' });",
+              "pm.environment.set('grpcBefore', pm.info.eventName);"
+            ]
+          }
+        },
+        {
+          "listen": "onMessage",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('grpc on message event', function () {",
+              "  pm.expect(pm.info.eventName).to.equal('onIncomingMessage');",
+              "  pm.expect(pm.message.data.id).to.equal(pm.variables.get('userId'));",
+              "  pm.expect(pm.response.messages.idx(0).data.id).to.equal(pm.variables.get('userId'));",
+              "});",
+              "pm.environment.set('grpcMessage', pm.message.data.name);"
+            ]
+          }
+        },
+        {
+          "listen": "afterResponse",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('grpc after response event', function () {",
+              "  pm.expect(pm.info.eventName).to.equal('afterResponse');",
+              "  pm.expect(pm.request.methodPath).to.equal('users.UserService/GetUser');",
+              "  pm.expect(pm.response.metadata.get('grpc-status')).to.equal('0');",
+              "  pm.expect(pm.response.trailers.get('grpc-message')).to.equal('done');",
+              "  pm.expect(pm.response.messages.count()).to.equal(1);",
+              "});",
+              "pm.environment.set('grpcAfter', pm.response.status);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "protocol": "grpc",
+        "url": "grpc://grpc.example.test:443",
+        "methodPath": "users.UserService/GetUser",
+        "metadata": [
+          {
+            "key": "x-client",
+            "value": "postmeter"
+          }
+        ],
+        "messages": [
+          {
+            "name": "seed",
+            "data": {
+              "id": "{{userId}}"
+            }
+          }
+        ],
+        "grpc": {
+          "service": "users.UserService",
+          "method": "GetUser",
+          "methodType": "server-streaming",
+          "proto": "syntax = \"proto3\"; service UserService { rpc GetUser(UserRequest) returns (stream User); }"
+        }
+      }
+    }
+  ]
+}

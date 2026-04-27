@@ -3,8 +3,8 @@
   "summary": {
     "passed": false,
     "cancelled": false,
-    "totalRequests": 10,
-    "passedRequests": 9,
+    "totalRequests": 13,
+    "passedRequests": 12,
     "failedRequests": 1
   },
   "sentRequests": [
@@ -12,6 +12,9 @@
     "02 Async Ordering And Nested SendRequest",
     "03 Iteration Data And Cookie Scope",
     "03a Bundled Package Loading",
+    "03aa Runtime Globals And Node Facades",
+    "03ab SDK Request Response Objects",
+    "03ac Tests Assertions Variables Dynamic",
     "03b Execution RunRequest",
     "03c RunRequest Target",
     "04 Execution Jump Start",
@@ -28,6 +31,9 @@
     "02 Async Ordering And Nested SendRequest",
     "03 Iteration Data And Cookie Scope",
     "03a Bundled Package Loading",
+    "03aa Runtime Globals And Node Facades",
+    "03ab SDK Request Response Objects",
+    "03ac Tests Assertions Variables Dynamic",
     "03b Execution RunRequest",
     "04 Execution Jump Start",
     "06 Skip By Prerequest",
@@ -43,6 +49,11 @@
     "setupComplete": "yes",
     "asyncOrder": "sync>timer>one>one",
     "packageLoading": "yes",
+    "runtimeGlobals": "yes",
+    "sdkObjectsPre": "yes",
+    "sdkObjects": "yes",
+    "step4Pre": "yes",
+    "step4Complete": "yes",
     "runRequestCaller": "yes",
     "runRequestTarget": "yes",
     "skipRequestPreRan": "yes",
@@ -54,6 +65,7 @@
   "collectionVariables": {
     "collectionPreSeen": "yes",
     "folderPreSeen": "yes",
+    "step4Collection": "yes",
     "collectionOnly": "collection-only"
   },
   "cookies": {

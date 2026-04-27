@@ -8,8 +8,8 @@ It is local-first software. It does not require a PostMeter account, app login, 
 
 - Managed multi-workspace desktop app with non-destructive workspace import
 - Saved collections, folders, variables, environments, request examples, and a local cookie jar
-- Native PostMeter plus Postman, OpenAPI, JMeter, curl, and HAR import/export
-- Assertions, pre-request/test scripts, collection runs, and a CI-friendly CLI runner
+- Native PostMeter, Postman Collection v2.1, OpenAPI, JMeter, curl, and HAR import/export
+- Assertions, pre-request/test scripts, local mock script support, collection runs, and a CI-friendly CLI runner
 - Local load tests with rate caps, percentiles, JSON/CSV export, and optional multi-process execution
 - OAuth 2.0 helpers, HTTPS client certificates, theme modes, and GitHub Releases update checks
 
@@ -35,6 +35,11 @@ npm start
 npm test
 npm run check
 npm run electron:version
+npm run sandbox:platform:validate
+npm run sandbox:platform:claim
+npm run postman:parity:validate
+npm run postman:parity:claim
+npm run postman:parity:diff
 ```
 
 ### UI And Smoke
@@ -134,6 +139,8 @@ POSTMETER_UPDATE_URL=https://api.github.com/repos/OWNER/REPO/releases/latest npm
 
 - Renderer `nodeIntegration` is disabled, `contextIsolation` is enabled, and the renderer is sandboxed.
 - The renderer talks to core logic only through explicit preload IPC bindings.
-- Request scripts run in constrained child processes with brokered privileged APIs, reviewed package-cache loading, isolated visualizer rendering, scoped vault grants, hardened script bridges, fail-closed Node permission flags in production runtimes, Linux `bubblewrap` OS isolation plus seccomp syscall policy when available/required, timeouts, and bounded resources. Native Windows/macOS OS sandbox backends remain future platform work.
+- Request scripts run in constrained child processes with brokered privileged APIs, Postman-compatible test/assertion/variable/dynamic-variable behavior, global/module/Collection-SDK object facades, GraphQL and gRPC protocol hook execution, local mock `pm.mock`/`pm.state` support, reviewed package-cache loading, isolated visualizer rendering, scoped vault grants, hardened script bridges, fail-closed Node permission flags in production runtimes, Linux `bubblewrap` OS isolation plus seccomp syscall policy when available/required, timeouts, and bounded resources. Native Windows/macOS OS sandbox backends remain future platform work.
+- Postman import parity is tracked by a generated matrix at `docs/postman-sandbox-parity-matrix.json`; `npm run postman:parity:validate` checks the matrix, `npm run postman:parity:diff` exercises the HTTP-core differential harness, and `npm run postman:parity:claim` fails closed until the default Postman import profile has zero claim blockers.
+- Platform OS sandbox completion is tracked separately at `docs/os-sandbox-platform-matrix.json`; `npm run sandbox:platform:validate` keeps the matrix fresh, and `npm run sandbox:platform:claim` must pass before claiming equivalent full OS sandbox coverage on Linux, Windows, and macOS.
 - Workspace data is stored as plain JSON without local encryption or redacted export modes. Script vault secrets are stored separately in encrypted per-workspace vault files when OS-backed desktop encryption is available.
 - Release builds are currently unsigned. Full security and production-readiness detail lives in [TECH_SPECS.MD](TECH_SPECS.MD) and [NEXT_STEPS.MD](NEXT_STEPS.MD).

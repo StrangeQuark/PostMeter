@@ -81,7 +81,16 @@ test('migrates schema 2 workspaces to schema 11 and creates a backup', async () 
   assert.deepEqual(workspace.collections[0].variables, []);
   assert.deepEqual(workspace.collections[0].certificates, []);
   assert.equal(workspace.collections[0].requests.length, 1);
-  assert.deepEqual(workspace.collections[0].requests[0].scripts, { preRequest: '', tests: '' });
+  assert.deepEqual(workspace.collections[0].requests[0].scripts, {
+    preRequest: '',
+    tests: '',
+    beforeQuery: '',
+    afterResponse: '',
+    beforeInvoke: '',
+    onMessage: '',
+    onIncomingMessage: '',
+    mock: ''
+  });
   assert.deepEqual(workspace.collections[0].requests[0].variables, []);
   assert.deepEqual(workspace.collections[0].requests[0].examples, []);
   assert.deepEqual(workspace.collections[0].requests[0].cookieJar, { enabled: false, storeResponses: true });
