@@ -2,12 +2,13 @@
 
 This document is the target contract for production-grade request scripting. It is the source of truth for sandbox implementation work; `docs/COMPATIBILITY.md` remains the user-facing current-support matrix.
 
-Status: Postman-import compatibility contract. The current runtime implements the brokered async subset described here in `src/core/scriptRuntime.js`, `src/core/scriptSandbox.js`, and `src/core/scriptWorker.js`, with a Linux `bubblewrap` OS isolation backend plus seccomp cBPF syscall policy layered around script workers when available or required. The product target is for imported Postman pre-request and test scripts to run on the first try wherever PostMeter can provide equivalent behavior without giving scripts direct host filesystem, process, shell, Node, Electron, or renderer access.
+Status: Postman-import compatibility contract and parity burn-down plan. The current runtime implements the brokered async subset described here in `src/core/scriptRuntime.js`, `src/core/scriptSandbox.js`, and `src/core/scriptWorker.js`, with a Linux `bubblewrap` OS isolation backend plus seccomp cBPF syscall policy layered around script workers when available or required. The product target is for imported Postman scripts to run on the first try wherever PostMeter can provide equivalent behavior without giving scripts direct host filesystem, process, shell, Node, Electron, or renderer access.
 
 ## Goals
 
 - Execute untrusted pre-request and test scripts without exposing Electron, renderer, Node, filesystem, process, shell, native module, or app-internal privileges.
-- Provide a Postman-compatible sandbox for single-request sends, collection runs, and CLI collection runs, prioritizing direct execution of imported Postman scripts.
+- Provide a Postman-compatible sandbox for single-request sends, collection runs, CLI collection runs, and every Postman script surface that can be represented in imported data, prioritizing direct execution of imported Postman scripts.
+- Treat the official Postman Sandbox API reference, Postman script run-order documentation, and the latest Newman release targeted by the compatibility corpus as the minimum compatibility surface. Full import parity means the same observable request mutations, HTTP traffic, response parsing, variable/cookie/vault side effects, visualizer output, test names/order/results, console output shape, and script errors for the supported imported artifact.
 - Keep load-test scripting out of the production sandbox v1 contract. Load tests must continue to use the direct HTTP sender unless a later explicit "scripted load test" contract is written.
 - Make every privileged script capability available only through a brokered, validated message protocol.
 - Preserve deterministic completion, cancellation, side-effect, and error-reporting behavior across desktop and CLI execution.
@@ -20,6 +21,7 @@ Status: Postman-import compatibility contract. The current runtime implements th
 - Do not let scripts read arbitrary local files, process environment variables, workspace files, Electron APIs, renderer DOM APIs, or Node modules.
 - Do not let scripts spawn processes, open native dialogs, register protocol handlers, load native modules, or modify app settings directly.
 - Do not run pre-request or test scripts during load tests in sandbox v1.
+- Do not claim complete Postman script import parity from the currently implemented HTTP subset alone.
 
 ## Threat Model
 
@@ -84,8 +86,8 @@ The production runtime must provide these properties:
 - User script code runs outside the Electron main process.
 - Worker processes start with a minimal environment and no inherited secrets such as `NODE_OPTIONS`, app-specific credentials, or arbitrary user environment variables.
 - Worker V8 heap, execution wall time, console output, broker payload size, and final result size are bounded.
-- Dynamic string code generation and WebAssembly code generation are disabled unless a future contract explicitly changes this.
-- Node module loading, `process`, filesystem, child process, native module, arbitrary `fetch`, `XMLHttpRequest`, `WebSocket`, and raw networking are unavailable in the script context.
+- Strict security mode may disable dynamic string code generation. Full Postman import parity mode must match Postman's current JavaScript global behavior, including a safe `Function` constructor if Postman supports it, inside the hardened worker context. WebAssembly remains disabled unless Postman exposes it and this contract is updated with equivalent limits.
+- Host Node module loading, `process`, filesystem, child process, native module, arbitrary `fetch`, `XMLHttpRequest`, `WebSocket`, and raw networking are unavailable in the script context. Postman-listed NodeJS modules are exposed only through bounded compatibility facades, not through host Node handles.
 - Host-created bridge objects, functions, arrays, errors, and async results exposed to scripts are hardened so scripts cannot reach the worker's host constructors through `constructor`, prototype, caught-error, or promise paths.
 - Any worker file-read allowlist is the minimum runtime bundle needed for script execution, not the whole repository or all of `src/core`.
 - Packaged Electron script workers require Node permission flags and fail closed when the pinned runtime cannot enforce them. CLI runs require the same on the supported Node 22+ baseline.
@@ -119,7 +121,7 @@ Required broker capabilities for sandbox v1 implementation:
 - Runner execution control and bounded collection-local `pm.execution.runRequest`.
 - Bounded `pm.visualizer` result capture for isolated UI rendering.
 - Explicitly granted, brokered `pm.vault` access backed by an encrypted local vault store.
-- Bundled allowlisted package loading for safe Postman import compatibility.
+- Bundled allowlisted package loading plus reviewed cached exact team/external package bundles for safe Postman import compatibility.
 - Iteration data reads.
 - Final result and side-effect commit reporting.
 
@@ -248,23 +250,25 @@ Security restrictions:
 
 Required behavior:
 
-- Supports `pm.visualizer.set(template, data)` and `pm.visualizer.clear()`.
+- Supports `pm.visualizer.set(template, data, options)` and `pm.visualizer.clear()`.
 - Clones visualizer data through JSON serialization so script objects and accessors do not cross the host boundary.
 - Enforces caps for template length, serialized data size, rendered HTML length, loop expansion, and template block nesting.
 - Supports escaped `{{value}}`, raw `{{{value}}}`, and a bounded Handlebars-style block subset: `{{#each}}`, `{{#if}}`, `{{#unless}}`, `{{#with}}`, `{{else}}`, `{{this}}`, `{{@index}}`, `{{@key}}`, `{{@root}}`, parent lookup with `../`, and object-field lookups.
+- Supports bounded custom visualizer helpers, partials, and `Handlebars.SafeString` through the sandbox-provided `Handlebars` facade and `pm.visualizer.set(..., options)` helper/partial registration.
+- Allows inline visualizer scripts only inside the isolated visualizer document so imported Postman visualizers can call `pm.getData(callback)` and render client-side charts from the JSON-cloned visualizer data.
 - Captures the latest visualizer output in the script result for the request that produced it.
-- Renders output in a sandboxed iframe with a restrictive document CSP.
+- Renders output in a sandboxed iframe with `allow-scripts`, no `allow-same-origin`, and a restrictive document CSP.
 
 Security restrictions:
 
-- Does not execute script tags or inline event handlers.
-- Does not allow external image, link, script, worker, frame, or network loads from visualizer output.
+- Does not preserve inline event handlers.
+- Does not allow external script, worker, frame, object, media, connection, form, or network loads from visualizer output. Image loads are limited to `data:` URLs by the visualizer document CSP.
 - Does not provide the visualizer document access to Electron, Node, PostMeter renderer state, cookies, storage, or the parent DOM.
-- Does not implement arbitrary Handlebars helpers, partials, custom JavaScript helpers, or remote assets unless a future contract adds a reviewed extension model.
+- Does not allow remote visualizer libraries/assets unless a future contract adds a reviewed asset model.
 
 ## `pm.vault` Contract
 
-`pm.vault` is a brokered secret-access compatibility API. It is disabled by default and only becomes available when the workspace explicitly grants script vault access.
+`pm.vault` is a brokered secret-access compatibility API. It is disabled by default and only becomes available when the workspace, collection, or request explicitly grants script vault access.
 
 Required behavior:
 
@@ -273,13 +277,14 @@ Required behavior:
 - Stores vault data outside the workspace JSON export path in a per-workspace vault file.
 - Encrypts vault values with Electron `safeStorage` in desktop builds and fails closed if OS-backed encryption is unavailable or Electron selected the Linux `basic_text` backend.
 - Enforces secret key, secret value, secret count, and per-script vault operation limits.
+- Supports workspace, collection, and request grants with explicit collection/request denial overrides. Denials win over workspace-wide grants.
 - Records bounded audit metadata for vault mutations without recording secret values.
 
 Security restrictions:
 
 - Workspace import/export does not include vault ciphertext or plaintext.
 - Scripts cannot enumerate vault secret values, access vault storage paths, or bypass the broker with Node filesystem/process APIs.
-- Current grant scope is workspace-wide. Collection/request-level vault grants and a reset/audit UI are still future UX work before claiming full Postman grant parity.
+- Rich reset/audit management UI is still future UX work before claiming full Postman vault-management parity.
 - Newman/Postman CLI compatibility is not expected for `pm.vault`; this is treated as Postman desktop sandbox parity.
 
 ## Package Loading Contract
@@ -289,41 +294,185 @@ Security restrictions:
 Required behavior:
 
 - Supports a manifest-driven bundled allowlist for common Postman imports: `ajv`, `chai`, `cheerio`, `crypto-js`, `csv-parse/lib/sync`, `lodash`, `moment`, `postman-collection`, `uuid`, and `xml2js`.
+- Supports Postman-listed NodeJS module facades for `path`, `assert`, `buffer`, `util`, `url`, `punycode`, `querystring`, `string-decoder`, `stream`, and `timers`. These facades must be implemented or wrapped as script-safe compatibility objects; they must not expose host filesystem, process, environment, native stream handles, or host constructors.
+- Supports reviewed package-cache entries for exact team-style package specifiers (`@team/package`) and exact external registry specifiers (`npm:package@version` and `jsr:package@version`).
+- Requires every reviewed package-cache entry to include source and matching `sha256-...` integrity metadata before scripts can load it.
+- Enforces package count, source byte size, dependency count, dependency depth, and export key limits. Duplicate package entries, missing reviewed dependencies, circular dependencies, and attempts to override bundled facades fail closed.
+- Allows cached packages to synchronously require only bundled facades or dependencies declared in their reviewed package manifest.
 - Provides global `CryptoJS` and `_` aliases for legacy Postman scripts.
 - Caches packages per script execution and hardens returned package objects/functions before exposing them to user code.
 - Keeps package loading synchronous and local; it never reaches the filesystem, shell, network, npm registry, or host Node resolver from script code.
 
 Security restrictions:
 
-- Rejects `node:`, `npm:`, `jsr:`, relative/absolute paths, URLs, backslash paths, team Package Library specifiers, and any package not on the allowlist.
+- Rejects direct `node:`, relative/absolute paths, URLs, backslash paths, unreviewed `npm:`/`jsr:`/team specifiers, and any package not on the bundled facade allowlist, Postman-compatible Node facade list, or reviewed package cache.
 - Does not expose Node `require`, Node built-ins, package installation, package update, transitive dependency loading, or user-controlled package paths.
-- Full Postman Package Library and external registry parity remains deferred until there is a reviewed signed/cacheable package model for user/team packages and exact external package versions.
+- Scripts cannot fetch, install, update, or resolve packages from registries at runtime. Any future online package workflow must run outside script execution and populate the same reviewed cache/integrity model.
+
+## Full Postman Import Parity Completion Plan
+
+Full Postman script import compatibility is not complete until every item in this section is implemented, documented, and covered by golden/differential fixtures. The current HTTP sandbox subset is a secure base, not the final compatibility claim.
+
+Claim gate:
+
+- The default import profile must prefer Postman-compatible behavior over intentionally narrow behavior. Stricter workspace settings may disable brokered APIs, but the default path for an imported Postman collection should run without manual policy changes.
+- Full parity is measured by observable output: executed script order, request mutation, network calls, response objects, variable/cookie/vault state, visualizer render data, mock output, test result names/order/pass/fail/skip state, console entries, and thrown errors.
+- Desktop-only Postman APIs such as `pm.vault`, `pm.mock`, and `pm.state` are validated against current Postman Desktop behavior. Newman-incompatible APIs must remain documented as desktop-only while still working in PostMeter's desktop import profile.
+- Newman-compatible behavior targets the latest published Newman release used by the corpus, currently `newman@6.2.2`, for APIs that Newman supports.
+- Extra compatibility support for older common Postman scripts is allowed, such as legacy `CryptoJS`, but extra support must not widen worker privileges or break current Postman behavior.
+
+Source-of-truth and audit work:
+
+- Maintain a generated parity inventory from the official Postman Sandbox API reference pages: overview, variables, vault, cookies, request, response, sendRequest, visualizer, test/expect, require/globals/modules, execution, message, info, mock, and state.
+- Maintain a second inventory from observed Postman Desktop and Newman runs for behavior not fully specified in docs: error text, callback ordering, async drain timing, duplicate test names, skipped-test result shape, console formatting, JSON parse errors, request mutation edge cases, and package module quirks.
+- Each inventory row must have an implementation status, a golden fixture, a differential fixture, and a security decision. No row may be "assumed compatible".
+
+JavaScript runtime and global parity:
+
+- Implement the full Postman global object set exposed in scripts: ECMAScript standard objects, typed arrays, `ArrayBuffer`, `SharedArrayBuffer` if Postman exposes it on the target runtime, `Intl`, `Promise`, `Proxy`, `Reflect`, DOM-style `AbortController`, `AbortSignal`, `DOMException`, `Event`, `EventTarget`, encoding globals `atob`, `btoa`, `TextEncoder`, `TextDecoder`, encoder/decoder streams, `Blob`, `File`, `structuredClone`, `queueMicrotask`, Web Streams constructors, `URL`, `URLSearchParams`, and Web Crypto `crypto`, `Crypto`, `CryptoKey`, and `SubtleCrypto`.
+- Match Postman's dynamic code behavior for `Function` and indirect eval only inside the isolated worker context. If enabled for import parity, add escape regression tests before the feature can ship.
+- Match timer behavior for `setTimeout`, `clearTimeout`, `setInterval`, `clearInterval`, and the `timers` module facade with script-safe limits, cancellation, async drain semantics, and deterministic timeout failures.
+- Match console method surface and formatting closely enough for imported script debugging and differential output: `log`, `info`, `warn`, `error`, `debug`, `trace`, `time`, `timeEnd`, `group`, `groupEnd`, and object formatting caps.
+- Keep raw browser/network globals unavailable unless Postman exposes them for the target script surface. Network compatibility is provided through `pm.sendRequest`, protocol-specific request execution, and brokered APIs.
+
+Module and package parity:
+
+- Replace partial facades with version-pinned behavior for every supported sandbox library: `ajv` with Postman's JSON Schema behavior, `chai`, `cheerio`, `csv-parse/lib/sync`, `lodash`, `moment`, `postman-collection`, `uuid`, and `xml2js`.
+- Add script-safe facades for Postman-listed NodeJS modules: `path`, `assert`, `buffer`, `util`, `url`, `punycode`, `querystring`, `string-decoder`, `stream`, and `timers`.
+- Implement `Buffer` compatibility through the `buffer` facade, and expose a global `Buffer` only if Postman exposes it in the target runtime.
+- Implement CommonJS semantics expected by Postman packages: module caching, `module.exports`, `exports`, dependency resolution within reviewed package bundles, default export interop patterns used by npm and JSR packages, circular dependency behavior, and error behavior.
+- Build package-cache management outside script execution: import package references, resolve package source, review/pin exact versions, store integrity metadata, show cache status in UI, and block script execution with a clear error when a referenced package is missing.
+- Continue blocking runtime package installation, registry fetches, path loading, native modules, and host Node resolution from scripts.
+
+Collection SDK object parity:
+
+- Use the official Postman Collection SDK directly inside the sandbox if it can be safely bundled and hardened, or implement faithful facades for the SDK classes Postman scripts receive: `Request`, `Url`, `Header`, `HeaderList`, `QueryParam`, `QueryParamList`, `RequestBody`, `FormParam`, `Variable`, `VariableList`, `Cookie`, `CookieList`, `Response`, and `PropertyList`.
+- Support common SDK methods and semantics used by imported scripts: `get`, `has`, `all`, `idx`, `each`, `map`, `filter`, `add`, `append`, `prepend`, `upsert`, `remove`, `clear`, `toObject`, `toJSON`, `toString`, `clone`, disabled-item filtering, case-insensitive headers, multi-value headers, URL path/query mutation, and safe object identity behavior.
+- Match Postman's immutability rules. For example, request body mutation must follow the behavior Postman exposes for that script surface; if Postman treats a body object as immutable in a protocol, PostMeter must do the same rather than accepting extra mutations.
+- Preserve generated SDK object prototypes enough for scripts that check constructors or call SDK helper methods, while preventing prototype/constructor escape to host objects.
+
+Tests, assertions, and result parity:
+
+- Implement full `pm.test` behavior: chaining return value, `pm.test.skip`, `pm.test.index`, sync callbacks, `done` callbacks, promise-returning callbacks, mixed callback/promise behavior, skipped-result reporting, duplicate names, nested tests from async callbacks, and ordering across timers, microtasks, and brokered callbacks.
+- Replace the current practical `pm.expect` subset with a full Chai-compatible assertion surface matching Postman's bundled Chai behavior, including negation, deep/nested/ordered membership chains, type assertions, property assertions, length assertions, throw assertions, `assert` and `should` where exposed by `chai`, and exact failure message compatibility where practical.
+- Implement Postman response assertion helpers: `pm.response.to.have.status`, `header`, `body`, `jsonBody`, `jsonSchema`, status-family helpers, `pm.response.to.not.be.error`, `pm.response.to.be.error` if supported, and the chain behavior around `to`, `be`, `have`, and `not`.
+- Match JSON schema validation with Postman's documented Ajv version and options behavior, including error propagation and option handling.
+
+Variable and dynamic variable parity:
+
+- Implement all documented variable methods: `has`, `get`, `set`, `unset`, `replaceIn`, `toObject`, and `clear` for globals, collection variables, and environments; `has`, `get`, `toObject`, `toJSON`, and `unset` for iteration data; and `has`, `get`, `set`, `unset`, `replaceIn`, and `toObject` for local/narrowest-scope variables.
+- Match Postman's precedence exactly: global, collection, environment, data, and local from broadest to narrowest, with `pm.variables` returning the narrowest available value and `pm.variables.set` creating local variables for the current request or collection run.
+- Preserve Postman variable metadata needed for parity: current value, initial value, type, disabled state, sensitive/secret masking behavior, request variables, folder variables, collection variables, environment variables, globals, and run data variables.
+- Implement the full dynamic variable catalog and Faker-based value generation used by Postman, including `$guid`, `$timestamp`, `$isoTimestamp`, `$randomUUID`, and all documented `$random*` categories: text, numbers, colors, internet, IP addresses, names, profession, phone, address, location, images, finance, business, catchphrases, databases, dates, domains, emails, usernames, files, directories, stores, grammar, and lorem ipsum. Dynamic values must resolve through `replaceIn` and through request URL/header/body/auth interpolation with Postman-compatible per-request generation semantics.
+- Ensure vault secrets are not accessible through `pm.variables`, matching Postman's separation between variables and `pm.vault`.
+
+Execution order and collection-run parity:
+
+- Match script hierarchy and run order for collection, nested folder, and request scripts in both pre-request and post-response phases: collection first, then each parent folder in order, then request; the same hierarchy applies after the response.
+- Support GraphQL script phases as Postman names them: Before query and After response.
+- Support gRPC script phases as Postman names them: Before invoke, On message, and After response. Before invoke failures must stop the request; On message scripts must run for every incoming streaming message according to the gRPC method type; After response must run when the stream closes, succeeds, fails, or is canceled.
+- Match `pm.info` for each surface, including `eventName` values such as `prerequest`, `test`, `beforeInvoke`, `onIncomingMessage`, and `afterResponse`, plus iteration, iteration count, request name, and request ID.
+- Match `pm.execution.setNextRequest` by name, ID, and `null`; `pm.execution.skipRequest`; and collection-run branching/loop semantics, including how failures, stops, and skipped requests affect later phases.
+- Match `pm.execution.runRequest` behavior: 10 calls per script, request ID/link/name target handling where possible after import, variable override precedence, referenced collection/folder/request script execution, returned `null` when the referenced request skips itself, referenced tests displayed on the caller, and documented restrictions such as referenced `setNextRequest` and visualizer calls not affecting the root request.
+
+Request, response, and network parity:
+
+- Expand `pm.request` to full Postman Collection SDK-compatible request access for HTTP, GraphQL, and gRPC: URL, method, method path, headers, query, auth, body, metadata, messages, and protocol-specific fields.
+- Support every Postman request body mode that can appear in imports and script-created requests: raw, JSON, text, GraphQL, urlencoded, form-data, file, binary, and no body. File/binary bodies must use an explicit user-granted file reference or imported safe attachment model; scripts must not gain arbitrary filesystem reads.
+- Expand pre-request mutation support to every mutation Postman permits, including URL, query, header, method, auth, and body mutations where supported, with parent validation before send.
+- Expand `pm.response` to full Postman response access: `text`, `json`, code, status, reason/status text behavior, headers, cookies where exposed, response time, response size, raw/body size behavior, final URL, metadata, trailers, messages, and binary/streaming body behavior.
+- Implement `pm.sendRequest` for all Postman request input forms: string URL, plain request object, Postman Collection SDK `Request`, header object/array/list inputs, body mode objects, auth helpers, cookie behavior, redirects, proxy behavior where supported by PostMeter, TLS validation, client certificate matching through brokered configured certificates, timeout behavior, cancellation, callback and promise forms, and response/error object compatibility.
+- Decide and document exact cookie-jar side effects for `pm.sendRequest` by matching Postman behavior. If Postman mutates the shared jar for a case, PostMeter must do so through staged broker transactions.
+
+Cookie parity:
+
+- Implement current-request `pm.cookies.has`, `get`, and `toObject` exactly for the current request URL.
+- Implement `pm.cookies.jar().set`, `get`, `getAll`, `unset`, and `clear` exactly, including callback ordering, promise/thenable behavior if Postman exposes it, hostname and URL normalization, Cookie object inputs from `postman-collection`, domain/path/default-path rules, expiry/max-age, `Secure`, `HttpOnly`, SameSite, Priority, Partitioned, host-only, prefixes, duplicate replacement, and error handling.
+- Match Postman's cookie domain allowlist model. Imported scripts should either import/store Postman's allowlist metadata when available or trigger a PostMeter permission flow that defaults to the least manual friction compatible with imported scripts.
+- Verify `HttpOnly` script readability and mutation behavior against current Postman Desktop and Newman before claiming parity. The current PostMeter policy hides `HttpOnly` values; keep that policy only if it matches Postman or is documented as an intentional security exception outside the full-parity profile.
+
+Visualizer parity:
+
+- Match `pm.visualizer.set(layout, data, options)` and `pm.visualizer.clear` with real Handlebars compile semantics, not just a subset, including helpers, partials, decorators if supported, `SafeString`, block params, data variables, parent/root lookup, whitespace behavior, escaping, and compile options.
+- Match `pm.getData(callback)` inside the visualizer document, including callback timing and data cloning behavior.
+- Support imported visualizers that depend on inline scripts and common charting libraries without granting renderer, Electron, Node, cookie, storage, or parent DOM access. External visualizer assets require a reviewed asset/cache model, deterministic CSP, size limits, and no unreviewed runtime network loads.
+- Differential-test rendered HTML and interactive behavior in the isolated visualizer iframe.
+
+Vault parity:
+
+- Match Postman's `pm.vault.get`, `set`, and `unset` async Promise behavior, prompt behavior, denial behavior, and "code after vault call does not run" error behavior when access is disabled or denied.
+- Implement rich grant management UX for reset, grant, deny, and audit review at workspace, collection, and request levels. Denials must override broader grants.
+- Keep vault storage encrypted outside workspace exports. Imported/exported Postman collections must never include vault plaintext or PostMeter vault ciphertext.
+- Document desktop-only scope: Postman scheduled runs, monitors, Postman CLI, Newman, GraphQL, and gRPC do not support `pm.vault`; PostMeter must mirror that compatibility boundary unless deliberately adding extra support outside the Postman claim.
+- Decide whether external vault integrations are required for parity. If PostMeter does not implement external vault providers, the contract must define an import-time local-secret binding flow that produces the same script outputs without claiming provider integration parity.
+
+Protocol-specific parity:
+
+- GraphQL imports must preserve query, variables, operation name, auth, headers, scripts, response parsing, and Before query/After response semantics. Package imports through `pm.require` must work in GraphQL scripts.
+- gRPC imports must preserve proto/service/method metadata, method path, request metadata, outgoing messages, streaming method type, incoming messages, response metadata, trailers, status, cancellation, and Before invoke/On message/After response script semantics. `pm.request.metadata`, `pm.request.messages`, `pm.response.metadata`, `pm.response.trailers`, `pm.response.messages`, and `pm.message` must expose Postman-compatible `PropertyList` behavior.
+- WebSocket or other streaming protocol scripts must be included if Postman exports or documents script hooks for them. If current Postman does not expose script hooks for a protocol, the generated inventory should record that fact with a source link and fixture.
+
+Local mock server parity:
+
+- If PostMeter imports or offers Postman local mock server scripts, implement the mock script surface: request/response objects compatible with Postman's local mock editor, `pm.mock.matchRequest`, `pm.mock.sendExample`, saved-example response lookup, path variable matching, route fallback behavior, and method/path-only matching behavior.
+- Implement persistent mock state through `pm.state.get`, `set`, `delete`, `has`, `keys`, `size`, `clear`, `toObject`, `increment`, `push`, and `addToSet`, with JSON-serializable value limits, per-mock-session storage, reset controls, and transaction safety.
+- Keep `pm.mock` and `pm.state` unavailable outside the local mock script surface, matching Postman's desktop-only boundary.
+
+Import/export and data model parity:
+
+- Preserve Postman Collection v2.1 script events at collection, folder, and request levels without flattening away information needed for exact run order, nested folders, request IDs, examples, package references, certificates, auth inheritance, variables, protocol profiles, GraphQL/gRPC definitions, WebSocket definitions if supported, and file/binary body references.
+- Preserve and resolve request IDs used by `pm.execution.runRequest`. Because Postman exports may not preserve all IDs, import must provide a deterministic mapping, a repair UI, or name/link fallback that makes imported scripts runnable.
+- Import Postman package references and team/external package metadata into the reviewed package-cache workflow. A collection that references packages must show missing packages before execution rather than failing obscurely inside a script.
+- Import cookie domain allowlists, vault access metadata, mock scripts, local mock state configuration, and visualizer assets when Postman exports them. If Postman does not export a needed permission or asset, provide a PostMeter binding UI and record the binding in workspace metadata.
+- Round-trip exported Postman-compatible collections without losing script text, script type, event location, package references, request IDs where possible, examples, variables, certificates, and protocol metadata.
+
+Security requirements for parity work:
+
+- Compatibility work must add facades, brokers, isolated renderers, reviewed caches, and explicit stores. It must not grant direct worker access to host Node, filesystem, environment variables, shell, Electron, renderer DOM, native modules, or raw networking.
+- New API surfaces require threat-model entries, broker validation rules, payload/operation limits, cancellation behavior, transaction behavior, and adversarial tests before being marked complete.
+- Any intentional security exception from Postman behavior must be explicit, user-facing, and reflected in `docs/COMPATIBILITY.md`. Full parity cannot be claimed while such exceptions affect the default import profile.
+
+Verification required for the full claim:
+
+- Generated docs parity matrix with zero unsupported rows for the supported import surface.
+- Golden corpus for every API category above, including obscure methods and failure paths, not only happy-path examples.
+- Differential harness that runs the same fixtures in Postman Desktop where automatable, latest Newman where supported, and PostMeter, then compares observable output.
+- Real-world import corpus from public and user-provided collections covering auth, package imports, dynamic variables, runRequest workflows, cookies, visualizers, vault prompts, GraphQL, gRPC streaming, and local mocks.
+- Fuzz/adversarial corpus for prototype escape, constructor escape, dynamic code generation, package loader abuse, broker payload mutation, oversized output, infinite async work, hostile visualizer HTML/scripts, mock state abuse, and protocol-stream floods.
+- Platform matrix for Linux, Windows, and macOS packaged apps, including OS sandbox validation, Node permission validation, and packaged asset/path behavior.
 
 ## API Target Matrix
 
-| API or behavior | Sandbox v1 target |
+This matrix is the full Postman import parity target. Rows marked as desktop-only or protocol-specific still belong in the contract because Postman users can encounter them when moving complex workspaces, even when Newman does not support them.
+
+| API or behavior | Full parity target |
 | --- | --- |
-| `pm.test` | Support sync, callback-style async, and promise-returning callbacks with deterministic completion. |
-| `pm.expect` | Continue practical Chai-style subset; expand only with compatibility fixtures. |
-| `pm.info` | Provide event name, request ID/name, iteration index/count, collection/run IDs where available. |
-| `pm.variables` | Support target resolution order and local writes. |
-| `pm.environment` | Read/write active environment. |
-| `pm.collectionVariables` | Read/write active collection variables. |
-| `pm.globals` | Supported through true workspace globals. No aliasing. |
-| `pm.request` | Read in both phases; support validated pre-request mutation deltas. |
-| `pm.response` | Available only in test scripts and `pm.sendRequest` callbacks/results. |
-| `pm.sendRequest` | Brokered, bounded HTTP(S) requests enabled by default for Postman import parity; workspace settings may disable. |
-| `pm.cookies` | Brokered current-URL and jar-style cookie helpers enabled by default for Postman import parity; `HttpOnly` values hidden; workspace settings may disable. |
-| `pm.execution` | Support collection-run control such as next-request/skip semantics where applicable, plus bounded brokered `runRequest` in collection runs. No-op or unsupported in single-send/test surfaces where not meaningful. |
-| `pm.iterationData` | Read-only current iteration data in collection/CLI runs; empty in single request sends. |
-| `pm.visualizer` | Supported through bounded template/data capture, a safe Handlebars-style subset, sanitization, and sandboxed iframe rendering. Custom helper/partial/interactive visualizer parity is deferred. |
-| `pm.vault` | Supported through explicit workspace grant, brokered async operations, encrypted per-workspace local storage, bounded values/operations, and mutation audit metadata. Collection/request grants and UI management are deferred. |
-| `pm.require` or package loading | Supports bundled facades for common Postman built-ins: `ajv`, `chai`, `cheerio`, `crypto-js`, `csv-parse/lib/sync`, `lodash`, `moment`, `postman-collection`, `uuid`, and `xml2js`; direct Node/external package loading remains forbidden. Full team Package Library and external registry parity is deferred. |
-| Timers | Support bounded `setTimeout`/`clearTimeout`; `setInterval` is unsupported unless a future bounded interval contract is written. |
-| Promises and microtasks | Support with bounded drain rules. |
-| `console` | Bounded capture only; never direct process logging. |
-| `eval`, `Function`, WebAssembly | Unsupported. |
-| Node globals and browser network globals | Unsupported except for safe ECMAScript built-ins and brokered APIs. |
+| `pm.test` | Support sync, callback-style async, promise-returning callbacks, chaining return value, `pm.test.skip`, `pm.test.index`, skipped results, duplicate names, nested async tests, and deterministic ordering. |
+| `pm.expect` and Chai | Match Postman's Chai-compatible BDD behavior, bundled `chai` package behavior, response assertion chains, JSON schema validation, and practical error messages. |
+| `pm.info` | Provide Postman-compatible metadata for HTTP, GraphQL, gRPC, and collection runs, including correct `eventName`, iteration, iteration count, request name, and request ID. |
+| `pm.variables` | Support local/narrowest-scope behavior, full precedence, `has`, `get`, `set`, `unset`, `replaceIn`, `toObject`, dynamic variables, and vault separation. |
+| `pm.environment` | Support Postman's full environment variable API, including `clear`, metadata preservation, disabled variables, current/initial values, and sensitive-value masking outside script-observable values. |
+| `pm.collectionVariables` | Support Postman's full collection variable API, including `clear`, collection/folder/request inheritance interactions, and metadata preservation. |
+| `pm.globals` | Support true workspace globals with Postman-compatible methods, metadata, import/export, and no aliasing to collection variables. |
+| `pm.iterationData` | Support current iteration data in collection/CLI runs with `has`, `get`, `toObject`, `toJSON`, and `unset` behavior matching Postman. |
+| Dynamic variables | Support the full documented Faker-backed catalog and generation semantics wherever Postman resolves variables. |
+| `pm.request` | Expose full Postman Collection SDK-compatible request objects for HTTP, GraphQL, and gRPC, including URL, headers, query, body, auth, metadata, messages, method path, mutation rules, and `toJSON`/`toString`/list APIs. |
+| `pm.response` | Expose full Postman response objects, including `text`, `json`, code, status text, headers, cookies where exposed, response time, response size, metadata, trailers, messages, binary/streaming handling, and response assertion helpers. |
+| `pm.message` | Expose incoming streaming message data and timestamp for gRPC On message scripts with Postman-compatible `PropertyList` behavior. |
+| `pm.sendRequest` | Broker all Postman-supported request input forms and callback/promise behavior, including body modes, auth, headers, cookies, redirects, TLS/certificates, cancellation, errors, and response objects. |
+| `pm.cookies` | Broker current-request cookie helpers and jar helpers with Postman's domain allowlist, callback ordering, Cookie object handling, cookie metadata, `HttpOnly` parity, and transaction rules. |
+| `pm.execution` | Support `setNextRequest`, `skipRequest`, `runRequest`, `location`, run metadata, variable override precedence, referenced-request behavior, and documented desktop/Newman limitations. |
+| `pm.visualizer` and `pm.getData` | Match Postman's Handlebars visualizer behavior, options, helpers, partials, `SafeString`, inline scripts, data cloning, timing, isolated rendering, and reviewed external asset strategy. |
+| `pm.vault` | Match desktop Postman `get`, `set`, and `unset` Promise behavior, prompt/grant/deny/reset behavior, denied-execution errors, audit metadata, encrypted local storage, and documented unsupported surfaces. |
+| `pm.require` | Support team Package Library specifiers, exact external `npm:` and `jsr:` specifiers, package cache/review workflow, CommonJS behavior, and full bundled library behavior without runtime registry access. |
+| Sandbox `require` | Support Postman built-in library names and Postman-listed NodeJS module facades only; reject host Node, paths, URLs, native modules, and unreviewed packages. |
+| Postman global objects | Support the full documented global object set, including Web Crypto, URL, streams, encoding, DOM-style abort/event objects, `Blob`, `File`, `structuredClone`, `queueMicrotask`, and safe dynamic code behavior where Postman exposes it. |
+| Timers and microtasks | Support `setTimeout`, `clearTimeout`, `setInterval`, `clearInterval`, `queueMicrotask`, promises, async tests, and brokered callbacks with bounded drain/cancellation semantics. |
+| `console` | Match Postman's script debugging surface closely enough for differential output while keeping bounded capture and no direct process logging. |
+| GraphQL scripts | Support Before query and After response hooks, package imports, variable interpolation, auth/headers, request/response access, and run-order semantics. |
+| gRPC scripts | Support Before invoke, On message, and After response hooks, streaming lifecycles, metadata, trailers, messages, cancellation, package imports, and `pm.message`. |
+| Local mock scripts | Support mock-editor-only `pm.mock`, `pm.state`, saved examples, path variables, request/response helpers, persistent state, and desktop-only availability. |
+| Raw host access | Keep direct filesystem, process, shell, Electron, renderer DOM, native modules, and raw networking unavailable. All privileged behavior remains brokered, validated, and bounded. |
 
 ## Load-Test Decision
 
@@ -359,13 +508,21 @@ Errors must not include secrets from protected assets unless the script explicit
 
 Contract compliance requires:
 
-- Compatibility fixtures for async ordering, promise and timer completion, failed async callbacks, nested `pm.sendRequest`, `pm.execution.runRequest`, variable precedence, globals, iteration data, cookie scope, request mutation, cancellation, and mixed assertion failures.
+- A generated official-docs parity matrix for every Postman sandbox page and every imported protocol surface, with an implementation status, security decision, and fixture link for each row.
+- Differential fixtures run against current Postman Desktop where automatable, latest targeted Newman where supported, and PostMeter. Differences must be classified as fixed, accepted extra support, or documented intentional security exception.
+- Compatibility fixtures for async ordering, promises, timers, intervals, microtasks, callback completion, failed async callbacks, skipped tests, `pm.test.index`, nested `pm.sendRequest`, `pm.execution.runRequest`, variable precedence, dynamic variables, globals, iteration data, cookie scope, request mutation, cancellation, and mixed assertion failures.
+- Protocol fixtures for HTTP, GraphQL, gRPC unary/client streaming/server streaming/bidirectional streaming, and any Postman-documented WebSocket script hooks.
+- Local mock fixtures for `pm.mock`, `pm.state`, saved-example matching, path variables, and persistent state.
+- Package fixtures for every built-in library facade, every Postman-listed NodeJS module facade, reviewed team packages, exact external npm packages, exact external JSR packages, missing packages, circular dependencies, and dependency policy failures.
+- Visualizer fixtures for Handlebars compile options, helpers, partials, `SafeString`, inline scripts, `pm.getData`, external asset policy, CSP failures, and interactive rendering.
+- Vault fixtures for grant, denial, reset, unavailable encryption, get/set/unset, denied code-after-call behavior, audit metadata, desktop-only scope, and import-time secret binding.
 - Golden fixtures from Postman/Newman-style runs where practical.
 - The checked-in Postman/Newman-style sandbox corpus lives under `test/fixtures/postman` and must continue to run through the normal Postman importer and collection runner.
-- Adversarial tests for constructor/prototype escape attempts, dynamic code generation, Node/global access, filesystem/process access, log flooding, large payloads, recursive scheduling, malformed broker messages, duplicate final results, late messages, worker crashes, and oversized results.
+- Adversarial tests for constructor/prototype escape attempts, dynamic code generation, Node/global access, package-loader abuse, filesystem/process access, raw networking, log flooding, large payloads, recursive scheduling, malformed broker messages, duplicate final results, late messages, worker crashes, oversized results, hostile visualizer documents, mock-state abuse, and protocol-stream floods.
 - Desktop single-send, desktop collection-run, CLI, and packaged-runtime coverage.
+- Real-world import corpus coverage from public and user-provided Postman collections, including auth-heavy workflows, package-heavy workflows, runRequest workflows, dynamic variables, cookies, visualizers, vault prompts, GraphQL, gRPC, and local mocks.
 - `npm run sandbox:validate` must pass against the pinned Electron runtime, including permission-model probes, Linux OS-sandbox filesystem/network-denial and seccomp-policy launch probes where applicable, and adversarial bridge-escape checks.
 - `npm run sandbox:validate:packaged` must pass against built desktop executables before release, including packaged path and ASAR behavior.
 - Packaged Linux assertions must prove the OS sandbox backend still works after packaging. Windows and macOS assertions must cover their native OS sandbox backends once those backends exist.
 
-The sandbox may be called production-ready only when the implementation, docs, compatibility matrix, and verification suite all match this contract. Full Postman script compatibility may be claimed only when `docs/COMPATIBILITY.md` no longer lists unsupported Postman script APIs for the supported import surface.
+The sandbox may be called production-ready only when the implementation, docs, compatibility matrix, and verification suite all match this contract. Full Postman script compatibility may be claimed only when `docs/COMPATIBILITY.md` no longer lists unsupported Postman script APIs for the supported import surface, and the generated parity matrix has zero unsupported rows for default Postman import mode.

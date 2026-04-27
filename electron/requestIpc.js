@@ -48,9 +48,11 @@ function registerRequestIpc(options = {}) {
     const baseCookies = cloneJson(workspaceSnapshot.cookies || []);
     try {
       const { response: result, environment: nextEnvironment, collectionVariables, localVariables, globals } = await runRequestWithScripts(request, environment, {
+        collectionId: requestContext?.collection?.id || '',
         collectionVariables: requestContext?.collection?.variables || [],
         globals: workspaceSnapshot.globals || [],
         cookieJar: workspaceSnapshot.cookies || [],
+        sandboxPackages: workspaceSnapshot.settings?.sandbox?.packageCache || [],
         trustedCapabilities: workspaceSnapshot.settings?.sandbox?.trustedCapabilities || {},
         vault: getVaultStore(workspaceId)
       });

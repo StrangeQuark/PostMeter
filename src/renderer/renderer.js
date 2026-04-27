@@ -1086,12 +1086,52 @@ function ensureSettings() {
   workspace.settings.updates ||= { includePrereleases: false };
   workspace.settings.appearance ||= { theme: 'system' };
   workspace.settings.sandbox ||= { trustedCapabilities: { sendRequest: true, cookies: true, vault: false } };
+  workspace.settings.sandbox.packageCache = normalizeSandboxPackageCache(workspace.settings.sandbox.packageCache);
   workspace.settings.sandbox.trustedCapabilities ||= { sendRequest: true, cookies: true, vault: false };
   workspace.settings.sandbox.trustedCapabilities.sendRequest = workspace.settings.sandbox.trustedCapabilities.sendRequest !== false;
   workspace.settings.sandbox.trustedCapabilities.cookies = workspace.settings.sandbox.trustedCapabilities.cookies !== false;
   workspace.settings.sandbox.trustedCapabilities.vault = workspace.settings.sandbox.trustedCapabilities.vault === true;
+  workspace.settings.sandbox.trustedCapabilities.vaultGrants = normalizeVaultGrants(
+    workspace.settings.sandbox.trustedCapabilities.vaultGrants,
+    workspace.settings.sandbox.trustedCapabilities.vault
+  );
   workspace.settings.appearance.theme = normalizeThemeOption(workspace.settings.appearance.theme);
   delete workspace.settings.loadTestPolicy;
+}
+
+function normalizeSandboxPackageCache(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter((item) => item && typeof item === 'object')
+    .slice(0, 32)
+    .map((item) => ({
+      specifier: String(item.specifier || item.name || '').trim(),
+      source: String(item.source || item.code || ''),
+      integrity: String(item.integrity || '').trim(),
+      dependencies: Array.isArray(item.dependencies) ? item.dependencies.map((dependency) => String(dependency || '').trim()).filter(Boolean).slice(0, 32) : [],
+      maxExportKeys: Number.isFinite(Number(item.maxExportKeys)) ? Number(item.maxExportKeys) : undefined
+    }))
+    .filter((item) => item.specifier && item.source && item.integrity);
+}
+
+function normalizeVaultGrants(value, workspaceGrant = false) {
+  const grants = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  return {
+    workspace: workspaceGrant === true || grants.workspace === true,
+    collections: normalizeIdList(grants.collections),
+    requests: normalizeIdList(grants.requests),
+    deniedCollections: normalizeIdList(grants.deniedCollections),
+    deniedRequests: normalizeIdList(grants.deniedRequests)
+  };
+}
+
+function normalizeIdList(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return [...new Set(value.map((item) => String(item || '').trim()).filter(Boolean))].slice(0, 1000);
 }
 
 function normalizeThemeOption(value) {
@@ -1147,6 +1187,14 @@ async function setTrustedScriptCapabilitiesFromInputs() {
   workspace.settings.sandbox.trustedCapabilities.sendRequest = $('trustedScriptSendRequestInput').checked === true;
   workspace.settings.sandbox.trustedCapabilities.cookies = $('trustedScriptCookiesInput').checked === true;
   workspace.settings.sandbox.trustedCapabilities.vault = $('trustedScriptVaultInput').checked === true;
+  const existingVaultGrants = workspace.settings.sandbox.trustedCapabilities.vaultGrants || {};
+  workspace.settings.sandbox.trustedCapabilities.vaultGrants = normalizeVaultGrants(
+    {
+      ...existingVaultGrants,
+      workspace: workspace.settings.sandbox.trustedCapabilities.vault === true
+    },
+    false
+  );
   await saveWorkspace(false, { scope: 'settings' });
   renderWorkspacePanel();
 }
@@ -1816,11 +1864,26 @@ function displayVisualizer(visualizer) {
     return;
   }
   const html = typeof visualizer?.html === 'string' ? visualizer.html : '';
-  frame.srcdoc = visualizerDocument(html);
+  frame.setAttribute('sandbox', 'allow-scripts');
+  frame.srcdoc = visualizerDocument(html, visualizer?.data);
 }
 
-function visualizerDocument(html) {
-  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; object-src 'none'; connect-src 'none'; media-src 'none'; worker-src 'none'; img-src data:; style-src 'unsafe-inline';"><style>html,body{margin:0;min-height:100%;font:13px system-ui,sans-serif;color:#1f2937;background:#fff;}body{padding:12px;box-sizing:border-box;}</style></head><body>${html}</body></html>`;
+function visualizerDocument(html, data = {}) {
+  const serializedData = safeScriptJson(data == null ? {} : data);
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; child-src 'none'; object-src 'none'; connect-src 'none'; media-src 'none'; worker-src 'none'; img-src data:; script-src 'unsafe-inline'; style-src 'unsafe-inline';"><style>html,body{margin:0;min-height:100%;font:13px system-ui,sans-serif;color:#1f2937;background:#fff;}body{padding:12px;box-sizing:border-box;}</style><script>window.pm=Object.freeze({getData:function(callback){if(typeof callback==='function'){callback(null,${serializedData});}}});</script></head><body>${html}</body></html>`;
+}
+
+function safeScriptJson(value) {
+  try {
+    return JSON.stringify(value)
+      .replace(/</g, '\\u003c')
+      .replace(/>/g, '\\u003e')
+      .replace(/&/g, '\\u0026')
+      .replace(/\u2028/g, '\\u2028')
+      .replace(/\u2029/g, '\\u2029');
+  } catch {
+    return '{}';
+  }
 }
 
 async function runLoadTest() {

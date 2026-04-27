@@ -4,6 +4,7 @@ const path = require('node:path');
 const test = require('node:test');
 const { runCollection } = require('../../src/core/collectionRunner');
 const { importPostmanCollection } = require('../../src/core/postmanImporter');
+const { scriptPackageIntegrity } = require('../../src/core/scriptRuntime');
 const { MemoryVaultStore } = require('../../src/core/vaultStore');
 
 const FIXTURE_DIR = path.join(__dirname, '..', 'fixtures', 'postman');
@@ -15,6 +16,8 @@ test('runs the golden Postman/Newman sandbox v1 corpus through the importer and 
   const sentRequests = [];
   const brokeredSendRequestUrls = [];
   const vault = new MemoryVaultStore({ seededToken: 'seeded-value' });
+  const teamPackageSource = "const lodash = require('lodash'); exports.format = function (value) { return lodash.get(value, 'name') + ':team'; };";
+  const externalPackageSource = "const team = require('@postmeter/corpus-tools'); module.exports = function (value) { return team.format(value).toUpperCase(); };";
 
   const result = await runCollection(collection, {
     id: 'env-golden',
@@ -35,6 +38,20 @@ test('runs the golden Postman/Newman sandbox v1 corpus through the importer and 
     iteration: 0,
     iterationCount: 1,
     iterationData,
+    sandboxPackages: [
+      {
+        specifier: '@postmeter/corpus-tools',
+        source: teamPackageSource,
+        integrity: scriptPackageIntegrity(teamPackageSource),
+        dependencies: ['lodash']
+      },
+      {
+        specifier: 'npm:@postmeter/corpus-format@1.0.0',
+        source: externalPackageSource,
+        integrity: scriptPackageIntegrity(externalPackageSource),
+        dependencies: ['@postmeter/corpus-tools']
+      }
+    ],
     trustedCapabilities: { vault: true },
     vault,
     sendRequest: async (request, environment) => {
@@ -82,8 +99,9 @@ test('runs the golden Postman/Newman sandbox v1 corpus through the importer and 
   const resultsByName = new Map(result.results.map((item) => [item.requestName, item]));
   assert.equal(
     resultsByName.get('01 Setup And Variable Precedence').testScriptResult.visualizer.html,
-    '<section><h1>Setup</h1><p>200</p><strong>ready</strong><span>Setup/Setup</span><ul><li>none</li></ul><ol><li>Setup:alpha/200</li><li>Setup:beta/200</li></ol></section>'
+    '<section><h1>Setup</h1><p>200</p><strong>ready</strong><span>Setup/Setup</span><ul><li>none</li></ul><ol><li>Setup:ALPHA/200</li><li>Setup:BETA/200</li></ol><script>pm.getData(function (error, data) { window.postmeterRows = data.rows.length; });</script></section>'
   );
+  assert.equal(resultsByName.get('01 Setup And Variable Precedence').testScriptResult.visualizer.interactive, true);
   for (const requestName of expected.notSentRequests) {
     if (requestName === '06 Skip By Prerequest') {
       assert.equal(resultsByName.get(requestName).statusCode, 0);

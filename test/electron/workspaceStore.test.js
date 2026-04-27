@@ -34,7 +34,21 @@ test('creates a default schema 11 workspace when no file exists', async () => {
   assert.equal(workspace.schemaVersion, 11);
   assert.deepEqual(workspace.settings, {
     appearance: { theme: 'system' },
-    sandbox: { trustedCapabilities: { sendRequest: true, cookies: true, vault: false } },
+    sandbox: {
+      packageCache: [],
+      trustedCapabilities: {
+        sendRequest: true,
+        cookies: true,
+        vault: false,
+        vaultGrants: {
+          workspace: false,
+          collections: [],
+          requests: [],
+          deniedCollections: [],
+          deniedRequests: []
+        }
+      }
+    },
     updates: { includePrereleases: false }
   });
   assert.deepEqual(workspace.collections, []);

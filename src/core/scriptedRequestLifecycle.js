@@ -37,6 +37,7 @@ async function runScriptedRequestLifecycle(state, options = {}) {
   const scriptOptions = {
     ...(options.scriptOptions || {}),
     runRequest: options.scriptOptions?.runRequest || options.runRequest,
+    sandboxPackages: options.scriptOptions?.sandboxPackages || options.sandboxPackages || [],
     sendRequest: options.scriptOptions?.sendRequest || send,
     signal: options.signal,
     trustedCapabilities: options.trustedCapabilities || options.scriptOptions?.trustedCapabilities || {},
@@ -44,6 +45,7 @@ async function runScriptedRequestLifecycle(state, options = {}) {
   };
 
   const preRequestScriptExecution = await runScript(state.request?.scripts?.preRequest, scriptContext(state, {
+    collectionId: options.collectionId,
     iteration: options.iteration || 0,
     iterationCount: options.iterationCount || 1,
     iterationData
@@ -85,6 +87,7 @@ async function runScriptedRequestLifecycle(state, options = {}) {
     state.cookies = response.updatedCookies;
   }
   const testScriptExecution = await runScript(state.request?.scripts?.tests, scriptContext(state, {
+    collectionId: options.collectionId,
     iteration: options.iteration || 0,
     iterationCount: options.iterationCount || 1,
     iterationData,
@@ -107,6 +110,7 @@ async function runScriptedRequestLifecycle(state, options = {}) {
 
 function scriptContext(state, options = {}) {
   return {
+    collectionId: options.collectionId || '',
     collectionVariables: state.collectionVariables,
     globals: state.globals,
     localVariables: state.localVariables,
