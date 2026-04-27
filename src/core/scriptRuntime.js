@@ -19,9 +19,18 @@ const MAX_VISUALIZER_DATA_BYTES = 256 * 1024;
 const MAX_VISUALIZER_HTML_LENGTH = 256 * 1024;
 const MAX_VISUALIZER_EACH_ITEMS = 500;
 const MAX_VISUALIZER_TEMPLATE_DEPTH = 5;
+const MAX_VISUALIZER_PARTIALS = 32;
+const MAX_VISUALIZER_HELPERS = 32;
+const MAX_VISUALIZER_PARTIAL_LENGTH = 32 * 1024;
 const VISUALIZER_VALUE_PATTERN = '[A-Za-z0-9_@./-]+';
 const VISUALIZER_UNSAFE_PATH_PARTS = new Set(['__proto__', 'prototype', 'constructor']);
 const VISUALIZER_BLOCK_HELPERS = new Set(['each', 'if', 'unless', 'with']);
+const MAX_SCRIPT_PACKAGE_COUNT = 32;
+const MAX_SCRIPT_PACKAGE_SOURCE_BYTES = 128 * 1024;
+const MAX_SCRIPT_PACKAGE_EXPORT_KEYS = 64;
+const MAX_SCRIPT_PACKAGE_DEPENDENCIES = 32;
+const MAX_SCRIPT_PACKAGE_LOAD_DEPTH = 16;
+const SCRIPT_PACKAGE_SPECIFIER_PATTERN = /^(?:npm:[a-z0-9@._/-]+@\d[\w.+-]*|jsr:[a-z0-9@._/-]+@\d[\w.+-]*|@[a-z0-9._-]+\/[a-z0-9._-]+)$/i;
 const SCRIPT_PACKAGE_DEFINITIONS = Object.freeze({
   ajv: Object.freeze({ factory: createAjvPackage, maxExportKeys: 4 }),
   chai: Object.freeze({ factory: createChaiPackage, maxExportKeys: 3 }),
@@ -42,6 +51,7 @@ const SCRIPT_PACKAGE_ALIASES = new Map([
 ]);
 const WORD_ARRAY_BYTES = new WeakMap();
 const MOMENT_INSTANCES = new WeakSet();
+const VISUALIZER_SAFE_STRING_VALUES = new WeakMap();
 
 function runPostmanScript(scriptText, context = {}, options = {}) {
   const source = String(scriptText || '');
@@ -60,7 +70,17 @@ function runPostmanScript(scriptText, context = {}, options = {}) {
   const tests = [];
   const logs = [];
   const visualizer = createVisualizerState();
-  const packageRegistry = createPackageRegistryState();
+  let packageRegistry;
+  try {
+    packageRegistry = createPackageRegistryState(context.sandboxPackages || options.sandboxPackages);
+  } catch (error) {
+    return {
+      passed: false,
+      tests,
+      error: errorMessage(error),
+      logs
+    };
+  }
   const scriptRequire = packageRequireApi(packageRegistry);
   const environmentVariables = context.environment?.variables || [];
   const collectionVariables = context.collectionVariables || [];
@@ -82,6 +102,7 @@ function runPostmanScript(scriptText, context = {}, options = {}) {
     _: scriptRequire('lodash'),
     CryptoJS: scriptRequire('crypto-js'),
     console: createConsole(logs),
+    Handlebars: createVisualizerHandlebarsApi(visualizer),
     Buffer: unsupportedApi('Buffer'),
     WebSocket: unsupportedApi('WebSocket'),
     XMLHttpRequest: unsupportedApi('XMLHttpRequest'),
@@ -100,6 +121,9 @@ function runPostmanScript(scriptText, context = {}, options = {}) {
       wasm: false
     },
     name: 'postmeter-script'
+  });
+  attachPackageRegistryContext(packageRegistry, vmContext, {
+    timeoutMillis: Number(options.timeoutMillis || DEFAULT_SCRIPT_TIMEOUT_MILLIS)
   });
 
   try {
@@ -145,7 +169,18 @@ async function runPostmanScriptAsync(scriptText, context = {}, options = {}) {
   const tests = [];
   const logs = [];
   const visualizer = createVisualizerState();
-  const packageRegistry = createPackageRegistryState();
+  let packageRegistry;
+  try {
+    packageRegistry = createPackageRegistryState(context.sandboxPackages || options.sandboxPackages);
+  } catch (error) {
+    return {
+      passed: false,
+      tests,
+      error: errorMessage(error),
+      logs,
+      commitSideEffects: false
+    };
+  }
   const scriptRequire = packageRequireApi(packageRegistry);
   const fatalErrors = [];
   const execution = {};
@@ -182,6 +217,7 @@ async function runPostmanScriptAsync(scriptText, context = {}, options = {}) {
     _: scriptRequire('lodash'),
     CryptoJS: scriptRequire('crypto-js'),
     console: createConsole(logs),
+    Handlebars: createVisualizerHandlebarsApi(visualizer),
     clearInterval: unsupportedApi('clearInterval'),
     clearTimeout: tracker.clearTimeout,
     setInterval: unsupportedApi('setInterval'),
@@ -200,6 +236,9 @@ async function runPostmanScriptAsync(scriptText, context = {}, options = {}) {
       wasm: false
     },
     name: 'postmeter-script'
+  });
+  attachPackageRegistryContext(packageRegistry, vmContext, {
+    timeoutMillis: Number(options.timeoutMillis || DEFAULT_SCRIPT_TIMEOUT_MILLIS)
   });
 
   try {
@@ -624,54 +663,73 @@ function unsupportedApi(name) {
   }));
 }
 
-function createPackageRegistryState() {
+function createPackageRegistryState(packages = []) {
   return {
-    cache: new Map()
+    cache: new Map(),
+    loading: [],
+    packages: normalizeScriptPackageBundles(packages),
+    timeoutMillis: DEFAULT_SCRIPT_TIMEOUT_MILLIS,
+    vmContext: null
   };
 }
 
-function packageRequireApi(registry = createPackageRegistryState()) {
+function attachPackageRegistryContext(registry, vmContext, options = {}) {
+  registry.vmContext = vmContext;
+  registry.timeoutMillis = Number(options.timeoutMillis || DEFAULT_SCRIPT_TIMEOUT_MILLIS);
+}
+
+function packageRequireApi(registry = createPackageRegistryState(), options = {}) {
   return hardenSandboxValue(function postmeterScriptRequire(packageName) {
-    const name = normalizeScriptPackageName(packageName);
+    const name = normalizeScriptPackageName(packageName, registry);
+    if (options.issuer) {
+      assertScriptPackageDependencyAllowed(registry, options.issuer, name);
+    }
     if (!registry.cache.has(name)) {
-      registry.cache.set(name, createScriptPackage(name));
+      registry.cache.set(name, createScriptPackage(name, registry));
     }
     return registry.cache.get(name);
   });
 }
 
-function normalizeScriptPackageName(packageName) {
+function normalizeScriptPackageName(packageName, registry = createPackageRegistryState()) {
   const raw = String(packageName == null ? '' : packageName).trim();
   const lowered = raw.toLowerCase();
-  const alias = SCRIPT_PACKAGE_ALIASES.get(lowered) || lowered;
-  if (!alias) {
+  if (!raw) {
     throw sandboxError('pm.require requires a package name.');
   }
-  if (alias.startsWith('npm:') || alias.startsWith('jsr:')) {
-    throw sandboxError('PostMeter package loading only supports reviewed bundled sandbox packages. External registry packages are not installed or fetched from scripts.');
-  }
   if (
-    alias.startsWith('node:')
-    || alias.startsWith('http:')
-    || alias.startsWith('https:')
-    || alias.startsWith('.')
-    || alias.startsWith('/')
-    || alias.includes('\\')
+    lowered.startsWith('node:')
+    || lowered.startsWith('http:')
+    || lowered.startsWith('https:')
+    || raw.startsWith('.')
+    || raw.startsWith('/')
+    || raw.includes('\\')
   ) {
     throw sandboxError('PostMeter package loading only supports bundled sandbox packages, not Node modules or external package specifiers.');
   }
+  const alias = SCRIPT_PACKAGE_ALIASES.get(lowered) || lowered;
   if (!SCRIPT_PACKAGE_NAMES.includes(alias)) {
+    if (registry.packages.has(raw)) {
+      return raw;
+    }
+    if (lowered.startsWith('npm:') || lowered.startsWith('jsr:') || raw.startsWith('@')) {
+      throw sandboxError(`Sandbox package "${raw}" is not installed in the reviewed package cache. Exact external and team package imports must be pre-bundled with integrity metadata before scripts can require them.`);
+    }
     throw sandboxError(`Sandbox package "${raw}" is not available. Supported packages: ${SCRIPT_PACKAGE_NAMES.join(', ')}.`);
   }
   return alias;
 }
 
-function createScriptPackage(name) {
+function createScriptPackage(name, registry = createPackageRegistryState()) {
   const definition = SCRIPT_PACKAGE_DEFINITIONS[name];
-  if (!definition || typeof definition.factory !== 'function') {
-    throw sandboxError(`Sandbox package "${name}" is not available.`);
+  if (definition && typeof definition.factory === 'function') {
+    return validateScriptPackageExport(name, definition.factory(), definition);
   }
-  return validateScriptPackageExport(name, definition.factory(), definition);
+  const packageBundle = registry.packages.get(name);
+  if (packageBundle) {
+    return createCachedScriptPackage(name, packageBundle, registry);
+  }
+  throw sandboxError(`Sandbox package "${name}" is not available.`);
 }
 
 function validateScriptPackageExport(name, exported, definition) {
@@ -683,6 +741,149 @@ function validateScriptPackageExport(name, exported, definition) {
     throw sandboxError(`Sandbox package "${name}" exceeds its bundled export policy.`);
   }
   return hardenSandboxValue(exported);
+}
+
+function normalizeScriptPackageBundles(packages) {
+  const map = new Map();
+  const values = Array.isArray(packages)
+    ? packages
+    : Object.entries(packages || {}).map(([specifier, value]) => ({ specifier, ...(value || {}) }));
+  if (values.length > MAX_SCRIPT_PACKAGE_COUNT) {
+    throw sandboxError(`Sandbox package cache cannot exceed ${MAX_SCRIPT_PACKAGE_COUNT} packages.`);
+  }
+  for (const item of values) {
+    const bundle = normalizeScriptPackageBundle(item);
+    if (SCRIPT_PACKAGE_NAMES.includes(bundle.specifier.toLowerCase())) {
+      throw sandboxError(`Sandbox package "${bundle.specifier}" cannot override a bundled package.`);
+    }
+    if (map.has(bundle.specifier)) {
+      throw sandboxError(`Sandbox package "${bundle.specifier}" is duplicated in the reviewed package cache.`);
+    }
+    map.set(bundle.specifier, bundle);
+  }
+  for (const bundle of map.values()) {
+    for (const dependency of bundle.dependencies) {
+      if (dependency === bundle.specifier) {
+        throw sandboxError(`Sandbox package "${bundle.specifier}" cannot depend on itself.`);
+      }
+      if (!SCRIPT_PACKAGE_NAMES.includes(dependency) && !map.has(dependency)) {
+        throw sandboxError(`Sandbox package "${bundle.specifier}" depends on missing reviewed package "${dependency}".`);
+      }
+    }
+  }
+  return map;
+}
+
+function normalizeScriptPackageBundle(item) {
+  if (!item || typeof item !== 'object') {
+    throw sandboxError('Sandbox package cache entries must be objects.');
+  }
+  const specifier = String(item.specifier || item.name || '').trim();
+  if (!specifier || !SCRIPT_PACKAGE_SPECIFIER_PATTERN.test(specifier)) {
+    throw sandboxError(`Sandbox package specifier "${specifier}" is invalid. Use @team/package, npm:package@version, or jsr:package@version.`);
+  }
+  const source = String(item.source || item.code || '');
+  if (!source.trim()) {
+    throw sandboxError(`Sandbox package "${specifier}" source is required.`);
+  }
+  if (Buffer.byteLength(source, 'utf8') > MAX_SCRIPT_PACKAGE_SOURCE_BYTES) {
+    throw sandboxError(`Sandbox package "${specifier}" source cannot exceed ${MAX_SCRIPT_PACKAGE_SOURCE_BYTES} bytes.`);
+  }
+  const integrity = String(item.integrity || '').trim();
+  const expectedIntegrity = scriptPackageIntegrity(source);
+  if (!integrity || integrity !== expectedIntegrity) {
+    throw sandboxError(`Sandbox package "${specifier}" integrity does not match its reviewed source.`);
+  }
+  const dependencyValues = Array.isArray(item.dependencies) ? item.dependencies : [];
+  if (dependencyValues.length > MAX_SCRIPT_PACKAGE_DEPENDENCIES) {
+    throw sandboxError(`Sandbox package "${specifier}" cannot declare more than ${MAX_SCRIPT_PACKAGE_DEPENDENCIES} dependencies.`);
+  }
+  const dependencies = new Set(dependencyValues.map((dependency) => normalizeScriptPackageDependencySpecifier(dependency)));
+  return {
+    dependencies,
+    integrity,
+    maxExportKeys: Math.max(1, Math.min(MAX_SCRIPT_PACKAGE_EXPORT_KEYS, Number(item.maxExportKeys || MAX_SCRIPT_PACKAGE_EXPORT_KEYS))),
+    source,
+    specifier
+  };
+}
+
+function normalizeScriptPackageDependencySpecifier(dependency) {
+  const raw = String(dependency == null ? '' : dependency).trim();
+  const lowered = raw.toLowerCase();
+  const alias = SCRIPT_PACKAGE_ALIASES.get(lowered) || lowered;
+  if (SCRIPT_PACKAGE_NAMES.includes(alias)) {
+    return alias;
+  }
+  if (SCRIPT_PACKAGE_SPECIFIER_PATTERN.test(raw)) {
+    return raw;
+  }
+  throw sandboxError(`Sandbox package dependency "${raw}" is invalid.`);
+}
+
+function scriptPackageIntegrity(source) {
+  return `sha256-${crypto.createHash('sha256').update(String(source || ''), 'utf8').digest('base64')}`;
+}
+
+function assertScriptPackageDependencyAllowed(registry, issuer, dependencyName) {
+  const bundle = registry.packages.get(issuer);
+  if (!bundle) {
+    return;
+  }
+  if (!bundle.dependencies.has(dependencyName)) {
+    throw sandboxError(`Sandbox package "${issuer}" cannot require undeclared dependency "${dependencyName}".`);
+  }
+}
+
+function createCachedScriptPackage(name, bundle, registry) {
+  if (!registry.vmContext) {
+    throw sandboxError(`Sandbox package "${name}" cannot load before the script context is ready.`);
+  }
+  if (registry.loading.includes(name)) {
+    throw sandboxError(`Sandbox package "${name}" has a circular dependency.`);
+  }
+  if (registry.loading.length >= MAX_SCRIPT_PACKAGE_LOAD_DEPTH) {
+    throw sandboxError('Sandbox package dependency depth exceeded.');
+  }
+  registry.loading.push(name);
+  const bridgeName = `__postmeterPackageBridge_${crypto.randomBytes(8).toString('hex')}`;
+  const bridge = hardenSandboxValue({
+    require: packageRequireApi(registry, { issuer: name })
+  });
+  const previousBridge = registry.vmContext[bridgeName];
+  registry.vmContext[bridgeName] = bridge;
+  try {
+    const source = [
+      "'use strict';",
+      '(() => {',
+      '  const module = { exports: {} };',
+      '  const exports = module.exports;',
+      `  const require = globalThis[${JSON.stringify(bridgeName)}].require;`,
+      bundle.source,
+      '  return module.exports;',
+      '})()'
+    ].join('\n');
+    const script = new vm.Script(source, {
+      filename: `postmeter-package:${name}`
+    });
+    const exported = script.runInContext(registry.vmContext, {
+      timeout: Math.max(1, Math.min(DEFAULT_SCRIPT_TIMEOUT_MILLIS, registry.timeoutMillis || DEFAULT_SCRIPT_TIMEOUT_MILLIS))
+    });
+    return validateScriptPackageExport(name, exported, bundle);
+  } catch (error) {
+    throw sandboxError(`Sandbox package "${name}" failed to load: ${errorMessage(error)}`);
+  } finally {
+    registry.loading.pop();
+    if (previousBridge === undefined) {
+      try {
+        delete registry.vmContext[bridgeName];
+      } catch {
+        registry.vmContext[bridgeName] = undefined;
+      }
+    } else {
+      registry.vmContext[bridgeName] = previousBridge;
+    }
+  }
 }
 
 function createCryptoJsPackage() {
@@ -919,7 +1120,7 @@ function jsonPointer(basePath, part) {
 function createLodashPackage() {
   const lodash = {
     assign(target, ...sources) {
-    const output = target && typeof target === 'object' ? target : createSafePlainObject();
+      const output = target && typeof target === 'object' ? target : createSafePlainObject();
       for (const source of sources) {
         assignSafeObjectProperties(output, source);
       }
@@ -2058,7 +2259,10 @@ function replaceVariablePairs(target, source) {
 function createVisualizerState() {
   return {
     data: null,
+    helpers: new Map(),
     html: '',
+    interactive: false,
+    partials: new Map(),
     template: ''
   };
 }
@@ -2070,21 +2274,86 @@ function visualizerApi(state = createVisualizerState()) {
       state.html = '';
       state.template = '';
     },
-    set(template, data = {}) {
+    set(template, data = {}, options = {}) {
       const source = String(template == null ? '' : template);
       if (source.length > MAX_VISUALIZER_TEMPLATE_LENGTH) {
         throw sandboxError(`pm.visualizer template cannot exceed ${MAX_VISUALIZER_TEMPLATE_LENGTH} characters.`);
       }
+      applyVisualizerOptions(state, options);
       const snapshot = cloneVisualizerData(data);
-      const rendered = sanitizeVisualizerHtml(renderVisualizerTemplate(source, snapshot));
+      const rendered = sanitizeVisualizerHtml(renderVisualizerTemplate(source, snapshot, state));
       if (rendered.length > MAX_VISUALIZER_HTML_LENGTH) {
         throw sandboxError(`pm.visualizer output cannot exceed ${MAX_VISUALIZER_HTML_LENGTH} characters.`);
       }
       state.data = snapshot;
       state.html = rendered;
+      state.interactive = /<script\b/i.test(rendered);
       state.template = source;
     }
   });
+}
+
+function createVisualizerHandlebarsApi(state = createVisualizerState()) {
+  function SafeString(value) {
+    const safeString = {
+      toString() {
+        return String(value == null ? '' : value);
+      }
+    };
+    VISUALIZER_SAFE_STRING_VALUES.set(safeString, String(value == null ? '' : value));
+    return hardenSandboxValue(safeString);
+  }
+  return hardenSandboxValue({
+    SafeString,
+    registerHelper(name, callback) {
+      const helperName = normalizeVisualizerExtensionName(name, 'helper');
+      if (typeof callback !== 'function') {
+        throw sandboxError('Handlebars.registerHelper requires a callback function.');
+      }
+      if (!state.helpers.has(helperName) && state.helpers.size >= MAX_VISUALIZER_HELPERS) {
+        throw sandboxError(`pm.visualizer cannot register more than ${MAX_VISUALIZER_HELPERS} helpers.`);
+      }
+      state.helpers.set(helperName, callback);
+    },
+    registerPartial(name, template) {
+      const partialName = normalizeVisualizerExtensionName(name, 'partial');
+      const source = String(template == null ? '' : template);
+      if (source.length > MAX_VISUALIZER_PARTIAL_LENGTH) {
+        throw sandboxError(`pm.visualizer partial cannot exceed ${MAX_VISUALIZER_PARTIAL_LENGTH} characters.`);
+      }
+      if (!state.partials.has(partialName) && state.partials.size >= MAX_VISUALIZER_PARTIALS) {
+        throw sandboxError(`pm.visualizer cannot register more than ${MAX_VISUALIZER_PARTIALS} partials.`);
+      }
+      state.partials.set(partialName, source);
+    }
+  });
+}
+
+function applyVisualizerOptions(state, options = {}) {
+  if (!options || typeof options !== 'object') {
+    return;
+  }
+  if (options.partials && typeof options.partials === 'object') {
+    for (const [name, template] of Object.entries(options.partials).slice(0, MAX_VISUALIZER_PARTIALS)) {
+      createVisualizerHandlebarsApi(state).registerPartial(name, template);
+    }
+  }
+  if (options.helpers && typeof options.helpers === 'object') {
+    for (const [name, callback] of Object.entries(options.helpers).slice(0, MAX_VISUALIZER_HELPERS)) {
+      createVisualizerHandlebarsApi(state).registerHelper(name, callback);
+    }
+  }
+}
+
+function normalizeVisualizerExtensionName(name, type) {
+  const normalized = String(name == null ? '' : name).trim();
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(normalized) || VISUALIZER_UNSAFE_PATH_PARTS.has(normalized)) {
+    throw sandboxError(`pm.visualizer ${type} name is invalid.`);
+  }
+  if (VISUALIZER_BLOCK_HELPERS.has(normalized)) {
+    throw sandboxError(`pm.visualizer ${type} cannot override built-in helper "${normalized}".`);
+  }
+  return normalized;
 }
 
 function cloneVisualizerData(data) {
@@ -2102,7 +2371,7 @@ function cloneVisualizerData(data) {
   }
 }
 
-function renderVisualizerTemplate(template, data, depth = 0) {
+function renderVisualizerTemplate(template, data, state = createVisualizerState(), depth = 0) {
   if (depth > MAX_VISUALIZER_TEMPLATE_DEPTH) {
     throw sandboxError(`pm.visualizer template block nesting cannot exceed ${MAX_VISUALIZER_TEMPLATE_DEPTH}.`);
   }
@@ -2115,31 +2384,43 @@ function renderVisualizerTemplate(template, data, depth = 0) {
   let match;
 
   while ((match = blockPattern.exec(source)) !== null) {
-    output = appendVisualizerOutput(output, renderVisualizerValues(source.slice(index, match.index), context));
+    output = appendVisualizerOutput(output, renderVisualizerValues(source.slice(index, match.index), context, state, depth));
     const block = readVisualizerBlock(source, blockPattern.lastIndex, match[1]);
     if (!block) {
       throw sandboxError(`pm.visualizer template has an unclosed {{#${match[1]}}} block.`);
     }
     output = appendVisualizerOutput(
       output,
-      renderVisualizerBlock(match[1], match[2], block, context, depth + 1)
+      renderVisualizerBlock(match[1], match[2], block, context, state, depth + 1)
     );
     index = block.endIndex;
     blockPattern.lastIndex = block.endIndex;
   }
 
-  return appendVisualizerOutput(output, renderVisualizerValues(source.slice(index), context));
+  return appendVisualizerOutput(output, renderVisualizerValues(source.slice(index), context, state, depth));
 }
 
-function renderVisualizerValues(template, data) {
-  const triplePattern = new RegExp(`\\{\\{\\{\\s*(${VISUALIZER_VALUE_PATTERN})\\s*\\}\\}\\}`, 'g');
-  const doublePattern = new RegExp(`\\{\\{\\s*(${VISUALIZER_VALUE_PATTERN})\\s*\\}\\}`, 'g');
+function renderVisualizerValues(template, data, state, depth) {
+  const partialPattern = /\{\{\s*>\s*([A-Za-z0-9_-]{1,64})(?:\s+([^}]+?))?\s*\}\}/g;
+  const triplePattern = /\{\{\{\s*([^{}]+?)\s*\}\}\}/g;
+  const doublePattern = /\{\{\s*([^#/{>!][^{}]*?)\s*\}\}/g;
   return String(template || '')
-    .replace(triplePattern, (_match, key) => {
-      const value = readVisualizerValue(data, key);
-      return value == null ? '' : String(value);
+    .replace(partialPattern, (_match, name, expression) => {
+      const partial = state.partials.get(name);
+      if (partial == null) {
+        return '';
+      }
+      const partialContext = expression ? readVisualizerExpression(data, expression, state) : data;
+      return renderVisualizerTemplate(partial, visualizerPartialContext(data, partialContext), state, depth + 1);
     })
-    .replace(doublePattern, (_match, key) => escapeHtml(readVisualizerValue(data, key)));
+    .replace(triplePattern, (_match, expression) => {
+      const value = readVisualizerExpression(data, expression, state);
+      return visualizerValueToString(value, { escape: false });
+    })
+    .replace(doublePattern, (_match, expression) => {
+      const value = readVisualizerExpression(data, expression, state);
+      return visualizerValueToString(value, { escape: true });
+    });
 }
 
 function readVisualizerBlock(template, startIndex, helperName) {
@@ -2179,33 +2460,33 @@ function readVisualizerBlock(template, startIndex, helperName) {
   return null;
 }
 
-function renderVisualizerBlock(helperName, pathValue, block, data, depth) {
+function renderVisualizerBlock(helperName, pathValue, block, data, state, depth) {
   const value = readVisualizerValue(data, pathValue);
   if (helperName === 'each') {
     const entries = visualizerEachEntries(value);
     if (!entries.length) {
-      return block.elseTemplate ? renderVisualizerTemplate(block.elseTemplate, data, depth) : '';
+      return block.elseTemplate ? renderVisualizerTemplate(block.elseTemplate, data, state, depth) : '';
     }
     let output = '';
     for (const entry of entries) {
       output = appendVisualizerOutput(
         output,
-        renderVisualizerTemplate(block.template, visualizerEachContext(data, entry.value, entry.index, entry.key), depth)
+        renderVisualizerTemplate(block.template, visualizerEachContext(data, entry.value, entry.index, entry.key), state, depth)
       );
     }
     return output;
   }
   if (helperName === 'if') {
-    return renderVisualizerTemplate(visualizerTruthy(value) ? block.template : block.elseTemplate, data, depth);
+    return renderVisualizerTemplate(visualizerTruthy(value) ? block.template : block.elseTemplate, data, state, depth);
   }
   if (helperName === 'unless') {
-    return renderVisualizerTemplate(visualizerTruthy(value) ? block.elseTemplate : block.template, data, depth);
+    return renderVisualizerTemplate(visualizerTruthy(value) ? block.elseTemplate : block.template, data, state, depth);
   }
   if (helperName === 'with') {
     if (!visualizerTruthy(value)) {
-      return block.elseTemplate ? renderVisualizerTemplate(block.elseTemplate, data, depth) : '';
+      return block.elseTemplate ? renderVisualizerTemplate(block.elseTemplate, data, state, depth) : '';
     }
-    return renderVisualizerTemplate(block.template, visualizerWithContext(data, value), depth);
+    return renderVisualizerTemplate(block.template, visualizerWithContext(data, value), state, depth);
   }
   return '';
 }
@@ -2239,6 +2520,16 @@ function visualizerWithContext(parent, item) {
   return visualizerItemContext(parent, item);
 }
 
+function visualizerPartialContext(parent, item) {
+  if (item == null) {
+    return parent;
+  }
+  if (item && typeof item === 'object') {
+    return visualizerItemContext(parent, item);
+  }
+  return visualizerItemContext(parent, item);
+}
+
 function visualizerItemContext(parent, item, index, key) {
   const context = createSafePlainObject();
   const root = parent?.['@root'] || parent;
@@ -2254,6 +2545,71 @@ function visualizerItemContext(parent, item, index, key) {
     context['@key'] = key;
   }
   return context;
+}
+
+function readVisualizerExpression(data, expression, state) {
+  const tokens = tokenizeVisualizerExpression(expression);
+  if (!tokens.length) {
+    return undefined;
+  }
+  const helper = state.helpers.get(tokens[0]);
+  if (helper) {
+    const args = tokens.slice(1).map((token) => readVisualizerHelperArgument(data, token));
+    try {
+      return helper.apply(data?.this ?? data, args);
+    } catch (error) {
+      throw sandboxError(`pm.visualizer helper "${tokens[0]}" failed: ${errorMessage(error)}`);
+    }
+  }
+  if (tokens.length === 1) {
+    return readVisualizerValue(data, tokens[0]);
+  }
+  return undefined;
+}
+
+function tokenizeVisualizerExpression(expression) {
+  const tokens = [];
+  const pattern = /"([^"\\]*(?:\\.[^"\\]*)*)"|'([^'\\]*(?:\\.[^'\\]*)*)'|(\S+)/g;
+  let match;
+  while ((match = pattern.exec(String(expression || '').trim())) !== null && tokens.length < 16) {
+    if (match[1] != null) {
+      tokens.push({ type: 'literal', value: match[1].replace(/\\(["\\])/g, '$1') });
+    } else if (match[2] != null) {
+      tokens.push({ type: 'literal', value: match[2].replace(/\\(['\\])/g, '$1') });
+    } else {
+      tokens.push(match[3]);
+    }
+  }
+  return tokens;
+}
+
+function readVisualizerHelperArgument(data, token) {
+  if (token && typeof token === 'object' && token.type === 'literal') {
+    return token.value;
+  }
+  const raw = String(token || '');
+  if (raw === 'true') {
+    return true;
+  }
+  if (raw === 'false') {
+    return false;
+  }
+  if (raw === 'null') {
+    return null;
+  }
+  if (/^-?\d+(?:\.\d+)?$/.test(raw)) {
+    return Number(raw);
+  }
+  return readVisualizerValue(data, raw);
+}
+
+function visualizerValueToString(value, options = {}) {
+  const safeValue = VISUALIZER_SAFE_STRING_VALUES.get(value);
+  if (safeValue != null) {
+    return safeValue;
+  }
+  const text = value == null ? '' : String(value);
+  return options.escape === false ? text : escapeHtml(text);
 }
 
 function assignVisualizerObjectFields(target, source) {
@@ -2329,7 +2685,8 @@ function readVisualizerProperty(value, part) {
 
 function sanitizeVisualizerHtml(html) {
   return String(html || '')
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<script\b[^>]*\bsrc\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*)[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<script\b[^>]*>/gi, '<script>')
     .replace(/\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
     .replace(/\s+(src|href)\s*=\s*(["'])(?!data:image\/|#|about:blank)(.*?)\2/gi, '')
     .replace(/\s+(src|href)\s*=\s*(?!["'])(?!data:image\/|#|about:blank)[^\s>]+/gi, '');
@@ -2340,7 +2697,9 @@ function visualizerResult(state) {
     return undefined;
   }
   return {
+    data: cloneJson(state.data || {}),
     html: state.html,
+    interactive: state.interactive === true,
     template: state.template.slice(0, MAX_VISUALIZER_TEMPLATE_LENGTH)
   };
 }
@@ -3288,7 +3647,9 @@ function boundedScriptResult(result) {
     } : {},
     request: result.request && typeof result.request === 'object' ? cloneJson(result.request) : undefined,
     visualizer: result.visualizer && typeof result.visualizer === 'object' ? {
+      data: result.visualizer.data == null ? {} : cloneJson(result.visualizer.data),
       html: truncate(result.visualizer.html || '', MAX_VISUALIZER_HTML_LENGTH),
+      interactive: result.visualizer.interactive === true,
       template: truncate(result.visualizer.template || '', MAX_VISUALIZER_TEMPLATE_LENGTH)
     } : undefined
   };
@@ -3347,5 +3708,6 @@ module.exports = {
   MAX_SCRIPT_RESULT_BYTES,
   MAX_TIMER_DELAY_MILLIS,
   runPostmanScript,
-  runPostmanScriptAsync
+  runPostmanScriptAsync,
+  scriptPackageIntegrity
 };

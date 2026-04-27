@@ -2,7 +2,7 @@
 
 These fixtures are exported Postman Collection v2.1 JSON documents used as the sandbox v1 compatibility corpus. The upstream Newman reference target is the current npm `latest` dist-tag resolved on April 25, 2026: `newman@6.2.2`.
 
-- `newman-sandbox-v1.collection.json` covers async ordering, nested `pm.sendRequest`, iteration data, current-URL and jar-style cookie helpers including hostname and object-set forms, variable precedence, bundled `pm.require`/`require` packages including the common Postman built-in facade set, `pm.execution.runRequest`, the safe `pm.visualizer` interpolation/block subset, brokered `pm.vault`, execution control, skipped requests, and mixed `pm.test` pass/fail behavior.
+- `newman-sandbox-v1.collection.json` covers async ordering, nested `pm.sendRequest`, iteration data, current-URL and jar-style cookie helpers including hostname and object-set forms, variable precedence, bundled `pm.require`/`require` packages including the common Postman built-in facade set, reviewed cached team/external package imports, `pm.execution.runRequest`, safe `pm.visualizer` interpolation/block/helper/partial/inline-script behavior, brokered `pm.vault`, execution control, skipped requests, and mixed `pm.test` pass/fail behavior.
 - `newman-sandbox-v1.iteration-data.json` is the data row used by the main corpus run.
 - `newman-sandbox-v1.expected.json` records the stable PostMeter/Newman-style run outcomes asserted by automated tests.
 - `newman-cancellation.collection.json` covers cancellation of pending async sandbox work.

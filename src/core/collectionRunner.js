@@ -75,11 +75,14 @@ async function runCollection(collection, environment, options = {}) {
       scriptOptions: {
         ...(options.scriptOptions || {}),
         runRequest: createRunRequestBroker(depth + 1),
+        sandboxPackages: options.sandboxPackages || options.scriptOptions?.sandboxPackages || [],
         vault: options.vault || options.scriptOptions?.vault
       },
+      sandboxPackages: options.sandboxPackages || options.scriptOptions?.sandboxPackages || [],
       vault: options.vault || options.scriptOptions?.vault,
       trustedCapabilities: options.trustedCapabilities || options.scriptOptions?.trustedCapabilities || {},
       iterationData: options.iterationData || [],
+      collectionId: collection?.id || '',
       iteration: options.iteration || 0,
       iterationCount: options.iterationCount || 1
     });
@@ -127,10 +130,12 @@ async function runCollection(collection, environment, options = {}) {
           scriptRunner: runScript,
           signal: options.signal,
           scriptOptions: options.scriptOptions,
+          sandboxPackages: options.sandboxPackages || options.scriptOptions?.sandboxPackages || [],
           trustedCapabilities: options.trustedCapabilities || options.scriptOptions?.trustedCapabilities || {},
           vault: options.vault || options.scriptOptions?.vault,
           runRequest: createRunRequestBroker(0),
           iterationData: options.iterationData || [],
+          collectionId: collection?.id || '',
           iteration: options.iteration || 0,
           iterationCount: options.iterationCount || 1
         }

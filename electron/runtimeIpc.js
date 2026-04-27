@@ -101,6 +101,7 @@ function registerRuntimeIpc(options = {}) {
         signal: abortController.signal,
         cookieJar: workspace.cookies || [],
         globals: workspace.globals || [],
+        sandboxPackages: workspace.settings?.sandbox?.packageCache || [],
         trustedCapabilities: workspace.settings?.sandbox?.trustedCapabilities || {},
         vault: getVaultStore(workspaceId),
         stopOnFailure: config.stopOnFailure === true,

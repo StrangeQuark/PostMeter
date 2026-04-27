@@ -106,16 +106,53 @@ function normalizeSettings(settings) {
       theme: normalizeTheme(settings?.appearance?.theme)
     },
     sandbox: {
+      packageCache: normalizeSandboxPackageCache(settings?.sandbox?.packageCache),
       trustedCapabilities: {
         sendRequest: settings?.sandbox?.trustedCapabilities?.sendRequest !== false,
         cookies: settings?.sandbox?.trustedCapabilities?.cookies !== false,
-        vault: settings?.sandbox?.trustedCapabilities?.vault === true
+        vault: settings?.sandbox?.trustedCapabilities?.vault === true,
+        vaultGrants: normalizeVaultGrants(settings?.sandbox?.trustedCapabilities?.vaultGrants, settings?.sandbox?.trustedCapabilities?.vault === true)
       }
     },
     updates: {
       includePrereleases: settings?.updates?.includePrereleases === true
     }
   };
+}
+
+function normalizeSandboxPackageCache(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter((item) => item && typeof item === 'object')
+    .slice(0, 32)
+    .map((item) => ({
+      specifier: String(item.specifier || item.name || '').trim(),
+      source: String(item.source || item.code || ''),
+      integrity: String(item.integrity || '').trim(),
+      dependencies: Array.isArray(item.dependencies) ? item.dependencies.map((dependency) => String(dependency || '').trim()).filter(Boolean).slice(0, 32) : [],
+      maxExportKeys: Number.isFinite(Number(item.maxExportKeys)) ? Number(item.maxExportKeys) : undefined
+    }))
+    .filter((item) => item.specifier && item.source && item.integrity);
+}
+
+function normalizeVaultGrants(value, workspaceGrant = false) {
+  const grants = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  return {
+    workspace: workspaceGrant === true || grants.workspace === true,
+    collections: normalizeIdList(grants.collections),
+    requests: normalizeIdList(grants.requests),
+    deniedCollections: normalizeIdList(grants.deniedCollections),
+    deniedRequests: normalizeIdList(grants.deniedRequests)
+  };
+}
+
+function normalizeIdList(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return [...new Set(value.map((item) => String(item || '').trim()).filter(Boolean))].slice(0, 1000);
 }
 
 function normalizeTheme(value) {

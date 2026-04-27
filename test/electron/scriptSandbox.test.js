@@ -424,6 +424,49 @@ test('runs pm.vault through the broker only when explicitly enabled', async () =
   assert.equal(await vault.get('token'), undefined);
 });
 
+test('supports scoped pm.vault grants for collections and requests', async () => {
+  const vault = new MemoryVaultStore({ existing: 'secret' });
+  const script = `
+    pm.test('scoped vault access', async function () {
+      pm.expect(await pm.vault.get('existing')).to.equal('secret');
+    });
+  `;
+
+  const collectionGranted = await runPostmanScriptIsolated(script, {
+    collectionId: 'collection-a',
+    request: { id: 'request-a', name: 'A' }
+  }, {
+    trustedCapabilities: { vault: false, vaultGrants: { collections: ['collection-a'] } },
+    vault,
+    timeoutMillis: 500,
+    workerTimeoutMillis: 1000
+  });
+  assert.equal(collectionGranted.result.passed, true);
+
+  const requestGranted = await runPostmanScriptIsolated(script, {
+    collectionId: 'collection-b',
+    request: { id: 'request-b', name: 'B' }
+  }, {
+    trustedCapabilities: { vault: false, vaultGrants: { requests: ['request-b'] } },
+    vault,
+    timeoutMillis: 500,
+    workerTimeoutMillis: 1000
+  });
+  assert.equal(requestGranted.result.passed, true);
+
+  const deniedOverride = await runPostmanScriptIsolated(script, {
+    collectionId: 'collection-c',
+    request: { id: 'request-c', name: 'C' }
+  }, {
+    trustedCapabilities: { vault: true, vaultGrants: { workspace: true, deniedRequests: ['request-c'] } },
+    vault,
+    timeoutMillis: 500,
+    workerTimeoutMillis: 1000
+  });
+  assert.equal(deniedOverride.result.passed, false);
+  assert.match(deniedOverride.result.tests[0].error, /pm\.vault is disabled/);
+});
+
 test('bounds pm.vault broker calls and values', async () => {
   const vault = new MemoryVaultStore();
   const bounded = await runPostmanScriptIsolated(`

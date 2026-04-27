@@ -71,7 +71,9 @@
                   "  pm.expect(pm.variables.get('globalOnly')).to.equal('global-only');",
                   "  pm.expect(pm.request.headers.get('X-Pre')).to.equal('collection-only');",
                   "});",
-                  "pm.visualizer.set('<section><h1>{{title}}</h1><p>{{status}}</p>{{#if ok}}<strong>ready</strong>{{else}}<strong>bad</strong>{{/if}}{{#with detail}}<span>{{name}}/{{@root.title}}</span>{{/with}}<ul>{{#each empty}}<li>{{this}}</li>{{else}}<li>none</li>{{/each}}</ul><ol>{{#each rows}}<li>{{../title}}:{{name}}/{{@root.status}}</li>{{/each}}</ol></section>', { title: 'Setup', status: pm.response.code, ok: true, detail: { name: 'Setup' }, empty: [], rows: [{ name: 'alpha' }, { name: 'beta' }] });",
+                  "Handlebars.registerHelper('upper', function (value) { return String(value).toUpperCase(); });",
+                  "Handlebars.registerPartial('row', '<li>{{../title}}:{{upper name}}/{{@root.status}}</li>');",
+                  "pm.visualizer.set('<section><h1>{{title}}</h1><p>{{status}}</p>{{#if ok}}<strong>ready</strong>{{else}}<strong>bad</strong>{{/if}}{{#with detail}}<span>{{name}}/{{@root.title}}</span>{{/with}}<ul>{{#each empty}}<li>{{this}}</li>{{else}}<li>none</li>{{/each}}</ul><ol>{{#each rows}}{{> row}}{{/each}}</ol><script>pm.getData(function (error, data) { window.postmeterRows = data.rows.length; });</script></section>', { title: 'Setup', status: pm.response.code, ok: true, detail: { name: 'Setup' }, empty: [], rows: [{ name: 'alpha' }, { name: 'beta' }] });",
                   "pm.environment.set('setupComplete', 'yes');"
                 ]
               }
@@ -175,6 +177,8 @@
                   "  const lodash = require('lodash');",
                   "  const moment = require('moment');",
                   "  const sdk = require('postman-collection');",
+                  "  const teamPackage = pm.require('@postmeter/corpus-tools');",
+                  "  const externalPackage = pm.require('npm:@postmeter/corpus-format@1.0.0');",
                   "  const uuid = pm.require('uuid');",
                   "  const xml2js = require('xml2js');",
                   "  pm.expect(Crypto.SHA256('abc').toString(Crypto.enc.Hex)).to.equal('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');",
@@ -191,6 +195,8 @@
                   "  const request = new sdk.Request({ method: 'POST', url: 'https://api.example.test/widgets', header: [{ key: 'X-Test', value: 'yes' }] });",
                   "  pm.expect(request.url.getHost()).to.equal('api.example.test');",
                   "  pm.expect(request.headers.get('X-Test')).to.equal('yes');",
+                  "  pm.expect(teamPackage.format({ name: 'Ada' })).to.equal('Ada:team');",
+                  "  pm.expect(externalPackage({ name: 'Ada' })).to.equal('ADA:TEAM');",
                   "  pm.expect(uuid.v4()).to.match(/^[0-9a-f-]{36}$/);",
                   "  let parsedXml;",
                   "  xml2js.parseString('<root><item id=\"1\">ok</item></root>', { explicitArray: false }, function (error, value) { if (error) { throw error; } parsedXml = value; });",

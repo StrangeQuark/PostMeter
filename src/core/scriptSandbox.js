@@ -103,6 +103,7 @@ function runPostmanScriptIsolated(scriptText, context = {}, options = {}) {
     }),
     options: {
       filename: options.filename,
+      sandboxPackages: options.sandboxPackages || context.sandboxPackages || [],
       timeoutMillis
     }
   };
@@ -751,9 +752,41 @@ function assertCookieCapability(state) {
 
 function scriptCapabilityEnabled(state, capability) {
   if (capability === 'vault') {
-    return state.options.trustedCapabilities?.vault === true;
+    return vaultCapabilityEnabled(state);
   }
   return state.options.trustedCapabilities?.[capability] !== false;
+}
+
+function vaultCapabilityEnabled(state) {
+  const trustedCapabilities = state.options.trustedCapabilities || {};
+  const grants = trustedCapabilities.vaultGrants;
+  const requestId = String(state.context?.request?.id || '');
+  const collectionId = String(state.context?.collectionId || '');
+  if (grants && typeof grants === 'object') {
+    if (requestId && listIncludesId(grants.deniedRequests, requestId)) {
+      return false;
+    }
+    if (collectionId && listIncludesId(grants.deniedCollections, collectionId)) {
+      return false;
+    }
+  }
+  if (trustedCapabilities.vault === true) {
+    return true;
+  }
+  if (!grants || typeof grants !== 'object') {
+    return false;
+  }
+  if (grants.workspace === true) {
+    return true;
+  }
+  if (requestId && listIncludesId(grants.requests, requestId)) {
+    return true;
+  }
+  return Boolean(collectionId && listIncludesId(grants.collections, collectionId));
+}
+
+function listIncludesId(values, id) {
+  return Array.isArray(values) && values.map((value) => String(value || '')).includes(id);
 }
 
 function visibleCookiesForCurrentRequest(state) {

@@ -1,6 +1,11 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { MAX_SCRIPT_LOG_LENGTH, MAX_SCRIPT_LOGS, runPostmanScript } = require('../../src/core/scriptRuntime');
+const {
+  MAX_SCRIPT_LOG_LENGTH,
+  MAX_SCRIPT_LOGS,
+  runPostmanScript,
+  scriptPackageIntegrity
+} = require('../../src/core/scriptRuntime');
 
 test('runs Postman-style tests and response helpers', () => {
   const result = runPostmanScript(`
@@ -86,7 +91,7 @@ test('blocks Node access and dynamic code generation', () => {
 
   const registryResult = runPostmanScript("pm.require('npm:left-pad@1.3.0');");
   assert.equal(registryResult.passed, false);
-  assert.match(registryResult.error, /External registry packages are not installed or fetched/);
+  assert.match(registryResult.error, /not installed in the reviewed package cache/);
 
   const functionResult = runPostmanScript('Function("return 1")();');
   assert.equal(functionResult.passed, false);
@@ -124,6 +129,97 @@ test('supports bundled Postman-style package loading without Node module access'
   `);
 
   assert.equal(result.passed, true);
+});
+
+test('supports exact reviewed team and external package bundles without Node access', () => {
+  const teamSource = `
+    const lodash = require('lodash');
+    exports.label = function (value) { return lodash.get(value, 'name') + ':team'; };
+  `;
+  const npmSource = `
+    const team = require('@postmeter/team-utils');
+    module.exports = function (value) { return team.label(value).toUpperCase(); };
+  `;
+  const result = runPostmanScript(`
+    const team = pm.require('@postmeter/team-utils');
+    const npmPackage = pm.require('npm:@postmeter/example@1.2.3');
+    pm.test('reviewed package cache', function () {
+      pm.expect(team.label({ name: 'Ada' })).to.equal('Ada:team');
+      pm.expect(npmPackage({ name: 'Ada' })).to.equal('ADA:TEAM');
+      pm.expect(team.label.constructor).to.be.undefined;
+      pm.expect(npmPackage.constructor).to.be.undefined;
+    });
+  `, {
+    sandboxPackages: [
+      {
+        specifier: '@postmeter/team-utils',
+        source: teamSource,
+        integrity: scriptPackageIntegrity(teamSource),
+        dependencies: ['lodash']
+      },
+      {
+        specifier: 'npm:@postmeter/example@1.2.3',
+        source: npmSource,
+        integrity: scriptPackageIntegrity(npmSource),
+        dependencies: ['@postmeter/team-utils']
+      }
+    ]
+  });
+
+  assert.equal(result.passed, true);
+
+  const deniedDependency = runPostmanScript("pm.require('@postmeter/bad');", {
+    sandboxPackages: [{
+      specifier: '@postmeter/bad',
+      source: "require('lodash'); module.exports = {};",
+      integrity: scriptPackageIntegrity("require('lodash'); module.exports = {};"),
+      dependencies: []
+    }]
+  });
+  assert.equal(deniedDependency.passed, false);
+  assert.match(deniedDependency.error, /undeclared dependency/);
+
+  const invalidIntegrity = runPostmanScript('pm.test("noop", function () {});', {
+    sandboxPackages: [{
+      specifier: 'npm:@postmeter/example@1.2.3',
+      source: npmSource,
+      integrity: 'sha256-invalid',
+      dependencies: []
+    }]
+  });
+  assert.equal(invalidIntegrity.passed, false);
+  assert.match(invalidIntegrity.error, /integrity does not match/);
+
+  const missingDependencySource = 'module.exports = {};';
+  const missingDependency = runPostmanScript('pm.test("noop", function () {});', {
+    sandboxPackages: [{
+      specifier: '@postmeter/missing-dependency',
+      source: missingDependencySource,
+      integrity: scriptPackageIntegrity(missingDependencySource),
+      dependencies: ['@postmeter/not-installed']
+    }]
+  });
+  assert.equal(missingDependency.passed, false);
+  assert.match(missingDependency.error, /depends on missing reviewed package/);
+
+  const duplicatePackage = runPostmanScript('pm.test("noop", function () {});', {
+    sandboxPackages: [
+      {
+        specifier: '@postmeter/duplicate',
+        source: missingDependencySource,
+        integrity: scriptPackageIntegrity(missingDependencySource),
+        dependencies: []
+      },
+      {
+        specifier: '@postmeter/duplicate',
+        source: missingDependencySource,
+        integrity: scriptPackageIntegrity(missingDependencySource),
+        dependencies: []
+      }
+    ]
+  });
+  assert.equal(duplicatePackage.passed, false);
+  assert.match(duplicatePackage.error, /duplicated in the reviewed package cache/);
 });
 
 test('supports additional bundled Postman built-in package facades', () => {
@@ -249,7 +345,9 @@ test('captures bounded pm.visualizer output', () => {
   `);
 
   assert.equal(result.passed, true);
-  assert.equal(result.visualizer.html, '<main><h1>&lt;Widget&gt;</h1><div><strong>ready</strong></div><ol><li data-index="0">&lt;alpha&gt;:ready</li><li data-index="1">beta:ok</li></ol></main>');
+  assert.equal(result.visualizer.html, '<main><h1>&lt;Widget&gt;</h1><div><strong>ready</strong></div><ol><li data-index="0">&lt;alpha&gt;:ready</li><li data-index="1">beta:ok</li></ol><script>bad()</script></main>');
+  assert.equal(result.visualizer.interactive, true);
+  assert.deepEqual(result.visualizer.data.rows.map((item) => item.status), ['ready', 'ok']);
 });
 
 test('supports primitive and object each blocks in pm.visualizer templates', () => {
@@ -279,6 +377,26 @@ test('supports conditional and scoped pm.visualizer blocks', () => {
 
   assert.equal(result.passed, true);
   assert.equal(result.visualizer.html, '<section><b>&lt;T&gt;/inner</b><i>clean</i><span>Ada/&lt;T&gt;</span><ul><li>none</li></ul><ol><li>&lt;T&gt;:one/&lt;T&gt;</li></ol></section>');
+});
+
+test('supports safe pm.visualizer helpers, partials, and inline scripts for pm.getData', () => {
+  const result = runPostmanScript(`
+    Handlebars.registerHelper('upper', function (value) {
+      return String(value).toUpperCase();
+    });
+    Handlebars.registerHelper('safeTag', function (value) {
+      return new Handlebars.SafeString('<em>' + String(value) + '</em>');
+    });
+    Handlebars.registerPartial('row', '<li>{{upper name}}/{{safeTag status}}</li>');
+    pm.visualizer.set('<ul>{{#each rows}}{{> row}}{{/each}}</ul><script>pm.getData(function (error, data) { window.renderedCount = data.rows.length; });</script>', {
+      rows: [{ name: 'ada', status: 'ok' }]
+    });
+  `);
+
+  assert.equal(result.passed, true);
+  assert.equal(result.visualizer.html, '<ul><li>ADA/<em>ok</em></li></ul><script>pm.getData(function (error, data) { window.renderedCount = data.rows.length; });</script>');
+  assert.equal(result.visualizer.interactive, true);
+  assert.equal(result.visualizer.data.rows[0].name, 'ada');
 });
 
 test('rejects malformed pm.visualizer blocks', () => {
