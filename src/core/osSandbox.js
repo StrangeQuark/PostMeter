@@ -1,5 +1,11 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const {
+  LINUX_SECCOMP_FILTER_FD,
+  createLinuxSeccompPolicy,
+  linuxSeccompSupported,
+  prepareSeccompStdio
+} = require('./seccompPolicy');
 
 const OS_SANDBOX_MODES = Object.freeze({
   AUTO: 'auto',
@@ -98,6 +104,7 @@ function createOsSandboxedProcessLaunch(options = {}) {
   }
 
   const executablePath = realPathIfExists(options.executablePath || process.execPath);
+  const seccompPolicy = createLinuxSeccompPolicy();
   return {
     sandboxed: true,
     backend: OS_SANDBOX_BACKENDS.BUBBLEWRAP,
@@ -106,24 +113,30 @@ function createOsSandboxedProcessLaunch(options = {}) {
       executablePath,
       args: options.args || [],
       env: options.env || {},
+      seccompPolicy,
       readOnlyPaths: [
         runtimeExecutableRoot(executablePath),
         ...(options.readOnlyPaths || [])
       ]
     }),
-    env: {}
+    env: {},
+    seccompPolicy
   };
 }
 
 function osSandboxStatus(options = {}) {
   const mode = normalizeOsSandboxMode(options.mode);
   const bubblewrapPath = process.platform === 'linux' ? findBubblewrap(options.bubblewrapPath) : '';
+  const supported = process.platform === 'linux' && Boolean(bubblewrapPath);
+  const seccompSupported = supported && linuxSeccompSupported();
   return {
     mode,
     platform: process.platform,
-    supported: process.platform === 'linux' && Boolean(bubblewrapPath),
+    supported,
     backend: process.platform === 'linux' && bubblewrapPath ? OS_SANDBOX_BACKENDS.BUBBLEWRAP : OS_SANDBOX_BACKENDS.NONE,
-    bubblewrapPath
+    bubblewrapPath,
+    seccompSupported,
+    seccompFilterFd: seccompSupported ? LINUX_SECCOMP_FILTER_FD : null
   };
 }
 
@@ -194,9 +207,17 @@ function bubblewrapArgs(options) {
     '/run',
     ...bindArgs,
     ...bubblewrapEnvArgs(options.env || {}),
+    ...bubblewrapSeccompArgs(options.seccompPolicy),
     options.executablePath,
     ...(options.args || [])
   ];
+}
+
+function bubblewrapSeccompArgs(seccompPolicy) {
+  if (!seccompPolicy?.filter) {
+    return [];
+  }
+  return ['--seccomp', String(seccompPolicy.fd)];
 }
 
 function bubblewrapEnvArgs(env) {
@@ -316,5 +337,6 @@ module.exports = {
   createOsSandboxedProcessLaunch,
   createScriptWorkerLaunch,
   osSandboxStatus,
-  normalizeOsSandboxMode
+  normalizeOsSandboxMode,
+  prepareSeccompStdio
 };

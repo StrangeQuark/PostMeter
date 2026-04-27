@@ -84,6 +84,10 @@ test('blocks Node access and dynamic code generation', () => {
   assert.equal(requireResult.passed, false);
   assert.match(requireResult.error, /only supports bundled sandbox packages/);
 
+  const registryResult = runPostmanScript("pm.require('npm:left-pad@1.3.0');");
+  assert.equal(registryResult.passed, false);
+  assert.match(registryResult.error, /External registry packages are not installed or fetched/);
+
   const functionResult = runPostmanScript('Function("return 1")();');
   assert.equal(functionResult.passed, false);
   assert.match(functionResult.error, /Code generation/);
@@ -104,6 +108,11 @@ test('supports bundled Postman-style package loading without Node module access'
       pm.expect(lodash.get({ nested: { value: 42 } }, 'nested.value')).to.equal(42);
       pm.expect(lodash.map([{ id: 'a' }, { id: 'b' }], 'id').join(',')).to.equal('a,b');
       const assigned = lodash.assign(null, { ok: true });
+      pm.expect(assigned.ok).to.equal(true);
+      const safeAssigned = lodash.assign({}, JSON.parse('{"__proto__":{"polluted":true},"constructor":"bad","safe":"ok"}'));
+      pm.expect(safeAssigned.safe).to.equal('ok');
+      pm.expect(safeAssigned.polluted).to.be.undefined;
+      pm.expect(safeAssigned.constructor).to.be.undefined;
       const created = {};
       lodash.set(created, 'nested.value', true);
       pm.expect(uuid.v4()).to.match(/^[0-9a-f-]{36}$/);
@@ -113,6 +122,106 @@ test('supports bundled Postman-style package loading without Node module access'
       pm.expect(created.nested.constructor).to.be.undefined;
     });
   `);
+
+  assert.equal(result.passed, true);
+});
+
+test('supports additional bundled Postman built-in package facades', () => {
+  const result = runPostmanScript(`
+    const Ajv = require('ajv');
+    const chai = require('chai');
+    const cheerio = require('cheerio');
+    const parseCsv = require('csv-parse/lib/sync');
+    const moment = require('moment');
+    const sdk = require('postman-collection');
+    const xml2js = require('xml2js');
+
+    pm.test('bundled Postman built-in facades', function () {
+      const ajv = new Ajv();
+      pm.expect(ajv.validate({ type: 'object', required: ['name'], properties: { name: { type: 'string' } }, additionalProperties: false }, { name: 'Ada' })).to.equal(true);
+      pm.expect(ajv.validate({ type: 'object', required: ['name'] }, {})).to.equal(false);
+      pm.expect(ajv.errors[0].keyword).to.equal('required');
+
+      chai.expect('PostMeter').to.include('Meter');
+      chai.assert.deepEqual({ ok: true }, { ok: true });
+
+      const $ = cheerio.load('<ul><li class="item" data-id="1">One</li><li class="item" data-id="2">Two</li></ul>');
+      pm.expect($('.item').length).to.equal(2);
+      pm.expect($('[data-id="2"]').text()).to.equal('Two');
+
+      const rows = parseCsv('name,score\\nAda,2', { columns: true, skip_empty_lines: true });
+      pm.expect(rows[0].name).to.equal('Ada');
+      pm.expect(rows[0].score).to.equal('2');
+      const csvPollution = parseCsv('__proto__,constructor,safe\\nbad,bad,ok', { columns: true })[0];
+      pm.expect(csvPollution.safe).to.equal('ok');
+      pm.expect(csvPollution.__proto__).to.be.undefined;
+      pm.expect(csvPollution.constructor).to.be.undefined;
+
+      pm.expect(moment.utc('2024-01-02T03:04:05Z').add(1, 'day').format('YYYY-MM-DD HH:mm:ss')).to.equal('2024-01-03 03:04:05');
+      const dateLike = moment.utc('2024-01-02T03:04:05Z').toDate();
+      pm.expect(dateLike.constructor).to.be.undefined;
+      pm.expect(dateLike.toISOString()).to.equal('2024-01-02T03:04:05.000Z');
+
+      const request = new sdk.Request({ method: 'POST', url: 'https://api.example.test/widgets?limit=1', header: [{ key: 'X-Test', value: 'yes' }] });
+      pm.expect(request.method).to.equal('POST');
+      pm.expect(request.url.getHost()).to.equal('api.example.test');
+      pm.expect(request.headers.get('X-Test')).to.equal('yes');
+      const headerObject = new sdk.HeaderList(null, [{ key: '__proto__', value: 'bad' }, { key: 'constructor', value: 'bad' }, { key: 'Safe', value: 'ok' }]).toObject();
+      pm.expect(headerObject.Safe).to.equal('ok');
+      pm.expect(headerObject.__proto__).to.be.undefined;
+      pm.expect(headerObject.constructor).to.be.undefined;
+      const collection = new sdk.Collection({ info: { name: 'Facade' }, item: [{ name: 'One', request: 'https://api.example.test/one' }] });
+      pm.expect(collection.items.count()).to.equal(1);
+
+      let parsed;
+      xml2js.parseString('<root><item id="1">ok</item></root>', { explicitArray: false }, function (error, value) {
+        if (error) { throw error; }
+        parsed = value;
+      });
+      pm.expect(parsed.root.item.$.id).to.equal('1');
+      pm.expect(parsed.root.item._).to.equal('ok');
+      const pollutedXml = xml2js.parseString('<root><__proto__>bad</__proto__><constructor>bad</constructor><safe>ok</safe></root>', { explicitArray: false });
+      pm.expect(pollutedXml.root.safe).to.equal('ok');
+      pm.expect(pollutedXml.root.__proto__).to.be.undefined;
+      pm.expect(pollutedXml.root.constructor).to.be.undefined;
+      const parsedPromise = xml2js.parseStringPromise('<root>ok</root>');
+      pm.expect(parsedPromise.constructor).to.be.undefined;
+      pm.expect(parsedPromise.then.constructor).to.be.undefined;
+    });
+  `);
+
+  assert.equal(result.passed, true);
+});
+
+test('does not expose prototype-polluting keys through object conversion helpers', () => {
+  const result = runPostmanScript(`
+    pm.test('safe object helpers', function () {
+      const variables = pm.variables.toObject();
+      pm.expect(variables.safe).to.equal('ok');
+      pm.expect(variables.__proto__).to.be.undefined;
+      pm.expect(variables.constructor).to.be.undefined;
+
+      const headers = pm.request.headers.toObject();
+      pm.expect(headers['X-Safe']).to.equal('yes');
+      pm.expect(headers.__proto__).to.be.undefined;
+      pm.expect(headers.constructor).to.be.undefined;
+    });
+  `, {
+    environment: {
+      variables: [
+        { key: '__proto__', value: 'bad', enabled: true },
+        { key: 'constructor', value: 'bad', enabled: true },
+        { key: 'safe', value: 'ok', enabled: true }
+      ]
+    },
+    request: {
+      headers: [
+        { key: '__proto__', value: 'bad', enabled: true },
+        { key: 'constructor', value: 'bad', enabled: true },
+        { key: 'X-Safe', value: 'yes', enabled: true }
+      ]
+    }
+  });
 
   assert.equal(result.passed, true);
 });
@@ -153,6 +262,40 @@ test('supports primitive and object each blocks in pm.visualizer templates', () 
 
   assert.equal(result.passed, true);
   assert.equal(result.visualizer.html, '<ul><li>0=red</li><li>1=&lt;blue&gt;</li></ul><dl><dt>pass</dt><dd>2</dd><dt>fail</dt><dd>0</dd></dl>');
+});
+
+test('supports conditional and scoped pm.visualizer blocks', () => {
+  const result = runPostmanScript(`
+    pm.visualizer.set('<section>{{#if ok}}<b>{{title}}/{{#if nested}}yes{{else}}inner{{/if}}</b>{{else}}bad{{/if}}{{#unless error}}<i>clean</i>{{/unless}}{{#with user}}<span>{{name}}/{{@root.title}}</span>{{/with}}<ul>{{#each empty}}<li>{{this}}</li>{{else}}<li>none</li>{{/each}}</ul><ol>{{#each rows}}<li>{{../title}}:{{name}}/{{@root.title}}</li>{{/each}}</ol></section>', {
+      ok: true,
+      nested: false,
+      error: '',
+      title: '<T>',
+      user: { name: 'Ada' },
+      empty: [],
+      rows: [{ name: 'one' }]
+    });
+  `);
+
+  assert.equal(result.passed, true);
+  assert.equal(result.visualizer.html, '<section><b>&lt;T&gt;/inner</b><i>clean</i><span>Ada/&lt;T&gt;</span><ul><li>none</li></ul><ol><li>&lt;T&gt;:one/&lt;T&gt;</li></ol></section>');
+});
+
+test('rejects malformed pm.visualizer blocks', () => {
+  const result = runPostmanScript("pm.visualizer.set('{{#if ok}}x{{/each}}', { ok: true });");
+
+  assert.equal(result.passed, false);
+  assert.match(result.error, /pm\.visualizer template block \{\{#if\}\} closed with \{\{\/each\}\}/);
+});
+
+test('blocks unsafe pm.visualizer path parts and context keys', () => {
+  const result = runPostmanScript(`
+    const data = JSON.parse('{"__proto__":{"polluted":"bad"},"constructor":{"constructor":"bad"},"prototype":"bad","safe":"ok"}');
+    pm.visualizer.set('<p>{{safe}}/{{__proto__.polluted}}/{{constructor.constructor}}/{{prototype}}</p><ul>{{#each this}}<li>{{@key}}</li>{{/each}}</ul>', data);
+  `);
+
+  assert.equal(result.passed, true);
+  assert.equal(result.visualizer.html, '<p>ok///</p><ul><li>safe</li></ul>');
 });
 
 test('times out runaway scripts', () => {

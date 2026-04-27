@@ -12,6 +12,7 @@ const {
   supportsNodePermissionFlags
 } = require('../../src/core/scriptSandbox');
 const {
+  createOsSandboxedProcessLaunch,
   createScriptWorkerLaunch
 } = require('../../src/core/osSandbox');
 const {
@@ -161,6 +162,28 @@ test('runs workers inside the required OS sandbox when a backend is available', 
 
   assert.equal(execution.result.passed, true);
   assert.equal(execution.environmentVariables.find((item) => item.key === 'osSandboxed').value, 'yes');
+});
+
+test('adds a Linux seccomp syscall policy to bubblewrap launches', (t) => {
+  const status = osSandboxStatus({ mode: OS_SANDBOX_MODES.REQUIRED });
+  if (!status.supported || !status.seccompSupported) {
+    t.skip('No seccomp-capable Linux OS sandbox backend is available on this platform.');
+    return;
+  }
+
+  const launch = createOsSandboxedProcessLaunch({
+    mode: OS_SANDBOX_MODES.REQUIRED,
+    args: ['-e', 'process.exit(0)'],
+    env: scriptWorkerEnv()
+  });
+
+  assert.equal(launch.sandboxed, true);
+  assert.equal(launch.backend, 'bubblewrap');
+  assert.deepEqual(launch.args.slice(launch.args.indexOf('--seccomp'), launch.args.indexOf('--seccomp') + 2), ['--seccomp', String(status.seccompFilterFd)]);
+  assert.ok(Buffer.isBuffer(launch.seccompPolicy.filter));
+  assert.ok(launch.seccompPolicy.filter.length > 0);
+  assert.ok(launch.seccompPolicy.deniedSyscalls.includes('bpf'));
+  assert.ok(launch.seccompPolicy.deniedSyscalls.includes('ptrace'));
 });
 
 test('fails closed when the required OS sandbox backend is unavailable', async () => {

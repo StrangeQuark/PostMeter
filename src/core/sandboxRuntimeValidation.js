@@ -5,7 +5,8 @@ const { spawnSync } = require('node:child_process');
 const {
   OS_SANDBOX_MODES,
   createOsSandboxedProcessLaunch,
-  osSandboxStatus
+  osSandboxStatus,
+  prepareSeccompStdio
 } = require('./osSandbox');
 const {
   runPostmanScriptIsolated,
@@ -125,6 +126,14 @@ function validateOsSandboxLaunchPolicy() {
   if (!hasArgPair(launch.args, '--cap-drop', 'ALL')) {
     throw new Error('Bubblewrap script sandbox launch must drop capabilities.');
   }
+  if (status.seccompSupported) {
+    if (!hasArgPair(launch.args, '--seccomp', String(status.seccompFilterFd))) {
+      throw new Error('Bubblewrap script sandbox launch is missing the Linux seccomp syscall policy.');
+    }
+    if (!launch.seccompPolicy?.filter || launch.seccompPolicy.filter.length === 0) {
+      throw new Error('Bubblewrap script sandbox launch has an empty seccomp syscall policy.');
+    }
+  }
 }
 
 function validateOsSandboxBoundary() {
@@ -160,15 +169,21 @@ function expectOsSandboxProbeDenied(label, code) {
     args: ['-e', code],
     env: scriptWorkerEnv()
   });
-  const result = spawnSync(launch.command, launch.args, {
-    encoding: 'utf8',
-    env: launch.env
-  });
-  if (result.error) {
-    throw result.error;
-  }
-  if (result.status !== 0) {
-    throw new Error(`OS sandbox probe did not deny ${label}: ${result.stderr || result.stdout || `status ${result.status}`}`);
+  const seccomp = prepareSeccompStdio(launch, ['ignore', 'pipe', 'pipe']);
+  try {
+    const result = spawnSync(launch.command, launch.args, {
+      encoding: 'utf8',
+      env: launch.env,
+      stdio: seccomp.stdio
+    });
+    if (result.error) {
+      throw result.error;
+    }
+    if (result.status !== 0) {
+      throw new Error(`OS sandbox probe did not deny ${label}: ${result.stderr || result.stdout || `status ${result.status}`}`);
+    }
+  } finally {
+    seccomp.cleanup();
   }
 }
 

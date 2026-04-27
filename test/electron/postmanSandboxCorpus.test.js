@@ -82,7 +82,7 @@ test('runs the golden Postman/Newman sandbox v1 corpus through the importer and 
   const resultsByName = new Map(result.results.map((item) => [item.requestName, item]));
   assert.equal(
     resultsByName.get('01 Setup And Variable Precedence').testScriptResult.visualizer.html,
-    '<section><h1>Setup</h1><p>200</p></section>'
+    '<section><h1>Setup</h1><p>200</p><strong>ready</strong><span>Setup/Setup</span><ul><li>none</li></ul><ol><li>Setup:alpha/200</li><li>Setup:beta/200</li></ol></section>'
   );
   for (const requestName of expected.notSentRequests) {
     if (requestName === '06 Skip By Prerequest') {
