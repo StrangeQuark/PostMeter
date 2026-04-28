@@ -45,9 +45,13 @@ for (const scriptName of [
 ]) {
   requireScript(scriptName);
 }
+for (const scriptName of ['pack:linux', 'dist:linux', 'dist:win', 'dist:mac']) {
+  requireScript(scriptName, ['electron-builder', '--publish never']);
+}
 
 requireWorkflow('CI workflow', ciWorkflow, [
   /node-version:\s*22/,
+  /POSTMETER_CI_ELECTRON_NO_SANDBOX:\s*"1"/,
   /apt-get install -y bubblewrap/,
   /npm test/,
   /npm run postman:parity:validate/,
@@ -70,6 +74,7 @@ requireWorkflow('CI workflow', ciWorkflow, [
 
 requireWorkflow('Release workflow', releaseWorkflow, [
   /platform:\s*linux/,
+  /POSTMETER_CI_ELECTRON_NO_SANDBOX:\s*"1"/,
   /platform:\s*windows/,
   /platform:\s*macos/,
   /npm run sandbox:validate/,
@@ -94,6 +99,7 @@ requireWorkflow('Manual native release validation workflow', releaseValidationWo
   /workflow_dispatch:/,
   /contents:\s*read/,
   /platform:\s*linux/,
+  /POSTMETER_CI_ELECTRON_NO_SANDBOX:\s*"1"/,
   /platform:\s*windows/,
   /platform:\s*macos/,
   /npm run sandbox:validate/,

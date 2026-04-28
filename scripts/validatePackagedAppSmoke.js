@@ -4,6 +4,7 @@ const fs = require('node:fs/promises');
 const { spawn } = require('node:child_process');
 const os = require('node:os');
 const path = require('node:path');
+const { WAIVER_ENV, withCiNoSandboxArgs } = require('./electronCiSandboxWaiver');
 
 const PROJECT_ROOT = path.join(__dirname, '..');
 const RELEASE_DIR = process.env.POSTMETER_RELEASE_DIR
@@ -76,32 +77,67 @@ async function runStartupSmoke(executable) {
       marker,
       expectReload: true
     });
-    await validatePersistenceArtifacts(userData, dataPath);
+    await validatePersistenceArtifacts(userData, dataPath, marker);
   } finally {
     await fs.rm(userData, { recursive: true, force: true });
   }
 }
 
 async function runStartupSmokeOnce(executable, options = {}) {
-  const result = await spawnWithTimeout(executable, [], {
+  const env = {
     ...minimalEnv(),
     POSTMETER_STARTUP_SMOKE: '1',
     POSTMETER_DATA_PATH: options.dataPath,
     POSTMETER_PACKAGED_SMOKE: '1',
     POSTMETER_PACKAGED_SMOKE_MARKER: options.marker,
     POSTMETER_PACKAGED_SMOKE_EXPECT_RELOAD: options.expectReload ? '1' : ''
-  });
+  };
+  const result = await spawnWithTimeout(executable, withCiNoSandboxArgs([], env), env);
   if (result.code !== 0) {
     throw new Error(`Packaged app startup smoke exited with ${result.code}: ${result.stderr || result.stdout}`);
   }
 }
 
-async function validatePersistenceArtifacts(userData, dataPath) {
-  const workspace = JSON.parse(await fs.readFile(dataPath, 'utf8'));
-  if (!Array.isArray(workspace.globals) || !workspace.globals.some((item) => item.key === '__postmeter_packaged_smoke')) {
+async function validatePersistenceArtifacts(userData, dataPath, marker = '') {
+  const workspace = await loadPersistedSmokeWorkspace(dataPath, marker);
+  if (!Array.isArray(workspace.globals) || !workspace.globals.some((item) => (
+    item.key === '__postmeter_packaged_smoke' && (!marker || item.value === marker)
+  ))) {
     throw new Error('Packaged app smoke did not persist the workspace marker.');
   }
   await fs.stat(path.join(userData, 'userData'));
+}
+
+async function loadPersistedSmokeWorkspace(dataPath, marker = '') {
+  const candidates = [dataPath];
+  const directory = path.dirname(dataPath);
+  let entries = [];
+  try {
+    entries = await fs.readdir(directory, { withFileTypes: true });
+  } catch {
+    entries = [];
+  }
+  for (const entry of entries) {
+    if (entry.isFile() && entry.name.endsWith('.json')) {
+      const candidate = path.join(directory, entry.name);
+      if (!candidates.includes(candidate)) {
+        candidates.push(candidate);
+      }
+    }
+  }
+  for (const candidate of candidates) {
+    try {
+      const workspace = JSON.parse(await fs.readFile(candidate, 'utf8'));
+      if (Array.isArray(workspace?.globals) && workspace.globals.some((item) => (
+        item.key === '__postmeter_packaged_smoke' && (!marker || item.value === marker)
+      ))) {
+        return workspace;
+      }
+    } catch {
+      continue;
+    }
+  }
+  throw new Error(`Packaged app smoke workspace marker was not found under ${directory}.`);
 }
 
 function spawnWithTimeout(command, args, env) {
@@ -131,7 +167,7 @@ function spawnWithTimeout(command, args, env) {
 
 function minimalEnv() {
   const keep = {};
-  for (const key of ['HOME', 'PATH', 'SystemRoot', 'TEMP', 'TMP', 'USERPROFILE', 'XAUTHORITY', 'DISPLAY', 'WAYLAND_DISPLAY']) {
+  for (const key of ['HOME', 'PATH', 'SystemRoot', 'TEMP', 'TMP', 'USERPROFILE', 'XAUTHORITY', 'DISPLAY', 'WAYLAND_DISPLAY', WAIVER_ENV]) {
     if (process.env[key]) {
       keep[key] = process.env[key];
     }
@@ -160,7 +196,9 @@ if (require.main === module) {
 
 module.exports = {
   findPackagedExecutable,
+  loadPersistedSmokeWorkspace,
   platformCandidates,
   runStartupSmoke,
+  validatePersistenceArtifacts,
   validateExecutable
 };

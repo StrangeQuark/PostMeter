@@ -950,6 +950,8 @@ Limitations:
 
 Packaging is configured through `electron-builder` in `package.json`.
 
+Distribution scripts pass `--publish never`; GitHub Release publication is handled only by the release workflow's explicit `gh release create` step after artifact metadata is generated and validated.
+
 Targets:
 
 - `npm run pack:linux`: unpacked Linux directory build.
@@ -984,7 +986,8 @@ CI is configured in `.github/workflows/ci.yml` for:
 Release automation is configured in `.github/workflows/release.yml` for tag pushes matching `v*`:
 
 - Builds unsigned Linux, Windows, and macOS artifacts on native GitHub-hosted runners.
-- Runs Node tests and checks the Electron runtime version before platform packaging.
+- Runs Node tests and checks the Electron runtime version before platform packaging. The version probe runs Electron in Node mode so GitHub-hosted Linux runners do not need Chromium's setuid sandbox helper configured just to print the runtime version.
+- Uses `POSTMETER_CI_ELECTRON_NO_SANDBOX=1` only for Linux GitHub-hosted Electron smoke launches where Chromium's setuid sandbox helper cannot be configured by the runner. This app-shell launch waiver is separate from PostMeter's script sandbox validation and is not a production runtime default.
 - Sets `CSC_IDENTITY_AUTO_DISCOVERY=false` so missing certificates do not block unsigned builds.
 - Downloads platform artifacts into one release directory.
 - Generates `SHA256SUMS` and `release-manifest.json`.

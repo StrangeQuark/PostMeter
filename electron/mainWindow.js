@@ -103,6 +103,7 @@ async function runStartupSmokeProbe(app, mainWindow, env) {
         loaded.workspace.globals = globals;
         await window.postmeter.workspace.save(loaded.workspace);
       }
+      window.__postmeterSkipWorkspaceShutdownSave = true;
       return true;
     })();
   `, true);

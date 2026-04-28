@@ -2,6 +2,7 @@ const { spawn } = require('node:child_process');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
+const { withCiNoSandboxArgs } = require('../../scripts/electronCiSandboxWaiver');
 
 async function main() {
   const electronPath = require('electron');
@@ -12,7 +13,7 @@ async function main() {
     POSTMETER_UI_REGRESSION_SMOKE: '1'
   };
   delete env.ELECTRON_RUN_AS_NODE;
-  const child = spawn(electronPath, ['.'], {
+  const child = spawn(electronPath, withCiNoSandboxArgs(['.'], env), {
     cwd: path.join(__dirname, '..', '..'),
     env,
     stdio: ['ignore', 'pipe', 'pipe']

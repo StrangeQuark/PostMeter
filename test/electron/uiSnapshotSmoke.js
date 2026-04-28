@@ -2,6 +2,7 @@ const { spawn } = require('node:child_process');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
+const { withCiNoSandboxArgs } = require('../../scripts/electronCiSandboxWaiver');
 
 const EXPECTED_SNAPSHOTS = [
   'request',
@@ -25,7 +26,7 @@ async function main() {
     POSTMETER_UI_SNAPSHOT_DIR: snapshotDir
   };
   delete env.ELECTRON_RUN_AS_NODE;
-  const child = spawn(electronPath, ['.'], {
+  const child = spawn(electronPath, withCiNoSandboxArgs(['.'], env), {
     cwd: path.join(__dirname, '..', '..'),
     env,
     stdio: ['ignore', 'pipe', 'pipe']

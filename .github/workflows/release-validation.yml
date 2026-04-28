@@ -96,6 +96,8 @@ jobs:
       - name: Packaged Linux app startup smoke
         if: matrix.platform == 'linux'
         run: xvfb-run -a npm run release:validate:packaged-smoke
+        env:
+          POSTMETER_CI_ELECTRON_NO_SANDBOX: "1"
 
       - name: Packaged sandbox validation
         if: matrix.platform != 'linux'
@@ -105,6 +107,7 @@ jobs:
         if: matrix.platform == 'linux'
         run: xvfb-run -a npm run sandbox:validate:packaged
         env:
+          POSTMETER_CI_ELECTRON_NO_SANDBOX: "1"
           POSTMETER_ALLOW_OS_SANDBOX_VALIDATION_SKIP: "1"
 
       - name: Validate Windows protocol registration

@@ -2,9 +2,10 @@ const { spawnSync } = require('node:child_process');
 const electronPath = require('electron');
 
 const env = { ...process.env };
-delete env.ELECTRON_RUN_AS_NODE;
+env.ELECTRON_RUN_AS_NODE = '1';
+delete env.NODE_OPTIONS;
 
-const result = spawnSync(electronPath, ['--version'], {
+const result = spawnSync(electronPath, ['-p', 'process.versions.electron'], {
   env,
   stdio: 'inherit'
 });
