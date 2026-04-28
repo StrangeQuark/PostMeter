@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 const {
   LINUX_SECCOMP_FILTER_FD,
   createLinuxSeccompPolicy,
@@ -36,6 +37,7 @@ const SYSTEM_READ_PATHS = [
   '/usr/share',
   '/etc/ld.so.cache'
 ];
+const BACKEND_PROBE_CACHE = new Map();
 
 function createScriptWorkerLaunch(workerPath, execArgv = [], env = {}, options = {}) {
   const mode = normalizeOsSandboxMode(options.osSandboxMode);
@@ -51,6 +53,11 @@ function createScriptWorkerLaunch(workerPath, execArgv = [], env = {}, options =
     readOnlyPaths: scriptWorkerReadOnlyPaths(workerPath),
     bubblewrapPath: options.bubblewrapPath,
     macosSandboxExecPath: options.macosSandboxExecPath,
+    probeArgs: [
+      ...execArgv,
+      '-e',
+      'process.exit(0)'
+    ],
     windowsSandboxHelperPath: options.windowsSandboxHelperPath
   });
 
@@ -92,6 +99,20 @@ function createOsSandboxedProcessLaunch(options = {}) {
       return unsandboxedLaunch(options);
     }
     const executablePath = realPathIfExists(options.executablePath || process.execPath);
+    if (!macosSandboxExecUsable(sandboxExecPath, {
+      executablePath,
+      env: options.env || {},
+      probeArgs: options.probeArgs,
+      readOnlyPaths: [
+        runtimeExecutableRoot(executablePath),
+        ...(options.readOnlyPaths || [])
+      ]
+    })) {
+      if (mode === OS_SANDBOX_MODES.REQUIRED) {
+        throw new Error('OS-level script sandboxing is required but the macOS seatbelt launcher failed its functional probe.');
+      }
+      return unsandboxedLaunch(options);
+    }
     return {
       sandboxed: true,
       backend: OS_SANDBOX_BACKENDS.MACOS_SEATBELT,
@@ -145,6 +166,20 @@ function createOsSandboxedProcessLaunch(options = {}) {
   }
 
   const executablePath = realPathIfExists(options.executablePath || process.execPath);
+  if (!bubblewrapUsable(bubblewrapPath, {
+    executablePath,
+    env: options.env || {},
+    probeArgs: options.probeArgs,
+    readOnlyPaths: [
+      runtimeExecutableRoot(executablePath),
+      ...(options.readOnlyPaths || [])
+    ]
+  })) {
+    if (mode === OS_SANDBOX_MODES.REQUIRED) {
+      throw new Error('OS-level script sandboxing is required but bubblewrap failed its functional probe.');
+    }
+    return unsandboxedLaunch(options);
+  }
   const seccompPolicy = createLinuxSeccompPolicy();
   return {
     sandboxed: true,
@@ -170,17 +205,27 @@ function osSandboxStatus(options = {}) {
   const bubblewrapPath = process.platform === 'linux' ? findBubblewrap(options.bubblewrapPath) : '';
   const macosSandboxExecPath = process.platform === 'darwin' ? findMacosSandboxExec(options.macosSandboxExecPath) : '';
   const windowsHelperPath = process.platform === 'win32' ? (options.windowsSandboxHelperPath || process.env.POSTMETER_WINDOWS_OS_SANDBOX_HELPER || '') : '';
-  const supported = (process.platform === 'linux' && Boolean(bubblewrapPath))
-    || (process.platform === 'darwin' && Boolean(macosSandboxExecPath))
+  const linuxSupported = process.platform === 'linux' && Boolean(bubblewrapPath) && bubblewrapUsable(bubblewrapPath, {
+    env: process.versions.electron ? { ELECTRON_RUN_AS_NODE: '1' } : {},
+    executablePath: realPathIfExists(process.execPath),
+    readOnlyPaths: [runtimeExecutableRoot(process.execPath), appSourceRoot()]
+  });
+  const macosSupported = process.platform === 'darwin' && Boolean(macosSandboxExecPath) && macosSandboxExecUsable(macosSandboxExecPath, {
+    env: process.versions.electron ? { ELECTRON_RUN_AS_NODE: '1' } : {},
+    executablePath: realPathIfExists(process.execPath),
+    readOnlyPaths: [runtimeExecutableRoot(process.execPath), appSourceRoot()]
+  });
+  const supported = linuxSupported
+    || macosSupported
     || (process.platform === 'win32' && executableFile(windowsHelperPath));
-  const seccompSupported = process.platform === 'linux' && supported && linuxSeccompSupported();
+  const seccompSupported = linuxSupported && linuxSeccompSupported();
   return {
     mode,
     platform: process.platform,
     supported,
-    backend: process.platform === 'linux' && bubblewrapPath
+    backend: linuxSupported
       ? OS_SANDBOX_BACKENDS.BUBBLEWRAP
-      : process.platform === 'darwin' && macosSandboxExecPath
+      : macosSupported
         ? OS_SANDBOX_BACKENDS.MACOS_SEATBELT
         : process.platform === 'win32' && executableFile(windowsHelperPath)
           ? OS_SANDBOX_BACKENDS.WINDOWS_HELPER
@@ -215,6 +260,64 @@ function findMacosSandboxExec(explicitPath) {
     return executableFile(explicitPath) ? explicitPath : '';
   }
   return MACOS_SANDBOX_EXEC_CANDIDATES.find(executableFile) || '';
+}
+
+function bubblewrapUsable(bubblewrapPath, options = {}) {
+  const executablePath = realPathIfExists(options.executablePath || process.execPath);
+  const env = {
+    POSTMETER_SCRIPT_WORKER: '1',
+    ...(options.env || {})
+  };
+  const probeArgs = Array.isArray(options.probeArgs) ? options.probeArgs : ['-e', 'process.exit(0)'];
+  const key = `bubblewrap:${bubblewrapPath}:${executablePath}:${env.ELECTRON_RUN_AS_NODE || ''}:${probeArgs.join('\0')}`;
+  if (BACKEND_PROBE_CACHE.has(key)) {
+    return BACKEND_PROBE_CACHE.get(key);
+  }
+  const args = bubblewrapArgs({
+    executablePath,
+    args: probeArgs,
+    env,
+    readOnlyPaths: [
+      runtimeExecutableRoot(executablePath),
+      ...(options.readOnlyPaths || [])
+    ],
+    seccompPolicy: null
+  });
+  const usable = spawnSync(bubblewrapPath, args, {
+    env: {},
+    stdio: 'ignore',
+    timeout: 3000
+  }).status === 0;
+  BACKEND_PROBE_CACHE.set(key, usable);
+  return usable;
+}
+
+function macosSandboxExecUsable(sandboxExecPath, options = {}) {
+  const executablePath = realPathIfExists(options.executablePath || process.execPath);
+  const env = options.env || {};
+  const probeArgs = Array.isArray(options.probeArgs) ? options.probeArgs : ['-e', 'process.exit(0)'];
+  const key = `macos-seatbelt:${sandboxExecPath}:${executablePath}:${env.ELECTRON_RUN_AS_NODE || ''}:${probeArgs.join('\0')}`;
+  if (BACKEND_PROBE_CACHE.has(key)) {
+    return BACKEND_PROBE_CACHE.get(key);
+  }
+  const usable = spawnSync(sandboxExecPath, [
+    '-p',
+    macosSeatbeltProfile({
+      executablePath,
+      readOnlyPaths: [
+        runtimeExecutableRoot(executablePath),
+        ...(options.readOnlyPaths || [])
+      ]
+    }),
+    executablePath,
+    ...probeArgs
+  ], {
+    env: macosSandboxEnv(env),
+    stdio: 'ignore',
+    timeout: 3000
+  }).status === 0;
+  BACKEND_PROBE_CACHE.set(key, usable);
+  return usable;
 }
 
 function unsandboxedLaunch(options = {}) {

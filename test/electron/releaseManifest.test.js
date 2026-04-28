@@ -64,8 +64,8 @@ test('validates release artifact manifest entries against files and package prot
       protocols: [{ schemes: ['postmeter'] }]
     }
   }));
-  const artifactPath = path.join(tempDir, 'PostMeter-9.9.9.zip');
-  await createZipArtifact(tempDir, artifactPath);
+  const artifactPath = path.join(tempDir, 'PostMeter-9.9.9.dmg');
+  await fs.writeFile(artifactPath, 'artifact');
   const artifactBytes = await fs.readFile(artifactPath);
   const hash = crypto.createHash('sha256').update(artifactBytes).digest('hex');
   const stat = await fs.stat(artifactPath);
@@ -73,11 +73,11 @@ test('validates release artifact manifest entries against files and package prot
   await fs.writeFile(manifestPath, JSON.stringify({
     schemaVersion: 1,
     artifacts: [{
-      file: 'PostMeter-9.9.9.zip',
+      file: 'PostMeter-9.9.9.dmg',
       sizeBytes: stat.size,
       sha256: hash,
-      platform: 'archive',
-      type: 'zip'
+      platform: 'macos',
+      type: 'dmg'
     }]
   }));
 
@@ -85,7 +85,7 @@ test('validates release artifact manifest entries against files and package prot
   await assert.doesNotReject(() => validateReleaseManifest({
     releaseDir: tempDir,
     manifestFile: manifestPath,
-    requiredTypes: new Set(['zip'])
+    requiredTypes: new Set(['dmg'])
   }));
   await assert.rejects(() => validateReleaseManifest({
     releaseDir: tempDir,
@@ -120,7 +120,12 @@ test('validates packaged Linux AppImage protocol registration when an artifact e
   await assert.doesNotReject(() => validateLinuxAppImageProtocol(appImagePath));
 });
 
-test('validates packaged macOS zip protocol registration when an app bundle exists', async () => {
+test('validates packaged macOS zip protocol registration when an app bundle exists', async (t) => {
+  if (!await commandExists('zip') || !await commandExists('unzip')) {
+    t.skip('zip and unzip are required to create and inspect macOS zip fixtures.');
+    return;
+  }
+
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-mac-zip-'));
   const appContents = path.join(tempDir, 'PostMeter.app', 'Contents');
   await fs.mkdir(appContents, { recursive: true });
@@ -171,14 +176,12 @@ function runCommand(command, args, options = {}) {
     let stderr = '';
     child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
     child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+    child.on('error', (error) => resolve({ code: 1, stdout, stderr: error.message || String(error) }));
     child.on('exit', (code) => resolve({ code, stdout, stderr }));
   });
 }
 
-async function createZipArtifact(tempDir, zipPath) {
-  const payloadDir = path.join(tempDir, 'zip-payload');
-  await fs.mkdir(payloadDir, { recursive: true });
-  await fs.writeFile(path.join(payloadDir, 'artifact.txt'), 'artifact');
-  const result = await runCommand('zip', ['-qr', zipPath, '.'], { cwd: payloadDir });
-  assert.equal(result.code, 0, result.stderr);
+async function commandExists(command) {
+  const result = await runCommand(command, ['--version']);
+  return result.code === 0;
 }

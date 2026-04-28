@@ -37,6 +37,8 @@ Current required native evidence:
 
 Run the `Native Release Validation` workflow manually from GitHub Actions for no-publish evidence. It builds Linux, Windows, and macOS artifacts on native runners, runs the packaged startup/sandbox/protocol checks, uploads the artifacts, then validates combined checksums and `release-manifest.json` without creating a GitHub Release.
 
+GitHub-hosted Linux runners may expose `bubblewrap` while denying the network-namespace setup required by PostMeter's full Linux OS-sandbox policy. Source and packaged sandbox validation therefore use an explicit CI-only waiver when the functional backend probe fails in that environment; local/manual Linux release signoff must still run `npm run sandbox:validate` without that waiver on a host where `bubblewrap` can launch the full namespace/seccomp sandbox.
+
 Manual Windows QA is optional before final release because the maintainer has a Windows machine. Manual Mac QA remains a final production signoff item once a Mac is available; until then, `macos-latest` runner evidence is the pre-production gate.
 
 ## Artifact Inventory

@@ -245,7 +245,7 @@ function startScriptWorkerProcess(launch) {
     env: launch.env,
     execArgv: launch.execArgv,
     serialization: 'json',
-    stdio: ['ignore', 'ignore', 'ignore', 'ipc']
+    stdio: ['ignore', 'ignore', 'pipe', 'ipc']
   });
 }
 
@@ -254,6 +254,7 @@ function createChildTransport(child, type) {
     return createStdioChildTransport(child);
   }
   return {
+    ...createStderrCapture(child),
     send(message) {
       if (child.connected) {
         child.send(message);
@@ -268,6 +269,22 @@ function createChildTransport(child, type) {
     },
     isConnected() {
       return child.connected;
+    }
+  };
+}
+
+function createStderrCapture(child) {
+  let stderrBuffer = '';
+  child.stderr?.setEncoding?.('utf8');
+  child.stderr?.on?.('data', (chunk) => {
+    stderrBuffer = `${stderrBuffer}${chunk}`;
+    if (Buffer.byteLength(stderrBuffer, 'utf8') > MAX_WORKER_STDERR_BYTES) {
+      stderrBuffer = stderrBuffer.slice(-MAX_WORKER_STDERR_BYTES);
+    }
+  });
+  return {
+    stderrText() {
+      return stderrBuffer.trim();
     }
   };
 }

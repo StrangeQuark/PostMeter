@@ -51,6 +51,8 @@ jobs:
 
       - name: Sandbox runtime validation
         run: npm run sandbox:validate
+        env:
+          POSTMETER_ALLOW_OS_SANDBOX_VALIDATION_SKIP: ${{ matrix.platform == 'linux' && '1' || '' }}
 
       - name: OS sandbox platform matrix validation
         run: npm run sandbox:platform:validate
@@ -99,6 +101,8 @@ jobs:
       - name: Packaged Linux sandbox validation
         if: matrix.platform == 'linux'
         run: xvfb-run -a npm run sandbox:validate:packaged
+        env:
+          POSTMETER_ALLOW_OS_SANDBOX_VALIDATION_SKIP: "1"
 
       - name: Validate Windows protocol registration
         if: matrix.platform == 'windows'

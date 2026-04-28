@@ -58,6 +58,8 @@ jobs:
 
       - name: Sandbox runtime validation
         run: npm run sandbox:validate
+        env:
+          POSTMETER_ALLOW_OS_SANDBOX_VALIDATION_SKIP: "1"
 
       - name: OS sandbox platform matrix validation
         run: npm run sandbox:platform:validate
@@ -85,6 +87,8 @@ jobs:
 
       - name: Packaged sandbox validation
         run: xvfb-run -a npm run sandbox:validate:packaged
+        env:
+          POSTMETER_ALLOW_OS_SANDBOX_VALIDATION_SKIP: "1"
 
   native-packaged-smoke:
     name: Native packaged smoke (${{ matrix.platform }})
