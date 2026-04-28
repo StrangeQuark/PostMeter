@@ -72,8 +72,11 @@
                   "  pm.expect(pm.request.headers.get('X-Pre')).to.equal('collection-only');",
                   "});",
                   "Handlebars.registerHelper('upper', function (value) { return String(value).toUpperCase(); });",
-                  "Handlebars.registerPartial('row', '<li>{{../title}}:{{upper name}}/{{@root.status}}</li>');",
-                  "pm.visualizer.set('<section><h1>{{title}}</h1><p>{{status}}</p>{{#if ok}}<strong>ready</strong>{{else}}<strong>bad</strong>{{/if}}{{#with detail}}<span>{{name}}/{{@root.title}}</span>{{/with}}<ul>{{#each empty}}<li>{{this}}</li>{{else}}<li>none</li>{{/each}}</ul><ol>{{#each rows}}{{> row}}{{/each}}</ol><script>pm.getData(function (error, data) { window.postmeterRows = data.rows.length; });</script></section>', { title: 'Setup', status: pm.response.code, ok: true, detail: { name: 'Setup' }, empty: [], rows: [{ name: 'alpha' }, { name: 'beta' }] });",
+                  "Handlebars.registerHelper('label', function (value, options) { return options.hash.prefix + String(value).toUpperCase() + '/' + options.data.root.title; });",
+                  "Handlebars.registerDecorator('stamp', function (program, props, container, options) { return function (context, runtimeOptions) { return program(context, runtimeOptions) + '<footer>' + options.args[0] + '</footer>'; }; });",
+                  "Handlebars.registerPartial('shared/row', '<li>{{@root.title}}:{{upper name}}/{{@root.status}}/{{label name prefix=\"row-\"}}</li>');",
+                  "var precompiledVisualizer = Handlebars.template(Function('return ' + Handlebars.precompile('<aside>{{title}}</aside>'))());",
+                  "pm.visualizer.set('{{*stamp \"done\"}}<section><h1>{{title}}</h1><p>{{status}}</p>' + precompiledVisualizer({ title: 'Compiled' }) + '<div class=\"postmeter-chart\"></div>{{#if ok}}<strong>ready</strong>{{else}}<strong>bad</strong>{{/if}}{{#with detail}}<span>{{name}}/{{@root.title}}</span>{{/with}}<ul>{{#each empty}}<li>{{this}}</li>{{else}}<li>none</li>{{/each}}</ul>{{#*inline \"inlineRow\"}}<li>inline:{{name}}</li>{{/inline}}<ol>{{#each rows}}{{> (lookup ../partials \"row\")}}{{> inlineRow}}{{/each}}</ol><script>pm.getData(function (error, data) { window.postmeterRows = data.rows.length; if (window.PostMeterChart) { window.PostMeterChart(data.rows.length); } });</script></section>', { title: 'Setup', status: pm.response.code, ok: true, detail: { name: 'Setup' }, empty: [], partials: { row: 'shared/row' }, rows: [{ name: 'alpha' }, { name: 'beta' }] }, { assets: { chartjs: { type: 'script', source: 'window.PostMeterChart=function(value){window.postmeterChartValue=value;}', integrity: 'sha256-LkF/dPq3n/m9xKusRIpr00y28ZaDbLPN2FFb29Sq7Vo=' }, chartcss: { type: 'style', source: '.postmeter-chart{color:#111;}', integrity: 'sha256-M36CCEe/D3787B6yKzPExcpntTBcLRrTuSdWkwSFkjg=' } } });",
                   "pm.environment.set('setupComplete', 'yes');"
                 ]
               }
@@ -134,22 +137,27 @@
                   "  pm.expect(pm.info.iteration).to.equal(0);",
                   "  pm.expect(pm.info.iterationCount).to.equal(1);",
                   "  pm.expect(pm.iterationData.get('rowId')).to.equal('row-42');",
-                  "  pm.expect(await pm.cookies.get('visible')).to.equal('visible-cookie');",
-                  "  pm.expect(await pm.cookies.get('secret')).to.be.undefined;",
+                  "  pm.expect(pm.cookies.get('visible')).to.equal('visible-cookie');",
+                  "  pm.expect(pm.cookies.get('secret')).to.equal('secret-cookie');",
+                  "  pm.expect(pm.cookies.has('secret')).to.equal(true);",
+                  "  pm.expect(pm.cookies.toObject().secret).to.equal('secret-cookie');",
                   "  await pm.cookies.set('scripted', 'from-corpus');",
                   "  await pm.cookies.unset('visible');",
                   "  const jar = pm.cookies.jar();",
                   "  await jar.set('https://api.example.test/path', 'jarred', 'from-jar');",
                   "  pm.expect(await jar.get('https://api.example.test/path', 'jarred')).to.equal('from-jar');",
+                  "  pm.expect(await jar.get('https://api.example.test/path', 'secret')).to.equal('secret-cookie');",
                   "  await jar.set('api.example.test/path', { name: 'jarObject', value: 'from-object', path: '/path' });",
                   "  pm.expect(await jar.get('api.example.test/path', 'jarObject')).to.equal('from-object');",
                   "  const jarCookies = await jar.getAll('https://api.example.test/path');",
-                  "  pm.expect(jarCookies.secret).to.be.undefined;",
+                  "  pm.expect(jarCookies.get('secret')).to.equal('secret-cookie');",
                   "  await jar.unset('https://api.example.test/path', 'jarred');",
                   "  await jar.unset('api.example.test/path', 'jarObject');",
+                  "  await pm.cookies.unset('secret');",
                   "  const cookies = await pm.cookies.toObject();",
                   "  pm.expect(cookies.scripted).to.equal('from-corpus');",
                   "  pm.expect(cookies.visible).to.be.undefined;",
+                  "  pm.expect(cookies.secret).to.be.undefined;",
                   "});"
                 ]
               }
@@ -179,6 +187,7 @@
                   "  const sdk = require('postman-collection');",
                   "  const teamPackage = pm.require('@postmeter/corpus-tools');",
                   "  const externalPackage = pm.require('npm:@postmeter/corpus-format@1.0.0');",
+                  "  const commonJsPackage = pm.require('npm:@postmeter/corpus-commonjs@1.0.0');",
                   "  const uuid = pm.require('uuid');",
                   "  const xml2js = require('xml2js');",
                   "  pm.expect(Crypto.SHA256('abc').toString(Crypto.enc.Hex)).to.equal('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');",
@@ -197,12 +206,255 @@
                   "  pm.expect(request.headers.get('X-Test')).to.equal('yes');",
                   "  pm.expect(teamPackage.format({ name: 'Ada' })).to.equal('Ada:team');",
                   "  pm.expect(externalPackage({ name: 'Ada' })).to.equal('ADA:TEAM');",
+                  "  pm.expect(commonJsPackage.describe({ name: 'Ada' })).to.equal('ADA:TEAM:bundle');",
                   "  pm.expect(uuid.v4()).to.match(/^[0-9a-f-]{36}$/);",
                   "  let parsedXml;",
                   "  xml2js.parseString('<root><item id=\"1\">ok</item></root>', { explicitArray: false }, function (error, value) { if (error) { throw error; } parsedXml = value; });",
                   "  pm.expect(parsedXml.root.item._).to.equal('ok');",
                   "});",
                   "pm.environment.set('packageLoading', 'yes');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03aa Runtime Globals And Node Facades",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/runtime-globals"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('runtime globals and Node module facades', async function () {",
+                  "  const path = require('path');",
+                  "  const assert = require('assert');",
+                  "  const buffer = require('buffer');",
+                  "  const util = require('util');",
+                  "  const url = require('url');",
+                  "  const punycode = require('punycode');",
+                  "  const querystring = require('querystring');",
+                  "  const stringDecoder = require('string-decoder');",
+                  "  const events = require('events');",
+                  "  const stream = require('stream');",
+                  "  const timers = require('timers');",
+                  "  const globalScope = Function('return this')();",
+                  "  const globalNames = [",
+                  "    'AggregateError', 'Array', 'ArrayBuffer', 'Atomics', 'BigInt', 'BigInt64Array',",
+                  "    'BigUint64Array', 'Boolean', 'DataView', 'Date', 'Error', 'EvalError',",
+                  "    'Float32Array', 'Float64Array', 'Function', 'Infinity', 'Int8Array',",
+                  "    'Int16Array', 'Int32Array', 'Intl', 'JSON', 'Map', 'Math', 'NaN', 'Number',",
+                  "    'Object', 'Promise', 'Proxy', 'RangeError', 'ReferenceError', 'Reflect',",
+                  "    'RegExp', 'Set', 'SharedArrayBuffer', 'String', 'Symbol', 'SyntaxError',",
+                  "    'TypeError', 'Uint8Array', 'Uint8ClampedArray', 'Uint16Array', 'Uint32Array',",
+                  "    'URIError', 'WeakMap', 'WeakSet', 'AbortController', 'AbortSignal',",
+                  "    'DOMException', 'Event', 'EventTarget', 'atob', 'btoa', 'TextEncoder',",
+                  "    'TextEncoderStream', 'TextDecoder', 'TextDecoderStream', 'Blob',",
+                  "    'decodeURI', 'decodeURIComponent', 'encodeURI', 'encodeURIComponent', 'escape',",
+                  "    'isFinite', 'isNaN', 'parseFloat', 'parseInt', 'unescape', 'structuredClone',",
+                  "    'queueMicrotask', 'ByteLengthQueuingStrategy', 'CountQueuingStrategy',",
+                  "    'CompressionStream', 'DecompressionStream', 'ReadableByteStreamController',",
+                  "    'ReadableStream', 'ReadableStreamBYOBReader', 'ReadableStreamBYOBRequest',",
+                  "    'ReadableStreamDefaultController', 'ReadableStreamDefaultReader',",
+                  "    'TransformStream', 'TransformStreamDefaultController', 'WritableStream',",
+                  "    'WritableStreamDefaultController', 'WritableStreamDefaultWriter', 'URL',",
+                  "    'URLSearchParams', 'Crypto', 'CryptoKey', 'SubtleCrypto', 'crypto'",
+                  "  ];",
+                  "  pm.expect(globalNames.filter(function (name) { return typeof globalScope[name] === 'undefined'; }).join(',')).to.equal('');",
+                  "  pm.expect(typeof Buffer).to.equal('function');",
+                  "  pm.expect(Buffer.from('abc').toString('base64')).to.equal('YWJj');",
+                  "  pm.expect(typeof globalScope.Buffer).to.equal('undefined');",
+                  "  pm.expect(typeof globalScope.globalThis).to.equal('undefined');",
+                  "  pm.expect(typeof globalScope.WebAssembly).to.equal('undefined');",
+                  "  pm.expect(typeof globalScope.fetch).to.equal('undefined');",
+                  "  pm.expect(typeof globalScope.XMLHttpRequest).to.equal('undefined');",
+                  "  pm.expect(typeof globalScope.WebSocket).to.equal('undefined');",
+                  "  pm.expect(Function('return typeof Buffer')()).to.equal('undefined');",
+                  "  pm.expect(Function('return typeof process')()).to.equal('undefined');",
+                  "  const parsedUrl = new URL('/v1/widgets?limit=2', 'https://api.example.test');",
+                  "  parsedUrl.searchParams.set('limit', '3');",
+                  "  pm.expect(parsedUrl.href).to.equal('https://api.example.test/v1/widgets?limit=3');",
+                  "  pm.expect(new URLSearchParams('a=1&a=2').getAll('a').join(',')).to.equal('1,2');",
+                  "  const encoded = new TextEncoder().encode('hello');",
+                  "  pm.expect(new TextDecoder().decode(encoded)).to.equal('hello');",
+                  "  pm.expect(encoded instanceof Uint8Array).to.equal(true);",
+                  "  pm.expect(encoded.constructor).to.be.undefined;",
+                  "  const blobBuffer = await new Blob(['abc']).arrayBuffer();",
+                  "  pm.expect(blobBuffer.byteLength).to.equal(3);",
+                  "  pm.expect(blobBuffer instanceof ArrayBuffer).to.equal(true);",
+                  "  pm.expect(new File(['abc'], 'a.txt').name).to.equal('a.txt');",
+                  "  pm.expect(typeof globalScope.File).to.equal('undefined');",
+                  "  pm.expect(Function('return typeof File')()).to.equal('undefined');",
+                  "  pm.expect(structuredClone({ ok: true }).ok).to.equal(true);",
+                  "  const random = new Uint8Array(4);",
+                  "  crypto.getRandomValues(random);",
+                  "  pm.expect(random.length).to.equal(4);",
+                  "  pm.expect(typeof crypto.randomUUID()).to.equal('string');",
+                  "  const digest = await crypto.subtle.digest('SHA-256', buffer.Buffer.from('abc'));",
+                  "  pm.expect(digest.byteLength).to.equal(32);",
+                  "  pm.expect(digest instanceof ArrayBuffer).to.equal(true);",
+                  "  pm.expect(digest.constructor).to.be.undefined;",
+                  "  pm.expect(new Uint8Array(digest).length).to.equal(32);",
+                  "  pm.expect(Function('return 2')()).to.equal(2);",
+                  "  pm.expect(path.join('root', 'child')).to.equal('root/child');",
+                  "  pm.expect(path.resolve('root', 'child')).to.equal('/root/child');",
+                  "  assert.strictEqual(buffer.Buffer.from('hello').toString('base64'), 'aGVsbG8=');",
+                  "  pm.expect(util.format('value=%d', 42)).to.equal('value=42');",
+                  "  pm.expect(url.parse('https://api.example.test/v1?limit=1').hostname).to.equal('api.example.test');",
+                  "  pm.expect(url.resolve('https://api.example.test/v1/', '../v2')).to.equal('https://api.example.test/v2');",
+                  "  pm.expect(punycode.toUnicode('xn--maana-pta.example')).to.equal('ma\\u00f1ana.example');",
+                  "  pm.expect(querystring.stringify({ a: '1', b: '2' })).to.equal('a=1&b=2');",
+                  "  pm.expect(new stringDecoder.StringDecoder('utf8').write(buffer.Buffer.from('ok'))).to.equal('ok');",
+                  "  const emitter = new events.EventEmitter();",
+                  "  let eventValue = '';",
+                  "  emitter.once('ready', function (value) { eventValue = value; });",
+                  "  emitter.emit('ready', 'yes');",
+                  "  pm.expect(eventValue).to.equal('yes');",
+                  "  const pass = new stream.PassThrough();",
+                  "  let streamed = '';",
+                  "  pass.on('data', function (chunk) { streamed += String(chunk); });",
+                  "  pass.write('a');",
+                  "  pass.end('b');",
+                  "  pm.expect(streamed).to.equal('ab');",
+                  "  const order = [];",
+                  "  queueMicrotask(function () { order.push('microtask'); });",
+                  "  await new Promise(function (resolve) {",
+                  "    const interval = timers.setInterval(function () { order.push('interval'); timers.clearInterval(interval); resolve(); }, 1);",
+                  "  });",
+                  "  pm.expect(order.join('>')).to.equal('microtask>interval');",
+                  "});",
+                  "pm.environment.set('runtimeGlobals', 'yes');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03ab SDK Request Response Objects",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/sdk-objects",
+            "header": [
+              { "key": "X-Old", "value": "remove" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "old"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const sdk = require('postman-collection');",
+                  "pm.request.method = 'PATCH';",
+                  "pm.request.url.raw = pm.variables.replaceIn('{{baseUrl}}/sdk-objects?existing=1');",
+                  "pm.expect(pm.request.url.query.get('existing')).to.equal('1');",
+                  "pm.request.url.query.upsert({ key: 'limit', value: '2' });",
+                  "pm.request.headers.add({ key: 'X-SDK', value: 'yes' });",
+                  "pm.request.headers.remove('X-Old');",
+                  "pm.request.body.update({ mode: 'urlencoded', urlencoded: [{ key: 'name', value: 'hammer' }] });",
+                  "pm.request.auth.update({ type: 'bearer', token: 'sdk-token' });",
+                  "pm.request.methodPath = 'package.Service.Method';",
+                  "pm.request.metadata.upsert({ key: 'route', value: 'primary' });",
+                  "pm.request.messages.add({ data: 'payload', timestamp: '2026-04-27T00:00:00.000Z' });",
+                  "const sdkRequest = new sdk.Request({ method: 'POST', url: 'https://api.example.test/widgets?limit=1', header: [{ key: 'X-Test', value: 'yes' }], body: { mode: 'urlencoded', urlencoded: [{ key: 'name', value: 'saw' }] } });",
+                  "sdkRequest.headers.upsert({ key: 'x-test', value: 'updated' });",
+                  "sdkRequest.url.query.upsert({ key: 'page', value: '2' });",
+                  "sdkRequest.body.urlencoded.add({ key: 'size', value: 'large' });",
+                  "pm.test('SDK request facade works in prerequest', function () {",
+                  "  pm.expect(sdkRequest.headers.get('X-Test')).to.equal('updated');",
+                  "  pm.expect(sdkRequest.url.toString()).to.include('page=2');",
+                  "  pm.expect(sdkRequest.body.toString()).to.include('size=large');",
+                  "  pm.expect(pm.request.methodPath).to.equal('package.Service.Method');",
+                  "  pm.expect(sdkRequest.clone().toJSON().header.length).to.be.above(0);",
+                  "});",
+                  "pm.environment.set('sdkObjectsPre', 'yes');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const sdk = require('postman-collection');",
+                  "pm.test('SDK response and pm response facades work in tests', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.status).to.equal('OK');",
+                  "  pm.expect(pm.response.headers.get('content-type')).to.equal('application/json');",
+                  "  pm.expect(pm.response.cookies.get('sdk')).to.equal('ready');",
+                  "  pm.expect(pm.response.responseTime).to.be.above(0);",
+                  "  pm.expect(pm.response.responseSize).to.be.above(0);",
+                  "  pm.expect(pm.response.json().sdk).to.equal(true);",
+                  "  const sdkResponse = new sdk.Response({ code: 202, status: 'Accepted', header: [{ key: 'Content-Type', value: 'application/json' }, { key: 'Set-Cookie', value: 'sid=123; Path=/; HttpOnly' }], body: '{\"ok\":true}', responseTime: 10, responseSize: 11 });",
+                  "  pm.expect(sdkResponse.status).to.equal('Accepted');",
+                  "  pm.expect(sdkResponse.headers.get('content-type')).to.equal('application/json');",
+                  "  pm.expect(sdkResponse.toJSON().responseTime).to.equal(10);",
+                  "});",
+                  "pm.environment.set('sdkObjects', 'yes');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03ac Tests Assertions Variables Dynamic",
+          "variable": [
+            { "key": "stepScoped", "value": "request-step" }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/step4",
+            "header": [
+              { "key": "X-Template-Dynamic", "value": "{{$randomUUID}}" }
+            ]
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test.skip('step4 skipped prerequest test');",
+                  "pm.expect(pm.info.eventName).to.equal('prerequest');",
+                  "pm.expect(pm.execution.location.current).to.include('03ac Tests Assertions Variables Dynamic');",
+                  "pm.request.headers.upsert({ key: 'X-Dynamic', value: pm.variables.replaceIn('{{$randomUUID}}') });",
+                  "pm.environment.set('step4Pre', 'yes');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const chai = require('chai');",
+                  "pm.test('step4 tests assertions variables dynamic', function () {",
+                  "  pm.expect(pm.test.index()).to.equal(1);",
+                  "  pm.response.to.not.be.error();",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.response.to.have.jsonSchema({ type: 'object', required: ['ok'], properties: { ok: { type: 'boolean' } } });",
+                  "  pm.expect(pm.request.headers.get('X-Dynamic')).to.match(/^[0-9a-f-]{36}$/);",
+                  "  pm.expect(pm.variables.get('stepScoped')).to.equal('request-step');",
+                  "  pm.expect(pm.collectionVariables.get('collectionPreSeen')).to.equal('yes');",
+                  "  pm.expect(pm.collectionVariables.get('folderPreSeen')).to.equal('yes');",
+                  "  pm.expect(pm.environment.toJSON()).to.be.a('array');",
+                  "  pm.expect(pm.variables.replaceIn('{{$randomFirstName}} {{$randomLastName}} {{$randomEmail}} {{$randomInt}}')).to.match(/^\\S+ \\S+ .+@.+\\.\\S+ \\d{1,4}$/);",
+                  "  pm.expect([1, { ok: true }, 3]).to.deep.include({ ok: true });",
+                  "  pm.expect([1, 2, 3]).to.include.ordered.members([1, 2]);",
+                  "  pm.expect(function () { throw new Error('step4'); }).to.throw(/step4/);",
+                  "  chai.assert.notDeepEqual({ ok: true }, { ok: false });",
+                  "});",
+                  "pm.test.skip('step4 skipped result shape');",
+                  "pm.environment.set('step4Complete', 'yes');",
+                  "pm.collectionVariables.set('step4Collection', 'yes');"
                 ]
               }
             }

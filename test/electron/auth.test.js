@@ -56,6 +56,7 @@ test('validates auth helper required fields', () => {
   assert.deepEqual(validateAuth({ type: 'clientCertificate', keyPath: '/tmp/client.key' }, null), ['Client certificate PEM certificate path is required.']);
   assert.deepEqual(validateAuth({ type: 'clientCertificate', certPath: '/tmp/client.pem', keyPath: '/tmp/client.key' }, null), []);
   assert.deepEqual(validateAuth({ type: 'clientCertificate', pfxPath: '/tmp/client.p12' }, null), []);
+  assert.deepEqual(validateAuth({ type: 'clientCertificate', certificateId: 'cert-1' }, null), []);
 });
 
 test('applies supported auth helpers during request execution', async () => {
@@ -77,6 +78,136 @@ test('applies supported auth helpers during request execution', async () => {
     assert.equal((await authRequest(server.baseUrl, { type: 'apiKey', location: 'query', key: 'api_key', value: 'q1' })).apiKeyQuery, 'q1');
     assert.equal((await authRequest(server.baseUrl, { type: 'cookie', value: 'session=abc' })).cookie, 'session=abc');
     assert.equal((await authRequest(server.baseUrl, { type: 'oauth2', accessToken: 'token' })).authorization, 'Bearer token');
+  } finally {
+    await server.close();
+  }
+});
+
+test('applies advanced Postman auth helpers through the brokered HTTP sender', async () => {
+  let ntlmStep = 0;
+  const server = await createServer(async (request, response) => {
+    if (request.url === '/digest' && !request.headers.authorization) {
+      response.writeHead(401, {
+        'WWW-Authenticate': 'Digest realm="postmeter", nonce="abc123", qop="auth", algorithm=MD5',
+        'Content-Type': 'application/json'
+      });
+      response.end(JSON.stringify({ challenge: true }));
+      return;
+    }
+    if (request.url === '/ntlm' && ntlmStep === 0) {
+      ntlmStep += 1;
+      assert.match(request.headers.authorization || '', /^NTLM TlRMTVNTUAAB/);
+      response.writeHead(401, {
+        'WWW-Authenticate': `NTLM ${ntlmType2Challenge()}`,
+        'Content-Type': 'application/json',
+        Connection: 'keep-alive'
+      });
+      response.end(JSON.stringify({ challenge: true }));
+      return;
+    }
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({
+      authorization: request.headers.authorization || '',
+      amzDate: request.headers['x-amz-date'] || '',
+      amzToken: request.headers['x-amz-security-token'] || '',
+      tokenQuery: new URL(request.url, 'http://127.0.0.1').searchParams.get('jwt') || ''
+    }));
+  });
+
+  try {
+    const digest = await authRequest(`${server.baseUrl}/digest`, { type: 'digest', username: 'ada', password: 'secret' });
+    assert.match(digest.authorization, /^Digest /);
+    assert.match(digest.authorization, /username="ada"/);
+    assert.match(digest.authorization, /response="[a-f0-9]{32}"/);
+
+    const hawk = await authRequest(`${server.baseUrl}/hawk`, { type: 'hawk', authId: 'hawk-id', authKey: 'hawk-secret', nonce: 'fixed', algorithm: 'sha256' });
+    assert.match(hawk.authorization, /^Hawk /);
+    assert.match(hawk.authorization, /id="hawk-id"/);
+    assert.match(hawk.authorization, /mac="/);
+
+    const aws = await authRequest(`${server.baseUrl}/aws`, {
+      type: 'aws',
+      accessKey: 'AKIDEXAMPLE',
+      secretKey: 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY',
+      region: 'us-east-1',
+      service: 'execute-api',
+      sessionToken: 'session'
+    }, { now: Date.parse('2026-04-27T12:00:00.000Z') });
+    assert.match(aws.authorization, /^AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE\/20260427\/us-east-1\/execute-api\/aws4_request/);
+    assert.equal(aws.amzDate, '20260427T120000Z');
+    assert.equal(aws.amzToken, 'session');
+
+    const oauth1 = await authRequest(`${server.baseUrl}/oauth1?existing=1`, {
+      type: 'oauth1',
+      consumerKey: 'consumer',
+      consumerSecret: 'consumer-secret',
+      token: 'token',
+      tokenSecret: 'token-secret',
+      nonce: 'nonce',
+      timestamp: '1777291200'
+    });
+    assert.match(oauth1.authorization, /^OAuth /);
+    assert.match(oauth1.authorization, /oauth_consumer_key="consumer"/);
+    assert.match(oauth1.authorization, /oauth_signature="/);
+
+    const akamai = await authRequest(`${server.baseUrl}/akamai`, {
+      type: 'akamaiEdgeGrid',
+      accessToken: 'access',
+      clientToken: 'client',
+      clientSecret: 'secret',
+      nonce: 'nonce',
+      headersToSign: ''
+    }, { now: Date.parse('2026-04-27T12:00:00.000Z') });
+    assert.match(akamai.authorization, /^EG1-HMAC-SHA256 /);
+    assert.match(akamai.authorization, /client_token=client/);
+    assert.match(akamai.authorization, /access_token=access/);
+    assert.match(akamai.authorization, /signature=/);
+
+    const jwt = await authRequest(`${server.baseUrl}/jwt`, {
+      type: 'jwtBearer',
+      algorithm: 'HS256',
+      secret: 'jwt-secret',
+      issuer: 'issuer',
+      subject: 'subject',
+      audience: 'audience',
+      expiresIn: '60'
+    }, { now: Date.parse('2026-04-27T12:00:00.000Z') });
+    assert.match(jwt.authorization, /^Bearer [A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+    const jwtPayload = JSON.parse(Buffer.from(jwt.authorization.split('.')[1], 'base64url').toString('utf8'));
+    assert.equal(jwtPayload.iss, 'issuer');
+    assert.equal(jwtPayload.exp, 1777291260);
+
+    const jwtQuery = await authRequest(`${server.baseUrl}/jwt-query`, {
+      type: 'jwtBearer',
+      algorithm: 'HS256',
+      secret: 'jwt-secret',
+      addTokenTo: 'query',
+      queryParamName: 'jwt'
+    }, { now: Date.parse('2026-04-27T12:00:00.000Z') });
+    assert.match(jwtQuery.tokenQuery, /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+
+    const asap = await authRequest(`${server.baseUrl}/asap`, {
+      type: 'asap',
+      algorithm: 'HS256',
+      secret: 'asap-secret',
+      issuer: 'issuer',
+      audience: 'audience',
+      subject: 'subject',
+      keyId: 'kid-1',
+      expiresIn: '60'
+    }, { now: Date.parse('2026-04-27T12:00:00.000Z') });
+    assert.match(asap.authorization, /^Bearer [A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+    const asapHeader = JSON.parse(Buffer.from(asap.authorization.split(' ')[1].split('.')[0], 'base64url').toString('utf8'));
+    assert.equal(asapHeader.kid, 'kid-1');
+
+    const ntlm = await authRequest(`${server.baseUrl}/ntlm`, {
+      type: 'ntlm',
+      username: 'ada',
+      password: 'secret',
+      domain: 'POSTMETER',
+      workstation: 'WORKSTATION'
+    });
+    assert.match(ntlm.authorization, /^NTLM TlRMTVNTUAAD/);
   } finally {
     await server.close();
   }
@@ -458,16 +589,18 @@ test('polls OAuth 2.0 device token before request execution', async () => {
   }
 });
 
-async function authRequest(baseUrl, auth) {
+async function authRequest(baseUrl, auth, options = {}) {
+  const parsed = new URL(baseUrl);
+  const url = parsed.pathname === '/' ? `${baseUrl}/auth` : baseUrl;
   const result = await sendRequest({
     method: 'GET',
-    url: `${baseUrl}/auth`,
+    url,
     queryParams: [],
     headers: [],
     bodyType: 'NONE',
     body: '',
     auth
-  }, null);
+  }, null, options);
   return JSON.parse(result.body);
 }
 
@@ -484,4 +617,26 @@ async function createServer(handler) {
     baseUrl: `http://127.0.0.1:${address.port}`,
     close: () => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
   };
+}
+
+function ntlmType2Challenge() {
+  const target = Buffer.from('POSTMETER', 'utf16le');
+  const targetInfo = Buffer.from('00000000', 'hex');
+  const payloadOffset = 48;
+  const message = Buffer.alloc(payloadOffset + target.length + targetInfo.length);
+  message.write('NTLMSSP\0', 0, 'ascii');
+  message.writeUInt32LE(2, 8);
+  writeSecurityBuffer(message, 12, target.length, payloadOffset);
+  message.writeUInt32LE(0x02888205, 20);
+  Buffer.from('0123456789abcdef', 'hex').copy(message, 24);
+  writeSecurityBuffer(message, 40, targetInfo.length, payloadOffset + target.length);
+  target.copy(message, payloadOffset);
+  targetInfo.copy(message, payloadOffset + target.length);
+  return message.toString('base64');
+}
+
+function writeSecurityBuffer(message, offset, length, payloadOffset) {
+  message.writeUInt16LE(length, offset);
+  message.writeUInt16LE(length, offset + 2);
+  message.writeUInt32LE(payloadOffset, offset + 4);
 }

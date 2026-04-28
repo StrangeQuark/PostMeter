@@ -1,0 +1,59 @@
+{
+  "type": "desktop-runtime-source-audit",
+  "postman": {
+    "version": "11.71.7",
+    "runtime": "7.50.0",
+    "collectionSdk": "5.2.0"
+  },
+  "newman": {
+    "version": "6.2.2",
+    "runtime": "7.39.1"
+  },
+  "rowIds": [
+    "sendRequest.advanced-auth-proxy"
+  ],
+  "rowEvidence": {
+    "sendRequest.advanced-auth-proxy": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-newman-differential",
+      "postmanEvidence": [
+        "newman@6.2.2 differential evidence covers Digest challenge retry, Hawk, and AWS Signature v4 behavior through pm.sendRequest.",
+        "Installed Postman Desktop runtime/source audit classifies proxy, TLS, configured client-certificate, and unsupported advanced-auth boundaries."
+      ],
+      "postmeterEvidence": [
+        "test/fixtures/postman/differential-sendrequest-advanced.collection.json",
+        "test/electron/auth.test.js",
+        "test/electron/httpClient.test.js",
+        "test/electron/scriptSandbox.test.js"
+      ]
+    }
+  },
+  "scope": [
+    "pm.sendRequest advanced auth helper normalization",
+    "Digest challenge retry",
+    "Hawk authorization headers",
+    "AWS Signature v4 authorization headers",
+    "OAuth 1.0 authorization headers",
+    "brokered proxy routing",
+    "strict TLS policy",
+    "configured client-certificate bindings"
+  ],
+  "observations": [
+    "PostMeter now applies supported advanced auth helpers in the parent-owned HTTP broker, never in the script worker.",
+    "Scripts can request configured client-certificate bindings by ID, but script-provided certificate/key/PFX paths fail closed before the parent reads any path.",
+    "Proxy options are normalized into a parent-owned transport configuration. Scripts never receive raw sockets, agents, CONNECT tunnel handles, or file handles.",
+    "TLS certificate validation remains strict for pm.sendRequest. Script-level strictSSL=false and equivalent rejectUnauthorized=false forms fail closed.",
+    "NTLM and Akamai EdgeGrid helper shapes are preserved/imported/exported and produce explicit unsupported errors in the broker until exact Postman-compatible stateful handshake/signing implementations are added; they remain explicit parity blocker rows."
+  ],
+  "evidence": {
+    "fixtures": [
+      "differential-sendrequest-advanced.collection.json"
+    ],
+    "tests": [
+      "test/electron/auth.test.js",
+      "test/electron/httpClient.test.js",
+      "test/electron/scriptSandbox.test.js",
+      "test/electron/postmanImporter.test.js"
+    ]
+  }
+}

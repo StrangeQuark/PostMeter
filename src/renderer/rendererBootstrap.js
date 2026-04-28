@@ -108,6 +108,7 @@
     bindClick(doc, 'exportWorkspaceButton', options.onExportWorkspace);
     bindClick(doc, 'importCollectionButton', options.onImportCollection);
     bindClick(doc, 'exportCollectionButton', options.onExportCollection);
+    bindClick(doc, 'exportPostmanButton', options.onExportPostman);
     bindClick(doc, 'exportOpenApiButton', options.onExportOpenApi);
     bindClick(doc, 'exportJMeterButton', options.onExportJMeter);
     bindClick(doc, 'exportCurlButton', options.onExportCurl);
@@ -126,6 +127,14 @@
     bindClick(doc, 'addVariableButton', options.onAddEnvironmentVariable);
     bindClick(doc, 'switchWorkspacePanelButton', options.onSwitchWorkspace);
     bindClick(doc, 'exportWorkspacePanelButton', options.onExportWorkspace);
+    bindClick(doc, 'addSandboxPackageButton', options.onAddSandboxPackage);
+    bindClick(doc, 'fetchSandboxPackageButton', options.onFetchSandboxPackage);
+    bindClick(doc, 'refreshSandboxPackagesButton', options.onRefreshSandboxPackages);
+    bindClick(doc, 'bindSandboxFileButton', options.onBindSandboxFile);
+    bindClick(doc, 'refreshSandboxFilesButton', options.onRefreshSandboxFiles);
+    bindClick(doc, 'bindVaultSecretButton', options.onBindVaultSecret);
+    bindClick(doc, 'refreshVaultMetadataButton', options.onRefreshVaultMetadata);
+    bindClick(doc, 'resetVaultButton', options.onResetVault);
     bindClick(doc, 'addCollectionVariableButton', options.onAddCollectionVariable);
     bindClick(doc, 'addRequestVariableButton', options.onAddRequestVariable);
     bindClick(doc, 'addCookieButton', options.onAddCookie);

@@ -1,0 +1,61 @@
+{
+  "info": {
+    "name": "PostMeter Differential HTTP Core",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "00000000-0000-4000-8000-000000000201"
+  },
+  "variable": [
+    { "key": "collectionSeed", "value": "collection-seed" }
+  ],
+  "item": [
+    {
+      "name": "Core JSON",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/json"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.variables.set('localToken', 'local-1');",
+              "pm.environment.set('envToken', 'env-1');",
+              "pm.collectionVariables.set('collectionTouched', 'yes');",
+              "pm.request.headers.upsert({ key: 'X-Pre', value: pm.variables.get('localToken') });"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('core response status and body', function () {",
+              "  pm.response.to.have.status(200);",
+              "  pm.expect(pm.response.headers.get('content-type')).to.include('application/json');",
+              "  var body = pm.response.json();",
+              "  pm.expect(body.path).to.equal('/json');",
+              "  pm.expect(body.xPre).to.equal('local-1');",
+              "  pm.expect(pm.collectionVariables.get('collectionTouched')).to.equal('yes');",
+              "});",
+              "pm.test('pm.info exposes core metadata', function () {",
+              "  pm.expect(pm.info.eventName).to.equal('test');",
+              "  pm.expect(pm.info.requestName).to.equal('Core JSON');",
+              "  pm.expect(pm.info.iteration).to.equal(0);",
+              "});",
+              "pm.sendRequest(pm.variables.replaceIn('{{baseUrl}}/aux'), function (error, response) {",
+              "  pm.test('pm.sendRequest callback receives response', function () {",
+              "    pm.expect(error).to.equal(null);",
+              "    pm.expect(response.code).to.equal(200);",
+              "    pm.expect(response.json().aux).to.equal(true);",
+              "  });",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

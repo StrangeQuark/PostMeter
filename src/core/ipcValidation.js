@@ -38,6 +38,7 @@ function assertCollectionPayload(value, field = 'collection') {
   optionalString(value.id, `${field}.id`, LIMITS.name);
   optionalString(value.name, `${field}.name`, LIMITS.name);
   optionalString(value.description, `${field}.description`, LIMITS.value);
+  optionalJsonObject(value.postman, `${field}.postman`, LIMITS.body);
   assertPairs(value.variables || [], `${field}.variables`);
   assertCertificates(value.certificates || [], `${field}.certificates`);
   assertRequestArray(value.requests || [], `${field}.requests`);
@@ -53,6 +54,11 @@ function assertRequestPayload(value, field = 'request') {
     fail(`${field}.method is not supported.`);
   }
   optionalString(value.url, `${field}.url`, fieldLimit('url'));
+  optionalString(value.protocol, `${field}.protocol`, fieldLimit('short'));
+  if (value.protocol && !hasSchemaEnumValue('requestProtocols', value.protocol)) {
+    fail(`${field}.protocol is not supported.`);
+  }
+  optionalString(value.methodPath, `${field}.methodPath`, fieldLimit('url'));
   assertPairs(value.queryParams || [], `${field}.queryParams`);
   assertPairs(value.headers || [], `${field}.headers`);
   optionalString(value.bodyType, `${field}.bodyType`, fieldLimit('short'));
@@ -65,8 +71,16 @@ function assertRequestPayload(value, field = 'request') {
     headers: assertPairs,
     assertions: assertAssertions,
     variables: assertPairs,
-    examples: assertExamples
+    examples: assertExamples,
+    metadata: assertPairs,
+    messages: assertProtocolMessages
   });
+  optionalJsonObject(value.postmanBody, `${field}.postmanBody`, LIMITS.body);
+  optionalJsonObject(value.protocolProfile, `${field}.protocolProfile`);
+  optionalJsonObject(value.graphql, `${field}.graphql`);
+  optionalJsonObject(value.grpc, `${field}.grpc`);
+  optionalJsonObject(value.websocket, `${field}.websocket`);
+  optionalJsonObject(value.postman, `${field}.postman`, LIMITS.body);
   assertSchemaNested('request', value, field, {
     auth: assertAuthPayload,
     scripts: assertScripts,
@@ -466,6 +480,7 @@ function assertFolderArray(values, field, depth) {
   array(values, field, LIMITS.foldersPerLevel).forEach((folder, index) => {
     const itemField = `${field}[${index}]`;
     assertSchemaFields('folder', folder, itemField);
+    optionalJsonObject(folder.postman, `${itemField}.postman`, LIMITS.body);
     assertRequestArray(folder.requests || [], `${itemField}.requests`);
     assertFolderArray(folder.folders || [], `${itemField}.folders`, depth + 1);
   });
@@ -493,14 +508,64 @@ function assertExamples(values, field) {
   array(values, field, LIMITS.pairs).forEach((example, index) => {
     const itemField = `${field}[${index}]`;
     assertSchemaFields('example', example, itemField);
+    optionalJsonObject(example.postman, `${itemField}.postman`, LIMITS.body);
     assertPairs(example.headers || [], `${itemField}.headers`);
   });
+}
+
+function assertProtocolMessages(values, field) {
+  array(values, field, LIMITS.pairs).forEach((message, index) => {
+    const itemField = `${field}[${index}]`;
+    object(message, itemField);
+    assertSchemaFields('protocolMessage', message, itemField);
+    const data = message.data ?? message.value;
+    if (data == null) {
+      return;
+    }
+    if (typeof data === 'string') {
+      string(data, `${itemField}.data`, LIMITS.value);
+      return;
+    }
+    optionalJsonValue(data, `${itemField}.data`, LIMITS.value);
+  });
+}
+
+function optionalJsonValue(value, field, maxBytes = 128 * 1024) {
+  if (value == null) {
+    return;
+  }
+  let text;
+  try {
+    text = JSON.stringify(value);
+  } catch {
+    fail(`${field} must be JSON-serializable.`);
+  }
+  if (Buffer.byteLength(text || '', 'utf8') > maxBytes) {
+    fail(`${field} cannot exceed ${maxBytes} bytes when serialized.`);
+  }
+}
+
+function optionalJsonObject(value, field, maxBytes = 128 * 1024) {
+  if (value == null) {
+    return;
+  }
+  object(value, field);
+  let text;
+  try {
+    text = JSON.stringify(value);
+  } catch {
+    fail(`${field} must be JSON-serializable.`);
+  }
+  if (Buffer.byteLength(text || '', 'utf8') > maxBytes) {
+    fail(`${field} cannot exceed ${maxBytes} bytes when serialized.`);
+  }
 }
 
 function assertCertificates(values, field) {
   array(values, field, LIMITS.pairs).forEach((certificate, index) => {
     const itemField = `${field}[${index}]`;
     assertSchemaFields('certificate', certificate, itemField);
+    optionalJsonObject(certificate.postman, `${itemField}.postman`, LIMITS.body);
     array(certificate.matches || [], `${itemField}.matches`, LIMITS.pairs).forEach((match, matchIndex) => {
       string(match, `${itemField}.matches[${matchIndex}]`, LIMITS.url);
     });

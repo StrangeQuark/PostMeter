@@ -20,6 +20,11 @@ test('encrypted vault store persists secrets outside plaintext JSON', async () =
   assert.equal(metadata.length, 1);
   assert.equal(metadata[0].key, 'apiToken');
   assert.ok(metadata[0].updatedAt);
+  const audit = await store.listAudit();
+  assert.equal(audit.length, 1);
+  assert.equal(audit[0].operation, 'set');
+  assert.equal(audit[0].key, 'apiToken');
+  assert.equal(audit[0].requestName, 'Request One');
 
   const raw = await fs.readFile(vaultPath, 'utf8');
   assert.equal(raw.includes('super-secret'), false);

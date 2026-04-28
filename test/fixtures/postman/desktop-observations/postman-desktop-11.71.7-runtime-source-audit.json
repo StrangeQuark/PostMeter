@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "type": "desktop-runtime-source-audit",
+  "rowIds": [
+    "cookies.httponly-parity",
+    "execution.runRequest",
+    "global.dynamic-code-and-host-like-globals-audit",
+    "graphql.http-body",
+    "grpc.hook.afterResponse",
+    "grpc.hook.beforeInvoke",
+    "grpc.hook.onMessage",
+    "grpc.live-desktop-transport",
+    "grpc.pm.message",
+    "harness.broad-differential-corpus",
+    "harness.completed-desktop-observations",
+    "harness.real-world-import-corpus",
+    "info.eventName.afterResponse",
+    "info.eventName.beforeInvoke",
+    "info.eventName.beforeQuery",
+    "info.eventName.onIncomingMessage",
+    "mock.matchRequest",
+    "mock.path-variables",
+    "mock.sendExample",
+    "require.builtin.full-library-parity",
+    "require.pm.commonjs-bundle-semantics",
+    "require.pm.jsr-package",
+    "require.pm.npm-package",
+    "require.pm.online-fetch-review",
+    "require.pm.team-package",
+    "runtime.resource-limit-parity",
+    "sendRequest.advanced-auth-proxy",
+    "sendRequest.file-binary-bindings",
+    "state.addToSet",
+    "state.clear",
+    "state.delete",
+    "state.get",
+    "state.has",
+    "state.increment",
+    "state.keys",
+    "state.push",
+    "state.set",
+    "state.size",
+    "state.toObject",
+    "vault.get",
+    "vault.prompt-denial-reset-audit",
+    "vault.set",
+    "vault.unset",
+    "visualizer.clear",
+    "visualizer.external-assets",
+    "visualizer.handlebars-full-parity",
+    "visualizer.pm.getData",
+    "visualizer.set",
+    "websocket.script-hooks.audit"
+  ],
+  "postman": {
+    "app": "Postman Desktop",
+    "version": "11.71.7",
+    "channel": "snap latest/stable",
+    "platform": "linux",
+    "observedAt": "2026-04-27"
+  },
+  "capture": {
+    "method": "installed-desktop-runtime-source-audit",
+    "commands": [
+      "snap info postman",
+      "cat /snap/postman/360/usr/share/postman/resources/app/package.json",
+      "rg \"postman-sandbox|postman-runtime|postman-collection|handlebars|lodash\" /snap/postman/360/usr/share/postman/resources/app/yarn.lock /snap/postman/360/usr/share/postman/resources/app/node_modules_postman-runtime_lib_sync_recursive_package_json_-common_services_RuntimeExecutio-c42333-7178fa5217edc63d.min.js"
+    ],
+    "artifactPaths": [
+      "/snap/postman/360/usr/share/postman/resources/app/package.json",
+      "/snap/postman/360/usr/share/postman/resources/app/yarn.lock",
+      "/snap/postman/360/usr/share/postman/resources/app/node_modules_postman-runtime_lib_sync_recursive_package_json_-common_services_RuntimeExecutio-c42333-7178fa5217edc63d.min.js"
+    ]
+  },
+  "observed": {
+    "appPackage": {
+      "name": "Postman",
+      "version": "11.71.7",
+      "electronNodeEngine": "20.11.1"
+    },
+    "runtimePackageEvidence": {
+      "postman-runtime": "7.50.0",
+      "postman-sandbox": "6.2.2",
+      "postman-collection": "5.2.0",
+      "handlebars": "4.7.8",
+      "lodash": "4.17.21",
+      "uuid": "8.3.2",
+      "@postman/tough-cookie": "4.1.3-postman.1"
+    },
+    "desktopSurfaces": [
+      "graphql-request default item exports before/after script events",
+      "grpc-request default item exports beforeInvoke/afterResponse script events",
+      "Postman Desktop packages postman-sandbox 6.2.2 for script execution",
+      "Postman Desktop packages postman-runtime 7.50.0 with the runtime dependencies listed above"
+    ]
+  },
+  "limitations": [
+    "This artifact is an automated installed-Desktop runtime/source audit, not a substitute for behavior-sensitive manual observations.",
+    "Rows that still need exact runtime behavior capture remain blocked by their own matrix rows. Dynamic code, HttpOnly cookies, runtime limits, supported pm.sendRequest transport policy, file/binary bindings, visualizer Handlebars behavior, online package fetch/review, bundled library parity, reviewed CommonJS package semantics, and live gRPC transport are covered by dedicated audit fixtures; response assertion shortcuts, protocol metadata/trailer/message assertions, message-list assertions, full Chai/JSON-schema assertions, SDK object semantics, GraphQL client/subscription behavior, local mock helper evidence, NTLM, Akamai EdgeGrid, JWT Bearer, ASAP, JSR ESM, pm.message timestamp Date behavior, and row-specific desktop behavior evidence remain open blockers."
+  ],
+  "notes": "This artifact removes template-only evidence from desktop-required matrix rows while keeping behavior-sensitive parity work blocked by row-specific claim blockers."
+}

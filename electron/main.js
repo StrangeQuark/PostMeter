@@ -12,6 +12,7 @@ const { createMainWindow } = require('./mainWindow');
 const { registerSessionIpc } = require('./sessionIpc');
 const { SessionStore, defaultSessionPath } = require('./sessionStore');
 const { registerRuntimeIpc } = require('./runtimeIpc');
+const { registerSandboxPackageIpc } = require('./sandboxPackageIpc');
 const { registerWorkspaceIpc } = require('./workspaceIpc');
 const { registerRequestIpc } = require('./requestIpc');
 const { registerOAuthIpc } = require('./oauthIpc');
@@ -252,9 +253,45 @@ async function deleteVaultStore(workspaceId) {
   await fs.rm(vaultPathForWorkspace(id), { force: true });
 }
 
+ipcMain.handle('vault:metadata', async () => {
+  const workspaceId = workspaceStore?.getWorkspaceId?.() || '';
+  const store = vaultStoreForWorkspace(workspaceId);
+  const available = store.isAvailable?.() !== false;
+  if (!available) {
+    return { audit: [], available: false, secrets: [] };
+  }
+  return {
+    audit: typeof store.listAudit === 'function' ? await store.listAudit() : [],
+    available: true,
+    secrets: typeof store.listMetadata === 'function' ? await store.listMetadata() : []
+  };
+});
+
+ipcMain.handle('vault:reset', async () => {
+  const workspaceId = workspaceStore?.getWorkspaceId?.() || '';
+  await deleteVaultStore(workspaceId);
+  return { ok: true };
+});
+
+ipcMain.handle('vault:bind-secret', async (_event, key, value) => {
+  const workspaceId = workspaceStore?.getWorkspaceId?.() || '';
+  const store = vaultStoreForWorkspace(workspaceId);
+  await store.set(key, value, { requestId: 'workspace-settings', requestName: 'Workspace vault binding' });
+  return { ok: true };
+});
+
+ipcMain.handle('vault:unset-secret', async (_event, key) => {
+  const workspaceId = workspaceStore?.getWorkspaceId?.() || '';
+  const store = vaultStoreForWorkspace(workspaceId);
+  await store.unset(key, { requestId: 'workspace-settings', requestName: 'Workspace vault binding' });
+  return { ok: true };
+});
+
 registerAppIpc({ app, ipcMain, shell });
 
 registerOAuthIpc({ ipcMain, oauthFlows });
+
+registerSandboxPackageIpc({ ipcMain });
 
 registerSessionIpc({
   getSession: () => sessionState,

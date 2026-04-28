@@ -4,7 +4,10 @@ const path = require('node:path');
 const test = require('node:test');
 const { runCollection } = require('../../src/core/collectionRunner');
 const { importPostmanCollection } = require('../../src/core/postmanImporter');
-const { scriptPackageIntegrity } = require('../../src/core/scriptRuntime');
+const {
+  scriptPackageBundleIntegrity,
+  scriptPackageIntegrity
+} = require('../../src/core/scriptRuntime');
 const { MemoryVaultStore } = require('../../src/core/vaultStore');
 
 const FIXTURE_DIR = path.join(__dirname, '..', 'fixtures', 'postman');
@@ -18,6 +21,20 @@ test('runs the golden Postman/Newman sandbox v1 corpus through the importer and 
   const vault = new MemoryVaultStore({ seededToken: 'seeded-value' });
   const teamPackageSource = "const lodash = require('lodash'); exports.format = function (value) { return lodash.get(value, 'name') + ':team'; };";
   const externalPackageSource = "const team = require('@postmeter/corpus-tools'); module.exports = function (value) { return team.format(value).toUpperCase(); };";
+  const commonJsPackage = {
+    specifier: 'npm:@postmeter/corpus-commonjs@1.0.0',
+    entrypoint: 'index.js',
+    packageName: '@postmeter/corpus-commonjs',
+    packageJson: { name: '@postmeter/corpus-commonjs', main: 'index.js', version: '1.0.0' },
+    dependencyAliases: { formatter: 'npm:@postmeter/corpus-format@1.0.0' },
+    dependencies: ['npm:@postmeter/corpus-format@1.0.0'],
+    files: [
+      { path: 'index.js', source: "const formatter = require('formatter'); const data = require('./data.json'); exports.describe = function (value) { return formatter(value) + ':' + data.kind; };" },
+      { path: 'data.json', source: '{"kind":"bundle"}' }
+    ]
+  };
+  commonJsPackage.source = commonJsPackage.files[0].source;
+  commonJsPackage.integrity = scriptPackageBundleIntegrity(commonJsPackage);
 
   const result = await runCollection(collection, {
     id: 'env-golden',
@@ -50,6 +67,9 @@ test('runs the golden Postman/Newman sandbox v1 corpus through the importer and 
         source: externalPackageSource,
         integrity: scriptPackageIntegrity(externalPackageSource),
         dependencies: ['@postmeter/corpus-tools']
+      },
+      {
+        ...commonJsPackage
       }
     ],
     trustedCapabilities: { vault: true },
@@ -79,6 +99,28 @@ test('runs the golden Postman/Newman sandbox v1 corpus through the importer and 
         assert.equal(envValue(environment, 'runRequestPath'), 'run-request-target');
         return jsonResponse(202, { target: 'run-request-target' });
       }
+      if (request.name === '03ab SDK Request Response Objects') {
+        assert.equal(request.method, 'PATCH');
+        assert.match(request.url, /sdk-objects/);
+        assert.match(request.url, /limit=2/);
+        assert.equal(headerValue(request.headers, 'X-SDK'), 'yes');
+        assert.equal(headerValue(request.headers, 'X-Old'), undefined);
+        assert.equal(request.bodyType, 'RAW_TEXT');
+        assert.equal(request.body, 'name=hammer');
+        assert.deepEqual(request.auth, { type: 'bearer', token: 'sdk-token' });
+        assert.equal(request.methodPath, 'package.Service.Method');
+        return {
+          ...jsonResponse(200, { sdk: true }),
+          headers: {
+            'content-type': ['application/json'],
+            'set-cookie': ['sdk=ready; Path=/; HttpOnly']
+          }
+        };
+      }
+      if (request.name === '03ac Tests Assertions Variables Dynamic') {
+        assert.match(headerValue(request.headers, 'X-Dynamic'), /^[0-9a-f-]{36}$/);
+        return jsonResponse(200, { ok: true, step: 'step4' });
+      }
       if (request.name === '08 Mixed Script Failure') {
         return jsonResponse(200, { state: 'mixed' });
       }
@@ -99,9 +141,19 @@ test('runs the golden Postman/Newman sandbox v1 corpus through the importer and 
   const resultsByName = new Map(result.results.map((item) => [item.requestName, item]));
   assert.equal(
     resultsByName.get('01 Setup And Variable Precedence').testScriptResult.visualizer.html,
-    '<section><h1>Setup</h1><p>200</p><strong>ready</strong><span>Setup/Setup</span><ul><li>none</li></ul><ol><li>Setup:ALPHA/200</li><li>Setup:BETA/200</li></ol><script>pm.getData(function (error, data) { window.postmeterRows = data.rows.length; });</script></section>'
+    '<section><h1>Setup</h1><p>200</p><aside>Compiled</aside><div class="postmeter-chart"></div><strong>ready</strong><span>Setup/Setup</span><ul><li>none</li></ul><ol><li>Setup:ALPHA/200/row-ALPHA/Setup</li><li>inline:alpha</li><li>Setup:BETA/200/row-BETA/Setup</li><li>inline:beta</li></ol><script>pm.getData(function (error, data) { window.postmeterRows = data.rows.length; if (window.PostMeterChart) { window.PostMeterChart(data.rows.length); } });</script></section><footer>done</footer>'
   );
   assert.equal(resultsByName.get('01 Setup And Variable Precedence').testScriptResult.visualizer.interactive, true);
+  assert.deepEqual(
+    resultsByName.get('01 Setup And Variable Precedence').testScriptResult.visualizer.assets.map((asset) => ({
+      name: asset.name,
+      type: asset.type
+    })),
+    [
+      { name: 'chartjs', type: 'script' },
+      { name: 'chartcss', type: 'style' }
+    ]
+  );
   for (const requestName of expected.notSentRequests) {
     if (requestName === '06 Skip By Prerequest') {
       assert.equal(resultsByName.get(requestName).statusCode, 0);
@@ -122,7 +174,7 @@ test('runs the golden Postman/Newman sandbox v1 corpus through the importer and 
   assert.ok(runRequestResult.testScriptResult.tests.some((item) => item.name === '03c RunRequest Target: runRequest target test is reported on caller' && item.passed));
 
   assert.equal(cookieValue(result.cookies, 'scripted'), expected.cookies.scripted);
-  assert.equal(cookieValue(result.cookies, 'secret'), expected.cookies.secret);
+  assert.equal(cookieValue(result.cookies, 'secret'), undefined);
   assert.equal(cookieValue(result.cookies, 'visible'), undefined);
   assert.equal(await vault.get('seededToken'), 'seeded-value');
   assert.equal(await vault.get('corpusToken'), undefined);

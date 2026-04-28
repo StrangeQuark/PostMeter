@@ -1,15 +1,29 @@
 const fs = require('node:fs/promises');
+const crypto = require('node:crypto');
 const http = require('node:http');
 const https = require('node:https');
+const tls = require('node:tls');
 const { performance } = require('node:perf_hooks');
 const { BODY_METHODS, BODY_TYPES, SUPPORTED_METHODS } = require('./models');
 const { resolveEnvironmentValue } = require('./environmentResolver');
-const { applyAuth, maybeRefreshOAuthToken, normalizeAuth, validateAuth } = require('./auth');
+const {
+  applyAuth,
+  applyDigestChallengeAuth,
+  buildNtlmType3AuthorizationHeader,
+  maybeRefreshOAuthToken,
+  normalizeAuth,
+  parseDigestChallenge,
+  validateAuth
+} = require('./auth');
 const { cookiesForRequest, mergeCookieHeader, updateCookiesFromResponse } = require('./cookieJar');
+const {
+  MAX_ATTACHMENT_BYTES,
+  resolveFileAttachmentBinding
+} = require('./fileAttachmentBindings');
 
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 const MANAGED_HEADERS = new Set(['content-length']);
-const REQUEST_TIMEOUT_MILLIS = 60_000;
+const REQUEST_TIMEOUT_MILLIS = 3 * 60 * 1000;
 const MAX_REDIRECTS = 10;
 const REDIRECT_STATUS_CODES = new Set([301, 302, 303, 307, 308]);
 
@@ -46,6 +60,10 @@ function validateRequest(request, environment) {
   if (builtUrl && normalizeAuth(request.auth).type === 'clientCertificate' && builtUrl.protocol !== 'https:') {
     errors.push('Client certificate auth requires an https URL.');
   }
+  const proxyError = validateProxyConfig(request.proxy, environment);
+  if (proxyError) {
+    errors.push(proxyError);
+  }
   return errors;
 }
 
@@ -74,40 +92,47 @@ async function sendRequest(request, environment, options = {}) {
     }
     headers[name] = value;
   }
-  applyAuth(requestForSend, environment, { url, headers });
-  applyCookieJar(requestForSend, headers, url, options.cookieJar || []);
-
   const method = requestForSend.method;
   const bodyType = requestForSend.bodyType || BODY_TYPES.NONE;
   const shouldSendBody = bodyType !== BODY_TYPES.NONE && BODY_METHODS.has(method);
+  let body = null;
   const fetchOptions = {
     method,
     headers,
-    redirect: 'follow',
-    signal: options.signal || AbortSignal.timeout(REQUEST_TIMEOUT_MILLIS)
+    redirect: requestForSend.followRedirects === false ? 'manual' : 'follow',
+    signal: requestSignal(options.signal, options.timeoutMillis)
   };
 
   if (shouldSendBody) {
     if (!hasContentType) {
       headers['Content-Type'] = bodyType === BODY_TYPES.RAW_JSON ? 'application/json' : 'text/plain; charset=utf-8';
     }
-    fetchOptions.body = resolveEnvironmentValue(requestForSend.body ?? '', environment);
+    body = Buffer.isBuffer(requestForSend.body)
+      ? requestForSend.body
+      : resolveEnvironmentValue(requestForSend.body ?? '', environment);
+    fetchOptions.body = body;
   }
+  applyAuth(requestForSend, environment, { body: body || '', headers, method, now: options.now, url });
+  applyCookieJar(requestForSend, headers, url, options.cookieJar || []);
 
   const started = performance.now();
-  const tlsOptions = await loadClientCertificateOptions(requestForSend.auth, environment, url);
-  const response = tlsOptions
-    ? await sendNodeRequest(url, fetchOptions, tlsOptions)
-    : await fetch(url, fetchOptions);
-  const body = typeof response.text === 'function' ? await response.text() : response.body;
+  const tlsOptions = await loadClientCertificateOptions(requestForSend.auth, environment, url, options.clientCertificates || []);
+  const proxyOptions = normalizeProxyConfig(requestForSend.proxy, environment);
+  const response = await sendWithAuthRetries(requestForSend, environment, url, fetchOptions, {
+    body: body || '',
+    now: options.now,
+    proxyOptions,
+    tlsOptions
+  });
+  const responseBody = typeof response.text === 'function' ? await response.text() : response.body;
   const durationMillis = Math.max(0, Math.round(performance.now() - started));
   const responseHeaders = headersToObject(response.headers);
   const result = {
     statusCode: response.status || response.statusCode,
     headers: responseHeaders,
-    body,
+    body: responseBody,
     durationMillis,
-    responseBytes: Buffer.byteLength(body, 'utf8'),
+    responseBytes: Buffer.byteLength(responseBody, 'utf8'),
     finalUrl: response.url || url.toString()
   };
   if (requestForSend.cookieJar?.enabled === true && requestForSend.cookieJar?.storeResponses !== false) {
@@ -117,6 +142,77 @@ async function sendRequest(request, environment, options = {}) {
     result.updatedAuth = prepared.updatedAuth;
   }
   return result;
+}
+
+async function sendWithAuthRetries(request, environment, url, fetchOptions, options = {}) {
+  const auth = normalizeAuth(request.auth);
+  const ntlmAgent = auth.type === 'ntlm' && !options.proxyOptions ? nodeAgentForUrl(url, options.tlsOptions) : null;
+  const transportOptions = ntlmAgent ? { ...options, forceNode: true, agent: ntlmAgent } : options;
+  const response = await sendWithTransport(url, fetchOptions, transportOptions);
+  if ((response.status || response.statusCode) !== 401) {
+    ntlmAgent?.destroy?.();
+    return response;
+  }
+  const headers = headersToObject(response.headers);
+  if (auth.type === 'ntlm') {
+    const challenge = headers['www-authenticate'];
+    if (!challenge || !String(Array.isArray(challenge) ? challenge.join(', ') : challenge).match(/\bNTLM\s+\S+/i)) {
+      ntlmAgent?.destroy?.();
+      return response;
+    }
+    if (typeof response.text === 'function') {
+      await response.text().catch(() => {});
+    }
+    const retryOptions = {
+      ...fetchOptions,
+      headers: { ...fetchOptions.headers }
+    };
+    retryOptions.headers.Authorization = buildNtlmType3AuthorizationHeader(request.auth, environment, challenge, { now: options.now });
+    const retryResponse = await sendWithTransport(url, retryOptions, transportOptions);
+    ntlmAgent?.destroy?.();
+    return retryResponse;
+  }
+  if (auth.type !== 'digest') {
+    return response;
+  }
+  const challenge = parseDigestChallenge(headers['www-authenticate']);
+  if (!challenge) {
+    return response;
+  }
+  if (typeof response.text === 'function') {
+    await response.text().catch(() => {});
+  }
+  const retryOptions = {
+    ...fetchOptions,
+    headers: { ...fetchOptions.headers }
+  };
+  applyDigestChallengeAuth(request, environment, {
+    body: options.body || '',
+    headers: retryOptions.headers,
+    method: retryOptions.method,
+    now: options.now,
+    url
+  }, challenge);
+  return sendWithTransport(url, retryOptions, options);
+}
+
+function sendWithTransport(url, fetchOptions, options = {}) {
+  if (options.forceNode || options.tlsOptions || options.proxyOptions) {
+    return sendNodeRequest(url, fetchOptions, options.tlsOptions, 0, url.origin, {
+      agent: options.agent,
+      proxyOptions: options.proxyOptions
+    });
+  }
+  return fetch(url, fetchOptions);
+}
+
+function nodeAgentForUrl(url, tlsOptions = null) {
+  const Agent = url.protocol === 'https:' ? https.Agent : http.Agent;
+  return new Agent({
+    keepAlive: true,
+    maxSockets: 1,
+    ...(url.protocol === 'https:' && tlsOptions ? tlsOptions : {})
+  });
 }
 
 function applyCookieJar(request, headers, url, cookieJar) {
@@ -139,13 +235,28 @@ function applyCookieJar(request, headers, url, cookieJar) {
   }
 }
 
-async function loadClientCertificateOptions(auth = {}, environment, url) {
+async function loadClientCertificateOptions(auth = {}, environment, url, clientCertificates = []) {
   const normalized = normalizeAuth(auth);
   if (normalized.type !== 'clientCertificate') {
     return null;
   }
   if (url.protocol !== 'https:') {
     throw new Error('Client certificate auth requires an https URL.');
+  }
+  const certificateId = resolveEnvironmentValue(normalized.certificateId, environment).trim();
+  if (certificateId) {
+    const certificate = (clientCertificates || []).find((item) => String(item?.id || '') === certificateId);
+    if (!certificate) {
+      throw new Error('Configured client certificate binding was not found for this request.');
+    }
+    return loadClientCertificateOptions({
+      type: 'clientCertificate',
+      certPath: certificate.certPath || '',
+      keyPath: certificate.keyPath || '',
+      pfxPath: certificate.pfxPath || '',
+      caPath: certificate.caPath || '',
+      passphrase: certificate.passphrase || ''
+    }, environment, url, []);
   }
 
   const passphrase = resolveEnvironmentValue(normalized.passphrase, environment);
@@ -179,10 +290,10 @@ async function readCertificateFile(filePath, label) {
   }
 }
 
-async function sendNodeRequest(url, requestOptions, tlsOptions, redirectCount = 0, originalOrigin = url.origin) {
-  const response = await sendSingleNodeRequest(url, requestOptions, tlsOptions);
+async function sendNodeRequest(url, requestOptions, tlsOptions, redirectCount = 0, originalOrigin = url.origin, options = {}) {
+  const response = await sendSingleNodeRequest(url, requestOptions, tlsOptions, options.proxyOptions, options.agent);
   const location = response.headers.location?.[0];
-  if (!REDIRECT_STATUS_CODES.has(response.statusCode) || !location) {
+  if (requestOptions.redirect === 'manual' || !REDIRECT_STATUS_CODES.has(response.statusCode) || !location) {
     return response;
   }
   if (redirectCount >= MAX_REDIRECTS) {
@@ -190,11 +301,14 @@ async function sendNodeRequest(url, requestOptions, tlsOptions, redirectCount = 
   }
 
   const redirectUrl = new URL(location, url);
-  if (redirectUrl.protocol !== 'https:') {
+  if (tlsOptions && redirectUrl.protocol !== 'https:') {
     throw new Error('Client certificate redirects must stay on https URLs.');
   }
-  if (redirectUrl.origin !== originalOrigin) {
+  if (tlsOptions && redirectUrl.origin !== originalOrigin) {
     throw new Error('Client certificate redirects must stay on the original origin.');
+  }
+  if (redirectUrl.protocol !== 'http:' && redirectUrl.protocol !== 'https:') {
+    throw new Error('Redirect target must use http or https.');
   }
 
   const nextOptions = {
@@ -206,10 +320,13 @@ async function sendNodeRequest(url, requestOptions, tlsOptions, redirectCount = 
     delete nextOptions.body;
     deleteHeader(nextOptions.headers, 'content-type');
   }
-  return sendNodeRequest(redirectUrl, nextOptions, tlsOptions, redirectCount + 1, originalOrigin);
+  return sendNodeRequest(redirectUrl, nextOptions, tlsOptions, redirectCount + 1, originalOrigin, options);
 }
 
-function sendSingleNodeRequest(url, requestOptions, tlsOptions) {
+function sendSingleNodeRequest(url, requestOptions, tlsOptions, proxyOptions = null, agent = null) {
+  if (proxyOptions) {
+    return sendSingleNodeRequestViaProxy(url, requestOptions, tlsOptions, proxyOptions);
+  }
   return new Promise((resolve, reject) => {
     const transport = url.protocol === 'https:' ? https : http;
     const nodeOptions = {
@@ -219,6 +336,7 @@ function sendSingleNodeRequest(url, requestOptions, tlsOptions) {
       path: `${url.pathname}${url.search}`,
       method: requestOptions.method,
       headers: requestOptions.headers,
+      agent,
       signal: requestOptions.signal,
       ...(url.protocol === 'https:' ? tlsOptions : {})
     };
@@ -244,19 +362,377 @@ function sendSingleNodeRequest(url, requestOptions, tlsOptions) {
   });
 }
 
-async function prepareRequestForSend(request, environment, options) {
+function sendSingleNodeRequestViaProxy(url, requestOptions, tlsOptions, proxyOptions) {
+  if (url.protocol === 'https:' || proxyOptions.tunnel === true) {
+    return sendSingleNodeRequestViaProxyTunnel(url, requestOptions, tlsOptions, proxyOptions);
+  }
+  return new Promise((resolve, reject) => {
+    const transport = proxyOptions.protocol === 'https:' ? https : http;
+    const headers = {
+      ...requestOptions.headers,
+      Host: hostHeaderForUrl(url)
+    };
+    addProxyAuthorization(headers, proxyOptions);
+    const nodeOptions = {
+      protocol: proxyOptions.protocol,
+      hostname: proxyOptions.hostname,
+      port: proxyOptions.port,
+      path: url.toString(),
+      method: requestOptions.method,
+      headers,
+      signal: requestOptions.signal
+    };
+    const request = transport.request(nodeOptions, (response) => collectNodeResponse(response, url.toString(), resolve));
+    request.on('error', reject);
+    if (requestOptions.body != null) {
+      request.write(requestOptions.body);
+    }
+    request.end();
+  });
+}
+
+async function sendSingleNodeRequestViaProxyTunnel(url, requestOptions, tlsOptions, proxyOptions) {
+  const tunnelSocket = await openProxyTunnel(url, requestOptions.signal, proxyOptions);
+  return new Promise((resolve, reject) => {
+    const transport = url.protocol === 'https:' ? https : http;
+    const nodeOptions = {
+      protocol: url.protocol,
+      hostname: url.hostname,
+      port: url.port,
+      path: `${url.pathname}${url.search}`,
+      method: requestOptions.method,
+      headers: requestOptions.headers,
+      signal: requestOptions.signal,
+      createConnection: () => {
+        if (url.protocol === 'https:') {
+          return tls.connect({
+            socket: tunnelSocket,
+            servername: url.hostname,
+            ...(tlsOptions || {})
+          });
+        }
+        return tunnelSocket;
+      }
+    };
+    const request = transport.request(nodeOptions, (response) => collectNodeResponse(response, url.toString(), resolve));
+    request.on('error', reject);
+    request.on('close', () => {
+      if (!tunnelSocket.destroyed) {
+        tunnelSocket.destroy();
+      }
+    });
+    if (requestOptions.body != null) {
+      request.write(requestOptions.body);
+    }
+    request.end();
+  });
+}
+
+function openProxyTunnel(url, signal, proxyOptions) {
+  return new Promise((resolve, reject) => {
+    const transport = proxyOptions.protocol === 'https:' ? https : http;
+    const target = hostHeaderForUrl(url);
+    const headers = { Host: target };
+    addProxyAuthorization(headers, proxyOptions);
+    const request = transport.request({
+      protocol: proxyOptions.protocol,
+      hostname: proxyOptions.hostname,
+      port: proxyOptions.port,
+      method: 'CONNECT',
+      path: target,
+      headers,
+      signal
+    });
+    request.once('connect', (response, socket, head) => {
+      if (response.statusCode !== 200) {
+        socket.destroy();
+        reject(new Error(`Proxy CONNECT failed with HTTP ${response.statusCode || 0}.`));
+        return;
+      }
+      if (head?.length) {
+        socket.unshift(head);
+      }
+      resolve(socket);
+    });
+    request.once('error', reject);
+    request.end();
+  });
+}
+
+function collectNodeResponse(response, finalUrl, resolve) {
+  const chunks = [];
+  response.on('data', (chunk) => chunks.push(chunk));
+  response.on('end', () => {
+    const bodyBuffer = Buffer.concat(chunks);
+    resolve({
+      statusCode: response.statusCode || 0,
+      headers: headersToObject(response.headers),
+      body: bodyBuffer.toString('utf8'),
+      url: finalUrl
+    });
+  });
+}
+
+function normalizeProxyConfig(proxy, environment) {
+  if (!proxy || proxy.enabled === false || proxy.disabled === true) {
+    return null;
+  }
+  let source = proxy;
+  if (typeof source === 'string') {
+    source = { url: source };
+  }
+  if (typeof source !== 'object') {
+    return null;
+  }
+  const rawUrl = resolveEnvironmentValue(source.url || source.uri || '', environment).trim();
+  let parsed = null;
+  if (rawUrl) {
+    try {
+      parsed = new URL(rawUrl);
+    } catch {
+      throw new Error('Proxy URL is not a valid URI.');
+    }
+  }
+  const protocolText = resolveEnvironmentValue(source.protocol || source.scheme || parsed?.protocol || 'http', environment)
+    .replace(/:$/, '')
+    .toLowerCase();
+  const protocol = protocolText === 'https' ? 'https:' : protocolText === 'http' ? 'http:' : '';
+  if (!protocol) {
+    throw new Error('Proxy protocol must be http or https.');
+  }
+  const hostname = resolveEnvironmentValue(source.host || source.hostname || parsed?.hostname || '', environment).trim();
+  if (!hostname) {
+    throw new Error('Proxy host is required.');
+  }
+  const rawPort = resolveEnvironmentValue(source.port || parsed?.port || '', environment).trim();
+  const port = rawPort ? Number(rawPort) : (protocol === 'https:' ? 443 : 80);
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+    throw new Error('Proxy port must be a valid TCP port.');
+  }
+  return {
+    protocol,
+    hostname,
+    port,
+    username: resolveEnvironmentValue(source.username || parsed?.username || '', environment),
+    password: resolveEnvironmentValue(source.password || parsed?.password || '', environment),
+    tunnel: source.tunnel === true
+  };
+}
+
+function validateProxyConfig(proxy, environment) {
+  try {
+    normalizeProxyConfig(proxy, environment);
+    return null;
+  } catch (error) {
+    return error.message || String(error);
+  }
+}
+
+function addProxyAuthorization(headers, proxyOptions) {
+  if (!proxyOptions.username && !proxyOptions.password) {
+    return;
+  }
+  headers['Proxy-Authorization'] = `Basic ${Buffer.from(`${proxyOptions.username}:${proxyOptions.password}`, 'utf8').toString('base64')}`;
+}
+
+function hostHeaderForUrl(url) {
+  if ((url.protocol === 'https:' && url.port === '443') || (url.protocol === 'http:' && url.port === '80') || !url.port) {
+    return url.hostname;
+  }
+  return `${url.hostname}:${url.port}`;
+}
+
+function requestSignal(parentSignal, timeoutMillis) {
+  const timeout = normalizeTimeoutMillis(timeoutMillis);
+  const timeoutSignal = AbortSignal.timeout(timeout);
+  if (!parentSignal) {
+    return timeoutSignal;
+  }
+  if (typeof AbortSignal.any === 'function') {
+    return AbortSignal.any([parentSignal, timeoutSignal]);
+  }
+  return parentSignal;
+}
+
+function normalizeTimeoutMillis(value) {
+  const timeout = Number(value || REQUEST_TIMEOUT_MILLIS);
+  if (!Number.isFinite(timeout) || timeout <= 0) {
+    return REQUEST_TIMEOUT_MILLIS;
+  }
+  return Math.max(1, Math.min(REQUEST_TIMEOUT_MILLIS, Math.floor(timeout)));
+}
+
+async function prepareRequestForSend(request, environment, options = {}) {
   const refreshed = await maybeRefreshOAuthToken(request?.auth, environment, {
     fetchImpl: options.fetchImpl,
     signal: options.signal,
     now: options.now
   });
+  const requestWithAuth = refreshed.refreshed ? { ...request, auth: refreshed.auth } : request;
+  const requestWithBody = await materializeBoundRequestBody(requestWithAuth, options.fileBindings || []);
   if (!refreshed.refreshed) {
-    return { request, updatedAuth: null };
+    return { request: requestWithBody, updatedAuth: null };
   }
   return {
-    request: { ...request, auth: refreshed.auth },
+    request: requestWithBody,
     updatedAuth: refreshed.auth
   };
+}
+
+async function materializeBoundRequestBody(request = {}, fileBindings = []) {
+  if (request.multipart?.parts?.length) {
+    const { body, contentType } = await buildMultipartRequestBody(request.multipart.parts, fileBindings);
+    return withRequestBody(request, body, contentType);
+  }
+  if (request.bodyAttachment) {
+    const { body, contentType } = await readBoundAttachmentBody(request.bodyAttachment, fileBindings);
+    return withRequestBody(request, body, contentType || 'application/octet-stream');
+  }
+  const postmanBodyMode = String(request.postmanBody?.mode || '').toLowerCase();
+  if (postmanBodyMode === 'file' || postmanBodyMode === 'binary') {
+    const source = request.postmanBody.file?.src || request.postmanBody.binary?.src || '';
+    if (!source) {
+      return request;
+    }
+    const { body, contentType } = await readBoundAttachmentBody({
+      contentType: request.postmanBody.file?.contentType || request.postmanBody.binary?.contentType || '',
+      mode: postmanBodyMode,
+      source
+    }, fileBindings);
+    return withRequestBody(request, body, contentType || 'application/octet-stream');
+  }
+  if (postmanBodyMode === 'formdata' || postmanBodyMode === 'form-data') {
+    const parts = postmanFormDataParts(request.postmanBody.formdata || []);
+    if (!parts.some((part) => part.type === 'file')) {
+      return request;
+    }
+    const { body, contentType } = await buildMultipartRequestBody(parts, fileBindings);
+    return withRequestBody(request, body, contentType);
+  }
+  return request;
+}
+
+function postmanFormDataParts(formdata = []) {
+  const parts = [];
+  for (const part of Array.isArray(formdata) ? formdata : []) {
+    if (!part || typeof part !== 'object' || part.disabled === true || part.enabled === false) {
+      continue;
+    }
+    const key = part.key == null ? '' : String(part.key);
+    if (!key) {
+      continue;
+    }
+    const isFile = part.src != null || String(part.type || '').toLowerCase() === 'file';
+    if (!isFile) {
+      parts.push({
+        key,
+        type: 'text',
+        value: part.value == null ? '' : String(part.value)
+      });
+      continue;
+    }
+    const sources = Array.isArray(part.src) ? part.src : [part.src];
+    for (const source of sources.filter((item) => item != null && item !== '')) {
+      parts.push({
+        contentType: part.contentType == null ? '' : String(part.contentType),
+        fileName: part.fileName == null ? '' : String(part.fileName),
+        key,
+        mode: 'formdata',
+        source: String(source),
+        type: 'file'
+      });
+    }
+  }
+  return parts;
+}
+
+async function readBoundAttachmentBody(reference, fileBindings) {
+  const binding = resolveFileAttachmentBinding(reference, fileBindings);
+  const body = await readBoundFile(binding.localPath, reference?.source || binding.source);
+  return {
+    body,
+    contentType: reference?.contentType || binding.contentType || ''
+  };
+}
+
+async function buildMultipartRequestBody(parts = [], fileBindings = []) {
+  const boundary = `postmeter-${crypto.randomBytes(12).toString('hex')}`;
+  const chunks = [];
+  let totalBytes = 0;
+  const push = (chunk) => {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk), 'utf8');
+    totalBytes += buffer.length;
+    if (totalBytes > MAX_ATTACHMENT_BYTES) {
+      throw new Error(`File attachment request body cannot exceed ${MAX_ATTACHMENT_BYTES} bytes.`);
+    }
+    chunks.push(buffer);
+  };
+  for (const part of parts) {
+    if (!part?.key) {
+      continue;
+    }
+    if (part.type === 'file') {
+      const binding = resolveFileAttachmentBinding(part, fileBindings);
+      const fileBody = await readBoundFile(binding.localPath, part.source || binding.source);
+      const fileName = multipartFileName(part.fileName || binding.fileName || binding.localPath || binding.source);
+      const contentType = part.contentType || binding.contentType || 'application/octet-stream';
+      push(`--${boundary}\r\nContent-Disposition: form-data; name="${escapeMultipartValue(part.key)}"; filename="${escapeMultipartValue(fileName)}"\r\nContent-Type: ${contentType}\r\n\r\n`);
+      push(fileBody);
+      push('\r\n');
+    } else {
+      push(`--${boundary}\r\nContent-Disposition: form-data; name="${escapeMultipartValue(part.key)}"\r\n\r\n${part.value == null ? '' : String(part.value)}\r\n`);
+    }
+  }
+  push(`--${boundary}--\r\n`);
+  return {
+    body: Buffer.concat(chunks),
+    contentType: `multipart/form-data; boundary=${boundary}`
+  };
+}
+
+async function readBoundFile(filePath, source) {
+  const stat = await fs.stat(filePath).catch((error) => {
+    const reason = error?.code ? `${error.code}` : (error?.message || 'unknown error');
+    throw new Error(`Unable to read bound file attachment for ${source || 'request body'}: ${reason}.`);
+  });
+  if (!stat.isFile()) {
+    throw new Error(`Bound file attachment for ${source || 'request body'} must be a regular file.`);
+  }
+  if (stat.size > MAX_ATTACHMENT_BYTES) {
+    throw new Error(`File attachment ${source || filePath} cannot exceed ${MAX_ATTACHMENT_BYTES} bytes.`);
+  }
+  const body = await fs.readFile(filePath);
+  if (body.length > MAX_ATTACHMENT_BYTES) {
+    throw new Error(`File attachment ${source || filePath} cannot exceed ${MAX_ATTACHMENT_BYTES} bytes.`);
+  }
+  return body;
+}
+
+function withRequestBody(request, body, contentType) {
+  return {
+    ...request,
+    body,
+    bodyType: BODY_TYPES.RAW_TEXT,
+    headers: headerWithDefault(request.headers || [], 'Content-Type', contentType)
+  };
+}
+
+function headerWithDefault(headers = [], key, value) {
+  if (!value || headers.some((header) => String(header?.key || '').toLowerCase() === key.toLowerCase() && header.enabled !== false)) {
+    return headers;
+  }
+  return [
+    ...headers,
+    { enabled: true, key, value }
+  ];
+}
+
+function multipartFileName(value) {
+  return String(value || 'attachment').split(/[\\/]/).pop() || 'attachment';
+}
+
+function escapeMultipartValue(value) {
+  return String(value || '').replace(/["\r\n]/g, '_');
 }
 
 function buildUrl(request, environment) {
@@ -342,6 +818,7 @@ module.exports = {
   buildUrl,
   applyCookieJar,
   loadClientCertificateOptions,
+  materializeBoundRequestBody,
   prepareRequestForSend,
   sendRequest,
   sendNodeRequest,

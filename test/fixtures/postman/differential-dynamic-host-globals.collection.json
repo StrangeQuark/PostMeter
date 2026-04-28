@@ -1,0 +1,76 @@
+{
+  "info": {
+    "name": "PostMeter Differential Dynamic Host Globals",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "00000000-0000-4000-8000-000000000203"
+  },
+  "item": [
+    {
+      "name": "Dynamic Code And Host Globals",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/json"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "function status(fn) {",
+              "  try {",
+              "    var value = fn();",
+              "    return { ok: true, type: typeof value, value: value === undefined ? 'undefined' : value === null ? 'null' : String(value) };",
+              "  } catch (error) {",
+              "    return { ok: false, name: error && error.name || '', message: error && error.message || String(error) };",
+              "  }",
+              "}",
+              "var globalScope = Function('return this')();",
+              "var names = ['eval', 'Function', 'Buffer', 'fetch', 'XMLHttpRequest', 'WebSocket', 'WebAssembly', 'process', 'require', 'global', 'globalThis', 'window', 'self', 'document', 'navigator', 'location', 'localStorage', 'sessionStorage', 'indexedDB', 'Deno', 'Bun', 'importScripts', 'postMessage'];",
+              "var summary = {};",
+              "names.forEach(function (name) {",
+              "  summary[name] = { type: typeof globalScope[name], own: Object.prototype.hasOwnProperty.call(globalScope, name) };",
+              "});",
+              "summary.topBuffer = status(function () { return typeof Buffer; });",
+              "summary.bufferFrom = status(function () { return Buffer.from('abc').toString('base64'); });",
+              "summary.directEval = status(function () { return eval('1 + 2'); });",
+              "summary.indirectEval = status(function () { return (0, eval)('1 + 3'); });",
+              "summary.directEvalBuffer = status(function () { return eval('typeof Buffer'); });",
+              "summary.indirectEvalBuffer = status(function () { return (0, eval)('typeof Buffer'); });",
+              "summary.functionSimple = status(function () { return Function('return 5')(); });",
+              "summary.functionThisType = status(function () { return typeof Function('return this')(); });",
+              "summary.functionRequireType = status(function () { return Function('return typeof require')(); });",
+              "summary.functionProcessType = status(function () { return Function('return typeof process')(); });",
+              "summary.functionFetchType = status(function () { return Function('return typeof fetch')(); });",
+              "summary.functionBufferType = status(function () { return Function('return typeof Buffer')(); });",
+              "summary.constructorEscape = status(function () { return ({}).constructor.constructor('return typeof process')(); });",
+              "summary.webAssemblyCompile = status(function () { return typeof WebAssembly === 'undefined' ? 'missing' : typeof WebAssembly.compile; });",
+              "pm.environment.set('dynamicHostSummary', JSON.stringify(summary));",
+              "pm.test('dynamic code and host-like globals match Postman sandbox profile', function () {",
+              "  pm.expect(summary.directEval).to.deep.equal({ ok: true, type: 'number', value: '3' });",
+              "  pm.expect(summary.indirectEval).to.deep.equal({ ok: true, type: 'number', value: '4' });",
+              "  pm.expect(summary.directEvalBuffer.value).to.equal('function');",
+              "  pm.expect(summary.indirectEvalBuffer.value).to.equal('undefined');",
+              "  pm.expect(summary.functionSimple.value).to.equal('5');",
+              "  pm.expect(summary.functionRequireType.value).to.equal('function');",
+              "  pm.expect(summary.functionProcessType.value).to.equal('undefined');",
+              "  pm.expect(summary.functionFetchType.value).to.equal('undefined');",
+              "  pm.expect(summary.functionBufferType.value).to.equal('undefined');",
+              "  pm.expect(summary.constructorEscape.value).to.equal('undefined');",
+              "  pm.expect(summary.topBuffer.value).to.equal('function');",
+              "  pm.expect(summary.bufferFrom.value).to.equal('YWJj');",
+              "  pm.expect(summary.fetch.type).to.equal('undefined');",
+              "  pm.expect(summary.XMLHttpRequest.type).to.equal('undefined');",
+              "  pm.expect(summary.WebSocket.type).to.equal('undefined');",
+              "  pm.expect(summary.WebAssembly.type).to.equal('undefined');",
+              "  pm.expect(summary.process.type).to.equal('undefined');",
+              "  pm.expect(summary.globalThis.type).to.equal('undefined');",
+              "  pm.expect(summary.webAssemblyCompile.value).to.equal('missing');",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

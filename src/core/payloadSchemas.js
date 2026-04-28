@@ -3,7 +3,24 @@ const PAYLOAD_SCHEMA_VERSION = 1;
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 const BODY_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
 const BODY_TYPE_VALUES = ['NONE', 'RAW_JSON', 'RAW_TEXT'];
-const AUTH_TYPE_VALUES = ['none', 'bearer', 'basic', 'apiKey', 'cookie', 'oauth2', 'clientCertificate'];
+const REQUEST_PROTOCOLS = ['http', 'graphql', 'grpc', 'websocket', 'socketio'];
+const AUTH_TYPE_VALUES = [
+  'none',
+  'bearer',
+  'basic',
+  'apiKey',
+  'cookie',
+  'oauth2',
+  'clientCertificate',
+  'digest',
+  'hawk',
+  'aws',
+  'oauth1',
+  'ntlm',
+  'akamaiEdgeGrid',
+  'jwtBearer',
+  'asap'
+];
 const API_KEY_LOCATIONS = ['header', 'query'];
 const OAUTH2_TOKEN_TYPES = ['Bearer', 'MAC'];
 const OAUTH2_GRANT_TYPES = ['authorizationCode', 'clientCredentials', 'deviceCode'];
@@ -21,7 +38,7 @@ const OAUTH_PROGRESS_STATUSES = [
   'failed'
 ];
 const LOAD_EXPORT_FORMATS = ['json', 'csv'];
-const COLLECTION_EXPORT_FORMATS = ['postmeter', 'openapi', 'jmeter', 'curl', 'har'];
+const COLLECTION_EXPORT_FORMATS = ['postmeter', 'postman', 'openapi', 'jmeter', 'curl', 'har'];
 const THEME_VALUES = ['system', 'light', 'dark'];
 const ASSERTION_TYPES = [
   'statusCode',
@@ -78,6 +95,7 @@ const SCHEMA_ENUMS = {
   oauth2TokenTypes: OAUTH2_TOKEN_TYPES,
   oauthProgressStatuses: OAUTH_PROGRESS_STATUSES,
   oauthProgressTypes: OAUTH_PROGRESS_TYPES,
+  requestProtocols: REQUEST_PROTOCOLS,
   sameSiteValues: ['', 'Lax', 'Strict', 'None'],
   themeValues: THEME_VALUES
 };
@@ -145,7 +163,18 @@ const FIELD_SCHEMAS = {
   },
   scripts: {
     preRequest: { type: 'string', limit: 'body', optional: true },
-    tests: { type: 'string', limit: 'body', optional: true }
+    tests: { type: 'string', limit: 'body', optional: true },
+    beforeQuery: { type: 'string', limit: 'body', optional: true },
+    afterResponse: { type: 'string', limit: 'body', optional: true },
+    beforeInvoke: { type: 'string', limit: 'body', optional: true },
+    onMessage: { type: 'string', limit: 'body', optional: true },
+    onIncomingMessage: { type: 'string', limit: 'body', optional: true },
+    mock: { type: 'string', limit: 'body', optional: true }
+  },
+  protocolMessage: {
+    timestamp: { type: 'string', limit: 'name', optional: true },
+    type: { type: 'string', limit: 'short', optional: true },
+    name: { type: 'string', limit: 'name', optional: true }
   },
   requestCookieJar: {
     enabled: { type: 'boolean', optional: true },
@@ -342,7 +371,48 @@ const FIELD_SCHEMAS = {
     keyPath: { type: 'string', limit: 'value', optional: true },
     pfxPath: { type: 'string', limit: 'value', optional: true },
     caPath: { type: 'string', limit: 'value', optional: true },
-    passphrase: { type: 'string', limit: 'value', optional: true }
+    passphrase: { type: 'string', limit: 'value', optional: true },
+    certificateId: { type: 'string', limit: 'name', optional: true },
+    realm: { type: 'string', limit: 'value', optional: true },
+    nonce: { type: 'string', limit: 'value', optional: true },
+    algorithm: { type: 'string', limit: 'short', optional: true },
+    qop: { type: 'string', limit: 'short', optional: true },
+    opaque: { type: 'string', limit: 'value', optional: true },
+    clientNonce: { type: 'string', limit: 'value', optional: true },
+    nonceCount: { type: 'string', limit: 'short', optional: true },
+    authId: { type: 'string', limit: 'value', optional: true },
+    authKey: { type: 'string', limit: 'value', optional: true },
+    user: { type: 'string', limit: 'value', optional: true },
+    extraData: { type: 'string', limit: 'value', optional: true },
+    app: { type: 'string', limit: 'value', optional: true },
+    delegation: { type: 'string', limit: 'value', optional: true },
+    accessKey: { type: 'string', limit: 'value', optional: true },
+    secretKey: { type: 'string', limit: 'value', optional: true },
+    region: { type: 'string', limit: 'value', optional: true },
+    service: { type: 'string', limit: 'value', optional: true },
+    sessionToken: { type: 'string', limit: 'value', optional: true },
+    addAuthDataToQuery: { type: 'boolean', optional: true },
+    consumerKey: { type: 'string', limit: 'value', optional: true },
+    consumerSecret: { type: 'string', limit: 'value', optional: true },
+    tokenSecret: { type: 'string', limit: 'value', optional: true },
+    signatureMethod: { type: 'string', limit: 'short', optional: true },
+    timestamp: { type: 'string', limit: 'value', optional: true },
+    version: { type: 'string', limit: 'short', optional: true },
+    domain: { type: 'string', limit: 'value', optional: true },
+    workstation: { type: 'string', limit: 'value', optional: true },
+    clientToken: { type: 'string', limit: 'value', optional: true },
+    headersToSign: { type: 'string', limit: 'value', optional: true },
+    privateKey: { type: 'string', limit: 'value', optional: true },
+    secret: { type: 'string', limit: 'value', optional: true },
+    issuer: { type: 'string', limit: 'value', optional: true },
+    subject: { type: 'string', limit: 'value', optional: true },
+    audience: { type: 'string', limit: 'value', optional: true },
+    keyId: { type: 'string', limit: 'value', optional: true },
+    expiresIn: { type: 'string', limit: 'short', optional: true },
+    claims: { type: 'string', limit: 'value', optional: true },
+    headerPrefix: { type: 'string', limit: 'short', optional: true },
+    addTokenTo: { type: 'string', limit: 'short', optional: true },
+    queryParamName: { type: 'string', limit: 'short', optional: true }
   }
 };
 
@@ -378,7 +448,7 @@ const payloadSchemas = {
   entities: {
     request: {
       required: ['method', 'url'],
-      arrays: ['queryParams', 'headers', 'assertions', 'variables', 'examples'],
+      arrays: ['queryParams', 'headers', 'assertions', 'variables', 'examples', 'metadata', 'messages'],
       nested: ['auth', 'scripts', 'cookieJar', 'loadTestPolicy']
     },
   workspace: {

@@ -1,0 +1,64 @@
+{
+  "info": {
+    "name": "PostMeter Differential Runtime Limits",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "00000000-0000-4000-8000-000000000204"
+  },
+  "item": [
+    {
+      "name": "Runtime Timer Drain And Output",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/json"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "var summary = {",
+              "  promiseMicrotask: false,",
+              "  timeout: false,",
+              "  intervalCleared: false,",
+              "  intervalCountAtLeastTwo: false,",
+              "  visualizerSet: false,",
+              "  timerFunctions: [typeof setTimeout, typeof clearTimeout, typeof setInterval, typeof clearInterval].join(','),",
+              "  consoleFunctions: [typeof console.log, typeof console.warn, typeof console.error].join(',')",
+              "};",
+              "console.log('runtime limit probe %s', 'start');",
+              "console.warn({ runtime: 'limits', ok: true });",
+              "Promise.resolve().then(function () {",
+              "  summary.promiseMicrotask = true;",
+              "});",
+              "var intervalCount = 0;",
+              "var interval = setInterval(function () {",
+              "  intervalCount += 1;",
+              "  if (intervalCount >= 2) {",
+              "    clearInterval(interval);",
+              "    summary.intervalCleared = true;",
+              "  }",
+              "}, 1);",
+              "setTimeout(function () {",
+              "  summary.timeout = true;",
+              "  summary.intervalCountAtLeastTwo = intervalCount >= 2;",
+              "  pm.visualizer.set('<section>{{label}}</section>', { label: 'runtime' });",
+              "  summary.visualizerSet = true;",
+              "  pm.environment.set('runtimeLimitsSummary', JSON.stringify(summary));",
+              "  pm.test('runtime timers, console, and visualizer work below policy limits', function () {",
+              "    pm.expect(summary.promiseMicrotask).to.equal(true);",
+              "    pm.expect(summary.timeout).to.equal(true);",
+              "    pm.expect(summary.intervalCleared).to.equal(true);",
+              "    pm.expect(summary.intervalCountAtLeastTwo).to.equal(true);",
+              "    pm.expect(summary.visualizerSet).to.equal(true);",
+              "    pm.expect(summary.timerFunctions).to.equal('function,function,function,function');",
+              "    pm.expect(summary.consoleFunctions).to.equal('function,function,function');",
+              "  });",
+              "}, 25);"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

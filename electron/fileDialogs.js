@@ -15,6 +15,7 @@ function collectionImportFilters() {
 function collectionExportExtension(format) {
   return {
     postmeter: 'json',
+    postman: 'postman_collection.json',
     openapi: 'openapi.json',
     jmeter: 'jmx',
     curl: 'sh',

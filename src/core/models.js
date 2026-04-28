@@ -11,6 +11,7 @@ const {
   normalizeLoadPolicy: normalizeLoadTestPolicy,
   normalizeRequestLoadPolicy: normalizeRequestLoadTestPolicy
 } = require('./loadPolicyModel');
+const { normalizeSandboxFileBindings } = require('./fileAttachmentBindings');
 
 const CURRENT_SCHEMA_VERSION = 11;
 const MIN_SUPPORTED_SCHEMA_VERSION = 1;
@@ -19,6 +20,7 @@ const BODY_METHODS = new Set(BODY_METHOD_VALUES);
 const BODY_TYPES = Object.freeze(Object.fromEntries(BODY_TYPE_VALUES.map((type) => [type, type])));
 const DEFAULT_REQUEST_BODY_TYPE = 'NONE';
 const DEFAULT_EXAMPLE_BODY_TYPE = 'RAW_TEXT';
+const POSTMAN_METADATA_MAX_BYTES = 10 * 1024 * 1024;
 
 function newId() {
   return crypto.randomUUID();
@@ -28,11 +30,38 @@ function keyValue(key = '', value = '', enabled = true) {
   return { enabled, key: key ?? '', value: value ?? '' };
 }
 
-function requestModel({ id, name, method, url, queryParams, headers, bodyType, body, auth, assertions, scripts, variables, examples, cookieJar, loadTestPolicy } = {}) {
+function requestModel({
+  id,
+  name,
+  method,
+  url,
+  queryParams,
+  headers,
+  bodyType,
+  body,
+  auth,
+  assertions,
+  scripts,
+  variables,
+  examples,
+  cookieJar,
+  loadTestPolicy,
+  protocol,
+  protocolProfile,
+  postmanBody,
+  graphql,
+  grpc,
+  websocket,
+  metadata,
+  postman,
+  messages,
+  methodPath
+} = {}) {
   const normalizedMethod = normalizeMethod(method);
-  return {
+  const request = {
     id: id || newId(),
     name: normalizeName(name, 'Untitled Request'),
+    protocol: normalizeRequestProtocol(protocol),
     method: normalizedMethod,
     url: typeof url === 'string' ? url.trim() : '',
     queryParams: normalizePairs(queryParams),
@@ -45,21 +74,33 @@ function requestModel({ id, name, method, url, queryParams, headers, bodyType, b
     variables: normalizePairs(variables),
     examples: normalizeExamples(examples),
     cookieJar: normalizeRequestCookieJar(cookieJar),
-    loadTestPolicy: normalizeRequestLoadTestPolicy(loadTestPolicy)
+    loadTestPolicy: normalizeRequestLoadTestPolicy(loadTestPolicy),
+    methodPath: methodPath == null ? '' : String(methodPath).slice(0, 512),
+    metadata: normalizePairs(metadata),
+    messages: normalizeMessages(messages),
+    postmanBody: normalizeJsonObject(postmanBody, POSTMAN_METADATA_MAX_BYTES),
+    protocolProfile: normalizeJsonObject(protocolProfile, 128 * 1024),
+    graphql: normalizeJsonObject(graphql, 128 * 1024),
+    grpc: normalizeJsonObject(grpc, 128 * 1024),
+    websocket: normalizeJsonObject(websocket, 128 * 1024)
   };
+  addOptionalJsonObject(request, 'postman', postman, POSTMAN_METADATA_MAX_BYTES);
+  return request;
 }
 
-function folderModel({ id, name, requests, folders } = {}) {
-  return {
+function folderModel({ id, name, requests, folders, postman } = {}) {
+  const folder = {
     id: id || newId(),
     name: normalizeName(name, 'Untitled Folder'),
     requests: Array.isArray(requests) ? requests.map(requestModel) : [],
     folders: Array.isArray(folders) ? folders.map(folderModel) : []
   };
+  addOptionalJsonObject(folder, 'postman', postman, POSTMAN_METADATA_MAX_BYTES);
+  return folder;
 }
 
-function collectionModel({ id, name, description, variables, certificates, requests, folders } = {}) {
-  return {
+function collectionModel({ id, name, description, variables, certificates, requests, folders, postman } = {}) {
+  const collection = {
     id: id || newId(),
     name: normalizeName(name, 'Untitled Collection'),
     description: description ?? '',
@@ -68,6 +109,8 @@ function collectionModel({ id, name, description, variables, certificates, reque
     requests: Array.isArray(requests) ? requests.map(requestModel) : [],
     folders: Array.isArray(folders) ? folders.map(folderModel) : []
   };
+  addOptionalJsonObject(collection, 'postman', postman, POSTMAN_METADATA_MAX_BYTES);
+  return collection;
 }
 
 function environmentModel({ id, name, variables } = {}) {
@@ -106,6 +149,7 @@ function normalizeSettings(settings) {
       theme: normalizeTheme(settings?.appearance?.theme)
     },
     sandbox: {
+      fileBindings: normalizeSandboxFileBindings(settings?.sandbox?.fileBindings),
       packageCache: normalizeSandboxPackageCache(settings?.sandbox?.packageCache),
       trustedCapabilities: {
         sendRequest: settings?.sandbox?.trustedCapabilities?.sendRequest !== false,
@@ -128,13 +172,84 @@ function normalizeSandboxPackageCache(value) {
     .filter((item) => item && typeof item === 'object')
     .slice(0, 32)
     .map((item) => ({
+      dependencyAliases: normalizePlainStringMap(item.dependencyAliases || item.dependencyMap, 32),
       specifier: String(item.specifier || item.name || '').trim(),
       source: String(item.source || item.code || ''),
+      files: normalizeSandboxPackageFiles(item.files),
       integrity: String(item.integrity || '').trim(),
       dependencies: Array.isArray(item.dependencies) ? item.dependencies.map((dependency) => String(dependency || '').trim()).filter(Boolean).slice(0, 32) : [],
-      maxExportKeys: Number.isFinite(Number(item.maxExportKeys)) ? Number(item.maxExportKeys) : undefined
+      maxExportKeys: Number.isFinite(Number(item.maxExportKeys)) ? Number(item.maxExportKeys) : undefined,
+      entrypoint: item.entrypoint == null ? '' : String(item.entrypoint).slice(0, 256),
+      fetchedAt: item.fetchedAt == null ? '' : String(item.fetchedAt).slice(0, 256),
+      packageDependencies: Array.isArray(item.packageDependencies) ? item.packageDependencies.map((dependency) => String(dependency || '').trim()).filter(Boolean).slice(0, 64) : [],
+      packageIntegrity: item.packageIntegrity == null ? '' : String(item.packageIntegrity).slice(0, 512),
+      packageJson: normalizeSandboxPackageJson(item.packageJson || item.package || item.manifest),
+      packageName: item.packageName == null ? '' : String(item.packageName).slice(0, 256),
+      packageVersion: item.packageVersion == null ? '' : String(item.packageVersion).slice(0, 128),
+      registry: item.registry == null ? '' : String(item.registry).slice(0, 32),
+      reviewedAt: item.reviewedAt == null ? '' : String(item.reviewedAt).slice(0, 256),
+      sourceUrl: item.sourceUrl == null ? '' : String(item.sourceUrl).slice(0, 2048)
     }))
     .filter((item) => item.specifier && item.source && item.integrity);
+}
+
+function normalizeSandboxPackageFiles(files) {
+  const entries = Array.isArray(files)
+    ? files.map((file) => [
+      file?.path ?? file?.name ?? file?.filename,
+      file?.source ?? file?.code ?? file?.text
+    ])
+    : Object.entries(files || {});
+  const output = [];
+  for (const [rawPath, rawSource] of entries.slice(0, 128)) {
+    const filePath = normalizeSandboxPackageFilePath(rawPath);
+    if (!filePath || output.some((file) => file.path === filePath)) {
+      continue;
+    }
+    output.push({
+      path: filePath,
+      source: String(rawSource ?? '')
+    });
+  }
+  return output;
+}
+
+function normalizeSandboxPackageFilePath(filePath) {
+  let value = String(filePath || '').replace(/\\/g, '/').trim();
+  while (value.startsWith('./')) {
+    value = value.slice(2);
+  }
+  value = value.replace(/^\/+/, '');
+  const parts = value.split('/').filter(Boolean);
+  if (!parts.length || parts.includes('..') || parts.some((part) => part === '.' || part.includes('\0'))) {
+    return '';
+  }
+  return parts.join('/').slice(0, 512);
+}
+
+function normalizeSandboxPackageJson(packageJson) {
+  if (!packageJson || typeof packageJson !== 'object' || Array.isArray(packageJson)) {
+    return {};
+  }
+  try {
+    return JSON.parse(JSON.stringify(packageJson));
+  } catch {
+    return {};
+  }
+}
+
+function normalizePlainStringMap(value, limit) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+  return Object.entries(value).slice(0, limit).reduce((output, [key, target]) => {
+    const alias = String(key || '').trim();
+    const specifier = String(target || '').trim();
+    if (alias && specifier) {
+      output[alias] = specifier;
+    }
+    return output;
+  }, {});
 }
 
 function normalizeVaultGrants(value, workspaceGrant = false) {
@@ -185,12 +300,79 @@ function normalizeAssertions(assertions) {
 
 function normalizeScripts(scripts) {
   if (!scripts || typeof scripts !== 'object') {
-    return { preRequest: '', tests: '' };
+    return emptyScripts();
   }
   return {
     preRequest: typeof scripts.preRequest === 'string' ? scripts.preRequest : '',
-    tests: typeof scripts.tests === 'string' ? scripts.tests : ''
+    tests: typeof scripts.tests === 'string' ? scripts.tests : '',
+    beforeQuery: typeof scripts.beforeQuery === 'string' ? scripts.beforeQuery : '',
+    afterResponse: typeof scripts.afterResponse === 'string' ? scripts.afterResponse : '',
+    beforeInvoke: typeof scripts.beforeInvoke === 'string' ? scripts.beforeInvoke : '',
+    onMessage: typeof scripts.onMessage === 'string' ? scripts.onMessage : '',
+    onIncomingMessage: typeof scripts.onIncomingMessage === 'string' ? scripts.onIncomingMessage : '',
+    mock: typeof scripts.mock === 'string' ? scripts.mock : ''
   };
+}
+
+function emptyScripts() {
+  return {
+    preRequest: '',
+    tests: '',
+    beforeQuery: '',
+    afterResponse: '',
+    beforeInvoke: '',
+    onMessage: '',
+    onIncomingMessage: '',
+    mock: ''
+  };
+}
+
+function normalizeRequestProtocol(value) {
+  const protocol = String(value || 'http').trim().toLowerCase();
+  if (protocol === 'graphql' || protocol === 'grpc' || protocol === 'websocket' || protocol === 'socketio') {
+    return protocol;
+  }
+  return 'http';
+}
+
+function normalizeMessages(messages) {
+  if (!Array.isArray(messages)) {
+    return [];
+  }
+  return messages.slice(0, 1000)
+    .filter((message) => message && typeof message === 'object')
+    .map((message) => ({
+      data: message.data == null ? '' : typeof message.data === 'string' ? message.data : safeJsonStringify(message.data),
+      timestamp: message.timestamp == null ? '' : String(message.timestamp).slice(0, 128),
+      type: message.type == null ? '' : String(message.type).slice(0, 64),
+      name: message.name == null ? '' : String(message.name).slice(0, 256)
+    }));
+}
+
+function normalizeJsonObject(value, maxBytes) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+  const text = safeJsonStringify(value);
+  if (Buffer.byteLength(text, 'utf8') > maxBytes) {
+    return {};
+  }
+  return JSON.parse(text);
+}
+
+function addOptionalJsonObject(target, key, value, maxBytes) {
+  const normalized = normalizeJsonObject(value, maxBytes);
+  if (Object.keys(normalized).length) {
+    target[key] = normalized;
+  }
+}
+
+function safeJsonStringify(value) {
+  try {
+    return JSON.stringify(value == null ? {} : value);
+  } catch {
+    return '{}';
+  }
 }
 
 function normalizeExamples(examples) {
@@ -199,14 +381,18 @@ function normalizeExamples(examples) {
   }
   return examples
     .filter((example) => example && typeof example === 'object')
-    .map((example) => ({
-      id: example.id || newId(),
-      name: normalizeName(example.name, 'Example Response'),
-      statusCode: Number.isFinite(Number(example.statusCode)) ? Number(example.statusCode) : 0,
-      headers: normalizePairs(example.headers),
-      bodyType: normalizeSchemaEnumValue('bodyTypes', example.bodyType, DEFAULT_EXAMPLE_BODY_TYPE),
-      body: example.body == null ? '' : String(example.body)
-    }));
+    .map((example) => {
+      const normalized = {
+        id: example.id || newId(),
+        name: normalizeName(example.name, 'Example Response'),
+        statusCode: Number.isFinite(Number(example.statusCode)) ? Number(example.statusCode) : 0,
+        headers: normalizePairs(example.headers),
+        bodyType: normalizeSchemaEnumValue('bodyTypes', example.bodyType, DEFAULT_EXAMPLE_BODY_TYPE),
+        body: example.body == null ? '' : String(example.body)
+      };
+      addOptionalJsonObject(normalized, 'postman', example.postman, POSTMAN_METADATA_MAX_BYTES);
+      return normalized;
+    });
 }
 
 function normalizeRequestCookieJar(cookieJar) {
@@ -226,16 +412,20 @@ function normalizeCertificates(certificates) {
   }
   return certificates
     .filter((certificate) => certificate && typeof certificate === 'object')
-    .map((certificate) => ({
-      id: certificate.id || newId(),
-      name: normalizeName(certificate.name, 'Client Certificate'),
-      matches: Array.isArray(certificate.matches) ? certificate.matches.map((value) => String(value || '')).filter(Boolean) : [],
-      certPath: certificate.certPath == null ? '' : String(certificate.certPath),
-      keyPath: certificate.keyPath == null ? '' : String(certificate.keyPath),
-      pfxPath: certificate.pfxPath == null ? '' : String(certificate.pfxPath),
-      caPath: certificate.caPath == null ? '' : String(certificate.caPath),
-      passphrase: certificate.passphrase == null ? '' : String(certificate.passphrase)
-    }));
+    .map((certificate) => {
+      const normalized = {
+        id: certificate.id || newId(),
+        name: normalizeName(certificate.name, 'Client Certificate'),
+        matches: Array.isArray(certificate.matches) ? certificate.matches.map((value) => String(value || '')).filter(Boolean) : [],
+        certPath: certificate.certPath == null ? '' : String(certificate.certPath),
+        keyPath: certificate.keyPath == null ? '' : String(certificate.keyPath),
+        pfxPath: certificate.pfxPath == null ? '' : String(certificate.pfxPath),
+        caPath: certificate.caPath == null ? '' : String(certificate.caPath),
+        passphrase: certificate.passphrase == null ? '' : String(certificate.passphrase)
+      };
+      addOptionalJsonObject(normalized, 'postman', certificate.postman, POSTMAN_METADATA_MAX_BYTES);
+      return normalized;
+    });
 }
 
 function normalizeMethod(method) {
@@ -262,21 +452,70 @@ function defaultWorkspace() {
 }
 
 function walkRequests(collection, visitor) {
-  for (const request of collection.requests || []) {
-    visitor(request, collection);
-  }
-  for (const folder of collection.folders || []) {
-    walkFolderRequests(folder, collection, visitor);
+  for (const entry of orderedChildren(collection)) {
+    if (entry.kind === 'request') {
+      visitor(entry.value, collection);
+    } else {
+      walkFolderRequests(entry.value, collection, visitor);
+    }
   }
 }
 
 function walkFolderRequests(folder, collection, visitor) {
-  for (const request of folder.requests || []) {
-    visitor(request, collection, folder);
+  for (const entry of orderedChildren(folder)) {
+    if (entry.kind === 'request') {
+      visitor(entry.value, collection, folder);
+    } else {
+      walkFolderRequests(entry.value, collection, visitor);
+    }
   }
-  for (const child of folder.folders || []) {
-    walkFolderRequests(child, collection, visitor);
+}
+
+function orderedChildren(container) {
+  const requests = (container?.requests || []).map((value) => ({ kind: 'request', value }));
+  const folders = (container?.folders || []).map((value) => ({ kind: 'folder', value }));
+  const entries = requests.concat(folders);
+  const order = Array.isArray(container?.postman?.itemOrder) ? container.postman.itemOrder : [];
+  if (!order.length) {
+    return entries;
   }
+  const used = new Set();
+  const ordered = [];
+  for (const item of order) {
+    const match = entries.find((entry) => !used.has(entry.value) && orderedChildMatches(entry, item));
+    if (match) {
+      used.add(match.value);
+      ordered.push(match);
+    }
+  }
+  for (const entry of entries) {
+    if (!used.has(entry.value)) {
+      ordered.push(entry);
+    }
+  }
+  return ordered;
+}
+
+function orderedChildMatches(entry, item) {
+  if (item?.kind && item.kind !== entry.kind) {
+    return false;
+  }
+  if (Number.isFinite(Number(item?.index)) && Number(entry.value?.postman?.orderIndex) === Number(item.index)) {
+    return true;
+  }
+  const aliases = [
+    entry.value?.postman?.ids?.original,
+    entry.value?.postman?.ids?.id,
+    entry.value?.postman?.ids?.uid,
+    entry.value?.postman?.ids?._postman_id,
+    entry.value?.postman?.ids?.deterministic,
+    entry.value?.id,
+    entry.value?.name
+  ].map((value) => String(value || '').trim()).filter(Boolean);
+  const targets = [item?.id, item?.uid, item?.postmanId, item?.deterministic, item?.name]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+  return targets.some((target) => aliases.includes(target));
 }
 
 module.exports = {

@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "type": "desktop-runtime-source-audit",
+  "rowIds": [
+    "require.pm.commonjs-bundle-semantics"
+  ],
+  "rowEvidence": {
+    "require.pm.commonjs-bundle-semantics": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-postmeter-focused-package-loader-coverage",
+      "postmanEvidence": [
+        "Postman Desktop resolves Package Library and external package imports before script execution and exposes prepared packages through the sandbox require surface.",
+        "The audited postman-sandbox package model supports synchronous CommonJS-style module loading and per-module cache behavior inside the sandbox."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/sandboxPackageFetcher.test.js",
+        "test/electron/sandboxPackageIpc.test.js",
+        "test/electron/postmanSandboxCorpus.test.js",
+        "test/electron/postmanSandboxAdversarial.test.js"
+      ]
+    }
+  },
+  "auditedAt": "2026-04-27",
+  "postman": {
+    "app": "Postman Desktop",
+    "version": "11.71.7",
+    "platform": "linux",
+    "observedAt": "2026-04-27"
+  },
+  "newmanTarget": "6.2.2",
+  "postmanSandboxVersion": "6.2.2",
+  "source": {
+    "desktopAudit": "postman-desktop-11.71.7-runtime-source-audit.json",
+    "packageAudit": "postman-desktop-11.71.7-builtin-package-audit.json",
+    "postmanRuntime": "7.50.0",
+    "postmanCollection": "5.2.0"
+  },
+  "observedPostmanPackageModel": {
+    "packageLibraryResolution": "Postman Desktop resolves Package Library and external package imports before script execution; scripts consume already prepared packages through the sandbox require surface.",
+    "sandboxBoundary": "Package loading happens inside postman-sandbox script execution, while host Node, Electron, filesystem, process, shell, native modules, path specifiers, URL specifiers, registry fetches, and runtime installs are not direct script capabilities.",
+    "commonJsExpectations": [
+      "module.exports and exports aliasing",
+      "synchronous require for package-local modules",
+      "per-module cache identity",
+      "partially initialized exports during supported circular dependencies",
+      "package metadata entrypoint selection",
+      "declared dependency resolution",
+      "JSON module loading",
+      "meaningful cannot-resolve errors"
+    ]
+  },
+  "postmeterImplementation": {
+    "reviewedCache": "PostMeter stores reviewed exact team, npm, and checksum-verified JSR package entries with SHA-256 integrity over normalized file maps, package metadata, and entrypoint metadata. Legacy single-source entries remain supported with the original source digest.",
+    "loaderSemantics": "The script VM loader resolves package entrypoints from explicit entrypoint metadata, package.json main/browser/module/exports fields, and index fallbacks; supports relative file, directory package.json, extension, .json, .js, .cjs, and .mjs resolution; pre-caches module records for circular dependencies; exposes module, exports, module.require, require.resolve, __filename, and __dirname; and keeps default export object patterns intact.",
+    "dependencyPolicy": "Reviewed packages may synchronously require only Postman bundled facades or reviewed dependencies declared in the package entry. Dependency aliases and reviewed dependency subpaths map package-local bare specifiers to exact reviewed package file-map entries without giving scripts Node or registry resolution.",
+    "securityBoundary": "The loader rejects host Node modules outside the approved Postman facade list, node: specifiers, absolute or parent-escaping paths, URLs, native modules, unreviewed packages, duplicate cache entries, missing dependencies, oversized packages, and integrity mismatches."
+  },
+  "postmeterEvidence": {
+    "focusedTests": [
+      "test/electron/scriptRuntime.test.js supports multi-file reviewed CommonJS packages with metadata, cache, circular dependencies, and default interop",
+      "test/electron/sandboxPackageFetcher.test.js normalizes reviewed npm/JSR/team package files and bundle integrity",
+      "test/electron/sandboxPackageIpc.test.js preserves fetched file maps, package metadata, dependency aliases, and integrity",
+      "test/electron/postmanSandboxCorpus.test.js executes the golden corpus reviewed multi-file package import",
+      "test/electron/postmanSandboxAdversarial.test.js rejects package-loader abuse without host Node or unreviewed package access"
+    ],
+    "goldenFixtures": [
+      "newman-sandbox-v1",
+      "real-world-import-corpus",
+      "adversarial-sandbox-v1"
+    ]
+  },
+  "limitations": [
+    "This artifact is a source and implementation audit. Package Library UI behavior and online fetch/review workflow evidence is tracked separately by require.pm.online-fetch-review.",
+    "This artifact covers reviewed CommonJS-compatible package execution. Native ESM execution for JSR packages is tracked separately by require.pm.jsr-esm-module-semantics.",
+    "PostMeter intentionally preserves the reviewed-cache security model instead of giving scripts direct npm, JSR, filesystem, or Node resolution."
+  ],
+  "notes": "This artifact clears the CommonJS bundle-semantics claim blocker by tying the Postman Desktop package model to PostMeter's reviewed multi-file CommonJS loader, integrity model, dependency policy, focused tests, adversarial denials, and golden corpus coverage."
+}

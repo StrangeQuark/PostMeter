@@ -1,0 +1,105 @@
+{
+  "info": {
+    "_postman_id": "differential-sendrequest-files",
+    "name": "PostMeter Differential File Bindings",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Binary Attachment Body",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const payload = pm.response.json();",
+              "const previous = pm.environment.get('fileBinarySummary') || '';",
+              "pm.environment.set('fileBinarySummary', (previous ? previous + '|' : '') + payload.kind + ':' + payload.attachment + ':' + payload.field);",
+              "pm.test('binary attachment body is sent', function () {",
+              "  pm.expect(payload.attachment).to.equal('BINARY_ATTACHMENT_CONTENT');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/attachments/binary",
+        "body": {
+          "mode": "file",
+          "file": {
+            "src": "test/fixtures/postman/attachments/sendrequest-binary.bin",
+            "contentType": "application/octet-stream"
+          }
+        }
+      }
+    },
+    {
+      "name": "File Attachment Body",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const payload = pm.response.json();",
+              "const previous = pm.environment.get('fileBinarySummary') || '';",
+              "pm.environment.set('fileBinarySummary', (previous ? previous + '|' : '') + payload.kind + ':' + payload.attachment + ':' + payload.field);",
+              "pm.test('file attachment body is sent', function () {",
+              "  pm.expect(payload.attachment).to.equal('FILE_ATTACHMENT_CONTENT');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/attachments/file",
+        "body": {
+          "mode": "file",
+          "file": {
+            "src": "test/fixtures/postman/attachments/sendrequest-file.txt",
+            "contentType": "text/plain"
+          }
+        }
+      }
+    },
+    {
+      "name": "Form Data File Attachment",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const payload = pm.response.json();",
+              "const previous = pm.environment.get('fileBinarySummary') || '';",
+              "pm.environment.set('fileBinarySummary', (previous ? previous + '|' : '') + payload.kind + ':' + payload.attachment + ':' + payload.field);",
+              "pm.test('form-data file attachment is sent', function () {",
+              "  pm.expect(payload.attachment).to.equal('FILE_ATTACHMENT_CONTENT');",
+              "  pm.expect(payload.field).to.equal('form-note');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/attachments/form",
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "note", "value": "form-note", "type": "text" },
+            {
+              "key": "payload",
+              "type": "file",
+              "src": "test/fixtures/postman/attachments/sendrequest-file.txt",
+              "contentType": "text/plain"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

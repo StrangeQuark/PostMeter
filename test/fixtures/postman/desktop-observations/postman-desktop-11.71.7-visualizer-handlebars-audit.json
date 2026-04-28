@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "type": "desktop-runtime-source-audit",
+  "rowIds": [
+    "visualizer.clear",
+    "visualizer.external-assets",
+    "visualizer.handlebars-full-parity",
+    "visualizer.pm.getData",
+    "visualizer.set"
+  ],
+  "rowEvidence": {
+    "visualizer.clear": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-postmeter-focused-coverage",
+      "postmanEvidence": [
+        "Postman Desktop 11.71.7 packages the visualizer sandbox surface and Handlebars 4.7 line."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/fixtures/postman/newman-sandbox-v1.collection.json"
+      ]
+    },
+    "visualizer.external-assets": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-postmeter-focused-coverage",
+      "postmanEvidence": [
+        "Postman Desktop 11.71.7 visualizer behavior is source-audited for the sandboxed iframe and Handlebars package line."
+      ],
+      "postmeterEvidence": [
+        "test/electron/postmanSandboxAdversarial.test.js",
+        "test/electron/postmanSandboxCorpus.test.js"
+      ]
+    },
+    "visualizer.handlebars-full-parity": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-postmeter-focused-coverage",
+      "postmanEvidence": [
+        "Postman Desktop 11.71.7 packages handlebars@4.7.8 through the visualizer runtime path."
+      ],
+      "postmeterEvidence": [
+        "src/core/visualizerHandlebarsBundle.js",
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/postmanSandboxAdversarial.test.js"
+      ]
+    },
+    "visualizer.pm.getData": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-postmeter-focused-coverage",
+      "postmanEvidence": [
+        "Postman Desktop 11.71.7 visualizer docs/source expose pm.getData(callback) inside the rendered document."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/fixtures/postman/newman-sandbox-v1.collection.json"
+      ]
+    },
+    "visualizer.set": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-postmeter-focused-coverage",
+      "postmanEvidence": [
+        "Postman Desktop 11.71.7 visualizer docs/source expose pm.visualizer.set(layout, data, options)."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/postmanSandboxCorpus.test.js"
+      ]
+    }
+  },
+  "postman": {
+    "app": "Postman Desktop",
+    "version": "11.71.7",
+    "channel": "snap latest/stable",
+    "platform": "linux",
+    "observedAt": "2026-04-27"
+  },
+  "capture": {
+    "method": "installed-desktop-runtime-source-audit-plus-postmeter-focused-coverage",
+    "commands": [
+      "cat /snap/postman/360/usr/share/postman/resources/app/package.json",
+      "rg \"handlebars\" /snap/postman/360/usr/share/postman/resources/app/yarn.lock",
+      "node --test test/electron/scriptRuntime.test.js test/electron/postmanSandboxAdversarial.test.js test/electron/postmanSandboxCorpus.test.js test/electron/scriptSandbox.test.js"
+    ],
+    "artifactPaths": [
+      "/snap/postman/360/usr/share/postman/resources/app/package.json",
+      "/snap/postman/360/usr/share/postman/resources/app/yarn.lock",
+      "src/core/visualizerHandlebarsBundle.js",
+      "test/electron/scriptRuntime.test.js",
+      "test/electron/postmanSandboxAdversarial.test.js",
+      "test/electron/postmanSandboxCorpus.test.js",
+      "test/fixtures/postman/newman-sandbox-v1.collection.json"
+    ]
+  },
+  "observed": {
+    "postmanDesktopRuntime": {
+      "postman-runtime": "7.50.0",
+      "postman-sandbox": "6.2.2",
+      "handlebars": "4.7.8"
+    },
+    "postmeterRuntime": {
+      "handlebars": "4.7.9",
+      "reason": "Handlebars 4.7.8 is the audited Postman Desktop 11.71.7 line, but current npm advisories cover <=4.7.8. PostMeter uses the patched 4.7-compatible browser runtime and records the vendored source SHA-256 in src/core/visualizerHandlebarsBundle.js."
+    },
+    "coveredBehavior": [
+      "pm.visualizer.set and pm.visualizer.clear capture bounded isolated render output",
+      "Handlebars.compile, precompile, template, create, helpers, block helpers, dynamic partials, inline partial decorator, custom decorators, runtime helper options, SafeString, block params, data variables, parent/root lookup, whitespace behavior, and noEscape compile option",
+      "pm.getData(callback) remains available only inside the isolated visualizer document",
+      "Reviewed JS/CSS visualizer assets require sha256 integrity and are injected into the isolated visualizer document; unreviewed remote/file/network loads remain stripped by sanitizer and iframe CSP",
+      "Unsafe constructor, prototype, and __proto__ data/helper-option keys are removed before render and callback handoff"
+    ]
+  },
+  "limitations": [
+    "This artifact records runtime/source evidence and PostMeter coverage for the Postman Desktop Handlebars line; it is not a license to load unreviewed remote visualizer assets.",
+    "PostMeter intentionally uses handlebars@4.7.9 rather than the exact Postman Desktop handlebars@4.7.8 package because the exact package line has active high/critical advisories."
+  ],
+  "notes": "This fixture closes the visualizer.handlebars-full-parity default-import claim blocker while preserving the isolated iframe CSP and no Node/Electron/renderer-access sandbox boundary."
+}

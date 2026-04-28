@@ -671,6 +671,52 @@ h2 {
   font-size: 13px;
 }
 
+.workspace-file-bindings,
+.workspace-package-cache,
+.workspace-vault-panel {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.workspace-package-list {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.workspace-package-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.workspace-package-row strong,
+.workspace-package-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.workspace-package-row span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.workspace-package-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 .environment-main-header #environmentNameInput {
   min-width: 260px;
 }

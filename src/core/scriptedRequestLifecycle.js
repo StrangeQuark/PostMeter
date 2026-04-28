@@ -1,4 +1,5 @@
 const { sendRequest } = require('./httpClient');
+const { invokeGrpcRequest } = require('./grpcClient');
 const { runPostmanScriptIsolated } = require('./scriptSandbox');
 const {
   cloneEnvironment,
@@ -31,21 +32,29 @@ function createScriptedRequestState(request, environment, options = {}) {
 }
 
 async function runScriptedRequestLifecycle(state, options = {}) {
+  const protocol = requestProtocol(state.request);
+  if (protocol === 'graphql') {
+    return runGraphqlRequestLifecycle(state, options);
+  }
+  if (protocol === 'grpc') {
+    return runGrpcRequestLifecycle(state, options);
+  }
+  if (protocol === 'websocket' || protocol === 'socketio') {
+    throw new Error('Postman WebSocket and Socket.IO requests do not currently expose documented script hooks for imported collections.');
+  }
+  return runHttpScriptedRequestLifecycle(state, options);
+}
+
+async function runHttpScriptedRequestLifecycle(state, options = {}) {
   const send = options.sendRequest || sendRequest;
   const runScript = options.scriptRunner || runPostmanScriptIsolated;
   const iterationData = options.iterationData || [];
-  const scriptOptions = {
-    ...(options.scriptOptions || {}),
-    runRequest: options.scriptOptions?.runRequest || options.runRequest,
-    sandboxPackages: options.scriptOptions?.sandboxPackages || options.sandboxPackages || [],
-    sendRequest: options.scriptOptions?.sendRequest || send,
-    signal: options.signal,
-    trustedCapabilities: options.trustedCapabilities || options.scriptOptions?.trustedCapabilities || {},
-    vault: options.scriptOptions?.vault || options.vault
-  };
+  const scriptOptions = scriptOptionsForLifecycle(options, { sendRequest: send });
 
   const preRequestScriptExecution = await runScript(state.request?.scripts?.preRequest, scriptContext(state, {
     collectionId: options.collectionId,
+    eventName: options.preRequestEventName || 'prerequest',
+    executionLocation: options.executionLocation,
     iteration: options.iteration || 0,
     iterationCount: options.iterationCount || 1,
     iterationData
@@ -81,13 +90,20 @@ async function runScriptedRequestLifecycle(state, options = {}) {
       globals: state.globals,
       iterationData
     }),
-    { signal: options.signal, cookieJar: state.cookies }
+    {
+      signal: options.signal,
+      cookieJar: state.cookies,
+      clientCertificates: options.clientCertificates || options.scriptOptions?.clientCertificates || [],
+      fileBindings: options.fileBindings || options.scriptOptions?.fileBindings || []
+    }
   );
   if (Array.isArray(response.updatedCookies)) {
     state.cookies = response.updatedCookies;
   }
   const testScriptExecution = await runScript(state.request?.scripts?.tests, scriptContext(state, {
     collectionId: options.collectionId,
+    eventName: options.testEventName || 'test',
+    executionLocation: options.executionLocation,
     iteration: options.iteration || 0,
     iterationCount: options.iterationCount || 1,
     iterationData,
@@ -108,6 +124,151 @@ async function runScriptedRequestLifecycle(state, options = {}) {
   };
 }
 
+async function runGraphqlRequestLifecycle(state, options = {}) {
+  const baseSend = options.sendRequest || sendRequest;
+  const request = {
+    ...(state.request || {}),
+    protocol: 'graphql',
+    scripts: {
+      ...(state.request?.scripts || {}),
+      preRequest: protocolScript(state.request, 'beforeQuery', 'preRequest'),
+      tests: protocolScript(state.request, 'afterResponse', 'tests')
+    }
+  };
+  return runHttpScriptedRequestLifecycle(
+    { ...state, request },
+    {
+      ...options,
+      preRequestEventName: 'beforeQuery',
+      testEventName: 'afterResponse',
+      sendRequest: async (nextRequest, environment, sendOptions) => (
+        normalizeGraphqlProtocolResponse(await baseSend(prepareGraphqlHttpRequest(nextRequest), environment, sendOptions))
+      )
+    }
+  );
+}
+
+async function runGrpcRequestLifecycle(state, options = {}) {
+  const runScript = options.scriptRunner || runPostmanScriptIsolated;
+  const invokeGrpc = options.grpcInvoker || options.scriptOptions?.grpcInvoker || defaultGrpcInvoker;
+  const grpcTransportConfig = trustedGrpcTransportConfig(state.request);
+  const iterationData = options.iterationData || [];
+  const grpcTransportEnvironment = runtimeEnvironment(state.collectionVariables, state.environment, state.localVariables, {
+    globals: state.globals,
+    iterationData
+  });
+  const scriptOptions = scriptOptionsForLifecycle(options, {
+    sendRequest: options.sendRequest || sendRequest
+  });
+
+  const beforeInvokeExecution = await runScript(protocolScript(state.request, 'beforeInvoke', 'preRequest'), scriptContext(state, {
+    collectionId: options.collectionId,
+    eventName: 'beforeInvoke',
+    executionLocation: options.executionLocation,
+    iteration: options.iteration || 0,
+    iterationCount: options.iterationCount || 1,
+    iterationData
+  }), scriptOptions);
+  applyScriptMutations(state, beforeInvokeExecution, { allowRequestMutation: true });
+  const beforeInvokeResult = scriptResultOnly(beforeInvokeExecution);
+  const beforeInvokeRuntime = beforeInvokeResult.execution || {};
+  if (!beforeInvokeResult.passed) {
+    return {
+      ...state,
+      response: null,
+      preRequestScriptResult: beforeInvokeResult,
+      messageScriptResults: [],
+      afterResponseScriptResult: emptyScriptResult(),
+      testScriptResult: emptyScriptResult(),
+      requestSent: false,
+      execution: beforeInvokeRuntime
+    };
+  }
+  if (beforeInvokeRuntime.skipRequest === true) {
+    return {
+      ...state,
+      response: null,
+      preRequestScriptResult: beforeInvokeResult,
+      messageScriptResults: [],
+      afterResponseScriptResult: emptyScriptResult(),
+      testScriptResult: emptyScriptResult(),
+      requestSent: false,
+      skipped: true,
+      execution: beforeInvokeRuntime
+    };
+  }
+
+  const runtimeEnv = runtimeEnvironment(state.collectionVariables, state.environment, state.localVariables, {
+    globals: state.globals,
+    iterationData
+  });
+  let response;
+  try {
+    const invoked = await invokeGrpc(state.request, runtimeEnv, {
+      signal: options.signal,
+      cookieJar: state.cookies,
+      clientCertificates: options.clientCertificates || options.scriptOptions?.clientCertificates || [],
+      grpcProtoBaseDir: options.grpcProtoBaseDir || options.scriptOptions?.grpcProtoBaseDir,
+      grpcProtoIncludeDirs: options.grpcProtoIncludeDirs || options.scriptOptions?.grpcProtoIncludeDirs || [],
+      grpcTransportEnvironment,
+      grpcTransportConfig
+    });
+    response = normalizeGrpcResponse(invoked);
+  } catch (error) {
+    response = normalizeGrpcResponse(grpcErrorResponse(error, state.request));
+  }
+  const onMessageScript = protocolScript(state.request, 'onIncomingMessage', 'onMessage');
+  const messageScriptResults = [];
+  let messageExecution = {};
+  for (const message of response.messages || []) {
+    const messageResponse = {
+      ...response,
+      messages: [message]
+    };
+    const messageScriptExecution = await runScript(onMessageScript, scriptContext(state, {
+      collectionId: options.collectionId,
+      eventName: 'onIncomingMessage',
+      executionLocation: options.executionLocation,
+      iteration: options.iteration || 0,
+      iterationCount: options.iterationCount || 1,
+      iterationData,
+      message,
+      response: messageResponse
+    }), scriptOptions);
+    applyScriptMutations(state, messageScriptExecution, { allowRequestMutation: false });
+    const result = scriptResultOnly(messageScriptExecution);
+    messageScriptResults.push(result);
+    messageExecution = mergeExecution(messageExecution, result.execution);
+  }
+
+  const afterResponseExecution = await runScript(protocolScript(state.request, 'afterResponse', 'tests'), scriptContext(state, {
+    collectionId: options.collectionId,
+    eventName: 'afterResponse',
+    executionLocation: options.executionLocation,
+    iteration: options.iteration || 0,
+    iterationCount: options.iterationCount || 1,
+    iterationData,
+    response
+  }), scriptOptions);
+  applyScriptMutations(state, afterResponseExecution, { allowRequestMutation: false });
+  const afterResponseResult = scriptResultOnly(afterResponseExecution);
+  const testScriptResult = aggregateGrpcScriptResult(messageScriptResults, afterResponseResult);
+
+  return {
+    ...state,
+    response,
+    preRequestScriptResult: beforeInvokeResult,
+    messageScriptResults,
+    afterResponseScriptResult: afterResponseResult,
+    testScriptResult,
+    requestSent: true,
+    execution: mergeExecution(
+      mergeExecution(beforeInvokeRuntime, messageExecution),
+      afterResponseResult.execution
+    )
+  };
+}
+
 function scriptContext(state, options = {}) {
   return {
     collectionId: options.collectionId || '',
@@ -115,6 +276,9 @@ function scriptContext(state, options = {}) {
     globals: state.globals,
     localVariables: state.localVariables,
     environment: state.environment,
+    eventName: options.eventName || (options.response ? 'test' : 'prerequest'),
+    executionLocation: options.executionLocation || {},
+    message: options.message,
     request: state.request,
     response: options.response,
     cookieJar: state.cookies,
@@ -122,6 +286,465 @@ function scriptContext(state, options = {}) {
     iteration: options.iteration || 0,
     iterationCount: options.iterationCount || 1
   };
+}
+
+function scriptOptionsForLifecycle(options = {}, overrides = {}) {
+  const send = overrides.sendRequest || options.sendRequest || sendRequest;
+  return {
+    ...(options.scriptOptions || {}),
+    runRequest: options.scriptOptions?.runRequest || options.runRequest,
+    sandboxPackages: options.scriptOptions?.sandboxPackages || options.sandboxPackages || [],
+    clientCertificates: options.scriptOptions?.clientCertificates || options.clientCertificates || [],
+    sendRequest: options.scriptOptions?.sendRequest || send,
+    signal: options.signal,
+    trustedCapabilities: options.trustedCapabilities || options.scriptOptions?.trustedCapabilities || {},
+    vault: options.scriptOptions?.vault || options.vault,
+    fileBindings: options.scriptOptions?.fileBindings || options.fileBindings || []
+  };
+}
+
+function requestProtocol(request = {}) {
+  const protocol = String(request?.protocol || '').trim().toLowerCase();
+  if (protocol === 'graphql' || protocol === 'grpc' || protocol === 'websocket' || protocol === 'socketio') {
+    return protocol;
+  }
+  const graphql = request?.graphql && typeof request.graphql === 'object' && Object.keys(request.graphql).length > 0;
+  if (request?.postmanBody?.mode === 'graphql' || request?.bodyDefinition?.mode === 'graphql' || graphql) {
+    return 'graphql';
+  }
+  const grpc = request?.grpc && typeof request.grpc === 'object' && Object.keys(request.grpc).length > 0;
+  const methodPath = String(request?.methodPath || '').trim();
+  const url = String(request?.url || '').trim().toLowerCase();
+  if (grpc || methodPath || url.startsWith('grpc://') || url.startsWith('grpcs://')) {
+    return 'grpc';
+  }
+  return 'http';
+}
+
+function protocolScript(request = {}, primary, fallback) {
+  const scripts = request?.scripts || {};
+  const primaryScript = String(scripts[primary] || '');
+  if (primaryScript.trim()) {
+    return primaryScript;
+  }
+  return String(scripts[fallback] || '');
+}
+
+function prepareGraphqlHttpRequest(request = {}) {
+  const body = graphqlBodyForRequest(request);
+  return {
+    ...request,
+    body: JSON.stringify(body),
+    bodyType: 'RAW_JSON',
+    headers: ensureHeader(request.headers, 'Content-Type', 'application/json'),
+    method: String(request.method || 'POST').toUpperCase(),
+    postmanBody: {
+      ...(request.postmanBody || {}),
+      mode: 'graphql',
+      graphql: {
+        query: body.query,
+        variables: typeof body.variables === 'string' ? body.variables : JSON.stringify(body.variables ?? {}),
+        operationName: body.operationName || ''
+      }
+    },
+    protocol: 'graphql'
+  };
+}
+
+function graphqlBodyForRequest(request = {}) {
+  const fromPostmanBody = request?.postmanBody?.graphql;
+  const fromGraphql = request?.graphql;
+  const fromBody = parseJsonObject(request?.body);
+  const source = fromPostmanBody && Object.keys(fromPostmanBody).length
+    ? fromPostmanBody
+    : fromGraphql && Object.keys(fromGraphql).length
+      ? fromGraphql
+      : fromBody;
+  return {
+    query: source?.query == null ? '' : String(source.query),
+    variables: parseGraphqlVariables(source?.variables),
+    operationName: source?.operationName == null ? '' : String(source.operationName)
+  };
+}
+
+function parseGraphqlVariables(value) {
+  if (value == null || value === '') {
+    return {};
+  }
+  if (typeof value !== 'string') {
+    return cloneJsonObject(value);
+  }
+  const text = value.trim();
+  if (!text) {
+    return {};
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    return value;
+  }
+}
+
+function normalizeGraphqlProtocolResponse(response = {}) {
+  const messages = graphqlMessagesFromResponse(response);
+  if (!messages.length) {
+    return response;
+  }
+  return {
+    ...response,
+    messages
+  };
+}
+
+function graphqlMessagesFromResponse(response = {}) {
+  if (Array.isArray(response.messages) && response.messages.length) {
+    return normalizeGraphqlMessages(response.messages);
+  }
+  const body = response.body == null ? '' : Buffer.isBuffer(response.body) ? response.body.toString('utf8') : String(response.body);
+  if (!body.trim()) {
+    return [];
+  }
+  const contentType = responseHeaderValue(response.headers || response.header || {}, 'content-type');
+  if (/text\/event-stream/i.test(contentType)) {
+    return normalizeGraphqlMessages(parseServerSentEventMessages(body));
+  }
+  if (/multipart\/mixed/i.test(contentType) || /multipart\/related/i.test(contentType)) {
+    return normalizeGraphqlMessages(parseMultipartGraphqlMessages(body, contentType));
+  }
+  const parsed = parseJsonValue(body);
+  if (Array.isArray(parsed)) {
+    return normalizeGraphqlMessages(parsed);
+  }
+  if (parsed && typeof parsed === 'object') {
+    if (Array.isArray(parsed.messages)) {
+      return normalizeGraphqlMessages(parsed.messages);
+    }
+    if (Array.isArray(parsed.responses)) {
+      return normalizeGraphqlMessages(parsed.responses);
+    }
+  }
+  return [];
+}
+
+function parseServerSentEventMessages(body) {
+  const messages = [];
+  for (const eventBlock of String(body || '').split(/\r?\n\r?\n/)) {
+    const dataLines = [];
+    for (const line of eventBlock.split(/\r?\n/)) {
+      if (!line || line.startsWith(':')) {
+        continue;
+      }
+      const separatorIndex = line.indexOf(':');
+      const field = separatorIndex >= 0 ? line.slice(0, separatorIndex) : line;
+      if (field !== 'data') {
+        continue;
+      }
+      let value = separatorIndex >= 0 ? line.slice(separatorIndex + 1) : '';
+      if (value.startsWith(' ')) {
+        value = value.slice(1);
+      }
+      dataLines.push(value);
+    }
+    const dataText = dataLines.join('\n').trim();
+    if (!dataText || dataText === '[DONE]') {
+      continue;
+    }
+    messages.push(parseJsonValue(dataText) ?? dataText);
+  }
+  return messages;
+}
+
+function parseMultipartGraphqlMessages(body, contentType) {
+  const boundaryMatch = String(contentType || '').match(/boundary="?([^";]+)"?/i);
+  if (!boundaryMatch) {
+    return [];
+  }
+  const boundary = boundaryMatch[1];
+  const messages = [];
+  for (const rawPart of String(body || '').split(`--${boundary}`)) {
+    const part = rawPart.trim();
+    if (!part || part === '--') {
+      continue;
+    }
+    const cleanPart = part.endsWith('--') ? part.slice(0, -2).trim() : part;
+    const delimiter = cleanPart.includes('\r\n\r\n') ? '\r\n\r\n' : '\n\n';
+    const delimiterIndex = cleanPart.indexOf(delimiter);
+    const payload = delimiterIndex >= 0 ? cleanPart.slice(delimiterIndex + delimiter.length).trim() : cleanPart.trim();
+    if (!payload) {
+      continue;
+    }
+    messages.push(parseJsonValue(payload) ?? payload);
+  }
+  return messages;
+}
+
+function normalizeGraphqlMessages(values = []) {
+  return values
+    .filter((message) => message != null)
+    .slice(0, 1000)
+    .map((message) => {
+      const source = message && typeof message === 'object' && !Buffer.isBuffer(message)
+        ? message
+        : { data: message };
+      return {
+        data: normalizeGraphqlMessageData(source.data ?? source.payload ?? source.body ?? source),
+        name: source.name == null ? 'graphql' : String(source.name),
+        timestamp: source.timestamp == null ? new Date(0).toISOString() : String(source.timestamp),
+        type: source.type == null ? 'response' : String(source.type)
+      };
+    });
+}
+
+function normalizeGraphqlMessageData(value) {
+  if (Buffer.isBuffer(value)) {
+    return parseJsonValue(value.toString('utf8')) ?? value.toString('utf8');
+  }
+  if (typeof value === 'string') {
+    return parseJsonValue(value) ?? value;
+  }
+  return cloneJsonObject(value);
+}
+
+function responseHeaderValue(headers, name) {
+  const target = String(name || '').toLowerCase();
+  if (typeof headers?.get === 'function') {
+    return headers.get(target) || '';
+  }
+  for (const [key, value] of Object.entries(headers || {})) {
+    if (String(key).toLowerCase() !== target) {
+      continue;
+    }
+    return Array.isArray(value) ? String(value[0] ?? '') : String(value ?? '');
+  }
+  return '';
+}
+
+function parseJsonValue(value) {
+  const text = String(value == null ? '' : value).trim();
+  if (!text || !/^[{[]/.test(text)) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+function ensureHeader(headers, name, value) {
+  const next = Array.isArray(headers) ? cloneJson(headers) : [];
+  const target = String(name || '').toLowerCase();
+  const existing = next.find((header) => String(header?.key || '').toLowerCase() === target);
+  if (existing) {
+    if (existing.enabled === false) {
+      existing.enabled = true;
+      existing.value = value;
+    }
+    return next;
+  }
+  next.push({ enabled: true, key: name, value });
+  return next;
+}
+
+function normalizeGrpcResponse(value = {}) {
+  const source = value?.response && typeof value.response === 'object' ? value.response : value || {};
+  const messages = normalizeGrpcMessages(source.messages || source.message || source.data);
+  const body = source.body == null ? grpcBodyFromMessages(messages) : responseBodyToString(source.body);
+  const code = normalizeGrpcStatusCode(source.code ?? source.statusCode ?? source.status);
+  return {
+    body,
+    cancelled: source.cancelled === true || value?.cancelled === true,
+    code,
+    durationMillis: Number(source.durationMillis ?? source.responseTime ?? value?.durationMillis ?? 0) || 0,
+    finalUrl: source.finalUrl || source.url || value?.finalUrl || '',
+    headers: source.headers || source.header || {},
+    messages,
+    metadata: normalizePairsForProtocol(source.metadata || source.headerMetadata || value?.metadata),
+    reason: source.reason || source.statusText || '',
+    responseBytes: Number(source.responseBytes ?? Buffer.byteLength(body, 'utf8')) || 0,
+    responseSize: Number(source.responseSize ?? source.responseBytes ?? Buffer.byteLength(body, 'utf8')) || 0,
+    responseTime: Number(source.responseTime ?? source.durationMillis ?? value?.durationMillis ?? 0) || 0,
+    status: source.status == null ? (source.statusText || source.reason || '') : source.status,
+    statusCode: code,
+    trailers: normalizePairsForProtocol(source.trailers || source.trailer || value?.trailers),
+    updatedCookies: Array.isArray(source.updatedCookies) ? cloneJson(source.updatedCookies) : undefined
+  };
+}
+
+function normalizeGrpcStatusCode(value) {
+  const code = Number(value);
+  return Number.isFinite(code) ? code : 0;
+}
+
+function normalizeGrpcMessages(values) {
+  const list = Array.isArray(values) ? values : values == null ? [] : [values];
+  return list
+    .filter((message) => message != null)
+    .slice(0, 1000)
+    .map((message) => {
+      const source = message && typeof message === 'object' && !Buffer.isBuffer(message)
+        ? message
+        : { data: message };
+      return {
+        data: normalizeGrpcMessageData(source.data ?? source.value ?? source.body ?? ''),
+        name: source.name == null ? '' : String(source.name),
+        timestamp: source.timestamp == null ? new Date(0).toISOString() : String(source.timestamp),
+        type: source.type == null ? '' : String(source.type)
+      };
+    });
+}
+
+function normalizeGrpcMessageData(value) {
+  if (typeof value !== 'string') {
+    return cloneJsonObject(value);
+  }
+  const text = value.trim();
+  if (!text || !/^[{[]/.test(text)) {
+    return value;
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    return value;
+  }
+}
+
+function grpcBodyFromMessages(messages = []) {
+  if (messages.length === 1) {
+    return responseBodyToString(messages[0].data);
+  }
+  return JSON.stringify(messages.map((message) => message.data));
+}
+
+function responseBodyToString(value) {
+  if (value == null) {
+    return '';
+  }
+  if (Buffer.isBuffer(value)) {
+    return value.toString('utf8');
+  }
+  if (typeof value === 'string') {
+    return value;
+  }
+  return JSON.stringify(value);
+}
+
+function normalizePairsForProtocol(values) {
+  const list = Array.isArray(values)
+    ? values
+    : values && typeof values === 'object'
+      ? Object.entries(values).map(([key, value]) => ({ key, value }))
+      : [];
+  return list
+    .filter((item) => item?.key || item?.name)
+    .slice(0, 1000)
+    .map((item) => ({
+      enabled: item.enabled !== false && item.disabled !== true,
+      key: String(item.key || item.name),
+      value: item.value == null ? '' : String(item.value)
+    }));
+}
+
+function aggregateGrpcScriptResult(messageResults = [], afterResponseResult = emptyScriptResult()) {
+  const results = [...messageResults, afterResponseResult || emptyScriptResult()];
+  return {
+    passed: results.every((result) => result?.passed !== false),
+    tests: results.flatMap((result) => result?.tests || []),
+    error: results.find((result) => result?.error)?.error || '',
+    logs: results.flatMap((result) => result?.logs || []),
+    commitSideEffects: results.every((result) => result?.commitSideEffects !== false),
+    execution: results.reduce((execution, result) => mergeExecution(execution, result?.execution), {})
+  };
+}
+
+function parseJsonObject(value) {
+  if (!value || typeof value !== 'string') {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function cloneJsonObject(value) {
+  if (!value || typeof value !== 'object') {
+    return value ?? {};
+  }
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return {};
+  }
+}
+
+async function defaultGrpcInvoker(request, runtimeEnv, options = {}) {
+  return invokeGrpcRequest(request, runtimeEnv, options);
+}
+
+function trustedGrpcTransportConfig(request = {}) {
+  return {
+    auth: request.auth && typeof request.auth === 'object' ? cloneJsonObject(request.auth) : {},
+    grpc: request.grpc && typeof request.grpc === 'object' ? cloneJsonObject(request.grpc) : {},
+    protocolProfile: request.protocolProfile && typeof request.protocolProfile === 'object' ? cloneJsonObject(request.protocolProfile) : {}
+  };
+}
+
+function grpcErrorResponse(error, request = {}) {
+  const code = Number.isFinite(Number(error?.code)) ? Number(error.code) : 13;
+  const reason = error?.details || error?.message || String(error || 'gRPC request failed.');
+  return {
+    response: {
+      body: '',
+      cancelled: code === 1 || error?.name === 'AbortError',
+      code,
+      durationMillis: 0,
+      finalUrl: grpcFinalUrlForError(request),
+      headers: {},
+      messages: [],
+      metadata: [],
+      reason,
+      responseBytes: 0,
+      responseSize: 0,
+      responseTime: 0,
+      status: grpcStatusName(code),
+      statusCode: code,
+      trailers: [
+        { enabled: true, key: 'grpc-status', value: String(code) },
+        { enabled: true, key: 'grpc-message', value: reason }
+      ]
+    }
+  };
+}
+
+function grpcFinalUrlForError(request = {}) {
+  const url = String(request.url || '').replace(/\/+$/, '');
+  const methodPath = String(request.methodPath || request.grpc?.methodPath || '').replace(/^\/+/, '');
+  return methodPath && !url.endsWith(methodPath) ? `${url}/${methodPath}` : url;
+}
+
+function grpcStatusName(code) {
+  return {
+    0: 'OK',
+    1: 'CANCELLED',
+    2: 'UNKNOWN',
+    3: 'INVALID_ARGUMENT',
+    4: 'DEADLINE_EXCEEDED',
+    5: 'NOT_FOUND',
+    6: 'ALREADY_EXISTS',
+    7: 'PERMISSION_DENIED',
+    8: 'RESOURCE_EXHAUSTED',
+    9: 'FAILED_PRECONDITION',
+    10: 'ABORTED',
+    11: 'OUT_OF_RANGE',
+    12: 'UNIMPLEMENTED',
+    13: 'INTERNAL',
+    14: 'UNAVAILABLE',
+    15: 'DATA_LOSS',
+    16: 'UNAUTHENTICATED'
+  }[code] || 'UNKNOWN';
 }
 
 function applyScriptMutations(state, execution, options = {}) {
@@ -154,7 +777,15 @@ function applyScriptMutations(state, execution, options = {}) {
       queryParams: Array.isArray(execution.request.queryParams) ? execution.request.queryParams : state.request.queryParams,
       headers: Array.isArray(execution.request.headers) ? execution.request.headers : state.request.headers,
       bodyType: execution.request.bodyType || state.request.bodyType,
-      body: execution.request.body == null ? state.request.body : execution.request.body
+      body: execution.request.body == null ? state.request.body : execution.request.body,
+      auth: execution.request.auth && typeof execution.request.auth === 'object' ? cloneJson(execution.request.auth) : state.request.auth,
+      metadata: Array.isArray(execution.request.metadata) ? cloneJson(execution.request.metadata) : state.request.metadata,
+      messages: Array.isArray(execution.request.messages) ? cloneJson(execution.request.messages) : state.request.messages,
+      methodPath: execution.request.methodPath == null ? state.request.methodPath : String(execution.request.methodPath),
+      postmanBody: execution.request.postmanBody && typeof execution.request.postmanBody === 'object' ? cloneJson(execution.request.postmanBody) : state.request.postmanBody,
+      protocol: execution.request.protocol == null ? state.request.protocol : String(execution.request.protocol),
+      graphql: execution.request.graphql && typeof execution.request.graphql === 'object' ? cloneJson(execution.request.graphql) : state.request.graphql,
+      grpc: execution.request.grpc && typeof execution.request.grpc === 'object' ? cloneJson(execution.request.grpc) : state.request.grpc
     };
   }
 }
@@ -227,6 +858,10 @@ module.exports = {
   createPreRequestScriptError,
   createScriptedRequestState,
   emptyScriptResult,
+  prepareGraphqlHttpRequest,
+  requestProtocol,
+  runGraphqlRequestLifecycle,
+  runGrpcRequestLifecycle,
   runScriptedRequestLifecycle,
   scriptResultOnly
 };

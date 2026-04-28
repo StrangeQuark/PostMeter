@@ -1,0 +1,182 @@
+{
+  "schemaVersion": 1,
+  "type": "desktop-runtime-source-audit",
+  "rowIds": [
+    "grpc.hook.afterResponse",
+    "grpc.hook.beforeInvoke",
+    "grpc.hook.onMessage",
+    "grpc.live-desktop-transport",
+    "grpc.pm.message",
+    "info.eventName.afterResponse",
+    "info.eventName.beforeInvoke",
+    "info.eventName.onIncomingMessage"
+  ],
+  "rowEvidence": {
+    "grpc.hook.afterResponse": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-postmeter-loopback-transport",
+      "postmanEvidence": [
+        "Postman Desktop 11.71.7 source/docs expose gRPC After response scripts and pm.info.eventName afterResponse."
+      ],
+      "postmeterEvidence": [
+        "test/electron/grpcClient.test.js",
+        "test/fixtures/postman/protocol-script-hooks.collection.json"
+      ]
+    },
+    "grpc.hook.beforeInvoke": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-postmeter-loopback-transport",
+      "postmanEvidence": [
+        "Postman Desktop 11.71.7 source/docs expose gRPC Before invoke scripts and pm.info.eventName beforeInvoke."
+      ],
+      "postmeterEvidence": [
+        "test/electron/grpcClient.test.js",
+        "test/fixtures/postman/protocol-script-hooks.collection.json"
+      ]
+    },
+    "grpc.hook.onMessage": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-postmeter-loopback-transport",
+      "postmanEvidence": [
+        "Postman Desktop 11.71.7 source/docs expose gRPC On message scripts and pm.info.eventName onIncomingMessage."
+      ],
+      "postmeterEvidence": [
+        "test/electron/grpcClient.test.js",
+        "test/fixtures/postman/protocol-script-hooks.collection.json"
+      ]
+    },
+    "grpc.live-desktop-transport": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-postmeter-loopback-transport",
+      "postmanEvidence": [
+        "Postman Desktop 11.71.7 source/docs expose unary, client-streaming, server-streaming, and bidirectional-streaming gRPC script lifecycles."
+      ],
+      "postmeterEvidence": [
+        "test/electron/grpcClient.test.js",
+        "src/core/grpcClient.js"
+      ]
+    },
+    "grpc.pm.message": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-postmeter-loopback-transport",
+      "postmanEvidence": [
+        "Postman Desktop docs expose pm.message data for gRPC streaming message scripts."
+      ],
+      "postmeterEvidence": [
+        "test/electron/grpcClient.test.js",
+        "test/fixtures/postman/protocol-script-hooks.collection.json"
+      ]
+    },
+    "info.eventName.afterResponse": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-postmeter-loopback-transport",
+      "postmanEvidence": [
+        "Postman Desktop gRPC script hooks expose afterResponse as an event name."
+      ],
+      "postmeterEvidence": [
+        "test/electron/grpcClient.test.js",
+        "test/fixtures/postman/protocol-script-hooks.collection.json"
+      ]
+    },
+    "info.eventName.beforeInvoke": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-postmeter-loopback-transport",
+      "postmanEvidence": [
+        "Postman Desktop gRPC script hooks expose beforeInvoke as an event name."
+      ],
+      "postmeterEvidence": [
+        "test/electron/grpcClient.test.js",
+        "test/fixtures/postman/protocol-script-hooks.collection.json"
+      ]
+    },
+    "info.eventName.onIncomingMessage": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-postmeter-loopback-transport",
+      "postmanEvidence": [
+        "Postman Desktop gRPC script hooks expose onIncomingMessage as an event name."
+      ],
+      "postmeterEvidence": [
+        "test/electron/grpcClient.test.js",
+        "test/fixtures/postman/protocol-script-hooks.collection.json"
+      ]
+    }
+  },
+  "postman": {
+    "app": "Postman Desktop",
+    "version": "11.71.7",
+    "channel": "snap latest/stable",
+    "platform": "linux",
+    "observedAt": "2026-04-27"
+  },
+  "capture": {
+    "method": "installed-desktop-runtime-source-audit-plus-postmeter-loopback-transport",
+    "commands": [
+      "snap info postman",
+      "cat /snap/postman/360/usr/share/postman/resources/app/package.json",
+      "rg \"grpc|beforeInvoke|onIncomingMessage|afterResponse|pm.message\" /snap/postman/360/usr/share/postman/resources/app",
+      "node --test test/electron/grpcClient.test.js"
+    ],
+    "artifactPaths": [
+      "/snap/postman/360/usr/share/postman/resources/app/package.json",
+      "/snap/postman/360/usr/share/postman/resources/app/yarn.lock",
+      "test/electron/grpcClient.test.js",
+      "src/core/grpcClient.js",
+      "src/core/scriptedRequestLifecycle.js"
+    ]
+  },
+  "observed": {
+    "postmanDesktop": {
+      "scriptEvents": [
+        "beforeInvoke",
+        "onIncomingMessage",
+        "afterResponse"
+      ],
+      "messageSurface": "Postman documents pm.message for gRPC streaming message scripts, with pm.info.eventName values beforeInvoke, onIncomingMessage, and afterResponse."
+    },
+    "postmeterTransport": {
+      "implementation": "Parent-owned @grpc/grpc-js client with @grpc/proto-loader proto loading.",
+      "methodTypesCovered": [
+        "unary",
+        "client-streaming",
+        "server-streaming",
+        "bidirectional-streaming"
+      ],
+      "preservedFields": [
+        "method path",
+        "request metadata",
+        "request messages",
+        "initial response metadata",
+        "response messages",
+        "status code/name",
+        "trailers including grpc-status",
+        "duration",
+        "final URL",
+        "cancellation/error shape"
+      ],
+      "scriptBoundary": "Before invoke, On message, and After response scripts run in the isolated script worker. Scripts can mutate metadata, messages, methodPath, and target URL through the Postman-compatible request facade, but raw gRPC clients, sockets, proto file reads, TLS material, and client-certificate files remain parent-owned."
+    }
+  },
+  "verification": {
+    "postmeterFocusedTests": [
+      "executes live unary gRPC requests through the default parent transport",
+      "executes live client-streaming gRPC requests through the default parent transport",
+      "executes live server-streaming gRPC requests and runs On message for each response",
+      "executes live bidirectional gRPC requests through the default parent transport",
+      "normalizes live gRPC errors and still runs After response scripts",
+      "uses trusted proto path interpolation from before Before invoke runs"
+    ],
+    "securityChecks": [
+      "transport proto/include/TLS/client-certificate configuration is snapshotted before Before invoke",
+      "script-mutated environment variables do not affect trusted proto path interpolation",
+      "scripts never receive grpc-js client, channel, call, socket, filesystem, TLS, or certificate handles",
+      "streaming response messages are capped and normalized before pm.message exposure"
+    ]
+  },
+  "limitations": [
+    "This artifact does not claim public internet interoperability with every gRPC server implementation; it proves PostMeter's imported-script lifecycle and parent-owned live transport against a local grpc-js loopback service.",
+    "This artifact covers the base pm.message data/name/type/toJSON surface but not Postman's documented Date-object behavior for pm.message.timestamp.",
+    "gRPC PFX/P12 client-certificate conversion is not implemented by grpc-js createSsl and remains outside the currently tested PEM cert/key coverage.",
+    "Platform-equivalent OS sandbox completion remains tracked separately from the Postman script compatibility claim."
+  ],
+  "notes": "This artifact clears grpc.live-desktop-transport by pairing the installed Postman Desktop gRPC script surface audit with focused live PostMeter transport coverage and explicit parent-owned transport hardening."
+}

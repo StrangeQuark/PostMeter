@@ -18,6 +18,7 @@ const {
 
 test('defines shared payload schema metadata for IPC and contributors', () => {
   assert.equal(PAYLOAD_SCHEMA_VERSION, 1);
+  assert.ok(COLLECTION_EXPORT_FORMATS.includes('postman'));
   assert.ok(COLLECTION_EXPORT_FORMATS.includes('openapi'));
   assert.ok(COLLECTION_EXPORT_FORMATS.includes('jmeter'));
   assert.ok(HTTP_METHODS.includes('PATCH'));

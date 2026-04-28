@@ -3,6 +3,7 @@ node_modules/
 out/
 release/
 dist-electron/
+artifacts/
 npm-debug.log*
 
 ### IntelliJ IDEA ###

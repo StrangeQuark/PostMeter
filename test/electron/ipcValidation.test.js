@@ -39,7 +39,13 @@ test('accepts structurally valid IPC payloads', () => {
     headers: [{ enabled: true, key: 'Accept', value: 'application/json' }],
     bodyType: 'NONE',
     body: '',
-    scripts: { preRequest: "pm.environment.set('x', '1');", tests: "pm.test('ok', function () {});" },
+    protocol: 'grpc',
+    methodPath: 'pkg.Service/Method',
+    metadata: [{ enabled: true, key: 'x-client', value: 'postmeter' }],
+    messages: [{ name: 'seed', data: { id: '1' }, timestamp: '2026-04-27T00:00:00.000Z' }],
+    grpc: { service: 'pkg.Service', method: 'Method', methodType: 'unary' },
+    postman: { ids: { original: 'postman-request-id' }, events: [{ listen: 'test', script: { exec: ['pm.test("ok", function () {});'] } }] },
+    scripts: { preRequest: "pm.environment.set('x', '1');", tests: "pm.test('ok', function () {});", beforeInvoke: "pm.request.metadata.add({ key: 'x', value: 'y' });" },
     variables: [{ enabled: true, key: 'local', value: 'value' }],
     examples: [{ name: 'Example', statusCode: 200, headers: [{ enabled: true, key: 'Content-Type', value: 'application/json' }], bodyType: 'RAW_JSON', body: '{}' }],
     cookieJar: { enabled: true, storeResponses: true },
@@ -51,6 +57,7 @@ test('accepts structurally valid IPC payloads', () => {
     name: 'Collection',
     description: '',
     variables: [{ enabled: true, key: 'baseUrl', value: 'https://example.test' }],
+    postman: { info: { _postman_id: 'postman-collection-id' }, itemOrder: [{ kind: 'request', id: 'postman-request-id' }] },
     certificates: [{ name: 'Client Cert', matches: ['https://example.test/*'], certPath: '/tmp/client.crt', keyPath: '/tmp/client.key', passphrase: 'secret' }],
     requests: [],
     folders: [{ id: 'f1', name: 'Folder', requests: [], folders: [] }]
@@ -237,6 +244,8 @@ test('accepts structurally valid IPC payloads', () => {
 test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertRequestPayload(null), /Invalid IPC payload: request must be an object/);
   assert.throws(() => assertRequestPayload({ method: 'TRACE', queryParams: [], headers: [], bodyType: 'NONE' }), /request.method is not supported/);
+  assert.throws(() => assertRequestPayload({ method: 'GET', protocol: 'ftp', queryParams: [], headers: [], bodyType: 'NONE' }), /request.protocol is not supported/);
+  assert.throws(() => assertRequestPayload({ method: 'GET', protocol: 'grpc', queryParams: [], headers: [], bodyType: 'NONE', messages: [{ data: 'x'.repeat(40000) }] }), /request.messages\[0\].data cannot exceed/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: 'bad', headers: [], bodyType: 'NONE' }), /request.queryParams must be an array/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', assertions: [{ type: 'bad' }] }), /assertions\[0\].type must be one of/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', assertions: [{ operator: 'near' }] }), /assertions\[0\].operator must be one of/);

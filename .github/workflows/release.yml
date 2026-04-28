@@ -52,6 +52,18 @@ jobs:
       - name: Sandbox runtime validation
         run: npm run sandbox:validate
 
+      - name: OS sandbox platform matrix validation
+        run: npm run sandbox:platform:validate
+
+      - name: Postman parity matrix validation
+        run: npm run postman:parity:validate
+
+      - name: Postman docs coverage validation
+        run: npm run postman:docs:validate
+
+      - name: Sandbox release gate manifest
+        run: npm run release:gate
+
       - name: Build unsigned artifacts
         run: ${{ matrix.command }}
         env:

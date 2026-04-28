@@ -117,6 +117,116 @@ test('sends matching cookie jar cookies and stores response cookies', async () =
   }
 });
 
+test('sends user-bound file and multipart Postman bodies without arbitrary path reads', async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-attachments-'));
+  t.after(async () => {
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+  const rawPath = path.join(dir, 'raw-upload.txt');
+  const partPath = path.join(dir, 'part-upload.txt');
+  await fs.writeFile(rawPath, 'BOUND_RAW');
+  await fs.writeFile(partPath, 'BOUND_PART');
+  const observed = [];
+  const server = await createServer(async (request, response) => {
+    const chunks = [];
+    for await (const chunk of request) {
+      chunks.push(chunk);
+    }
+    const body = Buffer.concat(chunks).toString('utf8');
+    observed.push({
+      body,
+      contentType: request.headers['content-type'] || '',
+      path: request.url
+    });
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({ ok: true }));
+  });
+
+  try {
+    await sendRequest({
+      method: 'POST',
+      url: `${server.baseUrl}/binary`,
+      queryParams: [],
+      headers: [],
+      postmanBody: { mode: 'binary', binary: { src: 'fixtures/raw-upload.txt', contentType: 'application/octet-stream' } }
+    }, null, {
+      fileBindings: [{ source: 'fixtures/raw-upload.txt', localPath: rawPath }]
+    });
+    await sendRequest({
+      method: 'POST',
+      url: `${server.baseUrl}/form`,
+      queryParams: [],
+      headers: [],
+      postmanBody: {
+        mode: 'formdata',
+        formdata: [
+          { key: 'note', value: 'hello', type: 'text' },
+          { key: 'payload', src: 'fixtures/part-upload.txt', type: 'file', contentType: 'text/plain' }
+        ]
+      }
+    }, null, {
+      fileBindings: [{ source: 'fixtures/part-upload.txt', localPath: partPath, fileName: 'part-upload.txt' }]
+    });
+
+    assert.equal(observed[0].body, 'BOUND_RAW');
+    assert.equal(observed[0].contentType, 'application/octet-stream');
+    assert.match(observed[1].contentType, /^multipart\/form-data; boundary=/);
+    assert.match(observed[1].body, /name="note"\r\n\r\nhello/);
+    assert.match(observed[1].body, /filename="part-upload.txt"/);
+    assert.match(observed[1].body, /BOUND_PART/);
+    await assert.rejects(
+      () => sendRequest({
+        method: 'POST',
+        url: `${server.baseUrl}/denied`,
+        queryParams: [],
+        headers: [],
+        postmanBody: { mode: 'file', file: { src: '/etc/passwd' } }
+      }, null, { fileBindings: [] }),
+      /File attachment binding is required/
+    );
+  } finally {
+    await server.close();
+  }
+});
+
+test('sends brokered HTTP requests through configured proxies without exposing raw sockets to scripts', async () => {
+  let observed = null;
+  const proxy = await createServer(async (request, response) => {
+    observed = {
+      host: request.headers.host,
+      proxyAuthorization: request.headers['proxy-authorization'] || '',
+      url: request.url
+    };
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({ proxied: true }));
+  });
+
+  try {
+    const result = await sendRequest({
+      method: 'GET',
+      url: 'http://api.example.test/proxied?x=1',
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      proxy: {
+        protocol: 'http',
+        host: '127.0.0.1',
+        port: String(new URL(proxy.baseUrl).port),
+        username: 'proxy-user',
+        password: 'proxy-pass'
+      }
+    }, null);
+
+    assert.equal(JSON.parse(result.body).proxied, true);
+    assert.equal(observed.host, 'api.example.test');
+    assert.equal(observed.url, 'http://api.example.test/proxied?x=1');
+    assert.equal(observed.proxyAuthorization, `Basic ${Buffer.from('proxy-user:proxy-pass').toString('base64')}`);
+  } finally {
+    await proxy.close();
+  }
+});
+
 test('loads PEM and PFX client certificate material from main-process paths', async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-cert-'));
   const certPath = path.join(dir, 'client.pem');
@@ -153,6 +263,25 @@ test('loads PEM and PFX client certificate material from main-process paths', as
     pfxPath
   }, null, new URL('https://example.test'));
   assert.equal(pfx.pfx.toString('utf8'), 'PFX BYTES');
+
+  const bound = await loadClientCertificateOptions({
+    type: 'clientCertificate',
+    certificateId: 'cert-1'
+  }, null, new URL('https://example.test'), [{
+    id: 'cert-1',
+    certPath,
+    keyPath,
+    caPath,
+    passphrase: 'bound-secret'
+  }]);
+  assert.equal(bound.cert.toString('utf8'), 'CERTIFICATE');
+  assert.equal(bound.key.toString('utf8'), 'PRIVATE KEY');
+  assert.equal(bound.passphrase, 'bound-secret');
+
+  await assert.rejects(
+    () => loadClientCertificateOptions({ type: 'clientCertificate', certificateId: 'missing' }, null, new URL('https://example.test'), []),
+    /binding was not found/
+  );
 
   await assert.rejects(
     () => loadClientCertificateOptions({ type: 'clientCertificate', pfxPath }, null, new URL('http://example.test')),

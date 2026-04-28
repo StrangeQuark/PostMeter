@@ -1,4 +1,7 @@
-const VARIABLE_PATTERN = /\{\{\s*([A-Za-z0-9_.-]+)\s*}}/g;
+const { resolveDynamicVariable } = require('./dynamicVariables');
+const { variableObservableValue } = require('./variableScope');
+
+const VARIABLE_PATTERN = /\{\{\s*([$A-Za-z0-9_.-]+)\s*}}/g;
 
 function resolveEnvironmentValue(value, environment) {
   if (value == null) {
@@ -11,13 +14,17 @@ function resolveEnvironmentValue(value, environment) {
   const variables = new Map();
   for (const variable of environment.variables || []) {
     if (variable.enabled !== false && variable.key && variable.key.trim()) {
-      variables.set(variable.key.trim(), variable.value ?? '');
+      variables.set(variable.key.trim(), variableObservableValue(variable));
     }
   }
 
-  return String(value).replace(VARIABLE_PATTERN, (match, name) => (
-    variables.has(name) ? variables.get(name) : match
-  ));
+  return String(value).replace(VARIABLE_PATTERN, (match, name) => {
+    if (variables.has(name)) {
+      return variables.get(name);
+    }
+    const dynamicValue = resolveDynamicVariable(name);
+    return dynamicValue == null ? match : String(dynamicValue);
+  });
 }
 
 module.exports = { resolveEnvironmentValue };

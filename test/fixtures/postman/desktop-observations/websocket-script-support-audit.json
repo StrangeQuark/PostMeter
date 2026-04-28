@@ -1,0 +1,13 @@
+{
+  "surface": "websocket.script-hooks",
+  "recordedAt": "2026-04-27",
+  "sources": [
+    "https://learning.postman.com/docs/sending-requests/websocket/websocket-overview/",
+    "https://learning.postman.com/docs/sending-requests/websocket/create-a-websocket-request/",
+    "https://learning.postman.com/docs/sending-requests/websocket/add-details-websocket",
+    "https://learning.postman.com/docs/sending-requests/websocket/work-with-websocket-messages",
+    "https://learning.postman.com/docs/sending-requests/websocket/document-websocket-requests"
+  ],
+  "finding": "Postman's current WebSocket and Socket.IO request documentation covers connection URL, params, headers, settings, saved messages, message viewing, and documentation, but does not document a saved/exported script-hook lifecycle equivalent to HTTP pre-request/post-response, GraphQL Before query/After response, or gRPC Before invoke/On message/After response.",
+  "postmeterDecision": "Do not invent WebSocket script execution for imported collections. Preserve WebSocket request metadata for future import/export work and keep this parity-matrix row as an audited no-script protocol surface unless Postman documents or exports WebSocket script hooks later."
+}

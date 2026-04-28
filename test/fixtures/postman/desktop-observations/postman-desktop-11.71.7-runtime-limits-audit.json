@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "type": "desktop-runtime-source-audit",
+  "rowIds": [
+    "runtime.resource-limit-parity"
+  ],
+  "rowEvidence": {
+    "runtime.resource-limit-parity": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-newman-probes",
+      "postmanEvidence": [
+        "Postman Desktop 11.71.7 and newman@6.2.2 runtime source both expose a 180000 ms global timeout default with request/script timeouts set to Infinity.",
+        "Newman probes record busy-loop, timer-drain, uncleared interval, and console/output behavior below PostMeter policy ceilings."
+      ],
+      "postmeterEvidence": [
+        "test/fixtures/postman/differential-runtime-limits.collection.json",
+        "test/electron/postmanSandboxAdversarial.test.js"
+      ]
+    }
+  },
+  "postman": {
+    "app": "Postman Desktop",
+    "version": "11.71.7",
+    "channel": "snap latest/stable",
+    "platform": "linux",
+    "observedAt": "2026-04-27"
+  },
+  "capture": {
+    "method": "installed-desktop-runtime-source-audit-plus-newman-probes",
+    "commands": [
+      "cat /snap/postman/360/usr/share/postman/resources/app/package.json",
+      "npm install postman-runtime@7.50.0 postman-sandbox@6.2.2 in an isolated temporary directory and inspect lib/runner/index.js, lib/runner/extensions/event.command.js, and lib/sandbox/execute.js",
+      "npm install postman-runtime@7.39.1 postman-sandbox@4.7.1 in an isolated temporary directory and inspect the same runtime/sandbox files for newman@6.2.2",
+      "Run bounded newman@6.2.2 probes for busy-loop duration, async timer drain, uncleared intervals, and console/log behavior",
+      "Run test/fixtures/postman/differential-runtime-limits.collection.json through PostMeter and optional live Newman comparison"
+    ],
+    "artifactPaths": [
+      "/snap/postman/360/usr/share/postman/resources/app/package.json",
+      "/snap/postman/360/usr/share/postman/resources/app/yarn.lock",
+      "test/fixtures/postman/differential-runtime-limits.collection.json"
+    ]
+  },
+  "observed": {
+    "desktopRuntimePackageEvidence": {
+      "postman-runtime": "7.50.0",
+      "postman-sandbox": "6.2.2",
+      "postman-collection": "5.2.0"
+    },
+    "newmanTargetEvidence": {
+      "newman": "6.2.2",
+      "postman-runtime": "7.39.1",
+      "postman-sandbox": "4.7.1",
+      "postman-collection": "4.4.0"
+    },
+    "runtimeSourceDefaults": {
+      "postmanRuntime750": {
+        "timeout.global": 180000,
+        "timeout.request": "Infinity",
+        "timeout.script": "Infinity",
+        "effectiveScriptDispatchTimeout": "min(timeout.script, timeout.global)"
+      },
+      "postmanRuntime739": {
+        "timeout.global": 180000,
+        "timeout.request": "Infinity",
+        "timeout.script": "Infinity",
+        "effectiveScriptDispatchTimeout": "min(timeout.script, timeout.global)"
+      },
+      "postmanSandbox622": "Only enforces script timeout when the runtime passes a finite options.timeout; otherwise timers drain until empty.",
+      "postmanSandbox471": "Only enforces script timeout when the runtime passes a finite options.timeout; otherwise timers drain until empty."
+    },
+    "newmanEmpiricalProbes": {
+      "busyLoop1500ms": "passed",
+      "busyLoop5200ms": "passed",
+      "timerDrain1200ms": "passed",
+      "unclearedInterval": "did not complete before an external 8s process timeout; runtime global timeout is the documented/source-level safety net",
+      "consoleLogCount150": "passed; newman JSON reporter did not expose console events as hard-comparable output"
+    },
+    "postmanSourceCaps": {
+      "legacyResponseSize": "postman-sandbox legacy globals use MAX_RESPONSE_SIZE = 50MiB for old responseBody-style globals",
+      "visualizer": "pm.visualizer.set records template/data/options without an explicit source-level size cap",
+      "console": "postman-sandbox forwards console events; no stable source-level output count/line cap was found",
+      "packages": "postman-sandbox package loading does not expose a stable source-level package source/count cap equivalent to PostMeter reviewed-cache policy"
+    }
+  },
+  "postmeterDecision": {
+    "matchedOrRelaxed": [
+      "Default script execution timeout increased to 180000ms to match the audited Postman Runtime default global timeout safety net while keeping a deterministic per-script worker kill.",
+      "Default HTTP request timeout and pm.sendRequest timeout ceiling increased to 180000ms so normal brokered script requests share the same audited default budget.",
+      "Async timer drain and cleared interval behavior are fixture-covered through differential-runtime-limits.collection.json."
+    ],
+    "productionResourcePolicy": [
+      "PostMeter keeps explicit caps for worker heap, broker payload bytes, pm.sendRequest response body bytes, final worker result bytes, console entry count/line length, visualizer template/data/output/assets, reviewed package count/source/dependency depth, mock state, and workspace payload sizes.",
+      "These caps are required by the production sandbox contract because scripts must not be able to exhaust parent IPC, renderer, storage, or worker memory. Postman/Newman source either has no stable equivalent cap for these channels or relies on host/runtime process limits.",
+      "The full Postman import claim treats these caps as documented local resource policy rather than unsupported Postman script APIs. Normal API behavior below the ceilings is differential-covered, while host-exhaustion-sized payloads remain adversarial/security cases."
+    ]
+  },
+  "notes": "This audit completes and clears runtime.resource-limit-parity: PostMeter matches the observed timeout/timer behavior, keeps documented production resource ceilings for channels where Postman/Newman rely on host process limits, and verifies the oversized cases through adversarial tests rather than treating them as unsupported Postman APIs."
+}

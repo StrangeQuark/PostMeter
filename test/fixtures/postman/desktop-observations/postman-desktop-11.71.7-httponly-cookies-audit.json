@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "type": "desktop-runtime-source-audit",
+  "rowIds": [
+    "cookies.httponly-parity"
+  ],
+  "rowEvidence": {
+    "cookies.httponly-parity": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-newman-probe",
+      "postmanEvidence": [
+        "Postman Desktop 11.71.7 packages postman-runtime 7.50.0, postman-collection 5.2.0, and @postman/tough-cookie 4.1.3-postman.1.",
+        "The Newman 6.2.2 probe records script readability and mutation behavior for HttpOnly cookies through pm.cookies, pm.cookies.jar(), and pm.sendRequest response-cookie updates."
+      ],
+      "postmeterEvidence": [
+        "test/fixtures/postman/differential-httponly-cookies.collection.json",
+        "test/electron/scriptRuntime.test.js"
+      ]
+    }
+  },
+  "postman": {
+    "app": "Postman Desktop",
+    "version": "11.71.7",
+    "channel": "snap latest/stable",
+    "platform": "linux",
+    "observedAt": "2026-04-27"
+  },
+  "capture": {
+    "method": "installed-desktop-runtime-source-audit-plus-newman-probe",
+    "commands": [
+      "npm view newman version dist-tags --json",
+      "npx --yes newman@6.2.2 run <httponly-probe-collection> --reporters json --reporter-json-export <probe-output>",
+      "rg -o \"httpOnly.{0,120}|HttpOnly.{0,120}|CookieStore|CookieJar\" /snap/postman/360/usr/share/postman/resources/app/node_modules_postman-runtime_lib_sync_recursive_package_json_-common_services_RuntimeExecutio-c42333-7178fa5217edc63d.min.js"
+    ],
+    "artifactPaths": [
+      "/snap/postman/360/usr/share/postman/resources/app/package.json",
+      "/snap/postman/360/usr/share/postman/resources/app/yarn.lock",
+      "/snap/postman/360/usr/share/postman/resources/app/node_modules_postman-runtime_lib_sync_recursive_package_json_-common_services_RuntimeExecutio-c42333-7178fa5217edc63d.min.js",
+      "test/fixtures/postman/differential-httponly-cookies.collection.json"
+    ]
+  },
+  "observed": {
+    "targetNewman": {
+      "package": "newman",
+      "version": "6.2.2",
+      "distTag": "latest"
+    },
+    "desktopPackageEvidence": {
+      "postman-runtime": "7.50.0",
+      "postman-sandbox": "6.2.2",
+      "postman-collection": "5.2.0",
+      "@postman/tough-cookie": "4.1.3-postman.1"
+    },
+    "desktopSourceEvidence": [
+      "The installed Desktop runtime bundle includes a CookieStore serializer/deserializer that round-trips httpOnly on persisted cookies.",
+      "The installed Desktop runtime uses @postman/tough-cookie CookieJar/CookieStore for request cookie storage and mutation; the storage layer does not strip httpOnly values while serializing or deserializing cookies."
+    ],
+    "newmanProbe": {
+      "pmCookiesShape": {
+        "pm.cookies.get('secret')": "secret-value",
+        "pm.cookies.has('secret')": true,
+        "pm.cookies.toObject().secret": "secret-value",
+        "pm.cookies.unset": "undefined in newman@6.2.2"
+      },
+      "jarHelpers": {
+        "jar.get(baseUrl, 'secret')": "secret-value",
+        "jar.getAll(baseUrl).get('secret')": "secret-value",
+        "jar.getAll(baseUrl).one('secret').httpOnly": true
+      },
+      "mutations": {
+        "jar.set(baseUrl, { name, value, httpOnly: true })": "creates a readable HttpOnly cookie that is sent on later requests",
+        "jar.set(baseUrl, 'replaceMe', 'client-visible')": "replaces an existing HttpOnly cookie with the visible value",
+        "jar.unset(baseUrl, 'clearMe')": "removes an existing HttpOnly cookie",
+        "jar.clear(baseUrl)": "removes visible and HttpOnly cookies in scope"
+      },
+      "pmSendRequest": {
+        "responseSetCookie": "pm.sendRequest response Set-Cookie with HttpOnly updates the shared jar and is readable through jar.get before the next request"
+      }
+    }
+  },
+  "postmeterDecision": {
+    "defaultImportProfile": "match-postman-newman",
+    "changes": [
+      "PostMeter no longer hides HttpOnly values from default Postman-compatible script cookie helpers.",
+      "Current-request pm.cookies.get/has/toObject are synchronous for Postman compatibility while retaining callback compatibility for existing PostMeter scripts.",
+      "pm.cookies.jar().getAll returns a Postman CookieList facade instead of a plain object.",
+      "Brokered jar unset and clear operations can remove HttpOnly cookies when script cookie access is enabled.",
+      "pm.sendRequest response-cookie jar updates preserve and expose HttpOnly values through the brokered cookie helpers."
+    ],
+    "securityBoundary": [
+      "Scripts still cannot access browser, Electron, Node, filesystem, shell, process, or raw network primitives.",
+      "HttpOnly access remains gated by the existing workspace script-cookie capability; disabling script cookie access blocks pm.cookies and pm.cookies.jar() entirely."
+    ]
+  },
+  "limitations": [
+    "This artifact combines installed Desktop runtime/source inspection with a Newman behavioral probe. It is not an automated GUI run of Postman Desktop.",
+    "Postman/Newman do not expose pm.cookies.unset in the observed current-request CookieList shape, so current-request removal remains a PostMeter compatibility extension and is not used as evidence for the Postman behavior row."
+  ]
+}

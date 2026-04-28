@@ -1,0 +1,86 @@
+{
+  "info": {
+    "_postman_id": "differential-sendrequest-advanced",
+    "name": "PostMeter Differential SendRequest Advanced",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Advanced SendRequest Auth",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/json"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('pm.sendRequest advanced auth helpers match Newman', async function () {",
+              "  const base = pm.variables.replaceIn('{{baseUrl}}');",
+              "  function responseJson(response) {",
+              "    if (response && typeof response.json === 'function') return response.json();",
+              "    if (response && typeof response.text === 'function') return JSON.parse(response.text());",
+              "    return JSON.parse(response && response.body ? response.body : '{}');",
+              "  }",
+              "  function send(request) {",
+              "    return new Promise(function (resolve, reject) {",
+              "      pm.sendRequest(request, function (error, response) {",
+              "        if (error) return reject(error);",
+              "        resolve(response);",
+              "      });",
+              "    });",
+              "  }",
+              "  const digest = await send({",
+              "    method: 'GET',",
+              "    url: base + '/auth/digest',",
+              "    auth: { type: 'digest', digest: [",
+              "      { key: 'username', value: 'ada' },",
+              "      { key: 'password', value: 'secret' },",
+              "      { key: 'algorithm', value: 'MD5' }",
+              "    ] }",
+              "  });",
+              "  const digestBody = responseJson(digest);",
+              "  pm.expect(digestBody.scheme).to.equal('Digest');",
+              "  pm.expect(digestBody.authorization).to.include('username=\"ada\"');",
+              "",
+              "  const hawk = await send({",
+              "    method: 'GET',",
+              "    url: base + '/auth/hawk',",
+              "    auth: { type: 'hawk', hawk: [",
+              "      { key: 'authId', value: 'hawk-id' },",
+              "      { key: 'authKey', value: 'hawk-secret' },",
+              "      { key: 'algorithm', value: 'sha256' },",
+              "      { key: 'nonce', value: 'fixed' }",
+              "    ] }",
+              "  });",
+              "  const hawkBody = responseJson(hawk);",
+              "  pm.expect(hawkBody.scheme).to.equal('Hawk');",
+              "",
+              "  const aws = await send({",
+              "    method: 'GET',",
+              "    url: base + '/auth/aws',",
+              "    auth: { type: 'awsv4', awsv4: [",
+              "      { key: 'accessKey', value: 'AKIDEXAMPLE' },",
+              "      { key: 'secretKey', value: 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY' },",
+              "      { key: 'region', value: 'us-east-1' },",
+              "      { key: 'service', value: 'execute-api' }",
+              "    ] }",
+              "  });",
+              "  const awsBody = responseJson(aws);",
+              "  pm.expect(awsBody.scheme).to.equal('AWS4-HMAC-SHA256');",
+              "",
+              "  pm.environment.set('advancedAuthSummary', JSON.stringify({",
+              "    digest: digestBody.scheme,",
+              "    hawk: hawkBody.scheme,",
+              "    aws: awsBody.scheme",
+              "  }));",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

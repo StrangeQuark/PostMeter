@@ -21,7 +21,12 @@ async function runCollection(collection, environment, options = {}) {
   const runScript = options.scriptRunner || runPostmanScriptIsolated;
   const requests = [];
   walkRequests(collection, (request, _collection, folder) => {
-    requests.push({ request, folderName: folder?.name || '' });
+    requests.push({
+      request,
+      folderName: folder?.name || '',
+      folderPath: folder?.name ? [folder.name] : [],
+      index: requests.length
+    });
   });
   const runnerEnvironment = cloneEnvironment(environment) || { id: 'runtime', name: 'Runtime', variables: [] };
   const runnerCollectionVariables = cloneVariables(collection?.variables || []);
@@ -71,18 +76,25 @@ async function runCollection(collection, environment, options = {}) {
     const scriptedRequest = await runScriptedRequestLifecycle(targetState, {
       sendRequest: send,
       scriptRunner: runScript,
+      grpcInvoker: options.grpcInvoker || options.scriptOptions?.grpcInvoker,
       signal: options.signal,
       scriptOptions: {
         ...(options.scriptOptions || {}),
         runRequest: createRunRequestBroker(depth + 1),
+        grpcInvoker: options.grpcInvoker || options.scriptOptions?.grpcInvoker,
         sandboxPackages: options.sandboxPackages || options.scriptOptions?.sandboxPackages || [],
+        clientCertificates: collection?.certificates || [],
+        fileBindings: options.fileBindings || options.scriptOptions?.fileBindings || [],
         vault: options.vault || options.scriptOptions?.vault
       },
       sandboxPackages: options.sandboxPackages || options.scriptOptions?.sandboxPackages || [],
+      clientCertificates: collection?.certificates || [],
+      fileBindings: options.fileBindings || options.scriptOptions?.fileBindings || [],
       vault: options.vault || options.scriptOptions?.vault,
       trustedCapabilities: options.trustedCapabilities || options.scriptOptions?.trustedCapabilities || {},
       iterationData: options.iterationData || [],
       collectionId: collection?.id || '',
+      executionLocation: executionLocationForEntry(collection, targetEntry),
       iteration: options.iteration || 0,
       iterationCount: options.iterationCount || 1
     });
@@ -128,14 +140,18 @@ async function runCollection(collection, environment, options = {}) {
         {
           sendRequest: send,
           scriptRunner: runScript,
+          grpcInvoker: options.grpcInvoker || options.scriptOptions?.grpcInvoker,
           signal: options.signal,
           scriptOptions: options.scriptOptions,
           sandboxPackages: options.sandboxPackages || options.scriptOptions?.sandboxPackages || [],
+          clientCertificates: collection?.certificates || [],
+          fileBindings: options.fileBindings || options.scriptOptions?.fileBindings || [],
           trustedCapabilities: options.trustedCapabilities || options.scriptOptions?.trustedCapabilities || {},
           vault: options.vault || options.scriptOptions?.vault,
           runRequest: createRunRequestBroker(0),
           iterationData: options.iterationData || [],
           collectionId: collection?.id || '',
+          executionLocation: executionLocationForEntry(collection, entry),
           iteration: options.iteration || 0,
           iterationCount: options.iterationCount || 1
         }
@@ -182,6 +198,8 @@ async function runCollection(collection, environment, options = {}) {
         passed,
         assertionResults: assertions.results,
         preRequestScriptResult: scriptedRequest.preRequestScriptResult,
+        messageScriptResults: scriptedRequest.messageScriptResults || [],
+        afterResponseScriptResult: scriptedRequest.afterResponseScriptResult,
         testScriptResult: scriptedRequest.testScriptResult,
         extractedVariables: assertions.extractedVariables,
         localVariables: scriptedRequest.localVariables,
@@ -239,7 +257,7 @@ function findRunRequestTarget(requests, target) {
   if (!value) {
     return null;
   }
-  return requests.find((entry) => entry.request.id === value || entry.request.name === value) || null;
+  return requests.find((entry) => requestMatchesTarget(entry.request, value)) || null;
 }
 
 function runRequestLocalVariables(request, overrides) {
@@ -250,6 +268,23 @@ function runRequestLocalVariables(request, overrides) {
     }
   }
   return variables;
+}
+
+function executionLocationForEntry(collection, entry) {
+  const folderPath = Array.isArray(entry?.folderPath) ? entry.folderPath.filter(Boolean) : [];
+  const current = [
+    collection?.name || '',
+    ...folderPath,
+    entry?.request?.name || ''
+  ].filter(Boolean);
+  return {
+    collectionId: collection?.id || '',
+    current,
+    folderPath,
+    index: Number.isFinite(Number(entry?.index)) ? Number(entry.index) : -1,
+    requestId: postmanCompatibleRequestId(entry?.request),
+    requestName: entry?.request?.name || ''
+  };
 }
 
 function runRequestBrokerResult(entry, scriptedRequest, response, assertionResults, options = {}) {
@@ -314,7 +349,8 @@ function appendScriptResultTests(tests, entry, phase, result) {
     tests.push({
       name: `${entry.request.name}: ${item.name || `${phase} test`}`,
       passed: item.passed === true,
-      error: item.error || ''
+      error: item.error || '',
+      skipped: item.skipped === true
     });
   }
   if (!result.passed && !(result.tests || []).length) {
@@ -350,10 +386,36 @@ function nextRequestIndex(currentIndex, requests, execution = {}) {
       return requests.length;
     }
     const target = String(execution.nextRequest);
-    const targetIndex = requests.findIndex((entry) => entry.request.id === target || entry.request.name === target);
+    const targetIndex = requests.findIndex((entry) => requestMatchesTarget(entry.request, target));
     return targetIndex >= 0 ? targetIndex : currentIndex + 1;
   }
   return currentIndex + 1;
+}
+
+function requestMatchesTarget(request, target) {
+  const value = String(target || '').trim();
+  if (!value) {
+    return false;
+  }
+  return postmanCompatibleRequestAliases(request).includes(value);
+}
+
+function postmanCompatibleRequestId(request) {
+  return postmanCompatibleRequestAliases(request)[0] || '';
+}
+
+function postmanCompatibleRequestAliases(request) {
+  const aliases = [
+    request?.postman?.ids?.original,
+    request?.postman?.ids?.id,
+    request?.postman?.ids?.uid,
+    request?.postman?.ids?._postman_id,
+    request?.postman?.ids?.deterministic,
+    request?.postman?.id,
+    request?.id,
+    request?.name
+  ];
+  return [...new Set(aliases.map((item) => String(item || '').trim()).filter(Boolean))];
 }
 
 function skippedResult(entry, startedAt, scriptedRequest) {

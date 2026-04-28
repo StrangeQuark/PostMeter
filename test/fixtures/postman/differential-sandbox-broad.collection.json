@@ -1,0 +1,175 @@
+{
+  "info": {
+    "name": "PostMeter Differential Sandbox Broad",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "00000000-0000-4000-8000-000000000202"
+  },
+  "variable": [
+    { "key": "collectionSeed", "value": "collection-seed" }
+  ],
+  "item": [
+    {
+      "name": "Broad Runtime Surface",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/json"
+      },
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "var _ = require('lodash');",
+              "var path = require('path');",
+              "var assert = require('assert');",
+              "pm.variables.set('requestLocal', 'broad-local');",
+              "pm.environment.set('envBroad', 'env-broad');",
+              "pm.collectionVariables.set('collectionBroad', 'yes');",
+              "pm.request.headers.upsert({ key: 'X-Pre', value: 'broad-pre' });",
+              "pm.request.headers.upsert({ key: 'X-Package-Smoke', value: _.map([1, 2, 3], function (value) { return value + 1; }).join('-') });",
+              "pm.request.headers.upsert({ key: 'X-Path-Smoke', value: path.join('a', 'b') });",
+              "assert.equal(pm.variables.get('requestLocal'), 'broad-local');"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('broad response, request mutation, and variables', function () {",
+              "  pm.response.to.have.status(200);",
+              "  var body = pm.response.json();",
+              "  pm.expect(body.path).to.equal('/json');",
+              "  pm.expect(body.xPre).to.equal('broad-pre');",
+              "  pm.expect(body.headers['x-package-smoke']).to.equal('2-3-4');",
+              "  pm.expect(body.headers['x-path-smoke']).to.equal('a/b');",
+              "  pm.expect(pm.environment.get('envBroad')).to.equal('env-broad');",
+              "  pm.expect(pm.collectionVariables.get('collectionBroad')).to.equal('yes');",
+              "});",
+              "pm.test('package and assertion facades', function () {",
+              "  var Ajv = require('ajv');",
+              "  var chai = require('chai');",
+              "  var _ = require('lodash');",
+              "  var ajv = new Ajv();",
+              "  var validate = ajv.compile({ type: 'object', required: ['ok'], properties: { ok: { const: true } } });",
+              "  chai.assert.deepEqual(_.pick({ ok: true, extra: 'drop' }, ['ok']), { ok: true });",
+              "  pm.expect(validate({ ok: true })).to.equal(true);",
+              "  pm.expect(function () { throw new Error('expected failure path'); }).to.throw('expected failure path');",
+              "});",
+              "pm.test('dynamic variables expose documented shapes', function () {",
+              "  var guid = pm.variables.replaceIn('{{$guid}}');",
+              "  var timestamp = pm.variables.replaceIn('{{$timestamp}}');",
+              "  pm.expect(guid).to.match(/^[0-9a-f-]{36}$/i);",
+              "  pm.expect(timestamp).to.match(/^\\d+$/);",
+              "});",
+              "pm.test('timer and microtask callbacks drain', function (done) {",
+              "  var order = [];",
+              "  Promise.resolve().then(function () { order.push('microtask'); });",
+              "  setTimeout(function () {",
+              "    order.push('timer');",
+              "    pm.environment.set('timerBroad', order.join('>'));",
+              "    pm.expect(order).to.deep.equal(['microtask', 'timer']);",
+              "    done();",
+              "  }, 0);",
+              "});",
+              "pm.sendRequest({",
+              "  url: pm.variables.replaceIn('{{baseUrl}}/echo'),",
+              "  method: 'POST',",
+              "  header: { 'Content-Type': 'text/plain', 'X-Aux': 'broad-aux' },",
+              "  body: { mode: 'raw', raw: 'object-body' }",
+              "}, function (error, response) {",
+              "  pm.test('pm.sendRequest object body', function () {",
+              "    pm.expect(error).to.equal(null);",
+              "    pm.expect(response.code).to.equal(200);",
+              "    var body = response.json();",
+              "    pm.expect(body.method).to.equal('POST');",
+              "    pm.expect(body.body).to.equal('object-body');",
+              "    pm.expect(body.headers['x-aux']).to.equal('broad-aux');",
+              "  });",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cookie Seed",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/set-cookie"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.cookies.jar().set(pm.variables.replaceIn('{{baseUrl}}'), 'scriptCookie', 'script-value', function (error) {",
+              "  pm.test('cookie jar set callback succeeds', function () {",
+              "    pm.expect(error).to.equal(null);",
+              "  });",
+              "  pm.cookies.jar().get(pm.variables.replaceIn('{{baseUrl}}'), 'scriptCookie', function (getError, value) {",
+              "    pm.test('cookie jar get callback sees scripted cookie', function () {",
+              "      pm.expect(getError).to.equal(null);",
+              "      pm.expect(value).to.equal('script-value');",
+              "    });",
+              "  });",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cookie Echo",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/cookie-check"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.cookies.jar().get(pm.variables.replaceIn('{{baseUrl}}'), 'scriptCookie', function (error, value) {",
+              "  pm.test('cookie jar persists scripted cookies across requests', function () {",
+              "    pm.expect(error).to.equal(null);",
+              "    pm.expect(value).to.equal('script-value');",
+              "  });",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Caught Failure Shape",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/status/418"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('caught assertion failure can be inspected without failing the run', function () {",
+              "  var message = '';",
+              "  try {",
+              "    pm.expect(pm.response.code).to.equal(200);",
+              "  } catch (error) {",
+              "    message = error.message || String(error);",
+              "  }",
+              "  pm.expect(message).to.include('200');",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
