@@ -197,6 +197,35 @@ test('adds a Linux seccomp syscall policy to bubblewrap launches', (t) => {
   assert.ok(launch.seccompPolicy.deniedSyscalls.includes('ptrace'));
 });
 
+test('falls back in auto mode when a Linux OS sandbox backend exists but cannot launch', async (t) => {
+  if (process.platform !== 'linux') {
+    t.skip('Linux-only bubblewrap launch probe.');
+    return;
+  }
+
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-bwrap-probe-'));
+  const failingBwrap = path.join(dir, 'bwrap');
+  await fs.writeFile(failingBwrap, '#!/bin/sh\necho "probe failed" >&2\nexit 1\n', { mode: 0o755 });
+
+  const autoLaunch = createScriptWorkerLaunch(
+    path.join(__dirname, '..', '..', 'src', 'core', 'scriptWorker.js'),
+    [],
+    scriptWorkerEnv(),
+    { osSandboxMode: OS_SANDBOX_MODES.AUTO, bubblewrapPath: failingBwrap }
+  );
+  assert.equal(autoLaunch.sandboxed, false);
+
+  assert.throws(
+    () => createScriptWorkerLaunch(
+      path.join(__dirname, '..', '..', 'src', 'core', 'scriptWorker.js'),
+      [],
+      scriptWorkerEnv(),
+      { osSandboxMode: OS_SANDBOX_MODES.REQUIRED, bubblewrapPath: failingBwrap }
+    ),
+    /bubblewrap failed its functional probe/
+  );
+});
+
 test('fails closed when the required OS sandbox backend is unavailable', async () => {
   assert.throws(
     () => createScriptWorkerLaunch(

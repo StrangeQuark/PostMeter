@@ -25,12 +25,21 @@ async function validateSandboxRuntime(options = {}) {
 
   validateWorkerLaunchPolicy(scriptWorkerExecArgv({ requireNodePermission: true }), scriptWorkerEnv());
   validateNodePermissionModel();
+  let requireOsSandbox = false;
   if (process.platform === 'linux') {
-    validateOsSandboxLaunchPolicy();
-    validateOsSandboxBoundary();
+    const status = osSandboxStatus({ mode: OS_SANDBOX_MODES.REQUIRED });
+    if (status.supported) {
+      validateOsSandboxLaunchPolicy();
+      validateOsSandboxBoundary();
+      requireOsSandbox = true;
+    } else if (process.env.POSTMETER_ALLOW_OS_SANDBOX_VALIDATION_SKIP === '1') {
+      console.warn('Linux OS-level script sandbox validation skipped because no functional bubblewrap backend is available in this environment.');
+    } else {
+      throw new Error('Linux OS-level script sandboxing requires a functional bubblewrap backend.');
+    }
   }
   await validateScriptBoundary({
-    requireOsSandbox: process.platform === 'linux'
+    requireOsSandbox
   });
 }
 
