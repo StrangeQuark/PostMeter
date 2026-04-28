@@ -47,7 +47,7 @@ function buildProductionReadinessMatrix() {
       evidenceRefs: ['docs/os-sandbox-platform-matrix.json', 'src/core/osSandboxPlatformMatrix.js'],
       notes: 'Linux is accepted for the current Linux claim; Windows/macOS still require native backend source plus packaged runner proof before the cross-platform claim can pass.'
     }),
-    row('grpc.pfx-p12-mtls', 'transport', 'gRPC mTLS supports parent-owned PFX/P12 extraction aligned with HTTP client-certificate handling.', 'implemented', {
+    row('grpc.pfx-p12-mtls', 'transport', 'HTTP and gRPC mTLS share parent-owned PFX/P12 extraction aligned with client-certificate handling.', 'implemented', {
       releaseBlocking: true,
       commands: ['npm test'],
       evidenceRefs: ['src/core/grpcClient.js', 'test/electron/grpcClient.test.js']

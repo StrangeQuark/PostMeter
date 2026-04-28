@@ -92,7 +92,7 @@
     {
       "id": "grpc.pfx-p12-mtls",
       "area": "transport",
-      "target": "gRPC mTLS supports parent-owned PFX/P12 extraction aligned with HTTP client-certificate handling.",
+      "target": "HTTP and gRPC mTLS share parent-owned PFX/P12 extraction aligned with client-certificate handling.",
       "status": "implemented",
       "releaseBlocking": true,
       "commands": [

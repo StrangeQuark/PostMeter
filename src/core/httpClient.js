@@ -20,6 +20,7 @@ const {
   MAX_ATTACHMENT_BYTES,
   resolveFileAttachmentBinding
 } = require('./fileAttachmentBindings');
+const { extractPfxToPem } = require('./pfxCertificate');
 
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 const MANAGED_HEADERS = new Set(['content-length']);
@@ -264,10 +265,15 @@ async function loadClientCertificateOptions(auth = {}, environment, url, clientC
   const ca = caPath ? await readCertificateFile(caPath, 'CA certificate') : undefined;
   const pfxPath = resolveEnvironmentValue(normalized.pfxPath, environment).trim();
   if (pfxPath) {
+    const extracted = await extractPfxToPem(pfxPath, passphrase, {
+      bundleLabel: 'client certificate PFX/P12 bundle',
+      envPassphraseName: 'POSTMETER_HTTP_PFX_PASSPHRASE',
+      tempPrefix: 'postmeter-http-pfx-'
+    });
     return {
-      pfx: await readCertificateFile(pfxPath, 'PFX/P12 bundle'),
-      ca,
-      passphrase: passphrase || undefined
+      cert: extracted.certChain,
+      key: extracted.privateKey,
+      ca
     };
   }
 

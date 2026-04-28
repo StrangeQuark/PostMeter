@@ -258,11 +258,13 @@ test('loads PEM and PFX client certificate material from main-process paths', as
   assert.equal(pem.ca.toString('utf8'), 'CA CERTIFICATE');
   assert.equal(pem.passphrase, 'secret');
 
-  const pfx = await loadClientCertificateOptions({
-    type: 'clientCertificate',
-    pfxPath
-  }, null, new URL('https://example.test'));
-  assert.equal(pfx.pfx.toString('utf8'), 'PFX BYTES');
+  await assert.rejects(
+    () => loadClientCertificateOptions({
+      type: 'clientCertificate',
+      pfxPath
+    }, null, new URL('https://example.test')),
+    /client certificate PFX\/P12 bundle could not be extracted/
+  );
 
   const bound = await loadClientCertificateOptions({
     type: 'clientCertificate',
