@@ -170,21 +170,28 @@ function runPostmanScript(scriptText, context = {}, options = {}) {
   const collectionVariables = context.collectionVariables || [];
   const globals = context.globals || [];
   const localVariables = context.localVariables || [];
+  const legacyExecution = {};
+  const pmApi = createPmApi({
+    collectionVariables,
+    environmentVariables,
+    environmentName,
+    globals,
+    localVariables,
+    logs,
+    message: context.message,
+    request: context.request,
+    response: context.response,
+    tests,
+    packageRegistry,
+    visualizer
+  });
   const sandbox = {
     ...runtimeGlobals,
-    pm: createPmApi({
-      collectionVariables,
+    pm: pmApi,
+    postman: createLegacyPostmanApi({
       environmentVariables,
-      environmentName,
-      globals,
-      localVariables,
-      logs,
-      message: context.message,
-      request: context.request,
-      response: context.response,
-      tests,
-      packageRegistry,
-      visualizer
+      execution: legacyExecution,
+      globals
     }),
     console: createConsole(logs),
     Handlebars: createVisualizerHandlebarsApi(visualizer),
@@ -298,32 +305,38 @@ async function runPostmanScriptAsync(scriptText, context = {}, options = {}) {
   packageRegistry.tracker = tracker;
   const runtimeGlobals = createPostmanRuntimeGlobals({ tracker, vmContextRef });
   const lexicalGlobals = createPostmanLexicalGlobals({ vmContextRef });
+  const pmApi = createAsyncPmApi({
+    broker: options.broker,
+    collectionVariables,
+    currentRequestCookies: context.currentRequestCookies,
+    cookieAccessEnabled: context.scriptCookieAccessEnabled !== false,
+    environmentVariables,
+    environmentName,
+    execution,
+    eventName: context.eventName,
+    executionLocation: context.executionLocation,
+    globals,
+    iteration: context.iteration,
+    iterationCount: context.iterationCount,
+    iterationData,
+    localVariables,
+    logs,
+    message: context.message,
+    mock,
+    request: mutableRequest,
+    response: context.response,
+    tests,
+    tracker,
+    packageRegistry,
+    visualizer
+  });
   const sandbox = {
     ...runtimeGlobals,
-    pm: createAsyncPmApi({
-      broker: options.broker,
-      collectionVariables,
-      currentRequestCookies: context.currentRequestCookies,
-      cookieAccessEnabled: context.scriptCookieAccessEnabled !== false,
+    pm: pmApi,
+    postman: createLegacyPostmanApi({
       environmentVariables,
-      environmentName,
       execution,
-      eventName: context.eventName,
-      executionLocation: context.executionLocation,
-      globals,
-      iteration: context.iteration,
-      iterationCount: context.iterationCount,
-      iterationData,
-      localVariables,
-      logs,
-      message: context.message,
-      mock,
-      request: mutableRequest,
-      response: context.response,
-      tests,
-      tracker,
-      packageRegistry,
-      visualizer
+      globals
     }),
     console: createConsole(logs),
     Handlebars: createVisualizerHandlebarsApi(visualizer),
@@ -1292,6 +1305,32 @@ function createPmApi({ collectionVariables, environmentName, environmentVariable
   };
   api.console = createConsole(logs);
   return hardenSandboxValue(api);
+}
+
+function createLegacyPostmanApi({ environmentVariables = [], execution = {}, globals = [] } = {}) {
+  return hardenSandboxValue({
+    clearEnvironmentVariable(key) {
+      unsetVariable(environmentVariables, key);
+    },
+    clearGlobalVariable(key) {
+      unsetVariable(globals, key);
+    },
+    getEnvironmentVariable(key) {
+      return getVariable(environmentVariables, key);
+    },
+    getGlobalVariable(key) {
+      return getVariable(globals, key);
+    },
+    setEnvironmentVariable(key, value) {
+      setVariable(environmentVariables, key, value);
+    },
+    setGlobalVariable(key, value) {
+      setVariable(globals, key, value);
+    },
+    setNextRequest(target) {
+      execution.nextRequest = target == null ? null : String(target);
+    }
+  });
 }
 
 function postmanCompatibleRequestId(request) {
