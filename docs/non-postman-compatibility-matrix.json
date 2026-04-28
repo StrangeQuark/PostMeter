@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 1,
+  "name": "non-postman-compatibility",
+  "generatedFrom": "src/core/productionSupportMatrices.js",
+  "deterministic": true,
+  "rows": [
+    {
+      "id": "curl.cross-shell-quoting",
+      "area": "curl",
+      "target": "curl import/export covers common Linux/macOS/Windows quoting forms and repeated headers without claiming every shell dialect.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/core/curlFormats.js",
+        "docs/COMPATIBILITY.md"
+      ],
+      "tests": [
+        "test/electron/collectionFormats.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "curl.import-export",
+      "area": "curl",
+      "target": "curl import/export covers common method, URL, header, data, cookie, proxy, retry, TLS, and quoting variants.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/core/curlFormats.js",
+        "docs/COMPATIBILITY.md"
+      ],
+      "tests": [
+        "test/electron/collectionFormats.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "har.import-export",
+      "area": "HAR",
+      "target": "HAR 1.2 import/export covers request entries, response examples, headers, cookies, timings, and body metadata.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/core/harFormats.js",
+        "docs/COMPATIBILITY.md"
+      ],
+      "tests": [
+        "test/electron/collectionFormats.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "har.privacy-export-boundary",
+      "area": "HAR",
+      "target": "HAR import/export tracks privacy-sensitive headers/cookies/body metadata boundaries in user-facing compatibility docs.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/core/harFormats.js",
+        "docs/COMPATIBILITY.md"
+      ],
+      "tests": [
+        "test/electron/collectionFormats.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "jmeter.bridge",
+      "area": "JMeter",
+      "target": "JMeter import/export remains a bridge for HTTP sampler plans with mapped assertions/timers/controllers and preserve-only unsupported metadata.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/core/jmeterFormats.js",
+        "test/fixtures/jmeter",
+        "docs/COMPATIBILITY.md"
+      ],
+      "tests": [
+        "test/electron/collectionFormats.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "native-postmeter.roundtrip",
+      "area": "Native PostMeter",
+      "target": "Native workspace round trips preserve auth, variables, examples, cookies, certificates, package/vault/mock/visualizer metadata, protocols, and file bindings.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/core/workspaceStore.js",
+        "src/core/workspacePersistence.js"
+      ],
+      "tests": [
+        "test/electron/workspaceStore.test.js",
+        "test/electron/postmanImporter.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "openapi.import-export",
+      "area": "OpenAPI",
+      "target": "OpenAPI/Swagger JSON/YAML import and OpenAPI 3.1 export cover paths, auth, variables, request bodies, and examples where representable.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/core/openApiFormats.js",
+        "docs/COMPATIBILITY.md"
+      ],
+      "tests": [
+        "test/electron/collectionFormats.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "openapi.invalid-common-specs",
+      "area": "OpenAPI",
+      "target": "Invalid-but-common OpenAPI variants fail with clear parser errors instead of crashing or producing misleading collections.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/core/openApiFormats.js",
+        "test/electron/collectionFormats.test.js"
+      ],
+      "tests": [
+        "test/electron/collectionFormats.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "unsupported.claim-boundaries",
+      "area": "Claim boundaries",
+      "target": "Unsupported or preserve-only behavior is documented without claiming full JMeter execution or source-format-perfect parity.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "docs/COMPATIBILITY.md",
+        "NEXT_STEPS.MD"
+      ],
+      "tests": [
+        "npm run compatibility:non-postman:validate"
+      ],
+      "notes": ""
+    }
+  ]
+}

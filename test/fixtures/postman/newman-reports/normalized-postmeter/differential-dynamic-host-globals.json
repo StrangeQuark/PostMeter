@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "source": "postmeter-parity-harness",
+  "fixtureId": "differential-dynamic-host-globals",
+  "summary": {
+    "collectionName": "PostMeter Differential Dynamic Host Globals",
+    "failedRequests": 0,
+    "passed": true,
+    "passedRequests": 1,
+    "totalRequests": 1
+  },
+  "requests": [
+    {
+      "requestName": "Dynamic Code And Host Globals",
+      "statusCode": 200,
+      "passed": true,
+      "tests": [
+        {
+          "name": "dynamic code and host-like globals match Postman sandbox profile",
+          "passed": true,
+          "error": ""
+        }
+      ]
+    }
+  ],
+  "environment": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:42371"
+    },
+    {
+      "key": "dynamicHostSummary",
+      "value": "{\"eval\":{\"type\":\"function\",\"own\":true},\"Function\":{\"type\":\"function\",\"own\":true},\"Buffer\":{\"type\":\"undefined\",\"own\":false},\"fetch\":{\"type\":\"undefined\",\"own\":false},\"XMLHttpRequest\":{\"type\":\"undefined\",\"own\":false},\"WebSocket\":{\"type\":\"undefined\",\"own\":false},\"WebAssembly\":{\"type\":\"undefined\",\"own\":false},\"process\":{\"type\":\"undefined\",\"own\":false},\"require\":{\"type\":\"function\",\"own\":true},\"global\":{\"type\":\"undefined\",\"own\":false},\"globalThis\":{\"type\":\"undefined\",\"own\":false},\"window\":{\"type\":\"undefined\",\"own\":false},\"self\":{\"type\":\"undefined\",\"own\":false},\"document\":{\"type\":\"undefined\",\"own\":false},\"navigator\":{\"type\":\"undefined\",\"own\":false},\"location\":{\"type\":\"undefined\",\"own\":false},\"localStorage\":{\"type\":\"undefined\",\"own\":false},\"sessionStorage\":{\"type\":\"undefined\",\"own\":false},\"indexedDB\":{\"type\":\"undefined\",\"own\":false},\"Deno\":{\"type\":\"undefined\",\"own\":false},\"Bun\":{\"type\":\"undefined\",\"own\":false},\"importScripts\":{\"type\":\"undefined\",\"own\":false},\"postMessage\":{\"type\":\"undefined\",\"own\":false},\"topBuffer\":{\"ok\":true,\"type\":\"string\",\"value\":\"function\"},\"bufferFrom\":{\"ok\":true,\"type\":\"string\",\"value\":\"YWJj\"},\"directEval\":{\"ok\":true,\"type\":\"number\",\"value\":\"3\"},\"indirectEval\":{\"ok\":true,\"type\":\"number\",\"value\":\"4\"},\"directEvalBuffer\":{\"ok\":true,\"type\":\"string\",\"value\":\"function\"},\"indirectEvalBuffer\":{\"ok\":true,\"type\":\"string\",\"value\":\"undefined\"},\"functionSimple\":{\"ok\":true,\"type\":\"number\",\"value\":\"5\"},\"functionThisType\":{\"ok\":true,\"type\":\"string\",\"value\":\"object\"},\"functionRequireType\":{\"ok\":true,\"type\":\"string\",\"value\":\"function\"},\"functionProcessType\":{\"ok\":true,\"type\":\"string\",\"value\":\"undefined\"},\"functionFetchType\":{\"ok\":true,\"type\":\"string\",\"value\":\"undefined\"},\"functionBufferType\":{\"ok\":true,\"type\":\"string\",\"value\":\"undefined\"},\"constructorEscape\":{\"ok\":true,\"type\":\"string\",\"value\":\"undefined\"},\"webAssemblyCompile\":{\"ok\":true,\"type\":\"string\",\"value\":\"missing\"}}"
+    },
+    {
+      "key": "envSeed",
+      "value": "env-seed"
+    }
+  ],
+  "observedRequests": [
+    {
+      "method": "GET",
+      "path": "/json",
+      "xPre": ""
+    }
+  ]
+}

@@ -1,0 +1,172 @@
+name: Native Release Validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      required_artifact_types:
+        description: "Comma-separated artifact types required by release validation."
+        required: false
+        default: "appimage,deb,dmg,zip,exe"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and validate ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            runner: ubuntu-latest
+            command: npm run dist:linux
+          - platform: windows
+            runner: windows-latest
+            command: npm run dist:win
+          - platform: macos
+            runner: macos-latest
+            command: npm run dist:mac
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Linux sandbox backend
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+
+      - name: Install
+        run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Electron runtime version
+        run: npm run electron:version
+
+      - name: Sandbox runtime validation
+        run: npm run sandbox:validate
+
+      - name: OS sandbox platform matrix validation
+        run: npm run sandbox:platform:validate
+
+      - name: Postman parity matrix validation
+        run: npm run postman:parity:validate
+
+      - name: Postman docs coverage validation
+        run: npm run postman:docs:validate
+
+      - name: Newman report evidence validation
+        run: npm run postman:newman-reports:validate
+
+      - name: Production readiness matrix validation
+        run: npm run production:readiness:validate
+
+      - name: Electron security matrix validation
+        run: npm run electron:security:validate
+
+      - name: Workspace durability matrix validation
+        run: npm run workspace:durability:validate
+
+      - name: Non-Postman compatibility matrix validation
+        run: npm run compatibility:non-postman:validate
+
+      - name: Sandbox release gate manifest
+        run: npm run release:gate
+
+      - name: Build unsigned artifacts
+        run: ${{ matrix.command }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Packaged app startup smoke
+        if: matrix.platform != 'linux'
+        run: npm run release:validate:packaged-smoke
+
+      - name: Packaged Linux app startup smoke
+        if: matrix.platform == 'linux'
+        run: xvfb-run -a npm run release:validate:packaged-smoke
+
+      - name: Packaged sandbox validation
+        if: matrix.platform != 'linux'
+        run: npm run sandbox:validate:packaged
+
+      - name: Packaged Linux sandbox validation
+        if: matrix.platform == 'linux'
+        run: xvfb-run -a npm run sandbox:validate:packaged
+
+      - name: Validate Windows protocol registration
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: npm run release:validate:win-protocol
+
+      - name: Validate macOS protocol registration
+        if: matrix.platform == 'macos'
+        run: npm run release:validate:mac-protocol
+
+      - name: Upload platform artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postmeter-validation-${{ matrix.platform }}
+          path: |
+            release/*.AppImage
+            release/*.deb
+            release/*.dmg
+            release/*.zip
+            release/*.exe
+            release/*.msi
+            release/latest*.yml
+          if-no-files-found: warn
+          retention-days: 14
+
+  validate-release-metadata:
+    name: Validate combined release metadata
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Download platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: List downloaded artifacts
+        run: find release -maxdepth 2 -type f -print | sort
+
+      - name: Prepare release metadata
+        run: npm run release:prepare
+
+      - name: Validate release metadata
+        run: npm run release:validate
+        env:
+          POSTMETER_RELEASE_REQUIRED_TYPES: ${{ inputs.required_artifact_types }}
+
+      - name: Upload combined validation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: postmeter-validation-combined
+          path: |
+            release/*
+          if-no-files-found: error
+          retention-days: 14

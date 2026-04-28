@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "source": "newman-json-reporter",
+  "fixtureId": "differential-dynamic-host-globals",
+  "newmanVersion": "6.2.2",
+  "postmanRuntimeVersion": "7.39.1",
+  "normalization": {
+    "normalizedFields": [
+      "timestamps",
+      "run durations",
+      "response timings",
+      "randomized localhost ports",
+      "host filesystem paths",
+      "machine-specific process metadata",
+      "raw reporter cursor ids where duplicated by Newman internals"
+    ],
+    "preservedFields": [
+      "collection name",
+      "request order",
+      "request names",
+      "request methods",
+      "response codes",
+      "assertion names",
+      "assertion pass/fail state",
+      "failure messages"
+    ]
+  },
+  "collectionName": "PostMeter Differential Dynamic Host Globals",
+  "stats": {
+    "iterations": {
+      "total": 1,
+      "pending": 0,
+      "failed": 0
+    },
+    "items": {
+      "total": 1,
+      "pending": 0,
+      "failed": 0
+    },
+    "scripts": {
+      "total": 1,
+      "pending": 0,
+      "failed": 0
+    },
+    "prerequests": {
+      "total": 1,
+      "pending": 0,
+      "failed": 0
+    },
+    "requests": {
+      "total": 1,
+      "pending": 0,
+      "failed": 0
+    },
+    "tests": {
+      "total": 1,
+      "pending": 0,
+      "failed": 0
+    },
+    "assertions": {
+      "total": 1,
+      "pending": 0,
+      "failed": 0
+    },
+    "testScripts": {
+      "total": 1,
+      "pending": 0,
+      "failed": 0
+    },
+    "prerequestScripts": {
+      "total": 0,
+      "pending": 0,
+      "failed": 0
+    }
+  },
+  "requests": [
+    {
+      "itemName": "Dynamic Code And Host Globals",
+      "method": "GET",
+      "responseCode": 200,
+      "assertions": [
+        {
+          "name": "dynamic code and host-like globals match Postman sandbox profile",
+          "passed": true,
+          "skipped": false,
+          "error": ""
+        }
+      ]
+    }
+  ],
+  "assertionFailures": []
+}

@@ -50,7 +50,7 @@ Keep DOM IDs stable unless tests and IPC-facing workflows are migrated at the sa
 - `appMenu.js` owns the application menu template and installation.
 - `appIpc.js` owns app version, update check, and allowed external-link IPC channels.
 - `fileDialogs.js` owns shared dialog filters, default extensions, and filename normalization.
-- `mainWindow.js` owns BrowserWindow creation, renderer loading, and UI-smoke/snapshot window hooks.
+- `mainWindow.js` owns BrowserWindow creation, renderer loading, startup/package smoke probes, and UI-smoke/snapshot window hooks.
 - `oauthIpc.js` owns OAuth IPC channel registration and payload validation.
 - `oauthFlows.js` owns OAuth authorization-code/device-code orchestration, callback routing, and protocol registration.
 - `requestIpc.js` owns single-request validation/send IPC and persistence of response-side workspace mutations.
@@ -59,6 +59,7 @@ Keep DOM IDs stable unless tests and IPC-facing workflows are migrated at the sa
 - `sessionStore.js` owns persisted UI session state in Electron `userData/session.json`.
 - `workspaceIpc.js` owns workspace import/export, collection import/export, workspace save/load, request-example export IPC channels, and the refreshed managed-workspace payloads returned after workspace import.
 - `workspaceMutations.js` owns workspace updates after request sends and collection runs.
+- `vaultPrompt.js` owns metadata-only vault prompt IPC, renderer/dialog fallback decisions, and scoped vault-grant persistence helpers.
 
 Further extraction should be demand-driven. `electron/main.js` is already reduced to app lifecycle, workspace/session-store wiring, and module registration, so more splitting should only happen when those responsibilities materially grow again.
 
@@ -72,7 +73,8 @@ Core modules must not depend on Electron or renderer globals.
 - `requestScriptRunner.js` adapts the shared scripted-request lifecycle for single-request execution and returns the response plus runtime variable mutations.
 - `collectionRunner.js` sequences collection requests and layers assertions, runner progress, cookies, stop-on-failure, and runner reports on top of the shared scripted-request lifecycle.
 - `httpClient.js` prepares and sends HTTP requests.
-- `grpcClient.js` owns the parent-side live gRPC transport for imported gRPC requests. It loads trusted proto definitions, builds parent-owned gRPC clients, normalizes metadata/messages/status/trailers/errors, and keeps proto/TLS/client-certificate filesystem access outside the script worker.
+- `grpcClient.js` owns the parent-side live gRPC transport for imported gRPC requests. It loads trusted proto definitions, builds parent-owned gRPC clients, normalizes metadata/messages/status/trailers/errors, and keeps proto/TLS/client-certificate filesystem access outside the script worker. gRPC mTLS supports PEM cert/key material and parent-side PFX/P12 extraction into in-memory PEM buffers for `@grpc/grpc-js`.
+- `productionReadinessMatrix.js` and `productionSupportMatrices.js` own release-readiness, Electron-security, workspace-durability, and non-Postman compatibility dashboards. Generated JSON lives in `docs/`.
 - `docs/SANDBOX_CONTRACT.md` is the source of truth for script sandbox compatibility, security boundaries, broker behavior, side-effect transactions, and load-test scripting scope. The current claim-gated Postman script parity target is Postman Desktop 11.71.7 with `postman-sandbox@6.2.2` and Postman Runtime 7.50.0, plus Newman 6.2.2 with Postman Runtime 7.39.1 for Newman-compatible surfaces.
 - `authModel.js`, `cookieModel.js`, and `loadPolicyModel.js` own shared runtime-neutral model defaults and normalization used by both core and renderer modules.
 - `payloadSchemas.js` owns shared field schemas, enum sets, and basic string-length limits consumed by IPC validation and shared normalization helpers.

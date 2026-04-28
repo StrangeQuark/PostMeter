@@ -217,6 +217,11 @@
         options.onResolveActiveModal?.(selectedCollectionId);
       }
     });
+    bindClick(doc, 'denyVaultPromptButton', () => options.onResolveVaultPrompt?.({ granted: false, scope: 'request' }));
+    bindClick(doc, 'allowVaultPromptRequestButton', () => options.onResolveVaultPrompt?.({ granted: true, scope: 'request' }));
+    bindClick(doc, 'allowVaultPromptCollectionButton', () => options.onResolveVaultPrompt?.({ granted: true, scope: 'collection' }));
+    bindClick(doc, 'allowVaultPromptWorkspaceButton', () => options.onResolveVaultPrompt?.({ granted: true, scope: 'workspace' }));
+    bindClick(doc, 'resetVaultPromptGrantsButton', () => options.onResolveVaultPrompt?.({ granted: false, reset: true, scope: 'request' }));
 
     doc.addEventListener('click', () => {
       options.onCloseContextMenu?.();

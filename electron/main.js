@@ -17,6 +17,11 @@ const { registerWorkspaceIpc } = require('./workspaceIpc');
 const { registerRequestIpc } = require('./requestIpc');
 const { registerOAuthIpc } = require('./oauthIpc');
 const {
+  applyVaultPromptDecisionToWorkspace,
+  createVaultPrompt,
+  registerVaultPromptIpc
+} = require('./vaultPrompt');
+const {
   assertFileOperationResultPayload,
   assertOAuthProgressPayload,
 } = require('../src/core/ipcValidation');
@@ -206,6 +211,17 @@ function vaultPathForWorkspace(workspaceId) {
   return path.join(app.getPath('userData'), 'vaults', `${workspaceVaultFilename(workspaceId)}.vault.json`);
 }
 
+async function persistVaultPromptDecision(decision, payload) {
+  if (decision?.granted !== true && decision?.reset !== true) {
+    return;
+  }
+  await mutateWorkspace(async (currentWorkspace) => (
+    applyVaultPromptDecisionToWorkspace(currentWorkspace, payload, decision)
+  ), {
+    workspaceId: workspaceStore?.getWorkspaceId?.() || ''
+  });
+}
+
 function workspaceVaultFilename(workspaceId) {
   return crypto.createHash('sha256').update(String(workspaceId || 'workspace')).digest('hex').slice(0, 32);
 }
@@ -287,6 +303,7 @@ ipcMain.handle('vault:unset-secret', async (_event, key) => {
   return { ok: true };
 });
 
+registerVaultPromptIpc({ ipcMain });
 registerAppIpc({ app, ipcMain, shell });
 
 registerOAuthIpc({ ipcMain, oauthFlows });
@@ -309,6 +326,7 @@ registerRuntimeIpc({
   getWorkspace: () => workspace,
   getWorkspaceId: () => workspaceStore?.getWorkspaceId?.() || '',
   getVaultStore: () => vaultStoreForWorkspace(workspaceStore?.getWorkspaceId?.() || ''),
+  getVaultPrompt: () => createVaultPrompt({ dialog, getMainWindow: () => mainWindow, persistDecision: persistVaultPromptDecision }),
   ipcMain,
   mutateWorkspace,
   saveWorkspace,
@@ -340,6 +358,7 @@ registerRequestIpc({
   getWorkspace: () => workspace,
   getWorkspaceId: () => workspaceStore?.getWorkspaceId?.() || '',
   getVaultStore: () => vaultStoreForWorkspace(workspaceStore?.getWorkspaceId?.() || ''),
+  getVaultPrompt: () => createVaultPrompt({ dialog, getMainWindow: () => mainWindow, persistDecision: persistVaultPromptDecision }),
   ipcMain,
   mutateWorkspace,
   saveWorkspace,

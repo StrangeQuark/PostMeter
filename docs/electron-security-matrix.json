@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "name": "electron-security",
+  "generatedFrom": "src/core/productionSupportMatrices.js",
+  "deterministic": true,
+  "rows": [
+    {
+      "id": "browser-window.navigation",
+      "area": "Navigation",
+      "target": "Window-open and navigation paths deny unexpected renderer-controlled top-level launches.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/mainWindow.js"
+      ],
+      "tests": [
+        "test/electron/appChrome.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "browser-window.webpreferences",
+      "area": "BrowserWindow",
+      "target": "Renderer runs with nodeIntegration disabled, contextIsolation enabled, sandbox enabled, webSecurity enabled, and insecure content disabled.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/mainWindow.js"
+      ],
+      "tests": [
+        "test/electron/appChrome.test.js",
+        "test/electron/uiWorkflowSmoke.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "electron.fuses-reviewed",
+      "area": "Packaging",
+      "target": "Electron fuse hardening is reviewed; fuses that cannot be flipped without breaking Electron-run-as-Node script workers remain documented instead of silently assumed.",
+      "status": "documented-gap",
+      "evidenceRefs": [
+        "SECURITY.md",
+        "docs/RELEASE_READINESS.md"
+      ],
+      "tests": [
+        "npm run release:gate"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "external-url.allowlist",
+      "area": "External URLs",
+      "target": "External URL IPC only opens HTTPS GitHub URLs after payload validation.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/appIpc.js",
+        "src/core/ipcValidation.js"
+      ],
+      "tests": [
+        "test/electron/appIpc.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "packaged.preload-integrity",
+      "area": "Packaging",
+      "target": "Packaged app validation must prove preload/API surface remains available after ASAR/app-bundle packaging.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "scripts/validatePackagedAppSmoke.js",
+        ".github/workflows/release.yml"
+      ],
+      "tests": [
+        "npm run release:validate:packaged-smoke"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "permissions.denied",
+      "area": "Permissions",
+      "target": "Electron permission requests are denied by default.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/mainWindow.js"
+      ],
+      "tests": [
+        "test/electron/appChrome.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "preload.explicit-api",
+      "area": "Preload",
+      "target": "Renderer access is restricted to explicit contextBridge APIs; IPC channel names remain compatibility contracts.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/preload.js",
+        "docs/ARCHITECTURE.md"
+      ],
+      "tests": [
+        "test/electron/ipcValidation.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "visualizer.csp",
+      "area": "Visualizer",
+      "target": "Visualizer iframe output remains sandboxed with CSP/reviewed asset controls and no unreviewed remote script loading.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/core/scriptRuntime.js",
+        "docs/SANDBOX_CONTRACT.md"
+      ],
+      "tests": [
+        "test/electron/scriptSandbox.test.js"
+      ],
+      "notes": ""
+    }
+  ]
+}

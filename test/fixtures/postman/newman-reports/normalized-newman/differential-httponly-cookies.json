@@ -1,0 +1,149 @@
+{
+  "schemaVersion": 1,
+  "source": "newman-json-reporter",
+  "fixtureId": "differential-httponly-cookies",
+  "newmanVersion": "6.2.2",
+  "postmanRuntimeVersion": "7.39.1",
+  "normalization": {
+    "normalizedFields": [
+      "timestamps",
+      "run durations",
+      "response timings",
+      "randomized localhost ports",
+      "host filesystem paths",
+      "machine-specific process metadata",
+      "raw reporter cursor ids where duplicated by Newman internals"
+    ],
+    "preservedFields": [
+      "collection name",
+      "request order",
+      "request names",
+      "request methods",
+      "response codes",
+      "assertion names",
+      "assertion pass/fail state",
+      "failure messages"
+    ]
+  },
+  "collectionName": "PostMeter Differential HttpOnly Cookies",
+  "stats": {
+    "iterations": {
+      "total": 1,
+      "pending": 0,
+      "failed": 0
+    },
+    "items": {
+      "total": 4,
+      "pending": 0,
+      "failed": 0
+    },
+    "scripts": {
+      "total": 5,
+      "pending": 0,
+      "failed": 0
+    },
+    "prerequests": {
+      "total": 4,
+      "pending": 0,
+      "failed": 0
+    },
+    "requests": {
+      "total": 5,
+      "pending": 0,
+      "failed": 0
+    },
+    "tests": {
+      "total": 4,
+      "pending": 0,
+      "failed": 0
+    },
+    "assertions": {
+      "total": 7,
+      "pending": 0,
+      "failed": 0
+    },
+    "testScripts": {
+      "total": 4,
+      "pending": 0,
+      "failed": 0
+    },
+    "prerequestScripts": {
+      "total": 1,
+      "pending": 0,
+      "failed": 0
+    }
+  },
+  "requests": [
+    {
+      "itemName": "Seed HttpOnly Cookies",
+      "method": "GET",
+      "responseCode": 200,
+      "assertions": [
+        {
+          "name": "seed scripted visible and httponly cookies",
+          "passed": true,
+          "skipped": false,
+          "error": ""
+        },
+        {
+          "name": "httponly seed request sends scripted cookies",
+          "passed": true,
+          "skipped": false,
+          "error": ""
+        }
+      ]
+    },
+    {
+      "itemName": "Read And Mutate HttpOnly Cookies",
+      "method": "GET",
+      "responseCode": 200,
+      "assertions": [
+        {
+          "name": "httponly cookies are readable through current helpers and jar helpers",
+          "passed": true,
+          "skipped": false,
+          "error": ""
+        },
+        {
+          "name": "httponly jar mutations and pm.sendRequest updates match Postman",
+          "passed": true,
+          "skipped": false,
+          "error": ""
+        }
+      ]
+    },
+    {
+      "itemName": "After HttpOnly Mutations",
+      "method": "GET",
+      "responseCode": 200,
+      "assertions": [
+        {
+          "name": "httponly mutations affect later requests",
+          "passed": true,
+          "skipped": false,
+          "error": ""
+        },
+        {
+          "name": "httponly jar clear removes visible and httponly cookies",
+          "passed": true,
+          "skipped": false,
+          "error": ""
+        }
+      ]
+    },
+    {
+      "itemName": "After HttpOnly Clear",
+      "method": "GET",
+      "responseCode": 200,
+      "assertions": [
+        {
+          "name": "httponly clear removed every in-scope cookie",
+          "passed": true,
+          "skipped": false,
+          "error": ""
+        }
+      ]
+    }
+  ],
+  "assertionFailures": []
+}

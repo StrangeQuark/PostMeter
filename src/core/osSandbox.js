@@ -15,12 +15,17 @@ const OS_SANDBOX_MODES = Object.freeze({
 
 const OS_SANDBOX_BACKENDS = Object.freeze({
   BUBBLEWRAP: 'bubblewrap',
+  MACOS_SEATBELT: 'macos-seatbelt',
+  WINDOWS_HELPER: 'windows-helper',
   NONE: 'none'
 });
 
 const BUBBLEWRAP_CANDIDATES = [
   '/usr/bin/bwrap',
   '/bin/bwrap'
+];
+const MACOS_SANDBOX_EXEC_CANDIDATES = [
+  '/usr/bin/sandbox-exec'
 ];
 
 const SYSTEM_READ_PATHS = [
@@ -44,7 +49,9 @@ function createScriptWorkerLaunch(workerPath, execArgv = [], env = {}, options =
     env,
     mode,
     readOnlyPaths: scriptWorkerReadOnlyPaths(workerPath),
-    bubblewrapPath: options.bubblewrapPath
+    bubblewrapPath: options.bubblewrapPath,
+    macosSandboxExecPath: options.macosSandboxExecPath,
+    windowsSandboxHelperPath: options.windowsSandboxHelperPath
   });
 
   if (!sandbox.sandboxed) {
@@ -76,17 +83,57 @@ function createOsSandboxedProcessLaunch(options = {}) {
     };
   }
 
+  if (process.platform === 'darwin') {
+    const sandboxExecPath = findMacosSandboxExec(options.macosSandboxExecPath);
+    if (!sandboxExecPath) {
+      if (mode === OS_SANDBOX_MODES.REQUIRED) {
+        throw new Error('OS-level script sandboxing is required but no macOS seatbelt launcher was found.');
+      }
+      return unsandboxedLaunch(options);
+    }
+    const executablePath = realPathIfExists(options.executablePath || process.execPath);
+    return {
+      sandboxed: true,
+      backend: OS_SANDBOX_BACKENDS.MACOS_SEATBELT,
+      command: sandboxExecPath,
+      args: [
+        '-p',
+        macosSeatbeltProfile({
+          executablePath,
+          readOnlyPaths: [
+            runtimeExecutableRoot(executablePath),
+            ...(options.readOnlyPaths || [])
+          ]
+        }),
+        executablePath,
+        ...(options.args || [])
+      ],
+      env: macosSandboxEnv(options.env || {})
+    };
+  }
+
+  if (process.platform === 'win32') {
+    const helperPath = options.windowsSandboxHelperPath || process.env.POSTMETER_WINDOWS_OS_SANDBOX_HELPER || '';
+    if (!helperPath || !executableFile(helperPath)) {
+      if (mode === OS_SANDBOX_MODES.REQUIRED) {
+        throw new Error('OS-level script sandboxing is required but no Windows AppContainer helper was configured.');
+      }
+      return unsandboxedLaunch(options);
+    }
+    return {
+      sandboxed: true,
+      backend: OS_SANDBOX_BACKENDS.WINDOWS_HELPER,
+      command: helperPath,
+      args: windowsHelperArgs(options),
+      env: {}
+    };
+  }
+
   if (process.platform !== 'linux') {
     if (mode === OS_SANDBOX_MODES.REQUIRED) {
       throw new Error(`OS-level script sandboxing is required but no backend is implemented for ${process.platform}.`);
     }
-    return {
-      sandboxed: false,
-      backend: OS_SANDBOX_BACKENDS.NONE,
-      command: options.executablePath || process.execPath,
-      args: options.args || [],
-      env: options.env || {}
-    };
+    return unsandboxedLaunch(options);
   }
 
   const bubblewrapPath = findBubblewrap(options.bubblewrapPath);
@@ -94,13 +141,7 @@ function createOsSandboxedProcessLaunch(options = {}) {
     if (mode === OS_SANDBOX_MODES.REQUIRED) {
       throw new Error('OS-level script sandboxing is required but bubblewrap was not found.');
     }
-    return {
-      sandboxed: false,
-      backend: OS_SANDBOX_BACKENDS.NONE,
-      command: options.executablePath || process.execPath,
-      args: options.args || [],
-      env: options.env || {}
-    };
+    return unsandboxedLaunch(options);
   }
 
   const executablePath = realPathIfExists(options.executablePath || process.execPath);
@@ -127,14 +168,26 @@ function createOsSandboxedProcessLaunch(options = {}) {
 function osSandboxStatus(options = {}) {
   const mode = normalizeOsSandboxMode(options.mode);
   const bubblewrapPath = process.platform === 'linux' ? findBubblewrap(options.bubblewrapPath) : '';
-  const supported = process.platform === 'linux' && Boolean(bubblewrapPath);
-  const seccompSupported = supported && linuxSeccompSupported();
+  const macosSandboxExecPath = process.platform === 'darwin' ? findMacosSandboxExec(options.macosSandboxExecPath) : '';
+  const windowsHelperPath = process.platform === 'win32' ? (options.windowsSandboxHelperPath || process.env.POSTMETER_WINDOWS_OS_SANDBOX_HELPER || '') : '';
+  const supported = (process.platform === 'linux' && Boolean(bubblewrapPath))
+    || (process.platform === 'darwin' && Boolean(macosSandboxExecPath))
+    || (process.platform === 'win32' && executableFile(windowsHelperPath));
+  const seccompSupported = process.platform === 'linux' && supported && linuxSeccompSupported();
   return {
     mode,
     platform: process.platform,
     supported,
-    backend: process.platform === 'linux' && bubblewrapPath ? OS_SANDBOX_BACKENDS.BUBBLEWRAP : OS_SANDBOX_BACKENDS.NONE,
+    backend: process.platform === 'linux' && bubblewrapPath
+      ? OS_SANDBOX_BACKENDS.BUBBLEWRAP
+      : process.platform === 'darwin' && macosSandboxExecPath
+        ? OS_SANDBOX_BACKENDS.MACOS_SEATBELT
+        : process.platform === 'win32' && executableFile(windowsHelperPath)
+          ? OS_SANDBOX_BACKENDS.WINDOWS_HELPER
+          : OS_SANDBOX_BACKENDS.NONE,
     bubblewrapPath,
+    macosSandboxExecPath,
+    windowsHelperPath,
     seccompSupported,
     seccompFilterFd: seccompSupported ? LINUX_SECCOMP_FILTER_FD : null
   };
@@ -155,6 +208,23 @@ function findBubblewrap(explicitPath) {
     return executableFile(explicitPath) ? explicitPath : '';
   }
   return BUBBLEWRAP_CANDIDATES.find(executableFile) || '';
+}
+
+function findMacosSandboxExec(explicitPath) {
+  if (explicitPath) {
+    return executableFile(explicitPath) ? explicitPath : '';
+  }
+  return MACOS_SANDBOX_EXEC_CANDIDATES.find(executableFile) || '';
+}
+
+function unsandboxedLaunch(options = {}) {
+  return {
+    sandboxed: false,
+    backend: OS_SANDBOX_BACKENDS.NONE,
+    command: options.executablePath || process.execPath,
+    args: options.args || [],
+    env: options.env || {}
+  };
 }
 
 function bubblewrapArgs(options) {
@@ -239,6 +309,72 @@ function bubblewrapEnvArgs(env) {
     args.push('--setenv', 'ELECTRON_RUN_AS_NODE', '1');
   }
   return args;
+}
+
+function macosSandboxEnv(env) {
+  const output = {
+    POSTMETER_SCRIPT_WORKER: '1',
+    TMPDIR: '/tmp',
+    TMP: '/tmp',
+    TEMP: '/tmp'
+  };
+  if (env.ELECTRON_RUN_AS_NODE) {
+    output.ELECTRON_RUN_AS_NODE = '1';
+  }
+  return output;
+}
+
+function macosSeatbeltProfile(options) {
+  const readPaths = [
+    options.executablePath,
+    ...(options.readOnlyPaths || []),
+    '/System/Library',
+    '/usr/lib',
+    '/usr/share',
+    '/dev/null',
+    '/dev/urandom',
+    '/private/etc/ssl',
+    '/etc/ssl'
+  ].map(normalizePath).filter(Boolean);
+  const readRules = Array.from(new Set(readPaths))
+    .map((item) => `(subpath "${escapeSeatbeltString(item)}")`)
+    .join(' ');
+  return [
+    '(version 1)',
+    '(deny default)',
+    '(allow process*)',
+    '(allow sysctl-read)',
+    '(allow mach-lookup)',
+    `(allow file-read* ${readRules})`,
+    '(allow file-write* (subpath "/tmp") (subpath "/private/tmp") (subpath "/private/var/folders"))',
+    '(deny network*)'
+  ].join('\n');
+}
+
+function escapeSeatbeltString(value) {
+  return String(value || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function windowsHelperArgs(options = {}) {
+  const payload = Buffer.from(JSON.stringify({
+    executablePath: options.executablePath || process.execPath,
+    args: options.args || [],
+    env: windowsSandboxEnv(options.env || {}),
+    readOnlyPaths: options.readOnlyPaths || []
+  }), 'utf8').toString('base64');
+  return ['--postmeter-sandbox-launch', payload];
+}
+
+function windowsSandboxEnv(env) {
+  const output = {
+    POSTMETER_SCRIPT_WORKER: '1',
+    TEMP: '%TEMP%',
+    TMP: '%TEMP%'
+  };
+  if (env.ELECTRON_RUN_AS_NODE) {
+    output.ELECTRON_RUN_AS_NODE = '1';
+  }
+  return output;
 }
 
 function scriptWorkerReadOnlyPaths(workerPath) {

@@ -61,6 +61,21 @@ jobs:
       - name: Postman docs coverage validation
         run: npm run postman:docs:validate
 
+      - name: Newman report evidence validation
+        run: npm run postman:newman-reports:validate
+
+      - name: Production readiness matrix validation
+        run: npm run production:readiness:validate
+
+      - name: Electron security matrix validation
+        run: npm run electron:security:validate
+
+      - name: Workspace durability matrix validation
+        run: npm run workspace:durability:validate
+
+      - name: Non-Postman compatibility matrix validation
+        run: npm run compatibility:non-postman:validate
+
       - name: Sandbox release gate manifest
         run: npm run release:gate
 
@@ -68,6 +83,14 @@ jobs:
         run: ${{ matrix.command }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Packaged app startup smoke
+        if: matrix.platform != 'linux'
+        run: npm run release:validate:packaged-smoke
+
+      - name: Packaged Linux app startup smoke
+        if: matrix.platform == 'linux'
+        run: xvfb-run -a npm run release:validate:packaged-smoke
 
       - name: Packaged sandbox validation
         if: matrix.platform != 'linux'

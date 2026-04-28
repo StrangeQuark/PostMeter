@@ -1,0 +1,378 @@
+{
+  "schemaVersion": 1,
+  "generatedFrom": "src/core/productionReadinessMatrix.js",
+  "deterministic": true,
+  "releaseLevels": [
+    "beta",
+    "rc",
+    "stable"
+  ],
+  "statuses": {
+    "implemented": "Implementation and local validation exist.",
+    "validated": "Implementation has required local and native-runner evidence.",
+    "external-validation-required": "Implementation exists, but final evidence requires native runners, provider credentials, or signing assets.",
+    "blocked": "Release-blocking implementation is not complete.",
+    "deferred": "Deliberately outside the current production claim.",
+    "not-applicable": "Not part of this product or release track."
+  },
+  "rows": [
+    {
+      "id": "compatibility.non-postman",
+      "area": "compatibility",
+      "target": "OpenAPI, HAR, curl, JMeter, and native PostMeter import/export compatibility are matrixed and validated.",
+      "status": "implemented",
+      "releaseBlocking": true,
+      "commands": [
+        "npm run compatibility:non-postman:validate",
+        "npm test"
+      ],
+      "evidenceRefs": [
+        "docs/non-postman-compatibility-matrix.json",
+        "docs/COMPATIBILITY.md"
+      ],
+      "owner": "PostMeter",
+      "lastVerified": "",
+      "notes": ""
+    },
+    {
+      "id": "diagnostics.privacy",
+      "area": "privacy",
+      "target": "Local diagnostics and logging must remain user-controlled, redacted, and cloud-free.",
+      "status": "blocked",
+      "releaseBlocking": true,
+      "commands": [
+        "future diagnostics validation"
+      ],
+      "evidenceRefs": [
+        "NEXT_STEPS.MD",
+        "docs/RELEASE_READINESS.md"
+      ],
+      "owner": "PostMeter",
+      "lastVerified": "",
+      "notes": "Structured local diagnostics/export is tracked after the current HPS 1-9 implementation."
+    },
+    {
+      "id": "docs.public-release",
+      "area": "docs",
+      "target": "Public release docs explain readiness gates, compatibility claims, unsigned artifacts, support channel, and platform limitations.",
+      "status": "implemented",
+      "releaseBlocking": true,
+      "commands": [
+        "npm run production:readiness:validate"
+      ],
+      "evidenceRefs": [
+        "README.md",
+        "TECH_SPECS.MD",
+        "docs/RELEASE_READINESS.md",
+        "SECURITY.md"
+      ],
+      "owner": "PostMeter",
+      "lastVerified": "",
+      "notes": ""
+    },
+    {
+      "id": "electron.security",
+      "area": "security",
+      "target": "Electron BrowserWindow, preload, IPC, navigation, external URL, protocol, and packaged-preload controls are matrixed and validated.",
+      "status": "implemented",
+      "releaseBlocking": true,
+      "commands": [
+        "npm run electron:security:validate",
+        "npm test"
+      ],
+      "evidenceRefs": [
+        "docs/electron-security-matrix.json",
+        "electron/mainWindow.js",
+        "electron/appIpc.js"
+      ],
+      "owner": "PostMeter",
+      "lastVerified": "",
+      "notes": ""
+    },
+    {
+      "id": "grpc.pfx-p12-mtls",
+      "area": "transport",
+      "target": "gRPC mTLS supports parent-owned PFX/P12 extraction aligned with HTTP client-certificate handling.",
+      "status": "implemented",
+      "releaseBlocking": true,
+      "commands": [
+        "npm test"
+      ],
+      "evidenceRefs": [
+        "src/core/grpcClient.js",
+        "test/electron/grpcClient.test.js"
+      ],
+      "owner": "PostMeter",
+      "lastVerified": "",
+      "notes": ""
+    },
+    {
+      "id": "load.distributed",
+      "area": "deferred-features",
+      "target": "Distributed/cloud load execution is deferred and not part of the local production claim.",
+      "status": "deferred",
+      "releaseBlocking": false,
+      "commands": [],
+      "evidenceRefs": [
+        "NEXT_STEPS.MD",
+        "docs/COMPATIBILITY.md"
+      ],
+      "owner": "PostMeter",
+      "lastVerified": "",
+      "notes": ""
+    },
+    {
+      "id": "oauth.live-certification",
+      "area": "oauth",
+      "target": "Live provider certification requires maintainer-owned Google, Microsoft Entra ID, and GitHub OAuth apps.",
+      "status": "external-validation-required",
+      "releaseBlocking": true,
+      "commands": [
+        "future npm run oauth:certify:live"
+      ],
+      "evidenceRefs": [
+        "docs/OAUTH_PROVIDER_CERTIFICATION.md"
+      ],
+      "owner": "PostMeter",
+      "lastVerified": "",
+      "notes": ""
+    },
+    {
+      "id": "packaging.linux",
+      "area": "packaging",
+      "target": "Linux deb/AppImage metadata, protocol registration, artifact checksums, and packaged sandbox validation are covered.",
+      "status": "implemented",
+      "releaseBlocking": true,
+      "commands": [
+        "npm run dist:linux",
+        "npm run release:validate",
+        "npm run sandbox:validate:packaged"
+      ],
+      "evidenceRefs": [
+        "scripts/validateReleaseArtifacts.js",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml"
+      ],
+      "owner": "PostMeter",
+      "lastVerified": "",
+      "notes": ""
+    },
+    {
+      "id": "packaging.macos",
+      "area": "packaging",
+      "target": "macOS packaged launch, protocol registration, workspace path, and script-worker validation must run on macos-latest.",
+      "status": "external-validation-required",
+      "releaseBlocking": true,
+      "commands": [
+        "npm run dist:mac",
+        "npm run release:validate:packaged-smoke",
+        "npm run release:validate:mac-protocol"
+      ],
+      "evidenceRefs": [
+        ".github/workflows/release.yml"
+      ],
+      "owner": "PostMeter",
+      "lastVerified": "",
+      "notes": ""
+    },
+    {
+      "id": "packaging.windows",
+      "area": "packaging",
+      "target": "Windows packaged launch, protocol registration, workspace path, and script-worker validation must run on windows-latest.",
+      "status": "external-validation-required",
+      "releaseBlocking": true,
+      "commands": [
+        "npm run dist:win",
+        "npm run release:validate:packaged-smoke",
+        "npm run release:validate:win-protocol"
+      ],
+      "evidenceRefs": [
+        ".github/workflows/release.yml"
+      ],
+      "owner": "PostMeter",
+      "lastVerified": "",
+      "notes": ""
+    },
+    {
+      "id": "postman.newman-json-reports",
+      "area": "compatibility",
+      "target": "Deterministic Newman JSON evidence reports for approved differential fixtures are checked in and validated.",
+      "status": "implemented",
+      "releaseBlocking": true,
+      "commands": [
+        "npm run postman:newman-reports:validate"
+      ],
+      "evidenceRefs": [
+        "test/fixtures/postman/newman-reports"
+      ],
+      "owner": "PostMeter",
+      "lastVerified": "",
+      "notes": ""
+    },
+    {
+      "id": "postman.script-parity",
+      "area": "compatibility",
+      "target": "Tracked Postman script import parity remains claim-gated against current target versions.",
+      "status": "validated",
+      "releaseBlocking": true,
+      "commands": [
+        "npm run postman:parity:claim",
+        "npm run postman:docs:validate",
+        "npm run postman:newman-reports:validate"
+      ],
+      "evidenceRefs": [
+        "docs/postman-sandbox-parity-matrix.json",
+        "docs/postman-docs-coverage-audit.json",
+        "test/fixtures/postman/newman-reports"
+      ],
+      "owner": "PostMeter",
+      "lastVerified": "",
+      "notes": ""
+    },
+    {
+      "id": "release.dashboard",
+      "area": "release-readiness",
+      "target": "Production readiness dashboard and gates exist as generated source-owned artifacts.",
+      "status": "implemented",
+      "releaseBlocking": true,
+      "commands": [
+        "npm run production:readiness",
+        "npm run production:readiness:validate"
+      ],
+      "evidenceRefs": [
+        "src/core/productionReadinessMatrix.js",
+        "docs/production-readiness-matrix.json",
+        "docs/RELEASE_READINESS.md"
+      ],
+      "owner": "PostMeter",
+      "lastVerified": "",
+      "notes": ""
+    },
+    {
+      "id": "release.signing",
+      "area": "release",
+      "target": "Signed/notarized stable artifacts require maintainer-controlled certificates.",
+      "status": "external-validation-required",
+      "releaseBlocking": true,
+      "commands": [
+        "future signing/notarization workflow"
+      ],
+      "evidenceRefs": [
+        "NEXT_STEPS.MD"
+      ],
+      "owner": "PostMeter",
+      "lastVerified": "",
+      "notes": ""
+    },
+    {
+      "id": "sandbox.platform-os",
+      "area": "security",
+      "target": "Platform-equivalent OS sandbox claim is tracked separately from Postman API parity.",
+      "status": "blocked",
+      "releaseBlocking": true,
+      "commands": [
+        "npm run sandbox:platform:validate",
+        "npm run sandbox:platform:claim"
+      ],
+      "evidenceRefs": [
+        "docs/os-sandbox-platform-matrix.json",
+        "src/core/osSandboxPlatformMatrix.js"
+      ],
+      "owner": "PostMeter",
+      "lastVerified": "",
+      "notes": "Linux is accepted for the current Linux claim; Windows/macOS still require native backend source plus packaged runner proof before the cross-platform claim can pass."
+    },
+    {
+      "id": "sandbox.script-runtime",
+      "area": "security",
+      "target": "Script runtime validation, Postman parity gates, and adversarial sandbox probes remain green.",
+      "status": "validated",
+      "releaseBlocking": true,
+      "commands": [
+        "npm run sandbox:validate",
+        "npm run postman:parity:claim",
+        "npm run postman:docs:validate"
+      ],
+      "evidenceRefs": [
+        "docs/SANDBOX_CONTRACT.md",
+        "docs/postman-sandbox-parity-matrix.json"
+      ],
+      "owner": "PostMeter",
+      "lastVerified": "",
+      "notes": ""
+    },
+    {
+      "id": "updates.metadata",
+      "area": "release",
+      "target": "Release/update metadata points to GitHub Releases without introducing a cloud account gate.",
+      "status": "implemented",
+      "releaseBlocking": true,
+      "commands": [
+        "npm run release:manifest",
+        "npm run release:validate"
+      ],
+      "evidenceRefs": [
+        "src/core/updateChecker.js",
+        "scripts/writeReleaseManifest.js",
+        "package.json"
+      ],
+      "owner": "PostMeter",
+      "lastVerified": "",
+      "notes": ""
+    },
+    {
+      "id": "ux.accessibility",
+      "area": "ux",
+      "target": "Production user workflows, accessibility-sensitive modals, and failure states are smoke-tested and documented before release.",
+      "status": "external-validation-required",
+      "releaseBlocking": true,
+      "commands": [
+        "npm run test:ui",
+        "npm run test:ui:regression",
+        "npm run test:ui:snapshot"
+      ],
+      "evidenceRefs": [
+        "docs/RELEASE_READINESS.md",
+        "src/renderer/index.html",
+        "test/electron/uiRegressionSmoke.js"
+      ],
+      "owner": "PostMeter",
+      "lastVerified": "",
+      "notes": "Linux headless smoke coverage exists; final production signoff still requires native packaged runner evidence and manual QA."
+    },
+    {
+      "id": "vault.per-request-prompts",
+      "area": "security",
+      "target": "Per-request vault prompt decisions are brokered without exposing vault secrets to scripts or renderer APIs.",
+      "status": "implemented",
+      "releaseBlocking": true,
+      "commands": [
+        "npm test"
+      ],
+      "evidenceRefs": [
+        "src/core/scriptSandbox.js",
+        "electron/vaultPrompt.js"
+      ],
+      "owner": "PostMeter",
+      "lastVerified": "",
+      "notes": ""
+    },
+    {
+      "id": "workspace.durability",
+      "area": "data-durability",
+      "target": "Workspace persistence, migrations, recovery, vault metadata, package cache, and large-workspace budgets are matrixed and validated.",
+      "status": "implemented",
+      "releaseBlocking": true,
+      "commands": [
+        "npm run workspace:durability:validate",
+        "npm test"
+      ],
+      "evidenceRefs": [
+        "docs/workspace-durability-matrix.json"
+      ],
+      "owner": "PostMeter",
+      "lastVerified": "",
+      "notes": ""
+    }
+  ]
+}

@@ -1,0 +1,636 @@
+{
+  "collection": {
+    "_": {
+      "postman_id": "00000000-0000-4000-8000-000000000204"
+    },
+    "item": [
+      {
+        "id": "da2809f1-ac28-43f2-b7aa-348a86827442",
+        "name": "Runtime Timer Drain And Output",
+        "request": {
+          "url": {
+            "path": [
+              "json"
+            ],
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "method": "GET"
+        },
+        "response": [],
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "id": "8e57c31e-47bd-4c2e-bedf-d46b1ab26779",
+              "type": "text/javascript",
+              "exec": [
+                "var summary = {",
+                "  promiseMicrotask: false,",
+                "  timeout: false,",
+                "  intervalCleared: false,",
+                "  intervalCountAtLeastTwo: false,",
+                "  visualizerSet: false,",
+                "  timerFunctions: [typeof setTimeout, typeof clearTimeout, typeof setInterval, typeof clearInterval].join(','),",
+                "  consoleFunctions: [typeof console.log, typeof console.warn, typeof console.error].join(',')",
+                "};",
+                "console.log('runtime limit probe %s', 'start');",
+                "console.warn({ runtime: 'limits', ok: true });",
+                "Promise.resolve().then(function () {",
+                "  summary.promiseMicrotask = true;",
+                "});",
+                "var intervalCount = 0;",
+                "var interval = setInterval(function () {",
+                "  intervalCount += 1;",
+                "  if (intervalCount >= 2) {",
+                "    clearInterval(interval);",
+                "    summary.intervalCleared = true;",
+                "  }",
+                "}, 1);",
+                "setTimeout(function () {",
+                "  summary.timeout = true;",
+                "  summary.intervalCountAtLeastTwo = intervalCount >= 2;",
+                "  pm.visualizer.set('<section>{{label}}</section>', { label: 'runtime' });",
+                "  summary.visualizerSet = true;",
+                "  pm.environment.set('runtimeLimitsSummary', JSON.stringify(summary));",
+                "  pm.test('runtime timers, console, and visualizer work below policy limits', function () {",
+                "    pm.expect(summary.promiseMicrotask).to.equal(true);",
+                "    pm.expect(summary.timeout).to.equal(true);",
+                "    pm.expect(summary.intervalCleared).to.equal(true);",
+                "    pm.expect(summary.intervalCountAtLeastTwo).to.equal(true);",
+                "    pm.expect(summary.visualizerSet).to.equal(true);",
+                "    pm.expect(summary.timerFunctions).to.equal('function,function,function,function');",
+                "    pm.expect(summary.consoleFunctions).to.equal('function,function,function');",
+                "  });",
+                "}, 25);"
+              ],
+              "_lastExecutionId": "a17cbdb9-643b-4545-95d6-04fac8ac4a9b"
+            }
+          }
+        ]
+      }
+    ],
+    "event": [],
+    "variable": [],
+    "info": {
+      "_postman_id": "00000000-0000-4000-8000-000000000204",
+      "name": "PostMeter Differential Runtime Limits",
+      "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    }
+  },
+  "environment": {
+    "id": "338245f1-629e-49f2-88da-13ec85eabd93",
+    "values": [
+      {
+        "type": "any",
+        "value": "http://127.0.0.1:42371",
+        "key": "baseUrl"
+      },
+      {
+        "type": "any",
+        "value": "{\"promiseMicrotask\":true,\"timeout\":true,\"intervalCleared\":true,\"intervalCountAtLeastTwo\":true,\"visualizerSet\":true,\"timerFunctions\":\"function,function,function,function\",\"consoleFunctions\":\"function,function,function\"}",
+        "key": "runtimeLimitsSummary"
+      }
+    ]
+  },
+  "globals": {
+    "id": "96c9a067-4181-4ec4-88d3-21c3eaa42df3",
+    "values": []
+  },
+  "run": {
+    "stats": {
+      "iterations": {
+        "total": 1,
+        "pending": 0,
+        "failed": 0
+      },
+      "items": {
+        "total": 1,
+        "pending": 0,
+        "failed": 0
+      },
+      "scripts": {
+        "total": 1,
+        "pending": 0,
+        "failed": 0
+      },
+      "prerequests": {
+        "total": 1,
+        "pending": 0,
+        "failed": 0
+      },
+      "requests": {
+        "total": 1,
+        "pending": 0,
+        "failed": 0
+      },
+      "tests": {
+        "total": 1,
+        "pending": 0,
+        "failed": 0
+      },
+      "assertions": {
+        "total": 1,
+        "pending": 0,
+        "failed": 0
+      },
+      "testScripts": {
+        "total": 1,
+        "pending": 0,
+        "failed": 0
+      },
+      "prerequestScripts": {
+        "total": 0,
+        "pending": 0,
+        "failed": 0
+      }
+    },
+    "timings": {
+      "responseAverage": 11,
+      "responseMin": 11,
+      "responseMax": 11,
+      "responseSd": 0,
+      "dnsAverage": 0,
+      "dnsMin": 0,
+      "dnsMax": 0,
+      "dnsSd": 0,
+      "firstByteAverage": 0,
+      "firstByteMin": 0,
+      "firstByteMax": 0,
+      "firstByteSd": 0,
+      "started": 1777389877503,
+      "completed": 1777389877562
+    },
+    "executions": [
+      {
+        "cursor": {
+          "position": 0,
+          "iteration": 0,
+          "length": 1,
+          "cycles": 1,
+          "empty": false,
+          "eof": false,
+          "bof": true,
+          "cr": false,
+          "ref": "a9fee1f4-6636-48ea-9c7d-4bc55a10c26f",
+          "httpRequestId": "97884249-c4a8-4dea-bdfe-3a8139bd04be"
+        },
+        "item": {
+          "id": "da2809f1-ac28-43f2-b7aa-348a86827442",
+          "name": "Runtime Timer Drain And Output",
+          "request": {
+            "url": {
+              "path": [
+                "json"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "method": "GET"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "8e57c31e-47bd-4c2e-bedf-d46b1ab26779",
+                "type": "text/javascript",
+                "exec": [
+                  "var summary = {",
+                  "  promiseMicrotask: false,",
+                  "  timeout: false,",
+                  "  intervalCleared: false,",
+                  "  intervalCountAtLeastTwo: false,",
+                  "  visualizerSet: false,",
+                  "  timerFunctions: [typeof setTimeout, typeof clearTimeout, typeof setInterval, typeof clearInterval].join(','),",
+                  "  consoleFunctions: [typeof console.log, typeof console.warn, typeof console.error].join(',')",
+                  "};",
+                  "console.log('runtime limit probe %s', 'start');",
+                  "console.warn({ runtime: 'limits', ok: true });",
+                  "Promise.resolve().then(function () {",
+                  "  summary.promiseMicrotask = true;",
+                  "});",
+                  "var intervalCount = 0;",
+                  "var interval = setInterval(function () {",
+                  "  intervalCount += 1;",
+                  "  if (intervalCount >= 2) {",
+                  "    clearInterval(interval);",
+                  "    summary.intervalCleared = true;",
+                  "  }",
+                  "}, 1);",
+                  "setTimeout(function () {",
+                  "  summary.timeout = true;",
+                  "  summary.intervalCountAtLeastTwo = intervalCount >= 2;",
+                  "  pm.visualizer.set('<section>{{label}}</section>', { label: 'runtime' });",
+                  "  summary.visualizerSet = true;",
+                  "  pm.environment.set('runtimeLimitsSummary', JSON.stringify(summary));",
+                  "  pm.test('runtime timers, console, and visualizer work below policy limits', function () {",
+                  "    pm.expect(summary.promiseMicrotask).to.equal(true);",
+                  "    pm.expect(summary.timeout).to.equal(true);",
+                  "    pm.expect(summary.intervalCleared).to.equal(true);",
+                  "    pm.expect(summary.intervalCountAtLeastTwo).to.equal(true);",
+                  "    pm.expect(summary.visualizerSet).to.equal(true);",
+                  "    pm.expect(summary.timerFunctions).to.equal('function,function,function,function');",
+                  "    pm.expect(summary.consoleFunctions).to.equal('function,function,function');",
+                  "  });",
+                  "}, 25);"
+                ],
+                "_lastExecutionId": "a17cbdb9-643b-4545-95d6-04fac8ac4a9b"
+              }
+            }
+          ]
+        },
+        "request": {
+          "url": {
+            "protocol": "http",
+            "port": "42371",
+            "path": [
+              "json"
+            ],
+            "host": [
+              "127",
+              "0",
+              "0",
+              "1"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.39.1",
+              "system": true
+            },
+            {
+              "key": "Accept",
+              "value": "*/*",
+              "system": true
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache",
+              "system": true
+            },
+            {
+              "key": "Postman-Token",
+              "value": "58acbad1-155e-401b-8bbe-48372eaaf32b",
+              "system": true
+            },
+            {
+              "key": "Host",
+              "value": "127.0.0.1:42371",
+              "system": true
+            },
+            {
+              "key": "Accept-Encoding",
+              "value": "gzip, deflate, br",
+              "system": true
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive",
+              "system": true
+            }
+          ],
+          "method": "GET"
+        },
+        "response": {
+          "id": "066b4749-cd57-4ae3-87ff-11377ec3ed55",
+          "status": "OK",
+          "code": 200,
+          "header": [
+            {
+              "key": "content-length",
+              "value": "282"
+            },
+            {
+              "key": "content-type",
+              "value": "application/json"
+            },
+            {
+              "key": "Date",
+              "value": "Tue, 28 Apr 2026 15:24:37 GMT"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Keep-Alive",
+              "value": "timeout=5"
+            }
+          ],
+          "stream": {
+            "type": "Buffer",
+            "data": [
+              123,
+              34,
+              104,
+              101,
+              97,
+              100,
+              101,
+              114,
+              115,
+              34,
+              58,
+              123,
+              34,
+              117,
+              115,
+              101,
+              114,
+              45,
+              97,
+              103,
+              101,
+              110,
+              116,
+              34,
+              58,
+              34,
+              80,
+              111,
+              115,
+              116,
+              109,
+              97,
+              110,
+              82,
+              117,
+              110,
+              116,
+              105,
+              109,
+              101,
+              47,
+              55,
+              46,
+              51,
+              57,
+              46,
+              49,
+              34,
+              44,
+              34,
+              97,
+              99,
+              99,
+              101,
+              112,
+              116,
+              34,
+              58,
+              34,
+              42,
+              47,
+              42,
+              34,
+              44,
+              34,
+              99,
+              97,
+              99,
+              104,
+              101,
+              45,
+              99,
+              111,
+              110,
+              116,
+              114,
+              111,
+              108,
+              34,
+              58,
+              34,
+              110,
+              111,
+              45,
+              99,
+              97,
+              99,
+              104,
+              101,
+              34,
+              44,
+              34,
+              112,
+              111,
+              115,
+              116,
+              109,
+              97,
+              110,
+              45,
+              116,
+              111,
+              107,
+              101,
+              110,
+              34,
+              58,
+              34,
+              53,
+              56,
+              97,
+              99,
+              98,
+              97,
+              100,
+              49,
+              45,
+              49,
+              53,
+              53,
+              101,
+              45,
+              52,
+              48,
+              49,
+              98,
+              45,
+              56,
+              98,
+              98,
+              101,
+              45,
+              52,
+              56,
+              51,
+              55,
+              50,
+              101,
+              97,
+              97,
+              102,
+              51,
+              50,
+              98,
+              34,
+              44,
+              34,
+              104,
+              111,
+              115,
+              116,
+              34,
+              58,
+              34,
+              49,
+              50,
+              55,
+              46,
+              48,
+              46,
+              48,
+              46,
+              49,
+              58,
+              52,
+              50,
+              51,
+              55,
+              49,
+              34,
+              44,
+              34,
+              97,
+              99,
+              99,
+              101,
+              112,
+              116,
+              45,
+              101,
+              110,
+              99,
+              111,
+              100,
+              105,
+              110,
+              103,
+              34,
+              58,
+              34,
+              103,
+              122,
+              105,
+              112,
+              44,
+              32,
+              100,
+              101,
+              102,
+              108,
+              97,
+              116,
+              101,
+              44,
+              32,
+              98,
+              114,
+              34,
+              44,
+              34,
+              99,
+              111,
+              110,
+              110,
+              101,
+              99,
+              116,
+              105,
+              111,
+              110,
+              34,
+              58,
+              34,
+              107,
+              101,
+              101,
+              112,
+              45,
+              97,
+              108,
+              105,
+              118,
+              101,
+              34,
+              125,
+              44,
+              34,
+              111,
+              107,
+              34,
+              58,
+              116,
+              114,
+              117,
+              101,
+              44,
+              34,
+              112,
+              97,
+              116,
+              104,
+              34,
+              58,
+              34,
+              47,
+              106,
+              115,
+              111,
+              110,
+              34,
+              44,
+              34,
+              113,
+              117,
+              101,
+              114,
+              121,
+              34,
+              58,
+              123,
+              125,
+              44,
+              34,
+              120,
+              80,
+              114,
+              101,
+              34,
+              58,
+              34,
+              34,
+              125
+            ]
+          },
+          "cookie": [],
+          "responseTime": 11,
+          "responseSize": 282
+        },
+        "id": "da2809f1-ac28-43f2-b7aa-348a86827442",
+        "assertions": [
+          {
+            "assertion": "runtime timers, console, and visualizer work below policy limits",
+            "skipped": false
+          }
+        ]
+      }
+    ],
+    "transfers": {
+      "responseTotal": 282
+    },
+    "failures": [],
+    "error": null
+  }
+}

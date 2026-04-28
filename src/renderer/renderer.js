@@ -39,6 +39,7 @@ let activeModalId = RENDERER_STATE_DEFAULTS.activeModalId;
 let activeModalResolver = RENDERER_STATE_DEFAULTS.activeModalResolver;
 let selectedDraftSaveCollectionId = RENDERER_STATE_DEFAULTS.selectedDraftSaveCollectionId;
 let selectedExportCollectionId = RENDERER_STATE_DEFAULTS.selectedExportCollectionId;
+let activeVaultPromptPayload = null;
 let sessionSaveTimer = null;
 let sessionPersistenceEnabled = false;
 
@@ -256,6 +257,11 @@ initializeRenderer({
         $('runnerResults').textContent = `Running collection...\nCompleted ${progress.completedRequests} of ${progress.totalRequests} requests.\nLast: ${progress.requestName} ${progress.passed ? 'passed' : 'failed'}`;
       }
     }));
+    if (window.postmeter.vault?.onPrompt) {
+      registerCleanup(window.postmeter.vault.onPrompt((payload) => {
+        void handleVaultPrompt(payload);
+      }));
+    }
 
     const loaded = await window.postmeter.workspace.load();
     applyLoadedWorkspace(loaded, { focus: 'request', render: false });
@@ -359,6 +365,7 @@ function bindUi() {
     onSelectSidebarPanel: selectSidebarPanel,
     onCancelActiveModal: cancelActiveModal,
     onResolveActiveModal: resolveActiveModal,
+    onResolveVaultPrompt: resolveVaultPrompt,
     getSelectedDraftSaveCollectionId: () => selectedDraftSaveCollectionId,
     getSelectedExportCollectionId: () => selectedExportCollectionId,
     onCloseContextMenu: closeContextMenu,
@@ -824,6 +831,8 @@ function showModal(modalId, cancelValue) {
       $('cancelCloseRequestButton').focus();
     } else if (modalId === 'exportCollectionModal') {
       $('cancelExportCollectionButton').focus();
+    } else if (modalId === 'vaultPromptModal') {
+      $('denyVaultPromptButton').focus();
     } else {
       $('cancelSaveDraftButton').focus();
     }
@@ -846,6 +855,39 @@ function cancelActiveModal() {
     return;
   }
   resolveActiveModal(state.activeModalId === 'unsavedRequestModal' ? 'cancel' : null);
+}
+
+async function handleVaultPrompt(payload = {}) {
+  activeVaultPromptPayload = payload;
+  renderVaultPrompt(payload);
+  const decision = normalizeVaultPromptDecision(await showModal('vaultPromptModal', { granted: false, scope: 'request' }));
+  activeVaultPromptPayload = null;
+  if (window.postmeter.vault?.resolvePrompt) {
+    await window.postmeter.vault.resolvePrompt(payload.promptId, decision);
+  }
+}
+
+function renderVaultPrompt(payload = {}) {
+  $('vaultPromptRequestName').textContent = payload.requestName || payload.requestId || 'Current request';
+  $('vaultPromptSecretKey').textContent = payload.key || '(empty key)';
+  $('vaultPromptOperation').textContent = payload.operation || 'access';
+  $('allowVaultPromptCollectionButton').disabled = !payload.collectionId;
+  $('vaultPromptMessage').textContent = `A script is asking to ${payload.operation || 'access'} a local vault secret.`;
+}
+
+function resolveVaultPrompt(decision) {
+  if (!activeVaultPromptPayload) {
+    return;
+  }
+  resolveActiveModal(normalizeVaultPromptDecision(decision));
+}
+
+function normalizeVaultPromptDecision(decision = {}) {
+  return {
+    granted: decision?.granted === true,
+    reset: decision?.reset === true,
+    scope: decision?.scope === 'collection' || decision?.scope === 'workspace' ? decision.scope : 'request'
+  };
 }
 
 function resetRequestTabs(options = {}) {

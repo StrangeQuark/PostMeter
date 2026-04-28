@@ -17,6 +17,7 @@ class VaultUnavailableError extends Error {
 class MemoryVaultStore {
   constructor(initialSecrets = {}) {
     this.secrets = new Map();
+    this.auditEntries = [];
     for (const [key, value] of Object.entries(initialSecrets || {})) {
       this.secrets.set(normalizeVaultKey(key), normalizeVaultSecretValue(value));
     }
@@ -41,12 +42,18 @@ class MemoryVaultStore {
     this.secrets.delete(normalizeVaultKey(key));
   }
 
+  async audit(operation, key, metadata = {}) {
+    const document = { audit: this.auditEntries };
+    appendAuditEntry(document, operation, normalizeVaultKey(key), metadata);
+    this.auditEntries = document.audit.slice(-MAX_VAULT_AUDIT_ENTRIES);
+  }
+
   async listMetadata() {
     return [...this.secrets.keys()].sort().map((key) => ({ key }));
   }
 
   async listAudit() {
-    return [];
+    return this.auditEntries.map((entry) => ({ ...entry }));
   }
 }
 
@@ -100,6 +107,15 @@ class EncryptedVaultStore {
     await this.mutate(async (document) => {
       delete document.secrets[normalizedKey];
       appendAuditEntry(document, 'unset', normalizedKey, metadata);
+      return document;
+    });
+  }
+
+  async audit(operation, key, metadata = {}) {
+    this.assertAvailable();
+    const normalizedKey = normalizeVaultKey(key);
+    await this.mutate(async (document) => {
+      appendAuditEntry(document, operation, normalizedKey, metadata);
       return document;
     });
   }

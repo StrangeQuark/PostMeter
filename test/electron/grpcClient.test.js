@@ -2,9 +2,14 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
+const { spawn } = require('node:child_process');
 const test = require('node:test');
 const grpc = require('@grpc/grpc-js');
 const protoLoader = require('@grpc/proto-loader');
+const {
+  extractPfxForGrpc,
+  invokeGrpcRequest
+} = require('../../src/core/grpcClient');
 const {
   createScriptedRequestState,
   runScriptedRequestLifecycle
@@ -158,7 +163,141 @@ test('uses trusted proto path interpolation from before Before invoke runs', asy
   assert.equal(result.response.messages[0].data.name, 'Ada');
 });
 
-async function startGrpcFixture(t) {
+test('extracts gRPC PFX/P12 client certificate material parent-side', async (t) => {
+  const certDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-grpc-pfx-test-'));
+  t.after(async () => {
+    await fs.rm(certDir, { recursive: true, force: true });
+  });
+  const keyPath = path.join(certDir, 'client.key');
+  const certPath = path.join(certDir, 'client.crt');
+  const pfxPath = path.join(certDir, 'client.p12');
+  await runOpenSsl([
+    'req',
+    '-x509',
+    '-newkey',
+    'rsa:2048',
+    '-keyout',
+    keyPath,
+    '-out',
+    certPath,
+    '-days',
+    '1',
+    '-nodes',
+    '-subj',
+    '/CN=postmeter-grpc-client'
+  ]);
+  await runOpenSsl([
+    'pkcs12',
+    '-export',
+    '-inkey',
+    keyPath,
+    '-in',
+    certPath,
+    '-out',
+    pfxPath,
+    '-passout',
+    'pass:correct-pass'
+  ]);
+
+  const extracted = await extractPfxForGrpc(pfxPath, 'correct-pass');
+  assert.match(extracted.privateKey.toString('utf8'), /BEGIN (RSA )?PRIVATE KEY/);
+  assert.match(extracted.certChain.toString('utf8'), /BEGIN CERTIFICATE/);
+  await assert.rejects(
+    () => extractPfxForGrpc(pfxPath, 'wrong-pass'),
+    /PFX\/P12 bundle could not be extracted/
+  );
+});
+
+test('uses PEM and PFX/P12 client certificates for live gRPC mTLS without script-time certificate mutation', async (t) => {
+  const certs = await createMtlsCertificates(t);
+  const fixture = await startGrpcFixture(t, {
+    caPath: certs.caPath,
+    serverCertPath: certs.serverCertPath,
+    serverKeyPath: certs.serverKeyPath
+  });
+  const baseRequest = grpcRequest(fixture.port, 'GetUser', 'unary');
+  baseRequest.url = `grpcs://127.0.0.1:${fixture.port}`;
+  baseRequest.messages = [{ name: 'direct', data: { id: 'user-42', name: 'Ada' } }];
+  baseRequest.auth = {
+    type: 'clientCertificate',
+    caPath: certs.caPath,
+    certPath: certs.clientCertPath,
+    keyPath: certs.clientKeyPath
+  };
+
+  const pemResult = await invokeGrpcRequest(baseRequest, grpcEnvironment());
+  assert.equal(pemResult.response.code, 0);
+  assert.equal(pemResult.response.messages[0].data.name, 'Ada');
+
+  const pfxRequest = {
+    ...baseRequest,
+    auth: {
+      type: 'clientCertificate',
+      caPath: certs.caPath,
+      pfxPath: certs.clientPfxPath,
+      passphrase: 'correct-pass'
+    }
+  };
+  const pfxResult = await invokeGrpcRequest(pfxRequest, grpcEnvironment());
+  assert.equal(pfxResult.response.code, 0);
+  assert.equal(pfxResult.response.messages[0].data.name, 'Ada');
+
+  const caMismatchResult = await invokeGrpcRequest({
+    ...pfxRequest,
+    auth: { ...pfxRequest.auth, caPath: certs.clientCertPath }
+  }, grpcEnvironment());
+  assert.notEqual(caMismatchResult.response.code, 0);
+
+  await assert.rejects(
+    () => invokeGrpcRequest({
+      ...pfxRequest,
+      auth: { ...pfxRequest.auth, passphrase: 'wrong-pass' }
+    }, grpcEnvironment()),
+    /PFX\/P12 bundle could not be extracted/
+  );
+  await assert.rejects(
+    () => invokeGrpcRequest({
+      ...pfxRequest,
+      auth: { ...pfxRequest.auth, pfxPath: path.join(path.dirname(certs.clientPfxPath), 'missing.p12') }
+    }, grpcEnvironment()),
+    /Unable to read gRPC PFX\/P12 bundle/
+  );
+  const malformedPath = path.join(path.dirname(certs.clientPfxPath), 'malformed.p12');
+  await fs.writeFile(malformedPath, 'not-a-p12');
+  await assert.rejects(
+    () => invokeGrpcRequest({
+      ...pfxRequest,
+      auth: { ...pfxRequest.auth, pfxPath: malformedPath }
+    }, grpcEnvironment()),
+    /PFX\/P12 bundle could not be extracted/
+  );
+
+  const lifecycleRequest = {
+    ...pfxRequest,
+    scripts: {
+      beforeInvoke: `
+        pm.request.auth.update({ type: 'clientCertificate', pfxPath: '${jsString(malformedPath)}', passphrase: 'wrong-pass' });
+        pm.request.metadata.upsert({ key: 'authorization', value: 'Bearer ' + pm.variables.get('token') });
+        pm.request.messages.add({ name: 'scripted', data: { id: pm.variables.get('userId'), name: pm.variables.get('userName') } });
+      `,
+      afterResponse: `
+        pm.test('snapshot certificate settings are used', function () {
+          pm.expect(pm.response.code).to.equal(0);
+          pm.expect(pm.response.messages.idx(0).data.name).to.equal('Ada');
+        });
+      `
+    }
+  };
+  const lifecycleResult = await runScriptedRequestLifecycle(
+    createScriptedRequestState(lifecycleRequest, grpcEnvironment()),
+    {}
+  );
+  assert.equal(lifecycleResult.requestSent, true);
+  assert.equal(lifecycleResult.response.code, 0);
+  assert.equal(lifecycleResult.afterResponseScriptResult.passed, true);
+});
+
+async function startGrpcFixture(t, options = {}) {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-grpc-fixture-'));
   const protoPath = path.join(tmpDir, 'fixture.proto');
   await fs.writeFile(protoPath, TEST_PROTO, 'utf8');
@@ -224,7 +363,7 @@ async function startGrpcFixture(t) {
       call.end();
     }
   });
-  const port = await bindGrpcServer(server);
+  const port = await bindGrpcServer(server, options);
   t.after(async () => {
     await new Promise((resolve) => {
       server.tryShutdown(() => resolve());
@@ -234,9 +373,19 @@ async function startGrpcFixture(t) {
   return { observed, port };
 }
 
-function bindGrpcServer(server) {
+function bindGrpcServer(server, options = {}) {
   return new Promise((resolve, reject) => {
-    server.bindAsync('127.0.0.1:0', grpc.ServerCredentials.createInsecure(), (error, port) => {
+    const credentials = options.caPath
+      ? grpc.ServerCredentials.createSsl(
+          fsSyncRead(options.caPath),
+          [{
+            cert_chain: fsSyncRead(options.serverCertPath),
+            private_key: fsSyncRead(options.serverKeyPath)
+          }],
+          true
+        )
+      : grpc.ServerCredentials.createInsecure();
+    server.bindAsync('127.0.0.1:0', credentials, (error, port) => {
       if (error) {
         reject(error);
         return;
@@ -244,6 +393,46 @@ function bindGrpcServer(server) {
       resolve(port);
     });
   });
+}
+
+async function createMtlsCertificates(t) {
+  const certDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-grpc-mtls-'));
+  t.after(async () => {
+    await fs.rm(certDir, { recursive: true, force: true });
+  });
+  const caKeyPath = path.join(certDir, 'ca.key');
+  const caPath = path.join(certDir, 'ca.crt');
+  const serverKeyPath = path.join(certDir, 'server.key');
+  const serverCsrPath = path.join(certDir, 'server.csr');
+  const serverCertPath = path.join(certDir, 'server.crt');
+  const clientKeyPath = path.join(certDir, 'client.key');
+  const clientCsrPath = path.join(certDir, 'client.csr');
+  const clientCertPath = path.join(certDir, 'client.crt');
+  const clientPfxPath = path.join(certDir, 'client.p12');
+  const serverExtPath = path.join(certDir, 'server.ext');
+  await fs.writeFile(serverExtPath, [
+    'subjectAltName = IP:127.0.0.1,DNS:localhost',
+    'extendedKeyUsage = serverAuth'
+  ].join('\n'));
+  await runOpenSsl(['genrsa', '-out', caKeyPath, '2048']);
+  await runOpenSsl(['req', '-x509', '-new', '-nodes', '-key', caKeyPath, '-sha256', '-days', '1', '-out', caPath, '-subj', '/CN=PostMeter Test CA']);
+  await runOpenSsl(['req', '-newkey', 'rsa:2048', '-nodes', '-keyout', serverKeyPath, '-out', serverCsrPath, '-subj', '/CN=127.0.0.1']);
+  await runOpenSsl(['x509', '-req', '-in', serverCsrPath, '-CA', caPath, '-CAkey', caKeyPath, '-CAcreateserial', '-out', serverCertPath, '-days', '1', '-sha256', '-extfile', serverExtPath]);
+  await runOpenSsl(['req', '-newkey', 'rsa:2048', '-nodes', '-keyout', clientKeyPath, '-out', clientCsrPath, '-subj', '/CN=postmeter-grpc-client']);
+  await runOpenSsl(['x509', '-req', '-in', clientCsrPath, '-CA', caPath, '-CAkey', caKeyPath, '-CAcreateserial', '-out', clientCertPath, '-days', '1', '-sha256']);
+  await runOpenSsl(['pkcs12', '-export', '-inkey', clientKeyPath, '-in', clientCertPath, '-certfile', caPath, '-out', clientPfxPath, '-passout', 'pass:correct-pass']);
+  return {
+    caPath,
+    clientCertPath,
+    clientKeyPath,
+    clientPfxPath,
+    serverCertPath,
+    serverKeyPath
+  };
+}
+
+function fsSyncRead(filePath) {
+  return require('node:fs').readFileSync(filePath);
 }
 
 function grpcRequest(port, method, methodType, messages = [], scriptOverrides = {}) {
@@ -303,4 +492,20 @@ function grpcEnvironment(extraVariables = []) {
 
 function jsString(value) {
   return String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+function runOpenSsl(args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('openssl', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    let stderr = '';
+    child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+    child.on('error', reject);
+    child.on('exit', (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(`openssl exited with ${code}: ${stderr.trim()}`));
+    });
+  });
 }

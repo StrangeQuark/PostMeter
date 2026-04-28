@@ -525,6 +525,51 @@ test('supports scoped pm.vault grants for collections and requests', async () =>
   assert.match(deniedOverride.result.tests[0].error, /pm\.vault is disabled/);
 });
 
+test('supports per-request pm.vault prompt grants without exposing vault handles', async () => {
+  const vault = new MemoryVaultStore({ existing: 'secret' });
+  const prompts = [];
+  const prompted = await runPostmanScriptIsolated(`
+    pm.test('prompted vault access', async function () {
+      pm.expect(await pm.vault.get('existing')).to.equal('secret');
+      pm.expect(await pm.vault.get('existing')).to.equal('secret');
+    });
+  `, {
+    collectionId: 'collection-prompt',
+    request: { id: 'request-prompt', name: 'Prompted Request' }
+  }, {
+    trustedCapabilities: { vault: false, vaultGrants: {} },
+    vault,
+    vaultPrompt: async (payload) => {
+      prompts.push(payload);
+      return { granted: true, scope: 'request' };
+    },
+    timeoutMillis: 500,
+    workerTimeoutMillis: 1000
+  });
+
+  assert.equal(prompted.result.passed, true);
+  assert.equal(prompts.length, 1);
+  assert.equal(prompts[0].key, 'existing');
+  assert.equal(prompts[0].operation, 'get');
+  assert.equal(prompts[0].requestId, 'request-prompt');
+
+  const denied = await runPostmanScriptIsolated(`
+    pm.test('denied prompt', async function () {
+      await pm.vault.get('existing');
+    });
+  `, {
+    request: { id: 'request-denied', name: 'Denied Request' }
+  }, {
+    trustedCapabilities: { vault: false, vaultGrants: {} },
+    vault,
+    vaultPrompt: async () => ({ granted: false, scope: 'request' }),
+    timeoutMillis: 500,
+    workerTimeoutMillis: 1000
+  });
+  assert.equal(denied.result.passed, false);
+  assert.match(denied.result.tests[0].error, /pm\.vault access was denied/);
+});
+
 test('bounds pm.vault broker calls and values', async () => {
   const vault = new MemoryVaultStore();
   const bounded = await runPostmanScriptIsolated(`

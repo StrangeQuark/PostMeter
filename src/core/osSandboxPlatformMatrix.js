@@ -6,7 +6,6 @@ const RELEASE_GATE_CLAIM = 'release-gate';
 const STATUS_DESCRIPTIONS = Object.freeze({
   implemented: 'Implemented and covered by automated validation or source-owned contract checks.',
   'blocked-native-backend': 'Blocked until a native OS sandbox backend and packaged validation exist for this platform.',
-  'deferred-decision': 'Security/product decision is intentionally deferred and blocks the stronger public claim.',
   'out-of-scope': 'Explicitly outside the current claim surface.',
   'validation-hook': 'Validation plumbing exists and must stay release-gated.'
 });
@@ -83,19 +82,21 @@ function buildOsSandboxPlatformMatrix() {
     }),
     row('linux.seccomp-dangerous-syscall-policy', 'linux', 'syscall-policy', 'Linux bubblewrap launches install a seccomp cBPF deny policy for high-risk kernel APIs such as bpf, ptrace, keyring, mount, process_vm_*, perf_event_open, io_uring, and nested namespace syscalls.', 'implemented', {
       claimBlocking: true,
-      securityDecision: 'Keep the dangerous-syscall deny policy in the Linux release gate while the stronger deny-by-default decision is tracked separately.',
+      securityDecision: 'Keep the dangerous-syscall deny policy in the Linux release gate as the accepted current Linux syscall-policy standard.',
       sourceRefs: ['sandboxContract', 'seccompPolicy', 'runtimeValidation'],
       verificationRefs: [
         'npm run sandbox:validate',
         'test/electron/scriptSandbox.test.js'
       ]
     }),
-    row('linux.seccomp-deny-default-allowlist-decision', 'linux', 'syscall-policy', 'Decide whether platform-equivalent "full syscall-policy sandbox" requires a maintained deny-by-default seccomp-BPF allowlist instead of the current dangerous-syscall deny policy.', 'deferred-decision', {
-      claimBlocking: true,
-      securityDecision: 'Do not claim platform-equivalent full OS sandbox coverage until this Linux syscall-policy standard is decided and implemented if required.',
+    row('linux.seccomp-deny-default-allowlist-decision', 'linux', 'syscall-policy', 'Maintainer decision: platform-equivalent current Linux coverage does not require a maintained deny-by-default seccomp-BPF allowlist beyond the current bubblewrap namespace isolation plus dangerous-syscall deny policy.', 'implemented', {
+      claimBlocking: false,
+      securityDecision: 'Accept the current Linux bubblewrap plus dangerous-syscall seccomp policy for the current Linux public claim; track a deny-by-default allowlist only as optional future hardening.',
       sourceRefs: ['sandboxContract', 'nextSteps', 'seccompPolicy'],
       verificationRefs: [
-        'NEXT_STEPS.MD Questions For Maintainer After Implementation'
+        'NEXT_STEPS.MD Questions For Maintainer After Implementation',
+        'npm run sandbox:validate',
+        'test/electron/scriptSandbox.test.js'
       ]
     }),
     row('linux.packaged-os-sandbox-validation', 'linux', 'packaged-validation', 'Packaged Linux artifacts must prove the OS sandbox backend, Node permission flags, ASAR/path behavior, and sandbox worker launch still work after packaging.', 'implemented', {
@@ -108,13 +109,14 @@ function buildOsSandboxPlatformMatrix() {
         '.github/workflows/release.yml'
       ]
     }),
-    row('windows.appcontainer-backend', 'windows', 'native-backend', 'Implement a native Windows OS sandbox backend, such as AppContainer or an equivalent restricted-token/job-object launch model, for script workers.', 'blocked-native-backend', {
+    row('windows.appcontainer-backend', 'windows', 'native-backend', 'Windows script workers have a fail-closed native helper contract, but the release-owned AppContainer/restricted-token helper binary is still required before claiming platform-equivalent coverage.', 'blocked-native-backend', {
       claimBlocking: true,
-      securityDecision: 'Fail closed or downgrade the public claim on Windows until a native OS sandbox backend exists; do not silently rely on node:vm alone.',
+      securityDecision: 'Fail closed or downgrade the public claim on Windows until the configured helper is packaged and validates AppContainer or equivalent restricted-token/job-object behavior; do not silently rely on node:vm alone.',
       sourceRefs: ['sandboxContract', 'nextSteps', 'osSandbox'],
       verificationRefs: [
+        'POSTMETER_WINDOWS_OS_SANDBOX_HELPER launcher contract in src/core/osSandbox.js',
         'future Windows native backend tests',
-        'future npm run sandbox:validate on windows-latest'
+        'future npm run sandbox:validate on windows-latest with helper artifact'
       ]
     }),
     row('windows.packaged-os-sandbox-validation', 'windows', 'packaged-validation', 'Packaged Windows artifacts must validate the native OS sandbox backend, Node permission flags, packaged path behavior, and script-worker launch behavior on a Windows runner.', 'blocked-native-backend', {
@@ -126,13 +128,14 @@ function buildOsSandboxPlatformMatrix() {
         '.github/workflows/release.yml'
       ]
     }),
-    row('macos.seatbelt-backend', 'macos', 'native-backend', 'Implement a native macOS OS sandbox backend, such as seatbelt/sandbox-exec replacement strategy or an equivalent hardened helper, for script workers.', 'blocked-native-backend', {
+    row('macos.seatbelt-backend', 'macos', 'native-backend', 'macOS script workers select a seatbelt-style sandbox-exec launcher when present, but native-runner source and packaged probes must prove the profile before claiming platform-equivalent coverage.', 'blocked-native-backend', {
       claimBlocking: true,
-      securityDecision: 'Fail closed or downgrade the public claim on macOS until a native OS sandbox backend exists; do not silently rely on node:vm alone.',
+      securityDecision: 'Fail closed or downgrade the public claim on macOS until seatbelt behavior is validated on macos-latest packaged artifacts; do not silently rely on node:vm alone.',
       sourceRefs: ['sandboxContract', 'nextSteps', 'osSandbox'],
       verificationRefs: [
+        'macos-seatbelt launcher path in src/core/osSandbox.js',
         'future macOS native backend tests',
-        'future npm run sandbox:validate on macos-latest'
+        'future npm run sandbox:validate on macos-latest with packaged probes'
       ]
     }),
     row('macos.packaged-os-sandbox-validation', 'macos', 'packaged-validation', 'Packaged macOS artifacts must validate the native OS sandbox backend, Node permission flags, app bundle/ASAR path behavior, and script-worker launch behavior on a macOS runner.', 'blocked-native-backend', {

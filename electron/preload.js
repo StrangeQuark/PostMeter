@@ -80,6 +80,12 @@ contextBridge.exposeInMainWorld('postmeter', {
   vault: {
     bindSecret: (key, value) => ipcRenderer.invoke('vault:bind-secret', key, value),
     metadata: () => ipcRenderer.invoke('vault:metadata'),
+    onPrompt: (callback) => {
+      const listener = (_event, payload) => callback(safeVaultPromptPayload(payload));
+      ipcRenderer.on('vault:prompt', listener);
+      return () => ipcRenderer.removeListener('vault:prompt', listener);
+    },
+    resolvePrompt: (promptId, decision) => ipcRenderer.invoke('vault:prompt-response', String(promptId || '').slice(0, 128), safeVaultPromptDecision(decision)),
     reset: () => ipcRenderer.invoke('vault:reset'),
     unsetSecret: (key) => ipcRenderer.invoke('vault:unset-secret', key)
   },
@@ -107,3 +113,26 @@ contextBridge.exposeInMainWorld('postmeter', {
     }
   }
 });
+
+function safeVaultPromptPayload(payload = {}) {
+  return {
+    collectionId: stringField(payload.collectionId, 256),
+    key: stringField(payload.key, 256),
+    operation: stringField(payload.operation, 64),
+    promptId: stringField(payload.promptId, 128),
+    requestId: stringField(payload.requestId, 256),
+    requestName: stringField(payload.requestName, 256)
+  };
+}
+
+function safeVaultPromptDecision(decision = {}) {
+  return {
+    granted: decision?.granted === true,
+    reset: decision?.reset === true,
+    scope: decision?.scope === 'collection' || decision?.scope === 'workspace' ? decision.scope : 'request'
+  };
+}
+
+function stringField(value, maxLength) {
+  return String(value == null ? '' : value).slice(0, maxLength);
+}
