@@ -4,6 +4,7 @@ out/
 release/
 dist-electron/
 artifacts/
+gha-logs/
 npm-debug.log*
 
 ### IntelliJ IDEA ###
@@ -31,6 +32,8 @@ npm-debug.log*
 /nbdist/
 /.nb-gradle/
 build/
+!build/
+!build/icon.png
 
 ### VS Code ###
 .vscode/

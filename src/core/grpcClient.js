@@ -1,7 +1,6 @@
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { spawn } = require('node:child_process');
 const { performance } = require('node:perf_hooks');
 const grpc = require('@grpc/grpc-js');
 const protoLoader = require('@grpc/proto-loader');
@@ -11,13 +10,16 @@ const {
 const {
   resolveEnvironmentValue
 } = require('./environmentResolver');
+const {
+  DEFAULT_MAX_PFX_BYTES,
+  extractPfxToPem
+} = require('./pfxCertificate');
 
 const DEFAULT_GRPC_TIMEOUT_MILLIS = 3 * 60 * 1000;
 const MAX_GRPC_METADATA_PAIRS = 1000;
 const MAX_GRPC_MESSAGES = 1000;
 const MAX_GRPC_MESSAGE_BYTES = 512 * 1024;
 const MAX_GRPC_PROTO_BYTES = 2 * 1024 * 1024;
-const MAX_GRPC_PFX_BYTES = 2 * 1024 * 1024;
 const GRPC_STATUS_NAMES = Object.freeze({
   0: 'OK',
   1: 'CANCELLED',
@@ -397,98 +399,12 @@ async function readBoundedFile(filePath, label) {
 }
 
 async function extractPfxForGrpc(filePath, passphrase = '') {
-  const resolved = path.resolve(filePath);
-  const stat = await fs.stat(resolved).catch((error) => {
-    throw new Error(`Unable to read gRPC PFX/P12 bundle: ${error?.code || error?.message || 'unknown error'}.`);
+  return extractPfxToPem(filePath, passphrase, {
+    bundleLabel: 'gRPC PFX/P12 bundle',
+    envPassphraseName: 'POSTMETER_GRPC_PFX_PASSPHRASE',
+    maxBytes: DEFAULT_MAX_PFX_BYTES,
+    tempPrefix: 'postmeter-grpc-pfx-'
   });
-  if (!stat.isFile()) {
-    throw new Error('gRPC PFX/P12 bundle must be a regular file.');
-  }
-  if (stat.size > MAX_GRPC_PFX_BYTES) {
-    throw new Error(`gRPC PFX/P12 bundle cannot exceed ${MAX_GRPC_PFX_BYTES} bytes.`);
-  }
-  const pem = await runOpenSslPkcs12(resolved, passphrase, false)
-    .catch(async (error) => {
-      if (/unsupported|legacy|invalid password|mac verify failure|bad decrypt/i.test(error.message || '')) {
-        return runOpenSslPkcs12(resolved, passphrase, true);
-      }
-      throw error;
-    });
-  const privateKey = firstPemBlock(pem, ['PRIVATE KEY', 'RSA PRIVATE KEY', 'EC PRIVATE KEY']);
-  const certificates = pemBlocks(pem, 'CERTIFICATE');
-  if (!privateKey) {
-    throw new Error('gRPC PFX/P12 bundle did not contain a private key.');
-  }
-  if (!certificates.length) {
-    throw new Error('gRPC PFX/P12 bundle did not contain a certificate chain.');
-  }
-  return {
-    certChain: Buffer.from(certificates.join('\n'), 'utf8'),
-    privateKey: Buffer.from(privateKey, 'utf8')
-  };
-}
-
-async function runOpenSslPkcs12(pfxPath, passphrase, legacy) {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-grpc-pfx-'));
-  const outputPath = path.join(tempDir, 'bundle.pem');
-  try {
-    const args = [
-      'pkcs12',
-      '-in',
-      pfxPath,
-      '-nodes',
-      '-passin',
-      'env:POSTMETER_GRPC_PFX_PASSPHRASE',
-      '-out',
-      outputPath
-    ];
-    if (legacy) {
-      args.splice(1, 0, '-legacy');
-    }
-    await runCommand('openssl', args, {
-      POSTMETER_GRPC_PFX_PASSPHRASE: passphrase || ''
-    });
-    return fs.readFile(outputPath, 'utf8');
-  } catch (error) {
-    throw new Error(`gRPC PFX/P12 bundle could not be extracted: ${error.message || String(error)}`);
-  } finally {
-    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
-  }
-}
-
-function runCommand(command, args, extraEnv = {}) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      env: { ...process.env, ...extraEnv },
-      stdio: ['ignore', 'ignore', 'pipe']
-    });
-    let stderr = '';
-    child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
-    child.on('error', reject);
-    child.on('exit', (code) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-      reject(new Error(`${command} exited with ${code}: ${stderr.trim()}`));
-    });
-  });
-}
-
-function firstPemBlock(text, labels) {
-  for (const label of labels) {
-    const block = pemBlocks(text, label)[0];
-    if (block) {
-      return block;
-    }
-  }
-  return '';
-}
-
-function pemBlocks(text, label) {
-  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const pattern = new RegExp(`-----BEGIN ${escaped}-----[\\s\\S]*?-----END ${escaped}-----`, 'g');
-  return String(text || '').match(pattern) || [];
 }
 
 function grpcMetadataForRequest(request, grpcConfig, environment) {

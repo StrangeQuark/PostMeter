@@ -12,7 +12,8 @@ if (!testFiles.length) {
   process.exit(1);
 }
 
-const result = spawnSync(process.execPath, ['--test', ...testFiles], {
+const testConcurrency = process.env.POSTMETER_TEST_CONCURRENCY || '1';
+const result = spawnSync(process.execPath, ['--test', `--test-concurrency=${testConcurrency}`, ...testFiles], {
   stdio: 'inherit'
 });
 
