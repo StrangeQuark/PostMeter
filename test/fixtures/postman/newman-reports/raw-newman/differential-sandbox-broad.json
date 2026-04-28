@@ -1,0 +1,2076 @@
+{
+  "collection": {
+    "_": {
+      "postman_id": "00000000-0000-4000-8000-000000000202"
+    },
+    "item": [
+      {
+        "id": "9fde6a85-ab00-4c65-8b7c-b4154a2121e9",
+        "name": "Broad Runtime Surface",
+        "request": {
+          "url": {
+            "path": [
+              "json"
+            ],
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "method": "GET"
+        },
+        "response": [],
+        "event": [
+          {
+            "listen": "prerequest",
+            "script": {
+              "id": "44e348be-0189-4bdb-9873-192f01a7d19d",
+              "type": "text/javascript",
+              "exec": [
+                "var _ = require('lodash');",
+                "var path = require('path');",
+                "var assert = require('assert');",
+                "pm.variables.set('requestLocal', 'broad-local');",
+                "pm.environment.set('envBroad', 'env-broad');",
+                "pm.collectionVariables.set('collectionBroad', 'yes');",
+                "pm.request.headers.upsert({ key: 'X-Pre', value: 'broad-pre' });",
+                "pm.request.headers.upsert({ key: 'X-Package-Smoke', value: _.map([1, 2, 3], function (value) { return value + 1; }).join('-') });",
+                "pm.request.headers.upsert({ key: 'X-Path-Smoke', value: path.join('a', 'b') });",
+                "assert.equal(pm.variables.get('requestLocal'), 'broad-local');"
+              ],
+              "_lastExecutionId": "dcc2bdee-499c-4873-bb3d-7fcc12f64cd7"
+            }
+          },
+          {
+            "listen": "test",
+            "script": {
+              "id": "634f4c3c-dbcd-414f-b621-9ae4702da475",
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('broad response, request mutation, and variables', function () {",
+                "  pm.response.to.have.status(200);",
+                "  var body = pm.response.json();",
+                "  pm.expect(body.path).to.equal('/json');",
+                "  pm.expect(body.xPre).to.equal('broad-pre');",
+                "  pm.expect(body.headers['x-package-smoke']).to.equal('2-3-4');",
+                "  pm.expect(body.headers['x-path-smoke']).to.equal('a/b');",
+                "  pm.expect(pm.environment.get('envBroad')).to.equal('env-broad');",
+                "  pm.expect(pm.collectionVariables.get('collectionBroad')).to.equal('yes');",
+                "});",
+                "pm.test('package and assertion facades', function () {",
+                "  var Ajv = require('ajv');",
+                "  var chai = require('chai');",
+                "  var _ = require('lodash');",
+                "  var ajv = new Ajv();",
+                "  var validate = ajv.compile({ type: 'object', required: ['ok'], properties: { ok: { const: true } } });",
+                "  chai.assert.deepEqual(_.pick({ ok: true, extra: 'drop' }, ['ok']), { ok: true });",
+                "  pm.expect(validate({ ok: true })).to.equal(true);",
+                "  pm.expect(function () { throw new Error('expected failure path'); }).to.throw('expected failure path');",
+                "});",
+                "pm.test('dynamic variables expose documented shapes', function () {",
+                "  var guid = pm.variables.replaceIn('{{$guid}}');",
+                "  var timestamp = pm.variables.replaceIn('{{$timestamp}}');",
+                "  pm.expect(guid).to.match(/^[0-9a-f-]{36}$/i);",
+                "  pm.expect(timestamp).to.match(/^\\d+$/);",
+                "});",
+                "pm.test('timer and microtask callbacks drain', function (done) {",
+                "  var order = [];",
+                "  Promise.resolve().then(function () { order.push('microtask'); });",
+                "  setTimeout(function () {",
+                "    order.push('timer');",
+                "    pm.environment.set('timerBroad', order.join('>'));",
+                "    pm.expect(order).to.deep.equal(['microtask', 'timer']);",
+                "    done();",
+                "  }, 0);",
+                "});",
+                "pm.sendRequest({",
+                "  url: pm.variables.replaceIn('{{baseUrl}}/echo'),",
+                "  method: 'POST',",
+                "  header: { 'Content-Type': 'text/plain', 'X-Aux': 'broad-aux' },",
+                "  body: { mode: 'raw', raw: 'object-body' }",
+                "}, function (error, response) {",
+                "  pm.test('pm.sendRequest object body', function () {",
+                "    pm.expect(error).to.equal(null);",
+                "    pm.expect(response.code).to.equal(200);",
+                "    var body = response.json();",
+                "    pm.expect(body.method).to.equal('POST');",
+                "    pm.expect(body.body).to.equal('object-body');",
+                "    pm.expect(body.headers['x-aux']).to.equal('broad-aux');",
+                "  });",
+                "});"
+              ],
+              "_lastExecutionId": "fdbdcfc8-ff2a-4884-a34a-d09f34c86c42"
+            }
+          }
+        ]
+      },
+      {
+        "id": "a951c41d-13a6-4a6a-ab15-715ee18d4491",
+        "name": "Cookie Seed",
+        "request": {
+          "url": {
+            "path": [
+              "set-cookie"
+            ],
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "method": "GET"
+        },
+        "response": [],
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "id": "45315a51-d12e-4eed-9b05-57f7b444dc22",
+              "type": "text/javascript",
+              "exec": [
+                "pm.cookies.jar().set(pm.variables.replaceIn('{{baseUrl}}'), 'scriptCookie', 'script-value', function (error) {",
+                "  pm.test('cookie jar set callback succeeds', function () {",
+                "    pm.expect(error).to.equal(null);",
+                "  });",
+                "  pm.cookies.jar().get(pm.variables.replaceIn('{{baseUrl}}'), 'scriptCookie', function (getError, value) {",
+                "    pm.test('cookie jar get callback sees scripted cookie', function () {",
+                "      pm.expect(getError).to.equal(null);",
+                "      pm.expect(value).to.equal('script-value');",
+                "    });",
+                "  });",
+                "});"
+              ],
+              "_lastExecutionId": "a26330c6-08a3-43eb-9818-b206d6afff0e"
+            }
+          }
+        ]
+      },
+      {
+        "id": "d3d180b6-cb7e-42f3-b0af-5b7dc5bd5270",
+        "name": "Cookie Echo",
+        "request": {
+          "url": {
+            "path": [
+              "cookie-check"
+            ],
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "method": "GET"
+        },
+        "response": [],
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "id": "6f099da0-737a-4df0-b755-c9c882be7359",
+              "type": "text/javascript",
+              "exec": [
+                "pm.cookies.jar().get(pm.variables.replaceIn('{{baseUrl}}'), 'scriptCookie', function (error, value) {",
+                "  pm.test('cookie jar persists scripted cookies across requests', function () {",
+                "    pm.expect(error).to.equal(null);",
+                "    pm.expect(value).to.equal('script-value');",
+                "  });",
+                "});"
+              ],
+              "_lastExecutionId": "b3027ffb-001d-4527-8502-39bfade68ed0"
+            }
+          }
+        ]
+      },
+      {
+        "id": "128783a4-be7f-4836-bc77-c1e2dc588d6a",
+        "name": "Caught Failure Shape",
+        "request": {
+          "url": {
+            "path": [
+              "status",
+              "418"
+            ],
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "method": "GET"
+        },
+        "response": [],
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "id": "b595d8ab-8b69-4876-a888-740baa7a98fa",
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('caught assertion failure can be inspected without failing the run', function () {",
+                "  var message = '';",
+                "  try {",
+                "    pm.expect(pm.response.code).to.equal(200);",
+                "  } catch (error) {",
+                "    message = error.message || String(error);",
+                "  }",
+                "  pm.expect(message).to.include('200');",
+                "});"
+              ],
+              "_lastExecutionId": "af90dc08-05f7-4009-884a-61a7115d458c"
+            }
+          }
+        ]
+      }
+    ],
+    "event": [],
+    "variable": [
+      {
+        "type": "any",
+        "value": "collection-seed",
+        "key": "collectionSeed"
+      }
+    ],
+    "info": {
+      "_postman_id": "00000000-0000-4000-8000-000000000202",
+      "name": "PostMeter Differential Sandbox Broad",
+      "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    }
+  },
+  "environment": {
+    "id": "28e33160-b029-43a5-aaea-776b854a9130",
+    "values": [
+      {
+        "type": "any",
+        "value": "http://127.0.0.1:42371",
+        "key": "baseUrl"
+      },
+      {
+        "type": "any",
+        "value": "env-broad",
+        "key": "envBroad"
+      },
+      {
+        "type": "any",
+        "value": "microtask>timer",
+        "key": "timerBroad"
+      }
+    ]
+  },
+  "globals": {
+    "id": "e1204036-05ee-429e-8d8d-c27a4f8ee7be",
+    "values": []
+  },
+  "run": {
+    "stats": {
+      "iterations": {
+        "total": 1,
+        "pending": 0,
+        "failed": 0
+      },
+      "items": {
+        "total": 4,
+        "pending": 0,
+        "failed": 0
+      },
+      "scripts": {
+        "total": 5,
+        "pending": 0,
+        "failed": 0
+      },
+      "prerequests": {
+        "total": 4,
+        "pending": 0,
+        "failed": 0
+      },
+      "requests": {
+        "total": 5,
+        "pending": 0,
+        "failed": 0
+      },
+      "tests": {
+        "total": 4,
+        "pending": 0,
+        "failed": 0
+      },
+      "assertions": {
+        "total": 9,
+        "pending": 0,
+        "failed": 0
+      },
+      "testScripts": {
+        "total": 4,
+        "pending": 0,
+        "failed": 0
+      },
+      "prerequestScripts": {
+        "total": 1,
+        "pending": 0,
+        "failed": 0
+      }
+    },
+    "timings": {
+      "responseAverage": 3.4,
+      "responseMin": 1,
+      "responseMax": 11,
+      "responseSd": 3.8781438859330635,
+      "dnsAverage": 0,
+      "dnsMin": 0,
+      "dnsMax": 0,
+      "dnsSd": 0,
+      "firstByteAverage": 0,
+      "firstByteMin": 0,
+      "firstByteMax": 0,
+      "firstByteSd": 0,
+      "started": 1777389875884,
+      "completed": 1777389875978
+    },
+    "executions": [
+      {
+        "cursor": {
+          "position": 0,
+          "iteration": 0,
+          "length": 4,
+          "cycles": 1,
+          "empty": false,
+          "eof": false,
+          "bof": true,
+          "cr": false,
+          "ref": "0659895b-95fd-452b-86b2-17d08692f083",
+          "httpRequestId": "ee27bc41-6d05-4056-bab0-f4a9497aa92f",
+          "scriptId": "634f4c3c-dbcd-414f-b621-9ae4702da475",
+          "execution": "fdbdcfc8-ff2a-4884-a34a-d09f34c86c42"
+        },
+        "item": {
+          "id": "9fde6a85-ab00-4c65-8b7c-b4154a2121e9",
+          "name": "Broad Runtime Surface",
+          "request": {
+            "url": {
+              "path": [
+                "json"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "method": "GET"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "id": "44e348be-0189-4bdb-9873-192f01a7d19d",
+                "type": "text/javascript",
+                "exec": [
+                  "var _ = require('lodash');",
+                  "var path = require('path');",
+                  "var assert = require('assert');",
+                  "pm.variables.set('requestLocal', 'broad-local');",
+                  "pm.environment.set('envBroad', 'env-broad');",
+                  "pm.collectionVariables.set('collectionBroad', 'yes');",
+                  "pm.request.headers.upsert({ key: 'X-Pre', value: 'broad-pre' });",
+                  "pm.request.headers.upsert({ key: 'X-Package-Smoke', value: _.map([1, 2, 3], function (value) { return value + 1; }).join('-') });",
+                  "pm.request.headers.upsert({ key: 'X-Path-Smoke', value: path.join('a', 'b') });",
+                  "assert.equal(pm.variables.get('requestLocal'), 'broad-local');"
+                ],
+                "_lastExecutionId": "dcc2bdee-499c-4873-bb3d-7fcc12f64cd7"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "id": "634f4c3c-dbcd-414f-b621-9ae4702da475",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('broad response, request mutation, and variables', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body.path).to.equal('/json');",
+                  "  pm.expect(body.xPre).to.equal('broad-pre');",
+                  "  pm.expect(body.headers['x-package-smoke']).to.equal('2-3-4');",
+                  "  pm.expect(body.headers['x-path-smoke']).to.equal('a/b');",
+                  "  pm.expect(pm.environment.get('envBroad')).to.equal('env-broad');",
+                  "  pm.expect(pm.collectionVariables.get('collectionBroad')).to.equal('yes');",
+                  "});",
+                  "pm.test('package and assertion facades', function () {",
+                  "  var Ajv = require('ajv');",
+                  "  var chai = require('chai');",
+                  "  var _ = require('lodash');",
+                  "  var ajv = new Ajv();",
+                  "  var validate = ajv.compile({ type: 'object', required: ['ok'], properties: { ok: { const: true } } });",
+                  "  chai.assert.deepEqual(_.pick({ ok: true, extra: 'drop' }, ['ok']), { ok: true });",
+                  "  pm.expect(validate({ ok: true })).to.equal(true);",
+                  "  pm.expect(function () { throw new Error('expected failure path'); }).to.throw('expected failure path');",
+                  "});",
+                  "pm.test('dynamic variables expose documented shapes', function () {",
+                  "  var guid = pm.variables.replaceIn('{{$guid}}');",
+                  "  var timestamp = pm.variables.replaceIn('{{$timestamp}}');",
+                  "  pm.expect(guid).to.match(/^[0-9a-f-]{36}$/i);",
+                  "  pm.expect(timestamp).to.match(/^\\d+$/);",
+                  "});",
+                  "pm.test('timer and microtask callbacks drain', function (done) {",
+                  "  var order = [];",
+                  "  Promise.resolve().then(function () { order.push('microtask'); });",
+                  "  setTimeout(function () {",
+                  "    order.push('timer');",
+                  "    pm.environment.set('timerBroad', order.join('>'));",
+                  "    pm.expect(order).to.deep.equal(['microtask', 'timer']);",
+                  "    done();",
+                  "  }, 0);",
+                  "});",
+                  "pm.sendRequest({",
+                  "  url: pm.variables.replaceIn('{{baseUrl}}/echo'),",
+                  "  method: 'POST',",
+                  "  header: { 'Content-Type': 'text/plain', 'X-Aux': 'broad-aux' },",
+                  "  body: { mode: 'raw', raw: 'object-body' }",
+                  "}, function (error, response) {",
+                  "  pm.test('pm.sendRequest object body', function () {",
+                  "    pm.expect(error).to.equal(null);",
+                  "    pm.expect(response.code).to.equal(200);",
+                  "    var body = response.json();",
+                  "    pm.expect(body.method).to.equal('POST');",
+                  "    pm.expect(body.body).to.equal('object-body');",
+                  "    pm.expect(body.headers['x-aux']).to.equal('broad-aux');",
+                  "  });",
+                  "});"
+                ],
+                "_lastExecutionId": "fdbdcfc8-ff2a-4884-a34a-d09f34c86c42"
+              }
+            }
+          ]
+        },
+        "request": {
+          "url": {
+            "protocol": "http",
+            "port": "42371",
+            "path": [
+              "echo"
+            ],
+            "host": [
+              "127",
+              "0",
+              "0",
+              "1"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "text/plain"
+            },
+            {
+              "key": "X-Aux",
+              "value": "broad-aux"
+            },
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.39.1",
+              "system": true
+            },
+            {
+              "key": "Accept",
+              "value": "*/*",
+              "system": true
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache",
+              "system": true
+            },
+            {
+              "key": "Postman-Token",
+              "value": "0720d77b-84d0-4fe4-bb58-64da0cfefc25",
+              "system": true
+            },
+            {
+              "key": "Host",
+              "value": "127.0.0.1:42371",
+              "system": true
+            },
+            {
+              "key": "Accept-Encoding",
+              "value": "gzip, deflate, br",
+              "system": true
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive",
+              "system": true
+            },
+            {
+              "key": "Content-Length",
+              "value": "11",
+              "system": true
+            }
+          ],
+          "method": "POST",
+          "body": {
+            "mode": "raw",
+            "raw": "object-body"
+          }
+        },
+        "response": {
+          "id": "459ef463-9e4e-4144-b4d8-b0c4396a0ce5",
+          "status": "OK",
+          "code": 200,
+          "header": [
+            {
+              "key": "content-length",
+              "value": "343"
+            },
+            {
+              "key": "content-type",
+              "value": "application/json"
+            },
+            {
+              "key": "Date",
+              "value": "Tue, 28 Apr 2026 15:24:35 GMT"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Keep-Alive",
+              "value": "timeout=5"
+            }
+          ],
+          "stream": {
+            "type": "Buffer",
+            "data": [
+              123,
+              34,
+              98,
+              111,
+              100,
+              121,
+              34,
+              58,
+              34,
+              111,
+              98,
+              106,
+              101,
+              99,
+              116,
+              45,
+              98,
+              111,
+              100,
+              121,
+              34,
+              44,
+              34,
+              104,
+              101,
+              97,
+              100,
+              101,
+              114,
+              115,
+              34,
+              58,
+              123,
+              34,
+              99,
+              111,
+              110,
+              116,
+              101,
+              110,
+              116,
+              45,
+              116,
+              121,
+              112,
+              101,
+              34,
+              58,
+              34,
+              116,
+              101,
+              120,
+              116,
+              47,
+              112,
+              108,
+              97,
+              105,
+              110,
+              34,
+              44,
+              34,
+              120,
+              45,
+              97,
+              117,
+              120,
+              34,
+              58,
+              34,
+              98,
+              114,
+              111,
+              97,
+              100,
+              45,
+              97,
+              117,
+              120,
+              34,
+              44,
+              34,
+              117,
+              115,
+              101,
+              114,
+              45,
+              97,
+              103,
+              101,
+              110,
+              116,
+              34,
+              58,
+              34,
+              80,
+              111,
+              115,
+              116,
+              109,
+              97,
+              110,
+              82,
+              117,
+              110,
+              116,
+              105,
+              109,
+              101,
+              47,
+              55,
+              46,
+              51,
+              57,
+              46,
+              49,
+              34,
+              44,
+              34,
+              97,
+              99,
+              99,
+              101,
+              112,
+              116,
+              34,
+              58,
+              34,
+              42,
+              47,
+              42,
+              34,
+              44,
+              34,
+              99,
+              97,
+              99,
+              104,
+              101,
+              45,
+              99,
+              111,
+              110,
+              116,
+              114,
+              111,
+              108,
+              34,
+              58,
+              34,
+              110,
+              111,
+              45,
+              99,
+              97,
+              99,
+              104,
+              101,
+              34,
+              44,
+              34,
+              112,
+              111,
+              115,
+              116,
+              109,
+              97,
+              110,
+              45,
+              116,
+              111,
+              107,
+              101,
+              110,
+              34,
+              58,
+              34,
+              48,
+              55,
+              50,
+              48,
+              100,
+              55,
+              55,
+              98,
+              45,
+              56,
+              52,
+              100,
+              48,
+              45,
+              52,
+              102,
+              101,
+              52,
+              45,
+              98,
+              98,
+              53,
+              56,
+              45,
+              54,
+              52,
+              100,
+              97,
+              48,
+              99,
+              102,
+              101,
+              102,
+              99,
+              50,
+              53,
+              34,
+              44,
+              34,
+              104,
+              111,
+              115,
+              116,
+              34,
+              58,
+              34,
+              49,
+              50,
+              55,
+              46,
+              48,
+              46,
+              48,
+              46,
+              49,
+              58,
+              52,
+              50,
+              51,
+              55,
+              49,
+              34,
+              44,
+              34,
+              97,
+              99,
+              99,
+              101,
+              112,
+              116,
+              45,
+              101,
+              110,
+              99,
+              111,
+              100,
+              105,
+              110,
+              103,
+              34,
+              58,
+              34,
+              103,
+              122,
+              105,
+              112,
+              44,
+              32,
+              100,
+              101,
+              102,
+              108,
+              97,
+              116,
+              101,
+              44,
+              32,
+              98,
+              114,
+              34,
+              44,
+              34,
+              99,
+              111,
+              110,
+              110,
+              101,
+              99,
+              116,
+              105,
+              111,
+              110,
+              34,
+              58,
+              34,
+              107,
+              101,
+              101,
+              112,
+              45,
+              97,
+              108,
+              105,
+              118,
+              101,
+              34,
+              44,
+              34,
+              99,
+              111,
+              110,
+              116,
+              101,
+              110,
+              116,
+              45,
+              108,
+              101,
+              110,
+              103,
+              116,
+              104,
+              34,
+              58,
+              34,
+              49,
+              49,
+              34,
+              125,
+              44,
+              34,
+              109,
+              101,
+              116,
+              104,
+              111,
+              100,
+              34,
+              58,
+              34,
+              80,
+              79,
+              83,
+              84,
+              34,
+              125
+            ]
+          },
+          "cookie": [],
+          "responseTime": 3,
+          "responseSize": 343
+        },
+        "id": "c436e21c-148d-4b52-a6fa-7edd1851f2d0",
+        "assertions": [
+          {
+            "assertion": "broad response, request mutation, and variables",
+            "skipped": false
+          },
+          {
+            "assertion": "package and assertion facades",
+            "skipped": false
+          },
+          {
+            "assertion": "dynamic variables expose documented shapes",
+            "skipped": false
+          },
+          {
+            "assertion": "timer and microtask callbacks drain",
+            "skipped": false
+          },
+          {
+            "assertion": "pm.sendRequest object body",
+            "skipped": false
+          }
+        ]
+      },
+      {
+        "cursor": {
+          "position": 0,
+          "iteration": 0,
+          "length": 4,
+          "cycles": 1,
+          "empty": false,
+          "eof": false,
+          "bof": true,
+          "cr": false,
+          "ref": "0659895b-95fd-452b-86b2-17d08692f083",
+          "httpRequestId": "ee27bc41-6d05-4056-bab0-f4a9497aa92f",
+          "scriptId": "634f4c3c-dbcd-414f-b621-9ae4702da475",
+          "execution": "fdbdcfc8-ff2a-4884-a34a-d09f34c86c42"
+        },
+        "item": {
+          "id": "9fde6a85-ab00-4c65-8b7c-b4154a2121e9",
+          "name": "Broad Runtime Surface",
+          "request": {
+            "url": {
+              "path": [
+                "json"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "method": "GET"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "id": "44e348be-0189-4bdb-9873-192f01a7d19d",
+                "type": "text/javascript",
+                "exec": [
+                  "var _ = require('lodash');",
+                  "var path = require('path');",
+                  "var assert = require('assert');",
+                  "pm.variables.set('requestLocal', 'broad-local');",
+                  "pm.environment.set('envBroad', 'env-broad');",
+                  "pm.collectionVariables.set('collectionBroad', 'yes');",
+                  "pm.request.headers.upsert({ key: 'X-Pre', value: 'broad-pre' });",
+                  "pm.request.headers.upsert({ key: 'X-Package-Smoke', value: _.map([1, 2, 3], function (value) { return value + 1; }).join('-') });",
+                  "pm.request.headers.upsert({ key: 'X-Path-Smoke', value: path.join('a', 'b') });",
+                  "assert.equal(pm.variables.get('requestLocal'), 'broad-local');"
+                ],
+                "_lastExecutionId": "dcc2bdee-499c-4873-bb3d-7fcc12f64cd7"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "id": "634f4c3c-dbcd-414f-b621-9ae4702da475",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('broad response, request mutation, and variables', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  var body = pm.response.json();",
+                  "  pm.expect(body.path).to.equal('/json');",
+                  "  pm.expect(body.xPre).to.equal('broad-pre');",
+                  "  pm.expect(body.headers['x-package-smoke']).to.equal('2-3-4');",
+                  "  pm.expect(body.headers['x-path-smoke']).to.equal('a/b');",
+                  "  pm.expect(pm.environment.get('envBroad')).to.equal('env-broad');",
+                  "  pm.expect(pm.collectionVariables.get('collectionBroad')).to.equal('yes');",
+                  "});",
+                  "pm.test('package and assertion facades', function () {",
+                  "  var Ajv = require('ajv');",
+                  "  var chai = require('chai');",
+                  "  var _ = require('lodash');",
+                  "  var ajv = new Ajv();",
+                  "  var validate = ajv.compile({ type: 'object', required: ['ok'], properties: { ok: { const: true } } });",
+                  "  chai.assert.deepEqual(_.pick({ ok: true, extra: 'drop' }, ['ok']), { ok: true });",
+                  "  pm.expect(validate({ ok: true })).to.equal(true);",
+                  "  pm.expect(function () { throw new Error('expected failure path'); }).to.throw('expected failure path');",
+                  "});",
+                  "pm.test('dynamic variables expose documented shapes', function () {",
+                  "  var guid = pm.variables.replaceIn('{{$guid}}');",
+                  "  var timestamp = pm.variables.replaceIn('{{$timestamp}}');",
+                  "  pm.expect(guid).to.match(/^[0-9a-f-]{36}$/i);",
+                  "  pm.expect(timestamp).to.match(/^\\d+$/);",
+                  "});",
+                  "pm.test('timer and microtask callbacks drain', function (done) {",
+                  "  var order = [];",
+                  "  Promise.resolve().then(function () { order.push('microtask'); });",
+                  "  setTimeout(function () {",
+                  "    order.push('timer');",
+                  "    pm.environment.set('timerBroad', order.join('>'));",
+                  "    pm.expect(order).to.deep.equal(['microtask', 'timer']);",
+                  "    done();",
+                  "  }, 0);",
+                  "});",
+                  "pm.sendRequest({",
+                  "  url: pm.variables.replaceIn('{{baseUrl}}/echo'),",
+                  "  method: 'POST',",
+                  "  header: { 'Content-Type': 'text/plain', 'X-Aux': 'broad-aux' },",
+                  "  body: { mode: 'raw', raw: 'object-body' }",
+                  "}, function (error, response) {",
+                  "  pm.test('pm.sendRequest object body', function () {",
+                  "    pm.expect(error).to.equal(null);",
+                  "    pm.expect(response.code).to.equal(200);",
+                  "    var body = response.json();",
+                  "    pm.expect(body.method).to.equal('POST');",
+                  "    pm.expect(body.body).to.equal('object-body');",
+                  "    pm.expect(body.headers['x-aux']).to.equal('broad-aux');",
+                  "  });",
+                  "});"
+                ],
+                "_lastExecutionId": "fdbdcfc8-ff2a-4884-a34a-d09f34c86c42"
+              }
+            }
+          ]
+        },
+        "request": {
+          "url": {
+            "protocol": "http",
+            "port": "42371",
+            "path": [
+              "echo"
+            ],
+            "host": [
+              "127",
+              "0",
+              "0",
+              "1"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "text/plain"
+            },
+            {
+              "key": "X-Aux",
+              "value": "broad-aux"
+            },
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.39.1",
+              "system": true
+            },
+            {
+              "key": "Accept",
+              "value": "*/*",
+              "system": true
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache",
+              "system": true
+            },
+            {
+              "key": "Postman-Token",
+              "value": "0720d77b-84d0-4fe4-bb58-64da0cfefc25",
+              "system": true
+            },
+            {
+              "key": "Host",
+              "value": "127.0.0.1:42371",
+              "system": true
+            },
+            {
+              "key": "Accept-Encoding",
+              "value": "gzip, deflate, br",
+              "system": true
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive",
+              "system": true
+            },
+            {
+              "key": "Content-Length",
+              "value": "11",
+              "system": true
+            }
+          ],
+          "method": "POST",
+          "body": {
+            "mode": "raw",
+            "raw": "object-body"
+          }
+        },
+        "response": {
+          "id": "459ef463-9e4e-4144-b4d8-b0c4396a0ce5",
+          "status": "OK",
+          "code": 200,
+          "header": [
+            {
+              "key": "content-length",
+              "value": "343"
+            },
+            {
+              "key": "content-type",
+              "value": "application/json"
+            },
+            {
+              "key": "Date",
+              "value": "Tue, 28 Apr 2026 15:24:35 GMT"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Keep-Alive",
+              "value": "timeout=5"
+            }
+          ],
+          "stream": {
+            "type": "Buffer",
+            "data": [
+              123,
+              34,
+              98,
+              111,
+              100,
+              121,
+              34,
+              58,
+              34,
+              111,
+              98,
+              106,
+              101,
+              99,
+              116,
+              45,
+              98,
+              111,
+              100,
+              121,
+              34,
+              44,
+              34,
+              104,
+              101,
+              97,
+              100,
+              101,
+              114,
+              115,
+              34,
+              58,
+              123,
+              34,
+              99,
+              111,
+              110,
+              116,
+              101,
+              110,
+              116,
+              45,
+              116,
+              121,
+              112,
+              101,
+              34,
+              58,
+              34,
+              116,
+              101,
+              120,
+              116,
+              47,
+              112,
+              108,
+              97,
+              105,
+              110,
+              34,
+              44,
+              34,
+              120,
+              45,
+              97,
+              117,
+              120,
+              34,
+              58,
+              34,
+              98,
+              114,
+              111,
+              97,
+              100,
+              45,
+              97,
+              117,
+              120,
+              34,
+              44,
+              34,
+              117,
+              115,
+              101,
+              114,
+              45,
+              97,
+              103,
+              101,
+              110,
+              116,
+              34,
+              58,
+              34,
+              80,
+              111,
+              115,
+              116,
+              109,
+              97,
+              110,
+              82,
+              117,
+              110,
+              116,
+              105,
+              109,
+              101,
+              47,
+              55,
+              46,
+              51,
+              57,
+              46,
+              49,
+              34,
+              44,
+              34,
+              97,
+              99,
+              99,
+              101,
+              112,
+              116,
+              34,
+              58,
+              34,
+              42,
+              47,
+              42,
+              34,
+              44,
+              34,
+              99,
+              97,
+              99,
+              104,
+              101,
+              45,
+              99,
+              111,
+              110,
+              116,
+              114,
+              111,
+              108,
+              34,
+              58,
+              34,
+              110,
+              111,
+              45,
+              99,
+              97,
+              99,
+              104,
+              101,
+              34,
+              44,
+              34,
+              112,
+              111,
+              115,
+              116,
+              109,
+              97,
+              110,
+              45,
+              116,
+              111,
+              107,
+              101,
+              110,
+              34,
+              58,
+              34,
+              48,
+              55,
+              50,
+              48,
+              100,
+              55,
+              55,
+              98,
+              45,
+              56,
+              52,
+              100,
+              48,
+              45,
+              52,
+              102,
+              101,
+              52,
+              45,
+              98,
+              98,
+              53,
+              56,
+              45,
+              54,
+              52,
+              100,
+              97,
+              48,
+              99,
+              102,
+              101,
+              102,
+              99,
+              50,
+              53,
+              34,
+              44,
+              34,
+              104,
+              111,
+              115,
+              116,
+              34,
+              58,
+              34,
+              49,
+              50,
+              55,
+              46,
+              48,
+              46,
+              48,
+              46,
+              49,
+              58,
+              52,
+              50,
+              51,
+              55,
+              49,
+              34,
+              44,
+              34,
+              97,
+              99,
+              99,
+              101,
+              112,
+              116,
+              45,
+              101,
+              110,
+              99,
+              111,
+              100,
+              105,
+              110,
+              103,
+              34,
+              58,
+              34,
+              103,
+              122,
+              105,
+              112,
+              44,
+              32,
+              100,
+              101,
+              102,
+              108,
+              97,
+              116,
+              101,
+              44,
+              32,
+              98,
+              114,
+              34,
+              44,
+              34,
+              99,
+              111,
+              110,
+              110,
+              101,
+              99,
+              116,
+              105,
+              111,
+              110,
+              34,
+              58,
+              34,
+              107,
+              101,
+              101,
+              112,
+              45,
+              97,
+              108,
+              105,
+              118,
+              101,
+              34,
+              44,
+              34,
+              99,
+              111,
+              110,
+              116,
+              101,
+              110,
+              116,
+              45,
+              108,
+              101,
+              110,
+              103,
+              116,
+              104,
+              34,
+              58,
+              34,
+              49,
+              49,
+              34,
+              125,
+              44,
+              34,
+              109,
+              101,
+              116,
+              104,
+              111,
+              100,
+              34,
+              58,
+              34,
+              80,
+              79,
+              83,
+              84,
+              34,
+              125
+            ]
+          },
+          "cookie": [],
+          "responseTime": 3,
+          "responseSize": 343
+        },
+        "id": "c436e21c-148d-4b52-a6fa-7edd1851f2d0",
+        "assertions": [
+          {
+            "assertion": "broad response, request mutation, and variables",
+            "skipped": false
+          },
+          {
+            "assertion": "package and assertion facades",
+            "skipped": false
+          },
+          {
+            "assertion": "dynamic variables expose documented shapes",
+            "skipped": false
+          },
+          {
+            "assertion": "timer and microtask callbacks drain",
+            "skipped": false
+          },
+          {
+            "assertion": "pm.sendRequest object body",
+            "skipped": false
+          }
+        ]
+      },
+      {
+        "cursor": {
+          "ref": "9043685a-b666-40f3-8cd3-33779e705229",
+          "length": 4,
+          "cycles": 1,
+          "position": 1,
+          "iteration": 0,
+          "httpRequestId": "f5b8ec41-f387-421e-9a1a-bfa9d1b16021"
+        },
+        "item": {
+          "id": "a951c41d-13a6-4a6a-ab15-715ee18d4491",
+          "name": "Cookie Seed",
+          "request": {
+            "url": {
+              "path": [
+                "set-cookie"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "method": "GET"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "45315a51-d12e-4eed-9b05-57f7b444dc22",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.cookies.jar().set(pm.variables.replaceIn('{{baseUrl}}'), 'scriptCookie', 'script-value', function (error) {",
+                  "  pm.test('cookie jar set callback succeeds', function () {",
+                  "    pm.expect(error).to.equal(null);",
+                  "  });",
+                  "  pm.cookies.jar().get(pm.variables.replaceIn('{{baseUrl}}'), 'scriptCookie', function (getError, value) {",
+                  "    pm.test('cookie jar get callback sees scripted cookie', function () {",
+                  "      pm.expect(getError).to.equal(null);",
+                  "      pm.expect(value).to.equal('script-value');",
+                  "    });",
+                  "  });",
+                  "});"
+                ],
+                "_lastExecutionId": "a26330c6-08a3-43eb-9818-b206d6afff0e"
+              }
+            }
+          ]
+        },
+        "request": {
+          "url": {
+            "protocol": "http",
+            "port": "42371",
+            "path": [
+              "set-cookie"
+            ],
+            "host": [
+              "127",
+              "0",
+              "0",
+              "1"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.39.1",
+              "system": true
+            },
+            {
+              "key": "Accept",
+              "value": "*/*",
+              "system": true
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache",
+              "system": true
+            },
+            {
+              "key": "Postman-Token",
+              "value": "064767b4-1a0c-4217-aeed-d5920241198d",
+              "system": true
+            },
+            {
+              "key": "Host",
+              "value": "127.0.0.1:42371",
+              "system": true
+            },
+            {
+              "key": "Accept-Encoding",
+              "value": "gzip, deflate, br",
+              "system": true
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive",
+              "system": true
+            }
+          ],
+          "method": "GET"
+        },
+        "response": {
+          "id": "ec3a7ff1-3676-4952-8951-1e0de5ffb0c1",
+          "status": "OK",
+          "code": 200,
+          "header": [
+            {
+              "key": "content-length",
+              "value": "15"
+            },
+            {
+              "key": "content-type",
+              "value": "application/json"
+            },
+            {
+              "key": "set-cookie",
+              "value": "serverCookie=server-value; Path=/"
+            },
+            {
+              "key": "Date",
+              "value": "Tue, 28 Apr 2026 15:24:35 GMT"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Keep-Alive",
+              "value": "timeout=5"
+            }
+          ],
+          "stream": {
+            "type": "Buffer",
+            "data": [
+              123,
+              34,
+              99,
+              111,
+              111,
+              107,
+              105,
+              101,
+              34,
+              58,
+              116,
+              114,
+              117,
+              101,
+              125
+            ]
+          },
+          "cookie": [],
+          "responseTime": 1,
+          "responseSize": 15
+        },
+        "id": "a951c41d-13a6-4a6a-ab15-715ee18d4491",
+        "assertions": [
+          {
+            "assertion": "cookie jar set callback succeeds",
+            "skipped": false
+          },
+          {
+            "assertion": "cookie jar get callback sees scripted cookie",
+            "skipped": false
+          }
+        ]
+      },
+      {
+        "cursor": {
+          "ref": "0952696e-aeeb-4781-8113-172e748fe503",
+          "length": 4,
+          "cycles": 1,
+          "position": 2,
+          "iteration": 0,
+          "httpRequestId": "164eab7a-d30a-4d70-a2cf-3b36bccf5d42"
+        },
+        "item": {
+          "id": "d3d180b6-cb7e-42f3-b0af-5b7dc5bd5270",
+          "name": "Cookie Echo",
+          "request": {
+            "url": {
+              "path": [
+                "cookie-check"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "method": "GET"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "6f099da0-737a-4df0-b755-c9c882be7359",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.cookies.jar().get(pm.variables.replaceIn('{{baseUrl}}'), 'scriptCookie', function (error, value) {",
+                  "  pm.test('cookie jar persists scripted cookies across requests', function () {",
+                  "    pm.expect(error).to.equal(null);",
+                  "    pm.expect(value).to.equal('script-value');",
+                  "  });",
+                  "});"
+                ],
+                "_lastExecutionId": "b3027ffb-001d-4527-8502-39bfade68ed0"
+              }
+            }
+          ]
+        },
+        "request": {
+          "url": {
+            "protocol": "http",
+            "port": "42371",
+            "path": [
+              "cookie-check"
+            ],
+            "host": [
+              "127",
+              "0",
+              "0",
+              "1"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.39.1",
+              "system": true
+            },
+            {
+              "key": "Accept",
+              "value": "*/*",
+              "system": true
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache",
+              "system": true
+            },
+            {
+              "key": "Postman-Token",
+              "value": "51a937e4-8fbb-44b0-8c27-88a7c45af52f",
+              "system": true
+            },
+            {
+              "key": "Host",
+              "value": "127.0.0.1:42371",
+              "system": true
+            },
+            {
+              "key": "Accept-Encoding",
+              "value": "gzip, deflate, br",
+              "system": true
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive",
+              "system": true
+            },
+            {
+              "key": "Cookie",
+              "value": "serverCookie=server-value; scriptCookie=script-value",
+              "system": true
+            }
+          ],
+          "method": "GET"
+        },
+        "response": {
+          "id": "7eb1960e-6ea0-4cda-91bb-cdac154fea50",
+          "status": "OK",
+          "code": 200,
+          "header": [
+            {
+              "key": "content-length",
+              "value": "73"
+            },
+            {
+              "key": "content-type",
+              "value": "application/json"
+            },
+            {
+              "key": "Date",
+              "value": "Tue, 28 Apr 2026 15:24:35 GMT"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Keep-Alive",
+              "value": "timeout=5"
+            }
+          ],
+          "stream": {
+            "type": "Buffer",
+            "data": [
+              123,
+              34,
+              99,
+              111,
+              111,
+              107,
+              105,
+              101,
+              115,
+              34,
+              58,
+              123,
+              34,
+              115,
+              101,
+              114,
+              118,
+              101,
+              114,
+              67,
+              111,
+              111,
+              107,
+              105,
+              101,
+              34,
+              58,
+              34,
+              115,
+              101,
+              114,
+              118,
+              101,
+              114,
+              45,
+              118,
+              97,
+              108,
+              117,
+              101,
+              34,
+              44,
+              34,
+              115,
+              99,
+              114,
+              105,
+              112,
+              116,
+              67,
+              111,
+              111,
+              107,
+              105,
+              101,
+              34,
+              58,
+              34,
+              115,
+              99,
+              114,
+              105,
+              112,
+              116,
+              45,
+              118,
+              97,
+              108,
+              117,
+              101,
+              34,
+              125,
+              125
+            ]
+          },
+          "cookie": [],
+          "responseTime": 1,
+          "responseSize": 73
+        },
+        "id": "d3d180b6-cb7e-42f3-b0af-5b7dc5bd5270",
+        "assertions": [
+          {
+            "assertion": "cookie jar persists scripted cookies across requests",
+            "skipped": false
+          }
+        ]
+      },
+      {
+        "cursor": {
+          "ref": "00cec4f4-cf9c-40c1-9562-4802353d3bab",
+          "length": 4,
+          "cycles": 1,
+          "position": 3,
+          "iteration": 0,
+          "httpRequestId": "61cb386d-b9db-480b-a3f2-950dc94da4a4"
+        },
+        "item": {
+          "id": "128783a4-be7f-4836-bc77-c1e2dc588d6a",
+          "name": "Caught Failure Shape",
+          "request": {
+            "url": {
+              "path": [
+                "status",
+                "418"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "method": "GET"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "b595d8ab-8b69-4876-a888-740baa7a98fa",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('caught assertion failure can be inspected without failing the run', function () {",
+                  "  var message = '';",
+                  "  try {",
+                  "    pm.expect(pm.response.code).to.equal(200);",
+                  "  } catch (error) {",
+                  "    message = error.message || String(error);",
+                  "  }",
+                  "  pm.expect(message).to.include('200');",
+                  "});"
+                ],
+                "_lastExecutionId": "af90dc08-05f7-4009-884a-61a7115d458c"
+              }
+            }
+          ]
+        },
+        "request": {
+          "url": {
+            "protocol": "http",
+            "port": "42371",
+            "path": [
+              "status",
+              "418"
+            ],
+            "host": [
+              "127",
+              "0",
+              "0",
+              "1"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.39.1",
+              "system": true
+            },
+            {
+              "key": "Accept",
+              "value": "*/*",
+              "system": true
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache",
+              "system": true
+            },
+            {
+              "key": "Postman-Token",
+              "value": "b8cca3b4-916c-4348-868b-eb038833391b",
+              "system": true
+            },
+            {
+              "key": "Host",
+              "value": "127.0.0.1:42371",
+              "system": true
+            },
+            {
+              "key": "Accept-Encoding",
+              "value": "gzip, deflate, br",
+              "system": true
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive",
+              "system": true
+            },
+            {
+              "key": "Cookie",
+              "value": "serverCookie=server-value; scriptCookie=script-value",
+              "system": true
+            }
+          ],
+          "method": "GET"
+        },
+        "response": {
+          "id": "d3bd5d52-c27d-40e7-b564-1fbf106808ee",
+          "status": "I'm a Teapot",
+          "code": 418,
+          "header": [
+            {
+              "key": "content-length",
+              "value": "15"
+            },
+            {
+              "key": "content-type",
+              "value": "application/json"
+            },
+            {
+              "key": "Date",
+              "value": "Tue, 28 Apr 2026 15:24:35 GMT"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Keep-Alive",
+              "value": "timeout=5"
+            }
+          ],
+          "stream": {
+            "type": "Buffer",
+            "data": [
+              123,
+              34,
+              116,
+              101,
+              97,
+              112,
+              111,
+              116,
+              34,
+              58,
+              116,
+              114,
+              117,
+              101,
+              125
+            ]
+          },
+          "cookie": [],
+          "responseTime": 1,
+          "responseSize": 15
+        },
+        "id": "128783a4-be7f-4836-bc77-c1e2dc588d6a",
+        "assertions": [
+          {
+            "assertion": "caught assertion failure can be inspected without failing the run",
+            "skipped": false
+          }
+        ]
+      }
+    ],
+    "transfers": {
+      "responseTotal": 804
+    },
+    "failures": [],
+    "error": null
+  }
+}

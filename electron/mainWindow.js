@@ -37,7 +37,12 @@ function bindSmokeHooks(app, mainWindow, env) {
   const isUiOauthSmoke = env.POSTMETER_UI_OAUTH_SMOKE === '1';
   if (env.POSTMETER_STARTUP_SMOKE === '1') {
     mainWindow.webContents.once('did-finish-load', () => {
-      setTimeout(() => app.quit(), 250);
+      runStartupSmokeProbe(app, mainWindow, env)
+        .then(() => app.quit())
+        .catch((error) => {
+          console.error(error.stack || error.message || String(error));
+          app.exit(1);
+        });
     });
   }
   if (isUiWorkflowSmoke) {
@@ -67,6 +72,41 @@ function bindSmokeHooks(app, mainWindow, env) {
       timeoutMillis: 20_000
     });
   }
+}
+
+async function runStartupSmokeProbe(app, mainWindow, env) {
+  const markerKey = '__postmeter_packaged_smoke';
+  const markerValue = env.POSTMETER_PACKAGED_SMOKE_MARKER || 'startup-smoke';
+  const expectReload = env.POSTMETER_PACKAGED_SMOKE_EXPECT_RELOAD === '1';
+  await mainWindow.webContents.executeJavaScript(`
+    (async function () {
+      if (!window.postmeter || !window.postmeter.app || !window.postmeter.workspace) {
+        throw new Error('Packaged smoke preload API is unavailable.');
+      }
+      const versions = await window.postmeter.app.versions();
+      if (!versions.app || !versions.electron || !versions.node) {
+        throw new Error('Packaged smoke version metadata is incomplete.');
+      }
+      const loaded = await window.postmeter.workspace.load();
+      if (!loaded || !loaded.workspace || !Array.isArray(loaded.workspace.globals)) {
+        throw new Error('Packaged smoke workspace load returned an invalid workspace.');
+      }
+      const key = ${JSON.stringify(markerKey)};
+      const marker = ${JSON.stringify(markerValue)};
+      const existing = loaded.workspace.globals.find((item) => item.key === key);
+      if (${JSON.stringify(expectReload)} && (!existing || existing.value !== marker)) {
+        throw new Error('Packaged smoke workspace persistence did not survive restart.');
+      }
+      if (!${JSON.stringify(expectReload)}) {
+        const globals = loaded.workspace.globals.filter((item) => item.key !== key);
+        globals.push({ enabled: true, key, value: marker });
+        loaded.workspace.globals = globals;
+        await window.postmeter.workspace.save(loaded.workspace);
+      }
+      return true;
+    })();
+  `, true);
+  await new Promise((resolve) => setTimeout(resolve, 100));
 }
 
 function bindTitleSmoke(app, mainWindow, options) {
@@ -191,5 +231,6 @@ function nativeImageHasVariance(image) {
 
 module.exports = {
   createMainWindow,
-  nativeImageHasVariance
+  nativeImageHasVariance,
+  runStartupSmokeProbe
 };

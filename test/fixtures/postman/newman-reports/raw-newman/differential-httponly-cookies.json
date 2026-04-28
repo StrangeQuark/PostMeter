@@ -1,0 +1,1619 @@
+{
+  "collection": {
+    "_": {
+      "postman_id": "00000000-0000-4000-8000-000000000205"
+    },
+    "item": [
+      {
+        "id": "e5a2d688-caf4-485e-b0b7-c077024e0b59",
+        "name": "Seed HttpOnly Cookies",
+        "request": {
+          "url": {
+            "path": [
+              "cookie-check"
+            ],
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "method": "GET"
+        },
+        "response": [],
+        "event": [
+          {
+            "listen": "prerequest",
+            "script": {
+              "id": "5ffc8afe-0181-4cbb-b169-92b08c9f7a32",
+              "type": "text/javascript",
+              "exec": [
+                "var baseUrl = pm.variables.replaceIn('{{baseUrl}}');",
+                "var jar = pm.cookies.jar();",
+                "pm.test('seed scripted visible and httponly cookies', function (done) {",
+                "  jar.set(baseUrl, 'visible', 'visible-value', function (visibleError) {",
+                "    if (visibleError) { done(visibleError); return; }",
+                "    jar.set(baseUrl, { name: 'secret', value: 'secret-value', httpOnly: true, path: '/' }, function (secretError) {",
+                "      if (secretError) { done(secretError); return; }",
+                "      jar.set(baseUrl, { name: 'replaceMe', value: 'server-secret', httpOnly: true, path: '/' }, function (replaceError) {",
+                "        if (replaceError) { done(replaceError); return; }",
+                "        jar.set(baseUrl, { name: 'clearMe', value: 'clear-secret', httpOnly: true, path: '/' }, function (clearError) {",
+                "          done(clearError || undefined);",
+                "        });",
+                "      });",
+                "    });",
+                "  });",
+                "});"
+              ],
+              "_lastExecutionId": "761c357a-64ec-44e7-98df-214819529bd7"
+            }
+          },
+          {
+            "listen": "test",
+            "script": {
+              "id": "c1015fcb-ca04-436c-b21a-d926d4168955",
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('httponly seed request sends scripted cookies', function () {",
+                "  pm.response.to.have.status(200);",
+                "  var cookies = pm.response.json().cookies;",
+                "  pm.expect(cookies.visible).to.equal('visible-value');",
+                "  pm.expect(cookies.secret).to.equal('secret-value');",
+                "  pm.expect(cookies.replaceMe).to.equal('server-secret');",
+                "  pm.expect(cookies.clearMe).to.equal('clear-secret');",
+                "});"
+              ],
+              "_lastExecutionId": "0ec0d0f0-6a1d-4996-831d-689f29e02313"
+            }
+          }
+        ]
+      },
+      {
+        "id": "f7ca1816-c937-4c20-a4d0-4f6ba95dab4d",
+        "name": "Read And Mutate HttpOnly Cookies",
+        "request": {
+          "url": {
+            "path": [
+              "cookie-check"
+            ],
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "method": "GET"
+        },
+        "response": [],
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "id": "5c1db355-336d-4a1d-8dff-9a63379ebb38",
+              "type": "text/javascript",
+              "exec": [
+                "var baseUrl = pm.variables.replaceIn('{{baseUrl}}');",
+                "var jar = pm.cookies.jar();",
+                "pm.test('httponly cookies are readable through current helpers and jar helpers', function (done) {",
+                "  try {",
+                "    var requestCookies = pm.response.json().cookies;",
+                "    pm.expect(requestCookies.secret).to.equal('secret-value');",
+                "    pm.expect(pm.cookies.get('secret')).to.equal('secret-value');",
+                "    pm.expect(pm.cookies.has('secret')).to.equal(true);",
+                "    pm.expect(pm.cookies.toObject().secret).to.equal('secret-value');",
+                "  } catch (error) {",
+                "    done(error);",
+                "    return;",
+                "  }",
+                "  jar.get(baseUrl, 'secret', function (getError, value) {",
+                "    try {",
+                "      pm.expect(getError).to.equal(null);",
+                "      pm.expect(value).to.equal('secret-value');",
+                "    } catch (error) {",
+                "      done(error);",
+                "      return;",
+                "    }",
+                "    jar.getAll(baseUrl, function (allError, cookies) {",
+                "      try {",
+                "        pm.expect(allError).to.equal(null);",
+                "        pm.expect(cookies.get('secret')).to.equal('secret-value');",
+                "        pm.expect(cookies.one('secret').httpOnly).to.equal(true);",
+                "        done();",
+                "      } catch (error) {",
+                "        done(error);",
+                "      }",
+                "    });",
+                "  });",
+                "});",
+                "pm.test('httponly jar mutations and pm.sendRequest updates match Postman', function (done) {",
+                "  jar.set(baseUrl, { name: 'scriptSecret', value: 'script-secret', httpOnly: true, path: '/' }, function (setError) {",
+                "    if (setError) { done(setError); return; }",
+                "    jar.get(baseUrl, 'scriptSecret', function (getError, value) {",
+                "      try {",
+                "        pm.expect(getError).to.equal(null);",
+                "        pm.expect(value).to.equal('script-secret');",
+                "      } catch (error) {",
+                "        done(error);",
+                "        return;",
+                "      }",
+                "      jar.set(baseUrl, 'replaceMe', 'client-visible', function (replaceError) {",
+                "        if (replaceError) { done(replaceError); return; }",
+                "        jar.unset(baseUrl, 'clearMe', function (unsetError) {",
+                "          if (unsetError) { done(unsetError); return; }",
+                "          pm.sendRequest(baseUrl + '/set-send-httponly', function (sendError, response) {",
+                "            try {",
+                "              pm.expect(sendError).to.equal(null);",
+                "              pm.expect(response.code).to.equal(200);",
+                "            } catch (error) {",
+                "              done(error);",
+                "              return;",
+                "            }",
+                "            jar.get(baseUrl, 'sendSecret', function (sendGetError, sendValue) {",
+                "              try {",
+                "                pm.expect(sendGetError).to.equal(null);",
+                "                pm.expect(sendValue).to.equal('send-secret');",
+                "                done();",
+                "              } catch (error) {",
+                "                done(error);",
+                "              }",
+                "            });",
+                "          });",
+                "        });",
+                "      });",
+                "    });",
+                "  });",
+                "});"
+              ],
+              "_lastExecutionId": "511000d8-1868-4dcb-9fef-f29ae51567ef"
+            }
+          }
+        ]
+      },
+      {
+        "id": "42e13120-8c58-44b2-9210-0ce6f78178f7",
+        "name": "After HttpOnly Mutations",
+        "request": {
+          "url": {
+            "path": [
+              "cookie-check"
+            ],
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "method": "GET"
+        },
+        "response": [],
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "id": "8e13dbad-aa0a-4a73-8717-2016555b8319",
+              "type": "text/javascript",
+              "exec": [
+                "var baseUrl = pm.variables.replaceIn('{{baseUrl}}');",
+                "var jar = pm.cookies.jar();",
+                "pm.test('httponly mutations affect later requests', function () {",
+                "  var cookies = pm.response.json().cookies;",
+                "  pm.expect(cookies.visible).to.equal('visible-value');",
+                "  pm.expect(cookies.secret).to.equal('secret-value');",
+                "  pm.expect(cookies.replaceMe).to.equal('client-visible');",
+                "  pm.expect(cookies.scriptSecret).to.equal('script-secret');",
+                "  pm.expect(cookies.sendSecret).to.equal('send-secret');",
+                "  pm.expect(cookies.clearMe).to.equal(undefined);",
+                "});",
+                "pm.test('httponly jar clear removes visible and httponly cookies', function (done) {",
+                "  jar.clear(baseUrl, function (error) {",
+                "    try {",
+                "      pm.expect(error).to.equal(null);",
+                "      done();",
+                "    } catch (assertion) {",
+                "      done(assertion);",
+                "    }",
+                "  });",
+                "});"
+              ],
+              "_lastExecutionId": "420e76bd-2b23-4316-b304-ff1b0ca906f6"
+            }
+          }
+        ]
+      },
+      {
+        "id": "36a64165-308b-4349-a1dd-6f8f08fc333d",
+        "name": "After HttpOnly Clear",
+        "request": {
+          "url": {
+            "path": [
+              "cookie-check"
+            ],
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "method": "GET"
+        },
+        "response": [],
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "id": "695d21da-b5ee-4256-b8c6-ea671f8ab320",
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('httponly clear removed every in-scope cookie', function () {",
+                "  var cookies = pm.response.json().cookies;",
+                "  pm.expect(cookies).to.deep.equal({});",
+                "  pm.environment.set('httpOnlyCookieSummary', JSON.stringify({ readable: true, mutable: true, clearRemovedAll: true }));",
+                "});"
+              ],
+              "_lastExecutionId": "0395e509-3616-41f4-8da9-4b914f39dc91"
+            }
+          }
+        ]
+      }
+    ],
+    "event": [],
+    "variable": [],
+    "info": {
+      "_postman_id": "00000000-0000-4000-8000-000000000205",
+      "name": "PostMeter Differential HttpOnly Cookies",
+      "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    }
+  },
+  "environment": {
+    "id": "197df024-c0fa-4351-8663-43df406f69fd",
+    "values": [
+      {
+        "type": "any",
+        "value": "http://127.0.0.1:42371",
+        "key": "baseUrl"
+      },
+      {
+        "type": "any",
+        "value": "{\"readable\":true,\"mutable\":true,\"clearRemovedAll\":true}",
+        "key": "httpOnlyCookieSummary"
+      }
+    ]
+  },
+  "globals": {
+    "id": "9ed97bd0-fdb3-4e48-b972-51f836b5881f",
+    "values": []
+  },
+  "run": {
+    "stats": {
+      "iterations": {
+        "total": 1,
+        "pending": 0,
+        "failed": 0
+      },
+      "items": {
+        "total": 4,
+        "pending": 0,
+        "failed": 0
+      },
+      "scripts": {
+        "total": 5,
+        "pending": 0,
+        "failed": 0
+      },
+      "prerequests": {
+        "total": 4,
+        "pending": 0,
+        "failed": 0
+      },
+      "requests": {
+        "total": 5,
+        "pending": 0,
+        "failed": 0
+      },
+      "tests": {
+        "total": 4,
+        "pending": 0,
+        "failed": 0
+      },
+      "assertions": {
+        "total": 7,
+        "pending": 0,
+        "failed": 0
+      },
+      "testScripts": {
+        "total": 4,
+        "pending": 0,
+        "failed": 0
+      },
+      "prerequestScripts": {
+        "total": 1,
+        "pending": 0,
+        "failed": 0
+      }
+    },
+    "timings": {
+      "responseAverage": 3.25,
+      "responseMin": 1,
+      "responseMax": 9,
+      "responseSd": 3.344772040064913,
+      "dnsAverage": 0,
+      "dnsMin": 0,
+      "dnsMax": 0,
+      "dnsSd": 0,
+      "firstByteAverage": 0,
+      "firstByteMin": 0,
+      "firstByteMax": 0,
+      "firstByteSd": 0,
+      "started": 1777389878588,
+      "completed": 1777389878684
+    },
+    "executions": [
+      {
+        "cursor": {
+          "position": 0,
+          "iteration": 0,
+          "length": 4,
+          "cycles": 1,
+          "empty": false,
+          "eof": false,
+          "bof": true,
+          "cr": false,
+          "ref": "f78e1076-3b0c-4a27-b2f0-5550def604a9",
+          "httpRequestId": "856a9d51-697c-41fe-a9e0-fd100cc8ff24"
+        },
+        "item": {
+          "id": "e5a2d688-caf4-485e-b0b7-c077024e0b59",
+          "name": "Seed HttpOnly Cookies",
+          "request": {
+            "url": {
+              "path": [
+                "cookie-check"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "method": "GET"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "id": "5ffc8afe-0181-4cbb-b169-92b08c9f7a32",
+                "type": "text/javascript",
+                "exec": [
+                  "var baseUrl = pm.variables.replaceIn('{{baseUrl}}');",
+                  "var jar = pm.cookies.jar();",
+                  "pm.test('seed scripted visible and httponly cookies', function (done) {",
+                  "  jar.set(baseUrl, 'visible', 'visible-value', function (visibleError) {",
+                  "    if (visibleError) { done(visibleError); return; }",
+                  "    jar.set(baseUrl, { name: 'secret', value: 'secret-value', httpOnly: true, path: '/' }, function (secretError) {",
+                  "      if (secretError) { done(secretError); return; }",
+                  "      jar.set(baseUrl, { name: 'replaceMe', value: 'server-secret', httpOnly: true, path: '/' }, function (replaceError) {",
+                  "        if (replaceError) { done(replaceError); return; }",
+                  "        jar.set(baseUrl, { name: 'clearMe', value: 'clear-secret', httpOnly: true, path: '/' }, function (clearError) {",
+                  "          done(clearError || undefined);",
+                  "        });",
+                  "      });",
+                  "    });",
+                  "  });",
+                  "});"
+                ],
+                "_lastExecutionId": "761c357a-64ec-44e7-98df-214819529bd7"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "id": "c1015fcb-ca04-436c-b21a-d926d4168955",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('httponly seed request sends scripted cookies', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  var cookies = pm.response.json().cookies;",
+                  "  pm.expect(cookies.visible).to.equal('visible-value');",
+                  "  pm.expect(cookies.secret).to.equal('secret-value');",
+                  "  pm.expect(cookies.replaceMe).to.equal('server-secret');",
+                  "  pm.expect(cookies.clearMe).to.equal('clear-secret');",
+                  "});"
+                ],
+                "_lastExecutionId": "0ec0d0f0-6a1d-4996-831d-689f29e02313"
+              }
+            }
+          ]
+        },
+        "assertions": [
+          {
+            "assertion": "seed scripted visible and httponly cookies",
+            "skipped": false
+          },
+          {
+            "assertion": "httponly seed request sends scripted cookies",
+            "skipped": false
+          }
+        ],
+        "request": {
+          "url": {
+            "protocol": "http",
+            "port": "42371",
+            "path": [
+              "cookie-check"
+            ],
+            "host": [
+              "127",
+              "0",
+              "0",
+              "1"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.39.1",
+              "system": true
+            },
+            {
+              "key": "Accept",
+              "value": "*/*",
+              "system": true
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache",
+              "system": true
+            },
+            {
+              "key": "Postman-Token",
+              "value": "63811b26-7bcc-4736-bef5-0a833e672b0c",
+              "system": true
+            },
+            {
+              "key": "Host",
+              "value": "127.0.0.1:42371",
+              "system": true
+            },
+            {
+              "key": "Accept-Encoding",
+              "value": "gzip, deflate, br",
+              "system": true
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive",
+              "system": true
+            },
+            {
+              "key": "Cookie",
+              "value": "visible=visible-value; secret=secret-value; replaceMe=server-secret; clearMe=clear-secret",
+              "system": true
+            }
+          ],
+          "method": "GET"
+        },
+        "response": {
+          "id": "2779f7c4-d8bf-4851-8328-49a12bc0fc0f",
+          "status": "OK",
+          "code": 200,
+          "header": [
+            {
+              "key": "content-length",
+              "value": "116"
+            },
+            {
+              "key": "content-type",
+              "value": "application/json"
+            },
+            {
+              "key": "Date",
+              "value": "Tue, 28 Apr 2026 15:24:38 GMT"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Keep-Alive",
+              "value": "timeout=5"
+            }
+          ],
+          "stream": {
+            "type": "Buffer",
+            "data": [
+              123,
+              34,
+              99,
+              111,
+              111,
+              107,
+              105,
+              101,
+              115,
+              34,
+              58,
+              123,
+              34,
+              118,
+              105,
+              115,
+              105,
+              98,
+              108,
+              101,
+              34,
+              58,
+              34,
+              118,
+              105,
+              115,
+              105,
+              98,
+              108,
+              101,
+              45,
+              118,
+              97,
+              108,
+              117,
+              101,
+              34,
+              44,
+              34,
+              115,
+              101,
+              99,
+              114,
+              101,
+              116,
+              34,
+              58,
+              34,
+              115,
+              101,
+              99,
+              114,
+              101,
+              116,
+              45,
+              118,
+              97,
+              108,
+              117,
+              101,
+              34,
+              44,
+              34,
+              114,
+              101,
+              112,
+              108,
+              97,
+              99,
+              101,
+              77,
+              101,
+              34,
+              58,
+              34,
+              115,
+              101,
+              114,
+              118,
+              101,
+              114,
+              45,
+              115,
+              101,
+              99,
+              114,
+              101,
+              116,
+              34,
+              44,
+              34,
+              99,
+              108,
+              101,
+              97,
+              114,
+              77,
+              101,
+              34,
+              58,
+              34,
+              99,
+              108,
+              101,
+              97,
+              114,
+              45,
+              115,
+              101,
+              99,
+              114,
+              101,
+              116,
+              34,
+              125,
+              125
+            ]
+          },
+          "cookie": [],
+          "responseTime": 9,
+          "responseSize": 116
+        },
+        "id": "e5a2d688-caf4-485e-b0b7-c077024e0b59"
+      },
+      {
+        "cursor": {
+          "ref": "6f828db0-b574-4638-84e5-04e86752672e",
+          "length": 4,
+          "cycles": 1,
+          "position": 1,
+          "iteration": 0,
+          "httpRequestId": "b4d25162-01e1-4cf0-836f-86aacaee4ac0",
+          "scriptId": "5c1db355-336d-4a1d-8dff-9a63379ebb38",
+          "execution": "511000d8-1868-4dcb-9fef-f29ae51567ef"
+        },
+        "item": {
+          "id": "f7ca1816-c937-4c20-a4d0-4f6ba95dab4d",
+          "name": "Read And Mutate HttpOnly Cookies",
+          "request": {
+            "url": {
+              "path": [
+                "cookie-check"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "method": "GET"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "5c1db355-336d-4a1d-8dff-9a63379ebb38",
+                "type": "text/javascript",
+                "exec": [
+                  "var baseUrl = pm.variables.replaceIn('{{baseUrl}}');",
+                  "var jar = pm.cookies.jar();",
+                  "pm.test('httponly cookies are readable through current helpers and jar helpers', function (done) {",
+                  "  try {",
+                  "    var requestCookies = pm.response.json().cookies;",
+                  "    pm.expect(requestCookies.secret).to.equal('secret-value');",
+                  "    pm.expect(pm.cookies.get('secret')).to.equal('secret-value');",
+                  "    pm.expect(pm.cookies.has('secret')).to.equal(true);",
+                  "    pm.expect(pm.cookies.toObject().secret).to.equal('secret-value');",
+                  "  } catch (error) {",
+                  "    done(error);",
+                  "    return;",
+                  "  }",
+                  "  jar.get(baseUrl, 'secret', function (getError, value) {",
+                  "    try {",
+                  "      pm.expect(getError).to.equal(null);",
+                  "      pm.expect(value).to.equal('secret-value');",
+                  "    } catch (error) {",
+                  "      done(error);",
+                  "      return;",
+                  "    }",
+                  "    jar.getAll(baseUrl, function (allError, cookies) {",
+                  "      try {",
+                  "        pm.expect(allError).to.equal(null);",
+                  "        pm.expect(cookies.get('secret')).to.equal('secret-value');",
+                  "        pm.expect(cookies.one('secret').httpOnly).to.equal(true);",
+                  "        done();",
+                  "      } catch (error) {",
+                  "        done(error);",
+                  "      }",
+                  "    });",
+                  "  });",
+                  "});",
+                  "pm.test('httponly jar mutations and pm.sendRequest updates match Postman', function (done) {",
+                  "  jar.set(baseUrl, { name: 'scriptSecret', value: 'script-secret', httpOnly: true, path: '/' }, function (setError) {",
+                  "    if (setError) { done(setError); return; }",
+                  "    jar.get(baseUrl, 'scriptSecret', function (getError, value) {",
+                  "      try {",
+                  "        pm.expect(getError).to.equal(null);",
+                  "        pm.expect(value).to.equal('script-secret');",
+                  "      } catch (error) {",
+                  "        done(error);",
+                  "        return;",
+                  "      }",
+                  "      jar.set(baseUrl, 'replaceMe', 'client-visible', function (replaceError) {",
+                  "        if (replaceError) { done(replaceError); return; }",
+                  "        jar.unset(baseUrl, 'clearMe', function (unsetError) {",
+                  "          if (unsetError) { done(unsetError); return; }",
+                  "          pm.sendRequest(baseUrl + '/set-send-httponly', function (sendError, response) {",
+                  "            try {",
+                  "              pm.expect(sendError).to.equal(null);",
+                  "              pm.expect(response.code).to.equal(200);",
+                  "            } catch (error) {",
+                  "              done(error);",
+                  "              return;",
+                  "            }",
+                  "            jar.get(baseUrl, 'sendSecret', function (sendGetError, sendValue) {",
+                  "              try {",
+                  "                pm.expect(sendGetError).to.equal(null);",
+                  "                pm.expect(sendValue).to.equal('send-secret');",
+                  "                done();",
+                  "              } catch (error) {",
+                  "                done(error);",
+                  "              }",
+                  "            });",
+                  "          });",
+                  "        });",
+                  "      });",
+                  "    });",
+                  "  });",
+                  "});"
+                ],
+                "_lastExecutionId": "511000d8-1868-4dcb-9fef-f29ae51567ef"
+              }
+            }
+          ]
+        },
+        "request": {
+          "url": {
+            "protocol": "http",
+            "port": "42371",
+            "path": [
+              "set-send-httponly"
+            ],
+            "host": [
+              "127",
+              "0",
+              "0",
+              "1"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.39.1",
+              "system": true
+            },
+            {
+              "key": "Accept",
+              "value": "*/*",
+              "system": true
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache",
+              "system": true
+            },
+            {
+              "key": "Postman-Token",
+              "value": "f662612e-c5f1-47b9-9978-784e5535e5e5",
+              "system": true
+            },
+            {
+              "key": "Host",
+              "value": "127.0.0.1:42371",
+              "system": true
+            },
+            {
+              "key": "Accept-Encoding",
+              "value": "gzip, deflate, br",
+              "system": true
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive",
+              "system": true
+            },
+            {
+              "key": "Cookie",
+              "value": "visible=visible-value; secret=secret-value; replaceMe=client-visible; scriptSecret=script-secret",
+              "system": true
+            }
+          ],
+          "method": "GET"
+        },
+        "response": {
+          "id": "6e0cb8f0-b948-44eb-a904-30765b4a7742",
+          "status": "OK",
+          "code": 200,
+          "header": [
+            {
+              "key": "content-length",
+              "value": "21"
+            },
+            {
+              "key": "content-type",
+              "value": "application/json"
+            },
+            {
+              "key": "set-cookie",
+              "value": "sendSecret=send-secret; Path=/; HttpOnly"
+            },
+            {
+              "key": "Date",
+              "value": "Tue, 28 Apr 2026 15:24:38 GMT"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Keep-Alive",
+              "value": "timeout=5"
+            }
+          ],
+          "stream": {
+            "type": "Buffer",
+            "data": [
+              123,
+              34,
+              115,
+              101,
+              110,
+              100,
+              72,
+              116,
+              116,
+              112,
+              79,
+              110,
+              108,
+              121,
+              34,
+              58,
+              116,
+              114,
+              117,
+              101,
+              125
+            ]
+          },
+          "cookie": [],
+          "responseTime": 2,
+          "responseSize": 21
+        },
+        "id": "1a5929d0-618a-4f36-acf2-863ac84df409",
+        "assertions": [
+          {
+            "assertion": "httponly cookies are readable through current helpers and jar helpers",
+            "skipped": false
+          },
+          {
+            "assertion": "httponly jar mutations and pm.sendRequest updates match Postman",
+            "skipped": false
+          }
+        ]
+      },
+      {
+        "cursor": {
+          "ref": "6f828db0-b574-4638-84e5-04e86752672e",
+          "length": 4,
+          "cycles": 1,
+          "position": 1,
+          "iteration": 0,
+          "httpRequestId": "b4d25162-01e1-4cf0-836f-86aacaee4ac0",
+          "scriptId": "5c1db355-336d-4a1d-8dff-9a63379ebb38",
+          "execution": "511000d8-1868-4dcb-9fef-f29ae51567ef"
+        },
+        "item": {
+          "id": "f7ca1816-c937-4c20-a4d0-4f6ba95dab4d",
+          "name": "Read And Mutate HttpOnly Cookies",
+          "request": {
+            "url": {
+              "path": [
+                "cookie-check"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "method": "GET"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "5c1db355-336d-4a1d-8dff-9a63379ebb38",
+                "type": "text/javascript",
+                "exec": [
+                  "var baseUrl = pm.variables.replaceIn('{{baseUrl}}');",
+                  "var jar = pm.cookies.jar();",
+                  "pm.test('httponly cookies are readable through current helpers and jar helpers', function (done) {",
+                  "  try {",
+                  "    var requestCookies = pm.response.json().cookies;",
+                  "    pm.expect(requestCookies.secret).to.equal('secret-value');",
+                  "    pm.expect(pm.cookies.get('secret')).to.equal('secret-value');",
+                  "    pm.expect(pm.cookies.has('secret')).to.equal(true);",
+                  "    pm.expect(pm.cookies.toObject().secret).to.equal('secret-value');",
+                  "  } catch (error) {",
+                  "    done(error);",
+                  "    return;",
+                  "  }",
+                  "  jar.get(baseUrl, 'secret', function (getError, value) {",
+                  "    try {",
+                  "      pm.expect(getError).to.equal(null);",
+                  "      pm.expect(value).to.equal('secret-value');",
+                  "    } catch (error) {",
+                  "      done(error);",
+                  "      return;",
+                  "    }",
+                  "    jar.getAll(baseUrl, function (allError, cookies) {",
+                  "      try {",
+                  "        pm.expect(allError).to.equal(null);",
+                  "        pm.expect(cookies.get('secret')).to.equal('secret-value');",
+                  "        pm.expect(cookies.one('secret').httpOnly).to.equal(true);",
+                  "        done();",
+                  "      } catch (error) {",
+                  "        done(error);",
+                  "      }",
+                  "    });",
+                  "  });",
+                  "});",
+                  "pm.test('httponly jar mutations and pm.sendRequest updates match Postman', function (done) {",
+                  "  jar.set(baseUrl, { name: 'scriptSecret', value: 'script-secret', httpOnly: true, path: '/' }, function (setError) {",
+                  "    if (setError) { done(setError); return; }",
+                  "    jar.get(baseUrl, 'scriptSecret', function (getError, value) {",
+                  "      try {",
+                  "        pm.expect(getError).to.equal(null);",
+                  "        pm.expect(value).to.equal('script-secret');",
+                  "      } catch (error) {",
+                  "        done(error);",
+                  "        return;",
+                  "      }",
+                  "      jar.set(baseUrl, 'replaceMe', 'client-visible', function (replaceError) {",
+                  "        if (replaceError) { done(replaceError); return; }",
+                  "        jar.unset(baseUrl, 'clearMe', function (unsetError) {",
+                  "          if (unsetError) { done(unsetError); return; }",
+                  "          pm.sendRequest(baseUrl + '/set-send-httponly', function (sendError, response) {",
+                  "            try {",
+                  "              pm.expect(sendError).to.equal(null);",
+                  "              pm.expect(response.code).to.equal(200);",
+                  "            } catch (error) {",
+                  "              done(error);",
+                  "              return;",
+                  "            }",
+                  "            jar.get(baseUrl, 'sendSecret', function (sendGetError, sendValue) {",
+                  "              try {",
+                  "                pm.expect(sendGetError).to.equal(null);",
+                  "                pm.expect(sendValue).to.equal('send-secret');",
+                  "                done();",
+                  "              } catch (error) {",
+                  "                done(error);",
+                  "              }",
+                  "            });",
+                  "          });",
+                  "        });",
+                  "      });",
+                  "    });",
+                  "  });",
+                  "});"
+                ],
+                "_lastExecutionId": "511000d8-1868-4dcb-9fef-f29ae51567ef"
+              }
+            }
+          ]
+        },
+        "request": {
+          "url": {
+            "protocol": "http",
+            "port": "42371",
+            "path": [
+              "set-send-httponly"
+            ],
+            "host": [
+              "127",
+              "0",
+              "0",
+              "1"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.39.1",
+              "system": true
+            },
+            {
+              "key": "Accept",
+              "value": "*/*",
+              "system": true
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache",
+              "system": true
+            },
+            {
+              "key": "Postman-Token",
+              "value": "f662612e-c5f1-47b9-9978-784e5535e5e5",
+              "system": true
+            },
+            {
+              "key": "Host",
+              "value": "127.0.0.1:42371",
+              "system": true
+            },
+            {
+              "key": "Accept-Encoding",
+              "value": "gzip, deflate, br",
+              "system": true
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive",
+              "system": true
+            },
+            {
+              "key": "Cookie",
+              "value": "visible=visible-value; secret=secret-value; replaceMe=client-visible; scriptSecret=script-secret",
+              "system": true
+            }
+          ],
+          "method": "GET"
+        },
+        "response": {
+          "id": "6e0cb8f0-b948-44eb-a904-30765b4a7742",
+          "status": "OK",
+          "code": 200,
+          "header": [
+            {
+              "key": "content-length",
+              "value": "21"
+            },
+            {
+              "key": "content-type",
+              "value": "application/json"
+            },
+            {
+              "key": "set-cookie",
+              "value": "sendSecret=send-secret; Path=/; HttpOnly"
+            },
+            {
+              "key": "Date",
+              "value": "Tue, 28 Apr 2026 15:24:38 GMT"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Keep-Alive",
+              "value": "timeout=5"
+            }
+          ],
+          "stream": {
+            "type": "Buffer",
+            "data": [
+              123,
+              34,
+              115,
+              101,
+              110,
+              100,
+              72,
+              116,
+              116,
+              112,
+              79,
+              110,
+              108,
+              121,
+              34,
+              58,
+              116,
+              114,
+              117,
+              101,
+              125
+            ]
+          },
+          "cookie": [],
+          "responseTime": 2,
+          "responseSize": 21
+        },
+        "id": "1a5929d0-618a-4f36-acf2-863ac84df409",
+        "assertions": [
+          {
+            "assertion": "httponly cookies are readable through current helpers and jar helpers",
+            "skipped": false
+          },
+          {
+            "assertion": "httponly jar mutations and pm.sendRequest updates match Postman",
+            "skipped": false
+          }
+        ]
+      },
+      {
+        "cursor": {
+          "ref": "3e17178e-8c95-496e-87a0-46211096a1fe",
+          "length": 4,
+          "cycles": 1,
+          "position": 2,
+          "iteration": 0,
+          "httpRequestId": "fef0b366-e675-4bd2-9d32-20dcef641fd4"
+        },
+        "item": {
+          "id": "42e13120-8c58-44b2-9210-0ce6f78178f7",
+          "name": "After HttpOnly Mutations",
+          "request": {
+            "url": {
+              "path": [
+                "cookie-check"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "method": "GET"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "8e13dbad-aa0a-4a73-8717-2016555b8319",
+                "type": "text/javascript",
+                "exec": [
+                  "var baseUrl = pm.variables.replaceIn('{{baseUrl}}');",
+                  "var jar = pm.cookies.jar();",
+                  "pm.test('httponly mutations affect later requests', function () {",
+                  "  var cookies = pm.response.json().cookies;",
+                  "  pm.expect(cookies.visible).to.equal('visible-value');",
+                  "  pm.expect(cookies.secret).to.equal('secret-value');",
+                  "  pm.expect(cookies.replaceMe).to.equal('client-visible');",
+                  "  pm.expect(cookies.scriptSecret).to.equal('script-secret');",
+                  "  pm.expect(cookies.sendSecret).to.equal('send-secret');",
+                  "  pm.expect(cookies.clearMe).to.equal(undefined);",
+                  "});",
+                  "pm.test('httponly jar clear removes visible and httponly cookies', function (done) {",
+                  "  jar.clear(baseUrl, function (error) {",
+                  "    try {",
+                  "      pm.expect(error).to.equal(null);",
+                  "      done();",
+                  "    } catch (assertion) {",
+                  "      done(assertion);",
+                  "    }",
+                  "  });",
+                  "});"
+                ],
+                "_lastExecutionId": "420e76bd-2b23-4316-b304-ff1b0ca906f6"
+              }
+            }
+          ]
+        },
+        "request": {
+          "url": {
+            "protocol": "http",
+            "port": "42371",
+            "path": [
+              "cookie-check"
+            ],
+            "host": [
+              "127",
+              "0",
+              "0",
+              "1"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.39.1",
+              "system": true
+            },
+            {
+              "key": "Accept",
+              "value": "*/*",
+              "system": true
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache",
+              "system": true
+            },
+            {
+              "key": "Postman-Token",
+              "value": "729881b5-c93b-4685-92d1-b97549b41e3c",
+              "system": true
+            },
+            {
+              "key": "Host",
+              "value": "127.0.0.1:42371",
+              "system": true
+            },
+            {
+              "key": "Accept-Encoding",
+              "value": "gzip, deflate, br",
+              "system": true
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive",
+              "system": true
+            },
+            {
+              "key": "Cookie",
+              "value": "visible=visible-value; secret=secret-value; replaceMe=client-visible; scriptSecret=script-secret; sendSecret=send-secret",
+              "system": true
+            }
+          ],
+          "method": "GET"
+        },
+        "response": {
+          "id": "2c19e023-4f0f-4d85-938d-057a610c126c",
+          "status": "OK",
+          "code": 200,
+          "header": [
+            {
+              "key": "content-length",
+              "value": "150"
+            },
+            {
+              "key": "content-type",
+              "value": "application/json"
+            },
+            {
+              "key": "Date",
+              "value": "Tue, 28 Apr 2026 15:24:38 GMT"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Keep-Alive",
+              "value": "timeout=5"
+            }
+          ],
+          "stream": {
+            "type": "Buffer",
+            "data": [
+              123,
+              34,
+              99,
+              111,
+              111,
+              107,
+              105,
+              101,
+              115,
+              34,
+              58,
+              123,
+              34,
+              118,
+              105,
+              115,
+              105,
+              98,
+              108,
+              101,
+              34,
+              58,
+              34,
+              118,
+              105,
+              115,
+              105,
+              98,
+              108,
+              101,
+              45,
+              118,
+              97,
+              108,
+              117,
+              101,
+              34,
+              44,
+              34,
+              115,
+              101,
+              99,
+              114,
+              101,
+              116,
+              34,
+              58,
+              34,
+              115,
+              101,
+              99,
+              114,
+              101,
+              116,
+              45,
+              118,
+              97,
+              108,
+              117,
+              101,
+              34,
+              44,
+              34,
+              114,
+              101,
+              112,
+              108,
+              97,
+              99,
+              101,
+              77,
+              101,
+              34,
+              58,
+              34,
+              99,
+              108,
+              105,
+              101,
+              110,
+              116,
+              45,
+              118,
+              105,
+              115,
+              105,
+              98,
+              108,
+              101,
+              34,
+              44,
+              34,
+              115,
+              99,
+              114,
+              105,
+              112,
+              116,
+              83,
+              101,
+              99,
+              114,
+              101,
+              116,
+              34,
+              58,
+              34,
+              115,
+              99,
+              114,
+              105,
+              112,
+              116,
+              45,
+              115,
+              101,
+              99,
+              114,
+              101,
+              116,
+              34,
+              44,
+              34,
+              115,
+              101,
+              110,
+              100,
+              83,
+              101,
+              99,
+              114,
+              101,
+              116,
+              34,
+              58,
+              34,
+              115,
+              101,
+              110,
+              100,
+              45,
+              115,
+              101,
+              99,
+              114,
+              101,
+              116,
+              34,
+              125,
+              125
+            ]
+          },
+          "cookie": [],
+          "responseTime": 1,
+          "responseSize": 150
+        },
+        "id": "42e13120-8c58-44b2-9210-0ce6f78178f7",
+        "assertions": [
+          {
+            "assertion": "httponly mutations affect later requests",
+            "skipped": false
+          },
+          {
+            "assertion": "httponly jar clear removes visible and httponly cookies",
+            "skipped": false
+          }
+        ]
+      },
+      {
+        "cursor": {
+          "ref": "32ef122c-3aa4-45f1-984b-c1626feaeed0",
+          "length": 4,
+          "cycles": 1,
+          "position": 3,
+          "iteration": 0,
+          "httpRequestId": "340a8366-2620-47c1-b9e6-aa5d6198a658"
+        },
+        "item": {
+          "id": "36a64165-308b-4349-a1dd-6f8f08fc333d",
+          "name": "After HttpOnly Clear",
+          "request": {
+            "url": {
+              "path": [
+                "cookie-check"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "method": "GET"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "695d21da-b5ee-4256-b8c6-ea671f8ab320",
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('httponly clear removed every in-scope cookie', function () {",
+                  "  var cookies = pm.response.json().cookies;",
+                  "  pm.expect(cookies).to.deep.equal({});",
+                  "  pm.environment.set('httpOnlyCookieSummary', JSON.stringify({ readable: true, mutable: true, clearRemovedAll: true }));",
+                  "});"
+                ],
+                "_lastExecutionId": "0395e509-3616-41f4-8da9-4b914f39dc91"
+              }
+            }
+          ]
+        },
+        "request": {
+          "url": {
+            "protocol": "http",
+            "port": "42371",
+            "path": [
+              "cookie-check"
+            ],
+            "host": [
+              "127",
+              "0",
+              "0",
+              "1"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.39.1",
+              "system": true
+            },
+            {
+              "key": "Accept",
+              "value": "*/*",
+              "system": true
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache",
+              "system": true
+            },
+            {
+              "key": "Postman-Token",
+              "value": "9bdcb54c-0c9e-47ed-8a40-f3cee46e53ef",
+              "system": true
+            },
+            {
+              "key": "Host",
+              "value": "127.0.0.1:42371",
+              "system": true
+            },
+            {
+              "key": "Accept-Encoding",
+              "value": "gzip, deflate, br",
+              "system": true
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive",
+              "system": true
+            }
+          ],
+          "method": "GET"
+        },
+        "response": {
+          "id": "a7d43aeb-19be-4a2e-b39c-6b3c6457532d",
+          "status": "OK",
+          "code": 200,
+          "header": [
+            {
+              "key": "content-length",
+              "value": "14"
+            },
+            {
+              "key": "content-type",
+              "value": "application/json"
+            },
+            {
+              "key": "Date",
+              "value": "Tue, 28 Apr 2026 15:24:38 GMT"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Keep-Alive",
+              "value": "timeout=5"
+            }
+          ],
+          "stream": {
+            "type": "Buffer",
+            "data": [
+              123,
+              34,
+              99,
+              111,
+              111,
+              107,
+              105,
+              101,
+              115,
+              34,
+              58,
+              123,
+              125,
+              125
+            ]
+          },
+          "cookie": [],
+          "responseTime": 0,
+          "responseSize": 14
+        },
+        "id": "36a64165-308b-4349-a1dd-6f8f08fc333d",
+        "assertions": [
+          {
+            "assertion": "httponly clear removed every in-scope cookie",
+            "skipped": false
+          }
+        ]
+      }
+    ],
+    "transfers": {
+      "responseTotal": 417
+    },
+    "failures": [],
+    "error": null
+  }
+}

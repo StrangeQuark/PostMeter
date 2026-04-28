@@ -27,11 +27,11 @@ test('keeps platform OS sandbox claim blockers separate from Postman API parity 
 
   assert.equal(result.ok, false);
   assert.ok(result.errors.some((error) => error.includes('Platform-equivalent full OS sandbox claim is blocked')));
-  assert.ok(blockerIds.has('linux.seccomp-deny-default-allowlist-decision'));
   assert.ok(blockerIds.has('windows.appcontainer-backend'));
   assert.ok(blockerIds.has('windows.packaged-os-sandbox-validation'));
   assert.ok(blockerIds.has('macos.seatbelt-backend'));
   assert.ok(blockerIds.has('macos.packaged-os-sandbox-validation'));
+  assert.equal(blockerIds.has('linux.seccomp-deny-default-allowlist-decision'), false);
   assert.equal(blockerIds.has('postman-parity.separate-claim'), false);
   assert.equal(blockerIds.has('load-tests.scripted-sandbox-contract'), false);
   assert.equal(blockerIds.has('sendRequest.advanced-auth-proxy'), false);

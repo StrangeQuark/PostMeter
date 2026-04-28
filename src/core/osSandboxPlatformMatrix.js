@@ -109,13 +109,14 @@ function buildOsSandboxPlatformMatrix() {
         '.github/workflows/release.yml'
       ]
     }),
-    row('windows.appcontainer-backend', 'windows', 'native-backend', 'Implement a native Windows OS sandbox backend, such as AppContainer or an equivalent restricted-token/job-object launch model, for script workers.', 'blocked-native-backend', {
+    row('windows.appcontainer-backend', 'windows', 'native-backend', 'Windows script workers have a fail-closed native helper contract, but the release-owned AppContainer/restricted-token helper binary is still required before claiming platform-equivalent coverage.', 'blocked-native-backend', {
       claimBlocking: true,
-      securityDecision: 'Fail closed or downgrade the public claim on Windows until a native OS sandbox backend exists; do not silently rely on node:vm alone.',
+      securityDecision: 'Fail closed or downgrade the public claim on Windows until the configured helper is packaged and validates AppContainer or equivalent restricted-token/job-object behavior; do not silently rely on node:vm alone.',
       sourceRefs: ['sandboxContract', 'nextSteps', 'osSandbox'],
       verificationRefs: [
+        'POSTMETER_WINDOWS_OS_SANDBOX_HELPER launcher contract in src/core/osSandbox.js',
         'future Windows native backend tests',
-        'future npm run sandbox:validate on windows-latest'
+        'future npm run sandbox:validate on windows-latest with helper artifact'
       ]
     }),
     row('windows.packaged-os-sandbox-validation', 'windows', 'packaged-validation', 'Packaged Windows artifacts must validate the native OS sandbox backend, Node permission flags, packaged path behavior, and script-worker launch behavior on a Windows runner.', 'blocked-native-backend', {
@@ -127,13 +128,14 @@ function buildOsSandboxPlatformMatrix() {
         '.github/workflows/release.yml'
       ]
     }),
-    row('macos.seatbelt-backend', 'macos', 'native-backend', 'Implement a native macOS OS sandbox backend, such as seatbelt/sandbox-exec replacement strategy or an equivalent hardened helper, for script workers.', 'blocked-native-backend', {
+    row('macos.seatbelt-backend', 'macos', 'native-backend', 'macOS script workers select a seatbelt-style sandbox-exec launcher when present, but native-runner source and packaged probes must prove the profile before claiming platform-equivalent coverage.', 'blocked-native-backend', {
       claimBlocking: true,
-      securityDecision: 'Fail closed or downgrade the public claim on macOS until a native OS sandbox backend exists; do not silently rely on node:vm alone.',
+      securityDecision: 'Fail closed or downgrade the public claim on macOS until seatbelt behavior is validated on macos-latest packaged artifacts; do not silently rely on node:vm alone.',
       sourceRefs: ['sandboxContract', 'nextSteps', 'osSandbox'],
       verificationRefs: [
+        'macos-seatbelt launcher path in src/core/osSandbox.js',
         'future macOS native backend tests',
-        'future npm run sandbox:validate on macos-latest'
+        'future npm run sandbox:validate on macos-latest with packaged probes'
       ]
     }),
     row('macos.packaged-os-sandbox-validation', 'macos', 'packaged-validation', 'Packaged macOS artifacts must validate the native OS sandbox backend, Node permission flags, app bundle/ASAR path behavior, and script-worker launch behavior on a macOS runner.', 'blocked-native-backend', {

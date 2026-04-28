@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "source": "postmeter-parity-harness",
+  "fixtureId": "differential-runtime-limits",
+  "summary": {
+    "collectionName": "PostMeter Differential Runtime Limits",
+    "failedRequests": 0,
+    "passed": true,
+    "passedRequests": 1,
+    "totalRequests": 1
+  },
+  "requests": [
+    {
+      "requestName": "Runtime Timer Drain And Output",
+      "statusCode": 200,
+      "passed": true,
+      "tests": [
+        {
+          "name": "runtime timers, console, and visualizer work below policy limits",
+          "passed": true,
+          "error": ""
+        }
+      ]
+    }
+  ],
+  "environment": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:42371"
+    },
+    {
+      "key": "envSeed",
+      "value": "env-seed"
+    },
+    {
+      "key": "runtimeLimitsSummary",
+      "value": "{\"promiseMicrotask\":true,\"timeout\":true,\"intervalCleared\":true,\"intervalCountAtLeastTwo\":true,\"visualizerSet\":true,\"timerFunctions\":\"function,function,function,function\",\"consoleFunctions\":\"function,function,function\"}"
+    }
+  ],
+  "observedRequests": [
+    {
+      "method": "GET",
+      "path": "/json",
+      "xPre": ""
+    }
+  ]
+}

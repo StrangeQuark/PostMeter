@@ -667,16 +667,18 @@ async function runBrokeredExecutionRunRequest(state, payload) {
 }
 
 async function runBrokeredVaultGet(state, payload) {
-  const vault = assertVaultCapability(state);
   countVaultOperation(state);
-  return vault.get(normalizeVaultKey(payload.key));
+  const key = normalizeVaultKey(payload.key);
+  const vault = await assertVaultCapability(state, 'get', key);
+  return vault.get(key);
 }
 
 async function runBrokeredVaultSet(state, payload) {
-  const vault = assertVaultCapability(state);
   countVaultOperation(state);
+  const key = normalizeVaultKey(payload.key);
+  const vault = await assertVaultCapability(state, 'set', key);
   await vault.set(
-    normalizeVaultKey(payload.key),
+    key,
     normalizeVaultSecretValue(payload.value),
     vaultAuditMetadata(state)
   );
@@ -684,9 +686,10 @@ async function runBrokeredVaultSet(state, payload) {
 }
 
 async function runBrokeredVaultUnset(state, payload) {
-  const vault = assertVaultCapability(state);
   countVaultOperation(state);
-  await vault.unset(normalizeVaultKey(payload.key), vaultAuditMetadata(state));
+  const key = normalizeVaultKey(payload.key);
+  const vault = await assertVaultCapability(state, 'unset', key);
+  await vault.unset(key, vaultAuditMetadata(state));
   return {};
 }
 
@@ -839,7 +842,27 @@ function mockStateValuesEqual(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-function assertVaultCapability(state) {
+async function assertVaultCapability(state, operation = '', key = '') {
+  const decision = vaultCapabilityDecision(state);
+  if (!decision.allowed) {
+    if (decision.explicitDenied || typeof state.options.vaultPrompt !== 'function') {
+      await auditVaultPromptDecision(state, 'prompt-deny', key);
+      throw new Error('pm.vault is disabled for this workspace.');
+    }
+    const promptResult = await state.options.vaultPrompt({
+      key,
+      operation,
+      requestId: state.context?.request?.id || '',
+      requestName: state.context?.request?.name || '',
+      collectionId: state.context?.collectionId || ''
+    });
+    if (!promptResult || promptResult.granted !== true) {
+      await auditVaultPromptDecision(state, promptResult?.reset === true ? 'prompt-reset' : 'prompt-deny', key);
+      throw new Error('pm.vault access was denied for this request.');
+    }
+    await auditVaultPromptDecision(state, `prompt-grant-${promptResult.scope || 'request'}`, key);
+    applyTransientVaultGrant(state, promptResult);
+  }
   if (!scriptCapabilityEnabled(state, 'vault')) {
     throw new Error('pm.vault is disabled for this workspace.');
   }
@@ -858,6 +881,14 @@ function countVaultOperation(state) {
   if (state.vaultOperations > MAX_PM_VAULT_OPERATIONS) {
     throw new Error(`pm.vault cannot be called more than ${MAX_PM_VAULT_OPERATIONS} times per script.`);
   }
+}
+
+async function auditVaultPromptDecision(state, operation, key) {
+  const vault = state.options.vault;
+  if (!vault || typeof vault.audit !== 'function') {
+    return;
+  }
+  await vault.audit(operation, key, vaultAuditMetadata(state)).catch(() => {});
 }
 
 function vaultAuditMetadata(state) {
@@ -1612,41 +1643,70 @@ function assertCookieCapability(state) {
 
 function scriptCapabilityEnabled(state, capability) {
   if (capability === 'vault') {
-    return vaultCapabilityEnabled(state);
+    return vaultCapabilityDecision(state).allowed;
   }
   return state.options.trustedCapabilities?.[capability] !== false;
 }
 
-function vaultCapabilityEnabled(state) {
+function vaultCapabilityDecision(state) {
   const trustedCapabilities = state.options.trustedCapabilities || {};
   const grants = trustedCapabilities.vaultGrants;
   const requestId = String(state.context?.request?.id || '');
   const collectionId = String(state.context?.collectionId || '');
   if (grants && typeof grants === 'object') {
     if (requestId && listIncludesId(grants.deniedRequests, requestId)) {
-      return false;
+      return { allowed: false, explicitDenied: true };
     }
     if (collectionId && listIncludesId(grants.deniedCollections, collectionId)) {
-      return false;
+      return { allowed: false, explicitDenied: true };
     }
   }
   if (trustedCapabilities.vault === true) {
-    return true;
+    return { allowed: true, explicitDenied: false };
   }
   if (!grants || typeof grants !== 'object') {
-    return false;
+    return { allowed: false, explicitDenied: false };
   }
   if (grants.workspace === true) {
-    return true;
+    return { allowed: true, explicitDenied: false };
   }
   if (requestId && listIncludesId(grants.requests, requestId)) {
-    return true;
+    return { allowed: true, explicitDenied: false };
   }
-  return Boolean(collectionId && listIncludesId(grants.collections, collectionId));
+  return {
+    allowed: Boolean(collectionId && listIncludesId(grants.collections, collectionId)),
+    explicitDenied: false
+  };
+}
+
+function applyTransientVaultGrant(state, promptResult = {}) {
+  state.options.trustedCapabilities ||= {};
+  const trustedCapabilities = state.options.trustedCapabilities;
+  trustedCapabilities.vaultGrants ||= {};
+  const grants = trustedCapabilities.vaultGrants;
+  const scope = promptResult.scope === 'collection' ? 'collection' : promptResult.scope === 'workspace' ? 'workspace' : 'request';
+  if (scope === 'workspace') {
+    grants.workspace = true;
+    return;
+  }
+  if (scope === 'collection') {
+    grants.collections = appendUniqueId(grants.collections, state.context?.collectionId || '');
+    return;
+  }
+  grants.requests = appendUniqueId(grants.requests, state.context?.request?.id || '');
 }
 
 function listIncludesId(values, id) {
   return Array.isArray(values) && values.map((value) => String(value || '')).includes(id);
+}
+
+function appendUniqueId(values, id) {
+  const normalized = String(id || '').trim();
+  const next = Array.isArray(values) ? values.map((value) => String(value || '')) : [];
+  if (normalized && !next.includes(normalized)) {
+    next.push(normalized);
+  }
+  return next;
 }
 
 function currentRequestCookiesForWorker(state) {

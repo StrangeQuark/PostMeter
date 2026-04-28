@@ -26,6 +26,7 @@ function registerRuntimeIpc(options = {}) {
     getWorkspace,
     getWorkspaceId = () => '',
     getVaultStore = () => null,
+    getVaultPrompt = () => null,
     ipcMain,
     mutateWorkspace = async (mutator) => {
       const nextWorkspace = await mutator(getWorkspace());
@@ -105,6 +106,7 @@ function registerRuntimeIpc(options = {}) {
         sandboxPackages: workspace.settings?.sandbox?.packageCache || [],
         trustedCapabilities: workspace.settings?.sandbox?.trustedCapabilities || {},
         vault: getVaultStore(workspaceId),
+        vaultPrompt: getVaultPrompt(workspaceId),
         stopOnFailure: config.stopOnFailure === true,
         onProgress: (progress) => {
           assertRunnerProgressPayload(progress);

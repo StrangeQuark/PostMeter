@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "target": {
+    "newman": "6.2.2",
+    "postmanRuntime": "7.39.1"
+  },
+  "generationCommand": "npm run postman:parity:diff -- --newman --download-newman --output <dir> && npm run postman:newman-reports:write -- --from <dir>",
+  "normalizedFields": [
+    "timestamps",
+    "run durations",
+    "response timings",
+    "randomized localhost ports",
+    "host filesystem paths",
+    "machine-specific process metadata",
+    "raw reporter cursor ids where duplicated by Newman internals"
+  ],
+  "comparison": {
+    "passed": true,
+    "differences": []
+  },
+  "suites": [
+    {
+      "fixtureId": "differential-http-core",
+      "newmanRaw": "raw-newman/differential-http-core.json",
+      "newmanNormalized": "normalized-newman/differential-http-core.json",
+      "postmeterNormalized": "normalized-postmeter/differential-http-core.json"
+    },
+    {
+      "fixtureId": "differential-sandbox-broad",
+      "newmanRaw": "raw-newman/differential-sandbox-broad.json",
+      "newmanNormalized": "normalized-newman/differential-sandbox-broad.json",
+      "postmeterNormalized": "normalized-postmeter/differential-sandbox-broad.json"
+    },
+    {
+      "fixtureId": "differential-dynamic-host-globals",
+      "newmanRaw": "raw-newman/differential-dynamic-host-globals.json",
+      "newmanNormalized": "normalized-newman/differential-dynamic-host-globals.json",
+      "postmeterNormalized": "normalized-postmeter/differential-dynamic-host-globals.json"
+    },
+    {
+      "fixtureId": "differential-runtime-limits",
+      "newmanRaw": "raw-newman/differential-runtime-limits.json",
+      "newmanNormalized": "normalized-newman/differential-runtime-limits.json",
+      "postmeterNormalized": "normalized-postmeter/differential-runtime-limits.json"
+    },
+    {
+      "fixtureId": "differential-httponly-cookies",
+      "newmanRaw": "raw-newman/differential-httponly-cookies.json",
+      "newmanNormalized": "normalized-newman/differential-httponly-cookies.json",
+      "postmeterNormalized": "normalized-postmeter/differential-httponly-cookies.json"
+    },
+    {
+      "fixtureId": "differential-sendrequest-advanced",
+      "newmanRaw": "raw-newman/differential-sendrequest-advanced.json",
+      "newmanNormalized": "normalized-newman/differential-sendrequest-advanced.json",
+      "postmeterNormalized": "normalized-postmeter/differential-sendrequest-advanced.json"
+    },
+    {
+      "fixtureId": "differential-sendrequest-files",
+      "newmanRaw": "raw-newman/differential-sendrequest-files.json",
+      "newmanNormalized": "normalized-newman/differential-sendrequest-files.json",
+      "postmeterNormalized": "normalized-postmeter/differential-sendrequest-files.json"
+    }
+  ]
+}

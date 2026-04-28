@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "source": "postmeter-parity-harness",
+  "fixtureId": "differential-sendrequest-advanced",
+  "summary": {
+    "collectionName": "PostMeter Differential SendRequest Advanced",
+    "failedRequests": 0,
+    "passed": true,
+    "passedRequests": 1,
+    "totalRequests": 1
+  },
+  "requests": [
+    {
+      "requestName": "Advanced SendRequest Auth",
+      "statusCode": 200,
+      "passed": true,
+      "tests": [
+        {
+          "name": "pm.sendRequest advanced auth helpers match Newman",
+          "passed": true,
+          "error": ""
+        }
+      ]
+    }
+  ],
+  "environment": [
+    {
+      "key": "advancedAuthSummary",
+      "value": "{\"digest\":\"Digest\",\"hawk\":\"Hawk\",\"aws\":\"AWS4-HMAC-SHA256\"}"
+    },
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:42371"
+    },
+    {
+      "key": "envSeed",
+      "value": "env-seed"
+    }
+  ],
+  "observedRequests": [
+    {
+      "method": "GET",
+      "path": "/json",
+      "xPre": ""
+    },
+    {
+      "method": "GET",
+      "path": "/auth/digest",
+      "xPre": ""
+    },
+    {
+      "method": "GET",
+      "path": "/auth/digest",
+      "xPre": ""
+    },
+    {
+      "method": "GET",
+      "path": "/auth/hawk",
+      "xPre": ""
+    },
+    {
+      "method": "GET",
+      "path": "/auth/aws",
+      "xPre": ""
+    }
+  ]
+}

@@ -7,6 +7,7 @@ const PROJECT_ROOT = path.join(__dirname, '..');
 const packageJson = readJson('package.json');
 const ciWorkflow = readText('.github/workflows/ci.yml');
 const releaseWorkflow = readText('.github/workflows/release.yml');
+const releaseValidationWorkflow = readText('.github/workflows/release-validation.yml');
 const errors = [];
 
 requireScript('check', [
@@ -30,8 +31,15 @@ for (const scriptName of [
   'postman:docs:validate',
   'postman:docs:write',
   'postman:docs:live',
+  'postman:newman-reports:validate',
+  'production:readiness:validate',
+  'production:readiness:claim',
+  'electron:security:validate',
+  'workspace:durability:validate',
+  'compatibility:non-postman:validate',
   'release:gate',
   'release:validate',
+  'release:validate:packaged-smoke',
   'release:validate:win-protocol',
   'release:validate:mac-protocol'
 ]) {
@@ -44,11 +52,19 @@ requireWorkflow('CI workflow', ciWorkflow, [
   /npm test/,
   /npm run postman:parity:validate/,
   /npm run postman:docs:validate/,
+  /npm run postman:newman-reports:validate/,
+  /npm run production:readiness:validate/,
+  /npm run electron:security:validate/,
+  /npm run workspace:durability:validate/,
+  /npm run compatibility:non-postman:validate/,
   /npm run release:gate/,
   /npm audit --audit-level=high/,
   /npm run sandbox:validate/,
   /npm run sandbox:platform:validate/,
   /npm run pack:linux/,
+  /npm run release:validate:packaged-smoke/,
+  /windows-latest/,
+  /macos-latest/,
   /xvfb-run -a npm run sandbox:validate:packaged/
 ]);
 
@@ -60,13 +76,50 @@ requireWorkflow('Release workflow', releaseWorkflow, [
   /npm run sandbox:platform:validate/,
   /npm run postman:parity:validate/,
   /npm run postman:docs:validate/,
+  /npm run postman:newman-reports:validate/,
+  /npm run production:readiness:validate/,
+  /npm run electron:security:validate/,
+  /npm run workspace:durability:validate/,
+  /npm run compatibility:non-postman:validate/,
   /npm run release:gate/,
+  /npm run release:validate:packaged-smoke/,
   /npm run sandbox:validate:packaged/,
   /xvfb-run -a npm run sandbox:validate:packaged/,
   /npm run release:validate:win-protocol/,
   /npm run release:validate:mac-protocol/,
   /npm run release:validate/
 ]);
+
+requireWorkflow('Manual native release validation workflow', releaseValidationWorkflow, [
+  /workflow_dispatch:/,
+  /contents:\s*read/,
+  /platform:\s*linux/,
+  /platform:\s*windows/,
+  /platform:\s*macos/,
+  /npm run sandbox:validate/,
+  /npm run sandbox:platform:validate/,
+  /npm run postman:parity:validate/,
+  /npm run postman:docs:validate/,
+  /npm run postman:newman-reports:validate/,
+  /npm run production:readiness:validate/,
+  /npm run electron:security:validate/,
+  /npm run workspace:durability:validate/,
+  /npm run compatibility:non-postman:validate/,
+  /npm run release:gate/,
+  /npm run release:validate:packaged-smoke/,
+  /npm run sandbox:validate:packaged/,
+  /xvfb-run -a npm run sandbox:validate:packaged/,
+  /npm run release:validate:win-protocol/,
+  /npm run release:validate:mac-protocol/,
+  /npm run release:prepare/,
+  /npm run release:validate/,
+  /actions\/upload-artifact@v4/,
+  /actions\/download-artifact@v4/
+]);
+
+if (/gh release create/.test(releaseValidationWorkflow) || /contents:\s*write/.test(releaseValidationWorkflow)) {
+  errors.push('Manual native release validation workflow must validate artifacts without publishing a GitHub Release.');
+}
 
 if (errors.length) {
   for (const error of errors) {

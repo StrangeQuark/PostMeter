@@ -1,0 +1,1145 @@
+{
+  "collection": {
+    "_": {
+      "postman_id": "differential-sendrequest-files"
+    },
+    "item": [
+      {
+        "id": "f44c51da-f1ec-4919-b9cd-f34c99966f5b",
+        "name": "Binary Attachment Body",
+        "request": {
+          "url": {
+            "path": [
+              "attachments",
+              "binary"
+            ],
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "method": "POST",
+          "body": {
+            "mode": "file",
+            "file": {
+              "src": "test/fixtures/postman/attachments/sendrequest-binary.bin",
+              "contentType": "application/octet-stream"
+            }
+          }
+        },
+        "response": [],
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "id": "f7ecaea2-6e9e-4c21-a01d-c52e932c479a",
+              "type": "text/javascript",
+              "exec": [
+                "const payload = pm.response.json();",
+                "const previous = pm.environment.get('fileBinarySummary') || '';",
+                "pm.environment.set('fileBinarySummary', (previous ? previous + '|' : '') + payload.kind + ':' + payload.attachment + ':' + payload.field);",
+                "pm.test('binary attachment body is sent', function () {",
+                "  pm.expect(payload.attachment).to.equal('BINARY_ATTACHMENT_CONTENT');",
+                "});"
+              ],
+              "_lastExecutionId": "0288578c-279a-4c7b-9dc6-96f484cd9ad7"
+            }
+          }
+        ]
+      },
+      {
+        "id": "75027300-7dd3-4add-b652-67f47a67f336",
+        "name": "File Attachment Body",
+        "request": {
+          "url": {
+            "path": [
+              "attachments",
+              "file"
+            ],
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "method": "POST",
+          "body": {
+            "mode": "file",
+            "file": {
+              "src": "test/fixtures/postman/attachments/sendrequest-file.txt",
+              "contentType": "text/plain"
+            }
+          }
+        },
+        "response": [],
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "id": "68c2a122-b4e8-4fa5-8945-68033b0b8163",
+              "type": "text/javascript",
+              "exec": [
+                "const payload = pm.response.json();",
+                "const previous = pm.environment.get('fileBinarySummary') || '';",
+                "pm.environment.set('fileBinarySummary', (previous ? previous + '|' : '') + payload.kind + ':' + payload.attachment + ':' + payload.field);",
+                "pm.test('file attachment body is sent', function () {",
+                "  pm.expect(payload.attachment).to.equal('FILE_ATTACHMENT_CONTENT');",
+                "});"
+              ],
+              "_lastExecutionId": "09622907-4696-464a-866d-cbd9aab37fe2"
+            }
+          }
+        ]
+      },
+      {
+        "id": "939968e3-345f-4c4d-b71b-bfba2c3d3955",
+        "name": "Form Data File Attachment",
+        "request": {
+          "url": {
+            "path": [
+              "attachments",
+              "form"
+            ],
+            "host": [
+              "{{baseUrl}}"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "method": "POST",
+          "body": {
+            "mode": "formdata",
+            "formdata": [
+              {
+                "key": "note",
+                "value": "form-note",
+                "type": "text"
+              },
+              {
+                "key": "payload",
+                "type": "file",
+                "src": "test/fixtures/postman/attachments/sendrequest-file.txt",
+                "contentType": "text/plain"
+              }
+            ]
+          }
+        },
+        "response": [],
+        "event": [
+          {
+            "listen": "test",
+            "script": {
+              "id": "3ca44247-a99e-433f-80bf-8dcb59f5e410",
+              "type": "text/javascript",
+              "exec": [
+                "const payload = pm.response.json();",
+                "const previous = pm.environment.get('fileBinarySummary') || '';",
+                "pm.environment.set('fileBinarySummary', (previous ? previous + '|' : '') + payload.kind + ':' + payload.attachment + ':' + payload.field);",
+                "pm.test('form-data file attachment is sent', function () {",
+                "  pm.expect(payload.attachment).to.equal('FILE_ATTACHMENT_CONTENT');",
+                "  pm.expect(payload.field).to.equal('form-note');",
+                "});"
+              ],
+              "_lastExecutionId": "1cb7a68a-dd4f-40ba-a2e2-f2159bce9063"
+            }
+          }
+        ]
+      }
+    ],
+    "event": [],
+    "variable": [],
+    "info": {
+      "_postman_id": "differential-sendrequest-files",
+      "name": "PostMeter Differential File Bindings",
+      "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    }
+  },
+  "environment": {
+    "id": "0c261cb3-6595-4177-80ac-c8cdf057e35b",
+    "values": [
+      {
+        "type": "any",
+        "value": "http://127.0.0.1:42371",
+        "key": "baseUrl"
+      },
+      {
+        "type": "any",
+        "value": "binary:BINARY_ATTACHMENT_CONTENT:none|file:FILE_ATTACHMENT_CONTENT:none|form:FILE_ATTACHMENT_CONTENT:form-note",
+        "key": "fileBinarySummary"
+      }
+    ]
+  },
+  "globals": {
+    "id": "38222913-cdf9-47f5-b4e6-5a108f9a2a26",
+    "values": []
+  },
+  "run": {
+    "stats": {
+      "iterations": {
+        "total": 1,
+        "pending": 0,
+        "failed": 0
+      },
+      "items": {
+        "total": 3,
+        "pending": 0,
+        "failed": 0
+      },
+      "scripts": {
+        "total": 3,
+        "pending": 0,
+        "failed": 0
+      },
+      "prerequests": {
+        "total": 3,
+        "pending": 0,
+        "failed": 0
+      },
+      "requests": {
+        "total": 3,
+        "pending": 0,
+        "failed": 0
+      },
+      "tests": {
+        "total": 3,
+        "pending": 0,
+        "failed": 0
+      },
+      "assertions": {
+        "total": 3,
+        "pending": 0,
+        "failed": 0
+      },
+      "testScripts": {
+        "total": 3,
+        "pending": 0,
+        "failed": 0
+      },
+      "prerequestScripts": {
+        "total": 0,
+        "pending": 0,
+        "failed": 0
+      }
+    },
+    "timings": {
+      "responseAverage": 6,
+      "responseMin": 2,
+      "responseMax": 12,
+      "responseSd": 4.320493798938574,
+      "dnsAverage": 0,
+      "dnsMin": 0,
+      "dnsMax": 0,
+      "dnsSd": 0,
+      "firstByteAverage": 0,
+      "firstByteMin": 0,
+      "firstByteMax": 0,
+      "firstByteSd": 0,
+      "started": 1777389880359,
+      "completed": 1777389880417
+    },
+    "executions": [
+      {
+        "cursor": {
+          "position": 0,
+          "iteration": 0,
+          "length": 3,
+          "cycles": 1,
+          "empty": false,
+          "eof": false,
+          "bof": true,
+          "cr": false,
+          "ref": "fef37a2d-21f4-4004-a53c-2f356e440261",
+          "httpRequestId": "6cc46379-1bbb-45e7-b176-ed138634bb5c"
+        },
+        "item": {
+          "id": "f44c51da-f1ec-4919-b9cd-f34c99966f5b",
+          "name": "Binary Attachment Body",
+          "request": {
+            "url": {
+              "path": [
+                "attachments",
+                "binary"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "method": "POST",
+            "body": {
+              "mode": "file",
+              "file": {
+                "src": "test/fixtures/postman/attachments/sendrequest-binary.bin",
+                "contentType": "application/octet-stream"
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "f7ecaea2-6e9e-4c21-a01d-c52e932c479a",
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "const previous = pm.environment.get('fileBinarySummary') || '';",
+                  "pm.environment.set('fileBinarySummary', (previous ? previous + '|' : '') + payload.kind + ':' + payload.attachment + ':' + payload.field);",
+                  "pm.test('binary attachment body is sent', function () {",
+                  "  pm.expect(payload.attachment).to.equal('BINARY_ATTACHMENT_CONTENT');",
+                  "});"
+                ],
+                "_lastExecutionId": "0288578c-279a-4c7b-9dc6-96f484cd9ad7"
+              }
+            }
+          ]
+        },
+        "request": {
+          "url": {
+            "protocol": "http",
+            "port": "42371",
+            "path": [
+              "attachments",
+              "binary"
+            ],
+            "host": [
+              "127",
+              "0",
+              "0",
+              "1"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.39.1",
+              "system": true
+            },
+            {
+              "key": "Accept",
+              "value": "*/*",
+              "system": true
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache",
+              "system": true
+            },
+            {
+              "key": "Postman-Token",
+              "value": "38631565-062d-44d3-8f23-028af550344d",
+              "system": true
+            },
+            {
+              "key": "Host",
+              "value": "127.0.0.1:42371",
+              "system": true
+            },
+            {
+              "key": "Accept-Encoding",
+              "value": "gzip, deflate, br",
+              "system": true
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive",
+              "system": true
+            },
+            {
+              "key": "Content-Length",
+              "value": "26",
+              "system": true
+            }
+          ],
+          "method": "POST",
+          "body": {
+            "mode": "file",
+            "file": {
+              "src": "test/fixtures/postman/attachments/sendrequest-binary.bin",
+              "contentType": "application/octet-stream"
+            }
+          }
+        },
+        "response": {
+          "id": "6e47ca75-b7a6-4c49-b118-3704f3079b9b",
+          "status": "OK",
+          "code": 200,
+          "header": [
+            {
+              "key": "content-length",
+              "value": "114"
+            },
+            {
+              "key": "content-type",
+              "value": "application/json"
+            },
+            {
+              "key": "Date",
+              "value": "Tue, 28 Apr 2026 15:24:40 GMT"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Keep-Alive",
+              "value": "timeout=5"
+            }
+          ],
+          "stream": {
+            "type": "Buffer",
+            "data": [
+              123,
+              34,
+              97,
+              116,
+              116,
+              97,
+              99,
+              104,
+              109,
+              101,
+              110,
+              116,
+              34,
+              58,
+              34,
+              66,
+              73,
+              78,
+              65,
+              82,
+              89,
+              95,
+              65,
+              84,
+              84,
+              65,
+              67,
+              72,
+              77,
+              69,
+              78,
+              84,
+              95,
+              67,
+              79,
+              78,
+              84,
+              69,
+              78,
+              84,
+              34,
+              44,
+              34,
+              99,
+              111,
+              110,
+              116,
+              101,
+              110,
+              116,
+              84,
+              121,
+              112,
+              101,
+              34,
+              58,
+              34,
+              97,
+              112,
+              112,
+              108,
+              105,
+              99,
+              97,
+              116,
+              105,
+              111,
+              110,
+              47,
+              111,
+              99,
+              116,
+              101,
+              116,
+              45,
+              115,
+              116,
+              114,
+              101,
+              97,
+              109,
+              34,
+              44,
+              34,
+              102,
+              105,
+              101,
+              108,
+              100,
+              34,
+              58,
+              34,
+              110,
+              111,
+              110,
+              101,
+              34,
+              44,
+              34,
+              107,
+              105,
+              110,
+              100,
+              34,
+              58,
+              34,
+              98,
+              105,
+              110,
+              97,
+              114,
+              121,
+              34,
+              125
+            ]
+          },
+          "cookie": [],
+          "responseTime": 12,
+          "responseSize": 114
+        },
+        "id": "f44c51da-f1ec-4919-b9cd-f34c99966f5b",
+        "assertions": [
+          {
+            "assertion": "binary attachment body is sent",
+            "skipped": false
+          }
+        ]
+      },
+      {
+        "cursor": {
+          "ref": "c202e634-1298-4d9e-ad59-504e5aec38ed",
+          "length": 3,
+          "cycles": 1,
+          "position": 1,
+          "iteration": 0,
+          "httpRequestId": "1967f8c5-2411-4b26-bd17-9a3d18f54ca6"
+        },
+        "item": {
+          "id": "75027300-7dd3-4add-b652-67f47a67f336",
+          "name": "File Attachment Body",
+          "request": {
+            "url": {
+              "path": [
+                "attachments",
+                "file"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "method": "POST",
+            "body": {
+              "mode": "file",
+              "file": {
+                "src": "test/fixtures/postman/attachments/sendrequest-file.txt",
+                "contentType": "text/plain"
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "68c2a122-b4e8-4fa5-8945-68033b0b8163",
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "const previous = pm.environment.get('fileBinarySummary') || '';",
+                  "pm.environment.set('fileBinarySummary', (previous ? previous + '|' : '') + payload.kind + ':' + payload.attachment + ':' + payload.field);",
+                  "pm.test('file attachment body is sent', function () {",
+                  "  pm.expect(payload.attachment).to.equal('FILE_ATTACHMENT_CONTENT');",
+                  "});"
+                ],
+                "_lastExecutionId": "09622907-4696-464a-866d-cbd9aab37fe2"
+              }
+            }
+          ]
+        },
+        "request": {
+          "url": {
+            "protocol": "http",
+            "port": "42371",
+            "path": [
+              "attachments",
+              "file"
+            ],
+            "host": [
+              "127",
+              "0",
+              "0",
+              "1"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.39.1",
+              "system": true
+            },
+            {
+              "key": "Accept",
+              "value": "*/*",
+              "system": true
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache",
+              "system": true
+            },
+            {
+              "key": "Postman-Token",
+              "value": "039c49e3-3db5-47d8-abff-9d0c3e462189",
+              "system": true
+            },
+            {
+              "key": "Host",
+              "value": "127.0.0.1:42371",
+              "system": true
+            },
+            {
+              "key": "Accept-Encoding",
+              "value": "gzip, deflate, br",
+              "system": true
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive",
+              "system": true
+            },
+            {
+              "key": "Content-Length",
+              "value": "24",
+              "system": true
+            }
+          ],
+          "method": "POST",
+          "body": {
+            "mode": "file",
+            "file": {
+              "src": "test/fixtures/postman/attachments/sendrequest-file.txt",
+              "contentType": "text/plain"
+            }
+          }
+        },
+        "response": {
+          "id": "f953d2dc-78d3-4ee9-a6b2-2772c643fadf",
+          "status": "OK",
+          "code": 200,
+          "header": [
+            {
+              "key": "content-length",
+              "value": "96"
+            },
+            {
+              "key": "content-type",
+              "value": "application/json"
+            },
+            {
+              "key": "Date",
+              "value": "Tue, 28 Apr 2026 15:24:40 GMT"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Keep-Alive",
+              "value": "timeout=5"
+            }
+          ],
+          "stream": {
+            "type": "Buffer",
+            "data": [
+              123,
+              34,
+              97,
+              116,
+              116,
+              97,
+              99,
+              104,
+              109,
+              101,
+              110,
+              116,
+              34,
+              58,
+              34,
+              70,
+              73,
+              76,
+              69,
+              95,
+              65,
+              84,
+              84,
+              65,
+              67,
+              72,
+              77,
+              69,
+              78,
+              84,
+              95,
+              67,
+              79,
+              78,
+              84,
+              69,
+              78,
+              84,
+              34,
+              44,
+              34,
+              99,
+              111,
+              110,
+              116,
+              101,
+              110,
+              116,
+              84,
+              121,
+              112,
+              101,
+              34,
+              58,
+              34,
+              116,
+              101,
+              120,
+              116,
+              47,
+              112,
+              108,
+              97,
+              105,
+              110,
+              34,
+              44,
+              34,
+              102,
+              105,
+              101,
+              108,
+              100,
+              34,
+              58,
+              34,
+              110,
+              111,
+              110,
+              101,
+              34,
+              44,
+              34,
+              107,
+              105,
+              110,
+              100,
+              34,
+              58,
+              34,
+              102,
+              105,
+              108,
+              101,
+              34,
+              125
+            ]
+          },
+          "cookie": [],
+          "responseTime": 2,
+          "responseSize": 96
+        },
+        "id": "75027300-7dd3-4add-b652-67f47a67f336",
+        "assertions": [
+          {
+            "assertion": "file attachment body is sent",
+            "skipped": false
+          }
+        ]
+      },
+      {
+        "cursor": {
+          "ref": "08a83d3f-f666-4226-8ef9-cf7cffe13242",
+          "length": 3,
+          "cycles": 1,
+          "position": 2,
+          "iteration": 0,
+          "httpRequestId": "4b4868aa-e098-4a31-a385-500d58eca581"
+        },
+        "item": {
+          "id": "939968e3-345f-4c4d-b71b-bfba2c3d3955",
+          "name": "Form Data File Attachment",
+          "request": {
+            "url": {
+              "path": [
+                "attachments",
+                "form"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "note",
+                  "value": "form-note",
+                  "type": "text"
+                },
+                {
+                  "key": "payload",
+                  "type": "file",
+                  "src": "test/fixtures/postman/attachments/sendrequest-file.txt",
+                  "contentType": "text/plain"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "id": "3ca44247-a99e-433f-80bf-8dcb59f5e410",
+                "type": "text/javascript",
+                "exec": [
+                  "const payload = pm.response.json();",
+                  "const previous = pm.environment.get('fileBinarySummary') || '';",
+                  "pm.environment.set('fileBinarySummary', (previous ? previous + '|' : '') + payload.kind + ':' + payload.attachment + ':' + payload.field);",
+                  "pm.test('form-data file attachment is sent', function () {",
+                  "  pm.expect(payload.attachment).to.equal('FILE_ATTACHMENT_CONTENT');",
+                  "  pm.expect(payload.field).to.equal('form-note');",
+                  "});"
+                ],
+                "_lastExecutionId": "1cb7a68a-dd4f-40ba-a2e2-f2159bce9063"
+              }
+            }
+          ]
+        },
+        "request": {
+          "url": {
+            "protocol": "http",
+            "port": "42371",
+            "path": [
+              "attachments",
+              "form"
+            ],
+            "host": [
+              "127",
+              "0",
+              "0",
+              "1"
+            ],
+            "query": [],
+            "variable": []
+          },
+          "header": [
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.39.1",
+              "system": true
+            },
+            {
+              "key": "Accept",
+              "value": "*/*",
+              "system": true
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache",
+              "system": true
+            },
+            {
+              "key": "Postman-Token",
+              "value": "04a3091b-f185-43c2-a712-8bef1d2ceb95",
+              "system": true
+            },
+            {
+              "key": "Host",
+              "value": "127.0.0.1:42371",
+              "system": true
+            },
+            {
+              "key": "Accept-Encoding",
+              "value": "gzip, deflate, br",
+              "system": true
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive",
+              "system": true
+            },
+            {
+              "key": "Content-Length",
+              "value": "357",
+              "system": true
+            }
+          ],
+          "method": "POST",
+          "body": {
+            "mode": "formdata",
+            "formdata": [
+              {
+                "key": "note",
+                "value": "form-note",
+                "type": "text"
+              },
+              {
+                "key": "payload",
+                "type": "file",
+                "src": "test/fixtures/postman/attachments/sendrequest-file.txt",
+                "contentType": "text/plain"
+              }
+            ]
+          }
+        },
+        "response": {
+          "id": "377f9baf-a3e0-4ed5-9fbf-074c22d526e0",
+          "status": "OK",
+          "code": 200,
+          "header": [
+            {
+              "key": "content-length",
+              "value": "171"
+            },
+            {
+              "key": "content-type",
+              "value": "application/json"
+            },
+            {
+              "key": "Date",
+              "value": "Tue, 28 Apr 2026 15:24:40 GMT"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Keep-Alive",
+              "value": "timeout=5"
+            }
+          ],
+          "stream": {
+            "type": "Buffer",
+            "data": [
+              123,
+              34,
+              97,
+              116,
+              116,
+              97,
+              99,
+              104,
+              109,
+              101,
+              110,
+              116,
+              34,
+              58,
+              34,
+              70,
+              73,
+              76,
+              69,
+              95,
+              65,
+              84,
+              84,
+              65,
+              67,
+              72,
+              77,
+              69,
+              78,
+              84,
+              95,
+              67,
+              79,
+              78,
+              84,
+              69,
+              78,
+              84,
+              34,
+              44,
+              34,
+              99,
+              111,
+              110,
+              116,
+              101,
+              110,
+              116,
+              84,
+              121,
+              112,
+              101,
+              34,
+              58,
+              34,
+              109,
+              117,
+              108,
+              116,
+              105,
+              112,
+              97,
+              114,
+              116,
+              47,
+              102,
+              111,
+              114,
+              109,
+              45,
+              100,
+              97,
+              116,
+              97,
+              59,
+              32,
+              98,
+              111,
+              117,
+              110,
+              100,
+              97,
+              114,
+              121,
+              61,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              45,
+              50,
+              57,
+              55,
+              54,
+              53,
+              54,
+              49,
+              51,
+              55,
+              56,
+              49,
+              53,
+              51,
+              50,
+              53,
+              52,
+              48,
+              57,
+              51,
+              51,
+              49,
+              51,
+              51,
+              55,
+              34,
+              44,
+              34,
+              102,
+              105,
+              101,
+              108,
+              100,
+              34,
+              58,
+              34,
+              102,
+              111,
+              114,
+              109,
+              45,
+              110,
+              111,
+              116,
+              101,
+              34,
+              44,
+              34,
+              107,
+              105,
+              110,
+              100,
+              34,
+              58,
+              34,
+              102,
+              111,
+              114,
+              109,
+              34,
+              125
+            ]
+          },
+          "cookie": [],
+          "responseTime": 4,
+          "responseSize": 171
+        },
+        "id": "939968e3-345f-4c4d-b71b-bfba2c3d3955",
+        "assertions": [
+          {
+            "assertion": "form-data file attachment is sent",
+            "skipped": false
+          }
+        ]
+      }
+    ],
+    "transfers": {
+      "responseTotal": 381
+    },
+    "failures": [],
+    "error": null
+  }
+}

@@ -18,6 +18,7 @@ function registerRequestIpc(options = {}) {
     getWorkspace,
     getWorkspaceId = () => '',
     getVaultStore = () => null,
+    getVaultPrompt = () => null,
     ipcMain,
     mutateWorkspace = async (mutator) => {
       const nextWorkspace = await mutator(getWorkspace());
@@ -56,7 +57,8 @@ function registerRequestIpc(options = {}) {
         fileBindings: workspaceSnapshot.settings?.sandbox?.fileBindings || [],
         sandboxPackages: workspaceSnapshot.settings?.sandbox?.packageCache || [],
         trustedCapabilities: workspaceSnapshot.settings?.sandbox?.trustedCapabilities || {},
-        vault: getVaultStore(workspaceId)
+        vault: getVaultStore(workspaceId),
+        vaultPrompt: getVaultPrompt(workspaceId)
       });
       await mutateWorkspace(async (latestWorkspace) => {
         const latestRequestContext = request.id ? findWorkspaceRequestContext(latestWorkspace, request.id) : null;

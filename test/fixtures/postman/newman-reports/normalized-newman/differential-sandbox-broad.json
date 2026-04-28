@@ -1,0 +1,161 @@
+{
+  "schemaVersion": 1,
+  "source": "newman-json-reporter",
+  "fixtureId": "differential-sandbox-broad",
+  "newmanVersion": "6.2.2",
+  "postmanRuntimeVersion": "7.39.1",
+  "normalization": {
+    "normalizedFields": [
+      "timestamps",
+      "run durations",
+      "response timings",
+      "randomized localhost ports",
+      "host filesystem paths",
+      "machine-specific process metadata",
+      "raw reporter cursor ids where duplicated by Newman internals"
+    ],
+    "preservedFields": [
+      "collection name",
+      "request order",
+      "request names",
+      "request methods",
+      "response codes",
+      "assertion names",
+      "assertion pass/fail state",
+      "failure messages"
+    ]
+  },
+  "collectionName": "PostMeter Differential Sandbox Broad",
+  "stats": {
+    "iterations": {
+      "total": 1,
+      "pending": 0,
+      "failed": 0
+    },
+    "items": {
+      "total": 4,
+      "pending": 0,
+      "failed": 0
+    },
+    "scripts": {
+      "total": 5,
+      "pending": 0,
+      "failed": 0
+    },
+    "prerequests": {
+      "total": 4,
+      "pending": 0,
+      "failed": 0
+    },
+    "requests": {
+      "total": 5,
+      "pending": 0,
+      "failed": 0
+    },
+    "tests": {
+      "total": 4,
+      "pending": 0,
+      "failed": 0
+    },
+    "assertions": {
+      "total": 9,
+      "pending": 0,
+      "failed": 0
+    },
+    "testScripts": {
+      "total": 4,
+      "pending": 0,
+      "failed": 0
+    },
+    "prerequestScripts": {
+      "total": 1,
+      "pending": 0,
+      "failed": 0
+    }
+  },
+  "requests": [
+    {
+      "itemName": "Broad Runtime Surface",
+      "method": "POST",
+      "responseCode": 200,
+      "assertions": [
+        {
+          "name": "broad response, request mutation, and variables",
+          "passed": true,
+          "skipped": false,
+          "error": ""
+        },
+        {
+          "name": "package and assertion facades",
+          "passed": true,
+          "skipped": false,
+          "error": ""
+        },
+        {
+          "name": "dynamic variables expose documented shapes",
+          "passed": true,
+          "skipped": false,
+          "error": ""
+        },
+        {
+          "name": "timer and microtask callbacks drain",
+          "passed": true,
+          "skipped": false,
+          "error": ""
+        },
+        {
+          "name": "pm.sendRequest object body",
+          "passed": true,
+          "skipped": false,
+          "error": ""
+        }
+      ]
+    },
+    {
+      "itemName": "Cookie Seed",
+      "method": "GET",
+      "responseCode": 200,
+      "assertions": [
+        {
+          "name": "cookie jar set callback succeeds",
+          "passed": true,
+          "skipped": false,
+          "error": ""
+        },
+        {
+          "name": "cookie jar get callback sees scripted cookie",
+          "passed": true,
+          "skipped": false,
+          "error": ""
+        }
+      ]
+    },
+    {
+      "itemName": "Cookie Echo",
+      "method": "GET",
+      "responseCode": 200,
+      "assertions": [
+        {
+          "name": "cookie jar persists scripted cookies across requests",
+          "passed": true,
+          "skipped": false,
+          "error": ""
+        }
+      ]
+    },
+    {
+      "itemName": "Caught Failure Shape",
+      "method": "GET",
+      "responseCode": 418,
+      "assertions": [
+        {
+          "name": "caught assertion failure can be inspected without failing the run",
+          "passed": true,
+          "skipped": false,
+          "error": ""
+        }
+      ]
+    }
+  ],
+  "assertionFailures": []
+}

@@ -1,0 +1,40 @@
+# Security
+
+PostMeter is a standalone local desktop app. It does not require a PostMeter account, cloud login, or telemetry service for core use.
+
+## Trust Boundaries
+
+- Renderer: no Node integration, context isolation enabled, renderer sandbox enabled, explicit preload API only.
+- Electron main process: owns desktop lifecycle, IPC validation, dialogs, workspace persistence, vault storage, OAuth flows, package review/fetch, and native OS integration.
+- Core script runtime: runs request scripts outside the main process with hardened VM values, bounded resources, Node permission flags where supported, and brokered privileged APIs.
+
+## Script Sandbox
+
+Scripts must not receive direct access to the host filesystem, process environment, child processes, shell, Electron APIs, renderer DOM, native modules, or raw sockets. Postman-compatible APIs such as `pm.sendRequest`, cookie helpers, package loading, visualizers, vault access, GraphQL hooks, and gRPC hooks are implemented through parent-owned brokers and validators.
+
+Linux script workers use `bubblewrap` plus a dangerous-syscall seccomp policy when available or required. Windows and macOS platform-equivalent OS sandbox coverage is tracked separately in `docs/os-sandbox-platform-matrix.json`; those claims must not be made until native runner evidence is available.
+
+## Vault And Secrets
+
+Vault values are stored outside workspace JSON in per-workspace encrypted files when Electron `safeStorage` has OS-backed encryption. The renderer and scripts never receive vault file paths, encryption keys, or secret enumeration through the prompt flow. The renderer vault prompt only receives metadata: request name/id, collection id, operation, and secret key name.
+
+Diagnostics and logs must not include secrets, tokens, vault values, auth headers, cookies, request/response bodies, or sensitive local paths by default.
+
+## Release Gates
+
+Run these before making security or production-readiness claims:
+
+```bash
+npm run check
+npm run release:gate
+npm run production:readiness:validate
+npm run postman:parity:claim
+npm run sandbox:platform:validate
+```
+
+`npm run production:readiness:claim` and `npm run sandbox:platform:claim` are stronger stable/platform gates and are expected to fail until their documented external blockers are closed.
+
+## Reporting
+
+Report vulnerabilities privately to `support@qrksw.com`. Avoid including live tokens, vault values, private keys, or proprietary request bodies in reports.
+

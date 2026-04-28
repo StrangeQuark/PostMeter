@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "source": "postmeter-parity-harness",
+  "fixtureId": "differential-http-core",
+  "summary": {
+    "collectionName": "PostMeter Differential HTTP Core",
+    "failedRequests": 0,
+    "passed": true,
+    "passedRequests": 1,
+    "totalRequests": 1
+  },
+  "requests": [
+    {
+      "requestName": "Core JSON",
+      "statusCode": 200,
+      "passed": true,
+      "tests": [
+        {
+          "name": "core response status and body",
+          "passed": true,
+          "error": ""
+        },
+        {
+          "name": "pm.info exposes core metadata",
+          "passed": true,
+          "error": ""
+        },
+        {
+          "name": "pm.sendRequest callback receives response",
+          "passed": true,
+          "error": ""
+        }
+      ]
+    }
+  ],
+  "environment": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:42371"
+    },
+    {
+      "key": "envSeed",
+      "value": "env-seed"
+    },
+    {
+      "key": "envToken",
+      "value": "env-1"
+    }
+  ],
+  "observedRequests": [
+    {
+      "method": "GET",
+      "path": "/json",
+      "xPre": "local-1"
+    },
+    {
+      "method": "GET",
+      "path": "/aux",
+      "xPre": ""
+    }
+  ]
+}

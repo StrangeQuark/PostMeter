@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "name": "workspace-durability",
+  "generatedFrom": "src/core/productionSupportMatrices.js",
+  "deterministic": true,
+  "rows": [
+    {
+      "id": "diagnostics.redaction-boundary",
+      "area": "Diagnostics",
+      "target": "Diagnostics must redact secrets, vault values, tokens, auth headers, cookies, request bodies, and sensitive local paths by default.",
+      "status": "blocked",
+      "evidenceRefs": [
+        "NEXT_STEPS.MD",
+        "docs/RELEASE_READINESS.md"
+      ],
+      "tests": [
+        "future diagnostics tests"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "vault.encrypted-outside-workspace",
+      "area": "Vault durability",
+      "target": "Vault values are encrypted outside workspace JSON and fail closed when OS encryption is unavailable.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/core/vaultStore.js"
+      ],
+      "tests": [
+        "test/electron/vaultStore.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "workspace.atomic-json-writes",
+      "area": "Atomic writes",
+      "target": "Workspace JSON writes use same-directory temporary files followed by atomic rename.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/core/workspacePersistence.js"
+      ],
+      "tests": [
+        "test/electron/workspaceStore.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "workspace.corrupt-quarantine",
+      "area": "Recovery",
+      "target": "Unreadable workspace JSON is quarantined and a default workspace is recovered instead of overwriting newer user data.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/core/workspaceStore.js",
+        "src/core/workspaceManager.js"
+      ],
+      "tests": [
+        "test/electron/workspaceStore.test.js",
+        "test/electron/workspaceManager.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "workspace.import-export-cancel",
+      "area": "Import/export recovery",
+      "target": "Import/export picker cancellation and failed parse paths return explicit results without clobbering the active workspace.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/workspaceIpc.js",
+        "src/core/workspaceStore.js"
+      ],
+      "tests": [
+        "test/electron/workspaceStore.test.js",
+        "test/electron/workspaceManager.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "workspace.large-workspace-budget",
+      "area": "Performance budget",
+      "target": "Large workspace load/save/render budgets must stay covered by focused tests before stable release.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "test/electron/workspaceStore.test.js",
+        "test/electron/uiRegressionSmoke.js"
+      ],
+      "tests": [
+        "npm test",
+        "npm run test:ui:regression"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "workspace.schema-migrations",
+      "area": "Migrations",
+      "target": "Workspace schema migrations preserve imported Postman metadata, globals, cookies, vault grants, package cache metadata, and protocol profiles.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/core/workspaceMigrations.js"
+      ],
+      "tests": [
+        "test/electron/workspaceStore.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "workspace.side-effect-merge",
+      "area": "Concurrent script effects",
+      "target": "Sandbox variable/cookie side effects are merged by delta with workspace identity guards.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/workspaceMutations.js"
+      ],
+      "tests": [
+        "test/electron/workspaceMutations.test.js"
+      ],
+      "notes": ""
+    }
+  ]
+}

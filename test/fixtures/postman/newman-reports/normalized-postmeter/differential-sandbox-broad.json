@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 1,
+  "source": "postmeter-parity-harness",
+  "fixtureId": "differential-sandbox-broad",
+  "summary": {
+    "collectionName": "PostMeter Differential Sandbox Broad",
+    "failedRequests": 0,
+    "passed": true,
+    "passedRequests": 4,
+    "totalRequests": 4
+  },
+  "requests": [
+    {
+      "requestName": "Broad Runtime Surface",
+      "statusCode": 200,
+      "passed": true,
+      "tests": [
+        {
+          "name": "broad response, request mutation, and variables",
+          "passed": true,
+          "error": ""
+        },
+        {
+          "name": "package and assertion facades",
+          "passed": true,
+          "error": ""
+        },
+        {
+          "name": "dynamic variables expose documented shapes",
+          "passed": true,
+          "error": ""
+        },
+        {
+          "name": "timer and microtask callbacks drain",
+          "passed": true,
+          "error": ""
+        },
+        {
+          "name": "pm.sendRequest object body",
+          "passed": true,
+          "error": ""
+        }
+      ]
+    },
+    {
+      "requestName": "Cookie Seed",
+      "statusCode": 200,
+      "passed": true,
+      "tests": [
+        {
+          "name": "cookie jar set callback succeeds",
+          "passed": true,
+          "error": ""
+        },
+        {
+          "name": "cookie jar get callback sees scripted cookie",
+          "passed": true,
+          "error": ""
+        }
+      ]
+    },
+    {
+      "requestName": "Cookie Echo",
+      "statusCode": 200,
+      "passed": true,
+      "tests": [
+        {
+          "name": "cookie jar persists scripted cookies across requests",
+          "passed": true,
+          "error": ""
+        }
+      ]
+    },
+    {
+      "requestName": "Caught Failure Shape",
+      "statusCode": 418,
+      "passed": true,
+      "tests": [
+        {
+          "name": "caught assertion failure can be inspected without failing the run",
+          "passed": true,
+          "error": ""
+        }
+      ]
+    }
+  ],
+  "environment": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:42371"
+    },
+    {
+      "key": "envBroad",
+      "value": "env-broad"
+    },
+    {
+      "key": "envSeed",
+      "value": "env-seed"
+    },
+    {
+      "key": "timerBroad",
+      "value": "microtask>timer"
+    }
+  ],
+  "observedRequests": [
+    {
+      "method": "GET",
+      "path": "/json",
+      "xPre": "broad-pre"
+    },
+    {
+      "method": "POST",
+      "path": "/echo",
+      "xPre": ""
+    },
+    {
+      "method": "GET",
+      "path": "/set-cookie",
+      "xPre": ""
+    },
+    {
+      "method": "GET",
+      "path": "/cookie-check",
+      "xPre": ""
+    },
+    {
+      "method": "GET",
+      "path": "/status/418",
+      "xPre": ""
+    }
+  ]
+}
