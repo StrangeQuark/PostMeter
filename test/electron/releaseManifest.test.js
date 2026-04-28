@@ -97,6 +97,11 @@ test('validates release artifact manifest entries against files and package prot
 });
 
 test('validates packaged Linux deb protocol registration when an artifact exists', async (t) => {
+  if (process.platform !== 'linux') {
+    t.skip('Linux deb protocol inspection requires a Linux host.');
+    return;
+  }
+
   const root = path.join(__dirname, '..', '..');
   const debPath = path.join(root, 'release', 'postmeter_0.2.0_amd64.deb');
   try {
@@ -110,6 +115,11 @@ test('validates packaged Linux deb protocol registration when an artifact exists
 });
 
 test('validates packaged Linux AppImage protocol registration when an artifact exists', async (t) => {
+  if (process.platform !== 'linux') {
+    t.skip('Linux AppImage protocol inspection requires a Linux host.');
+    return;
+  }
+
   const root = path.join(__dirname, '..', '..');
   const appImagePath = path.join(root, 'release', 'PostMeter-0.2.0.AppImage');
   try {
@@ -122,7 +132,12 @@ test('validates packaged Linux AppImage protocol registration when an artifact e
   await assert.doesNotReject(() => validateLinuxAppImageProtocol(appImagePath));
 });
 
-test('release validation restores execute bits before AppImage inspection', async () => {
+test('release validation restores execute bits before AppImage inspection', async (t) => {
+  if (process.platform === 'win32') {
+    t.skip('POSIX execute bits are not observable through fs.stat on Windows.');
+    return;
+  }
+
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-appimage-mode-'));
   const filePath = path.join(tempDir, 'PostMeter.AppImage');
   try {
