@@ -11,6 +11,7 @@ const {
   normalizeLoadPolicy: normalizeLoadTestPolicy,
   normalizeRequestLoadPolicy: normalizeRequestLoadTestPolicy
 } = require('./loadPolicyModel');
+const { normalizeSandboxFileBindings } = require('./fileAttachmentBindings');
 
 const CURRENT_SCHEMA_VERSION = 11;
 const MIN_SUPPORTED_SCHEMA_VERSION = 1;
@@ -148,6 +149,7 @@ function normalizeSettings(settings) {
       theme: normalizeTheme(settings?.appearance?.theme)
     },
     sandbox: {
+      fileBindings: normalizeSandboxFileBindings(settings?.sandbox?.fileBindings),
       packageCache: normalizeSandboxPackageCache(settings?.sandbox?.packageCache),
       trustedCapabilities: {
         sendRequest: settings?.sandbox?.trustedCapabilities?.sendRequest !== false,
@@ -170,13 +172,84 @@ function normalizeSandboxPackageCache(value) {
     .filter((item) => item && typeof item === 'object')
     .slice(0, 32)
     .map((item) => ({
+      dependencyAliases: normalizePlainStringMap(item.dependencyAliases || item.dependencyMap, 32),
       specifier: String(item.specifier || item.name || '').trim(),
       source: String(item.source || item.code || ''),
+      files: normalizeSandboxPackageFiles(item.files),
       integrity: String(item.integrity || '').trim(),
       dependencies: Array.isArray(item.dependencies) ? item.dependencies.map((dependency) => String(dependency || '').trim()).filter(Boolean).slice(0, 32) : [],
-      maxExportKeys: Number.isFinite(Number(item.maxExportKeys)) ? Number(item.maxExportKeys) : undefined
+      maxExportKeys: Number.isFinite(Number(item.maxExportKeys)) ? Number(item.maxExportKeys) : undefined,
+      entrypoint: item.entrypoint == null ? '' : String(item.entrypoint).slice(0, 256),
+      fetchedAt: item.fetchedAt == null ? '' : String(item.fetchedAt).slice(0, 256),
+      packageDependencies: Array.isArray(item.packageDependencies) ? item.packageDependencies.map((dependency) => String(dependency || '').trim()).filter(Boolean).slice(0, 64) : [],
+      packageIntegrity: item.packageIntegrity == null ? '' : String(item.packageIntegrity).slice(0, 512),
+      packageJson: normalizeSandboxPackageJson(item.packageJson || item.package || item.manifest),
+      packageName: item.packageName == null ? '' : String(item.packageName).slice(0, 256),
+      packageVersion: item.packageVersion == null ? '' : String(item.packageVersion).slice(0, 128),
+      registry: item.registry == null ? '' : String(item.registry).slice(0, 32),
+      reviewedAt: item.reviewedAt == null ? '' : String(item.reviewedAt).slice(0, 256),
+      sourceUrl: item.sourceUrl == null ? '' : String(item.sourceUrl).slice(0, 2048)
     }))
     .filter((item) => item.specifier && item.source && item.integrity);
+}
+
+function normalizeSandboxPackageFiles(files) {
+  const entries = Array.isArray(files)
+    ? files.map((file) => [
+      file?.path ?? file?.name ?? file?.filename,
+      file?.source ?? file?.code ?? file?.text
+    ])
+    : Object.entries(files || {});
+  const output = [];
+  for (const [rawPath, rawSource] of entries.slice(0, 128)) {
+    const filePath = normalizeSandboxPackageFilePath(rawPath);
+    if (!filePath || output.some((file) => file.path === filePath)) {
+      continue;
+    }
+    output.push({
+      path: filePath,
+      source: String(rawSource ?? '')
+    });
+  }
+  return output;
+}
+
+function normalizeSandboxPackageFilePath(filePath) {
+  let value = String(filePath || '').replace(/\\/g, '/').trim();
+  while (value.startsWith('./')) {
+    value = value.slice(2);
+  }
+  value = value.replace(/^\/+/, '');
+  const parts = value.split('/').filter(Boolean);
+  if (!parts.length || parts.includes('..') || parts.some((part) => part === '.' || part.includes('\0'))) {
+    return '';
+  }
+  return parts.join('/').slice(0, 512);
+}
+
+function normalizeSandboxPackageJson(packageJson) {
+  if (!packageJson || typeof packageJson !== 'object' || Array.isArray(packageJson)) {
+    return {};
+  }
+  try {
+    return JSON.parse(JSON.stringify(packageJson));
+  } catch {
+    return {};
+  }
+}
+
+function normalizePlainStringMap(value, limit) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+  return Object.entries(value).slice(0, limit).reduce((output, [key, target]) => {
+    const alias = String(key || '').trim();
+    const specifier = String(target || '').trim();
+    if (alias && specifier) {
+      output[alias] = specifier;
+    }
+    return output;
+  }, {});
 }
 
 function normalizeVaultGrants(value, workspaceGrant = false) {

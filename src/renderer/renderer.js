@@ -307,6 +307,7 @@ function bindUi() {
     onDeleteWorkspace: () => { void deleteWorkspace(); },
     onSwitchWorkspace: () => { void switchWorkspace(selectedWorkspaceId || activeWorkspaceId, { focus: 'workspace' }); },
     onAddSandboxPackage: () => { void addSandboxPackageFromPrompt(); },
+    onFetchSandboxPackage: () => { void fetchSandboxPackageFromPrompt(); },
     onRefreshSandboxPackages: () => renderWorkspacePanel(),
     onBindVaultSecret: () => { void bindVaultSecretFromPrompt(); },
     onRefreshVaultMetadata: () => { void refreshVaultMetadata(); },
@@ -350,6 +351,8 @@ function bindUi() {
     onFilterCookiesChange: renderCookieJarEditor,
     onEnvironmentNameInput: collectEnvironmentAndMarkDirty,
     onTrustedScriptCapabilityChange: setTrustedScriptCapabilitiesFromInputs,
+    onBindSandboxFile: () => { void bindSandboxFileFromPrompt(); },
+    onRefreshSandboxFiles: renderWorkspacePanel,
     onAuthTypeChange: showAuthSection,
     onAuthInput: collectRequestAndMarkDirty,
     onActivateTab: activateTab,
@@ -1093,6 +1096,7 @@ function ensureSettings() {
   workspace.settings.updates ||= { includePrereleases: false };
   workspace.settings.appearance ||= { theme: 'system' };
   workspace.settings.sandbox ||= { trustedCapabilities: { sendRequest: true, cookies: true, vault: false } };
+  workspace.settings.sandbox.fileBindings = normalizeSandboxFileBindings(workspace.settings.sandbox.fileBindings);
   workspace.settings.sandbox.packageCache = normalizeSandboxPackageCache(workspace.settings.sandbox.packageCache);
   workspace.settings.sandbox.trustedCapabilities ||= { sendRequest: true, cookies: true, vault: false };
   workspace.settings.sandbox.trustedCapabilities.sendRequest = workspace.settings.sandbox.trustedCapabilities.sendRequest !== false;
@@ -1114,17 +1118,134 @@ function normalizeSandboxPackageCache(value) {
     .filter((item) => item && typeof item === 'object')
     .slice(0, 32)
     .map((item) => ({
+      dependencyAliases: normalizePlainStringMap(item.dependencyAliases || item.dependencyMap, 32),
       specifier: String(item.specifier || item.name || '').trim(),
       source: String(item.source || item.code || ''),
+      files: normalizeSandboxPackageFiles(item.files),
       integrity: String(item.integrity || '').trim(),
       dependencies: Array.isArray(item.dependencies) ? item.dependencies.map((dependency) => String(dependency || '').trim()).filter(Boolean).slice(0, 32) : [],
-      maxExportKeys: Number.isFinite(Number(item.maxExportKeys)) ? Number(item.maxExportKeys) : undefined
+      maxExportKeys: Number.isFinite(Number(item.maxExportKeys)) ? Number(item.maxExportKeys) : undefined,
+      entrypoint: item.entrypoint == null ? '' : String(item.entrypoint).slice(0, 256),
+      fetchedAt: item.fetchedAt == null ? '' : String(item.fetchedAt).slice(0, 256),
+      packageDependencies: Array.isArray(item.packageDependencies) ? item.packageDependencies.map((dependency) => String(dependency || '').trim()).filter(Boolean).slice(0, 64) : [],
+      packageIntegrity: item.packageIntegrity == null ? '' : String(item.packageIntegrity).slice(0, 512),
+      packageJson: normalizeSandboxPackageJson(item.packageJson || item.package || item.manifest),
+      packageName: item.packageName == null ? '' : String(item.packageName).slice(0, 256),
+      packageVersion: item.packageVersion == null ? '' : String(item.packageVersion).slice(0, 128),
+      registry: item.registry == null ? '' : String(item.registry).slice(0, 32),
+      reviewedAt: item.reviewedAt == null ? '' : String(item.reviewedAt).slice(0, 256),
+      sourceUrl: item.sourceUrl == null ? '' : String(item.sourceUrl).slice(0, 2048)
     }))
     .filter((item) => item.specifier && item.source && item.integrity);
 }
 
+function normalizeSandboxPackageFiles(files) {
+  const entries = Array.isArray(files)
+    ? files.map((file) => [
+      file?.path ?? file?.name ?? file?.filename,
+      file?.source ?? file?.code ?? file?.text
+    ])
+    : Object.entries(files || {});
+  const output = [];
+  for (const [rawPath, rawSource] of entries.slice(0, 128)) {
+    const filePath = normalizeSandboxPackageFilePath(rawPath);
+    if (!filePath || output.some((file) => file.path === filePath)) {
+      continue;
+    }
+    output.push({
+      path: filePath,
+      source: String(rawSource ?? '')
+    });
+  }
+  return output;
+}
+
+function normalizeSandboxPackageFilePath(filePath) {
+  let value = String(filePath || '').replace(/\\/g, '/').trim();
+  while (value.startsWith('./')) {
+    value = value.slice(2);
+  }
+  value = value.replace(/^\/+/, '');
+  const parts = value.split('/').filter(Boolean);
+  if (!parts.length || parts.includes('..') || parts.some((part) => part === '.' || part.includes('\0'))) {
+    return '';
+  }
+  return parts.join('/').slice(0, 512);
+}
+
+function normalizeSandboxPackageJson(packageJson) {
+  if (!packageJson || typeof packageJson !== 'object' || Array.isArray(packageJson)) {
+    return {};
+  }
+  try {
+    return JSON.parse(JSON.stringify(packageJson));
+  } catch {
+    return {};
+  }
+}
+
+function normalizePlainStringMap(value, limit) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+  return Object.entries(value).slice(0, limit).reduce((output, [key, target]) => {
+    const alias = String(key || '').trim();
+    const specifier = String(target || '').trim();
+    if (alias && specifier) {
+      output[alias] = specifier;
+    }
+    return output;
+  }, {});
+}
+
+function normalizeSandboxFileBindings(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const seen = new Set();
+  const output = [];
+  for (const item of value) {
+    const source = String(item?.source || item?.src || '').trim().slice(0, 32768);
+    const localPath = String(item?.localPath || item?.path || item?.filePath || '').trim().slice(0, 32768);
+    if (!source || !localPath || seen.has(source)) {
+      continue;
+    }
+    seen.add(source);
+    output.push({
+      id: String(item?.id || `file-binding-${seen.size}`).slice(0, 256),
+      source,
+      localPath,
+      mode: normalizeSandboxFileMode(item?.mode),
+      key: item?.key == null ? '' : String(item.key).slice(0, 512),
+      contentType: item?.contentType == null ? '' : String(item.contentType).slice(0, 32768),
+      fileName: item?.fileName == null ? '' : String(item.fileName).slice(0, 256),
+      enabled: item?.enabled !== false,
+      reviewedAt: item?.reviewedAt == null ? '' : String(item.reviewedAt).slice(0, 256)
+    });
+    if (output.length >= 1000) {
+      break;
+    }
+  }
+  return output;
+}
+
+function normalizeSandboxFileMode(value) {
+  const mode = String(value || 'file').trim().toLowerCase();
+  return ['file', 'binary', 'formdata'].includes(mode) ? mode : 'file';
+}
+
 const SANDBOX_REVIEWED_PACKAGE_PATTERN = /^(?:npm:[a-z0-9@._/-]+@\d[\w.+-]*|jsr:[a-z0-9@._/-]+@\d[\w.+-]*|@[a-z0-9._-]+\/[a-z0-9._-]+)$/i;
 const SANDBOX_PACKAGE_REQUIRE_PATTERN = /\b(?:pm\.)?require\s*\(\s*(['"])([^'"]+)\1\s*\)/g;
+const SANDBOX_SCRIPT_SOURCE_FIELDS = [
+  'preRequest',
+  'tests',
+  'beforeQuery',
+  'afterResponse',
+  'beforeInvoke',
+  'onMessage',
+  'onIncomingMessage',
+  'mock'
+];
 
 function sandboxPackageReferencesForWorkspace() {
   const references = new Map();
@@ -1136,8 +1257,9 @@ function sandboxPackageReferencesForWorkspace() {
 
 function collectSandboxPackageReferencesFromScripts(node, references) {
   for (const request of node.requests || []) {
-    collectSandboxPackageReferencesFromText(request.scripts?.preRequest || '', references);
-    collectSandboxPackageReferencesFromText(request.scripts?.tests || '', references);
+    for (const field of SANDBOX_SCRIPT_SOURCE_FIELDS) {
+      collectSandboxPackageReferencesFromText(request.scripts?.[field] || '', references);
+    }
   }
   for (const folder of node.folders || []) {
     collectSandboxPackageReferencesFromScripts(folder, references);
@@ -1176,6 +1298,65 @@ function sandboxPackageStatusRows() {
           : 'Missing reviewed package'
     };
   });
+}
+
+function sandboxFileReferencesForWorkspace() {
+  const references = [];
+  for (const collection of workspace.collections || []) {
+    collectSandboxFileReferencesFromNode(collection, references);
+  }
+  const seen = new Set();
+  return references.filter((reference) => {
+    const source = String(reference.source || reference.src || '').trim();
+    if (!source) {
+      return false;
+    }
+    const key = `${reference.mode || 'file'}|${reference.key || ''}|${source}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  }).sort((left, right) => String(left.source || left.src || '').localeCompare(String(right.source || right.src || '')));
+}
+
+function collectSandboxFileReferencesFromNode(node, references) {
+  if (!node || typeof node !== 'object') {
+    return;
+  }
+  for (const reference of Array.isArray(node.postman?.fileReferences) ? node.postman.fileReferences : []) {
+    references.push({
+      contentType: reference.contentType == null ? '' : String(reference.contentType),
+      key: reference.key == null ? '' : String(reference.key),
+      mode: normalizeSandboxFileMode(reference.mode),
+      source: String(reference.source || reference.src || '')
+    });
+  }
+  for (const request of node.requests || []) {
+    collectSandboxFileReferencesFromNode(request, references);
+  }
+  for (const folder of node.folders || []) {
+    collectSandboxFileReferencesFromNode(folder, references);
+  }
+}
+
+function sandboxFileBindingStatusRows() {
+  ensureSettings();
+  const bindings = new Map((workspace.settings.sandbox.fileBindings || []).map((binding) => [binding.source, binding]));
+  return sandboxFileReferencesForWorkspace().map((reference) => {
+    const binding = bindings.get(String(reference.source || ''));
+    return {
+      ...reference,
+      binding,
+      bound: Boolean(binding?.localPath),
+      status: binding?.localPath ? `Bound to ${displayLocalFilePath(binding.localPath)}` : 'Needs local file binding'
+    };
+  });
+}
+
+function displayLocalFilePath(value) {
+  const text = String(value || '');
+  return text.split(/[\\/]/).pop() || text;
 }
 
 function normalizeVaultGrants(value, workspaceGrant = false) {
@@ -1289,6 +1470,76 @@ async function addSandboxPackageFromPrompt(defaultSpecifier = '') {
   setStatus(`Reviewed package ${specifier} added to the sandbox cache.`);
 }
 
+async function fetchSandboxPackageFromPrompt(defaultSpecifier = '') {
+  ensureSettings();
+  const firstMissing = sandboxPackageStatusRows().find((item) => item.pinned && !item.cached)?.specifier || '';
+  const specifier = String(prompt('Package specifier to fetch and review:', defaultSpecifier || firstMissing || 'npm:package@1.0.0') || '').trim();
+  if (!specifier) {
+    return;
+  }
+  if (!SANDBOX_REVIEWED_PACKAGE_PATTERN.test(specifier)) {
+    setStatus('Package fetch requires @team/package, npm:package@version, or jsr:package@version.');
+    return;
+  }
+  const fetchOptions = {};
+  if (specifier.startsWith('@')) {
+    const sourceUrl = String(prompt(`HTTPS source URL for ${specifier}:`, '') || '').trim();
+    if (!sourceUrl) {
+      return;
+    }
+    fetchOptions.sourceUrl = sourceUrl;
+  }
+  const fetchPackage = window.__postmeterFetchSandboxPackage || window.postmeter?.sandboxPackages?.fetch;
+  if (typeof fetchPackage !== 'function') {
+    setStatus('Package fetch is not available in this runtime.');
+    return;
+  }
+  setStatus(`Fetching ${specifier} for review...`);
+  let fetched;
+  try {
+    fetched = await fetchPackage(specifier, fetchOptions);
+  } catch (error) {
+    setStatus(`Package fetch failed: ${error.message || String(error)}`);
+    return;
+  }
+  const source = String(prompt(`Review fetched source for ${specifier}:`, fetched.source || '') || '');
+  if (!source.trim()) {
+    setStatus(`Fetched package ${specifier} was not added.`);
+    return;
+  }
+  const sourceChanged = source !== String(fetched.source || '');
+  const dependencyDefault = Array.isArray(fetched.dependencies) ? fetched.dependencies.join(', ') : '';
+  const dependenciesText = String(prompt('Reviewed dependencies, comma separated:', dependencyDefault) || dependencyDefault);
+  const dependencies = dependenciesText.split(',').map((item) => item.trim()).filter(Boolean).slice(0, 32);
+  const integrity = sourceChanged ? await sha256Integrity(source) : fetched.integrity;
+  const next = normalizeSandboxPackageCache([
+    ...workspace.settings.sandbox.packageCache.filter((item) => item.specifier !== specifier),
+    {
+      dependencyAliases: sourceChanged ? {} : (fetched.dependencyAliases || {}),
+      dependencies,
+      entrypoint: fetched.entrypoint || '',
+      fetchedAt: fetched.fetchedAt || '',
+      files: sourceChanged ? [] : (fetched.files || []),
+      integrity,
+      maxExportKeys: fetched.maxExportKeys,
+      packageDependencies: fetched.packageDependencies || [],
+      packageIntegrity: sourceChanged ? '' : (fetched.packageIntegrity || ''),
+      packageJson: sourceChanged ? {} : (fetched.packageJson || {}),
+      packageName: fetched.packageName || '',
+      packageVersion: fetched.packageVersion || '',
+      registry: fetched.registry || '',
+      reviewedAt: new Date().toISOString(),
+      source,
+      sourceUrl: fetched.sourceUrl || '',
+      specifier
+    }
+  ]);
+  workspace.settings.sandbox.packageCache = next;
+  await saveWorkspace(false, { scope: 'settings' });
+  renderWorkspacePanel();
+  setStatus(`Fetched package ${specifier} added to the reviewed sandbox cache.`);
+}
+
 async function sha256Integrity(source) {
   const bytes = new TextEncoder().encode(String(source || ''));
   const digest = await crypto.subtle.digest('SHA-256', bytes);
@@ -1302,6 +1553,44 @@ function removeSandboxPackage(specifier) {
   void saveWorkspace(false, { scope: 'settings' }).then(() => {
     renderWorkspacePanel();
     setStatus(`Reviewed package ${specifier} removed from the sandbox cache.`);
+  });
+}
+
+async function bindSandboxFileFromPrompt(defaultSource = '') {
+  ensureSettings();
+  const firstMissing = sandboxFileBindingStatusRows().find((item) => !item.bound)?.source || '';
+  const source = String(prompt('Imported Postman file reference to bind:', defaultSource || firstMissing || '') || '').trim();
+  if (!source) {
+    return;
+  }
+  const reference = sandboxFileReferencesForWorkspace().find((item) => item.source === source) || { source, mode: 'file' };
+  const localPath = String(prompt(`Local file path for "${source}":`, '') || '').trim();
+  if (!localPath) {
+    return;
+  }
+  const next = normalizeSandboxFileBindings([
+    ...workspace.settings.sandbox.fileBindings.filter((item) => item.source !== source),
+    {
+      contentType: reference.contentType || '',
+      key: reference.key || '',
+      localPath,
+      mode: reference.mode || 'file',
+      reviewedAt: new Date().toISOString(),
+      source
+    }
+  ]);
+  workspace.settings.sandbox.fileBindings = next;
+  await saveWorkspace(false, { scope: 'settings' });
+  renderWorkspacePanel();
+  setStatus(`Imported file binding added for ${source}.`);
+}
+
+function removeSandboxFileBinding(source) {
+  ensureSettings();
+  workspace.settings.sandbox.fileBindings = workspace.settings.sandbox.fileBindings.filter((item) => item.source !== source);
+  void saveWorkspace(false, { scope: 'settings' }).then(() => {
+    renderWorkspacePanel();
+    setStatus(`Imported file binding removed for ${source}.`);
   });
 }
 
@@ -1502,6 +1791,7 @@ function renderWorkspacePanel() {
   }
   renderVaultMetadataPanel();
   renderSandboxPackageCachePanel();
+  renderSandboxFileBindingsPanel();
   const container = $('workspaceSummary');
   container.textContent = '';
   if (!workspaceItem) {
@@ -1558,6 +1848,78 @@ function renderSandboxPackageCachePanel() {
   }
 }
 
+function renderSandboxFileBindingsPanel() {
+  const summary = $('sandboxFileBindingSummary');
+  const missingList = $('sandboxFileBindingMissingList');
+  const bindingList = $('sandboxFileBindingList');
+  if (!summary || !missingList || !bindingList) {
+    return;
+  }
+  ensureSettings();
+  const bindings = workspace.settings.sandbox.fileBindings || [];
+  const statuses = sandboxFileBindingStatusRows();
+  const missing = statuses.filter((item) => !item.bound);
+  const bound = statuses.filter((item) => item.bound);
+  summary.textContent = `${bound.length} imported file attachment${bound.length === 1 ? '' : 's'} bound. ${missing.length} attachment reference${missing.length === 1 ? '' : 's'} need local binding.`;
+  missingList.textContent = '';
+  bindingList.textContent = '';
+  for (const item of missing) {
+    missingList.append(fileBindingStatusRow(item));
+  }
+  for (const item of bound) {
+    bindingList.append(fileBindingRow(item));
+  }
+  for (const binding of bindings.filter((item) => !statuses.some((status) => status.source === item.source))) {
+    bindingList.append(fileBindingRow({
+      binding,
+      bound: true,
+      key: binding.key || '',
+      mode: binding.mode || 'file',
+      source: binding.source,
+      status: `Bound to ${displayLocalFilePath(binding.localPath)}`
+    }));
+  }
+}
+
+function fileBindingStatusRow(item) {
+  const row = document.createElement('div');
+  row.className = 'workspace-package-row';
+  const text = document.createElement('div');
+  const title = document.createElement('strong');
+  title.textContent = item.source;
+  const detail = document.createElement('span');
+  detail.textContent = `${item.mode}${item.key ? `:${item.key}` : ''} - ${item.status}`;
+  text.append(title, document.createElement('br'), detail);
+  const action = document.createElement('button');
+  action.type = 'button';
+  action.textContent = 'Bind';
+  action.addEventListener('click', () => {
+    void bindSandboxFileFromPrompt(item.source);
+  });
+  row.append(text, action);
+  return row;
+}
+
+function fileBindingRow(item) {
+  const binding = item.binding || item;
+  const row = document.createElement('div');
+  row.className = 'workspace-package-row';
+  const text = document.createElement('div');
+  const title = document.createElement('strong');
+  title.textContent = binding.source || item.source;
+  const detail = document.createElement('span');
+  detail.textContent = `${item.mode || binding.mode || 'file'} - ${binding.localPath || item.status || ''}`;
+  text.append(title, document.createElement('br'), detail);
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.textContent = 'Remove';
+  remove.addEventListener('click', () => {
+    removeSandboxFileBinding(binding.source || item.source);
+  });
+  row.append(text, remove);
+  return row;
+}
+
 function packageStatusRow(specifier, status) {
   const row = document.createElement('div');
   row.className = 'workspace-package-row';
@@ -1573,7 +1935,17 @@ function packageStatusRow(specifier, status) {
   action.addEventListener('click', () => {
     void addSandboxPackageFromPrompt(specifier);
   });
-  row.append(text, action);
+  const fetch = document.createElement('button');
+  fetch.type = 'button';
+  fetch.textContent = 'Fetch';
+  fetch.disabled = !SANDBOX_REVIEWED_PACKAGE_PATTERN.test(specifier);
+  fetch.addEventListener('click', () => {
+    void fetchSandboxPackageFromPrompt(specifier);
+  });
+  const actions = document.createElement('div');
+  actions.className = 'workspace-package-actions';
+  actions.append(action, fetch);
+  row.append(text, actions);
   return row;
 }
 
@@ -1584,7 +1956,11 @@ function packageCacheRow(item) {
   const title = document.createElement('strong');
   title.textContent = item.specifier;
   const detail = document.createElement('span');
-  detail.textContent = item.integrity;
+  detail.textContent = [
+    item.integrity,
+    item.registry ? `${item.registry}${item.entrypoint ? `:${item.entrypoint}` : ''}` : '',
+    item.reviewedAt ? `reviewed ${item.reviewedAt}` : ''
+  ].filter(Boolean).join(' - ');
   text.append(title, document.createElement('br'), detail);
   const remove = document.createElement('button');
   remove.type = 'button';

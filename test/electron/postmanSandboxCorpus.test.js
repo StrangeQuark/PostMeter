@@ -4,7 +4,10 @@ const path = require('node:path');
 const test = require('node:test');
 const { runCollection } = require('../../src/core/collectionRunner');
 const { importPostmanCollection } = require('../../src/core/postmanImporter');
-const { scriptPackageIntegrity } = require('../../src/core/scriptRuntime');
+const {
+  scriptPackageBundleIntegrity,
+  scriptPackageIntegrity
+} = require('../../src/core/scriptRuntime');
 const { MemoryVaultStore } = require('../../src/core/vaultStore');
 
 const FIXTURE_DIR = path.join(__dirname, '..', 'fixtures', 'postman');
@@ -18,6 +21,20 @@ test('runs the golden Postman/Newman sandbox v1 corpus through the importer and 
   const vault = new MemoryVaultStore({ seededToken: 'seeded-value' });
   const teamPackageSource = "const lodash = require('lodash'); exports.format = function (value) { return lodash.get(value, 'name') + ':team'; };";
   const externalPackageSource = "const team = require('@postmeter/corpus-tools'); module.exports = function (value) { return team.format(value).toUpperCase(); };";
+  const commonJsPackage = {
+    specifier: 'npm:@postmeter/corpus-commonjs@1.0.0',
+    entrypoint: 'index.js',
+    packageName: '@postmeter/corpus-commonjs',
+    packageJson: { name: '@postmeter/corpus-commonjs', main: 'index.js', version: '1.0.0' },
+    dependencyAliases: { formatter: 'npm:@postmeter/corpus-format@1.0.0' },
+    dependencies: ['npm:@postmeter/corpus-format@1.0.0'],
+    files: [
+      { path: 'index.js', source: "const formatter = require('formatter'); const data = require('./data.json'); exports.describe = function (value) { return formatter(value) + ':' + data.kind; };" },
+      { path: 'data.json', source: '{"kind":"bundle"}' }
+    ]
+  };
+  commonJsPackage.source = commonJsPackage.files[0].source;
+  commonJsPackage.integrity = scriptPackageBundleIntegrity(commonJsPackage);
 
   const result = await runCollection(collection, {
     id: 'env-golden',
@@ -50,6 +67,9 @@ test('runs the golden Postman/Newman sandbox v1 corpus through the importer and 
         source: externalPackageSource,
         integrity: scriptPackageIntegrity(externalPackageSource),
         dependencies: ['@postmeter/corpus-tools']
+      },
+      {
+        ...commonJsPackage
       }
     ],
     trustedCapabilities: { vault: true },
@@ -121,7 +141,7 @@ test('runs the golden Postman/Newman sandbox v1 corpus through the importer and 
   const resultsByName = new Map(result.results.map((item) => [item.requestName, item]));
   assert.equal(
     resultsByName.get('01 Setup And Variable Precedence').testScriptResult.visualizer.html,
-    '<section><h1>Setup</h1><p>200</p><div class="postmeter-chart"></div><strong>ready</strong><span>Setup/Setup</span><ul><li>none</li></ul><ol><li>Setup:ALPHA/200</li><li>Setup:BETA/200</li></ol><script>pm.getData(function (error, data) { window.postmeterRows = data.rows.length; if (window.PostMeterChart) { window.PostMeterChart(data.rows.length); } });</script></section>'
+    '<section><h1>Setup</h1><p>200</p><aside>Compiled</aside><div class="postmeter-chart"></div><strong>ready</strong><span>Setup/Setup</span><ul><li>none</li></ul><ol><li>Setup:ALPHA/200/row-ALPHA/Setup</li><li>inline:alpha</li><li>Setup:BETA/200/row-BETA/Setup</li><li>inline:beta</li></ol><script>pm.getData(function (error, data) { window.postmeterRows = data.rows.length; if (window.PostMeterChart) { window.PostMeterChart(data.rows.length); } });</script></section><footer>done</footer>'
   );
   assert.equal(resultsByName.get('01 Setup And Variable Precedence').testScriptResult.visualizer.interactive, true);
   assert.deepEqual(
@@ -154,7 +174,7 @@ test('runs the golden Postman/Newman sandbox v1 corpus through the importer and 
   assert.ok(runRequestResult.testScriptResult.tests.some((item) => item.name === '03c RunRequest Target: runRequest target test is reported on caller' && item.passed));
 
   assert.equal(cookieValue(result.cookies, 'scripted'), expected.cookies.scripted);
-  assert.equal(cookieValue(result.cookies, 'secret'), expected.cookies.secret);
+  assert.equal(cookieValue(result.cookies, 'secret'), undefined);
   assert.equal(cookieValue(result.cookies, 'visible'), undefined);
   assert.equal(await vault.get('seededToken'), 'seeded-value');
   assert.equal(await vault.get('corpusToken'), undefined);

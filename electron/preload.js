@@ -83,6 +83,9 @@ contextBridge.exposeInMainWorld('postmeter', {
     reset: () => ipcRenderer.invoke('vault:reset'),
     unsetSecret: (key) => ipcRenderer.invoke('vault:unset-secret', key)
   },
+  sandboxPackages: {
+    fetch: (specifier, options) => ipcRenderer.invoke('sandbox-package:fetch', specifier, options)
+  },
   loadTest: {
     start: (id, request, environment, config) => ipcRenderer.invoke('load:start', id, request, environment, config),
     cancel: (id) => ipcRenderer.invoke('load:cancel', id),

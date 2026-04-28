@@ -35,6 +35,7 @@ test('creates a default schema 11 workspace when no file exists', async () => {
   assert.deepEqual(workspace.settings, {
     appearance: { theme: 'system' },
     sandbox: {
+      fileBindings: [],
       packageCache: [],
       trustedCapabilities: {
         sendRequest: true,

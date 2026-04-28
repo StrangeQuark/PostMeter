@@ -56,6 +56,7 @@ test('validates auth helper required fields', () => {
   assert.deepEqual(validateAuth({ type: 'clientCertificate', keyPath: '/tmp/client.key' }, null), ['Client certificate PEM certificate path is required.']);
   assert.deepEqual(validateAuth({ type: 'clientCertificate', certPath: '/tmp/client.pem', keyPath: '/tmp/client.key' }, null), []);
   assert.deepEqual(validateAuth({ type: 'clientCertificate', pfxPath: '/tmp/client.p12' }, null), []);
+  assert.deepEqual(validateAuth({ type: 'clientCertificate', certificateId: 'cert-1' }, null), []);
 });
 
 test('applies supported auth helpers during request execution', async () => {
@@ -77,6 +78,64 @@ test('applies supported auth helpers during request execution', async () => {
     assert.equal((await authRequest(server.baseUrl, { type: 'apiKey', location: 'query', key: 'api_key', value: 'q1' })).apiKeyQuery, 'q1');
     assert.equal((await authRequest(server.baseUrl, { type: 'cookie', value: 'session=abc' })).cookie, 'session=abc');
     assert.equal((await authRequest(server.baseUrl, { type: 'oauth2', accessToken: 'token' })).authorization, 'Bearer token');
+  } finally {
+    await server.close();
+  }
+});
+
+test('applies advanced Postman auth helpers through the brokered HTTP sender', async () => {
+  const server = await createServer(async (request, response) => {
+    if (request.url === '/digest' && !request.headers.authorization) {
+      response.writeHead(401, {
+        'WWW-Authenticate': 'Digest realm="postmeter", nonce="abc123", qop="auth", algorithm=MD5',
+        'Content-Type': 'application/json'
+      });
+      response.end(JSON.stringify({ challenge: true }));
+      return;
+    }
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({
+      authorization: request.headers.authorization || '',
+      amzDate: request.headers['x-amz-date'] || '',
+      amzToken: request.headers['x-amz-security-token'] || ''
+    }));
+  });
+
+  try {
+    const digest = await authRequest(`${server.baseUrl}/digest`, { type: 'digest', username: 'ada', password: 'secret' });
+    assert.match(digest.authorization, /^Digest /);
+    assert.match(digest.authorization, /username="ada"/);
+    assert.match(digest.authorization, /response="[a-f0-9]{32}"/);
+
+    const hawk = await authRequest(`${server.baseUrl}/hawk`, { type: 'hawk', authId: 'hawk-id', authKey: 'hawk-secret', nonce: 'fixed', algorithm: 'sha256' });
+    assert.match(hawk.authorization, /^Hawk /);
+    assert.match(hawk.authorization, /id="hawk-id"/);
+    assert.match(hawk.authorization, /mac="/);
+
+    const aws = await authRequest(`${server.baseUrl}/aws`, {
+      type: 'aws',
+      accessKey: 'AKIDEXAMPLE',
+      secretKey: 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY',
+      region: 'us-east-1',
+      service: 'execute-api',
+      sessionToken: 'session'
+    }, { now: Date.parse('2026-04-27T12:00:00.000Z') });
+    assert.match(aws.authorization, /^AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE\/20260427\/us-east-1\/execute-api\/aws4_request/);
+    assert.equal(aws.amzDate, '20260427T120000Z');
+    assert.equal(aws.amzToken, 'session');
+
+    const oauth1 = await authRequest(`${server.baseUrl}/oauth1?existing=1`, {
+      type: 'oauth1',
+      consumerKey: 'consumer',
+      consumerSecret: 'consumer-secret',
+      token: 'token',
+      tokenSecret: 'token-secret',
+      nonce: 'nonce',
+      timestamp: '1777291200'
+    });
+    assert.match(oauth1.authorization, /^OAuth /);
+    assert.match(oauth1.authorization, /oauth_consumer_key="consumer"/);
+    assert.match(oauth1.authorization, /oauth_signature="/);
   } finally {
     await server.close();
   }
@@ -458,16 +517,18 @@ test('polls OAuth 2.0 device token before request execution', async () => {
   }
 });
 
-async function authRequest(baseUrl, auth) {
+async function authRequest(baseUrl, auth, options = {}) {
+  const parsed = new URL(baseUrl);
+  const url = parsed.pathname === '/' ? `${baseUrl}/auth` : baseUrl;
   const result = await sendRequest({
     method: 'GET',
-    url: `${baseUrl}/auth`,
+    url,
     queryParams: [],
     headers: [],
     bodyType: 'NONE',
     body: '',
     auth
-  }, null);
+  }, null, options);
   return JSON.parse(result.body);
 }
 

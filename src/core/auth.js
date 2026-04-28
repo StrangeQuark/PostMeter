@@ -16,6 +16,16 @@ const OAUTH_DEVICE_DEFAULT_INTERVAL_SECONDS = 5;
 const OAUTH_DEVICE_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:device_code';
 const OAUTH_PKCE_CODE_VERIFIER_BYTES = 32;
 const OAUTH_PKCE_STATE_BYTES = 24;
+const DIGEST_SUPPORTED_ALGORITHMS = new Map([
+  ['md5', 'md5'],
+  ['md5-sess', 'md5'],
+  ['sha-256', 'sha256'],
+  ['sha-256-sess', 'sha256'],
+  ['sha-512-256', 'sha512-256'],
+  ['sha-512-256-sess', 'sha512-256']
+]);
+const AWS_ALGORITHM = 'AWS4-HMAC-SHA256';
+const OAUTH1_SIGNATURE_METHODS = new Set(['HMAC-SHA1', 'HMAC-SHA256', 'PLAINTEXT']);
 
 function validateAuth(auth = {}, environment) {
   const normalized = normalizeAuth(auth);
@@ -66,6 +76,9 @@ function validateAuth(auth = {}, environment) {
       }
     }
   } else if (normalized.type === 'clientCertificate') {
+    if (resolveEnvironmentValue(normalized.certificateId, environment).trim()) {
+      return errors;
+    }
     const pfxPath = resolveEnvironmentValue(normalized.pfxPath, environment).trim();
     const certPath = resolveEnvironmentValue(normalized.certPath, environment).trim();
     const keyPath = resolveEnvironmentValue(normalized.keyPath, environment).trim();
@@ -82,6 +95,36 @@ function validateAuth(auth = {}, environment) {
         errors.push('Client certificate PEM key path is required.');
       }
     }
+  } else if (normalized.type === 'digest') {
+    requireResolved(normalized.username, environment, 'Digest auth username', errors);
+    requireResolved(normalized.password, environment, 'Digest auth password', errors);
+    const algorithm = normalizeDigestAlgorithm(resolveEnvironmentValue(normalized.algorithm, environment));
+    if (!algorithm) {
+      errors.push(`Unsupported Digest auth algorithm: ${normalized.algorithm}.`);
+    }
+  } else if (normalized.type === 'hawk') {
+    requireResolved(normalized.authId, environment, 'Hawk auth ID', errors);
+    requireResolved(normalized.authKey, environment, 'Hawk auth key', errors);
+    const algorithm = String(resolveEnvironmentValue(normalized.algorithm, environment) || 'sha256').toLowerCase();
+    if (algorithm !== 'sha1' && algorithm !== 'sha256') {
+      errors.push(`Unsupported Hawk auth algorithm: ${normalized.algorithm}.`);
+    }
+  } else if (normalized.type === 'aws') {
+    requireResolved(normalized.accessKey, environment, 'AWS access key', errors);
+    requireResolved(normalized.secretKey, environment, 'AWS secret key', errors);
+    requireResolved(normalized.region, environment, 'AWS region', errors);
+    requireResolved(normalized.service, environment, 'AWS service', errors);
+  } else if (normalized.type === 'oauth1') {
+    requireResolved(normalized.consumerKey, environment, 'OAuth 1.0 consumer key', errors);
+    requireResolved(normalized.consumerSecret, environment, 'OAuth 1.0 consumer secret', errors);
+    const signatureMethod = normalizeOAuth1SignatureMethod(resolveEnvironmentValue(normalized.signatureMethod, environment));
+    if (!OAUTH1_SIGNATURE_METHODS.has(signatureMethod)) {
+      errors.push(`Unsupported OAuth 1.0 signature method: ${normalized.signatureMethod}.`);
+    }
+  } else if (normalized.type === 'ntlm') {
+    errors.push('NTLM auth is explicitly classified as unsupported in the sandboxed HTTP broker because it requires a stateful connection authentication handshake that PostMeter has not implemented yet.');
+  } else if (normalized.type === 'akamaiEdgeGrid') {
+    errors.push('Akamai EdgeGrid auth is explicitly classified as unsupported in the sandboxed HTTP broker until exact Postman signing parity is implemented.');
   }
   return errors;
 }
@@ -480,6 +523,377 @@ function applyAuth(request, environment, target) {
   } else if (auth.type === 'oauth2') {
     const accessToken = resolveEnvironmentValue(auth.accessToken, environment);
     target.headers.Authorization = `${auth.tokenType} ${accessToken}`;
+  } else if (auth.type === 'digest') {
+    if (auth.realm && auth.nonce) {
+      setHeader(target.headers, 'Authorization', buildDigestAuthorizationHeader(auth, environment, target));
+    }
+  } else if (auth.type === 'hawk') {
+    setHeader(target.headers, 'Authorization', buildHawkAuthorizationHeader(auth, environment, target));
+  } else if (auth.type === 'aws') {
+    applyAwsSignature(auth, environment, target);
+  } else if (auth.type === 'oauth1') {
+    applyOAuth1Signature(auth, environment, target);
+  } else if (auth.type === 'ntlm') {
+    throw new Error('NTLM auth is not supported by the sandboxed HTTP broker yet.');
+  } else if (auth.type === 'akamaiEdgeGrid') {
+    throw new Error('Akamai EdgeGrid auth is not supported by the sandboxed HTTP broker yet.');
+  }
+}
+
+function applyDigestChallengeAuth(request, environment, target, challenge) {
+  const auth = normalizeAuth(request?.auth);
+  if (auth.type !== 'digest') {
+    return false;
+  }
+  setHeader(target.headers, 'Authorization', buildDigestAuthorizationHeader({
+    ...auth,
+    ...challenge
+  }, environment, target));
+  return true;
+}
+
+function buildDigestAuthorizationHeader(auth, environment, target) {
+  const username = resolveEnvironmentValue(auth.username, environment);
+  const password = resolveEnvironmentValue(auth.password, environment);
+  const realm = resolveEnvironmentValue(auth.realm, environment);
+  const nonce = resolveEnvironmentValue(auth.nonce, environment);
+  const algorithmName = String(resolveEnvironmentValue(auth.algorithm, environment) || 'MD5');
+  const algorithm = normalizeDigestAlgorithm(algorithmName);
+  if (!algorithm) {
+    throw new Error(`Unsupported Digest auth algorithm: ${algorithmName}.`);
+  }
+  if (!realm || !nonce) {
+    throw new Error('Digest auth requires a server challenge with realm and nonce.');
+  }
+  const qop = String(resolveEnvironmentValue(auth.qop, environment) || 'auth')
+    .split(',')
+    .map((item) => item.trim())
+    .find((item) => item === 'auth') || '';
+  const opaque = resolveEnvironmentValue(auth.opaque, environment);
+  const cnonce = resolveEnvironmentValue(auth.clientNonce, environment).trim() || crypto.randomBytes(8).toString('hex');
+  const nc = resolveEnvironmentValue(auth.nonceCount, environment).trim() || '00000001';
+  const uri = `${target.url.pathname}${target.url.search}`;
+  let ha1 = digestHash(algorithm.hash, `${username}:${realm}:${password}`);
+  if (algorithm.sess) {
+    ha1 = digestHash(algorithm.hash, `${ha1}:${nonce}:${cnonce}`);
+  }
+  const ha2 = digestHash(algorithm.hash, `${target.method || 'GET'}:${uri}`);
+  const response = qop
+    ? digestHash(algorithm.hash, `${ha1}:${nonce}:${nc}:${cnonce}:${qop}:${ha2}`)
+    : digestHash(algorithm.hash, `${ha1}:${nonce}:${ha2}`);
+  const fields = [
+    ['username', username],
+    ['realm', realm],
+    ['nonce', nonce],
+    ['uri', uri],
+    ['response', response],
+    ['algorithm', algorithm.label]
+  ];
+  if (opaque) {
+    fields.push(['opaque', opaque]);
+  }
+  if (qop) {
+    fields.push(['qop', qop, false], ['nc', nc, false], ['cnonce', cnonce]);
+  }
+  return `Digest ${fields.map(([key, value, quoted = true]) => `${key}=${quoted ? quoteAuthValue(value) : value}`).join(', ')}`;
+}
+
+function parseDigestChallenge(headerValues) {
+  const header = Array.isArray(headerValues) ? headerValues.find((value) => /^digest\b/i.test(String(value))) : String(headerValues || '');
+  if (!/^digest\b/i.test(header)) {
+    return null;
+  }
+  const text = header.replace(/^digest\s+/i, '');
+  const fields = {};
+  const pattern = /([A-Za-z0-9_-]+)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^,]*))(?:,|$)/g;
+  let match;
+  while ((match = pattern.exec(text)) !== null) {
+    const key = match[1].toLowerCase();
+    const raw = match[2] != null ? match[2].replace(/\\"/g, '"') : String(match[3] || '').trim();
+    fields[key] = raw;
+  }
+  if (!fields.realm || !fields.nonce) {
+    return null;
+  }
+  return {
+    realm: fields.realm,
+    nonce: fields.nonce,
+    algorithm: fields.algorithm || 'MD5',
+    qop: fields.qop || '',
+    opaque: fields.opaque || ''
+  };
+}
+
+function normalizeDigestAlgorithm(value) {
+  const label = String(value || 'MD5').trim() || 'MD5';
+  const hash = DIGEST_SUPPORTED_ALGORITHMS.get(label.toLowerCase());
+  if (!hash) {
+    return null;
+  }
+  return {
+    hash,
+    label,
+    sess: label.toLowerCase().endsWith('-sess')
+  };
+}
+
+function digestHash(algorithm, value) {
+  return crypto.createHash(algorithm).update(value, 'utf8').digest('hex');
+}
+
+function buildHawkAuthorizationHeader(auth, environment, target) {
+  const id = resolveEnvironmentValue(auth.authId, environment);
+  const key = resolveEnvironmentValue(auth.authKey, environment);
+  const algorithm = String(resolveEnvironmentValue(auth.algorithm, environment) || 'sha256').toLowerCase();
+  if (algorithm !== 'sha1' && algorithm !== 'sha256') {
+    throw new Error(`Unsupported Hawk auth algorithm: ${auth.algorithm}.`);
+  }
+  const ts = String(Math.floor(Number(target.now || Date.now()) / 1000));
+  const nonce = resolveEnvironmentValue(auth.nonce, environment).trim() || crypto.randomBytes(6).toString('hex');
+  const ext = resolveEnvironmentValue(auth.extraData, environment);
+  const app = resolveEnvironmentValue(auth.app, environment);
+  const dlg = resolveEnvironmentValue(auth.delegation, environment);
+  const port = target.url.port || (target.url.protocol === 'https:' ? '443' : '80');
+  const normalized = [
+    'hawk.1.header',
+    ts,
+    nonce,
+    String(target.method || 'GET').toUpperCase(),
+    `${target.url.pathname}${target.url.search}`,
+    target.url.hostname.toLowerCase(),
+    port,
+    '',
+    ext,
+    app,
+    dlg,
+    ''
+  ].join('\n');
+  const mac = crypto.createHmac(algorithm, key).update(normalized, 'utf8').digest('base64');
+  const fields = [
+    ['id', id],
+    ['ts', ts],
+    ['nonce', nonce],
+    ['mac', mac]
+  ];
+  if (ext) {
+    fields.push(['ext', ext]);
+  }
+  if (app) {
+    fields.push(['app', app]);
+  }
+  if (dlg) {
+    fields.push(['dlg', dlg]);
+  }
+  return `Hawk ${fields.map(([name, value]) => `${name}=${quoteAuthValue(value)}`).join(', ')}`;
+}
+
+function applyAwsSignature(auth, environment, target) {
+  const accessKey = resolveEnvironmentValue(auth.accessKey, environment);
+  const secretKey = resolveEnvironmentValue(auth.secretKey, environment);
+  const region = resolveEnvironmentValue(auth.region, environment);
+  const service = resolveEnvironmentValue(auth.service, environment);
+  const sessionToken = resolveEnvironmentValue(auth.sessionToken, environment);
+  const amzDate = awsAmzDate(target.now || Date.now());
+  const shortDate = amzDate.slice(0, 8);
+  setHeader(target.headers, 'Host', hostHeader(target.url));
+  if (auth.addAuthDataToQuery === true) {
+    target.url.searchParams.set('X-Amz-Algorithm', AWS_ALGORITHM);
+    target.url.searchParams.set('X-Amz-Credential', `${accessKey}/${shortDate}/${region}/${service}/aws4_request`);
+    target.url.searchParams.set('X-Amz-Date', amzDate);
+    target.url.searchParams.set('X-Amz-Expires', '900');
+    if (sessionToken) {
+      target.url.searchParams.set('X-Amz-Security-Token', sessionToken);
+    }
+  } else {
+    setHeader(target.headers, 'X-Amz-Date', amzDate);
+    if (sessionToken) {
+      setHeader(target.headers, 'X-Amz-Security-Token', sessionToken);
+    }
+  }
+  const signedHeaders = awsSignedHeaderNames(target.headers);
+  if (auth.addAuthDataToQuery === true) {
+    target.url.searchParams.set('X-Amz-SignedHeaders', signedHeaders);
+  }
+  const canonicalRequest = [
+    String(target.method || 'GET').toUpperCase(),
+    awsCanonicalUri(target.url),
+    awsCanonicalQuery(target.url),
+    awsCanonicalHeaders(target.headers),
+    signedHeaders,
+    sha256Hex(target.body || '')
+  ].join('\n');
+  const credentialScope = `${shortDate}/${region}/${service}/aws4_request`;
+  const stringToSign = [
+    AWS_ALGORITHM,
+    amzDate,
+    credentialScope,
+    sha256Hex(canonicalRequest)
+  ].join('\n');
+  const signature = crypto
+    .createHmac('sha256', awsSigningKey(secretKey, shortDate, region, service))
+    .update(stringToSign, 'utf8')
+    .digest('hex');
+  if (auth.addAuthDataToQuery === true) {
+    target.url.searchParams.set('X-Amz-Signature', signature);
+    return;
+  }
+  setHeader(
+    target.headers,
+    'Authorization',
+    `${AWS_ALGORITHM} Credential=${accessKey}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`
+  );
+}
+
+function applyOAuth1Signature(auth, environment, target) {
+  const signatureMethod = normalizeOAuth1SignatureMethod(resolveEnvironmentValue(auth.signatureMethod, environment));
+  if (!OAUTH1_SIGNATURE_METHODS.has(signatureMethod)) {
+    throw new Error(`Unsupported OAuth 1.0 signature method: ${auth.signatureMethod}.`);
+  }
+  const params = {
+    oauth_consumer_key: resolveEnvironmentValue(auth.consumerKey, environment),
+    oauth_nonce: resolveEnvironmentValue(auth.nonce, environment).trim() || crypto.randomBytes(12).toString('hex'),
+    oauth_signature_method: signatureMethod,
+    oauth_timestamp: resolveEnvironmentValue(auth.timestamp, environment).trim() || String(Math.floor(Number(target.now || Date.now()) / 1000)),
+    oauth_version: resolveEnvironmentValue(auth.version, environment).trim() || '1.0'
+  };
+  const token = resolveEnvironmentValue(auth.token, environment);
+  if (token) {
+    params.oauth_token = token;
+  }
+  const baseParams = new URLSearchParams(target.url.search);
+  for (const [key, value] of Object.entries(params)) {
+    baseParams.append(key, value);
+  }
+  const baseUrl = `${target.url.protocol}//${target.url.host}${target.url.pathname}`;
+  const normalizedParams = [...baseParams.entries()]
+    .map(([key, value]) => [oauthPercentEncode(key), oauthPercentEncode(value)])
+    .sort(([leftKey, leftValue], [rightKey, rightValue]) => leftKey === rightKey ? leftValue.localeCompare(rightValue) : leftKey.localeCompare(rightKey))
+    .map(([key, value]) => `${key}=${value}`)
+    .join('&');
+  const baseString = [
+    String(target.method || 'GET').toUpperCase(),
+    oauthPercentEncode(baseUrl),
+    oauthPercentEncode(normalizedParams)
+  ].join('&');
+  const signingKey = `${oauthPercentEncode(resolveEnvironmentValue(auth.consumerSecret, environment))}&${oauthPercentEncode(resolveEnvironmentValue(auth.tokenSecret, environment))}`;
+  const signature = signatureMethod === 'PLAINTEXT'
+    ? signingKey
+    : crypto
+      .createHmac(signatureMethod === 'HMAC-SHA256' ? 'sha256' : 'sha1', signingKey)
+      .update(baseString, 'utf8')
+      .digest('base64');
+  const headerParams = {
+    ...params,
+    oauth_signature: signature
+  };
+  const realm = resolveEnvironmentValue(auth.realm, environment);
+  const parts = realm ? [`realm=${quoteAuthValue(realm)}`] : [];
+  for (const key of Object.keys(headerParams).sort()) {
+    parts.push(`${oauthPercentEncode(key)}=${quoteAuthValue(oauthPercentEncode(headerParams[key]))}`);
+  }
+  setHeader(target.headers, 'Authorization', `OAuth ${parts.join(', ')}`);
+}
+
+function setHeader(headers, name, value) {
+  const existing = Object.keys(headers).find((key) => key.toLowerCase() === name.toLowerCase());
+  if (existing) {
+    headers[existing] = value;
+  } else {
+    headers[name] = value;
+  }
+}
+
+function hostHeader(url) {
+  if ((url.protocol === 'https:' && url.port === '443') || (url.protocol === 'http:' && url.port === '80') || !url.port) {
+    return url.hostname;
+  }
+  return `${url.hostname}:${url.port}`;
+}
+
+function awsAmzDate(now) {
+  return new Date(Number(now)).toISOString().replace(/[:-]|\.\d{3}/g, '');
+}
+
+function awsCanonicalUri(url) {
+  const path = url.pathname || '/';
+  return path
+    .split('/')
+    .map((part) => encodeRfc3986(decodeURIComponentSafe(part)))
+    .join('/') || '/';
+}
+
+function awsCanonicalQuery(url) {
+  return [...url.searchParams.entries()]
+    .map(([key, value]) => [encodeRfc3986(key), encodeRfc3986(value)])
+    .sort(([leftKey, leftValue], [rightKey, rightValue]) => leftKey === rightKey ? leftValue.localeCompare(rightValue) : leftKey.localeCompare(rightKey))
+    .map(([key, value]) => `${key}=${value}`)
+    .join('&');
+}
+
+function awsCanonicalHeaders(headers) {
+  return awsSignedHeaderNames(headers)
+    .split(';')
+    .map((name) => `${name}:${String(headerValue(headers, name) || '').trim().replace(/\s+/g, ' ')}`)
+    .join('\n') + '\n';
+}
+
+function awsSignedHeaderNames(headers) {
+  return Object.keys(headers)
+    .map((key) => key.toLowerCase())
+    .filter((key) => key !== 'authorization')
+    .sort()
+    .join(';');
+}
+
+function headerValue(headers, name) {
+  const key = Object.keys(headers).find((candidate) => candidate.toLowerCase() === name.toLowerCase());
+  return key ? headers[key] : '';
+}
+
+function awsSigningKey(secretKey, shortDate, region, service) {
+  const dateKey = crypto.createHmac('sha256', `AWS4${secretKey}`).update(shortDate, 'utf8').digest();
+  const dateRegionKey = crypto.createHmac('sha256', dateKey).update(region, 'utf8').digest();
+  const dateRegionServiceKey = crypto.createHmac('sha256', dateRegionKey).update(service, 'utf8').digest();
+  return crypto.createHmac('sha256', dateRegionServiceKey).update('aws4_request', 'utf8').digest();
+}
+
+function sha256Hex(value) {
+  const hash = crypto.createHash('sha256');
+  if (Buffer.isBuffer(value)) {
+    return hash.update(value).digest('hex');
+  }
+  return hash.update(String(value || ''), 'utf8').digest('hex');
+}
+
+function normalizeOAuth1SignatureMethod(value) {
+  const method = String(value || 'HMAC-SHA1').trim().toUpperCase();
+  if (method === 'HMACSHA1') {
+    return 'HMAC-SHA1';
+  }
+  if (method === 'HMACSHA256') {
+    return 'HMAC-SHA256';
+  }
+  return method;
+}
+
+function quoteAuthValue(value) {
+  return `"${String(value == null ? '' : value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+function oauthPercentEncode(value) {
+  return encodeRfc3986(value);
+}
+
+function encodeRfc3986(value) {
+  return encodeURIComponent(String(value == null ? '' : value))
+    .replace(/[!'()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+function decodeURIComponentSafe(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
   }
 }
 
@@ -626,11 +1040,13 @@ module.exports = {
   OAUTH_DEVICE_DEFAULT_INTERVAL_SECONDS,
   OAUTH_DEVICE_GRANT_TYPE,
   OAUTH_REFRESH_WINDOW_MILLIS,
+  applyDigestChallengeAuth,
   applyAuth,
   createOAuthPkceSession,
   exchangeOAuthAuthorizationCode,
   maybeRefreshOAuthToken,
   normalizeAuth,
+  parseDigestChallenge,
   pkceChallengeForVerifier,
   pollOAuthDeviceToken,
   refreshOAuthToken,

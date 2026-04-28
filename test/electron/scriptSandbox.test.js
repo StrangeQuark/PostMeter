@@ -1,4 +1,6 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const {
@@ -65,13 +67,22 @@ test('does not let environment variables disable script worker permission flags'
     const fileReadFlags = execArgv.filter((value) => value.startsWith('--allow-fs-read='));
 
     assert.ok(execArgv.includes('--permission'));
-    assert.equal(fileReadFlags.length, 4);
+    assert.equal(fileReadFlags.length, 8);
     assert.equal(fileReadFlags.some((value) => value.includes(',')), false);
     assert.deepEqual(
       fileReadFlags
         .map((value) => path.basename(value.slice('--allow-fs-read='.length)))
         .sort(),
-      ['dynamicVariables.js', 'scriptRuntime.js', 'scriptWorker.js', 'variableScope.js']
+      [
+        'dynamicVariables.js',
+        'postmanBuiltinPackages.js',
+        'postmanSandboxBootcodeBundle.js',
+        'sandboxPackageCache.js',
+        'scriptRuntime.js',
+        'scriptWorker.js',
+        'variableScope.js',
+        'visualizerHandlebarsBundle.js'
+      ]
     );
   } finally {
     if (originalDisable == null) {
@@ -217,6 +228,21 @@ test('fails closed when the required OS sandbox backend is unavailable', async (
 test('does not expose host constructors, errors, or promises to sandbox scripts', async () => {
   const execution = await runPostmanScriptIsolated(`
     pm.test('host constructors are blocked', async function () {
+      function expectNoHostProcessViaConstructor(value) {
+        let escaped = false;
+        try {
+          const constructor = value && value.constructor;
+          const functionConstructor = constructor && constructor.constructor;
+          if (typeof functionConstructor === 'function') {
+            const result = functionConstructor(
+              'try { return typeof process === "undefined" ? "missing" : process.cwd(); } catch (_) { return "blocked"; }'
+            )();
+            escaped = result !== 'missing' && result !== 'blocked';
+          }
+        } catch (_) {}
+        pm.expect(escaped).to.equal(false);
+      }
+
       pm.expect(pm.constructor).to.be.undefined;
       pm.expect(pm.test.constructor).to.be.undefined;
       pm.expect(console.log.constructor).to.be.undefined;
@@ -233,35 +259,25 @@ test('does not expose host constructors, errors, or promises to sandbox scripts'
         method: 'POST',
         url: 'https://api.example.test/current?one=1',
         header: [{ key: 'X-SDK', value: 'yes' }],
-        body: { mode: 'urlencoded', urlencoded: [{ key: 'a', value: 'b' }] },
-        metadata: [{ key: 'meta', value: 'safe' }],
-        messages: [{ data: 'message', timestamp: '2026-04-27T00:00:00.000Z' }]
+        body: { mode: 'urlencoded', urlencoded: [{ key: 'a', value: 'b' }] }
       });
       const requestJson = request.toJSON();
-      pm.expect(request.constructor).to.be.undefined;
-      pm.expect(request.headers.constructor).to.be.undefined;
-      pm.expect(request.headers.idx(0).constructor).to.be.undefined;
-      pm.expect(request.url.query.all().constructor).to.be.undefined;
-      pm.expect(request.url.query.idx(0).constructor).to.be.undefined;
-      pm.expect(request.body.urlencoded.idx(0).constructor).to.be.undefined;
-      pm.expect(request.metadata.idx(0).constructor).to.be.undefined;
-      pm.expect(request.messages.idx(0).constructor).to.be.undefined;
-      pm.expect(requestJson.constructor).to.be.undefined;
-      pm.expect(requestJson.header.constructor).to.be.undefined;
+      expectNoHostProcessViaConstructor(request);
+      expectNoHostProcessViaConstructor(request.headers);
+      expectNoHostProcessViaConstructor(request.headers.idx(0));
+      expectNoHostProcessViaConstructor(request.url.query.all());
+      expectNoHostProcessViaConstructor(request.url.query.idx(0));
+      expectNoHostProcessViaConstructor(request.body.urlencoded.idx(0));
+      expectNoHostProcessViaConstructor(requestJson);
+      expectNoHostProcessViaConstructor(requestJson.header);
 
       const sdkResponse = new sdk.Response({
         code: 200,
         header: [{ key: 'Content-Type', value: 'text/plain' }],
-        body: 'ok',
-        metadata: [{ key: 'received', value: 'yes' }],
-        trailers: [{ key: 'grpc-status', value: '0' }],
-        messages: [{ data: 'incoming', timestamp: '2026-04-27T00:00:00.000Z' }]
+        body: 'ok'
       });
-      pm.expect(sdkResponse.constructor).to.be.undefined;
-      pm.expect(sdkResponse.headers.idx(0).constructor).to.be.undefined;
-      pm.expect(sdkResponse.metadata.idx(0).constructor).to.be.undefined;
-      pm.expect(sdkResponse.trailers.idx(0).constructor).to.be.undefined;
-      pm.expect(sdkResponse.messages.idx(0).constructor).to.be.undefined;
+      expectNoHostProcessViaConstructor(sdkResponse);
+      expectNoHostProcessViaConstructor(sdkResponse.headers.idx(0));
 
       let escaped = false;
       try {
@@ -672,8 +688,25 @@ test('normalizes broader Postman pm.sendRequest inputs and commits jar side effe
       const second = await pm.sendRequest(request);
       pm.expect(second.url).to.equal('https://api.example.test/graphql');
 
+      const advanced = await pm.sendRequest({
+        method: 'GET',
+        url: 'https://api.example.test/signed',
+        proxy: { protocol: 'http', host: 'proxy.example.test', port: 8080, username: 'puser', password: 'ppass' },
+        auth: {
+          type: 'awsv4',
+          awsv4: [
+            { key: 'accessKey', value: 'akid' },
+            { key: 'secretKey', value: 'secret' },
+            { key: 'region', value: 'us-east-1' },
+            { key: 'service', value: 'execute-api' }
+          ]
+        }
+      });
+      pm.expect(advanced.code).to.equal(200);
+
       const jar = pm.cookies.jar();
       pm.expect(await jar.get('https://api.example.test/form', 'sendSide')).to.equal('effect');
+      pm.expect(await jar.get('https://api.example.test/form', 'sendSecret')).to.equal('secret-effect');
       await new Promise(function (resolve, reject) {
         pm.cookies.get('visible', function (error, value) {
           if (error) { reject(error); return; }
@@ -705,7 +738,8 @@ test('normalizes broader Postman pm.sendRequest inputs and commits jar side effe
         finalUrl: request.url,
         updatedCookies: [
           ...(options.cookieJar || []),
-          { enabled: true, name: 'sendSide', value: 'effect', domain: 'api.example.test', path: '/', secure: false, httpOnly: false, sameSite: 'Lax', hostOnly: true }
+          { enabled: true, name: 'sendSide', value: 'effect', domain: 'api.example.test', path: '/', secure: false, httpOnly: false, sameSite: 'Lax', hostOnly: true },
+          { enabled: true, name: 'sendSecret', value: 'secret-effect', domain: 'api.example.test', path: '/', secure: false, httpOnly: true, sameSite: 'Lax', hostOnly: true }
         ]
       };
     },
@@ -714,7 +748,7 @@ test('normalizes broader Postman pm.sendRequest inputs and commits jar side effe
   });
 
   assert.equal(execution.result.passed, true);
-  assert.equal(sent.length, 2);
+  assert.equal(sent.length, 3);
   assert.equal(sent[0].request.body, 'a=b');
   assert.equal(sent[0].request.auth.type, 'basic');
   assert.equal(sent[0].request.followRedirects, false);
@@ -722,7 +756,157 @@ test('normalizes broader Postman pm.sendRequest inputs and commits jar side effe
   assert.equal(sent[0].options.cookieJar[0].name, 'visible');
   assert.equal(sent[1].request.bodyType, 'RAW_JSON');
   assert.match(sent[1].request.body, /query Ok/);
+  assert.equal(sent[2].request.auth.type, 'aws');
+  assert.equal(sent[2].request.auth.region, 'us-east-1');
+  assert.equal(sent[2].request.proxy.host, 'proxy.example.test');
+  assert.equal(sent[2].request.proxy.port, '8080');
   assert.equal(execution.cookies.find((item) => item.name === 'sendSide').value, 'effect');
+  assert.equal(execution.cookies.find((item) => item.name === 'sendSecret').httpOnly, true);
+});
+
+test('requires brokered client-certificate bindings for pm.sendRequest', async () => {
+  let calls = 0;
+  const rejected = await runPostmanScriptIsolated(`
+    pm.test('script cert paths rejected', async function () {
+      await pm.sendRequest({
+        url: 'https://api.example.test/mtls',
+        auth: { type: 'clientCertificate', certPath: '/tmp/client.crt', keyPath: '/tmp/client.key' }
+      });
+    });
+  `, {}, {
+    sendRequest: async () => {
+      calls++;
+      return { statusCode: 200, headers: {}, body: '', durationMillis: 0, responseBytes: 0 };
+    },
+    timeoutMillis: 500,
+    workerTimeoutMillis: 1000
+  });
+  assert.equal(rejected.result.passed, false);
+  assert.match(rejected.result.tests[0].error, /configured certificate binding/);
+  assert.equal(calls, 0);
+
+  const allowed = await runPostmanScriptIsolated(`
+    pm.test('configured cert binding is brokered', async function () {
+      const response = await pm.sendRequest({
+        url: 'https://api.example.test/mtls',
+        auth: { type: 'clientCertificate', certificateId: 'cert-1' }
+      });
+      pm.expect(response.code).to.equal(200);
+    });
+  `, {}, {
+    clientCertificates: [{
+      id: 'cert-1',
+      certPath: '/configured/client.crt',
+      keyPath: '/configured/client.key',
+      passphrase: 'secret'
+    }],
+    sendRequest: async (request) => {
+      calls++;
+      assert.deepEqual(request.auth, {
+        type: 'clientCertificate',
+        certificateId: 'cert-1',
+        certPath: '/configured/client.crt',
+        keyPath: '/configured/client.key',
+        pfxPath: '',
+        caPath: '',
+        passphrase: 'secret'
+      });
+      return { statusCode: 200, headers: {}, body: '', durationMillis: 0, responseBytes: 0 };
+    },
+    timeoutMillis: 500,
+    workerTimeoutMillis: 1000
+  });
+
+  assert.equal(allowed.result.passed, true);
+  assert.equal(calls, 1);
+});
+
+test('requires user-granted file bindings for brokered pm.sendRequest bodies', async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-script-files-'));
+  t.after(async () => {
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+  const localPath = path.join(dir, 'upload.txt');
+  await fs.writeFile(localPath, 'BOUND_UPLOAD');
+  const sent = [];
+
+  const rejected = await runPostmanScriptIsolated(`
+    pm.test('unbound files fail closed', async function () {
+      await pm.sendRequest({
+        method: 'POST',
+        url: 'https://api.example.test/upload',
+        body: { mode: 'file', file: { src: '/etc/passwd' } }
+      });
+    });
+  `, {}, {
+    sendRequest: async () => {
+      throw new Error('sendRequest should not be called for unbound file bodies');
+    },
+    timeoutMillis: 500,
+    workerTimeoutMillis: 1000
+  });
+
+  assert.equal(rejected.result.passed, false);
+  assert.match(rejected.result.tests[0].error, /File attachment binding is required/);
+
+  const idBypass = await runPostmanScriptIsolated(`
+    pm.test('binding IDs cannot bypass source review', async function () {
+      await pm.sendRequest({
+        method: 'POST',
+        url: 'https://api.example.test/upload',
+        body: { mode: 'file', file: { src: '/etc/passwd' }, bindingId: 'approved-binding' }
+      });
+    });
+  `, {}, {
+    fileBindings: [{ id: 'approved-binding', source: 'fixtures/upload.txt', localPath }],
+    sendRequest: async () => {
+      throw new Error('sendRequest should not be called for mismatched file binding IDs');
+    },
+    timeoutMillis: 500,
+    workerTimeoutMillis: 1000
+  });
+
+  assert.equal(idBypass.result.passed, false);
+  assert.match(idBypass.result.tests[0].error, /File attachment binding is required/);
+
+  const allowed = await runPostmanScriptIsolated(`
+    pm.test('bound file and form-data references are brokered', async function () {
+      const first = await pm.sendRequest({
+        method: 'POST',
+        url: 'https://api.example.test/file',
+        body: { mode: 'binary', binary: { src: 'fixtures/upload.txt', contentType: 'text/plain' } }
+      });
+      const second = await pm.sendRequest({
+        method: 'POST',
+        url: 'https://api.example.test/form',
+        body: {
+          mode: 'formdata',
+          formdata: [
+            { key: 'note', value: 'ok', type: 'text' },
+            { key: 'payload', src: 'fixtures/upload.txt', type: 'file', contentType: 'text/plain' }
+          ]
+        }
+      });
+      pm.expect(first.code).to.equal(200);
+      pm.expect(second.code).to.equal(200);
+    });
+  `, {}, {
+    fileBindings: [{ source: 'fixtures/upload.txt', localPath, contentType: 'text/plain' }],
+    sendRequest: async (request, _environment, options = {}) => {
+      sent.push({ options, request });
+      return { statusCode: 200, headers: {}, body: '', durationMillis: 0, responseBytes: 0, finalUrl: request.url };
+    },
+    timeoutMillis: 1000,
+    workerTimeoutMillis: 1500
+  });
+
+  assert.equal(allowed.result.passed, true);
+  assert.equal(sent.length, 2);
+  assert.equal(sent[0].request.bodyAttachment.source, 'fixtures/upload.txt');
+  assert.equal(sent[0].request.bodyAttachment.contentType, 'text/plain');
+  assert.equal(sent[0].options.fileBindings[0].localPath, localPath);
+  assert.equal(sent[1].request.multipart.parts[0].type, 'text');
+  assert.equal(sent[1].request.multipart.parts[1].source, 'fixtures/upload.txt');
 });
 
 test('discards side effects when aggregate worker result payloads are oversized', async () => {
@@ -746,7 +930,7 @@ test('discards side effects when aggregate worker result payloads are oversized'
   assert.equal(execution.environmentVariables.find((item) => item.key === 'safe').value, 'original');
 });
 
-test('supports true globals, iteration data, and Postman-style cookie helpers by default while hiding HttpOnly cookies', async () => {
+test('supports true globals, iteration data, and Postman-style cookie helpers by default with HttpOnly parity', async () => {
   const execution = await runPostmanScriptIsolated(`
     pm.globals.set('globalToken', 'updated');
     pm.test('scopes resolve in target order', function () {
@@ -754,26 +938,30 @@ test('supports true globals, iteration data, and Postman-style cookie helpers by
       pm.expect(pm.variables.get('rowId')).to.equal('42');
       pm.expect(pm.variables.get('globalOnly')).to.equal('global');
     });
-    pm.test('cookies are scoped and httpOnly hidden', async function () {
-      pm.expect(await pm.cookies.get('visible')).to.equal('cookie-value');
-      pm.expect(await pm.cookies.get('secret')).to.be.undefined;
+    pm.test('cookies are scoped and expose HttpOnly like Postman', async function () {
+      pm.expect(pm.cookies.get('visible')).to.equal('cookie-value');
+      pm.expect(pm.cookies.get('secret')).to.equal('hidden');
+      pm.expect(pm.cookies.has('secret')).to.equal(true);
+      pm.expect(pm.cookies.toObject().secret).to.equal('hidden');
       await pm.cookies.set('scripted', 'yes');
       await pm.cookies.unset('visible');
       const jar = pm.cookies.jar();
       await jar.set('https://api.example.test/path', 'jarred', 'cookie');
       pm.expect(await jar.get('https://api.example.test/path', 'jarred')).to.equal('cookie');
+      pm.expect(await jar.get('https://api.example.test/path', 'secret')).to.equal('hidden');
       await jar.set('api.example.test/path', { name: 'jarObject', value: 'from-object', path: '/path' });
       pm.expect(await jar.get('api.example.test/path', 'jarObject')).to.equal('from-object');
       const all = await jar.getAll('https://api.example.test/path');
-      pm.expect(all.jarred).to.equal('cookie');
-      pm.expect(all.jarObject).to.equal('from-object');
-      pm.expect(all.secret).to.be.undefined;
+      pm.expect(all.get('jarred')).to.equal('cookie');
+      pm.expect(all.get('jarObject')).to.equal('from-object');
+      pm.expect(all.get('secret')).to.equal('hidden');
       await jar.unset('https://api.example.test/path', 'jarred');
       await jar.unset('api.example.test/path', 'jarObject');
       await pm.cookies.unset('secret');
       const cookies = await pm.cookies.toObject();
       pm.expect(cookies.scripted).to.equal('yes');
       pm.expect(cookies.visible).to.be.undefined;
+      pm.expect(cookies.secret).to.be.undefined;
     });
   `, {
     request: { method: 'GET', url: 'https://api.example.test/path' },
@@ -797,7 +985,7 @@ test('supports true globals, iteration data, and Postman-style cookie helpers by
   assert.equal(execution.cookies.find((item) => item.name === 'jarred'), undefined);
   assert.equal(execution.cookies.find((item) => item.name === 'jarObject'), undefined);
   assert.equal(execution.cookies.find((item) => item.name === 'visible'), undefined);
-  assert.equal(execution.cookies.find((item) => item.name === 'secret').value, 'hidden');
+  assert.equal(execution.cookies.find((item) => item.name === 'secret'), undefined);
 });
 
 test('can disable Postman cookie helpers per workspace', async () => {
@@ -848,13 +1036,17 @@ test('supports pm.cookies.jar clear for hostname targets', async () => {
       const jar = pm.cookies.jar();
       await jar.set('api.example.test/path', 'clearMe', 'x');
       pm.expect(await jar.get('api.example.test/path', 'clearMe')).to.equal('x');
+      pm.expect(await jar.get('api.example.test/path', 'clearSecret')).to.equal('hidden');
       await jar.clear('api.example.test/path');
       pm.expect(await jar.get('api.example.test/path', 'clearMe')).to.be.undefined;
+      pm.expect(await jar.get('api.example.test/path', 'clearSecret')).to.be.undefined;
     });
   `, {
     request: { method: 'GET', url: 'https://api.example.test/path' },
     environment: { id: 'env', name: 'Env', variables: [] },
-    cookieJar: []
+    cookieJar: [
+      { enabled: true, name: 'clearSecret', value: 'hidden', domain: 'api.example.test', path: '/', secure: false, httpOnly: true, sameSite: 'Lax', hostOnly: true }
+    ]
   }, {
     timeoutMillis: 500,
     workerTimeoutMillis: 1000
@@ -862,4 +1054,5 @@ test('supports pm.cookies.jar clear for hostname targets', async () => {
 
   assert.equal(execution.result.passed, true);
   assert.equal(execution.cookies.find((item) => item.name === 'clearMe'), undefined);
+  assert.equal(execution.cookies.find((item) => item.name === 'clearSecret'), undefined);
 });

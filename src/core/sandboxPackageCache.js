@@ -85,7 +85,7 @@ function sandboxPackageCacheStatus(workspace = {}) {
     if (!cached) {
       return { ...reference, installed: false, validIntegrity: false };
     }
-    const expected = scriptPackageIntegrity(cached.source);
+    const expected = scriptPackageBundleIntegrity(cached);
     return {
       ...reference,
       installed: true,
@@ -106,9 +106,13 @@ function normalizePackageCache(cache = []) {
       continue;
     }
     map.set(specifier, {
+      dependencyAliases: normalizeDependencyAliases(item.dependencyAliases || item.dependencyMap),
       dependencies: Array.isArray(item.dependencies) ? item.dependencies.map(String).filter(Boolean) : [],
+      entrypoint: item.entrypoint == null ? '' : String(item.entrypoint),
+      files: normalizePackageFiles(item.files),
       integrity: String(item.integrity || '').trim(),
       maxExportKeys: Number.isFinite(Number(item.maxExportKeys)) ? Number(item.maxExportKeys) : undefined,
+      packageJson: normalizePackageJson(item.packageJson || item.package || item.manifest),
       source: String(item.source || item.code || ''),
       specifier
     });
@@ -131,10 +135,176 @@ function scriptPackageIntegrity(source) {
   return `sha256-${crypto.createHash('sha256').update(String(source || ''), 'utf8').digest('base64')}`;
 }
 
+function scriptPackageBundleIntegrity(entry = {}) {
+  const files = normalizePackageFiles(entry.files);
+  const packageJson = normalizePackageJson(entry.packageJson || entry.package || entry.manifest);
+  const entrypoint = normalizePackageEntrypoint(entry.entrypoint, packageJson);
+  if (files.length === 0 && Object.keys(packageJson).length === 0) {
+    return scriptPackageIntegrity(entry.source ?? entry.code ?? '');
+  }
+  if (files.length === 0) {
+    files.push({
+      path: entrypoint,
+      source: String(entry.source ?? entry.code ?? '')
+    });
+  }
+  return scriptPackageIntegrity(JSON.stringify({
+    entrypoint,
+    files,
+    packageJson
+  }));
+}
+
+function normalizePackageEntrypoint(entrypoint, packageJson = {}) {
+  const explicit = normalizePackageFilePath(entrypoint);
+  if (explicit) {
+    return explicit;
+  }
+  for (const candidate of [
+    entrypointFromBrowserPackageField(packageJson.browser),
+    entrypointFromExportsPackageField(packageJson.exports),
+    packageJson.main,
+    packageJson.module,
+    'index.js'
+  ]) {
+    const normalized = normalizePackageFilePath(candidate);
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return 'index.js';
+}
+
+function entrypointFromBrowserPackageField(browserField) {
+  if (typeof browserField === 'string') {
+    return browserField;
+  }
+  if (browserField && typeof browserField === 'object' && typeof browserField['.'] === 'string') {
+    return browserField['.'];
+  }
+  return '';
+}
+
+function entrypointFromExportsPackageField(exportsField) {
+  if (typeof exportsField === 'string') {
+    return exportsField;
+  }
+  if (!exportsField || typeof exportsField !== 'object') {
+    return '';
+  }
+  if (exportsField['.']) {
+    return entrypointFromExportValue(exportsField['.']);
+  }
+  return entrypointFromExportValue(exportsField);
+}
+
+function entrypointFromExportValue(value) {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (!value || typeof value !== 'object') {
+    return '';
+  }
+  for (const key of ['browser', 'require', 'default', 'import', 'node']) {
+    const nested = entrypointFromExportValue(value[key]);
+    if (nested) {
+      return nested;
+    }
+  }
+  return '';
+}
+
+function normalizePackageFiles(files) {
+  const output = [];
+  const seen = new Set();
+  const entries = Array.isArray(files)
+    ? files.map((file) => [
+      file?.path ?? file?.name ?? file?.filename,
+      file?.source ?? file?.code ?? file?.text
+    ])
+    : Object.entries(files || {});
+  for (const [rawPath, rawSource] of entries) {
+    const filePath = normalizePackageFilePath(rawPath);
+    if (!filePath || seen.has(filePath)) {
+      continue;
+    }
+    seen.add(filePath);
+    output.push({
+      path: filePath,
+      source: String(rawSource ?? '')
+    });
+  }
+  return output.sort((left, right) => left.path.localeCompare(right.path));
+}
+
+function normalizePackageFilePath(filePath) {
+  let value = String(filePath || '').replace(/\\/g, '/').trim();
+  while (value.startsWith('./')) {
+    value = value.slice(2);
+  }
+  value = value.replace(/^\/+/, '');
+  const parts = value.split('/').filter(Boolean);
+  if (!parts.length || parts.includes('..') || parts.some((part) => part === '.' || part.includes('\0'))) {
+    return '';
+  }
+  return parts.join('/');
+}
+
+function normalizePackageJson(packageJson) {
+  if (!packageJson) {
+    return {};
+  }
+  if (typeof packageJson === 'string') {
+    try {
+      const parsed = JSON.parse(packageJson);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? sortJsonObject(parsed) : {};
+    } catch {
+      return {};
+    }
+  }
+  if (typeof packageJson === 'object' && !Array.isArray(packageJson)) {
+    return sortJsonObject(packageJson);
+  }
+  return {};
+}
+
+function sortJsonObject(value) {
+  if (Array.isArray(value)) {
+    return value.map(sortJsonObject);
+  }
+  if (!value || typeof value !== 'object') {
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' || value == null) {
+      return value;
+    }
+    return String(value);
+  }
+  return Object.keys(value).sort().reduce((output, key) => {
+    if (value[key] !== undefined) {
+      output[key] = sortJsonObject(value[key]);
+    }
+    return output;
+  }, {});
+}
+
+function normalizeDependencyAliases(value = {}) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+  return Object.keys(value).sort().reduce((output, key) => {
+    const alias = String(key || '').trim();
+    const target = String(value[key] || '').trim();
+    if (alias && target) {
+      output[alias] = target;
+    }
+    return output;
+  }, {});
+}
+
 module.exports = {
   collectSandboxPackageReferencesFromCollection,
   collectSandboxPackageReferencesFromText,
   collectSandboxPackageReferencesFromWorkspace,
   sandboxPackageCacheStatus,
+  scriptPackageBundleIntegrity,
   scriptPackageIntegrity
 };

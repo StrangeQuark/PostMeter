@@ -70,7 +70,7 @@
   },
   "cookies": {
     "scripted": "from-corpus",
-    "secret": "secret-cookie",
+    "secret": null,
     "visible": null
   },
   "failedTest": {

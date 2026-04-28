@@ -102,6 +102,7 @@ function importRequest(item, inheritedEvents = emptyEvents(), inheritedAuth = { 
     method: httpMethodForProtocol(requestNode.method, protocol),
     url: importUrl(requestNode.url),
     auth: requestNode.auth ? importAuth(requestNode.auth, inheritedAuth) : inheritedAuth,
+    cookieJar: { enabled: true, storeResponses: true },
     variables: mergeVariables(inheritedVariables, importVariables(requestNode.variable || item.variable)),
     examples: importExamples(item.response),
     scripts: {
@@ -614,11 +615,7 @@ function applyCollectionCertificates(collection) {
     }
     request.auth = {
       type: 'clientCertificate',
-      certPath: certificate.certPath || '',
-      keyPath: certificate.keyPath || '',
-      pfxPath: certificate.pfxPath || '',
-      caPath: certificate.caPath || '',
-      passphrase: certificate.passphrase || ''
+      certificateId: certificate.id || ''
     };
   };
   const walk = (folders) => {
@@ -690,6 +687,74 @@ function importAuth(authNode, inheritedAuth = { type: 'none' }) {
       clientSecret: authParam(authNode.oauth2, 'clientSecret'),
       scopes: authParam(authNode.oauth2, 'scope'),
       grantType: postmanOauthGrantType(authParam(authNode.oauth2, 'grant_type'))
+    };
+  }
+  if (type === 'digest') {
+    return {
+      type: 'digest',
+      username: authParam(authNode.digest, 'username'),
+      password: authParam(authNode.digest, 'password'),
+      realm: authParam(authNode.digest, 'realm'),
+      nonce: authParam(authNode.digest, 'nonce'),
+      algorithm: authParam(authNode.digest, 'algorithm') || 'MD5',
+      qop: authParam(authNode.digest, 'qop') || 'auth',
+      opaque: authParam(authNode.digest, 'opaque')
+    };
+  }
+  if (type === 'hawk') {
+    return {
+      type: 'hawk',
+      authId: authParam(authNode.hawk, 'authId') || authParam(authNode.hawk, 'id'),
+      authKey: authParam(authNode.hawk, 'authKey') || authParam(authNode.hawk, 'key'),
+      algorithm: authParam(authNode.hawk, 'algorithm') || 'sha256',
+      user: authParam(authNode.hawk, 'user'),
+      nonce: authParam(authNode.hawk, 'nonce'),
+      extraData: authParam(authNode.hawk, 'extraData') || authParam(authNode.hawk, 'ext'),
+      app: authParam(authNode.hawk, 'app'),
+      delegation: authParam(authNode.hawk, 'delegation') || authParam(authNode.hawk, 'dlg')
+    };
+  }
+  if (type === 'awsv4' || type === 'aws') {
+    return {
+      type: 'aws',
+      accessKey: authParam(authNode.awsv4 || authNode.aws, 'accessKey'),
+      secretKey: authParam(authNode.awsv4 || authNode.aws, 'secretKey'),
+      region: authParam(authNode.awsv4 || authNode.aws, 'region'),
+      service: authParam(authNode.awsv4 || authNode.aws, 'service') || authParam(authNode.awsv4 || authNode.aws, 'serviceName'),
+      sessionToken: authParam(authNode.awsv4 || authNode.aws, 'sessionToken'),
+      addAuthDataToQuery: String(authParam(authNode.awsv4 || authNode.aws, 'addAuthDataToQuery')).toLowerCase() === 'true'
+    };
+  }
+  if (type === 'oauth1') {
+    return {
+      type: 'oauth1',
+      consumerKey: authParam(authNode.oauth1, 'consumerKey'),
+      consumerSecret: authParam(authNode.oauth1, 'consumerSecret'),
+      token: authParam(authNode.oauth1, 'token'),
+      tokenSecret: authParam(authNode.oauth1, 'tokenSecret'),
+      signatureMethod: authParam(authNode.oauth1, 'signatureMethod') || 'HMAC-SHA1',
+      timestamp: authParam(authNode.oauth1, 'timestamp'),
+      nonce: authParam(authNode.oauth1, 'nonce'),
+      version: authParam(authNode.oauth1, 'version') || '1.0',
+      realm: authParam(authNode.oauth1, 'realm')
+    };
+  }
+  if (type === 'ntlm') {
+    return {
+      type: 'ntlm',
+      username: authParam(authNode.ntlm, 'username'),
+      password: authParam(authNode.ntlm, 'password'),
+      domain: authParam(authNode.ntlm, 'domain'),
+      workstation: authParam(authNode.ntlm, 'workstation')
+    };
+  }
+  if (type === 'akamai' || type === 'edgegrid' || type === 'akamaiedgegrid') {
+    return {
+      type: 'akamaiEdgeGrid',
+      accessToken: authParam(authNode[type] || authNode.akamai || authNode.edgegrid || authNode.akamaiEdgeGrid, 'accessToken'),
+      clientToken: authParam(authNode[type] || authNode.akamai || authNode.edgegrid || authNode.akamaiEdgeGrid, 'clientToken'),
+      clientSecret: authParam(authNode[type] || authNode.akamai || authNode.edgegrid || authNode.akamaiEdgeGrid, 'clientSecret'),
+      headersToSign: authParam(authNode[type] || authNode.akamai || authNode.edgegrid || authNode.akamaiEdgeGrid, 'headersToSign')
     };
   }
   return inheritedAuth || { type: 'none' };
@@ -1194,6 +1259,86 @@ function exportPostmanAuthModel(auth) {
         { key: 'clientSecret', value: auth.clientSecret || '', type: 'string' },
         { key: 'scope', value: auth.scopes || '', type: 'string' },
         { key: 'grant_type', value: auth.grantType === 'clientCredentials' ? 'client_credentials' : auth.grantType === 'deviceCode' ? 'device_code' : 'authorization_code', type: 'string' }
+      ]
+    };
+  }
+  if (auth.type === 'digest') {
+    return {
+      type: 'digest',
+      digest: [
+        { key: 'username', value: auth.username || '', type: 'string' },
+        { key: 'password', value: auth.password || '', type: 'string' },
+        { key: 'realm', value: auth.realm || '', type: 'string' },
+        { key: 'nonce', value: auth.nonce || '', type: 'string' },
+        { key: 'algorithm', value: auth.algorithm || 'MD5', type: 'string' },
+        { key: 'qop', value: auth.qop || 'auth', type: 'string' },
+        { key: 'opaque', value: auth.opaque || '', type: 'string' }
+      ]
+    };
+  }
+  if (auth.type === 'hawk') {
+    return {
+      type: 'hawk',
+      hawk: [
+        { key: 'authId', value: auth.authId || '', type: 'string' },
+        { key: 'authKey', value: auth.authKey || '', type: 'string' },
+        { key: 'algorithm', value: auth.algorithm || 'sha256', type: 'string' },
+        { key: 'user', value: auth.user || '', type: 'string' },
+        { key: 'nonce', value: auth.nonce || '', type: 'string' },
+        { key: 'extraData', value: auth.extraData || '', type: 'string' },
+        { key: 'app', value: auth.app || '', type: 'string' },
+        { key: 'delegation', value: auth.delegation || '', type: 'string' }
+      ]
+    };
+  }
+  if (auth.type === 'aws') {
+    return {
+      type: 'awsv4',
+      awsv4: [
+        { key: 'accessKey', value: auth.accessKey || '', type: 'string' },
+        { key: 'secretKey', value: auth.secretKey || '', type: 'string' },
+        { key: 'region', value: auth.region || '', type: 'string' },
+        { key: 'service', value: auth.service || '', type: 'string' },
+        { key: 'sessionToken', value: auth.sessionToken || '', type: 'string' },
+        { key: 'addAuthDataToQuery', value: auth.addAuthDataToQuery === true ? 'true' : 'false', type: 'boolean' }
+      ]
+    };
+  }
+  if (auth.type === 'oauth1') {
+    return {
+      type: 'oauth1',
+      oauth1: [
+        { key: 'consumerKey', value: auth.consumerKey || '', type: 'string' },
+        { key: 'consumerSecret', value: auth.consumerSecret || '', type: 'string' },
+        { key: 'token', value: auth.token || '', type: 'string' },
+        { key: 'tokenSecret', value: auth.tokenSecret || '', type: 'string' },
+        { key: 'signatureMethod', value: auth.signatureMethod || 'HMAC-SHA1', type: 'string' },
+        { key: 'timestamp', value: auth.timestamp || '', type: 'string' },
+        { key: 'nonce', value: auth.nonce || '', type: 'string' },
+        { key: 'version', value: auth.version || '1.0', type: 'string' },
+        { key: 'realm', value: auth.realm || '', type: 'string' }
+      ]
+    };
+  }
+  if (auth.type === 'ntlm') {
+    return {
+      type: 'ntlm',
+      ntlm: [
+        { key: 'username', value: auth.username || '', type: 'string' },
+        { key: 'password', value: auth.password || '', type: 'string' },
+        { key: 'domain', value: auth.domain || '', type: 'string' },
+        { key: 'workstation', value: auth.workstation || '', type: 'string' }
+      ]
+    };
+  }
+  if (auth.type === 'akamaiEdgeGrid') {
+    return {
+      type: 'akamaiEdgeGrid',
+      akamaiEdgeGrid: [
+        { key: 'accessToken', value: auth.accessToken || '', type: 'string' },
+        { key: 'clientToken', value: auth.clientToken || '', type: 'string' },
+        { key: 'clientSecret', value: auth.clientSecret || '', type: 'string' },
+        { key: 'headersToSign', value: auth.headersToSign || '', type: 'string' }
       ]
     };
   }

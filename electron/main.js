@@ -12,6 +12,7 @@ const { createMainWindow } = require('./mainWindow');
 const { registerSessionIpc } = require('./sessionIpc');
 const { SessionStore, defaultSessionPath } = require('./sessionStore');
 const { registerRuntimeIpc } = require('./runtimeIpc');
+const { registerSandboxPackageIpc } = require('./sandboxPackageIpc');
 const { registerWorkspaceIpc } = require('./workspaceIpc');
 const { registerRequestIpc } = require('./requestIpc');
 const { registerOAuthIpc } = require('./oauthIpc');
@@ -289,6 +290,8 @@ ipcMain.handle('vault:unset-secret', async (_event, key) => {
 registerAppIpc({ app, ipcMain, shell });
 
 registerOAuthIpc({ ipcMain, oauthFlows });
+
+registerSandboxPackageIpc({ ipcMain });
 
 registerSessionIpc({
   getSession: () => sessionState,

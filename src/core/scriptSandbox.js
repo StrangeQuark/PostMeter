@@ -19,6 +19,9 @@ const {
   runPostmanScript
 } = require('./scriptRuntime');
 const {
+  resolveFileAttachmentBinding
+} = require('./fileAttachmentBindings');
+const {
   normalizeVaultKey,
   normalizeVaultSecretValue
 } = require('./vaultStore');
@@ -30,7 +33,7 @@ const MIN_SCRIPT_WORKER_MAX_OLD_SPACE_MB = 16;
 const MAX_SCRIPT_WORKER_MAX_OLD_SPACE_MB = 512;
 const MAX_BROKER_PAYLOAD_BYTES = 512 * 1024;
 const MAX_PM_SEND_RESPONSE_BYTES = 512 * 1024;
-const MAX_PM_SEND_TIMEOUT_MILLIS = 120_000;
+const MAX_PM_SEND_TIMEOUT_MILLIS = 3 * 60 * 1000;
 const MAX_PM_EXECUTION_RUN_REQUESTS = 10;
 const MAX_PM_VAULT_OPERATIONS = 16;
 const MAX_PM_MOCK_STATE_OPERATIONS = 128;
@@ -44,6 +47,10 @@ const MAX_BROKER_TIMER_DELAY_MILLIS = 30_000;
 const SCRIPT_WORKER_ALLOWED_FILES = [
   path.join(__dirname, 'scriptWorker.js'),
   path.join(__dirname, 'scriptRuntime.js'),
+  path.join(__dirname, 'visualizerHandlebarsBundle.js'),
+  path.join(__dirname, 'postmanBuiltinPackages.js'),
+  path.join(__dirname, 'postmanSandboxBootcodeBundle.js'),
+  path.join(__dirname, 'sandboxPackageCache.js'),
   path.join(__dirname, 'dynamicVariables.js'),
   path.join(__dirname, 'variableScope.js')
 ];
@@ -117,7 +124,9 @@ function runPostmanScriptIsolated(scriptText, context = {}, options = {}) {
     scriptText: source,
     context: cloneForWorker({
       ...context,
-      cookieJar: brokerState.cookies
+      cookieJar: brokerState.cookies,
+      currentRequestCookies: currentRequestCookiesForWorker(brokerState),
+      scriptCookieAccessEnabled: scriptCapabilityEnabled(brokerState, 'cookies')
     }),
     options: {
       filename: options.filename,
@@ -485,13 +494,13 @@ async function runBrokerOperation(state, operation, payload) {
   }
   if (operation === 'cookies:get') {
     assertCookieCapability(state);
-    const cookie = visibleCookiesForCurrentRequest(state).find((item) => item.name === String(payload.name || ''));
+    const cookie = cookiesForCurrentRequest(state).find((item) => item.name === String(payload.name || ''));
     return cookie ? cookie.value ?? '' : undefined;
   }
   if (operation === 'cookies:toObject') {
     assertCookieCapability(state);
     const object = {};
-    for (const cookie of visibleCookiesForCurrentRequest(state)) {
+    for (const cookie of cookiesForCurrentRequest(state)) {
       object[cookie.name] = cookie.value ?? '';
     }
     return object;
@@ -514,25 +523,18 @@ async function runBrokerOperation(state, operation, payload) {
       if (String(cookie.name || '').toLowerCase() !== name) {
         return true;
       }
-      if (cookie.httpOnly === true) {
-        return true;
-      }
       return !cookiesForRequest([cookie], currentRequestUrl(state)).length;
     });
     return {};
   }
   if (operation === 'cookies.jar:get') {
     assertCookieCapability(state);
-    const cookie = visibleCookiesForUrl(state, payload.url).find((item) => item.name === String(payload.name || ''));
+    const cookie = cookiesForUrl(state, payload.url).find((item) => item.name === String(payload.name || ''));
     return cookie ? cookie.value ?? '' : undefined;
   }
   if (operation === 'cookies.jar:getAll') {
     assertCookieCapability(state);
-    const object = {};
-    for (const cookie of visibleCookiesForUrl(state, payload.url)) {
-      object[cookie.name] = cookie.value ?? '';
-    }
-    return object;
+    return cookiesForUrl(state, payload.url).map(scriptCookieForWorker);
   }
   if (operation === 'cookies.jar:set') {
     assertCookieCapability(state);
@@ -550,9 +552,6 @@ async function runBrokerOperation(state, operation, payload) {
       if (String(cookie.name || '').toLowerCase() !== name) {
         return true;
       }
-      if (cookie.httpOnly === true) {
-        return true;
-      }
       return !cookiesForRequest([cookie], url).length;
     });
     return {};
@@ -561,9 +560,6 @@ async function runBrokerOperation(state, operation, payload) {
     assertCookieCapability(state);
     const url = cookieJarOperationUrl(payload.url);
     state.cookies = state.cookies.filter((cookie) => {
-      if (cookie.httpOnly === true) {
-        return true;
-      }
       return !cookiesForRequest([cookie], url).length;
     });
     return {};
@@ -603,13 +599,17 @@ async function runBrokeredSendRequest(state, payload) {
   if (!scriptCapabilityEnabled(state, 'sendRequest')) {
     throw new Error('pm.sendRequest is disabled for this workspace.');
   }
-  const request = normalizePmSendRequest(payload.request);
+  const request = normalizePmSendRequest(payload.request, {
+    clientCertificates: state.options.clientCertificates || [],
+    fileBindings: state.options.fileBindings || []
+  });
   request.cookieJar = {
     enabled: scriptCapabilityEnabled(state, 'cookies') && request.cookieJar?.enabled !== false,
     storeResponses: request.cookieJar?.storeResponses !== false
   };
   const response = await (state.options.sendRequest || sendRequest)(request, runtimeEnvironmentForBroker(state), {
     cookieJar: request.cookieJar.enabled ? state.cookies : [],
+    fileBindings: state.options.fileBindings || [],
     signal: state.options.signal,
     timeoutMillis: request.timeoutMillis
   });
@@ -867,7 +867,7 @@ function vaultAuditMetadata(state) {
   };
 }
 
-function normalizePmSendRequest(input) {
+function normalizePmSendRequest(input, options = {}) {
   if (typeof input === 'string') {
     return {
       method: 'GET',
@@ -879,6 +879,7 @@ function normalizePmSendRequest(input) {
       auth: { type: 'none' },
       cookieJar: { enabled: true, storeResponses: true },
       followRedirects: true,
+      proxy: null,
       timeoutMillis: undefined
     };
   }
@@ -889,7 +890,7 @@ function normalizePmSendRequest(input) {
   const normalizedUrl = normalizePmSendRequestUrl(source.url || source.raw || source);
   const method = String(source.method || 'GET').toUpperCase();
   let headers = normalizePmSendRequestHeaders(source.header || source.headers);
-  const normalizedBody = normalizePmSendRequestBody(source.body);
+  const normalizedBody = normalizePmSendRequestBody(source.body, options);
   headers = mergePmSendRequestBodyHeaders(headers, normalizedBody.headers);
   rejectUnsupportedPmSendRequestTransportOptions(source);
   return {
@@ -899,9 +900,12 @@ function normalizePmSendRequest(input) {
     headers,
     bodyType: normalizedBody.bodyType,
     body: normalizedBody.body,
-    auth: normalizePmSendRequestAuth(source.auth),
+    bodyAttachment: normalizedBody.bodyAttachment,
+    multipart: normalizedBody.multipart,
+    auth: normalizePmSendRequestAuth(source.auth, options),
     cookieJar: normalizePmSendRequestCookieJar(source),
     followRedirects: source.followRedirects !== false && source.followRedirect !== false,
+    proxy: normalizePmSendRequestProxy(source.proxy),
     timeoutMillis: normalizePmSendRequestTimeout(source)
   };
 }
@@ -941,7 +945,7 @@ function normalizePmSendRequestHeaders(headers) {
   return [];
 }
 
-function normalizePmSendRequestBody(body) {
+function normalizePmSendRequestBody(body, options = {}) {
   if (body == null) {
     return { body: '', bodyType: BODY_TYPES.NONE, headers: [] };
   }
@@ -975,7 +979,7 @@ function normalizePmSendRequestBody(body) {
     };
   }
   if (mode === 'formdata' || mode === 'form-data') {
-    return normalizePmSendRequestFormDataBody(source.formdata || source.formData || []);
+    return normalizePmSendRequestFormDataBody(source.formdata || source.formData || [], options);
   }
   if (mode === 'graphql') {
     const payload = {
@@ -999,9 +1003,37 @@ function normalizePmSendRequestBody(body) {
         headers: []
       };
     }
-    throw new Error('pm.sendRequest file and binary bodies require an imported attachment binding; scripts cannot read arbitrary local files.');
+    const reference = normalizePmSendRequestBodyAttachment(source, mode, options);
+    return {
+      body: '',
+      bodyAttachment: reference,
+      bodyType: BODY_TYPES.RAW_TEXT,
+      headers: reference.contentType ? [{ key: 'Content-Type', value: reference.contentType }] : []
+    };
   }
   return { body: '', bodyType: BODY_TYPES.NONE, headers: [] };
+}
+
+function normalizePmSendRequestBodyAttachment(source, mode, options = {}) {
+  const file = source.file && typeof source.file === 'object' ? source.file : {};
+  const binary = source.binary && typeof source.binary === 'object' ? source.binary : {};
+  const rawSource = file.src ?? binary.src ?? source.src;
+  const attachmentSource = Array.isArray(rawSource) ? rawSource[0] : rawSource;
+  if (!attachmentSource) {
+    throw new Error('pm.sendRequest file and binary bodies require an imported attachment binding; scripts cannot read arbitrary local files.');
+  }
+  const reference = {
+    bindingId: source.attachmentId || source.bindingId || file.attachmentId || binary.attachmentId || '',
+    contentType: source.contentType || file.contentType || binary.contentType || '',
+    fileName: source.fileName || file.fileName || binary.fileName || '',
+    mode,
+    source: String(attachmentSource)
+  };
+  const binding = resolveFileAttachmentBinding(reference, options.fileBindings || []);
+  return {
+    ...reference,
+    bindingId: binding.id
+  };
 }
 
 function normalizePmSendRequestUrl(urlInput) {
@@ -1064,8 +1096,22 @@ function normalizePmSendRequestQueryParams(params) {
     }));
 }
 
-function normalizePmSendRequestFormDataBody(formdata) {
+function normalizePmSendRequestFormDataBody(formdata, options = {}) {
   const items = normalizePmSendRequestQueryParams(formdata);
+  const fileParts = normalizePmSendRequestFormDataFileParts(formdata, options);
+  if (fileParts.length) {
+    return {
+      body: '',
+      bodyType: BODY_TYPES.RAW_TEXT,
+      headers: [],
+      multipart: {
+        parts: [
+          ...normalizePmSendRequestFormDataTextParts(formdata),
+          ...fileParts
+        ]
+      }
+    };
+  }
   const boundary = `postmeter-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
   const chunks = [];
   for (const item of items) {
@@ -1087,6 +1133,65 @@ function normalizePmSendRequestFormDataBody(formdata) {
     bodyType: BODY_TYPES.RAW_TEXT,
     headers: [{ key: 'Content-Type', value: `multipart/form-data; boundary=${boundary}` }]
   };
+}
+
+function normalizePmSendRequestFormDataTextParts(formdata) {
+  const parts = [];
+  for (const part of Array.isArray(formdata) ? formdata : []) {
+    if (!part || typeof part !== 'object' || part.disabled === true || part.enabled === false) {
+      continue;
+    }
+    if (part.src || String(part.type || '').toLowerCase() === 'file') {
+      continue;
+    }
+    const key = String(part.key || part.name || '');
+    if (!key) {
+      continue;
+    }
+    parts.push({
+      key,
+      type: 'text',
+      value: part.value == null ? '' : String(part.value)
+    });
+  }
+  return parts;
+}
+
+function normalizePmSendRequestFormDataFileParts(formdata, options = {}) {
+  const parts = [];
+  for (const part of Array.isArray(formdata) ? formdata : []) {
+    if (!part || typeof part !== 'object' || part.disabled === true || part.enabled === false) {
+      continue;
+    }
+    if (!part.src && String(part.type || '').toLowerCase() !== 'file') {
+      continue;
+    }
+    const key = String(part.key || part.name || '');
+    if (!key) {
+      continue;
+    }
+    const sources = Array.isArray(part.src) ? part.src : part.src ? [part.src] : [];
+    if (!sources.length) {
+      throw new Error('pm.sendRequest form-data file parts require an imported attachment binding; scripts cannot read arbitrary local files.');
+    }
+    for (const source of sources) {
+      const reference = {
+        bindingId: part.attachmentId || part.bindingId || '',
+        contentType: part.contentType == null ? '' : String(part.contentType),
+        fileName: part.fileName == null ? '' : String(part.fileName),
+        key,
+        mode: 'formdata',
+        source: String(source),
+        type: 'file'
+      };
+      const binding = resolveFileAttachmentBinding(reference, options.fileBindings || []);
+      parts.push({
+        ...reference,
+        bindingId: binding.id
+      });
+    }
+  }
+  return parts;
 }
 
 function serializePmFormPairs(pairs, options = {}) {
@@ -1125,12 +1230,12 @@ function mergePmSendRequestBodyHeaders(headers, bodyHeaders) {
   return output;
 }
 
-function normalizePmSendRequestAuth(auth) {
+function normalizePmSendRequestAuth(auth, options = {}) {
   if (!auth || typeof auth !== 'object') {
     return { type: 'none' };
   }
   const source = auth && typeof auth.toJSON === 'function' ? auth.toJSON() : auth;
-  const type = String(source.type || '').toLowerCase();
+  const type = normalizePmAuthType(source.type);
   if (!type || type === 'none' || type === 'noauth' || type === 'inherit') {
     return { type: 'none' };
   }
@@ -1144,7 +1249,7 @@ function normalizePmSendRequestAuth(auth) {
       password: authField(source, 'password') || source.password || ''
     };
   }
-  if (type === 'apikey' || type === 'apiKey'.toLowerCase()) {
+  if (type === 'apikey') {
     return {
       type: 'apiKey',
       location: String(authField(source, 'in') || source.location || source.in || 'header').toLowerCase() === 'query' ? 'query' : 'header',
@@ -1169,17 +1274,126 @@ function normalizePmSendRequestAuth(auth) {
       grantType: postmanOauthGrantType(authField(source, 'grant_type') || source.grantType)
     };
   }
-  if (type === 'clientcertificate' || type === 'clientcertificate' || type === 'client-cert' || type === 'clientcert') {
+  if (type === 'clientcertificate') {
+    return normalizePmSendRequestClientCertificateAuth(source, options);
+  }
+  if (type === 'digest') {
     return {
-      type: 'clientCertificate',
-      certPath: source.certPath || source.cert?.src || '',
-      keyPath: source.keyPath || source.key?.src || '',
-      pfxPath: source.pfxPath || source.pfx?.src || '',
-      caPath: source.caPath || source.ca?.src || '',
-      passphrase: source.passphrase || ''
+      type: 'digest',
+      username: authField(source, 'username') || source.username || '',
+      password: authField(source, 'password') || source.password || '',
+      realm: authField(source, 'realm') || source.realm || '',
+      nonce: authField(source, 'nonce') || source.nonce || '',
+      algorithm: authField(source, 'algorithm') || source.algorithm || 'MD5',
+      qop: authField(source, 'qop') || source.qop || 'auth',
+      opaque: authField(source, 'opaque') || source.opaque || '',
+      clientNonce: authField(source, 'clientNonce') || authField(source, 'cnonce') || source.clientNonce || '',
+      nonceCount: authField(source, 'nonceCount') || authField(source, 'nc') || source.nonceCount || ''
+    };
+  }
+  if (type === 'hawk') {
+    return {
+      type: 'hawk',
+      authId: authField(source, 'authId') || authField(source, 'id') || source.authId || source.id || '',
+      authKey: authField(source, 'authKey') || authField(source, 'key') || source.authKey || source.key || '',
+      algorithm: authField(source, 'algorithm') || source.algorithm || 'sha256',
+      user: authField(source, 'user') || source.user || '',
+      nonce: authField(source, 'nonce') || source.nonce || '',
+      extraData: authField(source, 'extraData') || authField(source, 'ext') || source.extraData || source.ext || '',
+      app: authField(source, 'app') || source.app || '',
+      delegation: authField(source, 'delegation') || authField(source, 'dlg') || source.delegation || source.dlg || ''
+    };
+  }
+  if (type === 'aws') {
+    return {
+      type: 'aws',
+      accessKey: authField(source, 'accessKey') || source.accessKey || '',
+      secretKey: authField(source, 'secretKey') || source.secretKey || '',
+      region: authField(source, 'region') || source.region || '',
+      service: authField(source, 'service') || authField(source, 'serviceName') || source.service || source.serviceName || '',
+      sessionToken: authField(source, 'sessionToken') || source.sessionToken || '',
+      addAuthDataToQuery: boolAuthField(source, 'addAuthDataToQuery') || source.addAuthDataToQuery === true
+    };
+  }
+  if (type === 'oauth1') {
+    return {
+      type: 'oauth1',
+      consumerKey: authField(source, 'consumerKey') || source.consumerKey || '',
+      consumerSecret: authField(source, 'consumerSecret') || source.consumerSecret || '',
+      token: authField(source, 'token') || source.token || '',
+      tokenSecret: authField(source, 'tokenSecret') || source.tokenSecret || '',
+      signatureMethod: authField(source, 'signatureMethod') || source.signatureMethod || 'HMAC-SHA1',
+      timestamp: authField(source, 'timestamp') || source.timestamp || '',
+      nonce: authField(source, 'nonce') || source.nonce || '',
+      version: authField(source, 'version') || source.version || '1.0',
+      realm: authField(source, 'realm') || source.realm || ''
+    };
+  }
+  if (type === 'ntlm') {
+    return {
+      type: 'ntlm',
+      username: authField(source, 'username') || source.username || '',
+      password: authField(source, 'password') || source.password || '',
+      domain: authField(source, 'domain') || source.domain || '',
+      workstation: authField(source, 'workstation') || source.workstation || ''
+    };
+  }
+  if (type === 'akamaiedgegrid') {
+    return {
+      type: 'akamaiEdgeGrid',
+      accessToken: authField(source, 'accessToken') || source.accessToken || '',
+      clientToken: authField(source, 'clientToken') || source.clientToken || '',
+      clientSecret: authField(source, 'clientSecret') || source.clientSecret || '',
+      headersToSign: authField(source, 'headersToSign') || source.headersToSign || ''
     };
   }
   throw new Error(`pm.sendRequest auth helper "${source.type}" is not supported by the sandboxed HTTP broker yet.`);
+}
+
+function normalizePmAuthType(value) {
+  const normalized = String(value || '').toLowerCase().replace(/[\s_.-]+/g, '');
+  if (normalized === 'noauth' || normalized === 'none' || normalized === 'inherit') {
+    return normalized;
+  }
+  if (normalized === 'apikey') {
+    return 'apikey';
+  }
+  if (normalized === 'clientcertificate' || normalized === 'clientcert') {
+    return 'clientcertificate';
+  }
+  if (normalized === 'awsv4' || normalized === 'aws' || normalized === 'awssignature') {
+    return 'aws';
+  }
+  if (normalized === 'oauth1' || normalized === 'oauth10') {
+    return 'oauth1';
+  }
+  if (normalized === 'akamai' || normalized === 'edgegrid' || normalized === 'akamaiedgegrid') {
+    return 'akamaiedgegrid';
+  }
+  return normalized;
+}
+
+function normalizePmSendRequestClientCertificateAuth(source, options = {}) {
+  const certificateId = authField(source, 'certificateId') || authField(source, 'id') || source.certificateId || source.id || '';
+  if (!certificateId) {
+    if (source.certPath || source.keyPath || source.pfxPath || source.cert?.src || source.key?.src || source.pfx?.src) {
+      throw new Error('pm.sendRequest client certificate auth requires a configured certificate binding; scripts cannot provide certificate file paths.');
+    }
+    throw new Error('pm.sendRequest client certificate auth requires a configured certificate binding.');
+  }
+  const certificate = (options.clientCertificates || []).find((candidate) => String(candidate?.id || '') === String(certificateId));
+  if (!certificate) {
+    throw new Error('pm.sendRequest client certificate binding is not available to this script execution.');
+  }
+  return {
+    type: 'clientCertificate',
+    certificateId: String(certificate.id || ''),
+    certPath: certificate.certPath || '',
+    keyPath: certificate.keyPath || '',
+    pfxPath: certificate.pfxPath || '',
+    caPath: certificate.caPath || '',
+    passphrase: certificate.passphrase || ''
+  };
 }
 
 function authField(auth, key) {
@@ -1193,6 +1407,11 @@ function authField(auth, key) {
     return value == null ? '' : String(value);
   }
   return '';
+}
+
+function boolAuthField(auth, key) {
+  const value = authField(auth, key);
+  return value === true || String(value).toLowerCase() === 'true';
 }
 
 function postmanOauthGrantType(value) {
@@ -1233,12 +1452,31 @@ function normalizePmSendRequestTimeout(source) {
 }
 
 function rejectUnsupportedPmSendRequestTransportOptions(source) {
-  if (source.proxy && source.proxy.disabled !== true) {
-    throw new Error('pm.sendRequest proxy configuration is not supported by this PostMeter runtime.');
-  }
   if (source.strictSSL === false || source.tls?.rejectUnauthorized === false || source.ssl?.strict === false) {
     throw new Error('pm.sendRequest cannot disable TLS certificate validation inside the sandbox.');
   }
+}
+
+function normalizePmSendRequestProxy(proxy) {
+  if (!proxy || proxy.disabled === true || proxy.enabled === false) {
+    return null;
+  }
+  if (typeof proxy === 'string') {
+    return { enabled: true, url: proxy };
+  }
+  if (typeof proxy !== 'object') {
+    throw new Error('pm.sendRequest proxy configuration must be an object or URL string.');
+  }
+  return {
+    enabled: true,
+    url: proxy.url || proxy.uri || '',
+    protocol: proxy.protocol || proxy.scheme || '',
+    host: proxy.host || proxy.hostname || '',
+    port: proxy.port == null ? '' : String(proxy.port),
+    username: proxy.username || proxy.auth?.username || '',
+    password: proxy.password || proxy.auth?.password || '',
+    tunnel: proxy.tunnel === true
+  };
 }
 
 function looksLikeJsonText(value) {
@@ -1375,12 +1613,38 @@ function listIncludesId(values, id) {
   return Array.isArray(values) && values.map((value) => String(value || '')).includes(id);
 }
 
-function visibleCookiesForCurrentRequest(state) {
-  return cookiesForRequest(state.cookies, currentRequestUrl(state)).filter((cookie) => cookie.httpOnly !== true);
+function currentRequestCookiesForWorker(state) {
+  try {
+    return cookiesForCurrentRequest(state).map(scriptCookieForWorker);
+  } catch {
+    return [];
+  }
 }
 
-function visibleCookiesForUrl(state, rawUrl) {
-  return cookiesForRequest(state.cookies, cookieJarOperationUrl(rawUrl)).filter((cookie) => cookie.httpOnly !== true);
+function cookiesForCurrentRequest(state) {
+  return cookiesForRequest(state.cookies, currentRequestUrl(state));
+}
+
+function cookiesForUrl(state, rawUrl) {
+  return cookiesForRequest(state.cookies, cookieJarOperationUrl(rawUrl));
+}
+
+function scriptCookieForWorker(cookie = {}) {
+  return {
+    domain: cookie.domain || '',
+    enabled: cookie.enabled !== false,
+    expiresAt: cookie.expiresAt || cookie.expires || '',
+    hostOnly: cookie.hostOnly === true,
+    httpOnly: cookie.httpOnly === true,
+    maxAge: cookie.maxAge == null ? '' : String(cookie.maxAge),
+    name: cookie.name || '',
+    partitioned: cookie.partitioned === true,
+    path: cookie.path || '/',
+    priority: cookie.priority || '',
+    sameSite: cookie.sameSite || '',
+    secure: cookie.secure === true,
+    value: cookie.value == null ? '' : String(cookie.value)
+  };
 }
 
 function cookieJarOperationUrl(rawUrl) {

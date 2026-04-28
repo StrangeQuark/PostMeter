@@ -65,7 +65,12 @@ async function main() {
       process.exitCode = 1;
       return;
     }
-    const newmanState = result.newman?.skipped ? `Newman skipped: ${result.newman.reason}` : 'Newman compared.';
+    const skippedSuites = (result.suites || []).filter((suite) => suite.newman?.skipped);
+    const newmanState = skippedSuites.length === (result.suites || []).length
+      ? `Newman skipped: ${skippedSuites[0]?.newman?.reason || result.newman?.reason || 'not requested'}`
+      : skippedSuites.length
+        ? `Newman partially compared; skipped ${skippedSuites.length} suite(s).`
+        : 'Newman compared.';
     console.log(`Postman parity differential completed. ${newmanState}`);
     return;
   }

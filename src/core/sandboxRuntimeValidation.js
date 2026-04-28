@@ -42,8 +42,8 @@ function validateWorkerLaunchPolicy(execArgv, env) {
     throw new Error('Script worker must not allow child-process access.');
   }
   const readFlags = execArgv.filter((value) => value.startsWith('--allow-fs-read='));
-  if (readFlags.length !== 4) {
-    throw new Error(`Script worker must allow exactly four runtime files, found ${readFlags.length}.`);
+  if (readFlags.length !== 8) {
+    throw new Error(`Script worker must allow exactly eight runtime files, found ${readFlags.length}.`);
   }
   if (readFlags.some((value) => value.includes(','))) {
     throw new Error('Script worker file-read allowlist must use one flag per file.');
@@ -51,7 +51,16 @@ function validateWorkerLaunchPolicy(execArgv, env) {
   const basenames = readFlags
     .map((value) => path.basename(value.slice('--allow-fs-read='.length)))
     .sort();
-  assertDeepEqual(basenames, ['dynamicVariables.js', 'scriptRuntime.js', 'scriptWorker.js', 'variableScope.js']);
+  assertDeepEqual(basenames, [
+    'dynamicVariables.js',
+    'postmanBuiltinPackages.js',
+    'postmanSandboxBootcodeBundle.js',
+    'sandboxPackageCache.js',
+    'scriptRuntime.js',
+    'scriptWorker.js',
+    'variableScope.js',
+    'visualizerHandlebarsBundle.js'
+  ]);
 
   if (env.POSTMETER_SCRIPT_WORKER !== '1') {
     throw new Error('Script worker environment is missing POSTMETER_SCRIPT_WORKER.');

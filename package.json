@@ -97,7 +97,10 @@
     "node": ">=22"
   },
   "dependencies": {
+    "@grpc/grpc-js": "^1.14.3",
+    "@grpc/proto-loader": "^0.8.0",
     "@xmldom/xmldom": "^0.9.10",
+    "handlebars": "4.7.9",
     "node-html-parser": "^7.1.0",
     "xpath": "^0.0.34",
     "yaml": "^2.8.3"

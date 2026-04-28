@@ -15,7 +15,7 @@
   const OAUTH2_REDIRECT_STRATEGIES = new Set(OAUTH2_REDIRECT_STRATEGY_VALUES);
 
   function normalizeAuth(auth = {}) {
-    const type = normalizeSchemaEnumValue('authTypes', auth.type, 'none');
+    const type = normalizeAuthType(auth.type);
     if (type === 'none') {
       return { type: 'none' };
     }
@@ -60,29 +60,131 @@
         devicePollIntervalSeconds: auth.devicePollIntervalSeconds ?? ''
       };
     }
-    return {
-      type,
-      certPath: auth.certPath ?? '',
-      keyPath: auth.keyPath ?? '',
-      pfxPath: auth.pfxPath ?? '',
-      caPath: auth.caPath ?? '',
-      passphrase: auth.passphrase ?? ''
-    };
+    if (type === 'clientCertificate') {
+      return {
+        type,
+        certificateId: auth.certificateId ?? '',
+        certPath: auth.certPath ?? '',
+        keyPath: auth.keyPath ?? '',
+        pfxPath: auth.pfxPath ?? '',
+        caPath: auth.caPath ?? '',
+        passphrase: auth.passphrase ?? ''
+      };
+    }
+    if (type === 'digest') {
+      return {
+        type,
+        username: auth.username ?? '',
+        password: auth.password ?? '',
+        realm: auth.realm ?? '',
+        nonce: auth.nonce ?? '',
+        algorithm: auth.algorithm ?? 'MD5',
+        qop: auth.qop ?? 'auth',
+        opaque: auth.opaque ?? '',
+        clientNonce: auth.clientNonce ?? '',
+        nonceCount: auth.nonceCount ?? ''
+      };
+    }
+    if (type === 'hawk') {
+      return {
+        type,
+        authId: auth.authId ?? auth.id ?? '',
+        authKey: auth.authKey ?? auth.key ?? '',
+        algorithm: auth.algorithm ?? 'sha256',
+        user: auth.user ?? '',
+        nonce: auth.nonce ?? '',
+        extraData: auth.extraData ?? auth.ext ?? '',
+        app: auth.app ?? '',
+        delegation: auth.delegation ?? auth.dlg ?? ''
+      };
+    }
+    if (type === 'aws') {
+      return {
+        type,
+        accessKey: auth.accessKey ?? '',
+        secretKey: auth.secretKey ?? '',
+        region: auth.region ?? '',
+        service: auth.service ?? auth.serviceName ?? '',
+        sessionToken: auth.sessionToken ?? '',
+        addAuthDataToQuery: auth.addAuthDataToQuery === true
+      };
+    }
+    if (type === 'oauth1') {
+      return {
+        type,
+        consumerKey: auth.consumerKey ?? '',
+        consumerSecret: auth.consumerSecret ?? '',
+        token: auth.token ?? '',
+        tokenSecret: auth.tokenSecret ?? '',
+        signatureMethod: auth.signatureMethod ?? 'HMAC-SHA1',
+        timestamp: auth.timestamp ?? '',
+        nonce: auth.nonce ?? '',
+        version: auth.version ?? '1.0',
+        realm: auth.realm ?? ''
+      };
+    }
+    if (type === 'ntlm') {
+      return {
+        type,
+        username: auth.username ?? '',
+        password: auth.password ?? '',
+        domain: auth.domain ?? '',
+        workstation: auth.workstation ?? ''
+      };
+    }
+    if (type === 'akamaiEdgeGrid') {
+      return {
+        type,
+        accessToken: auth.accessToken ?? '',
+        clientToken: auth.clientToken ?? '',
+        clientSecret: auth.clientSecret ?? '',
+        headersToSign: auth.headersToSign ?? ''
+      };
+    }
+    return { type: 'none' };
+  }
+
+  function normalizeAuthType(value) {
+    const text = String(value || '').trim();
+    const lowered = text.toLowerCase().replace(/[\s_.-]+/g, '');
+    if (!text || lowered === 'none' || lowered === 'noauth') {
+      return 'none';
+    }
+    if (lowered === 'apikey') {
+      return 'apiKey';
+    }
+    if (lowered === 'clientcertificate' || lowered === 'clientcert' || lowered === 'clientcertificateauth') {
+      return 'clientCertificate';
+    }
+    if (lowered === 'awsv4' || lowered === 'aws' || lowered === 'awssignature') {
+      return 'aws';
+    }
+    if (lowered === 'oauth1' || lowered === 'oauth10' || lowered === 'oauth1auth') {
+      return 'oauth1';
+    }
+    if (lowered === 'akamai' || lowered === 'edgegrid' || lowered === 'akamaiedgegrid') {
+      return 'akamaiEdgeGrid';
+    }
+    return AUTH_TYPES.has(text) ? text : normalizeSchemaEnumValue('authTypes', text, 'none');
   }
 
   function normalizePersistedAuth(auth) {
-    if (!auth || typeof auth !== 'object' || !AUTH_TYPES.has(auth.type)) {
+    if (!auth || typeof auth !== 'object') {
       return { type: 'none' };
     }
-    return { ...auth };
+    const type = normalizeAuthType(auth.type);
+    if (type === 'none' || !AUTH_TYPES.has(type)) {
+      return { type: 'none' };
+    }
+    return { ...auth, type };
   }
 
   function defaultAuthEditorState() {
     return {
       type: 'none',
-      bearerToken: '',
       basicUsername: '',
       basicPassword: '',
+      bearerToken: '',
       apiKeyLocation: 'header',
       apiKeyName: '',
       apiKeyValue: '',
@@ -159,7 +261,7 @@
   }
 
   function authFromEditorState(state = {}, existingAuth = {}) {
-    const type = normalizeSchemaEnumValue('authTypes', state.type, 'none');
+    const type = normalizeAuthType(state.type);
     if (type === 'bearer') {
       return normalizeAuth({
         type,
@@ -218,12 +320,17 @@
     if (type === 'clientCertificate') {
       return normalizeAuth({
         type,
+        certificateId: normalizeAuth(existingAuth).type === 'clientCertificate' ? normalizeAuth(existingAuth).certificateId : '',
         pfxPath: state.clientPfxPath ?? '',
         certPath: state.clientCertPath ?? '',
         keyPath: state.clientKeyPath ?? '',
         caPath: state.clientCaPath ?? '',
         passphrase: state.clientPassphrase ?? ''
       });
+    }
+    if (['digest', 'hawk', 'aws', 'oauth1', 'ntlm', 'akamaiEdgeGrid'].includes(type)) {
+      const existing = normalizeAuth(existingAuth);
+      return normalizeAuth(existing.type === type ? existing : { type });
     }
     return { type: 'none' };
   }
@@ -253,6 +360,7 @@
     authFromEditorState,
     defaultAuthEditorState,
     normalizeAuth,
+    normalizeAuthType,
     normalizePersistedAuth
   };
 

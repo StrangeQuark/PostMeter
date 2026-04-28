@@ -1,4 +1,5 @@
 const { sendRequest } = require('./httpClient');
+const { invokeGrpcRequest } = require('./grpcClient');
 const { runPostmanScriptIsolated } = require('./scriptSandbox');
 const {
   cloneEnvironment,
@@ -89,7 +90,12 @@ async function runHttpScriptedRequestLifecycle(state, options = {}) {
       globals: state.globals,
       iterationData
     }),
-    { signal: options.signal, cookieJar: state.cookies }
+    {
+      signal: options.signal,
+      cookieJar: state.cookies,
+      clientCertificates: options.clientCertificates || options.scriptOptions?.clientCertificates || [],
+      fileBindings: options.fileBindings || options.scriptOptions?.fileBindings || []
+    }
   );
   if (Array.isArray(response.updatedCookies)) {
     state.cookies = response.updatedCookies;
@@ -145,7 +151,12 @@ async function runGraphqlRequestLifecycle(state, options = {}) {
 async function runGrpcRequestLifecycle(state, options = {}) {
   const runScript = options.scriptRunner || runPostmanScriptIsolated;
   const invokeGrpc = options.grpcInvoker || options.scriptOptions?.grpcInvoker || defaultGrpcInvoker;
+  const grpcTransportConfig = trustedGrpcTransportConfig(state.request);
   const iterationData = options.iterationData || [];
+  const grpcTransportEnvironment = runtimeEnvironment(state.collectionVariables, state.environment, state.localVariables, {
+    globals: state.globals,
+    iterationData
+  });
   const scriptOptions = scriptOptionsForLifecycle(options, {
     sendRequest: options.sendRequest || sendRequest
   });
@@ -191,11 +202,21 @@ async function runGrpcRequestLifecycle(state, options = {}) {
     globals: state.globals,
     iterationData
   });
-  const invoked = await invokeGrpc(state.request, runtimeEnv, {
-    signal: options.signal,
-    cookieJar: state.cookies
-  });
-  const response = normalizeGrpcResponse(invoked);
+  let response;
+  try {
+    const invoked = await invokeGrpc(state.request, runtimeEnv, {
+      signal: options.signal,
+      cookieJar: state.cookies,
+      clientCertificates: options.clientCertificates || options.scriptOptions?.clientCertificates || [],
+      grpcProtoBaseDir: options.grpcProtoBaseDir || options.scriptOptions?.grpcProtoBaseDir,
+      grpcProtoIncludeDirs: options.grpcProtoIncludeDirs || options.scriptOptions?.grpcProtoIncludeDirs || [],
+      grpcTransportEnvironment,
+      grpcTransportConfig
+    });
+    response = normalizeGrpcResponse(invoked);
+  } catch (error) {
+    response = normalizeGrpcResponse(grpcErrorResponse(error, state.request));
+  }
   const onMessageScript = protocolScript(state.request, 'onIncomingMessage', 'onMessage');
   const messageScriptResults = [];
   let messageExecution = {};
@@ -273,10 +294,12 @@ function scriptOptionsForLifecycle(options = {}, overrides = {}) {
     ...(options.scriptOptions || {}),
     runRequest: options.scriptOptions?.runRequest || options.runRequest,
     sandboxPackages: options.scriptOptions?.sandboxPackages || options.sandboxPackages || [],
+    clientCertificates: options.scriptOptions?.clientCertificates || options.clientCertificates || [],
     sendRequest: options.scriptOptions?.sendRequest || send,
     signal: options.signal,
     trustedCapabilities: options.trustedCapabilities || options.scriptOptions?.trustedCapabilities || {},
-    vault: options.scriptOptions?.vault || options.vault
+    vault: options.scriptOptions?.vault || options.vault,
+    fileBindings: options.scriptOptions?.fileBindings || options.fileBindings || []
   };
 }
 
@@ -511,8 +534,71 @@ function cloneJsonObject(value) {
   }
 }
 
-async function defaultGrpcInvoker() {
-  throw new Error('gRPC transport execution is not configured for this runtime.');
+async function defaultGrpcInvoker(request, runtimeEnv, options = {}) {
+  return invokeGrpcRequest(request, runtimeEnv, options);
+}
+
+function trustedGrpcTransportConfig(request = {}) {
+  return {
+    auth: request.auth && typeof request.auth === 'object' ? cloneJsonObject(request.auth) : {},
+    grpc: request.grpc && typeof request.grpc === 'object' ? cloneJsonObject(request.grpc) : {},
+    protocolProfile: request.protocolProfile && typeof request.protocolProfile === 'object' ? cloneJsonObject(request.protocolProfile) : {}
+  };
+}
+
+function grpcErrorResponse(error, request = {}) {
+  const code = Number.isFinite(Number(error?.code)) ? Number(error.code) : 13;
+  const reason = error?.details || error?.message || String(error || 'gRPC request failed.');
+  return {
+    response: {
+      body: '',
+      cancelled: code === 1 || error?.name === 'AbortError',
+      code,
+      durationMillis: 0,
+      finalUrl: grpcFinalUrlForError(request),
+      headers: {},
+      messages: [],
+      metadata: [],
+      reason,
+      responseBytes: 0,
+      responseSize: 0,
+      responseTime: 0,
+      status: grpcStatusName(code),
+      statusCode: code,
+      trailers: [
+        { enabled: true, key: 'grpc-status', value: String(code) },
+        { enabled: true, key: 'grpc-message', value: reason }
+      ]
+    }
+  };
+}
+
+function grpcFinalUrlForError(request = {}) {
+  const url = String(request.url || '').replace(/\/+$/, '');
+  const methodPath = String(request.methodPath || request.grpc?.methodPath || '').replace(/^\/+/, '');
+  return methodPath && !url.endsWith(methodPath) ? `${url}/${methodPath}` : url;
+}
+
+function grpcStatusName(code) {
+  return {
+    0: 'OK',
+    1: 'CANCELLED',
+    2: 'UNKNOWN',
+    3: 'INVALID_ARGUMENT',
+    4: 'DEADLINE_EXCEEDED',
+    5: 'NOT_FOUND',
+    6: 'ALREADY_EXISTS',
+    7: 'PERMISSION_DENIED',
+    8: 'RESOURCE_EXHAUSTED',
+    9: 'FAILED_PRECONDITION',
+    10: 'ABORTED',
+    11: 'OUT_OF_RANGE',
+    12: 'UNIMPLEMENTED',
+    13: 'INTERNAL',
+    14: 'UNAVAILABLE',
+    15: 'DATA_LOSS',
+    16: 'UNAUTHENTICATED'
+  }[code] || 'UNKNOWN';
 }
 
 function applyScriptMutations(state, execution, options = {}) {

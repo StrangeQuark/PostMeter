@@ -101,6 +101,7 @@ function registerRuntimeIpc(options = {}) {
         signal: abortController.signal,
         cookieJar: workspace.cookies || [],
         globals: workspace.globals || [],
+        fileBindings: workspace.settings?.sandbox?.fileBindings || [],
         sandboxPackages: workspace.settings?.sandbox?.packageCache || [],
         trustedCapabilities: workspace.settings?.sandbox?.trustedCapabilities || {},
         vault: getVaultStore(workspaceId),

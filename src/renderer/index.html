@@ -164,6 +164,12 @@
                 <option value="cookie">Cookie</option>
                 <option value="oauth2">OAuth 2.0 Request Auth</option>
                 <option value="clientCertificate">Client Certificate</option>
+                <option value="digest">Digest Auth</option>
+                <option value="hawk">Hawk Auth</option>
+                <option value="aws">AWS Signature</option>
+                <option value="oauth1">OAuth 1.0</option>
+                <option value="ntlm">NTLM</option>
+                <option value="akamaiEdgeGrid">Akamai EdgeGrid</option>
               </select>
             </label>
 
@@ -473,7 +479,17 @@
             <div id="sandboxPackageCacheList" class="workspace-package-list"></div>
             <div class="workspace-actions">
               <button id="addSandboxPackageButton" type="button">Add Reviewed Package</button>
+              <button id="fetchSandboxPackageButton" type="button">Fetch Package for Review</button>
               <button id="refreshSandboxPackagesButton" type="button">Refresh Package Status</button>
+            </div>
+          </div>
+          <div class="workspace-file-bindings">
+            <div class="workspace-sandbox-note" id="sandboxFileBindingSummary">No imported file attachments need binding.</div>
+            <div id="sandboxFileBindingMissingList" class="workspace-package-list"></div>
+            <div id="sandboxFileBindingList" class="workspace-package-list"></div>
+            <div class="workspace-actions">
+              <button id="bindSandboxFileButton" type="button">Bind Imported File</button>
+              <button id="refreshSandboxFilesButton" type="button">Refresh File Bindings</button>
             </div>
           </div>
         </div>

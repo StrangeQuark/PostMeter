@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "type": "desktop-runtime-source-audit",
+  "rowIds": [
+    "global.dynamic-code-and-host-like-globals-audit"
+  ],
+  "postman": {
+    "app": "Postman Desktop",
+    "version": "11.71.7",
+    "channel": "snap latest/stable",
+    "platform": "linux",
+    "observedAt": "2026-04-27"
+  },
+  "capture": {
+    "method": "installed-desktop-runtime-package-and-sandbox-probe",
+    "commands": [
+      "cat /snap/postman/360/usr/share/postman/resources/app/package.json",
+      "rg \"postman-sandbox|postman-runtime|postman-collection\" /snap/postman/360/usr/share/postman/resources/app/yarn.lock /snap/postman/360/usr/share/postman/resources/app/node_modules_postman-runtime_lib_sync_recursive_package_json_-common_services_RuntimeExecutio-c42333-7178fa5217edc63d.min.js",
+      "npm install postman-sandbox@6.2.2 postman-collection@5.2.0 in an isolated temporary directory",
+      "Run the dynamic host-global probe through postman-sandbox@6.2.2 createContext/execute",
+      "Run the same Newman-compatible probe through newman@6.2.2 and PostMeter via npm run postman:parity:diff -- --require-newman --download-newman"
+    ],
+    "artifactPaths": [
+      "/snap/postman/360/usr/share/postman/resources/app/package.json",
+      "/snap/postman/360/usr/share/postman/resources/app/yarn.lock",
+      "test/fixtures/postman/differential-dynamic-host-globals.collection.json"
+    ]
+  },
+  "observed": {
+    "desktopRuntimePackageEvidence": {
+      "postman-sandbox": "6.2.2",
+      "postman-runtime": "7.50.0",
+      "postman-collection": "5.2.0"
+    },
+    "newmanTargetEvidence": {
+      "newman": "6.2.2",
+      "postman-runtime": "7.39.1",
+      "postman-sandbox": "4.7.1",
+      "postman-collection": "4.4.0"
+    },
+    "commonDynamicCodeProfile": {
+      "directEval": "supported inside the script sandbox",
+      "indirectEval": "supported inside the script sandbox global scope",
+      "Function": "supported inside the script sandbox global scope",
+      "constructorConstructorEscape": "does not expose process or host Node handles",
+      "functionSeesRequire": "function",
+      "functionSeesProcess": "undefined",
+      "functionSeesFetch": "undefined",
+      "functionSeesBuffer": "undefined"
+    },
+    "commonHostLikeGlobalProfile": {
+      "Buffer": "available as a top-level script binding, absent from Function('return this')() and Function-created code",
+      "fetch": "undefined",
+      "XMLHttpRequest": "undefined",
+      "WebSocket": "undefined",
+      "WebAssembly": "undefined",
+      "process": "undefined",
+      "globalThis": "undefined",
+      "global": "undefined",
+      "window": "undefined",
+      "self": "undefined",
+      "document": "undefined",
+      "navigator": "undefined",
+      "location": "undefined",
+      "localStorage": "undefined",
+      "sessionStorage": "undefined",
+      "indexedDB": "undefined",
+      "Deno": "undefined",
+      "Bun": "undefined",
+      "importScripts": "undefined",
+      "postMessage": "undefined"
+    },
+    "desktopOnlyProfile": {
+      "File": "postman-sandbox@6.2.2 exposes File as a top-level script binding; newman@6.2.2 does not. PostMeter keeps the safe File facade for Desktop import compatibility and keeps it out of Function-created global code."
+    }
+  },
+  "postmeterDecision": "Match the common Postman sandbox profile for default imports: direct and indirect eval are enabled only inside the isolated VM, Function remains enabled but sees no host process/fetch/Buffer, top-level Buffer uses PostMeter's hardened buffer facade, raw fetch/XHR/WebSocket/WebAssembly/process/globalThis/browser globals remain absent, and Desktop's top-level File binding remains a safe facade.",
+  "notes": "This audit clears the dynamic-code and host-like globals claim blocker while preserving the parent-brokered network and package policies required by the supported import profile."
+}

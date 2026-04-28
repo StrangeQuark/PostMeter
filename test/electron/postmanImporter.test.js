@@ -133,6 +133,75 @@ test('imports common Postman auth helpers with collection and folder inheritance
   assert.equal(collection.requests[2].auth.tokenUrl, 'https://auth.example.test/token');
 });
 
+test('imports and exports advanced Postman auth helper shapes', () => {
+  const collection = importPostmanCollection({
+    info: {
+      name: 'Advanced Auth',
+      schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
+    },
+    item: [
+      {
+        name: 'Digest',
+        request: {
+          method: 'GET',
+          url: 'https://api.example.test/digest',
+          auth: {
+            type: 'digest',
+            digest: [
+              { key: 'username', value: 'ada' },
+              { key: 'password', value: 'secret' },
+              { key: 'algorithm', value: 'MD5' }
+            ]
+          }
+        }
+      },
+      {
+        name: 'AWS',
+        request: {
+          method: 'GET',
+          url: 'https://api.example.test/aws',
+          auth: {
+            type: 'awsv4',
+            awsv4: [
+              { key: 'accessKey', value: '{{awsAccessKey}}' },
+              { key: 'secretKey', value: '{{awsSecretKey}}' },
+              { key: 'region', value: 'us-east-1' },
+              { key: 'service', value: 'execute-api' }
+            ]
+          }
+        }
+      },
+      {
+        name: 'NTLM',
+        request: {
+          method: 'GET',
+          url: 'https://api.example.test/ntlm',
+          auth: {
+            type: 'ntlm',
+            ntlm: [
+              { key: 'username', value: 'user' },
+              { key: 'password', value: 'pass' },
+              { key: 'domain', value: 'EXAMPLE' }
+            ]
+          }
+        }
+      }
+    ]
+  });
+
+  assert.equal(collection.requests[0].auth.type, 'digest');
+  assert.equal(collection.requests[0].auth.username, 'ada');
+  assert.equal(collection.requests[1].auth.type, 'aws');
+  assert.equal(collection.requests[1].auth.service, 'execute-api');
+  assert.equal(collection.requests[2].auth.type, 'ntlm');
+  assert.equal(collection.requests[2].auth.domain, 'EXAMPLE');
+
+  const exported = exportPostmanCollection(collection);
+  assert.equal(exported.item[0].request.auth.type, 'digest');
+  assert.equal(exported.item[1].request.auth.type, 'awsv4');
+  assert.equal(exported.item[2].request.auth.type, 'ntlm');
+});
+
 test('imports Postman examples and collection certificates', () => {
   const collection = importPostmanCollection({
     info: {
@@ -164,7 +233,8 @@ test('imports Postman examples and collection certificates', () => {
   assert.equal(collection.certificates.length, 1);
   assert.equal(collection.certificates[0].certPath, '/tmp/client.crt');
   assert.equal(collection.requests[0].auth.type, 'clientCertificate');
-  assert.equal(collection.requests[0].auth.certPath, '/tmp/client.crt');
+  assert.equal(collection.requests[0].auth.certificateId, collection.certificates[0].id);
+  assert.equal(collection.requests[0].auth.certPath, undefined);
   assert.equal(collection.requests[0].examples.length, 1);
   assert.equal(collection.requests[0].examples[0].statusCode, 200);
   assert.equal(collection.requests[0].examples[0].bodyType, 'RAW_JSON');

@@ -128,7 +128,10 @@
     bindClick(doc, 'switchWorkspacePanelButton', options.onSwitchWorkspace);
     bindClick(doc, 'exportWorkspacePanelButton', options.onExportWorkspace);
     bindClick(doc, 'addSandboxPackageButton', options.onAddSandboxPackage);
+    bindClick(doc, 'fetchSandboxPackageButton', options.onFetchSandboxPackage);
     bindClick(doc, 'refreshSandboxPackagesButton', options.onRefreshSandboxPackages);
+    bindClick(doc, 'bindSandboxFileButton', options.onBindSandboxFile);
+    bindClick(doc, 'refreshSandboxFilesButton', options.onRefreshSandboxFiles);
     bindClick(doc, 'bindVaultSecretButton', options.onBindVaultSecret);
     bindClick(doc, 'refreshVaultMetadataButton', options.onRefreshVaultMetadata);
     bindClick(doc, 'resetVaultButton', options.onResetVault);

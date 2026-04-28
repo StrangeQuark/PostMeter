@@ -4,7 +4,21 @@ const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'
 const BODY_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
 const BODY_TYPE_VALUES = ['NONE', 'RAW_JSON', 'RAW_TEXT'];
 const REQUEST_PROTOCOLS = ['http', 'graphql', 'grpc', 'websocket', 'socketio'];
-const AUTH_TYPE_VALUES = ['none', 'bearer', 'basic', 'apiKey', 'cookie', 'oauth2', 'clientCertificate'];
+const AUTH_TYPE_VALUES = [
+  'none',
+  'bearer',
+  'basic',
+  'apiKey',
+  'cookie',
+  'oauth2',
+  'clientCertificate',
+  'digest',
+  'hawk',
+  'aws',
+  'oauth1',
+  'ntlm',
+  'akamaiEdgeGrid'
+];
 const API_KEY_LOCATIONS = ['header', 'query'];
 const OAUTH2_TOKEN_TYPES = ['Bearer', 'MAC'];
 const OAUTH2_GRANT_TYPES = ['authorizationCode', 'clientCredentials', 'deviceCode'];
@@ -355,7 +369,37 @@ const FIELD_SCHEMAS = {
     keyPath: { type: 'string', limit: 'value', optional: true },
     pfxPath: { type: 'string', limit: 'value', optional: true },
     caPath: { type: 'string', limit: 'value', optional: true },
-    passphrase: { type: 'string', limit: 'value', optional: true }
+    passphrase: { type: 'string', limit: 'value', optional: true },
+    certificateId: { type: 'string', limit: 'name', optional: true },
+    realm: { type: 'string', limit: 'value', optional: true },
+    nonce: { type: 'string', limit: 'value', optional: true },
+    algorithm: { type: 'string', limit: 'short', optional: true },
+    qop: { type: 'string', limit: 'short', optional: true },
+    opaque: { type: 'string', limit: 'value', optional: true },
+    clientNonce: { type: 'string', limit: 'value', optional: true },
+    nonceCount: { type: 'string', limit: 'short', optional: true },
+    authId: { type: 'string', limit: 'value', optional: true },
+    authKey: { type: 'string', limit: 'value', optional: true },
+    user: { type: 'string', limit: 'value', optional: true },
+    extraData: { type: 'string', limit: 'value', optional: true },
+    app: { type: 'string', limit: 'value', optional: true },
+    delegation: { type: 'string', limit: 'value', optional: true },
+    accessKey: { type: 'string', limit: 'value', optional: true },
+    secretKey: { type: 'string', limit: 'value', optional: true },
+    region: { type: 'string', limit: 'value', optional: true },
+    service: { type: 'string', limit: 'value', optional: true },
+    sessionToken: { type: 'string', limit: 'value', optional: true },
+    addAuthDataToQuery: { type: 'boolean', optional: true },
+    consumerKey: { type: 'string', limit: 'value', optional: true },
+    consumerSecret: { type: 'string', limit: 'value', optional: true },
+    tokenSecret: { type: 'string', limit: 'value', optional: true },
+    signatureMethod: { type: 'string', limit: 'short', optional: true },
+    timestamp: { type: 'string', limit: 'value', optional: true },
+    version: { type: 'string', limit: 'short', optional: true },
+    domain: { type: 'string', limit: 'value', optional: true },
+    workstation: { type: 'string', limit: 'value', optional: true },
+    clientToken: { type: 'string', limit: 'value', optional: true },
+    headersToSign: { type: 'string', limit: 'value', optional: true }
   }
 };
 

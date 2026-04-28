@@ -671,6 +671,7 @@ h2 {
   font-size: 13px;
 }
 
+.workspace-file-bindings,
 .workspace-package-cache,
 .workspace-vault-panel {
   display: grid;
@@ -707,6 +708,13 @@ h2 {
 .workspace-package-row span {
   color: var(--muted);
   font-size: 12px;
+}
+
+.workspace-package-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 .environment-main-header #environmentNameInput {

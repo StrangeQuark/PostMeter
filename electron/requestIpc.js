@@ -52,6 +52,8 @@ function registerRequestIpc(options = {}) {
         collectionVariables: requestContext?.collection?.variables || [],
         globals: workspaceSnapshot.globals || [],
         cookieJar: workspaceSnapshot.cookies || [],
+        clientCertificates: requestContext?.collection?.certificates || [],
+        fileBindings: workspaceSnapshot.settings?.sandbox?.fileBindings || [],
         sandboxPackages: workspaceSnapshot.settings?.sandbox?.packageCache || [],
         trustedCapabilities: workspaceSnapshot.settings?.sandbox?.trustedCapabilities || {},
         vault: getVaultStore(workspaceId)

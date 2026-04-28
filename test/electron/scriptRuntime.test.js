@@ -5,6 +5,7 @@ const {
   MAX_SCRIPT_LOGS,
   runPostmanScript,
   runPostmanScriptAsync,
+  scriptPackageBundleIntegrity,
   scriptPackageIntegrity
 } = require('../../src/core/scriptRuntime');
 const { resolveEnvironmentValue } = require('../../src/core/environmentResolver');
@@ -124,8 +125,16 @@ test('blocks direct host access while allowing sandboxed dynamic code', () => {
 
   const functionResult = runPostmanScript(`
     pm.test('safe function constructor stays inside sandbox globals', function () {
+      pm.expect(eval('1 + 2')).to.equal(3);
+      pm.expect((0, eval)('1 + 3')).to.equal(4);
+      pm.expect(eval('typeof Buffer')).to.equal('function');
+      pm.expect((0, eval)('typeof Buffer')).to.equal('undefined');
       pm.expect(Function('return 1')()).to.equal(1);
       pm.expect(Function('return typeof require')()).to.equal('function');
+      pm.expect(Function('return typeof Buffer')()).to.equal('undefined');
+      pm.expect(Function('return typeof process')()).to.equal('undefined');
+      pm.expect(Function('return typeof fetch')()).to.equal('undefined');
+      pm.expect(Function('return typeof WebAssembly')()).to.equal('undefined');
       pm.expect(Function('return require.constructor')()).to.be.undefined;
       pm.expect(Function('return this.constructor')()).to.be.undefined;
       let functionEscaped = false;
@@ -134,13 +143,14 @@ test('blocks direct host access while allowing sandboxed dynamic code', () => {
       let objectEscaped = false;
       try { ({}).constructor.constructor('return process')().cwd(); objectEscaped = true; } catch (_) {}
       pm.expect(objectEscaped).to.equal(false);
+      pm.expect(({}).constructor.constructor('return typeof process')()).to.equal('undefined');
     });
   `);
   assert.equal(functionResult.passed, true);
 
   const fetchResult = runPostmanScript('fetch("https://example.test");');
   assert.equal(fetchResult.passed, false);
-  assert.match(fetchResult.error, /fetch is not supported/);
+  assert.match(fetchResult.error, /fetch is not defined/);
 });
 
 test('supports bundled Postman-style package loading without Node module access', () => {
@@ -153,19 +163,26 @@ test('supports bundled Postman-style package loading without Node module access'
       pm.expect(Crypto.enc.Base64.stringify(Crypto.enc.Utf8.parse('hello'))).to.equal('aGVsbG8=');
       pm.expect(lodash.get({ nested: { value: 42 } }, 'nested.value')).to.equal(42);
       pm.expect(lodash.map([{ id: 'a' }, { id: 'b' }], 'id').join(',')).to.equal('a,b');
+      pm.expect(lodash.camelCase('Postman package parity')).to.equal('postmanPackageParity');
+      pm.expect(lodash.flattenDeep([1, [2, [3]]]).join(',')).to.equal('1,2,3');
+      pm.expect(lodash.template('hello <%= name %>')({ name: 'Ada' })).to.equal('hello Ada');
       const assigned = lodash.assign(null, { ok: true });
       pm.expect(assigned.ok).to.equal(true);
       const safeAssigned = lodash.assign({}, JSON.parse('{"__proto__":{"polluted":true},"constructor":"bad","safe":"ok"}'));
       pm.expect(safeAssigned.safe).to.equal('ok');
       pm.expect(safeAssigned.polluted).to.be.undefined;
-      pm.expect(safeAssigned.constructor).to.be.undefined;
+      pm.expect(safeAssigned.constructor).to.equal('bad');
+      pm.expect(({}).polluted).to.be.undefined;
       const created = {};
       lodash.set(created, 'nested.value', true);
       pm.expect(uuid.v4()).to.match(/^[0-9a-f-]{36}$/);
-      pm.expect(Crypto.SHA256.constructor).to.be.undefined;
-      pm.expect(lodash.map.constructor).to.be.undefined;
-      pm.expect(assigned.constructor).to.be.undefined;
-      pm.expect(created.nested.constructor).to.be.undefined;
+      let fsTemplateBlocked = false;
+      try { lodash.template("<%= require('fs') %>")({}); } catch (_) { fsTemplateBlocked = true; }
+      pm.expect(fsTemplateBlocked).to.equal(true);
+      pm.expect(Crypto.SHA256.constructor.constructor('return typeof process')()).to.equal('undefined');
+      pm.expect(lodash.map.constructor.constructor('return typeof process')()).to.equal('undefined');
+      pm.expect(assigned.constructor.constructor('return typeof process')()).to.equal('undefined');
+      pm.expect(created.nested.constructor.constructor('return typeof process')()).to.equal('undefined');
     });
   `);
 
@@ -263,6 +280,127 @@ test('supports exact reviewed team and external package bundles without Node acc
   assert.match(duplicatePackage.error, /duplicated in the reviewed package cache/);
 });
 
+test('supports multi-file reviewed CommonJS packages with metadata, cache, circular dependencies, and default interop', () => {
+  const commonJsPackage = {
+    specifier: 'npm:@postmeter/commonjs@2.0.0',
+    entrypoint: 'src/index.js',
+    packageName: '@postmeter/commonjs',
+    packageJson: { name: '@postmeter/commonjs', main: 'src/index.js', version: '2.0.0' },
+    dependencyAliases: {
+      'external-default': 'npm:@postmeter/default@1.0.0'
+    },
+    dependencies: ['@postmeter/commonjs-dep', 'npm:@postmeter/default@1.0.0'],
+    files: [
+      {
+        path: 'src/index.js',
+        source: `
+          const value = require('./lib/value');
+          const counter = require('./lib/counter');
+          counter.inc();
+          const counterAgain = require('./lib/counter');
+          const data = require('./data.json');
+          const circular = require('./lib/circular-a');
+          const directory = require('./lib/directory');
+          const dep = require('@postmeter/commonjs-dep');
+          const externalDefault = require('external-default');
+          const directSubpath = require('@postmeter/default/lib/format');
+          const aliasSubpath = require('external-default/lib/format');
+          exports.summary = function () { return data.name + ':' + value.kind + ':' + dep.name; };
+          exports.cacheCount = counterAgain.value;
+          exports.circular = circular.fromB + '/' + circular.bSawA;
+          exports.directory = directory.name;
+          exports.defaultInterop = externalDefault.default('Ada') + ':' + externalDefault.named;
+          exports.subpathDependency = directSubpath('Ada') + '/' + aliasSubpath('Grace');
+          exports.resolved = require.resolve('./lib/value');
+        `
+      },
+      { path: 'src/lib/value.js', source: "module.exports = { kind: 'multi' };" },
+      { path: 'src/lib/counter.js', source: 'exports.value = 0; exports.inc = function () { exports.value += 1; };' },
+      { path: 'src/data.json', source: '{"name":"bundle","count":3}' },
+      { path: 'src/lib/directory/package.json', source: '{"main":"main.js"}' },
+      { path: 'src/lib/directory/main.js', source: "exports.name = 'directory';" },
+      {
+        path: 'src/lib/circular-a.js',
+        source: "exports.name = 'a'; const b = require('./circular-b'); exports.fromB = b.name; exports.bSawA = b.aName;"
+      },
+      {
+        path: 'src/lib/circular-b.js',
+        source: "exports.name = 'b'; const a = require('./circular-a'); exports.aName = a.name;"
+      }
+    ]
+  };
+  commonJsPackage.source = commonJsPackage.files.find((file) => file.path === commonJsPackage.entrypoint).source;
+  commonJsPackage.integrity = scriptPackageBundleIntegrity(commonJsPackage);
+
+  const dependencySource = "exports.name = 'dependency';";
+  const defaultPackage = {
+    specifier: 'npm:@postmeter/default@1.0.0',
+    packageName: '@postmeter/default',
+    packageJson: { name: '@postmeter/default', main: 'index.js', version: '1.0.0' },
+    files: [
+      { path: 'index.js', source: "const format = require('./lib/format'); exports.__esModule = true; exports.default = function (value) { return value + ':default'; }; exports.named = 'named'; exports.format = format;" },
+      { path: 'lib/format.js', source: "module.exports = function (value) { return value + ':formatted'; };" }
+    ],
+    dependencies: []
+  };
+  defaultPackage.source = defaultPackage.files[0].source;
+  defaultPackage.integrity = scriptPackageBundleIntegrity(defaultPackage);
+  const result = runPostmanScript(`
+    const pkg = pm.require('npm:@postmeter/commonjs@2.0.0');
+    pm.test('multi-file CommonJS reviewed package', function () {
+      pm.expect(pkg.summary()).to.equal('bundle:multi:dependency');
+      pm.expect(pkg.cacheCount).to.equal(1);
+      pm.expect(pkg.circular).to.equal('b/a');
+      pm.expect(pkg.directory).to.equal('directory');
+      pm.expect(pkg.defaultInterop).to.equal('Ada:default:named');
+      pm.expect(pkg.subpathDependency).to.equal('Ada:formatted/Grace:formatted');
+      pm.expect(pkg.resolved).to.equal('./src/lib/value.js');
+      pm.expect(pkg.constructor).to.be.undefined;
+      pm.expect(pkg.summary.constructor).to.be.undefined;
+    });
+  `, {
+    sandboxPackages: [
+      commonJsPackage,
+      {
+        specifier: '@postmeter/commonjs-dep',
+        source: dependencySource,
+        integrity: scriptPackageIntegrity(dependencySource),
+        dependencies: []
+      },
+      {
+        ...defaultPackage
+      }
+    ]
+  });
+
+  assert.equal(result.passed, true);
+
+  const missingSource = "module.exports = require('./missing');";
+  const missing = runPostmanScript("pm.require('@postmeter/missing-file');", {
+    sandboxPackages: [{
+      specifier: '@postmeter/missing-file',
+      source: missingSource,
+      integrity: scriptPackageIntegrity(missingSource),
+      dependencies: []
+    }]
+  });
+  assert.equal(missing.passed, false);
+  assert.match(missing.error, /cannot resolve module "\.\/missing"/);
+
+  const undeclaredSubpath = runPostmanScript("pm.require('@postmeter/undeclared-subpath');", {
+    sandboxPackages: [{
+      specifier: '@postmeter/undeclared-subpath',
+      source: "module.exports = require('@postmeter/default/lib/format');",
+      integrity: scriptPackageIntegrity("module.exports = require('@postmeter/default/lib/format');"),
+      dependencies: []
+    }, {
+      ...defaultPackage
+    }]
+  });
+  assert.equal(undeclaredSubpath.passed, false);
+  assert.match(undeclaredSubpath.error, /undeclared dependency/);
+});
+
 test('supports additional bundled Postman built-in package facades', () => {
   const result = runPostmanScript(`
     const Ajv = require('ajv');
@@ -291,12 +429,13 @@ test('supports additional bundled Postman built-in package facades', () => {
       pm.expect(rows[0].score).to.equal('2');
       const csvPollution = parseCsv('__proto__,constructor,safe\\nbad,bad,ok', { columns: true })[0];
       pm.expect(csvPollution.safe).to.equal('ok');
-      pm.expect(csvPollution.__proto__).to.be.undefined;
-      pm.expect(csvPollution.constructor).to.be.undefined;
+      pm.expect(csvPollution.constructor).to.equal('bad');
+      pm.expect(({}).safe).to.be.undefined;
+      pm.expect(({}).polluted).to.be.undefined;
 
       pm.expect(moment.utc('2024-01-02T03:04:05Z').add(1, 'day').format('YYYY-MM-DD HH:mm:ss')).to.equal('2024-01-03 03:04:05');
       const dateLike = moment.utc('2024-01-02T03:04:05Z').toDate();
-      pm.expect(dateLike.constructor).to.be.undefined;
+      pm.expect(dateLike.constructor.constructor('return typeof process')()).to.equal('undefined');
       pm.expect(dateLike.toISOString()).to.equal('2024-01-02T03:04:05.000Z');
 
       const request = new sdk.Request({ method: 'POST', url: 'https://api.example.test/widgets?limit=1', header: [{ key: 'X-Test', value: 'yes' }] });
@@ -304,9 +443,9 @@ test('supports additional bundled Postman built-in package facades', () => {
       pm.expect(request.url.getHost()).to.equal('api.example.test');
       pm.expect(request.headers.get('X-Test')).to.equal('yes');
       const headerObject = new sdk.HeaderList(null, [{ key: '__proto__', value: 'bad' }, { key: 'constructor', value: 'bad' }, { key: 'Safe', value: 'ok' }]).toObject();
-      pm.expect(headerObject.Safe).to.equal('ok');
-      pm.expect(headerObject.__proto__).to.be.undefined;
-      pm.expect(headerObject.constructor).to.be.undefined;
+      pm.expect(headerObject.safe).to.equal('ok');
+      pm.expect(headerObject.constructor).to.equal('bad');
+      pm.expect(({}).Safe).to.be.undefined;
       const collection = new sdk.Collection({ info: { name: 'Facade' }, item: [{ name: 'One', request: 'https://api.example.test/one' }] });
       pm.expect(collection.items.count()).to.equal(1);
 
@@ -317,13 +456,16 @@ test('supports additional bundled Postman built-in package facades', () => {
       });
       pm.expect(parsed.root.item.$.id).to.equal('1');
       pm.expect(parsed.root.item._).to.equal('ok');
-      const pollutedXml = xml2js.parseString('<root><__proto__>bad</__proto__><constructor>bad</constructor><safe>ok</safe></root>', { explicitArray: false });
-      pm.expect(pollutedXml.root.safe).to.equal('ok');
-      pm.expect(pollutedXml.root.__proto__).to.be.undefined;
-      pm.expect(pollutedXml.root.constructor).to.be.undefined;
+      let parsedWithConstructor;
+      xml2js.parseString('<root><constructor>bad</constructor><safe>ok</safe></root>', { explicitArray: false }, function (error, value) {
+        if (error) { throw error; }
+        parsedWithConstructor = value;
+      });
+      pm.expect(parsedWithConstructor.root.safe).to.equal('ok');
+      pm.expect(({}).safe).to.be.undefined;
       const parsedPromise = xml2js.parseStringPromise('<root>ok</root>');
-      pm.expect(parsedPromise.constructor).to.be.undefined;
-      pm.expect(parsedPromise.then.constructor).to.be.undefined;
+      pm.expect(parsedPromise.constructor.constructor('return typeof process')()).to.equal('undefined');
+      pm.expect(parsedPromise.then.constructor.constructor('return typeof process')()).to.equal('undefined');
     });
   `);
 
@@ -337,10 +479,7 @@ test('supports Postman Collection SDK-style request and response object facades'
     pm.test('sdk request objects expose list, url, body, clone, and JSON helpers', function () {
       const request = new sdk.Request({
         method: 'POST',
-        url: {
-          raw: 'https://api.example.test/widgets?limit=1',
-          query: [{ key: 'limit', value: '1' }]
-        },
+        url: 'https://api.example.test/widgets?limit=1',
         header: [
           { key: 'X-Trace', value: 'one' },
           { key: 'x-trace', value: 'two' },
@@ -350,9 +489,7 @@ test('supports Postman Collection SDK-style request and response object facades'
           mode: 'urlencoded',
           urlencoded: [{ key: 'name', value: 'hammer' }]
         },
-        auth: { type: 'bearer', token: 'abc' },
-        metadata: [{ key: 'client', value: 'postmeter' }],
-        messages: [{ data: 'out', timestamp: '2026-04-27T00:00:00.000Z' }]
+        auth: { type: 'bearer', bearer: [{ key: 'token', value: 'abc' }] }
       });
 
       request.headers.upsert({ key: 'X-Trace', value: 'three' });
@@ -361,19 +498,17 @@ test('supports Postman Collection SDK-style request and response object facades'
       request.body.urlencoded.add({ key: 'size', value: 'large' });
 
       pm.expect(request.headers.get('x-trace')).to.equal('three');
-      pm.expect(request.headers.has('X-Disabled')).to.equal(false);
+      pm.expect(request.headers.has('X-Disabled')).to.equal(true);
       pm.expect(request.headers.idx(0).key).to.equal('X-First');
       pm.expect(request.headers.map(function (header) { return header.key; })).to.include('X-Trace');
-      pm.expect(request.headers.filter(function (header) { return header.key === 'X-Trace'; })).to.have.length(1);
-      pm.expect(request.headers.toObject(true, false, true)['X-Trace'][0]).to.equal('three');
+      pm.expect(request.headers.filter(function (header) { return header.key.toLowerCase() === 'x-trace'; })).to.have.length(2);
+      pm.expect(request.headers.toObject(true, false, true)['x-trace'][1]).to.equal('three');
       pm.expect(request.url.toString()).to.include('page=2');
       pm.expect(request.url.getHost()).to.equal('api.example.test');
       pm.expect(request.body.toString()).to.include('name=hammer');
       pm.expect(request.body.toString()).to.include('size=large');
-      pm.expect(request.auth.token).to.equal('abc');
-      pm.expect(request.metadata.get('client')).to.equal('postmeter');
-      pm.expect(request.messages.idx(0).data).to.equal('out');
-      pm.expect(request.clone().toJSON().header.length).to.be.above(1);
+      pm.expect(request.auth.bearer.get('token')).to.equal('abc');
+      pm.expect(request.toJSON().header.length).to.be.above(1);
     });
 
     pm.test('sdk response objects expose Postman response fields and lists', function () {
@@ -395,14 +530,11 @@ test('supports Postman Collection SDK-style request and response object facades'
       pm.expect(response.code).to.equal(202);
       pm.expect(response.status).to.equal('Accepted');
       pm.expect(response.headers.get('content-type')).to.equal('application/json');
-      pm.expect(response.cookies.get('sid')).to.equal('123');
-      pm.expect(response.metadata.get('grpc-status')).to.equal('0');
-      pm.expect(response.trailers.get('grpc-message')).to.equal('ok');
-      pm.expect(response.messages.idx(0).data).to.equal('in');
+      pm.expect(response.headers.get('set-cookie')).to.include('sid=123');
       pm.expect(response.json().ok).to.equal(true);
       pm.expect(response.text()).to.equal('{"ok":true}');
-      pm.expect(response.size()).to.equal(11);
-      pm.expect(response.clone().toJSON().responseSize).to.equal(11);
+      pm.expect(response.size().body).to.equal(11);
+      pm.expect(response.toJSON().responseTime).to.equal(12);
     });
   `);
 
@@ -458,11 +590,37 @@ test('commits SDK-style pm.request mutations from pre-request scripts', async ()
   assert.equal(result.request.postmanBody.mode, 'urlencoded');
 });
 
+test('preserves imported binary request body references in the pm.request facade', async () => {
+  const result = await runPostmanScriptAsync(`
+    pm.test('binary body is visible', function () {
+      pm.expect(pm.request.body.mode).to.equal('binary');
+      pm.expect(pm.request.body.binary.src).to.equal('fixtures/blob.bin');
+    });
+  `, {
+    request: {
+      method: 'POST',
+      url: 'https://api.example.test/upload',
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      postmanBody: {
+        mode: 'binary',
+        binary: { src: 'fixtures/blob.bin', contentType: 'application/octet-stream' }
+      }
+    }
+  }, { broker: timerBroker(), timeoutMillis: 1000 });
+
+  assert.equal(result.passed, true);
+  assert.equal(result.request.postmanBody.mode, 'binary');
+  assert.equal(result.request.postmanBody.binary.src, 'fixtures/blob.bin');
+});
+
 test('supports Postman documented globals and NodeJS module facades without host access', () => {
   const result = runPostmanScript(`
     const path = require('path');
     const assert = require('assert');
-    const { Buffer } = require('buffer');
+    const moduleBuffer = require('buffer').Buffer;
     const util = require('util');
     const url = require('url');
     const punycode = require('punycode');
@@ -483,7 +641,7 @@ test('supports Postman documented globals and NodeJS module facades without host
         'TypeError', 'Uint8Array', 'Uint8ClampedArray', 'Uint16Array', 'Uint32Array',
         'URIError', 'WeakMap', 'WeakSet', 'AbortController', 'AbortSignal',
         'DOMException', 'Event', 'EventTarget', 'atob', 'btoa', 'TextEncoder',
-        'TextEncoderStream', 'TextDecoder', 'TextDecoderStream', 'Blob', 'File',
+        'TextEncoderStream', 'TextDecoder', 'TextDecoderStream', 'Blob',
         'decodeURI', 'decodeURIComponent', 'encodeURI', 'encodeURIComponent', 'escape',
         'isFinite', 'isNaN', 'parseFloat', 'parseInt', 'unescape', 'structuredClone',
         'queueMicrotask', 'ByteLengthQueuingStrategy', 'CountQueuingStrategy',
@@ -495,6 +653,16 @@ test('supports Postman documented globals and NodeJS module facades without host
         'URLSearchParams', 'Crypto', 'CryptoKey', 'SubtleCrypto', 'crypto'
       ];
       pm.expect(globalNames.filter(function (name) { return typeof globalScope[name] === 'undefined'; }).join(',')).to.equal('');
+      pm.expect(typeof Buffer).to.equal('function');
+      pm.expect(Buffer.from('abc').toString('base64')).to.equal('YWJj');
+      pm.expect(typeof globalScope.Buffer).to.equal('undefined');
+      pm.expect(typeof globalScope.globalThis).to.equal('undefined');
+      pm.expect(typeof globalScope.WebAssembly).to.equal('undefined');
+      pm.expect(typeof globalScope.fetch).to.equal('undefined');
+      pm.expect(typeof globalScope.XMLHttpRequest).to.equal('undefined');
+      pm.expect(typeof globalScope.WebSocket).to.equal('undefined');
+      pm.expect(Function('return typeof Buffer')()).to.equal('undefined');
+      pm.expect(Function('return typeof process')()).to.equal('undefined');
 
       const parsedUrl = new URL('/v1/widgets?limit=2', 'https://api.example.test');
       parsedUrl.searchParams.set('limit', '3');
@@ -508,6 +676,8 @@ test('supports Postman documented globals and NodeJS module facades without host
       pm.expect(atob(btoa('abc'))).to.equal('abc');
       pm.expect(new Blob(['abc']).size).to.equal(3);
       pm.expect(new File(['abc'], 'a.txt').name).to.equal('a.txt');
+      pm.expect(typeof globalScope.File).to.equal('undefined');
+      pm.expect(Function('return typeof File')()).to.equal('undefined');
       pm.expect(typeof structuredClone({ ok: true }).ok).to.equal('boolean');
 
       const random = new Uint8Array(4);
@@ -517,13 +687,14 @@ test('supports Postman documented globals and NodeJS module facades without host
 
       pm.expect(path.join('root', 'child')).to.equal('root/child');
       pm.expect(path.resolve('root', 'child')).to.equal('/root/child');
-      assert.strictEqual(Buffer.from('hello').toString('base64'), 'aGVsbG8=');
-      pm.expect(Buffer.from([65, 66]).toString()).to.equal('AB');
+      assert.strictEqual(moduleBuffer.from('hello').toString('base64'), 'aGVsbG8=');
+      pm.expect(moduleBuffer.from([65, 66]).toString()).to.equal('AB');
       pm.expect(util.format('value=%d', 42)).to.equal('value=42');
-      pm.expect(url.domainToASCII('ma\\u00f1ana.example')).to.equal('xn--maana-pta.example');
+      pm.expect(url.parse('https://api.example.test/v1?limit=1').hostname).to.equal('api.example.test');
+      pm.expect(url.resolve('https://api.example.test/v1/', '../v2')).to.equal('https://api.example.test/v2');
       pm.expect(punycode.toUnicode('xn--maana-pta.example')).to.equal('ma\\u00f1ana.example');
       pm.expect(querystring.stringify({ a: '1', b: '2' })).to.equal('a=1&b=2');
-      pm.expect(new StringDecoder('utf8').write(Buffer.from('ok'))).to.equal('ok');
+      pm.expect(new StringDecoder('utf8').write(moduleBuffer.from('ok'))).to.equal('ok');
 
       const emitter = new EventEmitter();
       let eventValue = '';
@@ -537,8 +708,8 @@ test('supports Postman documented globals and NodeJS module facades without host
       pass.write('a');
       pass.end('b');
       pm.expect(streamed).to.equal('ab');
-      pm.expect(require('path').join.constructor).to.be.undefined;
-      pm.expect(Buffer.from('x').constructor).to.be.undefined;
+      pm.expect(require('path').join.constructor.constructor('return typeof process')()).to.equal('undefined');
+      pm.expect(moduleBuffer.from('x').constructor.constructor('return typeof process')()).to.equal('undefined');
     });
   `);
 
@@ -722,6 +893,44 @@ test('supports Handlebars compile options and block params in pm.visualizer temp
   assert.equal(result.visualizer.html, '<ol><li>0/<first>/true/false</li><li>1/second/false/true</li></ol><section data-value="ready"><b>ready</b></section>');
 });
 
+test('supports Postman-compatible Handlebars visualizer runtime features', () => {
+  const result = runPostmanScript(`
+    Handlebars.registerHelper('label', function (value, options) {
+      return options.hash.prefix + String(value).toUpperCase() + '/' + options.data.root.title;
+    });
+    Handlebars.registerDecorator('stamp', function (program, props, container, options) {
+      return function (context, runtimeOptions) {
+        return program(context, runtimeOptions) + '<i>' + options.args[0] + '</i>';
+      };
+    });
+    Handlebars.registerPartial('shared/row', '<li>{{@index}}/{{label name prefix="../"}}</li>');
+    const spec = Function('return ' + Handlebars.precompile('<p>{{title}}</p>', { noEscape: true }))();
+    const precompiled = Handlebars.template(spec);
+    const isolated = Handlebars.create();
+    isolated.registerHelper('shout', function (value) {
+      return String(value).toUpperCase();
+    });
+    const localHtml = isolated.compile('<small>{{shout local}}</small>')({ local: 'env' });
+    const runtimeTpl = Handlebars.compile('<mark>{{runtime value}}</mark>');
+    pm.visualizer.set(
+      '{{*stamp "done"}}' +
+        precompiled({ title: '<em>T</em>' }) +
+        '{{#*inline "inlineRow"}}<li>inline:{{name}}</li>{{/inline}}' +
+        '<ul>{{#each rows}}{{> (lookup ../partials "row")}}{{> inlineRow}}{{/each}}</ul>' +
+        runtimeTpl({ value: 'ok' }, { helpers: { runtime: function (value) { return '[' + value + ']'; } } }) +
+        localHtml,
+      {
+        title: 'Root',
+        partials: { row: 'shared/row' },
+        rows: [{ name: 'ada' }]
+      }
+    );
+  `);
+
+  assert.equal(result.passed, true);
+  assert.equal(result.visualizer.html, '<p><em>T</em></p><ul><li>0/../ADA/Root</li><li>inline:ada</li></ul><mark>[ok]</mark><small>ENV</small><i>done</i>');
+});
+
 test('requires integrity-checked reviewed pm.visualizer assets', () => {
   const chartSource = 'window.Chart=function Chart(){this.rendered=true;}';
   const styleSource = '.chart{color:#111;}';
@@ -770,7 +979,12 @@ test('tracks Postman package references for reviewed cache workflows', () => {
   const status = sandboxPackageCacheStatus({
     collections: [{
       requests: [{
-        scripts: { preRequest: '', tests: "pm.require('@postmeter/tools'); pm.require('npm:left-pad');" }
+        scripts: {
+          beforeInvoke: "pm.require('jsr:@postmeter/protocol@1.0.0');",
+          mock: "pm.require('npm:@postmeter/mock-tools@1.0.0');",
+          preRequest: '',
+          tests: "pm.require('@postmeter/tools'); pm.require('npm:left-pad');"
+        }
       }],
       folders: []
     }],
@@ -783,6 +997,8 @@ test('tracks Postman package references for reviewed cache workflows', () => {
 
   assert.deepEqual(references.map((item) => item.specifier), ['@postmeter/tools', 'npm:@postmeter/example@1.2.3', 'npm:left-pad']);
   assert.equal(status.find((item) => item.specifier === '@postmeter/tools').status, 'reviewed');
+  assert.equal(status.find((item) => item.specifier === 'jsr:@postmeter/protocol@1.0.0').status, 'missing-review');
+  assert.equal(status.find((item) => item.specifier === 'npm:@postmeter/mock-tools@1.0.0').status, 'missing-review');
   assert.equal(status.find((item) => item.specifier === 'npm:left-pad').status, 'unpinned-or-invalid');
 });
 
@@ -790,7 +1006,7 @@ test('rejects malformed pm.visualizer blocks', () => {
   const result = runPostmanScript("pm.visualizer.set('{{#if ok}}x{{/each}}', { ok: true });");
 
   assert.equal(result.passed, false);
-  assert.match(result.error, /pm\.visualizer template block \{\{#if\}\} closed with \{\{\/each\}\}/);
+  assert.match(result.error, /pm\.visualizer template render failed: if doesn't match each/);
 });
 
 test('blocks unsafe pm.visualizer path parts and context keys', () => {
@@ -801,6 +1017,23 @@ test('blocks unsafe pm.visualizer path parts and context keys', () => {
 
   assert.equal(result.passed, true);
   assert.equal(result.visualizer.html, '<p>ok///</p><ul><li>safe</li></ul>');
+});
+
+test('does not expose host constructors through visualizer helper options', () => {
+  const result = runPostmanScript(`
+    Handlebars.registerHelper('probe', function (options) {
+      return [
+        options.lookupProperty({ constructor: 'bad', safe: 'ok' }, 'constructor') === undefined,
+        options.lookupProperty({ constructor: 'bad', safe: 'ok' }, 'safe') === 'ok',
+        options.hash.constructor === undefined,
+        options.constructor === undefined
+      ].join('/');
+    });
+    pm.visualizer.set('<p>{{probe constructor="bad"}}</p>', {});
+  `);
+
+  assert.equal(result.passed, true);
+  assert.equal(result.visualizer.html, '<p>true/true/true/true</p>');
 });
 
 test('times out runaway scripts', () => {

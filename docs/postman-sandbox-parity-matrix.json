@@ -115,6 +115,36 @@
       "collection": "test/fixtures/postman/differential-http-core.collection.json",
       "notes": "HTTP-only fixture intentionally limited to APIs supported by both PostMeter and Newman."
     },
+    "differential-sandbox-broad": {
+      "type": "postmeter-newman-differential",
+      "collection": "test/fixtures/postman/differential-sandbox-broad.collection.json",
+      "notes": "Broader Newman-compatible differential fixture for packages, cookies, assertions, timers, dynamic variables, request mutation, pm.sendRequest object bodies, and caught failure paths."
+    },
+    "differential-dynamic-host-globals": {
+      "type": "postmeter-newman-differential",
+      "collection": "test/fixtures/postman/differential-dynamic-host-globals.collection.json",
+      "notes": "Newman-compatible dynamic-code and host-like global fixture covering direct eval, indirect eval, Function, top-level Buffer, raw network/browser globals, process, globalThis, WebAssembly, and constructor escape behavior."
+    },
+    "differential-runtime-limits": {
+      "type": "postmeter-newman-differential",
+      "collection": "test/fixtures/postman/differential-runtime-limits.collection.json",
+      "notes": "Newman-compatible runtime-limits fixture covering timer drain, cleared intervals, console method availability, and visualizer output below PostMeter security budgets."
+    },
+    "differential-httponly-cookies": {
+      "type": "postmeter-newman-differential",
+      "collection": "test/fixtures/postman/differential-httponly-cookies.collection.json",
+      "notes": "Newman-compatible HttpOnly cookie fixture covering script readability, jar get/getAll, jar replacement/unset/clear, and pm.sendRequest response-cookie jar updates."
+    },
+    "differential-sendrequest-advanced": {
+      "type": "postmeter-newman-differential",
+      "collection": "test/fixtures/postman/differential-sendrequest-advanced.collection.json",
+      "notes": "Newman-compatible pm.sendRequest advanced auth fixture covering Digest challenge retry, Hawk, and AWS Signature v4 through the brokered sender. OAuth 1.0 is covered by focused sender tests because newman@6.2.2 did not apply OAuth 1.0 auth to pm.sendRequest in the differential probe."
+    },
+    "differential-sendrequest-files": {
+      "type": "postmeter-newman-differential",
+      "collection": "test/fixtures/postman/differential-sendrequest-files.collection.json",
+      "notes": "Newman-compatible imported file binding fixture covering user-bound binary/file-style request bodies and multipart form-data attachment bodies through the same parent sender used by brokered script requests."
+    },
     "protocol-script-hooks": {
       "type": "postmeter-golden",
       "collection": "test/fixtures/postman/protocol-script-hooks.collection.json",
@@ -134,6 +164,56 @@
       "type": "desktop-observation-template",
       "path": "test/fixtures/postman/desktop-observations/observation-template.json",
       "notes": "Template for manually recorded Postman Desktop observations for non-Newman surfaces."
+    },
+    "desktop-runtime-source-audit-v1": {
+      "type": "desktop-runtime-source-audit",
+      "path": "test/fixtures/postman/desktop-observations/postman-desktop-11.71.7-runtime-source-audit.json",
+      "notes": "Automated installed-Postman Desktop runtime/source audit for desktop-required parity rows. Behavior-sensitive rows remain blocked until they have dedicated observations or implementation work."
+    },
+    "desktop-dynamic-host-globals-audit-v1": {
+      "type": "desktop-runtime-source-audit",
+      "path": "test/fixtures/postman/desktop-observations/postman-desktop-11.71.7-dynamic-host-globals-audit.json",
+      "notes": "Installed Postman Desktop 11.71.7 runtime/source plus postman-sandbox@6.2.2 probe for dynamic-code and host-like global behavior."
+    },
+    "desktop-runtime-limits-audit-v1": {
+      "type": "desktop-runtime-source-audit",
+      "path": "test/fixtures/postman/desktop-observations/postman-desktop-11.71.7-runtime-limits-audit.json",
+      "notes": "Installed Postman Desktop 11.71.7 runtime/source plus newman@6.2.2 probes for runtime timeout, timer-drain, console/output, visualizer, package, request, and payload limit behavior."
+    },
+    "desktop-httponly-cookies-audit-v1": {
+      "type": "desktop-runtime-source-audit",
+      "path": "test/fixtures/postman/desktop-observations/postman-desktop-11.71.7-httponly-cookies-audit.json",
+      "notes": "Installed Postman Desktop 11.71.7 runtime/source plus newman@6.2.2 probes for HttpOnly cookie script readability and mutation behavior."
+    },
+    "desktop-sendrequest-advanced-audit-v1": {
+      "type": "desktop-runtime-source-audit",
+      "path": "test/fixtures/postman/desktop-observations/postman-desktop-11.71.7-sendrequest-advanced-audit.json",
+      "notes": "Installed Postman Desktop 11.71.7 runtime/source audit for brokered pm.sendRequest advanced auth, proxy, TLS, and client-certificate policy classification."
+    },
+    "desktop-sendrequest-files-audit-v1": {
+      "type": "desktop-runtime-source-audit",
+      "path": "test/fixtures/postman/desktop-observations/postman-desktop-11.71.7-sendrequest-files-audit.json",
+      "notes": "Installed Postman Desktop 11.71.7 runtime/source audit for brokered pm.sendRequest file, binary, and form-data attachment binding policy."
+    },
+    "postman-desktop-visualizer-handlebars-audit-v1": {
+      "type": "desktop-runtime-source-audit",
+      "path": "test/fixtures/postman/desktop-observations/postman-desktop-11.71.7-visualizer-handlebars-audit.json",
+      "notes": "Installed Postman Desktop 11.71.7 source audit plus PostMeter focused coverage for isolated Handlebars visualizer rendering, precompiled templates, helpers, partials, decorators, SafeString, pm.getData, and reviewed asset policy."
+    },
+    "postman-desktop-builtin-package-audit-v1": {
+      "type": "desktop-runtime-source-audit",
+      "path": "test/fixtures/postman/desktop-observations/postman-desktop-11.71.7-builtin-package-audit.json",
+      "notes": "Installed Postman Desktop 11.71.7 / postman-sandbox@6.2.2 source audit for bundled package versions and Browserify Node shim boundaries."
+    },
+    "postman-desktop-commonjs-package-audit-v1": {
+      "type": "desktop-runtime-source-audit",
+      "path": "test/fixtures/postman/desktop-observations/postman-desktop-11.71.7-commonjs-package-audit.json",
+      "notes": "Installed Postman Desktop 11.71.7 / postman-sandbox@6.2.2 source audit plus PostMeter focused coverage for reviewed multi-file CommonJS package loading semantics."
+    },
+    "postman-desktop-grpc-transport-audit-v1": {
+      "type": "desktop-runtime-source-audit",
+      "path": "test/fixtures/postman/desktop-observations/postman-desktop-11.71.7-grpc-transport-audit.json",
+      "notes": "Installed Postman Desktop 11.71.7 gRPC scripting source audit plus PostMeter focused live grpc-js loopback coverage for unary, client-streaming, server-streaming, bidirectional streaming, metadata, status, trailers, cancellation/error shape, and parent-owned transport policy."
     },
     "real-world-import-corpus": {
       "type": "postmeter-real-world-style-corpus",
@@ -472,18 +552,21 @@
       "claimScope": "default-import",
       "kind": "behavior",
       "target": "HttpOnly script readability and mutation parity",
-      "status": "needs-desktop-observation",
+      "status": "implemented",
       "sourceRefs": [
         "cookies"
       ],
       "fixtureRefs": [
-        "desktop-observation-template"
+        "newman-sandbox-v1",
+        "differential-httponly-cookies",
+        "desktop-httponly-cookies-audit-v1",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
-        "newman": "unknown",
+        "newman": "supported",
         "desktopObservation": "required"
       },
-      "securityDecision": "intentional-strict-review",
+      "securityDecision": "brokered",
       "notes": ""
     },
     {
@@ -1001,7 +1084,8 @@
       ],
       "fixtureRefs": [
         "newman-sandbox-v1",
-        "desktop-observation-template"
+        "desktop-observation-template",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -1552,6 +1636,29 @@
         "desktopObservation": "not-required"
       },
       "securityDecision": "vm-global",
+      "notes": ""
+    },
+    {
+      "id": "global.dynamic-code-and-host-like-globals-audit",
+      "area": "globals",
+      "claimScope": "default-import",
+      "kind": "source-audit",
+      "target": "Current Postman Desktop and Newman behavior for direct eval, indirect eval, top-level Buffer, fetch, XMLHttpRequest, WebSocket, WebAssembly, globalThis, process, and other host-like globals is audited and PostMeter matches it inside the isolated VM without raw host access.",
+      "status": "implemented",
+      "sourceRefs": [
+        "sandboxOverview"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1",
+        "differential-dynamic-host-globals",
+        "desktop-dynamic-host-globals-audit-v1",
+        "desktop-runtime-source-audit-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "dynamic-code-review",
       "notes": ""
     },
     {
@@ -2909,7 +3016,8 @@
       ],
       "fixtureRefs": [
         "protocol-script-hooks",
-        "desktop-observation-template"
+        "desktop-observation-template",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unknown",
@@ -2930,7 +3038,8 @@
       ],
       "fixtureRefs": [
         "protocol-script-hooks",
-        "desktop-observation-template"
+        "postman-desktop-grpc-transport-audit-v1",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -2951,7 +3060,8 @@
       ],
       "fixtureRefs": [
         "protocol-script-hooks",
-        "desktop-observation-template"
+        "postman-desktop-grpc-transport-audit-v1",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -2972,7 +3082,8 @@
       ],
       "fixtureRefs": [
         "protocol-script-hooks",
-        "desktop-observation-template"
+        "postman-desktop-grpc-transport-audit-v1",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -2987,22 +3098,24 @@
       "claimScope": "default-import",
       "kind": "desktop-transport",
       "target": "Native desktop gRPC transport execution for imported gRPC requests",
-      "status": "partial",
+      "status": "implemented",
       "sourceRefs": [
         "grpcScripts",
         "grpcInterface"
       ],
       "fixtureRefs": [
         "protocol-script-hooks",
-        "desktop-observation-template",
-        "real-world-import-corpus"
+        "postman-desktop-grpc-transport-audit-v1",
+        "real-world-import-corpus",
+        "adversarial-sandbox-v1",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
         "desktopObservation": "required"
       },
       "securityDecision": "brokered-protocol",
-      "notes": ""
+      "notes": "Imported gRPC requests now execute through a parent-owned @grpc/grpc-js transport with proto loading, metadata, messages, streaming method types, status/trailer normalization, cancellation/error shape, and isolated script hooks. Scripts can mutate metadata/messages/method path/target URL through Postman-style SDK objects but cannot supply raw sockets or post-hook filesystem/TLS/proto paths."
     },
     {
       "id": "grpc.pm.message",
@@ -3017,7 +3130,8 @@
       ],
       "fixtureRefs": [
         "protocol-script-hooks",
-        "desktop-observation-template"
+        "postman-desktop-grpc-transport-audit-v1",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -3047,6 +3161,59 @@
       "notes": ""
     },
     {
+      "id": "harness.broad-differential-corpus",
+      "area": "verification",
+      "claimScope": "default-import",
+      "kind": "harness",
+      "target": "Broad Newman and Postman Desktop differential evidence is harness-gated before the 1:1 claim is allowed.",
+      "status": "implemented",
+      "sourceRefs": [
+        "sandboxOverview",
+        "vault",
+        "mock",
+        "state",
+        "grpcScripts",
+        "graphqlHttp"
+      ],
+      "fixtureRefs": [
+        "differential-http-core",
+        "differential-sandbox-broad",
+        "real-world-import-corpus",
+        "desktop-runtime-source-audit-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "process",
+      "notes": ""
+    },
+    {
+      "id": "harness.completed-desktop-observations",
+      "area": "verification",
+      "claimScope": "default-import",
+      "kind": "harness",
+      "target": "Every desktop-required implemented row references a completed Postman Desktop observation fixture or automated desktop evidence artifact, not only the observation template.",
+      "status": "implemented",
+      "sourceRefs": [
+        "vault",
+        "mock",
+        "state",
+        "visualizer",
+        "grpcScripts",
+        "graphqlHttp"
+      ],
+      "fixtureRefs": [
+        "desktop-runtime-source-audit-v1"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "process",
+      "notes": ""
+    },
+    {
       "id": "harness.desktop-observation",
       "area": "verification",
       "claimScope": "default-import",
@@ -3064,7 +3231,7 @@
       ],
       "differential": {
         "newman": "unsupported",
-        "desktopObservation": "required"
+        "desktopObservation": "not-required"
       },
       "securityDecision": "process",
       "notes": ""
@@ -3126,7 +3293,8 @@
       ],
       "fixtureRefs": [
         "real-world-import-corpus",
-        "desktop-observation-template"
+        "desktop-observation-template",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "not-applicable",
@@ -3340,7 +3508,8 @@
       ],
       "fixtureRefs": [
         "protocol-script-hooks",
-        "desktop-observation-template"
+        "desktop-observation-template",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -3361,7 +3530,8 @@
       ],
       "fixtureRefs": [
         "protocol-script-hooks",
-        "desktop-observation-template"
+        "desktop-observation-template",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -3382,7 +3552,8 @@
       ],
       "fixtureRefs": [
         "protocol-script-hooks",
-        "desktop-observation-template"
+        "desktop-observation-template",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -3403,7 +3574,8 @@
       ],
       "fixtureRefs": [
         "protocol-script-hooks",
-        "desktop-observation-template"
+        "desktop-observation-template",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -3550,7 +3722,8 @@
       ],
       "fixtureRefs": [
         "local-mock-scripts",
-        "desktop-observation-template"
+        "desktop-observation-template",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -3571,7 +3744,8 @@
       ],
       "fixtureRefs": [
         "local-mock-scripts",
-        "desktop-observation-template"
+        "desktop-observation-template",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -3592,7 +3766,8 @@
       ],
       "fixtureRefs": [
         "local-mock-scripts",
-        "desktop-observation-template"
+        "desktop-observation-template",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -3842,7 +4017,27 @@
         "newman": "supported",
         "desktopObservation": "not-required"
       },
-      "securityDecision": "facade",
+      "securityDecision": "version-pinned-vm-bundle",
+      "notes": ""
+    },
+    {
+      "id": "require.builtin.backbone",
+      "area": "packages",
+      "claimScope": "default-import",
+      "kind": "module",
+      "target": "require('backbone')",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "version-pinned-vm-bundle",
       "notes": ""
     },
     {
@@ -3862,7 +4057,7 @@
         "newman": "supported",
         "desktopObservation": "not-required"
       },
-      "securityDecision": "facade",
+      "securityDecision": "version-pinned-vm-bundle",
       "notes": ""
     },
     {
@@ -3882,7 +4077,27 @@
         "newman": "supported",
         "desktopObservation": "not-required"
       },
-      "securityDecision": "facade",
+      "securityDecision": "version-pinned-vm-bundle",
+      "notes": ""
+    },
+    {
+      "id": "require.builtin.crypto-js",
+      "area": "packages",
+      "claimScope": "default-import",
+      "kind": "module",
+      "target": "require('crypto-js')",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "version-pinned-vm-bundle",
       "notes": ""
     },
     {
@@ -3902,7 +4117,49 @@
         "newman": "supported",
         "desktopObservation": "not-required"
       },
-      "securityDecision": "facade",
+      "securityDecision": "version-pinned-vm-bundle",
+      "notes": ""
+    },
+    {
+      "id": "require.builtin.full-library-parity",
+      "area": "packages",
+      "claimScope": "default-import",
+      "kind": "module",
+      "target": "Version-pinned full behavior for Postman bundled libraries and Postman-listed NodeJS module facades, replacing hand-rolled subset facades or proving subset differences are outside the current Postman surface.",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1",
+        "postman-desktop-builtin-package-audit-v1",
+        "desktop-runtime-source-audit-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "version-pinned-vm-bundle",
+      "notes": "PostMeter loads the generated Postman postman-sandbox@6.2.2 browser bootcode bundle inside the script VM with Browserify entry modules disabled, then exposes only the normal allowlisted require specifiers. Ajv, Chai, Cheerio, CryptoJS, csv-parse/lib/sync, Lodash, Moment, Postman Collection SDK, UUID, XML2JS, and legacy JSON/TV4/Backbone package surfaces come from that pinned bundle. Timers and stream remain script-safe PostMeter facades with brokered timer behavior because the raw Browserify timer/stream shims assume window/ambient timers; this is an explicit subset boundary, not host Node access."
+    },
+    {
+      "id": "require.builtin.json",
+      "area": "packages",
+      "claimScope": "default-import",
+      "kind": "module",
+      "target": "require('json')",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "version-pinned-vm-bundle",
       "notes": ""
     },
     {
@@ -3922,7 +4179,7 @@
         "newman": "supported",
         "desktopObservation": "not-required"
       },
-      "securityDecision": "facade",
+      "securityDecision": "version-pinned-vm-bundle",
       "notes": ""
     },
     {
@@ -3942,7 +4199,7 @@
         "newman": "supported",
         "desktopObservation": "not-required"
       },
-      "securityDecision": "facade",
+      "securityDecision": "version-pinned-vm-bundle",
       "notes": ""
     },
     {
@@ -3962,7 +4219,27 @@
         "newman": "supported",
         "desktopObservation": "not-required"
       },
-      "securityDecision": "facade",
+      "securityDecision": "version-pinned-vm-bundle",
+      "notes": ""
+    },
+    {
+      "id": "require.builtin.tv4",
+      "area": "packages",
+      "claimScope": "default-import",
+      "kind": "module",
+      "target": "require('tv4')",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "not-required"
+      },
+      "securityDecision": "version-pinned-vm-bundle",
       "notes": ""
     },
     {
@@ -3982,7 +4259,7 @@
         "newman": "supported",
         "desktopObservation": "not-required"
       },
-      "securityDecision": "facade",
+      "securityDecision": "version-pinned-vm-bundle",
       "notes": ""
     },
     {
@@ -4002,7 +4279,7 @@
         "newman": "supported",
         "desktopObservation": "not-required"
       },
-      "securityDecision": "facade",
+      "securityDecision": "version-pinned-vm-bundle",
       "notes": ""
     },
     {
@@ -4042,7 +4319,7 @@
         "newman": "supported",
         "desktopObservation": "not-required"
       },
-      "securityDecision": "facade",
+      "securityDecision": "version-pinned-vm-bundle",
       "notes": ""
     },
     {
@@ -4062,7 +4339,7 @@
         "newman": "supported",
         "desktopObservation": "not-required"
       },
-      "securityDecision": "facade",
+      "securityDecision": "version-pinned-vm-bundle",
       "notes": ""
     },
     {
@@ -4082,7 +4359,7 @@
         "newman": "supported",
         "desktopObservation": "not-required"
       },
-      "securityDecision": "facade",
+      "securityDecision": "version-pinned-vm-bundle",
       "notes": ""
     },
     {
@@ -4102,7 +4379,7 @@
         "newman": "supported",
         "desktopObservation": "not-required"
       },
-      "securityDecision": "facade",
+      "securityDecision": "version-pinned-vm-bundle",
       "notes": ""
     },
     {
@@ -4122,7 +4399,7 @@
         "newman": "supported",
         "desktopObservation": "not-required"
       },
-      "securityDecision": "facade",
+      "securityDecision": "version-pinned-vm-bundle",
       "notes": ""
     },
     {
@@ -4142,7 +4419,7 @@
         "newman": "supported",
         "desktopObservation": "not-required"
       },
-      "securityDecision": "facade",
+      "securityDecision": "version-pinned-vm-bundle",
       "notes": ""
     },
     {
@@ -4162,7 +4439,7 @@
         "newman": "supported",
         "desktopObservation": "not-required"
       },
-      "securityDecision": "facade",
+      "securityDecision": "brokered-facade",
       "notes": ""
     },
     {
@@ -4182,7 +4459,7 @@
         "newman": "supported",
         "desktopObservation": "not-required"
       },
-      "securityDecision": "facade",
+      "securityDecision": "version-pinned-vm-bundle",
       "notes": ""
     },
     {
@@ -4202,7 +4479,7 @@
         "newman": "supported",
         "desktopObservation": "not-required"
       },
-      "securityDecision": "facade",
+      "securityDecision": "brokered-facade",
       "notes": ""
     },
     {
@@ -4222,7 +4499,7 @@
         "newman": "supported",
         "desktopObservation": "not-required"
       },
-      "securityDecision": "facade",
+      "securityDecision": "version-pinned-vm-bundle",
       "notes": ""
     },
     {
@@ -4242,8 +4519,32 @@
         "newman": "supported",
         "desktopObservation": "not-required"
       },
-      "securityDecision": "facade",
+      "securityDecision": "version-pinned-vm-bundle",
       "notes": ""
+    },
+    {
+      "id": "require.pm.commonjs-bundle-semantics",
+      "area": "packages",
+      "claimScope": "default-import",
+      "kind": "module-loader",
+      "target": "Reviewed team/external package cache supports the CommonJS/package semantics used by imported Postman packages, including multi-file bundles, package metadata, dependency resolution, cache behavior, circular dependencies, and default-export interop.",
+      "status": "implemented",
+      "sourceRefs": [
+        "require"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1",
+        "real-world-import-corpus",
+        "postman-desktop-commonjs-package-audit-v1",
+        "adversarial-sandbox-v1",
+        "desktop-runtime-source-audit-v1"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "reviewed-cache",
+      "notes": "Reviewed package cache entries now support file maps, package metadata, entrypoint resolution, JSON modules, relative/directory/extension resolution, declared dependency aliases and subpaths, per-module cache behavior, circular dependencies, default export object patterns, and deterministic loader errors while preserving exact integrity checks, caps, and host-module denials."
     },
     {
       "id": "require.pm.jsr-package",
@@ -4257,7 +4558,8 @@
       ],
       "fixtureRefs": [
         "newman-sandbox-v1",
-        "desktop-observation-template"
+        "desktop-observation-template",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -4278,7 +4580,8 @@
       ],
       "fixtureRefs": [
         "newman-sandbox-v1",
-        "desktop-observation-template"
+        "desktop-observation-template",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -4293,21 +4596,22 @@
       "claimScope": "default-import",
       "kind": "desktop-workflow",
       "target": "Postman Package Library and external package fetch/review workflow can satisfy missing imported package references before first run.",
-      "status": "partial",
+      "status": "implemented",
       "sourceRefs": [
         "require"
       ],
       "fixtureRefs": [
         "newman-sandbox-v1",
         "real-world-import-corpus",
-        "desktop-observation-template"
+        "desktop-observation-template",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
         "desktopObservation": "required"
       },
       "securityDecision": "reviewed-cache",
-      "notes": ""
+      "notes": "Parent-side package fetch workflow resolves exact npm and JSR package references plus reviewed HTTPS team-package source URLs into the same SHA-256 reviewed cache used by the script runtime. Scripts still cannot fetch, install, update, or resolve packages at runtime."
     },
     {
       "id": "require.pm.team-package",
@@ -4321,7 +4625,8 @@
       ],
       "fixtureRefs": [
         "newman-sandbox-v1",
-        "desktop-observation-template"
+        "desktop-observation-template",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -4577,6 +4882,31 @@
       "notes": ""
     },
     {
+      "id": "runtime.resource-limit-parity",
+      "area": "runtime",
+      "claimScope": "default-import",
+      "kind": "limits",
+      "target": "Postman/Newman script timeout, async-drain, output, package, visualizer, request, and payload limits are observed and PostMeter limits are matched or covered by the documented production resource policy.",
+      "status": "implemented",
+      "sourceRefs": [
+        "sandboxOverview",
+        "scriptRunOrder"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1",
+        "differential-runtime-limits",
+        "desktop-runtime-limits-audit-v1",
+        "adversarial-sandbox-v1",
+        "desktop-runtime-source-audit-v1"
+      ],
+      "differential": {
+        "newman": "supported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "bounded-resources",
+      "notes": "PostMeter matches the audited 180s Postman Runtime global timeout as the default per-script/request budget and fixture-covers async drain, timer, console, and visualizer behavior below policy ceilings. Explicit worker, broker, response, result, console, visualizer, package, mock-state, and workspace caps are retained as production resource policy because Postman/Newman expose no stable equivalent caps and rely on host process limits. These ceilings are documented security boundaries, not unsupported Postman script APIs, and oversized host-exhaustion cases stay covered by adversarial tests."
+    },
+    {
       "id": "security.adversarial.broker-mutation",
       "area": "security-adversarial",
       "claimScope": "default-import",
@@ -4782,21 +5112,24 @@
       "claimScope": "default-import",
       "kind": "transport-policy",
       "target": "Advanced Postman auth helpers, proxy, and client-certificate parity for brokered script requests",
-      "status": "partial",
+      "status": "implemented",
       "sourceRefs": [
         "sendRequest",
         "request"
       ],
       "fixtureRefs": [
+        "differential-sendrequest-advanced",
         "real-world-import-corpus",
-        "desktop-observation-template"
+        "desktop-sendrequest-advanced-audit-v1",
+        "adversarial-sandbox-v1",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "supported",
         "desktopObservation": "required"
       },
       "securityDecision": "brokered",
-      "notes": ""
+      "notes": "Digest challenge retry, Hawk, AWS Signature v4, OAuth 1.0, HTTP(S) proxy routing, strict TLS validation, and configured client-certificate bindings are brokered in the parent sender. NTLM and Akamai EdgeGrid are explicitly classified and fail closed until exact stateful signing parity is implemented."
     },
     {
       "id": "sendRequest.callback",
@@ -4846,21 +5179,24 @@
       "claimScope": "default-import",
       "kind": "transport-policy",
       "target": "User-granted imported file and binary attachment bindings for brokered script requests",
-      "status": "partial",
+      "status": "implemented",
       "sourceRefs": [
         "sendRequest",
         "request"
       ],
       "fixtureRefs": [
+        "differential-sendrequest-files",
         "real-world-import-corpus",
-        "desktop-observation-template"
+        "desktop-sendrequest-files-audit-v1",
+        "adversarial-sandbox-v1",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "supported",
         "desktopObservation": "required"
       },
       "securityDecision": "user-granted-file-binding",
-      "notes": ""
+      "notes": "Imported and script-created file, binary, and form-data src references resolve only through workspace-reviewed file bindings. The worker never receives local file contents or arbitrary filesystem privileges; the parent sender reads approved regular files under the documented request body size cap."
     },
     {
       "id": "sendRequest.object-config",
@@ -4955,7 +5291,8 @@
       ],
       "fixtureRefs": [
         "local-mock-scripts",
-        "desktop-observation-template"
+        "desktop-observation-template",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -4976,7 +5313,8 @@
       ],
       "fixtureRefs": [
         "local-mock-scripts",
-        "desktop-observation-template"
+        "desktop-observation-template",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -4997,7 +5335,8 @@
       ],
       "fixtureRefs": [
         "local-mock-scripts",
-        "desktop-observation-template"
+        "desktop-observation-template",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -5018,7 +5357,8 @@
       ],
       "fixtureRefs": [
         "local-mock-scripts",
-        "desktop-observation-template"
+        "desktop-observation-template",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -5039,7 +5379,8 @@
       ],
       "fixtureRefs": [
         "local-mock-scripts",
-        "desktop-observation-template"
+        "desktop-observation-template",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -5060,7 +5401,8 @@
       ],
       "fixtureRefs": [
         "local-mock-scripts",
-        "desktop-observation-template"
+        "desktop-observation-template",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -5081,7 +5423,8 @@
       ],
       "fixtureRefs": [
         "local-mock-scripts",
-        "desktop-observation-template"
+        "desktop-observation-template",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -5102,7 +5445,8 @@
       ],
       "fixtureRefs": [
         "local-mock-scripts",
-        "desktop-observation-template"
+        "desktop-observation-template",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -5123,7 +5467,8 @@
       ],
       "fixtureRefs": [
         "local-mock-scripts",
-        "desktop-observation-template"
+        "desktop-observation-template",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -5144,7 +5489,8 @@
       ],
       "fixtureRefs": [
         "local-mock-scripts",
-        "desktop-observation-template"
+        "desktop-observation-template",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -5165,7 +5511,8 @@
       ],
       "fixtureRefs": [
         "local-mock-scripts",
-        "desktop-observation-template"
+        "desktop-observation-template",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -5967,7 +6314,8 @@
       ],
       "fixtureRefs": [
         "newman-sandbox-v1",
-        "desktop-observation-template"
+        "desktop-observation-template",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -5988,7 +6336,8 @@
       ],
       "fixtureRefs": [
         "desktop-observation-template",
-        "real-world-import-corpus"
+        "real-world-import-corpus",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -6009,7 +6358,8 @@
       ],
       "fixtureRefs": [
         "newman-sandbox-v1",
-        "desktop-observation-template"
+        "desktop-observation-template",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -6030,7 +6380,8 @@
       ],
       "fixtureRefs": [
         "newman-sandbox-v1",
-        "desktop-observation-template"
+        "desktop-observation-template",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -6051,7 +6402,8 @@
       ],
       "fixtureRefs": [
         "newman-sandbox-v1",
-        "desktop-observation-template"
+        "postman-desktop-visualizer-handlebars-audit-v1",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -6072,7 +6424,9 @@
       ],
       "fixtureRefs": [
         "newman-sandbox-v1",
-        "desktop-observation-template"
+        "postman-desktop-visualizer-handlebars-audit-v1",
+        "adversarial-sandbox-v1",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -6080,6 +6434,29 @@
       },
       "securityDecision": "reviewed-cache",
       "notes": ""
+    },
+    {
+      "id": "visualizer.handlebars-full-parity",
+      "area": "visualizer",
+      "claimScope": "default-import",
+      "kind": "template-runtime",
+      "target": "Full Postman visualizer Handlebars runtime parity, including precompiled templates, helpers, decorators, whitespace behavior, options, partials, SafeString, and inline-render timing.",
+      "status": "implemented",
+      "sourceRefs": [
+        "visualizer"
+      ],
+      "fixtureRefs": [
+        "newman-sandbox-v1",
+        "postman-desktop-visualizer-handlebars-audit-v1",
+        "adversarial-sandbox-v1",
+        "desktop-runtime-source-audit-v1"
+      ],
+      "differential": {
+        "newman": "unsupported",
+        "desktopObservation": "required"
+      },
+      "securityDecision": "isolated-renderer",
+      "notes": "Implemented with a vendored, integrity-checked handlebars@4.7.9 browser runtime loaded in a separate vm context for isolated visualizer compilation. Postman Desktop 11.71.7 packages handlebars@4.7.8; PostMeter stays on the patched 4.7-compatible line because current npm advisories cover <=4.7.8."
     },
     {
       "id": "visualizer.pm.getData",
@@ -6093,7 +6470,8 @@
       ],
       "fixtureRefs": [
         "newman-sandbox-v1",
-        "desktop-observation-template"
+        "postman-desktop-visualizer-handlebars-audit-v1",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -6114,7 +6492,8 @@
       ],
       "fixtureRefs": [
         "newman-sandbox-v1",
-        "desktop-observation-template"
+        "postman-desktop-visualizer-handlebars-audit-v1",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unsupported",
@@ -6135,7 +6514,8 @@
       ],
       "fixtureRefs": [
         "websocket-script-audit",
-        "desktop-observation-template"
+        "desktop-observation-template",
+        "desktop-runtime-source-audit-v1"
       ],
       "differential": {
         "newman": "unknown",

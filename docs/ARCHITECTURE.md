@@ -72,6 +72,7 @@ Core modules must not depend on Electron or renderer globals.
 - `requestScriptRunner.js` adapts the shared scripted-request lifecycle for single-request execution and returns the response plus runtime variable mutations.
 - `collectionRunner.js` sequences collection requests and layers assertions, runner progress, cookies, stop-on-failure, and runner reports on top of the shared scripted-request lifecycle.
 - `httpClient.js` prepares and sends HTTP requests.
+- `grpcClient.js` owns the parent-side live gRPC transport for imported gRPC requests. It loads trusted proto definitions, builds parent-owned gRPC clients, normalizes metadata/messages/status/trailers/errors, and keeps proto/TLS/client-certificate filesystem access outside the script worker.
 - `docs/SANDBOX_CONTRACT.md` is the source of truth for script sandbox compatibility, security boundaries, broker behavior, side-effect transactions, and load-test scripting scope.
 - `authModel.js`, `cookieModel.js`, and `loadPolicyModel.js` own shared runtime-neutral model defaults and normalization used by both core and renderer modules.
 - `payloadSchemas.js` owns shared field schemas, enum sets, and basic string-length limits consumed by IPC validation and shared normalization helpers.
@@ -79,7 +80,7 @@ Core modules must not depend on Electron or renderer globals.
 - `openApiFormats.js`, `harFormats.js`, `curlFormats.js`, and `jmeterFormats.js` each own one import/export family instead of sharing a single god module.
 - `collectionFormatUtils.js` owns the small set of cross-format helpers such as URL parsing, JSON/XML escaping, shell splitting/quoting, and request flattening.
 - `collectionImportRegistry.js` owns collection import detection/dispatch and format-specific export dispatch without changing the `WorkspaceStore` API.
-- `scriptRuntime.js`, `scriptSandbox.js`, `scriptWorker.js`, and `osSandbox.js` implement the constrained Postman-style script environment, worker transport, broker boundary, and OS sandbox launcher layer.
+- `scriptRuntime.js`, `sandboxPackageCache.js`, `postmanBuiltinPackages.js`, `postmanSandboxBootcodeBundle.js`, `visualizerHandlebarsBundle.js`, `scriptSandbox.js`, `scriptWorker.js`, and `osSandbox.js` implement the constrained Postman-style script environment, reviewed package-cache policy, version-pinned Postman package bundle, isolated Handlebars visualizer runtime, worker transport, broker boundary, and OS sandbox launcher layer.
 - `models.js`, `payloadSchemas.js`, and `ipcValidation.js` define normalized payload shape and validation contracts.
 - `workspacePersistence.js` owns workspace-path defaults, workspace normalization, structured-content parsing, and JSON persistence helpers.
 - `importedCollectionIds.js` owns imported collection/folder/request/example/certificate ID regeneration.

@@ -1,0 +1,40 @@
+{
+  "type": "desktop-runtime-source-audit",
+  "postman": {
+    "version": "11.71.7",
+    "runtime": "7.50.0",
+    "collectionSdk": "5.2.0"
+  },
+  "newman": {
+    "version": "6.2.2",
+    "runtime": "7.39.1"
+  },
+  "rowIds": [
+    "sendRequest.file-binary-bindings"
+  ],
+  "scope": [
+    "pm.sendRequest file body src references",
+    "pm.sendRequest binary body src references",
+    "pm.sendRequest multipart form-data file parts",
+    "workspace-reviewed local file binding policy",
+    "unbound path denial"
+  ],
+  "observations": [
+    "PostMeter preserves imported file, binary, and form-data src references and exposes them through the script-visible Postman request body facade.",
+    "Scripts can use only source references that have a workspace-reviewed local file binding. Script-created arbitrary paths fail closed before the parent sender reads any file.",
+    "The script worker never receives local file contents, host file handles, filesystem APIs, Node fs, or arbitrary local path privileges.",
+    "The parent sender reads approved regular files only at send time and applies the documented request body size cap; oversized attachments remain governed by the audited production resource policy.",
+    "The Newman differential fixture compares brokered file, binary, and multipart form-data attachment behavior against newman@6.2.2."
+  ],
+  "evidence": {
+    "fixtures": [
+      "differential-sendrequest-files.collection.json"
+    ],
+    "tests": [
+      "test/electron/httpClient.test.js",
+      "test/electron/scriptSandbox.test.js",
+      "test/electron/scriptRuntime.test.js",
+      "test/electron/postmanParityHarness.test.js"
+    ]
+  }
+}

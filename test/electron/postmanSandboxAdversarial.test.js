@@ -45,7 +45,7 @@ test('blocks prototype and constructor escapes from script-visible objects', asy
   assert.equal(execution.result.passed, true);
 });
 
-test('keeps dynamic code generation inside the VM and blocks direct eval or WebAssembly', () => {
+test('keeps dynamic code generation inside the VM while blocking host escapes and WebAssembly', () => {
   const result = runPostmanScript(`
     pm.test('dynamic code remains sandboxed', function () {
       let processEscaped = false;
@@ -53,11 +53,23 @@ test('keeps dynamic code generation inside the VM and blocks direct eval or WebA
         Function('return process.cwd()')();
         processEscaped = true;
       } catch (_) {}
-      let evalBlocked = false;
+      let evalEscaped = false;
+      let evalValue = 0;
       try {
-        eval('1 + 1');
+        evalValue = eval('1 + 1');
+        eval('process.cwd()');
+        evalEscaped = true;
+      } catch (_) {}
+      let indirectEvalEscaped = false;
+      try {
+        (0, eval)('process.cwd()');
+        indirectEvalEscaped = true;
+      } catch (_) {}
+      let constructorEscaped = false;
+      try {
+        ({}).constructor.constructor('return process.cwd()')();
+        constructorEscaped = true;
       } catch (_) {
-        evalBlocked = true;
       }
       let wasmBlocked = false;
       try {
@@ -66,8 +78,11 @@ test('keeps dynamic code generation inside the VM and blocks direct eval or WebA
         wasmBlocked = true;
       }
       pm.expect(Function('return 2 + 2')()).to.equal(4);
+      pm.expect(evalValue).to.equal(2);
       pm.expect(processEscaped).to.equal(false);
-      pm.expect(evalBlocked).to.equal(true);
+      pm.expect(evalEscaped).to.equal(false);
+      pm.expect(indirectEvalEscaped).to.equal(false);
+      pm.expect(constructorEscaped).to.equal(false);
       pm.expect(wasmBlocked).to.equal(true);
     });
   `);
@@ -87,12 +102,21 @@ test('rejects package-loader abuse without loading host Node modules or unreview
       integrity: scriptPackageIntegrity('module.exports = {};')
     }]
   });
+  const dependencyAliasOverflow = runPostmanScript("pm.test('noop', function () {});", {
+    sandboxPackages: [{
+      specifier: '@postmeter/too-many-aliases',
+      source: 'module.exports = {};',
+      integrity: scriptPackageIntegrity('module.exports = {};'),
+      dependencyAliases: Object.fromEntries(Array.from({ length: 33 }, (_value, index) => [`alias${index}`, 'lodash']))
+    }]
+  });
 
   assert.match(hostFs.error, /only supports bundled sandbox packages/);
   assert.match(hostChildProcess.error, /is not available/);
   assert.match(pathTraversal.error, /only supports bundled sandbox packages/);
   assert.match(unreviewedPackage.error, /not installed in the reviewed package cache/);
   assert.match(duplicateBuiltIn.error, /specifier "lodash" is invalid/);
+  assert.match(dependencyAliasOverflow.error, /dependency aliases cannot exceed/);
 });
 
 test('normalizes broker payloads without prototype pollution or parent mutation', async () => {
