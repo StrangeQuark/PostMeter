@@ -7,6 +7,7 @@ const path = require('node:path');
 const test = require('node:test');
 const { inferArtifactType, inferPlatform } = require('../../scripts/writeReleaseManifest');
 const {
+  ensureExecutableFile,
   validateLinuxAppImageProtocol,
   validateLinuxDebProtocol,
   macInfoPlistPathFromListing,
@@ -119,6 +120,20 @@ test('validates packaged Linux AppImage protocol registration when an artifact e
   }
 
   await assert.doesNotReject(() => validateLinuxAppImageProtocol(appImagePath));
+});
+
+test('release validation restores execute bits before AppImage inspection', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-appimage-mode-'));
+  const filePath = path.join(tempDir, 'PostMeter.AppImage');
+  try {
+    await fs.writeFile(filePath, '');
+    await fs.chmod(filePath, 0o644);
+    await ensureExecutableFile(filePath);
+    const stat = await fs.stat(filePath);
+    assert.notEqual(stat.mode & 0o111, 0);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
 });
 
 test('validates packaged macOS zip protocol registration when an app bundle exists', async (t) => {
