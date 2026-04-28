@@ -6,7 +6,6 @@ const RELEASE_GATE_CLAIM = 'release-gate';
 const STATUS_DESCRIPTIONS = Object.freeze({
   implemented: 'Implemented and covered by automated validation or source-owned contract checks.',
   'blocked-native-backend': 'Blocked until a native OS sandbox backend and packaged validation exist for this platform.',
-  'deferred-decision': 'Security/product decision is intentionally deferred and blocks the stronger public claim.',
   'out-of-scope': 'Explicitly outside the current claim surface.',
   'validation-hook': 'Validation plumbing exists and must stay release-gated.'
 });
@@ -83,19 +82,21 @@ function buildOsSandboxPlatformMatrix() {
     }),
     row('linux.seccomp-dangerous-syscall-policy', 'linux', 'syscall-policy', 'Linux bubblewrap launches install a seccomp cBPF deny policy for high-risk kernel APIs such as bpf, ptrace, keyring, mount, process_vm_*, perf_event_open, io_uring, and nested namespace syscalls.', 'implemented', {
       claimBlocking: true,
-      securityDecision: 'Keep the dangerous-syscall deny policy in the Linux release gate while the stronger deny-by-default decision is tracked separately.',
+      securityDecision: 'Keep the dangerous-syscall deny policy in the Linux release gate as the accepted current Linux syscall-policy standard.',
       sourceRefs: ['sandboxContract', 'seccompPolicy', 'runtimeValidation'],
       verificationRefs: [
         'npm run sandbox:validate',
         'test/electron/scriptSandbox.test.js'
       ]
     }),
-    row('linux.seccomp-deny-default-allowlist-decision', 'linux', 'syscall-policy', 'Decide whether platform-equivalent "full syscall-policy sandbox" requires a maintained deny-by-default seccomp-BPF allowlist instead of the current dangerous-syscall deny policy.', 'deferred-decision', {
-      claimBlocking: true,
-      securityDecision: 'Do not claim platform-equivalent full OS sandbox coverage until this Linux syscall-policy standard is decided and implemented if required.',
+    row('linux.seccomp-deny-default-allowlist-decision', 'linux', 'syscall-policy', 'Maintainer decision: platform-equivalent current Linux coverage does not require a maintained deny-by-default seccomp-BPF allowlist beyond the current bubblewrap namespace isolation plus dangerous-syscall deny policy.', 'implemented', {
+      claimBlocking: false,
+      securityDecision: 'Accept the current Linux bubblewrap plus dangerous-syscall seccomp policy for the current Linux public claim; track a deny-by-default allowlist only as optional future hardening.',
       sourceRefs: ['sandboxContract', 'nextSteps', 'seccompPolicy'],
       verificationRefs: [
-        'NEXT_STEPS.MD Questions For Maintainer After Implementation'
+        'NEXT_STEPS.MD Questions For Maintainer After Implementation',
+        'npm run sandbox:validate',
+        'test/electron/scriptSandbox.test.js'
       ]
     }),
     row('linux.packaged-os-sandbox-validation', 'linux', 'packaged-validation', 'Packaged Linux artifacts must prove the OS sandbox backend, Node permission flags, ASAR/path behavior, and sandbox worker launch still work after packaging.', 'implemented', {

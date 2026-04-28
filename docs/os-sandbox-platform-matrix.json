@@ -18,7 +18,6 @@
   "statuses": {
     "implemented": "Implemented and covered by automated validation or source-owned contract checks.",
     "blocked-native-backend": "Blocked until a native OS sandbox backend and packaged validation exist for this platform.",
-    "deferred-decision": "Security/product decision is intentionally deferred and blocks the stronger public claim.",
     "out-of-scope": "Explicitly outside the current claim surface.",
     "validation-hook": "Validation plumbing exists and must stay release-gated."
   },
@@ -108,7 +107,7 @@
       "status": "implemented",
       "claimSurface": "platform-os-sandbox",
       "claimBlocking": true,
-      "securityDecision": "Keep the dangerous-syscall deny policy in the Linux release gate while the stronger deny-by-default decision is tracked separately.",
+      "securityDecision": "Keep the dangerous-syscall deny policy in the Linux release gate as the accepted current Linux syscall-policy standard.",
       "sourceRefs": [
         "sandboxContract",
         "seccompPolicy",
@@ -124,18 +123,20 @@
       "id": "linux.seccomp-deny-default-allowlist-decision",
       "platform": "linux",
       "area": "syscall-policy",
-      "target": "Decide whether platform-equivalent \"full syscall-policy sandbox\" requires a maintained deny-by-default seccomp-BPF allowlist instead of the current dangerous-syscall deny policy.",
-      "status": "deferred-decision",
+      "target": "Maintainer decision: platform-equivalent current Linux coverage does not require a maintained deny-by-default seccomp-BPF allowlist beyond the current bubblewrap namespace isolation plus dangerous-syscall deny policy.",
+      "status": "implemented",
       "claimSurface": "platform-os-sandbox",
-      "claimBlocking": true,
-      "securityDecision": "Do not claim platform-equivalent full OS sandbox coverage until this Linux syscall-policy standard is decided and implemented if required.",
+      "claimBlocking": false,
+      "securityDecision": "Accept the current Linux bubblewrap plus dangerous-syscall seccomp policy for the current Linux public claim; track a deny-by-default allowlist only as optional future hardening.",
       "sourceRefs": [
         "sandboxContract",
         "nextSteps",
         "seccompPolicy"
       ],
       "verificationRefs": [
-        "NEXT_STEPS.MD Questions For Maintainer After Implementation"
+        "NEXT_STEPS.MD Questions For Maintainer After Implementation",
+        "npm run sandbox:validate",
+        "test/electron/scriptSandbox.test.js"
       ],
       "notes": ""
     },
