@@ -79,6 +79,7 @@ async function validateReleaseManifest({ releaseDir, manifestFile, requiredTypes
 async function validateLinuxAppImageProtocol(appImagePath) {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-appimage-protocol-'));
   try {
+    await ensureExecutableFile(appImagePath);
     await runCommand(appImagePath, ['--appimage-extract', '*.desktop'], { cwd: tempDir });
     const desktopRoot = path.join(tempDir, 'squashfs-root');
     const desktopFiles = await findFiles(desktopRoot, (filePath) => filePath.endsWith('.desktop'));
@@ -91,6 +92,14 @@ async function validateLinuxAppImageProtocol(appImagePath) {
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
   }
+}
+
+async function ensureExecutableFile(filePath) {
+  const stat = await fs.stat(filePath);
+  if ((stat.mode & 0o111) !== 0) {
+    return;
+  }
+  await fs.chmod(filePath, stat.mode | 0o111);
 }
 
 async function validateLinuxDebProtocol(debPath) {
@@ -215,6 +224,7 @@ if (require.main === module) {
 
 module.exports = {
   validateLinuxAppImageProtocol,
+  ensureExecutableFile,
   validatePackageMetadata,
   validateLinuxDebProtocol,
   validateMacZipProtocol,
