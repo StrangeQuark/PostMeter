@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { withCiNoSandboxArgs } = require('./electronCiSandboxWaiver');
 
 const appPath = path.resolve(process.argv[2] || defaultPackagedAppPath());
 if (!fs.existsSync(appPath)) {
@@ -17,7 +18,7 @@ const env = {
 delete env.ELECTRON_RUN_AS_NODE;
 delete env.NODE_OPTIONS;
 
-const result = spawnSync(appPath, [], {
+const result = spawnSync(appPath, withCiNoSandboxArgs([], env), {
   env,
   stdio: 'inherit'
 });

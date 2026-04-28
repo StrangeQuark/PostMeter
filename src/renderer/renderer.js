@@ -234,7 +234,12 @@ initializeRenderer({
   getStoredThemePreference: () => localStorage.getItem('postmeter.theme') || 'system',
   onReady: async ({ registerCleanup }) => {
     bindUi();
-    registerCleanup(() => { flushWorkspaceSave({ sync: true }); });
+    registerCleanup(() => {
+      if (window.__postmeterSkipWorkspaceShutdownSave === true) {
+        return;
+      }
+      flushWorkspaceSave({ sync: true });
+    });
     registerCleanup(() => { flushSessionSave({ sync: true }); });
     registerCleanup(createVariableAutocomplete({
       doc: document,

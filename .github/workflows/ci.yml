@@ -7,6 +7,8 @@ on:
 jobs:
   node:
     runs-on: ubuntu-latest
+    env:
+      POSTMETER_CI_ELECTRON_NO_SANDBOX: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v4

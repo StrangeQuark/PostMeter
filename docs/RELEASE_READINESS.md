@@ -37,6 +37,8 @@ Current required native evidence:
 
 Run the `Native Release Validation` workflow manually from GitHub Actions for no-publish evidence. It builds Linux, Windows, and macOS artifacts on native runners, runs the packaged startup/sandbox/protocol checks, uploads the artifacts, then validates combined checksums and `release-manifest.json` without creating a GitHub Release.
 
+All `electron-builder` package scripts used by CI pass `--publish never`; release publication is reserved for the tag-driven release workflow's explicit `gh release create` step after combined artifact validation. The Electron runtime-version check runs Electron in Node mode, which avoids GitHub-hosted Linux failures caused by an unconfigured Chromium setuid sandbox helper during a version-only probe. Linux GitHub-hosted app-launch smoke steps set `POSTMETER_CI_ELECTRON_NO_SANDBOX=1` so Electron starts under the runner's constraints; this is a CI-only Chromium app-shell waiver and does not disable PostMeter's script sandbox validation or change production launch defaults.
+
 GitHub-hosted Linux runners may expose `bubblewrap` while denying the network-namespace setup required by PostMeter's full Linux OS-sandbox policy. Source and packaged sandbox validation therefore use an explicit CI-only waiver when the functional backend probe fails in that environment; local/manual Linux release signoff must still run `npm run sandbox:validate` without that waiver on a host where `bubblewrap` can launch the full namespace/seccomp sandbox.
 
 Manual Windows QA is optional before final release because the maintainer has a Windows machine. Manual Mac QA remains a final production signoff item once a Mac is available; until then, `macos-latest` runner evidence is the pre-production gate.

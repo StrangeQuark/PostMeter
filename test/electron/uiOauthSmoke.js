@@ -3,6 +3,7 @@ const fs = require('node:fs/promises');
 const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
+const { withCiNoSandboxArgs } = require('../../scripts/electronCiSandboxWaiver');
 
 async function main() {
   const server = await createMockOAuthServer();
@@ -17,7 +18,7 @@ async function main() {
     POSTMETER_TEST_OAUTH_SKIP_EXTERNAL: '1'
   };
   delete env.ELECTRON_RUN_AS_NODE;
-  const child = spawn(electronPath, ['.'], {
+  const child = spawn(electronPath, withCiNoSandboxArgs(['.'], env), {
     cwd: path.join(__dirname, '..', '..'),
     env,
     stdio: ['ignore', 'pipe', 'pipe']

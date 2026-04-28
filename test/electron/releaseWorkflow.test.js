@@ -23,6 +23,7 @@ test('CI workflow runs the Electron UI and packaging validation suite', async ()
   assert.match(workflow, /xvfb-run -a npm run test:ui:oauth/);
   assert.match(workflow, /xvfb-run -a npm run test:ui:snapshot/);
   assert.match(workflow, /npm run pack:linux/);
+  assert.match(workflow, /POSTMETER_CI_ELECTRON_NO_SANDBOX:\s*"1"/);
   assert.match(workflow, /xvfb-run -a npm run sandbox:validate:packaged/);
 });
 
@@ -48,6 +49,7 @@ test('release workflow builds unsigned artifacts for all tier-one desktop platfo
   assert.match(workflow, /CSC_IDENTITY_AUTO_DISCOVERY:\s*"false"/);
   assert.match(workflow, /npm run sandbox:validate:packaged/);
   assert.match(workflow, /xvfb-run -a npm run sandbox:validate:packaged/);
+  assert.match(workflow, /POSTMETER_CI_ELECTRON_NO_SANDBOX:\s*"1"/);
   assert.match(workflow, /Validate Windows protocol registration/);
   assert.match(workflow, /npm run release:validate:win-protocol/);
   assert.match(workflow, /Validate macOS protocol registration/);
@@ -66,6 +68,7 @@ test('release workflow builds unsigned artifacts for all tier-one desktop platfo
 test('manual native release validation workflow exercises release evidence without publishing', async () => {
   const root = path.join(__dirname, '..', '..');
   const workflow = await fs.readFile(path.join(root, '.github', 'workflows', 'release-validation.yml'), 'utf8');
+  const packageJson = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
 
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /contents:\s*read/);
@@ -84,6 +87,7 @@ test('manual native release validation workflow exercises release evidence witho
   assert.match(workflow, /npm run release:validate:packaged-smoke/);
   assert.match(workflow, /npm run sandbox:validate:packaged/);
   assert.match(workflow, /xvfb-run -a npm run sandbox:validate:packaged/);
+  assert.match(workflow, /POSTMETER_CI_ELECTRON_NO_SANDBOX:\s*"1"/);
   assert.match(workflow, /npm run release:validate:win-protocol/);
   assert.match(workflow, /npm run release:validate:mac-protocol/);
   assert.match(workflow, /npm run release:prepare/);
@@ -92,4 +96,7 @@ test('manual native release validation workflow exercises release evidence witho
   assert.match(workflow, /actions\/download-artifact@v4/);
   assert.doesNotMatch(workflow, /gh release create/);
   assert.doesNotMatch(workflow, /contents:\s*write/);
+  for (const scriptName of ['dist:linux', 'dist:win', 'dist:mac']) {
+    assert.match(packageJson.scripts[scriptName], /--publish never/);
+  }
 });
