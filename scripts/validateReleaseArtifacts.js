@@ -111,8 +111,7 @@ async function validateLinuxDebProtocol(debPath) {
 
 async function validateMacZipProtocolIfPresent(zipPath) {
   const listing = await runCommand('unzip', ['-Z1', zipPath]);
-  const infoPlistPath = listing.split(/\r?\n/)
-    .find((entry) => /\.app\/Contents\/Info\.plist$/.test(entry));
+  const infoPlistPath = macInfoPlistPathFromListing(listing);
   if (!infoPlistPath) {
     return;
   }
@@ -129,12 +128,24 @@ async function validateMacZipProtocol(zipPath, infoPlistPath) {
 
 async function macInfoPlistPath(zipPath) {
   const listing = await runCommand('unzip', ['-Z1', zipPath]);
-  const infoPlistPath = listing.split(/\r?\n/)
-    .find((entry) => /\.app\/Contents\/Info\.plist$/.test(entry));
+  const infoPlistPath = macInfoPlistPathFromListing(listing);
   if (!infoPlistPath) {
     throw new Error(`${path.basename(zipPath)} does not contain a macOS .app Info.plist.`);
   }
   return infoPlistPath;
+}
+
+function macInfoPlistPathFromListing(listing) {
+  const plistPaths = String(listing || '').split(/\r?\n/)
+    .map((entry) => entry.trim())
+    .filter((entry) => /\.app\/Contents\/Info\.plist$/.test(entry));
+  return plistPaths.find((entry) => /(^|\/)PostMeter\.app\/Contents\/Info\.plist$/.test(entry))
+    || plistPaths.sort((left, right) => pathDepth(left) - pathDepth(right))[0]
+    || '';
+}
+
+function pathDepth(filePath) {
+  return String(filePath || '').split('/').filter(Boolean).length;
 }
 
 function plistDeclaresPostMeterProtocol(plist) {
@@ -207,5 +218,6 @@ module.exports = {
   validatePackageMetadata,
   validateLinuxDebProtocol,
   validateMacZipProtocol,
+  macInfoPlistPathFromListing,
   validateReleaseManifest
 };

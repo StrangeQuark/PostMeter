@@ -9,6 +9,7 @@ const { inferArtifactType, inferPlatform } = require('../../scripts/writeRelease
 const {
   validateLinuxAppImageProtocol,
   validateLinuxDebProtocol,
+  macInfoPlistPathFromListing,
   validateMacZipProtocol,
   validatePackageMetadata,
   validateReleaseManifest
@@ -152,6 +153,59 @@ test('validates packaged macOS zip protocol registration when an app bundle exis
   await assert.doesNotReject(() => validateMacZipProtocol(zipPath));
 });
 
+test('selects the root PostMeter app plist before nested Electron helper app plists', () => {
+  const listing = [
+    'PostMeter.app/Contents/Frameworks/PostMeter Helper (GPU).app/Contents/Info.plist',
+    'PostMeter.app/Contents/Frameworks/PostMeter Helper.app/Contents/Info.plist',
+    'PostMeter.app/Contents/Info.plist'
+  ].join('\n');
+
+  assert.equal(macInfoPlistPathFromListing(listing), 'PostMeter.app/Contents/Info.plist');
+});
+
+test('validates macOS zip protocol registration against the root app plist, not helper app plists', async (t) => {
+  if (!await commandExists('zip') || !await commandExists('unzip')) {
+    t.skip('zip and unzip are required to create and inspect macOS zip fixtures.');
+    return;
+  }
+
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-mac-helper-zip-'));
+  const appContents = path.join(tempDir, 'PostMeter.app', 'Contents');
+  const helperContents = path.join(appContents, 'Frameworks', 'PostMeter Helper (GPU).app', 'Contents');
+  await fs.mkdir(helperContents, { recursive: true });
+  await fs.writeFile(path.join(helperContents, 'Info.plist'), `<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key>
+  <string>PostMeter Helper (GPU)</string>
+</dict>
+</plist>`);
+  await fs.writeFile(path.join(appContents, 'Info.plist'), `<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key>
+      <string>PostMeter OAuth Callback</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>postmeter</string>
+      </array>
+    </dict>
+  </array>
+</dict>
+</plist>`);
+  const zipPath = path.join(tempDir, 'PostMeter-9.9.9-mac.zip');
+  const result = await runCommand('zip', ['-qr', zipPath, 'PostMeter.app'], { cwd: tempDir });
+  assert.equal(result.code, 0, result.stderr);
+
+  const listing = await runCommand('unzip', ['-Z1', zipPath]);
+  assert.equal(listing.code, 0, listing.stderr);
+  assert.equal(macInfoPlistPathFromListing(listing.stdout), 'PostMeter.app/Contents/Info.plist');
+  await assert.doesNotReject(() => validateMacZipProtocol(zipPath));
+});
+
 function runNodeScript(scriptName, env) {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [path.join(__dirname, '..', '..', 'scripts', scriptName)], {
@@ -182,6 +236,9 @@ function runCommand(command, args, options = {}) {
 }
 
 async function commandExists(command) {
-  const result = await runCommand(command, ['--version']);
-  return result.code === 0;
+  return new Promise((resolve) => {
+    const child = spawn(command, ['-v'], { stdio: 'ignore' });
+    child.on('error', () => resolve(false));
+    child.on('exit', () => resolve(true));
+  });
 }
