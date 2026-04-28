@@ -6,6 +6,7 @@
 
 - Source package: `postman-sandbox@6.2.2`
 - Source license: Apache-2.0
+- Postman parity target: Postman Desktop 11.71.7 with `postman-sandbox@6.2.2` and Postman Runtime 7.50.0; Newman-compatible surfaces target `newman@6.2.2` with Postman Runtime 7.39.1.
 - PostMeter modification: the Browserify entry module list is disabled before compression so the artifact installs only Postman's bundled package/module resolver inside PostMeter's script VM.
 - Integrity check: the inflated artifact is verified against a checked-in SHA-256 digest before it can install the VM package resolver.
 - Runtime boundary: scripts can only access this bundle through PostMeter's allowlisted `pm.require()` / `require()` policy; it does not grant host Node, filesystem, process, Electron, renderer, shell, native module, path, or registry access.

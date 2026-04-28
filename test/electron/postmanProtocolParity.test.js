@@ -103,6 +103,73 @@ test('prepares GraphQL Postman body imports as brokered HTTP JSON requests', () 
   assert.equal(payload.operationName, 'GetUser');
 });
 
+test('normalizes GraphQL subscription-style responses into pm.response.messages', async () => {
+  const collection = importPostmanCollection({
+    info: {
+      name: 'GraphQL Subscription Messages',
+      schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
+    },
+    item: [{
+      name: 'GraphQL subscription',
+      protocol: 'graphql',
+      event: [{
+        listen: 'test',
+        script: {
+          type: 'text/javascript',
+          exec: [
+            "pm.test('subscription messages are available', function () {",
+            "  pm.expect(pm.info.eventName).to.equal('afterResponse');",
+            "  pm.expect(pm.response.messages.count()).to.equal(2);",
+            "  pm.response.messages.to.include({ data: { event: 'created' } });",
+            "  pm.response.messages.to.have.property('data.id', 'evt-2');",
+            "  pm.response.messages.to.have.jsonSchema({ type: 'object', required: ['data'], properties: { data: { type: 'object' } } });",
+            "  pm.expect(pm.response.messages.filter({ data: { event: 'updated' } }).length).to.equal(1);",
+            "});"
+          ]
+        }
+      }],
+      request: {
+        method: 'POST',
+        url: 'https://api.example.test/graphql',
+        body: {
+          mode: 'graphql',
+          graphql: {
+            query: 'subscription Events { events { id event } }',
+            variables: '{}',
+            operationName: 'Events'
+          }
+        }
+      }
+    }]
+  });
+  const state = createScriptedRequestState(collection.requests[0], null);
+
+  const result = await runScriptedRequestLifecycle(state, {
+    sendRequest: async () => ({
+      statusCode: 200,
+      headers: { 'content-type': ['text/event-stream'] },
+      body: [
+        'event: next',
+        'data: {"data":{"id":"evt-1","event":"created"}}',
+        '',
+        'event: next',
+        'data: {"data":{"id":"evt-2","event":"updated"}}',
+        '',
+        'event: complete',
+        'data: [DONE]',
+        ''
+      ].join('\n'),
+      durationMillis: 7,
+      responseBytes: 120,
+      finalUrl: 'https://api.example.test/graphql'
+    })
+  });
+
+  assert.equal(result.testScriptResult.passed, true);
+  assert.equal(result.response.messages.length, 2);
+  assert.deepEqual(result.response.messages.map((message) => message.data.id), ['evt-1', 'evt-2']);
+});
+
 test('rejects imported WebSocket protocol script execution instead of inventing unsupported hooks', async () => {
   await assert.rejects(
     () => runScriptedRequestLifecycle(

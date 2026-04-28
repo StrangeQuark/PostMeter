@@ -1,0 +1,792 @@
+{
+  "schemaVersion": 1,
+  "type": "desktop-runtime-source-audit",
+  "rowIds": [
+    "assertion.pm.request.messages.each",
+    "assertion.pm.request.messages.to.have.jsonSchema",
+    "assertion.pm.request.messages.to.have.property",
+    "assertion.pm.request.messages.to.include",
+    "assertion.pm.request.to.have.metadata",
+    "assertion.pm.response.messages.filter-object-predicate",
+    "assertion.pm.response.messages.idx",
+    "assertion.pm.response.messages.to.have.jsonSchema",
+    "assertion.pm.response.messages.to.have.property",
+    "assertion.pm.response.messages.to.include",
+    "assertion.pm.response.to.have.message",
+    "assertion.pm.response.to.have.metadata",
+    "assertion.pm.response.to.have.trailer",
+    "execution.runRequest",
+    "graphql.client-interface-hooks",
+    "graphql.http-body",
+    "graphql.subscription.response-messages",
+    "grpc.pm.message.timestamp-date",
+    "info.eventName.beforeQuery",
+    "mock.matchRequest",
+    "mock.path-variables",
+    "mock.req-surface",
+    "mock.res-surface",
+    "mock.sendExample",
+    "request.messages.idx",
+    "require.pm.jsr-esm-module-semantics",
+    "require.pm.jsr-package",
+    "require.pm.latest-package",
+    "require.pm.npm-package",
+    "require.pm.npm-scoped-package",
+    "require.pm.online-fetch-review",
+    "require.pm.team-package",
+    "response.metadata.get",
+    "response.metadata.has",
+    "response.trailers.get",
+    "response.trailers.has",
+    "sdk.list.filter-object-predicate",
+    "sdk.live-object.constructor-prototype-parity",
+    "sendRequest.auth.akamai-edgegrid",
+    "sendRequest.auth.asap",
+    "sendRequest.auth.jwt-bearer",
+    "sendRequest.auth.ntlm",
+    "state.addToSet",
+    "state.clear",
+    "state.delete",
+    "state.get",
+    "state.has",
+    "state.increment",
+    "state.keys",
+    "state.push",
+    "state.set",
+    "state.size",
+    "state.toObject",
+    "vault.get",
+    "vault.prompt-denial-reset-audit",
+    "vault.set",
+    "vault.unset"
+  ],
+  "rowEvidence": {
+    "assertion.pm.request.messages.each": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-focused-protocol-tests",
+      "postmanEvidence": [
+        "Postman documents protocol request/response message-list helpers in current protocol scripting and test-example material.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records protocol script hooks as Desktop-only behavior."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/postmanProtocolParity.test.js"
+      ]
+    },
+    "assertion.pm.request.messages.to.have.jsonSchema": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-focused-protocol-tests",
+      "postmanEvidence": [
+        "Postman documents protocol request message assertions and JSON-schema assertions as script test helpers.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records protocol script hooks as Desktop-only behavior."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/postmanProtocolParity.test.js"
+      ]
+    },
+    "assertion.pm.request.messages.to.have.property": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-focused-protocol-tests",
+      "postmanEvidence": [
+        "Postman documents protocol request message assertions and nested property assertions as script test helpers.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records protocol script hooks as Desktop-only behavior."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/postmanProtocolParity.test.js"
+      ]
+    },
+    "assertion.pm.request.messages.to.include": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-focused-protocol-tests",
+      "postmanEvidence": [
+        "Postman documents protocol request message assertions and deep include behavior in current test-example material.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records protocol script hooks as Desktop-only behavior."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/postmanProtocolParity.test.js"
+      ]
+    },
+    "assertion.pm.request.to.have.metadata": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-focused-protocol-tests",
+      "postmanEvidence": [
+        "Postman documents protocol request metadata helpers for protocol scripts.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records gRPC/GraphQL protocol hook support."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/postmanProtocolParity.test.js"
+      ]
+    },
+    "assertion.pm.response.messages.filter-object-predicate": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-focused-protocol-tests",
+      "postmanEvidence": [
+        "Postman protocol scripting examples use SDK-style list helpers and object-predicate matching on message streams.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records protocol script hooks as Desktop-only behavior."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/postmanProtocolParity.test.js"
+      ]
+    },
+    "assertion.pm.response.messages.idx": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-focused-protocol-tests",
+      "postmanEvidence": [
+        "Postman documents indexed protocol message access through message-list helpers.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records protocol script hooks as Desktop-only behavior."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/postmanProtocolParity.test.js"
+      ]
+    },
+    "assertion.pm.response.messages.to.have.jsonSchema": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-focused-protocol-tests",
+      "postmanEvidence": [
+        "Postman documents protocol response message assertions and JSON-schema assertions as script test helpers.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records protocol script hooks as Desktop-only behavior."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/postmanProtocolParity.test.js"
+      ]
+    },
+    "assertion.pm.response.messages.to.have.property": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-focused-protocol-tests",
+      "postmanEvidence": [
+        "Postman documents protocol response message assertions and nested property assertions as script test helpers.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records protocol script hooks as Desktop-only behavior."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/postmanProtocolParity.test.js"
+      ]
+    },
+    "assertion.pm.response.messages.to.include": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-focused-protocol-tests",
+      "postmanEvidence": [
+        "Postman documents protocol response message assertions and deep include behavior in current test-example material.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records protocol script hooks as Desktop-only behavior."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/postmanProtocolParity.test.js"
+      ]
+    },
+    "assertion.pm.response.to.have.message": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-focused-protocol-tests",
+      "postmanEvidence": [
+        "Postman documents protocol response message assertions for gRPC/GraphQL scripts.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records protocol script hooks as Desktop-only behavior."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/postmanProtocolParity.test.js"
+      ]
+    },
+    "assertion.pm.response.to.have.metadata": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-focused-protocol-tests",
+      "postmanEvidence": [
+        "Postman documents protocol response metadata assertions for gRPC/GraphQL scripts.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records protocol script hooks as Desktop-only behavior."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/postmanProtocolParity.test.js"
+      ]
+    },
+    "assertion.pm.response.to.have.trailer": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-focused-protocol-tests",
+      "postmanEvidence": [
+        "Postman documents gRPC trailer assertions for protocol response tests.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records gRPC protocol hook support."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/grpcClient.test.js"
+      ]
+    },
+    "execution.runRequest": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-golden-corpus",
+      "postmanEvidence": [
+        "Postman documents pm.execution.runRequest as a Desktop collection-run feature with a 10-call per-script limit, variable override behavior, skip-to-null behavior, and referenced-request restrictions.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records postman-runtime 7.50.0 and postman-sandbox 6.2.2 as the Desktop script runtime used for this behavior."
+      ],
+      "postmeterEvidence": [
+        "test/fixtures/postman/newman-sandbox-v1.collection.json",
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/collectionRunner.test.js"
+      ]
+    },
+    "graphql.http-body": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-protocol-fixture",
+      "postmanEvidence": [
+        "Postman documents GraphQL request scripts before a query and after a response, with query, variables, headers, auth, and response access through the normal script runtime.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records exported GraphQL request script events and package/runtime versions."
+      ],
+      "postmeterEvidence": [
+        "test/fixtures/postman/protocol-script-hooks.collection.json",
+        "test/electron/postmanImporter.test.js",
+        "test/electron/collectionRunner.test.js"
+      ]
+    },
+    "graphql.client-interface-hooks": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-protocol-fixture",
+      "postmanEvidence": [
+        "Postman documents GraphQL client Before query and After response script hooks as protocol request lifecycle events.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records exported GraphQL request script events."
+      ],
+      "postmeterEvidence": [
+        "test/fixtures/postman/protocol-script-hooks.collection.json",
+        "test/electron/postmanProtocolParity.test.js",
+        "test/electron/collectionRunner.test.js"
+      ]
+    },
+    "graphql.subscription.response-messages": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-protocol-fixture",
+      "postmanEvidence": [
+        "Postman GraphQL client docs describe subscription-style multiple responses and message access from protocol scripts.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records GraphQL protocol script hooks as Desktop-only behavior."
+      ],
+      "postmeterEvidence": [
+        "test/electron/postmanProtocolParity.test.js",
+        "test/electron/scriptRuntime.test.js"
+      ]
+    },
+    "grpc.pm.message.timestamp-date": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-focused-runtime-tests",
+      "postmanEvidence": [
+        "Postman documents pm.message.timestamp as a Date object for message protocol scripts.",
+        "The installed Postman Desktop 11.71.7 gRPC source audit records On message protocol hook support."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/grpcClient.test.js"
+      ]
+    },
+    "info.eventName.beforeQuery": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-protocol-fixture",
+      "postmanEvidence": [
+        "Postman documents GraphQL Before query scripts and their distinct request lifecycle phase.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records exported GraphQL script events."
+      ],
+      "postmeterEvidence": [
+        "test/fixtures/postman/protocol-script-hooks.collection.json",
+        "test/electron/collectionRunner.test.js"
+      ]
+    },
+    "mock.matchRequest": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-local-mock-fixture",
+      "postmanEvidence": [
+        "Postman documents pm.mock.matchRequest for local mock scripts and saved-example matching.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records the Desktop local mock script surface as Desktop-only."
+      ],
+      "postmeterEvidence": [
+        "test/fixtures/postman/local-mock-scripts.collection.json",
+        "test/electron/localMockServer.test.js"
+      ]
+    },
+    "mock.path-variables": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-local-mock-fixture",
+      "postmanEvidence": [
+        "Postman local mock docs describe request matching and path parameter behavior for mock scripts.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records the Desktop local mock script surface as Desktop-only."
+      ],
+      "postmeterEvidence": [
+        "test/fixtures/postman/local-mock-scripts.collection.json",
+        "test/electron/localMockServer.test.js"
+      ]
+    },
+    "mock.req-surface": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-local-mock-fixture",
+      "postmanEvidence": [
+        "Postman local mock docs describe request helper access for local mock scripts, including method, path, params, query, headers, body, and JSON request body handling.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records the Desktop local mock script surface as Desktop-only."
+      ],
+      "postmeterEvidence": [
+        "test/fixtures/postman/local-mock-scripts.collection.json",
+        "test/electron/localMockServer.test.js"
+      ]
+    },
+    "mock.res-surface": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-local-mock-fixture",
+      "postmanEvidence": [
+        "Postman local mock docs describe response helper behavior for local mock scripts, including status, headers, JSON/send/end helpers, and script return handling.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records the Desktop local mock script surface as Desktop-only."
+      ],
+      "postmeterEvidence": [
+        "test/fixtures/postman/local-mock-scripts.collection.json",
+        "test/electron/localMockServer.test.js"
+      ]
+    },
+    "mock.sendExample": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-local-mock-fixture",
+      "postmanEvidence": [
+        "Postman documents pm.mock.sendExample for local mock scripts and saved-example response lookup.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records the Desktop local mock script surface as Desktop-only."
+      ],
+      "postmeterEvidence": [
+        "test/fixtures/postman/local-mock-scripts.collection.json",
+        "test/electron/localMockServer.test.js"
+      ]
+    },
+    "request.messages.idx": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-focused-protocol-tests",
+      "postmanEvidence": [
+        "Postman documents indexed protocol request-message access through pm.request.messages.idx(index).",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records protocol script hooks as Desktop-only behavior."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/postmanProtocolParity.test.js"
+      ]
+    },
+    "require.pm.jsr-esm-module-semantics": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-package-cache-tests",
+      "postmanEvidence": [
+        "Postman documents exact JSR package references through pm.require and reviewed package workflows.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records package loading through the Desktop script runtime rather than direct script filesystem or registry access."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/postmanSandboxAdversarial.test.js"
+      ]
+    },
+    "require.pm.jsr-package": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-package-cache-tests",
+      "postmanEvidence": [
+        "Postman documents exact JSR package references through pm.require and team/external package workflows.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records package loading through the Desktop script runtime rather than direct script filesystem or registry access."
+      ],
+      "postmeterEvidence": [
+        "test/electron/sandboxPackageFetcher.test.js",
+        "test/electron/sandboxPackageIpc.test.js",
+        "test/electron/scriptRuntime.test.js"
+      ]
+    },
+    "require.pm.latest-package": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-package-cache-tests",
+      "postmanEvidence": [
+        "Postman documents omitting @version-number from external package imports to use the app-selected latest package version.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records external package loading as prepared sandbox behavior and current docs state external packages are unsupported in Newman."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/sandboxPackageFetcher.test.js",
+        "test/electron/postmanSandboxCorpus.test.js"
+      ]
+    },
+    "require.pm.npm-package": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-package-cache-tests",
+      "postmanEvidence": [
+        "Postman documents exact npm package references through pm.require and team/external package workflows.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records package loading through the Desktop script runtime rather than direct script filesystem or registry access."
+      ],
+      "postmeterEvidence": [
+        "test/electron/sandboxPackageFetcher.test.js",
+        "test/electron/sandboxPackageIpc.test.js",
+        "test/electron/scriptRuntime.test.js"
+      ]
+    },
+    "require.pm.npm-scoped-package": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-package-cache-tests",
+      "postmanEvidence": [
+        "Postman documents private/scoped npm external package imports with pm.require('npm:@scope/package-name@version-number').",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records package loading through the Desktop script runtime rather than direct script filesystem or registry access."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/postmanImporter.test.js",
+        "test/electron/postmanSandboxCorpus.test.js"
+      ]
+    },
+    "require.pm.online-fetch-review": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-package-cache-tests",
+      "postmanEvidence": [
+        "Postman documents resolving package references before script execution through team Package Library and external package workflows.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records package loading as a prepared sandbox capability, not a direct runtime registry fetch from scripts."
+      ],
+      "postmeterEvidence": [
+        "test/electron/sandboxPackageFetcher.test.js",
+        "test/electron/sandboxPackageIpc.test.js",
+        "test/electron/postmanSandboxCorpus.test.js"
+      ]
+    },
+    "require.pm.team-package": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-package-cache-tests",
+      "postmanEvidence": [
+        "Postman documents team Package Library package references through pm.require.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records package loading through the Desktop script runtime rather than direct script filesystem or registry access."
+      ],
+      "postmeterEvidence": [
+        "test/electron/sandboxPackageFetcher.test.js",
+        "test/electron/sandboxPackageIpc.test.js",
+        "test/electron/scriptRuntime.test.js"
+      ]
+    },
+    "response.metadata.get": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-focused-protocol-tests",
+      "postmanEvidence": [
+        "Postman test examples document pm.response.metadata.get(name) for protocol response metadata values.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records gRPC/GraphQL protocol hook support."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/postmanProtocolParity.test.js"
+      ]
+    },
+    "response.metadata.has": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-focused-protocol-tests",
+      "postmanEvidence": [
+        "Postman test examples document pm.response.metadata.has(name) for protocol response metadata presence.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records gRPC/GraphQL protocol hook support."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/postmanProtocolParity.test.js"
+      ]
+    },
+    "response.trailers.get": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-focused-protocol-tests",
+      "postmanEvidence": [
+        "Postman test examples document pm.response.trailers.get(name) for gRPC trailer values.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records gRPC protocol hook support."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/grpcClient.test.js"
+      ]
+    },
+    "response.trailers.has": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-focused-protocol-tests",
+      "postmanEvidence": [
+        "Postman test examples document pm.response.trailers.has(name) for gRPC trailer presence.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records gRPC protocol hook support."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/grpcClient.test.js"
+      ]
+    },
+    "sdk.list.filter-object-predicate": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-focused-runtime-tests",
+      "postmanEvidence": [
+        "Postman protocol scripting examples use SDK-style list helpers and object predicates for message/list matching.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records the Postman Collection SDK and protocol script runtime versions."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/postmanProtocolParity.test.js"
+      ]
+    },
+    "sdk.live-object.constructor-prototype-parity": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-focused-runtime-tests",
+      "postmanEvidence": [
+        "Postman exposes Postman Collection SDK objects and helper methods through pm.request, pm.response, and require('postman-collection').",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records the bundled postman-collection package through postman-sandbox."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/postmanSandboxAdversarial.test.js"
+      ]
+    },
+    "sendRequest.auth.akamai-edgegrid": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-focused-auth-tests",
+      "postmanEvidence": [
+        "Postman documents Akamai EdgeGrid as a request authorization helper.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records auth helper metadata as part of Desktop request execution."
+      ],
+      "postmeterEvidence": [
+        "test/electron/auth.test.js",
+        "test/electron/postmanImporter.test.js"
+      ]
+    },
+    "sendRequest.auth.asap": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-focused-auth-tests",
+      "postmanEvidence": [
+        "Postman official material documents Atlassian ASAP as a supported authorization helper.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records auth helper metadata as part of Desktop request execution."
+      ],
+      "postmeterEvidence": [
+        "test/electron/auth.test.js",
+        "test/electron/postmanImporter.test.js"
+      ]
+    },
+    "sendRequest.auth.jwt-bearer": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-focused-auth-tests",
+      "postmanEvidence": [
+        "Postman documents JWT Bearer as a request authorization helper with generated signed tokens.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records auth helper metadata as part of Desktop request execution."
+      ],
+      "postmeterEvidence": [
+        "test/electron/auth.test.js",
+        "test/electron/postmanImporter.test.js"
+      ]
+    },
+    "sendRequest.auth.ntlm": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-focused-auth-tests",
+      "postmanEvidence": [
+        "Postman documents NTLM as a request authorization helper with challenge/response behavior.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records auth helper metadata as part of Desktop request execution."
+      ],
+      "postmeterEvidence": [
+        "test/electron/auth.test.js",
+        "test/electron/postmanImporter.test.js"
+      ]
+    },
+    "state.addToSet": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-local-mock-fixture",
+      "postmanEvidence": [
+        "Postman documents pm.state.addToSet as a local mock server state helper.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records local mock state as a Desktop-only surface."
+      ],
+      "postmeterEvidence": [
+        "test/fixtures/postman/local-mock-scripts.collection.json",
+        "test/electron/localMockServer.test.js"
+      ]
+    },
+    "state.clear": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-local-mock-fixture",
+      "postmanEvidence": [
+        "Postman documents pm.state.clear as a local mock server state helper.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records local mock state as a Desktop-only surface."
+      ],
+      "postmeterEvidence": [
+        "test/fixtures/postman/local-mock-scripts.collection.json",
+        "test/electron/localMockServer.test.js"
+      ]
+    },
+    "state.delete": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-local-mock-fixture",
+      "postmanEvidence": [
+        "Postman documents pm.state.delete as a local mock server state helper.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records local mock state as a Desktop-only surface."
+      ],
+      "postmeterEvidence": [
+        "test/fixtures/postman/local-mock-scripts.collection.json",
+        "test/electron/localMockServer.test.js"
+      ]
+    },
+    "state.get": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-local-mock-fixture",
+      "postmanEvidence": [
+        "Postman documents pm.state.get as a local mock server state helper.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records local mock state as a Desktop-only surface."
+      ],
+      "postmeterEvidence": [
+        "test/fixtures/postman/local-mock-scripts.collection.json",
+        "test/electron/localMockServer.test.js"
+      ]
+    },
+    "state.has": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-local-mock-fixture",
+      "postmanEvidence": [
+        "Postman documents pm.state.has as a local mock server state helper.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records local mock state as a Desktop-only surface."
+      ],
+      "postmeterEvidence": [
+        "test/fixtures/postman/local-mock-scripts.collection.json",
+        "test/electron/localMockServer.test.js"
+      ]
+    },
+    "state.increment": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-local-mock-fixture",
+      "postmanEvidence": [
+        "Postman documents pm.state.increment as a local mock server state helper.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records local mock state as a Desktop-only surface."
+      ],
+      "postmeterEvidence": [
+        "test/fixtures/postman/local-mock-scripts.collection.json",
+        "test/electron/localMockServer.test.js"
+      ]
+    },
+    "state.keys": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-local-mock-fixture",
+      "postmanEvidence": [
+        "Postman documents pm.state.keys as a local mock server state helper.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records local mock state as a Desktop-only surface."
+      ],
+      "postmeterEvidence": [
+        "test/fixtures/postman/local-mock-scripts.collection.json",
+        "test/electron/localMockServer.test.js"
+      ]
+    },
+    "state.push": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-local-mock-fixture",
+      "postmanEvidence": [
+        "Postman documents pm.state.push as a local mock server state helper.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records local mock state as a Desktop-only surface."
+      ],
+      "postmeterEvidence": [
+        "test/fixtures/postman/local-mock-scripts.collection.json",
+        "test/electron/localMockServer.test.js"
+      ]
+    },
+    "state.set": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-local-mock-fixture",
+      "postmanEvidence": [
+        "Postman documents pm.state.set as a local mock server state helper.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records local mock state as a Desktop-only surface."
+      ],
+      "postmeterEvidence": [
+        "test/fixtures/postman/local-mock-scripts.collection.json",
+        "test/electron/localMockServer.test.js"
+      ]
+    },
+    "state.size": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-local-mock-fixture",
+      "postmanEvidence": [
+        "Postman documents pm.state.size as a local mock server state helper.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records local mock state as a Desktop-only surface."
+      ],
+      "postmeterEvidence": [
+        "test/fixtures/postman/local-mock-scripts.collection.json",
+        "test/electron/localMockServer.test.js"
+      ]
+    },
+    "state.toObject": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-local-mock-fixture",
+      "postmanEvidence": [
+        "Postman documents pm.state.toObject as a local mock server state helper.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records local mock state as a Desktop-only surface."
+      ],
+      "postmeterEvidence": [
+        "test/fixtures/postman/local-mock-scripts.collection.json",
+        "test/electron/localMockServer.test.js"
+      ]
+    },
+    "vault.get": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-vault-tests",
+      "postmanEvidence": [
+        "Postman documents pm.vault.get as a Desktop-only Promise-based secret helper.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records pm.vault as a Desktop-only script surface."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/vaultStore.test.js",
+        "test/fixtures/postman/real-world-import-corpus.collection.json"
+      ]
+    },
+    "vault.prompt-denial-reset-audit": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-vault-tests",
+      "postmanEvidence": [
+        "Postman documents explicit vault access, denial, and Desktop-only availability boundaries.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records pm.vault as a Desktop-only script surface."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/vaultStore.test.js",
+        "test/fixtures/postman/real-world-import-corpus.collection.json"
+      ]
+    },
+    "vault.set": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-vault-tests",
+      "postmanEvidence": [
+        "Postman documents pm.vault.set as a Desktop-only Promise-based secret helper.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records pm.vault as a Desktop-only script surface."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/vaultStore.test.js",
+        "test/fixtures/postman/real-world-import-corpus.collection.json"
+      ]
+    },
+    "vault.unset": {
+      "level": "behavior",
+      "method": "official-docs-and-installed-desktop-source-audit-plus-postmeter-vault-tests",
+      "postmanEvidence": [
+        "Postman documents pm.vault.unset as a Desktop-only Promise-based secret helper.",
+        "The installed Postman Desktop 11.71.7 runtime/source audit records pm.vault as a Desktop-only script surface."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/vaultStore.test.js",
+        "test/fixtures/postman/real-world-import-corpus.collection.json"
+      ]
+    }
+  },
+  "postman": {
+    "app": "Postman Desktop",
+    "version": "11.71.7",
+    "channel": "snap latest/stable",
+    "platform": "linux",
+    "observedAt": "2026-04-27"
+  },
+  "capture": {
+    "method": "row-specific-official-docs-plus-installed-desktop-source-audit",
+    "artifactPaths": [
+      "test/fixtures/postman/local-mock-scripts.collection.json",
+      "test/fixtures/postman/protocol-script-hooks.collection.json",
+      "test/fixtures/postman/real-world-import-corpus.collection.json",
+      "test/electron/auth.test.js",
+      "test/electron/localMockServer.test.js",
+      "test/electron/postmanImporter.test.js",
+      "test/electron/postmanProtocolParity.test.js",
+      "test/electron/postmanSandboxAdversarial.test.js",
+      "test/electron/scriptRuntime.test.js",
+      "test/electron/vaultStore.test.js",
+      "test/electron/sandboxPackageFetcher.test.js",
+      "test/electron/sandboxPackageIpc.test.js"
+    ]
+  },
+  "limitations": [
+    "This artifact supplies row-specific evidence metadata so the parity harness can distinguish these rows from the broad installed runtime/source audit row-id list.",
+    "Rows with future exact-behavior refinements should be reopened as explicit matrix rows instead of broadening this artifact beyond the behavior covered by the listed PostMeter tests and Desktop source/runtime audit.",
+    "This artifact does not grant scripts any host filesystem, Node, Electron, renderer, raw network, or unreviewed package capabilities."
+  ],
+  "notes": "This artifact supports the row-specific desktop behavior evidence gate for implemented Desktop-required rows that do not have a narrower dedicated artifact."
+}

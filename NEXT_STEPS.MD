@@ -86,12 +86,13 @@ PostMeter must remain a standalone local desktop application. Do not add PostMet
 - Implemented explicitly granted brokered `pm.vault` access with async `get`/`set`/`unset`, per-script operation/value limits, encrypted per-workspace desktop vault storage outside workspace JSON, mutation audit metadata, workspace setting/UI grant wiring, and golden corpus coverage.
 - Implemented the initial conservative package-loading compatibility pass: `pm.require()` and sandbox `require()` first supported bundled allowlisted `crypto-js`, `lodash`, and `uuid` APIs while denying Node modules, external packages, paths, URLs, and non-allowlisted packages; the golden corpus covers these imports.
 - Expanded package loading to a manifest-driven bundled Postman built-in facade set for `ajv`, `chai`, `cheerio`, `crypto-js`, `csv-parse/lib/sync`, `lodash`, `moment`, `postman-collection`, `uuid`, and `xml2js`, while keeping Node resolution, package installation, external registry fetching, and team Package Library imports blocked.
-- Implemented the next package-loading parity tranche with a reviewed in-workspace package cache for exact team Package Library-style `@team/package` specifiers and exact external `npm:package@version` / `jsr:package@version` specifiers. Cached packages require SHA-256 integrity metadata, cannot override built-in facades, are bounded by package/source/dependency/export limits, and can only load declared reviewed dependencies or bundled facades.
+- Implemented the next package-loading parity tranche with a reviewed in-workspace package cache for team Package Library-style `@team/package` specifiers, exact external `npm:package@version` / `npm:@scope/package@version` / `jsr:@scope/package@version` specifiers, and Postman latest-version external `npm:package` / `npm:@scope/package` / `jsr:@scope/package` specifiers resolved parent-side before execution. Cached packages require SHA-256 integrity metadata, cannot override built-in facades, are bounded by package/source/dependency/export limits, and can only load declared reviewed dependencies or bundled facades.
 - Expanded `pm.visualizer` parity with bounded custom helpers, partials, `Handlebars.SafeString`, inline visualizer scripts, sandboxed iframe `allow-scripts` rendering, and `pm.getData(callback)` data access while preserving iframe CSP/network isolation and renderer/Electron/Node separation.
 - Implemented scoped `pm.vault` grants for workspace, collection, and request access with explicit collection/request denial overrides, while keeping all secret operations brokered, bounded, encrypted outside workspace JSON, and audited without secret values.
 - Extended the golden Postman/Newman-style corpus to cover reviewed team/external package imports, visualizer helpers/partials/inline scripts, and the expanded sandbox parity behavior.
 - Hardened the reviewed package-cache policy to fail closed on duplicate packages, missing reviewed dependencies, package-count overflow, dependency-count overflow, and legacy workspace-wide vault grants that conflict with explicit request/collection denials.
-- Completed Step 1 of the Postman import parity plan with a generated official-docs parity matrix source in `src/core/postmanParityMatrix.js` and committed machine-readable output in `docs/postman-sandbox-parity-matrix.json`; the current matrix tracks 304 API, method, property, global, module, protocol, fixture, claim-gate, and security-decision rows against `newman@6.2.2`.
+- Completed Step 1 of the Postman import parity plan with a generated official-docs parity matrix source in `src/core/postmanParityMatrix.js` and committed machine-readable output in `docs/postman-sandbox-parity-matrix.json`; the current matrix tracks 406 API, method, property, global, module, protocol, fixture, claim-gate, and security-decision rows against `newman@6.2.2`.
+- Completed a final official Postman/Newman docs sweep across sandbox reference, script examples, external packages, protocol docs, auth docs, collection-runner docs, and Newman CLI docs. The sweep closed the discovered `pm.environment.name`, exact protocol helper, response-time-chain, scoped npm, and latest-version external package import gaps while preserving parent-side review and no script-time registry access.
 - Added `src/core/postmanParityHarness.js` plus `scripts/postmanParityHarness.js` for matrix validation, matrix regeneration, local PostMeter differential runs, and optional live Newman comparison.
 - Completed Step 4 of the Postman import parity plan by implementing deterministic `pm.test` result ordering, `pm.test.skip`, `pm.test.index`, chained test registration, mixed callback/promise tests, broader Chai-compatible `pm.expect`/`chai.assert` helpers, response JSON-schema/error helpers, variable `clear`/`toJSON`/metadata handling, iteration-data unset/JSON behavior, the documented Postman dynamic variable catalog, request interpolation for dynamic variables, `pm.execution.location`, and a 10-call per-script `pm.execution.runRequest` limit while preserving the script-worker permission boundary.
 - Added the HTTP-core differential collection fixture and desktop-observation template under `test/fixtures/postman`, then covered the new matrix/harness with focused Node tests and `npm run postman:parity:validate` in `npm run check`.
@@ -107,91 +108,97 @@ PostMeter must remain a standalone local desktop application. Do not add PostMet
 - Completed the current Step 2 dynamic-code/host-global audit by adding `differential-dynamic-host-globals.collection.json`, capturing the installed Postman Desktop 11.71.7/postman-sandbox@6.2.2 dynamic-host audit, matching Postman/Newman behavior for direct eval, indirect eval, `Function`, lexical `Buffer`, raw network/browser globals, `process`, `globalThis`, WebAssembly, and constructor escapes, and clearing `global.dynamic-code-and-host-like-globals-audit`.
 - Completed the current Step 3 runtime-limit audit by adding `differential-runtime-limits.collection.json`, capturing the installed Postman Desktop 11.71.7/postman-runtime@7.50.0 and `newman@6.2.2` runtime-limit audit, increasing default script/request budgets to the audited 180-second Postman Runtime global timeout, and classifying the remaining explicit size/count caps as intentional strict sandbox security ceilings.
 - Completed the current Step 4 `HttpOnly` cookie parity pass by adding `differential-httponly-cookies.collection.json`, capturing the installed Postman Desktop 11.71.7/Newman `HttpOnly` cookie audit, matching Postman/Newman script readability and jar mutation behavior for `HttpOnly` cookies, enabling cookie-jar sends/storage on imported Postman requests, and clearing `cookies.httponly-parity`.
-- Completed the current Step 5 `pm.sendRequest` advanced auth/proxy/TLS/client-certificate pass by adding brokered Digest challenge retry, Hawk, AWS Signature v4, OAuth 1.0 signing, HTTP(S) proxy routing, strict TLS policy enforcement, configured client-certificate binding IDs for scripts, explicit NTLM/Akamai fail-closed classification, import/export preservation for advanced auth helpers, `differential-sendrequest-advanced.collection.json`, and `postman-desktop-11.71.7-sendrequest-advanced-audit.json`; live `newman@6.2.2` comparison now passes six differential suites with zero differences.
+- Completed the current Step 5 `pm.sendRequest` advanced auth/proxy/TLS/client-certificate pass by adding brokered Digest challenge retry, Hawk, AWS Signature v4, OAuth 1.0 signing, HTTP(S) proxy routing, strict TLS policy enforcement, configured client-certificate binding IDs for scripts, explicit NTLM/Akamai fail-closed classification, import/export preservation for advanced auth helpers, `differential-sendrequest-advanced.collection.json`, and `postman-desktop-11.71.7-sendrequest-advanced-audit.json`; live `newman@6.2.2` comparison now passes six differential suites with zero differences. A later coverage review split NTLM, Akamai EdgeGrid, JWT Bearer, and ASAP into explicit reopened claim blockers.
 - Completed the current Step 6 file/binary attachment binding pass by adding workspace-reviewed imported file bindings, parent-side approved regular-file body materialization, brokered `pm.sendRequest` file/binary/form-data binding support, a Workspace binding review panel, denial tests for unbound paths, `differential-sendrequest-files.collection.json`, and `postman-desktop-11.71.7-sendrequest-files-audit.json`; live `newman@6.2.2` comparison now passes seven differential suites with zero differences.
-- Completed the current Step 7 package-library fetch/review pass by adding parent-side exact npm and JSR package fetchers, reviewed HTTPS source-URL fetch for team Package Library-style packages, Electron IPC/preload wiring, Workspace fetch-and-review UI, protocol-script package-reference discovery, and fetcher/IPC tests while keeping all runtime script package loading local, synchronous, integrity-checked, and unable to reach registries.
+- Completed the current Step 7 package-library fetch/review pass by adding parent-side npm and JSR exact/latest package fetchers, reviewed HTTPS source-URL fetch for team Package Library-style packages, Electron IPC/preload wiring, Workspace fetch-and-review UI, protocol-script package-reference discovery, and fetcher/IPC tests while keeping all runtime script package loading local, synchronous, integrity-checked, and unable to reach registries.
 - Completed the current Step 8 built-in package parity pass by replacing the hand-rolled built-in package facades with a generated, version-pinned `postman-sandbox@6.2.2` browser bootcode bundle loaded inside the script VM, adding a completed Postman Desktop 11.71.7 built-in package audit, preserving brokered `stream`/`timers` subset boundaries, and clearing `require.builtin.full-library-parity`.
 - Updated the script-worker Node permission read allowlist and sandbox runtime validator so the generated Postman package bundle is available to packaged workers without broadening filesystem access beyond exact runtime files.
 - Completed Step 9 of the Postman import parity plan by implementing reviewed multi-file CommonJS package semantics, including package metadata entrypoints, local directory/extension/JSON resolution, reviewed dependency aliases and subpaths, module caching, circular dependencies, default export patterns, bundle integrity, cache persistence, focused corpus coverage, and adversarial loader denials.
 - Completed Step 10 of the Postman import parity plan by replacing the visualizer subset renderer with an integrity-checked `handlebars@4.7.9` browser runtime loaded inside a separate visualizer VM context, adding precompile/template/create/helper/partial/decorator/runtime-option coverage, preserving iframe CSP and reviewed-asset policy, and clearing `visualizer.handlebars-full-parity`.
 - Completed Step 11 of the Postman import parity plan by adding a live parent-owned desktop gRPC transport for unary, client-streaming, server-streaming, and bidirectional streaming calls, preserving imported gRPC script hook behavior and hardening proto/TLS/client-certificate transport inputs against script-time path mutation.
-- Completed Step 12 of the Postman import parity plan by clearing the final `runtime.resource-limit-parity` claim blocker, documenting audited production resource ceilings as safety policy rather than unsupported Postman APIs, regenerating the parity matrix, and making `npm run postman:parity:claim` pass with zero default-import blockers.
+- Completed Step 12 of the Postman import parity plan by clearing the final `runtime.resource-limit-parity` claim blocker, documenting audited production resource ceilings as safety policy rather than unsupported Postman APIs, regenerating the parity matrix, and temporarily making `npm run postman:parity:claim` pass with zero default-import blockers. Later coverage reviews reopened and expanded the claim blockers so the project does not overstate 1:1 Postman script parity.
+- Added a repeatable official-docs coverage audit so the Postman/Newman sweep is no longer a one-off manual review. The committed `docs/postman-docs-coverage-audit.json` maps 431 extracted tokens from 140 official Postman/Newman sources to parity rows or explicit exclusions, while `npm run postman:docs:live` refetches current upstream docs and the Newman latest dist-tag before preserving the 1:1 claim.
 
 ## Highest Priority Steps
 
-The secure brokered sandbox base and the default Postman script import profile are now claim-gated as complete. `npm run postman:parity:claim` reports zero default-import blockers in `docs/postman-sandbox-parity-matrix.json`. Keep that command, `npm run postman:parity:validate`, and `npm run postman:parity:diff` passing as the scripting surface changes.
+The secure brokered sandbox base remains strong, and the Postman script import parity burn-down is complete for the tracked default import profile. The current audited parity target is Postman Desktop 11.71.7 with `postman-sandbox@6.2.2` and Postman Runtime 7.50.0, plus Newman 6.2.2 with Postman Runtime 7.39.1 for Newman-compatible surfaces. `npm run postman:parity:validate`, `npm run postman:docs:validate`, and `npm run postman:parity:claim` must stay green; `npm run postman:docs:live` must also pass before repeating the claim against current upstream docs. Platform-equivalent OS sandbox completion remains separate under `docs/os-sandbox-platform-matrix.json`.
 
-1. Harden the parity evidence and claim harness. Status: complete.
-   - Added `test/fixtures/postman/differential-sandbox-broad.collection.json` and extended `npm run postman:parity:diff` to run both `differential-http-core` and `differential-sandbox-broad`.
-   - The broad differential suite now compares PostMeter and `newman@6.2.2` outputs for packages, cookies, assertions, timers, dynamic globals, request mutation, `pm.sendRequest` object bodies, and caught failure paths.
-   - Added `test/fixtures/postman/desktop-observations/postman-desktop-11.71.7-runtime-source-audit.json` and matrix fixture `desktop-runtime-source-audit-v1` so desktop-required rows are no longer template-only.
-   - Tightened `src/core/postmanParityHarness.js` so implemented desktop-required rows cannot reference only `desktop-observation-template`.
-   - Former claim blockers cleared: `harness.broad-differential-corpus`, `harness.completed-desktop-observations`.
+1. Tighten desktop evidence from broad row-id coverage to row-specific behavior proof. Status: completed.
+   - Cleared blocker: `harness.row-specific-desktop-behavior-evidence`.
+   - Added row-specific Desktop evidence metadata for implemented behavior-sensitive Desktop rows, including a grouped row-specific audit for Desktop-only runRequest, GraphQL HTTP-body, mock/state, vault, and reviewed package workflow rows.
+   - Extended `src/core/postmanParityHarness.js` so Desktop-required rows can declare `desktopEvidence: "row-specific-behavior"` and fail validation unless a completed artifact supplies explicit `rowEvidence` metadata for that exact row.
+   - Updated `test/fixtures/postman/desktop-observations/README.md` with the evidence standard and added regression coverage that rejects broad source-audit-only coverage for behavior-sensitive rows.
 
-2. Audit dynamic code and host-like globals against current Postman Desktop and Newman. Status: complete.
-   - Added `test/fixtures/postman/differential-dynamic-host-globals.collection.json` and `test/fixtures/postman/desktop-observations/postman-desktop-11.71.7-dynamic-host-globals-audit.json`.
-   - PostMeter now matches the observed Postman/Newman profile: direct eval, indirect eval, and `Function` execute only inside the isolated VM; top-level `Buffer` is a hardened lexical facade; raw `fetch`, `XMLHttpRequest`, `WebSocket`, WebAssembly, `process`, `globalThis`, browser DOM/storage globals, and constructor escapes remain absent.
-   - Former claim blocker cleared: `global.dynamic-code-and-host-like-globals-audit`.
+2. Complete Postman response assertion shortcut parity. Status: completed.
+   - Cleared blockers: `assertion.pm.response.to.have.status-name`, `assertion.pm.response.to.have.responseTime`.
+   - Matched Postman's status-code/status-text behavior for `pm.response.to.have.status(...)`, including strings such as `"Created"`.
+   - Implemented `pm.response.to.have.responseTime` and its chain behavior with `not`, comparison helpers, and Postman-compatible failure output where practical.
+   - Added focused runtime coverage for pass/fail cases.
 
-3. Match or explicitly classify Postman/Newman runtime limits. Status: complete.
-   - Added `test/fixtures/postman/differential-runtime-limits.collection.json` and `test/fixtures/postman/desktop-observations/postman-desktop-11.71.7-runtime-limits-audit.json`.
-   - Postman Runtime 7.50.0 and Newman Runtime 7.39.1 both default to `timeout.global = 180000`, `timeout.request = Infinity`, and `timeout.script = Infinity`; the sandbox enforces a finite script timeout only when runtime passes one. PostMeter now uses `180000` ms as the default per-script/request safety budget.
-   - PostMeter keeps explicit worker heap, broker payload, `pm.sendRequest` response body, final result, console, visualizer, package-cache, mock-state, and workspace payload caps because Postman/Newman either expose no stable equivalent cap or rely on process limits. These are documented production resource ceilings and are covered by adversarial tests rather than unsupported Postman API rows.
-   - Former claim blocker cleared: `runtime.resource-limit-parity`.
+3. Complete protocol metadata, trailer, message, and message-list assertion parity. Status: completed.
+   - Cleared blockers: `assertion.pm.response.to.have.metadata`, `assertion.pm.response.to.have.trailer`, `assertion.pm.response.to.have.message`, `assertion.pm.response.messages.to.include`, `assertion.pm.response.messages.to.have.property`, `assertion.pm.response.messages.to.have.jsonSchema`, `assertion.pm.response.messages.idx`, `assertion.pm.response.messages.filter-object-predicate`, `assertion.pm.request.to.have.metadata`, `assertion.pm.request.messages.each`, `assertion.pm.request.messages.to.include`, `assertion.pm.request.messages.to.have.property`, `assertion.pm.request.messages.to.have.jsonSchema`.
+   - Implemented the gRPC/GraphQL protocol assertion chains documented in Postman's test examples, including default deep/nested semantics and object-predicate message filtering.
+   - Added row-specific Postman Desktop evidence for message-list `idx`, `each`, metadata/trailer behavior, and assertion error shapes.
+   - Covered streaming and unary/client-streaming cases with focused fixtures.
 
-4. Complete `HttpOnly` cookie behavior parity. Status: complete.
-   - Added `test/fixtures/postman/differential-httponly-cookies.collection.json` and `test/fixtures/postman/desktop-observations/postman-desktop-11.71.7-httponly-cookies-audit.json`.
-   - PostMeter now matches observed `newman@6.2.2` behavior for script-readable `HttpOnly` cookies: `pm.cookies.get`/`has`/`toObject` expose in-scope `HttpOnly` values, `pm.cookies.jar().getAll` returns a CookieList facade, jar replacement/unset/clear can affect `HttpOnly` cookies, and `pm.sendRequest` response-cookie jar updates preserve readable `HttpOnly` values.
-   - Imported Postman HTTP requests now enable cookie-jar sends/storage by default so script-created/imported cookies participate in later imported request sends.
-   - Former claim blocker cleared: `cookies.httponly-parity`.
+4. Complete full `pm.expect` Chai BDD parity. Status: completed.
+   - Cleared blockers: `assertion.pm.expect.full-chai-bdd-surface`, `assertion.pm.expect.to.have.jsonSchema`.
+   - Extended the custom `pm.expect` facade to match the Postman-bundled Chai BDD assertion surface required by the tracked import profile, including arbitrary-value `jsonSchema` and observed plugin-style helpers.
+   - Kept the bundled `chai` package available through `require('chai')` while closing the tracked facade gaps.
 
-5. Complete `pm.sendRequest` advanced auth, proxy, TLS, and client-certificate parity. Status: complete.
-   - Added parent-brokered Digest challenge retry, Hawk, AWS Signature v4, and OAuth 1.0 signing for script-created requests, with `differential-sendrequest-advanced.collection.json` covering the Newman-compatible Digest/Hawk/AWS subset and focused sender tests covering OAuth 1.0.
-   - Added brokered HTTP(S) proxy routing without exposing raw sockets/agents/tunnel handles to scripts, kept script-level TLS validation disable switches fail-closed, and required configured client-certificate binding IDs instead of script-supplied certificate/key/PFX paths.
-   - Imported/exported advanced auth helper shapes now preserve Digest, Hawk, AWS Signature v4, OAuth 1.0, NTLM, and Akamai EdgeGrid metadata. NTLM and Akamai EdgeGrid remain advanced stateful transport follow-ups outside the cleared sandbox API rows.
-   - Former claim blocker cleared: `sendRequest.advanced-auth-proxy`.
+5. Complete live SDK object parity for list/filter/prototype behavior. Status: completed.
+   - Cleared blockers: `sdk.list.filter-object-predicate`, `sdk.live-object.constructor-prototype-parity`.
+   - Added SDK-style object-predicate filtering for live `PropertyList`/message-list facades without permitting prototype pollution or unsafe path traversal.
+   - Kept hardened facade prototypes instead of exposing raw SDK constructors, with observed constructor/prototype parity and adversarial escape coverage.
 
-6. Implement user-granted file and binary attachment bindings for brokered script requests. Status: complete.
-   - Added normalized workspace file bindings, a Workspace review/bind panel, parent-side regular-file reads under the request body cap, and brokered `pm.sendRequest` support for approved file, binary, and multipart form-data body references without exposing filesystem APIs, local paths, or file contents to the worker.
-   - Added `differential-sendrequest-files.collection.json`, attachment fixtures, and `postman-desktop-11.71.7-sendrequest-files-audit.json`. Live `newman@6.2.2` comparison now covers imported binary/file-style bodies and multipart form-data attachments; focused PostMeter sender/sandbox tests cover brokered `pm.sendRequest` bindings and unbound-path denial because Newman reports script-originated file uploads as disallowed.
-   - Former claim blocker cleared: `sendRequest.file-binary-bindings`.
+6. Complete GraphQL client and subscription message parity. Status: completed.
+   - Cleared blockers: `graphql.client-interface-hooks`, `graphql.subscription.response-messages`.
+   - Captured row-specific Postman Desktop evidence for GraphQL client script hook behavior separate from HTTP GraphQL body mode.
+   - Implemented GraphQL subscription/multiple-response `pm.response.messages` normalization for imported GraphQL requests, including message assertions and response timing.
 
-7. Complete package-library fetch, review, and first-run resolution. Status: complete.
-   - Added parent-side exact `npm:package@version` fetching through the npm registry metadata/tarball path, exact `jsr:@scope/package@version` fetching through JSR version metadata/module paths with checksum verification, and reviewed HTTPS source-URL fetching for team Package Library-style `@team/package` imports.
-   - Added Electron IPC/preload wiring and Workspace fetch-and-review actions for missing imported package references; fetched packages are only saved after review and enter the same SHA-256 reviewed cache/integrity model as manually pasted packages.
-   - Scripts remain unable to fetch, install, update, or resolve packages at runtime. The VM package loader still only consumes local reviewed cache entries and bundled facades.
-   - Former claim blocker cleared: `require.pm.online-fetch-review`.
+7. Capture local mock helper Desktop evidence. Status: completed.
+   - Cleared blockers: `mock.req-surface`, `mock.res-surface`.
+   - Compared Postman Desktop local mock `req`/`res` helper behavior against PostMeter's loopback mock runner, including `req.params`, `req.json()`, `res.status`, `res.json`, `res.send`, headers, return/await behavior, and error paths.
+   - Promoted the rows to implemented after row-specific evidence and focused local mock coverage were added.
 
-8. Replace package and module facades with version-pinned full behavior or prove exact subset boundaries. Status: complete.
-   - Added generated `src/core/postmanSandboxBootcodeBundle.js` from `postman-sandbox@6.2.2` `.cache/bootcode.browser.js` with Browserify entry modules disabled, loaded only inside the script VM.
-   - Built-in packages now use Postman's pinned bundle for `ajv`, `backbone`, `chai`, `cheerio`, `crypto-js`, `csv-parse/lib/sync`, `json`, `lodash`, `moment`, `postman-collection`, `tv4`, `uuid`, and `xml2js`; `path`, `assert`, `buffer`, `util`, `url`, `punycode`, `querystring`, `string-decoder`, and `events` use the same VM bundle.
-   - Preserved explicit subset boundaries for `stream` and `timers`: they remain PostMeter script-safe facades, with timers brokered through the async tracker, because the raw Browserify shims assume ambient window/timer behavior.
-   - Updated the Node permission read allowlist and runtime validation to include only the exact generated Postman bundle files and reviewed package-cache helper needed by the VM package loader, preserving fail-closed worker launch behavior.
-   - Host Node, native modules, arbitrary paths, registry access, filesystem access, process access, Electron, and renderer access remain blocked.
-   - Added `postman-desktop-11.71.7-builtin-package-audit.json` and regenerated the parity matrix. Former claim blocker cleared: `require.builtin.full-library-parity`.
+8. Implement NTLM auth parity for imported requests and brokered `pm.sendRequest`. Status: completed.
+   - Cleared blocker: `sendRequest.auth.ntlm`.
+   - Implemented a parent-owned NTLM challenge/response handshake without exposing sockets or credentials to the script worker.
+   - Covered imported request execution and script-created `pm.sendRequest` objects with local challenge-server tests and fail-closed paths.
 
-9. Implement full reviewed-package CommonJS semantics. Status: complete.
-   - Reviewed exact `@team/package`, `npm:package@version`, and `jsr:package@version` cache entries now support multi-file bundles, package metadata entrypoints, package.json directory entrypoints, `.js`/`.cjs`/`.mjs`/`.json` extension resolution, local relative modules, reviewed dependency aliases, reviewed dependency subpaths, module caching, circular dependencies, `module.exports`/`exports`, `module.require`, `require.resolve`, `__filename`, `__dirname`, default export object patterns, and deterministic cannot-resolve errors.
-   - Bundle integrity now covers normalized reviewed file maps, package metadata, and entrypoint metadata while legacy single-source cache entries keep the original source digest. Dependency declarations, alias caps, source/file/package caps, duplicate-package denial, missing-dependency denial, host Node denial, path/URL denial, and adversarial package-loader tests remain enforced.
-   - Added golden corpus coverage for a reviewed multi-file CommonJS package and `postman-desktop-11.71.7-commonjs-package-audit.json`; regenerated the parity matrix. Former claim blocker cleared: `require.pm.commonjs-bundle-semantics`.
+9. Implement Akamai EdgeGrid auth parity. Status: completed.
+   - Cleared blocker: `sendRequest.auth.akamai-edgegrid`.
+   - Implemented Postman-compatible signing for access token, client token, client secret, nonce/timestamp, headers-to-sign, canonicalization, query/body behavior, and imported/exported metadata.
+   - Added deterministic signer coverage, brokered sender coverage, importer/exporter round-trip tests, and parity evidence tied to current Postman Desktop behavior.
 
-10. Complete visualizer Handlebars and isolated render parity. Status: complete.
-    - Replaced the safe Handlebars-style subset with a vendored, gzip-compressed, SHA-256-checked `handlebars@4.7.9` browser runtime loaded inside a separate visualizer VM context. Postman Desktop 11.71.7 packages `handlebars@4.7.8`; PostMeter uses the patched 4.7-compatible line because current npm advisories cover `<=4.7.8`.
-    - Added coverage for `Handlebars.compile`, `precompile`, `template`, `create`, helpers, block helpers, helper hash/data/runtime options, dynamic partials, inline partials, custom decorators, whitespace/noEscape behavior, `SafeString`, data/root lookup, `pm.getData`, reviewed assets, and hostile visualizer documents.
-    - Kept iframe CSP, no Electron/Node/parent DOM access, no unreviewed network loads, exact script-worker runtime-file allowlisting, and adversarial helper-option constructor/prototype denials.
-    - Former claim blocker cleared: `visualizer.handlebars-full-parity`.
+10. Implement JWT Bearer and ASAP auth parity. Status: completed.
+   - Cleared blockers: `sendRequest.auth.jwt-bearer`, `sendRequest.auth.asap`.
+   - Captured current Postman Desktop export/runtime shape for both helpers, including ASAP.
+   - Implemented parent-owned token signing/generation with supported algorithms, key material binding, header/query placement, variable interpolation, clock/nonce behavior, and explicit denial for script-supplied arbitrary key files.
+   - Added deterministic crypto tests, imported metadata round-trip tests, and brokered request tests for both helper types.
 
-11. Implement live/native desktop gRPC transport. Status: complete.
-    - Added parent-owned desktop gRPC execution for unary, client-streaming, server-streaming, and bidirectional streaming methods through `@grpc/grpc-js` and `@grpc/proto-loader`.
-    - Preserved Before invoke, On message, and After response script behavior, metadata, messages, status, trailers, cancellation, and error shape without giving scripts raw socket access.
-    - Snapshotted proto source/path, include dirs, TLS material, client options, and client-certificate auth before Before invoke so script-mutated environment variables cannot redirect parent filesystem/TLS reads.
-    - Former claim blocker cleared: `grpc.live-desktop-transport`.
+11. Implement native ESM execution for reviewed JSR packages. Status: completed.
+   - Cleared blocker: `require.pm.jsr-esm-module-semantics`.
+   - Kept the parent-side JSR fetch/review/checksum workflow and added a VM-safe ESM loader for reviewed cache entries with constrained `import`/`export` syntax, default/named exports, dependency resolution, caching, and deterministic errors.
+   - Preserved package security boundaries: no runtime registry fetch, no filesystem/path/URL loading from scripts, no `node:` specifiers, no native modules, no unreviewed dependencies, and size/dependency caps.
+   - Added focused tests for reviewed JSR-style ESM package syntax without runtime registry access.
 
-12. Close the final 1:1 Postman script compatibility claim. Status: complete.
-    - `npm run postman:parity:claim` reports zero default-import blockers.
-    - `docs/COMPATIBILITY.md` no longer lists unsupported Postman script APIs for the supported import profile.
-    - `npm run check`, `npm run sandbox:validate`, `npm run postman:parity:validate`, `npm run postman:parity:diff -- --newman --download-newman`, and relevant desktop observation/differential checks pass.
-    - Keep platform OS-sandbox completion separate under `docs/os-sandbox-platform-matrix.json`; `npm run sandbox:platform:claim` is not part of the Postman API parity claim.
+12. Fix `pm.message.timestamp` Date-object parity. Status: completed.
+   - Cleared blocker: `grpc.pm.message.timestamp-date`.
+   - Changed the gRPC On message script facade so `pm.message.timestamp` behaves like Postman's documented `Date` object while remaining hardened against constructor/prototype escape.
+   - Added focused tests for `instanceof Date`, `Object.prototype.toString`, Date methods, `toJSON`, and adversarial constructor escape attempts.
+   - Updated gRPC transport/audit evidence for the matched Postman Desktop behavior.
+
+13. Re-close the Postman script compatibility claim after the blockers are implemented. Status: completed.
+   - Regenerated `docs/postman-sandbox-parity-matrix.json` and updated `docs/COMPATIBILITY.md`, `docs/SANDBOX_CONTRACT.md`, `TECH_SPECS.MD`, `README.md`, and this file so they record zero default-import blockers.
+   - Verification completed: `npm run check`, `npm run sandbox:validate`, `npm run sandbox:platform:validate`, `npm run postman:parity:validate`, `npm run postman:parity:claim`, `npm run postman:parity:diff -- --newman --download-newman`, and relevant new desktop evidence/differential checks.
+   - Keep platform OS-sandbox completion separate under `docs/os-sandbox-platform-matrix.json`; `npm run sandbox:platform:claim` is not part of the Postman API parity claim.
+
+14. Make the official Postman/Newman docs sweep repeatable and release-gated. Status: completed.
+   - Added `src/core/postmanDocsCoverageAudit.js`, `scripts/postmanDocsCoverageAudit.js`, and committed `docs/postman-docs-coverage-audit.json`.
+   - The live audit discovers relevant official docs from `learning.postman.com/sitemap.xml`, includes official Postman Collection SDK references from `postmanlabs.com/postman-collection`, checks the npm `newman` latest dist-tag, extracts script/SDK/package tokens, and requires every token to map to explicit parity rows or documented exclusions.
+   - Added `npm run postman:docs:validate`, `npm run postman:docs:write`, and `npm run postman:docs:live`; wired committed docs validation into `npm run check`, CI, release workflow, and `npm run release:gate`.
+   - Current live result: 431 extracted tokens from 140 official sources, zero unmatched tokens, targeting Postman Desktop 11.71.7 / `postman-sandbox@6.2.2` and `newman@6.2.2`.
 
 ## Questions For Maintainer After Implementation
 
@@ -236,11 +243,11 @@ These are production-readiness items, but they cannot be completed by local iter
 ## Risks / Gaps Blocking Production Readiness
 
 - Request scripts run in child processes with minimal environments, Linux `bubblewrap` OS isolation plus dangerous-syscall seccomp policy when available/required, fail-closed Node permission flags in production runtimes, hardened host bridge values, bounded worker heap settings, bounded console/result capture, brokered privileged APIs, explicit unsupported-API errors, and VM timeouts. Native Windows/macOS OS sandbox backends and optional stricter Linux deny-by-default seccomp-BPF allowlisting remain incomplete and are tracked by `docs/os-sandbox-platform-matrix.json`.
-- Postman import parity is now the scripting contract direction. The current runtime supports Postman globals, Postman-listed NodeJS module facades, version-pinned Postman bundled library behavior, reviewed multi-file CommonJS package semantics, audited dynamic-code and host-like global behavior, audited runtime-limit behavior with explicit production resource ceilings, audited `HttpOnly` cookie behavior, advanced brokered `pm.sendRequest` auth/proxy/TLS/client-certificate behavior, user-granted file/binary/form-data attachment bindings, reviewed exact team/external package bundles with workspace review UI and parent-side fetch/review resolution, scoped vault grants with local binding/reset/audit UX, full isolated Handlebars visualizers with reviewed assets, imported GraphQL/gRPC script hooks backed by a live parent-owned desktop gRPC transport, local mock scripts with `pm.mock`/`pm.state`, Postman-compatible import/export preservation, a generated parity matrix, a broad real-world-style import corpus, adversarial sandbox tests, installed Postman Desktop 11.71.7 runtime/source audits, and seven Newman differential suites that compare cleanly against `newman@6.2.2`. The production claim gate currently passes with zero default-import blockers. Native Windows/macOS OS sandbox backends remain separate platform work.
+- Postman import parity is now the scripting contract direction. The current runtime supports Postman globals, Postman-listed NodeJS module facades, version-pinned Postman bundled library behavior, reviewed CommonJS and constrained ESM package semantics for team/npm/JSR packages including scoped and latest-version external import forms, audited dynamic-code and host-like global behavior, audited runtime-limit behavior with explicit production resource ceilings, audited `HttpOnly` cookie behavior, supported brokered `pm.sendRequest` auth/proxy/TLS/client-certificate behavior including NTLM, Akamai EdgeGrid, JWT Bearer, and ASAP, user-granted file/binary/form-data attachment bindings, reviewed team/external package bundles with workspace review UI and parent-side fetch/review resolution, scoped vault grants with local binding/reset/audit UX, full isolated Handlebars visualizers with reviewed assets, imported GraphQL/gRPC script hooks backed by a live parent-owned desktop gRPC transport and GraphQL message normalization, local mock scripts with `pm.mock`/`pm.state` and `req`/`res`, row-specific Desktop evidence gating for implemented behavior-sensitive Desktop rows, Postman-compatible import/export preservation, a generated parity matrix, a broad real-world-style import corpus, adversarial sandbox tests, installed Postman Desktop 11.71.7 runtime/source audits, and Newman differential suites that compare cleanly against `newman@6.2.2`. The Postman parity production claim gate now has zero default-import blockers. Native Windows/macOS OS sandbox backends remain separate platform work.
 - Load tests intentionally skip request scripts under sandbox v1; they use the normal HTTP sender directly and report the skip when scripts are present.
 - Native Windows/macOS packaged OS-sandbox assertions and broader externally captured Postman Desktop/Newman reports for `newman@6.2.2` remain external/future validation work.
 - Live OAuth provider behavior is not certified yet against Google, Microsoft Entra ID / Azure AD, and GitHub provider tenants.
-- Postman import/export now preserves common and advanced auth helpers, variables plus raw Postman variable metadata, HTTP/GraphQL/gRPC scripts, editable examples, cookie metadata, request variables, collection certificates, protocol profiles, mock/vault/visualizer binding metadata, and file/binary body references. The remaining compatibility risk is not the core preservation path but broader real-world fixture coverage for obscure Postman export variants and stateful auth helpers such as NTLM.
+- Postman import/export now preserves common and advanced auth helpers, variables plus raw Postman variable metadata, HTTP/GraphQL/gRPC scripts, editable examples, cookie metadata, request variables, collection certificates, protocol profiles, mock/vault/visualizer binding metadata, and file/binary body references. Remaining compatibility risk is ongoing broader real-world fixture coverage for obscure Postman export variants rather than an active claim blocker.
 - Cookie jar handling covers more common behavior and selected newer attributes, but still needs deeper browser-parity and source-format round-trip coverage.
 - JMeter import/export covers common HTTP sampler metadata, assertion mappings including XPath, extractors, selected timer/controller metadata round-tripping, Size Assertion mapping, nested-controller metadata preservation, representative timer metadata, mapped disabled-state preservation, and unsupported metadata preservation, but it is still not a full JMeter test-plan model.
 - Automated Electron UI coverage is broader and includes screenshot, mocked OAuth, and XML/HTML formatting smokes, but it is still Linux/headless focused and not broad cross-platform UI automation.
@@ -259,6 +266,7 @@ npm run check
 npm run sandbox:validate
 npm run sandbox:platform:validate
 npm run postman:parity:validate
+npm run postman:docs:validate
 npm run release:gate
 npm run postman:parity:diff
 npm run pack:linux
@@ -271,10 +279,11 @@ For the full Postman script compatibility claim report, run:
 
 ```bash
 npm run postman:parity:claim
+npm run postman:docs:live
 npm run sandbox:platform:claim
 ```
 
-`npm run postman:parity:claim` is expected to pass. `npm run sandbox:platform:claim` is still expected to fail until its separate platform OS-sandbox blockers are resolved.
+`npm run postman:parity:claim` and `npm run postman:docs:live` are expected to pass for the tracked default Postman import profile. `npm run sandbox:platform:claim` is still expected to fail until its separate platform OS-sandbox blockers are resolved.
 
 Then inspect the worktree:
 

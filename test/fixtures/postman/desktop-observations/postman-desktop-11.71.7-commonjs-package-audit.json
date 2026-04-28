@@ -4,6 +4,23 @@
   "rowIds": [
     "require.pm.commonjs-bundle-semantics"
   ],
+  "rowEvidence": {
+    "require.pm.commonjs-bundle-semantics": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-postmeter-focused-package-loader-coverage",
+      "postmanEvidence": [
+        "Postman Desktop resolves Package Library and external package imports before script execution and exposes prepared packages through the sandbox require surface.",
+        "The audited postman-sandbox package model supports synchronous CommonJS-style module loading and per-module cache behavior inside the sandbox."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/sandboxPackageFetcher.test.js",
+        "test/electron/sandboxPackageIpc.test.js",
+        "test/electron/postmanSandboxCorpus.test.js",
+        "test/electron/postmanSandboxAdversarial.test.js"
+      ]
+    }
+  },
   "auditedAt": "2026-04-27",
   "postman": {
     "app": "Postman Desktop",
@@ -34,7 +51,7 @@
     ]
   },
   "postmeterImplementation": {
-    "reviewedCache": "PostMeter stores reviewed exact team, npm, and JSR package entries with SHA-256 integrity over normalized file maps, package metadata, and entrypoint metadata. Legacy single-source entries remain supported with the original source digest.",
+    "reviewedCache": "PostMeter stores reviewed exact team, npm, and checksum-verified JSR package entries with SHA-256 integrity over normalized file maps, package metadata, and entrypoint metadata. Legacy single-source entries remain supported with the original source digest.",
     "loaderSemantics": "The script VM loader resolves package entrypoints from explicit entrypoint metadata, package.json main/browser/module/exports fields, and index fallbacks; supports relative file, directory package.json, extension, .json, .js, .cjs, and .mjs resolution; pre-caches module records for circular dependencies; exposes module, exports, module.require, require.resolve, __filename, and __dirname; and keeps default export object patterns intact.",
     "dependencyPolicy": "Reviewed packages may synchronously require only Postman bundled facades or reviewed dependencies declared in the package entry. Dependency aliases and reviewed dependency subpaths map package-local bare specifiers to exact reviewed package file-map entries without giving scripts Node or registry resolution.",
     "securityBoundary": "The loader rejects host Node modules outside the approved Postman facade list, node: specifiers, absolute or parent-escaping paths, URLs, native modules, unreviewed packages, duplicate cache entries, missing dependencies, oversized packages, and integrity mismatches."
@@ -55,6 +72,7 @@
   },
   "limitations": [
     "This artifact is a source and implementation audit. Package Library UI behavior and online fetch/review workflow evidence is tracked separately by require.pm.online-fetch-review.",
+    "This artifact covers reviewed CommonJS-compatible package execution. Native ESM execution for JSR packages is tracked separately by require.pm.jsr-esm-module-semantics.",
     "PostMeter intentionally preserves the reviewed-cache security model instead of giving scripts direct npm, JSR, filesystem, or Node resolution."
   ],
   "notes": "This artifact clears the CommonJS bundle-semantics claim blocker by tying the Postman Desktop package model to PostMeter's reviewed multi-file CommonJS loader, integrity model, dependency policy, focused tests, adversarial denials, and golden corpus coverage."

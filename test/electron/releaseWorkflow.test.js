@@ -12,6 +12,7 @@ test('CI workflow runs the Electron UI and packaging validation suite', async ()
   assert.match(workflow, /apt-get install -y bubblewrap/);
   assert.match(workflow, /npm test/);
   assert.match(workflow, /npm run postman:parity:validate/);
+  assert.match(workflow, /npm run postman:docs:validate/);
   assert.match(workflow, /npm run release:gate/);
   assert.match(workflow, /npm audit --audit-level=high/);
   assert.match(workflow, /npm run sandbox:validate/);
@@ -42,6 +43,7 @@ test('release workflow builds unsigned artifacts for all tier-one desktop platfo
   assert.match(workflow, /npm run sandbox:validate/);
   assert.match(workflow, /npm run sandbox:platform:validate/);
   assert.match(workflow, /npm run postman:parity:validate/);
+  assert.match(workflow, /npm run postman:docs:validate/);
   assert.match(workflow, /npm run release:gate/);
   assert.match(workflow, /CSC_IDENTITY_AUTO_DISCOVERY:\s*"false"/);
   assert.match(workflow, /npm run sandbox:validate:packaged/);

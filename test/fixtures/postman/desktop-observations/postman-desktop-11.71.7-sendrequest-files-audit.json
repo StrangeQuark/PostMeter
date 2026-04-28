@@ -12,6 +12,22 @@
   "rowIds": [
     "sendRequest.file-binary-bindings"
   ],
+  "rowEvidence": {
+    "sendRequest.file-binary-bindings": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-newman-differential",
+      "postmanEvidence": [
+        "newman@6.2.2 differential evidence covers file, binary, and multipart form-data attachment transport for imported file references.",
+        "Installed Postman Desktop runtime/source audit records the parent-owned file-binding policy classification."
+      ],
+      "postmeterEvidence": [
+        "test/fixtures/postman/differential-sendrequest-files.collection.json",
+        "test/electron/httpClient.test.js",
+        "test/electron/scriptSandbox.test.js",
+        "test/electron/scriptRuntime.test.js"
+      ]
+    }
+  },
   "scope": [
     "pm.sendRequest file body src references",
     "pm.sendRequest binary body src references",

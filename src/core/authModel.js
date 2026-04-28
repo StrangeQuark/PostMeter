@@ -141,6 +141,37 @@
         headersToSign: auth.headersToSign ?? ''
       };
     }
+    if (type === 'jwtBearer') {
+      return {
+        type,
+        algorithm: auth.algorithm ?? 'HS256',
+        secret: auth.secret ?? auth.clientSecret ?? '',
+        privateKey: auth.privateKey ?? '',
+        keyId: auth.keyId ?? auth.kid ?? '',
+        issuer: auth.issuer ?? auth.iss ?? '',
+        subject: auth.subject ?? auth.sub ?? '',
+        audience: auth.audience ?? auth.aud ?? '',
+        expiresIn: auth.expiresIn ?? '300',
+        claims: auth.claims ?? '',
+        headerPrefix: auth.headerPrefix ?? 'Bearer',
+        addTokenTo: auth.addTokenTo ?? 'header',
+        queryParamName: auth.queryParamName ?? 'token'
+      };
+    }
+    if (type === 'asap') {
+      return {
+        type,
+        algorithm: auth.algorithm ?? 'RS256',
+        privateKey: auth.privateKey ?? '',
+        secret: auth.secret ?? auth.clientSecret ?? '',
+        issuer: auth.issuer ?? auth.iss ?? '',
+        subject: auth.subject ?? auth.sub ?? '',
+        audience: auth.audience ?? auth.aud ?? '',
+        keyId: auth.keyId ?? auth.kid ?? '',
+        expiresIn: auth.expiresIn ?? '300',
+        headerPrefix: auth.headerPrefix ?? 'Bearer'
+      };
+    }
     return { type: 'none' };
   }
 
@@ -164,6 +195,12 @@
     }
     if (lowered === 'akamai' || lowered === 'edgegrid' || lowered === 'akamaiedgegrid') {
       return 'akamaiEdgeGrid';
+    }
+    if (lowered === 'jwt' || lowered === 'jwtbearer' || lowered === 'bearerjwt') {
+      return 'jwtBearer';
+    }
+    if (lowered === 'asap' || lowered === 'atlassianasap') {
+      return 'asap';
     }
     return AUTH_TYPES.has(text) ? text : normalizeSchemaEnumValue('authTypes', text, 'none');
   }
@@ -328,7 +365,7 @@
         passphrase: state.clientPassphrase ?? ''
       });
     }
-    if (['digest', 'hawk', 'aws', 'oauth1', 'ntlm', 'akamaiEdgeGrid'].includes(type)) {
+    if (['digest', 'hawk', 'aws', 'oauth1', 'ntlm', 'akamaiEdgeGrid', 'jwtBearer', 'asap'].includes(type)) {
       const existing = normalizeAuth(existingAuth);
       return normalizeAuth(existing.type === type ? existing : { type });
     }

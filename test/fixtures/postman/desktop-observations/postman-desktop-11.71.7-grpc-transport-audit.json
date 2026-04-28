@@ -11,6 +11,96 @@
     "info.eventName.beforeInvoke",
     "info.eventName.onIncomingMessage"
   ],
+  "rowEvidence": {
+    "grpc.hook.afterResponse": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-postmeter-loopback-transport",
+      "postmanEvidence": [
+        "Postman Desktop 11.71.7 source/docs expose gRPC After response scripts and pm.info.eventName afterResponse."
+      ],
+      "postmeterEvidence": [
+        "test/electron/grpcClient.test.js",
+        "test/fixtures/postman/protocol-script-hooks.collection.json"
+      ]
+    },
+    "grpc.hook.beforeInvoke": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-postmeter-loopback-transport",
+      "postmanEvidence": [
+        "Postman Desktop 11.71.7 source/docs expose gRPC Before invoke scripts and pm.info.eventName beforeInvoke."
+      ],
+      "postmeterEvidence": [
+        "test/electron/grpcClient.test.js",
+        "test/fixtures/postman/protocol-script-hooks.collection.json"
+      ]
+    },
+    "grpc.hook.onMessage": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-postmeter-loopback-transport",
+      "postmanEvidence": [
+        "Postman Desktop 11.71.7 source/docs expose gRPC On message scripts and pm.info.eventName onIncomingMessage."
+      ],
+      "postmeterEvidence": [
+        "test/electron/grpcClient.test.js",
+        "test/fixtures/postman/protocol-script-hooks.collection.json"
+      ]
+    },
+    "grpc.live-desktop-transport": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-postmeter-loopback-transport",
+      "postmanEvidence": [
+        "Postman Desktop 11.71.7 source/docs expose unary, client-streaming, server-streaming, and bidirectional-streaming gRPC script lifecycles."
+      ],
+      "postmeterEvidence": [
+        "test/electron/grpcClient.test.js",
+        "src/core/grpcClient.js"
+      ]
+    },
+    "grpc.pm.message": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-postmeter-loopback-transport",
+      "postmanEvidence": [
+        "Postman Desktop docs expose pm.message data for gRPC streaming message scripts."
+      ],
+      "postmeterEvidence": [
+        "test/electron/grpcClient.test.js",
+        "test/fixtures/postman/protocol-script-hooks.collection.json"
+      ]
+    },
+    "info.eventName.afterResponse": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-postmeter-loopback-transport",
+      "postmanEvidence": [
+        "Postman Desktop gRPC script hooks expose afterResponse as an event name."
+      ],
+      "postmeterEvidence": [
+        "test/electron/grpcClient.test.js",
+        "test/fixtures/postman/protocol-script-hooks.collection.json"
+      ]
+    },
+    "info.eventName.beforeInvoke": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-postmeter-loopback-transport",
+      "postmanEvidence": [
+        "Postman Desktop gRPC script hooks expose beforeInvoke as an event name."
+      ],
+      "postmeterEvidence": [
+        "test/electron/grpcClient.test.js",
+        "test/fixtures/postman/protocol-script-hooks.collection.json"
+      ]
+    },
+    "info.eventName.onIncomingMessage": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-postmeter-loopback-transport",
+      "postmanEvidence": [
+        "Postman Desktop gRPC script hooks expose onIncomingMessage as an event name."
+      ],
+      "postmeterEvidence": [
+        "test/electron/grpcClient.test.js",
+        "test/fixtures/postman/protocol-script-hooks.collection.json"
+      ]
+    }
+  },
   "postman": {
     "app": "Postman Desktop",
     "version": "11.71.7",
@@ -84,6 +174,7 @@
   },
   "limitations": [
     "This artifact does not claim public internet interoperability with every gRPC server implementation; it proves PostMeter's imported-script lifecycle and parent-owned live transport against a local grpc-js loopback service.",
+    "This artifact covers the base pm.message data/name/type/toJSON surface but not Postman's documented Date-object behavior for pm.message.timestamp.",
     "gRPC PFX/P12 client-certificate conversion is not implemented by grpc-js createSsl and remains outside the currently tested PEM cert/key coverage.",
     "Platform-equivalent OS sandbox completion remains tracked separately from the Postman script compatibility claim."
   ],

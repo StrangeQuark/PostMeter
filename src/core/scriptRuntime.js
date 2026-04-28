@@ -55,7 +55,7 @@ const MAX_SCRIPT_PACKAGE_SOURCE_BYTES = 128 * 1024;
 const MAX_SCRIPT_PACKAGE_EXPORT_KEYS = 64;
 const MAX_SCRIPT_PACKAGE_DEPENDENCIES = 32;
 const MAX_SCRIPT_PACKAGE_LOAD_DEPTH = 16;
-const SCRIPT_PACKAGE_SPECIFIER_PATTERN = /^(?:npm:[a-z0-9@._/-]+@\d[\w.+-]*|jsr:[a-z0-9@._/-]+@\d[\w.+-]*|@[a-z0-9._-]+\/[a-z0-9._-]+)$/i;
+const SCRIPT_PACKAGE_SPECIFIER_PATTERN = /^(?:npm:(?:@[a-z0-9._-]+\/[a-z0-9._-]+|[a-z0-9._-]+)(?:@\d[\w.+-]*)?|jsr:@[a-z0-9._-]+\/[a-z0-9._-]+(?:@\d[\w.+-]*)?|@[a-z0-9._-]+\/[a-z0-9._-]+)$/i;
 const POSTMAN_BUILTIN_EXPORT_KEY_LIMITS = Object.freeze({
   ajv: 16,
   assert: 32,
@@ -166,6 +166,7 @@ function runPostmanScript(scriptText, context = {}, options = {}) {
   const runtimeGlobals = createPostmanRuntimeGlobals({ vmContextRef });
   const lexicalGlobals = createPostmanLexicalGlobals({ vmContextRef });
   const environmentVariables = context.environment?.variables || [];
+  const environmentName = context.environment?.name || '';
   const collectionVariables = context.collectionVariables || [];
   const globals = context.globals || [];
   const localVariables = context.localVariables || [];
@@ -174,6 +175,7 @@ function runPostmanScript(scriptText, context = {}, options = {}) {
     pm: createPmApi({
       collectionVariables,
       environmentVariables,
+      environmentName,
       globals,
       localVariables,
       logs,
@@ -202,6 +204,7 @@ function runPostmanScript(scriptText, context = {}, options = {}) {
   });
   vmContextRef.current = vmContext;
   removePostmanAbsentGlobals(vmContext);
+  installDateInstanceofBridge(vmContext);
   attachPackageRegistryContext(packageRegistry, vmContext, {
     fileFacade: lexicalGlobals.scope.File,
     timeoutMillis: Number(options.timeoutMillis || DEFAULT_SCRIPT_TIMEOUT_MILLIS)
@@ -282,6 +285,7 @@ async function runPostmanScriptAsync(scriptText, context = {}, options = {}) {
   const mutableRequest = cloneJson(context.request || {});
   const mock = createMockRuntimeState(context.mock);
   const environmentVariables = context.environment?.variables || [];
+  const environmentName = context.environment?.name || '';
   const collectionVariables = context.collectionVariables || [];
   const localVariables = context.localVariables || [];
   const globals = context.globals || [];
@@ -302,6 +306,7 @@ async function runPostmanScriptAsync(scriptText, context = {}, options = {}) {
       currentRequestCookies: context.currentRequestCookies,
       cookieAccessEnabled: context.scriptCookieAccessEnabled !== false,
       environmentVariables,
+      environmentName,
       execution,
       eventName: context.eventName,
       executionLocation: context.executionLocation,
@@ -342,6 +347,7 @@ async function runPostmanScriptAsync(scriptText, context = {}, options = {}) {
   });
   vmContextRef.current = vmContext;
   removePostmanAbsentGlobals(vmContext);
+  installDateInstanceofBridge(vmContext);
   attachPackageRegistryContext(packageRegistry, vmContext, {
     fileFacade: lexicalGlobals.scope.File,
     timeoutMillis: Number(options.timeoutMillis || DEFAULT_SCRIPT_TIMEOUT_MILLIS)
@@ -488,6 +494,23 @@ function removePostmanAbsentGlobals(vmContext) {
         vmContext[name] = undefined;
       }
     }
+  }
+}
+
+function installDateInstanceofBridge(vmContext) {
+  try {
+    vm.runInContext(`
+      try {
+        Object.defineProperty(Date, Symbol.hasInstance, {
+          configurable: true,
+          value(value) {
+            return Object.prototype.toString.call(value) === '[object Date]';
+          }
+        });
+      } catch (_) {}
+    `, vmContext, { timeout: 50 });
+  } catch {
+    // Date remains usable through Object.prototype.toString and Date methods.
   }
 }
 
@@ -1134,6 +1157,7 @@ function createAsyncPmApi({
   collectionVariables,
   cookieAccessEnabled,
   currentRequestCookies,
+  environmentName,
   environmentVariables,
   execution,
   eventName,
@@ -1157,7 +1181,7 @@ function createAsyncPmApi({
   const api = {
     collectionVariables: variableApi(collectionVariables),
     cookies: brokerCookieApi({ broker, cookieAccessEnabled, currentRequestCookies, tracker }),
-    environment: variableApi(environmentVariables),
+    environment: variableApi(environmentVariables, { name: environmentName }),
     execution: executionApi({
       collectionVariables,
       environmentVariables,
@@ -1177,15 +1201,15 @@ function createAsyncPmApi({
       requestName: request?.name || ''
     },
     iterationData: readOnlyVariableApi(iterationData),
-    message: message ? createPostmanMessage(message) : unsupportedApi('pm.message'),
+    message: message ? createPostmanMessage(message, undefined, { packageRegistry }) : unsupportedApi('pm.message'),
     mock: mock ? mockApi(mock) : unsupportedApi('pm.mock'),
     require: packageRequireApi(packageRegistry),
     request: mutableRequestApi(request),
-    response: responseApi(response),
+    response: responseApi(response, { packageRegistry }),
     sendRequest(input, callback) {
       const promise = tracker.brokerRequest('sendRequest', { request: sendRequestPayloadForBroker(input) })
         .then((result) => {
-          const scriptResponse = responseApi(result);
+          const scriptResponse = responseApi(result, { packageRegistry });
           if (typeof callback === 'function') {
             callback(null, scriptResponse);
           }
@@ -1231,21 +1255,21 @@ function sendRequestPayloadForBroker(input) {
   return input;
 }
 
-function createPmApi({ collectionVariables, environmentVariables, globals = [], localVariables, logs, message, packageRegistry, request, response, tests, visualizer }) {
+function createPmApi({ collectionVariables, environmentName, environmentVariables, globals = [], localVariables, logs, message, packageRegistry, request, response, tests, visualizer }) {
   const testApi = createPmTestApi({ tests });
   const api = {
     collectionVariables: variableApi(collectionVariables),
     cookies: unsupportedApi('pm.cookies'),
-    environment: variableApi(environmentVariables),
+    environment: variableApi(environmentVariables, { name: environmentName }),
     execution: unsupportedApi('pm.execution'),
     expect,
     globals: variableApi(globals),
     iterationData: unsupportedApi('pm.iterationData'),
-    message: message ? createPostmanMessage(message) : unsupportedApi('pm.message'),
+    message: message ? createPostmanMessage(message, undefined, { packageRegistry }) : unsupportedApi('pm.message'),
     mock: unsupportedApi('pm.mock'),
     require: packageRequireApi(packageRegistry),
     request: requestApi(request),
-    response: responseApi(response),
+    response: responseApi(response, { packageRegistry }),
     sendRequest: unsupportedApi('pm.sendRequest'),
     state: unsupportedApi('pm.state'),
     test: testApi,
@@ -1361,7 +1385,7 @@ function mockRequestApi(mock) {
   const request = mock.request || {};
   return hardenSandboxValue({
     body: request.body == null ? '' : request.body,
-    headers: cloneMockJsonValue(request.headers || {}),
+    headers: mockRequestHeaderObject(request.headers || request.header || {}),
     method: String(request.method || mock.match?.method || 'GET').toUpperCase(),
     params: cloneMockJsonValue(mock.match?.pathVariables || {}),
     path: String(request.path || mock.match?.path || '/'),
@@ -1377,6 +1401,20 @@ function mockRequestApi(mock) {
       return JSON.parse(String(request.body));
     }
   });
+}
+
+function mockRequestHeaderObject(headers) {
+  if (Array.isArray(headers)) {
+    const output = {};
+    for (const header of headers) {
+      const key = String(header?.key || header?.name || '').trim();
+      if (key && header.enabled !== false && header.disabled !== true) {
+        output[key] = header.value == null ? '' : String(header.value);
+      }
+    }
+    return hardenSandboxValue(output);
+  }
+  return hardenSandboxValue(cloneMockJsonValue(headers || {}));
 }
 
 function mockResponseApi(mock) {
@@ -1700,7 +1738,7 @@ function normalizeScriptPackageName(packageName, registry = createPackageRegistr
       return raw;
     }
     if (lowered.startsWith('npm:') || lowered.startsWith('jsr:') || raw.startsWith('@')) {
-      throw sandboxError(`Sandbox package "${raw}" is not installed in the reviewed package cache. Exact external and team package imports must be pre-bundled with integrity metadata before scripts can require them.`);
+      throw sandboxError(`Sandbox package "${raw}" is not installed in the reviewed package cache. External and team package imports must be resolved through the review workflow with integrity metadata before scripts can require them.`);
     }
     throw sandboxError(`Sandbox package "${raw}" is not available. Supported packages: ${SCRIPT_PACKAGE_NAMES.join(', ')}.`);
   }
@@ -1778,7 +1816,7 @@ function normalizeScriptPackageBundle(item) {
   }
   const specifier = String(item.specifier || item.name || '').trim();
   if (!specifier || !SCRIPT_PACKAGE_SPECIFIER_PATTERN.test(specifier)) {
-    throw sandboxError(`Sandbox package specifier "${specifier}" is invalid. Use @team/package, npm:package@version, or jsr:package@version.`);
+    throw sandboxError(`Sandbox package specifier "${specifier}" is invalid. Use @team/package, npm:package[@version], npm:@scope/package[@version], or jsr:@scope/package[@version].`);
   }
   const packageJson = normalizeScriptPackageManifest(item.packageJson || item.package || item.manifest);
   const entrypoint = normalizeScriptPackageEntrypoint(item.entrypoint, packageJson);
@@ -2014,7 +2052,7 @@ function packageNameFromReviewedSpecifier(specifier) {
   if (value.startsWith('npm:') || value.startsWith('jsr:')) {
     const rawNameAndVersion = value.slice(value.indexOf(':') + 1);
     const versionSeparator = rawNameAndVersion.lastIndexOf('@');
-    return versionSeparator > 0 ? rawNameAndVersion.slice(0, versionSeparator) : '';
+    return versionSeparator > 0 ? rawNameAndVersion.slice(0, versionSeparator) : rawNameAndVersion;
   }
   return value.startsWith('@') ? value : '';
 }
@@ -2614,6 +2652,10 @@ function sourceForReviewedPackageModule(bundle, modulePath, bridgeName) {
       `this[${JSON.stringify(bridgeName)}].module.exports = JSON.parse(${JSON.stringify(bundle.files.get(modulePath) || '{}')});`
     ].join('\n');
   }
+  const moduleSource = bundle.files.get(modulePath) || '';
+  const source = reviewedPackageModuleIsEsm(bundle, modulePath, moduleSource)
+    ? transpileReviewedEsmModule(moduleSource)
+    : moduleSource;
   return [
     "'use strict';",
     '(() => {',
@@ -2625,9 +2667,116 @@ function sourceForReviewedPackageModule(bundle, modulePath, bridgeName) {
     '  module.require = require;',
     `  const __filename = ${JSON.stringify(modulePath)};`,
     `  const __dirname = ${JSON.stringify(nodePath.posix.dirname(modulePath) === '.' ? '' : nodePath.posix.dirname(modulePath))};`,
-    bundle.files.get(modulePath) || '',
+    source,
     '})()'
   ].join('\n');
+}
+
+function reviewedPackageModuleIsEsm(bundle, modulePath, source) {
+  if (/\.mjs$/i.test(modulePath)) {
+    return true;
+  }
+  if (String(bundle.specifier || '').startsWith('jsr:')) {
+    return true;
+  }
+  if (String(bundle.packageJson?.type || '').toLowerCase() === 'module' && !/\.cjs$/i.test(modulePath)) {
+    return true;
+  }
+  return /^\s*(?:import|export)\s/m.test(String(source || ''));
+}
+
+function transpileReviewedEsmModule(source) {
+  const exportedNames = new Set();
+  let output = String(source || '');
+  output = output.replace(/^\s*import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+(['"])([^'"]+)\2\s*;?/gm, (_match, namespace, _quote, specifier) => {
+    return `const ${namespace} = require(${JSON.stringify(specifier)});`;
+  });
+  output = output.replace(/^\s*import\s+([A-Za-z_$][\w$]*)\s*,\s*\{([^}]+)\}\s+from\s+(['"])([^'"]+)\3\s*;?/gm, (_match, defaultName, named, _quote, specifier) => {
+    const moduleName = esmTempName('esm_default', defaultName);
+    return [
+      `const ${moduleName} = require(${JSON.stringify(specifier)});`,
+      `const ${defaultName} = ${moduleName} && Object.prototype.hasOwnProperty.call(${moduleName}, 'default') ? ${moduleName}.default : ${moduleName};`,
+      `const { ${esmImportBindings(named)} } = ${moduleName};`
+    ].join('\n');
+  });
+  output = output.replace(/^\s*import\s+\{([^}]+)\}\s+from\s+(['"])([^'"]+)\2\s*;?/gm, (_match, named, _quote, specifier) => {
+    return `const { ${esmImportBindings(named)} } = require(${JSON.stringify(specifier)});`;
+  });
+  output = output.replace(/^\s*import\s+([A-Za-z_$][\w$]*)\s+from\s+(['"])([^'"]+)\2\s*;?/gm, (_match, defaultName, _quote, specifier) => {
+    const moduleName = esmTempName('esm_default', defaultName);
+    return `const ${moduleName} = require(${JSON.stringify(specifier)});\nconst ${defaultName} = ${moduleName} && Object.prototype.hasOwnProperty.call(${moduleName}, 'default') ? ${moduleName}.default : ${moduleName};`;
+  });
+  output = output.replace(/^\s*import\s+(['"])([^'"]+)\1\s*;?/gm, (_match, _quote, specifier) => {
+    return `require(${JSON.stringify(specifier)});`;
+  });
+  output = output.replace(/^\s*export\s+\*\s+from\s+(['"])([^'"]+)\1\s*;?/gm, (_match, _quote, specifier) => {
+    const moduleName = esmTempName('esm_star', specifier);
+    return `Object.assign(exports, require(${JSON.stringify(specifier)}));`;
+  });
+  output = output.replace(/^\s*export\s+\{([^}]+)\}\s+from\s+(['"])([^'"]+)\2\s*;?/gm, (_match, names, _quote, specifier) => {
+    const moduleName = esmTempName('esm_reexport', specifier);
+    return `const ${moduleName} = require(${JSON.stringify(specifier)});\n${esmExportListAssignments(names, moduleName)}`;
+  });
+  output = output.replace(/^\s*export\s+default\s+function\s+([A-Za-z_$][\w$]*)?\s*\(/gm, (_match, name = '') => `exports.default = function ${name || ''}(`);
+  output = output.replace(/^\s*export\s+default\s+class\s+([A-Za-z_$][\w$]*)?\s*/gm, (_match, name = '') => `exports.default = class ${name || ''} `);
+  output = output.replace(/^\s*export\s+default\s+([^;\n]+)\s*;?/gm, (_match, expression) => {
+    return `exports.default = ${expression};`;
+  });
+  output = output.replace(/^\s*export\s+(const|let|var)\s+([A-Za-z_$][\w$]*)/gm, (_match, kind, name) => {
+    exportedNames.add(name);
+    return `${kind} ${name}`;
+  });
+  output = output.replace(/^\s*export\s+function\s+([A-Za-z_$][\w$]*)/gm, (_match, name) => {
+    exportedNames.add(name);
+    return `function ${name}`;
+  });
+  output = output.replace(/^\s*export\s+class\s+([A-Za-z_$][\w$]*)/gm, (_match, name) => {
+    exportedNames.add(name);
+    return `class ${name}`;
+  });
+  output = output.replace(/^\s*export\s+\{([^}]+)\}\s*;?/gm, (_match, names) => esmExportListAssignments(names));
+  const assignments = [...exportedNames]
+    .map((name) => name === 'default' ? '' : `exports.${name} = ${name};`)
+    .filter(Boolean)
+    .join('\n');
+  return [
+    'Object.defineProperty(exports, "__esModule", { value: true });',
+    output,
+    assignments
+  ].filter(Boolean).join('\n');
+}
+
+function esmExportListAssignments(names, moduleName = '') {
+  return String(names || '')
+    .split(',')
+    .map((part) => {
+      const [local, exported = local] = part.trim().split(/\s+as\s+/i).map((value) => value.trim()).filter(Boolean);
+      if (!local || VISUALIZER_UNSAFE_PATH_PARTS.has(local) || VISUALIZER_UNSAFE_PATH_PARTS.has(exported)) {
+        return '';
+      }
+      const source = moduleName ? `${moduleName}.${local}` : local;
+      return `exports.${exported} = ${source};`;
+    })
+    .filter(Boolean)
+    .join('\n');
+}
+
+function esmImportBindings(names) {
+  return String(names || '')
+    .split(',')
+    .map((part) => {
+      const [imported, local = imported] = part.trim().split(/\s+as\s+/i).map((value) => value.trim()).filter(Boolean);
+      if (!imported || VISUALIZER_UNSAFE_PATH_PARTS.has(imported) || VISUALIZER_UNSAFE_PATH_PARTS.has(local)) {
+        return '';
+      }
+      return imported === local ? imported : `${imported}: ${local}`;
+    })
+    .filter(Boolean)
+    .join(', ');
+}
+
+function esmTempName(prefix, value) {
+  return `__postmeter_${prefix}_${crypto.createHash('sha1').update(String(value || '')).digest('hex').slice(0, 8)}`;
 }
 
 function requireFromReviewedPackage(packageName, parentPath, request, registry) {
@@ -4053,6 +4202,34 @@ function createPostmanRequest(definition = {}, options = {}) {
     auth: createPostmanAuth(request.auth || { type: 'none' }, mutable ? (nextAuth) => { request.auth = nextAuth; } : undefined),
     metadata,
     messages,
+    to: {
+      have: {
+        metadata(name, expectedValue) {
+          assertPropertyListContains(metadata, name, expectedValue, arguments.length, 'request metadata');
+        },
+        message(expectedMessage) {
+          const requestMessages = messages.all();
+          const passed = arguments.length === 0
+            ? requestMessages.length > 0
+            : requestMessages.some((message) => objectIncludesSubset(messageToComparable(message), expectedMessage));
+          assertCondition(passed, 'Expected request messages to include matching message.');
+        }
+      },
+      not: {
+        have: {
+          metadata(name, expectedValue) {
+            assertPropertyListContains(metadata, name, expectedValue, arguments.length, 'request metadata', true);
+          },
+          message(expectedMessage) {
+            const requestMessages = messages.all();
+            const passed = arguments.length === 0
+              ? requestMessages.length > 0
+              : requestMessages.some((message) => objectIncludesSubset(messageToComparable(message), expectedMessage));
+            assertCondition(!passed, 'Expected request messages not to include matching message.');
+          }
+        }
+      }
+    },
     get methodPath() { return request.methodPath == null ? '' : String(request.methodPath); },
     set methodPath(value) {
       if (mutable) {
@@ -4551,16 +4728,18 @@ function createSdkPropertyList(items = [], options = {}) {
       return hardenSandboxValue(enabledItems(true).map((item, index) => Reflect.apply(callback, context || api, [itemFor(item), index, api])));
     },
     filter(callback, context) {
-      if (typeof callback !== 'function') {
+      if (typeof callback !== 'function' && (!callback || typeof callback !== 'object')) {
         return hardenSandboxValue([]);
       }
-      return hardenSandboxValue(enabledItems(true).filter((item, index) => Reflect.apply(callback, context || api, [itemFor(item), index, api])).map(itemFor));
+      return hardenSandboxValue(enabledItems(true)
+        .filter((item, index) => sdkListPredicateMatches(callback, itemFor(item), index, api, context))
+        .map(itemFor));
     },
     find(callback, context) {
-      if (typeof callback !== 'function') {
+      if (typeof callback !== 'function' && (!callback || typeof callback !== 'object')) {
         return undefined;
       }
-      const item = enabledItems(true).find((entry, index) => Reflect.apply(callback, context || api, [itemFor(entry), index, api]));
+      const item = enabledItems(true).find((entry, index) => sdkListPredicateMatches(callback, itemFor(entry), index, api, context));
       return item ? itemFor(item) : undefined;
     },
     reduce(callback, initialValue, context) {
@@ -4613,9 +4792,117 @@ function createSdkPropertyList(items = [], options = {}) {
     },
     valueOf() {
       return api.all();
-    }
+    },
+    to: createListAssertionChain(() => api.all(), options.itemKind || 'list')
   };
   return hardenSandboxValue(api);
+}
+
+function sdkListPredicateMatches(predicate, item, index, api, context) {
+  if (typeof predicate === 'function') {
+    return Boolean(Reflect.apply(predicate, context || api, [item, index, api]));
+  }
+  return objectIncludesSubset(itemToComparable(item), predicate);
+}
+
+function createListAssertionChain(itemsProvider, label = 'list') {
+  const include = (expected, negate = false) => {
+    const items = itemsProvider();
+    const passed = items.some((item) => objectIncludesSubset(itemToComparable(item), expected));
+    assertCondition(negate ? !passed : passed, `Expected ${label} ${negate ? 'not ' : ''}to include ${safeJsonStringify(expected)}.`);
+  };
+  const property = (path, expectedValue, argCount, negate = false) => {
+    const items = itemsProvider();
+    const passed = items.some((item) => {
+      const value = readJsonPathForScript(itemToComparable(item), path);
+      if (argCount <= 1) {
+        return value !== undefined;
+      }
+      return deepEqual(value, expectedValue);
+    });
+    assertCondition(negate ? !passed : passed, `Expected ${label} ${negate ? 'not ' : ''}to have property ${path}.`);
+  };
+  const jsonSchema = (schema, options = {}, negate = false) => {
+    const items = itemsProvider().map(itemToComparable);
+    assertCondition(items.length > 0, `Expected ${label} to have items for jsonSchema validation.`);
+    const allValid = items.every((item) => validateJsonSchema(schema, item, '', options).valid);
+    assertCondition(negate ? !allValid : allValid, `Expected ${label} ${negate ? 'not ' : ''}to match JSON schema.`);
+  };
+  const have = {
+    property(path, expectedValue) {
+      property(path, expectedValue, arguments.length, false);
+    },
+    jsonSchema(schema, options = {}) {
+      jsonSchema(schema, options, false);
+    }
+  };
+  const notHave = {
+    property(path, expectedValue) {
+      property(path, expectedValue, arguments.length, true);
+    },
+    jsonSchema(schema, options = {}) {
+      jsonSchema(schema, options, true);
+    }
+  };
+  return {
+    include(expected) {
+      include(expected, false);
+    },
+    have,
+    not: {
+      include(expected) {
+        include(expected, true);
+      },
+      have: notHave
+    }
+  };
+}
+
+function itemToComparable(item) {
+  if (item && typeof item.toJSON === 'function') {
+    return clonePlainJson(item.toJSON());
+  }
+  return clonePlainJson(item);
+}
+
+function messageToComparable(message) {
+  const json = itemToComparable(message);
+  if (json.timestamp instanceof Date || Object.prototype.toString.call(json.timestamp) === '[object Date]') {
+    json.timestamp = normalizeMessageTimestamp(json.timestamp);
+  }
+  return json;
+}
+
+function objectIncludesSubset(actual, expected) {
+  if (expected == null || typeof expected !== 'object') {
+    return deepEqual(actual, expected);
+  }
+  const comparable = itemToComparable(actual);
+  return Object.entries(expected).every(([key, value]) => {
+    if (VISUALIZER_UNSAFE_PATH_PARTS.has(String(key))) {
+      return false;
+    }
+    const actualValue = readJsonPathForScript(comparable, key);
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      return objectIncludesSubset(actualValue, value);
+    }
+    return deepEqual(actualValue, value);
+  });
+}
+
+function assertPropertyListContains(list, name, expectedValue, argCount, label, negate = false) {
+  const key = String(name || '');
+  const value = list?.get?.(key);
+  const exists = value != null;
+  const matches = argCount <= 1 || String(value) === String(expectedValue);
+  assertCondition(
+    negate ? !(exists && matches) : exists && matches,
+    negate
+      ? `Expected ${label} ${key} not to match.`
+      : exists
+        ? `Expected ${label} ${key} to equal ${expectedValue} but received ${value}.`
+        : `Expected ${label} ${key}.`
+  );
 }
 
 function normalizeSdkListItem(item, options = {}) {
@@ -5154,7 +5441,18 @@ function createPostmanAuth(auth = {}, onChange) {
     'version',
     'domain',
     'workstation',
-    'certificateId'
+    'certificateId',
+    'privateKey',
+    'secret',
+    'issuer',
+    'subject',
+    'audience',
+    'keyId',
+    'expiresIn',
+    'claims',
+    'headerPrefix',
+    'addTokenTo',
+    'queryParamName'
   ]);
   for (const key of authKeys) {
     if (key === 'type' || VISUALIZER_UNSAFE_PATH_PARTS.has(key)) {
@@ -5170,12 +5468,12 @@ function createPostmanAuth(auth = {}, onChange) {
   return hardenSandboxValue(api);
 }
 
-function createPostmanMessage(definition = {}, onChange = () => {}) {
+function createPostmanMessage(definition = {}, onChange = () => {}, options = {}) {
   const source = definition && typeof definition.toJSON === 'function' ? definition.toJSON() : definition || {};
   const backing = {
     data: source.data == null ? '' : source.data,
     name: source.name == null ? '' : String(source.name),
-    timestamp: source.timestamp || new Date(0).toISOString(),
+    timestamp: normalizeMessageTimestamp(source.timestamp),
     type: source.type == null ? '' : String(source.type)
   };
   const sync = () => {
@@ -5190,8 +5488,8 @@ function createPostmanMessage(definition = {}, onChange = () => {}) {
   const api = {
     get data() { return backing.data; },
     set data(value) { backing.data = value == null ? '' : value; sync(); },
-    get timestamp() { return backing.timestamp; },
-    set timestamp(value) { backing.timestamp = value == null ? '' : String(value); sync(); },
+    get timestamp() { return createVmDate(backing.timestamp, options.vmContext); },
+    set timestamp(value) { backing.timestamp = normalizeMessageTimestamp(value); sync(); },
     get type() { return backing.type; },
     set type(value) { backing.type = value == null ? '' : String(value); sync(); },
     get name() { return backing.name; },
@@ -5209,7 +5507,7 @@ function createPostmanMessage(definition = {}, onChange = () => {}) {
 function messageToJSON(message = {}) {
   const output = {
     data: message.data == null ? '' : message.data,
-    timestamp: message.timestamp || new Date(0).toISOString()
+    timestamp: normalizeMessageTimestamp(message.timestamp)
   };
   if (message.type) {
     output.type = String(message.type);
@@ -5218,6 +5516,39 @@ function messageToJSON(message = {}) {
     output.name = String(message.name);
   }
   return output;
+}
+
+function normalizeMessageTimestamp(value) {
+  if (value instanceof Date || Object.prototype.toString.call(value) === '[object Date]') {
+    const millis = value.getTime();
+    return Number.isFinite(millis) ? new Date(millis).toISOString() : new Date(0).toISOString();
+  }
+  const text = value == null ? '' : String(value);
+  const parsed = Date.parse(text);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : new Date(0).toISOString();
+}
+
+function createVmDate(value, vmContext) {
+  const iso = normalizeMessageTimestamp(value);
+  if (vmContext?.packageRegistry) {
+    vmContext = vmContext.packageRegistry.vmContext;
+  }
+  const date = vmContext?.Date && typeof vmContext.Date === 'function'
+    ? new vmContext.Date(iso)
+    : vmContext
+      ? vm.runInContext(`new Date(${JSON.stringify(iso)})`, vmContext, { timeout: 50 })
+      : new Date(iso);
+  try {
+    Object.defineProperty(date, 'constructor', {
+      configurable: false,
+      enumerable: false,
+      value: undefined,
+      writable: false
+    });
+  } catch {
+    // Date remains usable; constructor masking is best effort for built-ins.
+  }
+  return date;
 }
 
 function clonePlainJson(value) {
@@ -5378,8 +5709,8 @@ function pmVariablesApi({ collectionVariables = [], environmentVariables = [], g
   });
 }
 
-function variableApi(variables) {
-  return hardenSandboxValue({
+function variableApi(variables, options = {}) {
+  const api = {
     get(key) {
       return getVariable(variables, key);
     },
@@ -5406,7 +5737,17 @@ function variableApi(variables) {
         variables.splice(0, variables.length);
       }
     }
-  });
+  };
+  if (Object.prototype.hasOwnProperty.call(options, 'name')) {
+    Object.defineProperty(api, 'name', {
+      configurable: false,
+      enumerable: true,
+      get() {
+        return options.name == null ? '' : String(options.name);
+      }
+    });
+  }
+  return hardenSandboxValue(api);
 }
 
 function readOnlyVariableApi(variables) {
@@ -7004,11 +7345,13 @@ function requestBodyApi(rawBody) {
   });
 }
 
-function responseApi(response = null) {
+function responseApi(response = null, options = {}) {
   if (!response) {
     return undefined;
   }
-  const postmanResponse = createPostmanResponse(response);
+  const postmanResponse = createPostmanResponse(response, options);
+  const haveAssertions = createResponseHaveAssertions(postmanResponse, false);
+  const notHaveAssertions = createResponseHaveAssertions(postmanResponse, true);
   const api = {
     ...postmanResponse,
     to: {
@@ -7052,71 +7395,126 @@ function responseApi(response = null) {
               throw sandboxError(`Expected response not to be an error but received ${postmanResponse.code}.`);
             }
           }
-        }
+        },
+        have: notHaveAssertions
       },
-      have: {
-        status(expectedStatus) {
-          if (Number(postmanResponse.code) !== Number(expectedStatus)) {
-            throw sandboxError(`Expected response status ${expectedStatus} but received ${postmanResponse.code}.`);
-          }
-        },
-        header(name, expectedValue) {
-          const value = postmanResponse.headers.get(name);
-          if (value == null) {
-            throw sandboxError(`Expected response header ${name}.`);
-          }
-          if (arguments.length > 1 && String(value) !== String(expectedValue)) {
-            throw sandboxError(`Expected response header ${name} to equal ${expectedValue} but received ${value}.`);
-          }
-        },
-        body(expectedText) {
-          const body = postmanResponse.text();
-          if (arguments.length === 0) {
-            if (!body) {
-              throw sandboxError('Expected response body.');
-            }
-            return;
-          }
-          if (!body.includes(String(expectedText))) {
-            throw sandboxError(`Expected response body to include ${expectedText}.`);
-          }
-        },
-        jsonBody(path, expectedValue) {
-          const payload = postmanResponse.json();
-          if (arguments.length === 0) {
-            return;
-          }
-          const value = readJsonPathForScript(payload, path);
-          if (arguments.length === 1) {
-            if (value == null || value === '') {
-              throw sandboxError(`Expected JSON body path ${path} to exist.`);
-            }
-            return;
-          }
-          if (!deepEqual(value, expectedValue)) {
-            throw sandboxError(`Expected JSON body path ${path} to equal ${safeJsonStringify(expectedValue)}.`);
-          }
-        },
-        jsonSchema(schema, options = {}) {
-          const Ajv = createAjvPackage();
-          const ajv = new Ajv(options);
-          if (!ajv.validate(schema, postmanResponse.json())) {
-            throw sandboxError(`Expected response JSON to match schema: ${ajv.errorsText(ajv.errors)}.`);
-          }
-        }
-      }
+      have: haveAssertions
     }
   };
   return hardenSandboxValue(api);
 }
 
-function createPostmanResponse(response = {}) {
+function createResponseHaveAssertions(postmanResponse, negate = false) {
+  const assertResponse = (condition, positiveMessage, negativeMessage) => {
+    assertCondition(negate ? !condition : condition, negate ? (negativeMessage || positiveMessage.replace('Expected', 'Expected not')) : positiveMessage);
+  };
+  return {
+    status(expectedStatus) {
+      const expectedNumber = Number(expectedStatus);
+      const actualText = postmanResponse.status || postmanResponse.reason || httpStatusText(postmanResponse.code);
+      const passed = Number.isFinite(expectedNumber) && String(expectedStatus).trim() !== ''
+        ? Number(postmanResponse.code) === expectedNumber
+        : String(actualText).toLowerCase() === String(expectedStatus || '').toLowerCase();
+      assertResponse(
+        passed,
+        `Expected response status ${expectedStatus} but received ${postmanResponse.code}${actualText ? ` ${actualText}` : ''}.`,
+        `Expected response status not to be ${expectedStatus}.`
+      );
+    },
+    header(name, expectedValue) {
+      const value = postmanResponse.headers.get(name);
+      const exists = value != null;
+      const matches = arguments.length <= 1 || String(value) === String(expectedValue);
+      assertResponse(exists && matches, exists
+        ? `Expected response header ${name} to equal ${expectedValue} but received ${value}.`
+        : `Expected response header ${name}.`, `Expected response header ${name} not to match.`);
+    },
+    body(expectedText) {
+      const body = postmanResponse.text();
+      const passed = arguments.length === 0 ? Boolean(body) : body.includes(String(expectedText));
+      assertResponse(passed, arguments.length === 0 ? 'Expected response body.' : `Expected response body to include ${expectedText}.`);
+    },
+    jsonBody(path, expectedValue) {
+      const payload = postmanResponse.json();
+      if (arguments.length === 0) {
+        assertResponse(payload !== undefined, 'Expected JSON body.');
+        return;
+      }
+      const value = readJsonPathForScript(payload, path);
+      const passed = arguments.length === 1 ? value != null && value !== '' : deepEqual(value, expectedValue);
+      assertResponse(passed, arguments.length === 1
+        ? `Expected JSON body path ${path} to exist.`
+        : `Expected JSON body path ${path} to equal ${safeJsonStringify(expectedValue)}.`);
+    },
+    jsonSchema(schema, options = {}) {
+      assertJsonSchema(postmanResponse.json(), schema, options, 'response JSON', negate);
+    },
+    responseTime: createResponseTimeAssertion(postmanResponse.responseTime, negate),
+    metadata(name, expectedValue) {
+      assertPropertyListContains(postmanResponse.metadata, name, expectedValue, arguments.length, 'response metadata', negate);
+    },
+    trailer(name, expectedValue) {
+      assertPropertyListContains(postmanResponse.trailers, name, expectedValue, arguments.length, 'response trailer', negate);
+    },
+    message(expectedMessage) {
+      const messages = postmanResponse.messages.all();
+      const passed = arguments.length === 0 ? messages.length > 0 : messages.some((message) => objectIncludesSubset(messageToComparable(message), expectedMessage));
+      assertResponse(passed, 'Expected response messages to include matching message.', 'Expected response messages not to include matching message.');
+    }
+  };
+}
+
+function createResponseTimeAssertion(responseTime, negate = false, includeNot = true) {
+  const actual = Number(responseTime) || 0;
+  const assertTime = (condition, message, negativeMessage) => {
+    assertCondition(negate ? !condition : condition, negate ? (negativeMessage || message.replace('Expected', 'Expected not')) : message);
+  };
+  const api = function responseTimeAssertion(expected) {
+    if (arguments.length === 0) {
+      assertTime(actual >= 0, `Expected response time to be present but received ${actual}.`);
+      return api;
+    }
+    assertTime(actual === Number(expected), `Expected response time ${expected} but received ${actual}.`, `Expected response time not to equal ${expected}.`);
+    return api;
+  };
+  api.above = api.gt = api.greaterThan = (expected) => {
+    assertTime(actual > Number(expected), `Expected response time to be above ${expected} but received ${actual}.`);
+    return api;
+  };
+  api.below = api.lt = api.lessThan = (expected) => {
+    assertTime(actual < Number(expected), `Expected response time to be below ${expected} but received ${actual}.`);
+    return api;
+  };
+  api.within = (minimum, maximum) => {
+    assertTime(actual >= Number(minimum) && actual <= Number(maximum), `Expected response time to be within ${minimum}..${maximum} but received ${actual}.`);
+    return api;
+  };
+  api.at = hardenSandboxValue({
+    least(expected) {
+      assertTime(actual >= Number(expected), `Expected response time to be at least ${expected} but received ${actual}.`);
+      return api;
+    },
+    most(expected) {
+      assertTime(actual <= Number(expected), `Expected response time to be at most ${expected} but received ${actual}.`);
+      return api;
+    }
+  });
+  if (includeNot) {
+    api.not = createResponseTimeAssertion(responseTime, !negate, false);
+  }
+  return hardenSandboxValue(api);
+}
+
+function createPostmanResponse(response = {}, options = {}) {
   const normalized = normalizePostmanResponse(response);
   const headers = createPostmanHeaderList(normalized.headers);
   const cookies = createPostmanCookieList(normalized.cookies);
   const metadata = createPostmanPropertyList(normalized.metadata);
   const trailers = createPostmanPropertyList(normalized.trailers);
-  const messages = createPostmanPropertyList(normalized.messages, { itemFactory: createPostmanMessage, toJSONItem: messageToJSON });
+  const messages = createPostmanPropertyList(normalized.messages, {
+    itemFactory: (message, onChange) => createPostmanMessage(message, onChange, options),
+    toJSONItem: messageToJSON
+  });
   const api = {
     code: normalized.code,
     status: normalized.status,
@@ -7330,6 +7728,18 @@ function readJsonPathForScript(value, path) {
     .reduce((current, part) => current == null ? undefined : current[part], value);
 }
 
+function assertJsonSchema(value, schema, options = {}, label = 'value', negate = false) {
+  const Ajv = createAjvPackage();
+  const ajv = new Ajv(options);
+  const valid = ajv.validate(schema, value);
+  assertCondition(
+    negate ? !valid : valid,
+    negate
+      ? `Expected ${label} not to match schema.`
+      : `Expected ${label} to match schema: ${ajv.errorsText(ajv.errors)}.`
+  );
+}
+
 function expect(actual) {
   return createExpectation(actual);
 }
@@ -7360,7 +7770,13 @@ function createExpectation(actual, flags = {}) {
     false: { get() { assertFlag(actual === false, `Expected ${formatExpectedValue(actual)} to be false.`, `Expected ${formatExpectedValue(actual)} not to be false.`); return chain; } },
     undefined: { get() { assertFlag(actual === undefined, `Expected ${formatExpectedValue(actual)} to be undefined.`, `Expected ${formatExpectedValue(actual)} not to be undefined.`); return chain; } },
     null: { get() { assertFlag(actual === null, `Expected ${formatExpectedValue(actual)} to be null.`, `Expected ${formatExpectedValue(actual)} not to be null.`); return chain; } },
-    empty: { get() { assertFlag(isEmpty(actual), `Expected ${formatExpectedValue(actual)} to be empty.`, `Expected ${formatExpectedValue(actual)} not to be empty.`); return chain; } }
+    empty: { get() { assertFlag(isEmpty(actual), `Expected ${formatExpectedValue(actual)} to be empty.`, `Expected ${formatExpectedValue(actual)} not to be empty.`); return chain; } },
+    finite: { get() { assertFlag(Number.isFinite(actual), `Expected ${formatExpectedValue(actual)} to be finite.`, `Expected ${formatExpectedValue(actual)} not to be finite.`); return chain; } },
+    NaN: { get() { assertFlag(Number.isNaN(actual), `Expected ${formatExpectedValue(actual)} to be NaN.`, `Expected ${formatExpectedValue(actual)} not to be NaN.`); return chain; } },
+    arguments: { get() { assertFlag(Object.prototype.toString.call(actual) === '[object Arguments]', 'Expected value to be arguments.', 'Expected value not to be arguments.'); return chain; } },
+    extensible: { get() { assertFlag(actual != null && Object.isExtensible(Object(actual)), 'Expected value to be extensible.', 'Expected value not to be extensible.'); return chain; } },
+    sealed: { get() { assertFlag(actual != null && Object.isSealed(Object(actual)), 'Expected value to be sealed.', 'Expected value not to be sealed.'); return chain; } },
+    frozen: { get() { assertFlag(actual != null && Object.isFrozen(Object(actual)), 'Expected value to be frozen.', 'Expected value not to be frozen.'); return chain; } }
   });
   chain.equal = (expected) => {
     const passed = flags.deep ? deepEqual(actual, expected) : Object.is(actual, expected);
@@ -7414,6 +7830,7 @@ function createExpectation(actual, flags = {}) {
     return chain;
   };
   chain.length = chain.lengthOf;
+  Object.defineProperty(chain, 'lengthOf', { value: chain.lengthOf, configurable: true, writable: true });
   chain.property = function property(name, expectedValue) {
     const result = readExpectationProperty(actual, name, flags);
     assertFlag(result.exists, `Expected object to have property ${name}.`, `Expected object not to have property ${name}.`);
@@ -7427,6 +7844,12 @@ function createExpectation(actual, flags = {}) {
     const passed = actual != null && Object.hasOwn(actual, name);
     assertFlag(passed, `Expected object to have own property ${name}.`, `Expected object not to have own property ${name}.`);
     return createExpectation(passed ? actual[name] : undefined, flags.deep ? { deep: true } : {});
+  };
+  chain.propertyVal = (name, expectedValue) => chain.property(name, expectedValue);
+  chain.ownPropertyVal = (name, expectedValue) => {
+    const value = actual == null ? undefined : actual[name];
+    assertFlag(actual != null && Object.hasOwn(actual, name) && Object.is(value, expectedValue), `Expected object to have own property ${name} with value ${formatExpectedValue(expectedValue)}.`);
+    return createExpectation(value, flags.deep ? { deep: true } : {});
   };
   chain.keys = (...expectedKeys) => {
     const keys = expectedKeys.flat().map(String);
@@ -7450,6 +7873,21 @@ function createExpectation(actual, flags = {}) {
   chain.closeTo = chain.approximately = (expected, delta) => {
     const passed = Math.abs(Number(actual) - Number(expected)) <= Number(delta);
     assertFlag(passed, `Expected ${actual} to be close to ${expected} +/- ${delta}.`, `Expected ${actual} not to be close to ${expected} +/- ${delta}.`);
+    return chain;
+  };
+  chain.instanceOf = chain.instanceof = (constructor) => {
+    assertCondition(typeof constructor === 'function', 'Expected instanceOf to receive a constructor.');
+    assertFlag(actual instanceof constructor, `Expected value to be instance of ${constructor.name || 'constructor'}.`, `Expected value not to be instance of ${constructor.name || 'constructor'}.`);
+    return chain;
+  };
+  chain.respondTo = (method) => {
+    const target = flags.itself ? actual : actual?.prototype || actual;
+    assertFlag(target != null && typeof target[method] === 'function', `Expected value to respond to ${method}.`, `Expected value not to respond to ${method}.`);
+    return chain;
+  };
+  Object.defineProperty(chain, 'itself', { get() { return withFlag('itself'); } });
+  chain.jsonSchema = (schema, options = {}) => {
+    assertJsonSchema(actual, schema, options, 'value', flags.negate === true);
     return chain;
   };
   chain.throw = chain.throws = chain.Throw = (expected, message) => {

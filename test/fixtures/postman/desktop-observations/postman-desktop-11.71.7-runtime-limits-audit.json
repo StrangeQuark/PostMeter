@@ -4,6 +4,20 @@
   "rowIds": [
     "runtime.resource-limit-parity"
   ],
+  "rowEvidence": {
+    "runtime.resource-limit-parity": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-newman-probes",
+      "postmanEvidence": [
+        "Postman Desktop 11.71.7 and newman@6.2.2 runtime source both expose a 180000 ms global timeout default with request/script timeouts set to Infinity.",
+        "Newman probes record busy-loop, timer-drain, uncleared interval, and console/output behavior below PostMeter policy ceilings."
+      ],
+      "postmeterEvidence": [
+        "test/fixtures/postman/differential-runtime-limits.collection.json",
+        "test/electron/postmanSandboxAdversarial.test.js"
+      ]
+    }
+  },
   "postman": {
     "app": "Postman Desktop",
     "version": "11.71.7",

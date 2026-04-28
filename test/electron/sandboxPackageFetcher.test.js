@@ -89,6 +89,71 @@ test('fetches an exact JSR package and verifies the registry checksum', async ()
   assert.deepEqual(fetched.files.map((file) => file.path), ['mod.js']);
 });
 
+test('resolves unversioned external package imports to reviewed latest-version cache entries', async () => {
+  const npmSource = 'module.exports = { npm: true };';
+  const tarball = createPackageTarball({
+    'package/package.json': JSON.stringify({
+      name: 'latest-pkg',
+      version: '2.0.0',
+      main: 'index.js'
+    }),
+    'package/index.js': npmSource
+  });
+  const npmFetched = await fetchSandboxPackageForReview('npm:latest-pkg', {
+    fetchImpl: async (url) => {
+      if (url === 'https://registry.npmjs.org/latest-pkg') {
+        return response(JSON.stringify({
+          'dist-tags': { latest: '2.0.0' },
+          versions: {
+            '2.0.0': {
+              dist: {
+                integrity: 'sha512-latest',
+                tarball: 'https://registry.npmjs.org/latest-pkg/-/latest-pkg-2.0.0.tgz'
+              }
+            }
+          }
+        }), { contentType: 'application/json', url });
+      }
+      if (url === 'https://registry.npmjs.org/latest-pkg/-/latest-pkg-2.0.0.tgz') {
+        return response(tarball, { contentType: 'application/octet-stream', url });
+      }
+      throw new Error(`unexpected URL ${url}`);
+    }
+  });
+
+  assert.equal(npmFetched.specifier, 'npm:latest-pkg');
+  assert.equal(npmFetched.packageVersion, '2.0.0');
+  assert.equal(npmFetched.packageJson.version, '2.0.0');
+  assert.equal(npmFetched.integrity, scriptPackageBundleIntegrity(npmFetched));
+
+  const jsrSource = 'export const jsr = true;';
+  const checksum = `sha256-${crypto.createHash('sha256').update(jsrSource, 'utf8').digest('hex')}`;
+  const jsrFetched = await fetchSandboxPackageForReview('jsr:@postmeter/latest', {
+    fetchImpl: async (url) => {
+      if (url === 'https://jsr.io/@postmeter/latest/meta.json') {
+        return response(JSON.stringify({ latest: '1.1.0' }), { contentType: 'application/json', url });
+      }
+      if (url === 'https://jsr.io/@postmeter/latest/1.1.0_meta.json') {
+        return response(JSON.stringify({
+          exports: { '.': './mod.js' },
+          manifest: {
+            '/mod.js': { checksum, size: jsrSource.length }
+          }
+        }), { contentType: 'application/json', url });
+      }
+      if (url === 'https://jsr.io/@postmeter/latest/1.1.0/mod.js') {
+        return response(jsrSource, { contentType: 'application/javascript', url });
+      }
+      throw new Error(`unexpected URL ${url}`);
+    }
+  });
+
+  assert.equal(jsrFetched.specifier, 'jsr:@postmeter/latest');
+  assert.equal(jsrFetched.packageVersion, '1.1.0');
+  assert.equal(jsrFetched.packageJson.version, '1.1.0');
+  assert.equal(jsrFetched.integrity, scriptPackageBundleIntegrity(jsrFetched));
+});
+
 test('fetches a team package from an explicitly reviewed HTTPS source URL', async () => {
   const source = 'module.exports = { team: true };';
   const fetched = await fetchSandboxPackageForReview('@postmeter/tools', {
@@ -111,8 +176,13 @@ test('fetches a team package from an explicitly reviewed HTTPS source URL', asyn
   assert.equal(fetched.integrity, scriptPackageBundleIntegrity(fetched));
 });
 
-test('rejects unpinned, unsafe, and redirected package fetches', async () => {
-  assert.throws(() => parseSandboxPackageSpecifier('npm:left-pad'), /requires @team\/package/);
+test('rejects unsafe and redirected package fetches', async () => {
+  assert.deepEqual(parseSandboxPackageSpecifier('npm:left-pad'), {
+    registry: 'npm',
+    packageName: 'left-pad',
+    specifier: 'npm:left-pad',
+    version: ''
+  });
   await assert.rejects(
     () => fetchSandboxPackageForReview('@postmeter/tools', {
       fetchImpl: async () => response('module.exports = {};'),

@@ -50,6 +50,13 @@ test('exposes pm.message for streaming protocol hooks', async () => {
       pm.expect(pm.info.eventName).to.equal('onIncomingMessage');
       pm.expect(pm.message.data.id).to.equal('user-42');
       pm.expect(pm.message.name).to.equal('user');
+      pm.expect(pm.message.timestamp).to.be.instanceOf(Date);
+      pm.expect(Object.prototype.toString.call(pm.message.timestamp)).to.equal('[object Date]');
+      pm.expect(pm.message.timestamp.toJSON()).to.equal('2026-04-27T00:00:00.000Z');
+      pm.expect(pm.message.timestamp.constructor).to.be.undefined;
+      let escaped = false;
+      try { pm.message.timestamp.constructor.constructor('return process')(); escaped = true; } catch (_) {}
+      pm.expect(escaped).to.equal(false);
       pm.expect(pm.message.toJSON().data.name).to.equal('Ada');
     });
   `, {
@@ -66,6 +73,55 @@ test('exposes pm.message for streaming protocol hooks', async () => {
     }
   }, {
     broker: timerBroker()
+  });
+
+  assert.equal(result.passed, true);
+});
+
+test('supports response shortcut and protocol message assertions', () => {
+  const result = runPostmanScript(`
+    pm.test('response assertion shortcuts', function () {
+      pm.response.to.have.status('Created');
+      pm.response.to.have.responseTime.above(40);
+      pm.response.to.have.responseTime.below(60);
+      pm.response.to.have.responseTime.not.above(60);
+      pm.response.to.have.responseTime.within(45, 55);
+      pm.response.to.have.metadata('content-type', 'application/grpc');
+      pm.response.to.have.trailer('grpc-status', '0');
+      pm.expect(pm.response.headers.get('x-response')).to.equal('yes');
+      pm.expect(pm.response.metadata.has('content-type')).to.equal(true);
+      pm.expect(pm.response.metadata.get('content-type')).to.equal('application/grpc');
+      pm.expect(pm.response.trailers.has('grpc-status')).to.equal(true);
+      pm.expect(pm.response.trailers.get('grpc-status')).to.equal('0');
+      pm.response.to.have.message({ name: 'user', data: { id: 'user-42' } });
+      pm.response.messages.to.include({ data: { name: 'Ada' } });
+      pm.response.messages.to.have.property('data.id', 'user-42');
+      pm.response.messages.to.have.jsonSchema({ type: 'object', required: ['data'], properties: { data: { type: 'object' } } });
+      pm.expect(pm.response.messages.idx(0).timestamp).to.be.instanceOf(Date);
+      pm.expect(pm.response.messages.filter({ data: { id: 'user-42' } }).length).to.equal(1);
+      pm.request.to.have.metadata('x-request', 'yes');
+      pm.expect(pm.request.messages.idx(0).data.id).to.equal('request-1');
+      pm.request.messages.to.include({ data: { id: 'request-1' } });
+      let requestMessageCount = 0;
+      pm.request.messages.each(function () { requestMessageCount += 1; });
+      pm.expect(requestMessageCount).to.equal(1);
+      pm.expect({ ok: true }).to.have.jsonSchema({ type: 'object', required: ['ok'] });
+    });
+  `, {
+    request: {
+      metadata: [{ key: 'x-request', value: 'yes' }],
+      messages: [{ name: 'request', data: { id: 'request-1' }, timestamp: '2026-04-27T00:00:00.000Z' }]
+    },
+    response: {
+      statusCode: 201,
+      statusText: 'Created',
+      responseTime: 50,
+      headers: [{ key: 'x-response', value: 'yes' }],
+      metadata: [{ key: 'content-type', value: 'application/grpc' }],
+      trailers: [{ key: 'grpc-status', value: '0' }],
+      messages: [{ name: 'user', data: { id: 'user-42', name: 'Ada' }, timestamp: '2026-04-27T00:00:00.000Z' }],
+      body: '{"ok":true}'
+    }
   });
 
   assert.equal(result.passed, true);
@@ -198,14 +254,22 @@ test('supports exact reviewed team and external package bundles without Node acc
     const team = require('@postmeter/team-utils');
     module.exports = function (value) { return team.label(value).toUpperCase(); };
   `;
+  const latestSource = `
+    exports.version = '3.0.0';
+    exports.slug = function (value) { return require('lodash').kebabCase(value); };
+  `;
   const result = runPostmanScript(`
     const team = pm.require('@postmeter/team-utils');
     const npmPackage = pm.require('npm:@postmeter/example@1.2.3');
+    const latestPackage = pm.require('npm:@postmeter/latest');
     pm.test('reviewed package cache', function () {
       pm.expect(team.label({ name: 'Ada' })).to.equal('Ada:team');
       pm.expect(npmPackage({ name: 'Ada' })).to.equal('ADA:TEAM');
+      pm.expect(latestPackage.version).to.equal('3.0.0');
+      pm.expect(latestPackage.slug('Latest Package')).to.equal('latest-package');
       pm.expect(team.label.constructor).to.be.undefined;
       pm.expect(npmPackage.constructor).to.be.undefined;
+      pm.expect(latestPackage.slug.constructor).to.be.undefined;
     });
   `, {
     sandboxPackages: [
@@ -220,6 +284,14 @@ test('supports exact reviewed team and external package bundles without Node acc
         source: npmSource,
         integrity: scriptPackageIntegrity(npmSource),
         dependencies: ['@postmeter/team-utils']
+      },
+      {
+        specifier: 'npm:@postmeter/latest',
+        source: latestSource,
+        integrity: scriptPackageIntegrity(latestSource),
+        dependencies: ['lodash'],
+        packageName: '@postmeter/latest',
+        packageVersion: '3.0.0'
       }
     ]
   });
@@ -399,6 +471,50 @@ test('supports multi-file reviewed CommonJS packages with metadata, cache, circu
   });
   assert.equal(undeclaredSubpath.passed, false);
   assert.match(undeclaredSubpath.error, /undeclared dependency/);
+});
+
+test('supports reviewed JSR-style ESM package syntax without runtime registry access', () => {
+  const esmPackage = {
+    specifier: 'jsr:@postmeter/esm@1.0.0',
+    packageName: '@postmeter/esm',
+    packageJson: { name: '@postmeter/esm', type: 'module', exports: './mod.mjs', version: '1.0.0' },
+    entrypoint: 'mod.mjs',
+    files: [
+      {
+        path: 'mod.mjs',
+        source: `
+          import { label as formatLabel } from './format.mjs';
+          export const kind = 'esm';
+          export function label(value) { return formatLabel(value) + ':' + kind; }
+          export { formatLabel as baseLabel };
+          export default function defaultLabel(value) { return label(value).toUpperCase(); }
+        `
+      },
+      {
+        path: 'format.mjs',
+        source: "export function label(value) { return value.name + ':formatted'; }"
+      }
+    ],
+    dependencies: []
+  };
+  esmPackage.source = esmPackage.files[0].source;
+  esmPackage.integrity = scriptPackageBundleIntegrity(esmPackage);
+
+  const result = runPostmanScript(`
+    const esm = pm.require('jsr:@postmeter/esm@1.0.0');
+    pm.test('reviewed ESM package', function () {
+      pm.expect(esm.__esModule).to.equal(true);
+      pm.expect(esm.kind).to.equal('esm');
+      pm.expect(esm.label({ name: 'Ada' })).to.equal('Ada:formatted:esm');
+      pm.expect(esm.default({ name: 'Ada' })).to.equal('ADA:FORMATTED:ESM');
+      pm.expect(esm.baseLabel({ name: 'Grace' })).to.equal('Grace:formatted');
+      pm.expect(esm.label.constructor).to.be.undefined;
+    });
+  `, {
+    sandboxPackages: [esmPackage]
+  });
+
+  assert.equal(result.passed, true);
 });
 
 test('supports additional bundled Postman built-in package facades', () => {
@@ -999,7 +1115,7 @@ test('tracks Postman package references for reviewed cache workflows', () => {
   assert.equal(status.find((item) => item.specifier === '@postmeter/tools').status, 'reviewed');
   assert.equal(status.find((item) => item.specifier === 'jsr:@postmeter/protocol@1.0.0').status, 'missing-review');
   assert.equal(status.find((item) => item.specifier === 'npm:@postmeter/mock-tools@1.0.0').status, 'missing-review');
-  assert.equal(status.find((item) => item.specifier === 'npm:left-pad').status, 'unpinned-or-invalid');
+  assert.equal(status.find((item) => item.specifier === 'npm:left-pad').status, 'missing-review');
 });
 
 test('rejects malformed pm.visualizer blocks', () => {
@@ -1190,6 +1306,7 @@ test('supports Chai-compatible assertion chains and assert helpers used by Postm
 
 test('supports variable metadata, clear/toJSON, iteration unset, and dynamic variables', async () => {
   const environment = {
+    name: 'Production',
     variables: [
       { enabled: false, key: 'disabled', value: 'no' },
       { enabled: true, key: 'currentOnly', currentValue: 'current', initialValue: 'initial', type: 'secret', sensitive: true },
@@ -1202,6 +1319,7 @@ test('supports variable metadata, clear/toJSON, iteration unset, and dynamic var
 
   const result = await runPostmanScriptAsync(`
     pm.test('variable API parity', function () {
+      pm.expect(pm.environment.name).to.equal('Production');
       pm.expect(pm.environment.get('disabled')).to.be.undefined;
       pm.expect(pm.environment.get('currentOnly')).to.equal('current');
       const json = pm.environment.toJSON();

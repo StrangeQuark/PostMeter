@@ -4,6 +4,21 @@
   "rowIds": [
     "require.builtin.full-library-parity"
   ],
+  "rowEvidence": {
+    "require.builtin.full-library-parity": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-vendored-bootcode-integrity-check",
+      "postmanEvidence": [
+        "Postman Desktop 11.71.7 packages postman-sandbox@6.2.2 and the listed bundled library versions.",
+        "The audited postman-sandbox bootcode exposes the bundled package specifiers and Browserify module shims recorded in this artifact."
+      ],
+      "postmeterEvidence": [
+        "src/core/postmanSandboxBootcodeBundle.js",
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/postmanSandboxAdversarial.test.js"
+      ]
+    }
+  },
   "auditedAt": "2026-04-27",
   "postman": {
     "app": "Postman Desktop",

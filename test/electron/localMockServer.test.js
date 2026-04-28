@@ -166,6 +166,53 @@ test('persists bounded pm.state values across local mock requests and supports r
   assert.deepEqual(store.snapshot(), {});
 });
 
+test('exposes Postman-style local mock req and res helper surfaces', async () => {
+  const collection = collectionModel({
+    requests: [requestModel({
+      id: 'mock-helper-route',
+      method: 'POST',
+      name: 'Mock helper route',
+      url: '/users/:id/helpers',
+      scripts: {
+        mock: `
+          pm.test('req helper fields', function () {
+            pm.expect(req.method).to.equal('POST');
+            pm.expect(req.path).to.equal('/users/abc/helpers');
+            pm.expect(req.params.id).to.equal('abc');
+            pm.expect(req.query.trace).to.equal('yes');
+            pm.expect(req.headers['content-type']).to.include('application/json');
+            pm.expect(req.json().ok).to.equal(true);
+          });
+          res.status(202)
+            .set('X-Mock-Helper', 'yes')
+            .json({ id: req.params.id, statusCode: res.statusCode, snapshot: res.toJSON() });
+        `
+      }
+    })]
+  });
+
+  const result = await handleLocalMockRequest(collection, {
+    body: '{"ok":true}',
+    headers: { 'content-type': 'application/json' },
+    method: 'POST',
+    url: 'http://localhost/users/abc/helpers?trace=yes'
+  }, localMockOptions(new MockStateStore()));
+  const payload = JSON.parse(result.response.body);
+
+  assert.equal(result.scriptExecution.result.passed, true);
+  assert.equal(result.response.statusCode, 202);
+  assert.equal(result.response.headers['X-Mock-Helper'], 'yes');
+  assert.deepEqual(payload, {
+    id: 'abc',
+    snapshot: {
+      body: '',
+      headers: { 'X-Mock-Helper': 'yes' },
+      statusCode: 202
+    },
+    statusCode: 202
+  });
+});
+
 test('rolls back pm.state mutations when a local mock script fails', async () => {
   const collection = collectionModel({
     requests: [requestModel({

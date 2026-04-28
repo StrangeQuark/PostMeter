@@ -1,7 +1,7 @@
 const crypto = require('node:crypto');
 
 const PACKAGE_REF_PATTERN = /\b(?:pm\.)?require\s*\(\s*(['"])([^'"]+)\1\s*\)/g;
-const REVIEWED_PACKAGE_SPECIFIER_PATTERN = /^(?:npm:[a-z0-9@._/-]+@\d[\w.+-]*|jsr:[a-z0-9@._/-]+@\d[\w.+-]*|@[a-z0-9._-]+\/[a-z0-9._-]+)$/i;
+const REVIEWED_PACKAGE_SPECIFIER_PATTERN = /^(?:npm:(?:@[a-z0-9._-]+\/[a-z0-9._-]+|[a-z0-9._-]+)(?:@\d[\w.+-]*)?|jsr:@[a-z0-9._-]+\/[a-z0-9._-]+(?:@\d[\w.+-]*)?|@[a-z0-9._-]+\/[a-z0-9._-]+)$/i;
 const EXTERNAL_PACKAGE_PREFIX_PATTERN = /^(?:npm:|jsr:|@)/i;
 
 function collectSandboxPackageReferencesFromCollection(collection = {}) {

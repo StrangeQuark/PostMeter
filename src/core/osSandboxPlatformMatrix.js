@@ -144,15 +144,17 @@ function buildOsSandboxPlatformMatrix() {
         '.github/workflows/release.yml'
       ]
     }),
-    row('postman-parity.separate-claim', 'all', 'claim-boundary', 'Postman script API parity is tracked by the Postman parity matrix and claim gate; platform OS sandbox completion is intentionally not part of npm run postman:parity:claim.', 'implemented', {
+    row('postman-parity.separate-claim', 'all', 'claim-boundary', 'Postman script API parity is tracked by the Postman parity matrix, official-docs coverage audit, and claim gate; platform OS sandbox completion is intentionally not part of npm run postman:parity:claim.', 'implemented', {
       claimBlocking: false,
       claimSurface: POSTMAN_API_PARITY_CLAIM,
       securityDecision: 'Keep compatibility gaps and platform OS sandbox gaps on separate claim gates so one cannot mask the other.',
       sourceRefs: ['sandboxContract', 'nextSteps'],
       verificationRefs: [
         'npm run postman:parity:validate',
+        'npm run postman:docs:validate',
         'npm run postman:parity:claim',
-        'docs/postman-sandbox-parity-matrix.json'
+        'docs/postman-sandbox-parity-matrix.json',
+        'docs/postman-docs-coverage-audit.json'
       ]
     }),
     row('load-tests.scripted-sandbox-contract', 'all', 'claim-boundary', 'Scripted load tests remain outside the Postman scripting parity claim unless a separate scripted-load-test contract is written and implemented.', 'out-of-scope', {
@@ -172,6 +174,7 @@ function buildOsSandboxPlatformMatrix() {
       sourceRefs: ['releaseGate', 'ciWorkflow', 'releaseWorkflow', 'nextSteps'],
       verificationRefs: [
         'npm run sandbox:platform:validate',
+        'npm run postman:docs:validate',
         'npm run release:gate',
         'npm run check'
       ]
@@ -186,6 +189,7 @@ function buildOsSandboxPlatformMatrix() {
       claim: 'Platform-equivalent full OS sandbox coverage for script workers',
       separation: 'This matrix is separate from Postman API parity and from scripted load-test support.',
       postmanParityCommand: 'npm run postman:parity:claim',
+      postmanDocsCommand: 'npm run postman:docs:validate',
       platformClaimCommand: 'npm run sandbox:platform:claim'
     },
     claimSurfaces: {

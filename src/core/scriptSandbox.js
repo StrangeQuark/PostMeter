@@ -1347,6 +1347,36 @@ function normalizePmSendRequestAuth(auth, options = {}) {
       headersToSign: authField(source, 'headersToSign') || source.headersToSign || ''
     };
   }
+  if (type === 'jwtbearer') {
+    return {
+      type: 'jwtBearer',
+      algorithm: authField(source, 'algorithm') || authField(source, 'alg') || source.algorithm || source.alg || 'HS256',
+      secret: authField(source, 'secret') || authField(source, 'clientSecret') || source.secret || source.clientSecret || '',
+      privateKey: authField(source, 'privateKey') || authField(source, 'key') || source.privateKey || source.key || '',
+      keyId: authField(source, 'keyId') || authField(source, 'kid') || source.keyId || source.kid || '',
+      issuer: authField(source, 'issuer') || authField(source, 'iss') || source.issuer || source.iss || '',
+      subject: authField(source, 'subject') || authField(source, 'sub') || source.subject || source.sub || '',
+      audience: authField(source, 'audience') || authField(source, 'aud') || source.audience || source.aud || '',
+      expiresIn: authField(source, 'expiresIn') || source.expiresIn || '300',
+      claims: authField(source, 'claims') || authField(source, 'payload') || source.claims || source.payload || '',
+      headerPrefix: authField(source, 'headerPrefix') || source.headerPrefix || 'Bearer',
+      addTokenTo: authField(source, 'addTokenTo') || source.addTokenTo || 'header',
+      queryParamName: authField(source, 'queryParamName') || source.queryParamName || 'token'
+    };
+  }
+  if (type === 'asap') {
+    return {
+      type: 'asap',
+      algorithm: authField(source, 'algorithm') || source.algorithm || 'RS256',
+      privateKey: authField(source, 'privateKey') || authField(source, 'key') || source.privateKey || source.key || '',
+      secret: authField(source, 'secret') || authField(source, 'clientSecret') || source.secret || source.clientSecret || '',
+      issuer: authField(source, 'issuer') || authField(source, 'iss') || source.issuer || source.iss || '',
+      subject: authField(source, 'subject') || authField(source, 'sub') || source.subject || source.sub || '',
+      audience: authField(source, 'audience') || authField(source, 'aud') || source.audience || source.aud || '',
+      keyId: authField(source, 'keyId') || authField(source, 'kid') || source.keyId || source.kid || '',
+      expiresIn: authField(source, 'expiresIn') || source.expiresIn || '300'
+    };
+  }
   throw new Error(`pm.sendRequest auth helper "${source.type}" is not supported by the sandboxed HTTP broker yet.`);
 }
 
@@ -1369,6 +1399,12 @@ function normalizePmAuthType(value) {
   }
   if (normalized === 'akamai' || normalized === 'edgegrid' || normalized === 'akamaiedgegrid') {
     return 'akamaiedgegrid';
+  }
+  if (normalized === 'jwt' || normalized === 'jwtbearer' || normalized === 'bearerjwt') {
+    return 'jwtbearer';
+  }
+  if (normalized === 'asap' || normalized === 'atlassianasap') {
+    return 'asap';
   }
   return normalized;
 }

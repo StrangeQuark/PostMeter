@@ -185,6 +185,56 @@ test('imports and exports advanced Postman auth helper shapes', () => {
             ]
           }
         }
+      },
+      {
+        name: 'Akamai',
+        request: {
+          method: 'GET',
+          url: 'https://api.example.test/akamai',
+          auth: {
+            type: 'akamaiEdgeGrid',
+            akamaiEdgeGrid: [
+              { key: 'accessToken', value: 'access' },
+              { key: 'clientToken', value: 'client' },
+              { key: 'clientSecret', value: 'secret' },
+              { key: 'headersToSign', value: 'host;x-test' }
+            ]
+          }
+        }
+      },
+      {
+        name: 'JWT Bearer',
+        request: {
+          method: 'GET',
+          url: 'https://api.example.test/jwt',
+          auth: {
+            type: 'jwt-bearer',
+            'jwt-bearer': [
+              { key: 'algorithm', value: 'HS256' },
+              { key: 'secret', value: 'jwt-secret' },
+              { key: 'issuer', value: 'issuer' },
+              { key: 'audience', value: 'audience' },
+              { key: 'claims', value: '{"scope":"read"}' }
+            ]
+          }
+        }
+      },
+      {
+        name: 'ASAP',
+        request: {
+          method: 'GET',
+          url: 'https://api.example.test/asap',
+          auth: {
+            type: 'asap',
+            asap: [
+              { key: 'algorithm', value: 'HS256' },
+              { key: 'secret', value: 'asap-secret' },
+              { key: 'issuer', value: 'issuer' },
+              { key: 'audience', value: 'audience' },
+              { key: 'keyId', value: 'kid-1' }
+            ]
+          }
+        }
       }
     ]
   });
@@ -195,11 +245,20 @@ test('imports and exports advanced Postman auth helper shapes', () => {
   assert.equal(collection.requests[1].auth.service, 'execute-api');
   assert.equal(collection.requests[2].auth.type, 'ntlm');
   assert.equal(collection.requests[2].auth.domain, 'EXAMPLE');
+  assert.equal(collection.requests[3].auth.type, 'akamaiEdgeGrid');
+  assert.equal(collection.requests[3].auth.headersToSign, 'host;x-test');
+  assert.equal(collection.requests[4].auth.type, 'jwtBearer');
+  assert.equal(collection.requests[4].auth.issuer, 'issuer');
+  assert.equal(collection.requests[5].auth.type, 'asap');
+  assert.equal(collection.requests[5].auth.keyId, 'kid-1');
 
   const exported = exportPostmanCollection(collection);
   assert.equal(exported.item[0].request.auth.type, 'digest');
   assert.equal(exported.item[1].request.auth.type, 'awsv4');
   assert.equal(exported.item[2].request.auth.type, 'ntlm');
+  assert.equal(exported.item[3].request.auth.type, 'akamaiEdgeGrid');
+  assert.equal(exported.item[4].request.auth.type, 'jwt-bearer');
+  assert.equal(exported.item[5].request.auth.type, 'asap');
 });
 
 test('imports Postman examples and collection certificates', () => {

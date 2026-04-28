@@ -4,6 +4,20 @@
   "rowIds": [
     "global.dynamic-code-and-host-like-globals-audit"
   ],
+  "rowEvidence": {
+    "global.dynamic-code-and-host-like-globals-audit": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-package-and-sandbox-probe",
+      "postmanEvidence": [
+        "Postman Desktop 11.71.7 packages postman-sandbox@6.2.2 for script execution.",
+        "The same postman-sandbox probe records direct eval, indirect eval, Function, Buffer, host-like globals, and constructor escape behavior."
+      ],
+      "postmeterEvidence": [
+        "test/fixtures/postman/differential-dynamic-host-globals.collection.json",
+        "test/electron/postmanSandboxAdversarial.test.js"
+      ]
+    }
+  },
   "postman": {
     "app": "Postman Desktop",
     "version": "11.71.7",

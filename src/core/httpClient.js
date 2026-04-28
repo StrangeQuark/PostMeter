@@ -9,6 +9,7 @@ const { resolveEnvironmentValue } = require('./environmentResolver');
 const {
   applyAuth,
   applyDigestChallengeAuth,
+  buildNtlmType3AuthorizationHeader,
   maybeRefreshOAuthToken,
   normalizeAuth,
   parseDigestChallenge,
@@ -144,11 +145,36 @@ async function sendRequest(request, environment, options = {}) {
 }
 
 async function sendWithAuthRetries(request, environment, url, fetchOptions, options = {}) {
-  const response = await sendWithTransport(url, fetchOptions, options);
-  if (normalizeAuth(request.auth).type !== 'digest' || (response.status || response.statusCode) !== 401) {
+  const auth = normalizeAuth(request.auth);
+  const ntlmAgent = auth.type === 'ntlm' && !options.proxyOptions ? nodeAgentForUrl(url, options.tlsOptions) : null;
+  const transportOptions = ntlmAgent ? { ...options, forceNode: true, agent: ntlmAgent } : options;
+  const response = await sendWithTransport(url, fetchOptions, transportOptions);
+  if ((response.status || response.statusCode) !== 401) {
+    ntlmAgent?.destroy?.();
     return response;
   }
   const headers = headersToObject(response.headers);
+  if (auth.type === 'ntlm') {
+    const challenge = headers['www-authenticate'];
+    if (!challenge || !String(Array.isArray(challenge) ? challenge.join(', ') : challenge).match(/\bNTLM\s+\S+/i)) {
+      ntlmAgent?.destroy?.();
+      return response;
+    }
+    if (typeof response.text === 'function') {
+      await response.text().catch(() => {});
+    }
+    const retryOptions = {
+      ...fetchOptions,
+      headers: { ...fetchOptions.headers }
+    };
+    retryOptions.headers.Authorization = buildNtlmType3AuthorizationHeader(request.auth, environment, challenge, { now: options.now });
+    const retryResponse = await sendWithTransport(url, retryOptions, transportOptions);
+    ntlmAgent?.destroy?.();
+    return retryResponse;
+  }
+  if (auth.type !== 'digest') {
+    return response;
+  }
   const challenge = parseDigestChallenge(headers['www-authenticate']);
   if (!challenge) {
     return response;
@@ -171,12 +197,22 @@ async function sendWithAuthRetries(request, environment, url, fetchOptions, opti
 }
 
 function sendWithTransport(url, fetchOptions, options = {}) {
-  if (options.tlsOptions || options.proxyOptions) {
+  if (options.forceNode || options.tlsOptions || options.proxyOptions) {
     return sendNodeRequest(url, fetchOptions, options.tlsOptions, 0, url.origin, {
+      agent: options.agent,
       proxyOptions: options.proxyOptions
     });
   }
   return fetch(url, fetchOptions);
+}
+
+function nodeAgentForUrl(url, tlsOptions = null) {
+  const Agent = url.protocol === 'https:' ? https.Agent : http.Agent;
+  return new Agent({
+    keepAlive: true,
+    maxSockets: 1,
+    ...(url.protocol === 'https:' && tlsOptions ? tlsOptions : {})
+  });
 }
 
 function applyCookieJar(request, headers, url, cookieJar) {
@@ -255,7 +291,7 @@ async function readCertificateFile(filePath, label) {
 }
 
 async function sendNodeRequest(url, requestOptions, tlsOptions, redirectCount = 0, originalOrigin = url.origin, options = {}) {
-  const response = await sendSingleNodeRequest(url, requestOptions, tlsOptions, options.proxyOptions);
+  const response = await sendSingleNodeRequest(url, requestOptions, tlsOptions, options.proxyOptions, options.agent);
   const location = response.headers.location?.[0];
   if (requestOptions.redirect === 'manual' || !REDIRECT_STATUS_CODES.has(response.statusCode) || !location) {
     return response;
@@ -287,7 +323,7 @@ async function sendNodeRequest(url, requestOptions, tlsOptions, redirectCount = 
   return sendNodeRequest(redirectUrl, nextOptions, tlsOptions, redirectCount + 1, originalOrigin, options);
 }
 
-function sendSingleNodeRequest(url, requestOptions, tlsOptions, proxyOptions = null) {
+function sendSingleNodeRequest(url, requestOptions, tlsOptions, proxyOptions = null, agent = null) {
   if (proxyOptions) {
     return sendSingleNodeRequestViaProxy(url, requestOptions, tlsOptions, proxyOptions);
   }
@@ -300,6 +336,7 @@ function sendSingleNodeRequest(url, requestOptions, tlsOptions, proxyOptions = n
       path: `${url.pathname}${url.search}`,
       method: requestOptions.method,
       headers: requestOptions.headers,
+      agent,
       signal: requestOptions.signal,
       ...(url.protocol === 'https:' ? tlsOptions : {})
     };

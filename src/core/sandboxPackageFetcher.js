@@ -4,7 +4,7 @@ const {
   scriptPackageIntegrity
 } = require('./sandboxPackageCache');
 
-const REVIEWED_PACKAGE_SPECIFIER_PATTERN = /^(?:npm:[a-z0-9@._/-]+@\d[\w.+-]*|jsr:[a-z0-9@._/-]+@\d[\w.+-]*|@[a-z0-9._-]+\/[a-z0-9._-]+)$/i;
+const REVIEWED_PACKAGE_SPECIFIER_PATTERN = /^(?:npm:(?:@[a-z0-9._-]+\/[a-z0-9._-]+|[a-z0-9._-]+)(?:@\d[\w.+-]*)?|jsr:@[a-z0-9._-]+\/[a-z0-9._-]+(?:@\d[\w.+-]*)?|@[a-z0-9._-]+\/[a-z0-9._-]+)$/i;
 const TEAM_PACKAGE_PATTERN = /^@[a-z0-9._-]+\/[a-z0-9._-]+$/i;
 const PACKAGE_NAME_PATTERN = /^(?:@[a-z0-9._-]+\/[a-z0-9._-]+|[a-z0-9._-]+)$/i;
 const VERSION_PATTERN = /^\d[\w.+-]*$/;
@@ -56,7 +56,7 @@ async function fetchSandboxPackageForReview(specifier, options = {}) {
 function parseSandboxPackageSpecifier(specifier) {
   const value = String(specifier || '').trim();
   if (!REVIEWED_PACKAGE_SPECIFIER_PATTERN.test(value)) {
-    throw new Error('Package fetch requires @team/package, npm:package@version, or jsr:package@version.');
+    throw new Error('Package fetch requires @team/package, npm:package[@version], npm:@scope/package[@version], or jsr:@scope/package[@version].');
   }
   if (TEAM_PACKAGE_PATTERN.test(value)) {
     return {
@@ -70,13 +70,16 @@ function parseSandboxPackageSpecifier(specifier) {
   const registry = value.slice(0, separator).toLowerCase();
   const rawNameAndVersion = value.slice(separator + 1);
   const versionSeparator = rawNameAndVersion.lastIndexOf('@');
-  if (versionSeparator <= 0) {
-    throw new Error(`${registry} package references must include an exact version.`);
-  }
-  const packageName = rawNameAndVersion.slice(0, versionSeparator);
-  const version = rawNameAndVersion.slice(versionSeparator + 1);
+  const hasVersion = versionSeparator > 0;
+  const packageName = hasVersion ? rawNameAndVersion.slice(0, versionSeparator) : rawNameAndVersion;
+  const version = hasVersion ? rawNameAndVersion.slice(versionSeparator + 1) : '';
   if (!PACKAGE_NAME_PATTERN.test(packageName) || !VERSION_PATTERN.test(version)) {
-    throw new Error(`${registry} package references must use an exact package name and version.`);
+    if (version) {
+      throw new Error(`${registry} package references must use an exact package name and version.`);
+    }
+    if (!PACKAGE_NAME_PATTERN.test(packageName)) {
+      throw new Error(`${registry} package references must use a supported package name.`);
+    }
   }
   if (registry === 'jsr' && !packageName.startsWith('@')) {
     throw new Error('JSR package fetch requires a scoped package name such as jsr:@scope/package@version.');
@@ -97,13 +100,15 @@ async function fetchNpmPackageForReview(parsed, options = {}) {
     headers: { accept: 'application/json' },
     maxBytes: MAX_REGISTRY_METADATA_BYTES
   }), `npm package metadata for ${parsed.packageName}`);
-  const versionInfo = metadata?.versions?.[parsed.version];
+  const resolvedVersion = parsed.version || resolveLatestPackageVersion(metadata?.['dist-tags']?.latest, `npm package ${parsed.packageName}`);
+  const resolved = { ...parsed, version: resolvedVersion };
+  const versionInfo = metadata?.versions?.[resolved.version];
   if (!versionInfo) {
-    throw new Error(`npm package ${parsed.packageName}@${parsed.version} was not found.`);
+    throw new Error(`npm package ${parsed.packageName}@${resolved.version} was not found.`);
   }
   const tarballUrl = String(versionInfo.dist?.tarball || '');
   if (!tarballUrl) {
-    throw new Error(`npm package ${parsed.packageName}@${parsed.version} does not expose a tarball.`);
+    throw new Error(`npm package ${parsed.packageName}@${resolved.version} does not expose a tarball.`);
   }
   const tarball = await fetchBytes(tarballUrl, {
     ...options,
@@ -111,9 +116,9 @@ async function fetchNpmPackageForReview(parsed, options = {}) {
     headers: { accept: 'application/octet-stream' },
     maxBytes: MAX_PACKAGE_FETCH_BYTES
   });
-  const packageData = await packageDataFromNpmTarball(tarball, parsed);
+  const packageData = await packageDataFromNpmTarball(tarball, resolved);
   const dependencies = supportedPackageDependencies(versionInfo);
-  return reviewedCacheEntry(parsed, {
+  return reviewedCacheEntry(resolved, {
     dependencies,
     entrypoint: packageData.entrypoint,
     files: packageData.files,
@@ -128,37 +133,58 @@ async function fetchNpmPackageForReview(parsed, options = {}) {
 
 async function fetchJsrPackageForReview(parsed, options = {}) {
   const [scope, name] = splitScopedPackageName(parsed.packageName);
-  const metadataUrl = `https://jsr.io/@${encodeURIComponent(scope)}/${encodeURIComponent(name)}/${encodeURIComponent(parsed.version)}_meta.json`;
+  const resolvedVersion = parsed.version || await fetchLatestJsrPackageVersion(scope, name, parsed, options);
+  const resolved = { ...parsed, version: resolvedVersion };
+  const metadataUrl = `https://jsr.io/@${encodeURIComponent(scope)}/${encodeURIComponent(name)}/${encodeURIComponent(resolved.version)}_meta.json`;
   const metadata = parseJson(await fetchText(metadataUrl, {
     ...options,
     allowedUrl: isJsrRegistryUrl,
     headers: { accept: 'application/json' },
     maxBytes: MAX_REGISTRY_METADATA_BYTES
-  }), `JSR package metadata for ${parsed.packageName}@${parsed.version}`);
+  }), `JSR package metadata for ${parsed.packageName}@${resolved.version}`);
   const entrypoint = normalizePackageEntryPath(entrypointFromExports(metadata?.exports) || 'mod.ts');
   const manifestEntry = metadata?.manifest?.[`/${entrypoint}`];
   if (!entrypoint || !manifestEntry) {
-    throw new Error(`JSR package ${parsed.packageName}@${parsed.version} does not expose a supported entrypoint.`);
+    throw new Error(`JSR package ${parsed.packageName}@${resolved.version} does not expose a supported entrypoint.`);
   }
-  const sourceUrl = `https://jsr.io/@${encodeURIComponent(scope)}/${encodeURIComponent(name)}/${encodeURIComponent(parsed.version)}/${entrypoint.split('/').map(encodeURIComponent).join('/')}`;
+  const sourceUrl = `https://jsr.io/@${encodeURIComponent(scope)}/${encodeURIComponent(name)}/${encodeURIComponent(resolved.version)}/${entrypoint.split('/').map(encodeURIComponent).join('/')}`;
   const source = await fetchText(sourceUrl, {
     ...options,
     allowedUrl: isJsrRegistryUrl,
     headers: { accept: 'application/javascript, text/javascript, application/typescript, text/plain;q=0.8, */*;q=0.1' },
     maxBytes: MAX_PACKAGE_SOURCE_BYTES
   });
-  verifyJsrChecksum(source, manifestEntry.checksum, parsed, entrypoint);
-  return reviewedCacheEntry(parsed, {
+  verifyJsrChecksum(source, manifestEntry.checksum, resolved, entrypoint);
+  return reviewedCacheEntry(resolved, {
     dependencies: [],
     entrypoint,
     files: [{ path: entrypoint, source }],
     packageDependencies: [],
     packageIntegrity: String(manifestEntry.checksum || ''),
-    packageJson: { exports: metadata?.exports || {}, name: parsed.packageName, version: parsed.version },
+    packageJson: { exports: metadata?.exports || {}, name: parsed.packageName, version: resolved.version },
     registry: 'jsr',
     source,
     sourceUrl
   });
+}
+
+async function fetchLatestJsrPackageVersion(scope, name, parsed, options = {}) {
+  const metadataUrl = `https://jsr.io/@${encodeURIComponent(scope)}/${encodeURIComponent(name)}/meta.json`;
+  const metadata = parseJson(await fetchText(metadataUrl, {
+    ...options,
+    allowedUrl: isJsrRegistryUrl,
+    headers: { accept: 'application/json' },
+    maxBytes: MAX_REGISTRY_METADATA_BYTES
+  }), `JSR package metadata for ${parsed.packageName}`);
+  return resolveLatestPackageVersion(metadata?.latest, `JSR package ${parsed.packageName}`);
+}
+
+function resolveLatestPackageVersion(version, label) {
+  const value = String(version || '').trim();
+  if (!VERSION_PATTERN.test(value)) {
+    throw new Error(`${label} does not expose a supported latest version.`);
+  }
+  return value;
 }
 
 async function fetchTeamPackageForReview(parsed, options = {}) {

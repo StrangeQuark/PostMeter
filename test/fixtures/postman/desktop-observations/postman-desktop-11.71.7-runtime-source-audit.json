@@ -96,7 +96,7 @@
   },
   "limitations": [
     "This artifact is an automated installed-Desktop runtime/source audit, not a substitute for behavior-sensitive manual observations.",
-    "Rows that still need exact runtime behavior capture remain blocked by their own matrix rows, including runtime limits. Dynamic code, HttpOnly cookies, advanced pm.sendRequest transport policy, file/binary bindings, visualizer Handlebars behavior, online package fetch/review, bundled library parity, reviewed CommonJS package semantics, and live gRPC transport are covered by dedicated audit fixtures."
+    "Rows that still need exact runtime behavior capture remain blocked by their own matrix rows. Dynamic code, HttpOnly cookies, runtime limits, supported pm.sendRequest transport policy, file/binary bindings, visualizer Handlebars behavior, online package fetch/review, bundled library parity, reviewed CommonJS package semantics, and live gRPC transport are covered by dedicated audit fixtures; response assertion shortcuts, protocol metadata/trailer/message assertions, message-list assertions, full Chai/JSON-schema assertions, SDK object semantics, GraphQL client/subscription behavior, local mock helper evidence, NTLM, Akamai EdgeGrid, JWT Bearer, ASAP, JSR ESM, pm.message timestamp Date behavior, and row-specific desktop behavior evidence remain open blockers."
   ],
   "notes": "This artifact removes template-only evidence from desktop-required matrix rows while keeping behavior-sensitive parity work blocked by row-specific claim blockers."
 }

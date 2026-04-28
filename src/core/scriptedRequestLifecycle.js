@@ -141,8 +141,8 @@ async function runGraphqlRequestLifecycle(state, options = {}) {
       ...options,
       preRequestEventName: 'beforeQuery',
       testEventName: 'afterResponse',
-      sendRequest: (nextRequest, environment, sendOptions) => (
-        baseSend(prepareGraphqlHttpRequest(nextRequest), environment, sendOptions)
+      sendRequest: async (nextRequest, environment, sendOptions) => (
+        normalizeGraphqlProtocolResponse(await baseSend(prepareGraphqlHttpRequest(nextRequest), environment, sendOptions))
       )
     }
   );
@@ -382,6 +382,152 @@ function parseGraphqlVariables(value) {
     return JSON.parse(text);
   } catch {
     return value;
+  }
+}
+
+function normalizeGraphqlProtocolResponse(response = {}) {
+  const messages = graphqlMessagesFromResponse(response);
+  if (!messages.length) {
+    return response;
+  }
+  return {
+    ...response,
+    messages
+  };
+}
+
+function graphqlMessagesFromResponse(response = {}) {
+  if (Array.isArray(response.messages) && response.messages.length) {
+    return normalizeGraphqlMessages(response.messages);
+  }
+  const body = response.body == null ? '' : Buffer.isBuffer(response.body) ? response.body.toString('utf8') : String(response.body);
+  if (!body.trim()) {
+    return [];
+  }
+  const contentType = responseHeaderValue(response.headers || response.header || {}, 'content-type');
+  if (/text\/event-stream/i.test(contentType)) {
+    return normalizeGraphqlMessages(parseServerSentEventMessages(body));
+  }
+  if (/multipart\/mixed/i.test(contentType) || /multipart\/related/i.test(contentType)) {
+    return normalizeGraphqlMessages(parseMultipartGraphqlMessages(body, contentType));
+  }
+  const parsed = parseJsonValue(body);
+  if (Array.isArray(parsed)) {
+    return normalizeGraphqlMessages(parsed);
+  }
+  if (parsed && typeof parsed === 'object') {
+    if (Array.isArray(parsed.messages)) {
+      return normalizeGraphqlMessages(parsed.messages);
+    }
+    if (Array.isArray(parsed.responses)) {
+      return normalizeGraphqlMessages(parsed.responses);
+    }
+  }
+  return [];
+}
+
+function parseServerSentEventMessages(body) {
+  const messages = [];
+  for (const eventBlock of String(body || '').split(/\r?\n\r?\n/)) {
+    const dataLines = [];
+    for (const line of eventBlock.split(/\r?\n/)) {
+      if (!line || line.startsWith(':')) {
+        continue;
+      }
+      const separatorIndex = line.indexOf(':');
+      const field = separatorIndex >= 0 ? line.slice(0, separatorIndex) : line;
+      if (field !== 'data') {
+        continue;
+      }
+      let value = separatorIndex >= 0 ? line.slice(separatorIndex + 1) : '';
+      if (value.startsWith(' ')) {
+        value = value.slice(1);
+      }
+      dataLines.push(value);
+    }
+    const dataText = dataLines.join('\n').trim();
+    if (!dataText || dataText === '[DONE]') {
+      continue;
+    }
+    messages.push(parseJsonValue(dataText) ?? dataText);
+  }
+  return messages;
+}
+
+function parseMultipartGraphqlMessages(body, contentType) {
+  const boundaryMatch = String(contentType || '').match(/boundary="?([^";]+)"?/i);
+  if (!boundaryMatch) {
+    return [];
+  }
+  const boundary = boundaryMatch[1];
+  const messages = [];
+  for (const rawPart of String(body || '').split(`--${boundary}`)) {
+    const part = rawPart.trim();
+    if (!part || part === '--') {
+      continue;
+    }
+    const cleanPart = part.endsWith('--') ? part.slice(0, -2).trim() : part;
+    const delimiter = cleanPart.includes('\r\n\r\n') ? '\r\n\r\n' : '\n\n';
+    const delimiterIndex = cleanPart.indexOf(delimiter);
+    const payload = delimiterIndex >= 0 ? cleanPart.slice(delimiterIndex + delimiter.length).trim() : cleanPart.trim();
+    if (!payload) {
+      continue;
+    }
+    messages.push(parseJsonValue(payload) ?? payload);
+  }
+  return messages;
+}
+
+function normalizeGraphqlMessages(values = []) {
+  return values
+    .filter((message) => message != null)
+    .slice(0, 1000)
+    .map((message) => {
+      const source = message && typeof message === 'object' && !Buffer.isBuffer(message)
+        ? message
+        : { data: message };
+      return {
+        data: normalizeGraphqlMessageData(source.data ?? source.payload ?? source.body ?? source),
+        name: source.name == null ? 'graphql' : String(source.name),
+        timestamp: source.timestamp == null ? new Date(0).toISOString() : String(source.timestamp),
+        type: source.type == null ? 'response' : String(source.type)
+      };
+    });
+}
+
+function normalizeGraphqlMessageData(value) {
+  if (Buffer.isBuffer(value)) {
+    return parseJsonValue(value.toString('utf8')) ?? value.toString('utf8');
+  }
+  if (typeof value === 'string') {
+    return parseJsonValue(value) ?? value;
+  }
+  return cloneJsonObject(value);
+}
+
+function responseHeaderValue(headers, name) {
+  const target = String(name || '').toLowerCase();
+  if (typeof headers?.get === 'function') {
+    return headers.get(target) || '';
+  }
+  for (const [key, value] of Object.entries(headers || {})) {
+    if (String(key).toLowerCase() !== target) {
+      continue;
+    }
+    return Array.isArray(value) ? String(value[0] ?? '') : String(value ?? '');
+  }
+  return '';
+}
+
+function parseJsonValue(value) {
+  const text = String(value == null ? '' : value).trim();
+  if (!text || !/^[{[]/.test(text)) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
   }
 }
 

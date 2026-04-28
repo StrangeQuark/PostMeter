@@ -757,6 +757,38 @@ function importAuth(authNode, inheritedAuth = { type: 'none' }) {
       headersToSign: authParam(authNode[type] || authNode.akamai || authNode.edgegrid || authNode.akamaiEdgeGrid, 'headersToSign')
     };
   }
+  if (type === 'jwt' || type === 'jwtbearer' || type === 'jwt-bearer') {
+    const jwt = authNode[type] || authNode.jwt || authNode.jwtBearer || authNode['jwt-bearer'];
+    return {
+      type: 'jwtBearer',
+      algorithm: authParam(jwt, 'algorithm') || authParam(jwt, 'alg') || 'HS256',
+      secret: authParam(jwt, 'secret') || authParam(jwt, 'clientSecret'),
+      privateKey: authParam(jwt, 'privateKey') || authParam(jwt, 'key'),
+      keyId: authParam(jwt, 'keyId') || authParam(jwt, 'kid'),
+      issuer: authParam(jwt, 'issuer') || authParam(jwt, 'iss'),
+      subject: authParam(jwt, 'subject') || authParam(jwt, 'sub'),
+      audience: authParam(jwt, 'audience') || authParam(jwt, 'aud'),
+      expiresIn: authParam(jwt, 'expiresIn') || '300',
+      claims: authParam(jwt, 'claims') || authParam(jwt, 'payload'),
+      headerPrefix: authParam(jwt, 'headerPrefix') || 'Bearer',
+      addTokenTo: authParam(jwt, 'addTokenTo') || 'header',
+      queryParamName: authParam(jwt, 'queryParamName') || 'token'
+    };
+  }
+  if (type === 'asap') {
+    const asap = authNode.asap;
+    return {
+      type: 'asap',
+      algorithm: authParam(asap, 'algorithm') || 'RS256',
+      privateKey: authParam(asap, 'privateKey') || authParam(asap, 'key'),
+      secret: authParam(asap, 'secret') || authParam(asap, 'clientSecret'),
+      issuer: authParam(asap, 'issuer') || authParam(asap, 'iss'),
+      subject: authParam(asap, 'subject') || authParam(asap, 'sub'),
+      audience: authParam(asap, 'audience') || authParam(asap, 'aud'),
+      keyId: authParam(asap, 'keyId') || authParam(asap, 'kid'),
+      expiresIn: authParam(asap, 'expiresIn') || '300'
+    };
+  }
   return inheritedAuth || { type: 'none' };
 }
 
@@ -1339,6 +1371,40 @@ function exportPostmanAuthModel(auth) {
         { key: 'clientToken', value: auth.clientToken || '', type: 'string' },
         { key: 'clientSecret', value: auth.clientSecret || '', type: 'string' },
         { key: 'headersToSign', value: auth.headersToSign || '', type: 'string' }
+      ]
+    };
+  }
+  if (auth.type === 'jwtBearer') {
+    return {
+      type: 'jwt-bearer',
+      'jwt-bearer': [
+        { key: 'algorithm', value: auth.algorithm || 'HS256', type: 'string' },
+        { key: 'secret', value: auth.secret || '', type: 'string' },
+        { key: 'privateKey', value: auth.privateKey || '', type: 'string' },
+        { key: 'keyId', value: auth.keyId || '', type: 'string' },
+        { key: 'issuer', value: auth.issuer || '', type: 'string' },
+        { key: 'subject', value: auth.subject || '', type: 'string' },
+        { key: 'audience', value: auth.audience || '', type: 'string' },
+        { key: 'expiresIn', value: auth.expiresIn || '300', type: 'string' },
+        { key: 'claims', value: auth.claims || '', type: 'string' },
+        { key: 'headerPrefix', value: auth.headerPrefix || 'Bearer', type: 'string' },
+        { key: 'addTokenTo', value: auth.addTokenTo || 'header', type: 'string' },
+        { key: 'queryParamName', value: auth.queryParamName || 'token', type: 'string' }
+      ]
+    };
+  }
+  if (auth.type === 'asap') {
+    return {
+      type: 'asap',
+      asap: [
+        { key: 'algorithm', value: auth.algorithm || 'RS256', type: 'string' },
+        { key: 'privateKey', value: auth.privateKey || '', type: 'string' },
+        { key: 'secret', value: auth.secret || '', type: 'string' },
+        { key: 'issuer', value: auth.issuer || '', type: 'string' },
+        { key: 'subject', value: auth.subject || '', type: 'string' },
+        { key: 'audience', value: auth.audience || '', type: 'string' },
+        { key: 'keyId', value: auth.keyId || '', type: 'string' },
+        { key: 'expiresIn', value: auth.expiresIn || '300', type: 'string' }
       ]
     };
   }

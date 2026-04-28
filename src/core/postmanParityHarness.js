@@ -6,6 +6,10 @@ const { runCollection } = require('./collectionRunner');
 const { importPostmanCollection } = require('./postmanImporter');
 const {
   NEWMAN_TARGET,
+  NEWMAN_RUNTIME_TARGET,
+  POSTMAN_DESKTOP_RUNTIME_TARGET,
+  POSTMAN_DESKTOP_TARGET,
+  POSTMAN_SANDBOX_TARGET,
   buildPostmanParityMatrix
 } = require('./postmanParityMatrix');
 
@@ -102,6 +106,7 @@ const CLAIM_BLOCKING_STATUSES = new Set([
 ]);
 const VALID_NEWMAN_VALUES = new Set(['supported', 'unsupported', 'unknown', 'not-applicable', 'desktop-required', 'legacy']);
 const VALID_DESKTOP_VALUES = new Set(['not-required', 'required']);
+const VALID_DESKTOP_EVIDENCE_VALUES = new Set(['not-required', 'source-audit', 'row-specific-behavior']);
 const VALID_CLAIM_SCOPES = new Set([DEFAULT_CLAIM_SCOPE, OUT_OF_SCOPE_CLAIM_SCOPE]);
 
 async function writeParityMatrix(filePath = MATRIX_PATH) {
@@ -145,7 +150,7 @@ async function validateFixtureArtifacts(matrix) {
     }
   }
 
-  const desktopEvidenceRows = new Map();
+  const desktopEvidenceArtifacts = new Map();
   for (const [fixtureId, fixture] of Object.entries(fixtures)) {
     if (!COMPLETED_DESKTOP_EVIDENCE_TYPES.has(fixture.type)) {
       continue;
@@ -163,7 +168,10 @@ async function validateFixtureArtifacts(matrix) {
       if (!Array.isArray(artifact.rowIds) || !artifact.rowIds.length) {
         errors.push(`Desktop evidence fixture ${fixtureId} must list covered rowIds.`);
       } else {
-        desktopEvidenceRows.set(fixtureId, new Set(artifact.rowIds));
+        desktopEvidenceArtifacts.set(fixtureId, {
+          artifact,
+          rowIds: new Set(artifact.rowIds)
+        });
       }
       if (!artifact.postman?.version && fixture.type !== 'desktop-runner-artifact') {
         errors.push(`Desktop evidence fixture ${fixtureId} must record the Postman Desktop version.`);
@@ -177,12 +185,47 @@ async function validateFixtureArtifacts(matrix) {
     if (row.status !== 'implemented' || row.differential?.desktopObservation !== 'required') {
       continue;
     }
-    const covered = (row.fixtureRefs || []).some((fixtureRef) => desktopEvidenceRows.get(fixtureRef)?.has(row.id));
+    const covered = (row.fixtureRefs || []).some((fixtureRef) => desktopEvidenceArtifacts.get(fixtureRef)?.rowIds.has(row.id));
     if (!covered) {
       errors.push(`Implemented desktop-observed parity row ${row.id} is not covered by a completed desktop evidence artifact rowIds list.`);
     }
+    if (row.differential?.desktopEvidence === 'row-specific-behavior'
+      && !hasRowSpecificBehaviorArtifact(row, desktopEvidenceArtifacts)) {
+      errors.push(`Implemented desktop-observed parity row ${row.id} requires row-specific Desktop behavior evidence, not only a broad runtime/source audit rowIds listing.`);
+    }
   }
   return errors;
+}
+
+function hasRowSpecificBehaviorArtifact(row, desktopEvidenceArtifacts) {
+  return (row.fixtureRefs || []).some((fixtureRef) => {
+    const evidenceArtifact = desktopEvidenceArtifacts.get(fixtureRef);
+    if (!evidenceArtifact?.rowIds.has(row.id)) {
+      return false;
+    }
+    const rowEvidence = rowSpecificEvidence(evidenceArtifact.artifact, row.id);
+    return rowEvidence?.level === 'behavior'
+      && typeof rowEvidence.method === 'string'
+      && rowEvidence.method.trim()
+      && (
+        nonEmptyArray(rowEvidence.postmanEvidence)
+        || nonEmptyArray(rowEvidence.observed)
+        || nonEmptyArray(rowEvidence.behavior)
+      )
+      && (
+        nonEmptyArray(rowEvidence.postmeterEvidence)
+        || nonEmptyArray(rowEvidence.fixtures)
+        || nonEmptyArray(rowEvidence.tests)
+      );
+  });
+}
+
+function rowSpecificEvidence(artifact, rowId) {
+  return artifact?.rowEvidence?.[rowId] || artifact?.evidence?.rowEvidence?.[rowId] || null;
+}
+
+function nonEmptyArray(value) {
+  return Array.isArray(value) && value.length > 0;
 }
 
 async function fileExists(filePath) {
@@ -222,6 +265,18 @@ function validateParityMatrix(matrix) {
   }
   if (matrix.target?.newman !== NEWMAN_TARGET) {
     errors.push(`Parity matrix must target newman@${NEWMAN_TARGET}.`);
+  }
+  if (matrix.target?.postmanDesktop !== POSTMAN_DESKTOP_TARGET) {
+    errors.push(`Parity matrix must target Postman Desktop ${POSTMAN_DESKTOP_TARGET}.`);
+  }
+  if (matrix.target?.postmanSandbox !== POSTMAN_SANDBOX_TARGET) {
+    errors.push(`Parity matrix must target postman-sandbox@${POSTMAN_SANDBOX_TARGET}.`);
+  }
+  if (matrix.target?.postmanDesktopRuntime !== POSTMAN_DESKTOP_RUNTIME_TARGET) {
+    errors.push(`Parity matrix must target Postman Desktop runtime ${POSTMAN_DESKTOP_RUNTIME_TARGET}.`);
+  }
+  if (matrix.target?.newmanRuntime !== NEWMAN_RUNTIME_TARGET) {
+    errors.push(`Parity matrix must target Newman runtime ${NEWMAN_RUNTIME_TARGET}.`);
   }
   const sourceIds = new Set(Object.keys(matrix.sources || {}));
   const fixtures = matrix.fixtures || {};
@@ -334,6 +389,15 @@ function validateRow(row, context) {
   }
   if (!VALID_DESKTOP_VALUES.has(row.differential?.desktopObservation)) {
     errors.push(`Parity row ${row.id} has invalid desktopObservation value.`);
+  }
+  if (!VALID_DESKTOP_EVIDENCE_VALUES.has(row.differential?.desktopEvidence || 'not-required')) {
+    errors.push(`Parity row ${row.id} has invalid desktopEvidence value.`);
+  }
+  if (row.differential?.desktopObservation === 'required' && row.differential?.desktopEvidence === 'not-required') {
+    errors.push(`Desktop-observed parity row ${row.id} must declare its desktopEvidence standard.`);
+  }
+  if (row.differential?.desktopObservation !== 'required' && row.differential?.desktopEvidence && row.differential.desktopEvidence !== 'not-required') {
+    errors.push(`Parity row ${row.id} declares desktopEvidence without requiring desktop observation.`);
   }
   if (!VALID_CLAIM_SCOPES.has(row.claimScope || DEFAULT_CLAIM_SCOPE)) {
     errors.push(`Parity row ${row.id} has invalid claimScope value.`);
@@ -923,6 +987,7 @@ module.exports = {
   runPostmanParityDifferential,
   validateCommittedParityMatrix,
   validateCommittedProductionClaim,
+  validateFixtureArtifacts,
   validateParityMatrix,
   validateProductionClaim,
   writeParityMatrix

@@ -1234,7 +1234,7 @@ function normalizeSandboxFileMode(value) {
   return ['file', 'binary', 'formdata'].includes(mode) ? mode : 'file';
 }
 
-const SANDBOX_REVIEWED_PACKAGE_PATTERN = /^(?:npm:[a-z0-9@._/-]+@\d[\w.+-]*|jsr:[a-z0-9@._/-]+@\d[\w.+-]*|@[a-z0-9._-]+\/[a-z0-9._-]+)$/i;
+const SANDBOX_REVIEWED_PACKAGE_PATTERN = /^(?:npm:(?:@[a-z0-9._-]+\/[a-z0-9._-]+|[a-z0-9._-]+)(?:@\d[\w.+-]*)?|jsr:@[a-z0-9._-]+\/[a-z0-9._-]+(?:@\d[\w.+-]*)?|@[a-z0-9._-]+\/[a-z0-9._-]+)$/i;
 const SANDBOX_PACKAGE_REQUIRE_PATTERN = /\b(?:pm\.)?require\s*\(\s*(['"])([^'"]+)\1\s*\)/g;
 const SANDBOX_SCRIPT_SOURCE_FIELDS = [
   'preRequest',
@@ -1292,7 +1292,7 @@ function sandboxPackageStatusRows() {
       ...reference,
       cached: Boolean(cached),
       status: !reference.pinned
-        ? 'Pin exact npm:/jsr: versions before review'
+        ? 'Use @team/package, npm:package[@version], or jsr:@scope/package[@version]'
         : cached
           ? 'Reviewed'
           : 'Missing reviewed package'
@@ -1450,7 +1450,7 @@ async function addSandboxPackageFromPrompt(defaultSpecifier = '') {
     return;
   }
   if (!SANDBOX_REVIEWED_PACKAGE_PATTERN.test(specifier)) {
-    setStatus('Package review requires @team/package, npm:package@version, or jsr:package@version.');
+    setStatus('Package review requires @team/package, npm:package[@version], npm:@scope/package[@version], or jsr:@scope/package[@version].');
     return;
   }
   const source = String(prompt(`Paste reviewed source for ${specifier}:`, '') || '');
@@ -1478,7 +1478,7 @@ async function fetchSandboxPackageFromPrompt(defaultSpecifier = '') {
     return;
   }
   if (!SANDBOX_REVIEWED_PACKAGE_PATTERN.test(specifier)) {
-    setStatus('Package fetch requires @team/package, npm:package@version, or jsr:package@version.');
+    setStatus('Package fetch requires @team/package, npm:package[@version], npm:@scope/package[@version], or jsr:@scope/package[@version].');
     return;
   }
   const fetchOptions = {};

@@ -7,6 +7,7 @@ const {
   runPostmanParityDifferential,
   validateCommittedParityMatrix,
   validateCommittedProductionClaim,
+  validateFixtureArtifacts,
   validateParityMatrix,
   validateProductionClaim
 } = require('../../src/core/postmanParityHarness');
@@ -25,7 +26,7 @@ test('validates the committed Postman sandbox parity matrix', async () => {
   assert.ok(result.summary.byArea.packages > 0);
 });
 
-test('allows the full Postman compatibility claim after default import parity blockers are cleared', async () => {
+test('passes the full Postman compatibility claim when default-import blockers are zero', async () => {
   const result = await validateCommittedProductionClaim();
   const blockerIds = new Set(result.blockers.map((row) => row.id));
 
@@ -46,6 +47,19 @@ test('allows the full Postman compatibility claim after default import parity bl
   assert.equal(result.blockers.length, 0);
   assert.equal(blockerIds.has('run-order.load-tests.skip'), false);
   assert.equal(result.summary.claim.ready, true);
+});
+
+test('blocks the full Postman compatibility claim if a default-import blocker is reopened', () => {
+  const matrix = buildPostmanParityMatrix();
+  matrix.rows = matrix.rows.map((row) => row.id === 'assertion.pm.response.to.have.responseTime'
+    ? { ...row, status: 'not-started' }
+    : row);
+  const result = validateProductionClaim(matrix);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.blockers.length, 1);
+  assert.equal(result.blockers[0].id, 'assertion.pm.response.to.have.responseTime');
+  assert.equal(result.summary.ready, false);
 });
 
 test('allows the full Postman compatibility claim only when default import blockers are zero', () => {
@@ -76,6 +90,17 @@ test('rejects implemented desktop-required rows that only reference the observat
   const errors = validateParityMatrix(matrix);
 
   assert.ok(errors.some((error) => error.includes('vault.get') && error.includes('cannot rely only')));
+});
+
+test('rejects behavior-sensitive desktop rows covered only by broad source-audit rowIds', async () => {
+  const matrix = buildPostmanParityMatrix();
+  matrix.rows = matrix.rows.map((row) => row.id === 'runtime.resource-limit-parity'
+    ? { ...row, fixtureRefs: ['desktop-runtime-source-audit-v1'] }
+    : row);
+
+  const errors = await validateFixtureArtifacts(matrix);
+
+  assert.ok(errors.some((error) => error.includes('runtime.resource-limit-parity') && error.includes('row-specific Desktop behavior evidence')));
 });
 
 test('runs the HTTP-core Postman parity differential fixture through PostMeter', async (t) => {

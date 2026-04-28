@@ -4,6 +4,20 @@
   "rowIds": [
     "cookies.httponly-parity"
   ],
+  "rowEvidence": {
+    "cookies.httponly-parity": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-newman-probe",
+      "postmanEvidence": [
+        "Postman Desktop 11.71.7 packages postman-runtime 7.50.0, postman-collection 5.2.0, and @postman/tough-cookie 4.1.3-postman.1.",
+        "The Newman 6.2.2 probe records script readability and mutation behavior for HttpOnly cookies through pm.cookies, pm.cookies.jar(), and pm.sendRequest response-cookie updates."
+      ],
+      "postmeterEvidence": [
+        "test/fixtures/postman/differential-httponly-cookies.collection.json",
+        "test/electron/scriptRuntime.test.js"
+      ]
+    }
+  },
   "postman": {
     "app": "Postman Desktop",
     "version": "11.71.7",

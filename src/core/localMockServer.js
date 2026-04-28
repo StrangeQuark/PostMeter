@@ -285,6 +285,7 @@ function scriptRequestPayload(request, pathVariables = {}) {
       const values = Array.isArray(value) ? value : [value];
       return values.map((item) => ({ enabled: true, key, value: item == null ? '' : String(item) }));
     }),
+    query: cloneJsonValue(request.query || {}),
     url: request.url,
     variables: Object.entries(pathVariables || {}).map(([key, value]) => ({ enabled: true, key, value }))
   };

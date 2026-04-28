@@ -73,7 +73,7 @@ Core modules must not depend on Electron or renderer globals.
 - `collectionRunner.js` sequences collection requests and layers assertions, runner progress, cookies, stop-on-failure, and runner reports on top of the shared scripted-request lifecycle.
 - `httpClient.js` prepares and sends HTTP requests.
 - `grpcClient.js` owns the parent-side live gRPC transport for imported gRPC requests. It loads trusted proto definitions, builds parent-owned gRPC clients, normalizes metadata/messages/status/trailers/errors, and keeps proto/TLS/client-certificate filesystem access outside the script worker.
-- `docs/SANDBOX_CONTRACT.md` is the source of truth for script sandbox compatibility, security boundaries, broker behavior, side-effect transactions, and load-test scripting scope.
+- `docs/SANDBOX_CONTRACT.md` is the source of truth for script sandbox compatibility, security boundaries, broker behavior, side-effect transactions, and load-test scripting scope. The current claim-gated Postman script parity target is Postman Desktop 11.71.7 with `postman-sandbox@6.2.2` and Postman Runtime 7.50.0, plus Newman 6.2.2 with Postman Runtime 7.39.1 for Newman-compatible surfaces.
 - `authModel.js`, `cookieModel.js`, and `loadPolicyModel.js` own shared runtime-neutral model defaults and normalization used by both core and renderer modules.
 - `payloadSchemas.js` owns shared field schemas, enum sets, and basic string-length limits consumed by IPC validation and shared normalization helpers.
 - `collectionFormats.js` is the stable public import/export boundary for collection format handling.

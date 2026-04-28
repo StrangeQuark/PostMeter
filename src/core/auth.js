@@ -122,9 +122,32 @@ function validateAuth(auth = {}, environment) {
       errors.push(`Unsupported OAuth 1.0 signature method: ${normalized.signatureMethod}.`);
     }
   } else if (normalized.type === 'ntlm') {
-    errors.push('NTLM auth is explicitly classified as unsupported in the sandboxed HTTP broker because it requires a stateful connection authentication handshake that PostMeter has not implemented yet.');
+    requireResolved(normalized.username, environment, 'NTLM auth username', errors);
+    requireResolved(normalized.password, environment, 'NTLM auth password', errors);
   } else if (normalized.type === 'akamaiEdgeGrid') {
-    errors.push('Akamai EdgeGrid auth is explicitly classified as unsupported in the sandboxed HTTP broker until exact Postman signing parity is implemented.');
+    requireResolved(normalized.accessToken, environment, 'Akamai EdgeGrid access token', errors);
+    requireResolved(normalized.clientToken, environment, 'Akamai EdgeGrid client token', errors);
+    requireResolved(normalized.clientSecret, environment, 'Akamai EdgeGrid client secret', errors);
+  } else if (normalized.type === 'jwtBearer') {
+    const algorithm = normalizeJwtAlgorithm(resolveEnvironmentValue(normalized.algorithm, environment));
+    if (!algorithm) {
+      errors.push(`Unsupported JWT Bearer algorithm: ${normalized.algorithm}.`);
+    } else if (algorithm.startsWith('HS')) {
+      requireResolved(normalized.secret, environment, 'JWT Bearer secret', errors);
+    } else {
+      requireResolved(normalized.privateKey, environment, 'JWT Bearer private key', errors);
+    }
+  } else if (normalized.type === 'asap') {
+    const algorithm = normalizeJwtAlgorithm(resolveEnvironmentValue(normalized.algorithm, environment) || 'RS256');
+    if (!algorithm) {
+      errors.push(`Unsupported ASAP algorithm: ${normalized.algorithm}.`);
+    } else if (algorithm.startsWith('HS')) {
+      requireResolved(normalized.secret, environment, 'ASAP secret', errors);
+    } else {
+      requireResolved(normalized.privateKey, environment, 'ASAP private key', errors);
+    }
+    requireResolved(normalized.issuer, environment, 'ASAP issuer', errors);
+    requireResolved(normalized.audience, environment, 'ASAP audience', errors);
   }
   return errors;
 }
@@ -534,9 +557,13 @@ function applyAuth(request, environment, target) {
   } else if (auth.type === 'oauth1') {
     applyOAuth1Signature(auth, environment, target);
   } else if (auth.type === 'ntlm') {
-    throw new Error('NTLM auth is not supported by the sandboxed HTTP broker yet.');
+    setHeader(target.headers, 'Authorization', buildNtlmType1AuthorizationHeader(auth, environment));
   } else if (auth.type === 'akamaiEdgeGrid') {
-    throw new Error('Akamai EdgeGrid auth is not supported by the sandboxed HTTP broker yet.');
+    applyAkamaiEdgeGridSignature(auth, environment, target);
+  } else if (auth.type === 'jwtBearer') {
+    applyJwtBearerAuth(auth, environment, target);
+  } else if (auth.type === 'asap') {
+    applyAsapAuth(auth, environment, target);
   }
 }
 
@@ -794,6 +821,218 @@ function applyOAuth1Signature(auth, environment, target) {
   setHeader(target.headers, 'Authorization', `OAuth ${parts.join(', ')}`);
 }
 
+function buildNtlmType1AuthorizationHeader(auth, environment) {
+  const domain = resolveEnvironmentValue(auth.domain, environment).toUpperCase();
+  const workstation = resolveEnvironmentValue(auth.workstation, environment).toUpperCase();
+  const flags = 0x00000001 | 0x00000002 | 0x00000200 | 0x00008000 | 0x00080000 | 0x20000000 | 0x02000000;
+  const domainBuffer = Buffer.from(domain, 'ascii');
+  const workstationBuffer = Buffer.from(workstation, 'ascii');
+  const payloadOffset = 32;
+  const message = Buffer.alloc(payloadOffset + domainBuffer.length + workstationBuffer.length);
+  message.write('NTLMSSP\0', 0, 'ascii');
+  message.writeUInt32LE(1, 8);
+  message.writeUInt32LE(flags, 12);
+  writeSecurityBuffer(message, 16, domainBuffer.length, payloadOffset);
+  writeSecurityBuffer(message, 24, workstationBuffer.length, payloadOffset + domainBuffer.length);
+  domainBuffer.copy(message, payloadOffset);
+  workstationBuffer.copy(message, payloadOffset + domainBuffer.length);
+  return `NTLM ${message.toString('base64')}`;
+}
+
+function buildNtlmType3AuthorizationHeader(auth, environment, challengeHeader, options = {}) {
+  const challenge = parseNtlmChallenge(challengeHeader);
+  if (!challenge) {
+    throw new Error('NTLM auth requires a server NTLM challenge.');
+  }
+  const username = resolveEnvironmentValue(auth.username, environment);
+  const password = resolveEnvironmentValue(auth.password, environment);
+  const domain = resolveEnvironmentValue(auth.domain, environment).toUpperCase();
+  const workstation = resolveEnvironmentValue(auth.workstation, environment).toUpperCase();
+  const timestamp = ntlmTimestamp(options.now || Date.now());
+  const clientNonce = crypto.randomBytes(8);
+  const ntlmHash = md4(Buffer.from(password, 'utf16le'));
+  const ntlmV2Hash = crypto.createHmac('md5', ntlmHash)
+    .update(Buffer.from(`${username.toUpperCase()}${challenge.targetName || domain}`, 'utf16le'))
+    .digest();
+  const targetInfo = challenge.targetInfo.length ? challenge.targetInfo : Buffer.from([0, 0, 0, 0]);
+  const blob = Buffer.concat([
+    Buffer.from('0101000000000000', 'hex'),
+    timestamp,
+    clientNonce,
+    Buffer.alloc(4),
+    targetInfo,
+    Buffer.alloc(4)
+  ]);
+  const ntProof = crypto.createHmac('md5', ntlmV2Hash).update(Buffer.concat([challenge.serverChallenge, blob])).digest();
+  const ntResponse = Buffer.concat([ntProof, blob]);
+  const lmResponse = Buffer.concat([
+    crypto.createHmac('md5', ntlmV2Hash).update(Buffer.concat([challenge.serverChallenge, clientNonce])).digest(),
+    clientNonce
+  ]);
+  const domainBuffer = Buffer.from(domain, 'utf16le');
+  const userBuffer = Buffer.from(username, 'utf16le');
+  const workstationBuffer = Buffer.from(workstation, 'utf16le');
+  const sessionKey = Buffer.alloc(0);
+  const flags = challenge.flags || 0x02888205;
+  const payloadOffset = 64;
+  let offset = payloadOffset;
+  const message = Buffer.alloc(payloadOffset + lmResponse.length + ntResponse.length + domainBuffer.length + userBuffer.length + workstationBuffer.length);
+  message.write('NTLMSSP\0', 0, 'ascii');
+  message.writeUInt32LE(3, 8);
+  offset = writeSecurityBufferWithPayload(message, 12, lmResponse, offset);
+  offset = writeSecurityBufferWithPayload(message, 20, ntResponse, offset);
+  offset = writeSecurityBufferWithPayload(message, 28, domainBuffer, offset);
+  offset = writeSecurityBufferWithPayload(message, 36, userBuffer, offset);
+  offset = writeSecurityBufferWithPayload(message, 44, workstationBuffer, offset);
+  writeSecurityBuffer(message, 52, sessionKey.length, offset);
+  message.writeUInt32LE(flags, 60);
+  return `NTLM ${message.toString('base64')}`;
+}
+
+function parseNtlmChallenge(headerValues) {
+  const header = Array.isArray(headerValues)
+    ? headerValues.find((value) => /^ntlm\s+\S+/i.test(String(value)))
+    : String(headerValues || '').split(',').map((value) => value.trim()).find((value) => /^ntlm\s+\S+/i.test(value));
+  if (!header) {
+    return null;
+  }
+  let message;
+  try {
+    message = Buffer.from(String(header).replace(/^ntlm\s+/i, ''), 'base64');
+  } catch {
+    return null;
+  }
+  if (message.length < 32 || message.slice(0, 8).toString('ascii') !== 'NTLMSSP\0' || message.readUInt32LE(8) !== 2) {
+    return null;
+  }
+  const targetName = readSecurityBuffer(message, 12).toString('utf16le');
+  const flags = message.readUInt32LE(20);
+  const serverChallenge = message.slice(24, 32);
+  const targetInfo = message.length >= 48 ? readSecurityBuffer(message, 40) : Buffer.alloc(0);
+  return { flags, serverChallenge, targetInfo, targetName };
+}
+
+function applyAkamaiEdgeGridSignature(auth, environment, target) {
+  const accessToken = resolveEnvironmentValue(auth.accessToken, environment);
+  const clientToken = resolveEnvironmentValue(auth.clientToken, environment);
+  const clientSecret = resolveEnvironmentValue(auth.clientSecret, environment);
+  const timestamp = edgeGridTimestamp(target.now || Date.now());
+  const nonce = resolveEnvironmentValue(auth.nonce, environment).trim() || crypto.randomBytes(16).toString('hex');
+  const authPrefix = `EG1-HMAC-SHA256 client_token=${clientToken};access_token=${accessToken};timestamp=${timestamp};nonce=${nonce};`;
+  const dataToSign = [
+    String(target.method || 'GET').toUpperCase(),
+    target.url.protocol.replace(/:$/, ''),
+    target.url.hostname.toLowerCase(),
+    `${target.url.pathname}${target.url.search}`,
+    edgeGridCanonicalHeaders(target.headers, auth.headersToSign, environment),
+    sha256Base64(target.body || ''),
+    authPrefix
+  ].join('\t');
+  const signingKey = crypto.createHmac('sha256', clientSecret).update(timestamp, 'utf8').digest('base64');
+  const signature = crypto.createHmac('sha256', signingKey).update(dataToSign, 'utf8').digest('base64');
+  setHeader(target.headers, 'Authorization', `${authPrefix}signature=${signature}`);
+}
+
+function applyJwtBearerAuth(auth, environment, target) {
+  const token = buildJwtToken(auth, environment, target.now || Date.now());
+  const location = String(resolveEnvironmentValue(auth.addTokenTo, environment) || 'header').toLowerCase();
+  if (location === 'query') {
+    target.url.searchParams.set(resolveEnvironmentValue(auth.queryParamName, environment).trim() || 'token', token);
+    return;
+  }
+  const prefix = resolveEnvironmentValue(auth.headerPrefix, environment).trim() || 'Bearer';
+  setHeader(target.headers, 'Authorization', `${prefix} ${token}`);
+}
+
+function applyAsapAuth(auth, environment, target) {
+  const token = buildJwtToken({
+    ...auth,
+    claims: JSON.stringify({
+      iss: resolveEnvironmentValue(auth.issuer, environment),
+      sub: resolveEnvironmentValue(auth.subject, environment) || resolveEnvironmentValue(auth.issuer, environment),
+      aud: resolveEnvironmentValue(auth.audience, environment)
+    }),
+    headerPrefix: auth.headerPrefix || 'Bearer'
+  }, environment, target.now || Date.now());
+  const prefix = resolveEnvironmentValue(auth.headerPrefix, environment).trim() || 'Bearer';
+  setHeader(target.headers, 'Authorization', `${prefix} ${token}`);
+}
+
+function buildJwtToken(auth, environment, now = Date.now()) {
+  const algorithm = normalizeJwtAlgorithm(resolveEnvironmentValue(auth.algorithm, environment) || 'HS256');
+  if (!algorithm) {
+    throw new Error(`Unsupported JWT algorithm: ${auth.algorithm}.`);
+  }
+  const issuedAt = Math.floor(Number(now) / 1000);
+  const expiresIn = Math.max(1, Number(resolveEnvironmentValue(auth.expiresIn, environment) || 300) || 300);
+  const payload = {
+    iat: issuedAt,
+    exp: issuedAt + expiresIn,
+    ...parseJwtClaims(resolveEnvironmentValue(auth.claims, environment))
+  };
+  const issuer = resolveEnvironmentValue(auth.issuer, environment);
+  const subject = resolveEnvironmentValue(auth.subject, environment);
+  const audience = resolveEnvironmentValue(auth.audience, environment);
+  if (issuer) { payload.iss = issuer; }
+  if (subject) { payload.sub = subject; }
+  if (audience) { payload.aud = audience; }
+  const header = { alg: algorithm, typ: 'JWT' };
+  const keyId = resolveEnvironmentValue(auth.keyId, environment);
+  if (keyId) { header.kid = keyId; }
+  const signingInput = `${base64UrlJson(header)}.${base64UrlJson(payload)}`;
+  return `${signingInput}.${jwtSignature(algorithm, signingInput, auth, environment)}`;
+}
+
+function jwtSignature(algorithm, signingInput, auth, environment) {
+  if (algorithm === 'none') {
+    return '';
+  }
+  if (algorithm.startsWith('HS')) {
+    const secret = requireResolvedValue(auth.secret || auth.clientSecret, environment, 'JWT secret');
+    return crypto.createHmac(jwtHashForAlgorithm(algorithm), secret).update(signingInput, 'utf8').digest('base64url');
+  }
+  const privateKey = requireResolvedValue(auth.privateKey, environment, 'JWT private key');
+  return crypto.sign(jwtHashForAlgorithm(algorithm), Buffer.from(signingInput, 'utf8'), privateKey).toString('base64url');
+}
+
+function normalizeJwtAlgorithm(value) {
+  const algorithm = String(value || 'HS256').trim().toUpperCase().replace(/[-_]/g, '');
+  if (algorithm === 'NONE') {
+    return 'none';
+  }
+  if (['HS256', 'HS384', 'HS512', 'RS256', 'RS384', 'RS512'].includes(algorithm)) {
+    return algorithm;
+  }
+  return '';
+}
+
+function jwtHashForAlgorithm(algorithm) {
+  if (algorithm.endsWith('384')) {
+    return 'sha384';
+  }
+  if (algorithm.endsWith('512')) {
+    return 'sha512';
+  }
+  return 'sha256';
+}
+
+function parseJwtClaims(value) {
+  const text = String(value || '').trim();
+  if (!text) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function base64UrlJson(value) {
+  return Buffer.from(JSON.stringify(value), 'utf8').toString('base64url');
+}
+
 function setHeader(headers, name, value) {
   const existing = Object.keys(headers).find((key) => key.toLowerCase() === name.toLowerCase());
   if (existing) {
@@ -895,6 +1134,132 @@ function decodeURIComponentSafe(value) {
   } catch {
     return value;
   }
+}
+
+function writeSecurityBuffer(message, offset, length, payloadOffset) {
+  message.writeUInt16LE(length, offset);
+  message.writeUInt16LE(length, offset + 2);
+  message.writeUInt32LE(payloadOffset, offset + 4);
+}
+
+function writeSecurityBufferWithPayload(message, descriptorOffset, payload, payloadOffset) {
+  writeSecurityBuffer(message, descriptorOffset, payload.length, payloadOffset);
+  payload.copy(message, payloadOffset);
+  return payloadOffset + payload.length;
+}
+
+function readSecurityBuffer(message, offset) {
+  if (message.length < offset + 8) {
+    return Buffer.alloc(0);
+  }
+  const length = message.readUInt16LE(offset);
+  const payloadOffset = message.readUInt32LE(offset + 4);
+  if (length < 0 || payloadOffset < 0 || payloadOffset + length > message.length) {
+    return Buffer.alloc(0);
+  }
+  return message.slice(payloadOffset, payloadOffset + length);
+}
+
+function ntlmTimestamp(now) {
+  const epochOffset = 11644473600000;
+  const value = BigInt(Math.max(0, Number(now) + epochOffset)) * 10000n;
+  const buffer = Buffer.alloc(8);
+  buffer.writeBigUInt64LE(value);
+  return buffer;
+}
+
+function md4(input) {
+  const message = Buffer.from(input);
+  const bitLength = BigInt(message.length) * 8n;
+  const paddedLength = (((message.length + 9 + 63) >> 6) << 6);
+  const buffer = Buffer.alloc(paddedLength);
+  message.copy(buffer);
+  buffer[message.length] = 0x80;
+  buffer.writeBigUInt64LE(bitLength, paddedLength - 8);
+  let a = 0x67452301;
+  let b = 0xefcdab89;
+  let c = 0x98badcfe;
+  let d = 0x10325476;
+  for (let offset = 0; offset < buffer.length; offset += 64) {
+    const x = Array.from({ length: 16 }, (_value, index) => buffer.readUInt32LE(offset + index * 4));
+    const aa = a;
+    const bb = b;
+    const cc = c;
+    const dd = d;
+    [a, b, c, d] = md4Round1(a, b, c, d, x);
+    [a, b, c, d] = md4Round2(a, b, c, d, x);
+    [a, b, c, d] = md4Round3(a, b, c, d, x);
+    a = (a + aa) >>> 0;
+    b = (b + bb) >>> 0;
+    c = (c + cc) >>> 0;
+    d = (d + dd) >>> 0;
+  }
+  const digest = Buffer.alloc(16);
+  digest.writeUInt32LE(a, 0);
+  digest.writeUInt32LE(b, 4);
+  digest.writeUInt32LE(c, 8);
+  digest.writeUInt32LE(d, 12);
+  return digest;
+}
+
+function md4Round1(a, b, c, d, x) {
+  const s = [3, 7, 11, 19];
+  for (let i = 0; i < 16; i += 4) {
+    a = rotl((a + md4F(b, c, d) + x[i]) >>> 0, s[0]);
+    d = rotl((d + md4F(a, b, c) + x[i + 1]) >>> 0, s[1]);
+    c = rotl((c + md4F(d, a, b) + x[i + 2]) >>> 0, s[2]);
+    b = rotl((b + md4F(c, d, a) + x[i + 3]) >>> 0, s[3]);
+  }
+  return [a, b, c, d];
+}
+
+function md4Round2(a, b, c, d, x) {
+  const s = [3, 5, 9, 13];
+  for (const i of [0, 1, 2, 3]) {
+    a = rotl((a + md4G(b, c, d) + x[i] + 0x5a827999) >>> 0, s[0]);
+    d = rotl((d + md4G(a, b, c) + x[i + 4] + 0x5a827999) >>> 0, s[1]);
+    c = rotl((c + md4G(d, a, b) + x[i + 8] + 0x5a827999) >>> 0, s[2]);
+    b = rotl((b + md4G(c, d, a) + x[i + 12] + 0x5a827999) >>> 0, s[3]);
+  }
+  return [a, b, c, d];
+}
+
+function md4Round3(a, b, c, d, x) {
+  const s = [3, 9, 11, 15];
+  for (const i of [0, 2, 1, 3]) {
+    a = rotl((a + md4H(b, c, d) + x[i] + 0x6ed9eba1) >>> 0, s[0]);
+    d = rotl((d + md4H(a, b, c) + x[i + 8] + 0x6ed9eba1) >>> 0, s[1]);
+    c = rotl((c + md4H(d, a, b) + x[i + 4] + 0x6ed9eba1) >>> 0, s[2]);
+    b = rotl((b + md4H(c, d, a) + x[i + 12] + 0x6ed9eba1) >>> 0, s[3]);
+  }
+  return [a, b, c, d];
+}
+
+function md4F(x, y, z) { return ((x & y) | (~x & z)) >>> 0; }
+function md4G(x, y, z) { return ((x & y) | (x & z) | (y & z)) >>> 0; }
+function md4H(x, y, z) { return (x ^ y ^ z) >>> 0; }
+function rotl(value, bits) { return ((value << bits) | (value >>> (32 - bits))) >>> 0; }
+
+function edgeGridTimestamp(now) {
+  return new Date(Number(now)).toISOString().replace(/\.\d{3}Z$/, '+0000');
+}
+
+function edgeGridCanonicalHeaders(headers, headersToSign, environment) {
+  const names = String(resolveEnvironmentValue(headersToSign || '', environment) || '')
+    .split(/[,\s]+/)
+    .map((name) => name.trim().toLowerCase())
+    .filter(Boolean);
+  return names
+    .map((name) => {
+      const value = headerValue(headers, name);
+      return value == null || value === '' ? '' : `${name}:${String(value).trim().replace(/\s+/g, ' ')}`;
+    })
+    .filter(Boolean)
+    .join('\t');
+}
+
+function sha256Base64(value) {
+  return crypto.createHash('sha256').update(Buffer.isBuffer(value) ? value : String(value || ''), Buffer.isBuffer(value) ? undefined : 'utf8').digest('base64');
 }
 
 function requireResolved(value, environment, label, errors) {
@@ -1042,6 +1407,7 @@ module.exports = {
   OAUTH_REFRESH_WINDOW_MILLIS,
   applyDigestChallengeAuth,
   applyAuth,
+  buildNtlmType3AuthorizationHeader,
   createOAuthPkceSession,
   exchangeOAuthAuthorizationCode,
   maybeRefreshOAuthToken,

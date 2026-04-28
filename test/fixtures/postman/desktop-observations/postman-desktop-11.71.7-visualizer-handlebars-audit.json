@@ -8,6 +8,64 @@
     "visualizer.pm.getData",
     "visualizer.set"
   ],
+  "rowEvidence": {
+    "visualizer.clear": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-postmeter-focused-coverage",
+      "postmanEvidence": [
+        "Postman Desktop 11.71.7 packages the visualizer sandbox surface and Handlebars 4.7 line."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/fixtures/postman/newman-sandbox-v1.collection.json"
+      ]
+    },
+    "visualizer.external-assets": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-postmeter-focused-coverage",
+      "postmanEvidence": [
+        "Postman Desktop 11.71.7 visualizer behavior is source-audited for the sandboxed iframe and Handlebars package line."
+      ],
+      "postmeterEvidence": [
+        "test/electron/postmanSandboxAdversarial.test.js",
+        "test/electron/postmanSandboxCorpus.test.js"
+      ]
+    },
+    "visualizer.handlebars-full-parity": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-postmeter-focused-coverage",
+      "postmanEvidence": [
+        "Postman Desktop 11.71.7 packages handlebars@4.7.8 through the visualizer runtime path."
+      ],
+      "postmeterEvidence": [
+        "src/core/visualizerHandlebarsBundle.js",
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/postmanSandboxAdversarial.test.js"
+      ]
+    },
+    "visualizer.pm.getData": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-postmeter-focused-coverage",
+      "postmanEvidence": [
+        "Postman Desktop 11.71.7 visualizer docs/source expose pm.getData(callback) inside the rendered document."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/fixtures/postman/newman-sandbox-v1.collection.json"
+      ]
+    },
+    "visualizer.set": {
+      "level": "behavior",
+      "method": "installed-desktop-runtime-source-audit-plus-postmeter-focused-coverage",
+      "postmanEvidence": [
+        "Postman Desktop 11.71.7 visualizer docs/source expose pm.visualizer.set(layout, data, options)."
+      ],
+      "postmeterEvidence": [
+        "test/electron/scriptRuntime.test.js",
+        "test/electron/postmanSandboxCorpus.test.js"
+      ]
+    }
+  },
   "postman": {
     "app": "Postman Desktop",
     "version": "11.71.7",

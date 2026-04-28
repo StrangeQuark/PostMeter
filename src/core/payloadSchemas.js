@@ -17,7 +17,9 @@ const AUTH_TYPE_VALUES = [
   'aws',
   'oauth1',
   'ntlm',
-  'akamaiEdgeGrid'
+  'akamaiEdgeGrid',
+  'jwtBearer',
+  'asap'
 ];
 const API_KEY_LOCATIONS = ['header', 'query'];
 const OAUTH2_TOKEN_TYPES = ['Bearer', 'MAC'];
@@ -399,7 +401,18 @@ const FIELD_SCHEMAS = {
     domain: { type: 'string', limit: 'value', optional: true },
     workstation: { type: 'string', limit: 'value', optional: true },
     clientToken: { type: 'string', limit: 'value', optional: true },
-    headersToSign: { type: 'string', limit: 'value', optional: true }
+    headersToSign: { type: 'string', limit: 'value', optional: true },
+    privateKey: { type: 'string', limit: 'value', optional: true },
+    secret: { type: 'string', limit: 'value', optional: true },
+    issuer: { type: 'string', limit: 'value', optional: true },
+    subject: { type: 'string', limit: 'value', optional: true },
+    audience: { type: 'string', limit: 'value', optional: true },
+    keyId: { type: 'string', limit: 'value', optional: true },
+    expiresIn: { type: 'string', limit: 'short', optional: true },
+    claims: { type: 'string', limit: 'value', optional: true },
+    headerPrefix: { type: 'string', limit: 'short', optional: true },
+    addTokenTo: { type: 'string', limit: 'short', optional: true },
+    queryParamName: { type: 'string', limit: 'short', optional: true }
   }
 };
 

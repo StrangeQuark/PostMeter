@@ -58,6 +58,9 @@ jobs:
       - name: Postman parity matrix validation
         run: npm run postman:parity:validate
 
+      - name: Postman docs coverage validation
+        run: npm run postman:docs:validate
+
       - name: Sandbox release gate manifest
         run: npm run release:gate
 

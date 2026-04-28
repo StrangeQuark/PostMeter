@@ -6,6 +6,7 @@
     "claim": "Platform-equivalent full OS sandbox coverage for script workers",
     "separation": "This matrix is separate from Postman API parity and from scripted load-test support.",
     "postmanParityCommand": "npm run postman:parity:claim",
+    "postmanDocsCommand": "npm run postman:docs:validate",
     "platformClaimCommand": "npm run sandbox:platform:claim"
   },
   "claimSurfaces": {
@@ -201,7 +202,7 @@
       "id": "postman-parity.separate-claim",
       "platform": "all",
       "area": "claim-boundary",
-      "target": "Postman script API parity is tracked by the Postman parity matrix and claim gate; platform OS sandbox completion is intentionally not part of npm run postman:parity:claim.",
+      "target": "Postman script API parity is tracked by the Postman parity matrix, official-docs coverage audit, and claim gate; platform OS sandbox completion is intentionally not part of npm run postman:parity:claim.",
       "status": "implemented",
       "claimSurface": "postman-api-parity",
       "claimBlocking": false,
@@ -212,8 +213,10 @@
       ],
       "verificationRefs": [
         "npm run postman:parity:validate",
+        "npm run postman:docs:validate",
         "npm run postman:parity:claim",
-        "docs/postman-sandbox-parity-matrix.json"
+        "docs/postman-sandbox-parity-matrix.json",
+        "docs/postman-docs-coverage-audit.json"
       ],
       "notes": ""
     },
@@ -234,6 +237,7 @@
       ],
       "verificationRefs": [
         "npm run sandbox:platform:validate",
+        "npm run postman:docs:validate",
         "npm run release:gate",
         "npm run check"
       ],

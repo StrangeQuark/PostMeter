@@ -40,6 +40,8 @@ npm run sandbox:platform:claim
 npm run postman:parity:validate
 npm run postman:parity:claim
 npm run postman:parity:diff
+npm run postman:docs:validate
+npm run postman:docs:live
 ```
 
 ### UI And Smoke
@@ -140,7 +142,8 @@ POSTMETER_UPDATE_URL=https://api.github.com/repos/OWNER/REPO/releases/latest npm
 - Renderer `nodeIntegration` is disabled, `contextIsolation` is enabled, and the renderer is sandboxed.
 - The renderer talks to core logic only through explicit preload IPC bindings.
 - Request scripts run in constrained child processes with brokered privileged APIs, Postman-compatible test/assertion/variable/dynamic-variable behavior, version-pinned Postman bundled packages, global/module/Collection-SDK object facades, GraphQL hook execution, live parent-owned gRPC hook transport, local mock `pm.mock`/`pm.state` support, reviewed package-cache loading with parent-side fetch/review, isolated Handlebars visualizer rendering with reviewed assets, scoped vault grants, hardened script bridges, fail-closed Node permission flags in production runtimes, Linux `bubblewrap` OS isolation plus seccomp syscall policy when available/required, timeouts, and bounded resources. Native Windows/macOS OS sandbox backends remain future platform work.
-- Postman import parity is tracked by a generated matrix at `docs/postman-sandbox-parity-matrix.json`; `npm run postman:parity:validate` checks the matrix, `npm run postman:parity:diff` exercises the HTTP-core, broad, dynamic-host-globals, runtime-limits, HttpOnly-cookies, sendRequest-advanced, and file-binding Newman-compatible differential harness, and `npm run postman:parity:claim` now passes with zero default-import blockers for the supported Postman script import profile.
+- Postman import parity is tracked by a generated matrix at `docs/postman-sandbox-parity-matrix.json`; `npm run postman:parity:validate` checks the matrix, and `npm run postman:parity:diff` exercises the HTTP-core, broad, dynamic-host-globals, runtime-limits, HttpOnly-cookies, sendRequest-advanced, and file-binding Newman-compatible differential harness. The official-docs sweep is separately committed at `docs/postman-docs-coverage-audit.json`; `npm run postman:docs:validate` gates the checked-in token mapping, and `npm run postman:docs:live` refetches official Postman/Newman docs to catch upstream drift. `npm run postman:parity:claim` is green for the tracked default Postman import profile with zero default-import blockers; behavior-sensitive Desktop rows are backed by row-specific evidence metadata.
+- Current audited parity targets are Postman Desktop 11.71.7 with `postman-sandbox@6.2.2` and Postman Runtime 7.50.0, plus Newman 6.2.2 with Postman Runtime 7.39.1 for Newman-compatible surfaces. The claim covers the current official Postman/Newman scripting docs and those audited runtime targets, not undocumented future Postman releases.
 - Platform OS sandbox completion is tracked separately at `docs/os-sandbox-platform-matrix.json`; `npm run sandbox:platform:validate` keeps the matrix fresh, and `npm run sandbox:platform:claim` must pass before claiming equivalent full OS sandbox coverage on Linux, Windows, and macOS.
 - Workspace data is stored as plain JSON without local encryption or redacted export modes. Script vault secrets are stored separately in encrypted per-workspace vault files when OS-backed desktop encryption is available.
 - Release builds are currently unsigned. Full security and production-readiness detail lives in [TECH_SPECS.MD](TECH_SPECS.MD) and [NEXT_STEPS.MD](NEXT_STEPS.MD).
