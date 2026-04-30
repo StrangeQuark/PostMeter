@@ -31,15 +31,19 @@ class MemoryVaultStore {
     return this.secrets.get(normalizeVaultKey(key));
   }
 
-  async set(key, value) {
+  async set(key, value, metadata = {}) {
     if (this.secrets.size >= MAX_VAULT_SECRETS && !this.secrets.has(normalizeVaultKey(key))) {
       throw new Error(`PostMeter vault cannot store more than ${MAX_VAULT_SECRETS} secrets.`);
     }
-    this.secrets.set(normalizeVaultKey(key), normalizeVaultSecretValue(value));
+    const normalizedKey = normalizeVaultKey(key);
+    this.secrets.set(normalizedKey, normalizeVaultSecretValue(value));
+    await this.audit('set', normalizedKey, metadata);
   }
 
-  async unset(key) {
-    this.secrets.delete(normalizeVaultKey(key));
+  async unset(key, metadata = {}) {
+    const normalizedKey = normalizeVaultKey(key);
+    this.secrets.delete(normalizedKey);
+    await this.audit('unset', normalizedKey, metadata);
   }
 
   async audit(operation, key, metadata = {}) {
@@ -232,9 +236,13 @@ function normalizeVaultDocument(document) {
       .map((entry) => ({
         at: typeof entry.at === 'string' ? entry.at : '',
         operation: typeof entry.operation === 'string' ? entry.operation : '',
+        collectionId: typeof entry.collectionId === 'string' ? entry.collectionId : '',
+        collectionName: typeof entry.collectionName === 'string' ? entry.collectionName : '',
         key: typeof entry.key === 'string' ? entry.key : '',
         requestId: typeof entry.requestId === 'string' ? entry.requestId : '',
-        requestName: typeof entry.requestName === 'string' ? entry.requestName : ''
+        requestName: typeof entry.requestName === 'string' ? entry.requestName : '',
+        workspaceId: typeof entry.workspaceId === 'string' ? entry.workspaceId : '',
+        workspaceName: typeof entry.workspaceName === 'string' ? entry.workspaceName : ''
       }));
   }
   return normalized;
@@ -258,9 +266,13 @@ function appendAuditEntry(document, operation, key, metadata = {}) {
     {
       at: document.updatedAt,
       operation,
+      collectionId: String(metadata.collectionId || '').slice(0, MAX_VAULT_KEY_BYTES),
+      collectionName: String(metadata.collectionName || '').slice(0, MAX_VAULT_KEY_BYTES),
       key,
       requestId: String(metadata.requestId || '').slice(0, MAX_VAULT_KEY_BYTES),
-      requestName: String(metadata.requestName || '').slice(0, MAX_VAULT_KEY_BYTES)
+      requestName: String(metadata.requestName || '').slice(0, MAX_VAULT_KEY_BYTES),
+      workspaceId: String(metadata.workspaceId || '').slice(0, MAX_VAULT_KEY_BYTES),
+      workspaceName: String(metadata.workspaceName || '').slice(0, MAX_VAULT_KEY_BYTES)
     }
   ].slice(-MAX_VAULT_AUDIT_ENTRIES);
 }

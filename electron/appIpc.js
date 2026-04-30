@@ -49,6 +49,9 @@ function safeExternalUrl(value) {
   if (parsed.protocol !== 'https:') {
     throw new Error('External URL must use HTTPS.');
   }
+  if (parsed.username || parsed.password) {
+    throw new Error('External URL must not include credentials.');
+  }
   if (!['github.com', 'www.github.com'].includes(parsed.hostname.toLowerCase())) {
     throw new Error('External URL host is not allowed.');
   }

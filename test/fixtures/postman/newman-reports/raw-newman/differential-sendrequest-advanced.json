@@ -5,7 +5,7 @@
     },
     "item": [
       {
-        "id": "0b802b4f-0a00-4577-bdd8-5fb6b0e74fcf",
+        "id": "936f146e-12c7-491c-a3b0-944aec0a39c5",
         "name": "Advanced SendRequest Auth",
         "request": {
           "url": {
@@ -25,7 +25,7 @@
           {
             "listen": "test",
             "script": {
-              "id": "bdcdd2e2-c5ff-42fa-9a6d-7de421b35e16",
+              "id": "adb0f30b-1d63-431a-a171-4770a9f99ee5",
               "type": "text/javascript",
               "exec": [
                 "pm.test('pm.sendRequest advanced auth helpers match Newman', async function () {",
@@ -89,7 +89,7 @@
                 "  }));",
                 "});"
               ],
-              "_lastExecutionId": "fc00bdf6-fb0e-40ce-8a03-781ca4d071e9"
+              "_lastExecutionId": "04bfd2d2-746c-4786-a1bd-59fb44d86179"
             }
           }
         ]
@@ -104,11 +104,11 @@
     }
   },
   "environment": {
-    "id": "af4a0766-24d8-40d6-931b-889ba34055e6",
+    "id": "14e52366-438c-415a-ab02-62371cb25779",
     "values": [
       {
         "type": "any",
-        "value": "http://127.0.0.1:42371",
+        "value": "http://127.0.0.1:41489",
         "key": "baseUrl"
       },
       {
@@ -119,7 +119,7 @@
     ]
   },
   "globals": {
-    "id": "52009e96-578e-45cf-9101-5f63b09e413c",
+    "id": "2175a1c4-7f53-4c63-ab06-49fe627c3a0f",
     "values": []
   },
   "run": {
@@ -171,10 +171,10 @@
       }
     },
     "timings": {
-      "responseAverage": 3.2,
+      "responseAverage": 3.4,
       "responseMin": 1,
-      "responseMax": 11,
-      "responseSd": 3.919183588453085,
+      "responseMax": 12,
+      "responseSd": 4.317406628984581,
       "dnsAverage": 0,
       "dnsMin": 0,
       "dnsMax": 0,
@@ -183,8 +183,8 @@
       "firstByteMin": 0,
       "firstByteMax": 0,
       "firstByteSd": 0,
-      "started": 1777389879436,
-      "completed": 1777389879483
+      "started": 1777558285720,
+      "completed": 1777558285773
     },
     "executions": [
       {
@@ -197,13 +197,13 @@
           "eof": false,
           "bof": true,
           "cr": false,
-          "ref": "117c7d28-97f3-4d85-b25d-83055221f612",
-          "httpRequestId": "44e9fc59-0fc7-40b1-af80-416199380e17",
-          "scriptId": "bdcdd2e2-c5ff-42fa-9a6d-7de421b35e16",
-          "execution": "fc00bdf6-fb0e-40ce-8a03-781ca4d071e9"
+          "ref": "e6bf5649-f7a5-400d-bcdc-8b9ff4e572ac",
+          "httpRequestId": "6cf0e4be-c87b-4ffb-b964-768fa7b7c150",
+          "scriptId": "adb0f30b-1d63-431a-a171-4770a9f99ee5",
+          "execution": "04bfd2d2-746c-4786-a1bd-59fb44d86179"
         },
         "item": {
-          "id": "0b802b4f-0a00-4577-bdd8-5fb6b0e74fcf",
+          "id": "936f146e-12c7-491c-a3b0-944aec0a39c5",
           "name": "Advanced SendRequest Auth",
           "request": {
             "url": {
@@ -223,7 +223,7 @@
             {
               "listen": "test",
               "script": {
-                "id": "bdcdd2e2-c5ff-42fa-9a6d-7de421b35e16",
+                "id": "adb0f30b-1d63-431a-a171-4770a9f99ee5",
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('pm.sendRequest advanced auth helpers match Newman', async function () {",
@@ -287,7 +287,7 @@
                   "  }));",
                   "});"
                 ],
-                "_lastExecutionId": "fc00bdf6-fb0e-40ce-8a03-781ca4d071e9"
+                "_lastExecutionId": "04bfd2d2-746c-4786-a1bd-59fb44d86179"
               }
             }
           ]
@@ -295,7 +295,7 @@
         "request": {
           "url": {
             "protocol": "http",
-            "port": "42371",
+            "port": "41489",
             "path": [
               "auth",
               "aws"
@@ -312,17 +312,17 @@
           "header": [
             {
               "key": "Host",
-              "value": "127.0.0.1:42371",
+              "value": "127.0.0.1:41489",
               "system": true
             },
             {
               "key": "X-Amz-Date",
-              "value": "20260428T152439Z",
+              "value": "20260430T141125Z",
               "system": true
             },
             {
               "key": "Authorization",
-              "value": "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20260428/us-east-1/execute-api/aws4_request, SignedHeaders=host;x-amz-date, Signature=c398226cc5e7efaefad73f93745c3c8a5c265059d49a16721187882dc7cdecb0",
+              "value": "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20260430/us-east-1/execute-api/aws4_request, SignedHeaders=host;x-amz-date, Signature=0da56191d8ce8839eb6254030e0b5729d9ce25c80d6ede19a967f95cf0125fb0",
               "system": true
             },
             {
@@ -342,7 +342,7 @@
             },
             {
               "key": "Postman-Token",
-              "value": "b654670d-f989-4530-9103-6490af20665a",
+              "value": "98687ed7-9881-49da-a437-d9c28bc7d36d",
               "system": true
             },
             {
@@ -384,7 +384,7 @@
           }
         },
         "response": {
-          "id": "05750c2b-4277-4325-882b-8b2bb10defa6",
+          "id": "226b49bf-348c-48bc-af12-518eeb1f66b8",
           "status": "OK",
           "code": 200,
           "header": [
@@ -398,7 +398,7 @@
             },
             {
               "key": "Date",
-              "value": "Tue, 28 Apr 2026 15:24:39 GMT"
+              "value": "Thu, 30 Apr 2026 14:11:25 GMT"
             },
             {
               "key": "Connection",
@@ -476,8 +476,8 @@
               54,
               48,
               52,
-              50,
-              56,
+              51,
+              48,
               47,
               117,
               115,
@@ -556,68 +556,68 @@
               114,
               101,
               61,
-              99,
-              51,
-              57,
-              56,
-              50,
-              50,
-              54,
-              99,
-              99,
-              53,
-              101,
-              55,
-              101,
-              102,
-              97,
-              101,
-              102,
-              97,
-              100,
-              55,
-              51,
-              102,
-              57,
-              51,
-              55,
-              52,
-              53,
-              99,
-              51,
-              99,
-              56,
-              97,
-              53,
-              99,
-              50,
-              54,
-              53,
               48,
-              53,
-              57,
               100,
-              52,
-              57,
               97,
-              49,
+              53,
               54,
-              55,
-              50,
               49,
+              57,
               49,
-              56,
-              55,
-              56,
-              56,
-              50,
               100,
+              56,
               99,
+              101,
+              56,
+              56,
+              51,
+              57,
+              101,
+              98,
+              54,
+              50,
+              53,
+              52,
+              48,
+              51,
+              48,
+              101,
+              48,
+              98,
+              53,
               55,
+              50,
+              57,
+              100,
+              57,
               99,
+              101,
+              50,
+              53,
+              99,
+              56,
+              48,
+              100,
+              54,
+              101,
               100,
               101,
+              49,
+              57,
+              97,
+              57,
+              54,
+              55,
+              102,
+              57,
+              53,
               99,
+              102,
+              48,
+              49,
+              50,
+              53,
+              102,
               98,
               48,
               34,
@@ -656,7 +656,7 @@
           "responseTime": 1,
           "responseSize": 238
         },
-        "id": "0fb478bf-04bd-4690-8642-fa2c684fd27d",
+        "id": "ea8f3514-8d02-433f-bd74-1a20509a355f",
         "assertions": [
           {
             "assertion": "pm.sendRequest advanced auth helpers match Newman",
@@ -674,13 +674,13 @@
           "eof": false,
           "bof": true,
           "cr": false,
-          "ref": "117c7d28-97f3-4d85-b25d-83055221f612",
-          "httpRequestId": "44e9fc59-0fc7-40b1-af80-416199380e17",
-          "scriptId": "bdcdd2e2-c5ff-42fa-9a6d-7de421b35e16",
-          "execution": "fc00bdf6-fb0e-40ce-8a03-781ca4d071e9"
+          "ref": "e6bf5649-f7a5-400d-bcdc-8b9ff4e572ac",
+          "httpRequestId": "6cf0e4be-c87b-4ffb-b964-768fa7b7c150",
+          "scriptId": "adb0f30b-1d63-431a-a171-4770a9f99ee5",
+          "execution": "04bfd2d2-746c-4786-a1bd-59fb44d86179"
         },
         "item": {
-          "id": "0b802b4f-0a00-4577-bdd8-5fb6b0e74fcf",
+          "id": "936f146e-12c7-491c-a3b0-944aec0a39c5",
           "name": "Advanced SendRequest Auth",
           "request": {
             "url": {
@@ -700,7 +700,7 @@
             {
               "listen": "test",
               "script": {
-                "id": "bdcdd2e2-c5ff-42fa-9a6d-7de421b35e16",
+                "id": "adb0f30b-1d63-431a-a171-4770a9f99ee5",
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('pm.sendRequest advanced auth helpers match Newman', async function () {",
@@ -764,7 +764,7 @@
                   "  }));",
                   "});"
                 ],
-                "_lastExecutionId": "fc00bdf6-fb0e-40ce-8a03-781ca4d071e9"
+                "_lastExecutionId": "04bfd2d2-746c-4786-a1bd-59fb44d86179"
               }
             }
           ]
@@ -772,7 +772,7 @@
         "request": {
           "url": {
             "protocol": "http",
-            "port": "42371",
+            "port": "41489",
             "path": [
               "auth",
               "aws"
@@ -789,17 +789,17 @@
           "header": [
             {
               "key": "Host",
-              "value": "127.0.0.1:42371",
+              "value": "127.0.0.1:41489",
               "system": true
             },
             {
               "key": "X-Amz-Date",
-              "value": "20260428T152439Z",
+              "value": "20260430T141125Z",
               "system": true
             },
             {
               "key": "Authorization",
-              "value": "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20260428/us-east-1/execute-api/aws4_request, SignedHeaders=host;x-amz-date, Signature=c398226cc5e7efaefad73f93745c3c8a5c265059d49a16721187882dc7cdecb0",
+              "value": "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20260430/us-east-1/execute-api/aws4_request, SignedHeaders=host;x-amz-date, Signature=0da56191d8ce8839eb6254030e0b5729d9ce25c80d6ede19a967f95cf0125fb0",
               "system": true
             },
             {
@@ -819,7 +819,7 @@
             },
             {
               "key": "Postman-Token",
-              "value": "b654670d-f989-4530-9103-6490af20665a",
+              "value": "98687ed7-9881-49da-a437-d9c28bc7d36d",
               "system": true
             },
             {
@@ -861,7 +861,7 @@
           }
         },
         "response": {
-          "id": "05750c2b-4277-4325-882b-8b2bb10defa6",
+          "id": "226b49bf-348c-48bc-af12-518eeb1f66b8",
           "status": "OK",
           "code": 200,
           "header": [
@@ -875,7 +875,7 @@
             },
             {
               "key": "Date",
-              "value": "Tue, 28 Apr 2026 15:24:39 GMT"
+              "value": "Thu, 30 Apr 2026 14:11:25 GMT"
             },
             {
               "key": "Connection",
@@ -953,8 +953,8 @@
               54,
               48,
               52,
-              50,
-              56,
+              51,
+              48,
               47,
               117,
               115,
@@ -1033,68 +1033,68 @@
               114,
               101,
               61,
-              99,
-              51,
-              57,
-              56,
-              50,
-              50,
-              54,
-              99,
-              99,
-              53,
-              101,
-              55,
-              101,
-              102,
-              97,
-              101,
-              102,
-              97,
-              100,
-              55,
-              51,
-              102,
-              57,
-              51,
-              55,
-              52,
-              53,
-              99,
-              51,
-              99,
-              56,
-              97,
-              53,
-              99,
-              50,
-              54,
-              53,
               48,
-              53,
-              57,
               100,
-              52,
-              57,
               97,
-              49,
+              53,
               54,
-              55,
-              50,
               49,
+              57,
               49,
-              56,
-              55,
-              56,
-              56,
-              50,
               100,
+              56,
               99,
+              101,
+              56,
+              56,
+              51,
+              57,
+              101,
+              98,
+              54,
+              50,
+              53,
+              52,
+              48,
+              51,
+              48,
+              101,
+              48,
+              98,
+              53,
               55,
+              50,
+              57,
+              100,
+              57,
               99,
+              101,
+              50,
+              53,
+              99,
+              56,
+              48,
+              100,
+              54,
+              101,
               100,
               101,
+              49,
+              57,
+              97,
+              57,
+              54,
+              55,
+              102,
+              57,
+              53,
               99,
+              102,
+              48,
+              49,
+              50,
+              53,
+              102,
               98,
               48,
               34,
@@ -1133,7 +1133,7 @@
           "responseTime": 1,
           "responseSize": 238
         },
-        "id": "0fb478bf-04bd-4690-8642-fa2c684fd27d",
+        "id": "ea8f3514-8d02-433f-bd74-1a20509a355f",
         "assertions": [
           {
             "assertion": "pm.sendRequest advanced auth helpers match Newman",
@@ -1151,13 +1151,13 @@
           "eof": false,
           "bof": true,
           "cr": false,
-          "ref": "117c7d28-97f3-4d85-b25d-83055221f612",
-          "httpRequestId": "44e9fc59-0fc7-40b1-af80-416199380e17",
-          "scriptId": "bdcdd2e2-c5ff-42fa-9a6d-7de421b35e16",
-          "execution": "fc00bdf6-fb0e-40ce-8a03-781ca4d071e9"
+          "ref": "e6bf5649-f7a5-400d-bcdc-8b9ff4e572ac",
+          "httpRequestId": "6cf0e4be-c87b-4ffb-b964-768fa7b7c150",
+          "scriptId": "adb0f30b-1d63-431a-a171-4770a9f99ee5",
+          "execution": "04bfd2d2-746c-4786-a1bd-59fb44d86179"
         },
         "item": {
-          "id": "0b802b4f-0a00-4577-bdd8-5fb6b0e74fcf",
+          "id": "936f146e-12c7-491c-a3b0-944aec0a39c5",
           "name": "Advanced SendRequest Auth",
           "request": {
             "url": {
@@ -1177,7 +1177,7 @@
             {
               "listen": "test",
               "script": {
-                "id": "bdcdd2e2-c5ff-42fa-9a6d-7de421b35e16",
+                "id": "adb0f30b-1d63-431a-a171-4770a9f99ee5",
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('pm.sendRequest advanced auth helpers match Newman', async function () {",
@@ -1241,7 +1241,7 @@
                   "  }));",
                   "});"
                 ],
-                "_lastExecutionId": "fc00bdf6-fb0e-40ce-8a03-781ca4d071e9"
+                "_lastExecutionId": "04bfd2d2-746c-4786-a1bd-59fb44d86179"
               }
             }
           ]
@@ -1249,7 +1249,7 @@
         "request": {
           "url": {
             "protocol": "http",
-            "port": "42371",
+            "port": "41489",
             "path": [
               "auth",
               "aws"
@@ -1266,17 +1266,17 @@
           "header": [
             {
               "key": "Host",
-              "value": "127.0.0.1:42371",
+              "value": "127.0.0.1:41489",
               "system": true
             },
             {
               "key": "X-Amz-Date",
-              "value": "20260428T152439Z",
+              "value": "20260430T141125Z",
               "system": true
             },
             {
               "key": "Authorization",
-              "value": "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20260428/us-east-1/execute-api/aws4_request, SignedHeaders=host;x-amz-date, Signature=c398226cc5e7efaefad73f93745c3c8a5c265059d49a16721187882dc7cdecb0",
+              "value": "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20260430/us-east-1/execute-api/aws4_request, SignedHeaders=host;x-amz-date, Signature=0da56191d8ce8839eb6254030e0b5729d9ce25c80d6ede19a967f95cf0125fb0",
               "system": true
             },
             {
@@ -1296,7 +1296,7 @@
             },
             {
               "key": "Postman-Token",
-              "value": "b654670d-f989-4530-9103-6490af20665a",
+              "value": "98687ed7-9881-49da-a437-d9c28bc7d36d",
               "system": true
             },
             {
@@ -1338,7 +1338,7 @@
           }
         },
         "response": {
-          "id": "05750c2b-4277-4325-882b-8b2bb10defa6",
+          "id": "226b49bf-348c-48bc-af12-518eeb1f66b8",
           "status": "OK",
           "code": 200,
           "header": [
@@ -1352,7 +1352,7 @@
             },
             {
               "key": "Date",
-              "value": "Tue, 28 Apr 2026 15:24:39 GMT"
+              "value": "Thu, 30 Apr 2026 14:11:25 GMT"
             },
             {
               "key": "Connection",
@@ -1430,8 +1430,8 @@
               54,
               48,
               52,
-              50,
-              56,
+              51,
+              48,
               47,
               117,
               115,
@@ -1510,68 +1510,68 @@
               114,
               101,
               61,
-              99,
-              51,
-              57,
-              56,
-              50,
-              50,
-              54,
-              99,
-              99,
-              53,
-              101,
-              55,
-              101,
-              102,
-              97,
-              101,
-              102,
-              97,
-              100,
-              55,
-              51,
-              102,
-              57,
-              51,
-              55,
-              52,
-              53,
-              99,
-              51,
-              99,
-              56,
-              97,
-              53,
-              99,
-              50,
-              54,
-              53,
               48,
-              53,
-              57,
               100,
-              52,
-              57,
               97,
-              49,
+              53,
               54,
-              55,
-              50,
               49,
+              57,
               49,
-              56,
-              55,
-              56,
-              56,
-              50,
               100,
+              56,
               99,
+              101,
+              56,
+              56,
+              51,
+              57,
+              101,
+              98,
+              54,
+              50,
+              53,
+              52,
+              48,
+              51,
+              48,
+              101,
+              48,
+              98,
+              53,
               55,
+              50,
+              57,
+              100,
+              57,
               99,
+              101,
+              50,
+              53,
+              99,
+              56,
+              48,
+              100,
+              54,
+              101,
               100,
               101,
+              49,
+              57,
+              97,
+              57,
+              54,
+              55,
+              102,
+              57,
+              53,
               99,
+              102,
+              48,
+              49,
+              50,
+              53,
+              102,
               98,
               48,
               34,
@@ -1610,7 +1610,7 @@
           "responseTime": 1,
           "responseSize": 238
         },
-        "id": "0fb478bf-04bd-4690-8642-fa2c684fd27d",
+        "id": "ea8f3514-8d02-433f-bd74-1a20509a355f",
         "assertions": [
           {
             "assertion": "pm.sendRequest advanced auth helpers match Newman",
@@ -1628,13 +1628,13 @@
           "eof": false,
           "bof": true,
           "cr": false,
-          "ref": "117c7d28-97f3-4d85-b25d-83055221f612",
-          "httpRequestId": "44e9fc59-0fc7-40b1-af80-416199380e17",
-          "scriptId": "bdcdd2e2-c5ff-42fa-9a6d-7de421b35e16",
-          "execution": "fc00bdf6-fb0e-40ce-8a03-781ca4d071e9"
+          "ref": "e6bf5649-f7a5-400d-bcdc-8b9ff4e572ac",
+          "httpRequestId": "6cf0e4be-c87b-4ffb-b964-768fa7b7c150",
+          "scriptId": "adb0f30b-1d63-431a-a171-4770a9f99ee5",
+          "execution": "04bfd2d2-746c-4786-a1bd-59fb44d86179"
         },
         "item": {
-          "id": "0b802b4f-0a00-4577-bdd8-5fb6b0e74fcf",
+          "id": "936f146e-12c7-491c-a3b0-944aec0a39c5",
           "name": "Advanced SendRequest Auth",
           "request": {
             "url": {
@@ -1654,7 +1654,7 @@
             {
               "listen": "test",
               "script": {
-                "id": "bdcdd2e2-c5ff-42fa-9a6d-7de421b35e16",
+                "id": "adb0f30b-1d63-431a-a171-4770a9f99ee5",
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('pm.sendRequest advanced auth helpers match Newman', async function () {",
@@ -1718,7 +1718,7 @@
                   "  }));",
                   "});"
                 ],
-                "_lastExecutionId": "fc00bdf6-fb0e-40ce-8a03-781ca4d071e9"
+                "_lastExecutionId": "04bfd2d2-746c-4786-a1bd-59fb44d86179"
               }
             }
           ]
@@ -1726,7 +1726,7 @@
         "request": {
           "url": {
             "protocol": "http",
-            "port": "42371",
+            "port": "41489",
             "path": [
               "auth",
               "aws"
@@ -1743,17 +1743,17 @@
           "header": [
             {
               "key": "Host",
-              "value": "127.0.0.1:42371",
+              "value": "127.0.0.1:41489",
               "system": true
             },
             {
               "key": "X-Amz-Date",
-              "value": "20260428T152439Z",
+              "value": "20260430T141125Z",
               "system": true
             },
             {
               "key": "Authorization",
-              "value": "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20260428/us-east-1/execute-api/aws4_request, SignedHeaders=host;x-amz-date, Signature=c398226cc5e7efaefad73f93745c3c8a5c265059d49a16721187882dc7cdecb0",
+              "value": "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20260430/us-east-1/execute-api/aws4_request, SignedHeaders=host;x-amz-date, Signature=0da56191d8ce8839eb6254030e0b5729d9ce25c80d6ede19a967f95cf0125fb0",
               "system": true
             },
             {
@@ -1773,7 +1773,7 @@
             },
             {
               "key": "Postman-Token",
-              "value": "b654670d-f989-4530-9103-6490af20665a",
+              "value": "98687ed7-9881-49da-a437-d9c28bc7d36d",
               "system": true
             },
             {
@@ -1815,7 +1815,7 @@
           }
         },
         "response": {
-          "id": "05750c2b-4277-4325-882b-8b2bb10defa6",
+          "id": "226b49bf-348c-48bc-af12-518eeb1f66b8",
           "status": "OK",
           "code": 200,
           "header": [
@@ -1829,7 +1829,7 @@
             },
             {
               "key": "Date",
-              "value": "Tue, 28 Apr 2026 15:24:39 GMT"
+              "value": "Thu, 30 Apr 2026 14:11:25 GMT"
             },
             {
               "key": "Connection",
@@ -1907,8 +1907,8 @@
               54,
               48,
               52,
-              50,
-              56,
+              51,
+              48,
               47,
               117,
               115,
@@ -1987,68 +1987,68 @@
               114,
               101,
               61,
-              99,
-              51,
-              57,
-              56,
-              50,
-              50,
-              54,
-              99,
-              99,
-              53,
-              101,
-              55,
-              101,
-              102,
-              97,
-              101,
-              102,
-              97,
-              100,
-              55,
-              51,
-              102,
-              57,
-              51,
-              55,
-              52,
-              53,
-              99,
-              51,
-              99,
-              56,
-              97,
-              53,
-              99,
-              50,
-              54,
-              53,
               48,
-              53,
-              57,
               100,
-              52,
-              57,
               97,
-              49,
+              53,
               54,
-              55,
-              50,
               49,
+              57,
               49,
-              56,
-              55,
-              56,
-              56,
-              50,
               100,
+              56,
               99,
+              101,
+              56,
+              56,
+              51,
+              57,
+              101,
+              98,
+              54,
+              50,
+              53,
+              52,
+              48,
+              51,
+              48,
+              101,
+              48,
+              98,
+              53,
               55,
+              50,
+              57,
+              100,
+              57,
               99,
+              101,
+              50,
+              53,
+              99,
+              56,
+              48,
+              100,
+              54,
+              101,
               100,
               101,
+              49,
+              57,
+              97,
+              57,
+              54,
+              55,
+              102,
+              57,
+              53,
               99,
+              102,
+              48,
+              49,
+              50,
+              53,
+              102,
               98,
               48,
               34,
@@ -2087,7 +2087,7 @@
           "responseTime": 1,
           "responseSize": 238
         },
-        "id": "0fb478bf-04bd-4690-8642-fa2c684fd27d",
+        "id": "ea8f3514-8d02-433f-bd74-1a20509a355f",
         "assertions": [
           {
             "assertion": "pm.sendRequest advanced auth helpers match Newman",
@@ -2105,13 +2105,13 @@
           "eof": false,
           "bof": true,
           "cr": false,
-          "ref": "117c7d28-97f3-4d85-b25d-83055221f612",
-          "httpRequestId": "44e9fc59-0fc7-40b1-af80-416199380e17",
-          "scriptId": "bdcdd2e2-c5ff-42fa-9a6d-7de421b35e16",
-          "execution": "fc00bdf6-fb0e-40ce-8a03-781ca4d071e9"
+          "ref": "e6bf5649-f7a5-400d-bcdc-8b9ff4e572ac",
+          "httpRequestId": "6cf0e4be-c87b-4ffb-b964-768fa7b7c150",
+          "scriptId": "adb0f30b-1d63-431a-a171-4770a9f99ee5",
+          "execution": "04bfd2d2-746c-4786-a1bd-59fb44d86179"
         },
         "item": {
-          "id": "0b802b4f-0a00-4577-bdd8-5fb6b0e74fcf",
+          "id": "936f146e-12c7-491c-a3b0-944aec0a39c5",
           "name": "Advanced SendRequest Auth",
           "request": {
             "url": {
@@ -2131,7 +2131,7 @@
             {
               "listen": "test",
               "script": {
-                "id": "bdcdd2e2-c5ff-42fa-9a6d-7de421b35e16",
+                "id": "adb0f30b-1d63-431a-a171-4770a9f99ee5",
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('pm.sendRequest advanced auth helpers match Newman', async function () {",
@@ -2195,7 +2195,7 @@
                   "  }));",
                   "});"
                 ],
-                "_lastExecutionId": "fc00bdf6-fb0e-40ce-8a03-781ca4d071e9"
+                "_lastExecutionId": "04bfd2d2-746c-4786-a1bd-59fb44d86179"
               }
             }
           ]
@@ -2203,7 +2203,7 @@
         "request": {
           "url": {
             "protocol": "http",
-            "port": "42371",
+            "port": "41489",
             "path": [
               "auth",
               "aws"
@@ -2220,17 +2220,17 @@
           "header": [
             {
               "key": "Host",
-              "value": "127.0.0.1:42371",
+              "value": "127.0.0.1:41489",
               "system": true
             },
             {
               "key": "X-Amz-Date",
-              "value": "20260428T152439Z",
+              "value": "20260430T141125Z",
               "system": true
             },
             {
               "key": "Authorization",
-              "value": "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20260428/us-east-1/execute-api/aws4_request, SignedHeaders=host;x-amz-date, Signature=c398226cc5e7efaefad73f93745c3c8a5c265059d49a16721187882dc7cdecb0",
+              "value": "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20260430/us-east-1/execute-api/aws4_request, SignedHeaders=host;x-amz-date, Signature=0da56191d8ce8839eb6254030e0b5729d9ce25c80d6ede19a967f95cf0125fb0",
               "system": true
             },
             {
@@ -2250,7 +2250,7 @@
             },
             {
               "key": "Postman-Token",
-              "value": "b654670d-f989-4530-9103-6490af20665a",
+              "value": "98687ed7-9881-49da-a437-d9c28bc7d36d",
               "system": true
             },
             {
@@ -2292,7 +2292,7 @@
           }
         },
         "response": {
-          "id": "05750c2b-4277-4325-882b-8b2bb10defa6",
+          "id": "226b49bf-348c-48bc-af12-518eeb1f66b8",
           "status": "OK",
           "code": 200,
           "header": [
@@ -2306,7 +2306,7 @@
             },
             {
               "key": "Date",
-              "value": "Tue, 28 Apr 2026 15:24:39 GMT"
+              "value": "Thu, 30 Apr 2026 14:11:25 GMT"
             },
             {
               "key": "Connection",
@@ -2384,8 +2384,8 @@
               54,
               48,
               52,
-              50,
-              56,
+              51,
+              48,
               47,
               117,
               115,
@@ -2464,68 +2464,68 @@
               114,
               101,
               61,
-              99,
-              51,
-              57,
-              56,
-              50,
-              50,
-              54,
-              99,
-              99,
-              53,
-              101,
-              55,
-              101,
-              102,
-              97,
-              101,
-              102,
-              97,
-              100,
-              55,
-              51,
-              102,
-              57,
-              51,
-              55,
-              52,
-              53,
-              99,
-              51,
-              99,
-              56,
-              97,
-              53,
-              99,
-              50,
-              54,
-              53,
               48,
-              53,
-              57,
               100,
-              52,
-              57,
               97,
-              49,
+              53,
               54,
-              55,
-              50,
               49,
+              57,
               49,
-              56,
-              55,
-              56,
-              56,
-              50,
               100,
+              56,
               99,
+              101,
+              56,
+              56,
+              51,
+              57,
+              101,
+              98,
+              54,
+              50,
+              53,
+              52,
+              48,
+              51,
+              48,
+              101,
+              48,
+              98,
+              53,
               55,
+              50,
+              57,
+              100,
+              57,
               99,
+              101,
+              50,
+              53,
+              99,
+              56,
+              48,
+              100,
+              54,
+              101,
               100,
               101,
+              49,
+              57,
+              97,
+              57,
+              54,
+              55,
+              102,
+              57,
+              53,
               99,
+              102,
+              48,
+              49,
+              50,
+              53,
+              102,
               98,
               48,
               34,
@@ -2564,7 +2564,7 @@
           "responseTime": 1,
           "responseSize": 238
         },
-        "id": "0fb478bf-04bd-4690-8642-fa2c684fd27d",
+        "id": "ea8f3514-8d02-433f-bd74-1a20509a355f",
         "assertions": [
           {
             "assertion": "pm.sendRequest advanced auth helpers match Newman",

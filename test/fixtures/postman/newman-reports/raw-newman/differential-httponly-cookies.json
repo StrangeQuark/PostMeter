@@ -5,7 +5,7 @@
     },
     "item": [
       {
-        "id": "e5a2d688-caf4-485e-b0b7-c077024e0b59",
+        "id": "f5500e4c-1f5c-4e42-8de9-bea7eae61489",
         "name": "Seed HttpOnly Cookies",
         "request": {
           "url": {
@@ -25,7 +25,7 @@
           {
             "listen": "prerequest",
             "script": {
-              "id": "5ffc8afe-0181-4cbb-b169-92b08c9f7a32",
+              "id": "e6f433a5-3c81-4e6c-bbcd-f4e09eb9f518",
               "type": "text/javascript",
               "exec": [
                 "var baseUrl = pm.variables.replaceIn('{{baseUrl}}');",
@@ -45,13 +45,13 @@
                 "  });",
                 "});"
               ],
-              "_lastExecutionId": "761c357a-64ec-44e7-98df-214819529bd7"
+              "_lastExecutionId": "fb37ae0d-5b38-487d-8eec-7355574f3df8"
             }
           },
           {
             "listen": "test",
             "script": {
-              "id": "c1015fcb-ca04-436c-b21a-d926d4168955",
+              "id": "c916b84e-9f8f-40de-948f-19bb3ecf7301",
               "type": "text/javascript",
               "exec": [
                 "pm.test('httponly seed request sends scripted cookies', function () {",
@@ -63,13 +63,13 @@
                 "  pm.expect(cookies.clearMe).to.equal('clear-secret');",
                 "});"
               ],
-              "_lastExecutionId": "0ec0d0f0-6a1d-4996-831d-689f29e02313"
+              "_lastExecutionId": "9547232b-b68b-4248-ad31-57013f05c92d"
             }
           }
         ]
       },
       {
-        "id": "f7ca1816-c937-4c20-a4d0-4f6ba95dab4d",
+        "id": "60b620ec-2a69-4584-a849-af4f1f07952b",
         "name": "Read And Mutate HttpOnly Cookies",
         "request": {
           "url": {
@@ -89,7 +89,7 @@
           {
             "listen": "test",
             "script": {
-              "id": "5c1db355-336d-4a1d-8dff-9a63379ebb38",
+              "id": "3bd18747-d007-429a-8ba1-ab3745d42474",
               "type": "text/javascript",
               "exec": [
                 "var baseUrl = pm.variables.replaceIn('{{baseUrl}}');",
@@ -164,13 +164,13 @@
                 "  });",
                 "});"
               ],
-              "_lastExecutionId": "511000d8-1868-4dcb-9fef-f29ae51567ef"
+              "_lastExecutionId": "bbf14dac-9c20-4c41-b824-847cb33151d9"
             }
           }
         ]
       },
       {
-        "id": "42e13120-8c58-44b2-9210-0ce6f78178f7",
+        "id": "e2507c47-6dee-4c97-b3c5-ca0340672436",
         "name": "After HttpOnly Mutations",
         "request": {
           "url": {
@@ -190,7 +190,7 @@
           {
             "listen": "test",
             "script": {
-              "id": "8e13dbad-aa0a-4a73-8717-2016555b8319",
+              "id": "348757df-9440-47cb-af2a-711d8f0b94ae",
               "type": "text/javascript",
               "exec": [
                 "var baseUrl = pm.variables.replaceIn('{{baseUrl}}');",
@@ -215,13 +215,13 @@
                 "  });",
                 "});"
               ],
-              "_lastExecutionId": "420e76bd-2b23-4316-b304-ff1b0ca906f6"
+              "_lastExecutionId": "6f253d71-90fd-4914-a3f9-72a104bd3552"
             }
           }
         ]
       },
       {
-        "id": "36a64165-308b-4349-a1dd-6f8f08fc333d",
+        "id": "30c7a847-a44e-4f69-b236-1ba69eb40531",
         "name": "After HttpOnly Clear",
         "request": {
           "url": {
@@ -241,7 +241,7 @@
           {
             "listen": "test",
             "script": {
-              "id": "695d21da-b5ee-4256-b8c6-ea671f8ab320",
+              "id": "d9d011b6-24a7-41e9-9865-8e2077ebca5e",
               "type": "text/javascript",
               "exec": [
                 "pm.test('httponly clear removed every in-scope cookie', function () {",
@@ -250,7 +250,7 @@
                 "  pm.environment.set('httpOnlyCookieSummary', JSON.stringify({ readable: true, mutable: true, clearRemovedAll: true }));",
                 "});"
               ],
-              "_lastExecutionId": "0395e509-3616-41f4-8da9-4b914f39dc91"
+              "_lastExecutionId": "284ed981-6521-4a18-8f0e-9a63a75717e5"
             }
           }
         ]
@@ -265,11 +265,11 @@
     }
   },
   "environment": {
-    "id": "197df024-c0fa-4351-8663-43df406f69fd",
+    "id": "0c70ca7a-44a9-4614-bf71-c831be6a146e",
     "values": [
       {
         "type": "any",
-        "value": "http://127.0.0.1:42371",
+        "value": "http://127.0.0.1:41489",
         "key": "baseUrl"
       },
       {
@@ -280,7 +280,7 @@
     ]
   },
   "globals": {
-    "id": "9ed97bd0-fdb3-4e48-b972-51f836b5881f",
+    "id": "0e102892-8fae-4c34-b081-6d14071b9636",
     "values": []
   },
   "run": {
@@ -332,10 +332,10 @@
       }
     },
     "timings": {
-      "responseAverage": 3.25,
+      "responseAverage": 3.4,
       "responseMin": 1,
-      "responseMax": 9,
-      "responseSd": 3.344772040064913,
+      "responseMax": 12,
+      "responseSd": 4.317406628984581,
       "dnsAverage": 0,
       "dnsMin": 0,
       "dnsMax": 0,
@@ -344,8 +344,8 @@
       "firstByteMin": 0,
       "firstByteMax": 0,
       "firstByteSd": 0,
-      "started": 1777389878588,
-      "completed": 1777389878684
+      "started": 1777558284583,
+      "completed": 1777558284696
     },
     "executions": [
       {
@@ -358,11 +358,11 @@
           "eof": false,
           "bof": true,
           "cr": false,
-          "ref": "f78e1076-3b0c-4a27-b2f0-5550def604a9",
-          "httpRequestId": "856a9d51-697c-41fe-a9e0-fd100cc8ff24"
+          "ref": "eeaa62f2-ba46-46a8-aa83-b02c77e86698",
+          "httpRequestId": "85f246da-ee36-41ab-a688-3adc04bab355"
         },
         "item": {
-          "id": "e5a2d688-caf4-485e-b0b7-c077024e0b59",
+          "id": "f5500e4c-1f5c-4e42-8de9-bea7eae61489",
           "name": "Seed HttpOnly Cookies",
           "request": {
             "url": {
@@ -382,7 +382,7 @@
             {
               "listen": "prerequest",
               "script": {
-                "id": "5ffc8afe-0181-4cbb-b169-92b08c9f7a32",
+                "id": "e6f433a5-3c81-4e6c-bbcd-f4e09eb9f518",
                 "type": "text/javascript",
                 "exec": [
                   "var baseUrl = pm.variables.replaceIn('{{baseUrl}}');",
@@ -402,13 +402,13 @@
                   "  });",
                   "});"
                 ],
-                "_lastExecutionId": "761c357a-64ec-44e7-98df-214819529bd7"
+                "_lastExecutionId": "fb37ae0d-5b38-487d-8eec-7355574f3df8"
               }
             },
             {
               "listen": "test",
               "script": {
-                "id": "c1015fcb-ca04-436c-b21a-d926d4168955",
+                "id": "c916b84e-9f8f-40de-948f-19bb3ecf7301",
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('httponly seed request sends scripted cookies', function () {",
@@ -420,7 +420,7 @@
                   "  pm.expect(cookies.clearMe).to.equal('clear-secret');",
                   "});"
                 ],
-                "_lastExecutionId": "0ec0d0f0-6a1d-4996-831d-689f29e02313"
+                "_lastExecutionId": "9547232b-b68b-4248-ad31-57013f05c92d"
               }
             }
           ]
@@ -438,7 +438,7 @@
         "request": {
           "url": {
             "protocol": "http",
-            "port": "42371",
+            "port": "41489",
             "path": [
               "cookie-check"
             ],
@@ -469,12 +469,12 @@
             },
             {
               "key": "Postman-Token",
-              "value": "63811b26-7bcc-4736-bef5-0a833e672b0c",
+              "value": "a8b1e5e2-eb18-40cc-98a5-a37d41e13430",
               "system": true
             },
             {
               "key": "Host",
-              "value": "127.0.0.1:42371",
+              "value": "127.0.0.1:41489",
               "system": true
             },
             {
@@ -496,7 +496,7 @@
           "method": "GET"
         },
         "response": {
-          "id": "2779f7c4-d8bf-4851-8328-49a12bc0fc0f",
+          "id": "71bc73bd-023d-4266-806c-6257e8e31d65",
           "status": "OK",
           "code": 200,
           "header": [
@@ -510,7 +510,7 @@
             },
             {
               "key": "Date",
-              "value": "Tue, 28 Apr 2026 15:24:38 GMT"
+              "value": "Thu, 30 Apr 2026 14:11:24 GMT"
             },
             {
               "key": "Connection",
@@ -643,24 +643,24 @@
             ]
           },
           "cookie": [],
-          "responseTime": 9,
+          "responseTime": 12,
           "responseSize": 116
         },
-        "id": "e5a2d688-caf4-485e-b0b7-c077024e0b59"
+        "id": "f5500e4c-1f5c-4e42-8de9-bea7eae61489"
       },
       {
         "cursor": {
-          "ref": "6f828db0-b574-4638-84e5-04e86752672e",
+          "ref": "0b90c862-3392-48a4-a485-5ffd77628495",
           "length": 4,
           "cycles": 1,
           "position": 1,
           "iteration": 0,
-          "httpRequestId": "b4d25162-01e1-4cf0-836f-86aacaee4ac0",
-          "scriptId": "5c1db355-336d-4a1d-8dff-9a63379ebb38",
-          "execution": "511000d8-1868-4dcb-9fef-f29ae51567ef"
+          "httpRequestId": "23125761-0a5e-4483-9bb3-f3db6423ed8d",
+          "scriptId": "3bd18747-d007-429a-8ba1-ab3745d42474",
+          "execution": "bbf14dac-9c20-4c41-b824-847cb33151d9"
         },
         "item": {
-          "id": "f7ca1816-c937-4c20-a4d0-4f6ba95dab4d",
+          "id": "60b620ec-2a69-4584-a849-af4f1f07952b",
           "name": "Read And Mutate HttpOnly Cookies",
           "request": {
             "url": {
@@ -680,7 +680,7 @@
             {
               "listen": "test",
               "script": {
-                "id": "5c1db355-336d-4a1d-8dff-9a63379ebb38",
+                "id": "3bd18747-d007-429a-8ba1-ab3745d42474",
                 "type": "text/javascript",
                 "exec": [
                   "var baseUrl = pm.variables.replaceIn('{{baseUrl}}');",
@@ -755,7 +755,7 @@
                   "  });",
                   "});"
                 ],
-                "_lastExecutionId": "511000d8-1868-4dcb-9fef-f29ae51567ef"
+                "_lastExecutionId": "bbf14dac-9c20-4c41-b824-847cb33151d9"
               }
             }
           ]
@@ -763,7 +763,7 @@
         "request": {
           "url": {
             "protocol": "http",
-            "port": "42371",
+            "port": "41489",
             "path": [
               "set-send-httponly"
             ],
@@ -794,12 +794,12 @@
             },
             {
               "key": "Postman-Token",
-              "value": "f662612e-c5f1-47b9-9978-784e5535e5e5",
+              "value": "081a3676-01de-4ace-b508-97a421623e7b",
               "system": true
             },
             {
               "key": "Host",
-              "value": "127.0.0.1:42371",
+              "value": "127.0.0.1:41489",
               "system": true
             },
             {
@@ -821,7 +821,7 @@
           "method": "GET"
         },
         "response": {
-          "id": "6e0cb8f0-b948-44eb-a904-30765b4a7742",
+          "id": "954d01ee-9d23-43c4-9d81-f52546e90ff1",
           "status": "OK",
           "code": 200,
           "header": [
@@ -839,7 +839,7 @@
             },
             {
               "key": "Date",
-              "value": "Tue, 28 Apr 2026 15:24:38 GMT"
+              "value": "Thu, 30 Apr 2026 14:11:24 GMT"
             },
             {
               "key": "Connection",
@@ -877,10 +877,10 @@
             ]
           },
           "cookie": [],
-          "responseTime": 2,
+          "responseTime": 1,
           "responseSize": 21
         },
-        "id": "1a5929d0-618a-4f36-acf2-863ac84df409",
+        "id": "81ec3ba1-9b94-487a-a8d7-b876b1386ba7",
         "assertions": [
           {
             "assertion": "httponly cookies are readable through current helpers and jar helpers",
@@ -894,17 +894,17 @@
       },
       {
         "cursor": {
-          "ref": "6f828db0-b574-4638-84e5-04e86752672e",
+          "ref": "0b90c862-3392-48a4-a485-5ffd77628495",
           "length": 4,
           "cycles": 1,
           "position": 1,
           "iteration": 0,
-          "httpRequestId": "b4d25162-01e1-4cf0-836f-86aacaee4ac0",
-          "scriptId": "5c1db355-336d-4a1d-8dff-9a63379ebb38",
-          "execution": "511000d8-1868-4dcb-9fef-f29ae51567ef"
+          "httpRequestId": "23125761-0a5e-4483-9bb3-f3db6423ed8d",
+          "scriptId": "3bd18747-d007-429a-8ba1-ab3745d42474",
+          "execution": "bbf14dac-9c20-4c41-b824-847cb33151d9"
         },
         "item": {
-          "id": "f7ca1816-c937-4c20-a4d0-4f6ba95dab4d",
+          "id": "60b620ec-2a69-4584-a849-af4f1f07952b",
           "name": "Read And Mutate HttpOnly Cookies",
           "request": {
             "url": {
@@ -924,7 +924,7 @@
             {
               "listen": "test",
               "script": {
-                "id": "5c1db355-336d-4a1d-8dff-9a63379ebb38",
+                "id": "3bd18747-d007-429a-8ba1-ab3745d42474",
                 "type": "text/javascript",
                 "exec": [
                   "var baseUrl = pm.variables.replaceIn('{{baseUrl}}');",
@@ -999,7 +999,7 @@
                   "  });",
                   "});"
                 ],
-                "_lastExecutionId": "511000d8-1868-4dcb-9fef-f29ae51567ef"
+                "_lastExecutionId": "bbf14dac-9c20-4c41-b824-847cb33151d9"
               }
             }
           ]
@@ -1007,7 +1007,7 @@
         "request": {
           "url": {
             "protocol": "http",
-            "port": "42371",
+            "port": "41489",
             "path": [
               "set-send-httponly"
             ],
@@ -1038,12 +1038,12 @@
             },
             {
               "key": "Postman-Token",
-              "value": "f662612e-c5f1-47b9-9978-784e5535e5e5",
+              "value": "081a3676-01de-4ace-b508-97a421623e7b",
               "system": true
             },
             {
               "key": "Host",
-              "value": "127.0.0.1:42371",
+              "value": "127.0.0.1:41489",
               "system": true
             },
             {
@@ -1065,7 +1065,7 @@
           "method": "GET"
         },
         "response": {
-          "id": "6e0cb8f0-b948-44eb-a904-30765b4a7742",
+          "id": "954d01ee-9d23-43c4-9d81-f52546e90ff1",
           "status": "OK",
           "code": 200,
           "header": [
@@ -1083,7 +1083,7 @@
             },
             {
               "key": "Date",
-              "value": "Tue, 28 Apr 2026 15:24:38 GMT"
+              "value": "Thu, 30 Apr 2026 14:11:24 GMT"
             },
             {
               "key": "Connection",
@@ -1121,10 +1121,10 @@
             ]
           },
           "cookie": [],
-          "responseTime": 2,
+          "responseTime": 1,
           "responseSize": 21
         },
-        "id": "1a5929d0-618a-4f36-acf2-863ac84df409",
+        "id": "81ec3ba1-9b94-487a-a8d7-b876b1386ba7",
         "assertions": [
           {
             "assertion": "httponly cookies are readable through current helpers and jar helpers",
@@ -1138,15 +1138,15 @@
       },
       {
         "cursor": {
-          "ref": "3e17178e-8c95-496e-87a0-46211096a1fe",
+          "ref": "881b1486-8a5d-405f-af4b-9f1de250897a",
           "length": 4,
           "cycles": 1,
           "position": 2,
           "iteration": 0,
-          "httpRequestId": "fef0b366-e675-4bd2-9d32-20dcef641fd4"
+          "httpRequestId": "1b931782-b20b-46c6-a24c-09ec57af8d17"
         },
         "item": {
-          "id": "42e13120-8c58-44b2-9210-0ce6f78178f7",
+          "id": "e2507c47-6dee-4c97-b3c5-ca0340672436",
           "name": "After HttpOnly Mutations",
           "request": {
             "url": {
@@ -1166,7 +1166,7 @@
             {
               "listen": "test",
               "script": {
-                "id": "8e13dbad-aa0a-4a73-8717-2016555b8319",
+                "id": "348757df-9440-47cb-af2a-711d8f0b94ae",
                 "type": "text/javascript",
                 "exec": [
                   "var baseUrl = pm.variables.replaceIn('{{baseUrl}}');",
@@ -1191,7 +1191,7 @@
                   "  });",
                   "});"
                 ],
-                "_lastExecutionId": "420e76bd-2b23-4316-b304-ff1b0ca906f6"
+                "_lastExecutionId": "6f253d71-90fd-4914-a3f9-72a104bd3552"
               }
             }
           ]
@@ -1199,7 +1199,7 @@
         "request": {
           "url": {
             "protocol": "http",
-            "port": "42371",
+            "port": "41489",
             "path": [
               "cookie-check"
             ],
@@ -1230,12 +1230,12 @@
             },
             {
               "key": "Postman-Token",
-              "value": "729881b5-c93b-4685-92d1-b97549b41e3c",
+              "value": "8a992187-3de8-41c1-8292-9fe8919f5611",
               "system": true
             },
             {
               "key": "Host",
-              "value": "127.0.0.1:42371",
+              "value": "127.0.0.1:41489",
               "system": true
             },
             {
@@ -1257,7 +1257,7 @@
           "method": "GET"
         },
         "response": {
-          "id": "2c19e023-4f0f-4d85-938d-057a610c126c",
+          "id": "bd277ac7-f76d-4d16-ae8d-27f4ac6cf305",
           "status": "OK",
           "code": 200,
           "header": [
@@ -1271,7 +1271,7 @@
             },
             {
               "key": "Date",
-              "value": "Tue, 28 Apr 2026 15:24:38 GMT"
+              "value": "Thu, 30 Apr 2026 14:11:24 GMT"
             },
             {
               "key": "Connection",
@@ -1441,7 +1441,7 @@
           "responseTime": 1,
           "responseSize": 150
         },
-        "id": "42e13120-8c58-44b2-9210-0ce6f78178f7",
+        "id": "e2507c47-6dee-4c97-b3c5-ca0340672436",
         "assertions": [
           {
             "assertion": "httponly mutations affect later requests",
@@ -1455,15 +1455,15 @@
       },
       {
         "cursor": {
-          "ref": "32ef122c-3aa4-45f1-984b-c1626feaeed0",
+          "ref": "d9a868e0-6c06-4a93-8ce4-da286197bbe0",
           "length": 4,
           "cycles": 1,
           "position": 3,
           "iteration": 0,
-          "httpRequestId": "340a8366-2620-47c1-b9e6-aa5d6198a658"
+          "httpRequestId": "98eda3a9-5139-40a0-85b2-1c706d6abd4e"
         },
         "item": {
-          "id": "36a64165-308b-4349-a1dd-6f8f08fc333d",
+          "id": "30c7a847-a44e-4f69-b236-1ba69eb40531",
           "name": "After HttpOnly Clear",
           "request": {
             "url": {
@@ -1483,7 +1483,7 @@
             {
               "listen": "test",
               "script": {
-                "id": "695d21da-b5ee-4256-b8c6-ea671f8ab320",
+                "id": "d9d011b6-24a7-41e9-9865-8e2077ebca5e",
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('httponly clear removed every in-scope cookie', function () {",
@@ -1492,7 +1492,7 @@
                   "  pm.environment.set('httpOnlyCookieSummary', JSON.stringify({ readable: true, mutable: true, clearRemovedAll: true }));",
                   "});"
                 ],
-                "_lastExecutionId": "0395e509-3616-41f4-8da9-4b914f39dc91"
+                "_lastExecutionId": "284ed981-6521-4a18-8f0e-9a63a75717e5"
               }
             }
           ]
@@ -1500,7 +1500,7 @@
         "request": {
           "url": {
             "protocol": "http",
-            "port": "42371",
+            "port": "41489",
             "path": [
               "cookie-check"
             ],
@@ -1531,12 +1531,12 @@
             },
             {
               "key": "Postman-Token",
-              "value": "9bdcb54c-0c9e-47ed-8a40-f3cee46e53ef",
+              "value": "1a8f84ad-4fd2-4898-b6e6-15628b6ab059",
               "system": true
             },
             {
               "key": "Host",
-              "value": "127.0.0.1:42371",
+              "value": "127.0.0.1:41489",
               "system": true
             },
             {
@@ -1553,7 +1553,7 @@
           "method": "GET"
         },
         "response": {
-          "id": "a7d43aeb-19be-4a2e-b39c-6b3c6457532d",
+          "id": "9cf483e8-7796-429f-9d7b-86bedf193e92",
           "status": "OK",
           "code": 200,
           "header": [
@@ -1567,7 +1567,7 @@
             },
             {
               "key": "Date",
-              "value": "Tue, 28 Apr 2026 15:24:38 GMT"
+              "value": "Thu, 30 Apr 2026 14:11:24 GMT"
             },
             {
               "key": "Connection",
@@ -1598,10 +1598,10 @@
             ]
           },
           "cookie": [],
-          "responseTime": 0,
+          "responseTime": 1,
           "responseSize": 14
         },
-        "id": "36a64165-308b-4349-a1dd-6f8f08fc333d",
+        "id": "30c7a847-a44e-4f69-b236-1ba69eb40531",
         "assertions": [
           {
             "assertion": "httponly clear removed every in-scope cookie",

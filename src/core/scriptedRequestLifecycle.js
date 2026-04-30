@@ -62,11 +62,14 @@ async function runHttpScriptedRequestLifecycle(state, options = {}) {
 
   const preRequestScriptExecution = await runScript(state.request?.scripts?.preRequest, scriptContext(state, {
     collectionId: options.collectionId,
+    collectionName: options.collectionName,
     eventName: options.preRequestEventName || 'prerequest',
     executionLocation: options.executionLocation,
     iteration: options.iteration || 0,
     iterationCount: options.iterationCount || 1,
-    iterationData
+    iterationData,
+    workspaceId: options.workspaceId,
+    workspaceName: options.workspaceName
   }), scriptOptions);
   applyScriptMutations(state, preRequestScriptExecution, { allowRequestMutation: true });
   const preRequestScriptResult = scriptResultOnly(preRequestScriptExecution);
@@ -111,12 +114,15 @@ async function runHttpScriptedRequestLifecycle(state, options = {}) {
   }
   const testScriptExecution = await runScript(state.request?.scripts?.tests, scriptContext(state, {
     collectionId: options.collectionId,
+    collectionName: options.collectionName,
     eventName: options.testEventName || 'test',
     executionLocation: options.executionLocation,
     iteration: options.iteration || 0,
     iterationCount: options.iterationCount || 1,
     iterationData,
-    response
+    response,
+    workspaceId: options.workspaceId,
+    workspaceName: options.workspaceName
   }), scriptOptions);
   applyScriptMutations(state, testScriptExecution, { allowRequestMutation: false });
   if (Array.isArray(state.cookies)) {
@@ -172,11 +178,14 @@ async function runGrpcRequestLifecycle(state, options = {}) {
 
   const beforeInvokeExecution = await runScript(protocolScript(state.request, 'beforeInvoke', 'preRequest'), scriptContext(state, {
     collectionId: options.collectionId,
+    collectionName: options.collectionName,
     eventName: 'beforeInvoke',
     executionLocation: options.executionLocation,
     iteration: options.iteration || 0,
     iterationCount: options.iterationCount || 1,
-    iterationData
+    iterationData,
+    workspaceId: options.workspaceId,
+    workspaceName: options.workspaceName
   }), scriptOptions);
   applyScriptMutations(state, beforeInvokeExecution, { allowRequestMutation: true });
   const beforeInvokeResult = scriptResultOnly(beforeInvokeExecution);
@@ -236,13 +245,16 @@ async function runGrpcRequestLifecycle(state, options = {}) {
     };
     const messageScriptExecution = await runScript(onMessageScript, scriptContext(state, {
       collectionId: options.collectionId,
+      collectionName: options.collectionName,
       eventName: 'onIncomingMessage',
       executionLocation: options.executionLocation,
       iteration: options.iteration || 0,
       iterationCount: options.iterationCount || 1,
       iterationData,
       message,
-      response: messageResponse
+      response: messageResponse,
+      workspaceId: options.workspaceId,
+      workspaceName: options.workspaceName
     }), scriptOptions);
     applyScriptMutations(state, messageScriptExecution, { allowRequestMutation: false });
     const result = scriptResultOnly(messageScriptExecution);
@@ -252,12 +264,15 @@ async function runGrpcRequestLifecycle(state, options = {}) {
 
   const afterResponseExecution = await runScript(protocolScript(state.request, 'afterResponse', 'tests'), scriptContext(state, {
     collectionId: options.collectionId,
+    collectionName: options.collectionName,
     eventName: 'afterResponse',
     executionLocation: options.executionLocation,
     iteration: options.iteration || 0,
     iterationCount: options.iterationCount || 1,
     iterationData,
-    response
+    response,
+    workspaceId: options.workspaceId,
+    workspaceName: options.workspaceName
   }), scriptOptions);
   applyScriptMutations(state, afterResponseExecution, { allowRequestMutation: false });
   const afterResponseResult = scriptResultOnly(afterResponseExecution);
@@ -281,6 +296,7 @@ async function runGrpcRequestLifecycle(state, options = {}) {
 function scriptContext(state, options = {}) {
   return {
     collectionId: options.collectionId || '',
+    collectionName: options.collectionName || options.executionLocation?.collectionName || options.executionLocation?.current?.[0] || '',
     collectionVariables: state.collectionVariables,
     globals: state.globals,
     localVariables: state.localVariables,
@@ -293,7 +309,9 @@ function scriptContext(state, options = {}) {
     cookieJar: state.cookies,
     iterationData: options.iterationData || [],
     iteration: options.iteration || 0,
-    iterationCount: options.iterationCount || 1
+    iterationCount: options.iterationCount || 1,
+    workspaceId: options.workspaceId || '',
+    workspaceName: options.workspaceName || ''
   };
 }
 
@@ -308,6 +326,7 @@ function scriptOptionsForLifecycle(options = {}, overrides = {}) {
     signal: options.signal,
     trustedCapabilities: options.trustedCapabilities || options.scriptOptions?.trustedCapabilities || {},
     vault: options.scriptOptions?.vault || options.vault,
+    vaultPrompt: options.scriptOptions?.vaultPrompt || options.vaultPrompt,
     fileBindings: options.scriptOptions?.fileBindings || options.fileBindings || []
   };
 }
@@ -825,13 +844,30 @@ function hasDirectClientCertificateMaterial(auth) {
 }
 
 function createPreRequestScriptError(result) {
-  const error = new Error(result?.preRequestScriptResult?.error || 'Pre-request script failed.');
+  const error = new Error(scriptResultFailureMessage(result?.preRequestScriptResult, 'Pre-request script failed.'));
   error.preRequestScriptResult = result?.preRequestScriptResult || emptyScriptResult();
   error.environment = normalizeRuntimeEnvironment(result?.environment);
   error.collectionVariables = Array.isArray(result?.collectionVariables) ? result.collectionVariables : [];
   error.globals = Array.isArray(result?.globals) ? result.globals : [];
   error.localVariables = Array.isArray(result?.localVariables) ? result.localVariables : [];
   return error;
+}
+
+function scriptResultFailureMessage(scriptResult, fallback = 'Script failed.') {
+  const result = scriptResult && typeof scriptResult === 'object' ? scriptResult : {};
+  const topLevelError = String(result.error || '').trim();
+  if (topLevelError) {
+    return topLevelError;
+  }
+  const failedTest = (Array.isArray(result.tests) ? result.tests : [])
+    .find((item) => item && item.passed === false);
+  if (failedTest) {
+    const testName = String(failedTest.name || '').trim();
+    const testError = String(failedTest.error || '').trim() || 'failed';
+    const prefix = String(fallback || 'Script failed.').replace(/\.$/, '');
+    return `${prefix}: ${testName ? `${testName}: ` : ''}${testError}`;
+  }
+  return String(fallback || 'Script failed.');
 }
 
 function scriptResultOnly(execution) {
@@ -897,5 +933,6 @@ module.exports = {
   runGraphqlRequestLifecycle,
   runGrpcRequestLifecycle,
   runScriptedRequestLifecycle,
+  scriptResultFailureMessage,
   scriptResultOnly
 };

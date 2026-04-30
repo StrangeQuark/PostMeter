@@ -633,6 +633,24 @@ test('supports scoped pm.vault grants for collections and requests', async () =>
   });
   assert.equal(deniedOverride.result.passed, false);
   assert.match(deniedOverride.result.tests[0].error, /pm\.vault is disabled/);
+
+  const collectionDeniedOverride = await runPostmanScriptIsolated(script, {
+    collectionId: 'collection-denied',
+    request: { id: 'request-allowed-by-workspace', name: 'Collection Denied' }
+  }, {
+    trustedCapabilities: {
+      vault: false,
+      vaultGrants: {
+        workspace: true,
+        deniedCollections: ['collection-denied']
+      }
+    },
+    vault,
+    timeoutMillis: 500,
+    workerTimeoutMillis: 1000
+  });
+  assert.equal(collectionDeniedOverride.result.passed, false);
+  assert.match(collectionDeniedOverride.result.tests[0].error, /pm\.vault is disabled/);
 });
 
 test('supports per-request pm.vault prompt grants without exposing vault handles', async () => {
@@ -662,6 +680,13 @@ test('supports per-request pm.vault prompt grants without exposing vault handles
   assert.equal(prompts[0].key, 'existing');
   assert.equal(prompts[0].operation, 'get');
   assert.equal(prompts[0].requestId, 'request-prompt');
+  assert.equal(prompts[0].collectionId, 'collection-prompt');
+  assert.equal(prompts[0].collectionName, '');
+  assert.equal(prompts[0].workspaceId, '');
+  const promptedAudit = await vault.listAudit();
+  assert.deepEqual(promptedAudit.map((entry) => entry.operation), ['prompt-grant-request', 'get', 'get']);
+  assert.equal(promptedAudit[0].requestId, 'request-prompt');
+  assert.equal(Object.hasOwn(promptedAudit[0], 'value'), false);
 
   const denied = await runPostmanScriptIsolated(`
     pm.test('denied prompt', async function () {
@@ -678,6 +703,50 @@ test('supports per-request pm.vault prompt grants without exposing vault handles
   });
   assert.equal(denied.result.passed, false);
   assert.match(denied.result.tests[0].error, /pm\.vault access was denied/);
+});
+
+test('audits unavailable pm.vault encryption without logging values', async () => {
+  const audit = [];
+  const unavailableVault = {
+    isAvailable: () => false,
+    get: async () => 'should-not-read',
+    set: async () => {},
+    unset: async () => {},
+    audit: async (operation, key, metadata) => {
+      audit.push({ operation, key, metadata });
+    }
+  };
+  const execution = await runPostmanScriptIsolated(`
+    pm.test('unavailable vault encryption', async function () {
+      await pm.vault.get('existing');
+    });
+  `, {
+    collectionId: 'collection-unavailable',
+    collectionName: 'Unavailable Collection',
+    request: { id: 'request-unavailable', name: 'Unavailable Request' },
+    workspaceId: 'Workspace.json',
+    workspaceName: 'Workspace'
+  }, {
+    trustedCapabilities: { vault: true },
+    vault: unavailableVault,
+    timeoutMillis: 500,
+    workerTimeoutMillis: 1000
+  });
+
+  assert.equal(execution.result.passed, false);
+  assert.match(execution.result.tests[0].error, /pm\.vault encryption is unavailable/);
+  assert.equal(audit.length, 1);
+  assert.equal(audit[0].operation, 'unavailable-encryption');
+  assert.equal(audit[0].key, 'existing');
+  assert.deepEqual(audit[0].metadata, {
+    collectionId: 'collection-unavailable',
+    collectionName: 'Unavailable Collection',
+    requestId: 'request-unavailable',
+    requestName: 'Unavailable Request',
+    workspaceId: 'Workspace.json',
+    workspaceName: 'Workspace'
+  });
+  assert.equal(Object.hasOwn(audit[0], 'value'), false);
 });
 
 test('bounds pm.vault broker calls and values', async () => {

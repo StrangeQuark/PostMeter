@@ -38,7 +38,7 @@ OAuth support in PostMeter is only for outbound API request authentication, matc
 
 ## Technology Stack
 
-- Desktop shell: Electron `41.2.1`
+- Desktop shell: Electron `41.3.0`
 - Main process: CommonJS Node modules under `electron/`
 - Renderer UI: static HTML/CSS/JavaScript under `src/renderer/`
 - Core services: CommonJS Node modules under `src/core/`
@@ -188,7 +188,7 @@ docs/
 
 `electron/main.js` owns the desktop lifecycle, window hardening, dialogs, workspace store instance, and IPC handlers.
 
-`electron/preload.js` exposes a small `window.postmeter` API to the renderer. The renderer has no direct Node access.
+`electron/preload.js` exposes a small `window.postmeter` API only to the main renderer frame. The renderer is served from the secure standard `postmeter-app://bundle` custom protocol through an allowlisted main-process handler instead of `file://`, the protocol response applies CSP/`nosniff`/`no-referrer` headers, and the renderer has no direct Node access.
 
 `src/core/` contains framework-independent business logic. JavaFX source, Maven wrapper files, and Maven tests are no longer part of the tracked repository.
 
@@ -199,13 +199,13 @@ Main process responsibilities:
 - Create a single `BrowserWindow`.
 - Own the native application menu. Current top-level menus are File, Edit, View, and Help; the default Window menu is intentionally omitted.
 - Disable hardware acceleration for reliable Linux/headless startup.
-- Deny `window.open` and all permission requests.
+- Deny renderer-controlled top-level navigation away from the exact initial packaged `postmeter-app://bundle/src/renderer/index.html` URL, including unexpected app-protocol query changes, deny `window.open`, deny `<webview>` attachment, and deny all permission requests.
 - Load and recover workspace data before creating the UI.
-- Own native open/save dialogs.
+- Own native open/save dialogs, including selected-path shape validation before import/export reads or writes.
 - Execute HTTP requests, collection runs, and load tests through core services.
 - Start and cancel OAuth 2.0 authorization-code PKCE using loopback or custom URI-scheme redirects.
 - Start and cancel OAuth 2.0 device-code polling.
-- Validate renderer-originated IPC payloads before handing them to persistence, request execution, or load testing.
+- Validate renderer-originated IPC sender identity and payloads before handing them to persistence, request execution, or load testing.
 - Persist and export normalized workspace data as plain JSON.
 - Export load-test and collection-run results to JSON or CSV.
 - Persist request history after sends.
@@ -263,7 +263,8 @@ Security settings:
 - `sandbox: true`
 - `webSecurity: true`
 - `allowRunningInsecureContent: false`
-- Renderer CSP: `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none';`
+- Renderer content protocol: secure standard `postmeter-app://bundle`, with handler allowlist limited to `src/renderer/`, reviewed browser-safe shared core model files, and `build/icon.png`; the handler does not request renderer fetch privilege and applies `cache-control: no-store`, `x-content-type-options: nosniff`, `referrer-policy: no-referrer`, and HTML CSP response headers.
+- Renderer CSP: `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; frame-src 'self' about: data:; child-src 'self' about: data:; connect-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; worker-src 'none'; media-src 'none';`
 
 Known security tradeoffs:
 
@@ -794,7 +795,7 @@ Implemented runtime behavior:
 - Supports brokered timers, including bounded `setTimeout`, `clearTimeout`, `setInterval`, `clearInterval`, and queueMicrotask/promise drain behavior, plus brokered `pm.sendRequest`, user-granted file/binary/form-data attachment bindings, bounded brokered `pm.execution.runRequest` with a 10-call per-script limit, current-URL `pm.cookies`, and `pm.cookies.jar()` helpers in the isolated worker runtime. Script network requests and script cookie access are enabled by default for Postman import parity and can be disabled in workspace settings.
 - The default Postman import profile exposes in-scope `HttpOnly` values through `pm.cookies` and `pm.cookies.jar()` to match current Postman/Newman behavior; disabling script cookie access blocks those helpers entirely.
 - Supports bounded `pm.visualizer` capture with JSON-cloned data and an integrity-checked `handlebars@4.7.9` browser runtime loaded inside a separate visualizer VM context. The facade supports compile/precompile/template/create, helpers, block helpers, runtime helpers, dynamic partials, inline partials, custom decorators, `Handlebars.SafeString`, block params, data variables, parent/root lookup, whitespace/noEscape behavior, inline scripts in an isolated iframe, `pm.getData(callback)`, sanitized output, integrity-checked reviewed JS/CSS assets, and sandboxed iframe rendering in the desktop UI.
-- Supports explicitly granted `pm.vault` access through the parent broker, including workspace, collection, and request grants with explicit denial overrides. If no grant exists, desktop sends/runs can display a metadata-only renderer prompt with request, collection, operation, secret-key, deny, reset, request-grant, collection-grant, and workspace-grant choices; prompt decisions are persisted as scoped vault-grant metadata without exposing secret values, vault paths, encryption keys, or secret lists to the renderer. Desktop vault values are stored outside workspace JSON in per-workspace encrypted vault files, using Electron `safeStorage` only when OS-backed encryption is available and not the Linux `basic_text` backend.
+- Supports explicitly granted `pm.vault` access through the parent broker, including workspace, collection, and request grants with explicit denial overrides. If no grant exists, desktop single-request sends, collection runs, and nested lifecycle executions can display a metadata-only renderer prompt with request, collection, workspace, operation, secret-key, deny, reset, request-grant, collection-grant, and workspace-grant choices; concurrent renderer prompts are queued by prompt ID; prompt responses are accepted only from the renderer `webContents` that received the prompt; prompt decisions are persisted as scoped vault-grant metadata on the prompted workspace without exposing secret values, vault paths, encryption keys, ciphertext, storage handles, or secret lists to the renderer. Denied or cancelled prompts fail the vault call so code after the denied call does not run. Audit metadata covers prompt grants, prompt denials, prompt resets, `get`, `set`, `unset`, denied-after-call, and unavailable-encryption outcomes without logging secret values. Desktop vault values are stored outside workspace JSON in per-workspace encrypted vault files, using Electron `safeStorage` only when OS-backed encryption is available and not the Linux `basic_text` backend.
 - Supports Postman documented script globals including URL/URLSearchParams, Web Crypto digest/random helpers, `TextEncoder`/`TextDecoder`, `atob`/`btoa`, Blob/File, structuredClone, queueMicrotask, DOM-style abort/event/error objects, Web Stream constructor facades, ECMAScript built-ins, and typed arrays. Host-created Blob/Web Crypto byte results are exposed as script-safe array-buffer facades so `byteLength` and typed-array construction work without exposing host constructors.
 - Supports `pm.require()` and sandbox `require()` for Postman's generated, version-pinned `postman-sandbox@6.2.2` browser bundle: `ajv`, `backbone`, `chai`, `cheerio`, `crypto-js`, `csv-parse/lib/sync`, `json`, `lodash`, `moment`, `postman-collection`, `tv4`, `uuid`, and `xml2js`; and for Postman-listed NodeJS module shims/facades: `path`, `assert`, `buffer`, `util`, `url`, `punycode`, `querystring`, `string-decoder`, `stream`, `timers`, and `events`. The loader also supports reviewed cached `@team/package`, exact/scoped npm, exact/scoped JSR, and Postman latest-version npm/JSR bundles with SHA-256 integrity metadata, multi-file CommonJS/ESM file maps, package metadata entrypoints, package.json directory entrypoints, relative/extension/JSON resolution, reviewed dependency aliases and subpaths, module cache/circular behavior, default and named exports, package/source/dependency/export caps, declared-dependency policy, and parent-side fetch/review for exact/latest npm/JSR packages plus reviewed HTTPS team-package source URLs. Direct Postman account/provider fetching for team packages is deferred. It rejects host Node built-ins outside the facade list, `node:` specifiers, unreviewed external registry/team packages, runtime registry fetches, package installation, paths, URLs, duplicate package-cache entries, missing reviewed dependencies, undeclared dependency subpaths, and any package outside the allowlist, Node facade list, or reviewed cache.
 - `require('postman-collection')` uses Postman's bundled Collection SDK inside the script VM. Live `pm.request` and `pm.response` objects use hardened PostMeter SDK-style facades with common SDK list methods, object-predicate list filtering, `clone`/`toJSON`/`toString`, disabled item handling, case-insensitive headers, multi-value header object conversion, URL query mutation, request body mode facades, response cookies, metadata, trailers, messages, and constructor/prototype escape hardening.
@@ -809,7 +810,7 @@ Implemented runtime behavior:
 - The generated Postman sandbox parity matrix lives at `docs/postman-sandbox-parity-matrix.json` with source in `src/core/postmanParityMatrix.js`; `npm run postman:parity:validate` fails if it is stale or structurally invalid.
 - The official Postman/Newman docs coverage audit lives at `docs/postman-docs-coverage-audit.json` with source in `src/core/postmanDocsCoverageAudit.js`; `npm run postman:docs:validate` fails if any committed official-docs token is unmapped, and `npm run postman:docs:live` refetches the current official docs plus the Newman npm latest dist-tag to catch upstream drift before preserving a 1:1 script-import claim.
 - `npm run postman:parity:claim` is the full Postman script compatibility gate for the supported default import profile. It currently passes with zero default-import blockers. Implemented behavior-sensitive Desktop rows are validated against explicit row-specific Desktop evidence metadata.
-- `npm run postman:parity:diff` runs the HTTP-core, broad, dynamic-host-globals, runtime-limits, HttpOnly-cookies, sendRequest-advanced, and file-binding Newman-compatible differential collections through PostMeter, and `npm run postman:parity:diff -- --newman --download-newman` optionally compares the same fixtures against the targeted `newman@6.2.2` reporter output. Checked-in raw and normalized `newman@6.2.2` JSON evidence lives under `test/fixtures/postman/newman-reports/`; `npm run postman:newman-reports:validate` keeps it structurally current without network access.
+- `npm run postman:parity:diff` runs the HTTP-core, broad, dynamic-host-globals, runtime-limits, HttpOnly-cookies, sendRequest-advanced, and file-binding Newman-compatible differential collections through PostMeter, and `npm run postman:parity:diff -- --newman --download-newman` optionally compares the same fixtures against the targeted `newman@6.2.2` reporter output. `npm run postman:newman-reports:refresh -- --download-newman` runs the approved live Newman differential and rewrites the checked-in evidence in one explicit network-using step; `npm run postman:newman-reports:write -- --from <dir>` keeps the two-step refresh path available and accepts only clean source summaries targeting `newman@6.2.2`, Postman Runtime 7.39.1, and the exact approved suite list. Checked-in raw Newman, raw PostMeter, and normalized `newman@6.2.2` JSON evidence lives under `test/fixtures/postman/newman-reports/`; `npm run postman:newman-reports:validate` keeps it structurally current without network access, verifies all required suites, rejects unexpected checked-in JSON files and stale normalized Newman/PostMeter output, requires generation metadata on each normalized report, preserves response-shape/body-digest evidence and console output when present, and fails if normalized evidence still contains concrete localhost ports, local filesystem paths, generated request IDs, generated Postman request tokens, generated multipart boundaries, time-derived request signatures, machine names, or machine-specific metadata.
 - The OS-sandbox platform completion matrix lives at `docs/os-sandbox-platform-matrix.json` with source in `src/core/osSandboxPlatformMatrix.js`; `npm run sandbox:platform:validate` fails if it is stale or structurally invalid.
 - `npm run sandbox:platform:claim` is the platform-equivalent full OS sandbox gate. It is intentionally separate from Postman API parity and passes when the committed platform matrix records implemented Linux `bubblewrap`/seccomp, Windows AppContainer helper, macOS seatbelt, and packaged-validation rows.
 - `npm run release:gate` validates that the package scripts and CI/release workflows keep the sandbox runtime validation, OS-sandbox platform-matrix validation, packaged validation, parity validation, official-docs coverage validation, aggregate `npm run check`, packaged Linux validation, and Windows/macOS native validation hooks in the production release gate.
@@ -908,7 +909,7 @@ Limitations:
 
 ## IPC Validation
 
-Renderer-originated IPC inputs are validated in `ipcValidation.js` before reaching main-process handlers. Shared enum and high-level payload contract metadata lives in `payloadSchemas.js` with `PAYLOAD_SCHEMA_VERSION = 1`.
+Renderer-originated IPC sender identity is checked by `electron/ipcSecurity.js` before production handlers run, including fail-closed rejection for missing sender-frame metadata, subframe senders, non-`postmeter-app` origins, unexpected app-protocol paths, and unexpected app-protocol query keys. IPC inputs are validated in `ipcValidation.js` before reaching main-process behavior. Shared enum and high-level payload contract metadata lives in `payloadSchemas.js` with `PAYLOAD_SCHEMA_VERSION = 1`. The source-owned Electron security matrix enumerates the BrowserWindow, navigation, window-open, webview, permission, secure app-content protocol response headers, main-frame-only preload, every IPC channel, IPC sender validation, file-dialog, external URL, custom protocol, packaged-preload, packaged-protocol, fuse, renderer CSP, and visualizer CSP surfaces and is validated by `npm run electron:security:validate`.
 
 Covered payloads:
 
@@ -931,7 +932,7 @@ Covered payloads:
 - Collection-run nested assertion results, pre-request/test script result shapes, extracted variable rows, local variable rows, environment output, collection variable output, and cookie output.
 - Load export format.
 - App update-check option payloads.
-- External URL open payloads before `shell.openExternal`.
+- External URL open payloads before credential-free `shell.openExternal` launches.
 - Main-process response payloads for request results, load-test results, and workspace load/save results.
 
 Validation behavior:
@@ -992,7 +993,7 @@ Release automation is configured in `.github/workflows/release.yml` for tag push
 - Runs Node tests and checks the Electron runtime version before platform packaging. The version probe runs Electron in Node mode so GitHub-hosted Linux runners do not need Chromium's setuid sandbox helper configured just to print the runtime version.
 - Uses `POSTMETER_CI_ELECTRON_NO_SANDBOX=1` only for Linux GitHub-hosted Electron smoke launches where Chromium's setuid sandbox helper cannot be configured by the runner. This app-shell launch waiver is separate from PostMeter's script sandbox validation and is not a production runtime default.
 - Sets `CSC_IDENTITY_AUTO_DISCOVERY=false` so missing certificates do not block unsigned builds.
-- Runs packaged startup smoke on every release platform. The smoke validates the packaged executable, full preload API function surface, app/electron/node/chrome/platform/release-channel metadata, default platform user-data path shape, isolated user-data path override behavior, and workspace save/reload persistence.
+- Runs packaged startup smoke on every release platform. The smoke validates the packaged executable, trusted `postmeter-app://bundle/src/renderer/index.html` renderer URL, renderer CSP meta policy, full preload API function surface, app/electron/node/chrome/platform/release-channel metadata, default platform user-data path shape, isolated user-data path override behavior, and workspace save/reload persistence.
 - Uploads validation logs and packaged startup-smoke failure screenshots on native runner failure so launch/protocol failures can be inspected after the job exits.
 - Downloads platform artifacts into one release directory.
 - Generates `SHA256SUMS` and `release-manifest.json`.

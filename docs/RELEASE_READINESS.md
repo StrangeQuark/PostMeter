@@ -85,14 +85,14 @@ Release builds are unsigned until maintainer-controlled certificates exist. Wind
 
 - Production readiness matrix and `production:*` scripts.
 - Dependency audit and Electron runtime-version checks tracked as release-blocking readiness rows.
-- Packaged startup smoke that verifies the full preload API function surface, app/electron/node/chrome/platform/release-channel metadata, workspace create/save/reload, default platform user-data path shape, and isolated user-data path override behavior.
+- Packaged startup smoke that verifies the trusted `postmeter-app://bundle/src/renderer/index.html` renderer URL, renderer CSP meta policy, full preload API function surface, app/electron/node/chrome/platform/release-channel metadata, workspace create/save/reload, default platform user-data path shape, and isolated user-data path override behavior.
 - Linux/Windows/macOS GitHub Actions source-tree sandbox, packaged build/smoke/protocol jobs with artifact upload and failure log/screenshot upload.
 - Manual no-publish native release validation workflow for pre-production evidence gathering.
 - Windows protocol registration plus ShellExecute launch script and macOS URL scheme metadata plus Launch Services launch validator, including checks that the launched app belongs to the installed Windows artifact or each discovered macOS app bundle under validation and uploaded protocol-validator logs when `POSTMETER_VALIDATION_ARTIFACT_DIR` is set.
-- Electron security, workspace durability, and non-Postman compatibility matrices.
+- Electron security, workspace durability, and non-Postman compatibility matrices, including channel-level Electron IPC enumeration, secure custom-protocol app-content loading with CSP/`nosniff`/`no-referrer` headers, main-frame-only preload exposure, and trusted main-frame renderer IPC sender validation.
 - Checked-in raw and normalized `newman@6.2.2` differential evidence under `test/fixtures/postman/newman-reports/`.
 - Shared parent-side PFX/P12 extraction and live HTTP/gRPC mTLS tests.
-- Metadata-only renderer vault prompt flow with request, collection, workspace, deny, and reset decisions.
+- Metadata-only renderer vault prompt flow with request, collection, workspace, deny, and reset decisions, serialized concurrent prompts, prompt-response sender binding, and prompted-workspace grant persistence.
 
 ## Known Release Blockers
 

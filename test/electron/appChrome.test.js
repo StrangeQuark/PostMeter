@@ -3,6 +3,30 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const test = require('node:test');
 
+const {
+  appProtocolFilePath,
+  appProtocolHeaders,
+  APP_RENDERER_CSP,
+  APP_RENDERER_QUERY_KEYS,
+  APP_PROTOCOL_SCHEME,
+  createAppRendererUrl,
+  isTrustedAppRendererUrl,
+  serveAppProtocolRequest
+} = require('../../electron/appProtocol');
+const {
+  isAllowedRendererNavigation
+} = require('../../electron/mainWindow');
+const {
+  createTrustedIpcMain,
+  isMainFrameSender,
+  isTrustedIpcSender,
+  isTrustedRendererUrl
+} = require('../../electron/ipcSecurity');
+const {
+  buildElectronSecurityMatrix,
+  ELECTRON_IPC_CHANNELS
+} = require('../../src/core/productionSupportMatrices');
+
 test('Electron shell keeps custom File/Edit/View/Help menus without the default Window menu', async () => {
   const root = path.join(__dirname, '..', '..');
   const mainSource = await fs.readFile(path.join(root, 'electron', 'main.js'), 'utf8');
@@ -39,9 +63,200 @@ test('Electron shell keeps custom File/Edit/View/Help menus without the default 
   assert.doesNotMatch(`${mainSource}\n${appMenuSource}`, /\.setMenuBarVisibility\(false\)/);
 
   assert.match(preloadSource, /onMenuAction/);
+  assert.match(preloadSource, /process\.isMainFrame\s*===\s*true/);
+  assert.match(preloadSource, /contextBridge\.exposeInMainWorld\('postmeter',\s*postmeterApi\)/);
   assert.match(preloadSource, /ipcRenderer\.on\('menu:action'/);
   assert.match(preloadSource, /'set-prereleases'/);
   assert.match(preloadSource, /includePrereleases/);
   assert.match(rendererSource, /handleAppMenuAction/);
   assert.match(rendererSource, /setIncludePrereleases/);
 });
+
+test('Electron BrowserWindow hardening denies renderer navigation, window-open, webview, and permissions', async () => {
+  const root = path.join(__dirname, '..', '..');
+  const mainWindowSource = await fs.readFile(path.join(root, 'electron', 'mainWindow.js'), 'utf8');
+  const rendererUrl = createAppRendererUrl({ uiWorkflowSmoke: '1' });
+
+  assert.match(mainWindowSource, /nodeIntegration:\s*false/);
+  assert.match(mainWindowSource, /contextIsolation:\s*true/);
+  assert.match(mainWindowSource, /sandbox:\s*true/);
+  assert.match(mainWindowSource, /webSecurity:\s*true/);
+  assert.match(mainWindowSource, /allowRunningInsecureContent:\s*false/);
+  assert.match(mainWindowSource, /setWindowOpenHandler\(\(\) => \(\{\s*action:\s*'deny'\s*\}\)\)/);
+  assert.match(mainWindowSource, /setPermissionCheckHandler\(\(\) => false\)/);
+  assert.match(mainWindowSource, /setPermissionRequestHandler/);
+  assert.match(mainWindowSource, /will-navigate/);
+  assert.match(mainWindowSource, /will-attach-webview/);
+  assert.match(mainWindowSource, /preventDefault\(\)/);
+  assert.match(mainWindowSource, /loadURL\(rendererUrl\)/);
+  assert.doesNotMatch(mainWindowSource, /loadFile\(/);
+
+  assert.equal(isAllowedRendererNavigation(rendererUrl, rendererUrl), true);
+  assert.equal(isAllowedRendererNavigation(createAppRendererUrl({ uiSnapshotSmoke: '1' }), rendererUrl), false);
+  assert.equal(isAllowedRendererNavigation(createAppRendererUrl({ uiSnapshotSmoke: '1' }), createAppRendererUrl({ uiSnapshotSmoke: '1' })), true);
+  assert.equal(isAllowedRendererNavigation(`${rendererUrl}#fragment`, rendererUrl), true);
+  assert.equal(isAllowedRendererNavigation(createAppRendererUrl({ unexpected: '1' }), rendererUrl), false);
+  assert.equal(isAllowedRendererNavigation('https://example.test/'), false);
+  assert.equal(isAllowedRendererNavigation('file:///tmp/evil.html'), false);
+  assert.equal(isAllowedRendererNavigation(`${APP_PROTOCOL_SCHEME}://evil/src/renderer/index.html`), false);
+  assert.equal(isAllowedRendererNavigation('https://example.test/', 'not-a-trusted-renderer-url'), false);
+  assert.equal(isTrustedAppRendererUrl(createAppRendererUrl({ uiWorkflowSmoke: '1', uiWorkflowBaseUrl: 'http://127.0.0.1:1' })), true);
+  assert.equal(isTrustedAppRendererUrl(createAppRendererUrl({ unexpected: '1' })), false);
+});
+
+test('Electron IPC sender hardening trusts only the packaged renderer URL', () => {
+  const indexUrl = createAppRendererUrl();
+  const fakeIpcMain = {
+    handlers: new Map(),
+    listeners: new Map(),
+    handle(channel, listener) {
+      this.handlers.set(channel, listener);
+    },
+    on(channel, listener) {
+      this.listeners.set(channel, listener);
+    }
+  };
+  const trustedIpcMain = createTrustedIpcMain(fakeIpcMain);
+
+  trustedIpcMain.handle('app:versions', () => 'ok');
+  assert.equal(fakeIpcMain.handlers.get('app:versions')({ senderFrame: { url: indexUrl } }), 'ok');
+  assert.equal(fakeIpcMain.handlers.get('app:versions')({ senderFrame: { url: createAppRendererUrl({ uiWorkflowSmoke: '1' }) } }), 'ok');
+  const mainFrame = { url: indexUrl, parent: null };
+  const subFrame = { url: indexUrl, parent: mainFrame, top: mainFrame };
+  assert.equal(isMainFrameSender({ senderFrame: mainFrame, sender: { mainFrame } }), true);
+  assert.equal(isMainFrameSender({ senderFrame: subFrame, sender: { mainFrame } }), false);
+  assert.equal(isMainFrameSender({ sender: { getURL: () => indexUrl } }), false);
+  assert.equal(isTrustedIpcSender({ senderFrame: mainFrame, sender: { mainFrame } }), true);
+  assert.equal(isTrustedIpcSender({ senderFrame: subFrame, sender: { mainFrame } }), false);
+  assert.equal(isTrustedIpcSender({ sender: { getURL: () => indexUrl } }), false);
+  assert.throws(
+    () => fakeIpcMain.handlers.get('app:versions')({ sender: { getURL: () => indexUrl } }),
+    /IPC sender is not the trusted PostMeter renderer/
+  );
+  assert.throws(
+    () => fakeIpcMain.handlers.get('app:versions')({ senderFrame: { url: 'https://example.test/' } }),
+    /IPC sender is not the trusted PostMeter renderer/
+  );
+  assert.throws(
+    () => fakeIpcMain.handlers.get('app:versions')({ senderFrame: subFrame, sender: { mainFrame } }),
+    /IPC sender is not the trusted PostMeter renderer/
+  );
+  assert.throws(
+    () => fakeIpcMain.handlers.get('app:versions')({ senderFrame: { url: `${APP_PROTOCOL_SCHEME}://bundle/README.md` } }),
+    /IPC sender is not the trusted PostMeter renderer/
+  );
+  assert.throws(
+    () => fakeIpcMain.handlers.get('app:versions')({ senderFrame: { url: createAppRendererUrl({ unexpected: '1' }) } }),
+    /IPC sender is not the trusted PostMeter renderer/
+  );
+
+  trustedIpcMain.on('workspace:saveSync', (event) => {
+    event.returnValue = 'saved';
+  });
+  const event = { senderFrame: { url: indexUrl }, returnValue: null };
+  fakeIpcMain.listeners.get('workspace:saveSync')(event);
+  assert.equal(event.returnValue, 'saved');
+  assert.throws(
+    () => fakeIpcMain.listeners.get('workspace:saveSync')({ senderFrame: { url: 'file:///tmp/evil.html' }, returnValue: null }),
+    /IPC sender is not the trusted PostMeter renderer/
+  );
+
+  assert.equal(isTrustedRendererUrl(indexUrl), true);
+  assert.equal(isTrustedRendererUrl(createAppRendererUrl({ uiSnapshotSmoke: '1' })), true);
+  assert.equal(isTrustedRendererUrl(createAppRendererUrl({ snapshot: '1' })), false);
+  assert.equal(isTrustedRendererUrl('about:blank'), false);
+});
+
+test('PostMeter app protocol only serves allowlisted renderer bundle assets', async () => {
+  const root = path.join(__dirname, '..', '..');
+  const appProtocolSource = await fs.readFile(path.join(root, 'electron', 'appProtocol.js'), 'utf8');
+  const rendererHtml = await fs.readFile(path.join(root, 'src', 'renderer', 'index.html'), 'utf8');
+  const rendererUrl = createAppRendererUrl({ uiWorkflowSmoke: '1' });
+
+  assert.equal(rendererUrl, `${APP_PROTOCOL_SCHEME}://bundle/src/renderer/index.html?uiWorkflowSmoke=1`);
+  assert.deepEqual([...APP_RENDERER_QUERY_KEYS].sort(), [
+    'uiOauthBaseUrl',
+    'uiOauthSmoke',
+    'uiRegressionSmoke',
+    'uiSnapshotSmoke',
+    'uiWorkflowBaseUrl',
+    'uiWorkflowSmoke'
+  ]);
+  assert.equal(appProtocolFilePath(rendererUrl, root), path.join(root, 'src', 'renderer', 'index.html'));
+  assert.equal(appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://bundle/src/core/payloadSchemas.js`, root), path.join(root, 'src', 'core', 'payloadSchemas.js'));
+  assert.equal(appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://bundle/build/icon.png`, root), path.join(root, 'build', 'icon.png'));
+  assert.throws(() => appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://evil/src/renderer/index.html`, root), /Invalid PostMeter app protocol URL/);
+  assert.throws(() => appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://bundle/package.json`, root), /not allowlisted/);
+  assert.throws(() => appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://bundle/src/core/scriptRuntime.js`, root), /not allowlisted/);
+  assert.throws(() => appProtocolFilePath(`file://${path.join(root, 'src', 'renderer', 'index.html')}`, root), /Invalid PostMeter app protocol URL/);
+  assert.doesNotMatch(appProtocolSource, /supportFetchAPI:\s*true/);
+  assert.match(rendererHtml, new RegExp(APP_RENDERER_CSP.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+
+  const response = await serveAppProtocolRequest({ method: 'GET', url: rendererUrl }, { rootPath: root });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('content-type'), 'text/html; charset=utf-8');
+  assert.equal(response.headers.get('content-security-policy'), APP_RENDERER_CSP);
+  assert.equal(response.headers.get('referrer-policy'), 'no-referrer');
+  assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+  assert.match(await response.text(), /Content-Security-Policy/);
+  assert.deepEqual(appProtocolHeaders(path.join(root, 'src', 'renderer', 'index.html')), {
+    'cache-control': 'no-store',
+    'content-type': 'text/html; charset=utf-8',
+    'referrer-policy': 'no-referrer',
+    'x-content-type-options': 'nosniff',
+    'content-security-policy': APP_RENDERER_CSP
+  });
+
+  const denied = await serveAppProtocolRequest({ method: 'GET', url: `${APP_PROTOCOL_SCHEME}://bundle/package.json` }, { rootPath: root });
+  assert.equal(denied.status, 404);
+  assert.equal(denied.headers.get('referrer-policy'), 'no-referrer');
+  assert.equal(denied.headers.get('x-content-type-options'), 'nosniff');
+  const methodDenied = await serveAppProtocolRequest({ method: 'POST', url: rendererUrl }, { rootPath: root });
+  assert.equal(methodDenied.status, 405);
+  assert.equal(methodDenied.headers.get('referrer-policy'), 'no-referrer');
+  assert.equal(methodDenied.headers.get('x-content-type-options'), 'nosniff');
+});
+
+test('Electron security matrix enumerates every IPC channel exposed by source', async () => {
+  const root = path.join(__dirname, '..', '..');
+  const mainFiles = [
+    'electron/appIpc.js',
+    'electron/main.js',
+    'electron/oauthIpc.js',
+    'electron/requestIpc.js',
+    'electron/runtimeIpc.js',
+    'electron/sandboxPackageIpc.js',
+    'electron/sessionIpc.js',
+    'electron/vaultPrompt.js',
+    'electron/workspaceIpc.js'
+  ];
+  const mainSource = (await Promise.all(mainFiles.map((file) => fs.readFile(path.join(root, file), 'utf8')))).join('\n');
+  const preloadSource = await fs.readFile(path.join(root, 'electron', 'preload.js'), 'utf8');
+  const matrixRows = new Set(buildElectronSecurityMatrix().rows.map((row) => row.id));
+  const declaredRendererToMain = new Set(ELECTRON_IPC_CHANNELS
+    .filter((channel) => channel.direction.startsWith('renderer-to-main'))
+    .map((channel) => channel.channel));
+  const declaredMainToRenderer = new Set(ELECTRON_IPC_CHANNELS
+    .filter((channel) => channel.direction === 'main-to-renderer')
+    .map((channel) => channel.channel));
+
+  for (const channel of ELECTRON_IPC_CHANNELS) {
+    assert.ok(matrixRows.has(channel.id), `Missing electron-security matrix row for ${channel.channel}`);
+  }
+
+  const sourceRendererToMain = new Set([
+    ...matches(mainSource, /(?:ipcMain|trustedIpcMain)\.(?:handle|on)\('([^']+)'/g),
+    ...matches(preloadSource, /ipcRenderer\.(?:invoke|sendSync)\('([^']+)'/g)
+  ]);
+  const sourceMainToRenderer = new Set([
+    ...matches(mainSource, /(?:webContents|sender)\.send\('([^']+)'/g),
+    ...matches(preloadSource, /ipcRenderer\.on\('([^']+)'/g)
+  ]);
+
+  assert.deepEqual([...declaredRendererToMain].sort(), [...sourceRendererToMain].sort());
+  assert.deepEqual([...declaredMainToRenderer].sort(), [...sourceMainToRenderer].sort());
+});
+
+function matches(source, regex) {
+  return [...source.matchAll(regex)].map((match) => match[1]);
+}

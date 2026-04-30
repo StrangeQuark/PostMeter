@@ -1,5 +1,6 @@
 const { loadTestResultToCsv, runLoadTest } = require('../src/core/loadTestRunner');
 const { collectionRunResultToCsv, runCollection } = require('../src/core/collectionRunner');
+const { selectedSaveFilePath } = require('./fileDialogs');
 const {
   applyCollectionRunMutationsToWorkspace,
   mergeCookieJarByDelta
@@ -107,6 +108,8 @@ function registerRuntimeIpc(options = {}) {
         trustedCapabilities: workspace.settings?.sandbox?.trustedCapabilities || {},
         vault: getVaultStore(workspaceId),
         vaultPrompt: getVaultPrompt(workspaceId),
+        workspaceId,
+        workspaceName: workspaceId,
         stopOnFailure: config.stopOnFailure === true,
         onProgress: (progress) => {
           assertRunnerProgressPayload(progress);
@@ -164,12 +167,13 @@ function registerRuntimeIpc(options = {}) {
         { name: 'All Files', extensions: ['*'] }
       ]
     });
-    if (saveResult.canceled || !saveResult.filePath) {
+    const filePath = selectedSaveFilePath(saveResult);
+    if (!filePath) {
       return fileOperationResult({ cancelled: true });
     }
     const content = format === 'csv' ? collectionRunResultToCsv(result) : JSON.stringify(result, null, 2);
-    await require('node:fs/promises').writeFile(saveResult.filePath, content);
-    return fileOperationResult({ cancelled: false, path: saveResult.filePath });
+    await require('node:fs/promises').writeFile(filePath, content);
+    return fileOperationResult({ cancelled: false, path: filePath });
   });
 
   ipcMain.handle('load:export', async (_event, result, format) => {
@@ -184,12 +188,13 @@ function registerRuntimeIpc(options = {}) {
         { name: 'All Files', extensions: ['*'] }
       ]
     });
-    if (saveResult.canceled || !saveResult.filePath) {
+    const filePath = selectedSaveFilePath(saveResult);
+    if (!filePath) {
       return fileOperationResult({ cancelled: true });
     }
     const content = format === 'csv' ? loadTestResultToCsv(result) : JSON.stringify(result, null, 2);
-    await require('node:fs/promises').writeFile(saveResult.filePath, content);
-    return fileOperationResult({ cancelled: false, path: saveResult.filePath });
+    await require('node:fs/promises').writeFile(filePath, content);
+    return fileOperationResult({ cancelled: false, path: filePath });
   });
 }
 

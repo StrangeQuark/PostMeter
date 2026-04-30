@@ -4,6 +4,7 @@ const {
   oneOf,
   payloadSchemas
 } = require('./payloadSchemas');
+const { MAX_OPEN_TABS } = require('./sessionState');
 
 const FIELD_ENUMS = payloadSchemas.enums;
 const LIMITS = payloadSchemas.limits;
@@ -22,6 +23,37 @@ function assertWorkspacePayload(value, field = 'workspace') {
     cookies: assertCookies,
     history: assertHistory
   });
+}
+
+function assertSessionPayload(value, field = 'session') {
+  object(value, field);
+  optionalNumber(value.version, `${field}.version`);
+  for (const name of [
+    'activeWorkspaceId',
+    'selectedWorkspaceId',
+    'activeEnvironmentId',
+    'activeCollectionId',
+    'activeFolderId',
+    'activeRequestId'
+  ]) {
+    optionalString(value[name], `${field}.${name}`, LIMITS.value);
+  }
+  for (const name of [
+    'activeSidebarPanel',
+    'activeMainPanel',
+    'activeRequestTab',
+    'activeResultsTab'
+  ]) {
+    optionalString(value[name], `${field}.${name}`, LIMITS.short);
+  }
+  assertSessionRequestTabs(value.openRequestTabs || [], `${field}.openRequestTabs`);
+  assertSessionEnvironmentTabs(value.openEnvironmentTabs || [], `${field}.openEnvironmentTabs`);
+  assertSessionWorkspaceTabs(value.openWorkspaceTabs || [], `${field}.openWorkspaceTabs`);
+  assertSessionDraftRequests(value.draftRequests || [], `${field}.draftRequests`);
+  assertDirtyCollectionStates(value.dirtyCollectionStates || [], `${field}.dirtyCollectionStates`);
+  if (value.dirtyCookieJarState != null) {
+    assertDirtyCookieJarState(value.dirtyCookieJarState, `${field}.dirtyCookieJarState`);
+  }
 }
 
 function assertWorkspaceSettingsSavePayload(value, field = 'settings') {
@@ -473,6 +505,72 @@ function assertSchemaNested(entityName, value, field, validators, defaults = {})
   }
 }
 
+function assertSessionRequestTabs(values, field) {
+  array(values, field, MAX_OPEN_TABS).forEach((tab, index) => {
+    const itemField = `${field}[${index}]`;
+    object(tab, itemField);
+    for (const name of ['key', 'collectionId', 'requestId', 'folderId']) {
+      optionalString(tab[name], `${itemField}.${name}`, LIMITS.value);
+    }
+    optionalBoolean(tab.draft, `${itemField}.draft`);
+    optionalBoolean(tab.dirty, `${itemField}.dirty`);
+    optionalBoolean(tab.createdUnsaved, `${itemField}.createdUnsaved`);
+    optionalString(tab.snapshot, `${itemField}.snapshot`, LIMITS.body);
+    if (tab.currentState != null) {
+      assertRequestPayload(tab.currentState, `${itemField}.currentState`);
+    }
+  });
+}
+
+function assertSessionEnvironmentTabs(values, field) {
+  array(values, field, MAX_OPEN_TABS).forEach((tab, index) => {
+    const itemField = `${field}[${index}]`;
+    object(tab, itemField);
+    optionalString(tab.key, `${itemField}.key`, LIMITS.value);
+    optionalString(tab.environmentId, `${itemField}.environmentId`, LIMITS.value);
+    optionalBoolean(tab.dirty, `${itemField}.dirty`);
+    optionalBoolean(tab.createdUnsaved, `${itemField}.createdUnsaved`);
+    optionalString(tab.snapshot, `${itemField}.snapshot`, LIMITS.body);
+    if (tab.currentState != null) {
+      assertEnvironmentPayload(tab.currentState, `${itemField}.currentState`);
+    }
+  });
+}
+
+function assertSessionWorkspaceTabs(values, field) {
+  array(values, field, MAX_OPEN_TABS).forEach((tab, index) => {
+    const itemField = `${field}[${index}]`;
+    object(tab, itemField);
+    optionalString(tab.key, `${itemField}.key`, LIMITS.value);
+    optionalString(tab.workspaceId, `${itemField}.workspaceId`, LIMITS.value);
+    optionalBoolean(tab.dirty, `${itemField}.dirty`);
+  });
+}
+
+function assertSessionDraftRequests(values, field) {
+  array(values, field, MAX_OPEN_TABS).forEach((request, index) => {
+    assertRequestPayload(request, `${field}[${index}]`);
+  });
+}
+
+function assertDirtyCollectionStates(values, field) {
+  array(values, field, MAX_OPEN_TABS).forEach((state, index) => {
+    const itemField = `${field}[${index}]`;
+    object(state, itemField);
+    optionalString(state.collectionId, `${itemField}.collectionId`, LIMITS.value);
+    optionalString(state.ownerKey, `${itemField}.ownerKey`, LIMITS.value);
+    optionalString(state.snapshot, `${itemField}.snapshot`, LIMITS.body);
+    assertPairs(state.currentState || [], `${itemField}.currentState`);
+  });
+}
+
+function assertDirtyCookieJarState(value, field) {
+  object(value, field);
+  optionalString(value.ownerKey, `${field}.ownerKey`, LIMITS.value);
+  optionalString(value.snapshot, `${field}.snapshot`, LIMITS.body);
+  assertCookies(value.currentState || [], `${field}.currentState`);
+}
+
 function assertFolderArray(values, field, depth) {
   if (depth > LIMITS.folderDepth) {
     fail(`${field} exceeds maximum folder depth.`);
@@ -726,6 +824,7 @@ module.exports = {
   assertOptionalEnvironmentPayload,
   assertRunnerConfigPayload,
   assertRunnerProgressPayload,
+  assertSessionPayload,
   assertExternalUrlPayload,
   assertFileOperationResultPayload,
   assertResponsePayload,

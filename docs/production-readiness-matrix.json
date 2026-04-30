@@ -132,7 +132,7 @@
     {
       "id": "electron.security",
       "area": "security",
-      "target": "Electron BrowserWindow, preload, IPC, navigation, external URL, protocol, and packaged-preload controls are matrixed and validated.",
+      "target": "Electron BrowserWindow, main-frame-only preload, channel-level IPC, IPC sender validation, navigation, webview, permissions, file dialogs, external URL, protocol, CSP, fuse-review, and packaged-preload controls are matrixed and validated.",
       "status": "implemented",
       "releaseBlocking": true,
       "commands": [
@@ -141,12 +141,19 @@
       ],
       "evidenceRefs": [
         "docs/electron-security-matrix.json",
+        "src/core/productionSupportMatrices.js",
+        "electron/appProtocol.js",
         "electron/mainWindow.js",
-        "electron/appIpc.js"
+        "electron/ipcSecurity.js",
+        "electron/preload.js",
+        "electron/workspaceIpc.js",
+        "electron/appIpc.js",
+        "electron/oauthFlows.js",
+        "test/electron/appChrome.test.js"
       ],
       "owner": "PostMeter",
       "lastVerified": "",
-      "notes": ""
+      "notes": "The source-owned Electron security matrix now enumerates the primary BrowserWindow, production webPreferences, secure custom app-content protocol with CSP/nosniff/referrer-policy headers and no renderer fetch privilege, packaged startup-smoke assertions for the trusted app-protocol renderer URL and renderer CSP, exact-initial-URL top-level navigation denial including unexpected app-protocol query changes, window-open denial, webview denial, permission denial, renderer CSP, visualizer CSP, explicit main-frame-only preload API, every IPC channel, fail-closed trusted main-frame renderer IPC sender validation including unexpected app-protocol query keys, native file-dialog groups, credential-free external URL allowlists, OAuth browser launch path, custom protocol registration path, packaged preload integrity, packaged protocol validation wiring, and documented Electron fuse review. Native runner execution evidence is still tracked by the separate packaging rows."
     },
     {
       "id": "grpc.pfx-p12-mtls",
@@ -284,11 +291,13 @@
         "npm run postman:newman-reports:validate"
       ],
       "evidenceRefs": [
-        "test/fixtures/postman/newman-reports"
+        "scripts/newmanReports.js",
+        "test/fixtures/postman/newman-reports",
+        "test/electron/newmanReports.test.js"
       ],
       "owner": "PostMeter",
       "lastVerified": "",
-      "notes": ""
+      "notes": "Checked-in raw Newman reporter output, raw PostMeter harness output, plus normalized Newman and PostMeter reports cover the seven approved Newman-compatible differential fixtures targeting newman@6.2.2 and Postman Runtime 7.39.1. The refresh script runs the approved live Newman differential and rewrites evidence in one explicit network-using step. The write path accepts only clean source summaries targeting newman@6.2.2, Postman Runtime 7.39.1, and the exact approved suite list. Validation is offline, requires exact suite coverage, rejects unexpected checked-in JSON files, clean comparison metadata, required generation metadata on every normalized report, fresh normalized Newman and PostMeter output, passing PostMeter evidence, no Newman assertion failures, preserved response-shape/body-digest evidence and console output when present, and no concrete localhost ports, local filesystem paths, generated request IDs, generated Postman request tokens, generated multipart boundaries, time-derived request signatures, machine names, or machine-specific metadata in normalized evidence."
     },
     {
       "id": "postman.script-parity",
@@ -440,11 +449,25 @@
       ],
       "evidenceRefs": [
         "src/core/scriptSandbox.js",
-        "electron/vaultPrompt.js"
+        "src/core/scriptedRequestLifecycle.js",
+        "src/core/collectionRunner.js",
+        "electron/vaultPrompt.js",
+        "electron/requestIpc.js",
+        "electron/runtimeIpc.js",
+        "src/renderer/index.html",
+        "src/renderer/rendererBootstrap.js",
+        "src/renderer/vaultPromptQueue.js",
+        "docs/TROUBLESHOOTING.md",
+        "test/electron/scriptSandbox.test.js",
+        "test/electron/collectionRunner.test.js",
+        "test/electron/vaultPrompt.test.js",
+        "test/electron/vaultPromptQueue.test.js",
+        "test/electron/rendererBootstrap.test.js",
+        "test/electron/workspaceStore.test.js"
       ],
       "owner": "PostMeter",
       "lastVerified": "",
-      "notes": ""
+      "notes": "Desktop single-request sends, collection runs, and nested request lifecycle executions forward metadata-only vault prompt callbacks into the isolated script lifecycle. Prompt payloads include bounded request, collection, workspace, operation, and key metadata only; prompt controls cover deny, request, collection, workspace, and reset decisions; concurrent renderer prompts are queued so each broker prompt resolves against its own prompt id; prompt responses are accepted only from the prompting renderer; grants persist as scoped metadata for the prompted workspace, explicit denials override broader grants, denials stop code after the vault call, audit entries cover prompt grant/deny/reset, get/set/unset, denied-after-call, and unavailable-encryption outcomes, workspace save/export strips vault-shaped plaintext/ciphertext fields, and troubleshooting docs explain prompt, binding, denial/reset, and encryption-unavailable behavior."
     },
     {
       "id": "workspace.durability",

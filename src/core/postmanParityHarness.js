@@ -525,7 +525,8 @@ async function runPostmanParityDifferential(options = {}) {
       postmeter: firstSuite.postmeter,
       suites,
       target: {
-        newman: NEWMAN_TARGET
+        newman: NEWMAN_TARGET,
+        postmanRuntime: NEWMAN_RUNTIME_TARGET
       }
     };
     await fs.writeFile(path.join(outputDir, 'postman-parity-differential-summary.json'), `${JSON.stringify(summary, null, 2)}\n`);

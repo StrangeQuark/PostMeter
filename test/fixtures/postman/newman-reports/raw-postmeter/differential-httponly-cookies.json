@@ -1,0 +1,172 @@
+{
+  "summary": {
+    "collectionName": "PostMeter Differential HttpOnly Cookies",
+    "failedRequests": 0,
+    "passed": true,
+    "passedRequests": 4,
+    "totalRequests": 4
+  },
+  "requests": [
+    {
+      "requestName": "Seed HttpOnly Cookies",
+      "statusCode": 200,
+      "passed": true,
+      "tests": [
+        {
+          "name": "seed scripted visible and httponly cookies",
+          "passed": true,
+          "error": ""
+        },
+        {
+          "name": "httponly seed request sends scripted cookies",
+          "passed": true,
+          "error": ""
+        }
+      ]
+    },
+    {
+      "requestName": "Read And Mutate HttpOnly Cookies",
+      "statusCode": 200,
+      "passed": true,
+      "tests": [
+        {
+          "name": "httponly cookies are readable through current helpers and jar helpers",
+          "passed": true,
+          "error": ""
+        },
+        {
+          "name": "httponly jar mutations and pm.sendRequest updates match Postman",
+          "passed": true,
+          "error": ""
+        }
+      ]
+    },
+    {
+      "requestName": "After HttpOnly Mutations",
+      "statusCode": 200,
+      "passed": true,
+      "tests": [
+        {
+          "name": "httponly mutations affect later requests",
+          "passed": true,
+          "error": ""
+        },
+        {
+          "name": "httponly jar clear removes visible and httponly cookies",
+          "passed": true,
+          "error": ""
+        }
+      ]
+    },
+    {
+      "requestName": "After HttpOnly Clear",
+      "statusCode": 200,
+      "passed": true,
+      "tests": [
+        {
+          "name": "httponly clear removed every in-scope cookie",
+          "passed": true,
+          "error": ""
+        }
+      ]
+    }
+  ],
+  "environment": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:41489"
+    },
+    {
+      "key": "envSeed",
+      "value": "env-seed"
+    },
+    {
+      "key": "httpOnlyCookieSummary",
+      "value": "{\"readable\":true,\"mutable\":true,\"clearRemovedAll\":true}"
+    }
+  ],
+  "collectionVariables": [],
+  "globals": [
+    {
+      "key": "globalSeed",
+      "value": "global-seed"
+    }
+  ],
+  "cookies": [],
+  "observedRequests": [
+    {
+      "body": "",
+      "headers": {
+        "host": "127.0.0.1:41489",
+        "connection": "keep-alive",
+        "cookie": "visible=visible-value; secret=secret-value; replaceMe=server-secret; clearMe=clear-secret",
+        "accept": "*/*",
+        "accept-language": "*",
+        "sec-fetch-mode": "cors",
+        "user-agent": "undici",
+        "accept-encoding": "gzip, deflate"
+      },
+      "method": "GET",
+      "path": "/cookie-check"
+    },
+    {
+      "body": "",
+      "headers": {
+        "host": "127.0.0.1:41489",
+        "connection": "keep-alive",
+        "cookie": "visible=visible-value; secret=secret-value; replaceMe=server-secret; clearMe=clear-secret",
+        "accept": "*/*",
+        "accept-language": "*",
+        "sec-fetch-mode": "cors",
+        "user-agent": "undici",
+        "accept-encoding": "gzip, deflate"
+      },
+      "method": "GET",
+      "path": "/cookie-check"
+    },
+    {
+      "body": "",
+      "headers": {
+        "host": "127.0.0.1:41489",
+        "connection": "keep-alive",
+        "cookie": "visible=visible-value; secret=secret-value; scriptSecret=script-secret; replaceMe=client-visible",
+        "accept": "*/*",
+        "accept-language": "*",
+        "sec-fetch-mode": "cors",
+        "user-agent": "undici",
+        "accept-encoding": "gzip, deflate"
+      },
+      "method": "GET",
+      "path": "/set-send-httponly"
+    },
+    {
+      "body": "",
+      "headers": {
+        "host": "127.0.0.1:41489",
+        "connection": "keep-alive",
+        "cookie": "visible=visible-value; secret=secret-value; scriptSecret=script-secret; replaceMe=client-visible; sendSecret=send-secret",
+        "accept": "*/*",
+        "accept-language": "*",
+        "sec-fetch-mode": "cors",
+        "user-agent": "undici",
+        "accept-encoding": "gzip, deflate"
+      },
+      "method": "GET",
+      "path": "/cookie-check"
+    },
+    {
+      "body": "",
+      "headers": {
+        "host": "127.0.0.1:41489",
+        "connection": "keep-alive",
+        "accept": "*/*",
+        "accept-language": "*",
+        "sec-fetch-mode": "cors",
+        "user-agent": "undici",
+        "accept-encoding": "gzip, deflate"
+      },
+      "method": "GET",
+      "path": "/cookie-check"
+    }
+  ]
+}

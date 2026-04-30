@@ -1,0 +1,119 @@
+{
+  "summary": {
+    "collectionName": "PostMeter Differential File Bindings",
+    "failedRequests": 0,
+    "passed": true,
+    "passedRequests": 3,
+    "totalRequests": 3
+  },
+  "requests": [
+    {
+      "requestName": "Binary Attachment Body",
+      "statusCode": 200,
+      "passed": true,
+      "tests": [
+        {
+          "name": "binary attachment body is sent",
+          "passed": true,
+          "error": ""
+        }
+      ]
+    },
+    {
+      "requestName": "File Attachment Body",
+      "statusCode": 200,
+      "passed": true,
+      "tests": [
+        {
+          "name": "file attachment body is sent",
+          "passed": true,
+          "error": ""
+        }
+      ]
+    },
+    {
+      "requestName": "Form Data File Attachment",
+      "statusCode": 200,
+      "passed": true,
+      "tests": [
+        {
+          "name": "form-data file attachment is sent",
+          "passed": true,
+          "error": ""
+        }
+      ]
+    }
+  ],
+  "environment": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:41489"
+    },
+    {
+      "key": "envSeed",
+      "value": "env-seed"
+    },
+    {
+      "key": "fileBinarySummary",
+      "value": "binary:BINARY_ATTACHMENT_CONTENT:none|file:FILE_ATTACHMENT_CONTENT:none|form:FILE_ATTACHMENT_CONTENT:form-note"
+    }
+  ],
+  "collectionVariables": [],
+  "globals": [
+    {
+      "key": "globalSeed",
+      "value": "global-seed"
+    }
+  ],
+  "cookies": [],
+  "observedRequests": [
+    {
+      "body": "BINARY_ATTACHMENT_CONTENT\n",
+      "headers": {
+        "host": "127.0.0.1:41489",
+        "connection": "keep-alive",
+        "content-type": "application/octet-stream",
+        "accept": "*/*",
+        "accept-language": "*",
+        "sec-fetch-mode": "cors",
+        "user-agent": "undici",
+        "accept-encoding": "gzip, deflate",
+        "content-length": "26"
+      },
+      "method": "POST",
+      "path": "/attachments/binary"
+    },
+    {
+      "body": "FILE_ATTACHMENT_CONTENT\n",
+      "headers": {
+        "host": "127.0.0.1:41489",
+        "connection": "keep-alive",
+        "content-type": "text/plain",
+        "accept": "*/*",
+        "accept-language": "*",
+        "sec-fetch-mode": "cors",
+        "user-agent": "undici",
+        "accept-encoding": "gzip, deflate",
+        "content-length": "24"
+      },
+      "method": "POST",
+      "path": "/attachments/file"
+    },
+    {
+      "body": "--postmeter-e0d66c37a4e6ab75e1f2896e\r\nContent-Disposition: form-data; name=\"note\"\r\n\r\nform-note\r\n--postmeter-e0d66c37a4e6ab75e1f2896e\r\nContent-Disposition: form-data; name=\"payload\"; filename=\"sendrequest-file.txt\"\r\nContent-Type: text/plain\r\n\r\nFILE_ATTACHMENT_CONTENT\n\r\n--postmeter-e0d66c37a4e6ab75e1f2896e--\r\n",
+      "headers": {
+        "host": "127.0.0.1:41489",
+        "connection": "keep-alive",
+        "content-type": "multipart/form-data; boundary=postmeter-e0d66c37a4e6ab75e1f2896e",
+        "accept": "*/*",
+        "accept-language": "*",
+        "sec-fetch-mode": "cors",
+        "user-agent": "undici",
+        "accept-encoding": "gzip, deflate",
+        "content-length": "309"
+      },
+      "method": "POST",
+      "path": "/attachments/form"
+    }
+  ]
+}

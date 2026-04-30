@@ -101,6 +101,134 @@ test('renderer workflows allow sending an active draft request without forcing a
   assert.equal(workspaceSaveCalls, 0);
 });
 
+test('renderer workflows render pre-request script failures inline without history or blocking notification', async () => {
+  const state = createRendererState();
+  const draftRequest = {
+    id: 'draft-1',
+    name: 'Draft Request',
+    method: 'GET',
+    url: 'https://example.test',
+    scripts: { preRequest: 'pm.sendRequest("https://example.test")', tests: '' }
+  };
+  state.workspace = { collections: [], environments: [], history: [], settings: {} };
+  state.activeMainPanel = 'request';
+  state.activeRequestId = draftRequest.id;
+  state.openRequestTabs = [{ key: 'draft:draft-1', requestId: draftRequest.id, draft: true, dirty: true }];
+  state.draftRequests.set(draftRequest.id, draftRequest);
+  let displayedResponse = null;
+  let historyRenders = 0;
+  let notifications = 0;
+  let status = '';
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => draftRequest,
+    collectRequestFromEditor: () => {},
+    displayResponse: (response) => { displayedResponse = response; },
+    doc: createDocument(),
+    notifyUser: () => { notifications += 1; },
+    renderHistory: () => { historyRenders += 1; },
+    runFormatting: createRunFormatting(),
+    setStatus: (value) => { status = value; },
+    windowObject: {
+      postmeter: {
+        request: {
+          validate: async () => [],
+          send: async () => ({
+            statusCode: 0,
+            headers: {},
+            body: 'Pre-request script failed: script network request should be available: Expected pm.sendRequest is disabled for this workspace. to equal null.',
+            durationMillis: 12,
+            responseBytes: 130,
+            finalUrl: 'https://example.test',
+            requestSent: false,
+            preRequestScriptResult: {
+              passed: false,
+              error: '',
+              tests: [{
+                name: 'script network request should be available',
+                passed: false,
+                error: 'Expected pm.sendRequest is disabled for this workspace. to equal null.'
+              }]
+            },
+            testScriptResult: { passed: true, tests: [], error: '', logs: [] },
+            environment: null,
+            collectionVariables: [],
+            globals: [],
+            localVariables: []
+          })
+        },
+        workspace: {
+          save: async (workspace) => workspace
+        }
+      }
+    }
+  });
+
+  await workflows.sendActiveRequest();
+
+  assert.equal(displayedResponse.requestSent, false);
+  assert.match(displayedResponse.body, /pm\.sendRequest is disabled/);
+  assert.equal(state.lastResponse, null);
+  assert.equal(state.workspace.history.length, 0);
+  assert.equal(historyRenders, 0);
+  assert.equal(notifications, 0);
+  assert.equal(status, 'Request failed.');
+});
+
+test('renderer workflows render request send exceptions inline without blocking notification', async () => {
+  const state = createRendererState();
+  const draftRequest = {
+    id: 'draft-1',
+    name: 'Draft Request',
+    method: 'GET',
+    url: 'https://example.test',
+    scripts: { preRequest: '', tests: '' }
+  };
+  const doc = createDocument();
+  state.workspace = { collections: [], environments: [], history: [], settings: {} };
+  state.activeMainPanel = 'request';
+  state.activeRequestId = draftRequest.id;
+  state.openRequestTabs = [{ key: 'draft:draft-1', requestId: draftRequest.id, draft: true, dirty: true }];
+  state.draftRequests.set(draftRequest.id, draftRequest);
+  let notifications = 0;
+  let status = '';
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => draftRequest,
+    collectRequestFromEditor: () => {},
+    doc,
+    notifyUser: () => { notifications += 1; },
+    runFormatting: createRunFormatting(),
+    setStatus: (value) => { status = value; },
+    windowObject: {
+      postmeter: {
+        request: {
+          validate: async () => [],
+          send: async () => {
+            throw new Error('network boom');
+          }
+        },
+        workspace: {
+          save: async (workspace) => workspace
+        }
+      }
+    }
+  });
+
+  await workflows.sendActiveRequest();
+
+  assert.equal(doc.getElementById('responseStatus').textContent, 'ERR');
+  assert.equal(doc.getElementById('responseBody').value, 'network boom');
+  assert.equal(notifications, 0);
+  assert.equal(status, 'Request failed: network boom');
+});
+
 test('renderer workflows allow running a load test from an active draft request without forcing a save', async () => {
   const state = createRendererState();
   const draftRequest = {

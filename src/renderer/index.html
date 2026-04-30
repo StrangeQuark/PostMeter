@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; frame-src 'self' about: data:; child-src 'self' about: data:; connect-src 'none';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; frame-src 'self' about: data:; child-src 'self' about: data:; connect-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; worker-src 'none'; media-src 'none';">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>PostMeter</title>
   <link rel="stylesheet" href="theme.css">
@@ -610,6 +610,14 @@
           <dd id="vaultPromptRequestName">-</dd>
         </div>
         <div>
+          <dt>Collection</dt>
+          <dd id="vaultPromptCollectionName">-</dd>
+        </div>
+        <div>
+          <dt>Workspace</dt>
+          <dd id="vaultPromptWorkspaceName">-</dd>
+        </div>
+        <div>
           <dt>Secret</dt>
           <dd id="vaultPromptSecretKey">-</dd>
         </div>
@@ -650,6 +658,7 @@
   <script src="requestTabs.js"></script>
   <script src="requestTabState.js"></script>
   <script src="rendererBootstrap.js"></script>
+  <script src="vaultPromptQueue.js"></script>
   <script src="rendererWorkflows.js"></script>
   <script src="runResultFormatting.js"></script>
   <script src="renderer.js"></script>

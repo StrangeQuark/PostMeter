@@ -4,6 +4,8 @@
   "fixtureId": "differential-httponly-cookies",
   "newmanVersion": "6.2.2",
   "postmanRuntimeVersion": "7.39.1",
+  "generationCommand": "npm run postman:newman-reports:refresh -- --download-newman --output <dir>",
+  "dateGenerated": "2026-04-30T14:11:24.583Z",
   "normalization": {
     "normalizedFields": [
       "timestamps",
@@ -11,7 +13,11 @@
       "response timings",
       "randomized localhost ports",
       "host filesystem paths",
-      "machine-specific process metadata",
+      "generated request IDs",
+      "generated Postman request tokens",
+      "generated multipart boundaries",
+      "time-derived request signatures",
+      "machine names and machine-specific process metadata",
       "raw reporter cursor ids where duplicated by Newman internals"
     ],
     "preservedFields": [
@@ -20,9 +26,11 @@
       "request names",
       "request methods",
       "response codes",
+      "response shape and body digest",
       "assertion names",
       "assertion pass/fail state",
-      "failure messages"
+      "failure messages",
+      "console output"
     ]
   },
   "collectionName": "PostMeter Differential HttpOnly Cookies",
@@ -78,6 +86,15 @@
       "itemName": "Seed HttpOnly Cookies",
       "method": "GET",
       "responseCode": 200,
+      "responseShape": {
+        "status": "OK",
+        "code": 200,
+        "sizeBytes": 116,
+        "headerCount": 5,
+        "cookieCount": 0,
+        "bodySha256": "0d423051ebd3580a07f0cced6625718d7d060ee4453c3e288bcd85434de2e15b"
+      },
+      "console": [],
       "assertions": [
         {
           "name": "seed scripted visible and httponly cookies",
@@ -97,6 +114,15 @@
       "itemName": "Read And Mutate HttpOnly Cookies",
       "method": "GET",
       "responseCode": 200,
+      "responseShape": {
+        "status": "OK",
+        "code": 200,
+        "sizeBytes": 21,
+        "headerCount": 6,
+        "cookieCount": 0,
+        "bodySha256": "06a0d93e3d99c8db67ce788b26e5bf4d57d3f26d786af9184237b9d4fc869797"
+      },
+      "console": [],
       "assertions": [
         {
           "name": "httponly cookies are readable through current helpers and jar helpers",
@@ -116,6 +142,15 @@
       "itemName": "After HttpOnly Mutations",
       "method": "GET",
       "responseCode": 200,
+      "responseShape": {
+        "status": "OK",
+        "code": 200,
+        "sizeBytes": 150,
+        "headerCount": 5,
+        "cookieCount": 0,
+        "bodySha256": "8b483a2d5ed82b11114d0010404dc5ff8c3a8d205cd6524011197dc66dc427f5"
+      },
+      "console": [],
       "assertions": [
         {
           "name": "httponly mutations affect later requests",
@@ -135,6 +170,15 @@
       "itemName": "After HttpOnly Clear",
       "method": "GET",
       "responseCode": 200,
+      "responseShape": {
+        "status": "OK",
+        "code": 200,
+        "sizeBytes": 14,
+        "headerCount": 5,
+        "cookieCount": 0,
+        "bodySha256": "65d3e65b0ec8d864dadb158e06a21632ecdecab94243094dcceba372a25aeba8"
+      },
+      "console": [],
       "assertions": [
         {
           "name": "httponly clear removed every in-scope cookie",

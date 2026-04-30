@@ -48,22 +48,24 @@ Keep DOM IDs stable unless tests and IPC-facing workflows are migrated at the sa
 `electron/main.js` is the app shell and IPC registration entry point. Main-process business helpers should move out of this file when they can be tested without launching Electron.
 
 - `appMenu.js` owns the application menu template and installation.
-- `appIpc.js` owns app version, update check, and allowed external-link IPC channels.
+- `appProtocol.js` owns the secure standard `postmeter-app://bundle` renderer asset protocol, including the narrow bundle allowlist, CSP/`nosniff`/`no-referrer` response headers, and least-privileged protocol registration used instead of loading the UI with `file://`.
+- `appIpc.js` owns app version, update check, and credential-free allowed external-link IPC channels.
 - `fileDialogs.js` owns shared dialog filters, default extensions, and filename normalization.
-- `mainWindow.js` owns BrowserWindow creation, renderer loading, startup/package smoke probes, and UI-smoke/snapshot window hooks.
+- `ipcSecurity.js` owns trusted main-frame renderer IPC sender validation against the `postmeter-app://bundle/src/renderer/index.html` main-frame URL. Production IPC registration wraps every renderer-to-main channel so messages from missing sender-frame metadata, navigated, external, subframe, or unexpected sender frames are rejected before handler logic.
+- `mainWindow.js` owns BrowserWindow creation, custom-protocol renderer loading, navigation/window-open/webview/permission denial, startup/package smoke probes, and UI-smoke/snapshot window hooks.
 - `oauthIpc.js` owns OAuth IPC channel registration and payload validation.
-- `oauthFlows.js` owns OAuth authorization-code/device-code orchestration, callback routing, and protocol registration.
+- `oauthFlows.js` owns OAuth authorization-code/device-code orchestration, callback routing, protocol registration, credential-free http/https shell-launch validation, and expected `postmeter://oauth/callback` route matching.
 - `requestIpc.js` owns single-request validation/send IPC and persistence of response-side workspace mutations.
 - `runtimeIpc.js` owns load-test and collection-run IPC channels, cancellation maps, progress events, and result exports.
 - `sessionIpc.js` owns renderer session load/save IPC, including the synchronous shutdown flush path.
 - `sessionStore.js` owns persisted UI session state in Electron `userData/session.json`.
 - `workspaceIpc.js` owns workspace import/export, collection import/export, workspace save/load, request-example export IPC channels, and the refreshed managed-workspace payloads returned after workspace import.
 - `workspaceMutations.js` owns workspace updates after request sends and collection runs.
-- `vaultPrompt.js` owns metadata-only vault prompt IPC, renderer/dialog fallback decisions, and scoped vault-grant persistence helpers.
+- `vaultPrompt.js` owns metadata-only vault prompt IPC, renderer/dialog fallback decisions, prompt-response sender binding, and scoped vault-grant persistence helpers. `vaultPromptQueue.js` serializes renderer prompt UI so concurrent script vault calls cannot overwrite active prompt state. `requestIpc.js` and `runtimeIpc.js` pass the prompt broker into the shared scripted lifecycle so single-request sends, collection runs, and nested request executions all use the same request/collection/workspace-scoped prompt path.
 
 Further extraction should be demand-driven. `electron/main.js` is already reduced to app lifecycle, workspace/session-store wiring, and module registration, so more splitting should only happen when those responsibilities materially grow again.
 
-IPC channel names and preload APIs are compatibility contracts. Refactors must preserve them unless a migration is explicitly planned.
+IPC channel names and preload APIs are compatibility contracts. Refactors must preserve them unless a migration is explicitly planned. The source-owned Electron security matrix enumerates every channel, and the matrix validator plus focused tests fail if source channels and documented channel rows diverge.
 
 ## Core
 

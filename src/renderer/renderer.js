@@ -75,6 +75,7 @@ const {
   closeToolbarMenus: closeRendererToolbarMenus,
   initializeRenderer
 } = PostMeterRendererBootstrap;
+const { createVaultPromptQueue } = PostMeterVaultPromptQueue;
 const { createVariableAutocomplete } = PostMeterVariableAutocomplete;
 const {
   activeEnvironmentTabKey: buildActiveEnvironmentTabKey,
@@ -98,6 +99,7 @@ const {
 const { createRequestTabState } = PostMeterRequestTabState;
 const { renderRequestTabs: renderRequestTabBar } = PostMeterRequestTabs;
 const { createRendererWorkflows } = PostMeterRendererWorkflows;
+const vaultPromptQueue = createVaultPromptQueue({ onPrompt: promptVaultAccess });
 
 const state = {
   get workspace() { return workspace; },
@@ -264,7 +266,7 @@ initializeRenderer({
     }));
     if (window.postmeter.vault?.onPrompt) {
       registerCleanup(window.postmeter.vault.onPrompt((payload) => {
-        void handleVaultPrompt(payload);
+        void handleVaultPrompt(payload).catch(() => {});
       }));
     }
 
@@ -319,7 +321,9 @@ function bindUi() {
     onSwitchWorkspace: () => { void switchWorkspace(selectedWorkspaceId || activeWorkspaceId, { focus: 'workspace' }); },
     onAddSandboxPackage: () => { void addSandboxPackageFromPrompt(); },
     onFetchSandboxPackage: () => { void fetchSandboxPackageFromPrompt(); },
-    onRefreshSandboxPackages: () => renderWorkspacePanel(),
+    onRefreshSandboxPackages: refreshSandboxPackageStatus,
+    onBindSandboxFile: () => { void bindSandboxFileFromPrompt(); },
+    onRefreshSandboxFiles: refreshSandboxFileBindings,
     onBindVaultSecret: () => { void bindVaultSecretFromPrompt(); },
     onRefreshVaultMetadata: () => { void refreshVaultMetadata(); },
     onResetVault: () => { void resetVaultFromWorkspacePanel(); },
@@ -863,10 +867,20 @@ function cancelActiveModal() {
 }
 
 async function handleVaultPrompt(payload = {}) {
+  await vaultPromptQueue.enqueue(payload);
+}
+
+async function promptVaultAccess(payload = {}) {
   activeVaultPromptPayload = payload;
-  renderVaultPrompt(payload);
-  const decision = normalizeVaultPromptDecision(await showModal('vaultPromptModal', { granted: false, scope: 'request' }));
-  activeVaultPromptPayload = null;
+  let decision = { granted: false, scope: 'request' };
+  try {
+    renderVaultPrompt(payload);
+    decision = normalizeVaultPromptDecision(await showModal('vaultPromptModal', { granted: false, scope: 'request' }));
+  } catch {
+    decision = { granted: false, reset: false, scope: 'request' };
+  } finally {
+    activeVaultPromptPayload = null;
+  }
   if (window.postmeter.vault?.resolvePrompt) {
     await window.postmeter.vault.resolvePrompt(payload.promptId, decision);
   }
@@ -874,6 +888,8 @@ async function handleVaultPrompt(payload = {}) {
 
 function renderVaultPrompt(payload = {}) {
   $('vaultPromptRequestName').textContent = payload.requestName || payload.requestId || 'Current request';
+  $('vaultPromptCollectionName').textContent = payload.collectionName || payload.collectionId || 'Current collection';
+  $('vaultPromptWorkspaceName').textContent = payload.workspaceName || payload.workspaceId || 'Current workspace';
   $('vaultPromptSecretKey').textContent = payload.key || '(empty key)';
   $('vaultPromptOperation').textContent = payload.operation || 'access';
   $('allowVaultPromptCollectionButton').disabled = !payload.collectionId;
@@ -1603,6 +1619,14 @@ function removeSandboxPackage(specifier) {
   });
 }
 
+function refreshSandboxPackageStatus() {
+  ensureSettings();
+  renderWorkspacePanel();
+  const statuses = sandboxPackageStatusRows();
+  const missing = statuses.filter((item) => !item.cached || !item.pinned);
+  setStatus(`${workspace.settings.sandbox.packageCache.length} reviewed package${workspace.settings.sandbox.packageCache.length === 1 ? '' : 's'} cached. ${missing.length} package reference${missing.length === 1 ? '' : 's'} need review.`);
+}
+
 async function bindSandboxFileFromPrompt(defaultSource = '') {
   ensureSettings();
   const firstMissing = sandboxFileBindingStatusRows().find((item) => !item.bound)?.source || '';
@@ -1639,6 +1663,15 @@ function removeSandboxFileBinding(source) {
     renderWorkspacePanel();
     setStatus(`Imported file binding removed for ${source}.`);
   });
+}
+
+function refreshSandboxFileBindings() {
+  ensureSettings();
+  renderWorkspacePanel();
+  const statuses = sandboxFileBindingStatusRows();
+  const bound = statuses.filter((item) => item.bound);
+  const missing = statuses.filter((item) => !item.bound);
+  setStatus(`${bound.length} imported file attachment${bound.length === 1 ? '' : 's'} bound. ${missing.length} attachment reference${missing.length === 1 ? '' : 's'} need local binding.`);
 }
 
 async function refreshVaultMetadata() {
@@ -2568,7 +2601,7 @@ async function sendActiveRequest() {
 }
 
 function displayResponse(response) {
-  $('responseStatus').textContent = response.statusCode;
+  $('responseStatus').textContent = response.statusCode || 'ERR';
   $('responseTime').textContent = `${response.durationMillis} ms`;
   $('responseSize').textContent = formatBytes(response.responseBytes);
   $('finalUrl').textContent = response.finalUrl;

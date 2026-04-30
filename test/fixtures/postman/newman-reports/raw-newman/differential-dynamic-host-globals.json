@@ -5,7 +5,7 @@
     },
     "item": [
       {
-        "id": "43de5bec-bf44-4978-9b30-c3f21db2d2d5",
+        "id": "74a95b3b-5c69-46f4-8f11-b866de10da1f",
         "name": "Dynamic Code And Host Globals",
         "request": {
           "url": {
@@ -25,7 +25,7 @@
           {
             "listen": "test",
             "script": {
-              "id": "26a9f95d-c0c7-4622-b599-8ce50c51ff5e",
+              "id": "06e56f0c-0160-40a7-b96a-5cda42fdf788",
               "type": "text/javascript",
               "exec": [
                 "function status(fn) {",
@@ -79,7 +79,7 @@
                 "  pm.expect(summary.webAssemblyCompile.value).to.equal('missing');",
                 "});"
               ],
-              "_lastExecutionId": "f6fcad61-3530-424a-ad24-3f8c527ea223"
+              "_lastExecutionId": "689e2ea1-5ddc-43d4-9091-7de32d58c7f1"
             }
           }
         ]
@@ -94,11 +94,11 @@
     }
   },
   "environment": {
-    "id": "05abab70-4de1-4333-a1af-0c6b88599cc3",
+    "id": "59a10804-1e32-4b5e-818b-3410fbd6641c",
     "values": [
       {
         "type": "any",
-        "value": "http://127.0.0.1:42371",
+        "value": "http://127.0.0.1:41489",
         "key": "baseUrl"
       },
       {
@@ -109,7 +109,7 @@
     ]
   },
   "globals": {
-    "id": "d284970f-c0e6-4329-a015-a1e4fde16711",
+    "id": "226f3125-c4fc-4834-bc3d-89a42906fff7",
     "values": []
   },
   "run": {
@@ -161,9 +161,9 @@
       }
     },
     "timings": {
-      "responseAverage": 11,
-      "responseMin": 11,
-      "responseMax": 11,
+      "responseAverage": 12,
+      "responseMin": 12,
+      "responseMax": 12,
       "responseSd": 0,
       "dnsAverage": 0,
       "dnsMin": 0,
@@ -173,8 +173,8 @@
       "firstByteMin": 0,
       "firstByteMax": 0,
       "firstByteSd": 0,
-      "started": 1777389876717,
-      "completed": 1777389876748
+      "started": 1777558281913,
+      "completed": 1777558281947
     },
     "executions": [
       {
@@ -187,11 +187,11 @@
           "eof": false,
           "bof": true,
           "cr": false,
-          "ref": "5d0647dc-919b-4bd1-b56c-9189e72e358a",
-          "httpRequestId": "f61633c2-178f-4cd0-a2f3-63be956a9b59"
+          "ref": "93990a1c-8423-4036-86ba-53695fd5c0fd",
+          "httpRequestId": "77933d81-48f9-4361-b04f-d41d22b9e873"
         },
         "item": {
-          "id": "43de5bec-bf44-4978-9b30-c3f21db2d2d5",
+          "id": "74a95b3b-5c69-46f4-8f11-b866de10da1f",
           "name": "Dynamic Code And Host Globals",
           "request": {
             "url": {
@@ -211,7 +211,7 @@
             {
               "listen": "test",
               "script": {
-                "id": "26a9f95d-c0c7-4622-b599-8ce50c51ff5e",
+                "id": "06e56f0c-0160-40a7-b96a-5cda42fdf788",
                 "type": "text/javascript",
                 "exec": [
                   "function status(fn) {",
@@ -265,7 +265,7 @@
                   "  pm.expect(summary.webAssemblyCompile.value).to.equal('missing');",
                   "});"
                 ],
-                "_lastExecutionId": "f6fcad61-3530-424a-ad24-3f8c527ea223"
+                "_lastExecutionId": "689e2ea1-5ddc-43d4-9091-7de32d58c7f1"
               }
             }
           ]
@@ -273,7 +273,7 @@
         "request": {
           "url": {
             "protocol": "http",
-            "port": "42371",
+            "port": "41489",
             "path": [
               "json"
             ],
@@ -304,12 +304,12 @@
             },
             {
               "key": "Postman-Token",
-              "value": "e902b496-08cb-477c-beee-cda2a4f96d58",
+              "value": "3d07f6f6-faa7-444a-a5f5-d646cbe1f29c",
               "system": true
             },
             {
               "key": "Host",
-              "value": "127.0.0.1:42371",
+              "value": "127.0.0.1:41489",
               "system": true
             },
             {
@@ -326,7 +326,7 @@
           "method": "GET"
         },
         "response": {
-          "id": "5dc6510c-571c-451d-b3a2-6beee7755fd2",
+          "id": "9e105746-578f-4ebf-a5da-eac3b6fc8139",
           "status": "OK",
           "code": 200,
           "header": [
@@ -340,7 +340,7 @@
             },
             {
               "key": "Date",
-              "value": "Tue, 28 Apr 2026 15:24:36 GMT"
+              "value": "Thu, 30 Apr 2026 14:11:21 GMT"
             },
             {
               "key": "Connection",
@@ -462,42 +462,42 @@
               34,
               58,
               34,
-              101,
-              57,
-              48,
-              50,
-              98,
-              52,
-              57,
-              54,
-              45,
-              48,
-              56,
-              99,
-              98,
-              45,
-              52,
-              55,
-              55,
-              99,
-              45,
-              98,
-              101,
-              101,
-              101,
-              45,
-              99,
+              51,
               100,
-              97,
-              50,
-              97,
-              52,
+              48,
+              55,
               102,
-              57,
               54,
-              100,
+              102,
+              54,
+              45,
+              102,
+              97,
+              97,
+              55,
+              45,
+              52,
+              52,
+              52,
+              97,
+              45,
+              97,
               53,
-              56,
+              102,
+              53,
+              45,
+              100,
+              54,
+              52,
+              54,
+              99,
+              98,
+              101,
+              49,
+              102,
+              50,
+              57,
+              99,
               34,
               44,
               34,
@@ -519,10 +519,10 @@
               49,
               58,
               52,
-              50,
-              51,
-              55,
               49,
+              52,
+              56,
+              57,
               34,
               44,
               34,
@@ -639,10 +639,10 @@
             ]
           },
           "cookie": [],
-          "responseTime": 11,
+          "responseTime": 12,
           "responseSize": 282
         },
-        "id": "43de5bec-bf44-4978-9b30-c3f21db2d2d5",
+        "id": "74a95b3b-5c69-46f4-8f11-b866de10da1f",
         "assertions": [
           {
             "assertion": "dynamic code and host-like globals match Postman sandbox profile",

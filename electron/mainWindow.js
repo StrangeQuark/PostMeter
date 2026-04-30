@@ -1,6 +1,14 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { BrowserWindow } = require('electron');
+const {
+  APP_PROTOCOL_HOST,
+  APP_PROTOCOL_SCHEME,
+  APP_RENDERER_CSP,
+  APP_RENDERER_PATHNAME,
+  createAppRendererUrl,
+  isTrustedAppRendererUrl
+} = require('./appProtocol');
 const { safeFilename } = require('./fileDialogs');
 
 function createMainWindow(app, options = {}) {
@@ -21,13 +29,49 @@ function createMainWindow(app, options = {}) {
     }
   });
 
+  const rendererUrl = options.rendererUrl || createAppRendererUrl(loadQuery(env));
+
+  bindNavigationGuards(mainWindow, rendererUrl);
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  mainWindow.webContents.session.setPermissionCheckHandler(() => false);
   mainWindow.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => {
     callback(false);
   });
   bindSmokeHooks(app, mainWindow, env);
-  mainWindow.loadFile(options.indexPath || path.join(__dirname, '..', 'src', 'renderer', 'index.html'), loadOptions(env));
+  mainWindow.loadURL(rendererUrl);
   return mainWindow;
+}
+
+function bindNavigationGuards(mainWindow, trustedRendererUrl) {
+  mainWindow.webContents.on('will-navigate', (event, targetUrl) => {
+    if (!isAllowedRendererNavigation(targetUrl, trustedRendererUrl)) {
+      event.preventDefault();
+    }
+  });
+  mainWindow.webContents.on('will-attach-webview', (event) => {
+    event.preventDefault();
+  });
+}
+
+function isAllowedRendererNavigation(targetUrl, trustedRendererUrl = createAppRendererUrl()) {
+  const trusted = normalizedRendererNavigationUrl(trustedRendererUrl);
+  if (!trusted) {
+    return false;
+  }
+  return normalizedRendererNavigationUrl(targetUrl) === trusted;
+}
+
+function normalizedRendererNavigationUrl(value) {
+  if (!isTrustedAppRendererUrl(value)) {
+    return '';
+  }
+  try {
+    const parsed = new URL(String(value || ''));
+    parsed.hash = '';
+    return parsed.toString();
+  } catch {
+    return '';
+  }
 }
 
 function bindSmokeHooks(app, mainWindow, env) {
@@ -81,8 +125,24 @@ async function runStartupSmokeProbe(app, mainWindow, env) {
   const markerValue = env.POSTMETER_PACKAGED_SMOKE_MARKER || 'startup-smoke';
   const expectReload = env.POSTMETER_PACKAGED_SMOKE_EXPECT_RELOAD === '1';
   const requiredPreloadApi = requiredPreloadApiSurface();
+  const expectedRenderer = {
+    csp: APP_RENDERER_CSP,
+    hostname: APP_PROTOCOL_HOST,
+    pathname: APP_RENDERER_PATHNAME,
+    protocol: `${APP_PROTOCOL_SCHEME}:`
+  };
   await mainWindow.webContents.executeJavaScript(`
     (async function () {
+      const expectedRenderer = ${JSON.stringify(expectedRenderer)};
+      if (window.location.protocol !== expectedRenderer.protocol
+        || window.location.hostname !== expectedRenderer.hostname
+        || window.location.pathname !== expectedRenderer.pathname) {
+        throw new Error('Packaged smoke renderer URL is not the trusted app protocol URL: ' + window.location.href);
+      }
+      const cspMeta = document.querySelector('meta[http-equiv="Content-Security-Policy"]');
+      if (!cspMeta || cspMeta.content !== expectedRenderer.csp) {
+        throw new Error('Packaged smoke renderer CSP meta tag does not match the app protocol policy.');
+      }
       if (!window.postmeter || !window.postmeter.app || !window.postmeter.workspace) {
         throw new Error('Packaged smoke preload API is unavailable.');
       }
@@ -258,21 +318,19 @@ function bindTitleSmoke(app, mainWindow, options) {
   });
 }
 
-function loadOptions(env) {
+function loadQuery(env) {
   const isUiWorkflowSmoke = env.POSTMETER_UI_WORKFLOW_SMOKE === '1';
   const isUiRegressionSmoke = env.POSTMETER_UI_REGRESSION_SMOKE === '1';
   const isUiSnapshotSmoke = env.POSTMETER_UI_SNAPSHOT_SMOKE === '1';
   const isUiOauthSmoke = env.POSTMETER_UI_OAUTH_SMOKE === '1';
   return isUiWorkflowSmoke || isUiRegressionSmoke || isUiSnapshotSmoke || isUiOauthSmoke
     ? {
-        query: {
-          uiWorkflowSmoke: isUiWorkflowSmoke ? '1' : '',
-          uiRegressionSmoke: isUiRegressionSmoke ? '1' : '',
-          uiSnapshotSmoke: isUiSnapshotSmoke ? '1' : '',
-          uiOauthSmoke: isUiOauthSmoke ? '1' : '',
-          uiWorkflowBaseUrl: env.POSTMETER_UI_WORKFLOW_BASE_URL || '',
-          uiOauthBaseUrl: env.POSTMETER_UI_OAUTH_BASE_URL || ''
-        }
+        uiWorkflowSmoke: isUiWorkflowSmoke ? '1' : '',
+        uiRegressionSmoke: isUiRegressionSmoke ? '1' : '',
+        uiSnapshotSmoke: isUiSnapshotSmoke ? '1' : '',
+        uiOauthSmoke: isUiOauthSmoke ? '1' : '',
+        uiWorkflowBaseUrl: env.POSTMETER_UI_WORKFLOW_BASE_URL || '',
+        uiOauthBaseUrl: env.POSTMETER_UI_OAUTH_BASE_URL || ''
       }
     : undefined;
 }
@@ -359,10 +417,14 @@ function nativeImageHasVariance(image) {
 }
 
 module.exports = {
+  bindNavigationGuards,
   createMainWindow,
   expectedDefaultUserDataRoot,
+  isAllowedRendererNavigation,
   isPathInside,
+  loadQuery,
   nativeImageHasVariance,
+  normalizedRendererNavigationUrl,
   requiredPreloadApiSurface,
   runStartupSmokeProbe,
   validateSmokeUserDataPath,

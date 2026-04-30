@@ -71,7 +71,7 @@ Linux builds produce AppImage and deb artifacts, Windows builds produce an unsig
 ## Project Layout
 
 - `electron/main.js` owns desktop lifecycle, window hardening, and IPC registration.
-- `electron/preload.js` exposes the explicit renderer API.
+- `electron/preload.js` exposes the explicit main-frame renderer API.
 - `src/renderer/` contains the browser UI.
 - `src/core/` contains request execution, persistence, import/export, and load-test logic.
 - `scripts/postmeter-cli.js` is the headless CLI runner.
@@ -127,6 +127,7 @@ POSTMETER_DATA_PATH=/tmp/postmeter-workspace.json npm start
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Renderer, Electron, and core ownership boundaries. |
 | [docs/SANDBOX_CONTRACT.md](docs/SANDBOX_CONTRACT.md) | Sandbox contract for script security and compatibility. |
 | [docs/RELEASE_READINESS.md](docs/RELEASE_READINESS.md) | Production readiness dashboard, release gates, and native-runner validation policy. |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | User-facing diagnosis notes for vault prompts, encrypted vault storage, and recovery behavior. |
 | [docs/OAUTH_PROVIDER_CERTIFICATION.md](docs/OAUTH_PROVIDER_CERTIFICATION.md) | Manual outbound OAuth provider certification plan. |
 | [SECURITY.md](SECURITY.md) | Security boundaries, reporting, and release-gate summary. |
 | [NEXT_STEPS.MD](NEXT_STEPS.MD) | Backlog, readiness gaps, and next-iteration priorities. |
@@ -141,12 +142,12 @@ POSTMETER_UPDATE_URL=https://api.github.com/repos/OWNER/REPO/releases/latest npm
 
 ## Security And Status
 
-- Renderer `nodeIntegration` is disabled, `contextIsolation` is enabled, and the renderer is sandboxed.
+- Renderer `nodeIntegration` is disabled, `contextIsolation` is enabled, the renderer is sandboxed, and app UI assets are served through an allowlisted secure `postmeter-app://bundle` protocol with CSP, `nosniff`, and `no-referrer` response headers instead of `file://`.
 - The renderer talks to core logic only through explicit preload IPC bindings.
 - Request scripts run in constrained child processes with brokered privileged APIs, Postman-compatible test/assertion/variable/dynamic-variable behavior, version-pinned Postman bundled packages, global/module/Collection-SDK object facades, GraphQL hook execution, live parent-owned gRPC hook transport including parent-side PEM and PFX/P12 mTLS material handling, local mock `pm.mock`/`pm.state` support, reviewed package-cache loading with parent-side fetch/review, isolated Handlebars visualizer rendering with reviewed assets, metadata-only vault prompts and scoped vault grants, hardened script bridges, fail-closed Node permission flags in production runtimes, Linux `bubblewrap` OS isolation plus seccomp syscall policy, Windows AppContainer helper isolation, macOS seatbelt isolation, timeouts, and bounded resources.
 - Postman import parity is tracked by a generated matrix at `docs/postman-sandbox-parity-matrix.json`; `npm run postman:parity:validate` checks the matrix, and `npm run postman:parity:diff` exercises the HTTP-core, broad, dynamic-host-globals, runtime-limits, HttpOnly-cookies, sendRequest-advanced, and file-binding Newman-compatible differential harness. The official-docs sweep is separately committed at `docs/postman-docs-coverage-audit.json`; `npm run postman:docs:validate` gates the checked-in token mapping, and `npm run postman:docs:live` refetches official Postman/Newman docs to catch upstream drift. `npm run postman:parity:claim` is green for the tracked default Postman import profile with zero default-import blockers; behavior-sensitive Desktop rows are backed by row-specific evidence metadata.
 - Current audited parity targets are Postman Desktop 11.71.7 with `postman-sandbox@6.2.2` and Postman Runtime 7.50.0, plus Newman 6.2.2 with Postman Runtime 7.39.1 for Newman-compatible surfaces. The claim covers the current official Postman/Newman scripting docs and those audited runtime targets, not undocumented future Postman releases.
-- Checked-in Newman evidence lives under `test/fixtures/postman/newman-reports/` with raw reporter JSON plus normalized PostMeter/Newman comparison output for the approved differential suites.
+- Checked-in Newman evidence lives under `test/fixtures/postman/newman-reports/` with raw Newman reporter JSON, raw PostMeter harness JSON, and normalized PostMeter/Newman comparison output for the approved differential suites. Refresh it with `npm run postman:newman-reports:refresh -- --download-newman`; validate the committed evidence offline with `npm run postman:newman-reports:validate`.
 - Production readiness is tracked at `docs/production-readiness-matrix.json`; `npm run production:readiness:validate` keeps the dashboard fresh, `npm run production:readiness:claim` is the fail-closed stable-release gate, and beta/RC thresholds are available through `npm run production:readiness:claim:beta` and `npm run production:readiness:claim:rc`. Rows marked `external-validation-required` need native GitHub Actions runner logs, maintainer-owned provider credentials, or signing assets before they can become stable-ready.
 - Platform OS sandbox completion is tracked separately at `docs/os-sandbox-platform-matrix.json`; `npm run sandbox:platform:validate` keeps the matrix fresh, and `npm run sandbox:platform:claim` must pass before claiming equivalent full OS sandbox coverage on Linux, Windows, and macOS.
 - Workspace data is stored as plain JSON without local encryption or redacted export modes. Script vault secrets are stored separately in encrypted per-workspace vault files when OS-backed desktop encryption is available.
