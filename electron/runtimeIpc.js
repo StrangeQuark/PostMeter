@@ -107,6 +107,8 @@ function registerRuntimeIpc(options = {}) {
         trustedCapabilities: workspace.settings?.sandbox?.trustedCapabilities || {},
         vault: getVaultStore(workspaceId),
         vaultPrompt: getVaultPrompt(workspaceId),
+        workspaceId,
+        workspaceName: workspaceId,
         stopOnFailure: config.stopOnFailure === true,
         onProgress: (progress) => {
           assertRunnerProgressPayload(progress);

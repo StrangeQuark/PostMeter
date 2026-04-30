@@ -127,6 +127,7 @@ POSTMETER_DATA_PATH=/tmp/postmeter-workspace.json npm start
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Renderer, Electron, and core ownership boundaries. |
 | [docs/SANDBOX_CONTRACT.md](docs/SANDBOX_CONTRACT.md) | Sandbox contract for script security and compatibility. |
 | [docs/RELEASE_READINESS.md](docs/RELEASE_READINESS.md) | Production readiness dashboard, release gates, and native-runner validation policy. |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | User-facing diagnosis notes for vault prompts, encrypted vault storage, and recovery behavior. |
 | [docs/OAUTH_PROVIDER_CERTIFICATION.md](docs/OAUTH_PROVIDER_CERTIFICATION.md) | Manual outbound OAuth provider certification plan. |
 | [SECURITY.md](SECURITY.md) | Security boundaries, reporting, and release-gate summary. |
 | [NEXT_STEPS.MD](NEXT_STEPS.MD) | Backlog, readiness gaps, and next-iteration priorities. |

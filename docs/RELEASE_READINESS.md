@@ -92,7 +92,7 @@ Release builds are unsigned until maintainer-controlled certificates exist. Wind
 - Electron security, workspace durability, and non-Postman compatibility matrices.
 - Checked-in raw and normalized `newman@6.2.2` differential evidence under `test/fixtures/postman/newman-reports/`.
 - Shared parent-side PFX/P12 extraction and live HTTP/gRPC mTLS tests.
-- Metadata-only renderer vault prompt flow with request, collection, workspace, deny, and reset decisions.
+- Metadata-only renderer vault prompt flow with request, collection, workspace, deny, and reset decisions, serialized concurrent prompts, prompt-response sender binding, and prompted-workspace grant persistence.
 
 ## Known Release Blockers
 

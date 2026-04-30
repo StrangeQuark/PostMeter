@@ -4,7 +4,8 @@ const { walkRequests } = require('./models');
 const {
   createScriptedRequestState,
   emptyScriptResult,
-  runScriptedRequestLifecycle
+  runScriptedRequestLifecycle,
+  scriptResultFailureMessage
 } = require('./scriptedRequestLifecycle');
 const { runPostmanScriptIsolated } = require('./scriptSandbox');
 const {
@@ -85,18 +86,23 @@ async function runCollection(collection, environment, options = {}) {
         sandboxPackages: options.sandboxPackages || options.scriptOptions?.sandboxPackages || [],
         clientCertificates: collection?.certificates || [],
         fileBindings: options.fileBindings || options.scriptOptions?.fileBindings || [],
-        vault: options.vault || options.scriptOptions?.vault
+        vault: options.vault || options.scriptOptions?.vault,
+        vaultPrompt: options.vaultPrompt || options.scriptOptions?.vaultPrompt
       },
       sandboxPackages: options.sandboxPackages || options.scriptOptions?.sandboxPackages || [],
       clientCertificates: collection?.certificates || [],
       fileBindings: options.fileBindings || options.scriptOptions?.fileBindings || [],
       vault: options.vault || options.scriptOptions?.vault,
+      vaultPrompt: options.vaultPrompt || options.scriptOptions?.vaultPrompt,
       trustedCapabilities: options.trustedCapabilities || options.scriptOptions?.trustedCapabilities || {},
       iterationData: options.iterationData || [],
       collectionId: collection?.id || '',
+      collectionName: collection?.name || '',
       executionLocation: executionLocationForEntry(collection, targetEntry),
       iteration: options.iteration || 0,
-      iterationCount: options.iterationCount || 1
+      iterationCount: options.iterationCount || 1,
+      workspaceId: options.workspaceId || options.scriptOptions?.workspaceId || '',
+      workspaceName: options.workspaceName || options.scriptOptions?.workspaceName || ''
     });
     if (Array.isArray(scriptedRequest.cookies)) {
       scopeState.cookies = scriptedRequest.cookies;
@@ -148,12 +154,16 @@ async function runCollection(collection, environment, options = {}) {
           fileBindings: options.fileBindings || options.scriptOptions?.fileBindings || [],
           trustedCapabilities: options.trustedCapabilities || options.scriptOptions?.trustedCapabilities || {},
           vault: options.vault || options.scriptOptions?.vault,
+          vaultPrompt: options.vaultPrompt || options.scriptOptions?.vaultPrompt,
           runRequest: createRunRequestBroker(0),
           iterationData: options.iterationData || [],
           collectionId: collection?.id || '',
+          collectionName: collection?.name || '',
           executionLocation: executionLocationForEntry(collection, entry),
           iteration: options.iteration || 0,
-          iterationCount: options.iterationCount || 1
+          iterationCount: options.iterationCount || 1,
+          workspaceId: options.workspaceId || options.scriptOptions?.workspaceId || '',
+          workspaceName: options.workspaceName || options.scriptOptions?.workspaceName || ''
         }
       );
       if (Array.isArray(scriptedRequest.cookies)) {
@@ -437,6 +447,7 @@ function skippedResult(entry, startedAt, scriptedRequest) {
 }
 
 function scriptFailureResult(entry, startedAt, preRequestScriptResult, localVariables = []) {
+  const error = scriptResultFailureMessage(preRequestScriptResult, 'Pre-request script failed.');
   return {
     requestId: entry.request.id,
     requestName: entry.request.name,
@@ -450,7 +461,7 @@ function scriptFailureResult(entry, startedAt, preRequestScriptResult, localVari
     testScriptResult: emptyScriptResult(),
     extractedVariables: [],
     localVariables,
-    error: preRequestScriptResult.error || 'Pre-request script failed.'
+    error
   };
 }
 

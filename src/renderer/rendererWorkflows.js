@@ -590,6 +590,7 @@
       const requestContext = createRequestContext(request, environment);
       try {
         const response = await windowObject.postmeter.request.send(request, environment);
+        const failedBeforeSend = response?.requestSent === false && response?.preRequestScriptResult?.passed === false;
         if (isActiveWorkspaceContext(requestContext)) {
           const targetRequest = findContextRequest(requestContext);
           if (response.updatedAuth && targetRequest) {
@@ -603,23 +604,25 @@
             renderCookieJarEditor();
           }
           applySingleRequestScriptMutations(response, requestContext);
-          state.lastResponse = { ...response, requestId: requestContext.requestId };
+          state.lastResponse = failedBeforeSend ? null : { ...response, requestId: requestContext.requestId };
           updateCaptureResponseButton();
           displayResponse(response);
-          state.workspace.history = [
-            {
-              timestamp: new Date().toISOString(),
-              method: request.method,
-              url: response.finalUrl,
-              statusCode: response.statusCode,
-              durationMillis: response.durationMillis
-            },
-            ...(state.workspace.history || [])
-          ].slice(0, 100);
-          renderHistory();
+          if (!failedBeforeSend) {
+            state.workspace.history = [
+              {
+                timestamp: new Date().toISOString(),
+                method: request.method,
+                url: response.finalUrl,
+                statusCode: response.statusCode,
+                durationMillis: response.durationMillis
+              },
+              ...(state.workspace.history || [])
+            ].slice(0, 100);
+            renderHistory();
+          }
           syncSavedRequestContextTabs(requestContext);
         }
-        setStatus('Request completed.');
+        setStatus(failedBeforeSend ? 'Request failed.' : 'Request completed.');
       } catch (error) {
         const message = error.message || String(error);
         if (isActiveWorkspaceContext(requestContext)) {
@@ -631,8 +634,7 @@
             element('visualizerFrame').srcdoc = '';
           }
         }
-        setStatus('Request failed.');
-        notifyUser('Request Failed', message);
+        setStatus(`Request failed: ${message}`);
       }
     }
 

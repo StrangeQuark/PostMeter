@@ -1,4 +1,6 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const test = require('node:test');
 const {
   bindUi,
@@ -132,6 +134,106 @@ test('renderer bootstrap binds auth input and modal draft confirmation events', 
   assert.deepEqual(calls.authType, ['oauth2']);
   assert.equal(calls.authInput, 1);
   assert.deepEqual(calls.resolveModal, ['collection-1', 'collection-2']);
+});
+
+test('renderer bootstrap binds workspace sandbox control buttons', () => {
+  const calls = [];
+  const controls = [
+    ['addSandboxPackageButton', 'add-package', 'onAddSandboxPackage'],
+    ['fetchSandboxPackageButton', 'fetch-package', 'onFetchSandboxPackage'],
+    ['refreshSandboxPackagesButton', 'refresh-packages', 'onRefreshSandboxPackages'],
+    ['bindSandboxFileButton', 'bind-file', 'onBindSandboxFile'],
+    ['refreshSandboxFilesButton', 'refresh-files', 'onRefreshSandboxFiles'],
+    ['bindVaultSecretButton', 'bind-vault', 'onBindVaultSecret'],
+    ['refreshVaultMetadataButton', 'refresh-vault', 'onRefreshVaultMetadata'],
+    ['resetVaultButton', 'reset-vault', 'onResetVault']
+  ];
+  const elements = new Map(controls.map(([id]) => [id, createElement()]));
+  const options = {
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} }
+  };
+  for (const [, label, optionName] of controls) {
+    options[optionName] = () => calls.push(label);
+  }
+
+  bindUi(options);
+  for (const [id] of controls) {
+    elements.get(id).dispatch('click');
+  }
+
+  assert.deepEqual(calls, controls.map(([, label]) => label));
+});
+
+test('renderer bootstrap binds vault prompt decision buttons', () => {
+  const decisions = [];
+  const controls = [
+    'denyVaultPromptButton',
+    'allowVaultPromptRequestButton',
+    'allowVaultPromptCollectionButton',
+    'allowVaultPromptWorkspaceButton',
+    'resetVaultPromptGrantsButton'
+  ];
+  const elements = new Map(controls.map((id) => [id, createElement()]));
+
+  bindUi({
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} },
+    onResolveVaultPrompt: (decision) => decisions.push(decision)
+  });
+
+  for (const id of controls) {
+    elements.get(id).dispatch('click');
+  }
+
+  assert.deepEqual(decisions, [
+    { granted: false, scope: 'request' },
+    { granted: true, scope: 'request' },
+    { granted: true, scope: 'collection' },
+    { granted: true, scope: 'workspace' },
+    { granted: false, reset: true, scope: 'request' }
+  ]);
+});
+
+test('renderer supplies handlers for all workspace sandbox controls', () => {
+  const rendererSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/renderer.js'), 'utf8');
+  for (const optionName of [
+    'onAddSandboxPackage',
+    'onFetchSandboxPackage',
+    'onRefreshSandboxPackages',
+    'onBindSandboxFile',
+    'onRefreshSandboxFiles',
+    'onBindVaultSecret',
+    'onRefreshVaultMetadata',
+    'onResetVault'
+  ]) {
+    assert.match(rendererSource, new RegExp(`${optionName}:`), `${optionName} should be passed to bindUi`);
+  }
+});
+
+test('renderer loads vault prompt queue before the app renderer', () => {
+  const indexHtml = fs.readFileSync(path.join(__dirname, '../../src/renderer/index.html'), 'utf8');
+  const queueIndex = indexHtml.indexOf('src="vaultPromptQueue.js"');
+  const rendererIndex = indexHtml.indexOf('src="renderer.js"');
+  assert.ok(queueIndex >= 0, 'vaultPromptQueue.js should be loaded');
+  assert.ok(rendererIndex >= 0, 'renderer.js should be loaded');
+  assert.ok(queueIndex < rendererIndex, 'vaultPromptQueue.js should load before renderer.js');
 });
 
 function createElement({ tagName = 'BUTTON', value = '' } = {}) {

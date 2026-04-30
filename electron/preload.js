@@ -117,11 +117,14 @@ contextBridge.exposeInMainWorld('postmeter', {
 function safeVaultPromptPayload(payload = {}) {
   return {
     collectionId: stringField(payload.collectionId, 256),
+    collectionName: stringField(payload.collectionName, 256),
     key: stringField(payload.key, 256),
     operation: stringField(payload.operation, 64),
     promptId: stringField(payload.promptId, 128),
     requestId: stringField(payload.requestId, 256),
-    requestName: stringField(payload.requestName, 256)
+    requestName: stringField(payload.requestName, 256),
+    workspaceId: stringField(payload.workspaceId, 256),
+    workspaceName: stringField(payload.workspaceName, 256)
   };
 }
 

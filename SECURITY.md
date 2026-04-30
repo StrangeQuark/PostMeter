@@ -16,7 +16,7 @@ Linux script workers use `bubblewrap` plus a dangerous-syscall seccomp policy wh
 
 ## Vault And Secrets
 
-Vault values are stored outside workspace JSON in per-workspace encrypted files when Electron `safeStorage` has OS-backed encryption. The renderer and scripts never receive vault file paths, encryption keys, or secret enumeration through the prompt flow. The renderer vault prompt only receives metadata: request name/id, collection id, operation, and secret key name.
+Vault values are stored outside workspace JSON in per-workspace encrypted files when Electron `safeStorage` has OS-backed encryption. The renderer and scripts never receive vault file paths, encryption keys, ciphertext, storage handles, or secret enumeration through the prompt flow. The renderer vault prompt only receives bounded metadata: request name/id, collection name/id, workspace name/id, operation, and secret key name. Concurrent prompt requests are queued so each decision is applied to the matching prompt and workspace, and prompt responses are accepted only from the renderer `webContents` that received the prompt.
 
 Diagnostics and logs must not include secrets, tokens, vault values, auth headers, cookies, request/response bodies, or sensitive local paths by default.
 

@@ -282,8 +282,12 @@ Required behavior:
 - Encrypts vault values with Electron `safeStorage` in desktop builds and fails closed if OS-backed encryption is unavailable or Electron selected the Linux `basic_text` backend.
 - Enforces secret key, secret value, secret count, and per-script vault operation limits.
 - Supports workspace, collection, and request grants with explicit collection/request denial overrides. Denials win over workspace-wide grants.
-- Records bounded audit metadata for vault mutations without recording secret values.
-- Provides desktop workspace UX for local secret binding, metadata refresh, reset, and audit review. These operations are parent-side IPC operations and never expose vault paths, encryption keys, or secret enumeration APIs to scripts.
+- If no grant or denial exists during a desktop single-request send, collection run, or nested lifecycle execution, the parent broker returns a prompt-required decision to the desktop shell instead of silently granting access or failing without user context.
+- The desktop prompt receives bounded request, collection, workspace, operation, and secret-key metadata only. It never receives secret values, vault file paths, encryption keys, ciphertext, storage handles, or secret enumeration. Concurrent script-triggered prompt requests are queued in the renderer so each broker prompt resolves against its own prompt ID, and the main process accepts prompt responses only from the renderer `webContents` that received that prompt.
+- Prompt grant decisions persist as scoped vault-grant metadata on the workspace that produced the prompt. Request grants stay request-scoped, collection grants stay collection-scoped, workspace grants stay workspace-scoped, and explicit request/collection denials continue to override broader grants.
+- Cancellation and denial fail the vault call and preserve the Postman-compatible behavior that code after the denied `pm.vault` call does not run.
+- Records bounded audit metadata for prompt grant, prompt denial, prompt reset, `get`, `set`, `unset`, denied-after-call, and unavailable-encryption outcomes without recording secret values.
+- Provides desktop workspace UX for local secret binding, metadata refresh, reset, prompt reset, and audit review. These operations are parent-side IPC operations and never expose vault paths, encryption keys, or secret enumeration APIs to scripts.
 
 Security restrictions:
 
@@ -435,7 +439,7 @@ Vault parity:
 - Keep vault storage encrypted outside workspace exports. Imported/exported Postman collections must never include vault plaintext or PostMeter vault ciphertext.
 - Document desktop-only scope: Postman scheduled runs, monitors, Postman CLI, Newman, GraphQL, and gRPC do not support `pm.vault`; PostMeter must mirror that compatibility boundary unless deliberately adding extra support outside the Postman claim.
 - Decide whether external vault integrations are required for parity. If PostMeter does not implement external vault providers, the contract must define an import-time local-secret binding flow that produces the same script outputs without claiming provider integration parity.
-- Current implementation status: vault operations are promise-based broker calls with scoped grants and denial overrides, encrypted per-workspace storage, unavailable-encryption fail-closed behavior, bounded audit metadata, workspace UI for local secret binding, metadata refresh, reset, and audit review, and a metadata-only desktop prompt flow for request, collection, workspace, deny, and reset decisions. Prompt grants persist only scoped metadata; secret values, vault paths, encryption keys, and secret enumeration never cross into the renderer or script worker. External vault provider integrations are not implemented.
+- Current implementation status: vault operations are promise-based broker calls with scoped grants and denial overrides, encrypted per-workspace storage, unavailable-encryption fail-closed behavior, bounded audit metadata, workspace UI for local secret binding, metadata refresh, reset, and audit review, and a metadata-only desktop prompt flow for request, collection, workspace, deny, and reset decisions during single-request sends, collection runs, and nested request lifecycle execution. Concurrent renderer prompts are serialized to avoid prompt-ID races, and prompt responses are bound to the prompting `webContents`. Prompt grants persist only scoped metadata on the prompted workspace; denied/cancelled prompts fail the vault call before subsequent script code runs; secret values, vault paths, encryption keys, ciphertext, storage handles, and secret enumeration never cross into the renderer or script worker. External vault provider integrations are not implemented.
 
 Protocol-specific parity:
 

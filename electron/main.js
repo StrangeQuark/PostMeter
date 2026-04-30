@@ -19,7 +19,8 @@ const { registerOAuthIpc } = require('./oauthIpc');
 const {
   applyVaultPromptDecisionToWorkspace,
   createVaultPrompt,
-  registerVaultPromptIpc
+  registerVaultPromptIpc,
+  workspaceIdForVaultPromptDecision
 } = require('./vaultPrompt');
 const {
   assertFileOperationResultPayload,
@@ -215,10 +216,11 @@ async function persistVaultPromptDecision(decision, payload) {
   if (decision?.granted !== true && decision?.reset !== true) {
     return;
   }
+  const promptWorkspaceId = workspaceIdForVaultPromptDecision(payload, workspaceStore?.getWorkspaceId?.() || '');
   await mutateWorkspace(async (currentWorkspace) => (
     applyVaultPromptDecisionToWorkspace(currentWorkspace, payload, decision)
   ), {
-    workspaceId: workspaceStore?.getWorkspaceId?.() || ''
+    workspaceId: promptWorkspaceId
   });
 }
 

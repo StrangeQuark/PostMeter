@@ -8,10 +8,13 @@ function registerVaultPromptIpc(options = {}) {
   if (!ipcMain || typeof ipcMain.handle !== 'function') {
     return;
   }
-  ipcMain.handle('vault:prompt-response', async (_event, promptId, decision = {}) => {
+  ipcMain.handle('vault:prompt-response', async (event, promptId, decision = {}) => {
     const id = String(promptId || '');
     const pending = pendingPrompts.get(id);
     if (!pending) {
+      return { ok: false };
+    }
+    if (pending.sender && event?.sender !== pending.sender) {
       return { ok: false };
     }
     pendingPrompts.delete(id);
@@ -57,8 +60,14 @@ function promptViaRenderer(mainWindow, payload) {
       resolve({ granted: false, scope: 'request' });
     }, PROMPT_TIMEOUT_MILLIS);
     timeout.unref?.();
-    pendingPrompts.set(promptId, { resolve, timeout });
-    mainWindow.webContents.send('vault:prompt', promptPayload);
+    pendingPrompts.set(promptId, { resolve, sender: mainWindow.webContents, timeout });
+    try {
+      mainWindow.webContents.send('vault:prompt', promptPayload);
+    } catch {
+      pendingPrompts.delete(promptId);
+      clearTimeout(timeout);
+      resolve(null);
+    }
   });
 }
 
@@ -74,7 +83,11 @@ async function promptViaDialog(dialog, mainWindow, payload) {
     noLink: true,
     title: 'Allow script vault access?',
     message: `Allow "${payload.requestName}" to ${payload.operation} PostMeter vault secret "${payload.key}"?`,
-    detail: 'The script receives only the requested secret value through the broker. Vault storage paths, encryption keys, and secret lists are never exposed to scripts.'
+    detail: [
+      `Collection: ${payload.collectionName || payload.collectionId || 'Current collection'}`,
+      `Workspace: ${payload.workspaceName || payload.workspaceId || 'Current workspace'}`,
+      'The script receives only the requested secret value through the broker. Vault storage paths, encryption keys, and secret lists are never exposed to scripts.'
+    ].join('\n')
   });
   if (result.response === 3) {
     return { granted: true, scope: 'workspace' };
@@ -91,10 +104,13 @@ async function promptViaDialog(dialog, mainWindow, payload) {
 function safePromptPayload(payload = {}) {
   return {
     collectionId: stringField(payload.collectionId, 256),
+    collectionName: stringField(payload.collectionName, 256),
     key: stringField(payload.key, 256),
     operation: stringField(payload.operation || 'access', 64),
     requestId: stringField(payload.requestId, 256),
-    requestName: stringField(payload.requestName || payload.requestId || 'this request', 256)
+    requestName: stringField(payload.requestName || payload.requestId || 'this request', 256),
+    workspaceId: stringField(payload.workspaceId, 256),
+    workspaceName: stringField(payload.workspaceName || payload.workspaceId, 256)
   };
 }
 
@@ -140,6 +156,10 @@ function applyVaultPromptDecisionToWorkspace(workspace = {}, payload = {}, decis
   return next;
 }
 
+function workspaceIdForVaultPromptDecision(payload = {}, fallbackWorkspaceId = '') {
+  return stringField(payload?.workspaceId || fallbackWorkspaceId, 256);
+}
+
 function defaultVaultGrants() {
   return {
     workspace: false,
@@ -167,5 +187,6 @@ module.exports = {
   applyVaultPromptDecisionToWorkspace,
   createVaultPrompt,
   normalizeVaultPromptDecision,
-  registerVaultPromptIpc
+  registerVaultPromptIpc,
+  workspaceIdForVaultPromptDecision
 };

@@ -371,3 +371,56 @@ test('persists and exports workspace values as plain JSON', async () => {
   assert.equal(exported.cookies[0].source, 'postman');
   assert.equal(exported.environments[0].variables[1].value, 'https://example.test');
 });
+
+test('excludes local vault plaintext and ciphertext from workspace save and export', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-store-vault-export-'));
+  const workspacePath = path.join(temp, 'workspace.json');
+  const exportPath = path.join(temp, 'workspace-export.json');
+  const store = new WorkspaceStore(workspacePath);
+  const workspace = {
+    schemaVersion: 11,
+    settings: {
+      sandbox: {
+        trustedCapabilities: {
+          sendRequest: true,
+          cookies: true,
+          vault: false,
+          vaultGrants: {
+            workspace: false,
+            collections: ['collection-1'],
+            requests: ['request-1'],
+            deniedCollections: ['collection-denied'],
+            deniedRequests: ['request-denied']
+          }
+        }
+      }
+    },
+    collections: [],
+    environments: [],
+    cookies: [],
+    history: [],
+    vault: {
+      secrets: [{ key: 'apiToken', value: 'vault-plaintext-secret' }],
+      entries: [{ key: 'apiToken', ciphertext: 'vault-ciphertext-secret' }]
+    }
+  };
+
+  const saved = await store.save(workspace);
+  const rawText = await fs.readFile(workspacePath, 'utf8');
+  assert.equal(rawText.includes('vault-plaintext-secret'), false);
+  assert.equal(rawText.includes('vault-ciphertext-secret'), false);
+  assert.equal(Object.hasOwn(JSON.parse(rawText), 'vault'), false);
+  assert.deepEqual(saved.settings.sandbox.trustedCapabilities.vaultGrants, {
+    workspace: false,
+    collections: ['collection-1'],
+    requests: ['request-1'],
+    deniedCollections: ['collection-denied'],
+    deniedRequests: ['request-denied']
+  });
+
+  await store.exportWorkspace({ ...saved, vault: workspace.vault }, exportPath);
+  const exportedText = await fs.readFile(exportPath, 'utf8');
+  assert.equal(exportedText.includes('vault-plaintext-secret'), false);
+  assert.equal(exportedText.includes('vault-ciphertext-secret'), false);
+  assert.equal(Object.hasOwn(JSON.parse(exportedText), 'vault'), false);
+});

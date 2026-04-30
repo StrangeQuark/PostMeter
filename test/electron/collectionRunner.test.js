@@ -360,6 +360,192 @@ test('runs pre-request and test scripts around single requests', async () => {
   assert.equal(result.response.testScriptResult.tests[0].passed, true);
 });
 
+test('routes single-request pm.vault prompts through the shared lifecycle', async () => {
+  const vault = new MemoryVaultStore({ token: 'secret-token' });
+  const prompts = [];
+  const request = requestModel({
+    id: 'vault-request',
+    name: 'Vault Request',
+    method: 'GET',
+    url: 'https://api.example.test/vault',
+    scripts: {
+      preRequest: `
+        pm.test('prompted vault access', async function () {
+          const token = await pm.vault.get('token');
+          pm.environment.set('vaultToken', token);
+        });
+      `
+    }
+  });
+
+  const result = await runRequestWithScripts(request, { id: 'env', name: 'Env', variables: [] }, {
+    collectionId: 'collection-1',
+    collectionName: 'Prompt Collection',
+    sendRequest: async () => response(200, '{}'),
+    trustedCapabilities: { vault: false, vaultGrants: {} },
+    vault,
+    vaultPrompt: async (payload) => {
+      prompts.push(payload);
+      return { granted: true, scope: 'request' };
+    },
+    workspaceId: 'Workspace.json',
+    workspaceName: 'Workspace'
+  });
+
+  assert.equal(result.preRequestScriptResult.passed, true);
+  assert.equal(result.environment.variables.find((item) => item.key === 'vaultToken').value, 'secret-token');
+  assert.equal(prompts.length, 1);
+  assert.deepEqual(prompts[0], {
+    collectionId: 'collection-1',
+    collectionName: 'Prompt Collection',
+    key: 'token',
+    operation: 'get',
+    requestId: 'vault-request',
+    requestName: 'Vault Request',
+    workspaceId: 'Workspace.json',
+    workspaceName: 'Workspace'
+  });
+});
+
+test('denied single-request pm.vault prompts stop code after the vault call', async () => {
+  const vault = new MemoryVaultStore({ token: 'secret-token' });
+  const request = requestModel({
+    id: 'vault-denied',
+    name: 'Vault Denied',
+    method: 'GET',
+    url: 'https://api.example.test/vault-denied',
+    scripts: {
+      preRequest: `
+        pm.test('denied vault access', async function () {
+          await pm.vault.get('token');
+          pm.environment.set('afterDeniedVault', 'should-not-run');
+        });
+      `
+    }
+  });
+
+  await assert.rejects(
+    () => runRequestWithScripts(request, { id: 'env', name: 'Env', variables: [] }, {
+      sendRequest: async () => response(200, '{}'),
+      trustedCapabilities: { vault: false, vaultGrants: {} },
+      vault,
+      vaultPrompt: async () => ({ granted: false, scope: 'request' })
+    }),
+    (error) => {
+      assert.match(error.preRequestScriptResult.tests[0].error, /pm\.vault access was denied/);
+      assert.equal(error.environment.variables.find((item) => item.key === 'afterDeniedVault'), undefined);
+      return true;
+    }
+  );
+  const audit = await vault.listAudit();
+  assert.deepEqual(audit.map((entry) => entry.operation), ['prompt-deny', 'denied-after-call']);
+});
+
+test('routes collection-run pm.vault prompts through the shared lifecycle', async () => {
+  const vault = new MemoryVaultStore({ token: 'collection-secret' });
+  const prompts = [];
+  const collection = collectionModel({
+    id: 'collection-vault',
+    name: 'Collection Vault',
+    requests: [
+      requestModel({
+        id: 'vault-runner-request',
+        name: 'Vault Runner Request',
+        method: 'GET',
+        url: 'https://api.example.test/vault-runner',
+        scripts: {
+          preRequest: `
+            pm.test('prompted collection vault access', async function () {
+              pm.collectionVariables.set('vaultToken', await pm.vault.get('token'));
+            });
+          `
+        }
+      })
+    ]
+  });
+
+  const result = await runCollection(collection, { id: 'env', name: 'Env', variables: [] }, {
+    sendRequest: async () => response(200, '{}'),
+    trustedCapabilities: { vault: false, vaultGrants: {} },
+    vault,
+    vaultPrompt: async (payload) => {
+      prompts.push(payload);
+      return { granted: true, scope: 'collection' };
+    },
+    workspaceId: 'Workspace.json',
+    workspaceName: 'Workspace'
+  });
+
+  assert.equal(result.passed, true);
+  assert.equal(result.collectionVariables.find((item) => item.key === 'vaultToken').value, 'collection-secret');
+  assert.equal(prompts.length, 1);
+  assert.equal(prompts[0].collectionId, 'collection-vault');
+  assert.equal(prompts[0].collectionName, 'Collection Vault');
+  assert.equal(prompts[0].requestId, 'vault-runner-request');
+  assert.equal(prompts[0].requestName, 'Vault Runner Request');
+  assert.equal(prompts[0].workspaceId, 'Workspace.json');
+  assert.equal(prompts[0].workspaceName, 'Workspace');
+});
+
+test('routes nested pm.execution.runRequest vault prompts through the shared lifecycle', async () => {
+  const vault = new MemoryVaultStore({ token: 'nested-secret' });
+  const prompts = [];
+  const collection = collectionModel({
+    id: 'collection-nested-vault',
+    name: 'Nested Vault',
+    requests: [
+      requestModel({
+        id: 'caller',
+        name: 'Caller',
+        method: 'GET',
+        url: 'https://api.example.test/caller',
+        scripts: {
+          tests: `
+            pm.test('nested vault prompt', async function () {
+              const response = await pm.execution.runRequest('target');
+              pm.expect(response.code).to.equal(200);
+              pm.expect(pm.environment.get('nestedVaultToken')).to.equal('nested-secret');
+            });
+          `
+        }
+      }),
+      requestModel({
+        id: 'target',
+        name: 'Target',
+        method: 'GET',
+        url: 'https://api.example.test/target',
+        scripts: {
+          preRequest: `
+            pm.test('target vault access', async function () {
+              pm.environment.set('nestedVaultToken', await pm.vault.get('token'));
+            });
+          `
+        }
+      })
+    ]
+  });
+
+  const result = await runCollection(collection, { id: 'env', name: 'Env', variables: [] }, {
+    sendRequest: async () => response(200, '{}'),
+    trustedCapabilities: { vault: false, vaultGrants: {} },
+    vault,
+    vaultPrompt: async (payload) => {
+      prompts.push(payload);
+      return { granted: true, scope: 'request' };
+    },
+    workspaceId: 'Workspace.json',
+    workspaceName: 'Workspace'
+  });
+
+  assert.equal(result.passed, true);
+  assert.equal(result.environment.variables.find((item) => item.key === 'nestedVaultToken').value, 'nested-secret');
+  assert.equal(prompts.length, 1);
+  assert.equal(prompts[0].requestId, 'target');
+  assert.equal(prompts[0].requestName, 'Target');
+  assert.equal(prompts[0].collectionId, 'collection-nested-vault');
+  assert.equal(prompts[0].collectionName, 'Nested Vault');
+});
+
 test('fails collection runs when scripts fail', async () => {
   const collection = collectionModel({
     name: 'Script Failures',

@@ -704,7 +704,9 @@ async function runBrokeredVaultGet(state, payload) {
   countVaultOperation(state);
   const key = normalizeVaultKey(payload.key);
   const vault = await assertVaultCapability(state, 'get', key);
-  return vault.get(key);
+  const value = await vault.get(key);
+  await auditVaultPromptDecision(state, 'get', key);
+  return value;
 }
 
 async function runBrokeredVaultSet(state, payload) {
@@ -881,17 +883,22 @@ async function assertVaultCapability(state, operation = '', key = '') {
   if (!decision.allowed) {
     if (decision.explicitDenied || typeof state.options.vaultPrompt !== 'function') {
       await auditVaultPromptDecision(state, 'prompt-deny', key);
+      await auditVaultPromptDecision(state, 'denied-after-call', key);
       throw new Error('pm.vault is disabled for this workspace.');
     }
     const promptResult = await state.options.vaultPrompt({
       key,
       operation,
+      collectionId: state.context?.collectionId || '',
+      collectionName: state.context?.collectionName || state.context?.executionLocation?.current?.[0] || '',
       requestId: state.context?.request?.id || '',
       requestName: state.context?.request?.name || '',
-      collectionId: state.context?.collectionId || ''
+      workspaceId: state.context?.workspaceId || '',
+      workspaceName: state.context?.workspaceName || ''
     });
     if (!promptResult || promptResult.granted !== true) {
       await auditVaultPromptDecision(state, promptResult?.reset === true ? 'prompt-reset' : 'prompt-deny', key);
+      await auditVaultPromptDecision(state, 'denied-after-call', key);
       throw new Error('pm.vault access was denied for this request.');
     }
     await auditVaultPromptDecision(state, `prompt-grant-${promptResult.scope || 'request'}`, key);
@@ -905,6 +912,7 @@ async function assertVaultCapability(state, operation = '', key = '') {
     throw new Error('pm.vault is not configured for this workspace.');
   }
   if (typeof vault.isAvailable === 'function' && vault.isAvailable() === false) {
+    await auditVaultPromptDecision(state, 'unavailable-encryption', key);
     throw new Error('pm.vault encryption is unavailable on this machine.');
   }
   return vault;
@@ -927,8 +935,12 @@ async function auditVaultPromptDecision(state, operation, key) {
 
 function vaultAuditMetadata(state) {
   return {
+    collectionId: state.context?.collectionId || '',
+    collectionName: state.context?.collectionName || state.context?.executionLocation?.current?.[0] || '',
     requestId: state.context?.request?.id || '',
-    requestName: state.context?.request?.name || ''
+    requestName: state.context?.request?.name || '',
+    workspaceId: state.context?.workspaceId || '',
+    workspaceName: state.context?.workspaceName || ''
   };
 }
 
