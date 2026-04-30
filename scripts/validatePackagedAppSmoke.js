@@ -63,6 +63,7 @@ async function validateExecutable(executable) {
 }
 
 async function runStartupSmoke(executable) {
+  await runDefaultPersistencePathSmoke(executable);
   const userData = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-packaged-smoke-'));
   const dataPath = path.join(userData, 'workspace.json');
   const marker = `packaged-smoke-${Date.now()}`;
@@ -70,12 +71,14 @@ async function runStartupSmoke(executable) {
     await runStartupSmokeOnce(executable, {
       dataPath,
       marker,
-      expectReload: false
+      expectReload: false,
+      label: 'initial'
     });
     await runStartupSmokeOnce(executable, {
       dataPath,
       marker,
-      expectReload: true
+      expectReload: true,
+      label: 'reload'
     });
     await validatePersistenceArtifacts(userData, dataPath, marker);
   } finally {
@@ -83,16 +86,49 @@ async function runStartupSmoke(executable) {
   }
 }
 
+async function runDefaultPersistencePathSmoke(executable) {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-packaged-default-path-'));
+  const envOverrides = await isolatedDefaultPathEnv(root);
+  const marker = `packaged-default-path-${Date.now()}`;
+  try {
+    await runStartupSmokeOnce(executable, {
+      marker,
+      expectReload: false,
+      label: 'default-path',
+      defaultUserData: true,
+      envOverrides
+    });
+    await runStartupSmokeOnce(executable, {
+      marker,
+      expectReload: true,
+      label: 'default-path-reload',
+      defaultUserData: true,
+      envOverrides
+    });
+    await validateDefaultPersistenceArtifacts(envOverrides, marker);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+}
+
 async function runStartupSmokeOnce(executable, options = {}) {
   const env = {
     ...minimalEnv(),
+    ...(options.envOverrides || {}),
     POSTMETER_STARTUP_SMOKE: '1',
-    POSTMETER_DATA_PATH: options.dataPath,
     POSTMETER_PACKAGED_SMOKE: '1',
     POSTMETER_PACKAGED_SMOKE_MARKER: options.marker,
-    POSTMETER_PACKAGED_SMOKE_EXPECT_RELOAD: options.expectReload ? '1' : ''
+    POSTMETER_PACKAGED_SMOKE_EXPECT_RELOAD: options.expectReload ? '1' : '',
+    POSTMETER_VALIDATION_ARTIFACT_DIR: process.env.POSTMETER_VALIDATION_ARTIFACT_DIR || ''
   };
+  if (options.dataPath) {
+    env.POSTMETER_DATA_PATH = options.dataPath;
+  }
+  if (options.defaultUserData) {
+    env.POSTMETER_PACKAGED_SMOKE_DEFAULT_PATH = '1';
+  }
   const result = await spawnWithTimeout(executable, withCiNoSandboxArgs([], env), env);
+  await writeSmokeLog(options.label || 'run', executable, result);
   if (result.code !== 0) {
     throw new Error(`Packaged app startup smoke exited with ${result.code}: ${result.stderr || result.stdout}`);
   }
@@ -106,6 +142,16 @@ async function validatePersistenceArtifacts(userData, dataPath, marker = '') {
     throw new Error('Packaged app smoke did not persist the workspace marker.');
   }
   await fs.stat(path.join(userData, 'userData'));
+}
+
+async function validateDefaultPersistenceArtifacts(env, marker = '') {
+  const userDataPath = expectedDefaultUserDataPath(env, process.platform);
+  const stat = await fs.stat(userDataPath);
+  if (!stat.isDirectory()) {
+    throw new Error(`Default packaged userData path is not a directory: ${userDataPath}`);
+  }
+  const workspacePath = path.join(env.USERPROFILE || env.HOME, '.postmeter', 'workspace.json');
+  await loadPersistedSmokeWorkspace(workspacePath, marker);
 }
 
 async function loadPersistedSmokeWorkspace(dataPath, marker = '') {
@@ -148,9 +194,10 @@ function spawnWithTimeout(command, args, env) {
     });
     let stdout = '';
     let stderr = '';
+    let timedOut = false;
     const timeout = setTimeout(() => {
+      timedOut = true;
       child.kill('SIGTERM');
-      reject(new Error(`Packaged app startup smoke timed out after ${TIMEOUT_MILLIS} ms.`));
     }, TIMEOUT_MILLIS);
     child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
     child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
@@ -160,14 +207,42 @@ function spawnWithTimeout(command, args, env) {
     });
     child.on('exit', (code) => {
       clearTimeout(timeout);
-      resolve({ code, stdout, stderr });
+      resolve({
+        code: timedOut ? 124 : code,
+        stdout,
+        stderr: timedOut
+          ? `${stderr}\nPackaged app startup smoke timed out after ${TIMEOUT_MILLIS} ms.`.trim()
+          : stderr
+      });
     });
   });
 }
 
+async function writeSmokeLog(label, executable, result) {
+  const directory = process.env.POSTMETER_VALIDATION_ARTIFACT_DIR;
+  if (!directory) {
+    return;
+  }
+  await fs.mkdir(directory, { recursive: true });
+  const safeLabel = String(label || 'run').replace(/[^a-z0-9._-]+/gi, '-').slice(0, 64) || 'run';
+  const logPath = path.join(directory, `packaged-app-smoke-${process.platform}-${safeLabel}.log`);
+  const body = [
+    `executable=${executable}`,
+    `platform=${process.platform}`,
+    `exitCode=${result.code}`,
+    '',
+    '[stdout]',
+    result.stdout || '',
+    '',
+    '[stderr]',
+    result.stderr || ''
+  ].join('\n');
+  await fs.writeFile(logPath, body);
+}
+
 function minimalEnv() {
   const keep = {};
-  for (const key of ['HOME', 'PATH', 'SystemRoot', 'TEMP', 'TMP', 'USERPROFILE', 'XAUTHORITY', 'DISPLAY', 'WAYLAND_DISPLAY', WAIVER_ENV]) {
+  for (const key of ['APPDATA', 'HOME', 'LOCALAPPDATA', 'PATH', 'SystemRoot', 'TEMP', 'TMP', 'USERPROFILE', 'XAUTHORITY', 'XDG_CONFIG_HOME', 'DISPLAY', 'WAYLAND_DISPLAY', WAIVER_ENV]) {
     if (process.env[key]) {
       keep[key] = process.env[key];
     }
@@ -176,6 +251,44 @@ function minimalEnv() {
     keep.ELECTRON_DISABLE_SECURITY_WARNINGS = '1';
   }
   return keep;
+}
+
+async function isolatedDefaultPathEnv(root) {
+  const home = path.join(root, 'home');
+  const xdgConfig = path.join(root, 'xdg-config');
+  const appData = path.join(root, 'AppData', 'Roaming');
+  const localAppData = path.join(root, 'AppData', 'Local');
+  const temp = path.join(root, 'tmp');
+  await Promise.all([
+    fs.mkdir(home, { recursive: true }),
+    fs.mkdir(xdgConfig, { recursive: true }),
+    fs.mkdir(appData, { recursive: true }),
+    fs.mkdir(localAppData, { recursive: true }),
+    fs.mkdir(temp, { recursive: true })
+  ]);
+  return {
+    APPDATA: appData,
+    HOME: home,
+    LOCALAPPDATA: localAppData,
+    TEMP: temp,
+    TMP: temp,
+    USERPROFILE: home,
+    XDG_CONFIG_HOME: xdgConfig
+  };
+}
+
+function expectedDefaultUserDataPath(env, platform = process.platform) {
+  return path.join(expectedDefaultUserDataRoot(env, platform), 'PostMeter');
+}
+
+function expectedDefaultUserDataRoot(env, platform = process.platform) {
+  if (platform === 'win32') {
+    return path.resolve(env.APPDATA || path.join(env.USERPROFILE || env.HOME || os.homedir(), 'AppData', 'Roaming'));
+  }
+  if (platform === 'darwin') {
+    return path.resolve(env.HOME || os.homedir(), 'Library', 'Application Support');
+  }
+  return path.resolve(env.XDG_CONFIG_HOME || path.join(env.HOME || os.homedir(), '.config'));
 }
 
 async function executableExists(filePath) {
@@ -195,10 +308,16 @@ if (require.main === module) {
 }
 
 module.exports = {
+  expectedDefaultUserDataPath,
+  expectedDefaultUserDataRoot,
   findPackagedExecutable,
+  isolatedDefaultPathEnv,
   loadPersistedSmokeWorkspace,
   platformCandidates,
+  runDefaultPersistencePathSmoke,
   runStartupSmoke,
+  writeSmokeLog,
+  validateDefaultPersistenceArtifacts,
   validatePersistenceArtifacts,
   validateExecutable
 };

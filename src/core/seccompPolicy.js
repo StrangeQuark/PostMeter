@@ -51,6 +51,7 @@ const X64_DENIED_SYSCALLS = Object.freeze([
   ['request_key', 249, EPERM],
   ['keyctl', 250, EPERM],
   ['migrate_pages', 256, EPERM],
+  ['unshare', 272, EPERM],
   ['move_pages', 279, EPERM],
   ['perf_event_open', 298, EPERM],
   ['fanotify_init', 300, EPERM],

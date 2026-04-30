@@ -10,6 +10,7 @@ const {
   extractPfxForGrpc,
   invokeGrpcRequest
 } = require('../../src/core/grpcClient');
+const { DEFAULT_MAX_PFX_BYTES } = require('../../src/core/pfxCertificate');
 const {
   createScriptedRequestState,
   runScriptedRequestLifecycle
@@ -171,6 +172,8 @@ test('extracts gRPC PFX/P12 client certificate material parent-side', async (t) 
   const keyPath = path.join(certDir, 'client.key');
   const certPath = path.join(certDir, 'client.crt');
   const pfxPath = path.join(certDir, 'client.p12');
+  const certOnlyPfxPath = path.join(certDir, 'cert-only.p12');
+  const oversizedPfxPath = path.join(certDir, 'oversized.p12');
   await runOpenSsl([
     'req',
     '-x509',
@@ -198,6 +201,17 @@ test('extracts gRPC PFX/P12 client certificate material parent-side', async (t) 
     '-passout',
     'pass:correct-pass'
   ]);
+  await runOpenSsl([
+    'pkcs12',
+    '-export',
+    '-nokeys',
+    '-in',
+    certPath,
+    '-out',
+    certOnlyPfxPath,
+    '-passout',
+    'pass:correct-pass'
+  ]);
 
   const extracted = await extractPfxForGrpc(pfxPath, 'correct-pass');
   assert.match(extracted.privateKey.toString('utf8'), /BEGIN (RSA )?PRIVATE KEY/);
@@ -206,9 +220,22 @@ test('extracts gRPC PFX/P12 client certificate material parent-side', async (t) 
     () => extractPfxForGrpc(pfxPath, 'wrong-pass'),
     /PFX\/P12 bundle could not be extracted/
   );
+  await assert.rejects(
+    () => extractPfxForGrpc(certOnlyPfxPath, 'correct-pass'),
+    /did not contain a private key/
+  );
+  await assert.rejects(
+    () => extractPfxForGrpc(certDir, 'correct-pass'),
+    /must be a regular file/
+  );
+  await fs.writeFile(oversizedPfxPath, Buffer.alloc(DEFAULT_MAX_PFX_BYTES + 1));
+  await assert.rejects(
+    () => extractPfxForGrpc(oversizedPfxPath, 'correct-pass'),
+    /cannot exceed/
+  );
 });
 
-test('uses PEM and PFX/P12 client certificates for live gRPC mTLS without script-time certificate mutation', async (t) => {
+test('uses PEM and PFX/P12 client certificates for live gRPC mTLS across unary and streaming calls without script-time certificate mutation', async (t) => {
   const certs = await createMtlsCertificates(t);
   const fixture = await startGrpcFixture(t, {
     caPath: certs.caPath,
@@ -229,6 +256,33 @@ test('uses PEM and PFX/P12 client certificates for live gRPC mTLS without script
   assert.equal(pemResult.response.code, 0);
   assert.equal(pemResult.response.messages[0].data.name, 'Ada');
 
+  const encryptedPemResult = await invokeGrpcRequest({
+    ...baseRequest,
+    auth: {
+      type: 'clientCertificate',
+      caPath: certs.caPath,
+      certPath: certs.clientCertPath,
+      keyPath: certs.clientEncryptedKeyPath,
+      passphrase: 'correct-pass'
+    }
+  }, grpcEnvironment());
+  assert.equal(encryptedPemResult.response.code, 0);
+  assert.equal(encryptedPemResult.response.messages[0].data.name, 'Ada');
+
+  await assert.rejects(
+    () => invokeGrpcRequest({
+      ...baseRequest,
+      auth: {
+        type: 'clientCertificate',
+        caPath: certs.caPath,
+        certPath: certs.clientCertPath,
+        keyPath: certs.clientEncryptedKeyPath,
+        passphrase: 'wrong-pass'
+      }
+    }, grpcEnvironment()),
+    /gRPC PEM key could not be decrypted/
+  );
+
   const pfxRequest = {
     ...baseRequest,
     auth: {
@@ -241,6 +295,20 @@ test('uses PEM and PFX/P12 client certificates for live gRPC mTLS without script
   const pfxResult = await invokeGrpcRequest(pfxRequest, grpcEnvironment());
   assert.equal(pfxResult.response.code, 0);
   assert.equal(pfxResult.response.messages[0].data.name, 'Ada');
+
+  const streamingCases = [
+    ['UploadUsers', 'client-streaming', [{ name: 'mtls-seed', data: { id: 'seed-1', name: 'Seed' } }], 1],
+    ['WatchUsers', 'server-streaming', [{ name: 'mtls-watch', data: { id: 'watch-1', name: 'Ada' } }], 2],
+    ['ChatUsers', 'bidirectional-streaming', [{ name: 'mtls-chat', data: { id: 'chat-1', name: 'Grace' } }], 1]
+  ];
+  for (const [method, methodType, messages, expectedMessages] of streamingCases) {
+    const request = grpcRequest(fixture.port, method, methodType, messages);
+    request.url = `grpcs://127.0.0.1:${fixture.port}`;
+    request.auth = { ...pfxRequest.auth };
+    const result = await invokeGrpcRequest(request, grpcEnvironment());
+    assert.equal(result.response.code, 0, `${method} should succeed with PFX/P12 mTLS`);
+    assert.equal(result.response.messages.length, expectedMessages, `${method} should return the expected message count`);
+  }
 
   const caMismatchResult = await invokeGrpcRequest({
     ...pfxRequest,
@@ -270,6 +338,41 @@ test('uses PEM and PFX/P12 client certificates for live gRPC mTLS without script
       auth: { ...pfxRequest.auth, pfxPath: malformedPath }
     }, grpcEnvironment()),
     /PFX\/P12 bundle could not be extracted/
+  );
+
+  const boundPfxResult = await invokeGrpcRequest({
+    ...pfxRequest,
+    auth: {
+      type: 'clientCertificate',
+      certificateId: '{{grpcCertId}}',
+      pfxPath: malformedPath,
+      passphrase: 'wrong-pass'
+    }
+  }, grpcEnvironment([
+    { enabled: true, key: 'grpcCertId', value: 'bound-grpc-pfx' }
+  ]), {
+    clientCertificates: [{
+      id: 'bound-grpc-pfx',
+      caPath: certs.caPath,
+      pfxPath: certs.clientPfxPath,
+      passphrase: 'correct-pass'
+    }]
+  });
+  assert.equal(boundPfxResult.response.code, 0);
+  assert.equal(boundPfxResult.response.messages[0].data.name, 'Ada');
+
+  await assert.rejects(
+    () => invokeGrpcRequest({
+      ...pfxRequest,
+      auth: {
+        type: 'clientCertificate',
+        certificateId: 'missing-grpc-pfx',
+        caPath: certs.caPath,
+        pfxPath: certs.clientPfxPath,
+        passphrase: 'correct-pass'
+      }
+    }, grpcEnvironment(), { clientCertificates: [] }),
+    /Configured gRPC client certificate binding was not found/
   );
 
   const lifecycleRequest = {
@@ -406,6 +509,7 @@ async function createMtlsCertificates(t) {
   const serverCsrPath = path.join(certDir, 'server.csr');
   const serverCertPath = path.join(certDir, 'server.crt');
   const clientKeyPath = path.join(certDir, 'client.key');
+  const clientEncryptedKeyPath = path.join(certDir, 'client-encrypted.key');
   const clientCsrPath = path.join(certDir, 'client.csr');
   const clientCertPath = path.join(certDir, 'client.crt');
   const clientPfxPath = path.join(certDir, 'client.p12');
@@ -420,10 +524,12 @@ async function createMtlsCertificates(t) {
   await runOpenSsl(['x509', '-req', '-in', serverCsrPath, '-CA', caPath, '-CAkey', caKeyPath, '-CAcreateserial', '-out', serverCertPath, '-days', '1', '-sha256', '-extfile', serverExtPath]);
   await runOpenSsl(['req', '-newkey', 'rsa:2048', '-nodes', '-keyout', clientKeyPath, '-out', clientCsrPath, '-subj', '/CN=postmeter-grpc-client']);
   await runOpenSsl(['x509', '-req', '-in', clientCsrPath, '-CA', caPath, '-CAkey', caKeyPath, '-CAcreateserial', '-out', clientCertPath, '-days', '1', '-sha256']);
+  await runOpenSsl(['rsa', '-aes256', '-in', clientKeyPath, '-out', clientEncryptedKeyPath, '-passout', 'pass:correct-pass']);
   await runOpenSsl(['pkcs12', '-export', '-inkey', clientKeyPath, '-in', clientCertPath, '-certfile', caPath, '-out', clientPfxPath, '-passout', 'pass:correct-pass']);
   return {
     caPath,
     clientCertPath,
+    clientEncryptedKeyPath,
     clientKeyPath,
     clientPfxPath,
     serverCertPath,

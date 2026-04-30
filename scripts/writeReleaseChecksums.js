@@ -6,7 +6,8 @@ const RELEASE_DIR = process.env.POSTMETER_RELEASE_DIR
   ? path.resolve(process.env.POSTMETER_RELEASE_DIR)
   : path.join(__dirname, '..', 'release');
 const CHECKSUM_FILE = path.join(RELEASE_DIR, 'SHA256SUMS');
-const ARTIFACT_EXTENSIONS = new Set(['.AppImage', '.deb', '.rpm', '.zip', '.dmg', '.exe', '.msi']);
+const ARTIFACT_EXTENSIONS = new Set(['.appimage', '.deb', '.zip', '.dmg', '.exe']);
+const UNSUPPORTED_DISTRIBUTABLE_EXTENSIONS = new Set(['.msi', '.rpm']);
 
 async function main() {
   const artifacts = await findArtifacts(RELEASE_DIR);
@@ -32,9 +33,7 @@ async function findArtifacts(dir) {
   const artifacts = [];
   for (const entry of entries) {
     const entryPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      artifacts.push(...await findArtifacts(entryPath));
-    } else if (ARTIFACT_EXTENSIONS.has(path.extname(entry.name))) {
+    if (entry.isFile() && ARTIFACT_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
       artifacts.push(entryPath);
     }
   }
@@ -62,6 +61,8 @@ if (require.main === module) {
 }
 
 module.exports = {
+  ARTIFACT_EXTENSIONS,
   findArtifacts,
-  sha256File
+  sha256File,
+  UNSUPPORTED_DISTRIBUTABLE_EXTENSIONS
 };

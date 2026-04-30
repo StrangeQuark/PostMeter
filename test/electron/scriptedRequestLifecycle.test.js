@@ -132,6 +132,87 @@ test('returns pre-request failures from the shared lifecycle without sending the
   assert.deepEqual(result.testScriptResult, emptyScriptResult());
 });
 
+test('ignores script-injected primary request client-certificate file paths', async () => {
+  const sent = [];
+  const result = await runScriptedRequestLifecycle(
+    createScriptedRequestState({
+      id: 'client-cert-path-mutation',
+      method: 'GET',
+      url: 'https://api.example.test',
+      auth: { type: 'bearer', token: 'trusted-token' },
+      scripts: { preRequest: 'pre' }
+    }, null),
+    {
+      scriptRunner: async (scriptText, context) => {
+        if (scriptText === 'pre') {
+          return {
+            result: emptyScriptResult(),
+            request: {
+              ...context.request,
+              auth: {
+                type: 'clientCertificate',
+                pfxPath: '/tmp/script-client.p12',
+                passphrase: 'script-secret'
+              }
+            }
+          };
+        }
+        return { result: emptyScriptResult() };
+      },
+      sendRequest: async (request) => {
+        sent.push(request);
+        return response(200, '{}');
+      }
+    }
+  );
+
+  assert.equal(result.requestSent, true);
+  assert.equal(sent.length, 1);
+  assert.deepEqual(sent[0].auth, { type: 'bearer', token: 'trusted-token' });
+  assert.deepEqual(result.request.auth, { type: 'bearer', token: 'trusted-token' });
+});
+
+test('allows script selection of configured primary request client-certificate bindings only by id', async () => {
+  const sent = [];
+  const result = await runScriptedRequestLifecycle(
+    createScriptedRequestState({
+      id: 'client-cert-binding-mutation',
+      method: 'GET',
+      url: 'https://api.example.test',
+      auth: { type: 'none' },
+      scripts: { preRequest: 'pre' }
+    }, null),
+    {
+      scriptRunner: async (scriptText, context) => {
+        if (scriptText === 'pre') {
+          return {
+            result: emptyScriptResult(),
+            request: {
+              ...context.request,
+              auth: {
+                type: 'clientCertificate',
+                certificateId: 'cert-1',
+                pfxPath: '/tmp/script-client.p12',
+                passphrase: 'script-secret'
+              }
+            }
+          };
+        }
+        return { result: emptyScriptResult() };
+      },
+      sendRequest: async (request) => {
+        sent.push(request);
+        return response(200, '{}');
+      }
+    }
+  );
+
+  assert.equal(result.requestSent, true);
+  assert.equal(sent.length, 1);
+  assert.deepEqual(sent[0].auth, { type: 'clientCertificate', certificateId: 'cert-1' });
+  assert.deepEqual(result.request.auth, { type: 'clientCertificate', certificateId: 'cert-1' });
+});
+
 test('throws enriched pre-request errors for single-request execution', async () => {
   await assert.rejects(
     () => runRequestWithScripts({

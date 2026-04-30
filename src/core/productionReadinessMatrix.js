@@ -8,28 +8,93 @@ const STATUS_DESCRIPTIONS = Object.freeze({
 });
 
 const RELEASE_LEVELS = Object.freeze(['beta', 'rc', 'stable']);
+const RELEASE_LEVEL_POLICIES = Object.freeze({
+  beta: {
+    allowedReleaseBlockingStatuses: ['implemented', 'validated', 'external-validation-required'],
+    allowDocumentedWaivers: false,
+    description: 'Beta readiness allows implemented rows and explicitly tracked external evidence gaps, but fails on blocked release work.'
+  },
+  rc: {
+    allowedReleaseBlockingStatuses: ['validated'],
+    allowDocumentedWaivers: true,
+    description: 'Release-candidate readiness requires validation for every release-blocking row unless the row carries an explicit documented waiver.'
+  },
+  stable: {
+    allowedReleaseBlockingStatuses: ['validated'],
+    allowDocumentedWaivers: false,
+    description: 'Stable readiness requires every release-blocking row to be validated with required local/native/provider/signing evidence.'
+  }
+});
+const REQUIRED_ROW_IDS = Object.freeze([
+  'release.dashboard',
+  'packaging.linux',
+  'packaging.windows',
+  'packaging.macos',
+  'sandbox.script-runtime',
+  'sandbox.platform-os',
+  'postman.script-parity',
+  'compatibility.non-postman',
+  'dependencies.audit',
+  'electron.security',
+  'electron.runtime-version',
+  'grpc.pfx-p12-mtls',
+  'workspace.durability',
+  'oauth.live-certification',
+  'ux.accessibility',
+  'diagnostics.privacy',
+  'docs.public-release',
+  'postman.newman-json-reports',
+  'updates.metadata',
+  'vault.per-request-prompts',
+  'release.signing',
+  'load.distributed'
+]);
+const REQUIRED_AREAS = Object.freeze([
+  'packaging',
+  'security',
+  'compatibility',
+  'data-durability',
+  'oauth',
+  'ux',
+  'privacy',
+  'docs',
+  'release',
+  'transport',
+  'deferred-features',
+  'release-readiness'
+]);
 
 function buildProductionReadinessMatrix() {
   const rows = [
-    row('release.dashboard', 'release-readiness', 'Production readiness dashboard and gates exist as generated source-owned artifacts.', 'implemented', {
+    row('release.dashboard', 'release-readiness', 'Production readiness dashboard and gates exist as generated source-owned artifacts.', 'validated', {
       releaseBlocking: true,
-      commands: ['npm run production:readiness', 'npm run production:readiness:validate'],
-      evidenceRefs: ['src/core/productionReadinessMatrix.js', 'docs/production-readiness-matrix.json', 'docs/RELEASE_READINESS.md']
+      commands: [
+        'npm run production:readiness',
+        'npm run production:readiness:write',
+        'npm run production:readiness:validate',
+        'npm run production:readiness:claim',
+        'npm run production:readiness:claim:beta',
+        'npm run production:readiness:claim:rc',
+        'npm run production:readiness:claim:stable',
+        'npm run release:gate'
+      ],
+      evidenceRefs: ['src/core/productionReadinessMatrix.js', 'docs/production-readiness-matrix.json', 'docs/RELEASE_READINESS.md', '.github/workflows/release.yml'],
+      notes: 'The tag-driven release workflow runs the stable readiness claim before artifact publication.'
     }),
     row('packaging.linux', 'packaging', 'Linux deb/AppImage metadata, protocol registration, artifact checksums, and packaged sandbox validation are covered.', 'implemented', {
       releaseBlocking: true,
-      commands: ['npm run dist:linux', 'npm run release:validate', 'npm run sandbox:validate:packaged'],
-      evidenceRefs: ['scripts/validateReleaseArtifacts.js', '.github/workflows/ci.yml', '.github/workflows/release.yml']
+      commands: ['npm run dist:linux', 'npm run release:validate:packaged-smoke', 'npm run release:validate', 'npm run sandbox:validate:packaged'],
+      evidenceRefs: ['scripts/validatePackagedAppSmoke.js', 'scripts/validateReleaseArtifacts.js', '.github/workflows/ci.yml', '.github/workflows/release.yml', '.github/workflows/release-validation.yml']
     }),
     row('packaging.windows', 'packaging', 'Windows packaged launch, protocol registration, workspace path, and script-worker validation must run on windows-latest.', 'external-validation-required', {
       releaseBlocking: true,
-      commands: ['npm run dist:win', 'npm run release:validate:packaged-smoke', 'npm run release:validate:win-protocol'],
-      evidenceRefs: ['.github/workflows/release.yml']
+      commands: ['npm run dist:win', 'npm run release:validate:packaged-smoke', 'npm run release:validate:win-protocol', 'npm run sandbox:validate:packaged'],
+      evidenceRefs: ['scripts/validatePackagedAppSmoke.js', 'scripts/validateWindowsProtocolRegistration.ps1', '.github/workflows/ci.yml', '.github/workflows/release.yml', '.github/workflows/release-validation.yml']
     }),
     row('packaging.macos', 'packaging', 'macOS packaged launch, protocol registration, workspace path, and script-worker validation must run on macos-latest.', 'external-validation-required', {
       releaseBlocking: true,
-      commands: ['npm run dist:mac', 'npm run release:validate:packaged-smoke', 'npm run release:validate:mac-protocol'],
-      evidenceRefs: ['.github/workflows/release.yml']
+      commands: ['npm run dist:mac', 'npm run release:validate:packaged-smoke', 'npm run release:validate:mac-protocol', 'npm run sandbox:validate:packaged'],
+      evidenceRefs: ['scripts/validatePackagedAppSmoke.js', 'scripts/validateMacProtocolRegistration.sh', '.github/workflows/ci.yml', '.github/workflows/release.yml', '.github/workflows/release-validation.yml']
     }),
     row('sandbox.script-runtime', 'security', 'Script runtime validation, Postman parity gates, and adversarial sandbox probes remain green.', 'validated', {
       releaseBlocking: true,
@@ -41,16 +106,17 @@ function buildProductionReadinessMatrix() {
       commands: ['npm run postman:parity:claim', 'npm run postman:docs:validate', 'npm run postman:newman-reports:validate'],
       evidenceRefs: ['docs/postman-sandbox-parity-matrix.json', 'docs/postman-docs-coverage-audit.json', 'test/fixtures/postman/newman-reports']
     }),
-    row('sandbox.platform-os', 'security', 'Platform-equivalent OS sandbox claim is tracked separately from Postman API parity.', 'blocked', {
+    row('sandbox.platform-os', 'security', 'Platform-equivalent OS sandbox claim is implemented and tracked separately from Postman API parity.', 'implemented', {
       releaseBlocking: true,
       commands: ['npm run sandbox:platform:validate', 'npm run sandbox:platform:claim'],
-      evidenceRefs: ['docs/os-sandbox-platform-matrix.json', 'src/core/osSandboxPlatformMatrix.js'],
-      notes: 'Linux is accepted for the current Linux claim; Windows/macOS still require native backend source plus packaged runner proof before the cross-platform claim can pass.'
+      evidenceRefs: ['docs/os-sandbox-platform-matrix.json', 'src/core/osSandboxPlatformMatrix.js', 'native/windows-sandbox-helper/PostMeterWindowsSandboxHelper.cpp'],
+      notes: 'Linux uses bubblewrap plus seccomp, Windows uses the release-owned AppContainer helper, and macOS uses the seatbelt sandbox-exec backend. Native runner packaging rows still track platform release evidence separately.'
     }),
-    row('grpc.pfx-p12-mtls', 'transport', 'HTTP and gRPC mTLS share parent-owned PFX/P12 extraction aligned with client-certificate handling.', 'implemented', {
+    row('grpc.pfx-p12-mtls', 'transport', 'HTTP and gRPC mTLS share parent-owned in-memory PFX/P12 extraction aligned with client-certificate handling.', 'implemented', {
       releaseBlocking: true,
       commands: ['npm test'],
-      evidenceRefs: ['src/core/grpcClient.js', 'test/electron/grpcClient.test.js']
+      evidenceRefs: ['src/core/pfxCertificate.js', 'src/core/grpcClient.js', 'src/core/httpClient.js', 'src/core/scriptedRequestLifecycle.js', 'src/core/scriptSandbox.js', 'src/core/postmanImporter.js', 'test/electron/grpcClient.test.js', 'test/electron/httpClient.test.js', 'test/electron/scriptSandbox.test.js', 'test/electron/scriptedRequestLifecycle.test.js', 'test/electron/postmanImporter.test.js'],
+      notes: 'PFX/P12 parsing and encrypted PEM key normalization use node-forge in the parent process, read certificate files through regular-file, byte-capped descriptor reads, emit in-memory PEM buffers only, preserve imported Postman PFX/P12 gRPC certificate references, deny script-provided certificate/PFX/CA/passphrase path changes for pm.sendRequest and primary request mutations, fail closed on missing certificate bindings, ignore direct path fallbacks when a binding is configured, and have live HTTP/gRPC mTLS coverage for PEM/PFX plus gRPC unary, client-streaming, server-streaming, and bidirectional calls and negative extraction failures.'
     }),
     row('vault.per-request-prompts', 'security', 'Per-request vault prompt decisions are brokered without exposing vault secrets to scripts or renderer APIs.', 'implemented', {
       releaseBlocking: true,
@@ -76,6 +142,16 @@ function buildProductionReadinessMatrix() {
       releaseBlocking: true,
       commands: ['npm run compatibility:non-postman:validate', 'npm test'],
       evidenceRefs: ['docs/non-postman-compatibility-matrix.json', 'docs/COMPATIBILITY.md']
+    }),
+    row('dependencies.audit', 'security', 'Release dependency audit must pass with no high-severity vulnerabilities.', 'validated', {
+      releaseBlocking: true,
+      commands: ['npm audit --audit-level=high'],
+      evidenceRefs: ['package.json', 'package-lock.json']
+    }),
+    row('electron.runtime-version', 'release', 'Electron runtime version is checked before production or security claims.', 'validated', {
+      releaseBlocking: true,
+      commands: ['npm run electron:version'],
+      evidenceRefs: ['package.json', 'scripts/electronVersion.js']
     }),
     row('ux.accessibility', 'ux', 'Production user workflows, accessibility-sensitive modals, and failure states are smoke-tested and documented before release.', 'external-validation-required', {
       releaseBlocking: true,
@@ -121,6 +197,7 @@ function buildProductionReadinessMatrix() {
     generatedFrom: 'src/core/productionReadinessMatrix.js',
     deterministic: true,
     releaseLevels: RELEASE_LEVELS,
+    releasePolicies: RELEASE_LEVEL_POLICIES,
     statuses: STATUS_DESCRIPTIONS,
     rows: rows.sort((left, right) => left.id.localeCompare(right.id))
   };
@@ -137,13 +214,45 @@ function validateProductionReadinessMatrix(matrix) {
   if (matrix.generatedFrom !== 'src/core/productionReadinessMatrix.js') {
     errors.push('Production readiness matrix generatedFrom must be src/core/productionReadinessMatrix.js.');
   }
+  if (matrix.deterministic !== true) {
+    errors.push('Production readiness matrix deterministic must be true.');
+  }
   const statuses = new Set(Object.keys(matrix.statuses || {}));
+  const releaseLevels = Array.isArray(matrix.releaseLevels) ? matrix.releaseLevels : [];
+  if (JSON.stringify(releaseLevels) !== JSON.stringify(RELEASE_LEVELS)) {
+    errors.push(`Production readiness matrix releaseLevels must be ${RELEASE_LEVELS.join(', ')}.`);
+  }
+  for (const releaseLevel of RELEASE_LEVELS) {
+    const policy = matrix.releasePolicies?.[releaseLevel];
+    if (!policy || typeof policy !== 'object') {
+      errors.push(`Production readiness matrix must declare release policy ${releaseLevel}.`);
+      continue;
+    }
+    if (!Array.isArray(policy.allowedReleaseBlockingStatuses) || !policy.allowedReleaseBlockingStatuses.length) {
+      errors.push(`Production readiness release policy ${releaseLevel} must declare allowedReleaseBlockingStatuses.`);
+    } else {
+      for (const status of policy.allowedReleaseBlockingStatuses) {
+        if (!statuses.has(status)) {
+          errors.push(`Production readiness release policy ${releaseLevel} references unknown status ${status}.`);
+        }
+      }
+    }
+    if (typeof policy.allowDocumentedWaivers !== 'boolean') {
+      errors.push(`Production readiness release policy ${releaseLevel} must declare allowDocumentedWaivers.`);
+    }
+    if (typeof policy.description !== 'string' || !policy.description.trim()) {
+      errors.push(`Production readiness release policy ${releaseLevel} must declare a description.`);
+    }
+  }
   for (const status of Object.keys(STATUS_DESCRIPTIONS)) {
     if (!statuses.has(status)) {
       errors.push(`Production readiness matrix must declare status ${status}.`);
+    } else if (typeof matrix.statuses[status] !== 'string' || !matrix.statuses[status].trim()) {
+      errors.push(`Production readiness status ${status} must have a non-empty description.`);
     }
   }
   const ids = new Set();
+  const areas = new Set();
   const rows = Array.isArray(matrix.rows) ? matrix.rows : [];
   if (!rows.length) {
     errors.push('Production readiness matrix must contain rows.');
@@ -153,13 +262,29 @@ function validateProductionReadinessMatrix(matrix) {
       errors.push('Production readiness matrix row must be an object.');
       continue;
     }
-    if (!item.id || ids.has(item.id)) {
-      errors.push(`Production readiness matrix row has missing or duplicate id: ${item.id || '<empty>'}.`);
+    if (typeof item.id !== 'string' || !item.id.trim()) {
+      errors.push('Production readiness matrix row has missing or non-string id.');
+      continue;
+    }
+    if (ids.has(item.id)) {
+      errors.push(`Production readiness matrix row has duplicate id: ${item.id}.`);
     }
     ids.add(item.id);
-    for (const field of ['area', 'target', 'status']) {
+    for (const field of ['area', 'target', 'status', 'owner', 'lastVerified', 'notes']) {
       if (typeof item[field] !== 'string' || !item[field].trim()) {
-        errors.push(`Production readiness row ${item.id || '<unknown>'} missing ${field}.`);
+        if (field === 'lastVerified' || field === 'notes') {
+          if (typeof item[field] !== 'string') {
+            errors.push(`Production readiness row ${item.id || '<unknown>'} must declare string ${field}.`);
+          }
+        } else {
+          errors.push(`Production readiness row ${item.id || '<unknown>'} missing ${field}.`);
+        }
+      }
+    }
+    if (typeof item.area === 'string') {
+      areas.add(item.area);
+      if (!REQUIRED_AREAS.includes(item.area)) {
+        errors.push(`Production readiness row ${item.id} uses untracked release area ${item.area}.`);
       }
     }
     if (!statuses.has(item.status)) {
@@ -170,24 +295,74 @@ function validateProductionReadinessMatrix(matrix) {
     }
     if (!Array.isArray(item.commands) || !Array.isArray(item.evidenceRefs)) {
       errors.push(`Production readiness row ${item.id} must declare commands and evidenceRefs arrays.`);
+    } else {
+      if (item.releaseBlocking && !item.commands.length) {
+        errors.push(`Production readiness row ${item.id} must declare at least one command when releaseBlocking is true.`);
+      }
+      if (item.releaseBlocking && !item.evidenceRefs.length) {
+        errors.push(`Production readiness row ${item.id} must declare at least one evidenceRef when releaseBlocking is true.`);
+      }
+      for (const command of item.commands) {
+        if (typeof command !== 'string' || !command.trim()) {
+          errors.push(`Production readiness row ${item.id} commands must contain only non-empty strings.`);
+        }
+      }
+      for (const ref of item.evidenceRefs) {
+        if (typeof ref !== 'string' || !ref.trim()) {
+          errors.push(`Production readiness row ${item.id} evidenceRefs must contain only non-empty strings.`);
+        }
+      }
+    }
+    if (item.waiver != null) {
+      if (!item.waiver || typeof item.waiver !== 'object' || Array.isArray(item.waiver)) {
+        errors.push(`Production readiness row ${item.id} waiver must be an object when present.`);
+      } else {
+        if (!Array.isArray(item.waiver.releaseLevels) || !item.waiver.releaseLevels.length) {
+          errors.push(`Production readiness row ${item.id} waiver must declare releaseLevels.`);
+        } else {
+          for (const releaseLevel of item.waiver.releaseLevels) {
+            if (!RELEASE_LEVELS.includes(releaseLevel)) {
+              errors.push(`Production readiness row ${item.id} waiver references unknown release level ${releaseLevel}.`);
+            }
+          }
+        }
+        if (typeof item.waiver.reason !== 'string' || !item.waiver.reason.trim()) {
+          errors.push(`Production readiness row ${item.id} waiver must declare a reason.`);
+        }
+        if (!Array.isArray(item.waiver.docs) || !item.waiver.docs.length) {
+          errors.push(`Production readiness row ${item.id} waiver must cite docs.`);
+        } else {
+          for (const doc of item.waiver.docs) {
+            if (typeof doc !== 'string' || !doc.trim()) {
+              errors.push(`Production readiness row ${item.id} waiver docs must contain only non-empty strings.`);
+            }
+          }
+        }
+      }
     }
   }
-  for (const requiredId of ['release.dashboard', 'sandbox.script-runtime', 'sandbox.platform-os', 'packaging.windows', 'packaging.macos', 'compatibility.non-postman']) {
+  for (const requiredId of REQUIRED_ROW_IDS) {
     if (!ids.has(requiredId)) {
       errors.push(`Production readiness matrix is missing required row ${requiredId}.`);
+    }
+  }
+  for (const requiredArea of REQUIRED_AREAS) {
+    if (!areas.has(requiredArea)) {
+      errors.push(`Production readiness matrix must track release area ${requiredArea}.`);
     }
   }
   return errors;
 }
 
-function productionReadinessSummary(matrix) {
+function productionReadinessSummary(matrix, releaseLevel = 'stable') {
   const rows = Array.isArray(matrix?.rows) ? matrix.rows : [];
   const byStatus = {};
   for (const item of rows) {
     byStatus[item.status] = (byStatus[item.status] || 0) + 1;
   }
-  const releaseBlockers = rows.filter((item) => item.releaseBlocking && !['implemented', 'validated'].includes(item.status));
+  const releaseBlockers = productionReadinessBlockers(matrix, releaseLevel);
   return {
+    releaseLevel,
     rowCount: rows.length,
     byStatus,
     releaseBlockerCount: releaseBlockers.length,
@@ -195,8 +370,33 @@ function productionReadinessSummary(matrix) {
   };
 }
 
+function productionReadinessBlockers(matrix, releaseLevel = 'stable') {
+  const policy = releasePolicy(matrix, releaseLevel);
+  const allowedStatuses = new Set(policy.allowedReleaseBlockingStatuses);
+  return (Array.isArray(matrix?.rows) ? matrix.rows : [])
+    .filter((item) => item.releaseBlocking && !allowedStatuses.has(item.status))
+    .filter((item) => !(policy.allowDocumentedWaivers && rowWaivedForReleaseLevel(item, releaseLevel)));
+}
+
+function releasePolicy(matrix, releaseLevel = 'stable') {
+  if (!RELEASE_LEVELS.includes(releaseLevel)) {
+    throw new Error(`Unknown production readiness release level: ${releaseLevel}`);
+  }
+  return matrix?.releasePolicies?.[releaseLevel] || RELEASE_LEVEL_POLICIES[releaseLevel];
+}
+
+function rowWaivedForReleaseLevel(rowItem, releaseLevel) {
+  return Boolean(Array.isArray(rowItem?.waiver?.releaseLevels)
+    && rowItem.waiver.releaseLevels.includes(releaseLevel)
+    && typeof rowItem.waiver.reason === 'string'
+    && rowItem.waiver.reason.trim()
+    && Array.isArray(rowItem.waiver.docs)
+    && rowItem.waiver.docs.length > 0
+    && rowItem.waiver.docs.every((doc) => typeof doc === 'string' && doc.trim()));
+}
+
 function row(id, area, target, status, options = {}) {
-  return {
+  const item = {
     id,
     area,
     target,
@@ -208,10 +408,16 @@ function row(id, area, target, status, options = {}) {
     lastVerified: options.lastVerified || '',
     notes: options.notes || ''
   };
+  if (options.waiver != null) {
+    item.waiver = options.waiver;
+  }
+  return item;
 }
 
 module.exports = {
   buildProductionReadinessMatrix,
+  productionReadinessBlockers,
   productionReadinessSummary,
+  rowWaivedForReleaseLevel,
   validateProductionReadinessMatrix
 };

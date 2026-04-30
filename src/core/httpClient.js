@@ -20,7 +20,7 @@ const {
   MAX_ATTACHMENT_BYTES,
   resolveFileAttachmentBinding
 } = require('./fileAttachmentBindings');
-const { extractPfxToPem } = require('./pfxCertificate');
+const { extractPfxToPem, readRegularFileBounded } = require('./pfxCertificate');
 
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 const MANAGED_HEADERS = new Set(['content-length']);
@@ -266,9 +266,7 @@ async function loadClientCertificateOptions(auth = {}, environment, url, clientC
   const pfxPath = resolveEnvironmentValue(normalized.pfxPath, environment).trim();
   if (pfxPath) {
     const extracted = await extractPfxToPem(pfxPath, passphrase, {
-      bundleLabel: 'client certificate PFX/P12 bundle',
-      envPassphraseName: 'POSTMETER_HTTP_PFX_PASSPHRASE',
-      tempPrefix: 'postmeter-http-pfx-'
+      bundleLabel: 'client certificate PFX/P12 bundle'
     });
     return {
       cert: extracted.certChain,
@@ -288,12 +286,7 @@ async function loadClientCertificateOptions(auth = {}, environment, url, clientC
 }
 
 async function readCertificateFile(filePath, label) {
-  try {
-    return await fs.readFile(filePath);
-  } catch (error) {
-    const reason = error?.code ? `${error.code}` : (error?.message || 'unknown error');
-    throw new Error(`Unable to read client certificate ${label}: ${reason}.`);
-  }
+  return readRegularFileBounded(filePath, `client certificate ${label}`);
 }
 
 async function sendNodeRequest(url, requestOptions, tlsOptions, redirectCount = 0, originalOrigin = url.origin, options = {}) {

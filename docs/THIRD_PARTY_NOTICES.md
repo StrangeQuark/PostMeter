@@ -31,6 +31,16 @@ PostMeter uses `@grpc/grpc-js` and `@grpc/proto-loader` for parent-owned live gR
 
 - Source packages: `@grpc/grpc-js`, `@grpc/proto-loader`
 - Source license: Apache-2.0
-- Runtime boundary: these packages are loaded only by the parent/core transport. Scripts can mutate gRPC metadata, messages, method path, and target URL through hardened Postman-compatible facades, but they never receive raw gRPC clients, channels, calls, sockets, proto-loader handles, filesystem handles, TLS material, or certificate file contents.
+- Runtime boundary: these packages are loaded only by the parent/core transport. Scripts can mutate gRPC metadata, messages, method path, and target URL through hardened Postman-compatible facades, but they never receive raw gRPC clients, channels, calls, sockets, proto-loader handles, filesystem handles, TLS material, certificate file contents, private keys, PFX passphrases, or decrypted PEM temp files.
 
 Apache License 2.0 text: https://www.apache.org/licenses/LICENSE-2.0
+
+## PFX/P12 Certificate Parser
+
+PostMeter uses `node-forge` for parent-owned PFX/P12 client-certificate parsing.
+
+- Source package: `node-forge`
+- Source license: `(BSD-3-Clause OR GPL-2.0)`; PostMeter relies on the BSD-3-Clause option.
+- Runtime boundary: the package is loaded only in the parent/core certificate loader. It extracts PFX/P12 certificate chains and private keys into in-memory PEM buffers, normalizes encrypted PEM private keys where gRPC needs unencrypted PEM input, and does not expose certificate contents, private keys, PFX passphrases, decrypted PEM temp files, or parser handles to scripts or the renderer.
+
+BSD 3-Clause text: https://opensource.org/license/bsd-3-clause

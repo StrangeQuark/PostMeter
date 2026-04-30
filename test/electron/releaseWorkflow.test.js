@@ -13,6 +13,7 @@ test('CI workflow runs the Electron UI and packaging validation suite', async ()
   assert.match(workflow, /npm test/);
   assert.match(workflow, /npm run postman:parity:validate/);
   assert.match(workflow, /npm run postman:docs:validate/);
+  assert.match(workflow, /npm run production:readiness:validate/);
   assert.match(workflow, /npm run release:gate/);
   assert.match(workflow, /npm audit --audit-level=high/);
   assert.match(workflow, /npm run sandbox:validate/);
@@ -25,6 +26,24 @@ test('CI workflow runs the Electron UI and packaging validation suite', async ()
   assert.match(workflow, /npm run pack:linux/);
   assert.match(workflow, /POSTMETER_CI_ELECTRON_NO_SANDBOX:\s*"1"/);
   assert.match(workflow, /xvfb-run -a npm run sandbox:validate:packaged/);
+  assert.match(workflow, /POSTMETER_VALIDATION_ARTIFACT_DIR:\s*validation-artifacts\/linux/);
+  assert.match(workflow, /name:\s*Native packaged smoke/);
+  assert.match(workflow, /platform:\s*linux/);
+  assert.match(workflow, /Build Windows sandbox helper/);
+  assert.match(workflow, /Source-tree sandbox runtime validation/);
+  assert.match(workflow, /npm run sandbox:validate/);
+  assert.match(workflow, /npm run sandbox:platform:validate/);
+  assert.match(workflow, /npm run dist:linux/);
+  assert.match(workflow, /xvfb-run -a npm run release:validate:packaged-smoke/);
+  assert.match(workflow, /npm run release:validate:win-protocol/);
+  assert.match(workflow, /npm run release:validate:mac-protocol/);
+  assert.match(workflow, /Upload native package artifacts/);
+  assert.match(workflow, /release\/\*\.AppImage/);
+  assert.match(workflow, /release\/\*\.deb/);
+  assert.doesNotMatch(workflow, /release\/\*\.msi/);
+  assert.doesNotMatch(workflow, /release\/\*\.rpm/);
+  assert.match(workflow, /if-no-files-found:\s*error/);
+  assert.match(workflow, /Upload native validation logs/);
 });
 
 test('release workflow builds unsigned artifacts for all tier-one desktop platforms', async () => {
@@ -45,6 +64,12 @@ test('release workflow builds unsigned artifacts for all tier-one desktop platfo
   assert.match(workflow, /npm run sandbox:platform:validate/);
   assert.match(workflow, /npm run postman:parity:validate/);
   assert.match(workflow, /npm run postman:docs:validate/);
+  assert.match(workflow, /npm run production:readiness:validate/);
+  assert.match(workflow, /npm run production:readiness:claim:stable/);
+  assert.ok(
+    workflow.indexOf('npm run production:readiness:claim:stable') < workflow.indexOf('Build unsigned artifacts'),
+    'stable readiness claim must run before release artifacts are built'
+  );
   assert.match(workflow, /npm run release:gate/);
   assert.match(workflow, /CSC_IDENTITY_AUTO_DISCOVERY:\s*"false"/);
   assert.match(workflow, /npm run sandbox:validate:packaged/);
@@ -54,6 +79,9 @@ test('release workflow builds unsigned artifacts for all tier-one desktop platfo
   assert.match(workflow, /npm run release:validate:win-protocol/);
   assert.match(workflow, /Validate macOS protocol registration/);
   assert.match(workflow, /npm run release:validate:mac-protocol/);
+  assert.match(workflow, /POSTMETER_VALIDATION_ARTIFACT_DIR:\s*validation-artifacts\/\$\{\{ matrix\.platform \}\}/);
+  assert.match(workflow, /Upload validation logs/);
+  assert.match(workflow, /if:\s*always\(\)/);
   assert.match(workflow, /npm run release:prepare/);
   assert.match(workflow, /npm run release:validate/);
   assert.match(workflow, /POSTMETER_RELEASE_REQUIRED_TYPES:\s*appimage,deb,dmg,zip,exe/);
@@ -63,6 +91,9 @@ test('release workflow builds unsigned artifacts for all tier-one desktop platfo
   assert.match(workflow, /release\/\*\.dmg/);
   assert.match(workflow, /release\/\*\.zip/);
   assert.match(workflow, /release\/\*\.exe/);
+  assert.doesNotMatch(workflow, /release\/\*\.msi/);
+  assert.doesNotMatch(workflow, /release\/\*\.rpm/);
+  assert.match(workflow, /if-no-files-found:\s*error/);
 });
 
 test('manual native release validation workflow exercises release evidence without publishing', async () => {
@@ -83,6 +114,7 @@ test('manual native release validation workflow exercises release evidence witho
   assert.match(workflow, /npm run sandbox:platform:validate/);
   assert.match(workflow, /npm run postman:parity:validate/);
   assert.match(workflow, /npm run postman:docs:validate/);
+  assert.match(workflow, /npm run production:readiness:validate/);
   assert.match(workflow, /npm run release:gate/);
   assert.match(workflow, /npm run release:validate:packaged-smoke/);
   assert.match(workflow, /npm run sandbox:validate:packaged/);
@@ -90,13 +122,47 @@ test('manual native release validation workflow exercises release evidence witho
   assert.match(workflow, /POSTMETER_CI_ELECTRON_NO_SANDBOX:\s*"1"/);
   assert.match(workflow, /npm run release:validate:win-protocol/);
   assert.match(workflow, /npm run release:validate:mac-protocol/);
+  assert.match(workflow, /POSTMETER_VALIDATION_ARTIFACT_DIR:\s*validation-artifacts\/\$\{\{ matrix\.platform \}\}/);
+  assert.match(workflow, /Upload validation logs/);
   assert.match(workflow, /npm run release:prepare/);
   assert.match(workflow, /npm run release:validate/);
   assert.match(workflow, /actions\/upload-artifact@v4/);
   assert.match(workflow, /actions\/download-artifact@v4/);
+  assert.match(workflow, /if-no-files-found:\s*error/);
+  assert.doesNotMatch(workflow, /release\/\*\.msi/);
+  assert.doesNotMatch(workflow, /release\/\*\.rpm/);
   assert.doesNotMatch(workflow, /gh release create/);
   assert.doesNotMatch(workflow, /contents:\s*write/);
   for (const scriptName of ['dist:linux', 'dist:win', 'dist:mac']) {
     assert.match(packageJson.scripts[scriptName], /--publish never/);
   }
+  assert.match(packageJson.scripts['dist:win'], /npm run native:windows-sandbox:build/);
+  assert.equal(packageJson.scripts['native:windows-sandbox:build'], 'node scripts/buildWindowsSandboxHelper.js');
+});
+
+test('native protocol validators exercise actual custom-scheme launches', async () => {
+  const root = path.join(__dirname, '..', '..');
+  const windowsScript = await fs.readFile(path.join(root, 'scripts', 'validateWindowsProtocolRegistration.ps1'), 'utf8');
+  const macScript = await fs.readFile(path.join(root, 'scripts', 'validateMacProtocolRegistration.sh'), 'utf8');
+
+  assert.match(windowsScript, /Start-Process -FilePath \$url/);
+  assert.match(windowsScript, /postmeter:\/\/oauth\/callback/);
+  assert.match(windowsScript, /Stop-PostMeterProcesses/);
+  assert.match(windowsScript, /ExpectedInstallDir/);
+  assert.match(windowsScript, /Find-Uninstaller/);
+  assert.match(windowsScript, /matchesExpectedInstall/);
+  assert.match(windowsScript, /Start-Transcript/);
+  assert.match(windowsScript, /windows-protocol-validation\.log/);
+  assert.match(windowsScript, /did not create an uninstaller/);
+  assert.match(macScript, /open -g -b "com\.strangequark\.postmeter" "\$url"/);
+  assert.match(macScript, /postmeter:\/\/oauth\/callback/);
+  assert.match(macScript, /Launch Services/);
+  assert.match(macScript, /pgrep -x PostMeter/);
+  assert.match(macScript, /expected_executable="\$app_path\/Contents\/MacOS\/PostMeter"/);
+  assert.match(macScript, /ps -p "\$pid" -o command=/);
+  assert.match(macScript, /mac-protocol-validation\.log/);
+  assert.match(macScript, /Validated \$validated macOS app bundle\(s\) and \$launches Launch Services protocol launch\(es\)\./);
+  assert.doesNotMatch(macScript, /if \[\[ "\$launched" -eq 0 \]\]/);
+  assert.match(macScript, /instead of \$expected_executable/);
+  assert.match(macScript, /did not launch/);
 });

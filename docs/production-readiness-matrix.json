@@ -7,6 +7,31 @@
     "rc",
     "stable"
   ],
+  "releasePolicies": {
+    "beta": {
+      "allowedReleaseBlockingStatuses": [
+        "implemented",
+        "validated",
+        "external-validation-required"
+      ],
+      "allowDocumentedWaivers": false,
+      "description": "Beta readiness allows implemented rows and explicitly tracked external evidence gaps, but fails on blocked release work."
+    },
+    "rc": {
+      "allowedReleaseBlockingStatuses": [
+        "validated"
+      ],
+      "allowDocumentedWaivers": true,
+      "description": "Release-candidate readiness requires validation for every release-blocking row unless the row carries an explicit documented waiver."
+    },
+    "stable": {
+      "allowedReleaseBlockingStatuses": [
+        "validated"
+      ],
+      "allowDocumentedWaivers": false,
+      "description": "Stable readiness requires every release-blocking row to be validated with required local/native/provider/signing evidence."
+    }
+  },
   "statuses": {
     "implemented": "Implementation and local validation exist.",
     "validated": "Implementation has required local and native-runner evidence.",
@@ -29,6 +54,23 @@
       "evidenceRefs": [
         "docs/non-postman-compatibility-matrix.json",
         "docs/COMPATIBILITY.md"
+      ],
+      "owner": "PostMeter",
+      "lastVerified": "",
+      "notes": ""
+    },
+    {
+      "id": "dependencies.audit",
+      "area": "security",
+      "target": "Release dependency audit must pass with no high-severity vulnerabilities.",
+      "status": "validated",
+      "releaseBlocking": true,
+      "commands": [
+        "npm audit --audit-level=high"
+      ],
+      "evidenceRefs": [
+        "package.json",
+        "package-lock.json"
       ],
       "owner": "PostMeter",
       "lastVerified": "",
@@ -71,6 +113,23 @@
       "notes": ""
     },
     {
+      "id": "electron.runtime-version",
+      "area": "release",
+      "target": "Electron runtime version is checked before production or security claims.",
+      "status": "validated",
+      "releaseBlocking": true,
+      "commands": [
+        "npm run electron:version"
+      ],
+      "evidenceRefs": [
+        "package.json",
+        "scripts/electronVersion.js"
+      ],
+      "owner": "PostMeter",
+      "lastVerified": "",
+      "notes": ""
+    },
+    {
       "id": "electron.security",
       "area": "security",
       "target": "Electron BrowserWindow, preload, IPC, navigation, external URL, protocol, and packaged-preload controls are matrixed and validated.",
@@ -92,19 +151,28 @@
     {
       "id": "grpc.pfx-p12-mtls",
       "area": "transport",
-      "target": "HTTP and gRPC mTLS share parent-owned PFX/P12 extraction aligned with client-certificate handling.",
+      "target": "HTTP and gRPC mTLS share parent-owned in-memory PFX/P12 extraction aligned with client-certificate handling.",
       "status": "implemented",
       "releaseBlocking": true,
       "commands": [
         "npm test"
       ],
       "evidenceRefs": [
+        "src/core/pfxCertificate.js",
         "src/core/grpcClient.js",
-        "test/electron/grpcClient.test.js"
+        "src/core/httpClient.js",
+        "src/core/scriptedRequestLifecycle.js",
+        "src/core/scriptSandbox.js",
+        "src/core/postmanImporter.js",
+        "test/electron/grpcClient.test.js",
+        "test/electron/httpClient.test.js",
+        "test/electron/scriptSandbox.test.js",
+        "test/electron/scriptedRequestLifecycle.test.js",
+        "test/electron/postmanImporter.test.js"
       ],
       "owner": "PostMeter",
       "lastVerified": "",
-      "notes": ""
+      "notes": "PFX/P12 parsing and encrypted PEM key normalization use node-forge in the parent process, read certificate files through regular-file, byte-capped descriptor reads, emit in-memory PEM buffers only, preserve imported Postman PFX/P12 gRPC certificate references, deny script-provided certificate/PFX/CA/passphrase path changes for pm.sendRequest and primary request mutations, fail closed on missing certificate bindings, ignore direct path fallbacks when a binding is configured, and have live HTTP/gRPC mTLS coverage for PEM/PFX plus gRPC unary, client-streaming, server-streaming, and bidirectional calls and negative extraction failures."
     },
     {
       "id": "load.distributed",
@@ -145,13 +213,16 @@
       "releaseBlocking": true,
       "commands": [
         "npm run dist:linux",
+        "npm run release:validate:packaged-smoke",
         "npm run release:validate",
         "npm run sandbox:validate:packaged"
       ],
       "evidenceRefs": [
+        "scripts/validatePackagedAppSmoke.js",
         "scripts/validateReleaseArtifacts.js",
         ".github/workflows/ci.yml",
-        ".github/workflows/release.yml"
+        ".github/workflows/release.yml",
+        ".github/workflows/release-validation.yml"
       ],
       "owner": "PostMeter",
       "lastVerified": "",
@@ -166,10 +237,15 @@
       "commands": [
         "npm run dist:mac",
         "npm run release:validate:packaged-smoke",
-        "npm run release:validate:mac-protocol"
+        "npm run release:validate:mac-protocol",
+        "npm run sandbox:validate:packaged"
       ],
       "evidenceRefs": [
-        ".github/workflows/release.yml"
+        "scripts/validatePackagedAppSmoke.js",
+        "scripts/validateMacProtocolRegistration.sh",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml",
+        ".github/workflows/release-validation.yml"
       ],
       "owner": "PostMeter",
       "lastVerified": "",
@@ -184,10 +260,15 @@
       "commands": [
         "npm run dist:win",
         "npm run release:validate:packaged-smoke",
-        "npm run release:validate:win-protocol"
+        "npm run release:validate:win-protocol",
+        "npm run sandbox:validate:packaged"
       ],
       "evidenceRefs": [
-        ".github/workflows/release.yml"
+        "scripts/validatePackagedAppSmoke.js",
+        "scripts/validateWindowsProtocolRegistration.ps1",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml",
+        ".github/workflows/release-validation.yml"
       ],
       "owner": "PostMeter",
       "lastVerified": "",
@@ -233,20 +314,27 @@
       "id": "release.dashboard",
       "area": "release-readiness",
       "target": "Production readiness dashboard and gates exist as generated source-owned artifacts.",
-      "status": "implemented",
+      "status": "validated",
       "releaseBlocking": true,
       "commands": [
         "npm run production:readiness",
-        "npm run production:readiness:validate"
+        "npm run production:readiness:write",
+        "npm run production:readiness:validate",
+        "npm run production:readiness:claim",
+        "npm run production:readiness:claim:beta",
+        "npm run production:readiness:claim:rc",
+        "npm run production:readiness:claim:stable",
+        "npm run release:gate"
       ],
       "evidenceRefs": [
         "src/core/productionReadinessMatrix.js",
         "docs/production-readiness-matrix.json",
-        "docs/RELEASE_READINESS.md"
+        "docs/RELEASE_READINESS.md",
+        ".github/workflows/release.yml"
       ],
       "owner": "PostMeter",
       "lastVerified": "",
-      "notes": ""
+      "notes": "The tag-driven release workflow runs the stable readiness claim before artifact publication."
     },
     {
       "id": "release.signing",
@@ -267,8 +355,8 @@
     {
       "id": "sandbox.platform-os",
       "area": "security",
-      "target": "Platform-equivalent OS sandbox claim is tracked separately from Postman API parity.",
-      "status": "blocked",
+      "target": "Platform-equivalent OS sandbox claim is implemented and tracked separately from Postman API parity.",
+      "status": "implemented",
       "releaseBlocking": true,
       "commands": [
         "npm run sandbox:platform:validate",
@@ -276,11 +364,12 @@
       ],
       "evidenceRefs": [
         "docs/os-sandbox-platform-matrix.json",
-        "src/core/osSandboxPlatformMatrix.js"
+        "src/core/osSandboxPlatformMatrix.js",
+        "native/windows-sandbox-helper/PostMeterWindowsSandboxHelper.cpp"
       ],
       "owner": "PostMeter",
       "lastVerified": "",
-      "notes": "Linux is accepted for the current Linux claim; Windows/macOS still require native backend source plus packaged runner proof before the cross-platform claim can pass."
+      "notes": "Linux uses bubblewrap plus seccomp, Windows uses the release-owned AppContainer helper, and macOS uses the seatbelt sandbox-exec backend. Native runner packaging rows still track platform release evidence separately."
     },
     {
       "id": "sandbox.script-runtime",

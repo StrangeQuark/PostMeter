@@ -86,11 +86,22 @@ jobs:
 
       - name: Packaged app startup smoke
         run: xvfb-run -a npm run release:validate:packaged-smoke
+        env:
+          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/linux
 
       - name: Packaged sandbox validation
         run: xvfb-run -a npm run sandbox:validate:packaged
         env:
           POSTMETER_ALLOW_OS_SANDBOX_VALIDATION_SKIP: "1"
+
+      - name: Upload Linux validation logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postmeter-ci-linux-validation-logs
+          path: validation-artifacts/**
+          if-no-files-found: ignore
+          retention-days: 14
 
   native-packaged-smoke:
     name: Native packaged smoke (${{ matrix.platform }})
@@ -102,9 +113,20 @@ jobs:
           - platform: windows
             runner: windows-latest
             command: npm run dist:win
+            smoke_command: npm run release:validate:packaged-smoke
+            sandbox_command: npm run sandbox:validate:packaged
           - platform: macos
             runner: macos-latest
             command: npm run dist:mac
+            smoke_command: npm run release:validate:packaged-smoke
+            sandbox_command: npm run sandbox:validate:packaged
+          - platform: linux
+            runner: ubuntu-latest
+            command: npm run dist:linux
+            smoke_command: xvfb-run -a npm run release:validate:packaged-smoke
+            sandbox_command: xvfb-run -a npm run sandbox:validate:packaged
+            ci_no_sandbox: "1"
+            allow_os_skip: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -115,8 +137,24 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Install Linux sandbox backend
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+
       - name: Install
         run: npm ci
+
+      - name: Build Windows sandbox helper
+        if: matrix.platform == 'windows'
+        run: npm run native:windows-sandbox:build
+
+      - name: Source-tree sandbox runtime validation
+        run: npm run sandbox:validate
+        env:
+          POSTMETER_ALLOW_OS_SANDBOX_VALIDATION_SKIP: ${{ matrix.allow_os_skip }}
+
+      - name: OS sandbox platform matrix validation
+        run: npm run sandbox:platform:validate
 
       - name: Validate production support matrices
         run: npm run production:readiness:validate && npm run electron:security:validate && npm run workspace:durability:validate && npm run compatibility:non-postman:validate
@@ -127,7 +165,50 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
       - name: Packaged app startup smoke
-        run: npm run release:validate:packaged-smoke
+        run: ${{ matrix.smoke_command }}
+        env:
+          POSTMETER_CI_ELECTRON_NO_SANDBOX: ${{ matrix.ci_no_sandbox }}
+          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/${{ matrix.platform }}
 
       - name: Packaged sandbox validation
-        run: npm run sandbox:validate:packaged
+        run: ${{ matrix.sandbox_command }}
+        env:
+          POSTMETER_ALLOW_OS_SANDBOX_VALIDATION_SKIP: ${{ matrix.allow_os_skip }}
+          POSTMETER_CI_ELECTRON_NO_SANDBOX: ${{ matrix.ci_no_sandbox }}
+
+      - name: Validate Windows protocol registration
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: npm run release:validate:win-protocol
+        env:
+          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/${{ matrix.platform }}
+
+      - name: Validate macOS protocol registration
+        if: matrix.platform == 'macos'
+        run: npm run release:validate:mac-protocol
+        env:
+          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/${{ matrix.platform }}
+
+      - name: Upload native package artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postmeter-ci-${{ matrix.platform }}-artifacts
+          path: |
+            release/*.AppImage
+            release/*.deb
+            release/*.dmg
+            release/*.zip
+            release/*.exe
+            release/latest*.yml
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload native validation logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postmeter-ci-${{ matrix.platform }}-validation-logs
+          path: validation-artifacts/**
+          if-no-files-found: ignore
+          retention-days: 14

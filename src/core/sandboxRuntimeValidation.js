@@ -4,6 +4,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const {
   OS_SANDBOX_MODES,
+  cleanupPrivateTempDir,
   createOsSandboxedProcessLaunch,
   osSandboxStatus,
   prepareSeccompStdio
@@ -26,16 +27,16 @@ async function validateSandboxRuntime(options = {}) {
   validateWorkerLaunchPolicy(scriptWorkerExecArgv({ requireNodePermission: true }), scriptWorkerEnv());
   validateNodePermissionModel();
   let requireOsSandbox = false;
-  if (process.platform === 'linux') {
+  if (platformRequiresOsSandbox(process.platform)) {
     const status = osSandboxStatus({ mode: OS_SANDBOX_MODES.REQUIRED });
     if (status.supported) {
       validateOsSandboxLaunchPolicy();
       validateOsSandboxBoundary();
       requireOsSandbox = true;
-    } else if (process.env.POSTMETER_ALLOW_OS_SANDBOX_VALIDATION_SKIP === '1') {
+    } else if (process.platform === 'linux' && process.env.POSTMETER_ALLOW_OS_SANDBOX_VALIDATION_SKIP === '1') {
       console.warn('Linux OS-level script sandbox validation skipped because no functional bubblewrap backend is available in this environment.');
     } else {
-      throw new Error('Linux OS-level script sandboxing requires a functional bubblewrap backend.');
+      throw new Error(`${platformLabel(process.platform)} OS-level script sandboxing requires a functional ${platformBackendLabel(process.platform)} backend.`);
     }
   }
   await validateScriptBoundary({
@@ -116,7 +117,7 @@ function validateNodePermissionModel() {
 function validateOsSandboxLaunchPolicy() {
   const status = osSandboxStatus({ mode: OS_SANDBOX_MODES.REQUIRED });
   if (!status.supported) {
-    throw new Error('Linux OS-level script sandboxing requires bubblewrap, but no bubblewrap executable was found.');
+    throw new Error(`${platformLabel(process.platform)} OS-level script sandboxing requires ${platformBackendLabel(process.platform)}, but no functional backend was found.`);
   }
 
   const launch = createOsSandboxedProcessLaunch({
@@ -124,40 +125,111 @@ function validateOsSandboxLaunchPolicy() {
     args: ['-e', 'process.exit(0)'],
     env: scriptWorkerEnv()
   });
-  if (!launch.sandboxed || launch.backend !== 'bubblewrap') {
-    throw new Error('Required OS-level script sandbox launch did not select the bubblewrap backend.');
-  }
-  for (const requiredArg of ['--unshare-all', '--unshare-user', '--disable-userns', '--assert-userns-disabled', '--die-with-parent', '--new-session', '--clearenv']) {
-    if (!launch.args.includes(requiredArg)) {
-      throw new Error(`Bubblewrap script sandbox launch is missing ${requiredArg}.`);
+  try {
+    if (!launch.sandboxed || launch.backend !== status.backend) {
+      throw new Error(`Required OS-level script sandbox launch did not select the ${status.backend} backend.`);
     }
-  }
-  if (launch.args.includes('--share-net')) {
-    throw new Error('Bubblewrap script sandbox launch must not share the host network namespace.');
-  }
-  if (!hasArgPair(launch.args, '--tmpfs', '/tmp') || !hasArgPair(launch.args, '--tmpfs', '/run')) {
-    throw new Error('Bubblewrap script sandbox launch must provide private tmpfs mounts.');
-  }
-  if (!hasArgPair(launch.args, '--setenv', 'POSTMETER_SCRIPT_WORKER')) {
-    throw new Error('Bubblewrap script sandbox launch must set the worker marker in the cleared environment.');
-  }
-  if (!hasArgPair(launch.args, '--cap-drop', 'ALL')) {
-    throw new Error('Bubblewrap script sandbox launch must drop capabilities.');
-  }
-  if (status.seccompSupported) {
-    if (!hasArgPair(launch.args, '--seccomp', String(status.seccompFilterFd))) {
-      throw new Error('Bubblewrap script sandbox launch is missing the Linux seccomp syscall policy.');
+    if (status.backend === 'windows-helper') {
+      validateWindowsSandboxLaunchPolicy(launch);
+      return;
     }
-    if (!launch.seccompPolicy?.filter || launch.seccompPolicy.filter.length === 0) {
-      throw new Error('Bubblewrap script sandbox launch has an empty seccomp syscall policy.');
+    if (status.backend === 'macos-seatbelt') {
+      validateMacosSandboxLaunchPolicy(launch);
+      return;
+    }
+    if (status.backend !== 'bubblewrap') {
+      throw new Error(`Unsupported OS sandbox validation backend: ${status.backend}.`);
+    }
+    for (const requiredArg of ['--unshare-all', '--unshare-user', '--disable-userns', '--assert-userns-disabled', '--die-with-parent', '--new-session', '--clearenv']) {
+      if (!launch.args.includes(requiredArg)) {
+        throw new Error(`Bubblewrap script sandbox launch is missing ${requiredArg}.`);
+      }
+    }
+    if (launch.args.includes('--share-net')) {
+      throw new Error('Bubblewrap script sandbox launch must not share the host network namespace.');
+    }
+    if (!hasArgPair(launch.args, '--tmpfs', '/tmp') || !hasArgPair(launch.args, '--tmpfs', '/run')) {
+      throw new Error('Bubblewrap script sandbox launch must provide private tmpfs mounts.');
+    }
+    if (!hasArgPair(launch.args, '--setenv', 'POSTMETER_SCRIPT_WORKER')) {
+      throw new Error('Bubblewrap script sandbox launch must set the worker marker in the cleared environment.');
+    }
+    if (!hasArgPair(launch.args, '--cap-drop', 'ALL')) {
+      throw new Error('Bubblewrap script sandbox launch must drop capabilities.');
+    }
+    if (status.seccompSupported) {
+      if (!hasArgPair(launch.args, '--seccomp', String(status.seccompFilterFd))) {
+        throw new Error('Bubblewrap script sandbox launch is missing the Linux seccomp syscall policy.');
+      }
+      if (!launch.seccompPolicy?.filter || launch.seccompPolicy.filter.length === 0) {
+        throw new Error('Bubblewrap script sandbox launch has an empty seccomp syscall policy.');
+      }
+    }
+  } finally {
+    cleanupPrivateTempDir(launch.privateTempDir);
+  }
+}
+
+function validateWindowsSandboxLaunchPolicy(launch) {
+  if (!launch.command.toLowerCase().endsWith('postmeterwindowssandboxhelper.exe')) {
+    throw new Error('Windows OS sandbox launch must use the release-owned AppContainer helper.');
+  }
+  if (!launch.privateTempDir || !hasArgPair(launch.args, '--temp', launch.privateTempDir)) {
+    throw new Error('Windows OS sandbox launch must provide a private temp directory to the helper.');
+  }
+  if (!hasArgPair(launch.args, '--profile', 'PostMeter.ScriptWorkerSandbox')) {
+    throw new Error('Windows OS sandbox launch must use the stable PostMeter AppContainer profile.');
+  }
+  if (!hasArgPair(launch.args, '--env', 'POSTMETER_SCRIPT_WORKER=1')) {
+    throw new Error('Windows OS sandbox launch must pass the script-worker marker to the helper child environment.');
+  }
+  if (!launch.args.includes('--read-only')) {
+    throw new Error('Windows OS sandbox launch must pass explicit read-only runtime/app paths to the helper.');
+  }
+  if (!launch.args.includes('--')) {
+    throw new Error('Windows OS sandbox launch must delimit helper options from the child command.');
+  }
+  if (Object.keys(launch.env || {}).length !== 0) {
+    throw new Error('Windows OS sandbox helper process must not inherit the script-worker child environment.');
+  }
+}
+
+function validateMacosSandboxLaunchPolicy(launch) {
+  const profileIndex = launch.args.indexOf('-p') + 1;
+  const profile = profileIndex > 0 ? launch.args[profileIndex] : '';
+  if (!profile) {
+    throw new Error('macOS OS sandbox launch must pass a seatbelt profile.');
+  }
+  if (!launch.privateTempDir || launch.env.TMPDIR !== launch.privateTempDir) {
+    throw new Error('macOS OS sandbox launch must provide a private writable temp directory.');
+  }
+  if (!profile.includes('(deny default)') || !profile.includes('(deny network*)')) {
+    throw new Error('macOS seatbelt profile must deny by default and deny network access.');
+  }
+  if (!profile.includes('(deny process-exec)') || !profile.includes('(deny process-fork)')) {
+    throw new Error('macOS seatbelt profile must explicitly deny process execution and forking.');
+  }
+  if (profile.includes('(allow process*)')) {
+    throw new Error('macOS seatbelt profile must not allow broad process operations.');
+  }
+  if (!profile.includes(launch.privateTempDir)) {
+    throw new Error('macOS seatbelt profile must limit file writes to the private temp directory.');
+  }
+  for (const denied of ['PATH', 'HOME', 'USERPROFILE']) {
+    if (launch.env[denied] != null) {
+      throw new Error(`macOS OS sandbox launch leaked ${denied}.`);
     }
   }
 }
 
 function validateOsSandboxBoundary() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'postmeter-os-sandbox-'));
+  const homeTempDir = createSandboxProbeDirectory(os.homedir(), 'postmeter-os-sandbox-home-');
   const forbiddenFile = path.join(tempDir, 'forbidden.txt');
+  const forbiddenHomeFile = path.join(homeTempDir, 'forbidden-home.txt');
+  const forbiddenWriteFile = path.join(tempDir, 'forbidden-write.txt');
   fs.writeFileSync(forbiddenFile, 'secret');
+  fs.writeFileSync(forbiddenHomeFile, 'secret');
   try {
     expectOsSandboxProbeDenied('host filesystem read', `
       const fs = require('node:fs');
@@ -169,6 +241,26 @@ function validateOsSandboxBoundary() {
       }
     `);
 
+    expectOsSandboxProbeDenied('home directory filesystem read', `
+      const fs = require('node:fs');
+      try {
+        fs.readFileSync(${JSON.stringify(forbiddenHomeFile)}, 'utf8');
+        process.exit(2);
+      } catch (error) {
+        process.exit(error && (error.code === 'ENOENT' || error.code === 'EACCES') ? 0 : 1);
+      }
+    `);
+
+    expectOsSandboxProbeDenied('host filesystem write', `
+      const fs = require('node:fs');
+      try {
+        fs.writeFileSync(${JSON.stringify(forbiddenWriteFile)}, 'modified');
+        process.exit(2);
+      } catch (error) {
+        process.exit(error && (error.code === 'ENOENT' || error.code === 'EACCES' || error.code === 'EPERM') ? 0 : 1);
+      }
+    `);
+
     expectOsSandboxProbeDenied('host network access', `
       const net = require('node:net');
       const socket = net.createConnection({ host: '1.1.1.1', port: 443, timeout: 500 });
@@ -176,16 +268,70 @@ function validateOsSandboxBoundary() {
       socket.on('error', () => process.exit(0));
       socket.on('timeout', () => process.exit(0));
     `);
+
+    expectOsSandboxProbeDenied('child process spawn', `
+      const { spawnSync } = require('node:child_process');
+      try {
+        const result = spawnSync(process.execPath, ['--version']);
+        process.exit(result && result.status === 0 ? 2 : 0);
+      } catch (_) {
+        process.exit(0);
+      }
+    `, {
+      execArgv: scriptWorkerExecArgv({ requireNodePermission: true })
+    });
+
+    expectOsSandboxProbePass('environment stripping', `
+      const leaked = ['PATH', 'HOME', 'USERPROFILE', 'POSTMETER_OS_SANDBOX_SECRET']
+        .filter((key) => process.env[key] != null);
+      process.exit(leaked.length === 0 && process.env.POSTMETER_SCRIPT_WORKER === '1' ? 0 : 2);
+    `);
+
+    expectOsSandboxProbePass('required runtime read access', `
+      require(${JSON.stringify(path.join(__dirname, 'scriptRuntime.js'))});
+      process.exit(0);
+    `, {
+      readOnlyPaths: [__dirname]
+    });
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
+    fs.rmSync(homeTempDir, { recursive: true, force: true });
   }
 }
 
-function expectOsSandboxProbeDenied(label, code) {
+function createSandboxProbeDirectory(rootDirectory, prefix) {
+  const root = rootDirectory && fs.existsSync(rootDirectory) ? rootDirectory : os.tmpdir();
+  try {
+    return fs.mkdtempSync(path.join(root, prefix));
+  } catch {
+    return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  }
+}
+
+function expectOsSandboxProbeDenied(label, code, options = {}) {
+  const result = runOsSandboxProbe(code, options);
+  if (result.status !== 0) {
+    throw new Error(`OS sandbox probe did not deny ${label}: ${result.stderr || result.stdout || `status ${result.status}`}`);
+  }
+}
+
+function expectOsSandboxProbePass(label, code, options = {}) {
+  const result = runOsSandboxProbe(code, options);
+  if (result.status !== 0) {
+    throw new Error(`OS sandbox probe did not allow ${label}: ${result.stderr || result.stdout || `status ${result.status}`}`);
+  }
+}
+
+function runOsSandboxProbe(code, options = {}) {
   const launch = createOsSandboxedProcessLaunch({
     mode: OS_SANDBOX_MODES.REQUIRED,
-    args: ['-e', code],
-    env: scriptWorkerEnv()
+    args: [
+      ...(options.execArgv || []),
+      '-e',
+      code
+    ],
+    env: scriptWorkerEnv(),
+    readOnlyPaths: options.readOnlyPaths || []
   });
   const seccomp = prepareSeccompStdio(launch, ['ignore', 'pipe', 'pipe']);
   try {
@@ -197,11 +343,10 @@ function expectOsSandboxProbeDenied(label, code) {
     if (result.error) {
       throw result.error;
     }
-    if (result.status !== 0) {
-      throw new Error(`OS sandbox probe did not deny ${label}: ${result.stderr || result.stdout || `status ${result.status}`}`);
-    }
+    return result;
   } finally {
     seccomp.cleanup();
+    cleanupPrivateTempDir(launch.privateTempDir);
   }
 }
 
@@ -328,6 +473,30 @@ function assertDeepEqual(actual, expected) {
 
 function hasArgPair(args, flag, value) {
   return args.some((arg, index) => arg === flag && args[index + 1] === value);
+}
+
+function platformRequiresOsSandbox(platform) {
+  return platform === 'linux' || platform === 'win32' || platform === 'darwin';
+}
+
+function platformLabel(platform) {
+  if (platform === 'win32') {
+    return 'Windows';
+  }
+  if (platform === 'darwin') {
+    return 'macOS';
+  }
+  return 'Linux';
+}
+
+function platformBackendLabel(platform) {
+  if (platform === 'win32') {
+    return 'Windows AppContainer helper';
+  }
+  if (platform === 'darwin') {
+    return 'macOS seatbelt';
+  }
+  return 'bubblewrap';
 }
 
 module.exports = {

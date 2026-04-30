@@ -5,6 +5,7 @@ release/
 dist-electron/
 artifacts/
 gha-logs/
+native/windows-sandbox-helper/bin/
 npm-debug.log*
 
 ### IntelliJ IDEA ###

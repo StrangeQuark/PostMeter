@@ -92,12 +92,15 @@ jobs:
       - name: Packaged app startup smoke
         if: matrix.platform != 'linux'
         run: npm run release:validate:packaged-smoke
+        env:
+          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/${{ matrix.platform }}
 
       - name: Packaged Linux app startup smoke
         if: matrix.platform == 'linux'
         run: xvfb-run -a npm run release:validate:packaged-smoke
         env:
           POSTMETER_CI_ELECTRON_NO_SANDBOX: "1"
+          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/${{ matrix.platform }}
 
       - name: Packaged sandbox validation
         if: matrix.platform != 'linux'
@@ -114,10 +117,23 @@ jobs:
         if: matrix.platform == 'windows'
         shell: pwsh
         run: npm run release:validate:win-protocol
+        env:
+          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/${{ matrix.platform }}
 
       - name: Validate macOS protocol registration
         if: matrix.platform == 'macos'
         run: npm run release:validate:mac-protocol
+        env:
+          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/${{ matrix.platform }}
+
+      - name: Upload validation logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postmeter-validation-${{ matrix.platform }}-logs
+          path: validation-artifacts/**
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Upload platform artifacts
         if: always()
@@ -130,9 +146,8 @@ jobs:
             release/*.dmg
             release/*.zip
             release/*.exe
-            release/*.msi
             release/latest*.yml
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14
 
   validate-release-metadata:
