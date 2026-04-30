@@ -4,6 +4,8 @@
   "fixtureId": "differential-http-core",
   "newmanVersion": "6.2.2",
   "postmanRuntimeVersion": "7.39.1",
+  "generationCommand": "npm run postman:newman-reports:refresh -- --download-newman --output <dir>",
+  "dateGenerated": "2026-04-30T14:11:19.215Z",
   "normalization": {
     "normalizedFields": [
       "timestamps",
@@ -11,7 +13,11 @@
       "response timings",
       "randomized localhost ports",
       "host filesystem paths",
-      "machine-specific process metadata",
+      "generated request IDs",
+      "generated Postman request tokens",
+      "generated multipart boundaries",
+      "time-derived request signatures",
+      "machine names and machine-specific process metadata",
       "raw reporter cursor ids where duplicated by Newman internals"
     ],
     "preservedFields": [
@@ -20,9 +26,11 @@
       "request names",
       "request methods",
       "response codes",
+      "response shape and body digest",
       "assertion names",
       "assertion pass/fail state",
-      "failure messages"
+      "failure messages",
+      "console output"
     ]
   },
   "collectionName": "PostMeter Differential HTTP Core",
@@ -78,6 +86,15 @@
       "itemName": "Core JSON",
       "method": "GET",
       "responseCode": 200,
+      "responseShape": {
+        "status": "OK",
+        "code": 200,
+        "sizeBytes": 12,
+        "headerCount": 5,
+        "cookieCount": 0,
+        "bodySha256": "9c5226e6acf4baaf2d788c2540c602fed4594f669f4ebff567cdbaba735222dd"
+      },
+      "console": [],
       "assertions": [
         {
           "name": "core response status and body",

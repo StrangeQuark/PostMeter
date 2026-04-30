@@ -4,6 +4,8 @@
   "fixtureId": "differential-runtime-limits",
   "newmanVersion": "6.2.2",
   "postmanRuntimeVersion": "7.39.1",
+  "generationCommand": "npm run postman:newman-reports:refresh -- --download-newman --output <dir>",
+  "dateGenerated": "2026-04-30T14:11:23.007Z",
   "normalization": {
     "normalizedFields": [
       "timestamps",
@@ -11,7 +13,11 @@
       "response timings",
       "randomized localhost ports",
       "host filesystem paths",
-      "machine-specific process metadata",
+      "generated request IDs",
+      "generated Postman request tokens",
+      "generated multipart boundaries",
+      "time-derived request signatures",
+      "machine names and machine-specific process metadata",
       "raw reporter cursor ids where duplicated by Newman internals"
     ],
     "preservedFields": [
@@ -20,9 +26,11 @@
       "request names",
       "request methods",
       "response codes",
+      "response shape and body digest",
       "assertion names",
       "assertion pass/fail state",
-      "failure messages"
+      "failure messages",
+      "console output"
     ]
   },
   "collectionName": "PostMeter Differential Runtime Limits",
@@ -78,6 +86,15 @@
       "itemName": "Runtime Timer Drain And Output",
       "method": "GET",
       "responseCode": 200,
+      "responseShape": {
+        "status": "OK",
+        "code": 200,
+        "sizeBytes": 261,
+        "headerCount": 5,
+        "cookieCount": 0,
+        "bodySha256": "d1b0901a94dcefa379869bd92fbb9bde5d49ea0eb805967913ed2b56cbf016ec"
+      },
+      "console": [],
       "assertions": [
         {
           "name": "runtime timers, console, and visualizer work below policy limits",

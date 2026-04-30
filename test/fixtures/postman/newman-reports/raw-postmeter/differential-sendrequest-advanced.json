@@ -1,0 +1,121 @@
+{
+  "summary": {
+    "collectionName": "PostMeter Differential SendRequest Advanced",
+    "failedRequests": 0,
+    "passed": true,
+    "passedRequests": 1,
+    "totalRequests": 1
+  },
+  "requests": [
+    {
+      "requestName": "Advanced SendRequest Auth",
+      "statusCode": 200,
+      "passed": true,
+      "tests": [
+        {
+          "name": "pm.sendRequest advanced auth helpers match Newman",
+          "passed": true,
+          "error": ""
+        }
+      ]
+    }
+  ],
+  "environment": [
+    {
+      "key": "advancedAuthSummary",
+      "value": "{\"digest\":\"Digest\",\"hawk\":\"Hawk\",\"aws\":\"AWS4-HMAC-SHA256\"}"
+    },
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:41489"
+    },
+    {
+      "key": "envSeed",
+      "value": "env-seed"
+    }
+  ],
+  "collectionVariables": [],
+  "globals": [
+    {
+      "key": "globalSeed",
+      "value": "global-seed"
+    }
+  ],
+  "cookies": [],
+  "observedRequests": [
+    {
+      "body": "",
+      "headers": {
+        "host": "127.0.0.1:41489",
+        "connection": "keep-alive",
+        "accept": "*/*",
+        "accept-language": "*",
+        "sec-fetch-mode": "cors",
+        "user-agent": "undici",
+        "accept-encoding": "gzip, deflate"
+      },
+      "method": "GET",
+      "path": "/json"
+    },
+    {
+      "body": "",
+      "headers": {
+        "host": "127.0.0.1:41489",
+        "connection": "keep-alive",
+        "accept": "*/*",
+        "accept-language": "*",
+        "sec-fetch-mode": "cors",
+        "user-agent": "undici",
+        "accept-encoding": "gzip, deflate"
+      },
+      "method": "GET",
+      "path": "/auth/digest"
+    },
+    {
+      "body": "",
+      "headers": {
+        "host": "127.0.0.1:41489",
+        "connection": "keep-alive",
+        "authorization": "Digest username=\"ada\", realm=\"postmeter\", nonce=\"abc123\", uri=\"/auth/digest\", response=\"5e095c36edca0a74df79dcb85409acdc\", algorithm=\"MD5\", qop=auth, nc=00000001, cnonce=\"eee6d621f8b21f9e\"",
+        "accept": "*/*",
+        "accept-language": "*",
+        "sec-fetch-mode": "cors",
+        "user-agent": "undici",
+        "accept-encoding": "gzip, deflate"
+      },
+      "method": "GET",
+      "path": "/auth/digest"
+    },
+    {
+      "body": "",
+      "headers": {
+        "host": "127.0.0.1:41489",
+        "connection": "keep-alive",
+        "authorization": "Hawk id=\"hawk-id\", ts=\"1777558284\", nonce=\"fixed\", mac=\"8G9k1Ll5DalO5dFDOT9x3Z/SKes956lHLl8GFDr9TTE=\"",
+        "accept": "*/*",
+        "accept-language": "*",
+        "sec-fetch-mode": "cors",
+        "user-agent": "undici",
+        "accept-encoding": "gzip, deflate"
+      },
+      "method": "GET",
+      "path": "/auth/hawk"
+    },
+    {
+      "body": "",
+      "headers": {
+        "host": "127.0.0.1:41489",
+        "connection": "keep-alive",
+        "x-amz-date": "20260430T141124Z",
+        "authorization": "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20260430/us-east-1/execute-api/aws4_request, SignedHeaders=host;x-amz-date, Signature=bde8880a0d4678250be80f95eea3f56397ee9771a1a9af96512762adac8f7c0a",
+        "accept": "*/*",
+        "accept-language": "*",
+        "sec-fetch-mode": "cors",
+        "user-agent": "undici",
+        "accept-encoding": "gzip, deflate"
+      },
+      "method": "GET",
+      "path": "/auth/aws"
+    }
+  ]
+}

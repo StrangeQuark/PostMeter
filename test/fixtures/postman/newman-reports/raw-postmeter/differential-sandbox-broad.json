@@ -1,0 +1,212 @@
+{
+  "summary": {
+    "collectionName": "PostMeter Differential Sandbox Broad",
+    "failedRequests": 0,
+    "passed": true,
+    "passedRequests": 4,
+    "totalRequests": 4
+  },
+  "requests": [
+    {
+      "requestName": "Broad Runtime Surface",
+      "statusCode": 200,
+      "passed": true,
+      "tests": [
+        {
+          "name": "broad response, request mutation, and variables",
+          "passed": true,
+          "error": ""
+        },
+        {
+          "name": "package and assertion facades",
+          "passed": true,
+          "error": ""
+        },
+        {
+          "name": "dynamic variables expose documented shapes",
+          "passed": true,
+          "error": ""
+        },
+        {
+          "name": "timer and microtask callbacks drain",
+          "passed": true,
+          "error": ""
+        },
+        {
+          "name": "pm.sendRequest object body",
+          "passed": true,
+          "error": ""
+        }
+      ]
+    },
+    {
+      "requestName": "Cookie Seed",
+      "statusCode": 200,
+      "passed": true,
+      "tests": [
+        {
+          "name": "cookie jar set callback succeeds",
+          "passed": true,
+          "error": ""
+        },
+        {
+          "name": "cookie jar get callback sees scripted cookie",
+          "passed": true,
+          "error": ""
+        }
+      ]
+    },
+    {
+      "requestName": "Cookie Echo",
+      "statusCode": 200,
+      "passed": true,
+      "tests": [
+        {
+          "name": "cookie jar persists scripted cookies across requests",
+          "passed": true,
+          "error": ""
+        }
+      ]
+    },
+    {
+      "requestName": "Caught Failure Shape",
+      "statusCode": 418,
+      "passed": true,
+      "tests": [
+        {
+          "name": "caught assertion failure can be inspected without failing the run",
+          "passed": true,
+          "error": ""
+        }
+      ]
+    }
+  ],
+  "environment": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:41489"
+    },
+    {
+      "key": "envBroad",
+      "value": "env-broad"
+    },
+    {
+      "key": "envSeed",
+      "value": "env-seed"
+    },
+    {
+      "key": "timerBroad",
+      "value": "microtask>timer"
+    }
+  ],
+  "collectionVariables": [
+    {
+      "key": "collectionBroad",
+      "value": "yes"
+    },
+    {
+      "key": "collectionSeed",
+      "value": "collection-seed"
+    }
+  ],
+  "globals": [
+    {
+      "key": "globalSeed",
+      "value": "global-seed"
+    }
+  ],
+  "cookies": [
+    {
+      "name": "scriptCookie",
+      "value": "script-value",
+      "domain": "127.0.0.1",
+      "path": "/"
+    },
+    {
+      "name": "serverCookie",
+      "value": "server-value",
+      "domain": "127.0.0.1",
+      "path": "/"
+    }
+  ],
+  "observedRequests": [
+    {
+      "body": "",
+      "headers": {
+        "host": "127.0.0.1:41489",
+        "connection": "keep-alive",
+        "x-pre": "broad-pre",
+        "x-package-smoke": "2-3-4",
+        "x-path-smoke": "a/b",
+        "accept": "*/*",
+        "accept-language": "*",
+        "sec-fetch-mode": "cors",
+        "user-agent": "undici",
+        "accept-encoding": "gzip, deflate"
+      },
+      "method": "GET",
+      "path": "/json"
+    },
+    {
+      "body": "object-body",
+      "headers": {
+        "host": "127.0.0.1:41489",
+        "connection": "keep-alive",
+        "content-type": "text/plain",
+        "x-aux": "broad-aux",
+        "accept": "*/*",
+        "accept-language": "*",
+        "sec-fetch-mode": "cors",
+        "user-agent": "undici",
+        "accept-encoding": "gzip, deflate",
+        "content-length": "11"
+      },
+      "method": "POST",
+      "path": "/echo"
+    },
+    {
+      "body": "",
+      "headers": {
+        "host": "127.0.0.1:41489",
+        "connection": "keep-alive",
+        "accept": "*/*",
+        "accept-language": "*",
+        "sec-fetch-mode": "cors",
+        "user-agent": "undici",
+        "accept-encoding": "gzip, deflate"
+      },
+      "method": "GET",
+      "path": "/set-cookie"
+    },
+    {
+      "body": "",
+      "headers": {
+        "host": "127.0.0.1:41489",
+        "connection": "keep-alive",
+        "cookie": "serverCookie=server-value; scriptCookie=script-value",
+        "accept": "*/*",
+        "accept-language": "*",
+        "sec-fetch-mode": "cors",
+        "user-agent": "undici",
+        "accept-encoding": "gzip, deflate"
+      },
+      "method": "GET",
+      "path": "/cookie-check"
+    },
+    {
+      "body": "",
+      "headers": {
+        "host": "127.0.0.1:41489",
+        "connection": "keep-alive",
+        "cookie": "serverCookie=server-value; scriptCookie=script-value",
+        "accept": "*/*",
+        "accept-language": "*",
+        "sec-fetch-mode": "cors",
+        "user-agent": "undici",
+        "accept-encoding": "gzip, deflate"
+      },
+      "method": "GET",
+      "path": "/status/418"
+    }
+  ]
+}

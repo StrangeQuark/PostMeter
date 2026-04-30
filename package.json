@@ -39,6 +39,7 @@
     "postman:docs:validate": "node scripts/postmanDocsCoverageAudit.js validate",
     "postman:docs:write": "node scripts/postmanDocsCoverageAudit.js write --live",
     "postman:docs:live": "node scripts/postmanDocsCoverageAudit.js live",
+    "postman:newman-reports:refresh": "node scripts/newmanReports.js refresh",
     "postman:newman-reports:write": "node scripts/newmanReports.js write",
     "postman:newman-reports:validate": "node scripts/newmanReports.js validate",
     "production:readiness": "node scripts/productionReadiness.js status",

@@ -1,37 +1,4 @@
 {
-  "schemaVersion": 1,
-  "source": "postmeter-parity-harness",
-  "fixtureId": "differential-dynamic-host-globals",
-  "newmanVersion": "6.2.2",
-  "postmanRuntimeVersion": "7.39.1",
-  "generationCommand": "npm run postman:newman-reports:refresh -- --download-newman --output <dir>",
-  "dateGenerated": "2026-04-30T14:11:21.913Z",
-  "normalization": {
-    "normalizedFields": [
-      "timestamps",
-      "run durations",
-      "response timings",
-      "randomized localhost ports",
-      "host filesystem paths",
-      "generated request IDs",
-      "generated Postman request tokens",
-      "generated multipart boundaries",
-      "time-derived request signatures",
-      "machine names and machine-specific process metadata",
-      "raw reporter cursor ids where duplicated by Newman internals"
-    ],
-    "preservedFields": [
-      "collection name",
-      "request order",
-      "request names",
-      "response codes",
-      "test names",
-      "test pass/fail state",
-      "failure messages",
-      "environment key order",
-      "observed request method/path/header evidence"
-    ]
-  },
   "summary": {
     "collectionName": "PostMeter Differential Dynamic Host Globals",
     "failedRequests": 0,
@@ -56,7 +23,7 @@
   "environment": [
     {
       "key": "baseUrl",
-      "value": "http://127.0.0.1:<port>"
+      "value": "http://127.0.0.1:41489"
     },
     {
       "key": "dynamicHostSummary",
@@ -67,11 +34,28 @@
       "value": "env-seed"
     }
   ],
+  "collectionVariables": [],
+  "globals": [
+    {
+      "key": "globalSeed",
+      "value": "global-seed"
+    }
+  ],
+  "cookies": [],
   "observedRequests": [
     {
+      "body": "",
+      "headers": {
+        "host": "127.0.0.1:41489",
+        "connection": "keep-alive",
+        "accept": "*/*",
+        "accept-language": "*",
+        "sec-fetch-mode": "cors",
+        "user-agent": "undici",
+        "accept-encoding": "gzip, deflate"
+      },
       "method": "GET",
-      "path": "/json",
-      "xPre": ""
+      "path": "/json"
     }
   ]
 }

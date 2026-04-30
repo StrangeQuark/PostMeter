@@ -127,7 +127,8 @@ function buildProductionReadinessMatrix() {
     row('postman.newman-json-reports', 'compatibility', 'Deterministic Newman JSON evidence reports for approved differential fixtures are checked in and validated.', 'implemented', {
       releaseBlocking: true,
       commands: ['npm run postman:newman-reports:validate'],
-      evidenceRefs: ['test/fixtures/postman/newman-reports']
+      evidenceRefs: ['scripts/newmanReports.js', 'test/fixtures/postman/newman-reports', 'test/electron/newmanReports.test.js'],
+      notes: 'Checked-in raw Newman reporter output, raw PostMeter harness output, plus normalized Newman and PostMeter reports cover the seven approved Newman-compatible differential fixtures targeting newman@6.2.2 and Postman Runtime 7.39.1. The refresh script runs the approved live Newman differential and rewrites evidence in one explicit network-using step. The write path accepts only clean source summaries targeting newman@6.2.2, Postman Runtime 7.39.1, and the exact approved suite list. Validation is offline, requires exact suite coverage, rejects unexpected checked-in JSON files, clean comparison metadata, required generation metadata on every normalized report, fresh normalized Newman and PostMeter output, passing PostMeter evidence, no Newman assertion failures, preserved response-shape/body-digest evidence and console output when present, and no concrete localhost ports, local filesystem paths, generated request IDs, generated Postman request tokens, generated multipart boundaries, time-derived request signatures, machine names, or machine-specific metadata in normalized evidence.'
     }),
     row('electron.security', 'security', 'Electron BrowserWindow, preload, IPC, navigation, external URL, protocol, and packaged-preload controls are matrixed and validated.', 'implemented', {
       releaseBlocking: true,

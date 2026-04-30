@@ -5,7 +5,7 @@
     },
     "item": [
       {
-        "id": "866f69eb-9179-428f-a549-605c2e76f210",
+        "id": "5cbad65a-e6e5-4e5f-9dc1-463488e95c88",
         "name": "Core JSON",
         "request": {
           "url": {
@@ -25,7 +25,7 @@
           {
             "listen": "prerequest",
             "script": {
-              "id": "100fd237-cf81-4456-a48c-7b1865db3301",
+              "id": "0ffe8b02-5c3e-407b-99e7-b9d5261285d6",
               "type": "text/javascript",
               "exec": [
                 "pm.variables.set('localToken', 'local-1');",
@@ -33,13 +33,13 @@
                 "pm.collectionVariables.set('collectionTouched', 'yes');",
                 "pm.request.headers.upsert({ key: 'X-Pre', value: pm.variables.get('localToken') });"
               ],
-              "_lastExecutionId": "7ded7fe5-ee30-4bd6-87ad-67d6d6c522a2"
+              "_lastExecutionId": "85b7850d-509b-4e12-bb6a-f1fb0fa1535f"
             }
           },
           {
             "listen": "test",
             "script": {
-              "id": "b9e834db-bb12-4362-ade2-ae57f26944ea",
+              "id": "2c8fef2d-211e-49fc-a272-e4f9ae075148",
               "type": "text/javascript",
               "exec": [
                 "pm.test('core response status and body', function () {",
@@ -63,7 +63,7 @@
                 "  });",
                 "});"
               ],
-              "_lastExecutionId": "0673409b-6043-492f-b512-fe0c5b1eaae2"
+              "_lastExecutionId": "8213592c-52ae-42bb-bf4e-e9291845358b"
             }
           }
         ]
@@ -84,11 +84,11 @@
     }
   },
   "environment": {
-    "id": "43ddaca7-990c-4d36-8683-8982180744f8",
+    "id": "d63227b2-05b0-4a3c-8a8e-71b6a872b0b2",
     "values": [
       {
         "type": "any",
-        "value": "http://127.0.0.1:42371",
+        "value": "http://127.0.0.1:41489",
         "key": "baseUrl"
       },
       {
@@ -99,7 +99,7 @@
     ]
   },
   "globals": {
-    "id": "b4a268b0-9cdd-49a7-88cf-82d62c9827ae",
+    "id": "8f59ac67-4a1d-4882-8e6d-b3c316d38385",
     "values": []
   },
   "run": {
@@ -152,9 +152,9 @@
     },
     "timings": {
       "responseAverage": 6.5,
-      "responseMin": 2,
-      "responseMax": 11,
-      "responseSd": 4.5,
+      "responseMin": 1,
+      "responseMax": 12,
+      "responseSd": 5.5,
       "dnsAverage": 0,
       "dnsMin": 0,
       "dnsMax": 0,
@@ -163,8 +163,8 @@
       "firstByteMin": 0,
       "firstByteMax": 0,
       "firstByteSd": 0,
-      "started": 1777389874771,
-      "completed": 1777389874807
+      "started": 1777558279215,
+      "completed": 1777558279256
     },
     "executions": [
       {
@@ -177,13 +177,13 @@
           "eof": false,
           "bof": true,
           "cr": false,
-          "ref": "a7803d84-f34b-4ed6-96d3-fa9987e49b26",
-          "httpRequestId": "f276da9f-b265-4bd6-88f1-b7394fe3b6de",
-          "scriptId": "b9e834db-bb12-4362-ade2-ae57f26944ea",
-          "execution": "0673409b-6043-492f-b512-fe0c5b1eaae2"
+          "ref": "b8e84826-45ff-4e6b-83ed-bfb237abbfef",
+          "httpRequestId": "f9f6031f-2931-4fbb-b19f-ca03e436b1a7",
+          "scriptId": "2c8fef2d-211e-49fc-a272-e4f9ae075148",
+          "execution": "8213592c-52ae-42bb-bf4e-e9291845358b"
         },
         "item": {
-          "id": "866f69eb-9179-428f-a549-605c2e76f210",
+          "id": "5cbad65a-e6e5-4e5f-9dc1-463488e95c88",
           "name": "Core JSON",
           "request": {
             "url": {
@@ -203,7 +203,7 @@
             {
               "listen": "prerequest",
               "script": {
-                "id": "100fd237-cf81-4456-a48c-7b1865db3301",
+                "id": "0ffe8b02-5c3e-407b-99e7-b9d5261285d6",
                 "type": "text/javascript",
                 "exec": [
                   "pm.variables.set('localToken', 'local-1');",
@@ -211,13 +211,13 @@
                   "pm.collectionVariables.set('collectionTouched', 'yes');",
                   "pm.request.headers.upsert({ key: 'X-Pre', value: pm.variables.get('localToken') });"
                 ],
-                "_lastExecutionId": "7ded7fe5-ee30-4bd6-87ad-67d6d6c522a2"
+                "_lastExecutionId": "85b7850d-509b-4e12-bb6a-f1fb0fa1535f"
               }
             },
             {
               "listen": "test",
               "script": {
-                "id": "b9e834db-bb12-4362-ade2-ae57f26944ea",
+                "id": "2c8fef2d-211e-49fc-a272-e4f9ae075148",
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('core response status and body', function () {",
@@ -241,7 +241,7 @@
                   "  });",
                   "});"
                 ],
-                "_lastExecutionId": "0673409b-6043-492f-b512-fe0c5b1eaae2"
+                "_lastExecutionId": "8213592c-52ae-42bb-bf4e-e9291845358b"
               }
             }
           ]
@@ -249,7 +249,7 @@
         "request": {
           "url": {
             "protocol": "http",
-            "port": "42371",
+            "port": "41489",
             "path": [
               "aux"
             ],
@@ -280,12 +280,12 @@
             },
             {
               "key": "Postman-Token",
-              "value": "4f2edf8e-930b-45cf-8c69-273f72d82d6c",
+              "value": "39538586-20e6-4971-924f-6b69fd95a628",
               "system": true
             },
             {
               "key": "Host",
-              "value": "127.0.0.1:42371",
+              "value": "127.0.0.1:41489",
               "system": true
             },
             {
@@ -302,7 +302,7 @@
           "method": "GET"
         },
         "response": {
-          "id": "3f301418-1b1c-4b3c-891e-3e93b83d5144",
+          "id": "a8534679-4afe-4384-b96d-accfea9cf2b5",
           "status": "OK",
           "code": 200,
           "header": [
@@ -316,7 +316,7 @@
             },
             {
               "key": "Date",
-              "value": "Tue, 28 Apr 2026 15:24:34 GMT"
+              "value": "Thu, 30 Apr 2026 14:11:19 GMT"
             },
             {
               "key": "Connection",
@@ -345,10 +345,10 @@
             ]
           },
           "cookie": [],
-          "responseTime": 2,
+          "responseTime": 1,
           "responseSize": 12
         },
-        "id": "46f2445f-9692-46c1-8bc3-bd28a603ef32",
+        "id": "d8d4545f-8c62-4a2f-913d-8dbad124de58",
         "assertions": [
           {
             "assertion": "core response status and body",
@@ -374,13 +374,13 @@
           "eof": false,
           "bof": true,
           "cr": false,
-          "ref": "a7803d84-f34b-4ed6-96d3-fa9987e49b26",
-          "httpRequestId": "f276da9f-b265-4bd6-88f1-b7394fe3b6de",
-          "scriptId": "b9e834db-bb12-4362-ade2-ae57f26944ea",
-          "execution": "0673409b-6043-492f-b512-fe0c5b1eaae2"
+          "ref": "b8e84826-45ff-4e6b-83ed-bfb237abbfef",
+          "httpRequestId": "f9f6031f-2931-4fbb-b19f-ca03e436b1a7",
+          "scriptId": "2c8fef2d-211e-49fc-a272-e4f9ae075148",
+          "execution": "8213592c-52ae-42bb-bf4e-e9291845358b"
         },
         "item": {
-          "id": "866f69eb-9179-428f-a549-605c2e76f210",
+          "id": "5cbad65a-e6e5-4e5f-9dc1-463488e95c88",
           "name": "Core JSON",
           "request": {
             "url": {
@@ -400,7 +400,7 @@
             {
               "listen": "prerequest",
               "script": {
-                "id": "100fd237-cf81-4456-a48c-7b1865db3301",
+                "id": "0ffe8b02-5c3e-407b-99e7-b9d5261285d6",
                 "type": "text/javascript",
                 "exec": [
                   "pm.variables.set('localToken', 'local-1');",
@@ -408,13 +408,13 @@
                   "pm.collectionVariables.set('collectionTouched', 'yes');",
                   "pm.request.headers.upsert({ key: 'X-Pre', value: pm.variables.get('localToken') });"
                 ],
-                "_lastExecutionId": "7ded7fe5-ee30-4bd6-87ad-67d6d6c522a2"
+                "_lastExecutionId": "85b7850d-509b-4e12-bb6a-f1fb0fa1535f"
               }
             },
             {
               "listen": "test",
               "script": {
-                "id": "b9e834db-bb12-4362-ade2-ae57f26944ea",
+                "id": "2c8fef2d-211e-49fc-a272-e4f9ae075148",
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('core response status and body', function () {",
@@ -438,7 +438,7 @@
                   "  });",
                   "});"
                 ],
-                "_lastExecutionId": "0673409b-6043-492f-b512-fe0c5b1eaae2"
+                "_lastExecutionId": "8213592c-52ae-42bb-bf4e-e9291845358b"
               }
             }
           ]
@@ -446,7 +446,7 @@
         "request": {
           "url": {
             "protocol": "http",
-            "port": "42371",
+            "port": "41489",
             "path": [
               "aux"
             ],
@@ -477,12 +477,12 @@
             },
             {
               "key": "Postman-Token",
-              "value": "4f2edf8e-930b-45cf-8c69-273f72d82d6c",
+              "value": "39538586-20e6-4971-924f-6b69fd95a628",
               "system": true
             },
             {
               "key": "Host",
-              "value": "127.0.0.1:42371",
+              "value": "127.0.0.1:41489",
               "system": true
             },
             {
@@ -499,7 +499,7 @@
           "method": "GET"
         },
         "response": {
-          "id": "3f301418-1b1c-4b3c-891e-3e93b83d5144",
+          "id": "a8534679-4afe-4384-b96d-accfea9cf2b5",
           "status": "OK",
           "code": 200,
           "header": [
@@ -513,7 +513,7 @@
             },
             {
               "key": "Date",
-              "value": "Tue, 28 Apr 2026 15:24:34 GMT"
+              "value": "Thu, 30 Apr 2026 14:11:19 GMT"
             },
             {
               "key": "Connection",
@@ -542,10 +542,10 @@
             ]
           },
           "cookie": [],
-          "responseTime": 2,
+          "responseTime": 1,
           "responseSize": 12
         },
-        "id": "46f2445f-9692-46c1-8bc3-bd28a603ef32",
+        "id": "d8d4545f-8c62-4a2f-913d-8dbad124de58",
         "assertions": [
           {
             "assertion": "core response status and body",

@@ -4,6 +4,8 @@
   "fixtureId": "differential-sendrequest-files",
   "newmanVersion": "6.2.2",
   "postmanRuntimeVersion": "7.39.1",
+  "generationCommand": "npm run postman:newman-reports:refresh -- --download-newman --output <dir>",
+  "dateGenerated": "2026-04-30T14:11:27.045Z",
   "normalization": {
     "normalizedFields": [
       "timestamps",
@@ -11,7 +13,11 @@
       "response timings",
       "randomized localhost ports",
       "host filesystem paths",
-      "machine-specific process metadata",
+      "generated request IDs",
+      "generated Postman request tokens",
+      "generated multipart boundaries",
+      "time-derived request signatures",
+      "machine names and machine-specific process metadata",
       "raw reporter cursor ids where duplicated by Newman internals"
     ],
     "preservedFields": [
@@ -20,9 +26,11 @@
       "request names",
       "request methods",
       "response codes",
+      "response shape and body digest",
       "assertion names",
       "assertion pass/fail state",
-      "failure messages"
+      "failure messages",
+      "console output"
     ]
   },
   "collectionName": "PostMeter Differential File Bindings",
@@ -78,6 +86,15 @@
       "itemName": "Binary Attachment Body",
       "method": "POST",
       "responseCode": 200,
+      "responseShape": {
+        "status": "OK",
+        "code": 200,
+        "sizeBytes": 114,
+        "headerCount": 5,
+        "cookieCount": 0,
+        "bodySha256": "3543e3c521c2e06f5a42fabd56e58bf3d9c332e36b6338039359aaa5ea31f1fc"
+      },
+      "console": [],
       "assertions": [
         {
           "name": "binary attachment body is sent",
@@ -91,6 +108,15 @@
       "itemName": "File Attachment Body",
       "method": "POST",
       "responseCode": 200,
+      "responseShape": {
+        "status": "OK",
+        "code": 200,
+        "sizeBytes": 96,
+        "headerCount": 5,
+        "cookieCount": 0,
+        "bodySha256": "8ab7d852a546f3375c717fdc554178a5ab8b4234248cd0e7e6477196760d0203"
+      },
+      "console": [],
       "assertions": [
         {
           "name": "file attachment body is sent",
@@ -104,6 +130,15 @@
       "itemName": "Form Data File Attachment",
       "method": "POST",
       "responseCode": 200,
+      "responseShape": {
+        "status": "OK",
+        "code": 200,
+        "sizeBytes": 131,
+        "headerCount": 5,
+        "cookieCount": 0,
+        "bodySha256": "f141f7f3afa0e2828c59bafc5f2870feaa0ef3245c89e72b828342af925a42a1"
+      },
+      "console": [],
       "assertions": [
         {
           "name": "form-data file attachment is sent",
