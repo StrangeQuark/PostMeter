@@ -5,13 +5,16 @@ const { exportCollectionByFormat, importCollectionFromContent } = require('./col
 const { migrate } = require('./workspaceMigrations');
 const {
   defaultWorkspacePath,
+  fsyncDirectory,
   looksLikeNativeWorkspace,
+  moveFileNoOverwrite,
   normalizeWorkspace,
   pathExists,
   siblingPath,
   writeJsonFile,
   writeJsonFileAtomic,
-  writeJsonFileAtomicSync
+  writeJsonFileAtomicSync,
+  writeTextFileAtomic
 } = require('./workspacePersistence');
 
 class WorkspaceRecoveryError extends Error {
@@ -36,7 +39,14 @@ class WorkspaceStore {
   async load() {
     if (!(await pathExists(this.workspacePath))) {
       const workspace = defaultWorkspace();
-      await this.save(workspace);
+      try {
+        await this.save(workspace, { overwrite: false });
+      } catch (error) {
+        if (error?.code === 'EEXIST') {
+          return this.load();
+        }
+        throw error;
+      }
       return { workspace, recovered: false };
     }
 
@@ -45,10 +55,22 @@ class WorkspaceStore {
       parsed = JSON.parse(await fs.readFile(this.workspacePath, 'utf8'));
     } catch (error) {
       const recoveredPath = await this.quarantineCorruptWorkspace();
-      const recoveredWorkspace = defaultWorkspace();
-      await this.save(recoveredWorkspace);
+      let recoveredWorkspace = defaultWorkspace();
+      let preservedReplacement = false;
+      try {
+        await this.save(recoveredWorkspace, { overwrite: false });
+      } catch (saveError) {
+        if (saveError?.code !== 'EEXIST') {
+          throw saveError;
+        }
+        const replacement = await this.load();
+        recoveredWorkspace = replacement.workspace;
+        preservedReplacement = true;
+      }
       throw new WorkspaceRecoveryError(
-        `Workspace file could not be read. A fresh workspace was created and the unreadable file was moved to ${recoveredPath}.`,
+        preservedReplacement
+          ? `Workspace file could not be read. The unreadable file was moved to ${recoveredPath}, and an existing replacement workspace was preserved.`
+          : `Workspace file could not be read. A fresh workspace was created and the unreadable file was moved to ${recoveredPath}.`,
         recoveredWorkspace,
         recoveredPath,
         error
@@ -64,15 +86,15 @@ class WorkspaceStore {
     return { workspace, recovered: false };
   }
 
-  async save(workspace) {
+  async save(workspace, options = {}) {
     const normalized = normalizeWorkspace(workspace);
-    await writeJsonFileAtomic(this.workspacePath, normalized);
+    await writeJsonFileAtomic(this.workspacePath, normalized, options);
     return normalized;
   }
 
-  saveSync(workspace) {
+  saveSync(workspace, options = {}) {
     const normalized = normalizeWorkspace(workspace);
-    writeJsonFileAtomicSync(this.workspacePath, normalized);
+    writeJsonFileAtomicSync(this.workspacePath, normalized, options);
     return normalized;
   }
 
@@ -106,21 +128,48 @@ class WorkspaceStore {
   async exportCollection(collection, exportPath, options = {}) {
     const workspace = normalizeWorkspace({ collections: [collection], environments: [], history: [] });
     const normalizedCollection = workspace.collections[0];
-    await fs.mkdir(path.dirname(exportPath), { recursive: true });
-    await fs.writeFile(exportPath, exportCollectionByFormat(normalizedCollection, options.format || 'postmeter', workspace));
+    await writeTextFileAtomic(
+      exportPath,
+      exportCollectionByFormat(normalizedCollection, options.format || 'postmeter', workspace),
+      { prefix: 'postmeter-collection-export' }
+    );
     return exportPath;
   }
 
   async createBackup(reason) {
-    const backupPath = siblingPath(this.workspacePath, reason);
-    await fs.copyFile(this.workspacePath, backupPath);
-    return backupPath;
+    const content = await fs.readFile(this.workspacePath, 'utf8');
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const backupPath = siblingPath(this.workspacePath, reason);
+      try {
+        await writeTextFileAtomic(
+          backupPath,
+          content,
+          { prefix: 'postmeter-workspace-backup', overwrite: false }
+        );
+        return backupPath;
+      } catch (error) {
+        if (error?.code !== 'EEXIST') {
+          throw error;
+        }
+      }
+    }
+    throw new Error('Could not allocate a non-conflicting workspace backup path.');
   }
 
   async quarantineCorruptWorkspace() {
-    const recoveredPath = siblingPath(this.workspacePath, 'corrupt');
-    await fs.rename(this.workspacePath, recoveredPath);
-    return recoveredPath;
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const recoveredPath = siblingPath(this.workspacePath, 'corrupt');
+      try {
+        await moveFileNoOverwrite(this.workspacePath, recoveredPath);
+        await fsyncDirectory(path.dirname(recoveredPath));
+        return recoveredPath;
+      } catch (error) {
+        if (error?.code !== 'EEXIST') {
+          throw error;
+        }
+      }
+    }
+    throw new Error('Could not allocate a non-conflicting corrupt workspace recovery path.');
   }
 }
 

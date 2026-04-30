@@ -27,6 +27,23 @@ test('workspace manager creates and describes a default managed workspace', asyn
   assert.equal(loaded.workspace.schemaVersion, 11);
 });
 
+test('workspace manager default creation allocates around unrecognized existing workspace files', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-workspace-manager-default-collision-'));
+  const preferredWorkspacePath = path.join(temp, 'workspace.json');
+  const unrecognizedPath = path.join(temp, 'Local Workspace.json');
+  await fs.writeFile(unrecognizedPath, '{not-managed-json');
+  const manager = new WorkspaceManager(preferredWorkspacePath);
+
+  const loaded = await manager.load();
+
+  assert.equal(loaded.path, path.join(temp, 'Local Workspace 2.json'));
+  assert.equal(loaded.activeWorkspaceId, 'Local Workspace 2.json');
+  assert.equal(loaded.workspaces.length, 1);
+  assert.equal(loaded.workspaces[0].id, 'Local Workspace 2.json');
+  assert.equal(await fs.readFile(unrecognizedPath, 'utf8'), '{not-managed-json');
+  assert.equal(JSON.parse(await fs.readFile(path.join(temp, 'Local Workspace 2.json'), 'utf8')).schemaVersion, 11);
+});
+
 test('workspace manager creates, switches, and deletes managed workspaces', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-workspace-manager-'));
   const preferredWorkspacePath = path.join(temp, 'workspace.json');
@@ -99,6 +116,26 @@ test('workspace manager renames managed workspaces using the filename as the can
   await fs.access(path.join(temp, 'Renamed Workspace.json'));
 });
 
+test('workspace manager case-only renames recover through a temporary file without orphaning workspaces', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-workspace-manager-rename-'));
+  const preferredWorkspacePath = path.join(temp, 'workspace.json');
+  const manager = new WorkspaceManager(preferredWorkspacePath);
+
+  await manager.load();
+  const createdWorkspaceId = await manager.createWorkspace();
+  assert.equal(createdWorkspaceId, 'Workspace.json');
+
+  const renamed = await manager.renameWorkspace('Workspace.json', 'workspace');
+
+  assert.equal(renamed.renamedWorkspaceId, 'workspace.json');
+  assert.equal(renamed.activeWorkspaceId, 'Local Workspace.json');
+  assert.equal(renamed.workspaces.some((item) => item.id === 'workspace.json'), true);
+  await fs.access(path.join(temp, 'workspace.json'));
+  await assert.rejects(() => fs.access(path.join(temp, 'Workspace.json')));
+  const tempFiles = (await fs.readdir(temp)).filter((entry) => entry.includes('postmeter-workspace-rename'));
+  assert.deepEqual(tempFiles, []);
+});
+
 test('workspace manager imports a workspace into the managed set without replacing the current workspace', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-workspace-manager-'));
   const importTemp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-workspace-import-'));
@@ -141,6 +178,86 @@ test('workspace manager imports a workspace into the managed set without replaci
   assert.equal(switched.activeWorkspaceId, importedWorkspaceId);
   assert.equal(switched.workspace.collections.length, 1);
   assert.equal(switched.workspace.collections[0].name, 'Imported Collection');
+});
+
+test('workspace manager allocates filenames around unrecognized existing workspace files', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-workspace-manager-collision-'));
+  const importTemp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-workspace-import-collision-'));
+  const preferredWorkspacePath = path.join(temp, 'workspace.json');
+  const importPath = path.join(importTemp, 'Imported Workspace.postmeter.json');
+  const manager = new WorkspaceManager(preferredWorkspacePath);
+
+  await manager.load();
+  await fs.writeFile(path.join(temp, 'Workspace.json'), '{not-managed-json');
+  await fs.writeFile(path.join(temp, 'Imported Workspace.json'), '{not-managed-import-json');
+  await fs.writeFile(path.join(temp, 'Renamed Workspace.json'), '{not-managed-rename-json');
+  await fs.writeFile(importPath, JSON.stringify({
+    schemaVersion: 11,
+    collections: [],
+    environments: [],
+    cookies: [],
+    history: [],
+    settings: { appearance: { theme: 'system' }, updates: { includePrereleases: false } }
+  }));
+
+  const createdWorkspaceId = await manager.createWorkspace();
+  const importedWorkspaceId = await manager.importWorkspace(importPath);
+  const renamed = await manager.renameWorkspace(createdWorkspaceId, 'Renamed Workspace');
+
+  assert.equal(createdWorkspaceId, 'Workspace 2.json');
+  assert.equal(importedWorkspaceId, 'Imported Workspace 2.json');
+  assert.equal(renamed.renamedWorkspaceId, 'Renamed Workspace 2.json');
+  assert.equal(await fs.readFile(path.join(temp, 'Workspace.json'), 'utf8'), '{not-managed-json');
+  assert.equal(await fs.readFile(path.join(temp, 'Imported Workspace.json'), 'utf8'), '{not-managed-import-json');
+  assert.equal(await fs.readFile(path.join(temp, 'Renamed Workspace.json'), 'utf8'), '{not-managed-rename-json');
+  await fs.access(path.join(temp, 'Renamed Workspace 2.json'));
+  await fs.access(path.join(temp, 'Imported Workspace 2.json'));
+});
+
+test('workspace manager retries create, import, and rename when destination files appear before publish', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-workspace-manager-race-'));
+  const importTemp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-workspace-import-race-'));
+  const preferredWorkspacePath = path.join(temp, 'workspace.json');
+  const importPath = path.join(importTemp, 'Imported Workspace.postmeter.json');
+  const manager = new WorkspaceManager(preferredWorkspacePath);
+  await fs.writeFile(importPath, JSON.stringify({
+    schemaVersion: 11,
+    collections: [],
+    environments: [],
+    cookies: [],
+    history: [],
+    settings: { appearance: { theme: 'system' }, updates: { includePrereleases: false } }
+  }));
+
+  await manager.load();
+  const originalAvailable = manager.workspaceFilenameAvailable.bind(manager);
+  const racedFilenames = new Set();
+  manager.workspaceFilenameAvailable = async (filename, allowedFilename = '') => {
+    const available = await originalAvailable(filename, allowedFilename);
+    if (
+      available
+      && ['Workspace.json', 'Imported Workspace.json', 'Renamed Workspace.json'].includes(filename)
+      && !racedFilenames.has(filename)
+    ) {
+      racedFilenames.add(filename);
+      await fs.writeFile(path.join(temp, filename), `{raced-${filename}}`);
+    }
+    return available;
+  };
+
+  const createdWorkspaceId = await manager.createWorkspace();
+  const importedWorkspaceId = await manager.importWorkspace(importPath);
+  const renamed = await manager.renameWorkspace(createdWorkspaceId, 'Renamed Workspace');
+
+  assert.equal(createdWorkspaceId, 'Workspace 2.json');
+  assert.equal(importedWorkspaceId, 'Imported Workspace 2.json');
+  assert.equal(renamed.renamedWorkspaceId, 'Renamed Workspace 2.json');
+  assert.equal(await fs.readFile(path.join(temp, 'Workspace.json'), 'utf8'), '{raced-Workspace.json}');
+  assert.equal(await fs.readFile(path.join(temp, 'Imported Workspace.json'), 'utf8'), '{raced-Imported Workspace.json}');
+  assert.equal(await fs.readFile(path.join(temp, 'Renamed Workspace.json'), 'utf8'), '{raced-Renamed Workspace.json}');
+  await assert.rejects(() => fs.access(path.join(temp, createdWorkspaceId)));
+  await fs.access(path.join(temp, 'Renamed Workspace 2.json'));
+  await fs.access(path.join(temp, 'Imported Workspace 2.json'));
 });
 
 test('workspace manager regenerates a workspace when all managed workspace files are deleted', async () => {

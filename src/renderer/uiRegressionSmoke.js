@@ -2,7 +2,8 @@
   const {
     assertUiSmoke,
     dispatchChange,
-    dispatchInput
+    dispatchInput,
+    nextPaint
   } = resolveUiSmokeCommon(global);
 
   async function runUiRegressionSmoke() {
@@ -23,6 +24,7 @@
     await assertUpdateCheckSmoke();
     assertOauthProgressSmoke();
     await assertWorkspaceManagementSmoke();
+    await assertLargeWorkspaceBudgetSmoke();
     await assertEditorCollectionSmoke();
     assertCreationSemanticsSmoke();
     await assertRequestTabCloseSmoke();
@@ -202,6 +204,143 @@
       resetRequestTabs();
       renderAll();
     }
+  }
+
+  async function assertLargeWorkspaceBudgetSmoke() {
+    const originalWorkspace = structuredClone(workspace);
+    const originalWorkspaces = structuredClone(workspaces);
+    const originalActiveCollectionId = activeCollectionId;
+    const originalActiveFolderId = activeFolderId;
+    const originalActiveRequestId = activeRequestId;
+    const originalActiveWorkspaceId = activeWorkspaceId;
+    const originalSelectedWorkspaceId = selectedWorkspaceId;
+    const originalSidebarPanel = activeSidebarPanel;
+    const originalMainPanel = activeMainPanel;
+    const originalOpenRequestTabs = structuredClone(openRequestTabs);
+    try {
+      workspace = largeUiWorkspace();
+      workspaces = [{
+        id: 'Large Workspace.json',
+        name: 'Large Workspace',
+        path: '/tmp/Large Workspace.json',
+        current: true,
+        deletable: false,
+        schemaVersion: 11,
+        theme: 'system',
+        collectionCount: workspace.collections.length,
+        folderCount: 30,
+        requestCount: 390,
+        environmentCount: 0,
+        cookieCount: 0,
+        historyCount: 0
+      }];
+      activeWorkspaceId = 'Large Workspace.json';
+      selectedWorkspaceId = 'Large Workspace.json';
+      activeSidebarPanel = 'collections';
+      activeMainPanel = 'request';
+      activeCollectionId = workspace.collections[0].id;
+      activeFolderId = null;
+      activeRequestId = workspace.collections[0].requests[0].id;
+      openRequestTabs = [];
+
+      const renderStarted = performance.now();
+      renderAll();
+      await nextPaint();
+      const renderMillis = performance.now() - renderStarted;
+      assertUiSmoke(renderMillis <= 6000, `Large collection tree render exceeded budget: ${renderMillis.toFixed(1)}ms.`);
+      assertUiSmoke(
+        $('collectionsTree').querySelectorAll('.request-node').length === 390,
+        'Large collection tree did not render every request node.'
+      );
+
+      const targetRequestId = 'large-request-29-1-3';
+      const targetButton = Array.from($('collectionsTree').querySelectorAll('.request-node .tree-item'))
+        .find((button) => button.textContent.includes('Large Request 29.1.3'));
+      assertUiSmoke(targetButton, 'Large workspace target request was not rendered.');
+      const openStarted = performance.now();
+      targetButton.click();
+      await nextPaint();
+      const openMillis = performance.now() - openStarted;
+      assertUiSmoke(openMillis <= 3000, `Large request open exceeded budget: ${openMillis.toFixed(1)}ms.`);
+      assertUiSmoke(activeRequestId === targetRequestId, 'Large request open did not select the target request.');
+      assertUiSmoke($('requestNameInput').value === 'Large Request 29.1.3', 'Large request open did not populate the editor.');
+    } finally {
+      workspace = originalWorkspace;
+      workspaces = originalWorkspaces;
+      activeCollectionId = originalActiveCollectionId;
+      activeFolderId = originalActiveFolderId;
+      activeRequestId = originalActiveRequestId;
+      activeWorkspaceId = originalActiveWorkspaceId;
+      selectedWorkspaceId = originalSelectedWorkspaceId;
+      activeSidebarPanel = originalSidebarPanel;
+      activeMainPanel = originalMainPanel;
+      openRequestTabs = originalOpenRequestTabs;
+      renderAll();
+    }
+  }
+
+  function largeUiWorkspace() {
+    return {
+      schemaVersion: 11,
+      collections: Array.from({ length: 30 }, (_unused, collectionIndex) => ({
+        id: `large-collection-${collectionIndex}`,
+        name: `Large Collection ${collectionIndex}`,
+        description: '',
+        variables: [],
+        certificates: [],
+        requests: Array.from({ length: 5 }, (_requestUnused, requestIndex) => largeUiRequest(collectionIndex, 'root', requestIndex)),
+        folders: Array.from({ length: 2 }, (_folderUnused, folderIndex) => ({
+          id: `large-folder-${collectionIndex}-${folderIndex}`,
+          name: `Large Folder ${collectionIndex}.${folderIndex}`,
+          requests: Array.from({ length: 4 }, (_requestUnused, requestIndex) => largeUiRequest(collectionIndex, folderIndex, requestIndex)),
+          folders: []
+        }))
+      })),
+      environments: [],
+      globals: [],
+      cookies: [],
+      history: [],
+      settings: {
+        appearance: { theme: 'system' },
+        sandbox: {
+          fileBindings: [],
+          packageCache: [],
+          trustedCapabilities: {
+            sendRequest: true,
+            cookies: true,
+            vault: false,
+            vaultGrants: {
+              workspace: false,
+              collections: [],
+              requests: [],
+              deniedCollections: [],
+              deniedRequests: []
+            }
+          }
+        },
+        updates: { includePrereleases: false }
+      }
+    };
+  }
+
+  function largeUiRequest(collectionIndex, folderIndex, requestIndex) {
+    return {
+      id: `large-request-${collectionIndex}-${folderIndex}-${requestIndex}`,
+      name: `Large Request ${collectionIndex}.${folderIndex}.${requestIndex}`,
+      method: requestIndex % 2 === 0 ? 'GET' : 'POST',
+      url: `https://large.example.test/${collectionIndex}/${folderIndex}/${requestIndex}`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      auth: { type: 'none' },
+      assertions: [],
+      scripts: { preRequest: '', tests: '' },
+      variables: [],
+      examples: [],
+      cookieJar: { enabled: false, storeResponses: true },
+      loadTestPolicy: { enabled: false }
+    };
   }
 
   async function assertEditorCollectionSmoke() {

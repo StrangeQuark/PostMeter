@@ -5,6 +5,7 @@ const { app, BrowserWindow, dialog, ipcMain, protocol, safeStorage, shell } = re
 const { WorkspaceRecoveryError } = require('../src/core/workspaceStore');
 const { WorkspaceManager } = require('../src/core/workspaceManager');
 const { EncryptedVaultStore } = require('../src/core/vaultStore');
+const { fsyncDirectory, moveFileNoOverwrite } = require('../src/core/workspacePersistence');
 const { registerAppProtocolHandler, registerAppProtocolScheme } = require('./appProtocol');
 const { installApplicationMenu } = require('./appMenu');
 const { registerAppIpc, safeExternalUrl } = require('./appIpc');
@@ -254,8 +255,12 @@ async function renameVaultStore(previousWorkspaceId, nextWorkspaceId) {
   vaultStores.delete(nextId);
   try {
     await fs.mkdir(path.dirname(nextPath), { recursive: true, mode: 0o700 });
-    await fs.rename(previousPath, nextPath);
+    if (await fileExists(nextPath)) {
+      return;
+    }
+    await moveFileNoOverwrite(previousPath, nextPath);
     await fs.chmod(nextPath, 0o600).catch(() => {});
+    await fsyncDirectory(path.dirname(nextPath));
   } catch (error) {
     if (error?.code === 'ENOENT') {
       return;
@@ -267,6 +272,15 @@ async function renameVaultStore(previousWorkspaceId, nextWorkspaceId) {
   }
 }
 
+async function fileExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function deleteVaultStore(workspaceId) {
   const id = String(workspaceId || '');
   if (!id) {
@@ -274,6 +288,7 @@ async function deleteVaultStore(workspaceId) {
   }
   vaultStores.delete(id);
   await fs.rm(vaultPathForWorkspace(id), { force: true });
+  await fsyncDirectory(path.dirname(vaultPathForWorkspace(id)));
 }
 
 trustedIpcMain.handle('vault:metadata', async () => {

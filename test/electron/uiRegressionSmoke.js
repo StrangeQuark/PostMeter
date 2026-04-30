@@ -25,7 +25,7 @@ async function main() {
 
   const timeout = setTimeout(() => {
     child.kill('SIGTERM');
-  }, 12_000);
+  }, 20_000);
 
   const exitCode = await new Promise((resolve) => {
     child.on('exit', (code, signal) => {

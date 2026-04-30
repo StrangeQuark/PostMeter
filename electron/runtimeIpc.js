@@ -1,5 +1,6 @@
 const { loadTestResultToCsv, runLoadTest } = require('../src/core/loadTestRunner');
 const { collectionRunResultToCsv, runCollection } = require('../src/core/collectionRunner');
+const { writeTextFileAtomic } = require('../src/core/workspacePersistence');
 const { selectedSaveFilePath } = require('./fileDialogs');
 const {
   applyCollectionRunMutationsToWorkspace,
@@ -172,7 +173,7 @@ function registerRuntimeIpc(options = {}) {
       return fileOperationResult({ cancelled: true });
     }
     const content = format === 'csv' ? collectionRunResultToCsv(result) : JSON.stringify(result, null, 2);
-    await require('node:fs/promises').writeFile(filePath, content);
+    await writeTextFileAtomic(filePath, content, { prefix: 'postmeter-runner-export' });
     return fileOperationResult({ cancelled: false, path: filePath });
   });
 
@@ -193,7 +194,7 @@ function registerRuntimeIpc(options = {}) {
       return fileOperationResult({ cancelled: true });
     }
     const content = format === 'csv' ? loadTestResultToCsv(result) : JSON.stringify(result, null, 2);
-    await require('node:fs/promises').writeFile(filePath, content);
+    await writeTextFileAtomic(filePath, content, { prefix: 'postmeter-load-export' });
     return fileOperationResult({ cancelled: false, path: filePath });
   });
 }

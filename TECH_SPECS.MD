@@ -463,14 +463,14 @@ POSTMETER_DATA_PATH=/tmp/postmeter-workspace.json npm start
 
 Behavior:
 
-- Uses `workspace.json` as the preferred startup path and scans the containing directory for native managed workspace JSON files.
-- Creates a default managed workspace such as `Local Workspace.json` when no workspace files exist.
-- Supports schema versions `1` through `10`.
-- Migrates older schemas to schema `10`.
-- Creates timestamped `pre-migration.backup` sibling files before saving migrated workspaces.
+- Uses `workspace.json` as the preferred startup path and scans the containing directory for native managed workspace JSON files. There is no persistent managed-workspace index or active-workspace pointer to go stale; the legacy manifest file is removed when found.
+- Creates a default managed workspace such as `Local Workspace.json` when no workspace files exist, allocating a suffixed name if that filename already exists as an unreadable or non-native file.
+- Allocates default, new, imported, and renamed managed workspace filenames around any existing filesystem entry, including unreadable or non-native JSON files, then publishes with no-overwrite semantics and retries suffixed names if a destination appears before publication.
+- Loads current schema `11` workspaces and migrates supported historical schema versions `1` through `10` to schema `11`.
+- Creates timestamped, collision-resistant `pre-migration.backup` sibling files through the atomic, no-overwrite write path before saving migrated workspaces.
 - Rejects future schema versions.
-- Quarantines unreadable workspace JSON by moving it to a timestamped `corrupt` sibling file, then creates a fresh default workspace and raises a recovery error for the UI.
-- Writes JSON through a temporary file and renames into place.
+- Quarantines unreadable workspace JSON by moving it through a no-overwrite file move to a timestamped, collision-resistant `corrupt` sibling file and best-effort fsyncing the directory, then creates a fresh default workspace through no-overwrite publication and raises a recovery error for the UI. If a replacement workspace file appears before recovery publication, PostMeter preserves that replacement instead of overwriting it.
+- Writes workspace, session, vault, and export files through collision-resistant same-directory temporary files, fsyncs file contents where supported, renames into place, and best-effort fsyncs the containing directory. Interrupted temporary files are ignored by workspace discovery.
 - Writes normalized workspace values directly to local JSON.
 - Normalizes IDs, names, body types, methods, arrays, settings, request load-test compatibility policies, collection variables, collection certificates, request variables, request examples, request cookie jar settings, workspace cookies, folders, environments, and history.
 - Native workspace import adds another managed workspace without replacing, switching away from, or backing up the current one.
@@ -486,11 +486,11 @@ Limitations:
 
 ## Import And Export
 
-Native workspace export writes the normalized workspace directly. The desktop UI can export the current in-memory workspace or another managed workspace by id from the Workspaces list.
+Native workspace export writes the normalized workspace through the atomic export path. The desktop UI can export the current in-memory workspace or another managed workspace by id from the Workspaces list.
 
 Native workspace import reads a PostMeter workspace, migrates it, normalizes it, writes it as another managed workspace, refreshes the managed workspace list, and keeps the current workspace active until the user switches.
 
-Native collection export writes one collection inside a valid PostMeter workspace wrapper. Environments are intentionally separate and are not included in collection export. In the desktop UI, `Export > Collection` opens an in-app collection-picker modal, the modal still opens when no collections exist, the Export button stays disabled while that empty-state warning is shown, and native collection export filenames default to `<collection-name>.json`.
+Native collection export writes one collection inside a valid PostMeter workspace wrapper through the atomic export path. Environments are intentionally separate and are not included in collection export. In the desktop UI, `Export > Collection` opens an in-app collection-picker modal, the modal still opens when no collections exist, the Export button stays disabled while that empty-state warning is shown, and native collection export filenames default to `<collection-name>.json`.
 
 Native collection import imports the first collection from a PostMeter workspace file, regenerates IDs, and appends it to the active workspace.
 

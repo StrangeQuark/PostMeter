@@ -2,6 +2,28 @@
 
 This page covers user-facing recovery and diagnosis notes for behavior that is expected by design but can look like a broken request.
 
+## Workspace Recovery Files
+
+PostMeter stores managed workspaces as local JSON files. When an older supported workspace schema is loaded, PostMeter first creates a collision-resistant sibling `pre-migration.backup` file through the same atomic no-overwrite write path used by normal workspace saves, then saves the migrated schema 11 workspace.
+
+If the active workspace JSON cannot be parsed, PostMeter moves the unreadable file through a no-overwrite file move to a collision-resistant timestamped `corrupt` sibling file, best-effort fsyncs the containing directory, creates a fresh default workspace through no-overwrite publication, and shows a recovery error. If another valid workspace appears at the active path before the recovered default can be published, PostMeter preserves that replacement instead of overwriting it. The corrupt file is kept for manual inspection or support, but PostMeter does not load it automatically.
+
+If a workspace uses a future schema version that this app does not support, PostMeter refuses to load it. It does not quarantine or overwrite that file, because a newer PostMeter build may still be able to read it.
+
+Stale `postmeter-*.json.tmp` files can be left behind by an interrupted write before rename. They are not managed workspaces and are ignored by workspace discovery; keep them only if you are investigating a crash. Managed workspaces are discovered from native workspace JSON files in the workspace directory, so the removed legacy workspace manifest is not a source of truth. When PostMeter creates a default workspace, creates another workspace, imports, or renames a managed workspace, it also avoids filenames that already exist on disk even if those files are unreadable or not native workspaces. If a destination appears between allocation and publication, PostMeter preserves that file and retries with a suffixed workspace filename.
+
+## Package Cache Repair
+
+Reviewed script packages are stored as workspace metadata in `settings.sandbox.packageCache`. If an imported script reports that a package is missing, unreviewed, duplicated, or has an integrity mismatch, open the workspace panel and review the package cache status.
+
+Repair options:
+
+- Re-fetch the package from the reviewed source URL or registry specifier.
+- Remove stale duplicate cache entries from the workspace JSON only if the app UI cannot repair them.
+- Re-import the collection after package review if the original import lacked package reference metadata.
+
+Do not hand-edit reviewed package source or integrity values unless you are intentionally invalidating and re-reviewing that package. Runtime scripts cannot fetch packages from registries directly.
+
 ## Vault Prompts
 
 Postman-style `pm.vault` access is desktop-only. PostMeter prompts when a request, collection run, or nested `pm.execution.runRequest` script calls `pm.vault.get()`, `pm.vault.set()`, or `pm.vault.unset()` and the workspace does not already have a matching vault grant or denial.

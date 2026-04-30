@@ -473,18 +473,27 @@
       "id": "workspace.durability",
       "area": "data-durability",
       "target": "Workspace persistence, migrations, recovery, vault metadata, package cache, and large-workspace budgets are matrixed and validated.",
-      "status": "implemented",
+      "status": "validated",
       "releaseBlocking": true,
       "commands": [
         "npm run workspace:durability:validate",
-        "npm test"
+        "npm test",
+        "npm run test:ui:regression"
       ],
       "evidenceRefs": [
-        "docs/workspace-durability-matrix.json"
+        "docs/workspace-durability-matrix.json",
+        "src/core/productionSupportMatrices.js",
+        "src/core/workspacePersistence.js",
+        "src/core/workspaceStore.js",
+        "src/core/workspaceManager.js",
+        "src/core/vaultStore.js",
+        "test/electron/workspaceStore.test.js",
+        "test/electron/workspaceManager.test.js",
+        "test/electron/workspaceDurabilityPerformance.test.js"
       ],
       "owner": "PostMeter",
       "lastVerified": "",
-      "notes": ""
+      "notes": "The lower-level workspace-durability matrix has 9 implemented rows covering atomic workspace/session/backup/export writes, corrupt quarantine and no-overwrite recovery, filesystem-discovered managed workspaces, schema migrations, side-effect merge semantics, encrypted vault storage outside workspace JSON, large-workspace budgets, and import/export cancellation or parse-failure behavior. Diagnostics/privacy redaction remains tracked separately by the diagnostics.privacy readiness row."
     }
   ]
 }
