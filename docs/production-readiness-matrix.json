@@ -132,7 +132,7 @@
     {
       "id": "electron.security",
       "area": "security",
-      "target": "Electron BrowserWindow, preload, IPC, navigation, external URL, protocol, and packaged-preload controls are matrixed and validated.",
+      "target": "Electron BrowserWindow, main-frame-only preload, channel-level IPC, IPC sender validation, navigation, webview, permissions, file dialogs, external URL, protocol, CSP, fuse-review, and packaged-preload controls are matrixed and validated.",
       "status": "implemented",
       "releaseBlocking": true,
       "commands": [
@@ -141,12 +141,19 @@
       ],
       "evidenceRefs": [
         "docs/electron-security-matrix.json",
+        "src/core/productionSupportMatrices.js",
+        "electron/appProtocol.js",
         "electron/mainWindow.js",
-        "electron/appIpc.js"
+        "electron/ipcSecurity.js",
+        "electron/preload.js",
+        "electron/workspaceIpc.js",
+        "electron/appIpc.js",
+        "electron/oauthFlows.js",
+        "test/electron/appChrome.test.js"
       ],
       "owner": "PostMeter",
       "lastVerified": "",
-      "notes": ""
+      "notes": "The source-owned Electron security matrix now enumerates the primary BrowserWindow, production webPreferences, secure custom app-content protocol with CSP/nosniff/referrer-policy headers and no renderer fetch privilege, packaged startup-smoke assertions for the trusted app-protocol renderer URL and renderer CSP, exact-initial-URL top-level navigation denial including unexpected app-protocol query changes, window-open denial, webview denial, permission denial, renderer CSP, visualizer CSP, explicit main-frame-only preload API, every IPC channel, fail-closed trusted main-frame renderer IPC sender validation including unexpected app-protocol query keys, native file-dialog groups, credential-free external URL allowlists, OAuth browser launch path, custom protocol registration path, packaged preload integrity, packaged protocol validation wiring, and documented Electron fuse review. Native runner execution evidence is still tracked by the separate packaging rows."
     },
     {
       "id": "grpc.pfx-p12-mtls",

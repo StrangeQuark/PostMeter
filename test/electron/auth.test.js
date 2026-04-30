@@ -384,6 +384,21 @@ test('creates OAuth 2.0 authorization-code PKCE sessions', () => {
     codeVerifier
   });
   assert.equal(new URL(customSchemeSession.authorizationUrl).searchParams.get('redirect_uri'), 'postmeter://oauth/callback');
+
+  assert.throws(
+    () => createOAuthPkceSession({
+      type: 'oauth2',
+      grantType: 'authorizationCode',
+      authorizationUrl: 'javascript:alert(1)',
+      tokenUrl: 'https://auth.example.test/token',
+      clientId: 'client-id'
+    }, null, {
+      redirectUri: 'http://127.0.0.1:49152/oauth/callback',
+      state: 'bad-state',
+      codeVerifier
+    }),
+    /OAuth 2\.0 authorization URL must use http or https/
+  );
 });
 
 test('exchanges OAuth 2.0 authorization-code PKCE callback for tokens', async () => {

@@ -182,10 +182,11 @@ function createOAuthFlowController(options = {}) {
   }
 
   async function openOAuthExternalUrl(url) {
+    const parsed = safeOAuthExternalUrl(url);
     if (env.POSTMETER_TEST_OAUTH_SKIP_EXTERNAL === '1') {
       return true;
     }
-    await shell.openExternal(url);
+    await shell.openExternal(parsed.toString());
     return true;
   }
 
@@ -217,7 +218,7 @@ function createOAuthFlowController(options = {}) {
     } catch {
       return false;
     }
-    if (parsed.protocol !== `${OAUTH_CUSTOM_SCHEME}:`) {
+    if (!isExpectedCustomOAuthCallbackUrl(parsed)) {
       return false;
     }
     const state = parsed.searchParams.get('state');
@@ -291,7 +292,39 @@ function registerOAuthProtocol(app) {
 }
 
 function findOAuthCallbackArg(argv) {
-  return (argv || []).find((value) => typeof value === 'string' && value.startsWith(`${OAUTH_CUSTOM_SCHEME}://`)) || '';
+  return (argv || []).find((value) => {
+    if (typeof value !== 'string') {
+      return false;
+    }
+    try {
+      return isExpectedCustomOAuthCallbackUrl(new URL(value));
+    } catch {
+      return false;
+    }
+  }) || '';
+}
+
+function isExpectedCustomOAuthCallbackUrl(parsed) {
+  return parsed?.protocol === `${OAUTH_CUSTOM_SCHEME}:`
+    && parsed.hostname === 'oauth'
+    && parsed.pathname === '/callback';
+}
+
+function safeOAuthExternalUrl(value) {
+  let parsed;
+  try {
+    parsed = new URL(String(value || ''));
+  } catch {
+    throw new Error('OAuth external URL is invalid.');
+  }
+  const scheme = parsed.protocol.replace(':', '').toLowerCase();
+  if (scheme !== 'http' && scheme !== 'https') {
+    throw new Error('OAuth external URL must use http or https.');
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error('OAuth external URL must not include credentials.');
+  }
+  return parsed;
 }
 
 async function createLoopbackCallbackServer(signal) {
@@ -345,5 +378,6 @@ module.exports = {
   createOAuthFlowController,
   findOAuthCallbackArg,
   OAUTH_CUSTOM_SCHEME,
-  registerOAuthProtocol
+  registerOAuthProtocol,
+  safeOAuthExternalUrl
 };

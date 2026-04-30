@@ -11,6 +11,12 @@ const {
   validateSmokeUserDataPath,
   writeStartupSmokeFailureArtifacts
 } = require('../../electron/mainWindow');
+const {
+  APP_PROTOCOL_HOST,
+  APP_PROTOCOL_SCHEME,
+  APP_RENDERER_CSP,
+  APP_RENDERER_PATHNAME
+} = require('../../electron/appProtocol');
 
 test('startup smoke probe prevents renderer shutdown from overwriting marker save', async () => {
   let executedScript = '';
@@ -32,6 +38,14 @@ test('startup smoke probe prevents renderer shutdown from overwriting marker sav
   assert.match(executedScript, /window\.postmeter\.workspace\.save\(loaded\.workspace\)/);
   assert.match(executedScript, /releaseChannel/);
   assert.match(executedScript, /missingApi/);
+  assert.match(executedScript, /window\.location\.protocol/);
+  assert.match(executedScript, /window\.location\.hostname/);
+  assert.match(executedScript, /window\.location\.pathname/);
+  assert.match(executedScript, /Content-Security-Policy/);
+  assert.match(executedScript, new RegExp(APP_PROTOCOL_SCHEME));
+  assert.match(executedScript, new RegExp(APP_PROTOCOL_HOST));
+  assert.match(executedScript, new RegExp(APP_RENDERER_PATHNAME.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(executedScript, new RegExp(APP_RENDERER_CSP.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
 
 test('packaged startup smoke writes failure logs and screenshots when configured', async () => {

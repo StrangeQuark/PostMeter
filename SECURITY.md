@@ -4,8 +4,8 @@ PostMeter is a standalone local desktop app. It does not require a PostMeter acc
 
 ## Trust Boundaries
 
-- Renderer: no Node integration, context isolation enabled, renderer sandbox enabled, explicit preload API only.
-- Electron main process: owns desktop lifecycle, IPC validation, dialogs, workspace persistence, vault storage, OAuth flows, package review/fetch, and native OS integration.
+- Renderer: loaded through the secure standard `postmeter-app://bundle` protocol instead of `file://`, no Node integration, context isolation enabled, renderer sandbox enabled, explicit main-frame-only preload API, restrictive CSP in both the HTML and protocol response, and `nosniff`/`no-referrer` protocol headers. Renderer-controlled top-level navigation away from the exact initial packaged renderer URL, `window.open`, `<webview>` attachment, and Electron permission checks/requests are denied in the main window.
+- Electron main process: owns desktop lifecycle, the allowlisted app-content protocol handler, fail-closed trusted main-frame renderer IPC sender validation with app-protocol path and query-key checks, IPC payload validation, dialogs, workspace persistence, vault storage, OAuth flows, constrained credential-free external browser launches, package review/fetch, and native OS integration.
 - Core script runtime: runs request scripts outside the main process with hardened VM values, bounded resources, Node permission flags where supported, and brokered privileged APIs.
 
 ## Script Sandbox

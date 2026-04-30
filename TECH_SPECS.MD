@@ -38,7 +38,7 @@ OAuth support in PostMeter is only for outbound API request authentication, matc
 
 ## Technology Stack
 
-- Desktop shell: Electron `41.2.1`
+- Desktop shell: Electron `41.3.0`
 - Main process: CommonJS Node modules under `electron/`
 - Renderer UI: static HTML/CSS/JavaScript under `src/renderer/`
 - Core services: CommonJS Node modules under `src/core/`
@@ -188,7 +188,7 @@ docs/
 
 `electron/main.js` owns the desktop lifecycle, window hardening, dialogs, workspace store instance, and IPC handlers.
 
-`electron/preload.js` exposes a small `window.postmeter` API to the renderer. The renderer has no direct Node access.
+`electron/preload.js` exposes a small `window.postmeter` API only to the main renderer frame. The renderer is served from the secure standard `postmeter-app://bundle` custom protocol through an allowlisted main-process handler instead of `file://`, the protocol response applies CSP/`nosniff`/`no-referrer` headers, and the renderer has no direct Node access.
 
 `src/core/` contains framework-independent business logic. JavaFX source, Maven wrapper files, and Maven tests are no longer part of the tracked repository.
 
@@ -199,13 +199,13 @@ Main process responsibilities:
 - Create a single `BrowserWindow`.
 - Own the native application menu. Current top-level menus are File, Edit, View, and Help; the default Window menu is intentionally omitted.
 - Disable hardware acceleration for reliable Linux/headless startup.
-- Deny `window.open` and all permission requests.
+- Deny renderer-controlled top-level navigation away from the exact initial packaged `postmeter-app://bundle/src/renderer/index.html` URL, including unexpected app-protocol query changes, deny `window.open`, deny `<webview>` attachment, and deny all permission requests.
 - Load and recover workspace data before creating the UI.
-- Own native open/save dialogs.
+- Own native open/save dialogs, including selected-path shape validation before import/export reads or writes.
 - Execute HTTP requests, collection runs, and load tests through core services.
 - Start and cancel OAuth 2.0 authorization-code PKCE using loopback or custom URI-scheme redirects.
 - Start and cancel OAuth 2.0 device-code polling.
-- Validate renderer-originated IPC payloads before handing them to persistence, request execution, or load testing.
+- Validate renderer-originated IPC sender identity and payloads before handing them to persistence, request execution, or load testing.
 - Persist and export normalized workspace data as plain JSON.
 - Export load-test and collection-run results to JSON or CSV.
 - Persist request history after sends.
@@ -263,7 +263,8 @@ Security settings:
 - `sandbox: true`
 - `webSecurity: true`
 - `allowRunningInsecureContent: false`
-- Renderer CSP: `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none';`
+- Renderer content protocol: secure standard `postmeter-app://bundle`, with handler allowlist limited to `src/renderer/`, reviewed browser-safe shared core model files, and `build/icon.png`; the handler does not request renderer fetch privilege and applies `cache-control: no-store`, `x-content-type-options: nosniff`, `referrer-policy: no-referrer`, and HTML CSP response headers.
+- Renderer CSP: `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; frame-src 'self' about: data:; child-src 'self' about: data:; connect-src 'none'; base-uri 'none'; object-src 'none'; form-action 'none'; worker-src 'none'; media-src 'none';`
 
 Known security tradeoffs:
 
@@ -908,7 +909,7 @@ Limitations:
 
 ## IPC Validation
 
-Renderer-originated IPC inputs are validated in `ipcValidation.js` before reaching main-process handlers. Shared enum and high-level payload contract metadata lives in `payloadSchemas.js` with `PAYLOAD_SCHEMA_VERSION = 1`.
+Renderer-originated IPC sender identity is checked by `electron/ipcSecurity.js` before production handlers run, including fail-closed rejection for missing sender-frame metadata, subframe senders, non-`postmeter-app` origins, unexpected app-protocol paths, and unexpected app-protocol query keys. IPC inputs are validated in `ipcValidation.js` before reaching main-process behavior. Shared enum and high-level payload contract metadata lives in `payloadSchemas.js` with `PAYLOAD_SCHEMA_VERSION = 1`. The source-owned Electron security matrix enumerates the BrowserWindow, navigation, window-open, webview, permission, secure app-content protocol response headers, main-frame-only preload, every IPC channel, IPC sender validation, file-dialog, external URL, custom protocol, packaged-preload, packaged-protocol, fuse, renderer CSP, and visualizer CSP surfaces and is validated by `npm run electron:security:validate`.
 
 Covered payloads:
 
@@ -931,7 +932,7 @@ Covered payloads:
 - Collection-run nested assertion results, pre-request/test script result shapes, extracted variable rows, local variable rows, environment output, collection variable output, and cookie output.
 - Load export format.
 - App update-check option payloads.
-- External URL open payloads before `shell.openExternal`.
+- External URL open payloads before credential-free `shell.openExternal` launches.
 - Main-process response payloads for request results, load-test results, and workspace load/save results.
 
 Validation behavior:
@@ -992,7 +993,7 @@ Release automation is configured in `.github/workflows/release.yml` for tag push
 - Runs Node tests and checks the Electron runtime version before platform packaging. The version probe runs Electron in Node mode so GitHub-hosted Linux runners do not need Chromium's setuid sandbox helper configured just to print the runtime version.
 - Uses `POSTMETER_CI_ELECTRON_NO_SANDBOX=1` only for Linux GitHub-hosted Electron smoke launches where Chromium's setuid sandbox helper cannot be configured by the runner. This app-shell launch waiver is separate from PostMeter's script sandbox validation and is not a production runtime default.
 - Sets `CSC_IDENTITY_AUTO_DISCOVERY=false` so missing certificates do not block unsigned builds.
-- Runs packaged startup smoke on every release platform. The smoke validates the packaged executable, full preload API function surface, app/electron/node/chrome/platform/release-channel metadata, default platform user-data path shape, isolated user-data path override behavior, and workspace save/reload persistence.
+- Runs packaged startup smoke on every release platform. The smoke validates the packaged executable, trusted `postmeter-app://bundle/src/renderer/index.html` renderer URL, renderer CSP meta policy, full preload API function surface, app/electron/node/chrome/platform/release-channel metadata, default platform user-data path shape, isolated user-data path override behavior, and workspace save/reload persistence.
 - Uploads validation logs and packaged startup-smoke failure screenshots on native runner failure so launch/protocol failures can be inspected after the job exits.
 - Downloads platform artifacts into one release directory.
 - Generates `SHA256SUMS` and `release-manifest.json`.

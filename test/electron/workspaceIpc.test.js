@@ -1,6 +1,22 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
+const {
+  selectedOpenFilePath,
+  selectedSaveFilePath,
+  validateDialogFilePath
+} = require('../../electron/fileDialogs');
 const { registerWorkspaceIpc } = require('../../electron/workspaceIpc');
+
+test('file dialog helpers validate selected paths before IPC file operations', () => {
+  assert.equal(selectedOpenFilePath({ canceled: true, filePaths: ['/tmp/workspace.json'] }), '');
+  assert.equal(selectedOpenFilePath({ canceled: false, filePaths: [] }), '');
+  assert.equal(selectedOpenFilePath({ canceled: false, filePaths: ['/tmp/workspace.json'] }), '/tmp/workspace.json');
+  assert.equal(selectedSaveFilePath({ canceled: true, filePath: '/tmp/export.json' }), '');
+  assert.equal(selectedSaveFilePath({ canceled: false, filePath: '/tmp/export.json' }), '/tmp/export.json');
+  assert.throws(() => selectedOpenFilePath({ canceled: false, filePaths: [42] }), /open dialog selected path must be a non-empty string/);
+  assert.throws(() => selectedSaveFilePath({ canceled: false, filePath: 'bad\0path.json' }), /save dialog selected path must not contain null bytes/);
+  assert.throws(() => validateDialogFilePath('', 'custom path'), /custom path must be a non-empty string/);
+});
 
 test('workspace IPC registers stable workspace, collection, and example channels', async () => {
   const handlers = new Map();

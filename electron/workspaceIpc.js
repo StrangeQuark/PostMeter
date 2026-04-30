@@ -5,7 +5,9 @@ const {
   collectionExportFilters,
   collectionImportFilters,
   jsonFilters,
-  safeFilename
+  safeFilename,
+  selectedOpenFilePath,
+  selectedSaveFilePath
 } = require('./fileDialogs');
 const {
   assertCollectionExportFormat,
@@ -190,11 +192,12 @@ function registerWorkspaceIpc(options = {}) {
       properties: ['openFile'],
       filters: jsonFilters()
     });
-    if (result.canceled || !result.filePaths.length) {
+    const filePath = selectedOpenFilePath(result);
+    if (!filePath) {
       return fileOperationResult({ cancelled: true });
     }
     const workspaceStore = getWorkspaceStore();
-    const createdWorkspaceId = await workspaceStore.importWorkspace(result.filePaths[0]);
+    const createdWorkspaceId = await workspaceStore.importWorkspace(filePath);
     const loaded = await workspaceStore.describeCurrent(getWorkspace(), { createdWorkspaceId });
     assertWorkspaceLoadResultPayload(loaded);
     return fileOperationResult({ cancelled: false, ...loaded });
@@ -212,12 +215,13 @@ function registerWorkspaceIpc(options = {}) {
       defaultPath: 'postmeter-workspace.postmeter.json',
       filters: jsonFilters()
     });
-    if (result.canceled || !result.filePath) {
+    const filePath = selectedSaveFilePath(result);
+    if (!filePath) {
       return fileOperationResult({ cancelled: true });
     }
     const exportedPath = workspaceId
-      ? await getWorkspaceStore().exportWorkspaceById(workspaceId, result.filePath)
-      : await getWorkspaceStore().exportWorkspace(nextWorkspace || getWorkspace(), result.filePath);
+      ? await getWorkspaceStore().exportWorkspaceById(workspaceId, filePath)
+      : await getWorkspaceStore().exportWorkspace(nextWorkspace || getWorkspace(), filePath);
     return fileOperationResult({ cancelled: false, path: exportedPath });
   });
 
@@ -227,10 +231,11 @@ function registerWorkspaceIpc(options = {}) {
       properties: ['openFile'],
       filters: collectionImportFilters()
     });
-    if (result.canceled || !result.filePaths.length) {
+    const filePath = selectedOpenFilePath(result);
+    if (!filePath) {
       return fileOperationResult({ cancelled: true });
     }
-    const collection = await getWorkspaceStore().importCollection(result.filePaths[0]);
+    const collection = await getWorkspaceStore().importCollection(filePath);
     return fileOperationResult({ cancelled: false, collection });
   });
 
@@ -243,10 +248,11 @@ function registerWorkspaceIpc(options = {}) {
       defaultPath: `${safeFilename(collection?.name || 'collection')}.${extension}`,
       filters: collectionExportFilters(format)
     });
-    if (result.canceled || !result.filePath) {
+    const filePath = selectedSaveFilePath(result);
+    if (!filePath) {
       return fileOperationResult({ cancelled: true });
     }
-    const exportedPath = await getWorkspaceStore().exportCollection(collection, result.filePath, { format });
+    const exportedPath = await getWorkspaceStore().exportCollection(collection, filePath, { format });
     return fileOperationResult({ cancelled: false, path: exportedPath });
   });
 
@@ -257,7 +263,8 @@ function registerWorkspaceIpc(options = {}) {
       defaultPath: `${safeFilename(request?.name || 'request')}-examples.json`,
       filters: jsonFilters()
     });
-    if (result.canceled || !result.filePath) {
+    const filePath = selectedSaveFilePath(result);
+    if (!filePath) {
       return fileOperationResult({ cancelled: true });
     }
     const payload = {
@@ -266,8 +273,8 @@ function registerWorkspaceIpc(options = {}) {
       exportedAt: new Date().toISOString(),
       examples: request.examples || []
     };
-    await fs.writeFile(result.filePath, JSON.stringify(payload, null, 2));
-    return fileOperationResult({ cancelled: false, path: result.filePath });
+    await fs.writeFile(filePath, JSON.stringify(payload, null, 2));
+    return fileOperationResult({ cancelled: false, path: filePath });
   });
 }
 

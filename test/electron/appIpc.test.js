@@ -35,5 +35,8 @@ test('app version metadata derives release channels', () => {
 test('app external URL helper only allows GitHub HTTPS URLs', () => {
   assert.equal(safeExternalUrl('https://github.com/StrangeQuark/PostMeter').hostname, 'github.com');
   assert.throws(() => safeExternalUrl('http://github.com/StrangeQuark/PostMeter'), /must use HTTPS/);
+  assert.throws(() => safeExternalUrl('https://token@github.com/StrangeQuark/PostMeter'), /must not include credentials/);
+  assert.throws(() => safeExternalUrl('javascript:alert(1)'), /must use HTTPS/);
+  assert.throws(() => safeExternalUrl('file:///tmp/postmeter.html'), /must use HTTPS/);
   assert.throws(() => safeExternalUrl('https://example.test/PostMeter'), /host is not allowed/);
 });

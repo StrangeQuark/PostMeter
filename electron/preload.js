@@ -1,6 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-contextBridge.exposeInMainWorld('postmeter', {
+const postmeterApi = {
   app: {
     versions: () => ipcRenderer.invoke('app:versions'),
     checkForUpdates: (options) => ipcRenderer.invoke('app:check-updates', options),
@@ -112,7 +112,11 @@ contextBridge.exposeInMainWorld('postmeter', {
       return () => ipcRenderer.removeListener('runner:progress', listener);
     }
   }
-});
+};
+
+if (process.isMainFrame === true) {
+  contextBridge.exposeInMainWorld('postmeter', postmeterApi);
+}
 
 function safeVaultPromptPayload(payload = {}) {
   return {

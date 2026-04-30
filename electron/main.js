@@ -1,12 +1,14 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, protocol, safeStorage, shell } = require('electron');
 const { WorkspaceRecoveryError } = require('../src/core/workspaceStore');
 const { WorkspaceManager } = require('../src/core/workspaceManager');
 const { EncryptedVaultStore } = require('../src/core/vaultStore');
+const { registerAppProtocolHandler, registerAppProtocolScheme } = require('./appProtocol');
 const { installApplicationMenu } = require('./appMenu');
 const { registerAppIpc, safeExternalUrl } = require('./appIpc');
+const { createTrustedIpcMain } = require('./ipcSecurity');
 const { createOAuthFlowController } = require('./oauthFlows');
 const { createMainWindow } = require('./mainWindow');
 const { registerSessionIpc } = require('./sessionIpc');
@@ -33,7 +35,10 @@ let sessionState;
 let workspaceStore;
 let workspace;
 const vaultStores = new Map();
+const trustedIpcMain = createTrustedIpcMain(ipcMain);
 const oauthFlows = createOAuthFlowController({ app, shell, emitProgress: emitOAuthProgress });
+
+registerAppProtocolScheme(protocol);
 
 if (process.env.POSTMETER_DATA_PATH) {
   const smokeUserDataPath = path.join(path.dirname(path.resolve(process.env.POSTMETER_DATA_PATH)), 'userData');
@@ -66,8 +71,7 @@ async function runSandboxRuntimeValidation() {
 
 function createWindow() {
   mainWindow = createMainWindow(app, {
-    preloadPath: path.join(__dirname, 'preload.js'),
-    indexPath: path.join(__dirname, '..', 'src', 'renderer', 'index.html')
+    preloadPath: path.join(__dirname, 'preload.js')
   });
 }
 
@@ -97,27 +101,28 @@ if (process.env.POSTMETER_VALIDATE_SANDBOX_RUNTIME === '1') {
   app.whenReady().then(runSandboxRuntimeValidation);
 } else {
   app.whenReady().then(async () => {
-  oauthFlows.registerProtocol();
-  sessionStore = new SessionStore(defaultSessionPath(app.getPath('userData')));
-  sessionState = await sessionStore.load();
-  workspaceStore = new WorkspaceManager();
-  try {
-    const loaded = await workspaceStore.load({ preferredWorkspaceId: sessionState.activeWorkspaceId });
-    workspace = loaded.workspace;
-    sessionState = await sessionStore.patch({ activeWorkspaceId: loaded.activeWorkspaceId });
-  } catch (error) {
-    if (error instanceof WorkspaceRecoveryError) {
-      workspace = error.recoveredWorkspace;
-      sessionState = await sessionStore.patch({ activeWorkspaceId: error.activeWorkspaceId || workspaceStore.getWorkspaceId() });
-      dialog.showErrorBox('Workspace Recovered', error.message);
-    } else {
-      dialog.showErrorBox('PostMeter could not open the workspace', error.message || String(error));
-      app.quit();
-      return;
+    registerAppProtocolHandler(protocol);
+    oauthFlows.registerProtocol();
+    sessionStore = new SessionStore(defaultSessionPath(app.getPath('userData')));
+    sessionState = await sessionStore.load();
+    workspaceStore = new WorkspaceManager();
+    try {
+      const loaded = await workspaceStore.load({ preferredWorkspaceId: sessionState.activeWorkspaceId });
+      workspace = loaded.workspace;
+      sessionState = await sessionStore.patch({ activeWorkspaceId: loaded.activeWorkspaceId });
+    } catch (error) {
+      if (error instanceof WorkspaceRecoveryError) {
+        workspace = error.recoveredWorkspace;
+        sessionState = await sessionStore.patch({ activeWorkspaceId: error.activeWorkspaceId || workspaceStore.getWorkspaceId() });
+        dialog.showErrorBox('Workspace Recovered', error.message);
+      } else {
+        dialog.showErrorBox('PostMeter could not open the workspace', error.message || String(error));
+        app.quit();
+        return;
+      }
     }
-  }
-  refreshApplicationMenu();
-  createWindow();
+    refreshApplicationMenu();
+    createWindow();
   });
 }
 
@@ -271,7 +276,7 @@ async function deleteVaultStore(workspaceId) {
   await fs.rm(vaultPathForWorkspace(id), { force: true });
 }
 
-ipcMain.handle('vault:metadata', async () => {
+trustedIpcMain.handle('vault:metadata', async () => {
   const workspaceId = workspaceStore?.getWorkspaceId?.() || '';
   const store = vaultStoreForWorkspace(workspaceId);
   const available = store.isAvailable?.() !== false;
@@ -285,37 +290,37 @@ ipcMain.handle('vault:metadata', async () => {
   };
 });
 
-ipcMain.handle('vault:reset', async () => {
+trustedIpcMain.handle('vault:reset', async () => {
   const workspaceId = workspaceStore?.getWorkspaceId?.() || '';
   await deleteVaultStore(workspaceId);
   return { ok: true };
 });
 
-ipcMain.handle('vault:bind-secret', async (_event, key, value) => {
+trustedIpcMain.handle('vault:bind-secret', async (_event, key, value) => {
   const workspaceId = workspaceStore?.getWorkspaceId?.() || '';
   const store = vaultStoreForWorkspace(workspaceId);
   await store.set(key, value, { requestId: 'workspace-settings', requestName: 'Workspace vault binding' });
   return { ok: true };
 });
 
-ipcMain.handle('vault:unset-secret', async (_event, key) => {
+trustedIpcMain.handle('vault:unset-secret', async (_event, key) => {
   const workspaceId = workspaceStore?.getWorkspaceId?.() || '';
   const store = vaultStoreForWorkspace(workspaceId);
   await store.unset(key, { requestId: 'workspace-settings', requestName: 'Workspace vault binding' });
   return { ok: true };
 });
 
-registerVaultPromptIpc({ ipcMain });
-registerAppIpc({ app, ipcMain, shell });
+registerVaultPromptIpc({ ipcMain: trustedIpcMain });
+registerAppIpc({ app, ipcMain: trustedIpcMain, shell });
 
-registerOAuthIpc({ ipcMain, oauthFlows });
+registerOAuthIpc({ ipcMain: trustedIpcMain, oauthFlows });
 
-registerSandboxPackageIpc({ ipcMain });
+registerSandboxPackageIpc({ ipcMain: trustedIpcMain });
 
 registerSessionIpc({
   getSession: () => sessionState,
   getSessionStore: () => sessionStore,
-  ipcMain,
+  ipcMain: trustedIpcMain,
   setSession: (nextSession) => {
     sessionState = nextSession;
   }
@@ -329,7 +334,7 @@ registerRuntimeIpc({
   getWorkspaceId: () => workspaceStore?.getWorkspaceId?.() || '',
   getVaultStore: () => vaultStoreForWorkspace(workspaceStore?.getWorkspaceId?.() || ''),
   getVaultPrompt: () => createVaultPrompt({ dialog, getMainWindow: () => mainWindow, persistDecision: persistVaultPromptDecision }),
-  ipcMain,
+  ipcMain: trustedIpcMain,
   mutateWorkspace,
   saveWorkspace,
   setWorkspace: (nextWorkspace) => {
@@ -344,7 +349,7 @@ registerWorkspaceIpc({
   getWorkspace: () => workspace,
   getWorkspaceId: () => workspaceStore?.getWorkspaceId?.() || '',
   getWorkspaceStore: () => workspaceStore,
-  ipcMain,
+  ipcMain: trustedIpcMain,
   queueWorkspaceOperation: enqueueWorkspaceOperation,
   refreshApplicationMenu,
   renameVaultStore,
@@ -361,7 +366,7 @@ registerRequestIpc({
   getWorkspaceId: () => workspaceStore?.getWorkspaceId?.() || '',
   getVaultStore: () => vaultStoreForWorkspace(workspaceStore?.getWorkspaceId?.() || ''),
   getVaultPrompt: () => createVaultPrompt({ dialog, getMainWindow: () => mainWindow, persistDecision: persistVaultPromptDecision }),
-  ipcMain,
+  ipcMain: trustedIpcMain,
   mutateWorkspace,
   saveWorkspace,
   setWorkspace: (nextWorkspace) => {

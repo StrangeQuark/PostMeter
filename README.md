@@ -71,7 +71,7 @@ Linux builds produce AppImage and deb artifacts, Windows builds produce an unsig
 ## Project Layout
 
 - `electron/main.js` owns desktop lifecycle, window hardening, and IPC registration.
-- `electron/preload.js` exposes the explicit renderer API.
+- `electron/preload.js` exposes the explicit main-frame renderer API.
 - `src/renderer/` contains the browser UI.
 - `src/core/` contains request execution, persistence, import/export, and load-test logic.
 - `scripts/postmeter-cli.js` is the headless CLI runner.
@@ -142,7 +142,7 @@ POSTMETER_UPDATE_URL=https://api.github.com/repos/OWNER/REPO/releases/latest npm
 
 ## Security And Status
 
-- Renderer `nodeIntegration` is disabled, `contextIsolation` is enabled, and the renderer is sandboxed.
+- Renderer `nodeIntegration` is disabled, `contextIsolation` is enabled, the renderer is sandboxed, and app UI assets are served through an allowlisted secure `postmeter-app://bundle` protocol with CSP, `nosniff`, and `no-referrer` response headers instead of `file://`.
 - The renderer talks to core logic only through explicit preload IPC bindings.
 - Request scripts run in constrained child processes with brokered privileged APIs, Postman-compatible test/assertion/variable/dynamic-variable behavior, version-pinned Postman bundled packages, global/module/Collection-SDK object facades, GraphQL hook execution, live parent-owned gRPC hook transport including parent-side PEM and PFX/P12 mTLS material handling, local mock `pm.mock`/`pm.state` support, reviewed package-cache loading with parent-side fetch/review, isolated Handlebars visualizer rendering with reviewed assets, metadata-only vault prompts and scoped vault grants, hardened script bridges, fail-closed Node permission flags in production runtimes, Linux `bubblewrap` OS isolation plus seccomp syscall policy, Windows AppContainer helper isolation, macOS seatbelt isolation, timeouts, and bounded resources.
 - Postman import parity is tracked by a generated matrix at `docs/postman-sandbox-parity-matrix.json`; `npm run postman:parity:validate` checks the matrix, and `npm run postman:parity:diff` exercises the HTTP-core, broad, dynamic-host-globals, runtime-limits, HttpOnly-cookies, sendRequest-advanced, and file-binding Newman-compatible differential harness. The official-docs sweep is separately committed at `docs/postman-docs-coverage-audit.json`; `npm run postman:docs:validate` gates the checked-in token mapping, and `npm run postman:docs:live` refetches official Postman/Newman docs to catch upstream drift. `npm run postman:parity:claim` is green for the tracked default Postman import profile with zero default-import blockers; behavior-sensitive Desktop rows are backed by row-specific evidence metadata.

@@ -45,3 +45,55 @@ test('session IPC registers stable load/save channels', async () => {
   });
   assert.equal(session.activeWorkspaceId, 'Synced Workspace.json');
 });
+
+test('session IPC rejects invalid session payloads before persistence', async () => {
+  const handlers = new Map();
+  const syncHandlers = new Map();
+  let saveCalls = 0;
+  const sessionStore = {
+    load: async () => ({}),
+    save: async (nextSession) => {
+      saveCalls += 1;
+      return nextSession;
+    },
+    saveSync: (nextSession) => {
+      saveCalls += 1;
+      return nextSession;
+    }
+  };
+
+  registerSessionIpc({
+    getSession: () => ({}),
+    getSessionStore: () => sessionStore,
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      },
+      on(channel, handler) {
+        syncHandlers.set(channel, handler);
+      }
+    },
+    setSession: () => {}
+  });
+
+  const tooManyTabs = {
+    openRequestTabs: Array.from({ length: 13 }, (_, index) => ({
+      collectionId: 'collection',
+      key: `request:${index}`,
+      requestId: `request-${index}`
+    }))
+  };
+  await assert.rejects(
+    () => handlers.get('session:save')(null, tooManyTabs),
+    /Invalid IPC payload: session\.openRequestTabs cannot contain more than 12 items/
+  );
+  assert.equal(saveCalls, 0);
+
+  assert.throws(
+    () => syncHandlers.get('session:saveSync')({ returnValue: undefined }, {
+      openRequestTabs: [{ key: 'request:1', requestId: 'request-1', dirty: 'yes' }]
+    }),
+    /Invalid IPC payload: session\.openRequestTabs\[0\]\.dirty must be a boolean/
+  );
+  assert.equal(saveCalls, 0);
+});

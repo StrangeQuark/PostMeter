@@ -36,10 +36,40 @@ function safeFilename(value) {
   return filename || 'collection';
 }
 
+function selectedOpenFilePath(result) {
+  if (result?.canceled === true || result?.cancelled === true) {
+    return '';
+  }
+  if (!Array.isArray(result?.filePaths) || result.filePaths.length === 0) {
+    return '';
+  }
+  return validateDialogFilePath(result.filePaths[0], 'open dialog selected path');
+}
+
+function selectedSaveFilePath(result) {
+  if (result?.canceled === true || result?.cancelled === true || result?.filePath == null) {
+    return '';
+  }
+  return validateDialogFilePath(result.filePath, 'save dialog selected path');
+}
+
+function validateDialogFilePath(value, label = 'dialog selected path') {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error(`${label} must be a non-empty string.`);
+  }
+  if (value.includes('\0')) {
+    throw new Error(`${label} must not contain null bytes.`);
+  }
+  return value;
+}
+
 module.exports = {
   collectionExportExtension,
   collectionExportFilters,
   collectionImportFilters,
   jsonFilters,
-  safeFilename
+  safeFilename,
+  selectedOpenFilePath,
+  selectedSaveFilePath,
+  validateDialogFilePath
 };
