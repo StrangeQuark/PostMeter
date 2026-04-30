@@ -5,7 +5,7 @@ const RELEASE_GATE_CLAIM = 'release-gate';
 
 const STATUS_DESCRIPTIONS = Object.freeze({
   implemented: 'Implemented and covered by automated validation or source-owned contract checks.',
-  'blocked-native-backend': 'Blocked until a native OS sandbox backend and packaged validation exist for this platform.',
+  'blocked-native-backend': 'Reserved for future platform rows that lack a native OS sandbox backend or packaged validation.',
   'out-of-scope': 'Explicitly outside the current claim surface.',
   'validation-hook': 'Validation plumbing exists and must stay release-gated.'
 });
@@ -42,6 +42,10 @@ const SOURCES = Object.freeze({
   releaseWorkflow: {
     title: 'Release workflow',
     path: '.github/workflows/release.yml'
+  },
+  releaseValidationWorkflow: {
+    title: 'Manual native release validation workflow',
+    path: '.github/workflows/release-validation.yml'
   }
 });
 
@@ -80,7 +84,7 @@ function buildOsSandboxPlatformMatrix() {
         'test/electron/scriptSandbox.test.js'
       ]
     }),
-    row('linux.seccomp-dangerous-syscall-policy', 'linux', 'syscall-policy', 'Linux bubblewrap launches install a seccomp cBPF deny policy for high-risk kernel APIs such as bpf, ptrace, keyring, mount, process_vm_*, perf_event_open, io_uring, and nested namespace syscalls.', 'implemented', {
+    row('linux.seccomp-dangerous-syscall-policy', 'linux', 'syscall-policy', 'Linux bubblewrap launches install a seccomp cBPF deny policy for high-risk kernel APIs such as bpf, ptrace, keyring, mount, process_vm_*, perf_event_open, io_uring, unshare/setns/clone3, and related nested namespace syscalls.', 'implemented', {
       claimBlocking: true,
       securityDecision: 'Keep the dangerous-syscall deny policy in the Linux release gate as the accepted current Linux syscall-policy standard.',
       sourceRefs: ['sandboxContract', 'seccompPolicy', 'runtimeValidation'],
@@ -109,41 +113,47 @@ function buildOsSandboxPlatformMatrix() {
         '.github/workflows/release.yml'
       ]
     }),
-    row('windows.appcontainer-backend', 'windows', 'native-backend', 'Windows script workers have a fail-closed native helper contract, but the release-owned AppContainer/restricted-token helper binary is still required before claiming platform-equivalent coverage.', 'blocked-native-backend', {
+    row('windows.appcontainer-backend', 'windows', 'native-backend', 'Windows script workers launch through the release-owned AppContainer helper with a stable AppContainer profile, minimal child environment, private temp directory, no broad filesystem grants, no declared network capabilities, inherited stdio only, and a kill-on-close single-process job object.', 'implemented', {
       claimBlocking: true,
-      securityDecision: 'Fail closed or downgrade the public claim on Windows until the configured helper is packaged and validates AppContainer or equivalent restricted-token/job-object behavior; do not silently rely on node:vm alone.',
-      sourceRefs: ['sandboxContract', 'nextSteps', 'osSandbox'],
+      securityDecision: 'Use a release-owned AppContainer helper instead of relying on node:vm alone; source and packaged Windows validation must fail closed if the helper is missing or cannot launch.',
+      sourceRefs: ['sandboxContract', 'nextSteps', 'osSandbox', 'runtimeValidation', 'ciWorkflow', 'releaseWorkflow'],
       verificationRefs: [
-        'POSTMETER_WINDOWS_OS_SANDBOX_HELPER launcher contract in src/core/osSandbox.js',
-        'future Windows native backend tests',
-        'future npm run sandbox:validate on windows-latest with helper artifact'
+        'native/windows-sandbox-helper/PostMeterWindowsSandboxHelper.cpp',
+        'npm run native:windows-sandbox:build',
+        'npm run sandbox:validate on windows-latest',
+        'test/electron/scriptSandbox.test.js'
       ]
     }),
-    row('windows.packaged-os-sandbox-validation', 'windows', 'packaged-validation', 'Packaged Windows artifacts must validate the native OS sandbox backend, Node permission flags, packaged path behavior, and script-worker launch behavior on a Windows runner.', 'blocked-native-backend', {
+    row('windows.packaged-os-sandbox-validation', 'windows', 'packaged-validation', 'Packaged Windows artifacts validate the native helper is included as an extra resource and that AppContainer helper launch, Node permission flags, packaged path behavior, and script-worker execution work on a Windows runner.', 'implemented', {
       claimBlocking: true,
-      securityDecision: 'Windows release validation cannot satisfy the platform-equivalent OS sandbox claim until it proves the native backend in packaged artifacts.',
-      sourceRefs: ['sandboxContract', 'nextSteps', 'releaseWorkflow'],
+      securityDecision: 'Keep packaged Windows OS-sandbox validation in CI, manual native release validation, and release workflows before shipping artifacts.',
+      sourceRefs: ['sandboxContract', 'nextSteps', 'runtimeValidation', 'ciWorkflow', 'releaseValidationWorkflow', 'releaseWorkflow'],
       verificationRefs: [
-        'future npm run sandbox:validate:packaged on windows-latest with native OS backend assertions',
+        'package.json win.extraResources includes PostMeterWindowsSandboxHelper.exe',
+        'npm run sandbox:validate:packaged on windows-latest',
+        '.github/workflows/ci.yml',
+        '.github/workflows/release-validation.yml',
         '.github/workflows/release.yml'
       ]
     }),
-    row('macos.seatbelt-backend', 'macos', 'native-backend', 'macOS script workers select a seatbelt-style sandbox-exec launcher when present, but native-runner source and packaged probes must prove the profile before claiming platform-equivalent coverage.', 'blocked-native-backend', {
+    row('macos.seatbelt-backend', 'macos', 'native-backend', 'macOS script workers launch through the system seatbelt sandbox-exec backend with a deny-default profile, denied network access, explicit process-exec/process-fork denial, no broad process allowance, minimal environment, private writable temp directory, and read-only runtime/app/library access.', 'implemented', {
       claimBlocking: true,
-      securityDecision: 'Fail closed or downgrade the public claim on macOS until seatbelt behavior is validated on macos-latest packaged artifacts; do not silently rely on node:vm alone.',
-      sourceRefs: ['sandboxContract', 'nextSteps', 'osSandbox'],
+      securityDecision: 'Use the platform seatbelt launcher where available and fail closed in required validation if the profile cannot launch or does not enforce the expected boundary.',
+      sourceRefs: ['sandboxContract', 'nextSteps', 'osSandbox', 'runtimeValidation', 'ciWorkflow', 'releaseWorkflow'],
       verificationRefs: [
         'macos-seatbelt launcher path in src/core/osSandbox.js',
-        'future macOS native backend tests',
-        'future npm run sandbox:validate on macos-latest with packaged probes'
+        'npm run sandbox:validate on macos-latest',
+        'test/electron/scriptSandbox.test.js'
       ]
     }),
-    row('macos.packaged-os-sandbox-validation', 'macos', 'packaged-validation', 'Packaged macOS artifacts must validate the native OS sandbox backend, Node permission flags, app bundle/ASAR path behavior, and script-worker launch behavior on a macOS runner.', 'blocked-native-backend', {
+    row('macos.packaged-os-sandbox-validation', 'macos', 'packaged-validation', 'Packaged macOS artifacts validate the seatbelt backend, Node permission flags, app bundle/ASAR path behavior, private temp behavior, and script-worker execution on a macOS runner.', 'implemented', {
       claimBlocking: true,
-      securityDecision: 'macOS release validation cannot satisfy the platform-equivalent OS sandbox claim until it proves the native backend in packaged artifacts.',
-      sourceRefs: ['sandboxContract', 'nextSteps', 'releaseWorkflow'],
+      securityDecision: 'Keep packaged macOS OS-sandbox validation in CI, manual native release validation, and release workflows before shipping artifacts.',
+      sourceRefs: ['sandboxContract', 'nextSteps', 'runtimeValidation', 'ciWorkflow', 'releaseValidationWorkflow', 'releaseWorkflow'],
       verificationRefs: [
-        'future npm run sandbox:validate:packaged on macos-latest with native OS backend assertions',
+        'npm run sandbox:validate:packaged on macos-latest',
+        '.github/workflows/ci.yml',
+        '.github/workflows/release-validation.yml',
         '.github/workflows/release.yml'
       ]
     }),

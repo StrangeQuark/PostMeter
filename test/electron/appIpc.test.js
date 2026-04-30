@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { registerAppIpc, safeExternalUrl } = require('../../electron/appIpc');
+const { registerAppIpc, releaseChannelForVersion, safeExternalUrl } = require('../../electron/appIpc');
 
 test('app IPC registers stable app channels', () => {
   const handlers = new Map();
@@ -19,7 +19,17 @@ test('app IPC registers stable app channels', () => {
     'app:open-external',
     'app:versions'
   ]);
-  assert.equal(handlers.get('app:versions')().app, '0.0.0-test');
+  const versions = handlers.get('app:versions')();
+  assert.equal(versions.app, '0.0.0-test');
+  assert.equal(versions.releaseChannel, 'stable');
+  assert.equal(versions.platform, process.platform);
+});
+
+test('app version metadata derives release channels', () => {
+  assert.equal(releaseChannelForVersion('1.2.3'), 'stable');
+  assert.equal(releaseChannelForVersion('1.2.3-alpha.1'), 'alpha');
+  assert.equal(releaseChannelForVersion('1.2.3-beta.1'), 'beta');
+  assert.equal(releaseChannelForVersion('1.2.3-rc.1'), 'rc');
 });
 
 test('app external URL helper only allows GitHub HTTPS URLs', () => {

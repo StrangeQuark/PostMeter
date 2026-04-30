@@ -39,7 +39,8 @@ function bindSmokeHooks(app, mainWindow, env) {
     mainWindow.webContents.once('did-finish-load', () => {
       runStartupSmokeProbe(app, mainWindow, env)
         .then(() => app.quit())
-        .catch((error) => {
+        .catch(async (error) => {
+          await writeStartupSmokeFailureArtifacts(mainWindow, env, error);
           console.error(error.stack || error.message || String(error));
           app.exit(1);
         });
@@ -75,17 +76,36 @@ function bindSmokeHooks(app, mainWindow, env) {
 }
 
 async function runStartupSmokeProbe(app, mainWindow, env) {
+  await validateSmokeUserDataPath(app, env);
   const markerKey = '__postmeter_packaged_smoke';
   const markerValue = env.POSTMETER_PACKAGED_SMOKE_MARKER || 'startup-smoke';
   const expectReload = env.POSTMETER_PACKAGED_SMOKE_EXPECT_RELOAD === '1';
+  const requiredPreloadApi = requiredPreloadApiSurface();
   await mainWindow.webContents.executeJavaScript(`
     (async function () {
       if (!window.postmeter || !window.postmeter.app || !window.postmeter.workspace) {
         throw new Error('Packaged smoke preload API is unavailable.');
       }
+      const requiredApi = ${JSON.stringify(requiredPreloadApi)};
+      const missingApi = requiredApi.filter(function (path) {
+        var cursor = window.postmeter;
+        for (var index = 0; index < path.length; index += 1) {
+          cursor = cursor && cursor[path[index]];
+        }
+        return typeof cursor !== 'function';
+      });
+      if (missingApi.length) {
+        throw new Error('Packaged smoke preload API is missing: ' + missingApi.map(function (path) { return path.join('.'); }).join(', '));
+      }
       const versions = await window.postmeter.app.versions();
-      if (!versions.app || !versions.electron || !versions.node) {
+      if (!versions.app || !versions.electron || !versions.node || !versions.chrome || !versions.releaseChannel || !versions.platform) {
         throw new Error('Packaged smoke version metadata is incomplete.');
+      }
+      if (!['stable', 'rc', 'beta', 'alpha'].includes(versions.releaseChannel)) {
+        throw new Error('Packaged smoke release channel metadata is invalid.');
+      }
+      if (versions.platform !== ${JSON.stringify(process.platform)}) {
+        throw new Error('Packaged smoke platform metadata does not match the host.');
       }
       const loaded = await window.postmeter.workspace.load();
       if (!loaded || !loaded.workspace || !Array.isArray(loaded.workspace.globals)) {
@@ -108,6 +128,114 @@ async function runStartupSmokeProbe(app, mainWindow, env) {
     })();
   `, true);
   await new Promise((resolve) => setTimeout(resolve, 100));
+}
+
+async function validateSmokeUserDataPath(app, env) {
+  if (!env.POSTMETER_PACKAGED_SMOKE || !app || typeof app.getPath !== 'function') {
+    return;
+  }
+  const userDataPath = app.getPath('userData');
+  if (!userDataPath) {
+    throw new Error('Packaged smoke userData path is unavailable.');
+  }
+  const stat = await fs.stat(userDataPath);
+  if (!stat.isDirectory()) {
+    throw new Error(`Packaged smoke userData path is not a directory: ${userDataPath}`);
+  }
+  if (env.POSTMETER_DATA_PATH) {
+    const expected = path.join(path.dirname(path.resolve(env.POSTMETER_DATA_PATH)), 'userData');
+    if (path.resolve(userDataPath) !== path.resolve(expected)) {
+      throw new Error(`Packaged smoke userData path mismatch: expected ${expected}, got ${userDataPath}`);
+    }
+    return;
+  }
+  if (env.POSTMETER_PACKAGED_SMOKE_DEFAULT_PATH === '1') {
+    const expectedRoot = expectedDefaultUserDataRoot(env);
+    if (!isPathInside(expectedRoot, userDataPath) || path.basename(userDataPath).toLowerCase() !== 'postmeter') {
+      throw new Error(`Packaged smoke default userData path mismatch: expected a PostMeter directory under ${expectedRoot}, got ${userDataPath}`);
+    }
+  }
+}
+
+function expectedDefaultUserDataRoot(env, platform = process.platform) {
+  if (platform === 'win32') {
+    return path.resolve(env.APPDATA || path.join(env.USERPROFILE || env.HOME || '', 'AppData', 'Roaming'));
+  }
+  if (platform === 'darwin') {
+    return path.resolve(env.HOME || '', 'Library', 'Application Support');
+  }
+  return path.resolve(env.XDG_CONFIG_HOME || path.join(env.HOME || '', '.config'));
+}
+
+function isPathInside(parent, child) {
+  const relative = path.relative(path.resolve(parent), path.resolve(child));
+  return relative === '' || (relative && !relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+async function writeStartupSmokeFailureArtifacts(mainWindow, env, error) {
+  const artifactDir = env.POSTMETER_VALIDATION_ARTIFACT_DIR;
+  if (!artifactDir || !mainWindow?.webContents || typeof mainWindow.webContents.capturePage !== 'function') {
+    return;
+  }
+  try {
+    await fs.mkdir(artifactDir, { recursive: true });
+    const stamp = safeFilename(new Date().toISOString().replaceAll(':', '-'));
+    const failureText = error?.stack || error?.message || String(error || 'Unknown startup smoke failure.');
+    await fs.writeFile(path.join(artifactDir, `packaged-startup-smoke-failure-${stamp}.log`), `${failureText}\n`);
+    const image = await mainWindow.webContents.capturePage();
+    await fs.writeFile(path.join(artifactDir, `packaged-startup-smoke-failure-${stamp}.png`), image.toPNG());
+  } catch (artifactError) {
+    console.error(`Unable to write packaged startup smoke failure artifacts: ${artifactError.message || artifactError}`);
+  }
+}
+
+function requiredPreloadApiSurface() {
+  return [
+    ['app', 'versions'],
+    ['app', 'checkForUpdates'],
+    ['app', 'openExternal'],
+    ['app', 'onMenuAction'],
+    ['session', 'load'],
+    ['session', 'save'],
+    ['session', 'saveSync'],
+    ['workspace', 'load'],
+    ['workspace', 'save'],
+    ['workspace', 'saveRequest'],
+    ['workspace', 'saveEnvironment'],
+    ['workspace', 'saveSettings'],
+    ['workspace', 'saveSync'],
+    ['workspace', 'create'],
+    ['workspace', 'rename'],
+    ['workspace', 'switch'],
+    ['workspace', 'delete'],
+    ['workspace', 'importWorkspace'],
+    ['workspace', 'exportWorkspace'],
+    ['collection', 'importCollection'],
+    ['collection', 'exportCollection'],
+    ['request', 'validate'],
+    ['request', 'send'],
+    ['request', 'exportExamples'],
+    ['oauth', 'startPkceFlow'],
+    ['oauth', 'startDeviceFlow'],
+    ['oauth', 'cancelFlow'],
+    ['oauth', 'cancelDeviceFlow'],
+    ['oauth', 'onProgress'],
+    ['vault', 'bindSecret'],
+    ['vault', 'metadata'],
+    ['vault', 'onPrompt'],
+    ['vault', 'resolvePrompt'],
+    ['vault', 'reset'],
+    ['vault', 'unsetSecret'],
+    ['sandboxPackages', 'fetch'],
+    ['loadTest', 'start'],
+    ['loadTest', 'cancel'],
+    ['loadTest', 'export'],
+    ['loadTest', 'onProgress'],
+    ['runner', 'start'],
+    ['runner', 'cancel'],
+    ['runner', 'export'],
+    ['runner', 'onProgress']
+  ];
 }
 
 function bindTitleSmoke(app, mainWindow, options) {
@@ -232,6 +360,11 @@ function nativeImageHasVariance(image) {
 
 module.exports = {
   createMainWindow,
+  expectedDefaultUserDataRoot,
+  isPathInside,
   nativeImageHasVariance,
-  runStartupSmokeProbe
+  requiredPreloadApiSurface,
+  runStartupSmokeProbe,
+  validateSmokeUserDataPath,
+  writeStartupSmokeFailureArtifacts
 };

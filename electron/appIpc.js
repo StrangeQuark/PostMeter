@@ -11,12 +11,17 @@ function registerAppIpc(options = {}) {
     shell
   } = options;
 
-  ipcMain.handle('app:versions', () => ({
-    app: app.getVersion(),
-    electron: process.versions.electron,
-    chrome: process.versions.chrome,
-    node: process.versions.node
-  }));
+  ipcMain.handle('app:versions', () => {
+    const appVersion = app.getVersion();
+    return {
+      app: appVersion,
+      electron: process.versions.electron,
+      chrome: process.versions.chrome,
+      node: process.versions.node,
+      platform: process.platform,
+      releaseChannel: releaseChannelForVersion(appVersion)
+    };
+  });
 
   ipcMain.handle('app:check-updates', async (_event, updateOptions = {}) => {
     assertUpdateCheckOptionsPayload(updateOptions);
@@ -50,7 +55,22 @@ function safeExternalUrl(value) {
   return parsed;
 }
 
+function releaseChannelForVersion(version) {
+  const value = String(version || '').toLowerCase();
+  if (/(^|[.-])alpha(\.|-|$)/.test(value)) {
+    return 'alpha';
+  }
+  if (/(^|[.-])beta(\.|-|$)/.test(value)) {
+    return 'beta';
+  }
+  if (/(^|[.-])rc(\.|-|$)/.test(value)) {
+    return 'rc';
+  }
+  return 'stable';
+}
+
 module.exports = {
   registerAppIpc,
+  releaseChannelForVersion,
   safeExternalUrl
 };

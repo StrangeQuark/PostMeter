@@ -2,7 +2,7 @@ const fs = require('node:fs/promises');
 const { spawn } = require('node:child_process');
 const os = require('node:os');
 const path = require('node:path');
-const { sha256File } = require('./writeReleaseChecksums');
+const { findArtifacts, sha256File, UNSUPPORTED_DISTRIBUTABLE_EXTENSIONS } = require('./writeReleaseChecksums');
 
 const RELEASE_DIR = process.env.POSTMETER_RELEASE_DIR
   ? path.resolve(process.env.POSTMETER_RELEASE_DIR)
@@ -13,42 +13,117 @@ const PACKAGE_JSON = process.env.POSTMETER_PACKAGE_JSON
 const MANIFEST_FILE = process.env.POSTMETER_RELEASE_MANIFEST
   ? path.resolve(process.env.POSTMETER_RELEASE_MANIFEST)
   : path.join(RELEASE_DIR, 'release-manifest.json');
+const CHECKSUM_FILE = process.env.POSTMETER_RELEASE_CHECKSUMS
+  ? path.resolve(process.env.POSTMETER_RELEASE_CHECKSUMS)
+  : path.join(RELEASE_DIR, 'SHA256SUMS');
 
 async function main() {
-  await validatePackageMetadata(PACKAGE_JSON);
+  const packageJson = await validatePackageMetadata(PACKAGE_JSON);
   await validateReleaseManifest({
     releaseDir: RELEASE_DIR,
     manifestFile: MANIFEST_FILE,
-    requiredTypes: csvSet(process.env.POSTMETER_RELEASE_REQUIRED_TYPES)
+    checksumFile: CHECKSUM_FILE,
+    requiredTypes: csvSet(process.env.POSTMETER_RELEASE_REQUIRED_TYPES),
+    expectedAppId: packageJson.build.appId,
+    expectedProductName: packageJson.build.productName,
+    expectedVersion: packageJson.version
   });
   console.log(`Validated release artifacts in ${RELEASE_DIR}`);
 }
 
 async function validatePackageMetadata(packageJsonPath) {
   const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf8'));
+  const build = packageJson.build || {};
   if (packageJson.build?.appId !== 'com.strangequark.postmeter') {
     throw new Error('package.json build.appId must be com.strangequark.postmeter.');
   }
   if (packageJson.build?.productName !== 'PostMeter') {
     throw new Error('package.json build.productName must be PostMeter.');
   }
+  if (packageJson.author !== 'StrangeQuark <support@qrksw.com>') {
+    throw new Error('package.json author must be StrangeQuark <support@qrksw.com>.');
+  }
+  if (!packageJson.version) {
+    throw new Error('package.json version is required for release artifact naming.');
+  }
+  if (packageJson.homepage !== 'https://github.com/StrangeQuark/PostMeter#readme') {
+    throw new Error('package.json homepage must point to the canonical PostMeter GitHub release source.');
+  }
+  if (packageJson.repository?.url !== 'git+https://github.com/StrangeQuark/PostMeter.git') {
+    throw new Error('package.json repository.url must point to StrangeQuark/PostMeter.');
+  }
+  if (packageJson.bugs?.url !== 'https://github.com/StrangeQuark/PostMeter/issues') {
+    throw new Error('package.json bugs.url must point to StrangeQuark/PostMeter issues.');
+  }
+  if (build.icon !== 'build/icon.png') {
+    throw new Error('package.json build.icon must point to build/icon.png.');
+  }
+  if (build.directories?.output !== 'release') {
+    throw new Error('package.json build.directories.output must be release.');
+  }
   if (!packageJson.build?.protocols?.some((protocol) => (protocol.schemes || []).includes('postmeter'))) {
     throw new Error('package.json must declare the postmeter:// custom protocol.');
   }
+  requireBuildTargets(build.linux?.target, ['AppImage', 'deb'], 'Linux');
+  requireBuildTargets(build.win?.target, ['nsis'], 'Windows');
+  requireBuildTargets(build.mac?.target, ['dmg', 'zip'], 'macOS');
+  if (build.linux?.maintainer !== 'StrangeQuark <support@qrksw.com>') {
+    throw new Error('package.json build.linux.maintainer must be StrangeQuark <support@qrksw.com>.');
+  }
+  if (build.fileAssociations && (!Array.isArray(build.fileAssociations) || build.fileAssociations.length)) {
+    throw new Error('package.json must not declare file associations until release docs and validators cover them.');
+  }
+  return packageJson;
 }
 
-async function validateReleaseManifest({ releaseDir, manifestFile, requiredTypes = new Set() }) {
+function requireBuildTargets(actualTargets, expectedTargets, label) {
+  const actual = new Set((Array.isArray(actualTargets) ? actualTargets : [])
+    .map((target) => String(target || '').toLowerCase()));
+  for (const target of expectedTargets) {
+    if (!actual.has(target.toLowerCase())) {
+      throw new Error(`package.json ${label} build target must include ${target}.`);
+    }
+  }
+}
+
+async function validateReleaseManifest({
+  releaseDir,
+  manifestFile,
+  checksumFile = path.join(releaseDir, 'SHA256SUMS'),
+  requiredTypes = new Set(),
+  expectedAppId = '',
+  expectedProductName = '',
+  expectedVersion = ''
+}) {
   const manifest = JSON.parse(await fs.readFile(manifestFile, 'utf8'));
   if (manifest.schemaVersion !== 1) {
     throw new Error('release-manifest.json schemaVersion must be 1.');
   }
+  if (expectedProductName && manifest.productName !== expectedProductName) {
+    throw new Error(`release-manifest.json productName must be ${expectedProductName}.`);
+  }
+  if (expectedAppId && manifest.appId !== expectedAppId) {
+    throw new Error(`release-manifest.json appId must be ${expectedAppId}.`);
+  }
+  if (expectedVersion && manifest.version !== expectedVersion) {
+    throw new Error(`release-manifest.json version must be ${expectedVersion}.`);
+  }
   if (!Array.isArray(manifest.artifacts) || !manifest.artifacts.length) {
     throw new Error('release-manifest.json must contain at least one artifact.');
   }
+  await validateNoUnsupportedDistributables(releaseDir);
+  const artifactVersion = expectedVersion || manifest.version || '';
   const seenTypes = new Set();
+  const manifestArtifacts = new Map();
   for (const artifact of manifest.artifacts) {
     if (!artifact.file || !artifact.type || !artifact.sha256 || !Number.isFinite(Number(artifact.sizeBytes))) {
       throw new Error(`Release artifact metadata is incomplete: ${JSON.stringify(artifact)}`);
+    }
+    if (artifact.file !== path.basename(artifact.file) || /[\\/]/.test(artifact.file)) {
+      throw new Error(`Release artifact must be a top-level distributable file, not a packaged internal path: ${artifact.file}`);
+    }
+    if (manifestArtifacts.has(artifact.file)) {
+      throw new Error(`release-manifest.json contains duplicate artifact metadata for ${artifact.file}.`);
     }
     const artifactPath = path.join(releaseDir, artifact.file);
     const stat = await fs.stat(artifactPath);
@@ -60,6 +135,7 @@ async function validateReleaseManifest({ releaseDir, manifestFile, requiredTypes
       throw new Error(`${artifact.file} SHA-256 does not match release-manifest.json.`);
     }
     const artifactType = String(artifact.type).toLowerCase();
+    validateArtifactPlatformAndName(artifact, artifactType, artifactVersion);
     if (artifactType === 'deb') {
       await validateLinuxDebProtocol(artifactPath);
     } else if (artifactType === 'appimage') {
@@ -67,13 +143,124 @@ async function validateReleaseManifest({ releaseDir, manifestFile, requiredTypes
     } else if (artifactType === 'zip') {
       await validateMacZipProtocolIfPresent(artifactPath);
     }
-    seenTypes.add(artifact.type);
+    manifestArtifacts.set(artifact.file, {
+      sha256: artifact.sha256,
+      type: artifactType
+    });
+    seenTypes.add(artifactType);
   }
+  await validateManifestCoversReleaseArtifacts(releaseDir, manifestArtifacts);
+  await validateChecksumsFile(checksumFile, manifestArtifacts);
   for (const type of requiredTypes) {
-    if (!seenTypes.has(type)) {
+    if (!seenTypes.has(String(type).toLowerCase())) {
       throw new Error(`Missing required release artifact type: ${type}.`);
     }
   }
+}
+
+async function validateManifestCoversReleaseArtifacts(releaseDir, manifestArtifacts) {
+  const artifactFiles = new Set((await findArtifacts(releaseDir))
+    .map((filePath) => path.relative(releaseDir, filePath).replaceAll(path.sep, '/')));
+  for (const file of artifactFiles) {
+    if (!manifestArtifacts.has(file)) {
+      throw new Error(`Top-level release artifact is missing from release-manifest.json: ${file}`);
+    }
+  }
+  for (const file of manifestArtifacts.keys()) {
+    if (!artifactFiles.has(file)) {
+      throw new Error(`release-manifest.json lists an artifact that was not discovered as a top-level release artifact: ${file}`);
+    }
+  }
+}
+
+async function validateNoUnsupportedDistributables(releaseDir) {
+  const entries = await fs.readdir(releaseDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isFile()) {
+      continue;
+    }
+    const extension = path.extname(entry.name).toLowerCase();
+    if (UNSUPPORTED_DISTRIBUTABLE_EXTENSIONS.has(extension)) {
+      throw new Error(`${entry.name} is not a configured PostMeter release artifact type. Update package metadata, docs, and validators before publishing ${extension} artifacts.`);
+    }
+  }
+}
+
+async function validateChecksumsFile(checksumFile, manifestArtifacts) {
+  const content = await fs.readFile(checksumFile, 'utf8');
+  const checksumEntries = new Map();
+  for (const [index, line] of content.split(/\r?\n/).entries()) {
+    if (!line.trim()) {
+      continue;
+    }
+    const match = line.match(/^([a-f0-9]{64}) {2}(.+)$/);
+    if (!match) {
+      throw new Error(`SHA256SUMS line ${index + 1} must use "<sha256>  <top-level artifact>" format.`);
+    }
+    const [, sha256, file] = match;
+    if (file !== path.basename(file) || /[\\/]/.test(file)) {
+      throw new Error(`SHA256SUMS must only list top-level release artifacts, got ${file}.`);
+    }
+    if (checksumEntries.has(file)) {
+      throw new Error(`SHA256SUMS contains duplicate artifact checksum for ${file}.`);
+    }
+    checksumEntries.set(file, sha256);
+  }
+  for (const [file, artifact] of manifestArtifacts.entries()) {
+    if (!checksumEntries.has(file)) {
+      throw new Error(`SHA256SUMS is missing release artifact ${file}.`);
+    }
+    if (checksumEntries.get(file) !== artifact.sha256) {
+      throw new Error(`SHA256SUMS hash for ${file} does not match release-manifest.json.`);
+    }
+  }
+  for (const file of checksumEntries.keys()) {
+    if (!manifestArtifacts.has(file)) {
+      throw new Error(`SHA256SUMS lists an artifact that is missing from release-manifest.json: ${file}`);
+    }
+  }
+}
+
+function validateArtifactPlatformAndName(artifact, artifactType, expectedVersion = '') {
+  const platform = String(artifact.platform || '').toLowerCase();
+  const file = path.basename(artifact.file);
+  const version = expectedVersion ? escapeRegExp(expectedVersion) : '\\d+\\.\\d+\\.\\d+(?:[-+][A-Za-z0-9._-]+)?';
+  const expectations = {
+    appimage: {
+      platform: 'linux',
+      pattern: new RegExp(`^PostMeter-${version}(?:-[A-Za-z0-9._-]+)?\\.AppImage$`)
+    },
+    deb: {
+      platform: 'linux',
+      pattern: new RegExp(`^postmeter_${version}_[A-Za-z0-9.+~-]+\\.deb$`)
+    },
+    dmg: {
+      platform: 'macos',
+      pattern: new RegExp(`^PostMeter-${version}(?:-[A-Za-z0-9._-]+)?\\.dmg$`)
+    },
+    zip: {
+      platform: 'macos',
+      pattern: new RegExp(`^PostMeter-${version}(?:-[A-Za-z0-9._-]+)?\\.zip$`)
+    },
+    exe: {
+      platform: 'windows',
+      pattern: new RegExp(`^PostMeter(?: Setup)?[ -]${version}(?:-[A-Za-z0-9._-]+)?\\.exe$`)
+    },
+  };
+  const expectation = expectations[artifactType];
+  if (!expectation) {
+    return;
+  }
+  if (platform !== expectation.platform) {
+    throw new Error(`${artifact.file} platform must be ${expectation.platform}, got ${artifact.platform}.`);
+  }
+  if (!expectation.pattern.test(file)) {
+    throw new Error(`${artifact.file} does not match the expected ${artifactType} release artifact name pattern.`);
+  }
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 async function validateLinuxAppImageProtocol(appImagePath) {
@@ -225,6 +412,7 @@ if (require.main === module) {
 module.exports = {
   validateLinuxAppImageProtocol,
   ensureExecutableFile,
+  requireBuildTargets,
   validatePackageMetadata,
   validateLinuxDebProtocol,
   validateMacZipProtocol,

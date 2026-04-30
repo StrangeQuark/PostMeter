@@ -116,13 +116,18 @@
       "rg \"grpc|beforeInvoke|onIncomingMessage|afterResponse|pm.message\" /snap/postman/360/usr/share/postman/resources/app",
       "node --test test/electron/grpcClient.test.js"
     ],
-    "artifactPaths": [
-      "/snap/postman/360/usr/share/postman/resources/app/package.json",
-      "/snap/postman/360/usr/share/postman/resources/app/yarn.lock",
-      "test/electron/grpcClient.test.js",
-      "src/core/grpcClient.js",
-      "src/core/scriptedRequestLifecycle.js"
-    ]
+      "artifactPaths": [
+        "/snap/postman/360/usr/share/postman/resources/app/package.json",
+        "/snap/postman/360/usr/share/postman/resources/app/yarn.lock",
+        "test/electron/grpcClient.test.js",
+        "test/electron/httpClient.test.js",
+        "test/electron/scriptedRequestLifecycle.test.js",
+        "test/electron/scriptSandbox.test.js",
+        "src/core/grpcClient.js",
+        "src/core/httpClient.js",
+        "src/core/pfxCertificate.js",
+        "src/core/scriptedRequestLifecycle.js"
+      ]
   },
   "observed": {
     "postmanDesktop": {
@@ -153,7 +158,8 @@
         "final URL",
         "cancellation/error shape"
       ],
-      "scriptBoundary": "Before invoke, On message, and After response scripts run in the isolated script worker. Scripts can mutate metadata, messages, methodPath, and target URL through the Postman-compatible request facade, but raw gRPC clients, sockets, proto file reads, TLS material, and client-certificate files remain parent-owned."
+      "scriptBoundary": "Before invoke, On message, and After response scripts run in the isolated script worker. Scripts can mutate metadata, messages, methodPath, and target URL through the Postman-compatible request facade, but raw gRPC clients, sockets, proto file reads, TLS material, and client-certificate files remain parent-owned.",
+      "clientCertificateCoverage": "HTTP and gRPC transports share parent-owned PEM and PFX/P12 client-certificate handling. PFX/P12 bundles are parsed with node-forge into in-memory PEM buffers, certificate files are read through regular-file byte-capped descriptor reads, configured certificate bindings fail closed when missing, and script-injected direct certificate/PFX/CA/passphrase fields are denied or ignored before parent file reads."
     }
   },
   "verification": {
@@ -163,19 +169,27 @@
       "executes live server-streaming gRPC requests and runs On message for each response",
       "executes live bidirectional gRPC requests through the default parent transport",
       "normalizes live gRPC errors and still runs After response scripts",
-      "uses trusted proto path interpolation from before Before invoke runs"
+      "uses trusted proto path interpolation from before Before invoke runs",
+      "extracts gRPC PFX/P12 client certificate material parent-side",
+      "uses PEM and PFX/P12 client certificates for live gRPC mTLS across unary and streaming calls without script-time certificate mutation",
+      "loads PEM and PFX client certificate material from main-process paths",
+      "sends HTTPS requests with PEM and PFX client certificates",
+      "requires brokered client-certificate bindings for pm.sendRequest",
+      "ignores script-injected primary request client-certificate file paths",
+      "allows script selection of configured primary request client-certificate bindings only by id"
     ],
     "securityChecks": [
       "transport proto/include/TLS/client-certificate configuration is snapshotted before Before invoke",
       "script-mutated environment variables do not affect trusted proto path interpolation",
       "scripts never receive grpc-js client, channel, call, socket, filesystem, TLS, or certificate handles",
+      "scripts can select only configured certificate bindings by certificateId and cannot inject direct certificate/PFX/CA/passphrase paths",
+      "certificate and PFX/P12 bundle reads are regular-file and byte-capped descriptor reads",
       "streaming response messages are capped and normalized before pm.message exposure"
     ]
   },
   "limitations": [
     "This artifact does not claim public internet interoperability with every gRPC server implementation; it proves PostMeter's imported-script lifecycle and parent-owned live transport against a local grpc-js loopback service.",
     "This artifact covers the base pm.message data/name/type/toJSON surface but not Postman's documented Date-object behavior for pm.message.timestamp.",
-    "gRPC PFX/P12 client-certificate conversion is not implemented by grpc-js createSsl and remains outside the currently tested PEM cert/key coverage.",
     "Platform-equivalent OS sandbox completion remains tracked separately from the Postman script compatibility claim."
   ],
   "notes": "This artifact clears grpc.live-desktop-transport by pairing the installed Postman Desktop gRPC script surface audit with focused live PostMeter transport coverage and explicit parent-owned transport hardening."

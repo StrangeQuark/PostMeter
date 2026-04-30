@@ -3,6 +3,7 @@ const path = require('node:path');
 const { BODY_TYPES } = require('./models');
 const {
   OS_SANDBOX_MODES,
+  cleanupPrivateTempDir,
   createScriptWorkerLaunch,
   osSandboxStatus,
   prepareSeccompStdio
@@ -229,24 +230,40 @@ function runPostmanScriptIsolated(scriptText, context = {}, options = {}) {
 }
 
 function startScriptWorkerProcess(launch) {
+  const attachCleanup = (child) => {
+    if (!launch.privateTempDir) {
+      return child;
+    }
+    let cleaned = false;
+    const cleanup = () => {
+      if (cleaned) {
+        return;
+      }
+      cleaned = true;
+      cleanupPrivateTempDir(launch.privateTempDir);
+    };
+    child.once('exit', cleanup);
+    child.once('error', cleanup);
+    return child;
+  };
   if (launch.transport === 'stdio') {
     const seccomp = prepareSeccompStdio(launch, ['pipe', 'pipe', 'pipe']);
     try {
-      return spawn(launch.command, launch.args, {
+      return attachCleanup(spawn(launch.command, launch.args, {
         env: launch.env,
         serialization: 'json',
         stdio: seccomp.stdio
-      });
+      }));
     } finally {
       seccomp.cleanup();
     }
   }
-  return fork(launch.workerPath, [], {
+  return attachCleanup(fork(launch.workerPath, [], {
     env: launch.env,
     execArgv: launch.execArgv,
     serialization: 'json',
     stdio: ['ignore', 'ignore', 'pipe', 'ipc']
-  });
+  }));
 }
 
 function createChildTransport(child, type) {

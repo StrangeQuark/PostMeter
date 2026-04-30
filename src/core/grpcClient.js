@@ -12,7 +12,9 @@ const {
 } = require('./environmentResolver');
 const {
   DEFAULT_MAX_PFX_BYTES,
-  extractPfxToPem
+  decryptPemPrivateKey,
+  extractPfxToPem,
+  readRegularFileBounded
 } = require('./pfxCertificate');
 
 const DEFAULT_GRPC_TIMEOUT_MILLIS = 3 * 60 * 1000;
@@ -345,16 +347,21 @@ async function grpcCredentialsForRequest(invocation, environment, options) {
     return grpc.credentials.createSsl(rootCerts || undefined);
   }
 
-  const certificateBinding = clientAuth.certificateId
-    ? (options.clientCertificates || []).find((item) => String(item?.id || '') === String(clientAuth.certificateId))
+  const certificateId = resolveEnvironmentValue(clientAuth.certificateId, transportEnvironment).trim();
+  const certificateBinding = certificateId
+    ? (options.clientCertificates || []).find((item) => String(item?.id || '') === certificateId)
     : null;
+  if (certificateId && !certificateBinding) {
+    throw new Error('Configured gRPC client certificate binding was not found for this request.');
+  }
   const auth = certificateBinding ? {
-    ...clientAuth,
-    caPath: certificateBinding.caPath || clientAuth.caPath,
-    certPath: certificateBinding.certPath || clientAuth.certPath,
-    keyPath: certificateBinding.keyPath || clientAuth.keyPath,
-    passphrase: certificateBinding.passphrase || clientAuth.passphrase,
-    pfxPath: certificateBinding.pfxPath || clientAuth.pfxPath
+    type: 'clientCertificate',
+    certificateId,
+    caPath: certificateBinding.caPath || '',
+    certPath: certificateBinding.certPath || '',
+    keyPath: certificateBinding.keyPath || '',
+    passphrase: certificateBinding.passphrase || '',
+    pfxPath: certificateBinding.pfxPath || ''
   } : clientAuth;
   const ca = rootCerts || await readOptionalPem(auth.caPath, transportEnvironment, 'CA certificate');
   const pfxPath = resolveEnvironmentValue(String(auth.pfxPath || ''), transportEnvironment).trim();
@@ -364,7 +371,11 @@ async function grpcCredentialsForRequest(invocation, environment, options) {
   }
 
   const certChain = await readRequiredPem(auth.certPath, transportEnvironment, 'PEM certificate');
-  const privateKey = await readRequiredPem(auth.keyPath, transportEnvironment, 'PEM key');
+  const privateKey = decryptPemPrivateKey(
+    await readRequiredPem(auth.keyPath, transportEnvironment, 'PEM key'),
+    resolveEnvironmentValue(auth.passphrase, transportEnvironment),
+    'gRPC PEM key'
+  );
   return grpc.credentials.createSsl(ca || undefined, privateKey, certChain);
 }
 
@@ -385,25 +396,13 @@ async function readRequiredPem(filePath, environment, label) {
 }
 
 async function readBoundedFile(filePath, label) {
-  const resolved = path.resolve(filePath);
-  const stat = await fs.stat(resolved).catch((error) => {
-    throw new Error(`Unable to read gRPC ${label}: ${error?.code || error?.message || 'unknown error'}.`);
-  });
-  if (!stat.isFile()) {
-    throw new Error(`gRPC ${label} must be a regular file.`);
-  }
-  if (stat.size > MAX_GRPC_PROTO_BYTES) {
-    throw new Error(`gRPC ${label} cannot exceed ${MAX_GRPC_PROTO_BYTES} bytes.`);
-  }
-  return fs.readFile(resolved);
+  return readRegularFileBounded(filePath, `gRPC ${label}`, MAX_GRPC_PROTO_BYTES);
 }
 
 async function extractPfxForGrpc(filePath, passphrase = '') {
   return extractPfxToPem(filePath, passphrase, {
     bundleLabel: 'gRPC PFX/P12 bundle',
-    envPassphraseName: 'POSTMETER_GRPC_PFX_PASSPHRASE',
-    maxBytes: DEFAULT_MAX_PFX_BYTES,
-    tempPrefix: 'postmeter-grpc-pfx-'
+    maxBytes: DEFAULT_MAX_PFX_BYTES
   });
 }
 

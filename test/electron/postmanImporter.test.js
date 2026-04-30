@@ -299,6 +299,51 @@ test('imports Postman examples and collection certificates', () => {
   assert.equal(collection.requests[0].examples[0].bodyType, 'RAW_JSON');
 });
 
+test('round-trips Postman PFX/P12 certificate references for gRPC requests', () => {
+  const collection = importPostmanCollection({
+    info: {
+      name: 'Postman gRPC PFX',
+      schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
+    },
+    certificate: [{
+      id: 'grpc-pfx-cert-id',
+      name: 'gRPC PFX cert',
+      matches: ['grpc.example.test'],
+      pfx: { src: '/tmp/client.p12' },
+      passphrase: '{{certPassphrase}}'
+    }],
+    item: [{
+      id: 'grpc-pfx-request-id',
+      name: 'gRPC PFX Request',
+      protocol: 'grpc',
+      request: {
+        methodPath: 'users.UserService/GetUser',
+        url: 'grpcs://grpc.example.test/users.UserService/GetUser',
+        grpc: {
+          method: 'GetUser',
+          methodType: 'unary',
+          service: 'users.UserService'
+        }
+      }
+    }]
+  });
+
+  assert.equal(collection.certificates.length, 1);
+  assert.equal(collection.certificates[0].id, 'grpc-pfx-cert-id');
+  assert.equal(collection.certificates[0].pfxPath, '/tmp/client.p12');
+  assert.equal(collection.certificates[0].passphrase, '{{certPassphrase}}');
+  assert.equal(collection.requests[0].protocol, 'grpc');
+  assert.equal(collection.requests[0].auth.type, 'clientCertificate');
+  assert.equal(collection.requests[0].auth.certificateId, 'grpc-pfx-cert-id');
+
+  const exported = exportPostmanCollection(collection);
+  assert.equal(exported.certificate[0].id, 'grpc-pfx-cert-id');
+  assert.equal(exported.certificate[0].pfx.src, '/tmp/client.p12');
+  assert.equal(exported.certificate[0].passphrase, '{{certPassphrase}}');
+  assert.equal(exported.item[0].request.url, 'grpcs://grpc.example.test/users.UserService/GetUser');
+  assert.equal(exported.item[0].request.grpc.method, 'GetUser');
+});
+
 test('annotates imported Postman package references for package-cache review', () => {
   const collection = importPostmanCollection({
     info: {

@@ -5,6 +5,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
+const { findArtifacts } = require('../../scripts/writeReleaseChecksums');
 const { inferArtifactType, inferPlatform } = require('../../scripts/writeReleaseManifest');
 const {
   ensureExecutableFile,
@@ -42,7 +43,7 @@ test('writes release manifest with artifact metadata', async () => {
   assert.equal(manifest.version, '9.9.9');
   assert.equal(manifest.artifacts.length, 1);
   assert.equal(manifest.artifacts[0].file, 'PostMeter-9.9.9.zip');
-  assert.equal(manifest.artifacts[0].platform, 'archive');
+  assert.equal(manifest.artifacts[0].platform, 'macos');
   assert.equal(manifest.artifacts[0].sha256, crypto.createHash('sha256').update('artifact').digest('hex'));
 });
 
@@ -51,19 +52,104 @@ test('infers release artifact platforms and types for supported desktop targets'
   assert.equal(inferPlatform('/release/postmeter_0.2.0_amd64.deb'), 'linux');
   assert.equal(inferPlatform('/release/PostMeter Setup 0.2.0.exe'), 'windows');
   assert.equal(inferPlatform('/release/PostMeter-0.2.0.dmg'), 'macos');
-  assert.equal(inferPlatform('/release/PostMeter-0.2.0.zip'), 'archive');
+  assert.equal(inferPlatform('/release/PostMeter-0.2.0.zip'), 'macos');
+  assert.equal(inferPlatform('/release/PostMeter-0.2.0.msi'), 'unknown');
+  assert.equal(inferPlatform('/release/postmeter-0.2.0.rpm'), 'unknown');
   assert.equal(inferArtifactType('/release/PostMeter.AppImage'), 'appimage');
   assert.equal(inferArtifactType('/release/PostMeter-0.2.0.dmg'), 'dmg');
+});
+
+test('release artifact discovery ignores unpacked packaged-app internals', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-release-top-level-'));
+  try {
+    const appImagePath = path.join(tempDir, 'PostMeter-9.9.9.AppImage');
+    const msiPath = path.join(tempDir, 'PostMeter-9.9.9.msi');
+    const rpmPath = path.join(tempDir, 'postmeter-9.9.9.rpm');
+    const unpackedExePath = path.join(tempDir, 'win-unpacked', 'PostMeter.exe');
+    await fs.mkdir(path.dirname(unpackedExePath), { recursive: true });
+    await fs.writeFile(appImagePath, 'top-level artifact');
+    await fs.writeFile(msiPath, 'unsupported msi');
+    await fs.writeFile(rpmPath, 'unsupported rpm');
+    await fs.writeFile(unpackedExePath, 'packaged internal executable');
+
+    assert.deepEqual((await findArtifacts(tempDir)).map((file) => path.basename(file)), [
+      'PostMeter-9.9.9.AppImage'
+    ]);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('release manifest validation rejects unconfigured MSI and RPM distributables', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-release-unsupported-artifacts-'));
+  try {
+    const artifactPath = path.join(tempDir, 'PostMeter-9.9.9.dmg');
+    await fs.writeFile(artifactPath, 'artifact');
+    const artifactBytes = await fs.readFile(artifactPath);
+    const hash = crypto.createHash('sha256').update(artifactBytes).digest('hex');
+    const stat = await fs.stat(artifactPath);
+    const manifestPath = path.join(tempDir, 'release-manifest.json');
+    const checksumPath = path.join(tempDir, 'SHA256SUMS');
+    await fs.writeFile(manifestPath, JSON.stringify({
+      schemaVersion: 1,
+      productName: 'PostMeter',
+      appId: 'com.strangequark.postmeter',
+      version: '9.9.9',
+      artifacts: [{
+        file: 'PostMeter-9.9.9.dmg',
+        sizeBytes: stat.size,
+        sha256: hash,
+        platform: 'macos',
+        type: 'dmg'
+      }]
+    }));
+    await fs.writeFile(checksumPath, `${hash}  PostMeter-9.9.9.dmg\n`);
+    await fs.writeFile(path.join(tempDir, 'PostMeter-9.9.9.MSI'), 'unsupported msi');
+    await assert.rejects(() => validateReleaseManifest({
+      releaseDir: tempDir,
+      manifestFile: manifestPath,
+      checksumFile: checksumPath,
+      expectedProductName: 'PostMeter',
+      expectedAppId: 'com.strangequark.postmeter',
+      expectedVersion: '9.9.9'
+    }), /not a configured PostMeter release artifact type/);
+
+    await fs.rm(path.join(tempDir, 'PostMeter-9.9.9.MSI'));
+    await fs.writeFile(path.join(tempDir, 'postmeter-9.9.9.rpm'), 'unsupported rpm');
+    await assert.rejects(() => validateReleaseManifest({
+      releaseDir: tempDir,
+      manifestFile: manifestPath,
+      checksumFile: checksumPath,
+      expectedProductName: 'PostMeter',
+      expectedAppId: 'com.strangequark.postmeter',
+      expectedVersion: '9.9.9'
+    }), /not a configured PostMeter release artifact type/);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
 });
 
 test('validates release artifact manifest entries against files and package protocol metadata', async () => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-release-validate-'));
   const packageJsonPath = path.join(tempDir, 'package.json');
   await fs.writeFile(packageJsonPath, JSON.stringify({
+    version: '9.9.9',
+    author: 'StrangeQuark <support@qrksw.com>',
+    homepage: 'https://github.com/StrangeQuark/PostMeter#readme',
+    repository: { url: 'git+https://github.com/StrangeQuark/PostMeter.git' },
+    bugs: { url: 'https://github.com/StrangeQuark/PostMeter/issues' },
     build: {
       appId: 'com.strangequark.postmeter',
       productName: 'PostMeter',
-      protocols: [{ schemes: ['postmeter'] }]
+      icon: 'build/icon.png',
+      protocols: [{ schemes: ['postmeter'] }],
+      directories: { output: 'release' },
+      linux: {
+        maintainer: 'StrangeQuark <support@qrksw.com>',
+        target: ['AppImage', 'deb']
+      },
+      win: { target: ['nsis'] },
+      mac: { target: ['dmg', 'zip'] }
     }
   }));
   const artifactPath = path.join(tempDir, 'PostMeter-9.9.9.dmg');
@@ -72,8 +158,12 @@ test('validates release artifact manifest entries against files and package prot
   const hash = crypto.createHash('sha256').update(artifactBytes).digest('hex');
   const stat = await fs.stat(artifactPath);
   const manifestPath = path.join(tempDir, 'release-manifest.json');
+  const checksumPath = path.join(tempDir, 'SHA256SUMS');
   await fs.writeFile(manifestPath, JSON.stringify({
     schemaVersion: 1,
+    productName: 'PostMeter',
+    appId: 'com.strangequark.postmeter',
+    version: '9.9.9',
     artifacts: [{
       file: 'PostMeter-9.9.9.dmg',
       sizeBytes: stat.size,
@@ -82,18 +172,116 @@ test('validates release artifact manifest entries against files and package prot
       type: 'dmg'
     }]
   }));
+  await fs.writeFile(checksumPath, `${hash}  PostMeter-9.9.9.dmg\n`);
 
   await assert.doesNotReject(() => validatePackageMetadata(packageJsonPath));
   await assert.doesNotReject(() => validateReleaseManifest({
     releaseDir: tempDir,
     manifestFile: manifestPath,
-    requiredTypes: new Set(['dmg'])
+    requiredTypes: new Set(['dmg']),
+    expectedProductName: 'PostMeter',
+    expectedAppId: 'com.strangequark.postmeter',
+    expectedVersion: '9.9.9'
   }));
   await assert.rejects(() => validateReleaseManifest({
     releaseDir: tempDir,
     manifestFile: manifestPath,
     requiredTypes: new Set(['deb'])
   }), /Missing required release artifact type/);
+});
+
+test('release manifest validation rejects stale checksums and unmanifested top-level artifacts', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-release-checksum-'));
+  try {
+    const artifactPath = path.join(tempDir, 'PostMeter-9.9.9.dmg');
+    await fs.writeFile(artifactPath, 'artifact');
+    const artifactBytes = await fs.readFile(artifactPath);
+    const hash = crypto.createHash('sha256').update(artifactBytes).digest('hex');
+    const stat = await fs.stat(artifactPath);
+    const manifestPath = path.join(tempDir, 'release-manifest.json');
+    const checksumPath = path.join(tempDir, 'SHA256SUMS');
+    await fs.writeFile(manifestPath, JSON.stringify({
+      schemaVersion: 1,
+      productName: 'PostMeter',
+      appId: 'com.strangequark.postmeter',
+      version: '9.9.9',
+      artifacts: [{
+        file: 'PostMeter-9.9.9.dmg',
+        sizeBytes: stat.size,
+        sha256: hash,
+        platform: 'macos',
+        type: 'dmg'
+      }]
+    }));
+    await fs.writeFile(checksumPath, `${'0'.repeat(64)}  PostMeter-9.9.9.dmg\n`);
+
+    await assert.rejects(() => validateReleaseManifest({
+      releaseDir: tempDir,
+      manifestFile: manifestPath,
+      checksumFile: checksumPath,
+      expectedProductName: 'PostMeter',
+      expectedAppId: 'com.strangequark.postmeter',
+      expectedVersion: '9.9.9'
+    }), /SHA256SUMS hash/);
+
+    await fs.writeFile(checksumPath, `${hash}  PostMeter-9.9.9.dmg\n`);
+    await fs.writeFile(path.join(tempDir, 'PostMeter Setup 9.9.9.exe'), 'extra installer');
+    await assert.rejects(() => validateReleaseManifest({
+      releaseDir: tempDir,
+      manifestFile: manifestPath,
+      checksumFile: checksumPath,
+      expectedProductName: 'PostMeter',
+      expectedAppId: 'com.strangequark.postmeter',
+      expectedVersion: '9.9.9'
+    }), /missing from release-manifest\.json/);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('release manifest validation rejects packaged internal paths', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-release-internal-path-'));
+  try {
+    const artifactPath = path.join(tempDir, 'win-unpacked', 'PostMeter.exe');
+    await fs.mkdir(path.dirname(artifactPath), { recursive: true });
+    await fs.writeFile(artifactPath, 'internal executable');
+    const artifactBytes = await fs.readFile(artifactPath);
+    const manifestPath = path.join(tempDir, 'release-manifest.json');
+    await fs.writeFile(manifestPath, JSON.stringify({
+      schemaVersion: 1,
+      productName: 'PostMeter',
+      appId: 'com.strangequark.postmeter',
+      version: '9.9.9',
+      artifacts: [{
+        file: 'win-unpacked/PostMeter.exe',
+        sizeBytes: artifactBytes.length,
+        sha256: crypto.createHash('sha256').update(artifactBytes).digest('hex'),
+        platform: 'windows',
+        type: 'exe'
+      }]
+    }));
+
+    await assert.rejects(() => validateReleaseManifest({
+      releaseDir: tempDir,
+      manifestFile: manifestPath,
+      expectedProductName: 'PostMeter',
+      expectedAppId: 'com.strangequark.postmeter',
+      expectedVersion: '9.9.9'
+    }), /top-level distributable file/);
+
+    const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+    manifest.artifacts[0].file = 'win-unpacked\\PostMeter.exe';
+    await fs.writeFile(manifestPath, JSON.stringify(manifest));
+    await assert.rejects(() => validateReleaseManifest({
+      releaseDir: tempDir,
+      manifestFile: manifestPath,
+      expectedProductName: 'PostMeter',
+      expectedAppId: 'com.strangequark.postmeter',
+      expectedVersion: '9.9.9'
+    }), /top-level distributable file/);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
 });
 
 test('validates packaged Linux deb protocol registration when an artifact exists', async (t) => {

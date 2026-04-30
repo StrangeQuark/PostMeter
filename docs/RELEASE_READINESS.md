@@ -12,9 +12,18 @@ Commands:
 npm run production:readiness
 npm run production:readiness:validate
 npm run production:readiness:claim
+npm run production:readiness:claim:beta
+npm run production:readiness:claim:rc
+npm run production:readiness:claim:stable
 ```
 
-`production:readiness:validate` is the normal CI freshness/structure check. `production:readiness:claim` is the stable-release gate and fails while release-blocking rows remain `external-validation-required` or `blocked`.
+`production:readiness:validate` is the normal CI freshness/structure check. `production:readiness:claim` is the stable-release gate and is equivalent to `production:readiness:claim:stable`. The tag-driven GitHub Release workflow runs `npm run production:readiness:claim:stable` before building artifacts, so stable publication stays blocked while release-blocking rows remain unresolved.
+
+Release-level gates are intentionally distinct:
+
+- Beta fails on release-blocking rows marked `blocked`.
+- Release-candidate fails unless every release-blocking row is `validated` or carries an explicit documented RC waiver in the matrix.
+- Stable fails unless every release-blocking row is `validated`; stable does not accept documented waivers.
 
 Status meanings:
 
@@ -47,9 +56,12 @@ Manual Windows QA is optional before final release because the maintainer has a 
 
 Configured artifacts:
 
-- Linux: AppImage and deb under `release/`.
-- Windows: NSIS installer under `release/`.
-- macOS: dmg and zip under `release/`.
+- Linux: AppImage (`release/*.AppImage`) and deb (`release/*.deb`) under `release/`; packaged smoke also uses the unpacked `release/linux-unpacked/PostMeter` or `release/linux-unpacked/postmeter` executable produced by `pack:linux`/`dist:linux`.
+- Windows: unsigned NSIS installer (`release/*.exe`) and unpacked app (`release/win-unpacked/PostMeter.exe`) under `release/`.
+- macOS: dmg (`release/*.dmg`), zip (`release/*.zip`), and app bundle (`release/mac/PostMeter.app` or `release/mac-arm64/PostMeter.app`) under `release/`.
+- MSI and RPM artifacts are not configured release targets. Release validation rejects them until package metadata, docs, upload paths, and native validators explicitly support those artifact types.
+
+Only top-level distributable files are included in `SHA256SUMS` and `release-manifest.json`; unpacked app internals such as `win-unpacked/PostMeter.exe` are used only by packaged smoke validators and are rejected if they appear in release metadata. Release validation also fails if any top-level distributable is missing from the manifest or if `SHA256SUMS` does not exactly match the manifest artifact set and hashes.
 
 Canonical metadata:
 
@@ -60,16 +72,23 @@ Canonical metadata:
 - Update source: GitHub Releases for `StrangeQuark/PostMeter`
 - Custom URL scheme: `postmeter://`
 - App icon: `build/icon.png`
+- Linux desktop integration: `x-scheme-handler/postmeter` in the packaged desktop entry.
+- Linux install behavior: AppImage is self-contained and not installed by the validator; deb installs through the user's package manager and removes through the same package manager. Release validation inspects deb/AppImage desktop metadata without mutating the runner's system install state.
+- Windows install behavior: NSIS silent install is validated into a temporary directory; the validator checks the registry root/open command, launches a `postmeter://oauth/callback?...` URL through ShellExecute, then runs the generated uninstaller silently and removes the temporary install directory.
+- macOS install behavior: dmg/zip artifacts contain `PostMeter.app`; users install by dragging/copying the app bundle. The validator registers each unsigned app bundle from the app output, zip, or dmg with Launch Services, launches a `postmeter://oauth/callback?...` URL through `open -b com.strangequark.postmeter` for each bundle, verifies the launched process belongs to that bundle, then quits PostMeter before checking the next bundle. There is no macOS package uninstaller in the current artifact set.
+- File associations: none are currently declared. Adding file associations must update this inventory, package metadata validation, and native runner checks.
+- Persistence paths: packaged smoke first runs against an isolated native home/profile to verify Electron's default platform `userData` root and default `~/.postmeter/workspace.json` persistence, then runs a separate isolated `POSTMETER_DATA_PATH` override smoke to verify workspace create/save/reload and companion `userData` directory creation.
 
 Release builds are unsigned until maintainer-controlled certificates exist. Windows users should expect SmartScreen warnings, and macOS users should expect Gatekeeper warnings for unsigned artifacts.
 
 ## Implemented Gates In This Pass
 
 - Production readiness matrix and `production:*` scripts.
-- Packaged startup smoke that verifies preload API availability, version metadata, workspace create/save/reload, and platform user-data path setup.
-- Windows/macOS GitHub Actions packaged build/smoke jobs.
+- Dependency audit and Electron runtime-version checks tracked as release-blocking readiness rows.
+- Packaged startup smoke that verifies the full preload API function surface, app/electron/node/chrome/platform/release-channel metadata, workspace create/save/reload, default platform user-data path shape, and isolated user-data path override behavior.
+- Linux/Windows/macOS GitHub Actions source-tree sandbox, packaged build/smoke/protocol jobs with artifact upload and failure log/screenshot upload.
 - Manual no-publish native release validation workflow for pre-production evidence gathering.
-- Windows protocol registration script and macOS URL scheme metadata validator.
+- Windows protocol registration plus ShellExecute launch script and macOS URL scheme metadata plus Launch Services launch validator, including checks that the launched app belongs to the installed Windows artifact or each discovered macOS app bundle under validation and uploaded protocol-validator logs when `POSTMETER_VALIDATION_ARTIFACT_DIR` is set.
 - Electron security, workspace durability, and non-Postman compatibility matrices.
 - Checked-in raw and normalized `newman@6.2.2` differential evidence under `test/fixtures/postman/newman-reports/`.
 - Shared parent-side PFX/P12 extraction and live HTTP/gRPC mTLS tests.
@@ -77,9 +96,8 @@ Release builds are unsigned until maintainer-controlled certificates exist. Wind
 
 ## Known Release Blockers
 
-The production readiness claim remains intentionally fail-closed until these are resolved or explicitly waived:
+The stable production readiness claim remains intentionally fail-closed until every release-blocking row is promoted to `validated`. Current high-level blockers include:
 
-- Native Windows/macOS OS-sandbox helper/addon source plus packaged native-runner evidence for platform-equivalent coverage.
 - Live OAuth provider certification against maintainer-owned Google, Microsoft Entra ID / Azure AD, and GitHub OAuth apps.
 - Signing/notarization credentials for stable signed artifacts.
 - Local diagnostics/privacy implementation with redaction tests.

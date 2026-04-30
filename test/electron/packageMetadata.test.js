@@ -29,5 +29,9 @@ test('package metadata declares canonical release repository and desktop protoco
   assert.equal(packageJson.build.linux.maintainer, 'StrangeQuark <support@qrksw.com>');
   assert.ok(packageJson.build.files.includes('src/**/*'));
   assert.ok(packageJson.build.files.includes('electron/**/*'));
+  assert.ok(packageJson.build.win.extraResources.some((entry) => (
+    entry.from === 'native/windows-sandbox-helper/bin/PostMeterWindowsSandboxHelper.exe'
+    && entry.to === 'native/windows/PostMeterWindowsSandboxHelper.exe'
+  )));
   assert.ok(packageJson.build.protocols.some((protocol) => protocol.schemes.includes('postmeter')));
 });

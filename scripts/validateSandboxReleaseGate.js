@@ -16,6 +16,8 @@ requireScript('check', [
   'npm run sandbox:platform:validate',
   'npm run postman:parity:validate',
   'npm run postman:docs:validate',
+  'npm run postman:newman-reports:validate',
+  'npm run production:readiness:validate',
   'npm run release:gate',
   'npm audit --audit-level=high',
   'npm run electron:version'
@@ -25,6 +27,7 @@ for (const scriptName of [
   'sandbox:validate:packaged',
   'sandbox:platform:validate',
   'sandbox:platform:claim',
+  'native:windows-sandbox:build',
   'postman:parity:validate',
   'postman:parity:claim',
   'postman:parity:diff',
@@ -32,8 +35,13 @@ for (const scriptName of [
   'postman:docs:write',
   'postman:docs:live',
   'postman:newman-reports:validate',
+  'production:readiness',
+  'production:readiness:write',
   'production:readiness:validate',
   'production:readiness:claim',
+  'production:readiness:claim:beta',
+  'production:readiness:claim:rc',
+  'production:readiness:claim:stable',
   'electron:security:validate',
   'workspace:durability:validate',
   'compatibility:non-postman:validate',
@@ -48,6 +56,8 @@ for (const scriptName of [
 for (const scriptName of ['pack:linux', 'dist:linux', 'dist:win', 'dist:mac']) {
   requireScript(scriptName, ['electron-builder', '--publish never']);
 }
+requireScript('dist:win', ['npm run native:windows-sandbox:build']);
+requireWindowsSandboxHelperPackaging();
 
 requireWorkflow('CI workflow', ciWorkflow, [
   /node-version:\s*22/,
@@ -66,7 +76,18 @@ requireWorkflow('CI workflow', ciWorkflow, [
   /npm run sandbox:validate/,
   /npm run sandbox:platform:validate/,
   /npm run pack:linux/,
+  /platform:\s*linux/,
+  /Build Windows sandbox helper/,
+  /Source-tree sandbox runtime validation/,
+  /POSTMETER_ALLOW_OS_SANDBOX_VALIDATION_SKIP:\s*\$\{\{ matrix\.allow_os_skip \}\}/,
+  /npm run dist:linux/,
   /npm run release:validate:packaged-smoke/,
+  /POSTMETER_VALIDATION_ARTIFACT_DIR/,
+  /npm run release:validate:win-protocol/,
+  /npm run release:validate:mac-protocol/,
+  /Upload native package artifacts/,
+  /if-no-files-found:\s*error/,
+  /Upload native validation logs/,
   /windows-latest/,
   /macos-latest/,
   /xvfb-run -a npm run sandbox:validate:packaged/
@@ -83,15 +104,20 @@ requireWorkflow('Release workflow', releaseWorkflow, [
   /npm run postman:docs:validate/,
   /npm run postman:newman-reports:validate/,
   /npm run production:readiness:validate/,
+  /npm run production:readiness:claim:stable/,
   /npm run electron:security:validate/,
   /npm run workspace:durability:validate/,
   /npm run compatibility:non-postman:validate/,
   /npm run release:gate/,
   /npm run release:validate:packaged-smoke/,
+  /POSTMETER_VALIDATION_ARTIFACT_DIR/,
   /npm run sandbox:validate:packaged/,
   /xvfb-run -a npm run sandbox:validate:packaged/,
   /npm run release:validate:win-protocol/,
   /npm run release:validate:mac-protocol/,
+  /Upload validation logs/,
+  /if:\s*always\(\)/,
+  /if-no-files-found:\s*error/,
   /npm run release:validate/
 ]);
 
@@ -113,10 +139,13 @@ requireWorkflow('Manual native release validation workflow', releaseValidationWo
   /npm run compatibility:non-postman:validate/,
   /npm run release:gate/,
   /npm run release:validate:packaged-smoke/,
+  /POSTMETER_VALIDATION_ARTIFACT_DIR/,
   /npm run sandbox:validate:packaged/,
   /xvfb-run -a npm run sandbox:validate:packaged/,
   /npm run release:validate:win-protocol/,
   /npm run release:validate:mac-protocol/,
+  /Upload validation logs/,
+  /if-no-files-found:\s*error/,
   /npm run release:prepare/,
   /npm run release:validate/,
   /actions\/upload-artifact@v4/,
@@ -125,6 +154,16 @@ requireWorkflow('Manual native release validation workflow', releaseValidationWo
 
 if (/gh release create/.test(releaseValidationWorkflow) || /contents:\s*write/.test(releaseValidationWorkflow)) {
   errors.push('Manual native release validation workflow must validate artifacts without publishing a GitHub Release.');
+}
+
+for (const [label, workflow] of [
+  ['CI workflow', ciWorkflow],
+  ['Release workflow', releaseWorkflow],
+  ['Manual native release validation workflow', releaseValidationWorkflow]
+]) {
+  if (/release\/\*\.(msi|rpm)/.test(workflow)) {
+    errors.push(`${label} must not upload unconfigured MSI/RPM release artifact types.`);
+  }
 }
 
 if (errors.length) {
@@ -154,6 +193,16 @@ function requireWorkflow(label, content, patterns) {
     if (!pattern.test(content)) {
       errors.push(`${label} is missing release-gate pattern ${pattern}.`);
     }
+  }
+}
+
+function requireWindowsSandboxHelperPackaging() {
+  const resources = packageJson.build?.win?.extraResources;
+  if (!Array.isArray(resources) || !resources.some((entry) => (
+    entry?.from === 'native/windows-sandbox-helper/bin/PostMeterWindowsSandboxHelper.exe'
+    && entry?.to === 'native/windows/PostMeterWindowsSandboxHelper.exe'
+  ))) {
+    errors.push('package.json build.win.extraResources must package the Windows AppContainer sandbox helper.');
   }
 }
 

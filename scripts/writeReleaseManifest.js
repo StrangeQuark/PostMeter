@@ -43,17 +43,17 @@ async function main() {
 
 function inferPlatform(filePath) {
   const name = path.basename(filePath).toLowerCase();
-  if (name.endsWith('.appimage') || name.endsWith('.deb') || name.endsWith('.rpm')) {
+  if (name.endsWith('.appimage') || name.endsWith('.deb')) {
     return 'linux';
   }
   if (name.endsWith('.dmg')) {
     return 'macos';
   }
-  if (name.endsWith('.exe') || name.endsWith('.msi')) {
+  if (name.endsWith('.exe')) {
     return 'windows';
   }
   if (name.endsWith('.zip')) {
-    return 'archive';
+    return 'macos';
   }
   return 'unknown';
 }

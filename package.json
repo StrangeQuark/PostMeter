@@ -16,6 +16,7 @@
   "license": "GPL-3.0-only",
   "scripts": {
     "start": "electron .",
+    "pretest": "node scripts/buildWindowsSandboxHelper.js --if-supported",
     "test": "node scripts/runElectronTests.js",
     "test:smoke": "node test/electron/startupSmoke.js",
     "test:ui": "node test/electron/uiWorkflowSmoke.js",
@@ -25,6 +26,7 @@
     "cli": "node scripts/postmeter-cli.js",
     "check": "npm test && npm run sandbox:validate && npm run sandbox:platform:validate && npm run postman:parity:validate && npm run postman:docs:validate && npm run postman:newman-reports:validate && npm run production:readiness:validate && npm run electron:security:validate && npm run workspace:durability:validate && npm run compatibility:non-postman:validate && npm run release:gate && npm run test:smoke && npm run test:ui && npm run test:ui:regression && npm run test:ui:oauth && npm run test:ui:snapshot && npm audit --audit-level=high && npm run electron:version",
     "electron:version": "node scripts/electronVersion.js",
+    "native:windows-sandbox:build": "node scripts/buildWindowsSandboxHelper.js",
     "sandbox:validate": "node scripts/validateSandboxRuntime.js",
     "sandbox:validate:packaged": "node scripts/validatePackagedSandboxRuntime.js",
     "sandbox:platform:validate": "node scripts/osSandboxPlatformMatrix.js validate",
@@ -43,6 +45,9 @@
     "production:readiness:write": "node scripts/productionReadiness.js write",
     "production:readiness:validate": "node scripts/productionReadiness.js validate",
     "production:readiness:claim": "node scripts/productionReadiness.js claim",
+    "production:readiness:claim:beta": "node scripts/productionReadiness.js claim --level=beta",
+    "production:readiness:claim:rc": "node scripts/productionReadiness.js claim --level=rc",
+    "production:readiness:claim:stable": "node scripts/productionReadiness.js claim --level=stable",
     "electron:security:write": "node scripts/productionSupportMatrix.js electron-security write",
     "electron:security:validate": "node scripts/productionSupportMatrix.js electron-security validate",
     "workspace:durability:write": "node scripts/productionSupportMatrix.js workspace-durability write",
@@ -51,7 +56,7 @@
     "compatibility:non-postman:validate": "node scripts/productionSupportMatrix.js non-postman-compatibility validate",
     "pack:linux": "electron-builder --linux dir --publish never",
     "dist:linux": "electron-builder --linux AppImage deb --publish never",
-    "dist:win": "electron-builder --win nsis --publish never",
+    "dist:win": "npm run native:windows-sandbox:build && electron-builder --win nsis --publish never",
     "dist:mac": "electron-builder --mac dmg zip --publish never",
     "release:checksums": "node scripts/writeReleaseChecksums.js",
     "release:manifest": "node scripts/writeReleaseManifest.js",
@@ -97,6 +102,12 @@
       ]
     },
     "win": {
+      "extraResources": [
+        {
+          "from": "native/windows-sandbox-helper/bin/PostMeterWindowsSandboxHelper.exe",
+          "to": "native/windows/PostMeterWindowsSandboxHelper.exe"
+        }
+      ],
       "target": [
         "nsis"
       ]
@@ -117,6 +128,7 @@
     "@grpc/proto-loader": "^0.8.0",
     "@xmldom/xmldom": "^0.9.10",
     "handlebars": "4.7.9",
+    "node-forge": "^1.4.0",
     "node-html-parser": "^7.1.0",
     "xpath": "^0.0.34",
     "yaml": "^2.8.3"

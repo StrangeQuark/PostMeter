@@ -3,6 +3,18 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$ProtocolTranscriptStarted = $false
+
+if ($env:POSTMETER_VALIDATION_ARTIFACT_DIR) {
+  try {
+    New-Item -ItemType Directory -Path $env:POSTMETER_VALIDATION_ARTIFACT_DIR -Force | Out-Null
+    $protocolLogPath = Join-Path $env:POSTMETER_VALIDATION_ARTIFACT_DIR "windows-protocol-validation.log"
+    Start-Transcript -Path $protocolLogPath -Append | Out-Null
+    $ProtocolTranscriptStarted = $true
+  } catch {
+    Write-Warning "Unable to start Windows protocol validation transcript: $($_.Exception.Message)"
+  }
+}
 
 function Find-Installer {
   param([string]$Directory)
@@ -25,6 +37,7 @@ function Read-DefaultValue {
 }
 
 function Test-ProtocolCommand {
+  param([string]$ExpectedInstallDir)
   $commandPaths = @(
     "Registry::HKEY_CURRENT_USER\Software\Classes\postmeter\shell\open\command",
     "Registry::HKEY_LOCAL_MACHINE\Software\Classes\postmeter\shell\open\command",
@@ -33,11 +46,61 @@ function Test-ProtocolCommand {
 
   foreach ($commandPath in $commandPaths) {
     $command = Read-DefaultValue -Path $commandPath
-    if ($command -and $command -match "PostMeter" -and $command -match "%1") {
+    $matchesExpectedInstall = $false
+    if ($command) {
+      $matchesExpectedInstall = $command.IndexOf($ExpectedInstallDir, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+    }
+    if ($command -and $command -match "PostMeter" -and $command -match "%1" -and $matchesExpectedInstall) {
       return $true
     }
   }
   return $false
+}
+
+function Stop-PostMeterProcesses {
+  Get-Process -Name "PostMeter" -ErrorAction SilentlyContinue |
+    ForEach-Object {
+      try {
+        Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+      } catch {
+      }
+    }
+}
+
+function Test-ProtocolLaunch {
+  param([string]$ExpectedInstallDir)
+  Stop-PostMeterProcesses
+  $url = "postmeter://oauth/callback?code=release-validation&state=release-validation"
+  Start-Process -FilePath $url
+
+  $deadline = (Get-Date).AddSeconds(20)
+  do {
+    Start-Sleep -Milliseconds 500
+    $process = Get-Process -Name "PostMeter" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($process) {
+      $processPath = ""
+      try {
+        $processPath = $process.Path
+      } catch {
+        $processPath = ""
+      }
+      if ($processPath -and $processPath.IndexOf($ExpectedInstallDir, [System.StringComparison]::OrdinalIgnoreCase) -lt 0) {
+        Stop-PostMeterProcesses
+        return $false
+      }
+      Stop-PostMeterProcesses
+      return $true
+    }
+  } while ((Get-Date) -lt $deadline)
+
+  Stop-PostMeterProcesses
+  return $false
+}
+
+function Find-Uninstaller {
+  param([string]$Directory)
+  return Get-ChildItem -Path $Directory -Filter "Uninstall*.exe" -File -ErrorAction SilentlyContinue |
+    Select-Object -First 1
 }
 
 function Test-ProtocolRoot {
@@ -76,16 +139,25 @@ try {
   if (-not (Test-ProtocolRoot)) {
     throw "postmeter protocol root registry key was not registered."
   }
-  if (-not (Test-ProtocolCommand)) {
-    throw "postmeter protocol open command was not registered with PostMeter and %1."
+  if (-not (Test-ProtocolCommand -ExpectedInstallDir $installDir)) {
+    throw "postmeter protocol open command was not registered with this PostMeter install and %1."
+  }
+  if (-not (Test-ProtocolLaunch -ExpectedInstallDir $installDir)) {
+    throw "postmeter:// protocol launch did not start this PostMeter install through ShellExecute."
+  }
+  if (-not (Find-Uninstaller -Directory $installDir)) {
+    throw "PostMeter installer did not create an uninstaller in $installDir."
   }
 
-  Write-Host "Validated Windows postmeter:// protocol registration from $($installer.Name)."
+  Write-Host "Validated Windows postmeter:// protocol registration and launch from $($installer.Name)."
 } finally {
-  $uninstaller = Get-ChildItem -Path $installDir -Filter "Uninstall*.exe" -File -ErrorAction SilentlyContinue |
-    Select-Object -First 1
+  Stop-PostMeterProcesses
+  $uninstaller = Find-Uninstaller -Directory $installDir
   if ($uninstaller) {
     Start-Process -FilePath $uninstaller.FullName -ArgumentList "/S" -Wait -ErrorAction SilentlyContinue
   }
   Remove-Item -Path $installDir -Recurse -Force -ErrorAction SilentlyContinue
+  if ($ProtocolTranscriptStarted) {
+    Stop-Transcript | Out-Null
+  }
 }

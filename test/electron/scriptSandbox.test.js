@@ -15,7 +15,8 @@ const {
 } = require('../../src/core/scriptSandbox');
 const {
   createOsSandboxedProcessLaunch,
-  createScriptWorkerLaunch
+  createScriptWorkerLaunch,
+  cleanupPrivateTempDir
 } = require('../../src/core/osSandbox');
 const {
   MemoryVaultStore
@@ -195,6 +196,8 @@ test('adds a Linux seccomp syscall policy to bubblewrap launches', (t) => {
   assert.ok(launch.seccompPolicy.filter.length > 0);
   assert.ok(launch.seccompPolicy.deniedSyscalls.includes('bpf'));
   assert.ok(launch.seccompPolicy.deniedSyscalls.includes('ptrace'));
+  assert.ok(launch.seccompPolicy.deniedSyscalls.includes('unshare'));
+  assert.ok(launch.seccompPolicy.deniedSyscalls.includes('clone3'));
 });
 
 test('falls back in auto mode when a Linux OS sandbox backend exists but cannot launch', async (t) => {
@@ -227,12 +230,18 @@ test('falls back in auto mode when a Linux OS sandbox backend exists but cannot 
 });
 
 test('fails closed when the required OS sandbox backend is unavailable', async () => {
+  const unavailableBackendOptions = process.platform === 'win32'
+    ? { windowsSandboxHelperPath: path.join(os.tmpdir(), 'definitely-not-postmeter-helper.exe') }
+    : process.platform === 'darwin'
+      ? { macosSandboxExecPath: '/definitely/not/sandbox-exec' }
+      : { bubblewrapPath: '/definitely/not/bwrap' };
+
   assert.throws(
     () => createScriptWorkerLaunch(
       path.join(__dirname, '..', '..', 'src', 'core', 'scriptWorker.js'),
       [],
       scriptWorkerEnv(),
-      { osSandboxMode: OS_SANDBOX_MODES.REQUIRED, bubblewrapPath: '/definitely/not/bwrap' }
+      { osSandboxMode: OS_SANDBOX_MODES.REQUIRED, ...unavailableBackendOptions }
     ),
     /OS-level script sandboxing is required/
   );
@@ -243,7 +252,7 @@ test('fails closed when the required OS sandbox backend is unavailable', async (
     environment: { id: 'env', name: 'Env', variables: [] }
   }, {
     osSandboxMode: OS_SANDBOX_MODES.REQUIRED,
-    bubblewrapPath: '/definitely/not/bwrap',
+    ...unavailableBackendOptions,
     timeoutMillis: 500,
     workerTimeoutMillis: 1000
   });
@@ -252,6 +261,78 @@ test('fails closed when the required OS sandbox backend is unavailable', async (
   assert.match(execution.result.error, /OS-level script sandboxing is required/);
   assert.equal(execution.result.commitSideEffects, false);
   assert.equal(execution.environmentVariables.find((item) => item.key === 'shouldNotCommit'), undefined);
+});
+
+test('builds Windows AppContainer helper launches with private temp and explicit allowlists', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-win-helper-test-'));
+  const helperPath = path.join(tempDir, 'PostMeterWindowsSandboxHelper.exe');
+  await fs.writeFile(helperPath, 'placeholder');
+
+  const launch = createOsSandboxedProcessLaunch({
+    platform: 'win32',
+    mode: OS_SANDBOX_MODES.REQUIRED,
+    windowsSandboxHelperPath: helperPath,
+    executablePath: process.execPath,
+    args: ['-e', 'process.exit(0)'],
+    env: scriptWorkerEnv(),
+    readOnlyPaths: [path.join(__dirname, '..', '..', 'src', 'core')]
+  });
+
+  try {
+    assert.equal(launch.sandboxed, true);
+    assert.equal(launch.backend, 'windows-helper');
+    assert.equal(launch.command, helperPath);
+    assert.deepEqual(launch.env, {});
+    assert.ok(launch.privateTempDir);
+    assert.ok(launch.args.includes('--read-only'));
+    assert.ok(launch.args.includes('--'));
+    assert.equal(launch.args[0], '--profile');
+    assert.equal(launch.args[1], 'PostMeter.ScriptWorkerSandbox');
+    assert.equal(launch.args[2], '--temp');
+    assert.equal(launch.args[3], launch.privateTempDir);
+    assert.ok(launch.args.includes('POSTMETER_SCRIPT_WORKER=1'));
+    assert.ok(launch.args.includes(`TEMP=${launch.privateTempDir}`));
+    assert.ok(launch.args.includes(process.execPath));
+  } finally {
+    cleanupPrivateTempDir(launch.privateTempDir);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('builds macOS seatbelt launches with private temp and no broad process allowance', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-seatbelt-test-'));
+  const sandboxExecPath = path.join(tempDir, 'sandbox-exec');
+  await fs.writeFile(sandboxExecPath, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+
+  const launch = createOsSandboxedProcessLaunch({
+    platform: 'darwin',
+    mode: OS_SANDBOX_MODES.REQUIRED,
+    macosSandboxExecPath: sandboxExecPath,
+    executablePath: process.execPath,
+    args: ['-e', 'process.exit(0)'],
+    env: scriptWorkerEnv(),
+    readOnlyPaths: [path.join(__dirname, '..', '..', 'src', 'core')]
+  });
+
+  try {
+    const profile = launch.args[launch.args.indexOf('-p') + 1];
+    assert.equal(launch.sandboxed, true);
+    assert.equal(launch.backend, 'macos-seatbelt');
+    assert.equal(launch.command, sandboxExecPath);
+    assert.equal(launch.env.POSTMETER_SCRIPT_WORKER, '1');
+    assert.equal(launch.env.TMPDIR, launch.privateTempDir);
+    assert.match(profile, /\(deny default\)/);
+    assert.match(profile, /\(deny network\*\)/);
+    assert.match(profile, /\(deny process-exec\)/);
+    assert.match(profile, /\(deny process-fork\)/);
+    assert.match(profile, /\(allow process-info\*\)/);
+    assert.doesNotMatch(profile, /\(allow process\*\)/);
+    assert.match(profile, new RegExp(escapeRegExp(launch.privateTempDir)));
+    assert.doesNotMatch(profile, /\(subpath "\\?\/tmp"\\?\)/);
+  } finally {
+    cleanupPrivateTempDir(launch.privateTempDir);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
 });
 
 test('does not expose host constructors, errors, or promises to sandbox scripts', async () => {
@@ -859,6 +940,25 @@ test('requires brokered client-certificate bindings for pm.sendRequest', async (
   assert.match(rejected.result.tests[0].error, /configured certificate binding/);
   assert.equal(calls, 0);
 
+  const rejectedPfx = await runPostmanScriptIsolated(`
+    pm.test('script pfx path rejected', async function () {
+      await pm.sendRequest({
+        url: 'https://api.example.test/mtls',
+        auth: { type: 'clientCertificate', pfxPath: '/tmp/client.p12', passphrase: 'secret' }
+      });
+    });
+  `, {}, {
+    sendRequest: async () => {
+      calls++;
+      return { statusCode: 200, headers: {}, body: '', durationMillis: 0, responseBytes: 0 };
+    },
+    timeoutMillis: 500,
+    workerTimeoutMillis: 1000
+  });
+  assert.equal(rejectedPfx.result.passed, false);
+  assert.match(rejectedPfx.result.tests[0].error, /configured certificate binding/);
+  assert.equal(calls, 0);
+
   const allowed = await runPostmanScriptIsolated(`
     pm.test('configured cert binding is brokered', async function () {
       const response = await pm.sendRequest({
@@ -893,6 +993,41 @@ test('requires brokered client-certificate bindings for pm.sendRequest', async (
 
   assert.equal(allowed.result.passed, true);
   assert.equal(calls, 1);
+
+  const allowedPfx = await runPostmanScriptIsolated(`
+    pm.test('configured pfx binding is brokered', async function () {
+      const response = await pm.sendRequest({
+        url: 'https://api.example.test/mtls',
+        auth: { type: 'clientCertificate', certificateId: 'cert-pfx' }
+      });
+      pm.expect(response.code).to.equal(200);
+    });
+  `, {}, {
+    clientCertificates: [{
+      id: 'cert-pfx',
+      pfxPath: '/configured/client.p12',
+      caPath: '/configured/ca.pem',
+      passphrase: 'pfx-secret'
+    }],
+    sendRequest: async (request) => {
+      calls++;
+      assert.deepEqual(request.auth, {
+        type: 'clientCertificate',
+        certificateId: 'cert-pfx',
+        certPath: '',
+        keyPath: '',
+        pfxPath: '/configured/client.p12',
+        caPath: '/configured/ca.pem',
+        passphrase: 'pfx-secret'
+      });
+      return { statusCode: 200, headers: {}, body: '', durationMillis: 0, responseBytes: 0 };
+    },
+    timeoutMillis: 500,
+    workerTimeoutMillis: 1000
+  });
+
+  assert.equal(allowedPfx.result.passed, true);
+  assert.equal(calls, 2);
 });
 
 test('requires user-granted file bindings for brokered pm.sendRequest bodies', async (t) => {
@@ -1130,3 +1265,7 @@ test('supports pm.cookies.jar clear for hostname targets', async () => {
   assert.equal(execution.cookies.find((item) => item.name === 'clearMe'), undefined);
   assert.equal(execution.cookies.find((item) => item.name === 'clearSecret'), undefined);
 });
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}

@@ -1,11 +1,20 @@
 const { sendRequest } = require('./httpClient');
 const { invokeGrpcRequest } = require('./grpcClient');
 const { runPostmanScriptIsolated } = require('./scriptSandbox');
+const { normalizeAuth } = require('./authModel');
 const {
   cloneEnvironment,
   cloneVariables,
   runtimeEnvironment
 } = require('./variableScope');
+
+const CLIENT_CERTIFICATE_DIRECT_AUTH_FIELDS = [
+  'certPath',
+  'keyPath',
+  'pfxPath',
+  'caPath',
+  'passphrase'
+];
 
 function createScriptedRequestState(request, environment, options = {}) {
   return {
@@ -778,7 +787,9 @@ function applyScriptMutations(state, execution, options = {}) {
       headers: Array.isArray(execution.request.headers) ? execution.request.headers : state.request.headers,
       bodyType: execution.request.bodyType || state.request.bodyType,
       body: execution.request.body == null ? state.request.body : execution.request.body,
-      auth: execution.request.auth && typeof execution.request.auth === 'object' ? cloneJson(execution.request.auth) : state.request.auth,
+      auth: execution.request.auth && typeof execution.request.auth === 'object'
+        ? sanitizeScriptMutatedAuth(execution.request.auth, state.request.auth)
+        : state.request.auth,
       metadata: Array.isArray(execution.request.metadata) ? cloneJson(execution.request.metadata) : state.request.metadata,
       messages: Array.isArray(execution.request.messages) ? cloneJson(execution.request.messages) : state.request.messages,
       methodPath: execution.request.methodPath == null ? state.request.methodPath : String(execution.request.methodPath),
@@ -788,6 +799,29 @@ function applyScriptMutations(state, execution, options = {}) {
       grpc: execution.request.grpc && typeof execution.request.grpc === 'object' ? cloneJson(execution.request.grpc) : state.request.grpc
     };
   }
+}
+
+function sanitizeScriptMutatedAuth(nextAuth, currentAuth) {
+  const normalized = normalizeAuth(nextAuth || {});
+  if (normalized.type !== 'clientCertificate') {
+    return cloneJson(nextAuth);
+  }
+  const certificateId = String(normalized.certificateId || '').trim();
+  if (certificateId) {
+    return { type: 'clientCertificate', certificateId };
+  }
+  if (hasDirectClientCertificateMaterial(nextAuth) || hasDirectClientCertificateMaterial(normalized)) {
+    return currentAuth && typeof currentAuth === 'object' ? cloneJson(currentAuth) : { type: 'none' };
+  }
+  return normalized;
+}
+
+function hasDirectClientCertificateMaterial(auth) {
+  if (!auth || typeof auth !== 'object') {
+    return false;
+  }
+  return CLIENT_CERTIFICATE_DIRECT_AUTH_FIELDS.some((field) => String(auth[field] || '').trim())
+    || Boolean(auth.cert?.src || auth.key?.src || auth.pfx?.src);
 }
 
 function createPreRequestScriptError(result) {
