@@ -18,6 +18,32 @@ test('session store returns defaults when no session file exists', async () => {
   assert.deepEqual(session.draftRequests, []);
 });
 
+test('session store recovers defaults from unreadable JSON without clobbering the file on load', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-session-store-corrupt-'));
+  const sessionPath = path.join(temp, 'session.json');
+  await fs.writeFile(sessionPath, '{not-json');
+  const store = new SessionStore(sessionPath);
+
+  const session = await store.load();
+
+  assert.equal(session.activeWorkspaceId, '');
+  assert.equal(session.activeEnvironmentId, 'none');
+  assert.equal(await fs.readFile(sessionPath, 'utf8'), '{not-json');
+});
+
+test('session store ignores stale atomic temp files while loading the committed session', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-session-store-stale-'));
+  const sessionPath = path.join(temp, 'session.json');
+  await fs.writeFile(path.join(temp, 'postmeter-session-stale.json.tmp'), '{partial');
+  const store = new SessionStore(sessionPath);
+  await store.save({ activeWorkspaceId: 'Workspace.json' });
+
+  const session = await store.load();
+
+  assert.equal(session.activeWorkspaceId, 'Workspace.json');
+  assert.equal(await fs.readFile(path.join(temp, 'postmeter-session-stale.json.tmp'), 'utf8'), '{partial');
+});
+
 test('session store saves normalized renderer session state', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-session-store-'));
   const sessionPath = path.join(temp, 'session.json');

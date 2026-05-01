@@ -1,8 +1,11 @@
-const syncFs = require('node:fs');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { defaultSessionState, normalizeSessionState } = require('../src/core/sessionState');
-const { pathExists, writeJsonFileAtomic } = require('../src/core/workspacePersistence');
+const {
+  pathExists,
+  writeJsonFileAtomic,
+  writeJsonFileAtomicSync
+} = require('../src/core/workspacePersistence');
 
 class SessionStore {
   constructor(sessionPath) {
@@ -26,13 +29,13 @@ class SessionStore {
 
   async save(session) {
     const normalized = normalizeSessionState(session);
-    await writeJsonFileAtomic(this.sessionPath, normalized);
+    await writeJsonFileAtomic(this.sessionPath, normalized, { prefix: 'postmeter-session' });
     return normalized;
   }
 
   saveSync(session) {
     const normalized = normalizeSessionState(session);
-    syncWriteJsonFileAtomic(this.sessionPath, normalized);
+    writeJsonFileAtomicSync(this.sessionPath, normalized, { prefix: 'postmeter-session' });
     return normalized;
   }
 
@@ -44,14 +47,6 @@ class SessionStore {
 
 function defaultSessionPath(userDataPath) {
   return path.join(path.resolve(userDataPath), 'session.json');
-}
-
-function syncWriteJsonFileAtomic(targetPath, value) {
-  syncFs.mkdirSync(path.dirname(targetPath), { recursive: true });
-  const tempPath = path.join(path.dirname(targetPath), `postmeter-session-${process.pid}-${Date.now()}.json.tmp`);
-  syncFs.writeFileSync(tempPath, JSON.stringify(value, null, 2));
-  syncFs.renameSync(tempPath, targetPath);
-  return targetPath;
 }
 
 module.exports = {

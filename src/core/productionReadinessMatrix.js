@@ -136,10 +136,21 @@ function buildProductionReadinessMatrix() {
       evidenceRefs: ['docs/electron-security-matrix.json', 'src/core/productionSupportMatrices.js', 'electron/appProtocol.js', 'electron/mainWindow.js', 'electron/ipcSecurity.js', 'electron/preload.js', 'electron/workspaceIpc.js', 'electron/appIpc.js', 'electron/oauthFlows.js', 'test/electron/appChrome.test.js'],
       notes: 'The source-owned Electron security matrix now enumerates the primary BrowserWindow, production webPreferences, secure custom app-content protocol with CSP/nosniff/referrer-policy headers and no renderer fetch privilege, packaged startup-smoke assertions for the trusted app-protocol renderer URL and renderer CSP, exact-initial-URL top-level navigation denial including unexpected app-protocol query changes, window-open denial, webview denial, permission denial, renderer CSP, visualizer CSP, explicit main-frame-only preload API, every IPC channel, fail-closed trusted main-frame renderer IPC sender validation including unexpected app-protocol query keys, native file-dialog groups, credential-free external URL allowlists, OAuth browser launch path, custom protocol registration path, packaged preload integrity, packaged protocol validation wiring, and documented Electron fuse review. Native runner execution evidence is still tracked by the separate packaging rows.'
     }),
-    row('workspace.durability', 'data-durability', 'Workspace persistence, migrations, recovery, vault metadata, package cache, and large-workspace budgets are matrixed and validated.', 'implemented', {
+    row('workspace.durability', 'data-durability', 'Workspace persistence, migrations, recovery, vault metadata, package cache, and large-workspace budgets are matrixed and validated.', 'validated', {
       releaseBlocking: true,
-      commands: ['npm run workspace:durability:validate', 'npm test'],
-      evidenceRefs: ['docs/workspace-durability-matrix.json']
+      commands: ['npm run workspace:durability:validate', 'npm test', 'npm run test:ui:regression'],
+      evidenceRefs: [
+        'docs/workspace-durability-matrix.json',
+        'src/core/productionSupportMatrices.js',
+        'src/core/workspacePersistence.js',
+        'src/core/workspaceStore.js',
+        'src/core/workspaceManager.js',
+        'src/core/vaultStore.js',
+        'test/electron/workspaceStore.test.js',
+        'test/electron/workspaceManager.test.js',
+        'test/electron/workspaceDurabilityPerformance.test.js'
+      ],
+      notes: 'The lower-level workspace-durability matrix has 9 implemented rows covering atomic workspace/session/backup/export writes, corrupt quarantine and no-overwrite recovery, filesystem-discovered managed workspaces, schema migrations, side-effect merge semantics, encrypted vault storage outside workspace JSON, large-workspace budgets, and import/export cancellation or parse-failure behavior. Diagnostics/privacy redaction remains tracked separately by the diagnostics.privacy readiness row.'
     }),
     row('compatibility.non-postman', 'compatibility', 'OpenAPI, HAR, curl, JMeter, and native PostMeter import/export compatibility are matrixed and validated.', 'implemented', {
       releaseBlocking: true,

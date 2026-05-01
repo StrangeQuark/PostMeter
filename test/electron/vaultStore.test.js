@@ -49,6 +49,39 @@ test('encrypted vault store fails closed when encryption is unavailable', async 
   await assert.rejects(() => store.get('token'), VaultUnavailableError);
 });
 
+test('encrypted vault store normalizes partial metadata without exposing plaintext', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-vault-partial-'));
+  const vaultPath = path.join(dir, 'vault.json');
+  const cryptoProvider = testCryptoProvider();
+  await fs.writeFile(vaultPath, JSON.stringify({
+    schemaVersion: 1,
+    secrets: {
+      apiToken: {
+        ciphertext: Buffer.from(cryptoProvider.encryptString('super-secret')).toString('base64')
+      },
+      malformed: {
+        value: 'plaintext-should-be-ignored'
+      },
+      invalidCiphertextType: {
+        ciphertext: 42
+      }
+    },
+    audit: [
+      { operation: 'set', key: 'apiToken', requestId: 'request-1', requestName: 'Request One' },
+      { operation: 42, key: 'malformed', requestName: { object: true } }
+    ]
+  }));
+
+  const store = new EncryptedVaultStore(vaultPath, cryptoProvider);
+  assert.equal(await store.get('apiToken'), 'super-secret');
+  assert.deepEqual(await store.listMetadata(), [{ key: 'apiToken', updatedAt: '' }]);
+  const audit = await store.listAudit();
+  assert.equal(audit.length, 2);
+  assert.equal(audit[0].operation, 'set');
+  assert.equal(audit[1].operation, '');
+  assert.equal((await fs.readFile(vaultPath, 'utf8')).includes('super-secret'), false);
+});
+
 test('memory vault store normalizes keys and values for broker tests', async () => {
   const store = new MemoryVaultStore();
   await store.set(' token ', 123);

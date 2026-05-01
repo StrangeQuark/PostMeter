@@ -1,3 +1,4 @@
+const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 
@@ -180,11 +181,46 @@ class EncryptedVaultStore {
   async save(document) {
     const normalized = normalizeVaultDocument(document);
     await fs.mkdir(path.dirname(this.vaultPath), { recursive: true, mode: 0o700 });
-    const tempPath = path.join(path.dirname(this.vaultPath), `postmeter-vault-${process.pid}-${Date.now()}.tmp`);
-    await fs.writeFile(tempPath, JSON.stringify(normalized, null, 2), { mode: 0o600 });
-    await fs.chmod(tempPath, 0o600).catch(() => {});
-    await fs.rename(tempPath, this.vaultPath);
-    await fs.chmod(this.vaultPath, 0o600).catch(() => {});
+    const tempPath = vaultTempPath(this.vaultPath);
+    let handle = null;
+    try {
+      handle = await fs.open(tempPath, 'wx', 0o600);
+      await handle.writeFile(JSON.stringify(normalized, null, 2));
+      await handle.sync();
+      await handle.close();
+      handle = null;
+      await fs.chmod(tempPath, 0o600).catch(() => {});
+      await fs.rename(tempPath, this.vaultPath);
+      await fs.chmod(this.vaultPath, 0o600).catch(() => {});
+      await fsyncDirectory(path.dirname(this.vaultPath));
+    } catch (error) {
+      if (handle) {
+        await handle.close().catch(() => {});
+      }
+      await fs.rm(tempPath, { force: true }).catch(() => {});
+      throw error;
+    }
+  }
+}
+
+function vaultTempPath(vaultPath) {
+  const suffix = typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : crypto.randomBytes(16).toString('hex');
+  return path.join(path.dirname(vaultPath), `postmeter-vault-${process.pid}-${Date.now()}-${suffix}.tmp`);
+}
+
+async function fsyncDirectory(directoryPath) {
+  let handle = null;
+  try {
+    handle = await fs.open(directoryPath, 'r');
+    await handle.sync();
+  } catch {
+    // Directory fsync is best-effort because some platforms do not support it.
+  } finally {
+    if (handle) {
+      await handle.close().catch(() => {});
+    }
   }
 }
 

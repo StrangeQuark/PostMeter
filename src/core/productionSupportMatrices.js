@@ -256,37 +256,41 @@ function buildElectronSecurityMatrix() {
 
 function buildWorkspaceDurabilityMatrix() {
   return matrix('workspace-durability', 'src/core/productionSupportMatrices.js', [
-    row('workspace.atomic-json-writes', 'Atomic writes', 'Workspace JSON writes use same-directory temporary files followed by atomic rename.', 'implemented', {
-      evidenceRefs: ['src/core/workspacePersistence.js'],
-      tests: ['test/electron/workspaceStore.test.js']
+    row('workspace.atomic-json-writes', 'Atomic writes', 'Workspace JSON, session, and backup writes use collision-resistant same-directory temporary files, fsync file contents where supported, and directory-fsync after rename.', 'implemented', {
+      evidenceRefs: ['src/core/workspacePersistence.js', 'src/core/workspaceStore.js', 'electron/sessionStore.js'],
+      tests: ['test/electron/workspaceStore.test.js', 'test/electron/sessionStore.test.js']
     }),
-    row('workspace.corrupt-quarantine', 'Recovery', 'Unreadable workspace JSON is quarantined and a default workspace is recovered instead of overwriting newer user data.', 'implemented', {
-      evidenceRefs: ['src/core/workspaceStore.js', 'src/core/workspaceManager.js'],
+    row('workspace.atomic-export-writes', 'Atomic writes', 'Workspace, collection, example, load-test, and collection-run exports write through same-directory temporary files before replacing the selected output path.', 'implemented', {
+      evidenceRefs: ['src/core/workspacePersistence.js', 'src/core/workspaceStore.js', 'electron/workspaceIpc.js', 'electron/runtimeIpc.js'],
+      tests: ['test/electron/workspaceStore.test.js', 'test/electron/workspaceDurabilityPerformance.test.js', 'test/electron/workspaceIpc.test.js', 'test/electron/runtimeIpc.test.js']
+    }),
+    row('workspace.corrupt-quarantine', 'Recovery', 'Unreadable workspace JSON is quarantined with a collision-resistant sibling path, the containing directory is fsynced where supported, and recovered default publication is no-overwrite so newer replacement data is preserved.', 'implemented', {
+      evidenceRefs: ['src/core/workspaceStore.js', 'src/core/workspaceManager.js', 'docs/TROUBLESHOOTING.md'],
       tests: ['test/electron/workspaceStore.test.js', 'test/electron/workspaceManager.test.js']
     }),
+    row('workspace.managed-catalog-discovery', 'Recovery', 'Managed workspace discovery is source-of-truth filesystem discovery; stale legacy manifests, stale temp files, missing workspace files, and unrecognized existing JSON files cannot silently replace or be overwritten by default creation, create/import/rename, publication races, or active-workspace recovery.', 'implemented', {
+      evidenceRefs: ['src/core/workspaceManager.js', 'TECH_SPECS.MD', 'docs/TROUBLESHOOTING.md'],
+      tests: ['test/electron/workspaceManager.test.js', 'test/electron/workspaceStore.test.js']
+    }),
     row('workspace.schema-migrations', 'Migrations', 'Workspace schema migrations preserve imported Postman metadata, globals, cookies, vault grants, package cache metadata, and protocol profiles.', 'implemented', {
-      evidenceRefs: ['src/core/workspaceMigrations.js'],
+      evidenceRefs: ['src/core/workspaceMigrations.js', 'TECH_SPECS.MD'],
       tests: ['test/electron/workspaceStore.test.js']
     }),
     row('workspace.side-effect-merge', 'Concurrent script effects', 'Sandbox variable/cookie side effects are merged by delta with workspace identity guards.', 'implemented', {
       evidenceRefs: ['electron/workspaceMutations.js'],
       tests: ['test/electron/workspaceMutations.test.js']
     }),
-    row('vault.encrypted-outside-workspace', 'Vault durability', 'Vault values are encrypted outside workspace JSON and fail closed when OS encryption is unavailable.', 'implemented', {
-      evidenceRefs: ['src/core/vaultStore.js'],
+    row('vault.encrypted-outside-workspace', 'Vault durability', 'Vault values are encrypted outside workspace JSON, vault file rename/delete is parent-owned and no-overwrite, and vault access fails closed when OS encryption is unavailable.', 'implemented', {
+      evidenceRefs: ['src/core/vaultStore.js', 'electron/main.js'],
       tests: ['test/electron/vaultStore.test.js']
     }),
-    row('workspace.large-workspace-budget', 'Performance budget', 'Large workspace load/save/render budgets must stay covered by focused tests before stable release.', 'implemented', {
-      evidenceRefs: ['test/electron/workspaceStore.test.js', 'test/electron/uiRegressionSmoke.js'],
-      tests: ['npm test', 'npm run test:ui:regression']
+    row('workspace.large-workspace-budget', 'Performance budget', 'Large workspace load, save, search, collection tree render, request open, collection run setup, and import/export budgets must stay covered by focused tests before stable release.', 'implemented', {
+      evidenceRefs: ['test/electron/workspaceDurabilityPerformance.test.js', 'src/renderer/uiRegressionSmoke.js', 'test/electron/uiRegressionSmoke.js'],
+      tests: ['test/electron/workspaceDurabilityPerformance.test.js', 'npm run test:ui:regression']
     }),
     row('workspace.import-export-cancel', 'Import/export recovery', 'Import/export picker cancellation and failed parse paths return explicit results without clobbering the active workspace.', 'implemented', {
-      evidenceRefs: ['electron/workspaceIpc.js', 'src/core/workspaceStore.js'],
+      evidenceRefs: ['electron/workspaceIpc.js', 'src/core/workspaceStore.js', 'docs/TROUBLESHOOTING.md'],
       tests: ['test/electron/workspaceStore.test.js', 'test/electron/workspaceManager.test.js']
-    }),
-    row('diagnostics.redaction-boundary', 'Diagnostics', 'Diagnostics must redact secrets, vault values, tokens, auth headers, cookies, request bodies, and sensitive local paths by default.', 'blocked', {
-      evidenceRefs: ['NEXT_STEPS.MD', 'docs/RELEASE_READINESS.md'],
-      tests: ['future diagnostics tests']
     })
   ]);
 }

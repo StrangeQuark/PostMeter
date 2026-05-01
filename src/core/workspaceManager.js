@@ -1,6 +1,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { defaultWorkspace, walkRequests } = require('./models');
+const { fsyncDirectory, moveFileNoOverwrite, pathExists, temporaryJsonPath } = require('./workspacePersistence');
 const {
   WorkspaceRecoveryError,
   WorkspaceStore,
@@ -85,9 +86,7 @@ class WorkspaceManager {
     const catalog = await this.ensureCatalog(this.currentWorkspaceId);
     const importedWorkspace = await this.currentStore().importWorkspace(importPath);
     const workspaceName = await this.nextWorkspaceName(importWorkspaceDisplayName(importPath));
-    const filename = this.nextWorkspaceFilename(catalog.files, workspaceName);
-    await new WorkspaceStore(this.absoluteWorkspacePath(filename)).save(importedWorkspace);
-    return filename;
+    return this.saveNewWorkspaceFile(workspaceName, importedWorkspace, catalog.files);
   }
 
   async exportWorkspace(workspace, exportPath) {
@@ -116,9 +115,7 @@ class WorkspaceManager {
     const catalog = await this.ensureCatalog(this.currentWorkspaceId);
     const workspaceName = await this.nextWorkspaceName(options.name);
     const workspace = defaultWorkspace();
-    const filename = this.nextWorkspaceFilename(catalog.files, workspaceName);
-    await new WorkspaceStore(this.absoluteWorkspacePath(filename)).save(workspace);
-    return filename;
+    return this.saveNewWorkspaceFile(workspaceName, workspace, catalog.files);
   }
 
   async renameWorkspace(workspaceId, nextName) {
@@ -127,14 +124,34 @@ class WorkspaceManager {
       throw new Error(`Workspace "${workspaceId}" was not found.`);
     }
     const normalizedName = normalizeWorkspaceDisplayName(nextName);
-    const renamedFilename = this.nextWorkspaceFilename(
-      catalog.files.filter((file) => file !== workspaceId),
-      normalizedName
-    );
     const currentPath = this.absoluteWorkspacePath(workspaceId);
-    const renamedPath = this.absoluteWorkspacePath(renamedFilename);
-    if (workspaceId !== renamedFilename) {
-      await renameWorkspaceFile(currentPath, renamedPath);
+    const reservedFiles = new Set(catalog.files.filter((file) => file !== workspaceId));
+    let renamedFilename = workspaceId;
+    let renamed = false;
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      renamedFilename = await this.nextAvailableWorkspaceFilename(
+        Array.from(reservedFiles),
+        normalizedName,
+        { allowedFilename: workspaceId }
+      );
+      const renamedPath = this.absoluteWorkspacePath(renamedFilename);
+      if (workspaceId === renamedFilename) {
+        renamed = true;
+        break;
+      }
+      try {
+        await renameWorkspaceFile(currentPath, renamedPath);
+        renamed = true;
+        break;
+      } catch (error) {
+        if (error?.code !== 'EEXIST') {
+          throw error;
+        }
+        reservedFiles.add(renamedFilename);
+      }
+    }
+    if (!renamed) {
+      throw new Error('Could not allocate a non-conflicting workspace rename path.');
     }
     catalog.files = catalog.files
       .map((file) => (file === workspaceId ? renamedFilename : file))
@@ -167,6 +184,7 @@ class WorkspaceManager {
       throw new Error('At least one workspace must remain.');
     }
     await fs.rm(this.absoluteWorkspacePath(workspaceId), { force: true });
+    await fsyncDirectory(this.baseDirectory);
     const remainingFiles = catalog.files.filter((file) => file !== workspaceId);
     catalog.files = remainingFiles;
     if (catalog.currentWorkspaceId === workspaceId) {
@@ -198,8 +216,7 @@ class WorkspaceManager {
     }
     if (!files.length) {
       const workspace = defaultWorkspace();
-      const filename = workspaceFilename('Local Workspace', this.workspaceExtension);
-      await new WorkspaceStore(this.absoluteWorkspacePath(filename)).save(workspace);
+      const filename = await this.saveNewWorkspaceFile('Local Workspace', workspace, files);
       files.push(filename);
     }
     return {
@@ -209,7 +226,16 @@ class WorkspaceManager {
   }
 
   async removeLegacyManifestFile() {
+    try {
+      await fs.access(this.legacyManifestPath);
+    } catch (error) {
+      if (error?.code === 'ENOENT') {
+        return;
+      }
+      throw error;
+    }
     await fs.rm(this.legacyManifestPath, { force: true });
+    await fsyncDirectory(this.baseDirectory);
   }
 
   async discoverWorkspaceFiles() {
@@ -300,6 +326,74 @@ class WorkspaceManager {
     return workspaceFilename(`${normalizedWorkspaceName} ${Date.now()}`, this.workspaceExtension);
   }
 
+  async nextAvailableWorkspaceFilename(existingFiles, workspaceName, options = {}) {
+    const existing = new Set(existingFiles);
+    const normalizedWorkspaceName = normalizeWorkspaceDisplayName(workspaceName);
+    const allowedFilename = typeof options.allowedFilename === 'string' ? options.allowedFilename : '';
+    const candidateForIndex = (index) => {
+      if (index === 1) {
+        return workspaceFilename(normalizedWorkspaceName, this.workspaceExtension);
+      }
+      return workspaceFilename(`${normalizedWorkspaceName} ${index}`, this.workspaceExtension);
+    };
+    for (let index = 1; index <= 10_000; index += 1) {
+      const candidate = candidateForIndex(index);
+      if (!existing.has(candidate) && await this.workspaceFilenameAvailable(candidate, allowedFilename)) {
+        return candidate;
+      }
+    }
+    for (let index = 0; index < 100; index += 1) {
+      const candidate = workspaceFilename(
+        `${normalizedWorkspaceName} ${Date.now()} ${Math.random().toString(36).slice(2, 8)}`,
+        this.workspaceExtension
+      );
+      if (!existing.has(candidate) && await this.workspaceFilenameAvailable(candidate, allowedFilename)) {
+        return candidate;
+      }
+    }
+    throw new Error('Could not allocate a non-conflicting workspace filename.');
+  }
+
+  async saveNewWorkspaceFile(workspaceName, workspace, existingFiles = []) {
+    const reservedFiles = new Set(existingFiles);
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const filename = await this.nextAvailableWorkspaceFilename(Array.from(reservedFiles), workspaceName);
+      try {
+        await new WorkspaceStore(this.absoluteWorkspacePath(filename)).save(workspace, { overwrite: false });
+        return filename;
+      } catch (error) {
+        if (error?.code !== 'EEXIST') {
+          throw error;
+        }
+        reservedFiles.add(filename);
+      }
+    }
+    throw new Error('Could not allocate a non-conflicting workspace filename.');
+  }
+
+  async workspaceFilenameAvailable(filename, allowedFilename = '') {
+    const candidatePath = this.absoluteWorkspacePath(filename);
+    if (!(await pathExists(candidatePath))) {
+      return true;
+    }
+    if (!allowedFilename) {
+      return false;
+    }
+    const allowedPath = this.absoluteWorkspacePath(allowedFilename);
+    if (path.resolve(candidatePath) === path.resolve(allowedPath)) {
+      return true;
+    }
+    try {
+      const [candidateStats, allowedStats] = await Promise.all([
+        fs.stat(candidatePath),
+        fs.stat(allowedPath)
+      ]);
+      return candidateStats.dev === allowedStats.dev && candidateStats.ino === allowedStats.ino;
+    } catch {
+      return false;
+    }
+  }
+
   workspaceDisplayNameFromFilename(filename) {
     const basename = path.basename(filename, this.workspaceExtension);
     return basename || 'Workspace';
@@ -344,12 +438,27 @@ async function renameWorkspaceFile(currentPath, nextPath) {
     return;
   }
   if (currentPath.toLowerCase() !== nextPath.toLowerCase()) {
-    await fs.rename(currentPath, nextPath);
+    await moveWorkspaceFileNoOverwrite(currentPath, nextPath);
     return;
   }
-  const tempPath = path.join(path.dirname(currentPath), `postmeter-workspace-rename-${process.pid}-${Date.now()}.json.tmp`);
-  await fs.rename(currentPath, tempPath);
-  await fs.rename(tempPath, nextPath);
+  const tempPath = temporaryJsonPath(currentPath, 'postmeter-workspace-rename');
+  let movedToTemp = false;
+  try {
+    await moveWorkspaceFileNoOverwrite(currentPath, tempPath);
+    movedToTemp = true;
+    await moveWorkspaceFileNoOverwrite(tempPath, nextPath);
+  } catch (error) {
+    if (movedToTemp) {
+      await moveWorkspaceFileNoOverwrite(tempPath, currentPath).catch(() => {});
+    } else {
+      await fs.rm(tempPath, { force: true }).catch(() => {});
+    }
+    throw error;
+  }
+}
+
+async function moveWorkspaceFileNoOverwrite(currentPath, nextPath) {
+  await moveFileNoOverwrite(currentPath, nextPath);
 }
 
 function normalizeWorkspaceDisplayName(name) {

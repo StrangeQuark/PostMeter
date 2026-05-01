@@ -1,5 +1,5 @@
-const fs = require('node:fs/promises');
 const { fieldLimit } = require('../src/core/payloadSchemas');
+const { writeTextFileAtomic } = require('../src/core/workspacePersistence');
 const {
   collectionExportExtension,
   collectionExportFilters,
@@ -273,7 +273,7 @@ function registerWorkspaceIpc(options = {}) {
       exportedAt: new Date().toISOString(),
       examples: request.examples || []
     };
-    await fs.writeFile(filePath, JSON.stringify(payload, null, 2));
+    await writeTextFileAtomic(filePath, JSON.stringify(payload, null, 2), { prefix: 'postmeter-examples-export' });
     return fileOperationResult({ cancelled: false, path: filePath });
   });
 }

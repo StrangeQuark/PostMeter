@@ -1,3 +1,4 @@
+const crypto = require('node:crypto');
 const syncFs = require('node:fs');
 const fs = require('node:fs/promises');
 const os = require('node:os');
@@ -66,7 +67,10 @@ function looksLikeNativeWorkspace(value) {
 
 function siblingPath(sourcePath, label) {
   const timestamp = new Date().toISOString().replaceAll(':', '-');
-  return path.join(path.dirname(sourcePath), `${path.basename(sourcePath)}.${label}.${timestamp}`);
+  const suffix = typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : crypto.randomBytes(16).toString('hex');
+  return path.join(path.dirname(sourcePath), `${path.basename(sourcePath)}.${label}.${timestamp}.${suffix}`);
 }
 
 async function pathExists(targetPath) {
@@ -79,35 +83,212 @@ async function pathExists(targetPath) {
 }
 
 async function writeJsonFile(targetPath, value) {
+  return writeJsonFileAtomic(targetPath, value, { prefix: 'postmeter-json-export' });
+}
+
+async function writeJsonFileAtomic(targetPath, value, options = {}) {
+  return writeTextFileAtomic(targetPath, JSON.stringify(value, null, 2), {
+    ...options,
+    prefix: options.prefix || 'postmeter-workspace'
+  });
+}
+
+async function writeTextFileAtomic(targetPath, content, options = {}) {
   await fs.mkdir(path.dirname(targetPath), { recursive: true });
-  await fs.writeFile(targetPath, JSON.stringify(value, null, 2));
+  const tempPath = temporaryJsonPath(targetPath, options.prefix || 'postmeter-file');
+  let handle = null;
+  try {
+    handle = await fs.open(tempPath, 'wx', options.mode);
+    await handle.writeFile(content);
+    await handle.sync();
+    await handle.close();
+    handle = null;
+    if (options.overwrite === false) {
+      await publishTempFileNoOverwrite(tempPath, targetPath);
+    } else {
+      await fs.rename(tempPath, targetPath);
+    }
+    await fsyncDirectory(path.dirname(targetPath));
+  } catch (error) {
+    if (handle) {
+      await handle.close().catch(() => {});
+    }
+    await fs.rm(tempPath, { force: true }).catch(() => {});
+    throw error;
+  }
   return targetPath;
 }
 
-async function writeJsonFileAtomic(targetPath, value) {
-  await fs.mkdir(path.dirname(targetPath), { recursive: true });
-  const tempPath = path.join(path.dirname(targetPath), `postmeter-workspace-${process.pid}-${Date.now()}.json.tmp`);
-  await fs.writeFile(tempPath, JSON.stringify(value, null, 2));
-  await fs.rename(tempPath, targetPath);
-  return targetPath;
+function writeJsonFileAtomicSync(targetPath, value, options = {}) {
+  return writeTextFileAtomicSync(targetPath, JSON.stringify(value, null, 2), {
+    ...options,
+    prefix: options.prefix || 'postmeter-workspace'
+  });
 }
 
-function writeJsonFileAtomicSync(targetPath, value) {
+function writeTextFileAtomicSync(targetPath, content, options = {}) {
   syncFs.mkdirSync(path.dirname(targetPath), { recursive: true });
-  const tempPath = path.join(path.dirname(targetPath), `postmeter-workspace-${process.pid}-${Date.now()}.json.tmp`);
-  syncFs.writeFileSync(tempPath, JSON.stringify(value, null, 2));
-  syncFs.renameSync(tempPath, targetPath);
+  const tempPath = temporaryJsonPath(targetPath, options.prefix || 'postmeter-file');
+  let fd = null;
+  try {
+    fd = syncFs.openSync(tempPath, 'wx', options.mode);
+    syncFs.writeFileSync(fd, content);
+    syncFs.fsyncSync(fd);
+    syncFs.closeSync(fd);
+    fd = null;
+    if (options.overwrite === false) {
+      publishTempFileNoOverwriteSync(tempPath, targetPath);
+    } else {
+      syncFs.renameSync(tempPath, targetPath);
+    }
+    fsyncDirectorySync(path.dirname(targetPath));
+  } catch (error) {
+    if (fd != null) {
+      try {
+        syncFs.closeSync(fd);
+      } catch {}
+    }
+    try {
+      syncFs.rmSync(tempPath, { force: true });
+    } catch {}
+    throw error;
+  }
   return targetPath;
+}
+
+async function moveFileNoOverwrite(sourcePath, targetPath) {
+  await fs.mkdir(path.dirname(targetPath), { recursive: true });
+  await copyOrLinkFileNoOverwrite(sourcePath, targetPath);
+  try {
+    await fs.rm(sourcePath, { force: true });
+  } catch (error) {
+    await fs.rm(targetPath, { force: true }).catch(() => {});
+    throw error;
+  }
+  await fsyncDirectory(path.dirname(targetPath));
+  return targetPath;
+}
+
+async function publishTempFileNoOverwrite(tempPath, targetPath) {
+  await copyOrLinkFileNoOverwrite(tempPath, targetPath);
+  await fs.rm(tempPath, { force: true }).catch(() => {});
+}
+
+function publishTempFileNoOverwriteSync(tempPath, targetPath) {
+  copyOrLinkFileNoOverwriteSync(tempPath, targetPath);
+  try {
+    syncFs.rmSync(tempPath, { force: true });
+  } catch {}
+}
+
+async function copyOrLinkFileNoOverwrite(sourcePath, targetPath) {
+  try {
+    await fs.link(sourcePath, targetPath);
+  } catch (error) {
+    if (error?.code === 'EEXIST' || error?.code === 'ENOENT') {
+      throw error;
+    }
+    try {
+      await fs.copyFile(sourcePath, targetPath, syncFs.constants.COPYFILE_EXCL);
+      await fsyncFile(targetPath);
+    } catch (copyError) {
+      await fs.rm(targetPath, { force: true }).catch(() => {});
+      throw copyError;
+    }
+  }
+}
+
+function copyOrLinkFileNoOverwriteSync(sourcePath, targetPath) {
+  try {
+    syncFs.linkSync(sourcePath, targetPath);
+  } catch (error) {
+    if (error?.code === 'EEXIST' || error?.code === 'ENOENT') {
+      throw error;
+    }
+    try {
+      syncFs.copyFileSync(sourcePath, targetPath, syncFs.constants.COPYFILE_EXCL);
+      fsyncFileSync(targetPath);
+    } catch (copyError) {
+      try {
+        syncFs.rmSync(targetPath, { force: true });
+      } catch {}
+      throw copyError;
+    }
+  }
+}
+
+async function fsyncFile(filePath) {
+  let handle = null;
+  try {
+    handle = await fs.open(filePath, 'r');
+    await handle.sync();
+  } finally {
+    if (handle) {
+      await handle.close().catch(() => {});
+    }
+  }
+}
+
+function fsyncFileSync(filePath) {
+  const fd = syncFs.openSync(filePath, 'r');
+  try {
+    syncFs.fsyncSync(fd);
+  } finally {
+    syncFs.closeSync(fd);
+  }
+}
+
+function temporaryJsonPath(targetPath, prefix) {
+  const suffix = typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : crypto.randomBytes(16).toString('hex');
+  return path.join(path.dirname(targetPath), `${prefix}-${process.pid}-${Date.now()}-${suffix}.json.tmp`);
+}
+
+async function fsyncDirectory(directoryPath) {
+  let handle = null;
+  try {
+    handle = await fs.open(directoryPath, 'r');
+    await handle.sync();
+  } catch {
+    // Directory fsync is not supported on every platform/filesystem.
+  } finally {
+    if (handle) {
+      await handle.close().catch(() => {});
+    }
+  }
+}
+
+function fsyncDirectorySync(directoryPath) {
+  let fd = null;
+  try {
+    fd = syncFs.openSync(directoryPath, 'r');
+    syncFs.fsyncSync(fd);
+  } catch {
+    // Directory fsync is not supported on every platform/filesystem.
+  } finally {
+    if (fd != null) {
+      try {
+        syncFs.closeSync(fd);
+      } catch {}
+    }
+  }
 }
 
 module.exports = {
   defaultWorkspacePath,
+  fsyncDirectory,
+  fsyncDirectorySync,
   looksLikeNativeWorkspace,
+  moveFileNoOverwrite,
   normalizeWorkspace,
   parseStructuredCollectionContent,
   pathExists,
   siblingPath,
+  temporaryJsonPath,
   writeJsonFile,
   writeJsonFileAtomic,
-  writeJsonFileAtomicSync
+  writeJsonFileAtomicSync,
+  writeTextFileAtomic,
+  writeTextFileAtomicSync
 };
