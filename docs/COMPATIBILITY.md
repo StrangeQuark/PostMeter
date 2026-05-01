@@ -6,13 +6,15 @@ PostMeter aims for practical compatibility with common API-client and load-test 
 
 The source-owned non-Postman production matrix is committed at `docs/non-postman-compatibility-matrix.json` and generated from `src/core/productionSupportMatrices.js`; validate it with `npm run compatibility:non-postman:validate`.
 
+Unless a section says otherwise, non-Postman formats are compatibility bridges for practical import/export workflows, not source-format-perfect round trips or full external engine clones.
+
 ## Native PostMeter
 
 Supported:
 
 - Workspace import/export, including filesystem-discovered managed workspaces, exporting the current workspace or another managed workspace from the Workspaces list, and non-destructive native workspace import in the desktop UI.
 - Collection import/export, including desktop collection-picker export that still opens with an explicit empty-state warning when no collections exist, and native collection export defaults of `<collection-name>.json`.
-- Collections, folders, requests, assertions, scripts, auth metadata, environments, history, cookies, request examples, variables, and light/dark/system theme preference.
+- Collections, folders, requests, assertions, scripts, auth metadata, environments, globals, history, cookies, request examples, variables, certificates, package-cache metadata, vault grant metadata, mock scripts, visualizer binding metadata, GraphQL/gRPC/protocol metadata, file-binding metadata, and light/dark/system theme preference.
 
 Known gaps:
 
@@ -56,12 +58,15 @@ Known gaps:
 Supported:
 
 - OpenAPI/Swagger JSON and YAML import.
-- Server URL, paths, methods, tags-as-folders, query/header parameters, and request body examples.
+- Server URL, server variables, paths, methods, tags-as-folders, path/query/header/cookie parameters, and request body examples.
+- Local `$ref` entries are resolved for common parameters, request bodies, responses, response headers/examples, and security schemes.
 - Path parameter conversion between OpenAPI `{id}` and PostMeter `{{id}}`.
-- Common HTTP bearer, HTTP basic, API key, and OAuth 2.0 security-scheme import.
+- Binary request-body media hints are preserved as request-local metadata while keeping the request body editable.
+- Common HTTP bearer, HTTP basic, header/query/cookie API key, and OAuth 2.0 security-scheme import.
+- Swagger 2.0 `body` and `formData` request parameters are imported into editable request bodies where representable.
 - Response examples are imported as editable request examples when inline examples are present.
 - Response status/header metadata is imported as disabled assertions so users can opt in without making every documented response code fail a run.
-- OpenAPI 3.1 JSON export for collections, including mappable PostMeter auth helpers as security schemes.
+- OpenAPI 3.1 JSON export for collections, including query/header/cookie parameters and mappable PostMeter auth helpers as security schemes.
 
 Known gaps:
 
@@ -83,7 +88,7 @@ Supported:
 - Simple response-code, response-body, duration, size, JSON-path, and XPath assertions mapped to PostMeter assertions where practical, including disabled-state preservation for mapped assertions and XPath assertion variants in nested-controller fixtures.
 - Regex Extractor import/export as PostMeter regex variable extraction.
 - JSON Extractor import/export as PostMeter JSON variable extraction.
-- Unsupported assertions, pre/post processors, and sampler/script elements such as JSR223 processors, HTML validity assertions, MD5 assertions, XML schema assertions, compare assertions, and SMIME assertions are preserved as explicit `jmeter.unsupported.*` collection variables instead of being silently dropped, and are re-exported as disabled JMX elements where the original class can be represented safely.
+- Known unsupported assertions, pre/post processors, and sampler/script elements such as JSR223 processors, HTML validity assertions, MD5 assertions, XML schema assertions, compare assertions, and SMIME assertions are preserved as explicit `jmeter.unsupported.*` collection variables instead of being silently dropped, and are re-exported as disabled JMX elements where the original class can be represented safely. PostMeter does not claim full arbitrary JMX object-graph preservation or JMeter execution parity.
 
 Known gaps:
 
@@ -95,26 +100,28 @@ Known gaps:
 Supported:
 
 - Common curl command import for URL, method, headers, data flags, cookies, multipart-ish form flags, and proxy/retry/TLS metadata.
-- Collection export to readable curl commands.
+- Basic-auth flags, user-agent/referer headers, repeated headers, redirect/compressed/insecure flags, `--url-query`, `-G` query-data mode, repeated data flags, and binary/file upload intent are imported where representable.
+- Collection export to readable curl commands, including PostMeter basic auth and preserved redirect/compressed/insecure/binary metadata when present.
 
 Known gaps:
 
 - Shell expansion and complex quoting edge cases are not fully modeled.
-- Multipart, proxy, retry, and TLS flags are preserved as request data/metadata, not executed with full curl-equivalent transport semantics.
+- Multipart, proxy, retry, redirect, compression, file-upload, and TLS flags are preserved as request data/metadata, not executed with full curl-equivalent transport semantics.
 
 ## HAR
 
 Supported:
 
 - HAR 1.2 request entry import.
-- HAR response status/headers/body import as request examples.
-- HAR timing metadata import as request-local variables.
-- Collection export as a HAR 1.2 log containing request entries.
-- Privacy-sensitive HAR headers, cookies, bodies, and timing/source metadata are tracked in `docs/non-postman-compatibility-matrix.json` so import/export docs do not imply browser-session-perfect parity.
+- HAR request headers, query params, request cookies, post data, and request body encoding metadata import where present.
+- HAR response status/headers/body/cookies import as request examples.
+- HAR timing, redirect URL, response body encoding, and compression metadata import as request-local variables.
+- Collection export as a HAR 1.2 log containing request entries, with request cookies derived from `Cookie` headers.
+- HAR export redacts privacy-sensitive `Authorization`, `Proxy-Authorization`, `Cookie`, and `Set-Cookie` header/cookie values by default; bodies are exported as authored because PostMeter cannot reliably identify arbitrary secret fields in payloads.
 
 Known gaps:
 
-- Cookies, cache entries, browser page metadata, and security details are not fully modeled.
+- Full browser cookie metadata, cache entries, browser page metadata, and security details are not fully modeled.
 
 ## XML And HTML
 

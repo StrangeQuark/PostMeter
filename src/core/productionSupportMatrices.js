@@ -83,6 +83,18 @@ const REQUIRED_ELECTRON_SECURITY_ROWS = Object.freeze([
   ...ELECTRON_IPC_CHANNELS.map((channel) => channel.id)
 ]);
 
+const REQUIRED_NON_POSTMAN_COMPATIBILITY_ROWS = Object.freeze([
+  'curl.cross-shell-quoting',
+  'curl.import-export',
+  'har.import-export',
+  'har.privacy-export-boundary',
+  'jmeter.bridge',
+  'native-postmeter.roundtrip',
+  'openapi.import-export',
+  'openapi.invalid-common-specs',
+  'unsupported.claim-boundaries'
+]);
+
 function buildMatrix(name) {
   const builder = MATRIX_BUILDERS[name];
   if (!builder) {
@@ -129,6 +141,13 @@ function validateMatrix(matrix, expectedName) {
     for (const requiredRowId of REQUIRED_ELECTRON_SECURITY_ROWS) {
       if (!ids.has(requiredRowId)) {
         errors.push(`electron-security matrix must enumerate ${requiredRowId}.`);
+      }
+    }
+  }
+  if (expectedName === 'non-postman-compatibility') {
+    for (const requiredRowId of REQUIRED_NON_POSTMAN_COMPATIBILITY_ROWS) {
+      if (!ids.has(requiredRowId)) {
+        errors.push(`non-postman-compatibility matrix must enumerate ${requiredRowId}.`);
       }
     }
   }
@@ -297,19 +316,19 @@ function buildWorkspaceDurabilityMatrix() {
 
 function buildNonPostmanCompatibilityMatrix() {
   return matrix('non-postman-compatibility', 'src/core/productionSupportMatrices.js', [
-    row('openapi.import-export', 'OpenAPI', 'OpenAPI/Swagger JSON/YAML import and OpenAPI 3.1 export cover paths, auth, variables, request bodies, and examples where representable.', 'implemented', {
+    row('openapi.import-export', 'OpenAPI', 'OpenAPI/Swagger JSON/YAML import and OpenAPI 3.1 export cover common local references, server variables, path/query/header/cookie parameters, Swagger 2.0 body/form-data, auth, binary body hints, request bodies, and examples where representable.', 'implemented', {
       evidenceRefs: ['src/core/openApiFormats.js', 'docs/COMPATIBILITY.md'],
       tests: ['test/electron/collectionFormats.test.js']
     }),
-    row('har.import-export', 'HAR', 'HAR 1.2 import/export covers request entries, response examples, headers, cookies, timings, and body metadata.', 'implemented', {
+    row('har.import-export', 'HAR', 'HAR 1.2 import/export covers request entries, response examples, headers, cookies, redirects, timings, compression, body encoding metadata, and sensitive header/cookie redaction on export.', 'implemented', {
       evidenceRefs: ['src/core/harFormats.js', 'docs/COMPATIBILITY.md'],
       tests: ['test/electron/collectionFormats.test.js']
     }),
-    row('curl.import-export', 'curl', 'curl import/export covers common method, URL, header, data, cookie, proxy, retry, TLS, and quoting variants.', 'implemented', {
+    row('curl.import-export', 'curl', 'curl import/export covers common method, URL, generated names, header, auth, repeated data, query-data, cookie, redirect, compression, file/binary, and quoting variants; proxy, retry, and client TLS flags are preserved as import metadata instead of being claimed as curl-equivalent transport execution.', 'implemented', {
       evidenceRefs: ['src/core/curlFormats.js', 'docs/COMPATIBILITY.md'],
       tests: ['test/electron/collectionFormats.test.js']
     }),
-    row('jmeter.bridge', 'JMeter', 'JMeter import/export remains a bridge for HTTP sampler plans with mapped assertions/timers/controllers and preserve-only unsupported metadata.', 'implemented', {
+    row('jmeter.bridge', 'JMeter', 'JMeter import/export remains a bridge for HTTP sampler plans with mapped assertions/timers/controllers and preserve-only metadata for known unsupported assertion, processor, sampler, and script element classes.', 'implemented', {
       evidenceRefs: ['src/core/jmeterFormats.js', 'test/fixtures/jmeter', 'docs/COMPATIBILITY.md'],
       tests: ['test/electron/collectionFormats.test.js']
     }),
@@ -321,15 +340,15 @@ function buildNonPostmanCompatibilityMatrix() {
       evidenceRefs: ['docs/COMPATIBILITY.md', 'NEXT_STEPS.MD'],
       tests: ['npm run compatibility:non-postman:validate']
     }),
-    row('openapi.invalid-common-specs', 'OpenAPI', 'Invalid-but-common OpenAPI variants fail with clear parser errors instead of crashing or producing misleading collections.', 'implemented', {
+    row('openapi.invalid-common-specs', 'OpenAPI', 'Invalid-but-common OpenAPI and structured collection variants fail with clear parser or fallback errors instead of crashing or producing misleading collections.', 'implemented', {
       evidenceRefs: ['src/core/openApiFormats.js', 'test/electron/collectionFormats.test.js'],
       tests: ['test/electron/collectionFormats.test.js']
     }),
-    row('har.privacy-export-boundary', 'HAR', 'HAR import/export tracks privacy-sensitive headers/cookies/body metadata boundaries in user-facing compatibility docs.', 'implemented', {
+    row('har.privacy-export-boundary', 'HAR', 'HAR export redacts privacy-sensitive authorization/cookie headers and cookie values while documenting that arbitrary payload bodies cannot be reliably secret-scanned.', 'implemented', {
       evidenceRefs: ['src/core/harFormats.js', 'docs/COMPATIBILITY.md'],
       tests: ['test/electron/collectionFormats.test.js']
     }),
-    row('curl.cross-shell-quoting', 'curl', 'curl import/export covers common Linux/macOS/Windows quoting forms and repeated headers without claiming every shell dialect.', 'implemented', {
+    row('curl.cross-shell-quoting', 'curl', 'curl import/export covers common Linux/macOS/Windows quoting forms, including cmd.exe caret line continuations, and repeated headers without claiming every shell dialect.', 'implemented', {
       evidenceRefs: ['src/core/curlFormats.js', 'docs/COMPATIBILITY.md'],
       tests: ['test/electron/collectionFormats.test.js']
     })

@@ -136,6 +136,41 @@ test('renderer bootstrap binds auth input and modal draft confirmation events', 
   assert.deepEqual(calls.resolveModal, ['collection-1', 'collection-2']);
 });
 
+test('renderer bootstrap binds every collection export menu button', () => {
+  const calls = [];
+  const controls = [
+    ['exportCollectionButton', 'postmeter', 'onExportCollection'],
+    ['exportPostmanButton', 'postman', 'onExportPostman'],
+    ['exportOpenApiButton', 'openapi', 'onExportOpenApi'],
+    ['exportJMeterButton', 'jmeter', 'onExportJMeter'],
+    ['exportCurlButton', 'curl', 'onExportCurl'],
+    ['exportHarButton', 'har', 'onExportHar']
+  ];
+  const elements = new Map(controls.map(([id]) => [id, createElement()]));
+  const options = {
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} }
+  };
+  for (const [, label, optionName] of controls) {
+    options[optionName] = () => calls.push(label);
+  }
+
+  bindUi(options);
+  for (const [id] of controls) {
+    elements.get(id).dispatch('click');
+  }
+
+  assert.deepEqual(calls, controls.map(([, label]) => label));
+});
+
 test('renderer bootstrap binds workspace sandbox control buttons', () => {
   const calls = [];
   const controls = [
@@ -224,6 +259,24 @@ test('renderer supplies handlers for all workspace sandbox controls', () => {
     'onResetVault'
   ]) {
     assert.match(rendererSource, new RegExp(`${optionName}:`), `${optionName} should be passed to bindUi`);
+  }
+});
+
+test('renderer supplies explicit collection export format handlers', () => {
+  const rendererSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/renderer.js'), 'utf8');
+  for (const [optionName, format] of [
+    ['onExportCollection', 'postmeter'],
+    ['onExportPostman', 'postman'],
+    ['onExportOpenApi', 'openapi'],
+    ['onExportJMeter', 'jmeter'],
+    ['onExportCurl', 'curl'],
+    ['onExportHar', 'har']
+  ]) {
+    assert.match(
+      rendererSource,
+      new RegExp(`${optionName}: \\(\\) => exportCollection\\(null, '${format}'\\)`),
+      `${optionName} should pass the ${format} export format`
+    );
   }
 });
 

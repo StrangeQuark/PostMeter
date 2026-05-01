@@ -221,15 +221,15 @@ Current implementation status:
    - Added user-facing troubleshooting docs for recovery files, corrupt workspace handling, future-schema refusal, stale temp files, vault encryption failure, and package cache repair.
    - Diagnostics redaction is intentionally outside the completed Step 8 durability claim and remains tracked under the diagnostics/privacy production blocker.
 
-9. Expand non-Postman import/export production compatibility. **Completed as a source-owned matrix and docs pass.**
-   - Create or expand a non-Postman compatibility matrix covering JMeter, OpenAPI, HAR, curl, and native PostMeter round trips with explicit statuses: supported, preserve-only, unsupported, and intentionally out of scope.
-   - JMeter: continue timers/assertions/controllers coverage, preserve unsupported metadata, add malformed but common `.jmx` variants, and avoid claiming full JMeter execution semantics.
-   - OpenAPI: cover OpenAPI 3.0/3.1, servers, path/query/header/cookie parameters, request bodies, examples, auth schemes, variables, binary payload hints, and invalid-but-common specs.
-   - HAR: cover headers, cookies, redirects, query params, post data, binary/base64 bodies, timings, compression metadata, and privacy-sensitive field redaction on export where applicable.
-   - curl: cover shell quoting on Linux/macOS/Windows styles, repeated headers, auth flags, data flags, compressed requests, insecure TLS flags, files/binary bodies, redirects, and generated request names.
-   - Native PostMeter: add round-trip tests for every workspace feature that should be durable, including auth, examples, variables, cookies, certificates, package cache metadata, vault metadata, mocks, visualizers, GraphQL/gRPC profiles, and file bindings.
-   - Add fuzz/property-style tests for source-format detection, parser failure messages, unsupported metadata preservation, and no-crash behavior.
-   - Update `docs/COMPATIBILITY.md` and import/export UI copy so users can see exactly what is executed, preserved, or unsupported.
+9. Expand non-Postman import/export production compatibility. **Completed and validated as a source-owned matrix, docs, and focused corpus pass.**
+   - The non-Postman compatibility matrix covers JMeter, OpenAPI, HAR, curl, and native PostMeter round trips with explicit implemented and preserve-only claim boundaries.
+   - JMeter coverage includes realistic HTTP sampler fixtures, nested controllers, timers, assertions, XPath variants, extractors, disabled assertion state, preserve-only metadata for known unsupported element classes, malformed/no-sampler rejection, and docs that avoid claiming full JMeter execution semantics or arbitrary JMX object-graph preservation.
+   - OpenAPI coverage includes 3.x/Swagger detection, common local `$ref` resolution, server variables, path/query/header/cookie parameters, Swagger 2.0 body/form-data import, request bodies, examples, auth schemes including cookie API keys, variables, binary payload hints, and invalid-but-common specs that fail clearly instead of producing misleading collections.
+   - HAR coverage includes headers, cookies, redirects, query params, post data, body encoding, timings, compression metadata, and privacy-sensitive Authorization/Cookie/Set-Cookie redaction on export where PostMeter can identify the field safely.
+   - curl coverage includes Linux/macOS shell quoting, common Windows line-continuation quoting, repeated headers, auth flags, repeated data flags, query-data mode, compressed requests, insecure TLS flags, files/binary bodies, redirects, and generated request names.
+   - Native PostMeter round-trip coverage includes durable workspace features such as auth, examples, variables, cookies, certificates, package cache metadata, vault metadata, mocks, visualizers, GraphQL/gRPC profiles, and file bindings.
+   - Focused tests cover common source-format detection, parser and fallback failure messages, unsupported metadata preservation boundaries, no-crash behavior, and the source-owned matrix freshness gate.
+   - `docs/COMPATIBILITY.md`, `TECH_SPECS.MD`, generated compatibility/readiness matrices, and import/export user-facing claim boundaries are updated to show what is executed, preserved, redacted, or unsupported.
 
 10. Certify outbound OAuth provider behavior.
    - Keep the product boundary explicit: OAuth is only outbound request authentication for target APIs; do not add PostMeter accounts, app login, or a cloud sign-in gate.

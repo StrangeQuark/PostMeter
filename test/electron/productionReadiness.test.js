@@ -252,3 +252,20 @@ test('production support matrices cover Electron security, workspace durability,
     assert.ok(matrix.rows.length >= 6, `${name} should cover multiple release concerns`);
   }
 });
+
+test('non-Postman compatibility matrix keeps every Step 9 required row enumerated', () => {
+  const matrix = buildMatrix('non-postman-compatibility');
+  const ids = new Set(matrix.rows.map((row) => row.id));
+  assert.deepEqual(validateMatrix(matrix, 'non-postman-compatibility'), []);
+  assert.deepEqual([...ids].sort(), [
+    'curl.cross-shell-quoting',
+    'curl.import-export',
+    'har.import-export',
+    'har.privacy-export-boundary',
+    'jmeter.bridge',
+    'native-postmeter.roundtrip',
+    'openapi.import-export',
+    'openapi.invalid-common-specs',
+    'unsupported.claim-boundaries'
+  ]);
+});

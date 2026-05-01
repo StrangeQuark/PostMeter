@@ -21,26 +21,34 @@ function importOpenApiDocument(document) {
     requests: [],
     folders: []
   });
-  const baseUrl = openApiBaseUrl(document);
+  const server = firstOpenApiServer(document);
+  const baseUrl = openApiBaseUrl(document, server);
+  importOpenApiServerVariables(server, collection);
   const foldersByTag = new Map();
 
-  for (const [pathName, pathItem] of Object.entries(document.paths || {})) {
+  for (const [pathName, rawPathItem] of Object.entries(document.paths || {})) {
+    const pathItem = resolveOpenApiObject(document, rawPathItem);
     if (!pathItem || typeof pathItem !== 'object') {
       continue;
     }
     for (const method of HTTP_METHODS) {
-      const operation = pathItem[method];
+      const operation = resolveOpenApiObject(document, pathItem[method]);
       if (!operation || typeof operation !== 'object') {
         continue;
       }
+      const parameters = [...(pathItem.parameters || []), ...(operation.parameters || [])]
+        .map((parameter) => resolveOpenApiObject(document, parameter))
+        .filter(Boolean);
       const request = requestModel({
         name: operation.operationId || operation.summary || `${method.toUpperCase()} ${pathName}`,
         method: method.toUpperCase(),
         url: `${baseUrl}${openApiPathToPostMeter(pathName)}`
       });
-      importOpenApiParameters([...(pathItem.parameters || []), ...(operation.parameters || [])], request);
-      importOpenApiBody(operation.requestBody, request);
-      importOpenApiResponses(operation.responses, request);
+      importOpenApiParameters(document, parameters, request);
+      if (!importOpenApiBody(document, operation.requestBody, request)) {
+        importSwaggerBodyParameters(document, parameters, operation, request);
+      }
+      importOpenApiResponses(document, operation.responses, request);
       importOpenApiAuth(document, operation, request);
       const tag = Array.isArray(operation.tags) && operation.tags[0] ? String(operation.tags[0]) : '';
       if (tag) {
@@ -67,7 +75,7 @@ function importOpenApiAuth(document, operation, request) {
   const schemes = document.components?.securitySchemes || document.securityDefinitions || {};
   for (const requirement of security) {
     const schemeName = Object.keys(requirement || {})[0];
-    const scheme = schemes[schemeName];
+    const scheme = resolveOpenApiObject(document, schemes[schemeName]);
     if (!scheme) {
       continue;
     }
@@ -90,6 +98,12 @@ function openApiSecuritySchemeToAuth(scheme) {
     return { type: 'basic', username: '{{username}}', password: '{{password}}' };
   }
   if (type === 'apikey' && name) {
+    if (location === 'cookie') {
+      return {
+        type: 'cookie',
+        value: `${name}={{${name}}}`
+      };
+    }
     return {
       type: 'apiKey',
       location: location === 'query' ? 'query' : 'header',
@@ -154,6 +168,9 @@ function exportOpenApiCollection(collection) {
         200: { description: 'Successful response' }
       }
     };
+    for (const name of openApiPathParameterNames(pathName)) {
+      operation.parameters.push(openApiParameter('path', name, requestVariableValue(request, name), { required: true }));
+    }
     for (const pair of request.queryParams || []) {
       if (pair.enabled === false || !pair.key) {
         continue;
@@ -162,6 +179,12 @@ function exportOpenApiCollection(collection) {
     }
     for (const header of request.headers || []) {
       if (header.enabled === false || !header.key || header.key.toLowerCase() === 'content-type') {
+        continue;
+      }
+      if (header.key.toLowerCase() === 'cookie') {
+        for (const cookie of cookieHeaderPairs(header.value)) {
+          operation.parameters.push(openApiParameter('cookie', cookie.name, cookie.value));
+        }
         continue;
       }
       operation.parameters.push(openApiParameter('header', header.key, header.value));
@@ -203,9 +226,13 @@ function looksLikeOpenApiDocument(document) {
   return Boolean(document && typeof document === 'object' && (document.openapi || document.swagger) && document.paths);
 }
 
-function openApiBaseUrl(document) {
-  if (Array.isArray(document.servers) && document.servers[0]?.url) {
-    return stripTrailingSlash(document.servers[0].url);
+function firstOpenApiServer(document) {
+  return Array.isArray(document.servers) && document.servers[0]?.url ? document.servers[0] : null;
+}
+
+function openApiBaseUrl(document, server = firstOpenApiServer(document)) {
+  if (server?.url) {
+    return openApiPathToPostMeter(stripTrailingSlash(server.url));
   }
   if (document.swagger === '2.0' && document.host) {
     const scheme = Array.isArray(document.schemes) && document.schemes[0] ? document.schemes[0] : 'https';
@@ -214,43 +241,134 @@ function openApiBaseUrl(document) {
   return '{{baseUrl}}';
 }
 
-function importOpenApiParameters(parameters, request) {
+function importOpenApiServerVariables(server, collection) {
+  const variables = server?.variables;
+  if (!variables || typeof variables !== 'object') {
+    return;
+  }
+  for (const [name, variable] of Object.entries(variables)) {
+    if (name) {
+      collection.variables.push(keyValue(name, openApiVariableDefault(variable)));
+    }
+  }
+}
+
+function openApiVariableDefault(variable) {
+  const value = variable?.default ?? (Array.isArray(variable?.enum) ? variable.enum[0] : '');
+  return stringifyOpenApiValue(value);
+}
+
+function importOpenApiParameters(document, parameters, request) {
   if (!Array.isArray(parameters)) {
     return;
   }
-  for (const parameter of parameters) {
+  for (const candidate of parameters) {
+    const parameter = resolveOpenApiObject(document, candidate);
     if (!parameter?.name) {
       continue;
     }
+    const value = openApiParameterExample(document, parameter);
     if (parameter.in === 'query') {
-      request.queryParams.push(keyValue(parameter.name, parameter.example ?? ''));
+      request.queryParams.push(keyValue(parameter.name, value));
     } else if (parameter.in === 'header') {
-      request.headers.push(keyValue(parameter.name, parameter.example ?? ''));
+      request.headers.push(keyValue(parameter.name, value));
+    } else if (parameter.in === 'path') {
+      request.variables.push(keyValue(parameter.name, value));
+    } else if (parameter.in === 'cookie') {
+      appendOpenApiCookieParameter(request, parameter.name, value);
     }
   }
 }
 
-function importOpenApiBody(requestBody, request) {
-  const content = requestBody?.content;
+function openApiParameterExample(document, parameter) {
+  const schema = resolveOpenApiObject(document, parameter.schema);
+  const value = parameter.example
+    ?? firstOpenApiExample(document, parameter.examples)
+    ?? parameter.default
+    ?? schema?.example
+    ?? schema?.default
+    ?? '';
+  return stringifyOpenApiValue(value);
+}
+
+function appendOpenApiCookieParameter(request, name, value) {
+  const cookie = `${name}=${value || `{{${name}}}`}`;
+  const existing = request.headers.find((header) => header.key?.toLowerCase() === 'cookie');
+  if (existing) {
+    existing.value = existing.value ? `${existing.value}; ${cookie}` : cookie;
+  } else {
+    request.headers.push(keyValue('Cookie', cookie));
+  }
+}
+
+function importOpenApiBody(document, requestBody, request) {
+  const resolvedRequestBody = resolveOpenApiObject(document, requestBody);
+  const content = resolvedRequestBody?.content;
   if (!content || typeof content !== 'object') {
-    return;
+    return false;
   }
   const contentType = Object.keys(content)[0];
   if (!contentType) {
-    return;
+    return false;
   }
-  const mediaType = content[contentType] || {};
-  const example = mediaType.example ?? firstExample(mediaType.examples);
+  const mediaType = resolveOpenApiObject(document, content[contentType] || {});
+  const example = mediaType.example ?? firstOpenApiExample(document, mediaType.examples);
   request.headers.push(keyValue('Content-Type', contentType));
   request.bodyType = isJsonMime(contentType) ? BODY_TYPES.RAW_JSON : BODY_TYPES.RAW_TEXT;
   request.body = example == null ? '' : typeof example === 'string' ? example : JSON.stringify(example, null, 2);
+  if (isOpenApiBinaryMedia(contentType, mediaType, document)) {
+    request.variables.push(keyValue('openapi.requestBody.binary', 'true'));
+    request.variables.push(keyValue('openapi.requestBody.contentType', contentType));
+  }
+  return true;
 }
 
-function importOpenApiResponses(responses, request) {
-  if (!responses || typeof responses !== 'object') {
+function importSwaggerBodyParameters(document, parameters, operation, request) {
+  const consumes = Array.isArray(operation.consumes) && operation.consumes[0]
+    ? operation.consumes[0]
+    : Array.isArray(document.consumes) && document.consumes[0]
+      ? document.consumes[0]
+      : 'application/json';
+  const bodyParameter = parameters.find((parameter) => parameter?.in === 'body');
+  if (bodyParameter) {
+    const bodySchema = resolveOpenApiObject(document, bodyParameter.schema);
+    const value = bodyParameter.example
+      ?? bodySchema?.example
+      ?? bodySchema?.default
+      ?? null;
+    request.headers.push(keyValue('Content-Type', consumes));
+    request.bodyType = isJsonMime(consumes) ? BODY_TYPES.RAW_JSON : BODY_TYPES.RAW_TEXT;
+    request.body = value == null ? '' : typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+    if (isOpenApiBinaryMedia(consumes, { schema: bodySchema || {} }, document)) {
+      request.variables.push(keyValue('openapi.requestBody.binary', 'true'));
+      request.variables.push(keyValue('openapi.requestBody.contentType', consumes));
+    }
     return;
   }
-  for (const [status, response] of Object.entries(responses)) {
+  const formParameters = parameters.filter((parameter) => parameter?.in === 'formData' && parameter.name);
+  if (!formParameters.length) {
+    return;
+  }
+  const formContentType = consumes || 'application/x-www-form-urlencoded';
+  request.headers.push(keyValue('Content-Type', formContentType));
+  request.bodyType = BODY_TYPES.RAW_TEXT;
+  request.body = formParameters
+    .map((parameter) => `${parameter.name}=${openApiParameterExample(document, parameter)}`)
+    .join(formContentType.includes('multipart/form-data') ? '\n' : '&');
+  for (const parameter of formParameters) {
+    if (parameter.type === 'file' || parameter.schema?.format === 'binary') {
+      request.variables.push(keyValue(`openapi.formData.${parameter.name}.file`, 'true'));
+    }
+  }
+}
+
+function importOpenApiResponses(document, responses, request) {
+  const resolvedResponses = resolveOpenApiObject(document, responses);
+  if (!resolvedResponses || typeof resolvedResponses !== 'object') {
+    return;
+  }
+  for (const [status, rawResponse] of Object.entries(resolvedResponses)) {
+    const response = resolveOpenApiObject(document, rawResponse);
     const statusCode = parseOpenApiStatus(status);
     if (statusCode) {
       request.assertions.push({
@@ -263,7 +381,7 @@ function importOpenApiResponses(responses, request) {
         variableName: ''
       });
     }
-    const responseHeaders = openApiResponseHeaders(response?.headers);
+    const responseHeaders = openApiResponseHeaders(document, response?.headers);
     for (const header of responseHeaders) {
       request.assertions.push({
         enabled: false,
@@ -275,7 +393,7 @@ function importOpenApiResponses(responses, request) {
         variableName: ''
       });
     }
-    request.examples.push(...openApiResponseExamples(status, response, responseHeaders));
+    request.examples.push(...openApiResponseExamples(document, status, response, responseHeaders));
   }
 }
 
@@ -284,21 +402,22 @@ function parseOpenApiStatus(status) {
   return /^\d{3}$/.test(value) ? Number(value) : 0;
 }
 
-function openApiResponseHeaders(headers) {
+function openApiResponseHeaders(document, headers) {
   if (!headers || typeof headers !== 'object') {
     return [];
   }
   return Object.entries(headers)
     .filter(([name]) => name)
-    .map(([name, header]) => keyValue(name, openApiHeaderExample(header)));
+    .map(([name, header]) => keyValue(name, openApiHeaderExample(document, resolveOpenApiObject(document, header))));
 }
 
-function openApiHeaderExample(header) {
-  const value = header?.example ?? firstExample(header?.examples) ?? header?.schema?.example ?? header?.schema?.default ?? '';
+function openApiHeaderExample(document, header) {
+  const schema = resolveOpenApiObject(document, header?.schema);
+  const value = header?.example ?? firstOpenApiExample(document, header?.examples) ?? schema?.example ?? schema?.default ?? '';
   return value == null ? '' : String(value);
 }
 
-function openApiResponseExamples(status, response, headers) {
+function openApiResponseExamples(document, status, response, headers) {
   const content = response?.content;
   if (!content || typeof content !== 'object') {
     return [];
@@ -306,7 +425,7 @@ function openApiResponseExamples(status, response, headers) {
   const statusCode = parseOpenApiStatus(status);
   const examples = [];
   for (const [contentType, mediaType] of Object.entries(content)) {
-    for (const example of openApiMediaExamples(mediaType)) {
+    for (const example of openApiMediaExamples(document, resolveOpenApiObject(document, mediaType))) {
       examples.push({
         name: openApiExampleName(status, contentType, example.name),
         statusCode,
@@ -319,7 +438,7 @@ function openApiResponseExamples(status, response, headers) {
   return examples;
 }
 
-function openApiMediaExamples(mediaType) {
+function openApiMediaExamples(document, mediaType) {
   if (!mediaType || typeof mediaType !== 'object') {
     return [];
   }
@@ -331,7 +450,8 @@ function openApiMediaExamples(mediaType) {
     return [];
   }
   return Object.entries(examples)
-    .map(([name, example]) => ({ name: example?.summary || name, value: example?.value }))
+    .map(([name, example]) => resolveOpenApiObject(document, example))
+    .map((example, index) => ({ name: example?.summary || Object.keys(examples)[index], value: example?.value }))
     .filter((example) => example.value !== undefined);
 }
 
@@ -346,12 +466,53 @@ function serializeOpenApiExample(value) {
   return typeof value === 'string' ? value : JSON.stringify(value, null, 2);
 }
 
+function stringifyOpenApiValue(value) {
+  if (value == null) {
+    return '';
+  }
+  return typeof value === 'string' ? value : JSON.stringify(value);
+}
+
+function isOpenApiBinaryMedia(contentType, mediaType, document) {
+  const schema = resolveOpenApiObject(document, mediaType?.schema) || {};
+  const format = String(schema.format || '').toLowerCase();
+  const encoding = String(schema.contentEncoding || '').toLowerCase();
+  return String(contentType || '').toLowerCase() === 'application/octet-stream'
+    || (schema.type === 'string' && (format === 'binary' || format === 'byte'))
+    || encoding === 'base64';
+}
+
 function firstExample(examples) {
   if (!examples || typeof examples !== 'object') {
     return null;
   }
   const first = Object.values(examples)[0];
   return first?.value ?? null;
+}
+
+function firstOpenApiExample(document, examples) {
+  if (!examples || typeof examples !== 'object') {
+    return null;
+  }
+  const first = resolveOpenApiObject(document, Object.values(examples)[0]);
+  return first?.value ?? null;
+}
+
+function resolveOpenApiObject(document, value, seen = new Set()) {
+  if (!value || typeof value !== 'object' || !value.$ref) {
+    return value;
+  }
+  const ref = String(value.$ref || '');
+  if (!ref.startsWith('#/') || seen.has(ref)) {
+    return value;
+  }
+  seen.add(ref);
+  const target = ref
+    .slice(2)
+    .split('/')
+    .map((part) => part.replace(/~1/g, '/').replace(/~0/g, '~'))
+    .reduce((current, part) => (current && typeof current === 'object' ? current[part] : undefined), document);
+  return resolveOpenApiObject(document, target || value, seen);
 }
 
 function openApiPathToPostMeter(pathName) {
@@ -372,11 +533,21 @@ function postMeterPathToOpenApiPath(pathName) {
   return String(pathName || '/').replace(/\{\{([^}]+)\}\}/g, '{$1}');
 }
 
-function openApiParameter(location, name, value) {
+function openApiPathParameterNames(pathName) {
+  return [...String(pathName || '').matchAll(/\{([^}]+)\}/g)]
+    .map((match) => match[1])
+    .filter(Boolean);
+}
+
+function requestVariableValue(request, key) {
+  return (request.variables || []).find((variable) => variable.enabled !== false && variable.key === key)?.value ?? '';
+}
+
+function openApiParameter(location, name, value, options = {}) {
   return {
     name,
     in: location,
-    required: false,
+    required: options.required === true,
     schema: { type: 'string' },
     example: value ?? ''
   };
@@ -470,6 +641,20 @@ function firstCookieName(value) {
   const pair = String(value || '').split(';').map((part) => part.trim()).find(Boolean);
   const separator = pair ? pair.indexOf('=') : -1;
   return separator > 0 ? pair.slice(0, separator).trim() : '';
+}
+
+function cookieHeaderPairs(value) {
+  return String(value || '')
+    .split(';')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      const separator = part.indexOf('=');
+      return separator > 0
+        ? { name: part.slice(0, separator).trim(), value: part.slice(separator + 1).trim() }
+        : { name: part, value: '' };
+    })
+    .filter((cookie) => cookie.name);
 }
 
 function addOpenApiSecurityScheme(securitySchemes, preferredName, scheme) {
