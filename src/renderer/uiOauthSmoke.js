@@ -41,9 +41,17 @@
     dispatchInput($('authOauthAccessTokenInput'));
     $('authOauthAuthorizationUrlInput').value = `${baseUrl}/authorize?mode=bad-state`;
     dispatchInput($('authOauthAuthorizationUrlInput'));
-    await startPkceFlow();
-    assertUiSmoke(lastStatusMessage.includes('OAuth authorization failed'), 'PKCE state mismatch did not fail cleanly.');
-    assertUiSmoke($('validationLabel').textContent.includes('state did not match'), 'PKCE state mismatch did not render useful validation details.');
+    const badStateFlow = startPkceFlow();
+    await waitForUiSmoke(
+      () => $('oauthProgressStatus').textContent.includes('callbackRejected'),
+      'PKCE state mismatch did not reject the unexpected callback.',
+      3000,
+      global
+    );
+    await cancelOauthFlow();
+    await badStateFlow;
+    assertUiSmoke(lastStatusMessage.includes('OAuth authorization cancelled'), 'PKCE state mismatch did not remain cancellable.');
+    assertUiSmoke($('authOauthAccessTokenInput').value === '', 'PKCE state mismatch unexpectedly persisted a token.');
 
     $('authOauthAuthorizationUrlInput').value = `${baseUrl}/authorize?mode=token-error`;
     dispatchInput($('authOauthAuthorizationUrlInput'));

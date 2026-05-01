@@ -176,6 +176,37 @@ test('passes cookie jar through collection runs and returns updated cookies', as
   assert.equal(result.cookies[0].value, 'updated');
 });
 
+test('carries refreshed OAuth auth forward during collection runs', async () => {
+  const oauthRequest = requestModel({
+    id: 'oauth-request',
+    name: 'OAuth Request',
+    method: 'GET',
+    url: 'https://api.example.test/oauth',
+    auth: { type: 'oauth2', grantType: 'clientCredentials', accessToken: 'stale-token' }
+  });
+  const collection = collectionModel({
+    name: 'OAuth Collection',
+    requests: [oauthRequest, oauthRequest]
+  });
+  const observedAuth = [];
+  const result = await runCollection(collection, null, {
+    sendRequest: async (request) => {
+      observedAuth.push(request.auth.accessToken);
+      return {
+        ...response(200, '{}'),
+        updatedAuth: { ...request.auth, accessToken: 'fresh-token' }
+      };
+    }
+  });
+
+  assert.equal(result.passed, true);
+  assert.deepEqual(observedAuth, ['stale-token', 'fresh-token']);
+  assert.equal(result.results[0].updatedAuth.accessToken, 'fresh-token');
+  assert.equal(Object.prototype.propertyIsEnumerable.call(result.results[0], 'updatedAuth'), false);
+  assert.equal(JSON.stringify(result).includes('fresh-token'), false);
+  assert.equal(result.authUpdates.get('oauth-request').accessToken, 'fresh-token');
+});
+
 test('marks collection runner failures when assertions fail', async () => {
   const collection = collectionModel({
     name: 'Failures',

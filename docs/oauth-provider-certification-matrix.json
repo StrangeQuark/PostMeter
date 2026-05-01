@@ -1,0 +1,217 @@
+{
+  "schemaVersion": 1,
+  "generatedFrom": "src/core/oauthProviderCertification.js",
+  "deterministic": true,
+  "providers": [
+    {
+      "id": "google",
+      "name": "Google OAuth 2.0",
+      "capabilities": {
+        "authorizationCodePkce": "required",
+        "refreshToken": "required-with-offline-access",
+        "clientCredentials": "not-applicable-for-general-user-oauth",
+        "deviceCode": "provider-supported-optional",
+        "loopbackRedirect": "required",
+        "customSchemeRedirect": "required"
+      },
+      "envVars": [
+        "POSTMETER_GOOGLE_OAUTH_CLIENT_ID",
+        "POSTMETER_GOOGLE_OAUTH_CLIENT_SECRET",
+        "POSTMETER_GOOGLE_OAUTH_AUTHORIZATION_URL",
+        "POSTMETER_GOOGLE_OAUTH_TOKEN_URL",
+        "POSTMETER_GOOGLE_OAUTH_SCOPES"
+      ],
+      "evidenceRequired": [
+        "provider-date-and-app-type",
+        "redirect-uri-registration",
+        "authorization-code-pkce",
+        "refresh-token",
+        "device-code-where-supported",
+        "client-credentials-where-supported",
+        "custom-scheme-callback",
+        "loopback-callback",
+        "cancellation-or-abandoned-browser",
+        "token-storage-and-redaction"
+      ]
+    },
+    {
+      "id": "microsoft-entra",
+      "name": "Microsoft Entra ID / Azure AD",
+      "capabilities": {
+        "authorizationCodePkce": "required",
+        "refreshToken": "required",
+        "clientCredentials": "required-for-app-only-apis",
+        "deviceCode": "required",
+        "loopbackRedirect": "required",
+        "customSchemeRedirect": "required"
+      },
+      "envVars": [
+        "POSTMETER_ENTRA_OAUTH_CLIENT_ID",
+        "POSTMETER_ENTRA_OAUTH_CLIENT_SECRET",
+        "POSTMETER_ENTRA_OAUTH_TENANT_ID",
+        "POSTMETER_ENTRA_OAUTH_AUTHORIZATION_URL",
+        "POSTMETER_ENTRA_OAUTH_TOKEN_URL",
+        "POSTMETER_ENTRA_OAUTH_DEVICE_AUTHORIZATION_URL",
+        "POSTMETER_ENTRA_OAUTH_SCOPES"
+      ],
+      "evidenceRequired": [
+        "provider-date-and-app-type",
+        "redirect-uri-registration",
+        "authorization-code-pkce",
+        "refresh-token",
+        "device-code-where-supported",
+        "client-credentials-where-supported",
+        "custom-scheme-callback",
+        "loopback-callback",
+        "cancellation-or-abandoned-browser",
+        "token-storage-and-redaction"
+      ]
+    },
+    {
+      "id": "github",
+      "name": "GitHub OAuth Apps",
+      "capabilities": {
+        "authorizationCodePkce": "required",
+        "refreshToken": "provider-dependent",
+        "clientCredentials": "not-applicable",
+        "deviceCode": "required-for-certification",
+        "loopbackRedirect": "required",
+        "customSchemeRedirect": "required"
+      },
+      "envVars": [
+        "POSTMETER_GITHUB_OAUTH_CLIENT_ID",
+        "POSTMETER_GITHUB_OAUTH_CLIENT_SECRET",
+        "POSTMETER_GITHUB_OAUTH_AUTHORIZATION_URL",
+        "POSTMETER_GITHUB_OAUTH_TOKEN_URL",
+        "POSTMETER_GITHUB_OAUTH_DEVICE_AUTHORIZATION_URL",
+        "POSTMETER_GITHUB_OAUTH_SCOPES"
+      ],
+      "evidenceRequired": [
+        "provider-date-and-app-type",
+        "redirect-uri-registration",
+        "authorization-code-pkce",
+        "refresh-token-where-enabled",
+        "device-code-where-supported",
+        "client-credentials-where-supported",
+        "custom-scheme-callback",
+        "loopback-callback",
+        "cancellation-or-abandoned-browser",
+        "token-storage-and-redaction"
+      ]
+    }
+  ],
+  "mockedScenarios": [
+    {
+      "id": "authorization-code-pkce-success",
+      "required": true
+    },
+    {
+      "id": "authorization-code-provider-denial",
+      "required": true
+    },
+    {
+      "id": "authorization-code-timeout-or-abandonment",
+      "required": true
+    },
+    {
+      "id": "authorization-code-bad-state",
+      "required": true
+    },
+    {
+      "id": "authorization-code-bad-code-verifier",
+      "required": true
+    },
+    {
+      "id": "refresh-token-success",
+      "required": true
+    },
+    {
+      "id": "refresh-token-revoked",
+      "required": true
+    },
+    {
+      "id": "client-credentials-success",
+      "required": true
+    },
+    {
+      "id": "device-code-success",
+      "required": true
+    },
+    {
+      "id": "device-code-denial",
+      "required": true
+    },
+    {
+      "id": "device-code-expired",
+      "required": true
+    },
+    {
+      "id": "device-code-cancellation",
+      "required": true
+    },
+    {
+      "id": "malformed-token-response",
+      "required": true
+    },
+    {
+      "id": "missing-access-token",
+      "required": true
+    },
+    {
+      "id": "token-endpoint-redirect-denial",
+      "required": true
+    },
+    {
+      "id": "token-storage-redaction-policy",
+      "required": true
+    }
+  ],
+  "liveRun": {
+    "enabledBy": "POSTMETER_LIVE_OAUTH_CERTIFICATION=1",
+    "skippedByDefault": true,
+    "evidenceFileEnv": "POSTMETER_LIVE_OAUTH_EVIDENCE_FILE",
+    "artifactDirectory": "validation-artifacts/oauth-provider-certification",
+    "requiredRedirectUris": [
+      "postmeter://oauth/callback",
+      "http://127.0.0.1:{dynamic-port}/oauth/callback"
+    ],
+    "acceptedGrantTypes": [
+      "authorization-code-pkce",
+      "refresh-token",
+      "client-credentials",
+      "device-code"
+    ],
+    "acceptedArtifactTypes": [
+      "sanitized-run-log",
+      "sanitized-transcript",
+      "sanitized-screenshot",
+      "manual-checklist"
+    ],
+    "artifactChecksumRequired": true,
+    "providerEndpointValidation": {
+      "google": {
+        "authorizationHost": "accounts.google.com",
+        "tokenHosts": [
+          "*.googleapis.com",
+          "accounts.google.com"
+        ]
+      },
+      "microsoft-entra": {
+        "authorityHosts": [
+          "login.microsoftonline.com",
+          "login.microsoftonline.us",
+          "login.chinacloudapi.cn",
+          "login.microsoftonline.de"
+        ],
+        "tenantPathRequired": true
+      },
+      "github": {
+        "host": "github.com",
+        "authorizationPath": "/login/oauth/authorize",
+        "tokenPath": "/login/oauth/access_token",
+        "deviceAuthorizationPath": "/login/device/code"
+      }
+    },
+    "redactionRequired": true
+  }
+}

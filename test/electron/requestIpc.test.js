@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const http = require('node:http');
 const test = require('node:test');
 const {
   collectionModel,
@@ -188,3 +189,104 @@ test('request IPC returns detailed callback-style pre-request test failures with
   assert.equal(workspace.history.length, 0);
   assert.equal(saveCalls, 1);
 });
+
+test('request IPC persists refreshed OAuth auth without returning raw auth in the response payload', async () => {
+  const handlers = new Map();
+  const workspace = workspaceModel({
+    collections: [
+      collectionModel({
+        id: 'collection-1',
+        name: 'OAuth Requests',
+        requests: [
+          requestModel({
+            id: 'request-1',
+            name: 'Refresh OAuth',
+            method: 'GET',
+            url: '',
+            auth: {
+              type: 'oauth2',
+              grantType: 'authorizationCode',
+              accessToken: 'stale-ipc-token',
+              refreshToken: 'ipc-refresh-token',
+              tokenUrl: '',
+              expiresAt: '2000-01-01T00:00:00.000Z'
+            }
+          })
+        ]
+      })
+    ],
+    environments: [],
+    cookies: [],
+    history: []
+  });
+  let savedWorkspace = null;
+  let capturedAuthorization = '';
+  const server = await createServer(async (request, response) => {
+    if (request.url === '/token') {
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({
+        access_token: 'ipc-fresh-token',
+        refresh_token: 'ipc-rotated-refresh-token',
+        token_type: 'Bearer',
+        expires_in: 600
+      }));
+      return;
+    }
+    capturedAuthorization = request.headers.authorization || '';
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({ ok: true }));
+  });
+
+  try {
+    workspace.collections[0].requests[0].url = `${server.baseUrl}/resource`;
+    workspace.collections[0].requests[0].auth.tokenUrl = `${server.baseUrl}/token`;
+    registerRequestIpc({
+      getWorkspace: () => workspace,
+      getWorkspaceId: () => 'workspace-1',
+      ipcMain: {
+        handle(channel, handler) {
+          handlers.set(channel, handler);
+        }
+      },
+      mutateWorkspace: async (mutator) => {
+        const nextWorkspace = await mutator(workspace);
+        savedWorkspace = structuredClone(nextWorkspace);
+        return nextWorkspace;
+      },
+      saveWorkspace: async (nextWorkspace) => nextWorkspace,
+      setWorkspace: () => {}
+    });
+
+    const response = await handlers.get('request:send')(
+      null,
+      structuredClone(workspace.collections[0].requests[0]),
+      null
+    );
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.updatedAuth, undefined);
+    assert.equal(response.updatedAuthPersisted, true);
+    assert.equal(JSON.stringify(response).includes('ipc-fresh-token'), false);
+    assert.equal(JSON.stringify(response).includes('ipc-rotated-refresh-token'), false);
+    assert.equal(capturedAuthorization, 'Bearer ipc-fresh-token');
+    assert.equal(savedWorkspace.collections[0].requests[0].auth.accessToken, 'ipc-fresh-token');
+    assert.equal(savedWorkspace.collections[0].requests[0].auth.refreshToken, 'ipc-rotated-refresh-token');
+  } finally {
+    await server.close();
+  }
+});
+
+async function createServer(handler) {
+  const server = http.createServer((request, response) => {
+    handler(request, response).catch((error) => {
+      response.statusCode = 500;
+      response.end(error.stack || String(error));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    close: () => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
+  };
+}

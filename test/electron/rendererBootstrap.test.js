@@ -262,6 +262,13 @@ test('renderer supplies handlers for all workspace sandbox controls', () => {
   }
 });
 
+test('renderer cancels active OAuth flow when loaded workspace context resets', () => {
+  const rendererSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/renderer.js'), 'utf8');
+  assert.match(rendererSource, /function cancelActiveOauthFlowForContextReset\(\)/);
+  assert.match(rendererSource, /window\.postmeter\.oauth\.cancelFlow\(flowId\)/);
+  assert.match(rendererSource, /function applyLoadedWorkspace\(loaded, options = \{\}\) \{\s*cancelActiveOauthFlowForContextReset\(\);/);
+});
+
 test('renderer supplies explicit collection export format handlers', () => {
   const rendererSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/renderer.js'), 'utf8');
   for (const [optionName, format] of [

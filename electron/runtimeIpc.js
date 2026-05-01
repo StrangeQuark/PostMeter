@@ -4,6 +4,7 @@ const { writeTextFileAtomic } = require('../src/core/workspacePersistence');
 const { selectedSaveFilePath } = require('./fileDialogs');
 const {
   applyCollectionRunMutationsToWorkspace,
+  findWorkspaceRequestContext,
   mergeCookieJarByDelta
 } = require('./workspaceMutations');
 const {
@@ -63,12 +64,27 @@ function registerRuntimeIpc(options = {}) {
       });
       if (Array.isArray(result.cookies)) {
         await mutateWorkspace(async (latestWorkspace) => {
+          if (result.updatedAuth && request.id) {
+            const latestRequestContext = findWorkspaceRequestContext(latestWorkspace, request.id);
+            if (latestRequestContext?.request) {
+              latestRequestContext.request.auth = result.updatedAuth;
+            }
+          }
           latestWorkspace.cookies = mergeCookieJarByDelta(latestWorkspace.cookies || [], baseCookies, result.cookies);
           return latestWorkspace;
         }, { workspaceId });
+      } else if (result.updatedAuth && request.id) {
+        await mutateWorkspace(async (latestWorkspace) => {
+          const latestRequestContext = findWorkspaceRequestContext(latestWorkspace, request.id);
+          if (latestRequestContext?.request) {
+            latestRequestContext.request.auth = result.updatedAuth;
+          }
+          return latestWorkspace;
+        }, { workspaceId });
       }
-      assertLoadResultPayload(result);
-      return result;
+      const publicResult = publicLoadResult(result);
+      assertLoadResultPayload(publicResult);
+      return publicResult;
     } finally {
       activeLoadTests.delete(id);
     }
@@ -139,8 +155,9 @@ function registerRuntimeIpc(options = {}) {
           return latestWorkspace;
         }, { workspaceId });
       }
-      assertCollectionRunResultPayload(result);
-      return result;
+      const publicResult = publicCollectionRunResult(result);
+      assertCollectionRunResultPayload(publicResult);
+      return publicResult;
     } finally {
       activeCollectionRuns.delete(id);
     }
@@ -157,7 +174,8 @@ function registerRuntimeIpc(options = {}) {
   });
 
   ipcMain.handle('runner:export', async (_event, result, format) => {
-    assertCollectionRunResultPayload(result);
+    const publicResult = publicCollectionRunResult(result);
+    assertCollectionRunResultPayload(publicResult);
     assertExportFormat(format);
     const extension = format === 'csv' ? 'csv' : 'json';
     const saveResult = await dialog.showSaveDialog(getMainWindow(), {
@@ -172,13 +190,14 @@ function registerRuntimeIpc(options = {}) {
     if (!filePath) {
       return fileOperationResult({ cancelled: true });
     }
-    const content = format === 'csv' ? collectionRunResultToCsv(result) : JSON.stringify(result, null, 2);
+    const content = format === 'csv' ? collectionRunResultToCsv(publicResult) : JSON.stringify(publicResult, null, 2);
     await writeTextFileAtomic(filePath, content, { prefix: 'postmeter-runner-export' });
     return fileOperationResult({ cancelled: false, path: filePath });
   });
 
   ipcMain.handle('load:export', async (_event, result, format) => {
-    assertLoadResultPayload(result);
+    const publicResult = publicLoadResult(result);
+    assertLoadResultPayload(publicResult);
     assertExportFormat(format);
     const extension = format === 'csv' ? 'csv' : 'json';
     const saveResult = await dialog.showSaveDialog(getMainWindow(), {
@@ -193,7 +212,7 @@ function registerRuntimeIpc(options = {}) {
     if (!filePath) {
       return fileOperationResult({ cancelled: true });
     }
-    const content = format === 'csv' ? loadTestResultToCsv(result) : JSON.stringify(result, null, 2);
+    const content = format === 'csv' ? loadTestResultToCsv(publicResult) : JSON.stringify(publicResult, null, 2);
     await writeTextFileAtomic(filePath, content, { prefix: 'postmeter-load-export' });
     return fileOperationResult({ cancelled: false, path: filePath });
   });
@@ -220,6 +239,23 @@ function cloneJson(value) {
     return value;
   }
   return JSON.parse(JSON.stringify(value));
+}
+
+function publicLoadResult(result) {
+  const publicResult = cloneJson(result) || {};
+  delete publicResult.updatedAuth;
+  return publicResult;
+}
+
+function publicCollectionRunResult(result) {
+  const publicResult = cloneJson(result) || {};
+  if (Array.isArray(publicResult.results)) {
+    for (const item of publicResult.results) {
+      delete item.updatedAuth;
+    }
+  }
+  delete publicResult.authUpdates;
+  return publicResult;
 }
 
 module.exports = {

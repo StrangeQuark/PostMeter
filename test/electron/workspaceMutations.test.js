@@ -172,7 +172,11 @@ test('applies collection run script mutations to environment, collection, and re
     environment: { id: 'e1', name: 'Env', variables: [{ enabled: true, key: 'envToken', value: 'runner' }] },
     collectionVariables: [{ enabled: true, key: 'collectionToken', value: 'runner' }],
     results: [
-      { requestId: 'r1', localVariables: [{ enabled: true, key: 'localOne', value: 'runner' }] },
+      {
+        requestId: 'r1',
+        localVariables: [{ enabled: true, key: 'localOne', value: 'runner' }],
+        updatedAuth: { type: 'oauth2', grantType: 'clientCredentials', accessToken: 'fresh-runner-token' }
+      },
       { requestId: 'r2', localVariables: [{ enabled: true, key: 'localTwo', value: 'runner' }] }
     ]
   });
@@ -180,6 +184,7 @@ test('applies collection run script mutations to environment, collection, and re
   assert.equal(workspace.environments[0].variables[0].value, 'runner');
   assert.equal(workspace.collections[0].variables[0].key, 'collectionToken');
   assert.equal(workspace.collections[0].requests[0].variables[0].key, 'localOne');
+  assert.equal(workspace.collections[0].requests[0].auth.accessToken, 'fresh-runner-token');
   assert.equal(workspace.collections[0].requests[1].variables[0].key, 'localTwo');
 });
 

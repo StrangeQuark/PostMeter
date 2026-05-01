@@ -273,6 +273,9 @@ function assertLoadResultPayload(value, field = 'result') {
       assertSchemaFields('loadSample', sample, `${field}.samples[${index}]`);
     });
   }
+  if (value.updatedAuth != null) {
+    fail(`${field}.updatedAuth must not be included in public IPC payloads.`);
+  }
 }
 
 function assertLoadProgressPayload(value, field = 'progress') {
@@ -317,6 +320,9 @@ function assertCollectionRunResultPayload(value, field = 'result') {
       if (result.localVariables != null) {
         assertPairs(result.localVariables, `${itemField}.localVariables`);
       }
+      if (result.updatedAuth != null) {
+        fail(`${itemField}.updatedAuth must not be included in public IPC payloads.`);
+      }
     });
   }
   if (value.environment != null) {
@@ -351,7 +357,7 @@ function assertResponsePayload(value, field = 'response') {
     });
   }
   if (value.updatedAuth != null) {
-    assertAuthPayload(value.updatedAuth, `${field}.updatedAuth`);
+    fail(`${field}.updatedAuth must not be included in public IPC payloads.`);
   }
   if (value.updatedCookies != null) {
     assertCookies(value.updatedCookies, `${field}.updatedCookies`);

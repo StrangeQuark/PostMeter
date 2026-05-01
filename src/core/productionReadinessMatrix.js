@@ -1,7 +1,7 @@
 const STATUS_DESCRIPTIONS = Object.freeze({
   implemented: 'Implementation and local validation exist.',
   validated: 'Implementation has required local and native-runner evidence.',
-  'external-validation-required': 'Implementation exists, but final evidence requires native runners, provider credentials, or signing assets.',
+  'external-validation-required': 'Implementation exists, but final evidence requires native runners, provider credentials plus sanitized evidence, or signing assets.',
   blocked: 'Release-blocking implementation is not complete.',
   deferred: 'Deliberately outside the current production claim.',
   'not-applicable': 'Not part of this product or release track.'
@@ -202,8 +202,9 @@ function buildProductionReadinessMatrix() {
     }),
     row('oauth.live-certification', 'oauth', 'Live provider certification requires maintainer-owned Google, Microsoft Entra ID, and GitHub OAuth apps.', 'external-validation-required', {
       releaseBlocking: true,
-      commands: ['future npm run oauth:certify:live'],
-      evidenceRefs: ['docs/OAUTH_PROVIDER_CERTIFICATION.md']
+      commands: ['npm run oauth:certify:validate', 'npm run oauth:certify:mock', 'npm run oauth:certify:live'],
+      evidenceRefs: ['src/core/oauthProviderCertification.js', 'docs/oauth-provider-certification-matrix.json', 'docs/OAUTH_PROVIDER_CERTIFICATION.md', '.github/workflows/oauth-provider-certification.yml'],
+      notes: 'Mocked certification is fully automated and runs without provider credentials. Live certification is skipped by default and requires POSTMETER_LIVE_OAUTH_CERTIFICATION=1, maintainer-owned provider clients/secrets, official-provider OAuth endpoint URLs, sanitized evidence JSON, and checksum-verified forward-slash repository-relative evidence artifacts under validation-artifacts/oauth-provider-certification/ before the row can move from external-validation-required to validated. Credentials alone are not accepted as live certification evidence.'
     }),
     row('release.signing', 'release', 'Signed/notarized stable artifacts require maintainer-controlled certificates.', 'external-validation-required', {
       releaseBlocking: true,

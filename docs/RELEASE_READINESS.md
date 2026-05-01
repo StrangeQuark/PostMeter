@@ -29,7 +29,7 @@ Status meanings:
 
 - `validated`: implementation plus required local/native evidence exist.
 - `implemented`: implementation and local validation exist, but the row is not claiming final external evidence.
-- `external-validation-required`: implementation exists or is scaffolded, but final evidence requires native runners, maintainer credentials, or signing assets.
+- `external-validation-required`: implementation exists or is scaffolded, but final evidence requires native runners, maintainer credentials plus sanitized evidence, or signing assets.
 - `blocked`: release-blocking work remains incomplete.
 - `deferred`: deliberately outside the current production claim.
 - `not-applicable`: not part of this product or release track.
@@ -98,7 +98,7 @@ Release builds are unsigned until maintainer-controlled certificates exist. Wind
 
 The stable production readiness claim remains intentionally fail-closed until every release-blocking row is promoted to `validated`. Current high-level blockers include:
 
-- Live OAuth provider certification against maintainer-owned Google, Microsoft Entra ID / Azure AD, and GitHub OAuth apps.
+- Live OAuth provider certification against maintainer-owned Google, Microsoft Entra ID / Azure AD, and GitHub OAuth apps. The local matrix and mocked provider corpus are automated through `npm run oauth:certify:validate` and `npm run oauth:certify:mock`; `npm run oauth:certify:live` remains skipped until maintainer credentials are explicitly supplied, and fails closed without official-provider endpoint URLs, sanitized live evidence JSON, plus checksum-verified forward-slash repository-relative evidence artifacts under `validation-artifacts/oauth-provider-certification/`.
 - Signing/notarization credentials for stable signed artifacts.
 - Local diagnostics/privacy implementation with redaction tests.
 - Final native packaged runner evidence and manual production QA where required.

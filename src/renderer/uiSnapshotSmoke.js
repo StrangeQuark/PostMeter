@@ -72,7 +72,7 @@
       dispatchInput($('authOauthAuthorizationUrlInput'));
       renderOauthProgress({
         type: 'pkce',
-        status: 'waitingForCallback',
+        status: 'waitingForAuthorization',
         message: 'Waiting for authorization callback.',
         redirectUri: 'http://127.0.0.1:42123/oauth/callback'
       });

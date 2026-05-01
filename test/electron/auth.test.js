@@ -7,6 +7,9 @@ const {
   normalizeAuth,
   pkceChallengeForVerifier,
   pollOAuthDeviceToken,
+  redactOAuthErrorMessage,
+  refreshOAuthToken,
+  requestOAuthClientCredentialsToken,
   requestOAuthDeviceAuthorization,
   shouldRequestClientCredentialsToken,
   validateAuth
@@ -471,6 +474,162 @@ test('rejects OAuth 2.0 authorization-code PKCE state mismatches', async () => {
   );
 });
 
+test('rejects OAuth 2.0 authorization-code malformed callbacks and redacts provider errors', async () => {
+  const session = {
+    tokenUrl: 'https://auth.example.test/token',
+    redirectUri: 'http://127.0.0.1:49152/oauth/callback',
+    clientId: 'client-id',
+    state: 'expected-state',
+    codeVerifier: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ'
+  };
+  await assert.rejects(
+    () => exchangeOAuthAuthorizationCode({
+      type: 'oauth2',
+      grantType: 'authorizationCode'
+    }, session, 'not a callback', null),
+    /callback URL is not valid/
+  );
+  await assert.rejects(
+    () => exchangeOAuthAuthorizationCode({
+      type: 'oauth2',
+      grantType: 'authorizationCode'
+    }, session, 'http://127.0.0.1:49152/oauth/callback?state=expected-state', null),
+    /did not include an authorization code/
+  );
+  await assert.rejects(
+    () => exchangeOAuthAuthorizationCode({
+      type: 'oauth2',
+      grantType: 'authorizationCode'
+    }, session, 'http://127.0.0.1:49152/oauth/callback?error=access_denied&error_description=bad%20access_token=secret-token&state=expected-state', null),
+    (error) => {
+      assert.match(error.message, /access_token=\[redacted\]/);
+      assert.doesNotMatch(error.message, /secret-token/);
+      return true;
+    }
+  );
+});
+
+test('rejects OAuth 2.0 PKCE code verifier values outside RFC bounds', () => {
+  assert.throws(() => pkceChallengeForVerifier('too-short'), /PKCE code verifier must be 43 to 128/);
+  assert.throws(
+    () => createOAuthPkceSession({
+      type: 'oauth2',
+      grantType: 'authorizationCode',
+      authorizationUrl: 'https://auth.example.test/authorize',
+      tokenUrl: 'https://auth.example.test/token',
+      clientId: 'client-id'
+    }, null, {
+      redirectUri: 'http://127.0.0.1:49152/oauth/callback',
+      state: 'test-state',
+      codeVerifier: 'bad verifier with spaces'
+    }),
+    /PKCE code verifier must be 43 to 128/
+  );
+});
+
+test('OAuth 2.0 token requests reject redirects without forwarding secret bodies', async () => {
+  let leakedBody = '';
+  const server = await createServer(async (request, response) => {
+    if (request.url === '/token') {
+      response.statusCode = 307;
+      response.setHeader('Location', `${server.baseUrl}/leak`);
+      response.setHeader('Content-Type', 'text/html');
+      response.end('<!doctype html><p>redirect</p>');
+      return;
+    }
+    if (request.url === '/leak') {
+      leakedBody = await readRequestBody(request);
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({ access_token: 'should-not-happen' }));
+      return;
+    }
+    response.statusCode = 404;
+    response.end();
+  });
+
+  try {
+    await assert.rejects(
+      () => requestOAuthClientCredentialsToken({
+        type: 'oauth2',
+        grantType: 'clientCredentials',
+        tokenUrl: `${server.baseUrl}/token`,
+        clientId: 'client-id',
+        clientSecret: 'client-secret'
+      }, null),
+      /refused an HTTP redirect/
+    );
+    assert.equal(leakedBody, '');
+  } finally {
+    await server.close();
+  }
+});
+
+test('OAuth 2.0 token request failures are redacted and malformed responses fail clearly', async () => {
+  const server = await createServer(async (request, response) => {
+    if (request.url === '/invalid-json') {
+      response.setHeader('Content-Type', 'application/json');
+      response.end('{not-json');
+      return;
+    }
+    if (request.url === '/missing-access-token') {
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({ token_type: 'Bearer' }));
+      return;
+    }
+    if (request.url === '/revoked') {
+      response.statusCode = 400;
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({
+        error: 'invalid_grant',
+        error_description: 'revoked refresh_token=refresh-secret client_secret=client-secret'
+      }));
+      return;
+    }
+    response.statusCode = 404;
+    response.end();
+  });
+
+  try {
+    await assert.rejects(
+      () => requestOAuthClientCredentialsToken({
+        type: 'oauth2',
+        grantType: 'clientCredentials',
+        tokenUrl: `${server.baseUrl}/invalid-json`,
+        clientId: 'client-id',
+        clientSecret: 'client-secret'
+      }, null),
+      /invalid JSON/
+    );
+    await assert.rejects(
+      () => requestOAuthClientCredentialsToken({
+        type: 'oauth2',
+        grantType: 'clientCredentials',
+        tokenUrl: `${server.baseUrl}/missing-access-token`,
+        clientId: 'client-id',
+        clientSecret: 'client-secret'
+      }, null),
+      /did not include an access token/
+    );
+    await assert.rejects(
+      () => refreshOAuthToken({
+        type: 'oauth2',
+        tokenUrl: `${server.baseUrl}/revoked`,
+        refreshToken: 'refresh-token',
+        clientId: 'client-id',
+        clientSecret: 'client-secret'
+      }, null),
+      (error) => {
+        assert.match(error.message, /refresh_token=\[redacted\]/);
+        assert.match(error.message, /client_secret=\[redacted\]/);
+        assert.doesNotMatch(error.message, /refresh-secret|client-secret/);
+        return true;
+      }
+    );
+  } finally {
+    await server.close();
+  }
+});
+
 test('runs OAuth 2.0 device authorization and polling helpers', async () => {
   let tokenAttempts = 0;
   const server = await createServer(async (request, response) => {
@@ -529,6 +688,147 @@ test('runs OAuth 2.0 device authorization and polling helpers', async () => {
   } finally {
     await server.close();
   }
+});
+
+test('handles OAuth 2.0 device-code slow_down polling responses', async () => {
+  let tokenAttempts = 0;
+  const server = await createServer(async (request, response) => {
+    if (request.url === '/device') {
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({
+        device_code: 'slow-device',
+        user_code: 'SLOW',
+        verification_uri: 'https://auth.example.test/device',
+        expires_in: 30,
+        interval: 0.001
+      }));
+      return;
+    }
+    if (request.url === '/token') {
+      tokenAttempts++;
+      response.setHeader('Content-Type', 'application/json');
+      if (tokenAttempts === 1) {
+        response.statusCode = 400;
+        response.end(JSON.stringify({ error: 'slow_down' }));
+        return;
+      }
+      response.end(JSON.stringify({
+        access_token: 'slow-device-access-token',
+        token_type: 'Bearer',
+        expires_in: 600
+      }));
+      return;
+    }
+    response.statusCode = 404;
+    response.end();
+  });
+
+  try {
+    const pendingAuth = await requestOAuthDeviceAuthorization({
+      type: 'oauth2',
+      grantType: 'deviceCode',
+      deviceAuthorizationUrl: `${server.baseUrl}/device`,
+      tokenUrl: `${server.baseUrl}/token`,
+      clientId: 'client-id'
+    }, null);
+    const completedAuth = await pollOAuthDeviceToken(pendingAuth, null);
+    assert.equal(completedAuth.accessToken, 'slow-device-access-token');
+    assert.equal(tokenAttempts, 2);
+  } finally {
+    await server.close();
+  }
+});
+
+test('handles OAuth 2.0 device-code provider denial and expiration errors', async () => {
+  const server = await createServer(async (request, response) => {
+    if (request.url === '/device-denied') {
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({
+        device_code: 'denied-device',
+        user_code: 'DENY',
+        verification_uri: 'https://auth.example.test/device',
+        expires_in: 30,
+        interval: 0.001
+      }));
+      return;
+    }
+    if (request.url === '/device-expired') {
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({
+        device_code: 'expired-device',
+        user_code: 'EXPIRE',
+        verification_uri: 'https://auth.example.test/device',
+        expires_in: 30,
+        interval: 0.001
+      }));
+      return;
+    }
+    if (request.url === '/token') {
+      response.statusCode = 400;
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({
+        error: request.headers['x-unused'] ? 'authorization_pending' : 'access_denied'
+      }));
+      return;
+    }
+    response.statusCode = 404;
+    response.end();
+  });
+
+  try {
+    const denied = await requestOAuthDeviceAuthorization({
+      type: 'oauth2',
+      grantType: 'deviceCode',
+      deviceAuthorizationUrl: `${server.baseUrl}/device-denied`,
+      tokenUrl: `${server.baseUrl}/token`,
+      clientId: 'client-id'
+    }, null);
+    await assert.rejects(() => pollOAuthDeviceToken(denied, null), /device authorization was denied/);
+
+    const expiredServer = await createServer(async (request, response) => {
+      if (request.url === '/token') {
+        response.statusCode = 400;
+        response.setHeader('Content-Type', 'application/json');
+        response.end(JSON.stringify({ error: 'expired_token' }));
+        return;
+      }
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({
+        device_code: 'expired-device',
+        user_code: 'EXPIRE',
+        verification_uri: 'https://auth.example.test/device',
+        expires_in: 30,
+        interval: 0.001
+      }));
+    });
+    try {
+      const expired = await requestOAuthDeviceAuthorization({
+        type: 'oauth2',
+        grantType: 'deviceCode',
+        deviceAuthorizationUrl: `${expiredServer.baseUrl}/device`,
+        tokenUrl: `${expiredServer.baseUrl}/token`,
+        clientId: 'client-id'
+      }, null);
+      await assert.rejects(() => pollOAuthDeviceToken(expired, null), /device authorization expired/);
+    } finally {
+      await expiredServer.close();
+    }
+  } finally {
+    await server.close();
+  }
+});
+
+test('redacts OAuth provider error strings without removing useful context', () => {
+  const message = redactOAuthErrorMessage('bad access_token=abc refresh_token=def client_secret=ghi token=opaque secret=value cookie=session code=secret authorization_code=secret2 user_code=ABCD Bearer live-token Authorization: Basic dXNlcjpwYXNz Proxy-Authorization="OAuth oauth-leak" authHeader=Basic auth-header-leak authorizationHeader=OAuth authorization-header-leak proxy_authorization=Basic proxy-leak proxyAuthorizationHeader=Bearer proxy-header-leak');
+  assert.equal(
+    message,
+    'bad access_token=[redacted] refresh_token=[redacted] client_secret=[redacted] token=[redacted] secret=[redacted] cookie=[redacted] code=[redacted] authorization_code=[redacted] user_code=[redacted] Bearer [redacted] Authorization: [redacted] Proxy-Authorization=[redacted] authHeader=[redacted] authorizationHeader=[redacted] proxy_authorization=[redacted] proxyAuthorizationHeader=[redacted]'
+  );
+  assert.equal(
+    redactOAuthErrorMessage('Authorization: [redacted] authHeader=Bearer [redacted] proxy_authorization=[redacted] Bearer [redacted]'),
+    'Authorization: [redacted] authHeader=Bearer [redacted] proxy_authorization=[redacted] Bearer [redacted]'
+  );
+  assert.doesNotMatch(message, /auth-header-leak|authorization-header-leak|proxy-leak|proxy-header-leak/);
 });
 
 test('rejects unsafe OAuth 2.0 device verification URLs', async () => {
@@ -632,6 +932,14 @@ async function createServer(handler) {
     baseUrl: `http://127.0.0.1:${address.port}`,
     close: () => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
   };
+}
+
+async function readRequestBody(request) {
+  const chunks = [];
+  for await (const chunk of request) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString('utf8');
 }
 
 function ntlmType2Challenge() {

@@ -1104,7 +1104,7 @@ test('renderer workflows apply single-request completions to the request that st
             state.activeRequestId = requestTwo.id;
             state.activeEnvironmentId = environmentTwo.id;
             return {
-              updatedAuth: { type: 'oauth2', grantType: 'clientCredentials', accessToken: 'fresh-token' },
+              updatedAuthPersisted: true,
               updatedCookies: [{ name: 'session', value: 'ready', domain: 'example.test', path: '/' }],
               environment: {
                 id: environmentOne.id,
@@ -1119,6 +1119,18 @@ test('renderer workflows apply single-request completions to the request that st
           }
         },
         workspace: {
+          load: async () => {
+            const loadedWorkspace = structuredClone(state.workspace);
+            loadedWorkspace.collections[0].requests[0].auth = {
+              type: 'oauth2',
+              grantType: 'clientCredentials',
+              accessToken: 'fresh-token'
+            };
+            return {
+              activeWorkspaceId: state.activeWorkspaceId,
+              workspace: loadedWorkspace
+            };
+          },
           save: async (workspace) => workspace,
           saveRequest: async (payload) => ({ request: payload.request })
         }
@@ -1140,7 +1152,11 @@ test('renderer workflows apply single-request completions to the request that st
   assert.equal(cookieJarRenders, 1);
   assert.equal(historyRenders, 1);
   assert.equal(displayedResponse.statusCode, 200);
+  assert.equal(displayedResponse.updatedAuth, undefined);
+  assert.equal(displayedResponse.updatedAuthPersisted, undefined);
   assert.equal(state.lastResponse.requestId, requestOne.id);
+  assert.equal(state.lastResponse.updatedAuth, undefined);
+  assert.equal(state.lastResponse.updatedAuthPersisted, undefined);
   assert.equal(doc.getElementById('captureResponseExampleButton').disabled, true);
   assert.equal(state.workspace.history[0].method, 'GET');
   assert.equal(state.workspace.history[0].url, 'https://example.test/widgets');
@@ -1246,6 +1262,172 @@ test('renderer workflows persist OAuth results to the request that started the f
   assert.equal(requestTwo.auth.accessToken, 'billing-token');
   assert.equal(savedWorkspaces[0].collections[0].requests[0].auth.accessToken, 'fresh-oauth-token');
   assert.equal(savedWorkspaces[0].collections[0].requests[1].auth.accessToken, 'billing-token');
+});
+
+test('renderer workflows clear stale OAuth validation errors when a later flow starts and succeeds', async () => {
+  const state = createRendererState();
+  const request = {
+    id: 'request-1',
+    name: 'Authorize Widgets',
+    method: 'GET',
+    url: 'https://example.test/widgets',
+    auth: {
+      type: 'oauth2',
+      grantType: 'authorizationCode',
+      authorizationUrl: 'https://auth.example.test/authorize',
+      tokenUrl: 'https://auth.example.test/token',
+      clientId: 'widget-client',
+      accessToken: ''
+    },
+    scripts: { preRequest: '', tests: '' }
+  };
+  const collection = {
+    id: 'collection-1',
+    name: 'OAuth',
+    variables: [],
+    requests: [request],
+    folders: []
+  };
+  state.workspace = { collections: [collection], environments: [], history: [], cookies: [], settings: {} };
+  state.activeCollectionId = collection.id;
+  state.activeRequestId = request.id;
+  const doc = createDocument();
+  doc.getElementById('authOauthRedirectStrategySelect').value = 'loopback';
+  let attempts = 0;
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => activeCollectionForState(state),
+    activeEnvironment: () => null,
+    activeRequest: () => activeRequestForState(state),
+    collectRequestFromEditor: () => {},
+    doc,
+    notifyUser: () => {},
+    renderAuthEditor: () => {},
+    renderCollections: () => {},
+    renderRequestTabs: () => {},
+    runFormatting: createRunFormatting(),
+    windowObject: {
+      postmeter: {
+        oauth: {
+          startPkceFlow: async () => {
+            attempts += 1;
+            if (attempts === 1) {
+              throw new Error('provider denied access_token=[redacted]');
+            }
+            return {
+              cancelled: false,
+              auth: { ...request.auth, accessToken: 'fresh-token' }
+            };
+          }
+        },
+        workspace: {
+          save: async (workspace) => workspace
+        }
+      }
+    }
+  });
+
+  await workflows.startPkceFlow();
+  assert.equal(doc.getElementById('validationLabel').textContent, 'provider denied access_token=[redacted]');
+
+  await workflows.startPkceFlow();
+  assert.equal(doc.getElementById('validationLabel').textContent, '');
+  assert.equal(request.auth.accessToken, 'fresh-token');
+});
+
+test('renderer workflows ignore stale OAuth completions after a newer flow starts', async () => {
+  const state = createRendererState();
+  const request = {
+    id: 'request-1',
+    name: 'Authorize Widgets',
+    method: 'GET',
+    url: 'https://example.test/widgets',
+    auth: {
+      type: 'oauth2',
+      grantType: 'authorizationCode',
+      authorizationUrl: 'https://auth.example.test/authorize',
+      tokenUrl: 'https://auth.example.test/token',
+      clientId: 'widget-client',
+      accessToken: ''
+    },
+    scripts: { preRequest: '', tests: '' }
+  };
+  const collection = {
+    id: 'collection-1',
+    name: 'OAuth',
+    variables: [],
+    requests: [request],
+    folders: []
+  };
+  state.workspace = { collections: [collection], environments: [], history: [], cookies: [], settings: {} };
+  state.activeCollectionId = collection.id;
+  state.activeRequestId = request.id;
+  const doc = createDocument();
+  doc.getElementById('authOauthRedirectStrategySelect').value = 'loopback';
+  const flowIds = [];
+  const resolvers = [];
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => activeCollectionForState(state),
+    activeEnvironment: () => null,
+    activeRequest: () => activeRequestForState(state),
+    collectRequestFromEditor: () => {},
+    doc,
+    notifyUser: () => {},
+    renderAuthEditor: () => {},
+    renderCollections: () => {},
+    renderRequestTabs: () => {},
+    runFormatting: createRunFormatting(),
+    windowObject: {
+      postmeter: {
+        oauth: {
+          startPkceFlow: async (flowId) => {
+            flowIds.push(flowId);
+            return new Promise((resolve) => {
+              resolvers.push(resolve);
+            });
+          }
+        },
+        workspace: {
+          save: async (workspace) => workspace
+        }
+      }
+    }
+  });
+
+  const firstFlow = workflows.startPkceFlow();
+  await Promise.resolve();
+  const firstFlowId = flowIds[0];
+  state.activeOauthFlowId = null;
+  doc.getElementById('startPkceFlowButton').disabled = false;
+  doc.getElementById('startDeviceFlowButton').disabled = false;
+  doc.getElementById('cancelOauthFlowButton').disabled = true;
+
+  const secondFlow = workflows.startPkceFlow();
+  await Promise.resolve();
+  const secondFlowId = flowIds[1];
+  assert.notEqual(firstFlowId, secondFlowId);
+
+  resolvers[0]({
+    cancelled: true,
+    auth: { ...request.auth, accessToken: 'stale-flow-token' }
+  });
+  await firstFlow;
+  assert.equal(state.activeOauthFlowId, secondFlowId);
+  assert.equal(doc.getElementById('startPkceFlowButton').disabled, true);
+  assert.equal(doc.getElementById('cancelOauthFlowButton').disabled, false);
+  assert.equal(request.auth.accessToken, '');
+
+  resolvers[1]({
+    cancelled: false,
+    auth: { ...request.auth, accessToken: 'fresh-flow-token' }
+  });
+  await secondFlow;
+  assert.equal(state.activeOauthFlowId, null);
+  assert.equal(doc.getElementById('startPkceFlowButton').disabled, false);
+  assert.equal(request.auth.accessToken, 'fresh-flow-token');
 });
 
 test('renderer workflows apply load-test cookie updates back into the renderer workspace state', async () => {

@@ -29,6 +29,7 @@ Supported on import:
 - Nested folders and requests, including mixed request/folder item order from the Postman export.
 - Request method, URL, query params, headers, disabled params/headers, raw JSON/text body.
 - Bearer, Basic, API key, and OAuth 2.0 auth import where Postman fields map cleanly to PostMeter auth helpers.
+- Outbound OAuth 2.0 runtime support includes authorization-code PKCE, device code, refresh-token renewal, client credentials where applicable, loopback/custom-scheme callbacks, token-endpoint redirect refusal, provider-error redaction, and a local certification corpus for Google/Microsoft/GitHub provider behavior.
 - Common `prerequest` and `test` event scripts from collection, folder, and request scopes, while preserving original event location, script type, and script text for Postman export.
 - Original Postman request IDs where present, deterministic fallback IDs where they are absent, and alias resolution for `pm.execution.runRequest`, `pm.execution.setNextRequest`, `pm.info.requestId`, and `pm.execution.location.requestId`.
 - Local mock `mock` event scripts where exported, including saved example IDs used by `pm.mock.sendExample`.

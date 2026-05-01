@@ -18,6 +18,8 @@ Linux script workers use `bubblewrap` plus a dangerous-syscall seccomp policy wh
 
 Vault values are stored outside workspace JSON in per-workspace encrypted files when Electron `safeStorage` has OS-backed encryption. The renderer and scripts never receive vault file paths, encryption keys, ciphertext, storage handles, or secret enumeration through the prompt flow. The renderer vault prompt only receives bounded metadata: request name/id, collection name/id, workspace name/id, operation, and secret key name. Concurrent prompt requests are queued so each decision is applied to the matching prompt and workspace, and prompt responses are accepted only from the renderer `webContents` that received the prompt.
 
+OAuth provider error text is redacted before display when it contains token-shaped fields, generic token/secret/cookie fields, authorization codes, device/user codes, PKCE verifiers, client secrets, Authorization/Proxy-Authorization header-shaped values, or common auth-header aliases, and token endpoint redirects are refused before response-body parsing so token POST bodies are not forwarded to redirect targets. OAuth access tokens, refresh tokens, and client secrets are still ordinary visible auth fields persisted in workspace JSON and collection exports; do not include live workspace files in bug reports or certification evidence unless those fields are scrubbed.
+
 Diagnostics and logs must not include secrets, tokens, vault values, auth headers, cookies, request/response bodies, or sensitive local paths by default.
 
 ## Release Gates

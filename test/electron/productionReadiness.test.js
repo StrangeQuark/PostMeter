@@ -123,7 +123,9 @@ test('production readiness matrix references real local evidence and required lo
     'npm run dist:linux',
     'npm run dist:win',
     'npm run dist:mac',
-    'future npm run oauth:certify:live'
+    'npm run oauth:certify:validate',
+    'npm run oauth:certify:mock',
+    'npm run oauth:certify:live'
   ]) {
     assert.ok(commands.has(command), `Readiness matrix does not reference ${command}`);
   }
