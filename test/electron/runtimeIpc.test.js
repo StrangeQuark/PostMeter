@@ -34,6 +34,113 @@ test('runtime IPC registers stable load and runner channels', async () => {
   assert.equal(await handlers.get('runner:cancel')(null, 'runner-id'), false);
 });
 
+test('runtime IPC validates load-test results before mutating workspace state', async () => {
+  const handlers = new Map();
+  const workspace = { cookies: [] };
+  let mutationCalls = 0;
+
+  registerRuntimeIpc({
+    dialog: { showSaveDialog: async () => ({ canceled: true }) },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => workspace,
+    getWorkspaceId: () => 'workspace-1',
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    },
+    mutateWorkspace: async (mutator) => {
+      mutationCalls += 1;
+      return mutator(workspace);
+    },
+    runLoadTest: async () => ({
+      totalRequests: 1,
+      successfulRequests: 1,
+      failedRequests: 0,
+      accessToken: 'leaked-token',
+      cookies: [{ enabled: true, name: 'sid', value: 'fresh', domain: 'example.test', path: '/' }]
+    }),
+    saveWorkspace: async (nextWorkspace) => nextWorkspace,
+    setWorkspace: () => {}
+  });
+
+  await assert.rejects(
+    () => handlers.get('load:start')({
+      sender: { send() {} }
+    }, 'invalid-load-result', {
+      method: 'GET',
+      url: 'https://example.test',
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      cookieJar: { enabled: true, storeResponses: true }
+    }, null, {
+      concurrency: 1,
+      totalRequests: 1
+    }),
+    /result.accessToken is not allowed in public IPC payloads/
+  );
+  assert.equal(mutationCalls, 0);
+  assert.deepEqual(workspace.cookies, []);
+});
+
+test('runtime IPC validates collection-run results before mutating workspace state', async () => {
+  const handlers = new Map();
+  const workspace = { cookies: [], globals: [], settings: {} };
+  let mutationCalls = 0;
+
+  registerRuntimeIpc({
+    dialog: { showSaveDialog: async () => ({ canceled: true }) },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => workspace,
+    getWorkspaceId: () => 'workspace-1',
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    },
+    mutateWorkspace: async (mutator) => {
+      mutationCalls += 1;
+      return mutator(workspace);
+    },
+    runCollection: async () => ({
+      collectionId: 'collection-1',
+      collectionName: 'Collection',
+      totalRequests: 0,
+      passedRequests: 0,
+      failedRequests: 0,
+      passed: true,
+      cancelled: false,
+      results: [],
+      accessToken: 'leaked-token',
+      environment: { id: 'runtime', name: 'Runtime', variables: [] },
+      collectionVariables: [],
+      globals: [],
+      cookies: []
+    }),
+    saveWorkspace: async (nextWorkspace) => nextWorkspace,
+    setWorkspace: () => {}
+  });
+
+  await assert.rejects(
+    () => handlers.get('runner:start')({
+      sender: { send() {} }
+    }, 'invalid-runner-result', {
+      id: 'collection-1',
+      name: 'Collection',
+      variables: [],
+      requests: [],
+      folders: []
+    }, null, {}),
+    /result.accessToken is not allowed in public IPC payloads/
+  );
+  assert.equal(mutationCalls, 0);
+  assert.deepEqual(workspace.cookies, []);
+});
+
 test('runtime IPC persists load-test cookie updates back to the workspace', async () => {
   const handlers = new Map();
   const workspace = { cookies: [] };
@@ -88,6 +195,170 @@ test('runtime IPC persists load-test cookie updates back to the workspace', asyn
     assert.equal(result.cookies.length, 1);
     assert.equal(savedWorkspace.cookies[0].name, 'runtimeSession');
     assert.equal(appliedWorkspace.cookies[0].value, 'ready');
+  } finally {
+    await server.close();
+  }
+});
+
+test('runtime IPC default workspace mutation does not dirty live workspace when persistence fails', async () => {
+  const handlers = new Map();
+  const workspace = { cookies: [] };
+  const server = await createServer((_request, response) => {
+    response.setHeader('Set-Cookie', 'runtimeSession=ready; Path=/; HttpOnly');
+    response.statusCode = 200;
+    response.end('ok');
+  });
+
+  try {
+    registerRuntimeIpc({
+      dialog: { showSaveDialog: async () => ({ canceled: true }) },
+      fileOperationResult: (result) => result,
+      getMainWindow: () => null,
+      getWorkspace: () => workspace,
+      ipcMain: {
+        handle(channel, handler) {
+          handlers.set(channel, handler);
+        }
+      },
+      saveWorkspace: async () => {
+        throw new Error('disk full');
+      },
+      setWorkspace: () => {
+        throw new Error('setWorkspace should not run after a failed save');
+      }
+    });
+
+    await assert.rejects(
+      () => handlers.get('load:start')({
+        sender: { send() {} }
+      }, 'load-save-failure-id', {
+        method: 'GET',
+        url: `${server.baseUrl}/load`,
+        queryParams: [],
+        headers: [],
+        bodyType: 'NONE',
+        body: '',
+        cookieJar: { enabled: true, storeResponses: true }
+      }, null, {
+        concurrency: 1,
+        totalRequests: 1
+      }),
+      /disk full/
+    );
+
+    assert.deepEqual(workspace.cookies, []);
+  } finally {
+    await server.close();
+  }
+});
+
+test('runtime IPC treats load-test progress delivery failures as recoverable run failures', async () => {
+  const handlers = new Map();
+  const workspace = { cookies: [] };
+  const server = await createServer((_request, response) => {
+    response.statusCode = 200;
+    response.end('ok');
+  });
+
+  try {
+    registerRuntimeIpc({
+      dialog: { showSaveDialog: async () => ({ canceled: true }) },
+      fileOperationResult: (result) => result,
+      getMainWindow: () => null,
+      getWorkspace: () => workspace,
+      ipcMain: {
+        handle(channel, handler) {
+          handlers.set(channel, handler);
+        }
+      },
+      saveWorkspace: async (nextWorkspace) => nextWorkspace,
+      setWorkspace: () => {}
+    });
+
+    await assert.rejects(
+      () => handlers.get('load:start')({
+        sender: {
+          send() {
+            throw new Error('sender unavailable');
+          }
+        }
+      }, 'progress-failure-load-id', {
+        method: 'GET',
+        url: `${server.baseUrl}/load`,
+        queryParams: [],
+        headers: [],
+        bodyType: 'NONE',
+        body: '',
+        cookieJar: { enabled: false, storeResponses: false }
+      }, null, {
+        concurrency: 1,
+        totalRequests: 1
+      }),
+      /Load-test progress delivery failed: sender unavailable/
+    );
+    assert.equal(await handlers.get('load:cancel')(null, 'progress-failure-load-id'), false);
+  } finally {
+    await server.close();
+  }
+});
+
+test('runtime IPC treats collection-run progress delivery failures as recoverable run failures', async () => {
+  const handlers = new Map();
+  const workspace = { cookies: [], globals: [], settings: {} };
+  const server = await createServer((_request, response) => {
+    response.statusCode = 200;
+    response.end('ok');
+  });
+
+  try {
+    registerRuntimeIpc({
+      dialog: { showSaveDialog: async () => ({ canceled: true }) },
+      fileOperationResult: (result) => result,
+      getMainWindow: () => null,
+      getWorkspace: () => workspace,
+      ipcMain: {
+        handle(channel, handler) {
+          handlers.set(channel, handler);
+        }
+      },
+      mutateWorkspace: async (mutator) => mutator(workspace),
+      saveWorkspace: async (nextWorkspace) => nextWorkspace,
+      setWorkspace: () => {}
+    });
+
+    await assert.rejects(
+      () => handlers.get('runner:start')({
+        sender: {
+          send() {
+            throw new Error('sender unavailable');
+          }
+        }
+      }, 'progress-failure-runner-id', {
+        id: 'collection-1',
+        name: 'Progress Failure Collection',
+        variables: [],
+        folders: [],
+        requests: [{
+          id: 'request-1',
+          name: 'Request',
+          method: 'GET',
+          url: `${server.baseUrl}/run`,
+          queryParams: [],
+          headers: [],
+          bodyType: 'NONE',
+          body: '',
+          auth: { type: 'none' },
+          assertions: [],
+          scripts: { preRequest: '', tests: '' },
+          variables: [],
+          cookieJar: { enabled: false, storeResponses: false }
+        }]
+      }, null, {
+        stopOnFailure: false
+      }),
+      /Collection-run progress delivery failed: sender unavailable/
+    );
+    assert.equal(await handlers.get('runner:cancel')(null, 'progress-failure-runner-id'), false);
   } finally {
     await server.close();
   }
@@ -216,6 +487,119 @@ test('runtime IPC persists refreshed OAuth auth without returning or exporting r
   } finally {
     await server.close();
     await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('runtime IPC rejects duplicate active load-test ids without replacing the active controller', async () => {
+  const handlers = new Map();
+  const workspace = { cookies: [] };
+  const server = await createServer((_request, response) => {
+    setTimeout(() => {
+      response.statusCode = 200;
+      response.end('ok');
+    }, 100);
+  });
+  try {
+    registerRuntimeIpc({
+      dialog: { showSaveDialog: async () => ({ canceled: true }) },
+      fileOperationResult: (result) => result,
+      getMainWindow: () => null,
+      getWorkspace: () => workspace,
+      ipcMain: {
+        handle(channel, handler) {
+          handlers.set(channel, handler);
+        }
+      },
+      mutateWorkspace: async (mutator) => mutator(workspace),
+      saveWorkspace: async (nextWorkspace) => nextWorkspace,
+      setWorkspace: () => {}
+    });
+    const event = { sender: { send() {} } };
+    const request = {
+      method: 'GET',
+      url: `${server.baseUrl}/load`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      cookieJar: { enabled: false, storeResponses: false }
+    };
+    const firstRun = handlers.get('load:start')(event, 'duplicate-load-id', request, null, {
+      concurrency: 1,
+      totalRequests: 1
+    });
+
+    await assert.rejects(
+      () => handlers.get('load:start')(event, 'duplicate-load-id', request, null, { concurrency: 1, totalRequests: 1 }),
+      /already running/
+    );
+    assert.equal(await handlers.get('load:cancel')(null, 'duplicate-load-id'), true);
+    await firstRun.catch(() => null);
+    assert.equal(await handlers.get('load:cancel')(null, 'duplicate-load-id'), false);
+  } finally {
+    await server.close();
+  }
+});
+
+test('runtime IPC rejects duplicate active collection-run ids without replacing the active controller', async () => {
+  const handlers = new Map();
+  const workspace = { cookies: [], globals: [], settings: {} };
+  const server = await createServer((_request, response) => {
+    setTimeout(() => {
+      response.statusCode = 200;
+      response.end('ok');
+    }, 100);
+  });
+  try {
+    registerRuntimeIpc({
+      dialog: { showSaveDialog: async () => ({ canceled: true }) },
+      fileOperationResult: (result) => result,
+      getMainWindow: () => null,
+      getWorkspace: () => workspace,
+      ipcMain: {
+        handle(channel, handler) {
+          handlers.set(channel, handler);
+        }
+      },
+      mutateWorkspace: async (mutator) => mutator(workspace),
+      saveWorkspace: async (nextWorkspace) => nextWorkspace,
+      setWorkspace: () => {}
+    });
+    const event = { sender: { send() {} } };
+    const collection = {
+      id: 'collection-1',
+      name: 'Duplicate Run Collection',
+      variables: [],
+      folders: [],
+      requests: [{
+        id: 'request-1',
+        name: 'Slow Request',
+        method: 'GET',
+        url: `${server.baseUrl}/run`,
+        queryParams: [],
+        headers: [],
+        bodyType: 'NONE',
+        body: '',
+        auth: { type: 'none' },
+        assertions: [],
+        scripts: { preRequest: '', tests: '' },
+        variables: [],
+        cookieJar: { enabled: false, storeResponses: false }
+      }]
+    };
+    const firstRun = handlers.get('runner:start')(event, 'duplicate-runner-id', collection, null, {
+      stopOnFailure: false
+    });
+
+    await assert.rejects(
+      () => handlers.get('runner:start')(event, 'duplicate-runner-id', collection, null, { stopOnFailure: false }),
+      /already running/
+    );
+    assert.equal(await handlers.get('runner:cancel')(null, 'duplicate-runner-id'), true);
+    await firstRun.catch(() => null);
+    assert.equal(await handlers.get('runner:cancel')(null, 'duplicate-runner-id'), false);
+  } finally {
+    await server.close();
   }
 });
 

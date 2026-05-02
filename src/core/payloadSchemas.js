@@ -267,11 +267,14 @@ const FIELD_SCHEMAS = {
   scriptTestResult: {
     name: { type: 'string', limit: 'name', optional: true },
     passed: { type: 'boolean', optional: true },
-    error: { type: 'string', limit: 'value', optional: true }
+    error: { type: 'string', limit: 'value', optional: true },
+    skipped: { type: 'boolean', optional: true },
+    index: { type: 'number', optional: true }
   },
   scriptVisualizer: {
     html: { type: 'string', limit: 'body', optional: true },
-    template: { type: 'string', limit: 'body', optional: true }
+    template: { type: 'string', limit: 'body', optional: true },
+    interactive: { type: 'boolean', optional: true }
   },
   updateCheckOptions: {
     includePrereleases: { type: 'boolean', optional: true }

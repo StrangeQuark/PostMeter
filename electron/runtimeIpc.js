@@ -31,8 +31,10 @@ function registerRuntimeIpc(options = {}) {
     getVaultStore = () => null,
     getVaultPrompt = () => null,
     ipcMain,
+    runCollection: runCollectionImpl = runCollection,
+    runLoadTest: runLoadTestImpl = runLoadTest,
     mutateWorkspace = async (mutator) => {
-      const nextWorkspace = await mutator(getWorkspace());
+      const nextWorkspace = await mutator(cloneJson(getWorkspace()));
       const savedWorkspace = await saveWorkspace(nextWorkspace);
       setWorkspace(savedWorkspace);
       return savedWorkspace;
@@ -48,20 +50,31 @@ function registerRuntimeIpc(options = {}) {
     assertRequestPayload(request);
     assertOptionalEnvironmentPayload(environment);
     assertLoadConfigPayload(config);
+    if (activeLoadTests.has(id)) {
+      throw new Error(`Load test is already running for id "${id}".`);
+    }
     const abortController = new AbortController();
     const workspace = getWorkspace();
     const workspaceId = getWorkspaceId();
     const baseCookies = cloneJson(workspace.cookies || []);
+    const progressDelivery = createProgressDelivery({
+      abortController,
+      assertPayload: assertLoadProgressPayload,
+      channel: 'load:progress',
+      event,
+      id,
+      label: 'Load-test progress'
+    });
     activeLoadTests.set(id, abortController);
     try {
-      const result = await runLoadTest(request, environment, config, {
+      const result = await runLoadTestImpl(request, environment, config, {
         abortController,
         cookieJar: workspace.cookies || [],
-        onProgress: (progress) => {
-          assertLoadProgressPayload(progress);
-          event.sender.send('load:progress', { id, progress });
-        }
+        onProgress: progressDelivery.send
       });
+      progressDelivery.throwIfFailed();
+      const publicResult = publicLoadResult(result);
+      assertLoadResultPayload(publicResult);
       if (Array.isArray(result.cookies)) {
         await mutateWorkspace(async (latestWorkspace) => {
           if (result.updatedAuth && request.id) {
@@ -82,11 +95,11 @@ function registerRuntimeIpc(options = {}) {
           return latestWorkspace;
         }, { workspaceId });
       }
-      const publicResult = publicLoadResult(result);
-      assertLoadResultPayload(publicResult);
       return publicResult;
     } finally {
-      activeLoadTests.delete(id);
+      if (activeLoadTests.get(id) === abortController) {
+        activeLoadTests.delete(id);
+      }
     }
   });
 
@@ -105,8 +118,19 @@ function registerRuntimeIpc(options = {}) {
     assertCollectionPayload(collection);
     assertOptionalEnvironmentPayload(environment);
     assertRunnerConfigPayload(config);
+    if (activeCollectionRuns.has(id)) {
+      throw new Error(`Collection run is already running for id "${id}".`);
+    }
     const abortController = new AbortController();
     const workspaceId = getWorkspaceId();
+    const progressDelivery = createProgressDelivery({
+      abortController,
+      assertPayload: assertRunnerProgressPayload,
+      channel: 'runner:progress',
+      event,
+      id,
+      label: 'Collection-run progress'
+    });
     activeCollectionRuns.set(id, abortController);
     try {
       const workspace = getWorkspace();
@@ -115,7 +139,7 @@ function registerRuntimeIpc(options = {}) {
       const baseGlobals = cloneJson(workspace.globals || []);
       const baseCookies = cloneJson(workspace.cookies || []);
       const baseLocalVariablesByRequestId = requestLocalVariablesById(collection);
-      const result = await runCollection(collection, environment, {
+      const result = await runCollectionImpl(collection, environment, {
         abortController,
         signal: abortController.signal,
         cookieJar: workspace.cookies || [],
@@ -128,11 +152,11 @@ function registerRuntimeIpc(options = {}) {
         workspaceId,
         workspaceName: workspaceId,
         stopOnFailure: config.stopOnFailure === true,
-        onProgress: (progress) => {
-          assertRunnerProgressPayload(progress);
-          event.sender.send('runner:progress', { id, progress });
-        }
+        onProgress: progressDelivery.send
       });
+      progressDelivery.throwIfFailed();
+      const publicResult = publicCollectionRunResult(result);
+      assertCollectionRunResultPayload(publicResult);
       if (Array.isArray(result.cookies)) {
         await mutateWorkspace(async (latestWorkspace) => {
           latestWorkspace.cookies = mergeCookieJarByDelta(latestWorkspace.cookies || [], baseCookies, result.cookies);
@@ -155,11 +179,11 @@ function registerRuntimeIpc(options = {}) {
           return latestWorkspace;
         }, { workspaceId });
       }
-      const publicResult = publicCollectionRunResult(result);
-      assertCollectionRunResultPayload(publicResult);
       return publicResult;
     } finally {
-      activeCollectionRuns.delete(id);
+      if (activeCollectionRuns.get(id) === abortController) {
+        activeCollectionRuns.delete(id);
+      }
     }
   });
 
@@ -239,6 +263,33 @@ function cloneJson(value) {
     return value;
   }
   return JSON.parse(JSON.stringify(value));
+}
+
+function createProgressDelivery({ abortController, assertPayload, channel, event, id, label }) {
+  let deliveryError = null;
+  return {
+    send(progress) {
+      if (deliveryError) {
+        return;
+      }
+      try {
+        assertPayload(progress);
+        if (event.sender?.isDestroyed?.() === true) {
+          throw new Error('renderer sender is destroyed');
+        }
+        event.sender.send(channel, { id, progress });
+      } catch (error) {
+        const message = error.message || String(error);
+        deliveryError = new Error(`${label} delivery failed: ${message}`);
+        abortController.abort();
+      }
+    },
+    throwIfFailed() {
+      if (deliveryError) {
+        throw deliveryError;
+      }
+    }
+  };
 }
 
 function publicLoadResult(result) {

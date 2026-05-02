@@ -15,6 +15,10 @@
     activeEnvironmentId = 'none';
     clearActiveWorkspaceItem();
     renderAll();
+    await captureUiSnapshotState('empty-state', () => {
+      selectSidebarPanel('collections');
+      renderAll();
+    }, global);
 
     newCollection();
     newRequest();
@@ -116,6 +120,23 @@
       ].join('\n');
       $('exportLoadJsonButton').disabled = false;
       $('exportLoadCsvButton').disabled = false;
+    }, global);
+
+    await captureUiSnapshotState('workspace-sandbox', () => {
+      selectSidebarPanel('workspaces');
+      refreshSandboxPackageStatus();
+      refreshSandboxFileBindings();
+      renderWorkspacePanel();
+    }, global);
+
+    await captureUiSnapshotState('long-labels', () => {
+      selectSidebarPanel('collections');
+      activeCollectionId = collection.id;
+      activeRequestId = request.id;
+      request.name = 'Request with a very long production label that should truncate cleanly without breaking the constrained desktop layout';
+      collection.name = 'Collection with a very long production label that should remain scannable in the tree';
+      ensureOpenRequestTabForActive();
+      renderAll();
     }, global);
 
     await captureUiSnapshotState('export-menu', () => {

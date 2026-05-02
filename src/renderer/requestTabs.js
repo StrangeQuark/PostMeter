@@ -23,19 +23,44 @@
   }
 
   function createTabButton(doc, tab, item, group) {
+    const wrapper = doc.createElement('div');
+    const typeClasses = String(group.buttonClassName || '')
+      .split(/\s+/)
+      .filter((className) => className && className !== 'request-tab-button');
+    wrapper.className = ['request-tab-item', ...typeClasses].join(' ');
+    wrapper.setAttribute('role', 'presentation');
     const button = doc.createElement('div');
     button.className = group.buttonClassName || 'request-tab-button';
     const isActive = group.isActive?.(tab) === true;
+    wrapper.classList.toggle('active', isActive);
     button.classList.toggle('active', isActive);
     button.setAttribute('role', 'tab');
     button.setAttribute('aria-selected', isActive ? 'true' : 'false');
-    button.tabIndex = 0;
+    button.setAttribute('aria-label', group.title?.(item, tab) || 'Open tab');
+    const tabId = group.tabId?.(tab, item) || stableTabId(group.idPrefix || 'open-tab', tab);
+    button.id = tabId;
+    if (group.controlsId) {
+      button.setAttribute('aria-controls', group.controlsId);
+      if (isActive) {
+        const panel = doc.getElementById(group.controlsId);
+        panel?.setAttribute?.('aria-labelledby', tabId);
+      }
+    }
+    button.tabIndex = isActive ? 0 : -1;
     button.title = group.title?.(item, tab) || '';
     button.addEventListener('click', () => group.onSelect?.(tab, item));
     button.addEventListener('keydown', (event) => {
+      if (moveOpenTabFocus(event, button)) {
+        return;
+      }
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
         group.onSelect?.(tab, item);
+        return;
+      }
+      if (event.key === 'Delete') {
+        event.preventDefault();
+        void group.onClose?.(tab, item);
       }
     });
 
@@ -59,13 +84,51 @@
     close.textContent = '\u00d7';
     close.title = group.closeTitle?.(item, tab) || '';
     close.setAttribute('aria-label', group.closeAriaLabel?.(item, tab) || close.title);
+    close.tabIndex = -1;
     close.addEventListener('click', async (event) => {
       event.stopPropagation();
       await group.onClose?.(tab, item);
     });
 
-    button.append(dirty, method, title, close);
-    return button;
+    button.append(dirty, method, title);
+    wrapper.append(button, close);
+    return wrapper;
+  }
+
+  function moveOpenTabFocus(event, button) {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+      return false;
+    }
+    const bar = button.closest?.('[role="tablist"]') || button.parentElement;
+    const tabs = Array.from(bar?.querySelectorAll('[role="tab"]') || []);
+    if (!tabs.length) {
+      return false;
+    }
+    event.preventDefault();
+    const currentIndex = Math.max(0, tabs.indexOf(button));
+    let nextIndex = currentIndex;
+    if (event.key === 'Home') {
+      nextIndex = 0;
+    } else if (event.key === 'End') {
+      nextIndex = tabs.length - 1;
+    } else if (event.key === 'ArrowLeft') {
+      nextIndex = (currentIndex + tabs.length - 1) % tabs.length;
+    } else if (event.key === 'ArrowRight') {
+      nextIndex = (currentIndex + 1) % tabs.length;
+    }
+    const nextTab = tabs[nextIndex];
+    const nextTabId = nextTab?.id || '';
+    tabs.forEach((tab, index) => {
+      tab.tabIndex = index === nextIndex ? 0 : -1;
+    });
+    nextTab?.click?.();
+    const refreshedTab = nextTabId ? bar?.ownerDocument?.getElementById?.(nextTabId) : null;
+    (refreshedTab || nextTab)?.focus?.();
+    return true;
+  }
+
+  function stableTabId(prefix, tab) {
+    return `${prefix}-${String(tab?.key || tab?.id || 'tab').replace(/[^A-Za-z0-9_-]+/g, '-')}`;
   }
 
   const exported = {

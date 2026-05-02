@@ -176,6 +176,35 @@ test('vault prompt decisions default to request-scoped denial', () => {
   });
 });
 
+test('native vault prompt fallback offers reset decisions and persists them', async () => {
+  let persistedDecision = null;
+  const dialogCalls = [];
+  const prompt = createVaultPrompt({
+    dialog: {
+      showMessageBox: async (_window, options) => {
+        dialogCalls.push(options);
+        return { response: 4 };
+      }
+    },
+    getMainWindow: () => null,
+    persistDecision: async (decision) => {
+      persistedDecision = decision;
+    }
+  });
+
+  const decision = await prompt({
+    collectionName: 'Collection',
+    key: 'apiToken',
+    operation: 'get',
+    requestName: 'Request',
+    workspaceName: 'Workspace'
+  });
+
+  assert.deepEqual(decision, { granted: false, reset: true, scope: 'request' });
+  assert.deepEqual(persistedDecision, decision);
+  assert.deepEqual(dialogCalls[0].buttons, ['Deny once', 'Allow request', 'Allow collection', 'Allow workspace', 'Reset grants']);
+});
+
 test('vault prompt persistence uses the prompted workspace id over the active workspace fallback', () => {
   assert.equal(
     workspaceIdForVaultPromptDecision({ workspaceId: 'Prompted Workspace.json' }, 'Current Workspace.json'),

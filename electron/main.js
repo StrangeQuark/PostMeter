@@ -11,7 +11,7 @@ const { installApplicationMenu } = require('./appMenu');
 const { registerAppIpc, safeExternalUrl } = require('./appIpc');
 const { createTrustedIpcMain } = require('./ipcSecurity');
 const { createOAuthFlowController } = require('./oauthFlows');
-const { createMainWindow } = require('./mainWindow');
+const { createMainWindow, writeStartupSmokeFailureArtifacts } = require('./mainWindow');
 const { registerSessionIpc } = require('./sessionIpc');
 const { SessionStore, defaultSessionPath } = require('./sessionStore');
 const { registerRuntimeIpc } = require('./runtimeIpc');
@@ -99,9 +99,15 @@ function refreshApplicationMenu() {
 }
 
 if (process.env.POSTMETER_VALIDATE_SANDBOX_RUNTIME === '1') {
-  app.whenReady().then(runSandboxRuntimeValidation);
+  app.whenReady()
+    .then(runSandboxRuntimeValidation)
+    .catch((error) => failStartup(error, 'PostMeter sandbox runtime validation failed'));
 } else {
-  app.whenReady().then(async () => {
+  app.whenReady().then(startApplication).catch((error) => failStartup(error));
+}
+
+async function startApplication() {
+  try {
     registerAppProtocolHandler(protocol);
     oauthFlows.registerProtocol();
     sessionStore = new SessionStore(defaultSessionPath(app.getPath('userData')));
@@ -117,14 +123,24 @@ if (process.env.POSTMETER_VALIDATE_SANDBOX_RUNTIME === '1') {
         sessionState = await sessionStore.patch({ activeWorkspaceId: error.activeWorkspaceId || workspaceStore.getWorkspaceId() });
         dialog.showErrorBox('Workspace Recovered', error.message);
       } else {
-        dialog.showErrorBox('PostMeter could not open the workspace', error.message || String(error));
-        app.quit();
+        await failStartup(error, 'PostMeter could not open the workspace');
         return;
       }
     }
     refreshApplicationMenu();
     createWindow();
-  });
+  } catch (error) {
+    await failStartup(error);
+  }
+}
+
+async function failStartup(error, title = 'PostMeter could not start') {
+  const message = error?.message || String(error);
+  await writeStartupSmokeFailureArtifacts(mainWindow, process.env, error);
+  if (process.env.POSTMETER_STARTUP_SMOKE !== '1' && process.env.POSTMETER_VALIDATE_SANDBOX_RUNTIME !== '1') {
+    dialog.showErrorBox(title, message);
+  }
+  app.exit(1);
 }
 
 app.on('second-instance', (_event, argv) => {
@@ -165,14 +181,30 @@ function saveWorkspaceSync(nextWorkspace) {
   return workspaceStore.saveSync(nextWorkspace);
 }
 
+function cloneWorkspace(value) {
+  return value == null ? value : JSON.parse(JSON.stringify(value));
+}
+
 let workspaceMutationQueue = Promise.resolve();
+let pendingWorkspaceOperations = 0;
 
 function enqueueWorkspaceOperation(operation) {
+  pendingWorkspaceOperations += 1;
   const run = workspaceMutationQueue
     .catch(() => {})
-    .then(operation);
+    .then(async () => {
+      try {
+        return await operation();
+      } finally {
+        pendingWorkspaceOperations = Math.max(0, pendingWorkspaceOperations - 1);
+      }
+    });
   workspaceMutationQueue = run.catch(() => {});
   return run;
+}
+
+function hasPendingWorkspaceOperations() {
+  return pendingWorkspaceOperations > 0;
 }
 
 function mutateWorkspace(mutator, options = {}) {
@@ -185,7 +217,8 @@ function mutateWorkspace(mutator, options = {}) {
     ) {
       return workspace;
     }
-    const nextWorkspace = await mutator(workspace);
+    const workspaceDraft = cloneWorkspace(workspace);
+    const nextWorkspace = await mutator(workspaceDraft);
     if (!nextWorkspace) {
       return workspace;
     }
@@ -256,16 +289,13 @@ async function renameVaultStore(previousWorkspaceId, nextWorkspaceId) {
   try {
     await fs.mkdir(path.dirname(nextPath), { recursive: true, mode: 0o700 });
     if (await fileExists(nextPath)) {
-      return;
+      throw new Error('Cannot rename workspace vault metadata because the destination vault already exists.');
     }
     await moveFileNoOverwrite(previousPath, nextPath);
     await fs.chmod(nextPath, 0o600).catch(() => {});
     await fsyncDirectory(path.dirname(nextPath));
   } catch (error) {
     if (error?.code === 'ENOENT') {
-      return;
-    }
-    if (error?.code === 'EEXIST') {
       return;
     }
     throw error;
@@ -364,6 +394,7 @@ registerWorkspaceIpc({
   getWorkspace: () => workspace,
   getWorkspaceId: () => workspaceStore?.getWorkspaceId?.() || '',
   getWorkspaceStore: () => workspaceStore,
+  hasPendingWorkspaceOperations,
   ipcMain: trustedIpcMain,
   queueWorkspaceOperation: enqueueWorkspaceOperation,
   refreshApplicationMenu,

@@ -1,10 +1,12 @@
-const { spawn } = require('node:child_process');
 const fs = require('node:fs/promises');
+const crypto = require('node:crypto');
 const os = require('node:os');
 const path = require('node:path');
 const { withCiNoSandboxArgs } = require('../../scripts/electronCiSandboxWaiver');
+const { redactSmokeOutputText, spawnWithTimeout } = require('../../scripts/smokeProcess');
 
 const EXPECTED_SNAPSHOTS = [
+  'empty-state',
   'request',
   'context-menu',
   'cookies',
@@ -12,6 +14,8 @@ const EXPECTED_SNAPSHOTS = [
   'response',
   'runner',
   'load',
+  'workspace-sandbox',
+  'long-labels',
   'export-menu'
 ];
 
@@ -23,38 +27,30 @@ async function main() {
     ...process.env,
     POSTMETER_DATA_PATH: path.join(tempDir, 'workspace.json'),
     POSTMETER_UI_SNAPSHOT_SMOKE: '1',
-    POSTMETER_UI_SNAPSHOT_DIR: snapshotDir
+    POSTMETER_UI_SNAPSHOT_DIR: snapshotDir,
+    POSTMETER_VALIDATION_ARTIFACT_DIR: process.env.POSTMETER_VALIDATION_ARTIFACT_DIR || path.join(tempDir, 'validation-artifacts')
   };
   delete env.ELECTRON_RUN_AS_NODE;
-  const child = spawn(electronPath, withCiNoSandboxArgs(['.'], env), {
+  const result = await spawnWithTimeout(electronPath, withCiNoSandboxArgs(['.'], env), {
     cwd: path.join(__dirname, '..', '..'),
     env,
-    stdio: ['ignore', 'pipe', 'pipe']
+    timeoutMillis: 25_000,
+    timeoutMessage: 'Electron UI snapshot smoke timed out after 25000 ms.'
   });
 
-  let output = '';
-  child.stdout.on('data', (chunk) => { output += chunk.toString(); });
-  child.stderr.on('data', (chunk) => { output += chunk.toString(); });
-
-  const timeout = setTimeout(() => {
-    child.kill('SIGTERM');
-  }, 25_000);
-
-  const exitCode = await new Promise((resolve) => {
-    child.on('exit', (code, signal) => {
-      clearTimeout(timeout);
-      resolve(signal ? 128 : code ?? 1);
-    });
-  });
-
-  if (exitCode !== 0) {
-    console.error(output.trim());
-    throw new Error(`Electron UI snapshot smoke failed with exit code ${exitCode}.`);
+  if (result.code !== 0) {
+    console.error(redactSmokeOutputText(`${result.stdout}${result.stderr}`, [tempDir, snapshotDir]).trim());
+    throw new Error(`Electron UI snapshot smoke failed with exit code ${result.code}.`);
   }
 
+  const hashes = new Set();
   for (const label of EXPECTED_SNAPSHOTS) {
     const screenshot = await fs.readFile(path.join(snapshotDir, `${label}.png`));
     assertPngScreenshot(label, screenshot);
+    hashes.add(crypto.createHash('sha256').update(screenshot).digest('hex'));
+  }
+  if (hashes.size < Math.ceil(EXPECTED_SNAPSHOTS.length * 0.75)) {
+    throw new Error(`UI snapshot smoke captured too many duplicate states: ${hashes.size}/${EXPECTED_SNAPSHOTS.length} unique screenshots.`);
   }
 }
 
@@ -73,6 +69,6 @@ function assertPngScreenshot(label, screenshot) {
 }
 
 main().catch((error) => {
-  console.error(error.stack || error.message || String(error));
+  console.error(redactSmokeOutputText(error.stack || error.message || String(error)));
   process.exitCode = 1;
 });

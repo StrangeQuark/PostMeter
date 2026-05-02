@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
 const fs = require('node:fs/promises');
-const { spawn } = require('node:child_process');
 const os = require('node:os');
 const path = require('node:path');
 const { WAIVER_ENV, withCiNoSandboxArgs } = require('./electronCiSandboxWaiver');
+const { spawnWithTimeout } = require('./smokeProcess');
 
 const PROJECT_ROOT = path.join(__dirname, '..');
 const RELEASE_DIR = process.env.POSTMETER_RELEASE_DIR
@@ -16,7 +16,7 @@ async function main() {
   const executable = await findPackagedExecutable();
   await validateExecutable(executable);
   await runStartupSmoke(executable);
-  console.log(`Packaged app smoke passed: ${executable}`);
+  console.log(`Packaged app smoke passed: ${redactPackagedSmokeLogText(executable, executable)}`);
 }
 
 async function findPackagedExecutable() {
@@ -127,10 +127,14 @@ async function runStartupSmokeOnce(executable, options = {}) {
   if (options.defaultUserData) {
     env.POSTMETER_PACKAGED_SMOKE_DEFAULT_PATH = '1';
   }
-  const result = await spawnWithTimeout(executable, withCiNoSandboxArgs([], env), env);
+  const result = await spawnWithTimeout(executable, withCiNoSandboxArgs([], env), {
+    env,
+    timeoutMillis: TIMEOUT_MILLIS,
+    timeoutMessage: `Packaged app startup smoke timed out after ${TIMEOUT_MILLIS} ms.`
+  });
   await writeSmokeLog(options.label || 'run', executable, result);
   if (result.code !== 0) {
-    throw new Error(`Packaged app startup smoke exited with ${result.code}: ${result.stderr || result.stdout}`);
+    throw new Error(packagedSmokeFailureMessage(result, executable));
   }
 }
 
@@ -186,38 +190,6 @@ async function loadPersistedSmokeWorkspace(dataPath, marker = '') {
   throw new Error(`Packaged app smoke workspace marker was not found under ${directory}.`);
 }
 
-function spawnWithTimeout(command, args, env) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      env,
-      stdio: ['ignore', 'pipe', 'pipe']
-    });
-    let stdout = '';
-    let stderr = '';
-    let timedOut = false;
-    const timeout = setTimeout(() => {
-      timedOut = true;
-      child.kill('SIGTERM');
-    }, TIMEOUT_MILLIS);
-    child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
-    child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
-    child.on('error', (error) => {
-      clearTimeout(timeout);
-      reject(error);
-    });
-    child.on('exit', (code) => {
-      clearTimeout(timeout);
-      resolve({
-        code: timedOut ? 124 : code,
-        stdout,
-        stderr: timedOut
-          ? `${stderr}\nPackaged app startup smoke timed out after ${TIMEOUT_MILLIS} ms.`.trim()
-          : stderr
-      });
-    });
-  });
-}
-
 async function writeSmokeLog(label, executable, result) {
   const directory = process.env.POSTMETER_VALIDATION_ARTIFACT_DIR;
   if (!directory) {
@@ -227,17 +199,49 @@ async function writeSmokeLog(label, executable, result) {
   const safeLabel = String(label || 'run').replace(/[^a-z0-9._-]+/gi, '-').slice(0, 64) || 'run';
   const logPath = path.join(directory, `packaged-app-smoke-${process.platform}-${safeLabel}.log`);
   const body = [
-    `executable=${executable}`,
+    `executable=${path.basename(String(executable || '')) || '[unknown]'}`,
     `platform=${process.platform}`,
     `exitCode=${result.code}`,
     '',
     '[stdout]',
-    result.stdout || '',
+    redactPackagedSmokeLogText(result.stdout || '', executable),
     '',
     '[stderr]',
-    result.stderr || ''
+    redactPackagedSmokeLogText(result.stderr || '', executable)
   ].join('\n');
   await fs.writeFile(logPath, body);
+}
+
+function redactPackagedSmokeLogText(text, executable = '') {
+  let redacted = String(text || '');
+  const sensitivePaths = [
+    executable,
+    path.dirname(String(executable || '')),
+    RELEASE_DIR,
+    PROJECT_ROOT,
+    os.homedir(),
+    process.cwd()
+  ].filter(Boolean);
+  for (const sensitivePath of sensitivePaths) {
+    redacted = redacted.split(String(sensitivePath)).join('[path]');
+  }
+  return redacted
+    .replace(/\b(set-cookie|cookie)\b(\s*[:=]\s*["']?)[^\n\r'"<>]+/gi, '$1$2[redacted]')
+    .replace(/\b(bearer|basic|digest|hawk|token|oauth|ntlm|negotiate)\s+[A-Za-z0-9._~+/=-]{6,}/gi, '$1 [redacted]')
+    .replace(/\b(access[-_\s]?token|refresh[-_\s]?token|id[-_\s]?token|authorization[-_\s]?code|device[-_\s]?code|user[-_\s]?code|code[-_\s]?verifier|client[-_\s]?secret|client[-_\s]?assertion|api[-_\s]?key|password|secret)\b(\s*[:=]\s*["']?)[^\s,;'"<>]+/gi, '$1$2[redacted]')
+    .replace(/[A-Za-z]:\\(?:[^\\\r\n]+\\)*[^\\\r\n\s'"]+/g, '[path]')
+    .replace(/\/(?:home|Users|tmp|var|private|workspace)\/[^\s'"]+/g, '[path]');
+}
+
+function packagedSmokeFailureMessage(result = {}, executable = '') {
+  const output = redactPackagedSmokeLogText(result.stderr || result.stdout || '', executable).trim();
+  return output
+    ? `Packaged app startup smoke exited with ${result.code}: ${output}`
+    : `Packaged app startup smoke exited with ${result.code}.`;
+}
+
+function packagedSmokeCliErrorText(error, executable = '') {
+  return redactPackagedSmokeLogText(error?.stack || error?.message || String(error), executable);
 }
 
 function minimalEnv() {
@@ -302,7 +306,7 @@ async function executableExists(filePath) {
 
 if (require.main === module) {
   main().catch((error) => {
-    console.error(error.stack || error.message || String(error));
+    console.error(packagedSmokeCliErrorText(error, process.env.POSTMETER_PACKAGED_APP_PATH || ''));
     process.exit(1);
   });
 }
@@ -313,7 +317,10 @@ module.exports = {
   findPackagedExecutable,
   isolatedDefaultPathEnv,
   loadPersistedSmokeWorkspace,
+  packagedSmokeCliErrorText,
+  packagedSmokeFailureMessage,
   platformCandidates,
+  redactPackagedSmokeLogText,
   runDefaultPersistencePathSmoke,
   runStartupSmoke,
   writeSmokeLog,

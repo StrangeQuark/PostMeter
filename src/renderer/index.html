@@ -16,7 +16,7 @@
     </div>
     <div class="toolbar-group menu-group" aria-label="Create">
       <button id="newMenuButton" class="primary menu-trigger" aria-haspopup="menu" aria-expanded="false">New</button>
-      <div id="newMenu" class="toolbar-menu" role="menu" hidden>
+      <div id="newMenu" class="toolbar-menu" role="menu" aria-labelledby="newMenuButton" hidden>
         <button id="newWorkspaceMenuButton" role="menuitem">Workspace</button>
         <button id="newRequestButton" role="menuitem">Request</button>
         <button id="newCollectionButton" role="menuitem">Collection</button>
@@ -29,14 +29,14 @@
     </div>
     <div class="toolbar-group menu-group" aria-label="Import">
       <button id="importMenuButton" class="menu-trigger" aria-haspopup="menu" aria-expanded="false">Import</button>
-      <div id="importMenu" class="toolbar-menu" role="menu" hidden>
+      <div id="importMenu" class="toolbar-menu" role="menu" aria-labelledby="importMenuButton" hidden>
         <button id="importWorkspaceButton" role="menuitem">Workspace</button>
         <button id="importCollectionButton" role="menuitem">Collection</button>
       </div>
     </div>
     <div class="toolbar-group menu-group" aria-label="Export">
       <button id="exportMenuButton" class="menu-trigger" aria-haspopup="menu" aria-expanded="false">Export</button>
-      <div id="exportMenu" class="toolbar-menu" role="menu" hidden>
+      <div id="exportMenu" class="toolbar-menu" role="menu" aria-labelledby="exportMenuButton" hidden>
         <button id="exportWorkspaceButton" role="menuitem">Workspace</button>
         <button id="exportCollectionButton" role="menuitem">Collection</button>
         <button id="exportPostmanButton" role="menuitem">Postman</button>
@@ -51,6 +51,7 @@
       <button id="themeLightButton" type="button" data-theme-option="light" aria-pressed="false">Light</button>
       <button id="themeDarkButton" type="button" data-theme-option="dark" aria-pressed="false">Dark</button>
     </div>
+    <div id="statusLabel" class="app-status" role="status" aria-live="polite" aria-atomic="true">Ready.</div>
     <label class="field inline environment-control">
       <span>Environment</span>
       <select id="environmentSelect"></select>
@@ -59,35 +60,35 @@
 
   <main id="appGrid" class="app-grid">
     <aside class="sidebar">
-      <nav class="sidebar-tabs" aria-label="Workspace panels">
-        <button id="collectionsPanelTab" class="sidebar-tab active" type="button" data-sidebar-panel="collections" aria-selected="true">Collections</button>
-        <button id="environmentsPanelTab" class="sidebar-tab" type="button" data-sidebar-panel="environments" aria-selected="false">Environments</button>
-        <button id="workspacesPanelTab" class="sidebar-tab" type="button" data-sidebar-panel="workspaces" aria-selected="false">Workspaces</button>
-        <button id="historyPanelTab" class="sidebar-tab" type="button" data-sidebar-panel="history" aria-selected="false">History</button>
+      <nav class="sidebar-tabs" role="tablist" aria-label="Workspace panels" aria-orientation="vertical">
+        <button id="collectionsPanelTab" class="sidebar-tab active" type="button" role="tab" data-sidebar-panel="collections" aria-selected="true" aria-controls="collectionsSidebarPanel">Collections</button>
+        <button id="environmentsPanelTab" class="sidebar-tab" type="button" role="tab" data-sidebar-panel="environments" aria-selected="false" aria-controls="environmentsSidebarPanel">Environments</button>
+        <button id="workspacesPanelTab" class="sidebar-tab" type="button" role="tab" data-sidebar-panel="workspaces" aria-selected="false" aria-controls="workspacesSidebarPanel">Workspaces</button>
+        <button id="historyPanelTab" class="sidebar-tab" type="button" role="tab" data-sidebar-panel="history" aria-selected="false" aria-controls="historySidebarPanel">History</button>
       </nav>
       <div class="sidebar-content">
-        <section id="collectionsSidebarPanel" class="sidebar-panel active" data-sidebar-panel-content="collections">
+        <section id="collectionsSidebarPanel" class="sidebar-panel active" role="tabpanel" aria-labelledby="collectionsPanelTab" data-sidebar-panel-content="collections">
           <div class="sidebar-panel-header">
             <h2>Collections</h2>
           </div>
           <div id="collectionsTree" class="tree"></div>
         </section>
 
-        <section id="environmentsSidebarPanel" class="sidebar-panel" data-sidebar-panel-content="environments" hidden>
+        <section id="environmentsSidebarPanel" class="sidebar-panel" role="tabpanel" aria-labelledby="environmentsPanelTab" data-sidebar-panel-content="environments" hidden>
           <div class="sidebar-panel-header">
             <h2>Environments</h2>
           </div>
           <div id="environmentsList" class="tree environment-list"></div>
         </section>
 
-        <section id="workspacesSidebarPanel" class="sidebar-panel" data-sidebar-panel-content="workspaces" hidden>
+        <section id="workspacesSidebarPanel" class="sidebar-panel" role="tabpanel" aria-labelledby="workspacesPanelTab" data-sidebar-panel-content="workspaces" hidden>
           <div class="sidebar-panel-header">
             <h2>Workspaces</h2>
           </div>
           <div id="workspacesList" class="tree workspace-list"></div>
         </section>
 
-        <section id="historySidebarPanel" class="sidebar-panel" data-sidebar-panel-content="history" hidden>
+        <section id="historySidebarPanel" class="sidebar-panel" role="tabpanel" aria-labelledby="historyPanelTab" data-sidebar-panel-content="history" hidden>
           <div class="sidebar-panel-header">
             <h2>History</h2>
           </div>
@@ -99,7 +100,7 @@
     <div id="mainPaneResize" class="splitter vertical" role="separator" aria-orientation="vertical" tabindex="0"></div>
 
     <section class="workspace">
-      <div id="requestTabBar" class="request-tab-bar" role="tablist" aria-label="Opened requests" hidden></div>
+      <div id="requestTabBar" class="request-tab-bar" role="tablist" aria-label="Open requests, environments, and workspaces" hidden></div>
       <section id="requestEmptyPanel" class="panel request-empty-panel" hidden>
         <div class="request-empty-content">
           <div class="request-empty-icon" aria-hidden="true">
@@ -109,10 +110,10 @@
           <button id="emptyCreateRequestButton" type="button" class="primary">New Request</button>
         </div>
       </section>
-      <section id="requestEditorPanel" class="panel request-panel">
-        <input id="requestNameInput" class="title-input" placeholder="Request name">
+      <section id="requestEditorPanel" class="panel request-panel" role="tabpanel">
+        <input id="requestNameInput" class="title-input" placeholder="Request name" aria-label="Request name">
         <div class="request-line">
-          <select id="methodSelect">
+          <select id="methodSelect" aria-label="HTTP method">
             <option class="method-get">GET</option>
             <option class="method-post">POST</option>
             <option class="method-put">PUT</option>
@@ -121,38 +122,38 @@
             <option class="method-head">HEAD</option>
             <option class="method-options">OPTIONS</option>
           </select>
-          <input id="urlInput" placeholder="https://api.example.com/resource">
+          <input id="urlInput" placeholder="https://api.example.com/resource" aria-label="Request URL">
           <button id="sendButton" class="primary">Send</button>
         </div>
-        <div id="validationLabel" class="validation"></div>
+        <div id="validationLabel" class="validation" role="status" aria-live="polite" aria-atomic="true"></div>
 
-        <div class="tabs" data-tab-group="request">
-          <button class="tab active" data-tab-group="request" data-tab="params">Params</button>
-          <button class="tab" data-tab-group="request" data-tab="headers">Headers</button>
-          <button class="tab" data-tab-group="request" data-tab="auth">Auth</button>
-          <button class="tab" data-tab-group="request" data-tab="cookies">Cookies</button>
-          <button class="tab" data-tab-group="request" data-tab="body">Body</button>
-          <button class="tab" data-tab-group="request" data-tab="tests">Tests</button>
-          <button class="tab" data-tab-group="request" data-tab="scripts">Scripts</button>
-          <button class="tab" data-tab-group="request" data-tab="examples">Examples</button>
-          <button class="tab" data-tab-group="request" data-tab="collectionVariables">Variables</button>
+        <div class="tabs" role="tablist" aria-label="Request editor sections" data-tab-group="request">
+          <button id="requestParamsTabButton" class="tab active" type="button" role="tab" data-tab-group="request" data-tab="params" aria-selected="true" aria-controls="paramsTab">Params</button>
+          <button id="requestHeadersTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="headers" aria-selected="false" aria-controls="headersTab">Headers</button>
+          <button id="requestAuthTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="auth" aria-selected="false" aria-controls="authTab">Auth</button>
+          <button id="requestCookiesTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="cookies" aria-selected="false" aria-controls="cookiesTab">Cookies</button>
+          <button id="requestBodyTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="body" aria-selected="false" aria-controls="bodyTab">Body</button>
+          <button id="requestTestsTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="tests" aria-selected="false" aria-controls="testsTab">Tests</button>
+          <button id="requestScriptsTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="scripts" aria-selected="false" aria-controls="scriptsTab">Scripts</button>
+          <button id="requestExamplesTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="examples" aria-selected="false" aria-controls="examplesTab">Examples</button>
+          <button id="requestVariablesTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="collectionVariables" aria-selected="false" aria-controls="collectionVariablesTab">Variables</button>
         </div>
 
-        <div id="paramsTab" class="tab-panel active">
+        <div id="paramsTab" class="tab-panel active" role="tabpanel" aria-labelledby="requestParamsTabButton">
           <div class="table-actions">
             <button id="addParamButton">Add Param</button>
           </div>
           <div id="paramsTable" class="kv-table"></div>
         </div>
 
-        <div id="headersTab" class="tab-panel">
+        <div id="headersTab" class="tab-panel" role="tabpanel" aria-labelledby="requestHeadersTabButton">
           <div class="table-actions">
             <button id="addHeaderButton">Add Header</button>
           </div>
           <div id="headersTable" class="kv-table"></div>
         </div>
 
-        <div id="authTab" class="tab-panel">
+        <div id="authTab" class="tab-panel" role="tabpanel" aria-labelledby="requestAuthTabButton">
           <div class="auth-grid">
             <label class="field">
               <span>Auth Type</span>
@@ -276,7 +277,7 @@
                 <button id="startDeviceFlowButton" type="button">Start Device Flow</button>
                 <button id="cancelOauthFlowButton" type="button" disabled>Cancel OAuth</button>
               </div>
-              <div id="oauthProgressPanel" class="oauth-progress" hidden>
+              <div id="oauthProgressPanel" class="oauth-progress" role="status" aria-live="polite" aria-atomic="true" hidden>
                 <div class="oauth-progress-title">OAuth progress</div>
                 <div id="oauthProgressStatus" class="oauth-progress-status">Idle</div>
                 <div id="oauthProgressDetail" class="oauth-progress-detail"></div>
@@ -316,7 +317,7 @@
           </div>
         </div>
 
-        <div id="bodyTab" class="tab-panel">
+        <div id="bodyTab" class="tab-panel" role="tabpanel" aria-labelledby="requestBodyTabButton">
           <label class="field">
             <span>Body Type</span>
             <select id="bodyTypeSelect">
@@ -325,10 +326,10 @@
               <option value="RAW_TEXT">Raw Text</option>
             </select>
           </label>
-          <textarea id="bodyInput" spellcheck="false" placeholder="Request body"></textarea>
+          <textarea id="bodyInput" spellcheck="false" placeholder="Request body" aria-label="Request body"></textarea>
         </div>
 
-        <div id="testsTab" class="tab-panel">
+        <div id="testsTab" class="tab-panel" role="tabpanel" aria-labelledby="requestTestsTabButton">
           <div class="table-actions">
             <button id="addAssertionButton">Add Assertion</button>
             <select id="assertionTemplateSelect" aria-label="Assertion template">
@@ -350,7 +351,7 @@
           <div id="assertionsTable" class="kv-table assertions-table"></div>
         </div>
 
-        <div id="scriptsTab" class="tab-panel">
+        <div id="scriptsTab" class="tab-panel" role="tabpanel" aria-labelledby="requestScriptsTabButton">
           <div class="script-grid">
             <label class="field script-field">
               <span>Pre-request Script</span>
@@ -363,7 +364,7 @@
           </div>
         </div>
 
-        <div id="examplesTab" class="tab-panel">
+        <div id="examplesTab" class="tab-panel" role="tabpanel" aria-labelledby="requestExamplesTabButton">
           <div class="table-actions">
             <button id="addExampleButton">Add Example</button>
             <button id="captureResponseExampleButton">Capture Response</button>
@@ -372,7 +373,7 @@
           <div id="examplesList" class="examples-list"></div>
         </div>
 
-        <div id="cookiesTab" class="tab-panel">
+        <div id="cookiesTab" class="tab-panel" role="tabpanel" aria-labelledby="requestCookiesTabButton">
           <div class="cookie-jar-options">
             <label class="field inline">
               <input id="requestCookieJarEnabledInput" type="checkbox">
@@ -395,7 +396,7 @@
           <div id="cookiesTable" class="kv-table cookies-table"></div>
         </div>
 
-        <div id="collectionVariablesTab" class="tab-panel">
+        <div id="collectionVariablesTab" class="tab-panel" role="tabpanel" aria-labelledby="requestVariablesTabButton">
           <div class="environment-actions">
             <button id="addRequestVariableButton">Add Request Variable</button>
             <button id="addCollectionVariableButton">Add Variable</button>
@@ -408,14 +409,14 @@
 
       </section>
 
-      <section id="environmentMainPanel" class="panel environment-main-panel" hidden>
+      <section id="environmentMainPanel" class="panel environment-main-panel" role="tabpanel" hidden>
         <div class="environment-main-header">
           <div>
             <h2>Environment</h2>
             <div id="environmentMainTitle" class="environment-main-title">Select an environment</div>
           </div>
           <div class="environment-actions">
-            <input id="environmentNameInput" placeholder="Environment name">
+            <input id="environmentNameInput" placeholder="Environment name" aria-label="Environment name">
             <button id="deleteEnvironmentButton">Delete</button>
             <button id="addVariableButton">Add Variable</button>
           </div>
@@ -433,7 +434,7 @@
         </div>
       </section>
 
-      <section id="workspaceMainPanel" class="panel workspace-main-panel" hidden>
+      <section id="workspaceMainPanel" class="panel workspace-main-panel" role="tabpanel" hidden>
         <div class="workspace-main-header">
           <div>
             <h2>Workspace</h2>
@@ -464,7 +465,7 @@
             <span>Script vault access</span>
           </label>
           <div class="workspace-vault-panel">
-            <div class="workspace-sandbox-note" id="sandboxVaultSummary">Vault metadata has not been loaded.</div>
+            <div class="workspace-sandbox-note" id="sandboxVaultSummary" role="status" aria-live="polite">Vault metadata has not been loaded.</div>
             <div id="sandboxVaultList" class="workspace-package-list"></div>
             <div id="sandboxVaultAuditList" class="workspace-package-list"></div>
             <div class="workspace-actions">
@@ -474,7 +475,7 @@
             </div>
           </div>
           <div class="workspace-package-cache">
-            <div class="workspace-sandbox-note" id="sandboxPackageCacheSummary">Reviewed package cache is empty.</div>
+            <div class="workspace-sandbox-note" id="sandboxPackageCacheSummary" role="status" aria-live="polite">Reviewed package cache is empty.</div>
             <div id="sandboxPackageMissingList" class="workspace-package-list"></div>
             <div id="sandboxPackageCacheList" class="workspace-package-list"></div>
             <div class="workspace-actions">
@@ -484,7 +485,7 @@
             </div>
           </div>
           <div class="workspace-file-bindings">
-            <div class="workspace-sandbox-note" id="sandboxFileBindingSummary">No imported file attachments need binding.</div>
+            <div class="workspace-sandbox-note" id="sandboxFileBindingSummary" role="status" aria-live="polite">No imported file attachments need binding.</div>
             <div id="sandboxFileBindingMissingList" class="workspace-package-list"></div>
             <div id="sandboxFileBindingList" class="workspace-package-list"></div>
             <div class="workspace-actions">
@@ -507,32 +508,32 @@
       <div id="workspacePaneResize" class="splitter horizontal" role="separator" aria-orientation="horizontal" tabindex="0"></div>
 
       <section class="results">
-        <div class="tabs" data-tab-group="results">
-          <button class="tab active" data-tab-group="results" data-tab="response">Response</button>
-          <button class="tab" data-tab-group="results" data-tab="visualizer">Visualizer</button>
-          <button class="tab" data-tab-group="results" data-tab="load">Load Test</button>
-          <button class="tab" data-tab-group="results" data-tab="runner">Runner</button>
+        <div class="tabs" role="tablist" aria-label="Result sections" data-tab-group="results">
+          <button id="resultsResponseTabButton" class="tab active" type="button" role="tab" data-tab-group="results" data-tab="response" aria-selected="true" aria-controls="responseTab">Response</button>
+          <button id="resultsVisualizerTabButton" class="tab" type="button" role="tab" data-tab-group="results" data-tab="visualizer" aria-selected="false" aria-controls="visualizerTab">Visualizer</button>
+          <button id="resultsLoadTabButton" class="tab" type="button" role="tab" data-tab-group="results" data-tab="load" aria-selected="false" aria-controls="loadTab">Load Test</button>
+          <button id="resultsRunnerTabButton" class="tab" type="button" role="tab" data-tab-group="results" data-tab="runner" aria-selected="false" aria-controls="runnerTab">Runner</button>
         </div>
 
-        <div id="responseTab" class="tab-panel active">
-          <div class="metrics">
+        <div id="responseTab" class="tab-panel active" role="tabpanel" aria-labelledby="resultsResponseTabButton">
+          <div class="metrics" role="status" aria-live="polite">
             <span>Status <strong id="responseStatus">-</strong></span>
             <span>Time <strong id="responseTime">-</strong></span>
             <span>Size <strong id="responseSize">-</strong></span>
           </div>
-          <div id="finalUrl" class="final-url">-</div>
+          <div id="finalUrl" class="final-url" aria-label="Final URL">-</div>
           <div class="response-grid">
-            <textarea id="responseBody" readonly spellcheck="false"></textarea>
+            <textarea id="responseBody" readonly spellcheck="false" aria-label="Response body"></textarea>
             <div id="responsePaneResize" class="splitter vertical" role="separator" aria-orientation="vertical" tabindex="0"></div>
-            <textarea id="responseHeaders" readonly spellcheck="false"></textarea>
+            <textarea id="responseHeaders" readonly spellcheck="false" aria-label="Response headers"></textarea>
           </div>
         </div>
 
-        <div id="visualizerTab" class="tab-panel">
+        <div id="visualizerTab" class="tab-panel" role="tabpanel" aria-labelledby="resultsVisualizerTabButton">
           <iframe id="visualizerFrame" class="visualizer-frame" sandbox="allow-scripts" title="Response visualizer"></iframe>
         </div>
 
-        <div id="loadTab" class="tab-panel">
+        <div id="loadTab" class="tab-panel" role="tabpanel" aria-labelledby="resultsLoadTabButton">
           <div class="load-controls">
             <label>Concurrency <input id="loadConcurrency" type="number" min="1" max="512" value="5"></label>
             <label>Max Requests <input id="loadRequests" type="number" min="1" max="100000" value="25"></label>
@@ -553,10 +554,10 @@
             <button id="exportLoadJsonButton" disabled>Export JSON</button>
             <button id="exportLoadCsvButton" disabled>Export CSV</button>
           </div>
-          <pre id="loadResults" class="load-results">No load test run yet.</pre>
+          <pre id="loadResults" class="load-results" role="status" aria-live="polite">No load test run yet.</pre>
         </div>
 
-        <div id="runnerTab" class="tab-panel">
+        <div id="runnerTab" class="tab-panel" role="tabpanel" aria-labelledby="resultsRunnerTabButton">
           <div class="load-controls">
             <label class="checkbox-field"><input id="runnerStopOnFailure" type="checkbox"> Stop on failure</label>
             <button id="runCollectionButton" class="primary">Run Collection</button>
@@ -564,14 +565,14 @@
             <button id="exportRunnerJsonButton" disabled>Export JSON</button>
             <button id="exportRunnerCsvButton" disabled>Export CSV</button>
           </div>
-          <pre id="runnerResults" class="load-results">No collection run yet.</pre>
+          <pre id="runnerResults" class="load-results" role="status" aria-live="polite">No collection run yet.</pre>
         </div>
       </section>
     </section>
   </main>
 
   <div id="modalBackdrop" class="modal-backdrop" hidden>
-    <section id="unsavedRequestModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="unsavedRequestTitle" hidden>
+    <section id="unsavedRequestModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="unsavedRequestTitle" aria-describedby="unsavedRequestMessage" hidden>
       <h2 id="unsavedRequestTitle">Close unsaved request?</h2>
       <p id="unsavedRequestMessage">This request has unsaved changes. Save it before closing?</p>
       <div class="modal-actions">
@@ -581,7 +582,7 @@
       </div>
     </section>
 
-    <section id="saveDraftRequestModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="saveDraftRequestTitle" hidden>
+    <section id="saveDraftRequestModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="saveDraftRequestTitle" aria-describedby="saveDraftRequestMessage" hidden>
       <h2 id="saveDraftRequestTitle">Save request to collection</h2>
       <p id="saveDraftRequestMessage">Choose a collection for this request.</p>
       <div id="saveDraftCollectionList" class="collection-pick-list" role="radiogroup" aria-label="Collections"></div>
@@ -591,7 +592,7 @@
       </div>
     </section>
 
-    <section id="exportCollectionModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="exportCollectionTitle" hidden>
+    <section id="exportCollectionModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="exportCollectionTitle" aria-describedby="exportCollectionMessage" hidden>
       <h2 id="exportCollectionTitle">Export collection</h2>
       <p id="exportCollectionMessage">Choose a collection to export.</p>
       <div id="exportCollectionList" class="collection-pick-list" role="radiogroup" aria-label="Collections"></div>
@@ -601,7 +602,38 @@
       </div>
     </section>
 
-    <section id="vaultPromptModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="vaultPromptTitle" hidden>
+    <section id="textInputModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="textInputModalTitle" aria-describedby="textInputModalMessage" hidden>
+      <h2 id="textInputModalTitle">Provide value</h2>
+      <p id="textInputModalMessage">Enter a value to continue.</p>
+      <label class="field">
+        <span id="textInputModalLabel">Value</span>
+        <input id="textInputModalSingleLineInput" type="text" spellcheck="false" hidden>
+        <textarea id="textInputModalInput" rows="4" spellcheck="false"></textarea>
+      </label>
+      <div class="modal-actions">
+        <button id="cancelTextInputModalButton" type="button">Cancel</button>
+        <button id="confirmTextInputModalButton" type="button" class="primary">Continue</button>
+      </div>
+    </section>
+
+    <section id="confirmActionModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="confirmActionModalTitle" aria-describedby="confirmActionModalMessage" hidden>
+      <h2 id="confirmActionModalTitle">Confirm action</h2>
+      <p id="confirmActionModalMessage">Continue?</p>
+      <div class="modal-actions">
+        <button id="cancelConfirmActionButton" type="button">Cancel</button>
+        <button id="confirmActionButton" type="button" class="primary">Continue</button>
+      </div>
+    </section>
+
+    <section id="notificationModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="notificationModalTitle" aria-describedby="notificationModalMessage" hidden>
+      <h2 id="notificationModalTitle">PostMeter</h2>
+      <p id="notificationModalMessage">Notification</p>
+      <div class="modal-actions">
+        <button id="closeNotificationModalButton" type="button" class="primary">OK</button>
+      </div>
+    </section>
+
+    <section id="vaultPromptModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="vaultPromptTitle" aria-describedby="vaultPromptMessage vaultPromptWarning" hidden>
       <h2 id="vaultPromptTitle">Allow script vault access?</h2>
       <p id="vaultPromptMessage">A request script is asking for a vault secret.</p>
       <dl class="vault-prompt-details">
@@ -626,7 +658,7 @@
           <dd id="vaultPromptOperation">-</dd>
         </div>
       </dl>
-      <p class="vault-prompt-warning">Secret values, vault file paths, and encryption keys stay in the main process. Imported collections cannot grant vault access without this prompt or existing workspace settings.</p>
+      <p id="vaultPromptWarning" class="vault-prompt-warning">Secret values, vault file paths, and encryption keys stay in the main process. Imported collections cannot grant vault access without this prompt or existing workspace settings.</p>
       <div class="modal-actions vault-prompt-actions">
         <button id="resetVaultPromptGrantsButton" type="button">Reset grants</button>
         <button id="denyVaultPromptButton" type="button" class="danger-button">Deny</button>
@@ -637,7 +669,7 @@
     </section>
   </div>
 
-  <div id="contextMenu" class="context-menu" role="menu" hidden></div>
+  <div id="contextMenu" class="context-menu" role="menu" aria-label="Item actions" hidden></div>
 
   <script src="responseFormatting.js"></script>
   <script src="contextMenu.js"></script>

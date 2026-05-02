@@ -65,7 +65,39 @@ test('accepts structurally valid IPC payloads', () => {
   assert.doesNotThrow(() => assertWorkspacePayload({
     schemaVersion: 11,
     name: 'Workspace',
-    settings: { appearance: { theme: 'dark' }, updates: { includePrereleases: true } },
+    settings: {
+      appearance: { theme: 'dark' },
+      sandbox: {
+        fileBindings: [{
+          source: 'fixtures/upload.txt',
+          localPath: '/tmp/upload.txt',
+          mode: 'file',
+          reviewedAt: '2026-05-01T00:00:00.000Z'
+        }],
+        packageCache: [{
+          specifier: 'npm:@postmeter/tools@1.0.0',
+          source: 'module.exports = {};',
+          files: [{ path: 'index.js', source: 'module.exports = {};' }],
+          integrity: 'sha256-reviewed',
+          dependencyAliases: { helper: 'npm:@postmeter/helper@1.0.0' },
+          dependencies: ['npm:@postmeter/helper@1.0.0'],
+          packageJson: { main: 'index.js' }
+        }],
+        trustedCapabilities: {
+          sendRequest: true,
+          cookies: true,
+          vault: false,
+          vaultGrants: {
+            workspace: false,
+            collections: ['collection-1'],
+            requests: ['request-1'],
+            deniedCollections: [],
+            deniedRequests: []
+          }
+        }
+      },
+      updates: { includePrereleases: true }
+    },
     collections: [],
     environments: [{ id: 'e1', name: 'Env', variables: [{ enabled: true, key: 'token', value: 'secret' }] }],
     cookies: [{ enabled: true, name: 'sid', value: 'secret', domain: 'example.test', path: '/', secure: true, httpOnly: true, sameSite: 'Lax', hostOnly: true, source: 'postman', extensions: ['SameParty'] }],
@@ -183,6 +215,11 @@ test('accepts structurally valid IPC payloads', () => {
   }));
   assert.doesNotThrow(() => assertWorkspaceSettingsSavePayload({
     appearance: { theme: 'dark' },
+    sandbox: {
+      fileBindings: [{ source: 'fixtures/upload.txt', localPath: '/tmp/upload.txt' }],
+      packageCache: [{ specifier: '@team/tools', source: 'module.exports = {};', integrity: 'sha256-reviewed' }],
+      trustedCapabilities: { sendRequest: true, cookies: true, vault: true, vaultGrants: { workspace: true } }
+    },
     updates: { includePrereleases: true }
   }));
   assert.doesNotThrow(() => assertWorkspaceSettingsSaveResultPayload({
@@ -260,6 +297,14 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertWorkspacePayload({ collections: {}, environments: [], history: [] }), /workspace.collections must be an array/);
   assert.throws(() => assertWorkspacePayload({ settings: { updates: { includePrereleases: 'yes' } }, collections: [], environments: [], history: [] }), /workspace.settings.updates.includePrereleases must be a boolean/);
   assert.throws(() => assertWorkspacePayload({ settings: { appearance: { theme: 'sepia' } }, collections: [], environments: [], history: [] }), /workspace.settings.appearance.theme must be one of/);
+  assert.throws(() => assertWorkspacePayload({ settings: { sandbox: { unknown: true } }, collections: [], environments: [], history: [] }), /workspace.settings.sandbox.unknown is not allowed/);
+  assert.throws(() => assertWorkspacePayload({ settings: { sandbox: { fileBindings: 'bad' } }, collections: [], environments: [], history: [] }), /workspace.settings.sandbox.fileBindings must be an array/);
+  assert.throws(() => assertWorkspacePayload({ settings: { sandbox: { fileBindings: [{ source: 'fixture.txt' }] } }, collections: [], environments: [], history: [] }), /workspace.settings.sandbox.fileBindings\[0\].localPath must be a string/);
+  assert.throws(() => assertWorkspacePayload({ settings: { sandbox: { fileBindings: [{ source: 'fixture.txt', localPath: '/tmp/fixture.txt', mode: 'socket' }] } }, collections: [], environments: [], history: [] }), /workspace.settings.sandbox.fileBindings\[0\].mode must be one of/);
+  assert.throws(() => assertWorkspacePayload({ settings: { sandbox: { packageCache: [{ specifier: '@team/tools', integrity: 'sha256' }] } }, collections: [], environments: [], history: [] }), /workspace.settings.sandbox.packageCache\[0\].source must be a string/);
+  assert.throws(() => assertWorkspacePayload({ settings: { sandbox: { packageCache: [{ specifier: '@team/tools', source: 'x', integrity: 'sha256', files: Array.from({ length: 129 }, (_value, index) => ({ path: `${index}.js`, source: 'x' })) }] } }, collections: [], environments: [], history: [] }), /workspace.settings.sandbox.packageCache\[0\].files cannot contain more than 128 items/);
+  assert.throws(() => assertWorkspacePayload({ settings: { sandbox: { packageCache: [{ specifier: '@team/tools', source: 'x'.repeat((128 * 1024) + 1), integrity: 'sha256' }] } }, collections: [], environments: [], history: [] }), /workspace.settings.sandbox.packageCache\[0\].source cannot exceed/);
+  assert.throws(() => assertWorkspacePayload({ settings: { sandbox: { trustedCapabilities: { vaultGrants: { requests: ['r'.repeat(257)] } } } }, collections: [], environments: [], history: [] }), /workspace.settings.sandbox.trustedCapabilities.vaultGrants.requests\[0\] cannot exceed/);
   assert.throws(() => assertWorkspacePayload({ settings: { loadTestPolicy: { recordSamples: true } }, collections: [], environments: [], history: [] }), /workspace.settings.loadTestPolicy is no longer supported/);
   assert.throws(() => assertWorkspacePayload({ collections: [], environments: [], cookies: [{ secure: 'yes' }], history: [] }), /workspace.cookies\[0\].secure must be a boolean/);
   assert.throws(() => assertWorkspacePayload({ collections: [], environments: [], cookies: [{ sameSite: 'Loose' }], history: [] }), /workspace.cookies\[0\].sameSite must be one of/);
@@ -278,25 +323,33 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertLoadResultPayload({ latencyHistogram: [{ count: 'one' }] }), /result.latencyHistogram\[0\].count must be a finite number/);
   assert.throws(() => assertLoadResultPayload({ samples: [{ success: 'yes' }] }), /result.samples\[0\].success must be a boolean/);
   assert.throws(() => assertLoadProgressPayload({ executionMode: 'cluster' }), /progress.executionMode must be one of/);
+  assert.throws(() => assertLoadProgressPayload({ completedRequests: 1, accessToken: 'raw-token' }), /progress.accessToken is not allowed in public IPC payloads/);
   assert.throws(() => assertRunnerConfigPayload({ stopOnFailure: 'yes' }), /config.stopOnFailure must be a boolean/);
   assert.throws(() => assertRunnerProgressPayload({ passed: 'yes' }), /progress.passed must be a boolean/);
+  assert.throws(() => assertRunnerProgressPayload({ completedRequests: 1, clientSecret: 'raw-secret' }), /progress.clientSecret is not allowed in public IPC payloads/);
   assert.throws(() => assertOAuthProgressPayload({ id: 'flow', type: 'password', status: 'starting' }), /progress.type must be one of/);
   assert.throws(() => assertOAuthProgressPayload({ id: 'flow', type: 'pkce', status: 'unknown' }), /progress.status must be one of/);
+  assert.throws(() => assertOAuthProgressPayload({ id: 'flow', type: 'pkce', status: 'starting', accessToken: 'raw-token' }), /progress.accessToken is not allowed in public IPC payloads/);
   assert.throws(() => assertCollectionRunResultPayload({ collectionName: 42 }), /result.collectionName must be a string/);
   assert.throws(() => assertCollectionRunResultPayload({ results: [{ assertionResults: 'bad' }] }), /result.results\[0\].assertionResults must be an array/);
   assert.throws(() => assertCollectionRunResultPayload({ results: [{ assertionResults: [{ passed: 'yes' }] }] }), /result.results\[0\].assertionResults\[0\].passed must be a boolean/);
   assert.throws(() => assertCollectionRunResultPayload({ results: [{ testScriptResult: { tests: [{ passed: 'yes' }] } }] }), /result.results\[0\].testScriptResult.tests\[0\].passed must be a boolean/);
   assert.throws(() => assertCollectionRunResultPayload({ results: [{ updatedAuth: { type: 'oauth2', accessToken: 'raw-token' } }] }), /result.results\[0\].updatedAuth must not be included in public IPC payloads/);
+  assert.throws(() => assertCollectionRunResultPayload({ results: [{ accessToken: 'raw-token' }] }), /result.results\[0\].accessToken is not allowed in public IPC payloads/);
+  assert.throws(() => assertCollectionRunResultPayload({ accessToken: 'raw-token' }), /result.accessToken is not allowed in public IPC payloads/);
   assert.throws(() => assertLoadResultPayload({ updatedAuth: { type: 'oauth2', accessToken: 'raw-token' } }), /result.updatedAuth must not be included in public IPC payloads/);
+  assert.throws(() => assertLoadResultPayload({ accessToken: 'raw-token' }), /result.accessToken is not allowed in public IPC payloads/);
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: '', durationMillis: 'slow', responseBytes: 0, finalUrl: '', headers: {} }), /response.durationMillis must be a finite number/);
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: 42, durationMillis: 1, responseBytes: 2, finalUrl: 'https://example.test', headers: {} }), /response.body must be a string/);
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: '{}', durationMillis: 1, responseBytes: 2, finalUrl: 'https://example.test', headers: {}, updatedAuth: { type: 'oauth2', accessToken: 'raw-token' } }), /response.updatedAuth must not be included in public IPC payloads/);
+  assert.throws(() => assertResponsePayload({ statusCode: 200, body: '{}', durationMillis: 1, responseBytes: 2, finalUrl: 'https://example.test', headers: {}, accessToken: 'raw-token' }), /response.accessToken is not allowed in public IPC payloads/);
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: '{}', durationMillis: 1, responseBytes: 2, finalUrl: 'https://example.test', headers: {}, testScriptResult: { tests: [{ passed: 'yes' }] } }), /response.testScriptResult.tests\[0\].passed must be a boolean/);
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: '{}', durationMillis: 1, responseBytes: 2, finalUrl: 'https://example.test', headers: {}, testScriptResult: { visualizer: { html: 42 } } }), /response.testScriptResult.visualizer.html must be a string/);
   assert.throws(() => assertWorkspaceRequestSavePayload({ requestId: 'r1', request: { method: 'GET', queryParams: [], headers: [], bodyType: 'NONE' } }), /payload.collectionId must be a string/);
   assert.throws(() => assertWorkspaceRequestSavePayload({ collectionId: 'c1', requestId: 'r1', request: { method: 'GET', queryParams: [], headers: [], bodyType: 'NONE' }, folderPath: 'bad' }), /payload.folderPath must be an array/);
   assert.throws(() => assertWorkspaceEnvironmentSavePayload({ environment: { id: 'e1', name: 'Env', variables: [] } }), /payload.environmentId must be a string/);
   assert.throws(() => assertWorkspaceSettingsSavePayload({ appearance: { theme: 'sepia' } }), /settings.appearance.theme must be one of/);
+  assert.throws(() => assertWorkspaceSettingsSavePayload({ sandbox: { trustedCapabilities: { vaultGrants: { requests: 'all' } } } }), /settings.sandbox.trustedCapabilities.vaultGrants.requests must be an array/);
   assert.throws(() => assertWorkspaceSettingsSaveResultPayload({ settings: { updates: { includePrereleases: 'yes' } } }), /result.settings.updates.includePrereleases must be a boolean/);
   assert.throws(() => assertWorkspaceLoadResultPayload({ workspace: null }), /result.workspace must be an object/);
   assert.throws(() => assertFileOperationResultPayload({ cancelled: 'yes' }), /result.cancelled must be a boolean/);

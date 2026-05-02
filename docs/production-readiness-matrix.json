@@ -98,7 +98,7 @@
       ],
       "owner": "PostMeter",
       "lastVerified": "",
-      "notes": "Structured local diagnostics/export is tracked after the current HPS 1-9 implementation."
+      "notes": "Structured local diagnostics/export is tracked by Step 12 in NEXT_STEPS.MD and remains separate from the Step 11 UI smoke artifact boundary."
     },
     {
       "id": "docs.public-release",
@@ -433,22 +433,30 @@
     {
       "id": "ux.accessibility",
       "area": "ux",
-      "target": "Production user workflows, accessibility-sensitive modals, and failure states are smoke-tested and documented before release.",
+      "target": "Production user workflows, accessibility-sensitive modals, and failure states are source-matrixed, smoke-tested, artifacted, and documented before release.",
       "status": "external-validation-required",
       "releaseBlocking": true,
       "commands": [
+        "npm run ux:accessibility:validate",
+        "npm run test:smoke",
         "npm run test:ui",
         "npm run test:ui:regression",
+        "npm run test:ui:oauth",
         "npm run test:ui:snapshot"
       ],
       "evidenceRefs": [
+        "docs/ux-accessibility-matrix.json",
         "docs/RELEASE_READINESS.md",
         "src/renderer/index.html",
-        "test/electron/uiRegressionSmoke.js"
+        "src/renderer/uiRegressionSmoke.js",
+        "src/renderer/uiSnapshotSmoke.js",
+        "test/electron/startupSmoke.js",
+        "scripts/smokeProcess.js",
+        "electron/mainWindow.js"
       ],
       "owner": "PostMeter",
       "lastVerified": "",
-      "notes": "Linux headless smoke coverage exists; final production signoff still requires native packaged runner evidence and manual QA."
+      "notes": "The lower-level UX/accessibility matrix enumerates first launch, workspaces, request sends, collection runs, load tests, imports/exports, OAuth flows, package review/fetch, vault prompts, file bindings, local mocks, settings/theme, update checks, accessibility semantics, in-app prompt/confirmation/notification focus management, live regions, long labels, constrained sizes, active forced-colors behavior, startup smoke, timeout-bounded child-process failure behavior, and CI failure artifacts. Source-owned implementation and local validators are complete; this row stays external-validation-required until native runner smoke evidence and final manual QA evidence are attached. Full local diagnostic bundle export remains owned by the separate diagnostics/privacy row."
     },
     {
       "id": "vault.per-request-prompts",

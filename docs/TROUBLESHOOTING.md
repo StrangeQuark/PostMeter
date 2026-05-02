@@ -2,6 +2,22 @@
 
 This page covers user-facing recovery and diagnosis notes for behavior that is expected by design but can look like a broken request.
 
+## Operation Failures And UI Recovery
+
+Most desktop operations are recoverable without restarting PostMeter. Failed sends show `ERR` in the response status and place the actionable error text in the response body. Validation failures stay in the request validation area and do not send the request. Collection runs and load tests keep their result panels in an idle/export-disabled state after failures, and duplicate active run IDs are rejected instead of replacing an existing cancellable run.
+
+Workspace and collection import failures show a notification and keep the currently loaded workspace intact. If a collection import succeeds but the follow-up workspace save fails, PostMeter rolls back the imported collection and restores the prior selection before reporting the save error. Export failures show a notification and do not mark the export as complete. Picker cancellation is treated as a no-op and leaves the previous status in place where practical.
+
+The package review/fetch and imported-file binding controls use in-app review prompts. Cancelling any prompt leaves the workspace unchanged, and failed settings persistence rolls back additive package/file/capability changes before reporting an error. Removing reviewed package-cache entries or imported file bindings requires confirmation because imported scripts or requests may fail until the package or file is reviewed again.
+
+UI smoke failures in CI and release-validation workflows write debugging artifacts when `POSTMETER_VALIDATION_ARTIFACT_DIR` is set, or when `POSTMETER_UI_SMOKE_ARTIFACT_DIR` is set for UI-smoke-specific output: a screenshot, a bounded structural DOM-state JSON file, and a redacted log containing the smoke failure title or stack. Startup load, preload, and early renderer failures fail fast with the same redacted startup artifacts when a renderer is available instead of waiting for the full startup timeout; pre-window failures still write a redacted log. DOM and screenshot capture are time-bounded, and the smoke launcher escalates hung Electron children so a stalled renderer cannot prevent the failing smoke process from exiting. The DOM-state capture keeps structural fields such as active element IDs, dialog IDs/titles, visible panel IDs, and text lengths, but does not persist broad page, panel, modal, request, response, cookie, validation, or OAuth-progress text. It redacts known secret-like active fields, including auth, cookie value, client-certificate, and OAuth fields, plus common token-shaped title and URL values before writing JSON. Source UI smoke wrapper stdout/stderr, launcher stacks, packaged-smoke process logs, and packaged-smoke thrown failure messages redact local paths, Bearer/Basic/Digest/Hawk/Token/OAuth/NTLM/Negotiate auth-shaped values, and OAuth authorization-code/device-code/user-code/code-verifier/client-assertion fields before writing validation artifacts or reaching CI stderr; smoke child output is byte-bounded before timeout reporting. Screenshots still reflect whatever was visible in the renderer at failure time, so review artifacts before sharing, especially after local/manual runs where request names, URLs, response text, or other sensitive workspace data may be visible.
+
+PostMeter's production renderer uses in-app dialogs for workspace renames/deletes, package review/fetch, imported file binding, vault binding/reset, update-opening confirmation, high-concurrency load confirmation, and tree rename/delete actions. These dialogs are keyboard focus-trapped, restore focus when closed, and report cancellation through the normal status surfaces instead of relying on raw browser prompt, confirm, or alert dialogs.
+
+Toolbar menus and tree context menus can be opened from the keyboard, move focus into the menu, support arrow/Home/End item navigation, close with Escape, and restore focus to the opener.
+
+Full redacted diagnostic bundle export is separate production work tracked by the diagnostics/privacy readiness row. Until that is implemented, use the UI smoke artifacts, validation logs, and screenshots only when you intentionally choose to share them; screenshots are raw renderer captures and may need manual review before sharing.
+
 ## OAuth Provider Setup
 
 PostMeter OAuth is outbound request authentication only. It does not sign you into PostMeter.

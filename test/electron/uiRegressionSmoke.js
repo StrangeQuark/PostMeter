@@ -1,8 +1,8 @@
-const { spawn } = require('node:child_process');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { withCiNoSandboxArgs } = require('../../scripts/electronCiSandboxWaiver');
+const { redactSmokeOutputText, spawnWithTimeout } = require('../../scripts/smokeProcess');
 
 async function main() {
   const electronPath = require('electron');
@@ -10,37 +10,25 @@ async function main() {
   const env = {
     ...process.env,
     POSTMETER_DATA_PATH: path.join(tempDir, 'workspace.json'),
-    POSTMETER_UI_REGRESSION_SMOKE: '1'
+    POSTMETER_UI_REGRESSION_SMOKE: '1',
+    POSTMETER_UI_CONSTRAINED_WINDOW: '1',
+    POSTMETER_VALIDATION_ARTIFACT_DIR: process.env.POSTMETER_VALIDATION_ARTIFACT_DIR || path.join(tempDir, 'validation-artifacts')
   };
   delete env.ELECTRON_RUN_AS_NODE;
-  const child = spawn(electronPath, withCiNoSandboxArgs(['.'], env), {
+  const result = await spawnWithTimeout(electronPath, withCiNoSandboxArgs(['--force-high-contrast', '.'], env), {
     cwd: path.join(__dirname, '..', '..'),
     env,
-    stdio: ['ignore', 'pipe', 'pipe']
+    timeoutMillis: 20_000,
+    timeoutMessage: 'Electron UI regression smoke timed out after 20000 ms.'
   });
 
-  let output = '';
-  child.stdout.on('data', (chunk) => { output += chunk.toString(); });
-  child.stderr.on('data', (chunk) => { output += chunk.toString(); });
-
-  const timeout = setTimeout(() => {
-    child.kill('SIGTERM');
-  }, 20_000);
-
-  const exitCode = await new Promise((resolve) => {
-    child.on('exit', (code, signal) => {
-      clearTimeout(timeout);
-      resolve(signal ? 128 : code ?? 1);
-    });
-  });
-
-  if (exitCode !== 0) {
-    console.error(output.trim());
-    throw new Error(`Electron UI regression smoke failed with exit code ${exitCode}.`);
+  if (result.code !== 0) {
+    console.error(redactSmokeOutputText(`${result.stdout}${result.stderr}`, [tempDir]).trim());
+    throw new Error(`Electron UI regression smoke failed with exit code ${result.code}.`);
   }
 }
 
 main().catch((error) => {
-  console.error(error.stack || error.message || String(error));
+  console.error(redactSmokeOutputText(error.stack || error.message || String(error)));
   process.exitCode = 1;
 });

@@ -2,10 +2,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const test = require('node:test');
+const YAML = require('yaml');
 
 test('CI workflow runs the Electron UI and packaging validation suite', async () => {
   const root = path.join(__dirname, '..', '..');
   const workflow = await fs.readFile(path.join(root, '.github', 'workflows', 'ci.yml'), 'utf8');
+  assertValidationLogUploadsFailClosed(YAML.parse(workflow), 'ci.yml');
 
   assert.match(workflow, /node-version:\s*22/);
   assert.match(workflow, /npm ci/);
@@ -16,6 +18,10 @@ test('CI workflow runs the Electron UI and packaging validation suite', async ()
   assert.match(workflow, /npm run oauth:certify:validate/);
   assert.match(workflow, /npm run oauth:certify:mock/);
   assert.match(workflow, /npm run production:readiness:validate/);
+  assert.match(workflow, /npm run electron:security:validate/);
+  assert.match(workflow, /npm run workspace:durability:validate/);
+  assert.match(workflow, /npm run compatibility:non-postman:validate/);
+  assert.match(workflow, /npm run ux:accessibility:validate/);
   assert.match(workflow, /npm run release:gate/);
   assert.match(workflow, /npm audit --audit-level=high/);
   assert.match(workflow, /npm run sandbox:validate/);
@@ -51,6 +57,7 @@ test('CI workflow runs the Electron UI and packaging validation suite', async ()
 test('release workflow builds unsigned artifacts for all tier-one desktop platforms', async () => {
   const root = path.join(__dirname, '..', '..');
   const workflow = await fs.readFile(path.join(root, '.github', 'workflows', 'release.yml'), 'utf8');
+  assertValidationLogUploadsFailClosed(YAML.parse(workflow), 'release.yml');
 
   assert.match(workflow, /tags:\s*\n\s*-\s+"v\*"/);
   assert.match(workflow, /platform:\s*linux/);
@@ -68,9 +75,21 @@ test('release workflow builds unsigned artifacts for all tier-one desktop platfo
   assert.match(workflow, /npm run postman:docs:validate/);
   assert.match(workflow, /npm run oauth:certify:validate/);
   assert.match(workflow, /npm run oauth:certify:mock/);
+  assert.match(workflow, /npm run test:smoke/);
+  assert.match(workflow, /xvfb-run -a npm run test:smoke/);
+  assert.match(workflow, /npm run test:ui\b/);
+  assert.match(workflow, /xvfb-run -a npm run test:ui\b/);
+  assert.match(workflow, /npm run test:ui:regression/);
+  assert.match(workflow, /xvfb-run -a npm run test:ui:regression/);
   assert.match(workflow, /npm run test:ui:oauth/);
   assert.match(workflow, /xvfb-run -a npm run test:ui:oauth/);
+  assert.match(workflow, /npm run test:ui:snapshot/);
+  assert.match(workflow, /xvfb-run -a npm run test:ui:snapshot/);
   assert.match(workflow, /npm run production:readiness:validate/);
+  assert.match(workflow, /npm run electron:security:validate/);
+  assert.match(workflow, /npm run workspace:durability:validate/);
+  assert.match(workflow, /npm run compatibility:non-postman:validate/);
+  assert.match(workflow, /npm run ux:accessibility:validate/);
   assert.match(workflow, /npm run production:readiness:claim:stable/);
   assert.ok(
     workflow.indexOf('npm run production:readiness:claim:stable') < workflow.indexOf('Build unsigned artifacts'),
@@ -106,6 +125,7 @@ test('manual native release validation workflow exercises release evidence witho
   const root = path.join(__dirname, '..', '..');
   const workflow = await fs.readFile(path.join(root, '.github', 'workflows', 'release-validation.yml'), 'utf8');
   const packageJson = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
+  assertValidationLogUploadsFailClosed(YAML.parse(workflow), 'release-validation.yml');
 
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /contents:\s*read/);
@@ -122,9 +142,21 @@ test('manual native release validation workflow exercises release evidence witho
   assert.match(workflow, /npm run postman:docs:validate/);
   assert.match(workflow, /npm run oauth:certify:validate/);
   assert.match(workflow, /npm run oauth:certify:mock/);
+  assert.match(workflow, /npm run test:smoke/);
+  assert.match(workflow, /xvfb-run -a npm run test:smoke/);
+  assert.match(workflow, /npm run test:ui\b/);
+  assert.match(workflow, /xvfb-run -a npm run test:ui\b/);
+  assert.match(workflow, /npm run test:ui:regression/);
+  assert.match(workflow, /xvfb-run -a npm run test:ui:regression/);
   assert.match(workflow, /npm run test:ui:oauth/);
   assert.match(workflow, /xvfb-run -a npm run test:ui:oauth/);
+  assert.match(workflow, /npm run test:ui:snapshot/);
+  assert.match(workflow, /xvfb-run -a npm run test:ui:snapshot/);
   assert.match(workflow, /npm run production:readiness:validate/);
+  assert.match(workflow, /npm run electron:security:validate/);
+  assert.match(workflow, /npm run workspace:durability:validate/);
+  assert.match(workflow, /npm run compatibility:non-postman:validate/);
+  assert.match(workflow, /npm run ux:accessibility:validate/);
   assert.match(workflow, /npm run release:gate/);
   assert.match(workflow, /npm run release:validate:packaged-smoke/);
   assert.match(workflow, /npm run sandbox:validate:packaged/);
@@ -149,6 +181,72 @@ test('manual native release validation workflow exercises release evidence witho
   assert.match(packageJson.scripts['dist:win'], /npm run native:windows-sandbox:build/);
   assert.equal(packageJson.scripts['native:windows-sandbox:build'], 'node scripts/buildWindowsSandboxHelper.js');
 });
+
+test('release workflows keep Step 11 validators as executable YAML run steps', async () => {
+  const root = path.join(__dirname, '..', '..');
+  for (const workflowName of ['ci.yml', 'release.yml', 'release-validation.yml']) {
+    const workflow = YAML.parse(await fs.readFile(path.join(root, '.github', 'workflows', workflowName), 'utf8'));
+    for (const requiredRun of [
+      /npm run ux:accessibility:validate/,
+      /npm run release:gate/,
+      /npm run test:ui\b/,
+      /npm run test:ui:regression/,
+      /npm run test:ui:oauth/,
+      /npm run test:ui:snapshot/
+    ]) {
+      assertWorkflowHasRunStep(workflow, requiredRun, workflowName);
+    }
+  }
+});
+
+test('release gate validator parses workflow YAML run steps instead of only scanning raw text', async () => {
+  const root = path.join(__dirname, '..', '..');
+  const validator = await fs.readFile(path.join(root, 'scripts', 'validateSandboxReleaseGate.js'), 'utf8');
+
+  assert.match(validator, /YAML\.parse/);
+  assert.match(validator, /requireWorkflowRunSteps/);
+  assert.match(validator, /workflowRunSteps/);
+  assert.match(validator, /missing executable run step/);
+});
+
+test('sandbox validation scripts are timeout bounded instead of using unbounded spawnSync', async () => {
+  const root = path.join(__dirname, '..', '..');
+  const sourceValidation = await fs.readFile(path.join(root, 'scripts', 'validateSandboxRuntime.js'), 'utf8');
+  const packagedValidation = await fs.readFile(path.join(root, 'scripts', 'validatePackagedSandboxRuntime.js'), 'utf8');
+
+  for (const source of [sourceValidation, packagedValidation]) {
+    assert.match(source, /spawnWithTimeout/);
+    assert.doesNotMatch(source, /spawnSync/);
+    assert.match(source, /timed out/);
+  }
+  assert.match(sourceValidation, /POSTMETER_SANDBOX_VALIDATE_TIMEOUT_MS/);
+  assert.match(packagedValidation, /POSTMETER_PACKAGED_SANDBOX_VALIDATE_TIMEOUT_MS/);
+  assert.match(packagedValidation, /redactSmokeOutputText/);
+  assert.match(packagedValidation, /redactForOutput/);
+});
+
+function assertWorkflowHasRunStep(workflow, pattern, workflowName) {
+  const runSteps = Object.values(workflow?.jobs || {})
+    .flatMap((job) => Array.isArray(job?.steps) ? job.steps : [])
+    .map((step) => step?.run)
+    .filter((run) => typeof run === 'string');
+  assert.ok(
+    runSteps.some((run) => pattern.test(run)),
+    `${workflowName} is missing executable run step ${pattern}`
+  );
+}
+
+function assertValidationLogUploadsFailClosed(workflow, workflowName) {
+  const steps = Object.values(workflow?.jobs || {})
+    .flatMap((job) => Array.isArray(job?.steps) ? job.steps : [])
+    .filter((step) => /validation logs/i.test(String(step?.name || '')));
+  assert.ok(steps.length > 0, `${workflowName} is missing validation log uploads`);
+  for (const step of steps) {
+    assert.match(String(step.uses || ''), /^actions\/upload-artifact@/);
+    assert.equal(step.with?.['if-no-files-found'], 'error', `${workflowName} ${step.name} must fail when validation logs are missing`);
+    assert.match(String(step.with?.path || ''), /validation-artifacts/);
+  }
+}
 
 test('manual OAuth provider certification workflow is evidence-gated and fail-closed', async () => {
   const root = path.join(__dirname, '..', '..');

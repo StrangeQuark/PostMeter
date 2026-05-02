@@ -8,6 +8,9 @@ const {
   expectedDefaultUserDataRoot,
   isolatedDefaultPathEnv,
   loadPersistedSmokeWorkspace,
+  packagedSmokeCliErrorText,
+  packagedSmokeFailureMessage,
+  redactPackagedSmokeLogText,
   validateDefaultPersistenceArtifacts,
   validatePersistenceArtifacts,
   writeSmokeLog
@@ -69,15 +72,16 @@ test('packaged smoke writes validation logs when an artifact directory is config
   try {
     await writeSmokeLog('reload pass', '/tmp/PostMeter', {
       code: 0,
-      stdout: 'ready',
-      stderr: ''
+      stdout: 'ready /tmp/PostMeter Authorization: Bearer stdout-token',
+      stderr: 'Cookie: sid=stderr-cookie'
     });
     const files = await fs.readdir(directory);
     assert.ok(files.some((file) => file.startsWith(`packaged-app-smoke-${process.platform}-reload-pass`)));
     const log = await fs.readFile(path.join(directory, files[0]), 'utf8');
-    assert.match(log, /executable=\/tmp\/PostMeter/);
+    assert.match(log, /executable=PostMeter/);
     assert.match(log, /exitCode=0/);
     assert.match(log, /ready/);
+    assert.doesNotMatch(log, /\/tmp\/PostMeter|stdout-token|stderr-cookie/);
   } finally {
     if (previous === undefined) {
       delete process.env.POSTMETER_VALIDATION_ARTIFACT_DIR;
@@ -86,4 +90,53 @@ test('packaged smoke writes validation logs when an artifact directory is config
     }
     await fs.rm(directory, { recursive: true, force: true });
   }
+});
+
+test('packaged smoke log redaction removes local paths and secret-bearing values', () => {
+  const redacted = redactPackagedSmokeLogText(
+    'Authorization: Bearer abcdef12345\nAuthorization: Digest digest-scheme-value\nAuthorization: Hawk hawk-scheme-value\nAuthorization: Token token-scheme-value\nAuthorization: OAuth oauth-scheme-value\nAuthorization: NTLM ntlm-scheme-value\nAuthorization: Negotiate negotiate-scheme-value\naccess_token=token-value\nauthorization_code=auth-code-value\ndevice_code=device-code-value\nuser_code=user-code-value\ncode_verifier=code-verifier-value\nclientAssertion=client-assertion-value\n/home/user/PostMeter/release/linux-unpacked/postmeter',
+    '/home/user/PostMeter/release/linux-unpacked/postmeter'
+  );
+
+  assert.doesNotMatch(redacted, /abcdef12345|digest-scheme-value|hawk-scheme-value|token-scheme-value|oauth-scheme-value|ntlm-scheme-value|negotiate-scheme-value|token-value|auth-code-value|device-code-value|user-code-value|code-verifier-value|client-assertion-value|\/home\/user\/PostMeter/);
+  assert.match(redacted, /\[path\]/);
+  assert.match(redacted, /Digest \[redacted\]/);
+  assert.match(redacted, /Hawk \[redacted\]/);
+  assert.match(redacted, /Token \[redacted\]/);
+  assert.match(redacted, /OAuth \[redacted\]/);
+  assert.match(redacted, /NTLM \[redacted\]/);
+  assert.match(redacted, /Negotiate \[redacted\]/);
+});
+
+test('packaged smoke success output redacts the executable path before logging', async () => {
+  const source = await fs.readFile(path.join(__dirname, '..', '..', 'scripts', 'validatePackagedAppSmoke.js'), 'utf8');
+
+  assert.match(source, /Packaged app smoke passed: \$\{redactPackagedSmokeLogText\(executable, executable\)\}/);
+});
+
+test('packaged smoke failure messages redact child output before reaching CI logs', () => {
+  const message = packagedSmokeFailureMessage({
+    code: 1,
+    stdout: 'ready',
+    stderr: 'Authorization: Bearer raw-token-123456\n/tmp/PostMeter/workspace.json\nclient_secret=secret-value'
+  }, '/tmp/PostMeter/postmeter');
+
+  assert.match(message, /Packaged app startup smoke exited with 1/);
+  assert.doesNotMatch(message, /raw-token|secret-value|\/tmp\/PostMeter/);
+  assert.match(message, /\[redacted\]|\[path\]/);
+});
+
+test('packaged smoke CLI error output redacts local stack paths', () => {
+  const error = new Error('Packaged app startup smoke exited with 1: /tmp/PostMeter Authorization: Bearer raw-token-123456');
+  error.stack = [
+    error.message,
+    '    at runStartupSmokeOnce (/home/user/PostMeter/scripts/validatePackagedAppSmoke.js:137:11)',
+    '    at main (C:\\Users\\user\\PostMeter\\scripts\\validatePackagedAppSmoke.js:20:1)'
+  ].join('\n');
+
+  const output = packagedSmokeCliErrorText(error, '/home/user/PostMeter/release/linux-unpacked/postmeter');
+
+  assert.doesNotMatch(output, /\/home\/user\/PostMeter|C:\\Users\\user\\PostMeter|raw-token/);
+  assert.match(output, /\[path\]/);
+  assert.match(output, /Bearer \[redacted\]/);
 });

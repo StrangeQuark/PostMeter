@@ -178,17 +178,17 @@ function buildProductionReadinessMatrix() {
       commands: ['npm run electron:version'],
       evidenceRefs: ['package.json', 'scripts/electronVersion.js']
     }),
-    row('ux.accessibility', 'ux', 'Production user workflows, accessibility-sensitive modals, and failure states are smoke-tested and documented before release.', 'external-validation-required', {
+    row('ux.accessibility', 'ux', 'Production user workflows, accessibility-sensitive modals, and failure states are source-matrixed, smoke-tested, artifacted, and documented before release.', 'external-validation-required', {
       releaseBlocking: true,
-      commands: ['npm run test:ui', 'npm run test:ui:regression', 'npm run test:ui:snapshot'],
-      evidenceRefs: ['docs/RELEASE_READINESS.md', 'src/renderer/index.html', 'test/electron/uiRegressionSmoke.js'],
-      notes: 'Linux headless smoke coverage exists; final production signoff still requires native packaged runner evidence and manual QA.'
+      commands: ['npm run ux:accessibility:validate', 'npm run test:smoke', 'npm run test:ui', 'npm run test:ui:regression', 'npm run test:ui:oauth', 'npm run test:ui:snapshot'],
+      evidenceRefs: ['docs/ux-accessibility-matrix.json', 'docs/RELEASE_READINESS.md', 'src/renderer/index.html', 'src/renderer/uiRegressionSmoke.js', 'src/renderer/uiSnapshotSmoke.js', 'test/electron/startupSmoke.js', 'scripts/smokeProcess.js', 'electron/mainWindow.js'],
+      notes: 'The lower-level UX/accessibility matrix enumerates first launch, workspaces, request sends, collection runs, load tests, imports/exports, OAuth flows, package review/fetch, vault prompts, file bindings, local mocks, settings/theme, update checks, accessibility semantics, in-app prompt/confirmation/notification focus management, live regions, long labels, constrained sizes, active forced-colors behavior, startup smoke, timeout-bounded child-process failure behavior, and CI failure artifacts. Source-owned implementation and local validators are complete; this row stays external-validation-required until native runner smoke evidence and final manual QA evidence are attached. Full local diagnostic bundle export remains owned by the separate diagnostics/privacy row.'
     }),
     row('diagnostics.privacy', 'privacy', 'Local diagnostics and logging must remain user-controlled, redacted, and cloud-free.', 'blocked', {
       releaseBlocking: true,
       commands: ['future diagnostics validation'],
       evidenceRefs: ['NEXT_STEPS.MD', 'docs/RELEASE_READINESS.md'],
-      notes: 'Structured local diagnostics/export is tracked after the current HPS 1-9 implementation.'
+      notes: 'Structured local diagnostics/export is tracked by Step 12 in NEXT_STEPS.MD and remains separate from the Step 11 UI smoke artifact boundary.'
     }),
     row('docs.public-release', 'docs', 'Public release docs explain readiness gates, compatibility claims, unsigned artifacts, support channel, and platform limitations.', 'implemented', {
       releaseBlocking: true,

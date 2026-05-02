@@ -8,6 +8,13 @@ const { MAX_OPEN_TABS } = require('./sessionState');
 
 const FIELD_ENUMS = payloadSchemas.enums;
 const LIMITS = payloadSchemas.limits;
+const MAX_SANDBOX_FILE_BINDINGS = 1000;
+const MAX_SANDBOX_PACKAGE_COUNT = 32;
+const MAX_SANDBOX_PACKAGE_FILES = 128;
+const MAX_SANDBOX_PACKAGE_DEPENDENCIES = 32;
+const MAX_SANDBOX_PACKAGE_PACKAGE_DEPENDENCIES = 64;
+const MAX_SANDBOX_PACKAGE_SOURCE_BYTES = 128 * 1024;
+const MAX_VAULT_GRANT_IDS = 1000;
 
 function assertWorkspacePayload(value, field = 'workspace') {
   object(value, field);
@@ -136,12 +143,193 @@ function assertSettingsPayload(value, field) {
   }
   if (value.sandbox != null) {
     object(value.sandbox, `${field}.sandbox`);
+    assertAllowedObjectFields(value.sandbox, `${field}.sandbox`, [
+      'fileBindings',
+      'packageCache',
+      'trustedCapabilities'
+    ]);
+    if (value.sandbox.fileBindings != null) {
+      assertSandboxFileBindings(value.sandbox.fileBindings, `${field}.sandbox.fileBindings`);
+    }
+    if (value.sandbox.packageCache != null) {
+      assertSandboxPackageCache(value.sandbox.packageCache, `${field}.sandbox.packageCache`);
+    }
     if (value.sandbox.trustedCapabilities != null) {
       assertSchemaFields('sandboxSettings', value.sandbox.trustedCapabilities, `${field}.sandbox.trustedCapabilities`);
+      assertNoUnexpectedFields('sandboxSettings', value.sandbox.trustedCapabilities, `${field}.sandbox.trustedCapabilities`, [
+        'vaultGrants'
+      ]);
+      if (value.sandbox.trustedCapabilities.vaultGrants != null) {
+        assertVaultGrants(value.sandbox.trustedCapabilities.vaultGrants, `${field}.sandbox.trustedCapabilities.vaultGrants`);
+      }
     }
   }
   if (value.loadTestPolicy != null) {
     fail(`${field}.loadTestPolicy is no longer supported; configure load tests from the Load Test panel.`);
+  }
+}
+
+function assertSandboxFileBindings(values, field) {
+  array(values, field, MAX_SANDBOX_FILE_BINDINGS).forEach((binding, index) => {
+    const itemField = `${field}[${index}]`;
+    object(binding, itemField);
+    assertAllowedObjectFields(binding, itemField, [
+      'contentType',
+      'enabled',
+      'fileName',
+      'filePath',
+      'id',
+      'key',
+      'localPath',
+      'mode',
+      'path',
+      'reviewedAt',
+      'source',
+      'src'
+    ]);
+    const source = binding.source ?? binding.src;
+    const localPath = binding.localPath ?? binding.path ?? binding.filePath;
+    string(source, `${itemField}.source`, LIMITS.value);
+    string(localPath, `${itemField}.localPath`, LIMITS.value);
+    optionalString(binding.id, `${itemField}.id`, LIMITS.name);
+    optionalString(binding.key, `${itemField}.key`, LIMITS.key);
+    optionalString(binding.contentType, `${itemField}.contentType`, LIMITS.value);
+    optionalString(binding.fileName, `${itemField}.fileName`, LIMITS.name);
+    optionalString(binding.reviewedAt, `${itemField}.reviewedAt`, LIMITS.name);
+    optionalBoolean(binding.enabled, `${itemField}.enabled`);
+    if (binding.mode != null) {
+      string(binding.mode, `${itemField}.mode`, LIMITS.short);
+      if (!['file', 'binary', 'formdata'].includes(String(binding.mode).trim().toLowerCase())) {
+        fail(`${itemField}.mode must be one of: file, binary, formdata.`);
+      }
+    }
+  });
+}
+
+function assertSandboxPackageCache(values, field) {
+  array(values, field, MAX_SANDBOX_PACKAGE_COUNT).forEach((item, index) => {
+    const itemField = `${field}[${index}]`;
+    object(item, itemField);
+    assertAllowedObjectFields(item, itemField, [
+      'code',
+      'dependencies',
+      'dependencyAliases',
+      'dependencyMap',
+      'entrypoint',
+      'fetchedAt',
+      'files',
+      'integrity',
+      'manifest',
+      'maxExportKeys',
+      'name',
+      'package',
+      'packageDependencies',
+      'packageIntegrity',
+      'packageJson',
+      'packageName',
+      'packageVersion',
+      'registry',
+      'reviewedAt',
+      'source',
+      'sourceUrl',
+      'specifier'
+    ]);
+    string(item.specifier ?? item.name, `${itemField}.specifier`, LIMITS.name);
+    if (item.source == null && item.code == null && item.files == null) {
+      fail(`${itemField}.source must be a string.`);
+    }
+    optionalString(item.source, `${itemField}.source`, MAX_SANDBOX_PACKAGE_SOURCE_BYTES);
+    optionalString(item.code, `${itemField}.code`, MAX_SANDBOX_PACKAGE_SOURCE_BYTES);
+    string(item.integrity, `${itemField}.integrity`, LIMITS.value);
+    optionalString(item.entrypoint, `${itemField}.entrypoint`, LIMITS.name);
+    optionalString(item.fetchedAt, `${itemField}.fetchedAt`, LIMITS.name);
+    optionalString(item.packageIntegrity, `${itemField}.packageIntegrity`, LIMITS.value);
+    optionalString(item.packageName, `${itemField}.packageName`, LIMITS.name);
+    optionalString(item.packageVersion, `${itemField}.packageVersion`, LIMITS.name);
+    optionalString(item.registry, `${itemField}.registry`, LIMITS.short);
+    optionalString(item.reviewedAt, `${itemField}.reviewedAt`, LIMITS.name);
+    optionalString(item.sourceUrl, `${itemField}.sourceUrl`, LIMITS.url);
+    optionalNumber(item.maxExportKeys, `${itemField}.maxExportKeys`);
+    assertOptionalStringMap(item.dependencyAliases, `${itemField}.dependencyAliases`, MAX_SANDBOX_PACKAGE_DEPENDENCIES);
+    assertOptionalStringMap(item.dependencyMap, `${itemField}.dependencyMap`, MAX_SANDBOX_PACKAGE_DEPENDENCIES);
+    if (item.dependencies != null) {
+      assertStringArray(item.dependencies, `${itemField}.dependencies`, MAX_SANDBOX_PACKAGE_DEPENDENCIES, LIMITS.name);
+    }
+    if (item.packageDependencies != null) {
+      assertStringArray(item.packageDependencies, `${itemField}.packageDependencies`, MAX_SANDBOX_PACKAGE_PACKAGE_DEPENDENCIES, LIMITS.name);
+    }
+    if (item.files != null) {
+      assertSandboxPackageFiles(item.files, `${itemField}.files`);
+    }
+    optionalJsonObject(item.packageJson, `${itemField}.packageJson`, MAX_SANDBOX_PACKAGE_SOURCE_BYTES);
+    optionalJsonObject(item.package, `${itemField}.package`, MAX_SANDBOX_PACKAGE_SOURCE_BYTES);
+    optionalJsonObject(item.manifest, `${itemField}.manifest`, MAX_SANDBOX_PACKAGE_SOURCE_BYTES);
+  });
+}
+
+function assertSandboxPackageFiles(value, field) {
+  if (Array.isArray(value)) {
+    array(value, field, MAX_SANDBOX_PACKAGE_FILES).forEach((file, index) => {
+      const itemField = `${field}[${index}]`;
+      object(file, itemField);
+      assertAllowedObjectFields(file, itemField, [
+        'code',
+        'filename',
+        'name',
+        'path',
+        'source',
+        'text'
+      ]);
+      string(file.path ?? file.name ?? file.filename, `${itemField}.path`, LIMITS.key);
+      optionalString(file.source, `${itemField}.source`, MAX_SANDBOX_PACKAGE_SOURCE_BYTES);
+      optionalString(file.code, `${itemField}.code`, MAX_SANDBOX_PACKAGE_SOURCE_BYTES);
+      optionalString(file.text, `${itemField}.text`, MAX_SANDBOX_PACKAGE_SOURCE_BYTES);
+      if (file.source == null && file.code == null && file.text == null) {
+        fail(`${itemField}.source must be a string.`);
+      }
+    });
+    return;
+  }
+  object(value, field);
+  const entries = Object.entries(value);
+  if (entries.length > MAX_SANDBOX_PACKAGE_FILES) {
+    fail(`${field} cannot contain more than ${MAX_SANDBOX_PACKAGE_FILES} files.`);
+  }
+  for (const [filePath, source] of entries) {
+    string(filePath, `${field}.${filePath}.path`, LIMITS.key);
+    string(source, `${field}.${filePath}`, MAX_SANDBOX_PACKAGE_SOURCE_BYTES);
+  }
+}
+
+function assertVaultGrants(value, field) {
+  object(value, field);
+  assertAllowedObjectFields(value, field, [
+    'collections',
+    'deniedCollections',
+    'deniedRequests',
+    'requests',
+    'workspace'
+  ]);
+  optionalBoolean(value.workspace, `${field}.workspace`);
+  for (const name of ['collections', 'requests', 'deniedCollections', 'deniedRequests']) {
+    if (value[name] != null) {
+      assertStringArray(value[name], `${field}.${name}`, MAX_VAULT_GRANT_IDS, LIMITS.name);
+    }
+  }
+}
+
+function assertOptionalStringMap(value, field, maxItems) {
+  if (value == null) {
+    return;
+  }
+  object(value, field);
+  const entries = Object.entries(value);
+  if (entries.length > maxItems) {
+    fail(`${field} cannot contain more than ${maxItems} entries.`);
+  }
+  for (const [key, target] of entries) {
+    string(key, `${field}.${key}.key`, LIMITS.key);
+    string(target, `${field}.${key}`, LIMITS.name);
   }
 }
 
@@ -250,6 +438,19 @@ function assertLoadResultPayload(value, field = 'result') {
     fail(`${field} is too large to export.`);
   }
   assertSchemaFields('loadResult', value, field);
+  if (value.updatedAuth != null) {
+    fail(`${field}.updatedAuth must not be included in public IPC payloads.`);
+  }
+  assertNoUnexpectedFields('loadResult', value, field, [
+    'cookies',
+    'errors',
+    'latencyHistogram',
+    'policyDecisions',
+    'sampleLimit',
+    'sampleLimitReached',
+    'samples',
+    'statusCounts'
+  ]);
   if (value.statusCounts != null) {
     object(value.statusCounts, `${field}.statusCounts`);
     for (const [statusCode, count] of Object.entries(value.statusCounts)) {
@@ -266,20 +467,31 @@ function assertLoadResultPayload(value, field = 'result') {
   if (value.latencyHistogram != null) {
     array(value.latencyHistogram, `${field}.latencyHistogram`, LIMITS.histogramBuckets).forEach((bucket, index) => {
       assertSchemaFields('loadHistogramBucket', bucket, `${field}.latencyHistogram[${index}]`);
+      assertNoUnexpectedFields('loadHistogramBucket', bucket, `${field}.latencyHistogram[${index}]`);
     });
   }
   if (value.samples != null) {
     array(value.samples, `${field}.samples`, LIMITS.loadSamples).forEach((sample, index) => {
       assertSchemaFields('loadSample', sample, `${field}.samples[${index}]`);
+      assertNoUnexpectedFields('loadSample', sample, `${field}.samples[${index}]`);
     });
   }
-  if (value.updatedAuth != null) {
-    fail(`${field}.updatedAuth must not be included in public IPC payloads.`);
+  if (value.sampleLimit != null) {
+    number(value.sampleLimit, `${field}.sampleLimit`);
+  }
+  if (value.sampleLimitReached != null) {
+    optionalBoolean(value.sampleLimitReached, `${field}.sampleLimitReached`);
+  }
+  if (value.cookies != null) {
+    assertCookies(value.cookies, `${field}.cookies`);
   }
 }
 
 function assertLoadProgressPayload(value, field = 'progress') {
   assertSchemaFields('loadProgress', value, field);
+  assertNoUnexpectedFields('loadProgress', value, field, [
+    'policyDecisions'
+  ]);
   if (value.policyDecisions != null) {
     assertLoadPolicyDecisions(value.policyDecisions, `${field}.policyDecisions`);
   }
@@ -288,6 +500,7 @@ function assertLoadProgressPayload(value, field = 'progress') {
 function assertLoadPolicyDecisions(values, field) {
   array(values, field, LIMITS.pairs).forEach((decision, index) => {
     assertSchemaFields('loadPolicyDecision', decision, `${field}[${index}]`);
+    assertNoUnexpectedFields('loadPolicyDecision', decision, `${field}[${index}]`);
   });
 }
 
@@ -298,18 +511,64 @@ function assertCollectionRunResultPayload(value, field = 'result') {
     fail(`${field} is too large to export.`);
   }
   assertSchemaFields('collectionRunResult', value, field);
+  assertNoUnexpectedFields('collectionRunResult', value, field, [
+    'collectionVariables',
+    'cookies',
+    'environment',
+    'globals',
+    'results'
+  ]);
   if (value.results != null) {
     array(value.results, `${field}.results`, LIMITS.history).forEach((result, index) => {
       const itemField = `${field}.results[${index}]`;
       assertSchemaFields('collectionRunRequestResult', result, itemField);
+      if (result.updatedAuth != null) {
+        fail(`${itemField}.updatedAuth must not be included in public IPC payloads.`);
+      }
+      assertNoUnexpectedFields('collectionRunRequestResult', result, itemField, [
+        'afterResponseScriptResult',
+        'assertionResults',
+        'extractedVariables',
+        'localVariables',
+        'messageScriptResults',
+        'preRequestScriptResult',
+        'testScriptResult'
+      ]);
       if (result.assertionResults != null) {
         array(result.assertionResults, `${itemField}.assertionResults`, LIMITS.pairs).forEach((assertionResult, assertionIndex) => {
           const assertionField = `${itemField}.assertionResults[${assertionIndex}]`;
           assertSchemaFields('assertionResult', assertionResult, assertionField);
+          assertNoUnexpectedFields('assertionResult', assertionResult, assertionField, [
+            'actual',
+            'assertion',
+            'expected',
+            'extractedVariable'
+          ]);
+          if (assertionResult.actual != null) {
+            optionalJsonValue(assertionResult.actual, `${assertionField}.actual`, LIMITS.value);
+          }
+          if (assertionResult.assertion != null) {
+            assertSchemaFields('assertion', assertionResult.assertion, `${assertionField}.assertion`);
+            assertNoUnexpectedFields('assertion', assertionResult.assertion, `${assertionField}.assertion`);
+          }
+          if (assertionResult.expected != null) {
+            optionalJsonValue(assertionResult.expected, `${assertionField}.expected`, LIMITS.value);
+          }
+          if (assertionResult.extractedVariable != null) {
+            assertSchemaFields('keyValue', assertionResult.extractedVariable, `${assertionField}.extractedVariable`);
+          }
         });
       }
       if (result.preRequestScriptResult != null) {
         assertScriptResult(result.preRequestScriptResult, `${itemField}.preRequestScriptResult`);
+      }
+      if (result.messageScriptResults != null) {
+        array(result.messageScriptResults, `${itemField}.messageScriptResults`, LIMITS.pairs).forEach((scriptResult, scriptIndex) => {
+          assertScriptResult(scriptResult, `${itemField}.messageScriptResults[${scriptIndex}]`);
+        });
+      }
+      if (result.afterResponseScriptResult != null) {
+        assertScriptResult(result.afterResponseScriptResult, `${itemField}.afterResponseScriptResult`);
       }
       if (result.testScriptResult != null) {
         assertScriptResult(result.testScriptResult, `${itemField}.testScriptResult`);
@@ -319,9 +578,6 @@ function assertCollectionRunResultPayload(value, field = 'result') {
       }
       if (result.localVariables != null) {
         assertPairs(result.localVariables, `${itemField}.localVariables`);
-      }
-      if (result.updatedAuth != null) {
-        fail(`${itemField}.updatedAuth must not be included in public IPC payloads.`);
       }
     });
   }
@@ -345,19 +601,32 @@ function assertRunnerConfigPayload(value, field = 'config') {
 
 function assertRunnerProgressPayload(value, field = 'progress') {
   assertSchemaFields('runnerProgress', value, field);
+  assertNoUnexpectedFields('runnerProgress', value, field);
 }
 
 function assertResponsePayload(value, field = 'response') {
   assertSchemaFields('response', value, field);
+  if (value.updatedAuth != null) {
+    fail(`${field}.updatedAuth must not be included in public IPC payloads.`);
+  }
+  assertNoUnexpectedFields('response', value, field, [
+    'collectionVariables',
+    'environment',
+    'error',
+    'globals',
+    'headers',
+    'localVariables',
+    'preRequestScriptResult',
+    'requestSent',
+    'testScriptResult',
+    'updatedCookies'
+  ]);
   object(value.headers || {}, `${field}.headers`);
   for (const [key, values] of Object.entries(value.headers || {})) {
     string(key, `${field}.headers key`, LIMITS.key);
     array(values, `${field}.headers.${key}`, 100).forEach((headerValue, index) => {
       string(headerValue, `${field}.headers.${key}[${index}]`, LIMITS.value);
     });
-  }
-  if (value.updatedAuth != null) {
-    fail(`${field}.updatedAuth must not be included in public IPC payloads.`);
   }
   if (value.updatedCookies != null) {
     assertCookies(value.updatedCookies, `${field}.updatedCookies`);
@@ -379,6 +648,12 @@ function assertResponsePayload(value, field = 'response') {
   }
   if (value.localVariables != null) {
     assertPairs(value.localVariables, `${field}.localVariables`);
+  }
+  if (value.requestSent != null) {
+    optionalBoolean(value.requestSent, `${field}.requestSent`);
+  }
+  if (value.error != null) {
+    string(value.error, `${field}.error`, LIMITS.value);
   }
 }
 
@@ -434,6 +709,7 @@ function assertFileOperationResultPayload(value, field = 'result') {
 
 function assertOAuthProgressPayload(value, field = 'progress') {
   assertSchemaFields('oauthProgress', value, field);
+  assertNoUnexpectedFields('oauthProgress', value, field);
 }
 
 function assertExportFormat(value, field = 'format') {
@@ -692,9 +968,19 @@ function assertCookies(values, field) {
 
 function assertScriptResult(value, field) {
   assertSchemaFields('scriptRunResult', value, field);
+  assertNoUnexpectedFields('scriptRunResult', value, field, [
+    'commitSideEffects',
+    'execution',
+    'logs',
+    'mock',
+    'request',
+    'tests',
+    'visualizer'
+  ]);
   if (value.tests != null) {
     array(value.tests, `${field}.tests`, LIMITS.pairs).forEach((testResult, index) => {
       assertSchemaFields('scriptTestResult', testResult, `${field}.tests[${index}]`);
+      assertNoUnexpectedFields('scriptTestResult', testResult, `${field}.tests[${index}]`);
     });
   }
   if (value.logs != null) {
@@ -702,6 +988,30 @@ function assertScriptResult(value, field) {
   }
   if (value.visualizer != null) {
     assertSchemaFields('scriptVisualizer', value.visualizer, `${field}.visualizer`);
+    assertNoUnexpectedFields('scriptVisualizer', value.visualizer, `${field}.visualizer`, [
+      'assets',
+      'data'
+    ]);
+    if (value.visualizer.assets != null) {
+      array(value.visualizer.assets, `${field}.visualizer.assets`, LIMITS.pairs).forEach((asset, assetIndex) => {
+        optionalJsonObject(asset, `${field}.visualizer.assets[${assetIndex}]`, LIMITS.value);
+      });
+    }
+    if (value.visualizer.data != null) {
+      optionalJsonObject(value.visualizer.data, `${field}.visualizer.data`, LIMITS.body);
+    }
+  }
+  if (value.commitSideEffects != null) {
+    optionalBoolean(value.commitSideEffects, `${field}.commitSideEffects`);
+  }
+  if (value.execution != null) {
+    optionalJsonObject(value.execution, `${field}.execution`, LIMITS.body);
+  }
+  if (value.request != null) {
+    optionalJsonObject(value.request, `${field}.request`, LIMITS.body);
+  }
+  if (value.mock != null) {
+    optionalJsonObject(value.mock, `${field}.mock`, LIMITS.body);
   }
 }
 
@@ -744,6 +1054,33 @@ function assertSchemaFields(schemaName, value, field) {
       if (!allowed.includes(candidate)) {
         fail(`${nextField} must be one of: ${allowed.join(', ')}.`);
       }
+    }
+  }
+}
+
+function assertNoUnexpectedFields(schemaName, value, field, allowedExtraFields = []) {
+  object(value, field);
+  const schema = payloadSchemas.fields?.[schemaName];
+  if (!schema) {
+    fail(`${field} does not have a shared field schema.`);
+  }
+  const allowed = new Set([
+    ...Object.keys(schema),
+    ...allowedExtraFields
+  ]);
+  for (const name of Object.keys(value)) {
+    if (!allowed.has(name)) {
+      fail(`${field}.${name} is not allowed in public IPC payloads.`);
+    }
+  }
+}
+
+function assertAllowedObjectFields(value, field, allowedFields) {
+  object(value, field);
+  const allowed = new Set(allowedFields);
+  for (const name of Object.keys(value)) {
+    if (!allowed.has(name)) {
+      fail(`${field}.${name} is not allowed in public IPC payloads.`);
     }
   }
 }

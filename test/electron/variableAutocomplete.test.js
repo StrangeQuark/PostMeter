@@ -2,8 +2,10 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const {
   buildVariableSuggestions,
+  createVariableAutocomplete,
   findVariableToken,
   isVariableAutocompleteEligible,
+  MENU_ID,
   menuPositionFromAnchor,
   replaceVariableToken
 } = require('../../src/renderer/variableAutocomplete');
@@ -65,3 +67,237 @@ test('variable autocomplete positions the menu from the token anchor rectangle',
     { left: 186, top: 142 }
   );
 });
+
+test('variable autocomplete connects the listbox to the active input and updates active descendants', () => {
+  const doc = createFakeDocument();
+  const input = doc.createElement('textarea');
+  input.id = 'bodyInput';
+  input.tagName = 'TEXTAREA';
+  input.value = 'Bearer {{tok';
+  input.selectionStart = input.value.length;
+  input.selectionEnd = input.value.length;
+  doc.elements.set(input.id, input);
+
+  const autocomplete = createVariableAutocomplete({
+    doc,
+    windowObject: {
+      Event: class Event {
+        constructor(type) {
+          this.type = type;
+        }
+      },
+      getComputedStyle: () => ({
+        borderStyle: 'solid',
+        borderWidth: '1px',
+        boxSizing: 'border-box',
+        direction: 'ltr',
+        font: '12px sans-serif',
+        fontFamily: 'sans-serif',
+        fontSize: '12px',
+        fontStyle: 'normal',
+        fontVariant: 'normal',
+        fontWeight: '400',
+        letterSpacing: '0px',
+        lineHeight: '16px',
+        padding: '4px',
+        tabSize: '4',
+        textAlign: 'left',
+        textIndent: '0',
+        textTransform: 'none',
+        wordSpacing: '0'
+      }),
+      innerHeight: 720,
+      innerWidth: 1280
+    },
+    getVariables: () => [
+      { enabled: true, key: 'token', value: 'secret' },
+      { enabled: true, key: 'tokenBackup', value: 'backup' }
+    ]
+  });
+
+  assert.equal(autocomplete.refresh(input), true);
+  assert.equal(input.attributes.role, undefined);
+  assert.equal(input.attributes['aria-autocomplete'], 'list');
+  assert.equal(input.attributes['aria-controls'], MENU_ID);
+  assert.equal(input.attributes['aria-expanded'], 'true');
+  assert.equal(input.attributes['aria-haspopup'], 'listbox');
+  assert.equal(input.attributes['aria-activedescendant'], `${MENU_ID}Option0`);
+  assert.equal(doc.getElementById(MENU_ID).children[0].tagName, 'DIV');
+  assert.equal(doc.getElementById(MENU_ID).children[0].attributes.role, 'option');
+
+  doc.listeners.get('keydown')({
+    key: 'ArrowDown',
+    target: input,
+    preventDefault() {},
+    stopPropagation() {}
+  });
+  assert.equal(input.attributes['aria-activedescendant'], `${MENU_ID}Option1`);
+
+  doc.listeners.get('keydown')({
+    key: 'ArrowUp',
+    target: input,
+    preventDefault() {},
+    stopPropagation() {}
+  });
+  assert.equal(input.attributes['aria-activedescendant'], `${MENU_ID}Option0`);
+
+  autocomplete.close();
+  assert.equal(input.attributes.role, undefined);
+  assert.equal(input.attributes['aria-controls'], undefined);
+  assert.equal(input.attributes['aria-haspopup'], undefined);
+  assert.equal(input.attributes['aria-expanded'], undefined);
+  autocomplete.destroy();
+});
+
+test('variable autocomplete uses combobox role only for single-line inputs and restores prior roles', () => {
+  const doc = createFakeDocument();
+  const input = doc.createElement('input');
+  input.id = 'urlInput';
+  input.tagName = 'INPUT';
+  input.type = 'text';
+  input.value = 'https://example.test/{{bas';
+  input.selectionStart = input.value.length;
+  input.selectionEnd = input.value.length;
+  input.setAttribute('role', 'searchbox');
+  doc.elements.set(input.id, input);
+
+  const autocomplete = createVariableAutocomplete({
+    doc,
+    windowObject: {
+      Event: class Event {
+        constructor(type) {
+          this.type = type;
+        }
+      },
+      getComputedStyle: () => ({
+        borderStyle: 'solid',
+        borderWidth: '1px',
+        boxSizing: 'border-box',
+        direction: 'ltr',
+        font: '12px sans-serif',
+        fontFamily: 'sans-serif',
+        fontSize: '12px',
+        fontStyle: 'normal',
+        fontVariant: 'normal',
+        fontWeight: '400',
+        letterSpacing: '0px',
+        lineHeight: '16px',
+        padding: '4px',
+        tabSize: '4',
+        textAlign: 'left',
+        textIndent: '0',
+        textTransform: 'none',
+        wordSpacing: '0'
+      }),
+      innerHeight: 720,
+      innerWidth: 1280
+    },
+    getVariables: () => [{ enabled: true, key: 'baseUrl', value: 'https://api.example.test' }]
+  });
+
+  assert.equal(autocomplete.refresh(input), true);
+  assert.equal(input.attributes.role, 'combobox');
+  assert.equal(input.attributes['aria-haspopup'], 'listbox');
+  autocomplete.close();
+  assert.equal(input.attributes.role, 'searchbox');
+  assert.equal(input.attributes['aria-haspopup'], undefined);
+  autocomplete.destroy();
+});
+
+function createFakeDocument() {
+  const elements = new Map();
+  const listeners = new Map();
+  const documentElement = createFakeElement('html');
+  const body = createFakeElement('body');
+  return {
+    body,
+    documentElement,
+    elements,
+    listeners,
+    addEventListener(name, handler) {
+      listeners.set(name, handler);
+    },
+    removeEventListener(name, handler) {
+      if (listeners.get(name) === handler) {
+        listeners.delete(name);
+      }
+    },
+    createElement(tagName) {
+      return createFakeElement(tagName, elements);
+    },
+    getElementById(id) {
+      return elements.get(id) || null;
+    }
+  };
+}
+
+function createFakeElement(tagName, elements = new Map()) {
+  const children = [];
+  const element = {
+    attributes: {},
+    children,
+    classList: { add() {} },
+    hidden: false,
+    id: '',
+    offsetHeight: 40,
+    selectionEnd: 0,
+    selectionStart: 0,
+    style: {},
+    tagName: String(tagName).toUpperCase(),
+    textContent: '',
+    addEventListener() {},
+    append(...items) {
+      for (const item of items) {
+        children.push(item);
+        if (item.id) {
+          elements.set(item.id, item);
+        }
+      }
+    },
+    contains(target) {
+      return target === element || children.includes(target);
+    },
+    dispatchEvent() {},
+    getBoundingClientRect() {
+      return { left: 10, top: 20, bottom: 40, width: 320, height: 120 };
+    },
+    querySelector(selector) {
+      if (selector.startsWith('#')) {
+        const id = selector.slice(1);
+        return children.find((child) => child.id === id) || null;
+      }
+      if (selector === '[data-variable-autocomplete-part="before"]') {
+        return children.find((child) => child.dataset?.variableAutocompletePart === 'before') || null;
+      }
+      if (selector === '[data-variable-autocomplete-part="marker"]') {
+        return children.find((child) => child.dataset?.variableAutocompletePart === 'marker') || null;
+      }
+      return null;
+    },
+    getAttribute(name) {
+      return this.attributes[name] ?? null;
+    },
+    removeAttribute(name) {
+      delete this.attributes[name];
+    },
+    setAttribute(name, value) {
+      this.attributes[name] = String(value);
+    }
+  };
+  Object.defineProperty(element, 'dataset', {
+    configurable: true,
+    value: {}
+  });
+  Object.defineProperty(element, 'id', {
+    get() {
+      return this._id || '';
+    },
+    set(value) {
+      this._id = String(value || '');
+      if (this._id) {
+        elements.set(this._id, element);
+      }
+    }
+  });
+  return element;
+}

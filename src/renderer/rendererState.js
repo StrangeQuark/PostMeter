@@ -29,6 +29,7 @@
       lastStatusMessage: 'Ready',
       lastUserNotification: null,
       activeModalId: null,
+      activeModalCancelValue: null,
       activeModalResolver: null,
       selectedDraftSaveCollectionId: '',
       selectedExportCollectionId: '',
@@ -135,11 +136,12 @@
     clearSharedRequestDirtyState(state);
   }
 
-  function openModalState(state, modalId, resolver) {
+  function openModalState(state, modalId, resolver, cancelValue = null) {
     if (!state) {
       return;
     }
     state.activeModalId = modalId;
+    state.activeModalCancelValue = cancelValue;
     state.activeModalResolver = resolver;
   }
 
@@ -150,6 +152,7 @@
     const resolver = state.activeModalResolver;
     state.activeModalResolver = null;
     state.activeModalId = null;
+    state.activeModalCancelValue = null;
     return resolver;
   }
 

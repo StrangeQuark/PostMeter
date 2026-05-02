@@ -43,6 +43,7 @@ const MAX_PM_MOCK_STATE_KEY_LENGTH = 256;
 const MAX_PM_MOCK_STATE_VALUE_BYTES = 64 * 1024;
 const MAX_PM_MOCK_STATE_TOTAL_BYTES = 256 * 1024;
 const MAX_WORKER_STDERR_BYTES = 4096;
+const MAX_WORKER_STDOUT_LINE_BYTES = MAX_BROKER_PAYLOAD_BYTES * 2;
 const MAX_PENDING_BROKER_TIMERS = 64;
 const MAX_BROKER_TIMER_DELAY_MILLIS = 30_000;
 const SCRIPT_WORKER_ALLOWED_FILES = [
@@ -309,12 +310,23 @@ function createStderrCapture(child) {
 function createStdioChildTransport(child) {
   let buffer = '';
   let stderrBuffer = '';
+  let stdoutOverflowed = false;
   let messageHandler = () => {};
   let errorHandler = () => {};
   child.stdout.setEncoding('utf8');
   child.stderr.setEncoding('utf8');
   child.stdout.on('data', (chunk) => {
+    if (stdoutOverflowed) {
+      return;
+    }
     buffer += chunk;
+    if (Buffer.byteLength(buffer, 'utf8') > MAX_WORKER_STDOUT_LINE_BYTES) {
+      stdoutOverflowed = true;
+      buffer = '';
+      errorHandler(new Error('Script worker protocol stdout line exceeded the maximum allowed size.'));
+      child.kill?.('SIGKILL');
+      return;
+    }
     let newlineIndex = buffer.indexOf('\n');
     while (newlineIndex !== -1) {
       const line = buffer.slice(0, newlineIndex);
@@ -325,6 +337,13 @@ function createStdioChildTransport(child) {
         } catch (error) {
           errorHandler(new Error(`Script worker protocol JSON was invalid: ${error.message || String(error)}`));
         }
+      }
+      if (Buffer.byteLength(buffer, 'utf8') > MAX_WORKER_STDOUT_LINE_BYTES) {
+        stdoutOverflowed = true;
+        buffer = '';
+        errorHandler(new Error('Script worker protocol stdout line exceeded the maximum allowed size.'));
+        child.kill?.('SIGKILL');
+        return;
       }
       newlineIndex = buffer.indexOf('\n');
     }
@@ -2089,6 +2108,7 @@ function cloneForWorker(value) {
 
 module.exports = {
   OS_SANDBOX_MODES,
+  _createStdioChildTransportForTest: createStdioChildTransport,
   osSandboxStatus,
   runPostmanScriptIsolated,
   scriptWorkerExecArgv,

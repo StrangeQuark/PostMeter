@@ -1,5 +1,8 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
 const http = require('node:http');
+const os = require('node:os');
+const path = require('node:path');
 const test = require('node:test');
 const {
   HIGH_CONCURRENCY_THRESHOLD,
@@ -33,6 +36,10 @@ test('validates load-test limits', () => {
   assert.throws(() => validateLoadConfig({ concurrency: 2, totalRequests: 1, targetRatePerSecond: -1 }), /Target rate must be between/);
   assert.throws(() => validateLoadConfig({ concurrency: 2, totalRequests: 1, maxRatePerSecond: -1 }), /Rate cap must be between/);
   assert.throws(() => validateLoadConfig({ concurrency: 2, totalRequests: 1, targetRatePerSecond: 20, maxRatePerSecond: 10 }), /Target rate cannot exceed/);
+  assert.throws(
+    () => validateLoadConfig({ concurrency: 2, totalRequests: 100000, targetRatePerSecond: 0.001 }),
+    /must complete within 3600 seconds/
+  );
   assert.equal(validateLoadConfig({ concurrency: 2, totalRequests: 1, maxRatePerSecond: 10 }).targetRatePerSecond, 10);
   assert.throws(() => validateLoadConfig({ concurrency: 2, totalRequests: 1, executionMode: 'cluster' }), /Execution mode must be one of/);
   assert.throws(() => validateLoadConfig({ concurrency: 2, totalRequests: 1, workerProcesses: 0 }), /Worker processes must be between/);
@@ -522,6 +529,121 @@ test('supports longer-running multi-process cancellation', async () => {
     assert.ok(result.elapsedMillis < 1200);
   } finally {
     await server.close();
+  }
+});
+
+test('fails closed when a multi-process load worker never returns a result', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-load-worker-hang-'));
+  const workerScript = path.join(directory, 'hang-worker.js');
+  try {
+    await fs.writeFile(workerScript, "process.on('SIGTERM', () => {}); process.on('message', () => {}); setInterval(() => {}, 1000);\n");
+    const started = Date.now();
+
+    await assert.rejects(
+      () => runLoadTest({
+        method: 'GET',
+        url: 'https://example.test/load-worker-hang',
+        queryParams: [],
+        headers: [],
+        bodyType: 'NONE',
+        body: ''
+      }, null, {
+        concurrency: 2,
+        totalRequests: 2,
+        executionMode: 'multiProcess',
+        workerProcesses: 2
+      }, {
+        workerKillGraceMillis: 25,
+        workerScript,
+        workerTimeoutMillis: 25
+      }),
+      /Load worker timed out/
+    );
+    assert.ok(Date.now() - started < 1000, 'Load worker timeout should force-kill children that ignore SIGTERM.');
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('bounds multi-process load worker stderr in failure messages', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-load-worker-stderr-'));
+  const workerScript = path.join(directory, 'stderr-worker.js');
+  try {
+    await fs.writeFile(workerScript, "process.stderr.write('S'.repeat(200000)); process.on('message', () => {}); setInterval(() => {}, 1000);\n");
+
+    await assert.rejects(
+      () => runLoadTest({
+        method: 'GET',
+        url: 'https://example.test/load-worker-stderr',
+        queryParams: [],
+        headers: [],
+        bodyType: 'NONE',
+        body: ''
+      }, null, {
+        concurrency: 2,
+        totalRequests: 2,
+        executionMode: 'multiProcess',
+        workerProcesses: 2
+      }, {
+        workerKillGraceMillis: 25,
+        workerScript,
+        workerTimeoutMillis: 150
+      }),
+      (error) => {
+        assert.match(error.message, /Load worker timed out/);
+        assert.match(error.message, /stderr truncated/);
+        assert.ok(Buffer.byteLength(error.message, 'utf8') < 80 * 1024);
+        return true;
+      }
+    );
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('redacts multi-process load worker stderr before surfacing failure messages', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-load-worker-redact-'));
+  const workerScript = path.join(directory, 'stderr-redact-worker.js');
+  try {
+    await fs.writeFile(workerScript, [
+      "process.stderr.write('/home/user/PostMeter Authorization: Bearer abcdefghijklmnopqrstuvwxyz authorization_code=auth-code-secret code_verifier=code-verifier-secret');",
+      'process.on("message", () => {});',
+      'setInterval(() => {}, 1000);'
+    ].join('\n'));
+
+    await assert.rejects(
+      () => runLoadTest({
+        method: 'GET',
+        url: 'https://example.test/load-worker-stderr-redaction',
+        queryParams: [],
+        headers: [],
+        bodyType: 'NONE',
+        body: ''
+      }, null, {
+        concurrency: 2,
+        totalRequests: 2,
+        executionMode: 'multiProcess',
+        workerProcesses: 2
+      }, {
+        workerKillGraceMillis: 25,
+        workerScript,
+        workerTimeoutMillis: 150
+      }),
+      (error) => {
+        assert.match(error.message, /Load worker timed out/);
+        assert.doesNotMatch(error.message, /\/home\/user\/PostMeter/);
+        assert.doesNotMatch(error.message, /abcdefghijklmnopqrstuvwxyz/);
+        assert.doesNotMatch(error.message, /auth-code-secret/);
+        assert.doesNotMatch(error.message, /code-verifier-secret/);
+        assert.match(error.message, /\[path\]/);
+        assert.match(error.message, /Bearer \[redacted\]/);
+        assert.match(error.message, /authorization_code=\[redacted\]/);
+        assert.match(error.message, /code_verifier=\[redacted\]/);
+        return true;
+      }
+    );
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
   }
 });
 

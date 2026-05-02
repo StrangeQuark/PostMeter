@@ -125,6 +125,28 @@
     for (const label of ['Add Request', 'Add Folder', 'Rename', 'Export', 'Delete']) {
       assertUiSmoke(labels.includes(label), `Context menu missing ${label}.`);
     }
+    if (options.keyboard === true) {
+      runtimeGlobal.closeContextMenu();
+      collectionButton.focus();
+      collectionButton.dispatchEvent(new KeyboardEvent('keydown', {
+        bubbles: true,
+        cancelable: true,
+        key: 'F10',
+        shiftKey: true
+      }));
+      assertUiSmoke(!contextMenu.hidden, 'Keyboard context menu did not open.');
+      const buttons = Array.from(contextMenu.querySelectorAll('button'));
+      assertUiSmoke(runtimeGlobal.document.activeElement === buttons[0], 'Keyboard context menu should focus the first action.');
+      buttons[0].dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowDown' }));
+      assertUiSmoke(runtimeGlobal.document.activeElement === buttons[1], 'Keyboard context menu should support arrow navigation.');
+      buttons[1].dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'End' }));
+      assertUiSmoke(runtimeGlobal.document.activeElement === buttons.at(-1), 'Keyboard context menu should support End navigation.');
+      buttons.at(-1).dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowUp' }));
+      assertUiSmoke(runtimeGlobal.document.activeElement === buttons.at(-2), 'Keyboard context menu should navigate relative to the focused menu item.');
+      buttons.at(-2).dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape' }));
+      assertUiSmoke(contextMenu.hidden, 'Escape should close the keyboard context menu.');
+      assertUiSmoke(runtimeGlobal.document.activeElement === collectionButton, 'Escape should restore focus to the context menu trigger.');
+    }
     if (!options.keepOpen) {
       runtimeGlobal.closeContextMenu();
     }

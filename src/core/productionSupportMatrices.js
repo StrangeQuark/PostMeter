@@ -1,8 +1,16 @@
 const MATRIX_BUILDERS = Object.freeze({
   'electron-security': buildElectronSecurityMatrix,
   'workspace-durability': buildWorkspaceDurabilityMatrix,
-  'non-postman-compatibility': buildNonPostmanCompatibilityMatrix
+  'non-postman-compatibility': buildNonPostmanCompatibilityMatrix,
+  'ux-accessibility': buildUxAccessibilityMatrix
 });
+
+const SUPPORT_MATRIX_STATUSES = new Set([
+  'implemented',
+  'documented-gap',
+  'deferred',
+  'not-applicable'
+]);
 
 const ELECTRON_IPC_CHANNELS = Object.freeze([
   ipcChannel('app:versions', 'renderer-to-main', 'Version metadata query with no renderer payload.', ['electron/appIpc.js', 'electron/preload.js'], ['test/electron/appIpc.test.js']),
@@ -17,7 +25,7 @@ const ELECTRON_IPC_CHANNELS = Object.freeze([
   ipcChannel('workspace:saveRequest', 'renderer-to-main', 'Targeted request save validates request, variables, and cookie payload shape.', ['electron/workspaceIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/workspaceIpc.test.js', 'test/electron/ipcValidation.test.js']),
   ipcChannel('workspace:saveEnvironment', 'renderer-to-main', 'Targeted environment save validates environment payload shape.', ['electron/workspaceIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/workspaceIpc.test.js', 'test/electron/ipcValidation.test.js']),
   ipcChannel('workspace:saveSettings', 'renderer-to-main', 'Workspace settings save validates settings-only payloads.', ['electron/workspaceIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/workspaceIpc.test.js', 'test/electron/ipcValidation.test.js']),
-  ipcChannel('workspace:saveSync', 'renderer-to-main-sync', 'Synchronous shutdown workspace save validates the workspace payload before persistence.', ['electron/workspaceIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/workspaceIpc.test.js', 'test/electron/ipcValidation.test.js']),
+  ipcChannel('workspace:saveSync', 'renderer-to-main-sync', 'Synchronous shutdown workspace save validates the workspace payload and skips stale full-workspace writes while queued workspace mutations are pending.', ['electron/workspaceIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/workspaceIpc.test.js', 'test/electron/ipcValidation.test.js']),
   ipcChannel('workspace:create', 'renderer-to-main', 'Workspace creation remains main-process owned.', ['electron/workspaceIpc.js', 'electron/preload.js'], ['test/electron/workspaceIpc.test.js']),
   ipcChannel('workspace:rename', 'renderer-to-main', 'Workspace rename validates workspace ID and bounded name input.', ['electron/workspaceIpc.js', 'electron/preload.js'], ['test/electron/workspaceIpc.test.js']),
   ipcChannel('workspace:switch', 'renderer-to-main', 'Workspace switch validates non-empty workspace IDs before loading.', ['electron/workspaceIpc.js', 'electron/preload.js'], ['test/electron/workspaceIpc.test.js']),
@@ -95,6 +103,29 @@ const REQUIRED_NON_POSTMAN_COMPATIBILITY_ROWS = Object.freeze([
   'unsupported.claim-boundaries'
 ]);
 
+const REQUIRED_UX_ACCESSIBILITY_ROWS = Object.freeze([
+  'workflow.first-launch-empty-state',
+  'workflow.workspace-management',
+  'workflow.request-edit-send',
+  'workflow.collection-runner',
+  'workflow.load-test',
+  'workflow.import-export',
+  'workflow.oauth',
+  'workflow.sandbox-package-review',
+  'workflow.vault-prompts',
+  'workflow.file-bindings',
+  'workflow.local-mocks',
+  'workflow.settings-theme',
+  'workflow.update-check',
+  'workflow.diagnostics-export',
+  'a11y.tabs-and-panels',
+  'a11y.modal-focus-management',
+  'a11y.live-regions',
+  'a11y.dynamic-controls',
+  'coverage.constrained-themes-long-labels',
+  'coverage.failure-artifacts'
+]);
+
 function buildMatrix(name) {
   const builder = MATRIX_BUILDERS[name];
   if (!builder) {
@@ -133,8 +164,18 @@ function validateMatrix(matrix, expectedName) {
         errors.push(`${expectedName} matrix row ${row.id || '<unknown>'} missing ${field}.`);
       }
     }
+    if (typeof row.status === 'string' && row.status.trim() && !SUPPORT_MATRIX_STATUSES.has(row.status)) {
+      errors.push(`${expectedName} matrix row ${row.id || '<unknown>'} has invalid status: ${row.status}.`);
+    }
     if (!Array.isArray(row.evidenceRefs) || !Array.isArray(row.tests)) {
       errors.push(`${expectedName} matrix row ${row.id || '<unknown>'} must declare evidenceRefs and tests.`);
+    } else {
+      if (!row.evidenceRefs.length) {
+        errors.push(`${expectedName} matrix row ${row.id || '<unknown>'} must declare at least one evidence ref.`);
+      }
+      if (!row.tests.length) {
+        errors.push(`${expectedName} matrix row ${row.id || '<unknown>'} must declare at least one test ref.`);
+      }
     }
   }
   if (expectedName === 'electron-security') {
@@ -148,6 +189,13 @@ function validateMatrix(matrix, expectedName) {
     for (const requiredRowId of REQUIRED_NON_POSTMAN_COMPATIBILITY_ROWS) {
       if (!ids.has(requiredRowId)) {
         errors.push(`non-postman-compatibility matrix must enumerate ${requiredRowId}.`);
+      }
+    }
+  }
+  if (expectedName === 'ux-accessibility') {
+    for (const requiredRowId of REQUIRED_UX_ACCESSIBILITY_ROWS) {
+      if (!ids.has(requiredRowId)) {
+        errors.push(`ux-accessibility matrix must enumerate ${requiredRowId}.`);
       }
     }
   }
@@ -355,6 +403,92 @@ function buildNonPostmanCompatibilityMatrix() {
   ]);
 }
 
+function buildUxAccessibilityMatrix() {
+  return matrix('ux-accessibility', 'src/core/productionSupportMatrices.js', [
+    row('workflow.first-launch-empty-state', 'First launch', 'First launch and empty workspace states give visible next actions without requiring existing collections, requests, environments, or history.', 'implemented', {
+      evidenceRefs: ['src/renderer/index.html', 'src/renderer/uiRegressionSmoke.js', 'src/renderer/uiSnapshotSmoke.js'],
+      tests: ['npm run test:ui:regression', 'npm run test:ui:snapshot']
+    }),
+    row('workflow.workspace-management', 'Workspaces', 'Workspace create, open, switch, rename, export, and delete flows expose success/failure states and in-app destructive confirmation through main-process validated operations.', 'implemented', {
+      evidenceRefs: ['src/renderer/rendererWorkflows.js', 'electron/workspaceIpc.js', 'docs/TROUBLESHOOTING.md'],
+      tests: ['npm run test:ui:regression', 'test/electron/workspaceIpc.test.js', 'test/electron/workspaceManager.test.js']
+    }),
+    row('workflow.request-edit-send', 'Requests', 'Request editing, validation, pre-send save failure, send success, send failure, response display, updated OAuth persistence markers, failed request/environment/draft close-save persistence, and unsaved-close recovery remain visible and recoverable.', 'implemented', {
+      evidenceRefs: ['src/renderer/index.html', 'src/renderer/rendererWorkflows.js', 'electron/requestIpc.js'],
+      tests: ['npm run test:ui', 'npm run test:ui:regression', 'test/electron/requestIpc.test.js']
+    }),
+    row('workflow.collection-runner', 'Collection runner', 'Collection runs expose idle, running, cancellation, export, pass/fail, pre-run save failure, and failed-operation states without writing partial result exports.', 'implemented', {
+      evidenceRefs: ['src/renderer/index.html', 'src/renderer/rendererWorkflows.js', 'electron/runtimeIpc.js'],
+      tests: ['npm run test:ui:regression', 'test/electron/runtimeIpc.test.js', 'test/electron/collectionRunner.test.js', 'test/electron/rendererWorkflows.test.js']
+    }),
+    row('workflow.load-test', 'Load tests', 'Load tests expose idle, running, cancellation, export, validation, pre-load save failure, and failed-operation states with bounded configuration controls.', 'implemented', {
+      evidenceRefs: ['src/renderer/index.html', 'src/renderer/rendererWorkflows.js', 'electron/runtimeIpc.js'],
+      tests: ['npm run test:ui:regression', 'test/electron/runtimeIpc.test.js', 'test/electron/rendererWorkflows.test.js']
+    }),
+    row('workflow.import-export', 'Imports/exports', 'Workspace, collection, example, runner, and load-test import/export cancellation and failure paths stay parent-owned and report actionable errors without clobbering active state.', 'implemented', {
+      evidenceRefs: ['electron/workspaceIpc.js', 'electron/runtimeIpc.js', 'electron/fileDialogs.js', 'docs/TROUBLESHOOTING.md'],
+      tests: ['npm run test:ui:regression', 'test/electron/workspaceIpc.test.js', 'test/electron/runtimeIpc.test.js', 'test/electron/collectionFormats.test.js']
+    }),
+    row('workflow.oauth', 'OAuth', 'OAuth PKCE and device-code UX exposes waiting, completion, cancellation, state-mismatch, provider-denial, timeout, token-failure, and redacted provider-error states.', 'implemented', {
+      evidenceRefs: ['src/renderer/index.html', 'src/renderer/rendererWorkflows.js', 'src/renderer/uiOauthSmoke.js', 'docs/OAUTH_PROVIDER_CERTIFICATION.md'],
+      tests: ['npm run test:ui:oauth', 'npm run test:ui:regression', 'test/electron/oauthIpc.test.js', 'test/electron/oauthFlows.test.js']
+    }),
+    row('workflow.sandbox-package-review', 'Sandbox package review', 'Package review/fetch/cache controls surface reviewed package status, missing references, fetch failure, refresh behavior, and destructive removal cancellation/success/failure rollback without installing unreviewed runtime packages.', 'implemented', {
+      evidenceRefs: ['src/renderer/index.html', 'src/renderer/rendererWorkflows.js', 'electron/sandboxPackageIpc.js', 'src/core/sandboxPackageCache.js'],
+      tests: ['npm run test:ui:regression', 'test/electron/sandboxPackageIpc.test.js', 'test/electron/sandboxPackageFetcher.test.js']
+    }),
+    row('workflow.vault-prompts', 'Vault prompts', 'Vault metadata, prompt, grant, deny, reset, unavailable-encryption, and local secret-binding states keep script-requested secret values in the main process, use masked in-app user input for local binding, and expose metadata-only script access decisions.', 'implemented', {
+      evidenceRefs: ['src/renderer/index.html', 'src/renderer/rendererBootstrap.js', 'electron/vaultPrompt.js', 'docs/TROUBLESHOOTING.md'],
+      tests: ['npm run test:ui:regression', 'test/electron/vaultPrompt.test.js', 'test/electron/vaultPromptQueue.test.js', 'test/electron/rendererBootstrap.test.js']
+    }),
+    row('workflow.file-bindings', 'File bindings', 'Imported file/binary attachment binding review exposes missing-binding, bound-file, destructive removal cancellation/success/failure rollback states while keeping arbitrary file paths denied until the user binds them.', 'implemented', {
+      evidenceRefs: ['src/renderer/index.html', 'src/renderer/rendererWorkflows.js', 'src/core/fileAttachmentBindings.js', 'docs/SANDBOX_CONTRACT.md'],
+      tests: ['npm run test:ui:regression', 'test/electron/postmanImporter.test.js', 'test/electron/scriptSandbox.test.js']
+    }),
+    row('workflow.local-mocks', 'Local mocks', 'Imported local mock scripts are preserved and run through the bounded loopback mock runner; mock failure and state behavior remain documented as sandbox-owned rather than cloud-owned.', 'implemented', {
+      evidenceRefs: ['src/core/localMockServer.js', 'docs/COMPATIBILITY.md', 'docs/SANDBOX_CONTRACT.md'],
+      tests: ['test/electron/postmanScriptImportCoverage.test.js', 'test/electron/postmanSandboxCorpus.test.js', 'test/electron/localMockServer.test.js']
+    }),
+    row('workflow.settings-theme', 'Settings/theme', 'Workspace-scoped sandbox capability toggles, update settings, load policy, and system/light/dark theme preference save and reload without leaking into request payloads.', 'implemented', {
+      evidenceRefs: ['src/renderer/index.html', 'src/renderer/theme.css', 'src/renderer/renderer.js', 'src/renderer/uiWorkflowSmoke.js'],
+      tests: ['npm run test:ui', 'npm run test:ui:regression']
+    }),
+    row('workflow.update-check', 'Update check', 'Update-check success, no-update, and failure states use validated main-process update metadata and user-visible non-secret notifications.', 'implemented', {
+      evidenceRefs: ['src/core/updateChecker.js', 'electron/appIpc.js', 'src/renderer/rendererWorkflows.js'],
+      tests: ['npm run test:ui:regression', 'test/electron/appIpc.test.js']
+    }),
+    row('workflow.diagnostics-export', 'Diagnostics export', 'Full local diagnostic bundle export is intentionally owned by the diagnostics/privacy production step; current UX docs point users to review-before-sharing manual artifacts without claiming automated bundle export.', 'deferred', {
+      evidenceRefs: ['NEXT_STEPS.MD', 'docs/RELEASE_READINESS.md', 'docs/TROUBLESHOOTING.md'],
+      tests: ['npm run production:readiness:validate'],
+      notes: 'Step 12 remains the release-blocking diagnostics/privacy implementation.'
+    }),
+    row('a11y.tabs-and-panels', 'Accessibility', 'Request/result tabs, sidebar tabs, opened request/environment/workspace tabs, and tab panels expose roles, selected state, labels, relationships, and close controls that are not nested inside tab roles.', 'implemented', {
+      evidenceRefs: ['src/renderer/index.html', 'src/renderer/renderer.js', 'src/renderer/requestTabs.js', 'src/renderer/requestTabState.js'],
+      tests: ['npm run test:ui:regression', 'test/electron/requestTabs.test.js']
+    }),
+    row('a11y.modal-focus-management', 'Accessibility', 'High-frequency text-input, secret-input, confirmation, notification, export, save-draft, and vault-access modals move focus on open, trap keyboard focus while open, restore focus to a visible opener on close, and support Escape/backdrop cancellation where safe.', 'implemented', {
+      evidenceRefs: ['src/renderer/renderer.js', 'src/renderer/rendererBootstrap.js', 'src/renderer/index.html'],
+      tests: ['npm run test:ui:regression', 'test/electron/rendererBootstrap.test.js']
+    }),
+    row('a11y.live-regions', 'Accessibility', 'App status, validation, OAuth progress, response metrics, runner results, load-test results, package status, vault status, and file-binding status are announced through appropriate live regions.', 'implemented', {
+      evidenceRefs: ['src/renderer/index.html', 'src/renderer/renderer.js'],
+      tests: ['npm run test:ui:regression']
+    }),
+    row('a11y.dynamic-controls', 'Accessibility', 'Dynamic workspace, package, file-binding, splitter, autocomplete combobox/listbox, context-menu, cookie, request-variable, response, and modal controls expose accessible names, keyboard focus behavior, and stable labels; production renderer workflows avoid raw native prompt, confirm, and alert dialogs.', 'implemented', {
+      evidenceRefs: ['src/renderer/index.html', 'src/renderer/layoutControls.js', 'src/renderer/variableAutocomplete.js', 'src/renderer/contextMenu.js', 'src/renderer/requestEditorPanels.js', 'src/renderer/renderer.js'],
+      tests: ['npm run test:ui:regression', 'test/electron/rendererBootstrap.test.js']
+    }),
+    row('coverage.constrained-themes-long-labels', 'UI coverage', 'Linux headless UI smoke covers constrained desktop size, system/light/dark theme switching, active forced-colors focus visibility, long labels, empty workspaces, and large workspaces.', 'implemented', {
+      evidenceRefs: ['src/renderer/uiRegressionSmoke.js', 'src/renderer/uiSnapshotSmoke.js', 'test/electron/uiRegressionSmoke.js', 'test/electron/uiSnapshotSmoke.js'],
+      tests: ['npm run test:ui:regression', 'npm run test:ui:snapshot']
+    }),
+    row('coverage.failure-artifacts', 'UI coverage', 'Startup and UI smoke failures can write timeout-bounded screenshot, redacted structural DOM-state, and redacted failure-log artifacts for CI upload through POSTMETER_VALIDATION_ARTIFACT_DIR or POSTMETER_UI_SMOKE_ARTIFACT_DIR; source UI, packaged smoke launcher, packaged sandbox-validation stdout/stderr/stacks, and multi-process load-worker stderr previews redact local paths plus Bearer/Basic/Digest/Hawk/Token/OAuth/NTLM/Negotiate auth-shaped values and OAuth code/verifier/assertion fields; smoke child processes fail closed with exit code 124 on timeout.', 'implemented', {
+      evidenceRefs: ['electron/main.js', 'electron/mainWindow.js', 'scripts/smokeProcess.js', 'test/electron/startupSmoke.js', '.github/workflows/ci.yml', '.github/workflows/release.yml', '.github/workflows/release-validation.yml'],
+      tests: ['npm run test:smoke', 'npm run test:ui', 'npm run test:ui:regression', 'npm run test:ui:oauth', 'npm run test:ui:snapshot', 'test/electron/mainWindowSmoke.test.js', 'test/electron/smokeProcess.test.js', 'test/electron/loadTestRunner.test.js']
+    })
+  ]);
+}
+
 function matrix(name, generatedFrom, rows) {
   return {
     schemaVersion: 1,
@@ -406,6 +540,7 @@ module.exports = {
   buildMatrix,
   buildElectronSecurityMatrix,
   buildNonPostmanCompatibilityMatrix,
+  buildUxAccessibilityMatrix,
   buildWorkspaceDurabilityMatrix,
   ELECTRON_IPC_CHANNELS,
   validateMatrix

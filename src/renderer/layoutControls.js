@@ -1,33 +1,58 @@
 function initResizablePanes() {
   restoreLayout();
-  setupDragResize('mainPaneResize', (event) => {
-    const maxWidth = Math.max(260, Math.min(560, window.innerWidth - 520));
-    setLayoutVar('--sidebar-width', `${clampLayoutValue(event.clientX, 220, maxWidth)}px`);
-  }, '--sidebar-width');
-  setupDragResize('sidebarPaneResize', (event) => {
-    const sidebar = document.querySelector('.sidebar');
-    const rect = sidebar.getBoundingClientRect();
-    const maxHeight = Math.max(140, rect.height - 190);
-    setLayoutVar('--history-height', `${clampLayoutValue(rect.bottom - event.clientY - 10, 120, maxHeight)}px`);
-  }, '--history-height');
-  setupDragResize('workspacePaneResize', (event) => {
-    const workspaceElement = document.querySelector('.workspace');
-    const rect = workspaceElement.getBoundingClientRect();
-    const maxHeight = Math.max(260, rect.height - 220);
-    setLayoutVar('--request-height', `${clampLayoutValue(event.clientY - rect.top - 10, 240, maxHeight)}px`);
-  }, '--request-height');
-  setupDragResize('responsePaneResize', (event) => {
-    const grid = document.querySelector('.response-grid');
-    const rect = grid.getBoundingClientRect();
-    setLayoutVar('--response-body-width', `${clampLayoutValue(event.clientX - rect.left, 220, Math.max(220, rect.width - 220))}px`);
-  }, '--response-body-width');
+  setupDragResize('mainPaneResize', {
+    cssVariable: '--sidebar-width',
+    fallbackPixels: 300,
+    label: 'Resize sidebar',
+    orientation: 'vertical',
+    max: () => Math.max(260, Math.min(560, window.innerWidth - 520)),
+    min: 220,
+    valueFromEvent: (event) => event.clientX
+  });
+  setupDragResize('workspacePaneResize', {
+    cssVariable: '--request-height',
+    fallbackPixels: 360,
+    label: 'Resize request editor and response panels',
+    orientation: 'horizontal',
+    currentPixels: () => measuredElementPixels('#requestEditorPanel', 'height'),
+    max: () => {
+      const workspaceElement = document.querySelector('.workspace');
+      const rect = workspaceElement.getBoundingClientRect();
+      return Math.max(260, rect.height - 220);
+    },
+    min: 240,
+    valueFromEvent: (event) => {
+      const workspaceElement = document.querySelector('.workspace');
+      const rect = workspaceElement.getBoundingClientRect();
+      return event.clientY - rect.top - 10;
+    }
+  });
+  setupDragResize('responsePaneResize', {
+    cssVariable: '--response-body-width',
+    fallbackPixels: 420,
+    label: 'Resize response body and headers panels',
+    orientation: 'vertical',
+    currentPixels: () => measuredElementPixels('#responseBody', 'width'),
+    max: () => {
+      const grid = document.querySelector('.response-grid');
+      const rect = grid.getBoundingClientRect();
+      return Math.max(220, rect.width - 220);
+    },
+    min: 220,
+    valueFromEvent: (event) => {
+      const grid = document.querySelector('.response-grid');
+      const rect = grid.getBoundingClientRect();
+      return event.clientX - rect.left;
+    }
+  });
 }
 
-function setupDragResize(id, update, cssVariable) {
+function setupDragResize(id, config) {
   const handle = document.getElementById(id);
   if (!handle) {
     return;
   }
+  configureSplitterAccessibility(handle, config);
   handle.addEventListener('mousedown', (event) => {
     if (event.button !== 0) {
       return;
@@ -35,7 +60,7 @@ function setupDragResize(id, update, cssVariable) {
     event.preventDefault();
     const resizeClass = handle.classList.contains('horizontal') ? 'is-resizing-row' : 'is-resizing-col';
     document.body.classList.add('is-resizing', resizeClass);
-    const onMouseMove = (moveEvent) => update(moveEvent);
+    const onMouseMove = (moveEvent) => applySplitterValue(handle, config, config.valueFromEvent(moveEvent));
     const onMouseUp = () => {
       document.body.classList.remove('is-resizing', resizeClass);
       document.removeEventListener('mousemove', onMouseMove);
@@ -44,7 +69,82 @@ function setupDragResize(id, update, cssVariable) {
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
   });
-  handle.addEventListener('dblclick', () => resetLayoutVar(cssVariable));
+  handle.addEventListener('dblclick', () => {
+    resetLayoutVar(config.cssVariable);
+    configureSplitterAccessibility(handle, config);
+  });
+  handle.addEventListener('keydown', (event) => {
+    const step = event.shiftKey ? 64 : 16;
+    const current = currentLayoutPixels(config.cssVariable, config.fallbackPixels, config);
+    let next = current;
+    if (event.key === 'Home') {
+      next = normalizedSplitterBounds(config).min;
+    } else if (event.key === 'End') {
+      next = normalizedSplitterBounds(config).max;
+    } else if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      resetLayoutVar(config.cssVariable);
+      configureSplitterAccessibility(handle, config);
+      return;
+    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+      next = current - step;
+    } else if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+      next = current + step;
+    } else {
+      return;
+    }
+    event.preventDefault();
+    applySplitterValue(handle, config, next);
+  });
+}
+
+function configureSplitterAccessibility(handle, config) {
+  const { min, max } = normalizedSplitterBounds(config);
+  const value = clampLayoutValue(currentLayoutPixels(config.cssVariable, config.fallbackPixels, config), min, max);
+  handle.setAttribute('aria-label', config.label);
+  handle.setAttribute('aria-valuemin', String(Math.round(min)));
+  handle.setAttribute('aria-valuemax', String(Math.round(max)));
+  handle.setAttribute('aria-valuenow', String(Math.round(value)));
+}
+
+function applySplitterValue(handle, config, value) {
+  const { min, max } = normalizedSplitterBounds(config);
+  const next = clampLayoutValue(value, min, max);
+  setLayoutVar(config.cssVariable, `${next}px`);
+  configureSplitterAccessibility(handle, config);
+}
+
+function normalizedSplitterBounds(config) {
+  const min = Number(config.min || 0);
+  const max = typeof config.max === 'function' ? Number(config.max()) : Number(config.max);
+  return {
+    min,
+    max: Math.max(min, Number.isFinite(max) ? max : min)
+  };
+}
+
+function currentLayoutPixels(name, fallbackPixels, config = {}) {
+  const value = readLayoutVar(name) || getComputedStyle(document.documentElement).getPropertyValue(name);
+  const parsed = Number.parseFloat(value);
+  if (Number.isFinite(parsed) && /px\s*$/.test(String(value).trim())) {
+    return parsed;
+  }
+  if (typeof config.currentPixels === 'function') {
+    const measured = Number(config.currentPixels());
+    if (Number.isFinite(measured) && measured > 0) {
+      return measured;
+    }
+  }
+  return fallbackPixels;
+}
+
+function measuredElementPixels(selector, dimension) {
+  const target = document.querySelector(selector);
+  if (!target?.getBoundingClientRect) {
+    return 0;
+  }
+  const rect = target.getBoundingClientRect();
+  return dimension === 'height' ? rect.height : rect.width;
 }
 
 function restoreLayout() {
@@ -87,7 +187,6 @@ function readLayoutVar(name) {
 function defaultLayoutVars() {
   return {
     '--sidebar-width': '300px',
-    '--history-height': '210px',
     '--request-height': '52%',
     '--response-body-width': '1.25fr'
   };

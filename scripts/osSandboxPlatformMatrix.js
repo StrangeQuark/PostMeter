@@ -40,7 +40,7 @@ async function main() {
       process.exitCode = 1;
       return;
     }
-    console.log(`Platform-equivalent full OS sandbox claim gate passed: ${result.summary.claim.rowCount} rows, zero blockers.`);
+    console.log(`Implemented tier-one OS sandbox backend claim gate passed: ${result.summary.claim.rowCount} rows, zero blockers.`);
     return;
   }
   console.error(`Unknown command: ${command}`);

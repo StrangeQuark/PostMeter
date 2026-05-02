@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
-const { spawnSync } = require('node:child_process');
+const { spawnWithTimeout } = require('./smokeProcess');
+
+const DEFAULT_TIMEOUT_MILLIS = 30_000;
 
 if (process.env.POSTMETER_SANDBOX_RUNTIME_CHILD === '1') {
   const { validateSandboxRuntime } = require('../src/core/sandboxRuntimeValidation');
@@ -13,6 +15,13 @@ if (process.env.POSTMETER_SANDBOX_RUNTIME_CHILD === '1') {
       process.exit(1);
     });
 } else {
+  runParent().catch((error) => {
+    console.error(error.stack || error.message || String(error));
+    process.exit(1);
+  });
+}
+
+async function runParent() {
   const electronPath = require('electron');
   const env = {
     ...process.env,
@@ -21,13 +30,24 @@ if (process.env.POSTMETER_SANDBOX_RUNTIME_CHILD === '1') {
   };
   delete env.NODE_OPTIONS;
 
-  const result = spawnSync(electronPath, [__filename], {
+  const result = await spawnWithTimeout(electronPath, [__filename], {
     env,
-    stdio: 'inherit'
+    timeoutMillis: validationTimeoutMillis(process.env.POSTMETER_SANDBOX_VALIDATE_TIMEOUT_MS),
+    timeoutMessage: `Sandbox runtime validation timed out after ${validationTimeoutMillis(process.env.POSTMETER_SANDBOX_VALIDATE_TIMEOUT_MS)} ms.`
   });
-  if (result.error) {
-    console.error(result.error.message || String(result.error));
-    process.exit(1);
+  if (result.stdout) {
+    process.stdout.write(result.stdout);
   }
-  process.exit(result.status ?? 1);
+  if (result.stderr) {
+    process.stderr.write(result.stderr.endsWith('\n') ? result.stderr : `${result.stderr}\n`);
+  }
+  process.exit(result.code ?? 1);
+}
+
+function validationTimeoutMillis(value) {
+  const timeout = Number(value || DEFAULT_TIMEOUT_MILLIS);
+  if (!Number.isFinite(timeout) || timeout <= 0) {
+    return DEFAULT_TIMEOUT_MILLIS;
+  }
+  return Math.max(1_000, Math.floor(timeout));
 }

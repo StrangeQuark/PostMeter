@@ -188,10 +188,16 @@
 
     for (const button of doc.querySelectorAll('.tab')) {
       button.addEventListener('click', () => options.onActivateTab?.(button.dataset.tabGroup, button.dataset.tab));
+      button.addEventListener('keydown', (event) => {
+        moveRovingTabFocus(event, Array.from(doc.querySelectorAll(`.tab[data-tab-group="${button.dataset.tabGroup}"]`)));
+      });
     }
 
     for (const button of doc.querySelectorAll('.sidebar-tab')) {
       button.addEventListener('click', () => options.onSelectSidebarPanel?.(button.dataset.sidebarPanel));
+      button.addEventListener('keydown', (event) => {
+        moveRovingTabFocus(event, Array.from(doc.querySelectorAll('.sidebar-tab')));
+      });
     }
 
     bindEvent(doc, 'contextMenu', 'click', (event) => event.stopPropagation());
@@ -217,6 +223,15 @@
         options.onResolveActiveModal?.(selectedCollectionId);
       }
     });
+    bindClick(doc, 'cancelTextInputModalButton', () => options.onResolveActiveModal?.(null));
+    bindClick(doc, 'confirmTextInputModalButton', () => {
+      const modal = getElement(doc, 'textInputModal');
+      const valueControlId = modal?.dataset?.valueControl || 'textInputModalInput';
+      options.onResolveActiveModal?.(getElement(doc, valueControlId)?.value || '');
+    });
+    bindClick(doc, 'cancelConfirmActionButton', () => options.onResolveActiveModal?.(false));
+    bindClick(doc, 'confirmActionButton', () => options.onResolveActiveModal?.(true));
+    bindClick(doc, 'closeNotificationModalButton', () => options.onResolveActiveModal?.(true));
     bindClick(doc, 'denyVaultPromptButton', () => options.onResolveVaultPrompt?.({ granted: false, scope: 'request' }));
     bindClick(doc, 'allowVaultPromptRequestButton', () => options.onResolveVaultPrompt?.({ granted: true, scope: 'request' }));
     bindClick(doc, 'allowVaultPromptCollectionButton', () => options.onResolveVaultPrompt?.({ granted: true, scope: 'collection' }));
@@ -228,6 +243,9 @@
       closeToolbarMenus(doc);
     });
     doc.addEventListener('keydown', (event) => {
+      if (event.key === 'Tab' && options.onTrapActiveModalFocus?.(event)) {
+        return;
+      }
       if (event.key === 'Escape') {
         options.onCancelActiveModal?.();
         options.onCloseContextMenu?.();
@@ -272,7 +290,90 @@
         event.stopPropagation();
         closeToolbarMenus(doc);
       });
+      menu.addEventListener('keydown', (event) => {
+        if (event.__postmeterMenuHandled === true) {
+          return;
+        }
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          event.__postmeterMenuHandled = true;
+          event.stopPropagation();
+          event.stopImmediatePropagation?.();
+          closeToolbarMenus(doc);
+          button.focus?.();
+          return;
+        }
+        if (event.key === 'Tab') {
+          event.__postmeterMenuHandled = true;
+          closeToolbarMenus(doc);
+          return;
+        }
+        if ((event.key === 'Enter' || event.key === ' ') && event.target?.matches?.('button')) {
+          event.preventDefault();
+          event.__postmeterMenuHandled = true;
+          event.stopPropagation();
+          event.stopImmediatePropagation?.();
+          closeToolbarMenus(doc);
+          button.focus?.();
+          event.target.click();
+          return;
+        }
+        if (moveMenuItemFocus(event, Array.from(menu.querySelectorAll('button:not([disabled])')))) {
+          event.__postmeterMenuHandled = true;
+          event.stopPropagation();
+          event.stopImmediatePropagation?.();
+        }
+      }, true);
     }
+  }
+
+  function moveRovingTabFocus(event, buttons) {
+    const tabList = event.currentTarget?.closest?.('[role="tablist"]');
+    const vertical = tabList?.getAttribute?.('aria-orientation') === 'vertical';
+    const previousKeys = vertical ? ['ArrowUp', 'ArrowLeft'] : ['ArrowLeft'];
+    const nextKeys = vertical ? ['ArrowDown', 'ArrowRight'] : ['ArrowRight'];
+    if (!['Home', 'End', ...previousKeys, ...nextKeys].includes(event.key) || !buttons.length) {
+      return;
+    }
+    event.preventDefault();
+    const eventSource = buttons.includes(event.currentTarget)
+      ? event.currentTarget
+      : buttons.includes(event.target)
+        ? event.target
+        : event.target?.ownerDocument?.activeElement;
+    const currentIndex = Math.max(0, buttons.indexOf(eventSource));
+    let nextIndex = currentIndex;
+    if (event.key === 'Home') {
+      nextIndex = 0;
+    } else if (event.key === 'End') {
+      nextIndex = buttons.length - 1;
+    } else if (previousKeys.includes(event.key)) {
+      nextIndex = (currentIndex + buttons.length - 1) % buttons.length;
+    } else if (nextKeys.includes(event.key)) {
+      nextIndex = (currentIndex + 1) % buttons.length;
+    }
+    buttons[nextIndex]?.focus?.();
+    buttons[nextIndex]?.click?.();
+  }
+
+  function moveMenuItemFocus(event, buttons) {
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key) || !buttons.length) {
+      return false;
+    }
+    event.preventDefault();
+    const currentIndex = Math.max(0, buttons.indexOf(event.target));
+    let nextIndex = currentIndex;
+    if (event.key === 'Home') {
+      nextIndex = 0;
+    } else if (event.key === 'End') {
+      nextIndex = buttons.length - 1;
+    } else if (event.key === 'ArrowUp') {
+      nextIndex = (currentIndex + buttons.length - 1) % buttons.length;
+    } else if (event.key === 'ArrowDown') {
+      nextIndex = (currentIndex + 1) % buttons.length;
+    }
+    buttons[nextIndex]?.focus?.();
+    return true;
   }
 
   function toggleToolbarMenu(doc, button, menu) {

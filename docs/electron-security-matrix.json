@@ -818,7 +818,7 @@
     {
       "id": "ipc.channel.workspace-savesync",
       "area": "IPC channel",
-      "target": "renderer-to-main-sync channel `workspace:saveSync`: Synchronous shutdown workspace save validates the workspace payload before persistence.",
+      "target": "renderer-to-main-sync channel `workspace:saveSync`: Synchronous shutdown workspace save validates the workspace payload and skips stale full-workspace writes while queued workspace mutations are pending.",
       "status": "implemented",
       "evidenceRefs": [
         "electron/workspaceIpc.js",

@@ -14,6 +14,10 @@ const {
   validateMatrix
 } = require('../../src/core/productionSupportMatrices');
 const {
+  validateEvidenceRefs: validateSupportEvidenceRefs,
+  validateTestRefs: validateSupportTestRefs
+} = require('../../scripts/productionSupportMatrix');
+const {
   validateMatrixReferences,
   validateCommittedMatrix
 } = require('../../scripts/productionReadiness');
@@ -247,8 +251,8 @@ test('committed production readiness matrix is fresh', async () => {
   assert.equal(result.ok, true);
 });
 
-test('production support matrices cover Electron security, workspace durability, and non-Postman compatibility', () => {
-  for (const name of ['electron-security', 'workspace-durability', 'non-postman-compatibility']) {
+test('production support matrices cover Electron security, workspace durability, non-Postman compatibility, and UX accessibility', () => {
+  for (const name of ['electron-security', 'workspace-durability', 'non-postman-compatibility', 'ux-accessibility']) {
     const matrix = buildMatrix(name);
     assert.deepEqual(validateMatrix(matrix, name), []);
     assert.ok(matrix.rows.length >= 6, `${name} should cover multiple release concerns`);
@@ -270,4 +274,82 @@ test('non-Postman compatibility matrix keeps every Step 9 required row enumerate
     'openapi.invalid-common-specs',
     'unsupported.claim-boundaries'
   ]);
+});
+
+test('UX accessibility matrix keeps every Step 11 required row enumerated', () => {
+  const matrix = buildMatrix('ux-accessibility');
+  const ids = new Set(matrix.rows.map((row) => row.id));
+  assert.deepEqual(validateMatrix(matrix, 'ux-accessibility'), []);
+  assert.deepEqual([...ids].sort(), [
+    'a11y.dynamic-controls',
+    'a11y.live-regions',
+    'a11y.modal-focus-management',
+    'a11y.tabs-and-panels',
+    'coverage.constrained-themes-long-labels',
+    'coverage.failure-artifacts',
+    'workflow.collection-runner',
+    'workflow.diagnostics-export',
+    'workflow.file-bindings',
+    'workflow.first-launch-empty-state',
+    'workflow.import-export',
+    'workflow.load-test',
+    'workflow.local-mocks',
+    'workflow.oauth',
+    'workflow.request-edit-send',
+    'workflow.sandbox-package-review',
+    'workflow.settings-theme',
+    'workflow.update-check',
+    'workflow.vault-prompts',
+    'workflow.workspace-management'
+  ]);
+});
+
+test('production support matrix validator rejects escaped evidence and missing test refs', async () => {
+  const matrix = {
+    name: 'ux-accessibility',
+    rows: [{
+      id: 'workflow.test',
+      area: 'Workflow',
+      target: 'Test',
+      status: 'implemented',
+      evidenceRefs: ['../outside.md'],
+      tests: [
+        'npm run missing-script',
+        '../outside.test.js',
+        'test/electron/missing-test.js',
+        'src/renderer/renderer.js',
+        'future manual validation',
+        'https://example.test/validation'
+      ]
+    }]
+  };
+
+  assert.match((await validateSupportEvidenceRefs(matrix)).join('\n'), /invalid evidence ref/);
+  const testErrors = (await validateSupportTestRefs(matrix)).join('\n');
+  assert.match(testErrors, /unknown npm script/);
+  assert.match(testErrors, /invalid test ref/);
+  assert.match(testErrors, /test ref does not exist/);
+  assert.match(testErrors, /not an executable test file/);
+  assert.match(testErrors, /future manual validation/);
+  assert.match(testErrors, /https:\/\/example\.test\/validation/);
+});
+
+test('production support matrix structure rejects weak coverage rows', () => {
+  const invalid = {
+    name: 'ux-accessibility',
+    schemaVersion: 1,
+    rows: [{
+      id: 'workflow.weak',
+      area: 'Workflow',
+      target: 'Weak coverage row',
+      status: 'maybe',
+      evidenceRefs: [],
+      tests: []
+    }]
+  };
+
+  const errors = validateMatrix(invalid, 'ux-accessibility').join('\n');
+  assert.match(errors, /invalid status/);
+  assert.match(errors, /at least one evidence ref/);
+  assert.match(errors, /at least one test ref/);
 });

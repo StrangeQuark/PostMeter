@@ -72,15 +72,70 @@ jobs:
       - name: Mock OAuth provider certification
         run: npm run oauth:certify:mock
 
+      - name: Startup smoke
+        if: matrix.platform != 'linux'
+        run: npm run test:smoke
+        env:
+          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/startup-smoke
+
+      - name: Linux startup smoke
+        if: matrix.platform == 'linux'
+        run: xvfb-run -a npm run test:smoke
+        env:
+          POSTMETER_CI_ELECTRON_NO_SANDBOX: "1"
+          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/startup-smoke
+
       - name: OAuth UI smoke
         if: matrix.platform != 'linux'
         run: npm run test:ui:oauth
+        env:
+          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-oauth
 
       - name: OAuth Linux UI smoke
         if: matrix.platform == 'linux'
         run: xvfb-run -a npm run test:ui:oauth
         env:
           POSTMETER_CI_ELECTRON_NO_SANDBOX: "1"
+          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-oauth
+
+      - name: UI workflow smoke
+        if: matrix.platform != 'linux'
+        run: npm run test:ui
+        env:
+          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-workflow
+
+      - name: Linux UI workflow smoke
+        if: matrix.platform == 'linux'
+        run: xvfb-run -a npm run test:ui
+        env:
+          POSTMETER_CI_ELECTRON_NO_SANDBOX: "1"
+          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-workflow
+
+      - name: UI regression smoke
+        if: matrix.platform != 'linux'
+        run: npm run test:ui:regression
+        env:
+          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-regression
+
+      - name: Linux UI regression smoke
+        if: matrix.platform == 'linux'
+        run: xvfb-run -a npm run test:ui:regression
+        env:
+          POSTMETER_CI_ELECTRON_NO_SANDBOX: "1"
+          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-regression
+
+      - name: UI snapshot smoke
+        if: matrix.platform != 'linux'
+        run: npm run test:ui:snapshot
+        env:
+          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-snapshot
+
+      - name: Linux UI snapshot smoke
+        if: matrix.platform == 'linux'
+        run: xvfb-run -a npm run test:ui:snapshot
+        env:
+          POSTMETER_CI_ELECTRON_NO_SANDBOX: "1"
+          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-snapshot
 
       - name: Production readiness matrix validation
         run: npm run production:readiness:validate
@@ -96,6 +151,9 @@ jobs:
 
       - name: Non-Postman compatibility matrix validation
         run: npm run compatibility:non-postman:validate
+
+      - name: UX accessibility matrix validation
+        run: npm run ux:accessibility:validate
 
       - name: Sandbox release gate manifest
         run: npm run release:gate
@@ -148,7 +206,7 @@ jobs:
         with:
           name: postmeter-${{ matrix.platform }}-validation-logs
           path: validation-artifacts/**
-          if-no-files-found: ignore
+          if-no-files-found: error
           retention-days: 14
 
       - name: Upload platform artifacts

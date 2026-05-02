@@ -43,7 +43,6 @@
   --shadow: 0 14px 34px rgba(31, 35, 40, 0.16);
   --mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
   --sidebar-width: 300px;
-  --history-height: 210px;
   --request-height: 52%;
   --response-body-width: 1.25fr;
 }
@@ -137,5 +136,49 @@
     --pre-bg: #0c0d0e;
     --pre-text: #efede7;
     --shadow: 0 14px 34px rgb(0 0 0 / 45%);
+  }
+}
+
+@media (forced-colors: active) {
+  :root,
+  :root[data-theme="dark"],
+  :root[data-theme="light"] {
+    color-scheme: light dark;
+    --bg: Canvas;
+    --surface: Canvas;
+    --surface-muted: Canvas;
+    --sidebar: Canvas;
+    --sidebar-rail: Canvas;
+    --line: ButtonBorder;
+    --line-strong: ButtonText;
+    --text: CanvasText;
+    --muted: CanvasText;
+    --primary: Highlight;
+    --primary-strong: Highlight;
+    --primary-soft: Canvas;
+    --blue: LinkText;
+    --green: CanvasText;
+    --danger: Highlight;
+    --button-hover: Highlight;
+    --sidebar-tab-hover: Highlight;
+    --tree-hover: Highlight;
+    --badge-bg: Canvas;
+    --request-badge-bg: Canvas;
+    --tabbar-bg: Canvas;
+    --tab-hover: Highlight;
+    --overlay: Canvas;
+    --modal-shadow: none;
+    --pre-bg: Canvas;
+    --pre-text: CanvasText;
+    --shadow: none;
+  }
+
+  input:focus,
+  select:focus,
+  textarea:focus,
+  button:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+    box-shadow: none;
   }
 }

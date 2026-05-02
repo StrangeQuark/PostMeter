@@ -2,32 +2,55 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
 const { withCiNoSandboxArgs } = require('./electronCiSandboxWaiver');
+const { redactSmokeOutputText, spawnWithTimeout } = require('./smokeProcess');
 
-const appPath = path.resolve(process.argv[2] || defaultPackagedAppPath());
-if (!fs.existsSync(appPath)) {
-  console.error(`Packaged PostMeter executable not found: ${appPath}`);
-  process.exit(1);
+const DEFAULT_TIMEOUT_MILLIS = 60_000;
+
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(redactForOutput(error.stack || error.message || String(error), process.argv[2] || defaultPackagedAppPath()));
+    process.exit(1);
+  });
 }
 
-const env = {
-  ...process.env,
-  POSTMETER_VALIDATE_SANDBOX_RUNTIME: '1'
-};
-delete env.ELECTRON_RUN_AS_NODE;
-delete env.NODE_OPTIONS;
+async function main() {
+  const appPath = path.resolve(process.argv[2] || defaultPackagedAppPath());
+  if (!fs.existsSync(appPath)) {
+    console.error(redactForOutput(`Packaged PostMeter executable not found: ${appPath}`, appPath));
+    process.exit(1);
+  }
 
-const result = spawnSync(appPath, withCiNoSandboxArgs([], env), {
-  env,
-  stdio: 'inherit'
-});
+  const env = {
+    ...process.env,
+    POSTMETER_VALIDATE_SANDBOX_RUNTIME: '1'
+  };
+  delete env.ELECTRON_RUN_AS_NODE;
+  delete env.NODE_OPTIONS;
 
-if (result.error) {
-  console.error(result.error.message || String(result.error));
-  process.exit(1);
+  const timeoutMillis = validationTimeoutMillis(process.env.POSTMETER_PACKAGED_SANDBOX_VALIDATE_TIMEOUT_MS);
+  const result = await spawnWithTimeout(appPath, withCiNoSandboxArgs([], env), {
+    env,
+    timeoutMillis,
+    timeoutMessage: `Packaged sandbox runtime validation timed out after ${timeoutMillis} ms.`
+  });
+  if (result.stdout) {
+    process.stdout.write(redactForOutput(result.stdout, appPath));
+  }
+  if (result.stderr) {
+    const redactedStderr = redactForOutput(result.stderr, appPath);
+    process.stderr.write(redactedStderr.endsWith('\n') ? redactedStderr : `${redactedStderr}\n`);
+  }
+  process.exit(result.code ?? 1);
 }
-process.exit(result.status ?? 1);
+
+function redactForOutput(value, executablePath = process.argv[2] || defaultPackagedAppPath()) {
+  const resolvedPath = path.resolve(executablePath || defaultPackagedAppPath());
+  return redactSmokeOutputText(String(value || ''), [
+    resolvedPath,
+    path.dirname(resolvedPath)
+  ]);
+}
 
 function defaultPackagedAppPath() {
   const releaseDir = path.join(__dirname, '..', 'release');
@@ -89,3 +112,20 @@ function pathMatchesSuffix(filePath, suffixParts) {
   }
   return suffixParts.every((part, index) => parts[parts.length - suffixParts.length + index] === part);
 }
+
+function validationTimeoutMillis(value) {
+  const timeout = Number(value || DEFAULT_TIMEOUT_MILLIS);
+  if (!Number.isFinite(timeout) || timeout <= 0) {
+    return DEFAULT_TIMEOUT_MILLIS;
+  }
+  return Math.max(1_000, Math.floor(timeout));
+}
+
+module.exports = {
+  defaultPackagedAppPath,
+  findPackagedExecutable,
+  firstExistingPath,
+  pathMatchesSuffix,
+  redactForOutput,
+  validationTimeoutMillis
+};

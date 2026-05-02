@@ -24,8 +24,9 @@ function registerRequestIpc(options = {}) {
     getVaultStore = () => null,
     getVaultPrompt = () => null,
     ipcMain,
+    runRequestWithScripts: runRequest = runRequestWithScripts,
     mutateWorkspace = async (mutator) => {
-      const nextWorkspace = await mutator(getWorkspace());
+      const nextWorkspace = await mutator(cloneJson(getWorkspace()));
       const savedWorkspace = await saveWorkspace(nextWorkspace);
       setWorkspace(savedWorkspace);
       return savedWorkspace;
@@ -53,7 +54,7 @@ function registerRequestIpc(options = {}) {
     const baseCookies = cloneJson(workspaceSnapshot.cookies || []);
     const startedAt = Date.now();
     try {
-      const { response: result, environment: nextEnvironment, collectionVariables, localVariables, globals } = await runRequestWithScripts(request, environment, {
+      const { response: result, environment: nextEnvironment, collectionVariables, localVariables, globals } = await runRequest(request, environment, {
         collectionId: requestContext?.collection?.id || '',
         collectionVariables: requestContext?.collection?.variables || [],
         globals: workspaceSnapshot.globals || [],
@@ -68,7 +69,11 @@ function registerRequestIpc(options = {}) {
         workspaceName: workspaceId,
         collectionName: requestContext?.collection?.name || ''
       });
+      const validationResult = publicRequestResult(result);
+      assertResponsePayload(validationResult);
+      let workspaceMutationApplied = false;
       await mutateWorkspace(async (latestWorkspace) => {
+        workspaceMutationApplied = true;
         const latestRequestContext = request.id ? findWorkspaceRequestContext(latestWorkspace, request.id) : null;
         if (result.updatedAuth && request.id) {
           if (latestRequestContext?.request) {
@@ -103,7 +108,9 @@ function registerRequestIpc(options = {}) {
         ].slice(0, 100);
         return latestWorkspace;
       }, { workspaceId });
-      const publicResult = publicRequestResult(result);
+      const publicResult = publicRequestResult(result, {
+        updatedAuthPersisted: workspaceMutationApplied && Boolean(result.updatedAuth)
+      });
       assertResponsePayload(publicResult);
       return publicResult;
     } catch (error) {
@@ -172,11 +179,13 @@ function cloneJson(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-function publicRequestResult(result) {
+function publicRequestResult(result, options = {}) {
   const publicResult = cloneJson(result) || {};
   if (result?.updatedAuth) {
     delete publicResult.updatedAuth;
-    publicResult.updatedAuthPersisted = true;
+    if (options.updatedAuthPersisted === true) {
+      publicResult.updatedAuthPersisted = true;
+    }
   }
   return publicResult;
 }

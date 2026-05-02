@@ -77,7 +77,7 @@ async function promptViaDialog(dialog, mainWindow, payload) {
   }
   const result = await dialog.showMessageBox(mainWindow, {
     type: 'warning',
-    buttons: ['Deny once', 'Allow request', 'Allow collection', 'Allow workspace'],
+    buttons: ['Deny once', 'Allow request', 'Allow collection', 'Allow workspace', 'Reset grants'],
     defaultId: 0,
     cancelId: 0,
     noLink: true,
@@ -91,6 +91,9 @@ async function promptViaDialog(dialog, mainWindow, payload) {
   });
   if (result.response === 3) {
     return { granted: true, scope: 'workspace' };
+  }
+  if (result.response === 4) {
+    return { granted: false, reset: true, scope: 'request' };
   }
   if (result.response === 2) {
     return { granted: true, scope: 'collection' };

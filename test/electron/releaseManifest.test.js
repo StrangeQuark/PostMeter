@@ -12,6 +12,8 @@ const {
   validateLinuxAppImageProtocol,
   validateLinuxDebProtocol,
   macInfoPlistPathFromListing,
+  releaseValidationCommandTimeoutMillis,
+  runCommand: runValidatedReleaseCommand,
   validateMacZipProtocol,
   validatePackageMetadata,
   validateReleaseManifest
@@ -337,6 +339,22 @@ test('release validation restores execute bits before AppImage inspection', asyn
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
   }
+});
+
+test('release validation external commands have bounded timeouts', async () => {
+  assert.equal(releaseValidationCommandTimeoutMillis('25'), 25);
+  assert.equal(releaseValidationCommandTimeoutMillis('0'), 30000);
+
+  await assert.rejects(
+    () => runValidatedReleaseCommand(process.execPath, [
+      '-e',
+      'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000);'
+    ], {
+      killGraceMillis: 25,
+      timeoutMillis: 25
+    }),
+    /timed out after 25 ms/
+  );
 });
 
 test('validates packaged macOS zip protocol registration when an app bundle exists', async (t) => {

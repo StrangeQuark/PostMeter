@@ -86,6 +86,39 @@ test('workspace manager creates, switches, and deletes managed workspaces', asyn
   await assert.rejects(() => fs.access(path.join(temp, 'Workspace.json')));
 });
 
+test('workspace manager can snapshot and restore a deleted managed workspace for rollback', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-workspace-manager-rollback-'));
+  const preferredWorkspacePath = path.join(temp, 'workspace.json');
+  const manager = new WorkspaceManager(preferredWorkspacePath);
+
+  await manager.load();
+  const createdWorkspaceId = await manager.createWorkspace();
+  const created = await manager.switchWorkspace(createdWorkspaceId);
+  created.workspace.collections.push({
+    id: 'collection-1',
+    name: 'Rollback Collection',
+    description: '',
+    variables: [],
+    certificates: [],
+    requests: [],
+    folders: []
+  });
+  await manager.save(created.workspace);
+
+  const snapshot = await manager.loadWorkspaceById(createdWorkspaceId);
+  await manager.deleteWorkspace(createdWorkspaceId);
+  await assert.rejects(() => fs.access(path.join(temp, createdWorkspaceId)));
+
+  const restored = await manager.restoreWorkspaceFile(createdWorkspaceId, snapshot, {
+    currentWorkspaceId: createdWorkspaceId
+  });
+
+  assert.equal(restored.activeWorkspaceId, createdWorkspaceId);
+  assert.equal(restored.path, path.join(temp, createdWorkspaceId));
+  assert.equal(restored.workspace.collections[0].name, 'Rollback Collection');
+  await fs.access(path.join(temp, createdWorkspaceId));
+});
+
 test('workspace manager renames managed workspaces using the filename as the canonical name', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-workspace-manager-'));
   const preferredWorkspacePath = path.join(temp, 'workspace.json');

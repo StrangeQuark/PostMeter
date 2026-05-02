@@ -1,9 +1,9 @@
-const { spawn } = require('node:child_process');
 const fs = require('node:fs/promises');
 const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
 const { withCiNoSandboxArgs } = require('../../scripts/electronCiSandboxWaiver');
+const { redactSmokeOutputText, spawnWithTimeout } = require('../../scripts/smokeProcess');
 
 async function main() {
   const server = await createMockOAuthServer();
@@ -15,34 +15,22 @@ async function main() {
     POSTMETER_UI_OAUTH_SMOKE: '1',
     POSTMETER_UI_OAUTH_BASE_URL: server.baseUrl,
     POSTMETER_TEST_OAUTH_AUTOCOMPLETE: '1',
-    POSTMETER_TEST_OAUTH_SKIP_EXTERNAL: '1'
+    POSTMETER_TEST_OAUTH_SKIP_EXTERNAL: '1',
+    POSTMETER_VALIDATION_ARTIFACT_DIR: process.env.POSTMETER_VALIDATION_ARTIFACT_DIR || path.join(tempDir, 'validation-artifacts')
   };
   delete env.ELECTRON_RUN_AS_NODE;
-  const child = spawn(electronPath, withCiNoSandboxArgs(['.'], env), {
+  const result = await spawnWithTimeout(electronPath, withCiNoSandboxArgs(['.'], env), {
     cwd: path.join(__dirname, '..', '..'),
     env,
-    stdio: ['ignore', 'pipe', 'pipe']
+    timeoutMillis: 25_000,
+    timeoutMessage: 'Electron UI OAuth smoke timed out after 25000 ms.'
   });
 
-  let output = '';
-  child.stdout.on('data', (chunk) => { output += chunk.toString(); });
-  child.stderr.on('data', (chunk) => { output += chunk.toString(); });
-
-  const timeout = setTimeout(() => {
-    child.kill('SIGTERM');
-  }, 25_000);
-
-  const exitCode = await new Promise((resolve) => {
-    child.on('exit', (code, signal) => {
-      clearTimeout(timeout);
-      resolve(signal ? 128 : code ?? 1);
-    });
-  });
   await server.close();
 
-  if (exitCode !== 0) {
-    console.error(output.trim());
-    throw new Error(`Electron UI OAuth smoke failed with exit code ${exitCode}.`);
+  if (result.code !== 0) {
+    console.error(redactSmokeOutputText(`${result.stdout}${result.stderr}`, [tempDir, server.baseUrl]).trim());
+    throw new Error(`Electron UI OAuth smoke failed with exit code ${result.code}.`);
   }
 }
 
@@ -136,6 +124,6 @@ async function readRequestBody(request) {
 }
 
 main().catch((error) => {
-  console.error(error.stack || error.message || String(error));
+  console.error(redactSmokeOutputText(error.stack || error.message || String(error)));
   process.exitCode = 1;
 });

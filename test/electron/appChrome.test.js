@@ -70,6 +70,13 @@ test('Electron shell keeps custom File/Edit/View/Help menus without the default 
   assert.match(preloadSource, /includePrereleases/);
   assert.match(rendererSource, /handleAppMenuAction/);
   assert.match(rendererSource, /setIncludePrereleases/);
+  assert.match(mainSource, /app\.whenReady\(\)\.then\(startApplication\)\.catch\(\(error\) => failStartup\(error\)\)/);
+  assert.match(mainSource, /async function failStartup/);
+  assert.match(mainSource, /writeStartupSmokeFailureArtifacts\(mainWindow,\s*process\.env,\s*error\)/);
+  assert.ok(
+    mainSource.indexOf('writeStartupSmokeFailureArtifacts(mainWindow, process.env, error)') < mainSource.indexOf('dialog.showErrorBox(title, message)'),
+    'startup failure artifacts must be written before native error dialogs'
+  );
 });
 
 test('Electron BrowserWindow hardening denies renderer navigation, window-open, webview, and permissions', async () => {

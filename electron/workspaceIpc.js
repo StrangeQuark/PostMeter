@@ -1,3 +1,4 @@
+const path = require('node:path');
 const { fieldLimit } = require('../src/core/payloadSchemas');
 const { writeTextFileAtomic } = require('../src/core/workspacePersistence');
 const {
@@ -36,6 +37,7 @@ function registerWorkspaceIpc(options = {}) {
     getMainWindow = () => undefined,
     getWorkspace,
     getWorkspaceStore,
+    hasPendingWorkspaceOperations = () => false,
     ipcMain,
     mutateWorkspace = async (mutator) => {
       const nextWorkspace = await mutator(getWorkspace());
@@ -114,6 +116,10 @@ function registerWorkspaceIpc(options = {}) {
 
   ipcMain.on('workspace:saveSync', (event, nextWorkspace) => {
     assertWorkspacePayload(nextWorkspace);
+    if (hasPendingWorkspaceOperations()) {
+      event.returnValue = getWorkspace();
+      return;
+    }
     const workspace = typeof saveWorkspaceSync === 'function'
       ? saveWorkspaceSync(nextWorkspace)
       : nextWorkspace;
@@ -147,8 +153,20 @@ function registerWorkspaceIpc(options = {}) {
       await mutateWorkspace(async (currentWorkspace) => currentWorkspace);
     }
     const result = await queueWorkspaceOperation(async () => {
-      const renamed = await workspaceStore.renameWorkspace(workspaceId, trimmedName);
-      await renameVaultStore(workspaceId, renamed.renamedWorkspaceId || '');
+      let renamed = null;
+      try {
+        renamed = await workspaceStore.renameWorkspace(workspaceId, trimmedName);
+        await renameVaultStore(workspaceId, renamed.renamedWorkspaceId || '');
+      } catch (error) {
+        if (renamed?.renamedWorkspaceId && renamed.renamedWorkspaceId !== workspaceId) {
+          try {
+            await rollbackWorkspaceRename(workspaceStore, renamed.renamedWorkspaceId, workspaceId);
+          } catch (rollbackError) {
+            attachRollbackFailure(error, rollbackError);
+          }
+        }
+        throw error;
+      }
       setWorkspace(renamed.workspace);
       return renamed;
     });
@@ -175,9 +193,28 @@ function registerWorkspaceIpc(options = {}) {
     if (typeof workspaceId !== 'string' || !workspaceId.trim()) {
       throw new Error('workspaceId must be a non-empty string.');
     }
+    const workspaceStore = getWorkspaceStore();
+    const originalCurrentWorkspaceId = typeof workspaceStore.getWorkspaceId === 'function' ? workspaceStore.getWorkspaceId() : '';
     const result = await queueWorkspaceOperation(async () => {
-      const deleted = await getWorkspaceStore().deleteWorkspace(workspaceId);
-      await deleteVaultStore(deleted.deletedWorkspaceId || workspaceId);
+      const deletedWorkspaceSnapshot = typeof workspaceStore.loadWorkspaceById === 'function'
+        ? await workspaceStore.loadWorkspaceById(workspaceId)
+        : null;
+      let deleted = null;
+      try {
+        deleted = await workspaceStore.deleteWorkspace(workspaceId);
+        await deleteVaultStore(deleted.deletedWorkspaceId || workspaceId);
+      } catch (error) {
+        if (deletedWorkspaceSnapshot && deleted?.deletedWorkspaceId && typeof workspaceStore.restoreWorkspaceFile === 'function') {
+          try {
+            await workspaceStore.restoreWorkspaceFile(deleted.deletedWorkspaceId, deletedWorkspaceSnapshot, {
+              currentWorkspaceId: originalCurrentWorkspaceId
+            });
+          } catch (rollbackError) {
+            attachRollbackFailure(error, rollbackError);
+          }
+        }
+        throw error;
+      }
       setWorkspace(deleted.workspace);
       return deleted;
     });
@@ -276,6 +313,29 @@ function registerWorkspaceIpc(options = {}) {
     await writeTextFileAtomic(filePath, JSON.stringify(payload, null, 2), { prefix: 'postmeter-examples-export' });
     return fileOperationResult({ cancelled: false, path: filePath });
   });
+}
+
+async function rollbackWorkspaceRename(workspaceStore, renamedWorkspaceId, originalWorkspaceId) {
+  if (typeof workspaceStore.renameWorkspace !== 'function') {
+    throw new Error('Workspace rename rollback is unavailable.');
+  }
+  await workspaceStore.renameWorkspace(renamedWorkspaceId, workspaceDisplayNameFromId(originalWorkspaceId));
+}
+
+function workspaceDisplayNameFromId(workspaceId) {
+  const basename = path.basename(String(workspaceId || 'Workspace'));
+  const extension = path.extname(basename);
+  return path.basename(basename, extension) || 'Workspace';
+}
+
+function attachRollbackFailure(error, rollbackError) {
+  if (error && typeof error === 'object') {
+    error.rollbackError = rollbackError;
+    return error;
+  }
+  const wrapped = new Error(String(error || 'Workspace operation failed.'));
+  wrapped.rollbackError = rollbackError;
+  return wrapped;
 }
 
 module.exports = {
