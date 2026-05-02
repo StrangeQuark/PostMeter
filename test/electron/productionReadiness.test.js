@@ -123,7 +123,9 @@ test('production readiness matrix references real local evidence and required lo
     'npm run dist:linux',
     'npm run dist:win',
     'npm run dist:mac',
-    'future npm run oauth:certify:live'
+    'npm run oauth:certify:validate',
+    'npm run oauth:certify:mock',
+    'npm run oauth:certify:live'
   ]) {
     assert.ok(commands.has(command), `Readiness matrix does not reference ${command}`);
   }
@@ -251,4 +253,21 @@ test('production support matrices cover Electron security, workspace durability,
     assert.deepEqual(validateMatrix(matrix, name), []);
     assert.ok(matrix.rows.length >= 6, `${name} should cover multiple release concerns`);
   }
+});
+
+test('non-Postman compatibility matrix keeps every Step 9 required row enumerated', () => {
+  const matrix = buildMatrix('non-postman-compatibility');
+  const ids = new Set(matrix.rows.map((row) => row.id));
+  assert.deepEqual(validateMatrix(matrix, 'non-postman-compatibility'), []);
+  assert.deepEqual([...ids].sort(), [
+    'curl.cross-shell-quoting',
+    'curl.import-export',
+    'har.import-export',
+    'har.privacy-export-boundary',
+    'jmeter.bridge',
+    'native-postmeter.roundtrip',
+    'openapi.import-export',
+    'openapi.invalid-common-specs',
+    'unsupported.claim-boundaries'
+  ]);
 });

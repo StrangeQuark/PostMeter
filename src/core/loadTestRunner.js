@@ -2,6 +2,7 @@ const { fork } = require('node:child_process');
 const path = require('node:path');
 const { performance } = require('node:perf_hooks');
 const { buildUrl, sendRequest } = require('./httpClient');
+const { maybeRefreshOAuthToken } = require('./auth');
 const { LOAD_EXECUTION_MODES } = require('./payloadSchemas');
 
 const MAX_CONCURRENCY = 512;
@@ -122,6 +123,12 @@ async function runSingleProcessLoadTest(request, environment, normalizedConfig, 
   const abortController = options.abortController || new AbortController();
   const progress = typeof options.onProgress === 'function' ? options.onProgress : () => {};
   const send = typeof options.sendRequest === 'function' ? options.sendRequest : sendRequest;
+  const authSnapshot = await initialOAuthSnapshot(request, environment, {
+    fetchImpl: options.fetchImpl,
+    signal: abortController.signal
+  });
+  let runnerRequest = authSnapshot.request;
+  let updatedAuth = authSnapshot.updatedAuth;
   const stats = createLoadStats(normalizedConfig);
   const trackCookies = request?.cookieJar?.enabled === true;
   let runnerCookies = trackCookies && Array.isArray(options.cookieJar) ? structuredClone(options.cookieJar) : [];
@@ -168,7 +175,11 @@ async function runSingleProcessLoadTest(request, environment, normalizedConfig, 
           startedAtMillis: Math.max(0, Math.round(sampleStarted - started))
         };
         try {
-          const result = await send(request, environment, { signal: abortController.signal, cookieJar: runnerCookies });
+          const result = await send(runnerRequest, environment, { signal: abortController.signal, cookieJar: runnerCookies });
+          if (result.updatedAuth) {
+            updatedAuth = result.updatedAuth;
+            runnerRequest = { ...runnerRequest, auth: result.updatedAuth };
+          }
           if (trackCookies && Array.isArray(result.updatedCookies)) {
             runnerCookies = result.updatedCookies;
           }
@@ -226,6 +237,7 @@ async function runSingleProcessLoadTest(request, environment, normalizedConfig, 
     abortController.signal.aborted,
     {
       cookies: trackCookies ? runnerCookies : null,
+      updatedAuth,
       includeInternalMetrics: options.includeInternalMetrics === true
     }
   );
@@ -237,11 +249,16 @@ async function runMultiProcessLoadTest(request, environment, normalizedConfig, o
   const started = performance.now();
   const trackCookies = request?.cookieJar?.enabled === true;
   const initialCookies = trackCookies && Array.isArray(options.cookieJar) ? structuredClone(options.cookieJar) : [];
+  const authSnapshot = await initialOAuthSnapshot(request, environment, {
+    fetchImpl: options.fetchImpl,
+    signal: abortController.signal
+  });
+  const runnerRequest = authSnapshot.request;
   const workerCount = Math.min(normalizedConfig.workerProcesses, normalizedConfig.concurrency, normalizedConfig.totalRequests);
   const childConfigs = splitLoadConfig(normalizedConfig, workerCount);
   const workerProgress = new Map();
   const workers = childConfigs.map((childConfig, index) => runLoadWorker({
-    request,
+    request: runnerRequest,
     environment,
     config: childConfig,
     cookieJar: initialCookies,
@@ -262,13 +279,35 @@ async function runMultiProcessLoadTest(request, environment, normalizedConfig, o
   }
   return summarizeStats(
     stats,
-      performance.now() - started,
-      { ...normalizedConfig, recordSamples: normalizedConfig.recordSamples },
-      abortController.signal.aborted || workerResults.some((result) => result.cancelled),
-      {
-        cookies: trackCookies ? mergeCookieJars(initialCookies, workerResults.map((result) => result?.cookies)) : null
-      }
+    performance.now() - started,
+    { ...normalizedConfig, recordSamples: normalizedConfig.recordSamples },
+    abortController.signal.aborted || workerResults.some((result) => result.cancelled),
+    {
+      cookies: trackCookies ? mergeCookieJars(initialCookies, workerResults.map((result) => result?.cookies)) : null,
+      updatedAuth: lastUpdatedAuth(authSnapshot.updatedAuth, workerResults)
+    }
   );
+}
+
+async function initialOAuthSnapshot(request, environment, options = {}) {
+  const refreshed = await maybeRefreshOAuthToken(request?.auth, environment, options);
+  if (refreshed.refreshed) {
+    return {
+      request: { ...request, auth: refreshed.auth },
+      updatedAuth: refreshed.auth
+    };
+  }
+  return { request, updatedAuth: null };
+}
+
+function lastUpdatedAuth(initialAuth, results) {
+  let updatedAuth = initialAuth || null;
+  for (const result of results || []) {
+    if (result?.updatedAuth) {
+      updatedAuth = result.updatedAuth;
+    }
+  }
+  return updatedAuth;
 }
 
 function splitLoadConfig(config, workerCount) {
@@ -576,6 +615,7 @@ function summarizeStats(stats, elapsedMillis, configOrRequestedRequests, cancell
     if (Array.isArray(options.cookies)) {
       result.cookies = structuredClone(options.cookies);
     }
+    attachInternalUpdatedAuth(result, options.updatedAuth);
     if (config.recordSamples) {
       result.samples = [];
       result.sampleLimit = stats.sampleLimit;
@@ -610,6 +650,19 @@ function summarizeStats(stats, elapsedMillis, configOrRequestedRequests, cancell
   if (Array.isArray(options.cookies)) {
     result.cookies = structuredClone(options.cookies);
   }
+  attachInternalUpdatedAuth(result, options.updatedAuth);
+  return result;
+}
+
+function attachInternalUpdatedAuth(result, updatedAuth) {
+  if (!updatedAuth) {
+    return result;
+  }
+  Object.defineProperty(result, 'updatedAuth', {
+    configurable: true,
+    enumerable: false,
+    value: structuredClone(updatedAuth)
+  });
   return result;
 }
 
@@ -636,7 +689,7 @@ function cookieIdentity(cookie) {
   return `${name}|${domain}|${path}`;
 }
 
-function summarize(samples, elapsedMillis, configOrRequestedRequests, cancelled) {
+function summarize(samples, elapsedMillis, configOrRequestedRequests, cancelled, options = {}) {
   const config = typeof configOrRequestedRequests === 'number'
     ? { totalRequests: configOrRequestedRequests, mode: 'requestCount', durationSeconds: 0, rampUpSeconds: 0, recordSamples: false }
     : configOrRequestedRequests;
@@ -644,7 +697,7 @@ function summarize(samples, elapsedMillis, configOrRequestedRequests, cancelled)
   for (const sample of samples) {
     recordLoadSample(stats, sample);
   }
-  return summarizeStats(stats, elapsedMillis, config, cancelled);
+  return summarizeStats(stats, elapsedMillis, config, cancelled, options);
 }
 
 function histogramFromCounts(counts) {

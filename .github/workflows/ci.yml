@@ -37,6 +37,12 @@ jobs:
       - name: Newman report evidence validation
         run: npm run postman:newman-reports:validate
 
+      - name: OAuth provider certification validation
+        run: npm run oauth:certify:validate
+
+      - name: Mock OAuth provider certification
+        run: npm run oauth:certify:mock
+
       - name: Production readiness matrix validation
         run: npm run production:readiness:validate
 
@@ -157,7 +163,7 @@ jobs:
         run: npm run sandbox:platform:validate
 
       - name: Validate production support matrices
-        run: npm run production:readiness:validate && npm run electron:security:validate && npm run workspace:durability:validate && npm run compatibility:non-postman:validate
+        run: npm run oauth:certify:validate && npm run oauth:certify:mock && npm run production:readiness:validate && npm run electron:security:validate && npm run workspace:durability:validate && npm run compatibility:non-postman:validate
 
       - name: Build unsigned packaged app
         run: ${{ matrix.command }}

@@ -1,0 +1,86 @@
+name: OAuth Provider Certification
+
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: "Provider to certify."
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - google
+          - microsoft-entra
+          - github
+      run_live:
+        description: "Run live-provider checks using configured maintainer secrets."
+        required: true
+        default: false
+        type: boolean
+      evidence_path:
+        description: "Optional repository-relative sanitized evidence JSON path for live certification."
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  oauth-provider-certification:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Validate OAuth provider certification matrix
+        run: npm run oauth:certify:validate
+
+      - name: Run mocked OAuth provider certification
+        run: npm run oauth:certify:mock
+
+      - name: Check live OAuth provider certification configuration
+        if: ${{ inputs.run_live }}
+        run: |
+          if [ -n "$POSTMETER_OAUTH_CERTIFICATION_EVIDENCE_INPUT" ]; then
+            npm run oauth:certify:live -- --provider "$POSTMETER_OAUTH_CERTIFICATION_PROVIDER_INPUT" --evidence "$POSTMETER_OAUTH_CERTIFICATION_EVIDENCE_INPUT"
+          else
+            npm run oauth:certify:live -- --provider "$POSTMETER_OAUTH_CERTIFICATION_PROVIDER_INPUT"
+          fi
+        env:
+          POSTMETER_OAUTH_CERTIFICATION_PROVIDER_INPUT: ${{ inputs.provider }}
+          POSTMETER_OAUTH_CERTIFICATION_EVIDENCE_INPUT: ${{ inputs.evidence_path }}
+          POSTMETER_LIVE_OAUTH_CERTIFICATION: "1"
+          POSTMETER_LIVE_OAUTH_EVIDENCE_FILE: ${{ inputs.evidence_path }}
+          POSTMETER_GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.POSTMETER_GOOGLE_OAUTH_CLIENT_ID }}
+          POSTMETER_GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.POSTMETER_GOOGLE_OAUTH_CLIENT_SECRET }}
+          POSTMETER_GOOGLE_OAUTH_AUTHORIZATION_URL: ${{ secrets.POSTMETER_GOOGLE_OAUTH_AUTHORIZATION_URL }}
+          POSTMETER_GOOGLE_OAUTH_TOKEN_URL: ${{ secrets.POSTMETER_GOOGLE_OAUTH_TOKEN_URL }}
+          POSTMETER_GOOGLE_OAUTH_SCOPES: ${{ secrets.POSTMETER_GOOGLE_OAUTH_SCOPES }}
+          POSTMETER_ENTRA_OAUTH_CLIENT_ID: ${{ secrets.POSTMETER_ENTRA_OAUTH_CLIENT_ID }}
+          POSTMETER_ENTRA_OAUTH_CLIENT_SECRET: ${{ secrets.POSTMETER_ENTRA_OAUTH_CLIENT_SECRET }}
+          POSTMETER_ENTRA_OAUTH_TENANT_ID: ${{ secrets.POSTMETER_ENTRA_OAUTH_TENANT_ID }}
+          POSTMETER_ENTRA_OAUTH_AUTHORIZATION_URL: ${{ secrets.POSTMETER_ENTRA_OAUTH_AUTHORIZATION_URL }}
+          POSTMETER_ENTRA_OAUTH_TOKEN_URL: ${{ secrets.POSTMETER_ENTRA_OAUTH_TOKEN_URL }}
+          POSTMETER_ENTRA_OAUTH_DEVICE_AUTHORIZATION_URL: ${{ secrets.POSTMETER_ENTRA_OAUTH_DEVICE_AUTHORIZATION_URL }}
+          POSTMETER_ENTRA_OAUTH_SCOPES: ${{ secrets.POSTMETER_ENTRA_OAUTH_SCOPES }}
+          POSTMETER_GITHUB_OAUTH_CLIENT_ID: ${{ secrets.POSTMETER_GITHUB_OAUTH_CLIENT_ID }}
+          POSTMETER_GITHUB_OAUTH_CLIENT_SECRET: ${{ secrets.POSTMETER_GITHUB_OAUTH_CLIENT_SECRET }}
+          POSTMETER_GITHUB_OAUTH_AUTHORIZATION_URL: ${{ secrets.POSTMETER_GITHUB_OAUTH_AUTHORIZATION_URL }}
+          POSTMETER_GITHUB_OAUTH_TOKEN_URL: ${{ secrets.POSTMETER_GITHUB_OAUTH_TOKEN_URL }}
+          POSTMETER_GITHUB_OAUTH_DEVICE_AUTHORIZATION_URL: ${{ secrets.POSTMETER_GITHUB_OAUTH_DEVICE_AUTHORIZATION_URL }}
+          POSTMETER_GITHUB_OAUTH_SCOPES: ${{ secrets.POSTMETER_GITHUB_OAUTH_SCOPES }}
+
+      - name: Confirm live OAuth provider certification skip
+        if: ${{ !inputs.run_live }}
+        run: npm run oauth:certify:live -- --provider "${{ inputs.provider }}"

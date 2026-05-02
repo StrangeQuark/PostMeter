@@ -2,6 +2,18 @@
 
 This page covers user-facing recovery and diagnosis notes for behavior that is expected by design but can look like a broken request.
 
+## OAuth Provider Setup
+
+PostMeter OAuth is outbound request authentication only. It does not sign you into PostMeter.
+
+Authorization Code + PKCE opens the system browser and waits for either `postmeter://oauth/callback` or `http://127.0.0.1:{dynamic-port}/oauth/callback`. If a provider reports a redirect URI mismatch, verify the exact `/oauth/callback` path and whether the provider allows dynamic loopback ports. If the browser is closed or consent is abandoned, return to PostMeter and click Cancel or wait for the OAuth callback timeout.
+
+Device Code flows keep polling until the provider approves, denies, expires, times out, or the user cancels. Denial and expiration are expected provider states, not local workspace corruption.
+
+Client Credentials only works for providers and APIs that support app-only access. Google user OAuth generally does not use client credentials; Microsoft Entra commonly does for app-only APIs; GitHub OAuth Apps do not use it as a normal OAuth App flow.
+
+Provider error messages are redacted before display when they contain token-shaped fields such as access tokens, refresh tokens, device codes, code verifiers, or client secrets. When filing a bug, include provider name, grant type, redirect strategy, sanitized error text, and whether the failure happened before browser launch, at callback, during token exchange, during refresh, or while sending the target request. Do not include live tokens, authorization codes, client secrets, auth headers, cookies, or workspace JSON containing OAuth auth fields.
+
 ## Workspace Recovery Files
 
 PostMeter stores managed workspaces as local JSON files. When an older supported workspace schema is loaded, PostMeter first creates a collision-resistant sibling `pre-migration.backup` file through the same atomic no-overwrite write path used by normal workspace saves, then saves the migrated schema 11 workspace.

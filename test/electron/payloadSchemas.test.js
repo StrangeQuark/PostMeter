@@ -57,6 +57,7 @@ test('defines shared payload schema metadata for IPC and contributors', () => {
   assert.equal(payloadSchemas.fields.runnerProgress.requestId.limit, 'name');
   assert.equal(payloadSchemas.fields.oauthProgress.type.enum, 'oauthProgressTypes');
   assert.ok(payloadSchemas.auth.oauthProgressStatuses.includes('polling'));
+  assert.ok(payloadSchemas.auth.oauthProgressStatuses.includes('callbackRejected'));
   assert.equal(payloadSchemas.fields.externalUrl.url.limit, 'url');
   assert.equal(payloadSchemas.fields.fileOperationResult.cancelled.type, 'boolean');
   assert.equal(payloadSchemas.fields.response.finalUrl.limit, 'url');

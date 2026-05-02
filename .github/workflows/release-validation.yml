@@ -69,6 +69,22 @@ jobs:
       - name: Newman report evidence validation
         run: npm run postman:newman-reports:validate
 
+      - name: OAuth provider certification validation
+        run: npm run oauth:certify:validate
+
+      - name: Mock OAuth provider certification
+        run: npm run oauth:certify:mock
+
+      - name: OAuth UI smoke
+        if: matrix.platform != 'linux'
+        run: npm run test:ui:oauth
+
+      - name: OAuth Linux UI smoke
+        if: matrix.platform == 'linux'
+        run: xvfb-run -a npm run test:ui:oauth
+        env:
+          POSTMETER_CI_ELECTRON_NO_SANDBOX: "1"
+
       - name: Production readiness matrix validation
         run: npm run production:readiness:validate
 

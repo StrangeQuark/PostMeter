@@ -31,6 +31,7 @@ const OAUTH_PROGRESS_STATUSES = [
   'waitingForAuthorization',
   'waitingForUser',
   'polling',
+  'callbackRejected',
   'callbackReceived',
   'exchangingToken',
   'completed',
@@ -310,7 +311,8 @@ const FIELD_SCHEMAS = {
     body: { type: 'string', limit: 'body' },
     durationMillis: { type: 'number' },
     responseBytes: { type: 'number' },
-    finalUrl: { type: 'string', limit: 'url' }
+    finalUrl: { type: 'string', limit: 'url' },
+    updatedAuthPersisted: { type: 'boolean', optional: true }
   },
   collectionRunResult: {
     collectionId: { type: 'string', limit: 'name', optional: true },

@@ -103,8 +103,9 @@ function registerRequestIpc(options = {}) {
         ].slice(0, 100);
         return latestWorkspace;
       }, { workspaceId });
-      assertResponsePayload(result);
-      return result;
+      const publicResult = publicRequestResult(result);
+      assertResponsePayload(publicResult);
+      return publicResult;
     } catch (error) {
       const isPreRequestScriptFailure = Boolean(error?.preRequestScriptResult);
       const shouldCommitPreRequestSideEffects = isPreRequestScriptFailure
@@ -171,6 +172,16 @@ function cloneJson(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function publicRequestResult(result) {
+  const publicResult = cloneJson(result) || {};
+  if (result?.updatedAuth) {
+    delete publicResult.updatedAuth;
+    publicResult.updatedAuthPersisted = true;
+  }
+  return publicResult;
+}
+
 module.exports = {
+  publicRequestResult,
   registerRequestIpc
 };

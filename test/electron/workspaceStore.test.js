@@ -789,6 +789,44 @@ test('imports native collection exports and Postman collections without confusin
   assert.equal(openApiYaml.requests[0].url, 'https://yaml.example.test/widgets');
 });
 
+test('round-trips native PostMeter workspaces and collection exports with metadata-rich imported features', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-native-roundtrip-'));
+  const workspacePath = path.join(temp, 'workspace.json');
+  const workspaceExportPath = path.join(temp, 'workspace-export.json');
+  const collectionExportPath = path.join(temp, 'collection-export.json');
+  const store = new WorkspaceStore(workspacePath);
+
+  await store.save(legacyWorkspaceFixture(CURRENT_SCHEMA_VERSION));
+  const { workspace } = await store.load();
+  await store.exportWorkspace(workspace, workspaceExportPath);
+  const importedWorkspace = await store.importWorkspace(workspaceExportPath);
+  assertLegacyMetadataPreserved(importedWorkspace, CURRENT_SCHEMA_VERSION);
+
+  await store.exportCollection(importedWorkspace.collections[0], collectionExportPath, { format: 'postmeter' });
+  const importedCollection = await store.importCollection(collectionExportPath);
+  const request = importedCollection.requests[0];
+  const nestedRequest = importedCollection.folders[0].requests[0];
+  assert.notEqual(importedCollection.id, 'collection-1');
+  assert.equal(importedCollection.postman.ids.original, 'postman-collection-1');
+  assert.equal(importedCollection.postman.bindings.visualizerAssets[0].name, 'legacy-chart');
+  assert.equal(importedCollection.postman.packageReferences[0], '@team/legacy-utils');
+  assert.equal(importedCollection.certificates[0].postman.ids.original, 'postman-cert-1');
+  assert.equal(importedCollection.folders[0].postman.ids.original, 'postman-folder-1');
+  assert.equal(request.postman.ids.original, 'postman-request-1');
+  assert.equal(nestedRequest.postman.ids.original, 'postman-nested-request-1');
+  assert.equal(request.scripts.mock, 'pm.state.set("count", 1);');
+  assert.equal(request.protocol, 'grpc');
+  assert.equal(request.methodPath, 'Greeter/SayHello');
+  assert.equal(request.postmanBody.mode, 'graphql');
+  assert.equal(request.protocolProfile.disableBodyPruning, true);
+  assert.equal(request.graphql.operationName, 'GetOk');
+  assert.equal(request.grpc.service, 'Greeter');
+  assert.equal(request.websocket.url, 'wss://example.test/socket');
+  assert.equal(request.examples[0].postman.ids.original, 'postman-request-1-example');
+  assert.equal(request.postman.bindings.vaultKeys[0], 'apiToken');
+  assert.equal(request.postman.fileReferences[0].source, 'fixtures/upload.bin');
+});
+
 test('rejects workspace import when the file is not a native PostMeter workspace', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-store-'));
   const store = new WorkspaceStore(path.join(temp, 'workspace.json'));

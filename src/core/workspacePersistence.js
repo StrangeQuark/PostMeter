@@ -19,18 +19,31 @@ function defaultWorkspacePath() {
 }
 
 function parseStructuredCollectionContent(content) {
+  const text = String(content || '');
   try {
-    return JSON.parse(content);
-  } catch {
-    if (!looksLikeYamlOpenApi(content)) {
+    return JSON.parse(text);
+  } catch (jsonError) {
+    if (looksLikeJsonDocument(text)) {
+      const error = new Error(`Failed to parse JSON collection file: ${jsonError.message}`);
+      error.cause = jsonError;
+      throw error;
+    }
+    if (!looksLikeYamlOpenApi(text)) {
       return null;
     }
     try {
-      return YAML.parse(content);
-    } catch {
-      return null;
+      return YAML.parse(text);
+    } catch (yamlError) {
+      const error = new Error(`Failed to parse OpenAPI YAML file: ${yamlError.message}`);
+      error.cause = yamlError;
+      throw error;
     }
   }
+}
+
+function looksLikeJsonDocument(content) {
+  const text = String(content || '').trimStart();
+  return text.startsWith('{') || text.startsWith('[');
 }
 
 function looksLikeYamlOpenApi(content) {

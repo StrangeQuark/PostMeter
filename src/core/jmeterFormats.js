@@ -546,7 +546,7 @@ function requestHeadersToJMeter(request) {
 }
 
 function responseAssertionToJMeter(name, field, expected) {
-  return `        <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="${xmlEscape(name)}" enabled="true">\n          <collectionProp name="Asserion.test_strings">\n            <stringProp name="${xmlEscape(expected)}">${xmlEscape(expected)}</stringProp>\n          </collectionProp>\n          <stringProp name="Assertion.test_field">${xmlEscape(field)}</stringProp>\n          <boolProp name="Assertion.assume_success">false</boolProp>\n          <intProp name="Assertion.test_type">2</intProp>\n        </ResponseAssertion>\n        <hashTree/>\n`;
+  return `        <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="${xmlEscape(name)}" enabled="true">\n          <collectionProp name="Assertion.test_strings">\n            <stringProp name="${xmlEscape(expected)}">${xmlEscape(expected)}</stringProp>\n          </collectionProp>\n          <stringProp name="Assertion.test_field">${xmlEscape(field)}</stringProp>\n          <boolProp name="Assertion.assume_success">false</boolProp>\n          <intProp name="Assertion.test_type">2</intProp>\n        </ResponseAssertion>\n        <hashTree/>\n`;
 }
 
 function durationAssertionToJMeter(name, expected) {

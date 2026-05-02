@@ -570,6 +570,38 @@
       return state.workspace;
     }
 
+    async function loadPersistedRequestAuth(context) {
+      if (!context?.collectionId || !context?.requestId || !isActiveWorkspaceContext(context)) {
+        return null;
+      }
+      const loadWorkspace = windowObject.__postmeterLoadWorkspace || windowObject.postmeter?.workspace?.load;
+      if (typeof loadWorkspace !== 'function') {
+        return null;
+      }
+      let loaded;
+      try {
+        loaded = await loadWorkspace();
+      } catch {
+        return null;
+      }
+      if (loaded?.activeWorkspaceId && loaded.activeWorkspaceId !== state.activeWorkspaceId) {
+        return null;
+      }
+      const persistedRequest = findRequestLocationInWorkspace(
+        loaded?.workspace,
+        context.collectionId,
+        context.requestId
+      )?.request;
+      return persistedRequest?.auth ? cloneJson(persistedRequest.auth, null) : null;
+    }
+
+    function publicResponseResult(response) {
+      const publicResponse = { ...(response || {}) };
+      delete publicResponse.updatedAuth;
+      delete publicResponse.updatedAuthPersisted;
+      return publicResponse;
+    }
+
     async function sendActiveRequest() {
       const request = activeRequest();
       if (!request) {
@@ -593,8 +625,11 @@
         const failedBeforeSend = response?.requestSent === false && response?.preRequestScriptResult?.passed === false;
         if (isActiveWorkspaceContext(requestContext)) {
           const targetRequest = findContextRequest(requestContext);
-          if (response.updatedAuth && targetRequest) {
-            targetRequest.auth = response.updatedAuth;
+          const updatedAuth = response.updatedAuth || (response.updatedAuthPersisted
+            ? await loadPersistedRequestAuth(requestContext)
+            : null);
+          if (updatedAuth && targetRequest) {
+            targetRequest.auth = updatedAuth;
             if (isActiveRequestContext(requestContext)) {
               renderAuthEditor(targetRequest.auth);
             }
@@ -604,9 +639,10 @@
             renderCookieJarEditor();
           }
           applySingleRequestScriptMutations(response, requestContext);
-          state.lastResponse = failedBeforeSend ? null : { ...response, requestId: requestContext.requestId };
+          const publicResponse = publicResponseResult(response);
+          state.lastResponse = failedBeforeSend ? null : { ...publicResponse, requestId: requestContext.requestId };
           updateCaptureResponseButton();
-          displayResponse(response);
+          displayResponse(publicResponse);
           if (!failedBeforeSend) {
             state.workspace.history = [
               {
@@ -774,8 +810,10 @@
       if (request.auth?.type !== 'oauth2' || request.auth?.grantType !== 'deviceCode') {
         return setStatus('Select OAuth 2.0 Device Code before starting device authorization.');
       }
-      state.activeOauthFlowId = runtimeId();
+      const flowId = runtimeId();
+      state.activeOauthFlowId = flowId;
       setOauthButtonsBusy(true);
+      element('validationLabel').textContent = '';
       setStatus('Starting OAuth device authorization...');
       renderOauthProgress({
         type: 'device',
@@ -786,7 +824,10 @@
       const requestContext = createRequestContext(request, environment);
       try {
         const startDevice = windowObject.__postmeterStartDeviceFlow || windowObject.postmeter.oauth.startDeviceFlow;
-        const result = await startDevice(state.activeOauthFlowId, request.auth, environment);
+        const result = await startDevice(flowId, request.auth, environment);
+        if (state.activeOauthFlowId !== flowId) {
+          return;
+        }
         if (result.auth && isActiveWorkspaceContext(requestContext)) {
           const targetRequest = findContextRequest(requestContext);
           if (targetRequest) {
@@ -802,15 +843,21 @@
             renderCollections();
           }
         }
+        element('validationLabel').textContent = '';
         setStatus(result.cancelled ? 'OAuth device authorization cancelled.' : 'OAuth device authorization completed.');
       } catch (error) {
+        if (state.activeOauthFlowId !== flowId) {
+          return;
+        }
         const message = error.message || String(error);
         setStatus('OAuth device authorization failed.');
         element('validationLabel').textContent = message;
         notifyUser('OAuth Device Authorization Failed', message);
       } finally {
-        setOauthButtonsBusy(false);
-        state.activeOauthFlowId = null;
+        if (state.activeOauthFlowId === flowId) {
+          setOauthButtonsBusy(false);
+          state.activeOauthFlowId = null;
+        }
       }
     }
 
@@ -823,8 +870,10 @@
       if (request.auth?.type !== 'oauth2' || request.auth?.grantType !== 'authorizationCode') {
         return setStatus('Select OAuth 2.0 Authorization Code before starting authorization.');
       }
-      state.activeOauthFlowId = runtimeId();
+      const flowId = runtimeId();
+      state.activeOauthFlowId = flowId;
       setOauthButtonsBusy(true);
+      element('validationLabel').textContent = '';
       setStatus('Starting OAuth authorization...');
       renderOauthProgress({
         type: 'pkce',
@@ -836,11 +885,14 @@
       try {
         const startPkce = windowObject.__postmeterStartPkceFlow || windowObject.postmeter.oauth.startPkceFlow;
         const result = await startPkce(
-          state.activeOauthFlowId,
+          flowId,
           request.auth,
           environment,
           element('authOauthRedirectStrategySelect').value
         );
+        if (state.activeOauthFlowId !== flowId) {
+          return;
+        }
         if (result.auth && isActiveWorkspaceContext(requestContext)) {
           const targetRequest = findContextRequest(requestContext);
           if (targetRequest) {
@@ -856,15 +908,21 @@
             renderCollections();
           }
         }
+        element('validationLabel').textContent = '';
         setStatus(result.cancelled ? 'OAuth authorization cancelled.' : 'OAuth authorization completed.');
       } catch (error) {
+        if (state.activeOauthFlowId !== flowId) {
+          return;
+        }
         const message = error.message || String(error);
         setStatus('OAuth authorization failed.');
         element('validationLabel').textContent = message;
         notifyUser('OAuth Authorization Failed', message);
       } finally {
-        setOauthButtonsBusy(false);
-        state.activeOauthFlowId = null;
+        if (state.activeOauthFlowId === flowId) {
+          setOauthButtonsBusy(false);
+          state.activeOauthFlowId = null;
+        }
       }
     }
 

@@ -42,6 +42,7 @@ let selectedExportCollectionId = RENDERER_STATE_DEFAULTS.selectedExportCollectio
 let activeVaultPromptPayload = null;
 let sessionSaveTimer = null;
 let sessionPersistenceEnabled = false;
+let lastRenderedRequestEditorContextKey = '';
 
 const $ = (id) => document.getElementById(id);
 const ASSERTION_TEMPLATES = PostMeterAssertionModel.assertionTemplates;
@@ -916,6 +917,8 @@ function resetRequestTabs(options = {}) {
 }
 
 function applyLoadedWorkspace(loaded, options = {}) {
+  cancelActiveOauthFlowForContextReset();
+  resetWorkspaceTransientUi();
   updateWorkspaceCatalog(loaded, options);
   workspace = loaded?.workspace || workspace;
   lastResponse = null;
@@ -940,6 +943,25 @@ function applyLoadedWorkspace(loaded, options = {}) {
   if (options.render !== false) {
     renderAll();
   }
+}
+
+function resetWorkspaceTransientUi() {
+  lastRenderedRequestEditorContextKey = '';
+  $('validationLabel').textContent = '';
+  resetOauthProgressPanel();
+}
+
+function cancelActiveOauthFlowForContextReset() {
+  const flowId = activeOauthFlowId;
+  if (!flowId) {
+    return;
+  }
+  activeOauthFlowId = null;
+  if (window.postmeter?.oauth?.cancelFlow) {
+    Promise.resolve(window.postmeter.oauth.cancelFlow(flowId)).catch(() => {});
+  }
+  setOauthButtonsBusy(false);
+  resetOauthProgressPanel();
 }
 
 function applyWorkspaceCatalogUpdate(loaded, options = {}) {
@@ -2336,6 +2358,7 @@ function updateMethodSelectClass() {
 }
 
 function renderRequestEditor() {
+  resetRequestEditorTransientStateOnContextChange();
   const request = activeRequest();
   if (!request) {
     $('requestNameInput').value = '';
@@ -2464,6 +2487,29 @@ function renderEnvironmentEditor() {
     renderEnvironmentPairs(environment.variables || []);
   }
   renderVariablePreview();
+}
+
+function resetRequestEditorTransientStateOnContextChange() {
+  const contextKey = `${activeCollectionId || 'draft'}:${activeRequestId || ''}`;
+  if (contextKey === lastRenderedRequestEditorContextKey) {
+    return;
+  }
+  lastRenderedRequestEditorContextKey = contextKey;
+  if (activeOauthFlowId) {
+    return;
+  }
+  $('validationLabel').textContent = '';
+  resetOauthProgressPanel();
+}
+
+function resetOauthProgressPanel() {
+  const panel = $('oauthProgressPanel');
+  if (!panel) {
+    return;
+  }
+  panel.hidden = true;
+  $('oauthProgressStatus').textContent = 'Idle';
+  $('oauthProgressDetail').textContent = '';
 }
 
 function renderCollectionVariablesEditor() {

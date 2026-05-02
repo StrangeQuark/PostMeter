@@ -89,11 +89,22 @@ function applyCollectionRunMutationsToWorkspace(workspace, result, options = {})
   }
   for (const item of result.results || []) {
     const request = item.requestId ? findRequestInCollection(collection, item.requestId) : null;
+    if (request && item.updatedAuth) {
+      request.auth = cloneJson(item.updatedAuth);
+    }
     if (request && Array.isArray(item.localVariables)) {
       const baseLocalVariables = options.baseLocalVariablesByRequestId?.get?.(item.requestId);
       request.variables = baseLocalVariables
         ? mergeVariableScopeByDelta(request.variables, baseLocalVariables, item.localVariables)
         : clonePairs(item.localVariables);
+    }
+  }
+  if (result.authUpdates instanceof Map) {
+    for (const [requestId, auth] of result.authUpdates.entries()) {
+      const request = findRequestInCollection(collection, requestId);
+      if (request) {
+        request.auth = cloneJson(auth);
+      }
     }
   }
 }

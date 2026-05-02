@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const {
+  collectionImportFilters,
   selectedOpenFilePath,
   selectedSaveFilePath,
   validateDialogFilePath
@@ -8,6 +9,10 @@ const {
 const { registerWorkspaceIpc } = require('../../electron/workspaceIpc');
 
 test('file dialog helpers validate selected paths before IPC file operations', () => {
+  assert.deepEqual(collectionImportFilters(), [
+    { name: 'API Collections', extensions: ['json', 'yaml', 'yml', 'har', 'jmx', 'sh'] },
+    { name: 'All Files', extensions: ['*'] }
+  ]);
   assert.equal(selectedOpenFilePath({ canceled: true, filePaths: ['/tmp/workspace.json'] }), '');
   assert.equal(selectedOpenFilePath({ canceled: false, filePaths: [] }), '');
   assert.equal(selectedOpenFilePath({ canceled: false, filePaths: ['/tmp/workspace.json'] }), '/tmp/workspace.json');
@@ -230,7 +235,7 @@ test('workspace IPC exports a selected non-current workspace by id', async () =>
   assert.equal(syncHandlers.has('workspace:saveSync'), true);
 });
 
-test('workspace IPC suggests a collection-name json filename for native collection exports', async () => {
+test('workspace IPC suggests collection filenames, filters, and formats for every collection export type', async () => {
   const handlers = new Map();
   const syncHandlers = new Map();
   let saveDialogOptions = null;
@@ -241,7 +246,7 @@ test('workspace IPC suggests a collection-name json filename for native collecti
       showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
       showSaveDialog: async (_window, options) => {
         saveDialogOptions = options;
-        return { canceled: false, filePath: '/tmp/AuthServiceCollection.json' };
+        return { canceled: false, filePath: `/tmp/${options.defaultPath}` };
       }
     },
     fileOperationResult: (result) => result,
@@ -249,10 +254,10 @@ test('workspace IPC suggests a collection-name json filename for native collecti
     getWorkspace: () => ({ schemaVersion: 11, collections: [], environments: [], history: [], cookies: [], settings: { updates: { includePrereleases: false } } }),
     getWorkspaceStore: () => ({
       describeCurrent: async (workspace) => ({ workspace, path: '/tmp/Local Workspace.json', activeWorkspaceId: 'Local Workspace.json', workspaces: [] }),
-      exportCollection: async (collection, _exportPath, options = {}) => {
+      exportCollection: async (collection, exportPath, options = {}) => {
         exportedCollection = collection;
         exportedFormat = options.format || '';
-        return '/tmp/AuthServiceCollection.json';
+        return exportPath;
       }
     }),
     ipcMain: {
@@ -270,18 +275,70 @@ test('workspace IPC suggests a collection-name json filename for native collecti
   });
 
   const collection = { id: 'c1', name: 'AuthServiceCollection', requests: [], folders: [] };
-  const result = await handlers.get('collection:export')(null, collection, 'postmeter');
+  for (const [format, defaultPath, filterName, extension] of [
+    ['postmeter', 'AuthServiceCollection.json', 'POSTMETER Collection', 'json'],
+    ['postman', 'AuthServiceCollection.postman_collection.json', 'POSTMAN Collection', 'json'],
+    ['openapi', 'AuthServiceCollection.openapi.json', 'OPENAPI Collection', 'json'],
+    ['jmeter', 'AuthServiceCollection.jmx', 'JMETER Collection', 'jmx'],
+    ['curl', 'AuthServiceCollection.sh', 'CURL Collection', 'sh'],
+    ['har', 'AuthServiceCollection.har', 'HAR Collection', 'har']
+  ]) {
+    const result = await handlers.get('collection:export')(null, collection, format);
 
-  assert.equal(saveDialogOptions?.title, 'Export Collection');
-  assert.equal(saveDialogOptions?.defaultPath, 'AuthServiceCollection.json');
-  assert.deepEqual(saveDialogOptions?.filters, [
-    { name: 'POSTMETER Collection', extensions: ['json'] },
-    { name: 'All Files', extensions: ['*'] }
-  ]);
-  assert.equal(exportedCollection, collection);
-  assert.equal(exportedFormat, 'postmeter');
-  assert.deepEqual(result, { cancelled: false, path: '/tmp/AuthServiceCollection.json' });
+    assert.equal(saveDialogOptions?.title, 'Export Collection');
+    assert.equal(saveDialogOptions?.defaultPath, defaultPath);
+    assert.deepEqual(saveDialogOptions?.filters, [
+      { name: filterName, extensions: [extension] },
+      { name: 'All Files', extensions: ['*'] }
+    ]);
+    assert.equal(exportedCollection, collection);
+    assert.equal(exportedFormat, format);
+    assert.deepEqual(result, { cancelled: false, path: `/tmp/${defaultPath}` });
+  }
   assert.equal(syncHandlers.has('workspace:saveSync'), true);
+});
+
+test('workspace IPC exposes only documented collection import filters', async () => {
+  const handlers = new Map();
+  let openDialogOptions = null;
+  let importedPath = '';
+  registerWorkspaceIpc({
+    dialog: {
+      showOpenDialog: async (_window, options) => {
+        openDialogOptions = options;
+        return { canceled: false, filePaths: ['/tmp/collection.openapi.json'] };
+      },
+      showSaveDialog: async () => ({ canceled: true })
+    },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => ({ schemaVersion: 11, collections: [], environments: [], history: [], cookies: [], settings: { updates: { includePrereleases: false } } }),
+    getWorkspaceStore: () => ({
+      describeCurrent: async (workspace) => ({ workspace, path: '/tmp/Local Workspace.json', activeWorkspaceId: 'Local Workspace.json', workspaces: [] }),
+      importCollection: async (filePath) => {
+        importedPath = filePath;
+        return { id: 'c1', name: 'Imported', requests: [], folders: [] };
+      }
+    }),
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      },
+      on() {}
+    },
+    refreshApplicationMenu: () => {},
+    saveWorkspace: async (workspace) => workspace,
+    saveWorkspaceSync: (workspace) => workspace,
+    setWorkspace: () => {}
+  });
+
+  const result = await handlers.get('collection:import')();
+
+  assert.equal(openDialogOptions?.title, 'Import Collection');
+  assert.deepEqual(openDialogOptions?.properties, ['openFile']);
+  assert.deepEqual(openDialogOptions?.filters, collectionImportFilters());
+  assert.equal(importedPath, '/tmp/collection.openapi.json');
+  assert.deepEqual(result, { cancelled: false, collection: { id: 'c1', name: 'Imported', requests: [], folders: [] } });
 });
 
 test('workspace IPC imports a workspace as an additional managed workspace without backing up or replacing the current workspace', async () => {

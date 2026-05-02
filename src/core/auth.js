@@ -16,6 +16,46 @@ const OAUTH_DEVICE_DEFAULT_INTERVAL_SECONDS = 5;
 const OAUTH_DEVICE_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:device_code';
 const OAUTH_PKCE_CODE_VERIFIER_BYTES = 32;
 const OAUTH_PKCE_STATE_BYTES = 24;
+const OAUTH_REDACTED_VALUE = '[redacted]';
+const OAUTH_SECRET_FIELD_NAMES = [
+  'token',
+  'secret',
+  'cookie',
+  'set-cookie',
+  'set_cookie',
+  'access_token',
+  'accessToken',
+  'refresh_token',
+  'refreshToken',
+  'id_token',
+  'idToken',
+  'client_secret',
+  'clientSecret',
+  'client_assertion',
+  'clientAssertion',
+  'code',
+  'authorization_code',
+  'authorizationCode',
+  'code_verifier',
+  'codeVerifier',
+  'device_code',
+  'deviceCode',
+  'user_code',
+  'userCode',
+  'authorization',
+  'authorization_header',
+  'authorizationHeader',
+  'auth-header',
+  'auth_header',
+  'authHeader',
+  'proxy-authorization',
+  'proxy_authorization',
+  'proxyAuthorization',
+  'proxy-authorization-header',
+  'proxy_authorization_header',
+  'proxyAuthorizationHeader'
+];
+const OAUTH_AUTHORIZATION_HEADER_PATTERN = /\b((?:(?:Proxy[-_]?Authorization|Authorization)(?:[-_]?Header)?|Auth[-_]?Header))(\s*[:=]\s*)(["']?)(?!(?:(?:Bearer|Basic|OAuth)\s+)?(?:\[redacted\]|redacted)\3?(?=\s|[;,.)\]]|$))(?:(?:Bearer|Basic|OAuth)\s+)?[A-Za-z0-9._~+/=-]+(?:\3)?/gi;
 const DIGEST_SUPPORTED_ALGORITHMS = new Map([
   ['md5', 'md5'],
   ['md5-sess', 'md5'],
@@ -316,7 +356,7 @@ async function exchangeOAuthAuthorizationCode(auth = {}, session, callbackUrl, e
   const error = parsedCallback.searchParams.get('error');
   if (error) {
     const description = parsedCallback.searchParams.get('error_description');
-    throw new Error(description || error);
+    throw new Error(redactOAuthErrorMessage(description || error));
   }
   const state = parsedCallback.searchParams.get('state');
   if (!state || state !== session.state) {
@@ -1304,6 +1344,7 @@ async function postOAuthTokenRequest(url, body, options, label, requestOptions =
   const fetchImpl = options.fetchImpl || fetch;
   const response = await fetchImpl(url, {
     method: 'POST',
+    redirect: 'manual',
     headers: {
       Accept: 'application/json',
       'Content-Type': 'application/x-www-form-urlencoded'
@@ -1311,6 +1352,10 @@ async function postOAuthTokenRequest(url, body, options, label, requestOptions =
     body,
     signal: options.signal
   });
+
+  if (response.status >= 300 && response.status < 400) {
+    throw new Error(`${label} refused an HTTP redirect from the token endpoint.`);
+  }
 
   const responseText = await response.text();
   let payload = {};
@@ -1322,7 +1367,7 @@ async function postOAuthTokenRequest(url, body, options, label, requestOptions =
     }
   }
   if (!response.ok) {
-    const error = new Error(payload.error_description || payload.error || `${label} failed with HTTP ${response.status}.`);
+    const error = new Error(redactOAuthErrorMessage(payload.error_description || payload.error || `${label} failed with HTTP ${response.status}.`));
     error.oauthError = payload.error ? String(payload.error) : '';
     error.status = response.status;
     throw error;
@@ -1378,6 +1423,32 @@ function validatePkceCodeVerifier(value) {
   }
 }
 
+function redactOAuthErrorMessage(value) {
+  let text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!text) {
+    return 'OAuth 2.0 provider returned an error.';
+  }
+  text = text.replace(OAUTH_AUTHORIZATION_HEADER_PATTERN, `$1$2${OAUTH_REDACTED_VALUE}`);
+  for (const fieldName of OAUTH_SECRET_FIELD_NAMES) {
+    const field = escapeRegExp(fieldName);
+    text = text
+      .replace(new RegExp(`("${field}"\\s*:\\s*")([^"]*)(")`, 'gi'), `$1${OAUTH_REDACTED_VALUE}$3`)
+      .replace(new RegExp(`('\\s*${field}\\s*'\\s*:\\s*')([^']*)(')`, 'gi'), `$1${OAUTH_REDACTED_VALUE}$3`)
+      .replace(new RegExp(`\\b(${field})(\\s*[:=]\\s*)(["']?)(?!(?:(?:Bearer|Basic|OAuth)\\s+)?(?:\\[redacted\\]|redacted)\\3?(?=\\s|[;,.)\\]]|$))[^\\s&,;<>}"']+\\3`, 'gi'), `$1$2${OAUTH_REDACTED_VALUE}`);
+  }
+  text = text
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, `Bearer ${OAUTH_REDACTED_VALUE}`)
+    .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, OAUTH_REDACTED_VALUE);
+  if (text.length > 1000) {
+    return `${text.slice(0, 1000)}...`;
+  }
+  return text;
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function normalizeTokenType(value) {
   if (typeof value === 'string' && value.toLowerCase() === 'bearer') {
     return 'Bearer';
@@ -1415,6 +1486,7 @@ module.exports = {
   parseDigestChallenge,
   pkceChallengeForVerifier,
   pollOAuthDeviceToken,
+  redactOAuthErrorMessage,
   refreshOAuthToken,
   requestOAuthClientCredentialsToken,
   requestOAuthDeviceAuthorization,

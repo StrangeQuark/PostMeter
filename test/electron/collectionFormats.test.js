@@ -96,6 +96,193 @@ test('imports and exports OpenAPI collections', async () => {
   assert.equal(exportedApiKeyScheme.in, 'header');
 });
 
+test('imports OpenAPI server variables, path variables, cookies, and binary body hints', async () => {
+  const { store, dir } = await tempStore();
+  const importPath = path.join(dir, 'openapi-edge.json');
+  await fs.writeFile(importPath, JSON.stringify({
+    openapi: '3.1.0',
+    info: { title: 'OpenAPI Edge Matrix', version: '1.0.0' },
+    servers: [{
+      url: 'https://{region}.api.example.test/{version}',
+      variables: {
+        region: { default: 'us' },
+        version: { default: 'v2' }
+      }
+    }],
+    components: {
+      schemas: {
+        ReferencedBinary: { type: 'string', format: 'binary' }
+      },
+      securitySchemes: {
+        cookieAuth: { type: 'apiKey', in: 'cookie', name: 'sid' }
+      }
+    },
+    paths: {
+      '/files/{fileId}': {
+        put: {
+          operationId: 'uploadFile',
+          security: [{ cookieAuth: [] }],
+          parameters: [
+            { name: 'fileId', in: 'path', schema: { type: 'string', default: 'file-1' } },
+            { name: 'session', in: 'cookie', schema: { type: 'string', default: 'cookie-1' } }
+          ],
+          requestBody: {
+            content: {
+              'application/octet-stream': {
+                schema: { $ref: '#/components/schemas/ReferencedBinary' }
+              }
+            }
+          },
+          responses: { 204: { description: 'Uploaded' } }
+        }
+      }
+    }
+  }));
+
+  const collection = await store.importCollection(importPath);
+  const request = collection.requests[0];
+  assert.equal(collection.variables.find((variable) => variable.key === 'region').value, 'us');
+  assert.equal(collection.variables.find((variable) => variable.key === 'version').value, 'v2');
+  assert.equal(request.url, 'https://{{region}}.api.example.test/{{version}}/files/{{fileId}}');
+  assert.equal(request.variables.find((variable) => variable.key === 'fileId').value, 'file-1');
+  assert.equal(request.headers.find((header) => header.key === 'Cookie').value, 'session=cookie-1');
+  assert.equal(request.auth.type, 'cookie');
+  assert.equal(request.auth.value, 'sid={{sid}}');
+  assert.equal(request.variables.find((variable) => variable.key === 'openapi.requestBody.binary').value, 'true');
+  assert.equal(request.variables.find((variable) => variable.key === 'openapi.requestBody.contentType').value, 'application/octet-stream');
+
+  const exportPath = path.join(dir, 'openapi-edge-export.json');
+  await store.exportCollection(collection, exportPath, { format: 'openapi' });
+  const exported = JSON.parse(await fs.readFile(exportPath, 'utf8'));
+  const exportedParameters = exported.paths['/{version}/files/{fileId}'].put.parameters;
+  const exportedPathParameter = exportedParameters
+    .find((parameter) => parameter.in === 'path' && parameter.name === 'fileId');
+  assert.equal(exportedPathParameter.required, true);
+  assert.equal(exportedPathParameter.example, 'file-1');
+  const exportedParameter = exportedParameters
+    .find((parameter) => parameter.in === 'cookie' && parameter.name === 'session');
+  assert.equal(exportedParameter.example, 'cookie-1');
+});
+
+test('imports OpenAPI local references and Swagger 2 request body variants', async () => {
+  const { store, dir } = await tempStore();
+  const refPath = path.join(dir, 'openapi-ref.json');
+  await fs.writeFile(refPath, JSON.stringify({
+    openapi: '3.1.0',
+    info: { title: 'Referenced API', version: '1.0.0' },
+    servers: [{ url: 'https://ref.example.test' }],
+    components: {
+      parameters: {
+        id: { name: 'id', in: 'path', schema: { type: 'string', default: 'ref-1' } },
+        trace: { name: 'X-Trace', in: 'header', example: 'trace-ref' }
+      },
+      requestBodies: {
+        widget: {
+          content: {
+            'application/json': {
+              example: { name: 'referenced' }
+            }
+          }
+        }
+      },
+      responses: {
+        created: {
+          description: 'Created',
+          headers: {
+            Location: { schema: { type: 'string', default: '/widgets/ref-1' } }
+          },
+          content: {
+            'application/json': {
+              examples: {
+                created: { value: { id: 'ref-1' } }
+              }
+            }
+          }
+        }
+      }
+    },
+    paths: {
+      '/widgets/{id}': {
+        post: {
+          operationId: 'createReferencedWidget',
+          parameters: [
+            { $ref: '#/components/parameters/id' },
+            { $ref: '#/components/parameters/trace' }
+          ],
+          requestBody: { $ref: '#/components/requestBodies/widget' },
+          responses: {
+            201: { $ref: '#/components/responses/created' }
+          }
+        }
+      }
+    }
+  }));
+
+  const referenced = await store.importCollection(refPath);
+  const referencedRequest = referenced.requests[0];
+  assert.equal(referencedRequest.url, 'https://ref.example.test/widgets/{{id}}');
+  assert.equal(referencedRequest.variables.find((variable) => variable.key === 'id').value, 'ref-1');
+  assert.equal(referencedRequest.headers.find((header) => header.key === 'X-Trace').value, 'trace-ref');
+  assert.match(referencedRequest.body, /referenced/);
+  assert.equal(referencedRequest.examples[0].statusCode, 201);
+  assert.equal(referencedRequest.examples[0].headers.find((header) => header.key === 'Location').value, '/widgets/ref-1');
+
+  const swaggerBodyPath = path.join(dir, 'swagger-body.json');
+  await fs.writeFile(swaggerBodyPath, JSON.stringify({
+    swagger: '2.0',
+    info: { title: 'Swagger Body API', version: '1.0.0' },
+    schemes: ['https'],
+    host: 'swagger.example.test',
+    basePath: '/v1',
+    consumes: ['application/json'],
+    paths: {
+      '/widgets': {
+        post: {
+          operationId: 'createSwaggerWidget',
+          parameters: [{
+            name: 'payload',
+            in: 'body',
+            schema: {
+              type: 'object',
+              example: { name: 'swagger' }
+            }
+          }],
+          responses: { 201: { description: 'Created' } }
+        }
+      }
+    }
+  }));
+  const swaggerBody = await store.importCollection(swaggerBodyPath);
+  assert.equal(swaggerBody.requests[0].url, 'https://swagger.example.test/v1/widgets');
+  assert.equal(swaggerBody.requests[0].bodyType, 'RAW_JSON');
+  assert.match(swaggerBody.requests[0].body, /swagger/);
+
+  const swaggerFormPath = path.join(dir, 'swagger-form.json');
+  await fs.writeFile(swaggerFormPath, JSON.stringify({
+    swagger: '2.0',
+    info: { title: 'Swagger Form API', version: '1.0.0' },
+    schemes: ['https'],
+    host: 'swagger.example.test',
+    consumes: ['multipart/form-data'],
+    paths: {
+      '/upload': {
+        post: {
+          operationId: 'uploadSwaggerFile',
+          parameters: [
+            { name: 'file', in: 'formData', type: 'file' },
+            { name: 'token', in: 'formData', type: 'string', default: 'form-token' }
+          ],
+          responses: { 200: { description: 'Uploaded' } }
+        }
+      }
+    }
+  }));
+  const swaggerForm = await store.importCollection(swaggerFormPath);
+  assert.equal(swaggerForm.requests[0].headers.find((header) => header.key === 'Content-Type').value, 'multipart/form-data');
+  assert.match(swaggerForm.requests[0].body, /token=form-token/);
+  assert.equal(swaggerForm.requests[0].variables.find((variable) => variable.key === 'openapi.formData.file.file').value, 'true');
+});
+
 test('imports and exports HAR collections', async () => {
   const { store, dir } = await tempStore();
   const importPath = path.join(dir, 'collection.har');
@@ -107,14 +294,23 @@ test('imports and exports HAR collections', async () => {
         request: {
           method: 'POST',
           url: 'https://api.example.test/widgets?trace=1',
-          headers: [{ name: 'Accept', value: 'application/json' }],
+          headers: [
+            { name: 'Accept', value: 'application/json' },
+            { name: 'Authorization', value: 'Bearer secret' },
+            { name: 'Authorization ', value: 'Bearer whitespace-secret' },
+            { name: 'Proxy-Authorization', value: 'Basic proxy-secret' },
+            { name: 'Set-Cookie', value: 'request-side=secret' }
+          ],
+          cookies: [{ name: 'session', value: 'abc', path: '/' }],
           queryString: [{ name: 'trace', value: '1' }],
-          postData: { mimeType: 'application/json', text: '{"name":"hammer"}' }
+          postData: { mimeType: 'application/json', text: '{"name":"hammer"}', encoding: 'utf8' }
         },
         response: {
           status: 201,
           headers: [{ name: 'Content-Type', value: 'application/json' }],
-          content: { mimeType: 'application/json', text: '{"id":"w1"}' }
+          cookies: [{ name: 'seen', value: 'yes', path: '/', httpOnly: true, secure: true }],
+          redirectURL: 'https://api.example.test/widgets/w1',
+          content: { mimeType: 'application/json', text: '{"id":"w1"}', encoding: 'base64', compression: 12 }
         },
         time: 123
       }]
@@ -125,14 +321,27 @@ test('imports and exports HAR collections', async () => {
   assert.equal(collection.requests[0].method, 'POST');
   assert.equal(collection.requests[0].queryParams[0].key, 'trace');
   assert.equal(collection.requests[0].bodyType, 'RAW_JSON');
+  assert.equal(collection.requests[0].headers.find((header) => header.key === 'Cookie').value, 'session=abc');
   assert.equal(collection.requests[0].examples[0].statusCode, 201);
+  assert.equal(collection.requests[0].examples[0].headers.find((header) => header.key === 'Set-Cookie').value, 'seen=yes; Path=/; HttpOnly; Secure');
   assert.equal(collection.requests[0].variables.find((variable) => variable.key === 'har.responseTimeMillis').value, '123');
+  assert.equal(collection.requests[0].variables.find((variable) => variable.key === 'har.requestBodyEncoding').value, 'utf8');
+  assert.equal(collection.requests[0].variables.find((variable) => variable.key === 'har.redirectUrl').value, 'https://api.example.test/widgets/w1');
+  assert.equal(collection.requests[0].variables.find((variable) => variable.key === 'har.responseBodyEncoding').value, 'base64');
+  assert.equal(collection.requests[0].variables.find((variable) => variable.key === 'har.responseCompressionBytes').value, '12');
 
   const exportPath = path.join(dir, 'export.har');
   await store.exportCollection(collection, exportPath, { format: 'har' });
   const exported = JSON.parse(await fs.readFile(exportPath, 'utf8'));
   assert.equal(exported.log.version, '1.2');
   assert.equal(exported.log.entries[0].request.method, 'POST');
+  assert.equal(exported.log.entries[0].request.headers.find((header) => header.name === 'Cookie').value, '<redacted>');
+  assert.equal(exported.log.entries[0].request.headers.find((header) => header.name === 'Authorization').value, '<redacted>');
+  assert.equal(exported.log.entries[0].request.headers.find((header) => header.name === 'Authorization ').value, '<redacted>');
+  assert.equal(exported.log.entries[0].request.headers.find((header) => header.name === 'Proxy-Authorization').value, '<redacted>');
+  assert.equal(exported.log.entries[0].request.headers.find((header) => header.name === 'Set-Cookie').value, '<redacted>');
+  assert.equal(exported.log.entries[0].request.cookies[0].name, 'session');
+  assert.equal(exported.log.entries[0].request.cookies[0].value, '<redacted>');
 });
 
 test('imports and exports curl collections', async () => {
@@ -147,6 +356,7 @@ test('imports and exports curl collections', async () => {
   assert.equal(collection.requests[0].headers.find((header) => header.key === 'Cookie').value, 'session=abc');
   assert.equal(collection.requests[0].variables.find((variable) => variable.key === 'curl.proxy').value, 'http://proxy.example.test:8080');
   assert.equal(collection.requests[0].variables.find((variable) => variable.key === 'curl.retry').value, '3');
+  assert.equal(collection.requests[0].variables.find((variable) => variable.key === 'curl.cacert').value, '/tmp/ca.pem');
 
   const exportPath = path.join(dir, 'export.sh');
   await store.exportCollection(collection, exportPath, { format: 'curl' });
@@ -213,6 +423,124 @@ test('imports curl commands with attached short-option values and preserves trai
   assert.equal(collection.requests[0].body, 'foo=bar');
   assert.equal(collection.requests[0].bodyType, 'RAW_TEXT');
   assert.deepEqual(splitCommandLine('curl http://example.com/foo\\\\'), ['curl', 'http://example.com/foo\\']);
+});
+
+test('imports curl auth, redirect, compression, query, binary, and Windows-style quoting variants', async () => {
+  const { store, dir } = await tempStore();
+  const binaryPath = path.join(dir, 'binary.sh');
+  await fs.writeFile(binaryPath, [
+    "curl --location --compressed --insecure --user 'alice:secret'",
+    "--user-agent 'PostMeter Test/1.0' --referer 'https://app.example.test'",
+    "--url 'https://api.example.test/upload' --url-query 'debug=true'",
+    "--data-binary '@payload.bin'"
+  ].join(' '));
+
+  const binaryCollection = await store.importCollection(binaryPath);
+  const binaryRequest = binaryCollection.requests[0];
+  assert.equal(binaryRequest.name, 'POST /upload');
+  assert.equal(binaryRequest.auth.type, 'basic');
+  assert.equal(binaryRequest.auth.username, 'alice');
+  assert.equal(binaryRequest.auth.password, 'secret');
+  assert.equal(binaryRequest.queryParams.find((param) => param.key === 'debug').value, 'true');
+  assert.equal(binaryRequest.body, '@payload.bin');
+  assert.equal(binaryRequest.headers.find((header) => header.key === 'User-Agent').value, 'PostMeter Test/1.0');
+  assert.equal(binaryRequest.headers.find((header) => header.key === 'Referer').value, 'https://app.example.test');
+  assert.equal(binaryRequest.variables.find((variable) => variable.key === 'curl.followRedirects').value, 'true');
+  assert.equal(binaryRequest.variables.find((variable) => variable.key === 'curl.compressed').value, 'true');
+  assert.equal(binaryRequest.variables.find((variable) => variable.key === 'curl.insecure').value, 'true');
+  assert.equal(binaryRequest.variables.find((variable) => variable.key === 'curl.dataBinaryFile').value, 'payload.bin');
+  const binaryExportPath = path.join(dir, 'binary-export.sh');
+  await store.exportCollection(binaryCollection, binaryExportPath, { format: 'curl' });
+  const binaryExported = await fs.readFile(binaryExportPath, 'utf8');
+  assert.match(binaryExported, / -u 'alice:secret'/);
+  assert.match(binaryExported, / -L/);
+  assert.match(binaryExported, / --compressed/);
+  assert.match(binaryExported, / -k/);
+  assert.match(binaryExported, / --data-binary '@payload\.bin'/);
+
+  const metadataPath = path.join(dir, 'metadata.sh');
+  await fs.writeFile(metadataPath, "curl --cert '/tmp/client.pem' --key=/tmp/client.key --connect-timeout 2 --max-time=5 --upload-file './upload.bin' https://api.example.test/files");
+  const metadataCollection = await store.importCollection(metadataPath);
+  const metadataRequest = metadataCollection.requests[0];
+  assert.equal(metadataRequest.method, 'PUT');
+  assert.equal(metadataRequest.body, '@./upload.bin');
+  assert.equal(metadataRequest.variables.find((variable) => variable.key === 'curl.cert').value, '/tmp/client.pem');
+  assert.equal(metadataRequest.variables.find((variable) => variable.key === 'curl.key').value, '/tmp/client.key');
+  assert.equal(metadataRequest.variables.find((variable) => variable.key === 'curl.connect-timeout').value, '2');
+  assert.equal(metadataRequest.variables.find((variable) => variable.key === 'curl.max-time').value, '5');
+  assert.equal(metadataRequest.variables.find((variable) => variable.key === 'curl.uploadFile').value, './upload.bin');
+
+  const formPath = path.join(dir, 'form.sh');
+  await fs.writeFile(formPath, "curl -F 'file=@avatar.png' --form-string 'name=Ada' https://api.example.test/profile");
+  const formCollection = await store.importCollection(formPath);
+  const formRequest = formCollection.requests[0];
+  assert.equal(formRequest.method, 'POST');
+  assert.equal(formRequest.headers.find((header) => header.key === 'Content-Type').value, 'multipart/form-data');
+  assert.match(formRequest.body, /file=@avatar\.png/);
+  assert.match(formRequest.body, /name=Ada/);
+
+  const windowsPath = path.join(dir, 'windows.cmd');
+  await fs.writeFile(windowsPath, [
+    'curl "https://api.example.test/widgets" ^',
+    '  -H "X-Trace: two" ^',
+    '  --user "bob:s3"'
+  ].join('\n'));
+  const windowsCollection = await store.importCollection(windowsPath);
+  assert.equal(windowsCollection.requests[0].headers.find((header) => header.key === 'X-Trace').value, 'two');
+  assert.equal(windowsCollection.requests[0].auth.username, 'bob');
+  assert.equal(windowsCollection.requests[0].auth.password, 's3');
+
+  const attachedCaretWindowsPath = path.join(dir, 'windows-attached-caret.cmd');
+  await fs.writeFile(attachedCaretWindowsPath, [
+    'curl "https://api.example.test/widgets"^',
+    '  -H "X-Trace: attached"^',
+    '  --user "carol:s4"'
+  ].join('\r\n'));
+  const attachedCaretWindowsCollection = await store.importCollection(attachedCaretWindowsPath);
+  assert.equal(attachedCaretWindowsCollection.requests[0].url, 'https://api.example.test/widgets');
+  assert.equal(attachedCaretWindowsCollection.requests[0].headers.find((header) => header.key === 'X-Trace').value, 'attached');
+  assert.equal(attachedCaretWindowsCollection.requests[0].auth.username, 'carol');
+
+  const repeatedHeaderPath = path.join(dir, 'repeated-headers.sh');
+  await fs.writeFile(repeatedHeaderPath, [
+    "curl -H 'X-Repeat: one' -H 'X-Repeat: two' -H 'Accept: application/json' https://api.example.test/repeat"
+  ].join('\n'));
+  const repeatedHeaderCollection = await store.importCollection(repeatedHeaderPath);
+  const repeatedHeaders = repeatedHeaderCollection.requests[0].headers.filter((header) => header.key === 'X-Repeat');
+  assert.deepEqual(repeatedHeaders.map((header) => header.value), ['one', 'two']);
+  const repeatedHeaderExportPath = path.join(dir, 'repeated-headers-export.sh');
+  await store.exportCollection(repeatedHeaderCollection, repeatedHeaderExportPath, { format: 'curl' });
+  const repeatedHeaderExported = await fs.readFile(repeatedHeaderExportPath, 'utf8');
+  assert.match(repeatedHeaderExported, /-H 'X-Repeat: one'.*-H 'X-Repeat: two'/);
+
+  const repeatedDataPath = path.join(dir, 'repeated-data.sh');
+  await fs.writeFile(repeatedDataPath, "curl -G -d 'q=hammer' -d 'limit=10' https://api.example.test/search");
+  const repeatedDataCollection = await store.importCollection(repeatedDataPath);
+  assert.equal(repeatedDataCollection.requests[0].method, 'GET');
+  assert.equal(repeatedDataCollection.requests[0].bodyType, 'NONE');
+  assert.equal(repeatedDataCollection.requests[0].queryParams.find((param) => param.key === 'q').value, 'hammer');
+  assert.equal(repeatedDataCollection.requests[0].queryParams.find((param) => param.key === 'limit').value, '10');
+});
+
+test('non-Postman importers reject malformed common inputs with clear errors', async () => {
+  const { store, dir } = await tempStore();
+  const cases = [
+    ['malformed-openapi.json', '{"openapi":"3.1.0",', /Failed to parse JSON collection file:/],
+    ['malformed-openapi.yaml', 'openapi: 3.1.0\ninfo:\n  title: [unterminated', /Failed to parse OpenAPI YAML file:/],
+    ['malformed.har', '{"log":', /Failed to parse JSON collection file:/],
+    ['empty-openapi.json', JSON.stringify({ openapi: '3.1.0', info: { title: 'Empty', version: '1' }, paths: {} }), /OpenAPI document does not contain importable requests/],
+    ['empty.har', JSON.stringify({ log: { version: '1.2', entries: [] } }), /HAR document does not contain importable requests/],
+    ['missing-url.sh', "curl -H 'X-Test: yes'", /curl command does not include a URL/],
+    ['malformed.jmx', '<jmeterTestPlan><HTTPSamplerProxy testname="Broken"><stringProp name="HTTPSampler.domain">api.example.test</stringProp>', /JMeter test plan does not contain importable requests/],
+    ['empty.jmx', '<jmeterTestPlan><hashTree/></jmeterTestPlan>', /JMeter test plan does not contain importable requests/],
+    ['ambiguous.txt', 'this is not an API collection', /File is not a supported PostMeter, Postman, OpenAPI, HAR, curl, or JMeter collection/]
+  ];
+
+  for (const [name, content, message] of cases) {
+    const importPath = path.join(dir, name);
+    await fs.writeFile(importPath, content);
+    await assert.rejects(() => store.importCollection(importPath), message);
+  }
 });
 
 test('imports and exports JMeter plans', async () => {
@@ -404,6 +732,8 @@ test('imports and exports JMeter plans', async () => {
   assert.match(exported, /ThroughputController/);
   assert.match(exported, /RuntimeController/);
   assert.match(exported, /ResponseAssertion/);
+  assert.match(exported, /Assertion\.test_strings/);
+  assert.doesNotMatch(exported, /Asserion\.test_strings/);
   assert.match(exported, /DurationAssertion/);
   assert.match(exported, /SizeAssertion/);
   assert.match(exported, /JSONPathAssertion/);

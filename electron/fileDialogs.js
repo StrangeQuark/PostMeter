@@ -7,7 +7,7 @@ function jsonFilters() {
 
 function collectionImportFilters() {
   return [
-    { name: 'API Collections', extensions: ['json', 'yaml', 'yml', 'har', 'jmx', 'sh', 'txt'] },
+    { name: 'API Collections', extensions: ['json', 'yaml', 'yml', 'har', 'jmx', 'sh'] },
     { name: 'All Files', extensions: ['*'] }
   ];
 }

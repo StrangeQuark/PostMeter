@@ -7,6 +7,7 @@ const {
   MAX_RECORDED_SAMPLES,
   loadTestResultToCsv,
   runLoadTest,
+  summarize,
   validateLoadConfig
 } = require('../../src/core/loadTestRunner');
 
@@ -160,6 +161,134 @@ test('carries response cookies forward during load tests and returns the final c
     assert.equal(result.cookies.length, 1);
     assert.equal(result.cookies[0].name, 'loadSession');
     assert.equal(result.cookies[0].value, 'ready');
+  } finally {
+    await server.close();
+  }
+});
+
+test('pre-refreshes OAuth auth once for concurrent load tests and returns the refreshed auth', async () => {
+  let tokenRequests = 0;
+  const authorizations = [];
+  const server = await createServer(async (request, response) => {
+    if (request.url === '/token') {
+      tokenRequests += 1;
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({
+        access_token: 'fresh-load-token',
+        refresh_token: 'rotated-load-refresh',
+        token_type: 'Bearer',
+        expires_in: 600
+      }));
+      return;
+    }
+    authorizations.push(request.headers.authorization || '');
+    response.statusCode = 200;
+    response.end('ok');
+  });
+
+  try {
+    const result = await runLoadTest({
+      method: 'GET',
+      url: `${server.baseUrl}/resource`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      auth: {
+        type: 'oauth2',
+        grantType: 'authorizationCode',
+        accessToken: 'stale-load-token',
+        refreshToken: 'load-refresh',
+        tokenUrl: `${server.baseUrl}/token`,
+        expiresAt: '2000-01-01T00:00:00.000Z'
+      }
+    }, null, { concurrency: 3, totalRequests: 3 });
+
+    assert.equal(tokenRequests, 1);
+    assert.deepEqual(authorizations, ['Bearer fresh-load-token', 'Bearer fresh-load-token', 'Bearer fresh-load-token']);
+    assert.equal(result.updatedAuth.accessToken, 'fresh-load-token');
+    assert.equal(result.updatedAuth.refreshToken, 'rotated-load-refresh');
+    assert.equal(Object.prototype.propertyIsEnumerable.call(result, 'updatedAuth'), false);
+    assert.equal(JSON.stringify(result).includes('fresh-load-token'), false);
+    assert.equal(JSON.stringify(result).includes('rotated-load-refresh'), false);
+  } finally {
+    await server.close();
+  }
+});
+
+test('keeps zero-sample refreshed OAuth auth internal when summarizing load results', () => {
+  const result = summarize([], 0, {
+    totalRequests: 1000,
+    mode: 'duration',
+    durationSeconds: 0.001,
+    rampUpSeconds: 0,
+    targetRatePerSecond: 0,
+    maxRatePerSecond: 0,
+    executionMode: 'singleProcess',
+    workerProcesses: 1,
+    recordSamples: true,
+    policyDecisions: []
+  }, false, {
+    updatedAuth: {
+      type: 'oauth2',
+      grantType: 'authorizationCode',
+      accessToken: 'fresh-zero-sample-token',
+      refreshToken: 'rotated-zero-sample-refresh'
+    }
+  });
+
+  assert.equal(result.totalRequests, 0);
+  assert.equal(result.updatedAuth.accessToken, 'fresh-zero-sample-token');
+  assert.equal(Object.prototype.propertyIsEnumerable.call(result, 'updatedAuth'), false);
+  assert.equal(JSON.stringify(result).includes('fresh-zero-sample-token'), false);
+  assert.equal(JSON.stringify(result).includes('rotated-zero-sample-refresh'), false);
+});
+
+test('fails load tests before dispatch when OAuth pre-refresh fails', async () => {
+  let tokenRequests = 0;
+  let resourceRequests = 0;
+  const server = await createServer(async (request, response) => {
+    if (request.url === '/token') {
+      tokenRequests += 1;
+      response.statusCode = 400;
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({
+        error: 'invalid_grant',
+        error_description: 'revoked refresh_token=leaked-refresh-token'
+      }));
+      return;
+    }
+    resourceRequests += 1;
+    response.statusCode = 200;
+    response.end('ok');
+  });
+
+  try {
+    await assert.rejects(
+      () => runLoadTest({
+        method: 'GET',
+        url: `${server.baseUrl}/resource`,
+        queryParams: [],
+        headers: [],
+        bodyType: 'NONE',
+        body: '',
+        auth: {
+          type: 'oauth2',
+          grantType: 'authorizationCode',
+          accessToken: 'stale-load-token',
+          refreshToken: 'load-refresh',
+          tokenUrl: `${server.baseUrl}/token`,
+          expiresAt: '2000-01-01T00:00:00.000Z'
+        }
+      }, null, { concurrency: 3, totalRequests: 3 }),
+      (error) => {
+        assert.match(error.message, /refresh_token=\[redacted\]/);
+        assert.doesNotMatch(error.message, /leaked-refresh-token/);
+        return true;
+      }
+    );
+    assert.equal(tokenRequests, 1);
+    assert.equal(resourceRequests, 0);
   } finally {
     await server.close();
   }

@@ -4,6 +4,7 @@ const {
   createOAuthPkceSession,
   exchangeOAuthAuthorizationCode,
   pollOAuthDeviceToken,
+  redactOAuthErrorMessage,
   requestOAuthDeviceAuthorization
 } = require('../src/core/auth');
 
@@ -20,6 +21,9 @@ function createOAuthFlowController(options = {}) {
   const activeOAuthFlows = new Map();
 
   async function startPkce(id, auth, environment, strategy) {
+    if (activeOAuthFlows.has(id)) {
+      throw new Error('OAuth flow is already active for this request.');
+    }
     const redirectStrategy = strategy === 'customScheme' ? 'customScheme' : 'loopback';
     const abortController = new AbortController();
     activeOAuthFlows.set(id, { abortController, type: 'pkce', strategy: redirectStrategy });
@@ -32,8 +36,15 @@ function createOAuthFlowController(options = {}) {
       });
       const redirectUri = redirectStrategy === 'customScheme'
         ? `${OAUTH_CUSTOM_SCHEME}://oauth/callback`
-        : (loopbackServer = await createLoopbackCallbackServer(abortController.signal)).redirectUri;
+        : (loopbackServer = await createLoopbackCallbackServer(abortController.signal, {
+            onRejectedCallback: () => emitProgress(id, {
+              type: 'pkce',
+              status: 'callbackRejected',
+              message: 'OAuth callback state did not match the active request. Waiting for the original browser tab.'
+            })
+          })).redirectUri;
       const session = createOAuthPkceSession(auth, environment, { redirectUri });
+      loopbackServer?.setExpectedState(session.state);
       const flow = activeOAuthFlows.get(id);
       if (flow) {
         flow.state = session.state;
@@ -77,7 +88,7 @@ function createOAuthFlowController(options = {}) {
       emitProgress(id, {
         type: 'pkce',
         status: 'failed',
-        message: error.message || String(error)
+        message: redactOAuthErrorMessage(error.message || String(error))
       });
       throw error;
     } finally {
@@ -87,6 +98,9 @@ function createOAuthFlowController(options = {}) {
   }
 
   async function startDevice(id, auth, environment) {
+    if (activeOAuthFlows.has(id)) {
+      throw new Error('OAuth flow is already active for this request.');
+    }
     const abortController = new AbortController();
     activeOAuthFlows.set(id, { abortController, type: 'device' });
     try {
@@ -142,7 +156,7 @@ function createOAuthFlowController(options = {}) {
       emitProgress(id, {
         type: 'device',
         status: 'failed',
-        message: error.message || String(error)
+        message: redactOAuthErrorMessage(error.message || String(error))
       });
       throw error;
     } finally {
@@ -327,10 +341,11 @@ function safeOAuthExternalUrl(value) {
   return parsed;
 }
 
-async function createLoopbackCallbackServer(signal) {
+async function createLoopbackCallbackServer(signal, options = {}) {
   let server;
   let resolveCallback;
   let rejectCallback;
+  let expectedState = '';
   const callbackPromise = new Promise((resolve, reject) => {
     resolveCallback = resolve;
     rejectCallback = reject;
@@ -342,9 +357,23 @@ async function createLoopbackCallbackServer(signal) {
       response.end('Not found');
       return;
     }
+    const state = requestUrl.searchParams.get('state') || '';
+    if (!expectedState) {
+      response.statusCode = 503;
+      response.setHeader('Content-Type', 'text/html; charset=utf-8');
+      response.end('<!doctype html><title>PostMeter OAuth</title><p>OAuth callback server is not ready. Return to PostMeter and try again.</p>');
+      return;
+    }
+    if (state !== expectedState) {
+      options.onRejectedCallback?.(requestUrl);
+      response.statusCode = 400;
+      response.setHeader('Content-Type', 'text/html; charset=utf-8');
+      response.end('<!doctype html><title>PostMeter OAuth</title><p>OAuth callback state did not match the active request. Return to PostMeter and continue from the original browser tab.</p>');
+      return;
+    }
     response.statusCode = 200;
     response.setHeader('Content-Type', 'text/html; charset=utf-8');
-    response.end('<!doctype html><title>PostMeter OAuth</title><p>Authorization received. You can return to PostMeter.</p>');
+    response.end('<!doctype html><title>PostMeter OAuth</title><p>OAuth callback received. Return to PostMeter for the final result.</p>');
     resolveCallback(`http://127.0.0.1:${server.address().port}${request.url}`);
   });
   await new Promise((resolve, reject) => {
@@ -361,11 +390,16 @@ async function createLoopbackCallbackServer(signal) {
   signal?.addEventListener('abort', onAbort, { once: true });
   return {
     redirectUri: `http://127.0.0.1:${server.address().port}/oauth/callback`,
+    setExpectedState(state) {
+      expectedState = String(state || '');
+    },
     waitForCallback() {
-      return Promise.race([
-        callbackPromise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error('OAuth authorization callback timed out.')), OAUTH_CALLBACK_TIMEOUT_MILLIS))
-      ]);
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('OAuth authorization callback timed out.')), OAUTH_CALLBACK_TIMEOUT_MILLIS);
+        callbackPromise
+          .then(resolve, reject)
+          .finally(() => clearTimeout(timeout));
+      });
     },
     close() {
       signal?.removeEventListener('abort', onAbort);

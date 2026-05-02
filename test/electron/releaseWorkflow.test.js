@@ -13,6 +13,8 @@ test('CI workflow runs the Electron UI and packaging validation suite', async ()
   assert.match(workflow, /npm test/);
   assert.match(workflow, /npm run postman:parity:validate/);
   assert.match(workflow, /npm run postman:docs:validate/);
+  assert.match(workflow, /npm run oauth:certify:validate/);
+  assert.match(workflow, /npm run oauth:certify:mock/);
   assert.match(workflow, /npm run production:readiness:validate/);
   assert.match(workflow, /npm run release:gate/);
   assert.match(workflow, /npm audit --audit-level=high/);
@@ -64,6 +66,10 @@ test('release workflow builds unsigned artifacts for all tier-one desktop platfo
   assert.match(workflow, /npm run sandbox:platform:validate/);
   assert.match(workflow, /npm run postman:parity:validate/);
   assert.match(workflow, /npm run postman:docs:validate/);
+  assert.match(workflow, /npm run oauth:certify:validate/);
+  assert.match(workflow, /npm run oauth:certify:mock/);
+  assert.match(workflow, /npm run test:ui:oauth/);
+  assert.match(workflow, /xvfb-run -a npm run test:ui:oauth/);
   assert.match(workflow, /npm run production:readiness:validate/);
   assert.match(workflow, /npm run production:readiness:claim:stable/);
   assert.ok(
@@ -114,6 +120,10 @@ test('manual native release validation workflow exercises release evidence witho
   assert.match(workflow, /npm run sandbox:platform:validate/);
   assert.match(workflow, /npm run postman:parity:validate/);
   assert.match(workflow, /npm run postman:docs:validate/);
+  assert.match(workflow, /npm run oauth:certify:validate/);
+  assert.match(workflow, /npm run oauth:certify:mock/);
+  assert.match(workflow, /npm run test:ui:oauth/);
+  assert.match(workflow, /xvfb-run -a npm run test:ui:oauth/);
   assert.match(workflow, /npm run production:readiness:validate/);
   assert.match(workflow, /npm run release:gate/);
   assert.match(workflow, /npm run release:validate:packaged-smoke/);
@@ -138,6 +148,26 @@ test('manual native release validation workflow exercises release evidence witho
   }
   assert.match(packageJson.scripts['dist:win'], /npm run native:windows-sandbox:build/);
   assert.equal(packageJson.scripts['native:windows-sandbox:build'], 'node scripts/buildWindowsSandboxHelper.js');
+});
+
+test('manual OAuth provider certification workflow is evidence-gated and fail-closed', async () => {
+  const root = path.join(__dirname, '..', '..');
+  const workflow = await fs.readFile(path.join(root, '.github', 'workflows', 'oauth-provider-certification.yml'), 'utf8');
+
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /provider:/);
+  assert.match(workflow, /run_live:/);
+  assert.match(workflow, /evidence_path:/);
+  assert.match(workflow, /repository-relative sanitized evidence JSON path/);
+  assert.match(workflow, /npm run oauth:certify:validate/);
+  assert.match(workflow, /npm run oauth:certify:mock/);
+  assert.match(workflow, /npm run oauth:certify:live -- --provider/);
+  assert.match(workflow, /--evidence/);
+  assert.match(workflow, /POSTMETER_LIVE_OAUTH_CERTIFICATION:\s*"1"/);
+  assert.match(workflow, /POSTMETER_LIVE_OAUTH_EVIDENCE_FILE/);
+  assert.match(workflow, /secrets\.POSTMETER_GOOGLE_OAUTH_CLIENT_ID/);
+  assert.match(workflow, /secrets\.POSTMETER_ENTRA_OAUTH_CLIENT_ID/);
+  assert.match(workflow, /secrets\.POSTMETER_GITHUB_OAUTH_CLIENT_ID/);
 });
 
 test('native protocol validators exercise actual custom-scheme launches', async () => {

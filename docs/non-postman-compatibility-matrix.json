@@ -7,7 +7,7 @@
     {
       "id": "curl.cross-shell-quoting",
       "area": "curl",
-      "target": "curl import/export covers common Linux/macOS/Windows quoting forms and repeated headers without claiming every shell dialect.",
+      "target": "curl import/export covers common Linux/macOS/Windows quoting forms, including cmd.exe caret line continuations, and repeated headers without claiming every shell dialect.",
       "status": "implemented",
       "evidenceRefs": [
         "src/core/curlFormats.js",
@@ -21,7 +21,7 @@
     {
       "id": "curl.import-export",
       "area": "curl",
-      "target": "curl import/export covers common method, URL, header, data, cookie, proxy, retry, TLS, and quoting variants.",
+      "target": "curl import/export covers common method, URL, generated names, header, auth, repeated data, query-data, cookie, redirect, compression, file/binary, and quoting variants; proxy, retry, and client TLS flags are preserved as import metadata instead of being claimed as curl-equivalent transport execution.",
       "status": "implemented",
       "evidenceRefs": [
         "src/core/curlFormats.js",
@@ -35,7 +35,7 @@
     {
       "id": "har.import-export",
       "area": "HAR",
-      "target": "HAR 1.2 import/export covers request entries, response examples, headers, cookies, timings, and body metadata.",
+      "target": "HAR 1.2 import/export covers request entries, response examples, headers, cookies, redirects, timings, compression, body encoding metadata, and sensitive header/cookie redaction on export.",
       "status": "implemented",
       "evidenceRefs": [
         "src/core/harFormats.js",
@@ -49,7 +49,7 @@
     {
       "id": "har.privacy-export-boundary",
       "area": "HAR",
-      "target": "HAR import/export tracks privacy-sensitive headers/cookies/body metadata boundaries in user-facing compatibility docs.",
+      "target": "HAR export redacts privacy-sensitive authorization/cookie headers and cookie values while documenting that arbitrary payload bodies cannot be reliably secret-scanned.",
       "status": "implemented",
       "evidenceRefs": [
         "src/core/harFormats.js",
@@ -63,7 +63,7 @@
     {
       "id": "jmeter.bridge",
       "area": "JMeter",
-      "target": "JMeter import/export remains a bridge for HTTP sampler plans with mapped assertions/timers/controllers and preserve-only unsupported metadata.",
+      "target": "JMeter import/export remains a bridge for HTTP sampler plans with mapped assertions/timers/controllers and preserve-only metadata for known unsupported assertion, processor, sampler, and script element classes.",
       "status": "implemented",
       "evidenceRefs": [
         "src/core/jmeterFormats.js",
@@ -93,7 +93,7 @@
     {
       "id": "openapi.import-export",
       "area": "OpenAPI",
-      "target": "OpenAPI/Swagger JSON/YAML import and OpenAPI 3.1 export cover paths, auth, variables, request bodies, and examples where representable.",
+      "target": "OpenAPI/Swagger JSON/YAML import and OpenAPI 3.1 export cover common local references, server variables, path/query/header/cookie parameters, Swagger 2.0 body/form-data, auth, binary body hints, request bodies, and examples where representable.",
       "status": "implemented",
       "evidenceRefs": [
         "src/core/openApiFormats.js",
@@ -107,7 +107,7 @@
     {
       "id": "openapi.invalid-common-specs",
       "area": "OpenAPI",
-      "target": "Invalid-but-common OpenAPI variants fail with clear parser errors instead of crashing or producing misleading collections.",
+      "target": "Invalid-but-common OpenAPI and structured collection variants fail with clear parser or fallback errors instead of crashing or producing misleading collections.",
       "status": "implemented",
       "evidenceRefs": [
         "src/core/openApiFormats.js",

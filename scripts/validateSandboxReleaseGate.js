@@ -8,6 +8,7 @@ const packageJson = readJson('package.json');
 const ciWorkflow = readText('.github/workflows/ci.yml');
 const releaseWorkflow = readText('.github/workflows/release.yml');
 const releaseValidationWorkflow = readText('.github/workflows/release-validation.yml');
+const oauthProviderCertificationWorkflow = readText('.github/workflows/oauth-provider-certification.yml');
 const errors = [];
 
 requireScript('check', [
@@ -17,8 +18,11 @@ requireScript('check', [
   'npm run postman:parity:validate',
   'npm run postman:docs:validate',
   'npm run postman:newman-reports:validate',
+  'npm run oauth:certify:validate',
+  'npm run oauth:certify:mock',
   'npm run production:readiness:validate',
   'npm run release:gate',
+  'npm run test:ui:oauth',
   'npm audit --audit-level=high',
   'npm run electron:version'
 ]);
@@ -35,6 +39,10 @@ for (const scriptName of [
   'postman:docs:write',
   'postman:docs:live',
   'postman:newman-reports:validate',
+  'oauth:certify:validate',
+  'oauth:certify:write',
+  'oauth:certify:mock',
+  'oauth:certify:live',
   'production:readiness',
   'production:readiness:write',
   'production:readiness:validate',
@@ -67,11 +75,14 @@ requireWorkflow('CI workflow', ciWorkflow, [
   /npm run postman:parity:validate/,
   /npm run postman:docs:validate/,
   /npm run postman:newman-reports:validate/,
+  /npm run oauth:certify:validate/,
+  /npm run oauth:certify:mock/,
   /npm run production:readiness:validate/,
   /npm run electron:security:validate/,
   /npm run workspace:durability:validate/,
   /npm run compatibility:non-postman:validate/,
   /npm run release:gate/,
+  /xvfb-run -a npm run test:ui:oauth/,
   /npm audit --audit-level=high/,
   /npm run sandbox:validate/,
   /npm run sandbox:platform:validate/,
@@ -103,12 +114,15 @@ requireWorkflow('Release workflow', releaseWorkflow, [
   /npm run postman:parity:validate/,
   /npm run postman:docs:validate/,
   /npm run postman:newman-reports:validate/,
+  /npm run oauth:certify:validate/,
+  /npm run oauth:certify:mock/,
   /npm run production:readiness:validate/,
   /npm run production:readiness:claim:stable/,
   /npm run electron:security:validate/,
   /npm run workspace:durability:validate/,
   /npm run compatibility:non-postman:validate/,
   /npm run release:gate/,
+  /xvfb-run -a npm run test:ui:oauth/,
   /npm run release:validate:packaged-smoke/,
   /POSTMETER_VALIDATION_ARTIFACT_DIR/,
   /npm run sandbox:validate:packaged/,
@@ -133,11 +147,14 @@ requireWorkflow('Manual native release validation workflow', releaseValidationWo
   /npm run postman:parity:validate/,
   /npm run postman:docs:validate/,
   /npm run postman:newman-reports:validate/,
+  /npm run oauth:certify:validate/,
+  /npm run oauth:certify:mock/,
   /npm run production:readiness:validate/,
   /npm run electron:security:validate/,
   /npm run workspace:durability:validate/,
   /npm run compatibility:non-postman:validate/,
   /npm run release:gate/,
+  /xvfb-run -a npm run test:ui:oauth/,
   /npm run release:validate:packaged-smoke/,
   /POSTMETER_VALIDATION_ARTIFACT_DIR/,
   /npm run sandbox:validate:packaged/,
@@ -150,6 +167,23 @@ requireWorkflow('Manual native release validation workflow', releaseValidationWo
   /npm run release:validate/,
   /actions\/upload-artifact@v4/,
   /actions\/download-artifact@v4/
+]);
+
+requireWorkflow('OAuth provider certification workflow', oauthProviderCertificationWorkflow, [
+  /workflow_dispatch:/,
+  /provider:/,
+  /run_live:/,
+  /evidence_path:/,
+  /contents:\s*read/,
+  /npm run oauth:certify:validate/,
+  /npm run oauth:certify:mock/,
+  /POSTMETER_LIVE_OAUTH_CERTIFICATION:\s*"1"/,
+  /POSTMETER_LIVE_OAUTH_EVIDENCE_FILE/,
+  /npm run oauth:certify:live/,
+  /Confirm live OAuth provider certification skip/,
+  /POSTMETER_GOOGLE_OAUTH_CLIENT_ID/,
+  /POSTMETER_ENTRA_OAUTH_CLIENT_ID/,
+  /POSTMETER_GITHUB_OAUTH_CLIENT_ID/
 ]);
 
 if (/gh release create/.test(releaseValidationWorkflow) || /contents:\s*write/.test(releaseValidationWorkflow)) {

@@ -35,6 +35,7 @@ async function runCollection(collection, environment, options = {}) {
   let runnerCookies = Array.isArray(options.cookieJar) ? structuredClone(options.cookieJar) : [];
   const results = [];
   const progress = typeof options.onProgress === 'function' ? options.onProgress : () => {};
+  const refreshedAuthByRequestId = new Map();
   const runRequestBudget = {
     calls: 0,
     max: Math.min(
@@ -57,6 +58,7 @@ async function runCollection(collection, environment, options = {}) {
     if (!targetEntry) {
       throw new Error(`pm.execution.runRequest target was not found: ${payload?.target || ''}.`);
     }
+    const targetRequest = requestWithRefreshedAuth(targetEntry.request, refreshedAuthByRequestId);
     const scopeState = runRequestScopeState(
       payload,
       runnerEnvironment,
@@ -64,14 +66,14 @@ async function runCollection(collection, environment, options = {}) {
       runnerGlobals,
       runnerCookies
     );
-    const targetState = createScriptedRequestState(targetEntry.request, runnerEnvironment, {
+    const targetState = createScriptedRequestState(targetRequest, runnerEnvironment, {
       collectionVariables: scopeState.collectionVariables,
       globals: scopeState.globals,
       cookieJar: scopeState.cookies,
       cloneEnvironment: false,
       cloneCollectionVariables: false,
       cloneGlobals: false,
-      localVariables: runRequestLocalVariables(targetEntry.request, payload?.options?.variables)
+      localVariables: runRequestLocalVariables(targetRequest, payload?.options?.variables)
     });
     targetState.environment = scopeState.environment;
     const scriptedRequest = await runScriptedRequestLifecycle(targetState, {
@@ -117,7 +119,10 @@ async function runCollection(collection, environment, options = {}) {
     if (Array.isArray(response?.updatedCookies)) {
       scopeState.cookies = response.updatedCookies;
     }
-    const assertions = evaluateAssertions(response, targetEntry.request.assertions || []);
+    if (response?.updatedAuth) {
+      rememberRefreshedAuth(targetEntry.request, response.updatedAuth, refreshedAuthByRequestId);
+    }
+    const assertions = evaluateAssertions(response, targetRequest.assertions || []);
     applyExtractedVariables(scopeState.environment, assertions.extractedVariables);
     return runRequestBrokerResult(targetEntry, scriptedRequest, response, assertions.results);
   };
@@ -132,10 +137,11 @@ async function runCollection(collection, environment, options = {}) {
       throw new Error('Collection run exceeded the maximum scripted execution steps.');
     }
     const entry = requests[index];
+    const requestForExecution = requestWithRefreshedAuth(entry.request, refreshedAuthByRequestId);
     const startedAt = new Date().toISOString();
     try {
       const scriptedRequest = await runScriptedRequestLifecycle(
-        createScriptedRequestState(entry.request, runnerEnvironment, {
+        createScriptedRequestState(requestForExecution, runnerEnvironment, {
           collectionVariables: runnerCollectionVariables,
           globals: runnerGlobals,
           cookieJar: runnerCookies,
@@ -195,7 +201,10 @@ async function runCollection(collection, environment, options = {}) {
       if (Array.isArray(response.updatedCookies)) {
         runnerCookies = response.updatedCookies;
       }
-      const assertions = evaluateAssertions(response, entry.request.assertions || []);
+      if (response.updatedAuth) {
+        rememberRefreshedAuth(entry.request, response.updatedAuth, refreshedAuthByRequestId);
+      }
+      const assertions = evaluateAssertions(response, requestForExecution.assertions || []);
       applyExtractedVariables(runnerEnvironment, assertions.extractedVariables);
       const passed = assertions.passed && scriptedRequest.testScriptResult.passed;
       const result = {
@@ -246,7 +255,7 @@ async function runCollection(collection, environment, options = {}) {
   }
 
   const failedRequests = results.filter((result) => !result.passed).length;
-  return {
+  const result = {
     collectionId: collection?.id || '',
     collectionName: collection?.name || '',
     totalRequests: results.length,
@@ -260,6 +269,49 @@ async function runCollection(collection, environment, options = {}) {
     globals: runnerGlobals,
     cookies: runnerCookies
   };
+  attachInternalAuthUpdates(result, refreshedAuthByRequestId);
+  return result;
+}
+
+function requestWithRefreshedAuth(request, refreshedAuthByRequestId) {
+  const requestId = request?.id || '';
+  if (!requestId || !refreshedAuthByRequestId.has(requestId)) {
+    return request;
+  }
+  return {
+    ...request,
+    auth: refreshedAuthByRequestId.get(requestId)
+  };
+}
+
+function rememberRefreshedAuth(request, auth, refreshedAuthByRequestId) {
+  if (request?.id) {
+    refreshedAuthByRequestId.set(request.id, auth);
+  }
+  request.auth = auth;
+}
+
+function attachInternalAuthUpdates(result, refreshedAuthByRequestId) {
+  if (!refreshedAuthByRequestId.size) {
+    return result;
+  }
+  const updates = new Map(refreshedAuthByRequestId);
+  Object.defineProperty(result, 'authUpdates', {
+    configurable: true,
+    enumerable: false,
+    value: updates
+  });
+  for (const item of result.results || []) {
+    if (!item?.requestId || !updates.has(item.requestId)) {
+      continue;
+    }
+    Object.defineProperty(item, 'updatedAuth', {
+      configurable: true,
+      enumerable: false,
+      value: updates.get(item.requestId)
+    });
+  }
+  return result;
 }
 
 function findRunRequestTarget(requests, target) {
