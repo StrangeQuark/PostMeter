@@ -15,6 +15,7 @@ const postmeterApi = {
         'import-collection',
         'export-workspace',
         'export-collection',
+        'export-diagnostics',
         'check-updates'
       ]);
       const allowedPayloadActions = new Set(['set-prereleases']);
@@ -91,6 +92,9 @@ const postmeterApi = {
   },
   sandboxPackages: {
     fetch: (specifier, options) => ipcRenderer.invoke('sandbox-package:fetch', specifier, options)
+  },
+  diagnostics: {
+    export: () => ipcRenderer.invoke('diagnostics:export')
   },
   loadTest: {
     start: (id, request, environment, config) => ipcRenderer.invoke('load:start', id, request, environment, config),

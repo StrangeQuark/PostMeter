@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { registerOAuthIpc } = require('../../electron/oauthIpc');
+const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../src/core/diagnostics');
 
 test('OAuth IPC registers stable OAuth channels', () => {
   const handlers = new Map();
@@ -71,4 +72,89 @@ test('OAuth IPC validates and forwards start payloads', async () => {
     () => handlers.get('oauth:device:start')(null, 'flow-3', { type: 'oauth2', grantType: 'password' }, environment),
     /auth.grantType must be one of/
   );
+});
+
+test('OAuth IPC emits structured diagnostic events for start outcomes', async () => {
+  const handlers = new Map();
+  const events = [];
+  registerOAuthIpc({
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    },
+    oauthFlows: {
+      cancelFlow: () => false,
+      startDevice: async () => {
+        throw new Error('device_code=device-secret');
+      },
+      startPkce: async () => ({ cancelled: false })
+    },
+    recordDiagnosticEvent: async (event) => {
+      events.push(event);
+    }
+  });
+
+  const auth = {
+    type: 'oauth2',
+    grantType: 'authorizationCode',
+    authorizationUrl: 'https://auth.example.test/authorize',
+    tokenUrl: 'https://auth.example.test/token',
+    clientId: 'client-id'
+  };
+  const environment = { id: 'env', name: 'Env', variables: [] };
+  await handlers.get('oauth:pkce:start')(null, 'flow-1', auth, environment, 'customScheme');
+  await assert.rejects(
+    () => handlers.get('oauth:device:start')(null, 'flow-2', { ...auth, grantType: 'deviceCode' }, environment),
+    /device_code/
+  );
+
+  assert.deepEqual(events.map((event) => event.type), ['oauth.pkce.completed', 'oauth.device.failed']);
+  assert.equal(events[0].fields.redirectStrategy, 'customScheme');
+  assert.equal(events[1].failureCode, 'oauth_device_failed');
+});
+
+test('OAuth IPC emits sanitized diagnostic events for PKCE failures and device success', async () => {
+  const handlers = new Map();
+  const events = [];
+  registerOAuthIpc({
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    },
+    oauthFlows: {
+      cancelFlow: () => false,
+      startDevice: async () => ({ cancelled: false }),
+      startPkce: async () => {
+        throw new Error('pkce failed password=plain-secret next=ok /data/oauth-cache.json access_token=pkce-token code_verifier=verifier-token https://auth.example.test/token?client_secret=url-secret');
+      }
+    },
+    recordDiagnosticEvent: async (event) => {
+      events.push(sanitizeDiagnosticEvent(event, defaultDiagnosticsSettings()));
+    }
+  });
+
+  const auth = {
+    type: 'oauth2',
+    grantType: 'authorizationCode',
+    authorizationUrl: 'https://auth.example.test/authorize',
+    tokenUrl: 'https://auth.example.test/token',
+    clientId: 'client-id'
+  };
+  const environment = { id: 'env', name: 'Env', variables: [] };
+  await assert.rejects(
+    () => handlers.get('oauth:pkce:start')(null, 'flow-1', auth, environment, 'loopback'),
+    /pkce failed/
+  );
+  await handlers.get('oauth:device:start')(null, 'flow-2', { ...auth, grantType: 'deviceCode' }, environment);
+
+  assert.deepEqual(events.map((event) => event.type), ['oauth.pkce.failed', 'oauth.device.completed']);
+  assert.equal(events[0].failureCode, 'oauth_pkce_failed');
+  assert.equal(events[1].outcome, 'completed');
+  const serialized = JSON.stringify(events);
+  assert.doesNotMatch(serialized, /plain-secret|pkce-token|verifier-token|url-secret|\/data\/oauth-cache|auth\.example\.test/);
+  assert.match(serialized, /\[path\]/);
+  assert.match(serialized, /\[url\]/);
+  assert.match(serialized, /\[redacted/);
 });

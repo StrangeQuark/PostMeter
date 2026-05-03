@@ -5,6 +5,7 @@ const { performance } = require('node:perf_hooks');
 const { buildUrl, sendRequest } = require('./httpClient');
 const { maybeRefreshOAuthToken } = require('./auth');
 const { LOAD_EXECUTION_MODES } = require('./payloadSchemas');
+const { redactText } = require('./diagnostics');
 
 const MAX_CONCURRENCY = 512;
 const MAX_TOTAL_REQUESTS = 100_000;
@@ -470,16 +471,7 @@ function runLoadWorker({
 }
 
 function redactLoadWorkerStderr(value) {
-  let redacted = String(value || '');
-  for (const sensitivePath of [process.cwd(), os.homedir(), os.tmpdir()].filter(Boolean)) {
-    redacted = redacted.split(String(sensitivePath)).join('[path]');
-  }
-  return redacted
-    .replace(/\b(set-cookie|cookie)\b(\s*[:=]\s*["']?)[^\n\r'"<>]+/gi, '$1$2[redacted]')
-    .replace(/\b(bearer|basic|digest|hawk|token|oauth|ntlm|negotiate)\s+[A-Za-z0-9._~+/=-]{6,}/gi, '$1 [redacted]')
-    .replace(/\b(access[-_\s]?token|refresh[-_\s]?token|id[-_\s]?token|authorization[-_\s]?code|device[-_\s]?code|user[-_\s]?code|code[-_\s]?verifier|client[-_\s]?secret|client[-_\s]?assertion|api[-_\s]?key|password|secret)\b(\s*[:=]\s*["']?)[^\s,;'"<>]+/gi, '$1$2[redacted]')
-    .replace(/[A-Za-z]:\\(?:[^\\\r\n]+\\)*[^\\\r\n\s'"]+/g, '[path]')
-    .replace(/\/(?:home|Users|tmp|var|private|workspace)\/[^\s'"]+/g, '[path]');
+  return redactText(value);
 }
 
 function normalizedLoadWorkerTimeoutMillis(value) {

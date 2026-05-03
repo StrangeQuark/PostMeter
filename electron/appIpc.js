@@ -7,7 +7,9 @@ const {
 function registerAppIpc(options = {}) {
   const {
     app,
+    checkForUpdates: checkForUpdatesImpl = checkForUpdates,
     ipcMain,
+    recordDiagnosticEvent = async () => {},
     shell
   } = options;
 
@@ -25,10 +27,35 @@ function registerAppIpc(options = {}) {
 
   ipcMain.handle('app:check-updates', async (_event, updateOptions = {}) => {
     assertUpdateCheckOptionsPayload(updateOptions);
-    return checkForUpdates({
-      currentVersion: app.getVersion(),
-      includePrereleases: updateOptions?.includePrereleases === true
-    });
+    try {
+      const result = await checkForUpdatesImpl({
+        currentVersion: app.getVersion(),
+        includePrereleases: updateOptions?.includePrereleases === true
+      });
+      await recordDiagnosticEvent({
+        type: 'updates.check.completed',
+        level: 'info',
+        outcome: 'completed',
+        fields: {
+          includePrereleases: updateOptions?.includePrereleases === true,
+          updateAvailable: result.updateAvailable === true,
+          releaseChannel: releaseChannelForVersion(app.getVersion())
+        }
+      });
+      return result;
+    } catch (error) {
+      await recordDiagnosticEvent({
+        type: 'updates.check.failed',
+        level: 'warn',
+        outcome: 'failed',
+        failureCode: 'updates_check_failed',
+        fields: {
+          includePrereleases: updateOptions?.includePrereleases === true,
+          error: error?.message || String(error)
+        }
+      });
+      throw error;
+    }
   });
 
   ipcMain.handle('app:open-external', async (_event, url) => {

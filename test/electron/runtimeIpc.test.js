@@ -5,6 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const { registerRuntimeIpc } = require('../../electron/runtimeIpc');
+const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../src/core/diagnostics');
 
 test('runtime IPC registers stable load and runner channels', async () => {
   const handlers = new Map();
@@ -32,6 +33,144 @@ test('runtime IPC registers stable load and runner channels', async () => {
   ]);
   assert.equal(await handlers.get('load:cancel')(null, 'load-id'), false);
   assert.equal(await handlers.get('runner:cancel')(null, 'runner-id'), false);
+});
+
+test('runtime IPC emits structured diagnostic events for load and collection run outcomes', async () => {
+  const handlers = new Map();
+  const events = [];
+  const workspace = { cookies: [], globals: [], settings: { sandbox: { fileBindings: [], packageCache: [], trustedCapabilities: {} } } };
+  registerRuntimeIpc({
+    dialog: { showSaveDialog: async () => ({ canceled: true }) },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => workspace,
+    getWorkspaceId: () => 'workspace-1',
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    },
+    mutateWorkspace: async (mutator) => mutator(workspace),
+    recordDiagnosticEvent: async (event) => {
+      events.push(event);
+    },
+    runCollection: async () => ({
+      collectionId: 'collection-1',
+      collectionName: 'Diagnostics',
+      totalRequests: 1,
+      passedRequests: 1,
+      failedRequests: 0,
+      passed: true,
+      cancelled: false,
+      results: []
+    }),
+    runLoadTest: async () => ({
+      totalRequests: 1,
+      successfulRequests: 1,
+      failedRequests: 0,
+      elapsedMillis: 5,
+      executionMode: 'singleProcess',
+      statusCounts: { 200: 1 }
+    }),
+    saveWorkspace: async (nextWorkspace) => nextWorkspace,
+    setWorkspace: () => {}
+  });
+
+  await handlers.get('load:start')({ sender: { send() {} } }, 'load-id', {
+    method: 'GET',
+    url: 'https://api.example.test',
+    queryParams: [],
+    headers: [],
+    bodyType: 'NONE',
+    body: '',
+    cookieJar: { enabled: true, storeResponses: true }
+  }, { id: 'env', name: 'Env', variables: [] }, {
+    concurrency: 1,
+    totalRequests: 1
+  });
+  await handlers.get('runner:start')({ sender: { send() {} } }, 'runner-id', {
+    id: 'collection-1',
+    name: 'Diagnostics',
+    requests: [{ id: 'request-1', name: 'Request', url: 'https://api.example.test' }],
+    folders: []
+  }, { id: 'env', name: 'Env', variables: [] }, {
+    stopOnFailure: false
+  });
+
+  assert.deepEqual(events.map((event) => event.type), [
+    'load.start.completed',
+    'runner.start.completed'
+  ]);
+  assert.equal(events[0].fields.totalRequests, 1);
+  assert.equal(events[1].fields.requestCount, 1);
+});
+
+test('runtime IPC emits sanitized failed diagnostic events for load and collection run failures', async () => {
+  const handlers = new Map();
+  const events = [];
+  const workspace = { cookies: [], globals: [], settings: { sandbox: { fileBindings: [], packageCache: [], trustedCapabilities: {} } } };
+  registerRuntimeIpc({
+    dialog: { showSaveDialog: async () => ({ canceled: true }) },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => workspace,
+    getWorkspaceId: () => 'workspace-1',
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    },
+    mutateWorkspace: async (mutator) => mutator(workspace),
+    recordDiagnosticEvent: async (event) => {
+      events.push(sanitizeDiagnosticEvent(event, defaultDiagnosticsSettings()));
+    },
+    runCollection: async () => {
+      throw new Error('runner failed /srv/customer.json Authorization: Bearer runner-token body=runner-body https://api.example.test/run?token=url-token');
+    },
+    runLoadTest: async () => {
+      throw new Error('load failed /data/customer.json Authorization: Bearer load-token body=load-body https://api.example.test/load?token=url-token');
+    },
+    saveWorkspace: async (nextWorkspace) => nextWorkspace,
+    setWorkspace: () => {}
+  });
+
+  await assert.rejects(
+    () => handlers.get('load:start')({ sender: { send() {} } }, 'load-failed', {
+      method: 'GET',
+      url: 'https://api.example.test',
+      queryParams: [],
+      headers: [],
+      bodyType: 'RAW_TEXT',
+      body: 'customer-body',
+      cookieJar: { enabled: true, storeResponses: true }
+    }, { id: 'env', name: 'Env', variables: [] }, {
+      concurrency: 1,
+      totalRequests: 1
+    }),
+    /load failed/
+  );
+  await assert.rejects(
+    () => handlers.get('runner:start')({ sender: { send() {} } }, 'runner-failed', {
+      id: 'collection-1',
+      name: 'Diagnostics',
+      requests: [{ id: 'request-1', name: 'Request', url: 'https://api.example.test' }],
+      folders: []
+    }, { id: 'env', name: 'Env', variables: [] }, {
+      stopOnFailure: false
+    }),
+    /runner failed/
+  );
+
+  assert.deepEqual(events.map((event) => event.type), [
+    'load.start.failed',
+    'runner.start.failed'
+  ]);
+  assert.equal(events[0].failureCode, 'load_start_failed');
+  assert.equal(events[1].failureCode, 'runner_start_failed');
+  const serialized = JSON.stringify(events);
+  assert.doesNotMatch(serialized, /load-token|runner-token|url-token|customer-body|load-body|runner-body|\/data\/customer|\/srv\/customer|api\.example\.test/);
+  assert.match(serialized, /\[path\]/);
+  assert.match(serialized, /\[redacted/);
 });
 
 test('runtime IPC validates load-test results before mutating workspace state', async () => {

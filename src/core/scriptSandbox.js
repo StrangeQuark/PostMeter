@@ -650,6 +650,7 @@ function waitForBrokerTimer(state, payload) {
 
 async function runBrokeredSendRequest(state, payload) {
   if (!scriptCapabilityEnabled(state, 'sendRequest')) {
+    recordSandboxDenial(state, 'script_send_request_disabled', 'pm.sendRequest');
     throw new Error('pm.sendRequest is disabled for this workspace.');
   }
   const request = normalizePmSendRequest(payload.request, {
@@ -670,6 +671,7 @@ async function runBrokeredSendRequest(state, payload) {
     state.cookies = response.updatedCookies;
   }
   if (Buffer.byteLength(String(response.body || ''), 'utf8') > MAX_PM_SEND_RESPONSE_BYTES) {
+    recordSandboxDenial(state, 'script_send_request_response_too_large', 'pm.sendRequest');
     throw new Error(`pm.sendRequest response body cannot exceed ${MAX_PM_SEND_RESPONSE_BYTES} bytes.`);
   }
   return {
@@ -684,6 +686,7 @@ async function runBrokeredSendRequest(state, payload) {
 
 async function runBrokeredExecutionRunRequest(state, payload) {
   if (!scriptCapabilityEnabled(state, 'sendRequest')) {
+    recordSandboxDenial(state, 'script_run_request_disabled', 'pm.execution.runRequest');
     throw new Error('pm.execution.runRequest is disabled for this workspace.');
   }
   if (typeof state.options.runRequest !== 'function') {
@@ -903,6 +906,7 @@ async function assertVaultCapability(state, operation = '', key = '') {
     if (decision.explicitDenied || typeof state.options.vaultPrompt !== 'function') {
       await auditVaultPromptDecision(state, 'prompt-deny', key);
       await auditVaultPromptDecision(state, 'denied-after-call', key);
+      recordSandboxDenial(state, 'script_vault_disabled', 'pm.vault');
       throw new Error('pm.vault is disabled for this workspace.');
     }
     const promptResult = await state.options.vaultPrompt({
@@ -918,12 +922,14 @@ async function assertVaultCapability(state, operation = '', key = '') {
     if (!promptResult || promptResult.granted !== true) {
       await auditVaultPromptDecision(state, promptResult?.reset === true ? 'prompt-reset' : 'prompt-deny', key);
       await auditVaultPromptDecision(state, 'denied-after-call', key);
+      recordSandboxDenial(state, 'script_vault_prompt_denied', 'pm.vault');
       throw new Error('pm.vault access was denied for this request.');
     }
     await auditVaultPromptDecision(state, `prompt-grant-${promptResult.scope || 'request'}`, key);
     applyTransientVaultGrant(state, promptResult);
   }
   if (!scriptCapabilityEnabled(state, 'vault')) {
+    recordSandboxDenial(state, 'script_vault_disabled', 'pm.vault');
     throw new Error('pm.vault is disabled for this workspace.');
   }
   const vault = state.options.vault;
@@ -932,6 +938,7 @@ async function assertVaultCapability(state, operation = '', key = '') {
   }
   if (typeof vault.isAvailable === 'function' && vault.isAvailable() === false) {
     await auditVaultPromptDecision(state, 'unavailable-encryption', key);
+    recordSandboxDenial(state, 'script_vault_unavailable', 'pm.vault');
     throw new Error('pm.vault encryption is unavailable on this machine.');
   }
   return vault;
@@ -1702,8 +1709,26 @@ function runtimeEnvironmentForBroker(state) {
 
 function assertCookieCapability(state) {
   if (!scriptCapabilityEnabled(state, 'cookies')) {
+    recordSandboxDenial(state, 'script_cookies_disabled', 'pm.cookies');
     throw new Error('pm.cookies is disabled for this workspace.');
   }
+}
+
+function recordSandboxDenial(state, failureCode, operation) {
+  const record = state?.options?.recordDiagnosticEvent;
+  if (typeof record !== 'function') {
+    return;
+  }
+  Promise.resolve(record({
+    type: 'sandbox.broker.denied',
+    level: 'warn',
+    outcome: 'denied',
+    failureCode,
+    fields: {
+      operation,
+      protocol: state?.context?.request?.protocol || 'http'
+    }
+  })).catch(() => {});
 }
 
 function scriptCapabilityEnabled(state, capability) {

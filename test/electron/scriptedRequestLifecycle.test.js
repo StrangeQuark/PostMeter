@@ -242,6 +242,43 @@ test('throws enriched pre-request errors for single-request execution', async ()
   );
 });
 
+test('propagates diagnostics callbacks into single-request sandbox broker denials', async () => {
+  const events = [];
+
+  await assert.rejects(
+    () => runRequestWithScripts({
+      id: 'diagnostic-denial',
+      method: 'GET',
+      url: 'https://api.example.test/root',
+      scripts: {
+        preRequest: `
+          pm.test('sendRequest denial is diagnosed', async function () {
+            await pm.sendRequest('https://api.example.test/denied');
+          });
+        `
+      }
+    }, { id: 'env', name: 'Env', variables: [] }, {
+      trustedCapabilities: { sendRequest: false },
+      recordDiagnosticEvent: async (event) => {
+        events.push(event);
+      },
+      scriptOptions: {
+        timeoutMillis: 500,
+        workerTimeoutMillis: 1000
+      },
+      sendRequest: async () => response(200, '{}')
+    }),
+    /Pre-request script failed/
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.ok(events.some((event) => (
+    event.type === 'sandbox.broker.denied'
+      && event.failureCode === 'script_send_request_disabled'
+      && event.fields.operation === 'pm.sendRequest'
+  )));
+});
+
 function response(statusCode, body) {
   return {
     statusCode,

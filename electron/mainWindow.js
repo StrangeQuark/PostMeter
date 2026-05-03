@@ -11,8 +11,21 @@ const {
   isTrustedAppRendererUrl
 } = require('./appProtocol');
 const { safeFilename } = require('./fileDialogs');
+const {
+  redactRequestResponseAliasesInText,
+  redactTransportReferences
+} = require('../src/core/diagnostics');
 
 const DEFAULT_SMOKE_ARTIFACT_TIMEOUT_MILLIS = 2_000;
+const UI_SMOKE_AUTH_SCHEME_NAMES = 'bearer|basic|digest|hawk|token|oauth|ntlm|negotiate|aws4-hmac-sha256|eg1-hmac-sha256';
+const UI_SMOKE_SIMPLE_AUTH_SCHEME_NAMES = 'bearer|basic|digest|hawk|token|oauth|ntlm|negotiate';
+const UI_SMOKE_AUTH_PARAMETER_PAIR_PATTERN = '[A-Za-z][A-Za-z0-9_-]*\\s*=\\s*(?:"[^"\\r\\n<>]*"|[^\\s,;\\[\\]\\\'"<>}&]+)';
+const UI_SMOKE_AUTH_PARAMETER_PAIR_LIST_PATTERN = `${UI_SMOKE_AUTH_PARAMETER_PAIR_PATTERN}(?:\\s*[,;]\\s*${UI_SMOKE_AUTH_PARAMETER_PAIR_PATTERN})*`;
+const UI_SMOKE_AUTH_PARAMETER_VALUE_PATTERN = '(?:[A-Za-z][A-Za-z0-9_-]*\\s*=\\s*(?:"[^"\\r\\n<>]*"|[^\\s,;\\[\\]\\\'"<>}&]+)|"[^"\\r\\n<>]*"|[^\\s,;\\[\\]\\\'"<>}&]+)(?:\\s*[,;]\\s*[A-Za-z][A-Za-z0-9_-]*\\s*=\\s*(?:"[^"\\r\\n<>]*"|[^\\s,;\\[\\]\\\'"<>}&]+))*';
+const UI_SMOKE_AUTH_HEADER_VALUE_PATTERN = `(?:(?:${UI_SMOKE_AUTH_SCHEME_NAMES})\\s+)?${UI_SMOKE_AUTH_PARAMETER_VALUE_PATTERN}`;
+const UI_SMOKE_AWS_QUERY_FIELD_PATTERN = String.raw`\b((?:x[-_]?amz[-_]?credential|x[-_]?amz[-_]?signature|x[-_]?amz[-_]?security[-_]?token|aws[-_]?credential|aws[-_]?signature))(\s*[:=]\s*["']?)[^\s&"',;<>}&\])]+`;
+const UI_SMOKE_COOKIE_SAFE_CONTEXT_PATTERN = String.raw`OAuth\s+2\.0\b|token\s+endpoint\b|provider\s+(?:returned|failed|denied|reported)\b|HTTP\s+\d{3}\b|status\s*[:=]?\s*\d{3}\b|error(?:[-_\s]*description)?\s*[:=]|Basic\s+authentication\b|Bearer\s+authentication\b|Digest\s+auth\b|authentication\s+(?:failed|required)\b`;
+const UI_SMOKE_COOKIE_HEADER_SAFE_CONTEXT_BOUNDARY_PATTERN = new RegExp(String.raw`\s+(?=(?:${UI_SMOKE_COOKIE_SAFE_CONTEXT_PATTERN}))`, 'i');
 
 function createMainWindow(app, options = {}) {
   const env = options.env || process.env;
@@ -361,6 +374,7 @@ function requiredPreloadApiSurface() {
     ['workspace', 'exportWorkspace'],
     ['collection', 'importCollection'],
     ['collection', 'exportCollection'],
+    ['diagnostics', 'export'],
     ['request', 'validate'],
     ['request', 'send'],
     ['request', 'exportExamples'],
@@ -535,6 +549,9 @@ function redactUiSmokeDomState(domState) {
     }
   }
   const activeElement = domState.activeElement;
+  if (activeElement && typeof activeElement.ariaLabel === 'string') {
+    activeElement.ariaLabel = redactUiSmokeText(activeElement.ariaLabel);
+  }
   if (activeElement && shouldRedactUiSmokeElement(activeElement)) {
     activeElement.text = '[redacted]';
   } else if (activeElement?.valueElement === true) {
@@ -613,9 +630,28 @@ function redactUiSmokeText(text) {
   if (typeof text !== 'string' || text.length === 0) {
     return text;
   }
-  const secretKeyPattern = '(?:secret\\s+value|client[-_\\s]?secret|client[-_\\s]?assertion|api[-_\\s]?key|access[-_\\s]?token|refresh[-_\\s]?token|id[-_\\s]?token|authorization[-_\\s]?code|authorization[-_\\s]?header|auth[-_\\s]?header|proxy[-_\\s]?authorization(?:[-_\\s]?header)?|device[-_\\s]?code|user[-_\\s]?code|code[-_\\s]?verifier|password|passphrase|private[-_\\s]?key|session[-_\\s]?id|csrf[-_\\s]?token|xsrf[-_\\s]?token|secret)';
+  const cookieKeyPattern = '(?:cookie[-_\\s]*header|set[-_\\s]*cookie(?:[-_\\s]*header)?|cookie)';
+  const secretKeyPattern = '(?:secret[-_\\s]*value|secret[-_\\s]*(?:key|access[-_\\s]*key)|[A-Za-z][A-Za-z0-9]{0,80}[-_\\s]*(?:token|secret|password|passwd|passphrase|credential|credentials)|client[-_\\s]*secret|client[-_\\s]*assertion|api[-_\\s]*(?:key|secret)|subscription[-_\\s]*key|ocp[-_\\s]*apim[-_\\s]*subscription[-_\\s]*key|access[-_\\s]*key(?:[-_\\s]*id)?|shared[-_\\s]*access[-_\\s]*key|(?:account|consumer|license|public|private|signing|storage|webhook)[-_\\s]*key(?:[-_\\s]*id)?|consumer[-_\\s]*(?:key|secret)|oauth[-_\\s]*consumer[-_\\s]*(?:key|secret)|x[-_\\s]*(?:api[-_\\s]*key|access[-_\\s]*token|auth[-_\\s]*token|authorization[-_\\s]*token|csrf[-_\\s]*token|xsrf[-_\\s]*token)|access[-_\\s]*token|refresh[-_\\s]*token|id[-_\\s]*token|jwt[-_\\s]*token|auth[-_\\s]*token|authentication[-_\\s]*token|authorization[-_\\s]*token|bearer[-_\\s]*token|client[-_\\s]*token|oauth[-_\\s]*token|authorization[-_\\s]*code|authorization[-_\\s]*header|auth[-_\\s]*header|proxy[-_\\s]*authorization(?:[-_\\s]*header)?|device[-_\\s]*code|user[-_\\s]*code|code[-_\\s]*verifier|x[-_\\s]*amz[-_\\s]*credential|x[-_\\s]*amz[-_\\s]*signature|x[-_\\s]*amz[-_\\s]*security[-_\\s]*token|aws[-_\\s]*credential|aws[-_\\s]*signature|oauth[-_\\s]*signature|signature|nonce|mac|password|passwd|passphrase|credential|credentials|private[-_\\s]*key|cert(?:ificate)?[-_\\s]*passphrase|session[-_\\s]*id|session[-_\\s]*token|csrf[-_\\s]*token|xsrf[-_\\s]*token|token|code|state|secret)';
+  const assignmentSecretKeyPattern = `(?:${secretKeyPattern}|${cookieKeyPattern})`;
+  const cookieBareSafeWords = 'authentication|authenticated|auth|jar|jars|handling|handler|helpers?|access|disabled|enabled|unavailable|available|failed|failure|required|provider|returned|setting|settings|policy|policies|headers?|values?|metadata';
+  const cookieNextLabelPattern = String.raw`(?:${cookieKeyPattern})\b(?:\s*[:=]|\s+(?=[^\r\n"'<>]{1,2048}=))`;
+  const cookieValueTerminatorPattern = String.raw`(?=\s+(?:(?:${UI_SMOKE_COOKIE_SAFE_CONTEXT_PATTERN})|${cookieNextLabelPattern})|[\r\n]|$)`;
+  const cookieBareValuePattern = String.raw`(?=[^\r\n"'<>]{1,2048}=)[^\r\n"'<>]*?`;
+  const cookieAssignmentValuePattern = String.raw`[^\r\n"'<>]*?`;
+  const secretBareSafeWords = 'is|are|was|were|be|must|should|may|can|cannot|not|endpoint|auth|authentication|authenticated|required|provider|returned|failed|failure|missing|empty|unset|invalid|expired|denied|enabled|disabled|available|unavailable|username|bearer|basic|digest|hawk|oauth|ntlm|negotiate|status|code|flow|grant|scope|scopes|setting|settings|policy|policies|field|fields|value|values|metadata|header|headers|cookie|cookies|jar';
+  const authSchemeSafeValuePattern = String.raw`(?:2\.0|\[redacted\]|redacted|endpoint|app|application|auth|authentication|authenticated|token|bearer|basic|digest|hawk|oauth|ntlm|negotiate|username|required|provider|returned|failed|failure|missing|empty|unset|invalid|expired|denied|enabled|disabled|available|unavailable|status|code|flow|grant|scope|scopes|setting|settings|policy|policies|field|fields|value|values|metadata|header|headers|cookie|cookies|jar)(?=\s|$|[.,;:!?)}\]])`;
+  const safeWordFollowPattern = String.raw`(?:\s|$|[.,;:!?)}\]])`;
+  const requestResponseKeyPattern = String.raw`request[-_\s]*body(?:[-_\s]*text)?|response[-_\s]*body(?:[-_\s]*text)?|body[-_\s]*preview|rendered[-_\s]*response(?:[-_\s]*text)?|response[-_\s]*text|graphql[-_\s]*variables|form[-_\s]*data(?:[-_\s]*parts)?|protocol[-_\s]*messages?|grpc[-_\s]*messages?|websocket[-_\s]*messages?|socketio[-_\s]*messages?|console[-_\s]*output|script[-_\s]*console|script[-_\s]*logs?|payload[-_\s]*derived[-_\s]*identifier|payload[-_\s]*identifier|request[-_\s]*id[-_\s]*from[-_\s]*payload|id[-_\s]*from[-_\s]*payload|variables|body|data|text`;
+  const requestResponseAssignmentValuePattern = '[^\\r\\n"\',;<>}&\\])]+?(?=\\s+[A-Za-z][A-Za-z0-9_.-]{0,128}\\s*[:=]|[\\r\\n"\',;<>}&\\])]|$)';
+  const requestResponseBareFieldTerminatorPattern = String.raw`(?=\s+(?:${requestResponseKeyPattern})\b|[\r\n;,.]|$)`;
+  const requestResponseBareFieldPattern = new RegExp(String.raw`(?<![A-Za-z0-9_-])(${requestResponseKeyPattern})(\s+)(?!\[redacted\]|redacted\b)(?!(?:${secretBareSafeWords})${safeWordFollowPattern})([^\r\n;,.]*?)${requestResponseBareFieldTerminatorPattern}`, 'gi');
+  const secretAssignmentValuePattern = `[^\\r\\n"',;<>}&\\])]+?(?=\\s+(?:${assignmentSecretKeyPattern}|[A-Za-z][A-Za-z0-9_.-]{0,128})\\s*[:=]|[\\r\\n"',;<>}&\\])]|$)`;
   const tokenValuePattern = '[^\\s,;\'"<>}&]+';
-  let redacted = text;
+  const doubleQuotedSecretFieldPattern = new RegExp(`"(${assignmentSecretKeyPattern})"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)"`, 'gi');
+  const singleQuotedSecretFieldPattern = new RegExp(`'(${assignmentSecretKeyPattern})'\\s*:\\s*'((?:\\\\.|[^'\\\\])*)'`, 'gi');
+  let redacted = text
+    .replace(doubleQuotedSecretFieldPattern, (_match, key) => `"${key}":"[redacted]"`)
+    .replace(singleQuotedSecretFieldPattern, (_match, key) => `'${key}':'[redacted]'`);
   const sensitivePaths = [
     __dirname,
     path.dirname(__dirname),
@@ -626,16 +662,34 @@ function redactUiSmokeText(text) {
   for (const sensitivePath of sensitivePaths) {
     redacted = redacted.split(String(sensitivePath)).join('[path]');
   }
+  redacted = redactTransportReferences(redacted);
   return redacted
     .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, '[redacted private key]')
     .replace(/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g, '[redacted jwt]')
     .replace(/\b[A-Za-z]:\\[^\s)'"<>]+/g, '[path]')
     .replace(/\/(?:home|Users|tmp|var\/folders|private\/var\/folders)\/[^\s)'"<>]+/g, '[path]')
-    .replace(new RegExp(`(["']?\\b(?:proxy[-_\\s]?authorization(?:[-_\\s]?header)?|authorization(?:[-_\\s]?header)?|auth[-_\\s]?header)\\b["']?\\s*[:=]\\s*["']?)(?:(?:bearer|basic|digest|hawk|token|oauth|ntlm|negotiate)\\s+)?${tokenValuePattern}`, 'gi'), '$1[redacted]')
-    .replace(/\b(set-cookie|cookie)\b(\s*[:=]\s*["']?)[^\n\r'"<>]+/gi, '$1$2[redacted]')
-    .replace(/\b(bearer|basic|digest|hawk|token|oauth|ntlm|negotiate)\s+[A-Za-z0-9._~+/=-]{6,}/gi, '$1 [redacted]')
-    .replace(new RegExp(`(["']?\\b${secretKeyPattern}\\b["']?\\s*[:=]\\s*["']?)${tokenValuePattern}`, 'gi'), '$1[redacted]')
-    .replace(new RegExp(`\\b(${secretKeyPattern})\\b(\\s+)${tokenValuePattern}`, 'gi'), '$1$2[redacted]');
+    .replace(new RegExp(`(["']?\\b(?:proxy[-_\\s]*authorization(?:[-_\\s]*header)?|authorization(?:[-_\\s]*header)?|auth[-_\\s]*header)\\b["']?\\s*[:=]\\s*")((?:\\\\.|[^"\\\\])*)(")`, 'gi'), '$1[redacted]$3')
+    .replace(new RegExp(`(['"]?\\b(?:proxy[-_\\s]*authorization(?:[-_\\s]*header)?|authorization(?:[-_\\s]*header)?|auth[-_\\s]*header)\\b['"]?\\s*[:=]\\s*')((?:\\\\.|[^'\\\\])*)(')`, 'gi'), '$1[redacted]$3')
+    .replace(new RegExp(`(["']?\\b(?:proxy[-_\\s]*authorization(?:[-_\\s]*header)?|authorization(?:[-_\\s]*header)?|auth[-_\\s]*header)\\b["']?\\s*[:=]\\s*["']?)(?!["']?\\[redacted\\])${UI_SMOKE_AUTH_HEADER_VALUE_PATTERN}["']?`, 'gi'), '$1[redacted]')
+    .replace(new RegExp(`\\b(set-cookie|cookie)\\b(\\s*[:=]\\s*["']?)([^\\n\\r'"<>]*?)${cookieValueTerminatorPattern}`, 'gi'), redactUiSmokeCookieHeaderValue)
+    .replace(new RegExp(`((?<![A-Za-z0-9_-])["']?\\b${cookieKeyPattern}\\b["']?\\s*[:=]\\s*["']?)(?!\\s*\\[redacted\\])${cookieAssignmentValuePattern}${cookieValueTerminatorPattern}`, 'gi'), '$1[redacted]')
+    .replace(new RegExp(`(?<![A-Za-z0-9_-])\\b(${cookieKeyPattern})\\b(\\s+)(?!(?:${cookieBareSafeWords})\\b)(?!\\[redacted\\])${cookieBareValuePattern}${cookieValueTerminatorPattern}`, 'gi'), '$1$2[redacted]')
+    .replace(new RegExp(`(?<![A-Za-z0-9_-])(${UI_SMOKE_AUTH_SCHEME_NAMES})\\s+${UI_SMOKE_AUTH_PARAMETER_PAIR_LIST_PATTERN}`, 'gi'), '$1 [redacted]')
+    .replace(new RegExp(`(?<![A-Za-z0-9_-])(${UI_SMOKE_SIMPLE_AUTH_SCHEME_NAMES})\\s+(?!(?:${authSchemeSafeValuePattern}))[A-Za-z0-9._~+/=-]{1,}`, 'gi'), '$1 [redacted]')
+    .replace(new RegExp(UI_SMOKE_AWS_QUERY_FIELD_PATTERN, 'gi'), '$1$2[redacted];')
+    .replace(/[\s\S]*/, (value) => redactRequestResponseAliasesInText(value, '[redacted]'))
+    .replace(new RegExp(`((?<![A-Za-z0-9_-])["']?\\b(?:${requestResponseKeyPattern})\\b["']?\\s*[:=]\\s*["']?)(?!\\s*\\[redacted\\])${requestResponseAssignmentValuePattern}`, 'gi'), '$1[redacted]')
+    .replace(requestResponseBareFieldPattern, '$1$2[redacted]')
+    .replace(new RegExp(`((?<![A-Za-z0-9_-])["']?\\b${assignmentSecretKeyPattern}\\b["']?\\s*[:=]\\s*["']?)(?!\\s*\\[redacted\\])${secretAssignmentValuePattern}`, 'gi'), '$1[redacted]')
+    .replace(new RegExp(`\\b(${secretKeyPattern})\\b(\\s+)(?!\\[redacted\\]\\b|redacted\\b)(?!(?:${secretBareSafeWords})${safeWordFollowPattern})${tokenValuePattern}`, 'gi'), '$1$2[redacted]');
+}
+
+function redactUiSmokeCookieHeaderValue(_match, key, separator, value = '') {
+  const text = String(value || '');
+  const safeBoundary = UI_SMOKE_COOKIE_HEADER_SAFE_CONTEXT_BOUNDARY_PATTERN.exec(text);
+  return safeBoundary
+    ? `${key}${separator}[redacted]${text.slice(safeBoundary.index)}`
+    : `${key}${separator}[redacted]`;
 }
 
 function smokeArtifactTimeoutMillis(env = process.env) {

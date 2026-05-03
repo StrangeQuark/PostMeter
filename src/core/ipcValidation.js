@@ -141,6 +141,21 @@ function assertSettingsPayload(value, field) {
   if (value.appearance != null) {
     assertSchemaFields('appearance', value.appearance, `${field}.appearance`);
   }
+  if (value.diagnostics != null) {
+    object(value.diagnostics, `${field}.diagnostics`);
+    assertAllowedObjectFields(value.diagnostics, `${field}.diagnostics`, [
+      'logging',
+      'requestResponseLogging'
+    ]);
+    if (value.diagnostics.logging != null) {
+      assertSchemaFields('diagnosticsLogging', value.diagnostics.logging, `${field}.diagnostics.logging`);
+      assertNoUnexpectedFields('diagnosticsLogging', value.diagnostics.logging, `${field}.diagnostics.logging`);
+    }
+    if (value.diagnostics.requestResponseLogging != null) {
+      assertSchemaFields('requestResponseLoggingSettings', value.diagnostics.requestResponseLogging, `${field}.diagnostics.requestResponseLogging`);
+      assertNoUnexpectedFields('requestResponseLoggingSettings', value.diagnostics.requestResponseLogging, `${field}.diagnostics.requestResponseLogging`);
+    }
+  }
   if (value.sandbox != null) {
     object(value.sandbox, `${field}.sandbox`);
     assertAllowedObjectFields(value.sandbox, `${field}.sandbox`, [

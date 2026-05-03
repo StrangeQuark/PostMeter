@@ -3,15 +3,55 @@ const { fetchSandboxPackageForReview } = require('../src/core/sandboxPackageFetc
 function registerSandboxPackageIpc(options = {}) {
   const {
     fetchPackageForReview = fetchSandboxPackageForReview,
-    ipcMain
+    ipcMain,
+    recordDiagnosticEvent = async () => {}
   } = options;
 
   ipcMain.handle('sandbox-package:fetch', async (_event, specifier, fetchOptions = {}) => {
     const normalizedSpecifier = String(specifier || '').trim();
     const options = normalizeFetchOptions(fetchOptions);
-    const result = await fetchPackageForReview(normalizedSpecifier, options);
-    return normalizePackageReviewResult(result);
+    try {
+      const result = await fetchPackageForReview(normalizedSpecifier, options);
+      const normalized = normalizePackageReviewResult(result);
+      await recordDiagnosticEvent({
+        type: 'sandbox.package.fetch.completed',
+        level: 'info',
+        outcome: 'completed',
+        fields: {
+          registry: normalized.registry || packageSpecifierKind(normalizedSpecifier),
+          fileCount: normalized.files.length,
+          sourceBytes: Buffer.byteLength(normalized.source || '', 'utf8')
+        }
+      });
+      return normalized;
+    } catch (error) {
+      await recordDiagnosticEvent({
+        type: 'sandbox.package.fetch.failed',
+        level: 'warn',
+        outcome: 'failed',
+        failureCode: 'sandbox_package_fetch_failed',
+        fields: {
+          registry: packageSpecifierKind(normalizedSpecifier),
+          error: error?.message || String(error)
+        }
+      });
+      throw error;
+    }
   });
+}
+
+function packageSpecifierKind(specifier) {
+  const value = String(specifier || '').trim().toLowerCase();
+  if (value.startsWith('npm:')) {
+    return 'npm';
+  }
+  if (value.startsWith('jsr:')) {
+    return 'jsr';
+  }
+  if (value.startsWith('@')) {
+    return 'team';
+  }
+  return 'unknown';
 }
 
 function normalizeFetchOptions(value = {}) {

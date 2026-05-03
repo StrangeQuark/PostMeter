@@ -8,6 +8,10 @@ const {
   OAUTH2_TOKEN_TYPES,
   normalizeAuth
 } = require('./authModel');
+const {
+  redactRequestResponseAliasesInText,
+  redactTransportReferences
+} = require('./diagnostics');
 
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 const OAUTH_REFRESH_WINDOW_MILLIS = 60_000;
@@ -17,31 +21,174 @@ const OAUTH_DEVICE_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:device_code';
 const OAUTH_PKCE_CODE_VERIFIER_BYTES = 32;
 const OAUTH_PKCE_STATE_BYTES = 24;
 const OAUTH_REDACTED_VALUE = '[redacted]';
+const OAUTH_AUTH_SCHEME_NAMES = 'Bearer|Basic|Digest|Hawk|Token|OAuth|NTLM|Negotiate|AWS4-HMAC-SHA256|EG1-HMAC-SHA256';
 const OAUTH_SECRET_FIELD_NAMES = [
   'token',
   'secret',
   'cookie',
+  'cookieHeader',
+  'cookie_header',
+  'cookie-header',
   'set-cookie',
   'set_cookie',
+  'setCookieHeader',
+  'set_cookie_header',
+  'set-cookie-header',
   'access_token',
   'accessToken',
   'refresh_token',
   'refreshToken',
   'id_token',
   'idToken',
+  'jwt_token',
+  'jwtToken',
+  'jwt-token',
+  'csrf_token',
+  'csrfToken',
+  'csrf-token',
+  'xsrf_token',
+  'xsrfToken',
+  'xsrf-token',
+  'x_api_key',
+  'xApiKey',
+  'x-api-key',
+  'x_access_token',
+  'xAccessToken',
+  'x-access-token',
+  'x_auth_token',
+  'xAuthToken',
+  'x-auth-token',
+  'x_authorization_token',
+  'xAuthorizationToken',
+  'x-authorization-token',
+  'x_csrf_token',
+  'xCsrfToken',
+  'x-csrf-token',
+  'x_xsrf_token',
+  'xXsrfToken',
+  'x-xsrf-token',
+  'auth_token',
+  'authToken',
+  'auth-token',
+  'authentication_token',
+  'authenticationToken',
+  'authentication-token',
+  'authorization_token',
+  'authorizationToken',
+  'authorization-token',
+  'bearer_token',
+  'bearerToken',
+  'bearer-token',
+  'client_token',
+  'clientToken',
+  'client-token',
+  'oauth_token',
+  'oauthToken',
+  'oauth-token',
   'client_secret',
   'clientSecret',
+  'client-secret',
   'client_assertion',
   'clientAssertion',
+  'client-assertion',
   'code',
   'authorization_code',
   'authorizationCode',
+  'authorization-code',
   'code_verifier',
   'codeVerifier',
+  'code-verifier',
   'device_code',
   'deviceCode',
+  'device-code',
   'user_code',
   'userCode',
+  'user-code',
+  'session_token',
+  'sessionToken',
+  'session-token',
+  'api_key',
+  'apiKey',
+  'api-key',
+  'api_secret',
+  'apiSecret',
+  'api-secret',
+  'secret_key',
+  'secretKey',
+  'secret-key',
+  'subscription_key',
+  'subscriptionKey',
+  'subscription-key',
+  'Ocp-Apim-Subscription-Key',
+  'ocp_apim_subscription_key',
+  'ocpApimSubscriptionKey',
+  'access_key',
+  'accessKey',
+  'access-key',
+  'access_key_id',
+  'accessKeyId',
+  'access-key-id',
+  'secret_access_key',
+  'secretAccessKey',
+  'secret-access-key',
+  'shared_access_key',
+  'sharedAccessKey',
+  'shared-access-key',
+  'account_key',
+  'accountKey',
+  'account-key',
+  'storage_key',
+  'storageKey',
+  'storage-key',
+  'signing_key',
+  'signingKey',
+  'signing-key',
+  'webhook_key',
+  'webhookKey',
+  'webhook-key',
+  'license_key',
+  'licenseKey',
+  'license-key',
+  'public_key',
+  'publicKey',
+  'public-key',
+  'consumer_key',
+  'consumerKey',
+  'consumer-key',
+  'consumer_secret',
+  'consumerSecret',
+  'consumer-secret',
+  'oauth_consumer_key',
+  'oauthConsumerKey',
+  'oauth-consumer-key',
+  'oauth_consumer_secret',
+  'oauthConsumerSecret',
+  'oauth-consumer-secret',
+  'password',
+  'passwd',
+  'passphrase',
+  'credential',
+  'credentials',
+  'x-amz-signature',
+  'x_amz_signature',
+  'xAmzSignature',
+  'x-amz-credential',
+  'x_amz_credential',
+  'xAmzCredential',
+  'x-amz-security-token',
+  'x_amz_security_token',
+  'xAmzSecurityToken',
+  'aws_signature',
+  'awsSignature',
+  'aws-signature',
+  'aws_credential',
+  'awsCredential',
+  'aws-credential',
+  'oauth_signature',
+  'oauthSignature',
+  'oauth-signature',
+  'signature',
+  'mac',
   'authorization',
   'authorization_header',
   'authorizationHeader',
@@ -55,7 +202,25 @@ const OAUTH_SECRET_FIELD_NAMES = [
   'proxy_authorization_header',
   'proxyAuthorizationHeader'
 ];
-const OAUTH_AUTHORIZATION_HEADER_PATTERN = /\b((?:(?:Proxy[-_]?Authorization|Authorization)(?:[-_]?Header)?|Auth[-_]?Header))(\s*[:=]\s*)(["']?)(?!(?:(?:Bearer|Basic|OAuth)\s+)?(?:\[redacted\]|redacted)\3?(?=\s|[;,.)\]]|$))(?:(?:Bearer|Basic|OAuth)\s+)?[A-Za-z0-9._~+/=-]+(?:\3)?/gi;
+const OAUTH_AUTHORIZATION_HEADER_PATTERN = new RegExp(String.raw`\b((?:(?:Proxy[-_]?Authorization|Authorization)(?:[-_]?Header)?|Auth[-_]?Header))(\s*[:=]\s*)(["']?)(?!(?:(?:${OAUTH_AUTH_SCHEME_NAMES})\s+)?(?:\[redacted\]|redacted)\3?(?=\s|[;,.)\]]|$))(?:(?:${OAUTH_AUTH_SCHEME_NAMES})\s+)?(?:[A-Za-z][A-Za-z0-9_-]*\s*=\s*(?:"(?:\\.|[^"\\\r\n<>])*"|'(?:\\.|[^'\\\r\n<>])*'|[^\s"',;<>}\])]+)|"(?:\\.|[^"\\\r\n<>])*"|'(?:\\.|[^'\\\r\n<>])*'|[^\s"',;<>}\])]+)(?:\s*[,;]\s*[A-Za-z][A-Za-z0-9_-]*\s*=\s*(?:"(?:\\.|[^"\\\r\n<>])*"|'(?:\\.|[^'\\\r\n<>])*'|[^\s"',;<>}\])]+))*\3?`, 'gi');
+const OAUTH_SECRET_TEXT_FIELD_NAME_PATTERN = /(?<![A-Za-z0-9_-])(["']?)(access[-_\s]*token|refresh[-_\s]*token|id[-_\s]*token|auth[-_\s]*token|authentication[-_\s]*token|authorization[-_\s]*token|bearer[-_\s]*token|client[-_\s]*token|oauth[-_\s]*token|csrf[-_\s]*token|xsrf[-_\s]*token|jwt[-_\s]*token|[A-Za-z][A-Za-z0-9]{0,80}[-_\s]*(?:token|secret|password|passwd|passphrase|credential|credentials)|x[-_\s]*(?:api[-_\s]*key|access[-_\s]*token|auth[-_\s]*token|authorization[-_\s]*token|csrf[-_\s]*token|xsrf[-_\s]*token)|client[-_\s]*secret|client[-_\s]*assertion|authorization[-_\s]*code|code[-_\s]*verifier|device[-_\s]*code|user[-_\s]*code|auth[-_\s]*header|authorization[-_\s]*header|proxy[-_\s]*authorization[-_\s]*header|proxy[-_\s]*authorization|authorization|session[-_\s]*(?:token|id)|api[-_\s]*(?:key|secret)|secret[-_\s]*(?:key|access[-_\s]*key)|subscription[-_\s]*key|ocp[-_\s]*apim[-_\s]*subscription[-_\s]*key|access[-_\s]*key(?:[-_\s]*id)?|shared[-_\s]*access[-_\s]*key|(?:account|consumer|license|public|private|signing|storage|webhook)[-_\s]*key(?:[-_\s]*id)?|consumer[-_\s]*(?:key|secret)|oauth[-_\s]*consumer[-_\s]*(?:key|secret)|x[-_\s]*amz[-_\s]*credential|x[-_\s]*amz[-_\s]*signature|x[-_\s]*amz[-_\s]*security[-_\s]*token|aws[-_\s]*credential|aws[-_\s]*signature|oauth[-_\s]*signature|cert(?:ificate)?[-_\s]*passphrase|private[-_\s]*key|secret[-_\s]*value|signature|mac|token|secret|password|passwd|passphrase|credential|credentials|cookie[-_\s]*header|cookieHeader|set[-_\s]*cookie[-_\s]*header|setCookieHeader|cookie|set[-_\s]*cookie|code|state)\1(\s*[:=]\s*)/gi;
+const OAUTH_COOKIE_HEADER_START_PATTERN = /\b((?:Set[-_]?Cookie|Cookie)(?:[-_]?Header)?)(\s*:\s*)/gi;
+const OAUTH_COOKIE_BARE_START_PATTERN = /\b((?:Set[-_]?Cookie|Cookie)(?:[-_]?Header)?)(\s+)(?!(?:authentication|authenticated|auth|jar|jars|handling|handler|helpers?|access|disabled|enabled|unavailable|available|failed|failure|required|provider|returned|setting|settings|policy|policies|headers?|values?|metadata)\b)(?=[^\r\n"'<>]{1,2048}=)/gi;
+const OAUTH_COOKIE_SAFE_CONTEXT_BOUNDARY_PATTERN = /\s+(?=(?:OAuth\s+2\.0\b|token\s+endpoint\b|provider\s+(?:returned|failed|denied|reported)\b|HTTP\s+\d{3}\b|status\s*[:=]?\s*\d{3}\b|error(?:[-_\s]*description)?\s*[:=]|Basic\s+authentication\b|Bearer\s+authentication\b|Digest\s+auth\b|authentication\s+(?:failed|required)\b))/i;
+const OAUTH_BARE_SECRET_LABEL_NAMES = String.raw`access[-_\s]*token|refresh[-_\s]*token|id[-_\s]*token|csrf[-_\s]*token|xsrf[-_\s]*token|jwt[-_\s]*token|[A-Za-z][A-Za-z0-9]{0,80}[-_\s]*(?:token|secret|password|passwd|passphrase|credential|credentials)|x[-_\s]*(?:api[-_\s]*key|access[-_\s]*token|auth[-_\s]*token|authorization[-_\s]*token|csrf[-_\s]*token|xsrf[-_\s]*token)|client[-_\s]*secret|client[-_\s]*assertion|authorization[-_\s]*code|code[-_\s]*verifier|device[-_\s]*code|user[-_\s]*code|api[-_\s]*(?:key|secret)|secret[-_\s]*(?:key|access[-_\s]*key)|subscription[-_\s]*key|ocp[-_\s]*apim[-_\s]*subscription[-_\s]*key|access[-_\s]*key(?:[-_\s]*id)?|shared[-_\s]*access[-_\s]*key|(?:account|consumer|license|public|private|signing|storage|webhook)[-_\s]*key(?:[-_\s]*id)?|consumer[-_\s]*(?:key|secret)|oauth[-_\s]*consumer[-_\s]*(?:key|secret)|session[-_\s]*(?:token|id)|auth[-_\s]*header|authorization[-_\s]*header|proxy[-_\s]*authorization(?:[-_\s]*header)?|cert(?:ificate)?[-_\s]*passphrase|private[-_\s]*key|secret[-_\s]*value|password|passwd|passphrase|credential|credentials|token|secret`;
+const OAUTH_BARE_SECRET_LABEL_SAFE_WORDS = String.raw`is|are|was|were|be|must|should|may|can|cannot|not|endpoint|auth|authentication|authenticated|required|provider|returned|failed|failure|missing|empty|unset|invalid|expired|denied|enabled|disabled|available|unavailable|username|bearer|basic|digest|hawk|oauth|ntlm|negotiate|status|code|flow|grant|scope|scopes|setting|settings|policy|policies|field|fields|value|values|metadata|header|headers|cookie|cookies|jar`;
+const OAUTH_BARE_SAFE_WORD_FOLLOW_PATTERN = String.raw`(?:\s|$|[.,;:!?)}\]])`;
+const OAUTH_BARE_SECRET_LABEL_PATTERN = new RegExp(String.raw`(?<![A-Za-z0-9_-])(${OAUTH_BARE_SECRET_LABEL_NAMES})(\s+)(?!\[redacted\]|redacted\b)(?!(?:${OAUTH_BARE_SECRET_LABEL_SAFE_WORDS})${OAUTH_BARE_SAFE_WORD_FOLLOW_PATTERN})[A-Za-z0-9._~+/=-]{4,}`, 'gi');
+const OAUTH_AWS_QUERY_FIELD_PATTERN = /\b((?:x[-_]?amz[-_]?credential|x[-_]?amz[-_]?signature|x[-_]?amz[-_]?security[-_]?token|aws[-_]?credential|aws[-_]?signature))(\s*[:=]\s*["']?)[^\s&"',;<>}\])]+/gi;
+const OAUTH_REQUEST_RESPONSE_FIELD_NAMES = String.raw`request[-_\s]*body(?:[-_\s]*text)?|response[-_\s]*body(?:[-_\s]*text)?|body[-_\s]*preview|rendered[-_\s]*response(?:[-_\s]*text)?|response[-_\s]*text|graphql[-_\s]*variables|form[-_\s]*data(?:[-_\s]*parts)?|protocol[-_\s]*messages?|grpc[-_\s]*messages?|websocket[-_\s]*messages?|socketio[-_\s]*messages?|console[-_\s]*output|script[-_\s]*console|script[-_\s]*logs?|payload[-_\s]*derived[-_\s]*identifier|payload[-_\s]*identifier|request[-_\s]*id[-_\s]*from[-_\s]*payload|id[-_\s]*from[-_\s]*payload|variables|body|data|text`;
+const OAUTH_REQUEST_RESPONSE_FIELD_NAME_PATTERN = new RegExp(String.raw`(?<![A-Za-z0-9_-])(["']?)(${OAUTH_REQUEST_RESPONSE_FIELD_NAMES})\1(\s*[:=]\s*)`, 'gi');
+const OAUTH_REQUEST_RESPONSE_BARE_FIELD_TERMINATOR_PATTERN = String.raw`(?=\s+(?:${OAUTH_REQUEST_RESPONSE_FIELD_NAMES})\b|[\r\n;,.]|$)`;
+const OAUTH_REQUEST_RESPONSE_BARE_FIELD_PATTERN = new RegExp(String.raw`(?<![A-Za-z0-9_-])(${OAUTH_REQUEST_RESPONSE_FIELD_NAMES})(\s+)(?!\[redacted\]|redacted\b)(?!(?:${OAUTH_BARE_SECRET_LABEL_SAFE_WORDS})${OAUTH_BARE_SAFE_WORD_FOLLOW_PATTERN})([^\r\n;,.]*?)${OAUTH_REQUEST_RESPONSE_BARE_FIELD_TERMINATOR_PATTERN}`, 'gi');
+const OAUTH_AUTH_SCHEME_START_PATTERN = String.raw`(?<![A-Za-z0-9_-])`;
+const OAUTH_COMPOUND_AUTH_SCHEME_PATTERN = new RegExp(String.raw`${OAUTH_AUTH_SCHEME_START_PATTERN}(${OAUTH_AUTH_SCHEME_NAMES})\s+(?!\[redacted\]|redacted\b)(?:[A-Za-z][A-Za-z0-9_-]*\s*=\s*(?:"(?:\\.|[^"\\\r\n<>])*"|'(?:\\.|[^'\\\r\n<>])*'|[^\s"',;<>}\])]+))(?:\s*[,;]\s*[A-Za-z][A-Za-z0-9_-]*\s*=\s*(?:"(?:\\.|[^"\\\r\n<>])*"|'(?:\\.|[^'\\\r\n<>])*'|[^\s"',;<>}\])]+))*`, 'gi');
+const OAUTH_ALREADY_REDACTED_AUTH_VALUE_PATTERN = new RegExp(String.raw`^(?:${OAUTH_AUTH_SCHEME_NAMES})\s+\[redacted\]$`, 'i');
+const OAUTH_AUTH_SCHEME_SAFE_VALUE_PATTERN = String.raw`(?:2\.0|\[redacted\]|redacted|endpoint|app|application|auth|authentication|authenticated|token|bearer|basic|digest|hawk|oauth|ntlm|negotiate|username|required|provider|returned|failed|failure|missing|empty|unset|invalid|expired|denied|enabled|disabled|available|unavailable|status|code|flow|grant|scope|scopes|setting|settings|policy|policies|field|fields|value|values|metadata|header|headers|cookie|cookies|jar)(?=\s|$|[.,;:!?)}\]])`;
+const OAUTH_TOKEN_AUTH_SCHEME_PATTERN = new RegExp(String.raw`${OAUTH_AUTH_SCHEME_START_PATTERN}(Bearer|Basic|Digest|Hawk|Token|OAuth|NTLM|Negotiate)\s+(?!(?:${OAUTH_AUTH_SCHEME_SAFE_VALUE_PATTERN}))[A-Za-z0-9._~+/=-]{1,}`, 'gi');
 const DIGEST_SUPPORTED_ALGORITHMS = new Map([
   ['md5', 'md5'],
   ['md5-sess', 'md5'],
@@ -1424,25 +1589,254 @@ function validatePkceCodeVerifier(value) {
 }
 
 function redactOAuthErrorMessage(value) {
-  let text = String(value || '').replace(/\s+/g, ' ').trim();
+  let text = String(value || '').trim();
   if (!text) {
     return 'OAuth 2.0 provider returned an error.';
   }
+  text = redactOAuthQuotedSecretFields(text);
+  text = redactTransportReferences(text);
+  text = redactOAuthCookieHeaders(text);
+  text = redactOAuthBareCookieValues(text);
+  text = text.replace(/\s+/g, ' ').trim();
+  text = redactOAuthQuotedSecretFields(text);
   text = text.replace(OAUTH_AUTHORIZATION_HEADER_PATTERN, `$1$2${OAUTH_REDACTED_VALUE}`);
-  for (const fieldName of OAUTH_SECRET_FIELD_NAMES) {
-    const field = escapeRegExp(fieldName);
-    text = text
-      .replace(new RegExp(`("${field}"\\s*:\\s*")([^"]*)(")`, 'gi'), `$1${OAUTH_REDACTED_VALUE}$3`)
-      .replace(new RegExp(`('\\s*${field}\\s*'\\s*:\\s*')([^']*)(')`, 'gi'), `$1${OAUTH_REDACTED_VALUE}$3`)
-      .replace(new RegExp(`\\b(${field})(\\s*[:=]\\s*)(["']?)(?!(?:(?:Bearer|Basic|OAuth)\\s+)?(?:\\[redacted\\]|redacted)\\3?(?=\\s|[;,.)\\]]|$))[^\\s&,;<>}"']+\\3`, 'gi'), `$1$2${OAUTH_REDACTED_VALUE}`);
-  }
   text = text
-    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, `Bearer ${OAUTH_REDACTED_VALUE}`)
+    .replace(OAUTH_COMPOUND_AUTH_SCHEME_PATTERN, `$1 ${OAUTH_REDACTED_VALUE}`);
+  text = redactOAuthAwsQueryFields(text);
+  text = redactOAuthSecretFieldsInText(text);
+  text = redactOAuthBareSecretLabelsInText(text);
+  text = redactRequestResponseAliasesInText(text, OAUTH_REDACTED_VALUE);
+  text = redactOAuthRequestResponseFieldsInText(text);
+  text = redactOAuthBareRequestResponseLabelsInText(text);
+  text = text
+    .replace(OAUTH_TOKEN_AUTH_SCHEME_PATTERN, `$1 ${OAUTH_REDACTED_VALUE}`)
     .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, OAUTH_REDACTED_VALUE);
+  text = text.replace(/\[redacted\]\]+/g, OAUTH_REDACTED_VALUE);
   if (text.length > 1000) {
     return `${text.slice(0, 1000)}...`;
   }
   return text;
+}
+
+function redactOAuthQuotedSecretFields(value) {
+  let text = String(value || '');
+  for (const fieldName of OAUTH_SECRET_FIELD_NAMES) {
+    const field = escapeRegExp(fieldName);
+    text = text
+      .replace(new RegExp(`("${field}"\\s*:\\s*")((?:\\\\.|[^"\\\\])*)(")`, 'gi'), `$1${OAUTH_REDACTED_VALUE}$3`)
+      .replace(new RegExp(`('\\s*${field}\\s*'\\s*:\\s*')((?:\\\\.|[^'\\\\])*)(')`, 'gi'), `$1${OAUTH_REDACTED_VALUE}$3`);
+  }
+  return text;
+}
+
+function redactOAuthCookieHeaders(value) {
+  const text = String(value || '');
+  let output = '';
+  let cursor = 0;
+  OAUTH_COOKIE_HEADER_START_PATTERN.lastIndex = 0;
+  let match;
+  while ((match = OAUTH_COOKIE_HEADER_START_PATTERN.exec(text)) !== null) {
+    if (match.index < cursor) {
+      continue;
+    }
+    const valueStart = OAUTH_COOKIE_HEADER_START_PATTERN.lastIndex;
+    const valueEnd = oauthCookieHeaderValueEnd(text, valueStart);
+    output += text.slice(cursor, match.index);
+    const cookieValue = text.slice(valueStart, valueEnd).trim();
+    if (cookieValue === OAUTH_REDACTED_VALUE || /^redacted$/i.test(cookieValue)) {
+      output += text.slice(match.index, valueEnd);
+    } else {
+      output += `${match[1]}${match[2]}${OAUTH_REDACTED_VALUE}`;
+    }
+    cursor = valueEnd;
+    OAUTH_COOKIE_HEADER_START_PATTERN.lastIndex = valueEnd;
+  }
+  return output + text.slice(cursor);
+}
+
+function redactOAuthBareCookieValues(value) {
+  const text = String(value || '');
+  let output = '';
+  let cursor = 0;
+  OAUTH_COOKIE_BARE_START_PATTERN.lastIndex = 0;
+  let match;
+  while ((match = OAUTH_COOKIE_BARE_START_PATTERN.exec(text)) !== null) {
+    if (match.index < cursor) {
+      continue;
+    }
+    const valueStart = OAUTH_COOKIE_BARE_START_PATTERN.lastIndex;
+    const valueEnd = oauthCookieHeaderValueEnd(text, valueStart);
+    output += text.slice(cursor, match.index);
+    const cookieValue = text.slice(valueStart, valueEnd).trim();
+    if (cookieValue === OAUTH_REDACTED_VALUE || /^redacted$/i.test(cookieValue)) {
+      output += text.slice(match.index, valueEnd);
+    } else {
+      output += `${match[1]}${match[2]}${OAUTH_REDACTED_VALUE}`;
+    }
+    cursor = valueEnd;
+    OAUTH_COOKIE_BARE_START_PATTERN.lastIndex = valueEnd;
+  }
+  return output + text.slice(cursor);
+}
+
+function oauthCookieHeaderValueEnd(text, valueStart) {
+  const start = Math.max(0, Number(valueStart) || 0);
+  const nextNewline = text.slice(start).search(/[\r\n]/);
+  const lineEnd = nextNewline === -1 ? text.length : start + nextNewline;
+  const lineValue = text.slice(start, lineEnd);
+  const safeBoundary = OAUTH_COOKIE_SAFE_CONTEXT_BOUNDARY_PATTERN.exec(lineValue);
+  if (safeBoundary) {
+    return start + safeBoundary.index;
+  }
+  return lineEnd;
+}
+
+function redactOAuthAwsQueryFields(value) {
+  return String(value || '').replace(OAUTH_AWS_QUERY_FIELD_PATTERN, `$1$2${OAUTH_REDACTED_VALUE};`);
+}
+
+function redactOAuthSecretFieldsInText(value) {
+  const text = String(value || '');
+  let output = '';
+  let cursor = 0;
+  OAUTH_SECRET_TEXT_FIELD_NAME_PATTERN.lastIndex = 0;
+  let match;
+  while ((match = OAUTH_SECRET_TEXT_FIELD_NAME_PATTERN.exec(text)) !== null) {
+    if (match.index < cursor) {
+      continue;
+    }
+    const valueStart = OAUTH_SECRET_TEXT_FIELD_NAME_PATTERN.lastIndex;
+    const valueEnd = oauthSecretFieldValueEnd(text, valueStart);
+    output += text.slice(cursor, match.index);
+    const redactedValue = text.slice(valueStart, valueEnd).trim();
+    const normalizedRedactedValue = redactedValue.replace(/^(['"])(.*)\1$/, '$2').toLowerCase();
+    if (normalizedRedactedValue === OAUTH_REDACTED_VALUE || OAUTH_ALREADY_REDACTED_AUTH_VALUE_PATTERN.test(redactedValue)) {
+      output += text.slice(match.index, valueEnd);
+      cursor = valueEnd;
+      OAUTH_SECRET_TEXT_FIELD_NAME_PATTERN.lastIndex = valueEnd;
+      continue;
+    }
+    output += `${match[1]}${match[2]}${match[1]}${match[3]}${OAUTH_REDACTED_VALUE}`;
+    cursor = valueEnd;
+    OAUTH_SECRET_TEXT_FIELD_NAME_PATTERN.lastIndex = valueEnd;
+  }
+  return output + text.slice(cursor);
+}
+
+function redactOAuthBareSecretLabelsInText(value) {
+  return String(value || '').replace(OAUTH_BARE_SECRET_LABEL_PATTERN, `$1$2${OAUTH_REDACTED_VALUE}`);
+}
+
+function redactOAuthRequestResponseFieldsInText(value) {
+  const text = String(value || '');
+  let output = '';
+  let cursor = 0;
+  OAUTH_REQUEST_RESPONSE_FIELD_NAME_PATTERN.lastIndex = 0;
+  let match;
+  while ((match = OAUTH_REQUEST_RESPONSE_FIELD_NAME_PATTERN.exec(text)) !== null) {
+    if (match.index < cursor) {
+      continue;
+    }
+    const valueStart = OAUTH_REQUEST_RESPONSE_FIELD_NAME_PATTERN.lastIndex;
+    const valueEnd = oauthSecretFieldValueEnd(text, valueStart);
+    output += text.slice(cursor, match.index);
+    output += `${match[1]}${match[2]}${match[1]}${match[3]}${OAUTH_REDACTED_VALUE}`;
+    cursor = valueEnd;
+    OAUTH_REQUEST_RESPONSE_FIELD_NAME_PATTERN.lastIndex = valueEnd;
+  }
+  return output + text.slice(cursor);
+}
+
+function redactOAuthBareRequestResponseLabelsInText(value) {
+  return String(value || '').replace(OAUTH_REQUEST_RESPONSE_BARE_FIELD_PATTERN, `$1$2${OAUTH_REDACTED_VALUE}`);
+}
+
+function oauthSecretFieldValueEnd(text, valueStart) {
+  const start = Math.max(0, Number(valueStart) || 0);
+  if (text.startsWith(OAUTH_REDACTED_VALUE, start)) {
+    return start + OAUTH_REDACTED_VALUE.length;
+  }
+  const alreadyRedactedAuth = new RegExp(String.raw`^(?:${OAUTH_AUTH_SCHEME_NAMES})\s+\[redacted\]`, 'i').exec(text.slice(start));
+  if (alreadyRedactedAuth) {
+    return start + alreadyRedactedAuth[0].length;
+  }
+  const valueChar = text[start];
+  if (valueChar === '"' || valueChar === "'") {
+    return quotedOAuthValueEnd(text, start, valueChar);
+  }
+  if (valueChar === '{' || valueChar === '[') {
+    return balancedOAuthValueEnd(text, start);
+  }
+  return unquotedOAuthSecretValueEnd(text, start);
+}
+
+function unquotedOAuthSecretValueEnd(text, start) {
+  for (let index = start; index < text.length; index += 1) {
+    const char = text[index];
+    if (/[\r\n&"',;<>}\])]/.test(char)) {
+      return index;
+    }
+    if (/\s/.test(char) && looksLikeFollowingOAuthBoundary(text, index + 1)) {
+      return index;
+    }
+  }
+  return text.length;
+}
+
+function looksLikeFollowingOAuthBoundary(text, start) {
+  const remaining = text.slice(start);
+  return /^(?:access[-_\s]*token|refresh[-_\s]*token|id[-_\s]*token|auth[-_\s]*token|authentication[-_\s]*token|authorization[-_\s]*token|bearer[-_\s]*token|client[-_\s]*token|oauth[-_\s]*token|client[-_\s]*secret|client[-_\s]*assertion|authorization[-_\s]*code|code[-_\s]*verifier|device[-_\s]*code|user[-_\s]*code|auth[-_\s]*header|authorization[-_\s]*header|proxy[-_\s]*authorization[-_\s]*header|proxy[-_\s]*authorization|authorization|session[-_\s]*token|api[-_\s]*key|x[-_\s]*amz[-_\s]*credential|x[-_\s]*amz[-_\s]*signature|x[-_\s]*amz[-_\s]*security[-_\s]*token|aws[-_\s]*credential|aws[-_\s]*signature|oauth[-_\s]*signature|cert(?:ificate)?[-_\s]*passphrase|private[-_\s]*key|secret[-_\s]*value|signature|mac|token|secret|password|passwd|passphrase|credential|credentials|cookie[-_\s]*header|cookieHeader|set[-_\s]*cookie[-_\s]*header|setCookieHeader|cookie|set[-_\s]*cookie|code|state)\s*[:=]/i.test(remaining)
+    || /^[A-Za-z][A-Za-z0-9_.-]{0,128}\s*[:=]/.test(remaining);
+}
+
+function quotedOAuthValueEnd(text, start, quote) {
+  for (let index = start + 1; index < text.length; index += 1) {
+    if (text[index] === '\\') {
+      index += 1;
+      continue;
+    }
+    if (text[index] === quote) {
+      return index + 1;
+    }
+  }
+  return text.length;
+}
+
+function balancedOAuthValueEnd(text, start) {
+  const stack = [text[start]];
+  let quote = '';
+  for (let index = start + 1; index < text.length; index += 1) {
+    const char = text[index];
+    if (quote) {
+      if (char === '\\') {
+        index += 1;
+        continue;
+      }
+      if (char === quote) {
+        quote = '';
+      }
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '{' || char === '[') {
+      stack.push(char);
+      continue;
+    }
+    if (char === '}' || char === ']') {
+      const expectedOpen = char === '}' ? '{' : '[';
+      if (stack.at(-1) !== expectedOpen) {
+        return index;
+      }
+      stack.pop();
+      if (stack.length === 0) {
+        return index + 1;
+      }
+    }
+  }
+  return text.length;
 }
 
 function escapeRegExp(value) {

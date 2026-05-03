@@ -493,6 +493,59 @@
               <button id="refreshSandboxFilesButton" type="button">Refresh File Bindings</button>
             </div>
           </div>
+          <fieldset class="workspace-diagnostics-panel" aria-describedby="diagnosticsPrivacySummary diagnosticsSensitiveWarning">
+            <legend>Diagnostics &amp; Privacy</legend>
+            <div class="workspace-sandbox-note" id="diagnosticsPrivacySummary" role="status" aria-live="polite">
+              Local diagnostics are user-exported only. Request and response details are not logged unless enabled below.
+            </div>
+            <label class="checkbox-line">
+              <input id="diagnosticLoggingEnabledInput" type="checkbox">
+              <span>Structured local logs</span>
+            </label>
+            <label class="field inline">
+              <span>Log Level</span>
+              <select id="diagnosticLogLevelSelect">
+                <option value="debug">Debug</option>
+                <option value="info">Info</option>
+                <option value="warn">Warn</option>
+                <option value="error">Error</option>
+              </select>
+            </label>
+            <div class="workspace-sandbox-note" id="diagnosticsSensitiveWarning">
+              These request/response log categories may expose PII or customer data. Keep them off unless a local troubleshooting session requires them.
+            </div>
+            <label class="checkbox-line">
+              <input id="diagnosticLogUrlsInput" type="checkbox" aria-describedby="diagnosticsSensitiveWarning">
+              <span>Request and response URLs, paths, and query params</span>
+            </label>
+            <label class="checkbox-line">
+              <input id="diagnosticLogHeadersInput" type="checkbox" aria-describedby="diagnosticsSensitiveWarning">
+              <span>Request and response headers</span>
+            </label>
+            <label class="checkbox-line">
+              <input id="diagnosticLogCookiesInput" type="checkbox" aria-describedby="diagnosticsSensitiveWarning">
+              <span>Cookies and Set-Cookie values</span>
+            </label>
+            <label class="checkbox-line">
+              <input id="diagnosticLogBodiesInput" type="checkbox" aria-describedby="diagnosticsSensitiveWarning">
+              <span>Request and response bodies, form-data, GraphQL variables, and payloads</span>
+            </label>
+            <label class="checkbox-line">
+              <input id="diagnosticLogProtocolMessagesInput" type="checkbox" aria-describedby="diagnosticsSensitiveWarning">
+              <span>gRPC and protocol messages</span>
+            </label>
+            <label class="checkbox-line">
+              <input id="diagnosticLogScriptConsoleInput" type="checkbox" aria-describedby="diagnosticsSensitiveWarning">
+              <span>Script console output</span>
+            </label>
+            <label class="checkbox-line">
+              <input id="diagnosticLogPayloadIdentifiersInput" type="checkbox" aria-describedby="diagnosticsSensitiveWarning">
+              <span>Payload-derived identifiers</span>
+            </label>
+            <div class="workspace-actions">
+              <button id="exportDiagnosticsButton" type="button" aria-describedby="diagnosticsSensitiveWarning">Export Local Diagnostics</button>
+            </div>
+          </fieldset>
         </div>
       </section>
 

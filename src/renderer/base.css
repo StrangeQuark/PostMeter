@@ -91,3 +91,25 @@ button:focus-visible {
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(255, 108, 55, 0.18);
 }
+
+@media (forced-colors: active) {
+  input:focus,
+  select:focus,
+  textarea:focus,
+  button:focus,
+  button:focus-visible {
+    outline: 2px solid Highlight !important;
+    outline-offset: 2px;
+    box-shadow: none;
+  }
+}
+
+:root[data-forced-colors="active"] input:focus,
+:root[data-forced-colors="active"] select:focus,
+:root[data-forced-colors="active"] textarea:focus,
+:root[data-forced-colors="active"] button:focus,
+:root[data-forced-colors="active"] button:focus-visible {
+  outline: 2px solid Highlight !important;
+  outline-offset: 2px;
+  box-shadow: none;
+}

@@ -9,6 +9,7 @@ const {
 
 const PROJECT_ROOT = path.join(__dirname, '..');
 const MATRIX_FILES = Object.freeze({
+  'diagnostics-privacy': path.join(PROJECT_ROOT, 'docs', 'diagnostics-privacy-matrix.json'),
   'electron-security': path.join(PROJECT_ROOT, 'docs', 'electron-security-matrix.json'),
   'workspace-durability': path.join(PROJECT_ROOT, 'docs', 'workspace-durability-matrix.json'),
   'non-postman-compatibility': path.join(PROJECT_ROOT, 'docs', 'non-postman-compatibility-matrix.json'),

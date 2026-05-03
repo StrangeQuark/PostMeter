@@ -215,6 +215,18 @@ test('accepts structurally valid IPC payloads', () => {
   }));
   assert.doesNotThrow(() => assertWorkspaceSettingsSavePayload({
     appearance: { theme: 'dark' },
+    diagnostics: {
+      logging: { enabled: true, level: 'warn' },
+      requestResponseLogging: {
+        urls: true,
+        headers: false,
+        cookies: false,
+        bodies: false,
+        protocolMessages: false,
+        scriptConsole: false,
+        payloadIdentifiers: false
+      }
+    },
     sandbox: {
       fileBindings: [{ source: 'fixtures/upload.txt', localPath: '/tmp/upload.txt' }],
       packageCache: [{ specifier: '@team/tools', source: 'module.exports = {};', integrity: 'sha256-reviewed' }],
@@ -297,6 +309,9 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertWorkspacePayload({ collections: {}, environments: [], history: [] }), /workspace.collections must be an array/);
   assert.throws(() => assertWorkspacePayload({ settings: { updates: { includePrereleases: 'yes' } }, collections: [], environments: [], history: [] }), /workspace.settings.updates.includePrereleases must be a boolean/);
   assert.throws(() => assertWorkspacePayload({ settings: { appearance: { theme: 'sepia' } }, collections: [], environments: [], history: [] }), /workspace.settings.appearance.theme must be one of/);
+  assert.throws(() => assertWorkspacePayload({ settings: { diagnostics: { requestResponseLogging: { bodies: 'yes' } } }, collections: [], environments: [], history: [] }), /workspace.settings.diagnostics.requestResponseLogging.bodies must be a boolean/);
+  assert.throws(() => assertWorkspacePayload({ settings: { diagnostics: { logging: { level: 'trace' } } }, collections: [], environments: [], history: [] }), /workspace.settings.diagnostics.logging.level must be one of/);
+  assert.throws(() => assertWorkspacePayload({ settings: { diagnostics: { uploadUrl: 'https://example.test' } }, collections: [], environments: [], history: [] }), /workspace.settings.diagnostics.uploadUrl is not allowed/);
   assert.throws(() => assertWorkspacePayload({ settings: { sandbox: { unknown: true } }, collections: [], environments: [], history: [] }), /workspace.settings.sandbox.unknown is not allowed/);
   assert.throws(() => assertWorkspacePayload({ settings: { sandbox: { fileBindings: 'bad' } }, collections: [], environments: [], history: [] }), /workspace.settings.sandbox.fileBindings must be an array/);
   assert.throws(() => assertWorkspacePayload({ settings: { sandbox: { fileBindings: [{ source: 'fixture.txt' }] } }, collections: [], environments: [], history: [] }), /workspace.settings.sandbox.fileBindings\[0\].localPath must be a string/);
@@ -349,6 +364,9 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertWorkspaceRequestSavePayload({ collectionId: 'c1', requestId: 'r1', request: { method: 'GET', queryParams: [], headers: [], bodyType: 'NONE' }, folderPath: 'bad' }), /payload.folderPath must be an array/);
   assert.throws(() => assertWorkspaceEnvironmentSavePayload({ environment: { id: 'e1', name: 'Env', variables: [] } }), /payload.environmentId must be a string/);
   assert.throws(() => assertWorkspaceSettingsSavePayload({ appearance: { theme: 'sepia' } }), /settings.appearance.theme must be one of/);
+  assert.throws(() => assertWorkspaceSettingsSavePayload({ diagnostics: { requestResponseLogging: { headers: 'yes' } } }), /settings.diagnostics.requestResponseLogging.headers must be a boolean/);
+  assert.throws(() => assertWorkspaceSettingsSavePayload({ diagnostics: { logging: { enabled: 'yes' } } }), /settings.diagnostics.logging.enabled must be a boolean/);
+  assert.throws(() => assertWorkspaceSettingsSavePayload({ diagnostics: { uploadUrl: 'https:\/\/example.test' } }), /settings.diagnostics.uploadUrl is not allowed/);
   assert.throws(() => assertWorkspaceSettingsSavePayload({ sandbox: { trustedCapabilities: { vaultGrants: { requests: 'all' } } } }), /settings.sandbox.trustedCapabilities.vaultGrants.requests must be an array/);
   assert.throws(() => assertWorkspaceSettingsSaveResultPayload({ settings: { updates: { includePrereleases: 'yes' } } }), /result.settings.updates.includePrereleases must be a boolean/);
   assert.throws(() => assertWorkspaceLoadResultPayload({ workspace: null }), /result.workspace must be an object/);

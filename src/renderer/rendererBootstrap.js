@@ -132,6 +132,7 @@
     bindClick(doc, 'refreshSandboxPackagesButton', options.onRefreshSandboxPackages);
     bindClick(doc, 'bindSandboxFileButton', options.onBindSandboxFile);
     bindClick(doc, 'refreshSandboxFilesButton', options.onRefreshSandboxFiles);
+    bindClick(doc, 'exportDiagnosticsButton', options.onExportDiagnostics);
     bindClick(doc, 'bindVaultSecretButton', options.onBindVaultSecret);
     bindClick(doc, 'refreshVaultMetadataButton', options.onRefreshVaultMetadata);
     bindClick(doc, 'resetVaultButton', options.onResetVault);
@@ -172,6 +173,19 @@
     bindChange(doc, 'trustedScriptSendRequestInput', options.onTrustedScriptCapabilityChange);
     bindChange(doc, 'trustedScriptCookiesInput', options.onTrustedScriptCapabilityChange);
     bindChange(doc, 'trustedScriptVaultInput', options.onTrustedScriptCapabilityChange);
+    for (const id of [
+      'diagnosticLoggingEnabledInput',
+      'diagnosticLogLevelSelect',
+      'diagnosticLogUrlsInput',
+      'diagnosticLogHeadersInput',
+      'diagnosticLogCookiesInput',
+      'diagnosticLogBodiesInput',
+      'diagnosticLogProtocolMessagesInput',
+      'diagnosticLogScriptConsoleInput',
+      'diagnosticLogPayloadIdentifiersInput'
+    ]) {
+      bindChange(doc, id, options.onDiagnosticsSettingsChange);
+    }
 
     for (const id of AUTH_EDITOR_INPUT_IDS) {
       const input = getElement(doc, id);

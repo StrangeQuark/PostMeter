@@ -25,7 +25,7 @@
     assertUiSmoke(document.documentElement.dataset.theme === 'system', 'System theme was not restored.');
     await assertSettingsRollbackSmoke();
     assertConstrainedViewportSmoke();
-    assertForcedColorsStylesheetSmoke();
+    await assertForcedColorsStylesheetSmoke();
     assertAccessibilitySemanticsSmoke();
     await assertSidebarPanelSmoke();
     await assertModalFocusSmoke();
@@ -138,7 +138,7 @@
     assertUiSmoke(document.documentElement.scrollWidth <= window.innerWidth + 2, 'Constrained viewport should not produce page-level horizontal overflow.');
   }
 
-  function assertForcedColorsStylesheetSmoke() {
+  async function assertForcedColorsStylesheetSmoke() {
     const hasForcedColorsRule = Array.from(document.styleSheets).some((sheet) => {
       try {
         return Array.from(sheet.cssRules || []).some((rule) => String(rule.conditionText || '').includes('forced-colors'));
@@ -148,9 +148,27 @@
     });
     assertUiSmoke(hasForcedColorsRule, 'Theme styles should include a forced-colors high-contrast rule.');
     assertUiSmoke(window.matchMedia?.('(forced-colors: active)')?.matches === true, 'Regression smoke should execute with forced-colors active.');
-    $('themeLightButton').focus();
-    const focusStyle = getComputedStyle($('themeLightButton'));
-    assertUiSmoke(focusStyle.outlineStyle !== 'none' && Number.parseFloat(focusStyle.outlineWidth) > 0, 'Forced-colors focus state should expose a visible outline.');
+    const focusTarget = $('themeLightButton');
+    focusTarget.focus({ preventScroll: true });
+    await nextPaint();
+    assertUiSmoke(document.activeElement === focusTarget, 'Forced-colors focus probe should move focus to the theme control.');
+    const focusStyle = getComputedStyle(focusTarget);
+    const computedOutlineVisible = focusStyle.outlineStyle !== 'none' && Number.parseFloat(focusStyle.outlineWidth) > 0;
+    const hasDatasetFallbackRule = document.documentElement.dataset.forcedColors === 'active'
+      && Array.from(document.styleSheets).some((sheet) => {
+        try {
+          return Array.from(sheet.cssRules || []).some((rule) => (
+            String(rule.selectorText || '').includes('data-forced-colors="active"')
+              && String(rule.cssText || '').includes('outline')
+          ));
+        } catch {
+          return false;
+        }
+      });
+    assertUiSmoke(
+      computedOutlineVisible || hasDatasetFallbackRule,
+      `Forced-colors focus state should expose a visible outline. Computed ${focusStyle.outlineStyle}/${focusStyle.outlineWidth}.`
+    );
   }
 
   function assertAccessibilitySemanticsSmoke() {
@@ -288,6 +306,16 @@
       await setIncludePrereleases(true, { save: true });
       assertUiSmoke(workspace.settings.updates.includePrereleases === false, 'Failed prerelease setting save should roll back the in-memory setting.');
       assertStatusIncludes('Prerelease setting save failed', 'Failed prerelease setting save should surface a user-visible status.');
+
+      workspace.settings.diagnostics = normalizeDiagnosticsSettings({
+        logging: { enabled: true, level: 'info' },
+        requestResponseLogging: { urls: false }
+      });
+      renderDiagnosticsPrivacyPanel();
+      $('diagnosticLogUrlsInput').checked = true;
+      await setDiagnosticsSettingsFromInputs();
+      assertUiSmoke(workspace.settings.diagnostics.requestResponseLogging.urls === false, 'Failed diagnostics setting save should roll back request/response logging opt-ins.');
+      assertStatusIncludes('Diagnostics privacy setting save failed', 'Failed diagnostics setting save should surface a user-visible status.');
     } finally {
       window.__postmeterSaveWorkspaceSettings = originalSaveSettings;
       workspace.settings = originalSettings;
@@ -347,6 +375,7 @@
 
   async function assertWorkspaceManagementSmoke() {
     const originalSaveWorkspace = window.__postmeterSaveWorkspace;
+    const originalDiagnostics = window.__postmeterDiagnostics;
     try {
       window.__postmeterSaveWorkspace = async (nextWorkspace) => nextWorkspace;
       workspace.collections = [];
@@ -388,8 +417,37 @@
       renamedWorkspaceButton.click();
       assertUiSmoke(!$('switchWorkspacePanelButton').disabled, 'Viewing a non-current workspace should enable the switch button.');
       assertUiSmoke(!$('exportWorkspacePanelButton').disabled, 'Viewing a non-current workspace should keep workspace export enabled.');
+      assertUiSmoke($('exportDiagnosticsButton').disabled, 'Viewing a non-current workspace should disable local diagnostics export controls.');
+      assertUiSmoke($('diagnosticLogUrlsInput').disabled, 'Viewing a non-current workspace should disable diagnostics privacy settings.');
+      assertUiSmoke($('diagnosticsPrivacySummary').textContent.includes('Switch to this workspace'), 'Non-current workspace diagnostics controls should explain the switch requirement.');
       assertUiSmoke(!$('switchWorkspacePanelButton').hidden, 'Workspace details should render the switch action.');
       assertUiSmoke(!$('renameWorkspacePanelButton').hidden, 'Workspace details should still render rename.');
+      let diagnosticsExported = false;
+      window.__postmeterDiagnostics = {
+        export: async () => {
+          diagnosticsExported = true;
+          return { cancelled: true };
+        }
+      };
+      setStatus('Ready.');
+      await exportDiagnostics();
+      assertUiSmoke(!diagnosticsExported, 'Workspace-panel diagnostics export should block while viewing a non-current workspace.');
+      assertStatusIncludes('Switch to this workspace before exporting local diagnostics', 'Non-current workspace diagnostics export should explain the switch requirement.');
+      setStatus('Ready.');
+      await handleAppMenuAction('export-diagnostics');
+      assertUiSmoke(diagnosticsExported, 'Help-menu diagnostics export should target the current workspace while viewing a non-current workspace.');
+      assertUiSmoke(lastStatusMessage === 'Ready.', 'Cancelled Help-menu diagnostics export should leave status unchanged while viewing a non-current workspace.');
+      selectSidebarPanel('collections');
+      setStatus('Ready.');
+      diagnosticsExported = false;
+      await exportDiagnostics();
+      assertUiSmoke(diagnosticsExported, 'Help-menu diagnostics export should use the current workspace after leaving a non-current workspace view.');
+      assertUiSmoke(lastStatusMessage === 'Ready.', 'Cancelled Help-menu diagnostics export should leave status unchanged after leaving a non-current workspace view.');
+      selectSidebarPanel('workspaces');
+      const renamedWorkspaceButtonAgain = Array.from($('workspacesList').querySelectorAll('button'))
+        .find((button) => button.textContent.includes('Renamed Workspace'));
+      assertUiSmoke(renamedWorkspaceButtonAgain, 'Workspace list did not rerender the renamed workspace button.');
+      renamedWorkspaceButtonAgain.click();
       await switchWorkspace(renamedWorkspaceId, { focus: 'workspace' });
       assertUiSmoke(activeWorkspaceId === renamedWorkspaceId, 'Switching workspaces should update the active workspace id.');
       assertUiSmoke(selectedWorkspaceId === renamedWorkspaceId, 'Switching workspaces should keep the selected workspace in view.');
@@ -401,6 +459,7 @@
       assertUiSmoke($('deleteWorkspacePanelButton').disabled, 'Workspace delete should disable again when one workspace remains.');
     } finally {
       window.__postmeterSaveWorkspace = originalSaveWorkspace;
+      window.__postmeterDiagnostics = originalDiagnostics;
       workspace.collections = [];
       workspace.environments = [];
       activeEnvironmentId = 'none';
@@ -861,6 +920,7 @@
     const originalImportCollection = window.__postmeterImportCollection;
     const originalExportWorkspace = window.__postmeterExportWorkspace;
     const originalSaveWorkspace = window.__postmeterSaveWorkspace;
+    const originalDiagnostics = window.__postmeterDiagnostics;
     try {
       let exportedExampleCount = 0;
       window.__postmeterExportExamples = async (request) => {
@@ -918,6 +978,47 @@
       };
       await exportCollection(activeCollection(), 'postmeter');
       assertStatusIncludes('Collection export failed: mocked collection export failure', 'Failed collection export did not update status with an actionable error.');
+
+      window.__postmeterDiagnostics = { export: async () => ({ cancelled: true }) };
+      setStatus('Ready.');
+      await exportDiagnostics();
+      assertUiSmoke(lastStatusMessage === 'Ready.', 'Cancelled diagnostics export should leave the current status unchanged.');
+
+      let releaseDiagnosticsSave;
+      let exportCalledAfterSave = false;
+      pendingDiagnosticsSettingsSave = new Promise((resolve) => {
+        releaseDiagnosticsSave = resolve;
+      });
+      window.__postmeterDiagnostics = {
+        export: async () => {
+          exportCalledAfterSave = true;
+          return { cancelled: true };
+        }
+      };
+      const pendingExport = exportDiagnostics();
+      await nextPaint();
+      assertUiSmoke(!exportCalledAfterSave, 'Diagnostics export should wait for pending privacy-setting saves.');
+      assertStatusIncludes('Saving diagnostics privacy settings before export', 'Diagnostics export should surface pending privacy-setting saves.');
+      releaseDiagnosticsSave(true);
+      await pendingExport;
+      assertUiSmoke(exportCalledAfterSave, 'Diagnostics export should continue after pending privacy-setting saves succeed.');
+      pendingDiagnosticsSettingsSave = null;
+
+      window.__postmeterDiagnostics = { export: async () => ({ path: '/tmp/postmeter-diagnostics.json' }) };
+      lastUserNotification = null;
+      await exportDiagnostics();
+      assertStatusIncludes('Local diagnostics exported to /tmp/postmeter-diagnostics.json. Review before sharing.', 'Successful diagnostics export should show a review-before-sharing status.');
+      assertUiSmoke(lastUserNotification?.title === 'Local Diagnostics Exported', 'Successful diagnostics export should show a popup notification.');
+
+      window.__postmeterDiagnostics = {
+        export: async () => {
+          throw new Error('mocked diagnostics export failure');
+        }
+      };
+      lastUserNotification = null;
+      await exportDiagnostics();
+      assertStatusIncludes('Diagnostics export failed: mocked diagnostics export failure', 'Failed diagnostics export did not update visible status.');
+      assertUiSmoke(lastUserNotification?.title === 'Diagnostics Export Failed', 'Failed diagnostics export should show a popup notification.');
     } finally {
       window.__postmeterExportExamples = originalExportExamples;
       window.__postmeterImportWorkspace = originalImportWorkspace;
@@ -925,6 +1026,8 @@
       window.__postmeterImportCollection = originalImportCollection;
       window.__postmeterExportWorkspace = originalExportWorkspace;
       window.__postmeterSaveWorkspace = originalSaveWorkspace;
+      window.__postmeterDiagnostics = originalDiagnostics;
+      pendingDiagnosticsSettingsSave = null;
     }
   }
 

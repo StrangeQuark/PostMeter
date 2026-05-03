@@ -1,17 +1,26 @@
 const { isTrustedAppRendererUrl } = require('./appProtocol');
+const { redactText, sanitizeDiagnosticErrorCode } = require('../src/core/diagnostics');
 
 function createTrustedIpcMain(ipcMain, options = {}) {
   return {
     handle(channel, listener) {
-      ipcMain.handle(channel, (event, ...args) => {
+      ipcMain.handle(channel, async (event, ...args) => {
         assertTrustedIpcSender(event, rendererPathForOptions(options));
-        return listener(event, ...args);
+        try {
+          return await listener(event, ...args);
+        } catch (error) {
+          throw sanitizeIpcError(error);
+        }
       });
     },
     on(channel, listener) {
       ipcMain.on(channel, (event, ...args) => {
         assertTrustedIpcSender(event, rendererPathForOptions(options));
-        return listener(event, ...args);
+        try {
+          return listener(event, ...args);
+        } catch (error) {
+          throw sanitizeIpcError(error);
+        }
       });
     }
   };
@@ -59,10 +68,41 @@ function rendererPathForOptions(options = {}) {
   return options.rendererPath;
 }
 
+function sanitizeIpcError(error) {
+  const rawMessage = error?.message || String(error || 'IPC handler failed.');
+  const message = redactText(rawMessage) || 'IPC handler failed.';
+  const sanitized = new Error(message);
+  const name = sanitizeIpcErrorName(error?.name);
+  if (name && name !== 'Error') {
+    sanitized.name = name;
+  }
+  const code = sanitizeDiagnosticErrorCode(error?.code);
+  if (code) {
+    sanitized.code = code;
+  }
+  return sanitized;
+}
+
+function sanitizeIpcErrorName(name) {
+  if (typeof name !== 'string') {
+    return '';
+  }
+  const cleaned = name.replace(/[^\w:.-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 128);
+  if (!cleaned || cleaned === 'Error') {
+    return '';
+  }
+  if (sanitizeDiagnosticErrorCode(cleaned) === '[redacted]' || redactText(cleaned) !== cleaned) {
+    return '';
+  }
+  return cleaned;
+}
+
 module.exports = {
   assertTrustedIpcSender,
   createTrustedIpcMain,
   isMainFrameSender,
   isTrustedIpcSender,
-  isTrustedRendererUrl
+  isTrustedRendererUrl,
+  sanitizeIpcError,
+  sanitizeIpcErrorName
 };

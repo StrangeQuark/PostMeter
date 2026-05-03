@@ -605,8 +605,17 @@ test('redacts multi-process load worker stderr before surfacing failure messages
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-load-worker-redact-'));
   const workerScript = path.join(directory, 'stderr-redact-worker.js');
   try {
+    const stderrText = [
+      '/home/user/PostMeter Authorization: Bearer abcdefghijklmnopqrstuvwxyz authorization_code=auth-code-secret code_verifier=code-verifier-secret',
+      'Authorization: Digest username="digest-user", realm="digest-realm", nonce="digest-nonce-secret", uri="/private/path", response="digest-response-secret"',
+      'Digest username="standalone-digest-user", realm="standalone-digest-realm", response="standalone-digest-response"',
+      'requestBodyText raw-body-preview-secret responseText raw-response-preview-secret bodyPreview raw-body-preview-secret-2',
+      'https:\\/\\/plain.example.test\\/private\\/customer?x-amz-signature=aws-url-signature&token=url-token-secret',
+      'file:\\/\\/\\/Users\\/alice\\/private\\/payload.json x-amz-signature=aws-query-secret client_secret=client-secret-value',
+      '-----BEGIN PRIVATE KEY-----\nPRIVATE-KEY-SECRET\n-----END PRIVATE KEY-----'
+    ].join('\n');
     await fs.writeFile(workerScript, [
-      "process.stderr.write('/home/user/PostMeter Authorization: Bearer abcdefghijklmnopqrstuvwxyz authorization_code=auth-code-secret code_verifier=code-verifier-secret');",
+      `process.stderr.write(${JSON.stringify(stderrText)});`,
       'process.on("message", () => {});',
       'setInterval(() => {}, 1000);'
     ].join('\n'));
@@ -635,10 +644,29 @@ test('redacts multi-process load worker stderr before surfacing failure messages
         assert.doesNotMatch(error.message, /abcdefghijklmnopqrstuvwxyz/);
         assert.doesNotMatch(error.message, /auth-code-secret/);
         assert.doesNotMatch(error.message, /code-verifier-secret/);
+        assert.doesNotMatch(error.message, /digest-user/);
+        assert.doesNotMatch(error.message, /digest-realm/);
+        assert.doesNotMatch(error.message, /digest-response-secret/);
+        assert.doesNotMatch(error.message, /standalone-digest-user/);
+        assert.doesNotMatch(error.message, /standalone-digest-realm/);
+        assert.doesNotMatch(error.message, /standalone-digest-response/);
+        assert.doesNotMatch(error.message, /raw-body-preview-secret/);
+        assert.doesNotMatch(error.message, /raw-response-preview-secret/);
+        assert.doesNotMatch(error.message, /plain\.example\.test/);
+        assert.doesNotMatch(error.message, /url-token-secret/);
+        assert.doesNotMatch(error.message, /aws-url-signature/);
+        assert.doesNotMatch(error.message, /Users\\\/alice/);
+        assert.doesNotMatch(error.message, /aws-query-secret/);
+        assert.doesNotMatch(error.message, /client-secret-value/);
+        assert.doesNotMatch(error.message, /PRIVATE-KEY-SECRET/);
         assert.match(error.message, /\[path\]/);
-        assert.match(error.message, /Bearer \[redacted\]/);
+        assert.match(error.message, /\[url\]/);
+        assert.match(error.message, /\[redacted-auth\]/);
+        assert.match(error.message, /\[redacted-private-key\]/);
         assert.match(error.message, /authorization_code=\[redacted\]/);
         assert.match(error.message, /code_verifier=\[redacted\]/);
+        assert.match(error.message, /requestBodyText \[omitted:bodies\]/);
+        assert.match(error.message, /responseText \[omitted:bodies\]/);
         return true;
       }
     );

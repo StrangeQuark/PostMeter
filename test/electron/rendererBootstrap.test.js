@@ -92,6 +92,7 @@ test('renderer bootstrap closes toolbar menus and resets trigger aria state', ()
 test('renderer accessibility source keeps splitters body editor and toolbar save recovery wired', async () => {
   const root = path.join(__dirname, '..', '..');
   const indexSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'index.html'), 'utf8');
+  const chromeSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'chrome.css'), 'utf8');
   const layoutSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'layoutControls.js'), 'utf8');
   const bootstrapSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'rendererBootstrap.js'), 'utf8');
   const rendererSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'renderer.js'), 'utf8');
@@ -110,6 +111,23 @@ test('renderer accessibility source keeps splitters body editor and toolbar save
   assert.match(rendererSource, /Workspace Save Failed/);
   assert.match(rendererSource, /const previousSettings = structuredClone\(workspace\.settings\)/);
   assert.match(rendererSource, /workspace\.settings = previousSettings/);
+  assert.match(indexSource, /<fieldset class="workspace-diagnostics-panel" aria-describedby="diagnosticsPrivacySummary diagnosticsSensitiveWarning">/);
+  for (const id of [
+    'diagnosticLogUrlsInput',
+    'diagnosticLogHeadersInput',
+    'diagnosticLogCookiesInput',
+    'diagnosticLogBodiesInput',
+    'diagnosticLogProtocolMessagesInput',
+    'diagnosticLogScriptConsoleInput',
+    'diagnosticLogPayloadIdentifiersInput',
+    'exportDiagnosticsButton'
+  ]) {
+    assert.match(indexSource, new RegExp(`id="${id}"[^>]+aria-describedby="diagnosticsSensitiveWarning"`));
+  }
+  assert.match(chromeSource, /\.workspace-diagnostics-panel/);
+  assert.match(rendererSource, /pendingDiagnosticsSettingsSave/);
+  assert.match(rendererSource, /Switch to this workspace before exporting local diagnostics/);
+  assert.match(rendererSource, /Saving diagnostics privacy settings before export/);
 });
 
 test('renderer bootstrap binds auth input and modal draft confirmation events', () => {
@@ -398,6 +416,49 @@ test('renderer bootstrap binds workspace sandbox control buttons', () => {
   assert.deepEqual(calls, controls.map(([, label]) => label));
 });
 
+test('renderer bootstrap binds diagnostics privacy controls and export button', () => {
+  const changes = [];
+  const exports = [];
+  const diagnosticControlIds = [
+    'diagnosticLoggingEnabledInput',
+    'diagnosticLogLevelSelect',
+    'diagnosticLogUrlsInput',
+    'diagnosticLogHeadersInput',
+    'diagnosticLogCookiesInput',
+    'diagnosticLogBodiesInput',
+    'diagnosticLogProtocolMessagesInput',
+    'diagnosticLogScriptConsoleInput',
+    'diagnosticLogPayloadIdentifiersInput'
+  ];
+  const elements = new Map([
+    ...diagnosticControlIds.map((id) => [id, createElement({ tagName: id === 'diagnosticLogLevelSelect' ? 'SELECT' : 'INPUT' })]),
+    ['exportDiagnosticsButton', createElement()]
+  ]);
+
+  bindUi({
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} },
+    onDiagnosticsSettingsChange: (event) => changes.push(event.target),
+    onExportDiagnostics: () => exports.push('export')
+  });
+
+  for (const id of diagnosticControlIds) {
+    elements.get(id).dispatch('change');
+  }
+  elements.get('exportDiagnosticsButton').dispatch('click');
+
+  assert.equal(changes.length, diagnosticControlIds.length);
+  assert.deepEqual(exports, ['export']);
+});
+
 test('renderer bootstrap binds vault prompt decision buttons', () => {
   const decisions = [];
   const controls = [
@@ -446,7 +507,9 @@ test('renderer supplies handlers for all workspace sandbox controls', () => {
     'onRefreshSandboxFiles',
     'onBindVaultSecret',
     'onRefreshVaultMetadata',
-    'onResetVault'
+    'onResetVault',
+    'onDiagnosticsSettingsChange',
+    'onExportDiagnostics'
   ]) {
     assert.match(rendererSource, new RegExp(`${optionName}:`), `${optionName} should be passed to bindUi`);
   }

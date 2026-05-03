@@ -28,7 +28,8 @@ function createVaultPrompt(options = {}) {
   const {
     dialog,
     getMainWindow = () => undefined,
-    persistDecision = async () => {}
+    persistDecision = async () => {},
+    recordDiagnosticEvent = async () => {}
   } = options;
   return async function promptForVaultAccess(payload = {}) {
     const safePayload = safePromptPayload(payload);
@@ -44,6 +45,17 @@ function createVaultPrompt(options = {}) {
     if (normalizedDecision.granted || normalizedDecision.reset === true) {
       await persistDecision(normalizedDecision, safePayload);
     }
+    await recordDiagnosticEvent({
+      type: normalizedDecision.granted ? 'vault.prompt.granted' : 'vault.prompt.denied',
+      level: normalizedDecision.granted ? 'info' : 'warn',
+      outcome: normalizedDecision.granted ? 'completed' : 'denied',
+      failureCode: normalizedDecision.granted ? undefined : 'vault_prompt_denied',
+      fields: {
+        operation: safePayload.operation,
+        reset: normalizedDecision.reset === true,
+        scope: normalizedDecision.scope
+      }
+    });
     return normalizedDecision;
   };
 }

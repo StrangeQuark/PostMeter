@@ -1,9 +1,11 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { registerSandboxPackageIpc } = require('../../electron/sandboxPackageIpc');
+const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../src/core/diagnostics');
 
 test('sandbox package IPC registers parent-side package fetch channel', async () => {
   const handlers = new Map();
+  const events = [];
   let requested = null;
   registerSandboxPackageIpc({
     fetchPackageForReview: async (specifier, options) => {
@@ -30,6 +32,9 @@ test('sandbox package IPC registers parent-side package fetch channel', async ()
       handle(channel, handler) {
         handlers.set(channel, handler);
       }
+    },
+    recordDiagnosticEvent: async (event) => {
+      events.push(sanitizeDiagnosticEvent(event, defaultDiagnosticsSettings()));
     }
   });
 
@@ -61,4 +66,36 @@ test('sandbox package IPC registers parent-side package fetch channel', async ()
     sourceUrl: 'https://registry.npmjs.org/@postmeter/tools/-/tools-1.0.0.tgz',
     specifier: 'npm:@postmeter/tools@1.0.0'
   });
+  assert.deepEqual(events.map((event) => event.type), ['sandbox.package.fetch.completed']);
+  assert.equal(events[0].fields.registry, 'npm');
+  assert.equal(events[0].fields.fileCount, 1);
+});
+
+test('sandbox package IPC emits diagnostic events for fetch failures', async () => {
+  const handlers = new Map();
+  const events = [];
+  registerSandboxPackageIpc({
+    fetchPackageForReview: async () => {
+      throw new Error('fetch failed with accessToken=package-token');
+    },
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    },
+    recordDiagnosticEvent: async (event) => {
+      events.push(sanitizeDiagnosticEvent(event, defaultDiagnosticsSettings()));
+    }
+  });
+
+  await assert.rejects(
+    () => handlers.get('sandbox-package:fetch')({}, '@team/package', {}),
+    /fetch failed/
+  );
+
+  assert.deepEqual(events.map((event) => event.type), ['sandbox.package.fetch.failed']);
+  assert.equal(events[0].failureCode, 'sandbox_package_fetch_failed');
+  assert.equal(events[0].fields.registry, 'team');
+  assert.equal(events[0].fields.error, 'fetch failed with accessToken=[redacted]');
+  assert.doesNotMatch(JSON.stringify(events[0]), /package-token/);
 });

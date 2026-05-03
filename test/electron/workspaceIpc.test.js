@@ -7,6 +7,7 @@ const {
   validateDialogFilePath
 } = require('../../electron/fileDialogs');
 const { registerWorkspaceIpc } = require('../../electron/workspaceIpc');
+const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../src/core/diagnostics');
 
 test('file dialog helpers validate selected paths before IPC file operations', () => {
   assert.deepEqual(collectionImportFilters(), [
@@ -131,13 +132,123 @@ test('workspace IPC registers stable workspace, collection, and example channels
   assert.deepEqual(await handlers.get('collection:import')(), { cancelled: true });
 });
 
+test('workspace IPC emits structured diagnostic events for import outcomes', async () => {
+  const handlers = new Map();
+  const events = [];
+  const dialogPaths = ['/tmp/workspace.postmeter.json', '/tmp/collection.json'];
+  const workspace = { schemaVersion: 11, collections: [], environments: [], history: [], cookies: [], settings: { updates: { includePrereleases: false } } };
+  registerWorkspaceIpc({
+    dialog: {
+      showOpenDialog: async () => ({ canceled: false, filePaths: [dialogPaths.shift()] }),
+      showSaveDialog: async () => ({ canceled: true })
+    },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => workspace,
+    getWorkspaceStore: () => ({
+      importWorkspace: async () => 'Imported Workspace.json',
+      describeCurrent: async (currentWorkspace, extras = {}) => ({
+        workspace: currentWorkspace,
+        path: '/tmp/Local Workspace.json',
+        activeWorkspaceId: 'Local Workspace.json',
+        workspaces: [{ id: 'Local Workspace.json', name: 'Local Workspace', path: '/tmp/Local Workspace.json', current: true, deletable: false }],
+        ...extras
+      }),
+      importCollection: async () => ({
+        id: 'c1',
+        name: 'Imported',
+        requests: [{ id: 'r1', name: 'Request', url: 'https://api.example.test' }],
+        folders: []
+      })
+    }),
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      },
+      on() {}
+    },
+    recordDiagnosticEvent: async (event) => {
+      events.push(event);
+    },
+    refreshApplicationMenu: () => {},
+    saveWorkspace: async (nextWorkspace) => nextWorkspace,
+    saveWorkspaceSync: (nextWorkspace) => nextWorkspace,
+    setWorkspace: () => {}
+  });
+
+  await handlers.get('workspace:import')();
+  await handlers.get('collection:import')();
+
+  assert.deepEqual(events.map((event) => event.type), [
+    'workspace.import.completed',
+    'collection.import.completed'
+  ]);
+  assert.equal(events[1].fields.requestCount, 1);
+});
+
+test('workspace IPC emits sanitized diagnostic events for import failures', async () => {
+  const handlers = new Map();
+  const events = [];
+  const dialogPaths = ['/workspace/customer-workspace.postmeter.json', '/nix/store/customer-collection.json'];
+  const workspace = { schemaVersion: 11, collections: [], environments: [], history: [], cookies: [], settings: { updates: { includePrereleases: false } } };
+  registerWorkspaceIpc({
+    dialog: {
+      showOpenDialog: async () => ({ canceled: false, filePaths: [dialogPaths.shift()] }),
+      showSaveDialog: async () => ({ canceled: true })
+    },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => workspace,
+    getWorkspaceStore: () => ({
+      importWorkspace: async () => {
+        throw new Error('workspace import failed /workspace/customer-workspace.postmeter.json Authorization: Bearer workspace-token body=workspace-body');
+      },
+      importCollection: async () => {
+        throw new Error('collection import failed /nix/store/customer-collection.json access_token=collection-token body=collection-body');
+      }
+    }),
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      },
+      on() {}
+    },
+    recordDiagnosticEvent: async (event) => {
+      events.push(sanitizeDiagnosticEvent(event, defaultDiagnosticsSettings()));
+    },
+    refreshApplicationMenu: () => {},
+    saveWorkspace: async (nextWorkspace) => nextWorkspace,
+    saveWorkspaceSync: (nextWorkspace) => nextWorkspace,
+    setWorkspace: () => {}
+  });
+
+  await assert.rejects(() => handlers.get('workspace:import')(), /workspace import failed/);
+  await assert.rejects(() => handlers.get('collection:import')(), /collection import failed/);
+
+  assert.deepEqual(events.map((event) => event.type), [
+    'workspace.import.failed',
+    'collection.import.failed'
+  ]);
+  assert.equal(events[0].failureCode, 'workspace_import_failed');
+  assert.equal(events[1].failureCode, 'collection_import_failed');
+  const serialized = JSON.stringify(events);
+  assert.doesNotMatch(serialized, /workspace-token|collection-token|workspace-body|collection-body|\/workspace\/customer|\/nix\/store/);
+  assert.match(serialized, /\[path\]/);
+  assert.match(serialized, /\[redacted/);
+});
+
 test('workspace IPC load falls back to the workspace store when no cached workspace is available', async () => {
   const handlers = new Map();
   const syncHandlers = new Map();
   const loadedWorkspace = {
     schemaVersion: 11,
-    collections: [],
-    environments: [],
+    collections: [{
+      id: 'collection-1',
+      name: 'Collection',
+      requests: [{ id: 'request-1', name: 'Request', method: 'GET', url: 'https://example.test', queryParams: [], headers: [], bodyType: 'NONE' }],
+      folders: []
+    }],
+    environments: [{ id: 'environment-1', name: 'Environment', variables: [] }],
     history: [],
     cookies: [],
     settings: { updates: { includePrereleases: false } }
@@ -431,8 +542,13 @@ test('workspace IPC suggests collection filenames, filters, and formats for ever
 function emptyWorkspace() {
   return {
     schemaVersion: 11,
-    collections: [],
-    environments: [],
+    collections: [{
+      id: 'collection-1',
+      name: 'Collection',
+      requests: [{ id: 'request-1', name: 'Request', method: 'GET', url: 'https://example.test', queryParams: [], headers: [], bodyType: 'NONE' }],
+      folders: []
+    }],
+    environments: [{ id: 'environment-1', name: 'Environment', variables: [] }],
     globals: [],
     history: [],
     cookies: [],
@@ -493,8 +609,13 @@ test('workspace IPC imports a workspace as an additional managed workspace witho
   let refreshCalls = 0;
   const currentWorkspace = {
     schemaVersion: 11,
-    collections: [],
-    environments: [],
+    collections: [{
+      id: 'collection-1',
+      name: 'Collection',
+      requests: [{ id: 'request-1', name: 'Request', method: 'GET', url: 'https://example.test', queryParams: [], headers: [], bodyType: 'NONE' }],
+      folders: []
+    }],
+    environments: [{ id: 'environment-1', name: 'Environment', variables: [] }],
     history: [],
     cookies: [],
     settings: { updates: { includePrereleases: false } }
@@ -763,10 +884,17 @@ test('workspace IPC saves only workspace settings through targeted settings save
 
   const result = await handlers.get('workspace:saveSettings')(null, {
     appearance: { theme: 'dark' },
+    diagnostics: {
+      logging: { enabled: true, level: 'warn' },
+      requestResponseLogging: { urls: true }
+    },
     updates: { includePrereleases: true }
   });
 
   assert.equal(savedWorkspace.settings.appearance.theme, 'dark');
+  assert.equal(savedWorkspace.settings.diagnostics.logging.level, 'warn');
+  assert.equal(savedWorkspace.settings.diagnostics.requestResponseLogging.urls, true);
+  assert.equal(savedWorkspace.settings.diagnostics.requestResponseLogging.bodies, false);
   assert.equal(savedWorkspace.settings.updates.includePrereleases, true);
   assert.equal(savedWorkspace.collections[0].id, 'collection-1');
   assert.equal(appliedWorkspace.environments[0].id, 'environment-1');
@@ -775,6 +903,102 @@ test('workspace IPC saves only workspace settings through targeted settings save
     settings: appliedWorkspace.settings
   });
   assert.equal(syncHandlers.has('workspace:saveSync'), true);
+});
+
+test('workspace IPC partial settings saves preserve diagnostics privacy choices', async () => {
+  const handlers = new Map();
+  let savedWorkspace = null;
+  const currentWorkspace = {
+    schemaVersion: 11,
+    collections: [{
+      id: 'collection-1',
+      name: 'Collection',
+      requests: [{ id: 'request-1', name: 'Request', method: 'GET', url: 'https://example.test', queryParams: [], headers: [], bodyType: 'NONE' }],
+      folders: []
+    }],
+    environments: [{ id: 'environment-1', name: 'Environment', variables: [] }],
+    history: [],
+    cookies: [],
+    settings: {
+      appearance: { theme: 'dark' },
+      diagnostics: {
+        logging: { enabled: false, level: 'error' },
+        requestResponseLogging: {
+          urls: true,
+          headers: false,
+          cookies: false,
+          bodies: false,
+          protocolMessages: false,
+          scriptConsole: false,
+          payloadIdentifiers: false
+        }
+      },
+      sandbox: {
+        trustedCapabilities: { sendRequest: false, cookies: false, vault: true },
+        fileBindings: [{ source: 'upload.bin', localPath: '/tmp/upload.bin' }],
+        packageCache: []
+      },
+      updates: { includePrereleases: true }
+    }
+  };
+
+  registerWorkspaceIpc({
+    dialog: {
+      showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+      showSaveDialog: async () => ({ canceled: true })
+    },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => currentWorkspace,
+    getWorkspaceStore: () => ({
+      describeCurrent: async (workspace) => ({ workspace, path: '/tmp/Local Workspace.json', activeWorkspaceId: 'Local Workspace.json', workspaces: [] })
+    }),
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      },
+      on() {}
+    },
+    refreshApplicationMenu: () => {},
+    saveWorkspace: async (workspace) => {
+      savedWorkspace = workspace;
+      return workspace;
+    },
+    saveWorkspaceSync: (workspace) => workspace,
+    setWorkspace: () => {}
+  });
+
+  const result = await handlers.get('workspace:saveSettings')(null, {
+    appearance: { theme: 'light' }
+  });
+
+  assert.equal(savedWorkspace.settings.appearance.theme, 'light');
+  assert.equal(savedWorkspace.settings.diagnostics.logging.enabled, false);
+  assert.equal(savedWorkspace.settings.diagnostics.logging.level, 'error');
+  assert.equal(savedWorkspace.settings.diagnostics.requestResponseLogging.urls, true);
+  assert.equal(savedWorkspace.settings.sandbox.trustedCapabilities.sendRequest, false);
+  assert.equal(savedWorkspace.settings.sandbox.trustedCapabilities.cookies, false);
+  assert.equal(savedWorkspace.settings.sandbox.trustedCapabilities.vault, true);
+  assert.equal(savedWorkspace.settings.sandbox.fileBindings.length, 1);
+  assert.equal(savedWorkspace.settings.updates.includePrereleases, true);
+  assert.deepEqual(result, { settings: savedWorkspace.settings });
+
+  await handlers.get('workspace:saveEnvironment')(null, {
+    environmentId: 'environment-1',
+    environment: { id: 'environment-1', name: 'Environment', variables: [] },
+    settings: { appearance: { theme: 'dark' } }
+  });
+  assert.equal(savedWorkspace.settings.diagnostics.logging.enabled, false);
+  assert.equal(savedWorkspace.settings.diagnostics.requestResponseLogging.urls, true);
+
+  await handlers.get('workspace:saveRequest')(null, {
+    collectionId: 'collection-1',
+    requestId: 'request-1',
+    request: { id: 'request-1', name: 'Request', method: 'GET', url: 'https://example.test', queryParams: [], headers: [], bodyType: 'NONE' },
+    settings: { appearance: { theme: 'system' } }
+  });
+  assert.equal(savedWorkspace.settings.diagnostics.logging.enabled, false);
+  assert.equal(savedWorkspace.settings.diagnostics.requestResponseLogging.urls, true);
 });
 
 test('workspace IPC rejects malformed sandbox settings before persistence', async () => {
@@ -814,6 +1038,12 @@ test('workspace IPC rejects malformed sandbox settings before persistence', asyn
     setWorkspace: () => {}
   });
 
+  await assert.rejects(
+    () => handlers.get('workspace:saveSettings')(null, {
+      diagnostics: { requestResponseLogging: { bodies: 'yes' } }
+    }),
+    /settings.diagnostics.requestResponseLogging.bodies must be a boolean/
+  );
   await assert.rejects(
     () => handlers.get('workspace:saveSettings')(null, {
       sandbox: { fileBindings: [{ source: 'fixtures/upload.txt' }] }

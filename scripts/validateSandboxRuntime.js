@@ -1,24 +1,27 @@
 #!/usr/bin/env node
 
-const { spawnWithTimeout } = require('./smokeProcess');
+const path = require('node:path');
+const { redactSmokeOutputText, spawnWithTimeout } = require('./smokeProcess');
 
 const DEFAULT_TIMEOUT_MILLIS = 30_000;
 
-if (process.env.POSTMETER_SANDBOX_RUNTIME_CHILD === '1') {
-  const { validateSandboxRuntime } = require('../src/core/sandboxRuntimeValidation');
-  validateSandboxRuntime()
-    .then(() => {
-      console.log('PostMeter sandbox runtime validation passed.');
-    })
-    .catch((error) => {
-      console.error(error.message || String(error));
+if (require.main === module) {
+  if (process.env.POSTMETER_SANDBOX_RUNTIME_CHILD === '1') {
+    const { validateSandboxRuntime } = require('../src/core/sandboxRuntimeValidation');
+    validateSandboxRuntime()
+      .then(() => {
+        console.log('PostMeter sandbox runtime validation passed.');
+      })
+      .catch((error) => {
+        console.error(redactForOutput(error.message || String(error)));
+        process.exit(1);
+      });
+  } else {
+    runParent().catch((error) => {
+      console.error(redactForOutput(error.stack || error.message || String(error)));
       process.exit(1);
     });
-} else {
-  runParent().catch((error) => {
-    console.error(error.stack || error.message || String(error));
-    process.exit(1);
-  });
+  }
 }
 
 async function runParent() {
@@ -36,12 +39,22 @@ async function runParent() {
     timeoutMessage: `Sandbox runtime validation timed out after ${validationTimeoutMillis(process.env.POSTMETER_SANDBOX_VALIDATE_TIMEOUT_MS)} ms.`
   });
   if (result.stdout) {
-    process.stdout.write(result.stdout);
+    process.stdout.write(redactForOutput(result.stdout, electronPath));
   }
   if (result.stderr) {
-    process.stderr.write(result.stderr.endsWith('\n') ? result.stderr : `${result.stderr}\n`);
+    const redactedStderr = redactForOutput(result.stderr, electronPath);
+    process.stderr.write(redactedStderr.endsWith('\n') ? redactedStderr : `${redactedStderr}\n`);
   }
   process.exit(result.code ?? 1);
+}
+
+function redactForOutput(value, executablePath = '') {
+  const extraPaths = [process.cwd(), __dirname];
+  if (executablePath) {
+    const resolvedPath = path.resolve(executablePath);
+    extraPaths.push(resolvedPath, path.dirname(resolvedPath));
+  }
+  return redactSmokeOutputText(String(value || ''), extraPaths);
 }
 
 function validationTimeoutMillis(value) {
@@ -51,3 +64,8 @@ function validationTimeoutMillis(value) {
   }
   return Math.max(1_000, Math.floor(timeout));
 }
+
+module.exports = {
+  redactForOutput,
+  validationTimeoutMillis
+};

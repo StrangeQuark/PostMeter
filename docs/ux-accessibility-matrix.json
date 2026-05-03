@@ -90,7 +90,7 @@
     {
       "id": "coverage.failure-artifacts",
       "area": "UI coverage",
-      "target": "Startup and UI smoke failures can write timeout-bounded screenshot, redacted structural DOM-state, and redacted failure-log artifacts for CI upload through POSTMETER_VALIDATION_ARTIFACT_DIR or POSTMETER_UI_SMOKE_ARTIFACT_DIR; source UI, packaged smoke launcher, packaged sandbox-validation stdout/stderr/stacks, and multi-process load-worker stderr previews redact local paths plus Bearer/Basic/Digest/Hawk/Token/OAuth/NTLM/Negotiate auth-shaped values and OAuth code/verifier/assertion fields; smoke child processes fail closed with exit code 124 on timeout.",
+      "target": "Startup and UI smoke failures can write timeout-bounded screenshot, redacted structural DOM-state including active-element ARIA metadata, and redacted failure-log artifacts for CI upload through POSTMETER_VALIDATION_ARTIFACT_DIR or POSTMETER_UI_SMOKE_ARTIFACT_DIR; source UI, packaged smoke launcher, packaged sandbox-validation stdout/stderr/stacks, and multi-process load-worker stderr previews use the shared diagnostics redactor for local paths, private keys, request/response alias values, JSON-escaped slash URLs/file URLs, Bearer/Basic/Digest/Hawk/Token/OAuth/NTLM/Negotiate auth-shaped values, JSON-escaped/double-escaped/nested-JSON camelCase auth-header aliases, and OAuth code/verifier/assertion fields; smoke child processes fail closed with exit code 124 on timeout.",
       "status": "implemented",
       "evidenceRefs": [
         "electron/main.js",
@@ -134,17 +134,23 @@
     {
       "id": "workflow.diagnostics-export",
       "area": "Diagnostics export",
-      "target": "Full local diagnostic bundle export is intentionally owned by the diagnostics/privacy production step; current UX docs point users to review-before-sharing manual artifacts without claiming automated bundle export.",
-      "status": "deferred",
+      "target": "Workspace diagnostics controls and Help menu export produce a user-selected local diagnostic bundle with visible review-before-sharing messaging and off-by-default request/response logging categories.",
+      "status": "implemented",
       "evidenceRefs": [
-        "NEXT_STEPS.MD",
-        "docs/RELEASE_READINESS.md",
+        "src/renderer/index.html",
+        "src/renderer/renderer.js",
+        "src/renderer/rendererBootstrap.js",
+        "electron/appMenu.js",
+        "electron/diagnosticsIpc.js",
         "docs/TROUBLESHOOTING.md"
       ],
       "tests": [
-        "npm run production:readiness:validate"
+        "npm run diagnostics:privacy:validate",
+        "test/electron/diagnosticsIpc.test.js",
+        "test/electron/rendererBootstrap.test.js",
+        "npm run test:ui:regression"
       ],
-      "notes": "Step 12 remains the release-blocking diagnostics/privacy implementation."
+      "notes": "The diagnostics/privacy matrix owns the strict redaction and no-telemetry proof; this UX row owns the visible controls and export path."
     },
     {
       "id": "workflow.file-bindings",

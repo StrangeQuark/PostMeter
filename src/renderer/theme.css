@@ -176,7 +176,7 @@
   input:focus,
   select:focus,
   textarea:focus,
-  button:focus-visible {
+  button:focus {
     outline: 2px solid Highlight;
     outline-offset: 2px;
     box-shadow: none;

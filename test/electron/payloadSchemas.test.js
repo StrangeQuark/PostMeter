@@ -32,6 +32,8 @@ test('defines shared payload schema metadata for IPC and contributors', () => {
   assert.ok(ASSERTION_OPERATORS.includes('lessThan'));
   assert.equal(payloadSchemas.fields.keyValue.value.limit, 'value');
   assert.equal(payloadSchemas.fields.appearance.theme.enum, 'themeValues');
+  assert.equal(payloadSchemas.fields.diagnosticsLogging.level.enum, 'diagnosticLogLevels');
+  assert.equal(payloadSchemas.fields.requestResponseLoggingSettings.bodies.type, 'boolean');
   assert.equal(payloadSchemas.fields.cookie.sameSite.enum, 'sameSiteValues');
   assert.equal(payloadSchemas.fields.cookie.priority.enum, 'cookiePriorities');
   assert.equal(payloadSchemas.fields.cookie.source.limit, 'short');
@@ -65,6 +67,7 @@ test('defines shared payload schema metadata for IPC and contributors', () => {
   assert.equal(payloadSchemas.entities.request.nested[0], 'auth');
   assert.equal(payloadSchemas.auth.oauth2GrantTypes[0], 'authorizationCode');
   assert.deepEqual(payloadSchemas.load.executionModes, ['singleProcess', 'multiProcess']);
+  assert.deepEqual(payloadSchemas.enums.diagnosticLogLevels, ['debug', 'info', 'warn', 'error']);
   assert.deepEqual(payloadSchemas.enums.sameSiteValues, ['', 'Lax', 'Strict', 'None']);
   assert.equal(payloadSchemas.limits.url, 8192);
 });

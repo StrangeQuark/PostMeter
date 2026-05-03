@@ -49,6 +49,7 @@ function registerWorkspaceIpc(options = {}) {
       return workspace;
     },
     queueWorkspaceOperation = async (operation) => operation(),
+    recordDiagnosticEvent = async () => {},
     refreshApplicationMenu,
     renameVaultStore = async () => {},
     saveWorkspace,
@@ -224,20 +225,37 @@ function registerWorkspaceIpc(options = {}) {
   });
 
   ipcMain.handle('workspace:import', async () => {
-    const result = await dialog.showOpenDialog(getMainWindow(), {
-      title: 'Import PostMeter Workspace',
-      properties: ['openFile'],
-      filters: jsonFilters()
-    });
-    const filePath = selectedOpenFilePath(result);
-    if (!filePath) {
-      return fileOperationResult({ cancelled: true });
+    try {
+      const result = await dialog.showOpenDialog(getMainWindow(), {
+        title: 'Import PostMeter Workspace',
+        properties: ['openFile'],
+        filters: jsonFilters()
+      });
+      const filePath = selectedOpenFilePath(result);
+      if (!filePath) {
+        return fileOperationResult({ cancelled: true });
+      }
+      const workspaceStore = getWorkspaceStore();
+      const createdWorkspaceId = await workspaceStore.importWorkspace(filePath);
+      const loaded = await workspaceStore.describeCurrent(getWorkspace(), { createdWorkspaceId });
+      assertWorkspaceLoadResultPayload(loaded);
+      await recordDiagnosticEvent({
+        type: 'workspace.import.completed',
+        level: 'info',
+        outcome: 'completed',
+        fields: { importedWorkspace: true }
+      });
+      return fileOperationResult({ cancelled: false, ...loaded });
+    } catch (error) {
+      await recordDiagnosticEvent({
+        type: 'workspace.import.failed',
+        level: 'error',
+        outcome: 'failed',
+        failureCode: 'workspace_import_failed',
+        fields: { error: error?.message || String(error) }
+      });
+      throw error;
     }
-    const workspaceStore = getWorkspaceStore();
-    const createdWorkspaceId = await workspaceStore.importWorkspace(filePath);
-    const loaded = await workspaceStore.describeCurrent(getWorkspace(), { createdWorkspaceId });
-    assertWorkspaceLoadResultPayload(loaded);
-    return fileOperationResult({ cancelled: false, ...loaded });
   });
 
   ipcMain.handle('workspace:export', async (_event, nextWorkspace, workspaceId) => {
@@ -263,17 +281,37 @@ function registerWorkspaceIpc(options = {}) {
   });
 
   ipcMain.handle('collection:import', async () => {
-    const result = await dialog.showOpenDialog(getMainWindow(), {
-      title: 'Import Collection',
-      properties: ['openFile'],
-      filters: collectionImportFilters()
-    });
-    const filePath = selectedOpenFilePath(result);
-    if (!filePath) {
-      return fileOperationResult({ cancelled: true });
+    try {
+      const result = await dialog.showOpenDialog(getMainWindow(), {
+        title: 'Import Collection',
+        properties: ['openFile'],
+        filters: collectionImportFilters()
+      });
+      const filePath = selectedOpenFilePath(result);
+      if (!filePath) {
+        return fileOperationResult({ cancelled: true });
+      }
+      const collection = await getWorkspaceStore().importCollection(filePath);
+      await recordDiagnosticEvent({
+        type: 'collection.import.completed',
+        level: 'info',
+        outcome: 'completed',
+        fields: {
+          folderCount: countFolders(collection),
+          requestCount: countRequests(collection)
+        }
+      });
+      return fileOperationResult({ cancelled: false, collection });
+    } catch (error) {
+      await recordDiagnosticEvent({
+        type: 'collection.import.failed',
+        level: 'error',
+        outcome: 'failed',
+        failureCode: 'collection_import_failed',
+        fields: { error: error?.message || String(error) }
+      });
+      throw error;
     }
-    const collection = await getWorkspaceStore().importCollection(filePath);
-    return fileOperationResult({ cancelled: false, collection });
   });
 
   ipcMain.handle('collection:export', async (_event, collection, format = 'postmeter') => {
@@ -313,6 +351,22 @@ function registerWorkspaceIpc(options = {}) {
     await writeTextFileAtomic(filePath, JSON.stringify(payload, null, 2), { prefix: 'postmeter-examples-export' });
     return fileOperationResult({ cancelled: false, path: filePath });
   });
+}
+
+function countRequests(collection = {}) {
+  let count = Array.isArray(collection.requests) ? collection.requests.length : 0;
+  for (const folder of collection.folders || []) {
+    count += countRequests(folder);
+  }
+  return count;
+}
+
+function countFolders(collection = {}) {
+  let count = Array.isArray(collection.folders) ? collection.folders.length : 0;
+  for (const folder of collection.folders || []) {
+    count += countFolders(folder);
+  }
+  return count;
 }
 
 async function rollbackWorkspaceRename(workspaceStore, renamedWorkspaceId, originalWorkspaceId) {

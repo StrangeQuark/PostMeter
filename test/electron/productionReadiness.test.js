@@ -63,6 +63,8 @@ test('production readiness matrix tracks release areas and stable-release blocke
   assert.ok(byId.get('dependencies.audit').commands.includes('npm audit --audit-level=high'));
   assert.ok(byId.get('electron.runtime-version').commands.includes('npm run electron:version'));
   assert.equal(byId.get('grpc.pfx-p12-mtls').area, 'transport');
+  assert.equal(byId.get('diagnostics.privacy').status, 'validated');
+  assert.ok(byId.get('diagnostics.privacy').commands.includes('npm run diagnostics:privacy:validate'));
   assert.deepEqual(matrix.releaseLevels, ['beta', 'rc', 'stable']);
   assert.deepEqual(matrix.releasePolicies.beta.allowedReleaseBlockingStatuses, ['implemented', 'validated', 'external-validation-required']);
   assert.equal(matrix.releasePolicies.beta.allowDocumentedWaivers, false);
@@ -78,20 +80,20 @@ test('production readiness matrix tracks release areas and stable-release blocke
   const summary = productionReadinessSummary(matrix);
   assert.equal(summary.releaseLevel, 'stable');
   assert.ok(summary.releaseBlockerCount >= 1);
-  assert.ok(summary.releaseBlockers.includes('diagnostics.privacy'));
+  assert.equal(summary.releaseBlockers.includes('diagnostics.privacy'), false);
   const betaBlockers = productionReadinessBlockers(matrix, 'beta');
   const rcBlockers = productionReadinessBlockers(matrix, 'rc');
   const stableBlockers = productionReadinessBlockers(matrix, 'stable');
-  assert.deepEqual([...new Set(betaBlockers.map((row) => row.status))], ['blocked']);
+  assert.deepEqual(betaBlockers, []);
   assert.ok(betaBlockers.length < rcBlockers.length);
   assert.equal(rcBlockers.length, stableBlockers.length);
-  for (const validatedGateRow of ['release.dashboard', 'dependencies.audit', 'electron.runtime-version']) {
+  for (const validatedGateRow of ['release.dashboard', 'dependencies.audit', 'electron.runtime-version', 'diagnostics.privacy']) {
     assert.equal(stableBlockers.some((row) => row.id === validatedGateRow), false);
   }
 
   const waivedMatrix = {
     ...matrix,
-    rows: matrix.rows.map((row) => row.id === 'diagnostics.privacy'
+    rows: matrix.rows.map((row) => row.id === 'oauth.live-certification'
       ? {
           ...row,
           waiver: {
@@ -102,11 +104,11 @@ test('production readiness matrix tracks release areas and stable-release blocke
         }
       : row)
   };
-  const waivedDiagnostics = waivedMatrix.rows.find((row) => row.id === 'diagnostics.privacy');
-  assert.equal(rowWaivedForReleaseLevel(waivedDiagnostics, 'rc'), true);
-  assert.equal(rowWaivedForReleaseLevel(waivedDiagnostics, 'stable'), false);
-  assert.equal(rowWaivedForReleaseLevel({ ...waivedDiagnostics, waiver: { ...waivedDiagnostics.waiver, reason: '' } }, 'rc'), false);
-  assert.equal(rowWaivedForReleaseLevel({ ...waivedDiagnostics, waiver: { ...waivedDiagnostics.waiver, docs: [null] } }, 'rc'), false);
+  const waivedOauth = waivedMatrix.rows.find((row) => row.id === 'oauth.live-certification');
+  assert.equal(rowWaivedForReleaseLevel(waivedOauth, 'rc'), true);
+  assert.equal(rowWaivedForReleaseLevel(waivedOauth, 'stable'), false);
+  assert.equal(rowWaivedForReleaseLevel({ ...waivedOauth, waiver: { ...waivedOauth.waiver, reason: '' } }, 'rc'), false);
+  assert.equal(rowWaivedForReleaseLevel({ ...waivedOauth, waiver: { ...waivedOauth.waiver, docs: [null] } }, 'rc'), false);
   assert.ok(productionReadinessBlockers(waivedMatrix, 'rc').length < productionReadinessBlockers(waivedMatrix, 'stable').length);
 });
 
@@ -129,7 +131,8 @@ test('production readiness matrix references real local evidence and required lo
     'npm run dist:mac',
     'npm run oauth:certify:validate',
     'npm run oauth:certify:mock',
-    'npm run oauth:certify:live'
+    'npm run oauth:certify:live',
+    'npm run diagnostics:privacy:validate'
   ]) {
     assert.ok(commands.has(command), `Readiness matrix does not reference ${command}`);
   }
@@ -251,8 +254,8 @@ test('committed production readiness matrix is fresh', async () => {
   assert.equal(result.ok, true);
 });
 
-test('production support matrices cover Electron security, workspace durability, non-Postman compatibility, and UX accessibility', () => {
-  for (const name of ['electron-security', 'workspace-durability', 'non-postman-compatibility', 'ux-accessibility']) {
+test('production support matrices cover Electron security, workspace durability, non-Postman compatibility, UX accessibility, and diagnostics privacy', () => {
+  for (const name of ['electron-security', 'workspace-durability', 'non-postman-compatibility', 'ux-accessibility', 'diagnostics-privacy']) {
     const matrix = buildMatrix(name);
     assert.deepEqual(validateMatrix(matrix, name), []);
     assert.ok(matrix.rows.length >= 6, `${name} should cover multiple release concerns`);
@@ -301,6 +304,25 @@ test('UX accessibility matrix keeps every Step 11 required row enumerated', () =
     'workflow.update-check',
     'workflow.vault-prompts',
     'workflow.workspace-management'
+  ]);
+});
+
+test('diagnostics privacy matrix keeps every Step 12 required row enumerated', () => {
+  const matrix = buildMatrix('diagnostics-privacy');
+  const ids = new Set(matrix.rows.map((row) => row.id));
+  assert.deepEqual(validateMatrix(matrix, 'diagnostics-privacy'), []);
+  assert.deepEqual([...ids].sort(), [
+    'bundle.no-telemetry',
+    'bundle.sanitized-export',
+    'ipc.diagnostics-export',
+    'logging.event-coverage',
+    'logging.local-structured-rotation',
+    'privacy.default-deny-request-response',
+    'privacy.import-reset',
+    'privacy.redaction-engine',
+    'privacy.settings-validation',
+    'release.matrix-validation',
+    'ui.workspace-controls'
   ]);
 });
 

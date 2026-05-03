@@ -58,6 +58,9 @@ jobs:
       - name: UX accessibility matrix validation
         run: npm run ux:accessibility:validate
 
+      - name: Diagnostics privacy matrix validation
+        run: npm run diagnostics:privacy:validate
+
       - name: Sandbox release gate manifest
         run: npm run release:gate
 
@@ -176,7 +179,7 @@ jobs:
         run: npm run sandbox:platform:validate
 
       - name: Validate production support matrices
-        run: npm run oauth:certify:validate && npm run oauth:certify:mock && npm run production:readiness:validate && npm run electron:security:validate && npm run workspace:durability:validate && npm run compatibility:non-postman:validate && npm run ux:accessibility:validate
+        run: npm run oauth:certify:validate && npm run oauth:certify:mock && npm run production:readiness:validate && npm run electron:security:validate && npm run workspace:durability:validate && npm run compatibility:non-postman:validate && npm run ux:accessibility:validate && npm run diagnostics:privacy:validate
 
       - name: Build unsigned packaged app
         run: ${{ matrix.command }}

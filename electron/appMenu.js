@@ -73,6 +73,10 @@ function createApplicationMenuTemplate(options = {}) {
           label: 'Report Issue',
           click: () => openExternal('https://github.com/StrangeQuark/PostMeter/issues')
         },
+        {
+          label: 'Export Local Diagnostics...',
+          click: () => sendMenuAction('export-diagnostics')
+        },
         { type: 'separator' },
         {
           label: 'Prereleases',

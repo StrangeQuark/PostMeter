@@ -5,17 +5,26 @@ const { app, BrowserWindow, dialog, ipcMain, protocol, safeStorage, shell } = re
 const { WorkspaceRecoveryError } = require('../src/core/workspaceStore');
 const { WorkspaceManager } = require('../src/core/workspaceManager');
 const { EncryptedVaultStore } = require('../src/core/vaultStore');
+const {
+  LocalDiagnosticsLogger,
+  redactText
+} = require('../src/core/diagnostics');
 const { fsyncDirectory, moveFileNoOverwrite } = require('../src/core/workspacePersistence');
 const { registerAppProtocolHandler, registerAppProtocolScheme } = require('./appProtocol');
 const { installApplicationMenu } = require('./appMenu');
-const { registerAppIpc, safeExternalUrl } = require('./appIpc');
+const { registerAppIpc, releaseChannelForVersion, safeExternalUrl } = require('./appIpc');
 const { createTrustedIpcMain } = require('./ipcSecurity');
 const { createOAuthFlowController } = require('./oauthFlows');
 const { createMainWindow, writeStartupSmokeFailureArtifacts } = require('./mainWindow');
+const {
+  startupFailureDiagnosticEvent,
+  workspaceRecoveryDiagnosticEvent
+} = require('./mainDiagnostics');
 const { registerSessionIpc } = require('./sessionIpc');
 const { SessionStore, defaultSessionPath } = require('./sessionStore');
 const { registerRuntimeIpc } = require('./runtimeIpc');
 const { registerSandboxPackageIpc } = require('./sandboxPackageIpc');
+const { registerDiagnosticsIpc } = require('./diagnosticsIpc');
 const { registerWorkspaceIpc } = require('./workspaceIpc');
 const { registerRequestIpc } = require('./requestIpc');
 const { registerOAuthIpc } = require('./oauthIpc');
@@ -38,6 +47,7 @@ let workspace;
 const vaultStores = new Map();
 const trustedIpcMain = createTrustedIpcMain(ipcMain);
 const oauthFlows = createOAuthFlowController({ app, shell, emitProgress: emitOAuthProgress });
+let diagnosticsLogger;
 
 registerAppProtocolScheme(protocol);
 
@@ -46,6 +56,11 @@ if (process.env.POSTMETER_DATA_PATH) {
   require('node:fs').mkdirSync(smokeUserDataPath, { recursive: true });
   app.setPath('userData', smokeUserDataPath);
 }
+
+diagnosticsLogger = new LocalDiagnosticsLogger({
+  logDirectory: path.join(app.getPath('userData'), 'diagnostics', 'logs'),
+  settingsProvider: () => workspace?.settings?.diagnostics || {}
+});
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
@@ -65,7 +80,15 @@ async function runSandboxRuntimeValidation() {
     console.log('PostMeter packaged sandbox runtime validation passed.');
     app.exit(0);
   } catch (error) {
-    console.error(error.message || String(error));
+    const message = error?.message || String(error);
+    await recordDiagnosticEvent({
+      type: 'app.sandbox-runtime-validation.failed',
+      level: 'error',
+      outcome: 'failed',
+      failureCode: 'sandbox_runtime_validation_failed',
+      fields: { error: message }
+    });
+    console.error(redactText(message));
     app.exit(1);
   }
 }
@@ -121,6 +144,7 @@ async function startApplication() {
       if (error instanceof WorkspaceRecoveryError) {
         workspace = error.recoveredWorkspace;
         sessionState = await sessionStore.patch({ activeWorkspaceId: error.activeWorkspaceId || workspaceStore.getWorkspaceId() });
+        await recordDiagnosticEvent(workspaceRecoveryDiagnosticEvent(error));
         dialog.showErrorBox('Workspace Recovered', error.message);
       } else {
         await failStartup(error, 'PostMeter could not open the workspace');
@@ -137,6 +161,7 @@ async function startApplication() {
 async function failStartup(error, title = 'PostMeter could not start') {
   const message = error?.message || String(error);
   await writeStartupSmokeFailureArtifacts(mainWindow, process.env, error);
+  await recordDiagnosticEvent(startupFailureDiagnosticEvent(error, title));
   if (process.env.POSTMETER_STARTUP_SMOKE !== '1' && process.env.POSTMETER_VALIDATE_SANDBOX_RUNTIME !== '1') {
     dialog.showErrorBox(title, message);
   }
@@ -207,6 +232,10 @@ function hasPendingWorkspaceOperations() {
   return pendingWorkspaceOperations > 0;
 }
 
+function waitForPendingWorkspaceOperations() {
+  return workspaceMutationQueue.catch(() => {});
+}
+
 function mutateWorkspace(mutator, options = {}) {
   const expectedWorkspaceId = typeof options.workspaceId === 'string' ? options.workspaceId : '';
   return enqueueWorkspaceOperation(async () => {
@@ -233,6 +262,19 @@ function emitOAuthProgress(id, progress) {
   }
   const payload = { id, ...progress };
   assertOAuthProgressPayload(payload);
+  if (payload.status === 'failed' || payload.status === 'callbackRejected') {
+    void recordDiagnosticEvent({
+      type: 'oauth.progress.failed',
+      level: 'warn',
+      outcome: 'failed',
+      failureCode: `oauth_${String(payload.status || 'failed').toLowerCase()}`,
+      fields: {
+        oauthType: payload.type,
+        status: payload.status,
+        message: payload.message || ''
+      }
+    });
+  }
   mainWindow.webContents.send('oauth:progress', payload);
 }
 
@@ -338,6 +380,12 @@ trustedIpcMain.handle('vault:metadata', async () => {
 trustedIpcMain.handle('vault:reset', async () => {
   const workspaceId = workspaceStore?.getWorkspaceId?.() || '';
   await deleteVaultStore(workspaceId);
+  await recordDiagnosticEvent({
+    type: 'vault.reset.completed',
+    level: 'warn',
+    outcome: 'completed',
+    fields: { workspaceScoped: true }
+  });
   return { ok: true };
 });
 
@@ -345,6 +393,12 @@ trustedIpcMain.handle('vault:bind-secret', async (_event, key, value) => {
   const workspaceId = workspaceStore?.getWorkspaceId?.() || '';
   const store = vaultStoreForWorkspace(workspaceId);
   await store.set(key, value, { requestId: 'workspace-settings', requestName: 'Workspace vault binding' });
+  await recordDiagnosticEvent({
+    type: 'vault.secret.bound',
+    level: 'info',
+    outcome: 'completed',
+    fields: { workspaceScoped: true }
+  });
   return { ok: true };
 });
 
@@ -352,15 +406,36 @@ trustedIpcMain.handle('vault:unset-secret', async (_event, key) => {
   const workspaceId = workspaceStore?.getWorkspaceId?.() || '';
   const store = vaultStoreForWorkspace(workspaceId);
   await store.unset(key, { requestId: 'workspace-settings', requestName: 'Workspace vault binding' });
+  await recordDiagnosticEvent({
+    type: 'vault.secret.removed',
+    level: 'info',
+    outcome: 'completed',
+    fields: { workspaceScoped: true }
+  });
   return { ok: true };
 });
 
 registerVaultPromptIpc({ ipcMain: trustedIpcMain });
-registerAppIpc({ app, ipcMain: trustedIpcMain, shell });
+registerAppIpc({ app, ipcMain: trustedIpcMain, recordDiagnosticEvent, shell });
 
-registerOAuthIpc({ ipcMain: trustedIpcMain, oauthFlows });
+registerOAuthIpc({ ipcMain: trustedIpcMain, oauthFlows, recordDiagnosticEvent });
 
-registerSandboxPackageIpc({ ipcMain: trustedIpcMain });
+registerSandboxPackageIpc({ ipcMain: trustedIpcMain, recordDiagnosticEvent });
+
+registerDiagnosticsIpc({
+  dialog,
+  fileOperationResult,
+  getAppInfo: () => ({
+    name: app.name,
+    releaseChannel: releaseChannelForVersion(app.getVersion()),
+    version: app.getVersion()
+  }),
+  getMainWindow: () => mainWindow,
+  getWorkspace: () => workspace,
+  ipcMain: trustedIpcMain,
+  logger: diagnosticsLogger,
+  waitForPendingWorkspaceOperations
+});
 
 registerSessionIpc({
   getSession: () => sessionState,
@@ -378,9 +453,10 @@ registerRuntimeIpc({
   getWorkspace: () => workspace,
   getWorkspaceId: () => workspaceStore?.getWorkspaceId?.() || '',
   getVaultStore: () => vaultStoreForWorkspace(workspaceStore?.getWorkspaceId?.() || ''),
-  getVaultPrompt: () => createVaultPrompt({ dialog, getMainWindow: () => mainWindow, persistDecision: persistVaultPromptDecision }),
+  getVaultPrompt: () => createVaultPrompt({ dialog, getMainWindow: () => mainWindow, persistDecision: persistVaultPromptDecision, recordDiagnosticEvent }),
   ipcMain: trustedIpcMain,
   mutateWorkspace,
+  recordDiagnosticEvent,
   saveWorkspace,
   setWorkspace: (nextWorkspace) => {
     workspace = nextWorkspace;
@@ -397,6 +473,7 @@ registerWorkspaceIpc({
   hasPendingWorkspaceOperations,
   ipcMain: trustedIpcMain,
   queueWorkspaceOperation: enqueueWorkspaceOperation,
+  recordDiagnosticEvent,
   refreshApplicationMenu,
   renameVaultStore,
   saveWorkspace,
@@ -411,11 +488,24 @@ registerRequestIpc({
   getWorkspace: () => workspace,
   getWorkspaceId: () => workspaceStore?.getWorkspaceId?.() || '',
   getVaultStore: () => vaultStoreForWorkspace(workspaceStore?.getWorkspaceId?.() || ''),
-  getVaultPrompt: () => createVaultPrompt({ dialog, getMainWindow: () => mainWindow, persistDecision: persistVaultPromptDecision }),
+  getVaultPrompt: () => createVaultPrompt({ dialog, getMainWindow: () => mainWindow, persistDecision: persistVaultPromptDecision, recordDiagnosticEvent }),
   ipcMain: trustedIpcMain,
   mutateWorkspace,
+  recordDiagnosticEvent,
   saveWorkspace,
   setWorkspace: (nextWorkspace) => {
     workspace = nextWorkspace;
   }
 });
+
+async function recordDiagnosticEvent(event = {}) {
+  try {
+    return await diagnosticsLogger.log(event);
+  } catch (error) {
+    if (process.env.POSTMETER_STARTUP_SMOKE === '1' || process.env.POSTMETER_VALIDATE_SANDBOX_RUNTIME === '1') {
+      return null;
+    }
+    console.error(redactText(`Diagnostic log write failed: ${error?.message || String(error)}`));
+    return null;
+  }
+}

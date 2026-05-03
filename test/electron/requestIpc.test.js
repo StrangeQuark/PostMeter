@@ -222,6 +222,66 @@ test('request IPC returns pre-request script failures without committing top-lev
   assert.equal(workspace.collections[0].requests[0].variables.find((item) => item.key === 'local').value, 'old-local');
 });
 
+test('request IPC diagnostic events do not include request URLs or bodies by default', async () => {
+  const handlers = new Map();
+  const events = [];
+  const workspace = workspaceModel({
+    collections: [
+      collectionModel({
+        id: 'collection-1',
+        requests: [
+          requestModel({
+            id: 'request-1',
+            method: 'POST',
+            url: 'https://api.example.test/customers?token=request-token',
+            body: 'customer-request-body'
+          })
+        ]
+      })
+    ],
+    environments: [],
+    cookies: [],
+    history: []
+  });
+  const failure = new Error('Pre-request script failed.');
+  failure.preRequestScriptResult = {
+    passed: false,
+    tests: [],
+    error: 'Authorization: Bearer script-token customer-request-body',
+    logs: [],
+    commitSideEffects: false
+  };
+
+  registerRequestIpc({
+    getWorkspace: () => workspace,
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    },
+    recordDiagnosticEvent: async (event) => {
+      events.push(event);
+    },
+    runRequestWithScripts: async () => {
+      throw failure;
+    },
+    saveWorkspace: async (nextWorkspace) => nextWorkspace,
+    setWorkspace: () => {}
+  });
+
+  const result = await handlers.get('request:send')(
+    null,
+    structuredClone(workspace.collections[0].requests[0]),
+    null
+  );
+
+  assert.equal(result.requestSent, false);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, 'request.send.failed');
+  assert.equal(events[0].fields.requestBodyBytes, Buffer.byteLength('customer-request-body', 'utf8'));
+  assert.doesNotMatch(JSON.stringify(events[0]), /api\.example\.test|request-token|customer-request-body|script-token/);
+});
+
 test('request IPC returns detailed callback-style pre-request test failures without throwing', async () => {
   const handlers = new Map();
   const workspace = workspaceModel({

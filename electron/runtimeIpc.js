@@ -33,6 +33,7 @@ function registerRuntimeIpc(options = {}) {
     ipcMain,
     runCollection: runCollectionImpl = runCollection,
     runLoadTest: runLoadTestImpl = runLoadTest,
+    recordDiagnosticEvent = async () => {},
     mutateWorkspace = async (mutator) => {
       const nextWorkspace = await mutator(cloneJson(getWorkspace()));
       const savedWorkspace = await saveWorkspace(nextWorkspace);
@@ -75,6 +76,20 @@ function registerRuntimeIpc(options = {}) {
       progressDelivery.throwIfFailed();
       const publicResult = publicLoadResult(result);
       assertLoadResultPayload(publicResult);
+      await recordDiagnosticEvent({
+        type: 'load.start.completed',
+        level: 'info',
+        outcome: 'completed',
+        durationMillis: publicResult.elapsedMillis,
+        fields: {
+          executionMode: publicResult.executionMode || config.executionMode || 'singleProcess',
+          failedRequests: publicResult.failedRequests || 0,
+          requestBodyBytes: Buffer.byteLength(String(request.body || ''), 'utf8'),
+          statusCodeBucketCount: Object.keys(result.statusCounts || {}).length,
+          successfulRequests: publicResult.successfulRequests || 0,
+          totalRequests: publicResult.totalRequests || 0
+        }
+      });
       if (Array.isArray(result.cookies)) {
         await mutateWorkspace(async (latestWorkspace) => {
           if (result.updatedAuth && request.id) {
@@ -96,6 +111,19 @@ function registerRuntimeIpc(options = {}) {
         }, { workspaceId });
       }
       return publicResult;
+    } catch (error) {
+      await recordDiagnosticEvent({
+        type: 'load.start.failed',
+        level: 'error',
+        outcome: 'failed',
+        failureCode: failureCodeFromError(error, 'load_start_failed'),
+        fields: {
+          executionMode: config?.executionMode || 'singleProcess',
+          requestBodyBytes: Buffer.byteLength(String(request.body || ''), 'utf8'),
+          error: error?.message || String(error)
+        }
+      });
+      throw error;
     } finally {
       if (activeLoadTests.get(id) === abortController) {
         activeLoadTests.delete(id);
@@ -152,11 +180,23 @@ function registerRuntimeIpc(options = {}) {
         workspaceId,
         workspaceName: workspaceId,
         stopOnFailure: config.stopOnFailure === true,
-        onProgress: progressDelivery.send
+        onProgress: progressDelivery.send,
+        recordDiagnosticEvent
       });
       progressDelivery.throwIfFailed();
       const publicResult = publicCollectionRunResult(result);
       assertCollectionRunResultPayload(publicResult);
+      await recordDiagnosticEvent({
+        type: 'runner.start.completed',
+        level: 'info',
+        outcome: 'completed',
+        fields: {
+          cancelled: publicResult.cancelled === true,
+          failedRequests: publicResult.failedRequests || 0,
+          passedRequests: publicResult.passedRequests || 0,
+          requestCount: publicResult.totalRequests || 0
+        }
+      });
       if (Array.isArray(result.cookies)) {
         await mutateWorkspace(async (latestWorkspace) => {
           latestWorkspace.cookies = mergeCookieJarByDelta(latestWorkspace.cookies || [], baseCookies, result.cookies);
@@ -180,6 +220,18 @@ function registerRuntimeIpc(options = {}) {
         }, { workspaceId });
       }
       return publicResult;
+    } catch (error) {
+      await recordDiagnosticEvent({
+        type: 'runner.start.failed',
+        level: 'error',
+        outcome: 'failed',
+        failureCode: failureCodeFromError(error, 'runner_start_failed'),
+        fields: {
+          requestCount: countCollectionRequests(collection),
+          error: error?.message || String(error)
+        }
+      });
+      throw error;
     } finally {
       if (activeCollectionRuns.get(id) === abortController) {
         activeCollectionRuns.delete(id);
@@ -307,6 +359,37 @@ function publicCollectionRunResult(result) {
   }
   delete publicResult.authUpdates;
   return publicResult;
+}
+
+function countCollectionRequests(collection = {}) {
+  let count = Array.isArray(collection.requests) ? collection.requests.length : 0;
+  for (const folder of collection.folders || []) {
+    count += countCollectionRequests(folder);
+  }
+  return count;
+}
+
+function failureCodeFromError(error, fallback) {
+  const text = String(error?.message || fallback || 'error').toLowerCase();
+  if (/progress.*delivery/.test(text)) {
+    return 'progress_delivery_failed';
+  }
+  if (/cancel/.test(text)) {
+    return 'operation_cancelled';
+  }
+  if (/timeout|timed out/.test(text)) {
+    return 'operation_timeout';
+  }
+  if (/sendrequest|send request|pm\.sendrequest/.test(text)) {
+    return 'script_send_request_denied_or_failed';
+  }
+  if (/pm\.vault|vault/.test(text)) {
+    return 'script_vault_denied_or_failed';
+  }
+  if (/pm\.cookies|cookie/.test(text)) {
+    return 'script_cookie_denied_or_failed';
+  }
+  return String(fallback || 'runtime_failed');
 }
 
 module.exports = {

@@ -7,6 +7,7 @@ const {
   registerVaultPromptIpc,
   workspaceIdForVaultPromptDecision
 } = require('../../electron/vaultPrompt');
+const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../src/core/diagnostics');
 
 test('normalizes and persists metadata-only vault prompt grant decisions', async () => {
   const workspace = {
@@ -80,12 +81,16 @@ test('renderer vault prompt IPC resolves bounded decisions without exposing secr
       });
     }
   };
+  const events = [];
   const prompt = createVaultPrompt({
     getMainWindow: () => ({
       isDestroyed: () => false,
       webContents
     }),
-    persistDecision: async () => {}
+    persistDecision: async () => {},
+    recordDiagnosticEvent: async (event) => {
+      events.push(event);
+    }
   });
 
   const decision = await prompt({
@@ -107,6 +112,77 @@ test('renderer vault prompt IPC resolves bounded decisions without exposing secr
   assert.equal(sentPayloads[0].workspaceName, 'Workspace');
   assert.equal(Object.hasOwn(sentPayloads[0], 'value'), false);
   assert.equal(Object.hasOwn(sentPayloads[0], 'secretValue'), false);
+  assert.deepEqual(events.map((event) => event.type), ['vault.prompt.granted']);
+  assert.equal(events[0].fields.operation, 'get');
+  assert.equal(events[0].fields.scope, 'workspace');
+});
+
+test('vault prompt emits sanitized denied and reset diagnostic events', async () => {
+  const handlers = new Map();
+  registerVaultPromptIpc({
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    }
+  });
+  const events = [];
+  const sentPayloads = [];
+  const webContents = {
+    send(_channel, payload) {
+      sentPayloads.push(payload);
+      queueMicrotask(() => {
+        void handlers.get('vault:prompt-response')({ sender: webContents }, payload.promptId, {
+          granted: false,
+          scope: 'request'
+        });
+      });
+    }
+  };
+  const rendererPrompt = createVaultPrompt({
+    getMainWindow: () => ({
+      isDestroyed: () => false,
+      webContents
+    }),
+    persistDecision: async () => {},
+    recordDiagnosticEvent: async (event) => {
+      events.push(sanitizeDiagnosticEvent(event, defaultDiagnosticsSettings()));
+    }
+  });
+
+  const denied = await rendererPrompt({
+    key: 'apiToken',
+    operation: 'get',
+    requestId: 'request-1',
+    value: 'vault-secret-value'
+  });
+  const resetPrompt = createVaultPrompt({
+    dialog: {
+      showMessageBox: async () => ({ response: 4 })
+    },
+    getMainWindow: () => null,
+    persistDecision: async () => {},
+    recordDiagnosticEvent: async (event) => {
+      events.push(sanitizeDiagnosticEvent(event, defaultDiagnosticsSettings()));
+    }
+  });
+  const reset = await resetPrompt({
+    key: 'apiToken',
+    operation: 'set',
+    requestId: 'request-1',
+    value: 'vault-reset-secret'
+  });
+
+  assert.deepEqual(denied, { granted: false, reset: false, scope: 'request' });
+  assert.deepEqual(reset, { granted: false, reset: true, scope: 'request' });
+  assert.deepEqual(events.map((event) => event.type), ['vault.prompt.denied', 'vault.prompt.denied']);
+  assert.equal(events[0].failureCode, 'vault_prompt_denied');
+  assert.equal(events[0].outcome, 'denied');
+  assert.equal(events[0].fields.reset, false);
+  assert.equal(events[1].fields.reset, true);
+  assert.equal(Object.hasOwn(sentPayloads[0], 'value'), false);
+  const serialized = JSON.stringify(events);
+  assert.doesNotMatch(serialized, /vault-secret-value|vault-reset-secret/);
 });
 
 test('vault prompt IPC ignores responses from non-prompting renderers', async () => {

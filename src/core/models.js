@@ -12,6 +12,7 @@ const {
   normalizeRequestLoadPolicy: normalizeRequestLoadTestPolicy
 } = require('./loadPolicyModel');
 const { normalizeSandboxFileBindings } = require('./fileAttachmentBindings');
+const { normalizeDiagnosticsSettings } = require('./diagnosticsSettings');
 
 const CURRENT_SCHEMA_VERSION = 11;
 const MIN_SUPPORTED_SCHEMA_VERSION = 1;
@@ -158,6 +159,7 @@ function normalizeSettings(settings) {
         vaultGrants: normalizeVaultGrants(settings?.sandbox?.trustedCapabilities?.vaultGrants, settings?.sandbox?.trustedCapabilities?.vault === true)
       }
     },
+    diagnostics: normalizeDiagnosticsSettings(settings?.diagnostics),
     updates: {
       includePrereleases: settings?.updates?.includePrereleases === true
     }

@@ -22,6 +22,7 @@ test('CI workflow runs the Electron UI and packaging validation suite', async ()
   assert.match(workflow, /npm run workspace:durability:validate/);
   assert.match(workflow, /npm run compatibility:non-postman:validate/);
   assert.match(workflow, /npm run ux:accessibility:validate/);
+  assert.match(workflow, /npm run diagnostics:privacy:validate/);
   assert.match(workflow, /npm run release:gate/);
   assert.match(workflow, /npm audit --audit-level=high/);
   assert.match(workflow, /npm run sandbox:validate/);
@@ -90,6 +91,7 @@ test('release workflow builds unsigned artifacts for all tier-one desktop platfo
   assert.match(workflow, /npm run workspace:durability:validate/);
   assert.match(workflow, /npm run compatibility:non-postman:validate/);
   assert.match(workflow, /npm run ux:accessibility:validate/);
+  assert.match(workflow, /npm run diagnostics:privacy:validate/);
   assert.match(workflow, /npm run production:readiness:claim:stable/);
   assert.ok(
     workflow.indexOf('npm run production:readiness:claim:stable') < workflow.indexOf('Build unsigned artifacts'),
@@ -182,12 +184,13 @@ test('manual native release validation workflow exercises release evidence witho
   assert.equal(packageJson.scripts['native:windows-sandbox:build'], 'node scripts/buildWindowsSandboxHelper.js');
 });
 
-test('release workflows keep Step 11 validators as executable YAML run steps', async () => {
+test('release workflows keep Step 11 and Step 12 validators as executable YAML run steps', async () => {
   const root = path.join(__dirname, '..', '..');
   for (const workflowName of ['ci.yml', 'release.yml', 'release-validation.yml']) {
     const workflow = YAML.parse(await fs.readFile(path.join(root, '.github', 'workflows', workflowName), 'utf8'));
     for (const requiredRun of [
       /npm run ux:accessibility:validate/,
+      /npm run diagnostics:privacy:validate/,
       /npm run release:gate/,
       /npm run test:ui\b/,
       /npm run test:ui:regression/,

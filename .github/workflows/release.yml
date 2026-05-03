@@ -155,6 +155,9 @@ jobs:
       - name: UX accessibility matrix validation
         run: npm run ux:accessibility:validate
 
+      - name: Diagnostics privacy matrix validation
+        run: npm run diagnostics:privacy:validate
+
       - name: Sandbox release gate manifest
         run: npm run release:gate
 

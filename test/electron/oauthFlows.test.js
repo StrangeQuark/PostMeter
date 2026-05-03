@@ -121,6 +121,57 @@ test('OAuth flow controller rejects duplicate active flow ids and preserves canc
   assert.equal(result.cancelled, true);
 });
 
+test('OAuth flow controller redacts failed provider progress messages', async () => {
+  const providerError = [
+    'provider failed at https://user:password@example.test/callback?access_token=url-token&visible=1',
+    'provider failed at file:///Users/Alice/oauth.json?token=file-token',
+    'provider failed at C:\\Users\\Alice\\oauth.json Digest realm="private-realm", nonce="secret-nonce", response="secret-response"',
+    'provider failed with -----BEGIN PRIVATE KEY-----\nprivate-key-secret\n-----END PRIVATE KEY-----',
+    'provider returned Cookie: sid=first-cookie-secret; csrftoken=second-cookie-secret',
+    'provider returned Set-Cookie: sid=first-set-cookie-secret; Path=/; HttpOnly; csrfToken=second-set-cookie-secret',
+    'Basic authentication failed. Bearer authentication is required.'
+  ].join(' ');
+  const server = await createServer(async (request, response) => {
+    if (request.url === '/device') {
+      response.statusCode = 400;
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({
+        error: 'invalid_request',
+        error_description: providerError
+      }));
+      return;
+    }
+    response.statusCode = 404;
+    response.end();
+  });
+  const progress = [];
+  const controller = createOAuthFlowController({
+    app: { setAsDefaultProtocolClient: () => true },
+    env: {},
+    shell: { openExternal: async () => true },
+    emitProgress: (id, payload) => progress.push({ id, ...payload })
+  });
+
+  try {
+    await assert.rejects(() => controller.startDevice('redacted-device-flow', {
+      type: 'oauth2',
+      grantType: 'deviceCode',
+      deviceAuthorizationUrl: `${server.baseUrl}/device`,
+      tokenUrl: `${server.baseUrl}/token`,
+      clientId: 'client-id'
+    }, null), /provider failed/);
+
+    const failed = progress.find((entry) => entry.id === 'redacted-device-flow' && entry.status === 'failed');
+    assert.ok(failed, 'failed OAuth progress should be emitted');
+    assert.doesNotMatch(failed.message, /user:password|example\.test|url-token|file-token|file:\/\/\/Users\/Alice|C:\\Users\\Alice|private-realm|secret-nonce|secret-response|private-key-secret|first-cookie-secret|second-cookie-secret|first-set-cookie-secret|second-set-cookie-secret/);
+    assert.match(failed.message, /\[url\]/);
+    assert.match(failed.message, /\[redacted\]/);
+    assert.match(failed.message, /Basic authentication failed\. Bearer authentication is required\./);
+  } finally {
+    await server.close();
+  }
+});
+
 async function createServer(handler) {
   const server = http.createServer((request, response) => {
     handler(request, response).catch((error) => {

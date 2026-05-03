@@ -47,6 +47,7 @@ let sessionPersistenceEnabled = false;
 let lastRenderedRequestEditorContextKey = '';
 let lastModalFocusTarget = null;
 let notificationModalActive = false;
+let pendingDiagnosticsSettingsSave = null;
 const pendingNotificationModals = [];
 
 const $ = (id) => document.getElementById(id);
@@ -254,6 +255,7 @@ initializeRenderer({
   getStoredThemePreference: () => localStorage.getItem('postmeter.theme') || 'system',
   onReady: async ({ registerCleanup }) => {
     bindUi();
+    registerCleanup(bindForcedColorsPreference());
     registerCleanup(() => {
       if (window.__postmeterSkipWorkspaceShutdownSave === true) {
         return;
@@ -348,6 +350,7 @@ function bindUi() {
     onRefreshSandboxPackages: refreshSandboxPackageStatus,
     onBindSandboxFile: () => { void bindSandboxFileFromPrompt(); },
     onRefreshSandboxFiles: refreshSandboxFileBindings,
+    onExportDiagnostics: exportDiagnostics,
     onBindVaultSecret: () => { void bindVaultSecretFromPrompt(); },
     onRefreshVaultMetadata: () => { void refreshVaultMetadata(); },
     onResetVault: () => { void resetVaultFromWorkspacePanel(); },
@@ -390,6 +393,7 @@ function bindUi() {
     onFilterCookiesChange: renderCookieJarEditor,
     onEnvironmentNameInput: collectEnvironmentAndMarkDirty,
     onTrustedScriptCapabilityChange: setTrustedScriptCapabilitiesFromInputs,
+    onDiagnosticsSettingsChange: setDiagnosticsSettingsFromInputs,
     onAuthTypeChange: showAuthSection,
     onAuthInput: collectRequestAndMarkDirty,
     onActivateTab: activateTab,
@@ -432,6 +436,9 @@ async function handleAppMenuAction(action) {
         break;
       case 'export-collection':
         await exportCollection(null, 'postmeter');
+        break;
+      case 'export-diagnostics':
+        await exportDiagnostics({ allowNonCurrentWorkspaceView: true });
         break;
       case 'set-prereleases':
         await setIncludePrereleases(action.includePrereleases === true, { save: true });
@@ -1374,6 +1381,7 @@ function ensureSettings() {
   workspace.settings ||= {};
   workspace.settings.updates ||= { includePrereleases: false };
   workspace.settings.appearance ||= { theme: 'system' };
+  workspace.settings.diagnostics = normalizeDiagnosticsSettings(workspace.settings.diagnostics);
   workspace.settings.sandbox ||= { trustedCapabilities: { sendRequest: true, cookies: true, vault: false } };
   workspace.settings.sandbox.fileBindings = normalizeSandboxFileBindings(workspace.settings.sandbox.fileBindings);
   workspace.settings.sandbox.packageCache = normalizeSandboxPackageCache(workspace.settings.sandbox.packageCache);
@@ -1387,6 +1395,37 @@ function ensureSettings() {
   );
   workspace.settings.appearance.theme = normalizeThemeOption(workspace.settings.appearance.theme);
   delete workspace.settings.loadTestPolicy;
+}
+
+const RENDERER_DIAGNOSTIC_LOG_LEVELS = ['debug', 'info', 'warn', 'error'];
+const RENDERER_DIAGNOSTIC_REQUEST_RESPONSE_FIELDS = [
+  'urls',
+  'headers',
+  'cookies',
+  'bodies',
+  'protocolMessages',
+  'scriptConsole',
+  'payloadIdentifiers'
+];
+
+function normalizeDiagnosticsSettings(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const level = RENDERER_DIAGNOSTIC_LOG_LEVELS.includes(String(source.logging?.level || '').toLowerCase())
+    ? String(source.logging.level).toLowerCase()
+    : 'info';
+  const requestResponseSource = source.requestResponseLogging && typeof source.requestResponseLogging === 'object' && !Array.isArray(source.requestResponseLogging)
+    ? source.requestResponseLogging
+    : {};
+  return {
+    logging: {
+      enabled: source.logging?.enabled !== false,
+      level
+    },
+    requestResponseLogging: Object.fromEntries(RENDERER_DIAGNOSTIC_REQUEST_RESPONSE_FIELDS.map((field) => [
+      field,
+      requestResponseSource[field] === true
+    ]))
+  };
 }
 
 function normalizeSandboxPackageCache(value) {
@@ -1664,11 +1703,27 @@ function normalizeThemeOption(value) {
 function applyThemePreference(theme) {
   const normalizedTheme = normalizeThemeOption(theme);
   document.documentElement.dataset.theme = normalizedTheme;
+  syncForcedColorsPreference();
   try {
     localStorage.setItem('postmeter.theme', normalizedTheme);
   } catch {
     // Theme still applies for this session when storage is unavailable.
   }
+}
+
+function bindForcedColorsPreference() {
+  const media = window.matchMedia?.('(forced-colors: active)');
+  syncForcedColorsPreference(media);
+  if (!media?.addEventListener) {
+    return () => {};
+  }
+  const onChange = () => syncForcedColorsPreference(media);
+  media.addEventListener('change', onChange);
+  return () => media.removeEventListener('change', onChange);
+}
+
+function syncForcedColorsPreference(media = window.matchMedia?.('(forced-colors: active)')) {
+  document.documentElement.dataset.forcedColors = media?.matches === true ? 'active' : 'inactive';
 }
 
 function renderThemeControl() {
@@ -1773,6 +1828,49 @@ async function setTrustedScriptCapabilitiesFromInputs() {
     'Script sandbox capability update failed',
     'Sandbox Capability Save Failed'
   );
+}
+
+async function setDiagnosticsSettingsFromInputs() {
+  if (pendingDiagnosticsSettingsSave) {
+    await pendingDiagnosticsSettingsSave;
+  }
+  const workspaceItem = activeWorkspaceItem();
+  if (workspaceItem && workspaceItem.current !== true) {
+    renderDiagnosticsPrivacyPanel();
+    setStatus('Switch to this workspace before changing diagnostics privacy settings.');
+    return false;
+  }
+  ensureSettings();
+  const previousSettings = cloneWorkspaceSettings();
+  const diagnostics = normalizeDiagnosticsSettings(workspace.settings.diagnostics);
+  diagnostics.logging.enabled = $('diagnosticLoggingEnabledInput').checked === true;
+  diagnostics.logging.level = RENDERER_DIAGNOSTIC_LOG_LEVELS.includes($('diagnosticLogLevelSelect').value)
+    ? $('diagnosticLogLevelSelect').value
+    : 'info';
+  diagnostics.requestResponseLogging.urls = $('diagnosticLogUrlsInput').checked === true;
+  diagnostics.requestResponseLogging.headers = $('diagnosticLogHeadersInput').checked === true;
+  diagnostics.requestResponseLogging.cookies = $('diagnosticLogCookiesInput').checked === true;
+  diagnostics.requestResponseLogging.bodies = $('diagnosticLogBodiesInput').checked === true;
+  diagnostics.requestResponseLogging.protocolMessages = $('diagnosticLogProtocolMessagesInput').checked === true;
+  diagnostics.requestResponseLogging.scriptConsole = $('diagnosticLogScriptConsoleInput').checked === true;
+  diagnostics.requestResponseLogging.payloadIdentifiers = $('diagnosticLogPayloadIdentifiersInput').checked === true;
+  workspace.settings.diagnostics = diagnostics;
+  const savePromise = saveWorkspaceSettingsWithRollback(
+    previousSettings,
+    'Diagnostics privacy settings updated.',
+    'Diagnostics privacy setting save failed',
+    'Diagnostics Settings Save Failed'
+  );
+  pendingDiagnosticsSettingsSave = savePromise;
+  renderDiagnosticsPrivacyPanel();
+  try {
+    return await savePromise;
+  } finally {
+    if (pendingDiagnosticsSettingsSave === savePromise) {
+      pendingDiagnosticsSettingsSave = null;
+      renderDiagnosticsPrivacyPanel();
+    }
+  }
 }
 
 async function promptTextInput(options = {}) {
@@ -2334,6 +2432,7 @@ function renderWorkspacePanel() {
   if ($('trustedScriptVaultInput')) {
     $('trustedScriptVaultInput').checked = workspace.settings?.sandbox?.trustedCapabilities?.vault === true;
   }
+  renderDiagnosticsPrivacyPanel();
   renderVaultMetadataPanel();
   renderSandboxPackageCachePanel();
   renderSandboxFileBindingsPanel();
@@ -2368,6 +2467,70 @@ function renderWorkspacePanel() {
     valueElement.textContent = value;
     row.append(labelElement, valueElement);
     container.append(row);
+  }
+}
+
+function renderDiagnosticsPrivacyPanel() {
+  ensureSettings();
+  const workspaceItem = activeWorkspaceItem();
+  const editable = !workspaceItem || workspaceItem.current === true;
+  const diagnostics = normalizeDiagnosticsSettings(workspace.settings.diagnostics);
+  setChecked('diagnosticLoggingEnabledInput', diagnostics.logging.enabled);
+  setValue('diagnosticLogLevelSelect', diagnostics.logging.level);
+  setChecked('diagnosticLogUrlsInput', diagnostics.requestResponseLogging.urls);
+  setChecked('diagnosticLogHeadersInput', diagnostics.requestResponseLogging.headers);
+  setChecked('diagnosticLogCookiesInput', diagnostics.requestResponseLogging.cookies);
+  setChecked('diagnosticLogBodiesInput', diagnostics.requestResponseLogging.bodies);
+  setChecked('diagnosticLogProtocolMessagesInput', diagnostics.requestResponseLogging.protocolMessages);
+  setChecked('diagnosticLogScriptConsoleInput', diagnostics.requestResponseLogging.scriptConsole);
+  setChecked('diagnosticLogPayloadIdentifiersInput', diagnostics.requestResponseLogging.payloadIdentifiers);
+  setDiagnosticsControlsDisabled(!editable || Boolean(pendingDiagnosticsSettingsSave));
+  const enabledRequestResponseCategories = Object.values(diagnostics.requestResponseLogging).filter(Boolean).length;
+  const summary = $('diagnosticsPrivacySummary');
+  if (summary) {
+    if (!editable) {
+      summary.textContent = 'Switch to this workspace to edit diagnostics privacy settings or export its local diagnostics.';
+    } else if (pendingDiagnosticsSettingsSave) {
+      summary.textContent = 'Saving diagnostics privacy settings before diagnostics can be exported.';
+    } else if (enabledRequestResponseCategories) {
+      summary.textContent = `${enabledRequestResponseCategories} request/response log categor${enabledRequestResponseCategories === 1 ? 'y is' : 'ies are'} enabled. Review exported diagnostics before sharing.`;
+    } else {
+      summary.textContent = 'Local diagnostics are user-exported only. Request and response details are not logged unless enabled below.';
+    }
+  }
+}
+
+function setDiagnosticsControlsDisabled(disabled) {
+  for (const id of [
+    'diagnosticLoggingEnabledInput',
+    'diagnosticLogLevelSelect',
+    'diagnosticLogUrlsInput',
+    'diagnosticLogHeadersInput',
+    'diagnosticLogCookiesInput',
+    'diagnosticLogBodiesInput',
+    'diagnosticLogProtocolMessagesInput',
+    'diagnosticLogScriptConsoleInput',
+    'diagnosticLogPayloadIdentifiersInput',
+    'exportDiagnosticsButton'
+  ]) {
+    const control = $(id);
+    if (control) {
+      control.disabled = disabled === true;
+    }
+  }
+}
+
+function setChecked(id, checked) {
+  const input = $(id);
+  if (input) {
+    input.checked = checked === true;
+  }
+}
+
+function setValue(id, value) {
+  const input = $(id);
+  if (input) {
+    input.value = String(value || '');
   }
 }
 
@@ -3346,6 +3509,46 @@ async function exportWorkspace() {
     }
   }
   return rendererWorkflows.exportWorkspace();
+}
+
+async function exportDiagnostics(options = {}) {
+  const diagnostics = window.__postmeterDiagnostics || window.postmeter?.diagnostics;
+  if (!diagnostics?.export) {
+    setStatus('Diagnostics export is unavailable in this runtime.');
+    return null;
+  }
+  if (isViewingNonCurrentWorkspace() && options.allowNonCurrentWorkspaceView !== true) {
+    setStatus('Switch to this workspace before exporting local diagnostics.');
+    return null;
+  }
+  try {
+    if (pendingDiagnosticsSettingsSave) {
+      setStatus('Saving diagnostics privacy settings before export.');
+      const saved = await pendingDiagnosticsSettingsSave;
+      if (!saved) {
+        return null;
+      }
+    }
+    const result = await diagnostics.export();
+    if (result?.path) {
+      setStatus(`Local diagnostics exported to ${result.path}. Review before sharing.`);
+      notifyUser('Local Diagnostics Exported', `Review ${result.path} before attaching it to a support request or GitHub issue.`);
+    }
+    return result;
+  } catch (error) {
+    const message = error.message || String(error);
+    setStatus(`Diagnostics export failed: ${message}`);
+    notifyUser('Diagnostics Export Failed', message);
+    return null;
+  }
+}
+
+function isViewingNonCurrentWorkspace() {
+  const workspaceItem = activeWorkspaceItem();
+  return activeSidebarPanel === 'workspaces'
+    && activeMainPanel === 'workspace'
+    && workspaceItem
+    && workspaceItem.current !== true;
 }
 
 async function prepareForWorkspaceChange(actionLabel) {
