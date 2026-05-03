@@ -4,6 +4,7 @@ const { walkRequests } = require('./models');
 const {
   createScriptedRequestState,
   emptyScriptResult,
+  preRequestScriptShouldAbortRequest,
   runScriptedRequestLifecycle,
   scriptResultFailureMessage
 } = require('./scriptedRequestLifecycle');
@@ -111,7 +112,7 @@ async function runCollection(collection, environment, options = {}) {
     if (Array.isArray(scriptedRequest.cookies)) {
       scopeState.cookies = scriptedRequest.cookies;
     }
-    if (!scriptedRequest.preRequestScriptResult.passed) {
+    if (preRequestScriptShouldAbortRequest(scriptedRequest.preRequestScriptResult)) {
       return runRequestBrokerResult(targetEntry, scriptedRequest, null, []);
     }
     if (scriptedRequest.skipped) {
@@ -178,7 +179,7 @@ async function runCollection(collection, environment, options = {}) {
       if (Array.isArray(scriptedRequest.cookies)) {
         runnerCookies = scriptedRequest.cookies;
       }
-      if (!scriptedRequest.preRequestScriptResult.passed) {
+      if (preRequestScriptShouldAbortRequest(scriptedRequest.preRequestScriptResult)) {
         const result = scriptFailureResult(
           entry,
           startedAt,
@@ -209,7 +210,9 @@ async function runCollection(collection, environment, options = {}) {
       }
       const assertions = evaluateAssertions(response, requestForExecution.assertions || []);
       applyExtractedVariables(runnerEnvironment, assertions.extractedVariables);
-      const passed = assertions.passed && scriptedRequest.testScriptResult.passed;
+      const passed = assertions.passed
+        && scriptedRequest.preRequestScriptResult.passed
+        && scriptedRequest.testScriptResult.passed;
       const result = {
         requestId: entry.request.id,
         requestName: entry.request.name,
@@ -318,11 +321,11 @@ function attachInternalAuthUpdates(result, refreshedAuthByRequestId) {
 }
 
 function findRunRequestTarget(requests, target) {
-  const value = String(target || '').trim();
-  if (!value) {
+  const values = requestTargetCandidates(target);
+  if (!values.length) {
     return null;
   }
-  return requests.find((entry) => requestMatchesTarget(entry.request, value)) || null;
+  return requests.find((entry) => requestMatchesAnyTarget(entry.request, values)) || null;
 }
 
 function runRequestLocalVariables(request, overrides) {
@@ -458,11 +461,82 @@ function nextRequestIndex(currentIndex, requests, execution = {}) {
 }
 
 function requestMatchesTarget(request, target) {
-  const value = String(target || '').trim();
-  if (!value) {
+  return requestMatchesAnyTarget(request, requestTargetCandidates(target));
+}
+
+function requestMatchesAnyTarget(request, targets) {
+  const values = Array.isArray(targets) ? targets : [];
+  if (!values.length) {
     return false;
   }
-  return postmanCompatibleRequestAliases(request).includes(value);
+  const aliases = postmanCompatibleRequestAliases(request);
+  return values.some((value) => aliases.includes(value));
+}
+
+function requestTargetCandidates(target) {
+  const value = String(target || '').trim();
+  if (!value) {
+    return [];
+  }
+  const candidates = new Set([value]);
+  addDecodedCandidate(candidates, value);
+  addRequestLinkCandidates(candidates, value);
+  return [...candidates].filter(Boolean);
+}
+
+function addDecodedCandidate(candidates, value) {
+  try {
+    const decoded = decodeURIComponent(value);
+    if (decoded && decoded !== value) {
+      candidates.add(decoded);
+    }
+  } catch {
+    // Invalid percent escapes leave the original target as the only candidate.
+  }
+}
+
+function addRequestLinkCandidates(candidates, value) {
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    return;
+  }
+  for (const [key, itemValue] of url.searchParams.entries()) {
+    if (/request/i.test(key) && itemValue) {
+      candidates.add(itemValue.trim());
+      addDecodedCandidate(candidates, itemValue.trim());
+    }
+  }
+  for (const itemValue of requestTargetValuesFromPath(url.pathname)) {
+    candidates.add(itemValue);
+    addDecodedCandidate(candidates, itemValue);
+  }
+  if (url.hash) {
+    for (const itemValue of requestTargetValuesFromPath(url.hash.replace(/^#/, ''))) {
+      candidates.add(itemValue);
+      addDecodedCandidate(candidates, itemValue);
+    }
+  }
+}
+
+function requestTargetValuesFromPath(pathname) {
+  const segments = String(pathname || '')
+    .split('/')
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  const values = [];
+  for (let index = 0; index < segments.length; index += 1) {
+    const segment = segments[index];
+    if (segment.toLowerCase() === 'request') {
+      values.push(...segments.slice(index + 1));
+      break;
+    }
+  }
+  if (segments.length) {
+    values.push(segments[segments.length - 1]);
+  }
+  return [...new Set(values)];
 }
 
 function postmanCompatibleRequestId(request) {

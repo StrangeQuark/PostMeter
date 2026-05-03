@@ -4,7 +4,7 @@ const THEME_OPTIONS = ['system', 'light', 'dark'];
 const RENDERER_STATE_DEFAULTS = PostMeterRendererState.createRendererState();
 const TAB_PANEL_IDS = {
   request: ['paramsTab', 'headersTab', 'authTab', 'cookiesTab', 'bodyTab', 'testsTab', 'scriptsTab', 'examplesTab', 'collectionVariablesTab'],
-  results: ['responseTab', 'visualizerTab', 'loadTab', 'runnerTab']
+  results: ['responseTab', 'testResultsTab', 'visualizerTab', 'loadTab', 'runnerTab']
 };
 
 let workspace = RENDERER_STATE_DEFAULTS.workspace;
@@ -216,6 +216,7 @@ const rendererWorkflows = createRendererWorkflows({
   collectRequestFromEditor,
   collectSettingsFromEditor,
   displayResponse,
+  displayTestResults,
   domainFromRequestUrl,
   loadConfigFromControls: () => PostMeterLoadPolicy.loadConfigFromControls(),
   notifyUser,
@@ -1128,6 +1129,7 @@ function resetWorkspaceTransientUi() {
   $('validationLabel').textContent = '';
   $('loadResults').textContent = '';
   $('runnerResults').textContent = '';
+  displayTestResults(null);
   $('runLoadButton').disabled = false;
   $('cancelLoadButton').disabled = true;
   $('runCollectionButton').disabled = false;
@@ -3359,7 +3361,7 @@ async function sendActiveRequest() {
 }
 
 function displayResponse(response) {
-  $('responseStatus').textContent = response.statusCode || 'ERR';
+  $('responseStatus').textContent = response.skipped === true ? 'SKIP' : response.statusCode || 'ERR';
   $('responseTime').textContent = `${response.durationMillis} ms`;
   $('responseSize').textContent = formatBytes(response.responseBytes);
   $('finalUrl').textContent = response.finalUrl;
@@ -3367,7 +3369,195 @@ function displayResponse(response) {
     .map(([key, values]) => `${key}: ${values.join(', ')}`)
     .join('\n');
   $('responseBody').value = PostMeterResponseFormatting.formatBody(response);
+  displayTestResults(response);
   displayVisualizer(response.testScriptResult?.visualizer);
+}
+
+function displayTestResults(response) {
+  const summary = $('testResultsSummary');
+  if (!summary) {
+    return;
+  }
+  const hasResponse = response && typeof response === 'object';
+  const preRequestResult = normalizeScriptResult(response?.preRequestScriptResult);
+  const postRequestResult = normalizeScriptResult(response?.testScriptResult);
+  const preRequestStats = renderScriptResultColumn('preRequest', preRequestResult, hasResponse ? 'No tests recorded.' : 'No test results yet.');
+  const postRequestStats = renderScriptResultColumn('postRequest', postRequestResult, hasResponse ? 'No tests recorded.' : 'No test results yet.');
+  const total = preRequestStats.total + postRequestStats.total;
+  const passed = preRequestStats.passed + postRequestStats.passed;
+  const failed = preRequestStats.failed + postRequestStats.failed;
+  const skipped = preRequestStats.skipped + postRequestStats.skipped;
+  const tabCount = $('testResultsTabCount');
+
+  if (tabCount) {
+    tabCount.textContent = total ? `(${passed}/${total})` : '';
+    tabCount.hidden = total === 0;
+  }
+  if (!hasResponse) {
+    summary.textContent = 'No test results yet.';
+    return;
+  }
+  if (!total) {
+    summary.textContent = 'No tests recorded for this response.';
+    return;
+  }
+  summary.textContent = testResultSummaryText({ total, passed, failed, skipped });
+}
+
+function normalizeScriptResult(result) {
+  return result && typeof result === 'object' ? result : null;
+}
+
+function renderScriptResultColumn(prefix, scriptResult, emptyText) {
+  const list = $(`${prefix}TestResults`);
+  const summary = $(`${prefix}ResultsSummary`);
+  const stats = scriptResultStats(scriptResult);
+  if (!list || !summary) {
+    return stats;
+  }
+  list.textContent = '';
+  summary.textContent = stats.total ? testResultSummaryText(stats) : 'No tests';
+
+  if (!scriptResult) {
+    appendEmptyTestResult(list, emptyText);
+    return stats;
+  }
+
+  const topLevelError = scriptResultTopLevelError(scriptResult);
+  if (topLevelError) {
+    appendTestResultRow(list, {
+      status: 'error',
+      name: 'Script error',
+      detail: topLevelError
+    });
+  }
+
+  for (const test of Array.isArray(scriptResult.tests) ? scriptResult.tests : []) {
+    appendTestResultRow(list, {
+      status: scriptTestStatus(test),
+      name: String(test?.name || 'Unnamed test'),
+      detail: String(test?.error || '')
+    });
+  }
+
+  const logs = Array.isArray(scriptResult.logs) ? scriptResult.logs : [];
+  for (const log of logs) {
+    appendTestResultRow(list, {
+      status: 'log',
+      name: 'Console',
+      detail: String(log || '')
+    });
+  }
+
+  if (!list.children.length) {
+    appendEmptyTestResult(list, emptyText);
+  }
+  return stats;
+}
+
+function scriptResultStats(scriptResult) {
+  if (!scriptResult) {
+    return { total: 0, passed: 0, failed: 0, skipped: 0 };
+  }
+  let passed = 0;
+  let failed = 0;
+  let skipped = 0;
+  const tests = Array.isArray(scriptResult.tests) ? scriptResult.tests : [];
+  for (const test of tests) {
+    if (test?.skipped === true) {
+      skipped += 1;
+    } else if (test?.passed === true) {
+      passed += 1;
+    } else {
+      failed += 1;
+    }
+  }
+  const topLevelErrorCount = scriptResultTopLevelError(scriptResult) ? 1 : 0;
+  return {
+    total: tests.length + topLevelErrorCount,
+    passed,
+    failed: failed + topLevelErrorCount,
+    skipped
+  };
+}
+
+function scriptResultTopLevelError(scriptResult) {
+  const explicitError = String(scriptResult?.error || '').trim();
+  if (explicitError) {
+    return explicitError;
+  }
+  const tests = Array.isArray(scriptResult?.tests) ? scriptResult.tests : [];
+  const hasFailedTest = tests.some((test) => test?.skipped !== true && test?.passed !== true);
+  if (scriptResult?.passed === false && !hasFailedTest) {
+    return 'Script failed.';
+  }
+  return '';
+}
+
+function scriptTestStatus(test) {
+  if (test?.skipped === true) {
+    return 'skipped';
+  }
+  return test?.passed === true ? 'passed' : 'failed';
+}
+
+function testResultSummaryText(stats) {
+  const parts = [`${stats.passed}/${stats.total} passed`];
+  if (stats.failed) {
+    parts.push(`${stats.failed} ${plural(stats.failed, 'failed test', 'failed tests')}`);
+  }
+  if (stats.skipped) {
+    parts.push(`${stats.skipped} ${plural(stats.skipped, 'skipped test', 'skipped tests')}`);
+  }
+  return parts.join(', ');
+}
+
+function appendTestResultRow(list, result) {
+  const row = document.createElement('div');
+  row.className = 'test-result-row';
+  const badge = document.createElement('span');
+  badge.className = `test-result-badge ${result.status}`;
+  badge.textContent = testResultStatusLabel(result.status);
+  const content = document.createElement('div');
+  const name = document.createElement('div');
+  name.className = 'test-result-name';
+  name.textContent = result.name;
+  content.append(name);
+  if (result.detail) {
+    const detail = document.createElement('div');
+    detail.className = result.status === 'log' ? 'test-result-log' : 'test-result-error';
+    detail.textContent = result.detail;
+    content.append(detail);
+  }
+  row.append(badge, content);
+  list.append(row);
+}
+
+function appendEmptyTestResult(list, message) {
+  const empty = document.createElement('p');
+  empty.className = 'test-result-empty';
+  empty.textContent = message;
+  list.append(empty);
+}
+
+function testResultStatusLabel(status) {
+  if (status === 'passed') {
+    return 'PASSED';
+  }
+  if (status === 'skipped') {
+    return 'SKIPPED';
+  }
+  if (status === 'error') {
+    return 'ERROR';
+  }
+  if (status === 'log') {
+    return 'LOG';
+  }
+  return 'FAILED';
+}
+
+function plural(count, singular, pluralValue) {
+  return count === 1 ? singular : pluralValue;
 }
 
 function displayVisualizer(visualizer) {

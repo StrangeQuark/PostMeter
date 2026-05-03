@@ -74,7 +74,7 @@ async function runHttpScriptedRequestLifecycle(state, options = {}) {
   applyScriptMutations(state, preRequestScriptExecution, { allowRequestMutation: true });
   const preRequestScriptResult = scriptResultOnly(preRequestScriptExecution);
   const preRequestExecution = preRequestScriptResult.execution || {};
-  if (!preRequestScriptResult.passed) {
+  if (preRequestScriptShouldAbortRequest(preRequestScriptResult)) {
     return {
       ...state,
       response: null,
@@ -190,7 +190,7 @@ async function runGrpcRequestLifecycle(state, options = {}) {
   applyScriptMutations(state, beforeInvokeExecution, { allowRequestMutation: true });
   const beforeInvokeResult = scriptResultOnly(beforeInvokeExecution);
   const beforeInvokeRuntime = beforeInvokeResult.execution || {};
-  if (!beforeInvokeResult.passed) {
+  if (preRequestScriptShouldAbortRequest(beforeInvokeResult)) {
     return {
       ...state,
       response: null,
@@ -854,6 +854,17 @@ function createPreRequestScriptError(result) {
   return error;
 }
 
+function preRequestScriptShouldAbortRequest(scriptResult) {
+  const result = scriptResult && typeof scriptResult === 'object' ? scriptResult : {};
+  if (result.passed !== false) {
+    return false;
+  }
+  if (String(result.error || '').trim()) {
+    return true;
+  }
+  return !Array.isArray(result.tests) || result.tests.length === 0;
+}
+
 function scriptResultFailureMessage(scriptResult, fallback = 'Script failed.') {
   const result = scriptResult && typeof scriptResult === 'object' ? scriptResult : {};
   const topLevelError = String(result.error || '').trim();
@@ -929,6 +940,7 @@ module.exports = {
   createPreRequestScriptError,
   createScriptedRequestState,
   emptyScriptResult,
+  preRequestScriptShouldAbortRequest,
   prepareGraphqlHttpRequest,
   requestProtocol,
   runGraphqlRequestLifecycle,

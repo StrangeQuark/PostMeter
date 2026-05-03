@@ -330,6 +330,7 @@ const FIELD_SCHEMAS = {
     durationMillis: { type: 'number' },
     responseBytes: { type: 'number' },
     finalUrl: { type: 'string', limit: 'url' },
+    skipped: { type: 'boolean', optional: true },
     updatedAuthPersisted: { type: 'boolean', optional: true }
   },
   collectionRunResult: {

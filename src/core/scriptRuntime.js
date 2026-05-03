@@ -123,6 +123,7 @@ const POSTMAN_ABSENT_GLOBALS = Object.freeze([
   'globalThis',
   'WebAssembly'
 ]);
+const SKIP_REQUEST_SIGNAL = Symbol('postmeter.skipRequest');
 
 function postmanBuiltinPackageDefinition(name) {
   return Object.freeze({
@@ -399,6 +400,16 @@ async function runPostmanScriptAsync(scriptText, context = {}, options = {}) {
     }
     await tracker.waitForIdle();
   } catch (error) {
+    if (isSkipRequestSignal(error)) {
+      return skippedScriptResult({
+        tests,
+        logs,
+        execution,
+        request: mutableRequest,
+        mock,
+        visualizer
+      });
+    }
     return boundedScriptResult({
       passed: false,
       tests,
@@ -544,6 +555,20 @@ function emptyScriptResultWithCommit() {
   };
 }
 
+function skippedScriptResult({ tests = [], logs = [], execution = {}, request, mock, visualizer } = {}) {
+  return boundedScriptResult({
+    passed: tests.every((test) => test.passed),
+    tests,
+    error: '',
+    logs,
+    commitSideEffects: true,
+    execution,
+    request,
+    mock: mockResult(mock),
+    visualizer: visualizerResult(visualizer)
+  });
+}
+
 function createAsyncTracker({ broker, fatalErrors, timeoutMillis }) {
   const pending = new Set();
   const timers = new Map();
@@ -558,6 +583,9 @@ function createAsyncTracker({ broker, fatalErrors, timeoutMillis }) {
   };
 
   const recordFatal = (error) => {
+    if (isSkipRequestSignal(error)) {
+      return;
+    }
     fatalErrors.push(error?.message || String(error));
   };
 
@@ -568,6 +596,9 @@ function createAsyncTracker({ broker, fatalErrors, timeoutMillis }) {
         await value;
       }
     } catch (error) {
+      if (isSkipRequestSignal(error)) {
+        return;
+      }
       recordFatal(error);
     }
   };
@@ -1196,6 +1227,7 @@ function createAsyncPmApi({
     cookies: brokerCookieApi({ broker, cookieAccessEnabled, currentRequestCookies, tracker }),
     environment: variableApi(environmentVariables, { name: environmentName }),
     execution: executionApi({
+      canSkipRequest: canSkipRequestFromScriptPhase(eventName, response),
       collectionVariables,
       environmentVariables,
       execution,
@@ -1224,14 +1256,17 @@ function createAsyncPmApi({
         .then((result) => {
           const scriptResponse = responseApi(result, { packageRegistry });
           if (typeof callback === 'function') {
-            callback(null, scriptResponse);
+            invokeBrokerCallback(callback, null, scriptResponse);
           }
           return scriptResponse;
         })
         .catch((error) => {
+          if (isSkipRequestSignal(error)) {
+            return undefined;
+          }
           const safeError = sandboxError(errorMessage(error));
           if (typeof callback === 'function') {
-            callback(safeError);
+            invokeBrokerCallback(callback, safeError);
             return undefined;
           }
           throw safeError;
@@ -1253,6 +1288,22 @@ function createAsyncPmApi({
   };
   api.console = createConsole(logs);
   return hardenSandboxValue(api);
+}
+
+function canSkipRequestFromScriptPhase(eventName, response) {
+  const phase = String(eventName || (response ? 'test' : 'prerequest'));
+  return !response && ['prerequest', 'beforeQuery', 'beforeInvoke'].includes(phase);
+}
+
+function invokeBrokerCallback(callback, ...args) {
+  try {
+    return callback(...args);
+  } catch (error) {
+    if (isSkipRequestSignal(error)) {
+      throw error;
+    }
+    throw sandboxError(errorMessage(error));
+  }
 }
 
 function sendRequestPayloadForBroker(input) {
@@ -5638,29 +5689,38 @@ function createPmTestApi({ tests, tracker } = {}) {
       record.error = 'pm.test requires a callback function.';
       return testApi;
     }
-    const run = async () => {
-      try {
-        await runTestCallback(fn, tracker);
-        record.passed = true;
-        record.error = '';
-      } catch (error) {
-        record.passed = false;
-        record.error = errorMessage(error);
+    const markPassed = () => {
+      record.passed = true;
+      record.error = '';
+    };
+    const markFailed = (error) => {
+      if (isSkipRequestSignal(error)) {
+        markPassed();
+        throw error;
       }
+      record.passed = false;
+      record.error = errorMessage(error);
     };
     if (tracker && typeof tracker.track === 'function') {
-      tracker.track(run());
+      try {
+        const value = runTestCallback(fn);
+        if (value && typeof value.then === 'function') {
+          tracker.track(Promise.resolve(value).then(markPassed, markFailed));
+        } else {
+          markPassed();
+        }
+      } catch (error) {
+        markFailed(error);
+      }
     } else {
       try {
-        const value = fn();
+        const value = runTestCallback(fn);
         if (value && typeof value.then === 'function') {
           throw sandboxError('Async pm.test callbacks are not supported in this script runtime.');
         }
-        record.passed = true;
-        record.error = '';
+        markPassed();
       } catch (error) {
-        record.passed = false;
-        record.error = errorMessage(error);
+        markFailed(error);
       }
     }
     return testApi;
@@ -5681,9 +5741,9 @@ function createPmTestApi({ tests, tracker } = {}) {
   return hardenSandboxValue(testApi);
 }
 
-async function runTestCallback(fn) {
+function runTestCallback(fn) {
   if (fn.length > 0) {
-    await new Promise((resolve, reject) => {
+    return new Promise((resolve, reject) => {
       let settled = false;
       const finish = (error) => {
         if (settled) {
@@ -5705,12 +5765,9 @@ async function runTestCallback(fn) {
         finish(error);
       }
     });
-    return;
   }
   const value = fn();
-  if (value && typeof value.then === 'function') {
-    await value;
-  }
+  return value;
 }
 
 function pmVariablesApi({ collectionVariables = [], environmentVariables = [], globals = [], iterationData = [], localVariables = [] } = {}) {
@@ -5851,9 +5908,9 @@ function variableToScriptJson(variable) {
   return output;
 }
 
-function executionApi({ collectionVariables = [], environmentVariables = [], execution = {}, globals = [], location = {}, tests = [], tracker } = {}) {
+function executionApi({ canSkipRequest = true, collectionVariables = [], environmentVariables = [], execution = {}, globals = [], location = {}, tests = [], tracker } = {}) {
   let runRequestCalls = 0;
-  return hardenSandboxValue({
+  const api = {
     runRequest(target, options) {
       runRequestCalls += 1;
       if (runRequestCalls > MAX_EXECUTION_RUN_REQUESTS_PER_SCRIPT) {
@@ -5883,28 +5940,49 @@ function executionApi({ collectionVariables = [], environmentVariables = [], exe
     setNextRequest(target) {
       execution.nextRequest = target == null ? null : String(target);
     },
-    skipRequest() {
-      execution.skipRequest = true;
-    },
     location: executionLocationApi(location)
-  });
+  };
+  if (canSkipRequest) {
+    api.skipRequest = function skipRequest() {
+      execution.skipRequest = true;
+      throw createSkipRequestSignal();
+    };
+  }
+  return hardenSandboxValue(api);
 }
 
 function executionLocationApi(location = {}) {
   const folderPath = Array.isArray(location.folderPath)
     ? location.folderPath.map((item) => String(item || '')).filter(Boolean)
     : [];
-  const current = Array.isArray(location.current)
+  const path = Array.isArray(location.current)
     ? location.current.map((item) => String(item || '')).filter(Boolean)
     : [location.current || location.requestName || ''].filter(Boolean).map(String);
-  return hardenSandboxValue({
-    collectionId: String(location.collectionId || ''),
-    folderPath: hardenSandboxValue(folderPath.slice()),
-    index: Number.isFinite(Number(location.index)) ? Number(location.index) : -1,
-    requestId: String(location.requestId || ''),
-    requestName: String(location.requestName || ''),
-    current: hardenSandboxValue(current.length ? current : folderPath.slice())
+  const output = path.length ? path.slice() : folderPath.slice();
+  const current = output.length ? output[output.length - 1] : '';
+  Object.defineProperties(output, {
+    collectionId: { value: String(location.collectionId || '') },
+    folderPath: { value: hardenSandboxValue(folderPath.slice()) },
+    index: { value: Number.isFinite(Number(location.index)) ? Number(location.index) : -1 },
+    requestId: { value: String(location.requestId || '') },
+    requestName: { value: String(location.requestName || '') },
+    current: { value: current }
   });
+  return hardenSandboxValue(output);
+}
+
+function createSkipRequestSignal() {
+  const error = new Error('pm.execution.skipRequest');
+  Object.defineProperty(error, SKIP_REQUEST_SIGNAL, {
+    configurable: false,
+    enumerable: false,
+    value: true
+  });
+  return error;
+}
+
+function isSkipRequestSignal(error) {
+  return Boolean(error && typeof error === 'object' && error[SKIP_REQUEST_SIGNAL] === true);
 }
 
 function normalizeExecutionRunRequestOptions(options) {

@@ -121,6 +121,35 @@
       body: '<!doctype html><html><body><h1>Smoke</h1></body></html>'
     });
     assertUiSmoke($('responseBody').value.includes('\n    <h1>Smoke</h1>'), `HTML response body was not formatted: ${$('responseBody').value}`);
+    displayResponse({
+      statusCode: 200,
+      durationMillis: 2,
+      responseBytes: 2,
+      finalUrl: 'https://api.example.test/tests',
+      headers: { 'content-type': ['application/json'] },
+      body: '{}',
+      preRequestScriptResult: {
+        passed: false,
+        tests: [{
+          name: 'pre-request script network request is blocked',
+          passed: false,
+          error: 'Expected pm.sendRequest is disabled for this workspace. to equal null.'
+        }],
+        error: '',
+        logs: []
+      },
+      testScriptResult: {
+        passed: true,
+        tests: [{ name: 'post-request status is 200', passed: true, error: '' }],
+        error: '',
+        logs: ['post-request console output']
+      }
+    });
+    activateTab('results', 'testResults');
+    assertUiSmoke($('testResultsSummary').textContent.includes('1/2 passed'), 'Test results summary did not show aggregate pass count.');
+    assertUiSmoke($('preRequestTestResults').textContent.includes('FAILED'), 'Pre-request test failure was not rendered.');
+    assertUiSmoke($('postRequestTestResults').textContent.includes('PASSED'), 'Post-request test pass was not rendered.');
+    assertUiSmoke($('postRequestTestResults').textContent.includes('post-request console output'), 'Post-request script log was not rendered.');
     await assertValidationErrorSmoke();
     await assertRequestSendFailureSmoke();
     await assertExportCancellationSmoke();

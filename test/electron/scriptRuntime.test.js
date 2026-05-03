@@ -1362,7 +1362,10 @@ test('resolves dynamic variables during request interpolation and exposes execut
   const result = await runPostmanScriptAsync(`
     pm.test('execution location', function () {
       pm.expect(pm.info.eventName).to.equal('test');
-      pm.expect(pm.execution.location.current).to.deep.equal(['Collection', 'Folder', 'Request']);
+      pm.expect(Array.isArray(pm.execution.location)).to.equal(true);
+      pm.expect(pm.execution.location).to.deep.equal(['Collection', 'Folder', 'Request']);
+      pm.expect(pm.execution.location.current).to.equal('Request');
+      pm.expect(pm.execution.location.folderPath).to.deep.equal(['Folder']);
       pm.expect(pm.execution.location.requestName).to.equal('Request');
       pm.expect(pm.execution.location.index).to.equal(2);
     });
@@ -1381,6 +1384,23 @@ test('resolves dynamic variables during request interpolation and exposes execut
   }, { broker: timerBroker(), timeoutMillis: 1000 });
 
   assert.equal(result.passed, true);
+});
+
+test('does not expose pm.execution.skipRequest in post-response scripts', async () => {
+  const result = await runPostmanScriptAsync(`
+    pm.test('post-response skipRequest is unavailable', function () {
+      pm.expect(pm.execution.skipRequest).to.equal(undefined);
+      pm.execution.skipRequest();
+    });
+  `, {
+    eventName: 'test',
+    request: { id: 'request-id', name: 'Request' },
+    response: response()
+  }, { broker: timerBroker(), timeoutMillis: 1000 });
+
+  assert.equal(result.passed, false);
+  assert.match(result.tests[0].error, /skipRequest.*function/);
+  assert.equal(result.execution.skipRequest, false);
 });
 
 test('bounds script console output in result payloads', () => {

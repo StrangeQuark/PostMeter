@@ -563,6 +563,7 @@
       <section class="results">
         <div class="tabs" role="tablist" aria-label="Result sections" data-tab-group="results">
           <button id="resultsResponseTabButton" class="tab active" type="button" role="tab" data-tab-group="results" data-tab="response" aria-selected="true" aria-controls="responseTab">Response</button>
+          <button id="resultsTestResultsTabButton" class="tab" type="button" role="tab" data-tab-group="results" data-tab="testResults" aria-selected="false" aria-controls="testResultsTab">Test Results <span id="testResultsTabCount" class="tab-count" hidden></span></button>
           <button id="resultsVisualizerTabButton" class="tab" type="button" role="tab" data-tab-group="results" data-tab="visualizer" aria-selected="false" aria-controls="visualizerTab">Visualizer</button>
           <button id="resultsLoadTabButton" class="tab" type="button" role="tab" data-tab-group="results" data-tab="load" aria-selected="false" aria-controls="loadTab">Load Test</button>
           <button id="resultsRunnerTabButton" class="tab" type="button" role="tab" data-tab-group="results" data-tab="runner" aria-selected="false" aria-controls="runnerTab">Runner</button>
@@ -579,6 +580,30 @@
             <textarea id="responseBody" readonly spellcheck="false" aria-label="Response body"></textarea>
             <div id="responsePaneResize" class="splitter vertical" role="separator" aria-orientation="vertical" tabindex="0"></div>
             <textarea id="responseHeaders" readonly spellcheck="false" aria-label="Response headers"></textarea>
+          </div>
+        </div>
+
+        <div id="testResultsTab" class="tab-panel" role="tabpanel" aria-labelledby="resultsTestResultsTabButton">
+          <div id="testResultsSummary" class="test-results-summary" role="status" aria-live="polite">No test results yet.</div>
+          <div class="script-results-grid">
+            <section class="script-results-section" aria-labelledby="preRequestResultsTitle">
+              <div class="script-results-header">
+                <h3 id="preRequestResultsTitle">Pre-request</h3>
+                <span id="preRequestResultsSummary" class="script-results-count">No tests</span>
+              </div>
+              <div id="preRequestTestResults" class="test-result-list" aria-live="polite">
+                <p class="test-result-empty">No test results yet.</p>
+              </div>
+            </section>
+            <section class="script-results-section" aria-labelledby="postRequestResultsTitle">
+              <div class="script-results-header">
+                <h3 id="postRequestResultsTitle">Post-request</h3>
+                <span id="postRequestResultsSummary" class="script-results-count">No tests</span>
+              </div>
+              <div id="postRequestTestResults" class="test-result-list" aria-live="polite">
+                <p class="test-result-empty">No test results yet.</p>
+              </div>
+            </section>
           </div>
         </div>
 

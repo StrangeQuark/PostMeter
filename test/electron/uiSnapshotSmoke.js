@@ -12,6 +12,7 @@ const EXPECTED_SNAPSHOTS = [
   'cookies',
   'auth-oauth',
   'response',
+  'test-results',
   'runner',
   'load',
   'workspace-sandbox',

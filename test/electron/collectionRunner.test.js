@@ -438,7 +438,7 @@ test('routes single-request pm.vault prompts through the shared lifecycle', asyn
   });
 });
 
-test('denied single-request pm.vault prompts stop code after the vault call', async () => {
+test('denied single-request pm.vault prompts fail pre-request tests without blocking the main request', async () => {
   const vault = new MemoryVaultStore({ token: 'secret-token' });
   const request = requestModel({
     id: 'vault-denied',
@@ -454,20 +454,22 @@ test('denied single-request pm.vault prompts stop code after the vault call', as
       `
     }
   });
+  const sent = [];
 
-  await assert.rejects(
-    () => runRequestWithScripts(request, { id: 'env', name: 'Env', variables: [] }, {
-      sendRequest: async () => response(200, '{}'),
-      trustedCapabilities: { vault: false, vaultGrants: {} },
-      vault,
-      vaultPrompt: async () => ({ granted: false, scope: 'request' })
-    }),
-    (error) => {
-      assert.match(error.preRequestScriptResult.tests[0].error, /pm\.vault access was denied/);
-      assert.equal(error.environment.variables.find((item) => item.key === 'afterDeniedVault'), undefined);
-      return true;
-    }
-  );
+  const result = await runRequestWithScripts(request, { id: 'env', name: 'Env', variables: [] }, {
+    sendRequest: async (sentRequest) => {
+      sent.push(sentRequest.id);
+      return response(200, '{}');
+    },
+    trustedCapabilities: { vault: false, vaultGrants: {} },
+    vault,
+    vaultPrompt: async () => ({ granted: false, scope: 'request' })
+  });
+
+  assert.deepEqual(sent, ['vault-denied']);
+  assert.equal(result.response.statusCode, 200);
+  assert.match(result.preRequestScriptResult.tests[0].error, /pm\.vault access was denied/);
+  assert.equal(result.environment.variables.find((item) => item.key === 'afterDeniedVault'), undefined);
   const audit = await vault.listAudit();
   assert.deepEqual(audit.map((entry) => entry.operation), ['prompt-deny', 'denied-after-call']);
 });
@@ -776,6 +778,52 @@ test('runs pm.execution.runRequest through the collection broker', async () => {
   assert.ok(result.results[0].testScriptResult.tests.some((item) => item.name === 'Target: target request tests are reported on caller' && item.passed));
 });
 
+test('resolves pm.execution.runRequest request links against imported request IDs', async () => {
+  const collection = collectionModel({
+    id: 'collection-link-targets',
+    name: 'Run Request Links',
+    requests: [
+      requestModel({
+        id: 'root',
+        name: 'Root',
+        url: 'https://api.example.test/root',
+        scripts: {
+          tests: `
+            pm.test('root can run a linked request', async function () {
+              const response = await pm.execution.runRequest('https://www.postman.com/team/workspace/request/collection-postman-id/request-postman-uid?action=share&source=copy-link');
+              pm.expect(response.code).to.equal(204);
+            });
+            pm.execution.setNextRequest(null);
+          `
+        }
+      }),
+      requestModel({
+        id: 'regenerated-target-id',
+        name: 'Target',
+        url: 'https://api.example.test/target',
+        postman: {
+          ids: {
+            original: 'request-postman-original',
+            uid: 'request-postman-uid'
+          }
+        }
+      })
+    ]
+  });
+  const sent = [];
+
+  const result = await runCollection(collection, null, {
+    sendRequest: async (request) => {
+      sent.push(request.id);
+      return response(request.id === 'regenerated-target-id' ? 204 : 200, '');
+    }
+  });
+
+  assert.equal(result.passed, true);
+  assert.deepEqual(sent, ['root', 'regenerated-target-id']);
+  assert.equal(result.totalRequests, 1);
+});
+
 test('runs pm.vault through collection scripts when the workspace grants access', async () => {
   const collection = collectionModel({
     name: 'Vault Collection',
@@ -833,16 +881,23 @@ test('propagates diagnostics callbacks into collection sandbox broker denials', 
     ]
   });
 
+  const sent = [];
   const result = await runCollection(collection, { id: 'env', name: 'Env', variables: [] }, {
     trustedCapabilities: { sendRequest: false },
     recordDiagnosticEvent: async (event) => {
       events.push(event);
     },
-    sendRequest: async () => response(200, '{}')
+    sendRequest: async (request) => {
+      sent.push(request.id);
+      return response(200, '{}');
+    }
   });
   await new Promise((resolve) => setImmediate(resolve));
 
   assert.equal(result.passed, false);
+  assert.deepEqual(sent, ['root']);
+  assert.equal(result.results[0].statusCode, 200);
+  assert.equal(result.results[0].preRequestScriptResult.tests[0].passed, false);
   assert.ok(events.some((event) => (
     event.type === 'sandbox.broker.denied'
       && event.failureCode === 'script_send_request_disabled'

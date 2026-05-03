@@ -94,6 +94,34 @@
       });
     }, global);
 
+    await captureUiSnapshotState('test-results', () => {
+      activateTab('results', 'testResults');
+      displayResponse({
+        statusCode: 200,
+        durationMillis: 39,
+        responseBytes: 2,
+        finalUrl: 'https://api.snapshot.test/widgets?expand=owner',
+        headers: { 'content-type': ['application/json'] },
+        body: '{}',
+        preRequestScriptResult: {
+          passed: false,
+          tests: [{
+            name: 'pre-request token is available',
+            passed: false,
+            error: 'Expected pm.sendRequest is disabled for this workspace. to equal null.'
+          }],
+          error: '',
+          logs: []
+        },
+        testScriptResult: {
+          passed: true,
+          tests: [{ name: 'response status is 200', passed: true, error: '' }],
+          error: '',
+          logs: ['post-request console output']
+        }
+      });
+    }, global);
+
     await captureUiSnapshotState('runner', () => {
       activateTab('results', 'runner');
       $('runnerResults').textContent = [
