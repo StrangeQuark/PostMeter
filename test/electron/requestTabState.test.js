@@ -328,6 +328,54 @@ test('request tab state saves the requested environment tab when closing an inac
   assert.equal(renders, 1);
 });
 
+test('request tab state keeps a dirty environment tab open and reports failed close-save persistence', async () => {
+  const state = createRendererState();
+  const savedEnvironment = { id: 'environment-1', name: 'Saved Environment', variables: [] };
+  state.workspace = {
+    collections: [],
+    environments: [savedEnvironment]
+  };
+  state.activeMainPanel = 'request';
+  state.activeEnvironmentId = 'none';
+  state.openEnvironmentTabs = [
+    {
+      key: 'environment:environment-1',
+      environmentId: 'environment-1',
+      dirty: true,
+      createdUnsaved: false,
+      snapshot: JSON.stringify(savedEnvironment)
+    }
+  ];
+  const statuses = [];
+  const notifications = [];
+  let tabRenders = 0;
+
+  const tabState = createRequestTabState({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => null,
+    activeWorkspaceItem: () => null,
+    notifyUser: (title, message) => notifications.push({ title, message }),
+    persistWorkspace: async () => {
+      throw new Error('disk full');
+    },
+    promptUnsavedRequestClose: async () => 'save',
+    renderAll: () => {},
+    renderRequestTabs: () => { tabRenders += 1; },
+    setStatus: (message) => statuses.push(message),
+    workspaceListItems: () => []
+  });
+
+  await tabState.closeEnvironmentTab(state.openEnvironmentTabs[0]);
+
+  assert.equal(state.openEnvironmentTabs.length, 1);
+  assert.equal(state.openEnvironmentTabs[0].dirty, true);
+  assert.match(statuses.at(-1), /Environment Save Failed: disk full/);
+  assert.deepEqual(notifications.at(-1), { title: 'Environment Save Failed', message: 'disk full' });
+  assert.equal(tabRenders, 1);
+});
+
 test('request tab state saves the requested request tab when closing an inactive dirty request', async () => {
   const state = createRendererState();
   const request = { id: 'request-1', name: 'Saved Request', method: 'GET', url: 'https://saved.example.test' };
@@ -387,5 +435,65 @@ test('request tab state saves the requested request tab when closing an inactive
   assert.deepEqual(persistCalls, [{ showStatus: false, config: { requestTabKey: 'request:collection-1:request-1' } }]);
   assert.deepEqual(state.openRequestTabs, []);
   assert.equal(collectionRenders, 1);
+  assert.equal(tabRenders, 1);
+});
+
+test('request tab state keeps a dirty request tab open and reports failed close-save persistence', async () => {
+  const state = createRendererState();
+  const request = { id: 'request-1', name: 'Saved Request', method: 'GET', url: 'https://saved.example.test' };
+  state.workspace = {
+    collections: [
+      {
+        id: 'collection-1',
+        requests: [request],
+        folders: []
+      }
+    ],
+    environments: []
+  };
+  state.activeMainPanel = 'environment';
+  state.openRequestTabs = [
+    {
+      key: 'request:collection-1:request-1',
+      collectionId: 'collection-1',
+      requestId: 'request-1',
+      dirty: true,
+      createdUnsaved: false,
+      draft: false,
+      snapshot: JSON.stringify(request)
+    }
+  ];
+  const statuses = [];
+  const notifications = [];
+  let tabRenders = 0;
+
+  const tabState = createRequestTabState({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => null,
+    activeWorkspaceItem: () => null,
+    findRequest(collection, requestId) {
+      const found = collection.requests.find((item) => item.id === requestId);
+      return found ? { request: found, folder: null } : null;
+    },
+    notifyUser: (title, message) => notifications.push({ title, message }),
+    persistWorkspace: async () => {
+      throw new Error('disk full');
+    },
+    promptUnsavedRequestClose: async () => 'save',
+    renderAll: () => {},
+    renderCollections: () => {},
+    renderRequestTabs: () => { tabRenders += 1; },
+    setStatus: (message) => statuses.push(message),
+    workspaceListItems: () => []
+  });
+
+  await tabState.closeRequestTab(state.openRequestTabs[0]);
+
+  assert.equal(state.openRequestTabs.length, 1);
+  assert.equal(state.openRequestTabs[0].dirty, true);
+  assert.match(statuses.at(-1), /Request Save Failed: disk full/);
+  assert.deepEqual(notifications.at(-1), { title: 'Request Save Failed', message: 'disk full' });
   assert.equal(tabRenders, 1);
 });

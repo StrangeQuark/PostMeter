@@ -1,0 +1,366 @@
+{
+  "schemaVersion": 1,
+  "name": "ux-accessibility",
+  "generatedFrom": "src/core/productionSupportMatrices.js",
+  "deterministic": true,
+  "rows": [
+    {
+      "id": "a11y.dynamic-controls",
+      "area": "Accessibility",
+      "target": "Dynamic workspace, package, file-binding, splitter, autocomplete combobox/listbox, context-menu, cookie, request-variable, response, and modal controls expose accessible names, keyboard focus behavior, and stable labels; production renderer workflows avoid raw native prompt, confirm, and alert dialogs.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/renderer/index.html",
+        "src/renderer/layoutControls.js",
+        "src/renderer/variableAutocomplete.js",
+        "src/renderer/contextMenu.js",
+        "src/renderer/requestEditorPanels.js",
+        "src/renderer/renderer.js"
+      ],
+      "tests": [
+        "npm run test:ui:regression",
+        "test/electron/rendererBootstrap.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "a11y.live-regions",
+      "area": "Accessibility",
+      "target": "App status, validation, OAuth progress, response metrics, runner results, load-test results, package status, vault status, and file-binding status are announced through appropriate live regions.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/renderer/index.html",
+        "src/renderer/renderer.js"
+      ],
+      "tests": [
+        "npm run test:ui:regression"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "a11y.modal-focus-management",
+      "area": "Accessibility",
+      "target": "High-frequency text-input, secret-input, confirmation, notification, export, save-draft, and vault-access modals move focus on open, trap keyboard focus while open, restore focus to a visible opener on close, and support Escape/backdrop cancellation where safe.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/renderer/renderer.js",
+        "src/renderer/rendererBootstrap.js",
+        "src/renderer/index.html"
+      ],
+      "tests": [
+        "npm run test:ui:regression",
+        "test/electron/rendererBootstrap.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "a11y.tabs-and-panels",
+      "area": "Accessibility",
+      "target": "Request/result tabs, sidebar tabs, opened request/environment/workspace tabs, and tab panels expose roles, selected state, labels, relationships, and close controls that are not nested inside tab roles.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/renderer/index.html",
+        "src/renderer/renderer.js",
+        "src/renderer/requestTabs.js",
+        "src/renderer/requestTabState.js"
+      ],
+      "tests": [
+        "npm run test:ui:regression",
+        "test/electron/requestTabs.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "coverage.constrained-themes-long-labels",
+      "area": "UI coverage",
+      "target": "Linux headless UI smoke covers constrained desktop size, system/light/dark theme switching, active forced-colors focus visibility, long labels, empty workspaces, and large workspaces.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/renderer/uiRegressionSmoke.js",
+        "src/renderer/uiSnapshotSmoke.js",
+        "test/electron/uiRegressionSmoke.js",
+        "test/electron/uiSnapshotSmoke.js"
+      ],
+      "tests": [
+        "npm run test:ui:regression",
+        "npm run test:ui:snapshot"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "coverage.failure-artifacts",
+      "area": "UI coverage",
+      "target": "Startup and UI smoke failures can write timeout-bounded screenshot, redacted structural DOM-state including active-element ARIA metadata, and redacted failure-log artifacts for CI upload through POSTMETER_VALIDATION_ARTIFACT_DIR or POSTMETER_UI_SMOKE_ARTIFACT_DIR; source UI, packaged smoke launcher, packaged sandbox-validation stdout/stderr/stacks, and multi-process load-worker stderr previews use the shared diagnostics redactor for local paths, private keys, request/response alias values, JSON-escaped slash URLs/file URLs, Bearer/Basic/Digest/Hawk/Token/OAuth/NTLM/Negotiate auth-shaped values, JSON-escaped/double-escaped/nested-JSON camelCase auth-header aliases, and OAuth code/verifier/assertion fields; smoke child processes fail closed with exit code 124 on timeout.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/main.js",
+        "electron/mainWindow.js",
+        "scripts/smokeProcess.js",
+        "test/electron/startupSmoke.js",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml",
+        ".github/workflows/release-validation.yml"
+      ],
+      "tests": [
+        "npm run test:smoke",
+        "npm run test:ui",
+        "npm run test:ui:regression",
+        "npm run test:ui:oauth",
+        "npm run test:ui:snapshot",
+        "test/electron/mainWindowSmoke.test.js",
+        "test/electron/smokeProcess.test.js",
+        "test/electron/loadTestRunner.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "workflow.collection-runner",
+      "area": "Collection runner",
+      "target": "Collection runs expose idle, running, cancellation, export, pass/fail, pre-run save failure, and failed-operation states without writing partial result exports.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/renderer/index.html",
+        "src/renderer/rendererWorkflows.js",
+        "electron/runtimeIpc.js"
+      ],
+      "tests": [
+        "npm run test:ui:regression",
+        "test/electron/runtimeIpc.test.js",
+        "test/electron/collectionRunner.test.js",
+        "test/electron/rendererWorkflows.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "workflow.diagnostics-export",
+      "area": "Diagnostics export",
+      "target": "Workspace diagnostics controls and Help menu export produce a user-selected local diagnostic bundle with visible review-before-sharing messaging and off-by-default request/response logging categories.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/renderer/index.html",
+        "src/renderer/renderer.js",
+        "src/renderer/rendererBootstrap.js",
+        "electron/appMenu.js",
+        "electron/diagnosticsIpc.js",
+        "docs/TROUBLESHOOTING.md"
+      ],
+      "tests": [
+        "npm run diagnostics:privacy:validate",
+        "test/electron/diagnosticsIpc.test.js",
+        "test/electron/rendererBootstrap.test.js",
+        "npm run test:ui:regression"
+      ],
+      "notes": "The diagnostics/privacy matrix owns the strict redaction and no-telemetry proof; this UX row owns the visible controls and export path."
+    },
+    {
+      "id": "workflow.file-bindings",
+      "area": "File bindings",
+      "target": "Imported file/binary attachment binding review exposes missing-binding, bound-file, destructive removal cancellation/success/failure rollback states while keeping arbitrary file paths denied until the user binds them.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/renderer/index.html",
+        "src/renderer/rendererWorkflows.js",
+        "src/core/fileAttachmentBindings.js",
+        "docs/SANDBOX_CONTRACT.md"
+      ],
+      "tests": [
+        "npm run test:ui:regression",
+        "test/electron/postmanImporter.test.js",
+        "test/electron/scriptSandbox.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "workflow.first-launch-empty-state",
+      "area": "First launch",
+      "target": "First launch and empty workspace states give visible next actions without requiring existing collections, requests, environments, or history.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/renderer/index.html",
+        "src/renderer/uiRegressionSmoke.js",
+        "src/renderer/uiSnapshotSmoke.js"
+      ],
+      "tests": [
+        "npm run test:ui:regression",
+        "npm run test:ui:snapshot"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "workflow.import-export",
+      "area": "Imports/exports",
+      "target": "Workspace, collection, example, runner, and load-test import/export cancellation and failure paths stay parent-owned and report actionable errors without clobbering active state.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/workspaceIpc.js",
+        "electron/runtimeIpc.js",
+        "electron/fileDialogs.js",
+        "docs/TROUBLESHOOTING.md"
+      ],
+      "tests": [
+        "npm run test:ui:regression",
+        "test/electron/workspaceIpc.test.js",
+        "test/electron/runtimeIpc.test.js",
+        "test/electron/collectionFormats.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "workflow.load-test",
+      "area": "Load tests",
+      "target": "Load tests expose idle, running, cancellation, export, validation, pre-load save failure, and failed-operation states with bounded configuration controls.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/renderer/index.html",
+        "src/renderer/rendererWorkflows.js",
+        "electron/runtimeIpc.js"
+      ],
+      "tests": [
+        "npm run test:ui:regression",
+        "test/electron/runtimeIpc.test.js",
+        "test/electron/rendererWorkflows.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "workflow.local-mocks",
+      "area": "Local mocks",
+      "target": "Imported local mock scripts are preserved and run through the bounded loopback mock runner; mock failure and state behavior remain documented as sandbox-owned rather than cloud-owned.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/core/localMockServer.js",
+        "docs/COMPATIBILITY.md",
+        "docs/SANDBOX_CONTRACT.md"
+      ],
+      "tests": [
+        "test/electron/postmanScriptImportCoverage.test.js",
+        "test/electron/postmanSandboxCorpus.test.js",
+        "test/electron/localMockServer.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "workflow.oauth",
+      "area": "OAuth",
+      "target": "OAuth PKCE and device-code UX exposes waiting, completion, cancellation, state-mismatch, provider-denial, timeout, token-failure, and redacted provider-error states.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/renderer/index.html",
+        "src/renderer/rendererWorkflows.js",
+        "src/renderer/uiOauthSmoke.js",
+        "docs/OAUTH_PROVIDER_CERTIFICATION.md"
+      ],
+      "tests": [
+        "npm run test:ui:oauth",
+        "npm run test:ui:regression",
+        "test/electron/oauthIpc.test.js",
+        "test/electron/oauthFlows.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "workflow.request-edit-send",
+      "area": "Requests",
+      "target": "Request editing, validation, pre-send save failure, send success, send failure, response display, updated OAuth persistence markers, failed request/environment/draft close-save persistence, and unsaved-close recovery remain visible and recoverable.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/renderer/index.html",
+        "src/renderer/rendererWorkflows.js",
+        "electron/requestIpc.js"
+      ],
+      "tests": [
+        "npm run test:ui",
+        "npm run test:ui:regression",
+        "test/electron/requestIpc.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "workflow.sandbox-package-review",
+      "area": "Sandbox package review",
+      "target": "Package review/fetch/cache controls surface reviewed package status, missing references, fetch failure, refresh behavior, and destructive removal cancellation/success/failure rollback without installing unreviewed runtime packages.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/renderer/index.html",
+        "src/renderer/rendererWorkflows.js",
+        "electron/sandboxPackageIpc.js",
+        "src/core/sandboxPackageCache.js"
+      ],
+      "tests": [
+        "npm run test:ui:regression",
+        "test/electron/sandboxPackageIpc.test.js",
+        "test/electron/sandboxPackageFetcher.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "workflow.settings-theme",
+      "area": "Settings/theme",
+      "target": "Workspace-scoped sandbox capability toggles, update settings, load policy, and system/light/dark theme preference save and reload without leaking into request payloads.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/renderer/index.html",
+        "src/renderer/theme.css",
+        "src/renderer/renderer.js",
+        "src/renderer/uiWorkflowSmoke.js"
+      ],
+      "tests": [
+        "npm run test:ui",
+        "npm run test:ui:regression"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "workflow.update-check",
+      "area": "Update check",
+      "target": "Update-check success, no-update, and failure states use validated main-process update metadata and user-visible non-secret notifications.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/core/updateChecker.js",
+        "electron/appIpc.js",
+        "src/renderer/rendererWorkflows.js"
+      ],
+      "tests": [
+        "npm run test:ui:regression",
+        "test/electron/appIpc.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "workflow.vault-prompts",
+      "area": "Vault prompts",
+      "target": "Vault metadata, prompt, grant, deny, reset, unavailable-encryption, and local secret-binding states keep script-requested secret values in the main process, use masked in-app user input for local binding, and expose metadata-only script access decisions.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/renderer/index.html",
+        "src/renderer/rendererBootstrap.js",
+        "electron/vaultPrompt.js",
+        "docs/TROUBLESHOOTING.md"
+      ],
+      "tests": [
+        "npm run test:ui:regression",
+        "test/electron/vaultPrompt.test.js",
+        "test/electron/vaultPromptQueue.test.js",
+        "test/electron/rendererBootstrap.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "workflow.workspace-management",
+      "area": "Workspaces",
+      "target": "Workspace create, open, switch, rename, export, and delete flows expose success/failure states and in-app destructive confirmation through main-process validated operations.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/renderer/rendererWorkflows.js",
+        "electron/workspaceIpc.js",
+        "docs/TROUBLESHOOTING.md"
+      ],
+      "tests": [
+        "npm run test:ui:regression",
+        "test/electron/workspaceIpc.test.js",
+        "test/electron/workspaceManager.test.js"
+      ],
+      "notes": ""
+    }
+  ]
+}

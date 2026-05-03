@@ -813,6 +813,43 @@ test('runs pm.vault through collection scripts when the workspace grants access'
   assert.equal(await vault.get('collectionToken'), undefined);
 });
 
+test('propagates diagnostics callbacks into collection sandbox broker denials', async () => {
+  const events = [];
+  const collection = collectionModel({
+    name: 'Diagnostic Denials',
+    requests: [
+      requestModel({
+        id: 'root',
+        name: 'Root',
+        url: 'https://api.example.test/root',
+        scripts: {
+          preRequest: `
+            pm.test('sendRequest denial is diagnosed', async function () {
+              await pm.sendRequest('https://api.example.test/denied');
+            });
+          `
+        }
+      })
+    ]
+  });
+
+  const result = await runCollection(collection, { id: 'env', name: 'Env', variables: [] }, {
+    trustedCapabilities: { sendRequest: false },
+    recordDiagnosticEvent: async (event) => {
+      events.push(event);
+    },
+    sendRequest: async () => response(200, '{}')
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(result.passed, false);
+  assert.ok(events.some((event) => (
+    event.type === 'sandbox.broker.denied'
+      && event.failureCode === 'script_send_request_disabled'
+      && event.fields.operation === 'pm.sendRequest'
+  )));
+});
+
 test('returns null when pm.execution.runRequest targets a skipped request', async () => {
   const collection = collectionModel({
     name: 'Run Request Skip',

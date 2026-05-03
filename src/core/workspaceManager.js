@@ -103,6 +103,35 @@ class WorkspaceManager {
     return store.exportWorkspace(loaded.workspace, exportPath);
   }
 
+  async loadWorkspaceById(workspaceId) {
+    const catalog = await this.ensureCatalog(this.currentWorkspaceId);
+    if (!catalog.files.includes(workspaceId)) {
+      throw new Error(`Workspace "${workspaceId}" was not found.`);
+    }
+    const loaded = await new WorkspaceStore(this.absoluteWorkspacePath(workspaceId)).load();
+    return loaded.workspace;
+  }
+
+  async restoreWorkspaceFile(workspaceId, workspace, options = {}) {
+    if (typeof workspaceId !== 'string' || !workspaceId.trim() || path.basename(workspaceId) !== workspaceId) {
+      throw new Error('workspaceId must be a managed workspace filename.');
+    }
+    if (!workspaceId.endsWith(this.workspaceExtension)) {
+      throw new Error(`workspaceId must end with ${this.workspaceExtension}.`);
+    }
+    const targetPath = this.absoluteWorkspacePath(workspaceId);
+    if (await pathExists(targetPath)) {
+      throw new Error(`Workspace "${workspaceId}" already exists.`);
+    }
+    await new WorkspaceStore(targetPath).save(workspace, { overwrite: false });
+    const catalog = await this.ensureCatalog(workspaceId);
+    const requestedCurrent = typeof options.currentWorkspaceId === 'string' ? options.currentWorkspaceId : '';
+    const preferredWorkspaceId = catalog.files.includes(requestedCurrent)
+      ? requestedCurrent
+      : workspaceId;
+    return this.load({ preferredWorkspaceId });
+  }
+
   async importCollection(importPath) {
     return this.currentStore().importCollection(importPath);
   }

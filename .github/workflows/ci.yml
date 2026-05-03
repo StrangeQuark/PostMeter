@@ -55,6 +55,12 @@ jobs:
       - name: Non-Postman compatibility matrix validation
         run: npm run compatibility:non-postman:validate
 
+      - name: UX accessibility matrix validation
+        run: npm run ux:accessibility:validate
+
+      - name: Diagnostics privacy matrix validation
+        run: npm run diagnostics:privacy:validate
+
       - name: Sandbox release gate manifest
         run: npm run release:gate
 
@@ -74,18 +80,28 @@ jobs:
 
       - name: Startup smoke
         run: xvfb-run -a npm run test:smoke
+        env:
+          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/startup-smoke
 
       - name: UI workflow smoke
         run: xvfb-run -a npm run test:ui
+        env:
+          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-workflow
 
       - name: UI regression smoke
         run: xvfb-run -a npm run test:ui:regression
+        env:
+          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-regression
 
       - name: UI OAuth smoke
         run: xvfb-run -a npm run test:ui:oauth
+        env:
+          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-oauth
 
       - name: UI snapshot smoke
         run: xvfb-run -a npm run test:ui:snapshot
+        env:
+          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-snapshot
 
       - name: Linux package smoke
         run: npm run pack:linux
@@ -106,7 +122,7 @@ jobs:
         with:
           name: postmeter-ci-linux-validation-logs
           path: validation-artifacts/**
-          if-no-files-found: ignore
+          if-no-files-found: error
           retention-days: 14
 
   native-packaged-smoke:
@@ -163,7 +179,7 @@ jobs:
         run: npm run sandbox:platform:validate
 
       - name: Validate production support matrices
-        run: npm run oauth:certify:validate && npm run oauth:certify:mock && npm run production:readiness:validate && npm run electron:security:validate && npm run workspace:durability:validate && npm run compatibility:non-postman:validate
+        run: npm run oauth:certify:validate && npm run oauth:certify:mock && npm run production:readiness:validate && npm run electron:security:validate && npm run workspace:durability:validate && npm run compatibility:non-postman:validate && npm run ux:accessibility:validate && npm run diagnostics:privacy:validate
 
       - name: Build unsigned packaged app
         run: ${{ matrix.command }}
@@ -216,5 +232,5 @@ jobs:
         with:
           name: postmeter-ci-${{ matrix.platform }}-validation-logs
           path: validation-artifacts/**
-          if-no-files-found: ignore
+          if-no-files-found: error
           retention-days: 14

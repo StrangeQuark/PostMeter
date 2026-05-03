@@ -1,18 +1,30 @@
 #!/usr/bin/env node
 
-const { spawnSync } = require('node:child_process');
+const path = require('node:path');
+const { redactSmokeOutputText, spawnWithTimeout } = require('./smokeProcess');
 
-if (process.env.POSTMETER_SANDBOX_RUNTIME_CHILD === '1') {
-  const { validateSandboxRuntime } = require('../src/core/sandboxRuntimeValidation');
-  validateSandboxRuntime()
-    .then(() => {
-      console.log('PostMeter sandbox runtime validation passed.');
-    })
-    .catch((error) => {
-      console.error(error.message || String(error));
+const DEFAULT_TIMEOUT_MILLIS = 30_000;
+
+if (require.main === module) {
+  if (process.env.POSTMETER_SANDBOX_RUNTIME_CHILD === '1') {
+    const { validateSandboxRuntime } = require('../src/core/sandboxRuntimeValidation');
+    validateSandboxRuntime()
+      .then(() => {
+        console.log('PostMeter sandbox runtime validation passed.');
+      })
+      .catch((error) => {
+        console.error(redactForOutput(error.message || String(error)));
+        process.exit(1);
+      });
+  } else {
+    runParent().catch((error) => {
+      console.error(redactForOutput(error.stack || error.message || String(error)));
       process.exit(1);
     });
-} else {
+  }
+}
+
+async function runParent() {
   const electronPath = require('electron');
   const env = {
     ...process.env,
@@ -21,13 +33,39 @@ if (process.env.POSTMETER_SANDBOX_RUNTIME_CHILD === '1') {
   };
   delete env.NODE_OPTIONS;
 
-  const result = spawnSync(electronPath, [__filename], {
+  const result = await spawnWithTimeout(electronPath, [__filename], {
     env,
-    stdio: 'inherit'
+    timeoutMillis: validationTimeoutMillis(process.env.POSTMETER_SANDBOX_VALIDATE_TIMEOUT_MS),
+    timeoutMessage: `Sandbox runtime validation timed out after ${validationTimeoutMillis(process.env.POSTMETER_SANDBOX_VALIDATE_TIMEOUT_MS)} ms.`
   });
-  if (result.error) {
-    console.error(result.error.message || String(result.error));
-    process.exit(1);
+  if (result.stdout) {
+    process.stdout.write(redactForOutput(result.stdout, electronPath));
   }
-  process.exit(result.status ?? 1);
+  if (result.stderr) {
+    const redactedStderr = redactForOutput(result.stderr, electronPath);
+    process.stderr.write(redactedStderr.endsWith('\n') ? redactedStderr : `${redactedStderr}\n`);
+  }
+  process.exit(result.code ?? 1);
 }
+
+function redactForOutput(value, executablePath = '') {
+  const extraPaths = [process.cwd(), __dirname];
+  if (executablePath) {
+    const resolvedPath = path.resolve(executablePath);
+    extraPaths.push(resolvedPath, path.dirname(resolvedPath));
+  }
+  return redactSmokeOutputText(String(value || ''), extraPaths);
+}
+
+function validationTimeoutMillis(value) {
+  const timeout = Number(value || DEFAULT_TIMEOUT_MILLIS);
+  if (!Number.isFinite(timeout) || timeout <= 0) {
+    return DEFAULT_TIMEOUT_MILLIS;
+  }
+  return Math.max(1_000, Math.floor(timeout));
+}
+
+module.exports = {
+  redactForOutput,
+  validationTimeoutMillis
+};

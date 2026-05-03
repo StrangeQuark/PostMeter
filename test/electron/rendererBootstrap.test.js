@@ -7,6 +7,7 @@ const {
   closeToolbarMenus,
   initializeRenderer
 } = require('../../src/renderer/rendererBootstrap');
+const { showContextMenu } = require('../../src/renderer/contextMenu');
 
 test('renderer bootstrap initializes theme and runs registered cleanup callbacks on unload', async () => {
   const documentListeners = new Map();
@@ -88,6 +89,47 @@ test('renderer bootstrap closes toolbar menus and resets trigger aria state', ()
   assert.equal(triggers.every((button) => button.attributes['aria-expanded'] === 'false'), true);
 });
 
+test('renderer accessibility source keeps splitters body editor and toolbar save recovery wired', async () => {
+  const root = path.join(__dirname, '..', '..');
+  const indexSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'index.html'), 'utf8');
+  const chromeSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'chrome.css'), 'utf8');
+  const layoutSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'layoutControls.js'), 'utf8');
+  const bootstrapSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'rendererBootstrap.js'), 'utf8');
+  const rendererSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'renderer.js'), 'utf8');
+
+  assert.match(indexSource, /id="bodyInput"[^>]+aria-label="Request body"/);
+  assert.match(indexSource, /role="tablist"[^>]+aria-orientation="vertical"/);
+  assert.match(layoutSource, /aria-valuemin/);
+  assert.match(layoutSource, /aria-valuemax/);
+  assert.match(layoutSource, /aria-valuenow/);
+  assert.match(layoutSource, /event\.key === 'ArrowLeft'/);
+  assert.match(layoutSource, /event\.key === 'ArrowRight'/);
+  assert.match(bootstrapSource, /aria-orientation/);
+  assert.match(bootstrapSource, /ArrowDown/);
+  assert.match(bootstrapSource, /ArrowUp/);
+  assert.match(rendererSource, /Workspace save failed:/);
+  assert.match(rendererSource, /Workspace Save Failed/);
+  assert.match(rendererSource, /const previousSettings = structuredClone\(workspace\.settings\)/);
+  assert.match(rendererSource, /workspace\.settings = previousSettings/);
+  assert.match(indexSource, /<fieldset class="workspace-diagnostics-panel" aria-describedby="diagnosticsPrivacySummary diagnosticsSensitiveWarning">/);
+  for (const id of [
+    'diagnosticLogUrlsInput',
+    'diagnosticLogHeadersInput',
+    'diagnosticLogCookiesInput',
+    'diagnosticLogBodiesInput',
+    'diagnosticLogProtocolMessagesInput',
+    'diagnosticLogScriptConsoleInput',
+    'diagnosticLogPayloadIdentifiersInput',
+    'exportDiagnosticsButton'
+  ]) {
+    assert.match(indexSource, new RegExp(`id="${id}"[^>]+aria-describedby="diagnosticsSensitiveWarning"`));
+  }
+  assert.match(chromeSource, /\.workspace-diagnostics-panel/);
+  assert.match(rendererSource, /pendingDiagnosticsSettingsSave/);
+  assert.match(rendererSource, /Switch to this workspace before exporting local diagnostics/);
+  assert.match(rendererSource, /Saving diagnostics privacy settings before export/);
+});
+
 test('renderer bootstrap binds auth input and modal draft confirmation events', () => {
   const calls = {
     authType: [],
@@ -136,6 +178,45 @@ test('renderer bootstrap binds auth input and modal draft confirmation events', 
   assert.deepEqual(calls.resolveModal, ['collection-1', 'collection-2']);
 });
 
+test('renderer bootstrap resolves text, confirmation, and notification modals', () => {
+  const resolved = [];
+  const elements = new Map([
+    ['textInputModal', createElement()],
+    ['textInputModalInput', createElement({ tagName: 'TEXTAREA', value: 'textarea-value' })],
+    ['textInputModalSingleLineInput', createElement({ tagName: 'INPUT', value: 'single-line-value' })],
+    ['confirmTextInputModalButton', createElement()],
+    ['cancelTextInputModalButton', createElement()],
+    ['confirmActionButton', createElement()],
+    ['cancelConfirmActionButton', createElement()],
+    ['closeNotificationModalButton', createElement()],
+    ['contextMenu', createElement()],
+    ['modalBackdrop', createElement()]
+  ]);
+  elements.get('textInputModal').dataset.valueControl = 'textInputModalSingleLineInput';
+
+  bindUi({
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} },
+    onResolveActiveModal: (value) => resolved.push(value)
+  });
+
+  elements.get('confirmTextInputModalButton').dispatch('click');
+  elements.get('cancelTextInputModalButton').dispatch('click');
+  elements.get('confirmActionButton').dispatch('click');
+  elements.get('cancelConfirmActionButton').dispatch('click');
+  elements.get('closeNotificationModalButton').dispatch('click');
+
+  assert.deepEqual(resolved, ['single-line-value', null, true, false, true]);
+});
+
 test('renderer bootstrap binds every collection export menu button', () => {
   const calls = [];
   const controls = [
@@ -169,6 +250,133 @@ test('renderer bootstrap binds every collection export menu button', () => {
   }
 
   assert.deepEqual(calls, controls.map(([, label]) => label));
+});
+
+test('renderer bootstrap closes open toolbar menus on Tab without native dialogs', () => {
+  const button = createElement();
+  const menu = createElement();
+  const elements = new Map([
+    ['importMenuButton', button],
+    ['importMenu', menu]
+  ]);
+  const fakeDocument = {
+    getElementById(id) {
+      return elements.get(id) || null;
+    },
+    querySelectorAll(selector) {
+      if (selector === '.toolbar-menu') {
+        return [menu];
+      }
+      if (selector === '.menu-trigger') {
+        return [button];
+      }
+      return [];
+    },
+    addEventListener() {}
+  };
+
+  bindUi({
+    doc: fakeDocument,
+    windowObject: { addEventListener() {} }
+  });
+
+  button.dispatch('click');
+  assert.equal(menu.hidden, false);
+  assert.equal(button.attributes['aria-expanded'], 'true');
+
+  menu.dispatch('keydown', { key: 'Tab' });
+
+  assert.equal(menu.hidden, true);
+  assert.equal(button.attributes['aria-expanded'], 'false');
+});
+
+test('tree context menus close on Tab and reset trigger expanded state', () => {
+  const previousDocument = global.document;
+  const previousWindow = global.window;
+  const trigger = createElement();
+  const menu = {
+    children: [],
+    hidden: true,
+    offsetHeight: 80,
+    offsetWidth: 120,
+    style: {},
+    textContent: '',
+    append(child) {
+      this.children.push(child);
+    },
+    querySelector(selector) {
+      return selector === 'button' ? this.children[0] : null;
+    },
+    querySelectorAll(selector) {
+      return selector === 'button:not([disabled])' ? this.children : [];
+    }
+  };
+
+  global.document = {
+    activeElement: null,
+    createElement() {
+      return createElement();
+    },
+    getElementById(id) {
+      return id === 'contextMenu' ? menu : null;
+    }
+  };
+  global.window = { innerHeight: 768, innerWidth: 1024 };
+
+  try {
+    showContextMenu(32, 32, [['Rename', () => {}]], { focusFirst: true, trigger });
+    assert.equal(menu.hidden, false);
+    assert.equal(trigger.attributes['aria-expanded'], 'true');
+
+    menu.onkeydown({
+      key: 'Tab',
+      preventDefault() {},
+      target: menu.children[0]
+    });
+
+    assert.equal(menu.hidden, true);
+    assert.equal(trigger.attributes['aria-expanded'], 'false');
+  } finally {
+    global.document = previousDocument;
+    global.window = previousWindow;
+  }
+});
+
+test('renderer bootstrap routes toolbar save failures to visible recovery state', async () => {
+  const elements = new Map([
+    ['saveButton', createElement()]
+  ]);
+  let status = '';
+  let notification = null;
+
+  bindUi({
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} },
+    onSaveWorkspace: () => {
+      Promise.reject(new Error('disk full')).catch((error) => {
+        const message = error.message || String(error);
+        status = `Workspace save failed: ${message}`;
+        notification = { title: 'Workspace Save Failed', message };
+      });
+    }
+  });
+
+  elements.get('saveButton').dispatch('click');
+  await Promise.resolve();
+
+  assert.equal(status, 'Workspace save failed: disk full');
+  assert.deepEqual(notification, {
+    title: 'Workspace Save Failed',
+    message: 'disk full'
+  });
 });
 
 test('renderer bootstrap binds workspace sandbox control buttons', () => {
@@ -206,6 +414,49 @@ test('renderer bootstrap binds workspace sandbox control buttons', () => {
   }
 
   assert.deepEqual(calls, controls.map(([, label]) => label));
+});
+
+test('renderer bootstrap binds diagnostics privacy controls and export button', () => {
+  const changes = [];
+  const exports = [];
+  const diagnosticControlIds = [
+    'diagnosticLoggingEnabledInput',
+    'diagnosticLogLevelSelect',
+    'diagnosticLogUrlsInput',
+    'diagnosticLogHeadersInput',
+    'diagnosticLogCookiesInput',
+    'diagnosticLogBodiesInput',
+    'diagnosticLogProtocolMessagesInput',
+    'diagnosticLogScriptConsoleInput',
+    'diagnosticLogPayloadIdentifiersInput'
+  ];
+  const elements = new Map([
+    ...diagnosticControlIds.map((id) => [id, createElement({ tagName: id === 'diagnosticLogLevelSelect' ? 'SELECT' : 'INPUT' })]),
+    ['exportDiagnosticsButton', createElement()]
+  ]);
+
+  bindUi({
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} },
+    onDiagnosticsSettingsChange: (event) => changes.push(event.target),
+    onExportDiagnostics: () => exports.push('export')
+  });
+
+  for (const id of diagnosticControlIds) {
+    elements.get(id).dispatch('change');
+  }
+  elements.get('exportDiagnosticsButton').dispatch('click');
+
+  assert.equal(changes.length, diagnosticControlIds.length);
+  assert.deepEqual(exports, ['export']);
 });
 
 test('renderer bootstrap binds vault prompt decision buttons', () => {
@@ -256,9 +507,36 @@ test('renderer supplies handlers for all workspace sandbox controls', () => {
     'onRefreshSandboxFiles',
     'onBindVaultSecret',
     'onRefreshVaultMetadata',
-    'onResetVault'
+    'onResetVault',
+    'onDiagnosticsSettingsChange',
+    'onExportDiagnostics'
   ]) {
     assert.match(rendererSource, new RegExp(`${optionName}:`), `${optionName} should be passed to bindUi`);
+  }
+  assert.equal(
+    [...rendererSource.matchAll(/onRefreshSandboxFiles:/g)].length,
+    1,
+    'onRefreshSandboxFiles should not be overwritten by a later bindUi option'
+  );
+  assert.match(rendererSource, /onRefreshSandboxFiles: refreshSandboxFileBindings/);
+});
+
+test('renderer Step 11 workflows do not rely on native prompt alert or confirm dialogs', () => {
+  for (const relativePath of [
+    'src/renderer/renderer.js',
+    'src/renderer/rendererWorkflows.js',
+    'src/renderer/rendererBootstrap.js',
+    'src/renderer/requestTabState.js',
+    'src/renderer/contextMenu.js',
+    'src/renderer/variableAutocomplete.js',
+    'src/renderer/requestTabs.js'
+  ]) {
+    const source = fs.readFileSync(path.join(__dirname, '../..', relativePath), 'utf8');
+    assert.doesNotMatch(
+      source,
+      /(^|[^A-Za-z0-9_$.])(?:prompt|alert|confirm)\s*\(/,
+      `${relativePath} should use in-app modal workflows instead of native dialogs`
+    );
   }
 });
 
@@ -267,6 +545,19 @@ test('renderer cancels active OAuth flow when loaded workspace context resets', 
   assert.match(rendererSource, /function cancelActiveOauthFlowForContextReset\(\)/);
   assert.match(rendererSource, /window\.postmeter\.oauth\.cancelFlow\(flowId\)/);
   assert.match(rendererSource, /function applyLoadedWorkspace\(loaded, options = \{\}\) \{\s*cancelActiveOauthFlowForContextReset\(\);/);
+  assert.match(rendererSource, /function cancelActiveRuntimeForContextReset\(\)/);
+  assert.match(rendererSource, /window\.postmeter\.loadTest\.cancel\(loadId\)/);
+  assert.match(rendererSource, /window\.postmeter\.runner\.cancel\(runnerId\)/);
+});
+
+test('renderer clears and scopes vault metadata to the active workspace context', () => {
+  const rendererSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/renderer.js'), 'utf8');
+  assert.match(rendererSource, /let lastVaultMetadataWorkspaceId = null/);
+  assert.match(rendererSource, /lastVaultMetadata = null;\s*lastVaultMetadataWorkspaceId = null;\s*activeLoadId = null;/);
+  assert.match(rendererSource, /const metadataWorkspaceId = activeWorkspaceId \|\| ''/);
+  assert.match(rendererSource, /if \(\(activeWorkspaceId \|\| ''\) !== metadataWorkspaceId\) \{\s*return;\s*\}/);
+  assert.match(rendererSource, /lastVaultMetadataWorkspaceId = metadataWorkspaceId/);
+  assert.match(rendererSource, /lastVaultMetadataWorkspaceId !== \(activeWorkspaceId \|\| ''\)/);
 });
 
 test('renderer supplies explicit collection export format handlers', () => {
@@ -299,6 +590,7 @@ test('renderer loads vault prompt queue before the app renderer', () => {
 function createElement({ tagName = 'BUTTON', value = '' } = {}) {
   const listeners = new Map();
   return {
+    attributes: {},
     tagName,
     value,
     hidden: true,
@@ -309,12 +601,31 @@ function createElement({ tagName = 'BUTTON', value = '' } = {}) {
       }
       listeners.get(name).push(handler);
     },
+    setAttribute(name, nextValue) {
+      this.attributes[name] = String(nextValue);
+    },
+    getAttribute(name) {
+      return this.attributes[name];
+    },
+    focus() {
+      this.focused = true;
+    },
+    matches(selector) {
+      return selector === 'button' && this.tagName === 'BUTTON';
+    },
+    querySelector() {
+      return null;
+    },
+    querySelectorAll() {
+      return [];
+    },
     dispatch(name, event = {}) {
       for (const handler of listeners.get(name) || []) {
         handler({
           stopPropagation() {},
           preventDefault() {},
           target: this,
+          currentTarget: this,
           key: event.key
         });
       }

@@ -7,6 +7,7 @@ const {
   registerVaultPromptIpc,
   workspaceIdForVaultPromptDecision
 } = require('../../electron/vaultPrompt');
+const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../src/core/diagnostics');
 
 test('normalizes and persists metadata-only vault prompt grant decisions', async () => {
   const workspace = {
@@ -80,12 +81,16 @@ test('renderer vault prompt IPC resolves bounded decisions without exposing secr
       });
     }
   };
+  const events = [];
   const prompt = createVaultPrompt({
     getMainWindow: () => ({
       isDestroyed: () => false,
       webContents
     }),
-    persistDecision: async () => {}
+    persistDecision: async () => {},
+    recordDiagnosticEvent: async (event) => {
+      events.push(event);
+    }
   });
 
   const decision = await prompt({
@@ -107,6 +112,77 @@ test('renderer vault prompt IPC resolves bounded decisions without exposing secr
   assert.equal(sentPayloads[0].workspaceName, 'Workspace');
   assert.equal(Object.hasOwn(sentPayloads[0], 'value'), false);
   assert.equal(Object.hasOwn(sentPayloads[0], 'secretValue'), false);
+  assert.deepEqual(events.map((event) => event.type), ['vault.prompt.granted']);
+  assert.equal(events[0].fields.operation, 'get');
+  assert.equal(events[0].fields.scope, 'workspace');
+});
+
+test('vault prompt emits sanitized denied and reset diagnostic events', async () => {
+  const handlers = new Map();
+  registerVaultPromptIpc({
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    }
+  });
+  const events = [];
+  const sentPayloads = [];
+  const webContents = {
+    send(_channel, payload) {
+      sentPayloads.push(payload);
+      queueMicrotask(() => {
+        void handlers.get('vault:prompt-response')({ sender: webContents }, payload.promptId, {
+          granted: false,
+          scope: 'request'
+        });
+      });
+    }
+  };
+  const rendererPrompt = createVaultPrompt({
+    getMainWindow: () => ({
+      isDestroyed: () => false,
+      webContents
+    }),
+    persistDecision: async () => {},
+    recordDiagnosticEvent: async (event) => {
+      events.push(sanitizeDiagnosticEvent(event, defaultDiagnosticsSettings()));
+    }
+  });
+
+  const denied = await rendererPrompt({
+    key: 'apiToken',
+    operation: 'get',
+    requestId: 'request-1',
+    value: 'vault-secret-value'
+  });
+  const resetPrompt = createVaultPrompt({
+    dialog: {
+      showMessageBox: async () => ({ response: 4 })
+    },
+    getMainWindow: () => null,
+    persistDecision: async () => {},
+    recordDiagnosticEvent: async (event) => {
+      events.push(sanitizeDiagnosticEvent(event, defaultDiagnosticsSettings()));
+    }
+  });
+  const reset = await resetPrompt({
+    key: 'apiToken',
+    operation: 'set',
+    requestId: 'request-1',
+    value: 'vault-reset-secret'
+  });
+
+  assert.deepEqual(denied, { granted: false, reset: false, scope: 'request' });
+  assert.deepEqual(reset, { granted: false, reset: true, scope: 'request' });
+  assert.deepEqual(events.map((event) => event.type), ['vault.prompt.denied', 'vault.prompt.denied']);
+  assert.equal(events[0].failureCode, 'vault_prompt_denied');
+  assert.equal(events[0].outcome, 'denied');
+  assert.equal(events[0].fields.reset, false);
+  assert.equal(events[1].fields.reset, true);
+  assert.equal(Object.hasOwn(sentPayloads[0], 'value'), false);
+  const serialized = JSON.stringify(events);
+  assert.doesNotMatch(serialized, /vault-secret-value|vault-reset-secret/);
 });
 
 test('vault prompt IPC ignores responses from non-prompting renderers', async () => {
@@ -174,6 +250,35 @@ test('vault prompt decisions default to request-scoped denial', () => {
     reset: false,
     scope: 'request'
   });
+});
+
+test('native vault prompt fallback offers reset decisions and persists them', async () => {
+  let persistedDecision = null;
+  const dialogCalls = [];
+  const prompt = createVaultPrompt({
+    dialog: {
+      showMessageBox: async (_window, options) => {
+        dialogCalls.push(options);
+        return { response: 4 };
+      }
+    },
+    getMainWindow: () => null,
+    persistDecision: async (decision) => {
+      persistedDecision = decision;
+    }
+  });
+
+  const decision = await prompt({
+    collectionName: 'Collection',
+    key: 'apiToken',
+    operation: 'get',
+    requestName: 'Request',
+    workspaceName: 'Workspace'
+  });
+
+  assert.deepEqual(decision, { granted: false, reset: true, scope: 'request' });
+  assert.deepEqual(persistedDecision, decision);
+  assert.deepEqual(dialogCalls[0].buttons, ['Deny once', 'Allow request', 'Allow collection', 'Allow workspace', 'Reset grants']);
 });
 
 test('vault prompt persistence uses the prompted workspace id over the active workspace fallback', () => {

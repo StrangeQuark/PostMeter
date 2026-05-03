@@ -1,5 +1,6 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { defaultDiagnosticsSettings } = require('./diagnosticsSettings');
 const { defaultWorkspace } = require('./models');
 const { exportCollectionByFormat, importCollectionFromContent } = require('./collectionImportRegistry');
 const { migrate } = require('./workspaceMigrations');
@@ -111,7 +112,9 @@ class WorkspaceStore {
       throw new Error('Selected file is not a native PostMeter workspace.');
     }
     migrate(parsed);
-    return normalizeWorkspace(parsed);
+    const imported = normalizeWorkspace(parsed);
+    imported.settings.diagnostics = defaultDiagnosticsSettings();
+    return imported;
   }
 
   async exportWorkspace(workspace, exportPath) {

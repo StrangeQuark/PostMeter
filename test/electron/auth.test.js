@@ -819,16 +819,123 @@ test('handles OAuth 2.0 device-code provider denial and expiration errors', asyn
 });
 
 test('redacts OAuth provider error strings without removing useful context', () => {
-  const message = redactOAuthErrorMessage('bad access_token=abc refresh_token=def client_secret=ghi token=opaque secret=value cookie=session code=secret authorization_code=secret2 user_code=ABCD Bearer live-token Authorization: Basic dXNlcjpwYXNz Proxy-Authorization="OAuth oauth-leak" authHeader=Basic auth-header-leak authorizationHeader=OAuth authorization-header-leak proxy_authorization=Basic proxy-leak proxyAuthorizationHeader=Bearer proxy-header-leak');
+  const message = redactOAuthErrorMessage('bad access_token=abc refresh_token=def client_secret=ghi token=opaque secret=value cookie=session code=secret authorization_code=secret2 user_code=ABCD Bearer live-token Authorization: Basic dXNlcjpwYXNz Proxy-Authorization="OAuth oauth-leak" Authorization: Digest username="alice", nonce="abc123", response="deadbeef" Digest username="standalone-user", realm="standalone-realm", nonce="standalone-nonce", uri="/standalone/path", response="standalone-response", cnonce="standalone-cnonce" authHeader=Basic auth-header-leak authorizationHeader=OAuth authorization-header-leak proxy_authorization=Basic proxy-leak proxyAuthorizationHeader=Bearer proxy-header-leak');
   assert.equal(
     message,
-    'bad access_token=[redacted] refresh_token=[redacted] client_secret=[redacted] token=[redacted] secret=[redacted] cookie=[redacted] code=[redacted] authorization_code=[redacted] user_code=[redacted] Bearer [redacted] Authorization: [redacted] Proxy-Authorization=[redacted] authHeader=[redacted] authorizationHeader=[redacted] proxy_authorization=[redacted] proxyAuthorizationHeader=[redacted]'
+    'bad access_token=[redacted] refresh_token=[redacted] client_secret=[redacted] token=[redacted] secret=[redacted] cookie=[redacted] code=[redacted] authorization_code=[redacted] user_code=[redacted] Authorization: [redacted] Proxy-Authorization=[redacted] Authorization: [redacted] [redacted-auth] authHeader=[redacted] authorizationHeader=[redacted] proxy_authorization=[redacted] proxyAuthorizationHeader=[redacted]'
   );
   assert.equal(
     redactOAuthErrorMessage('Authorization: [redacted] authHeader=Bearer [redacted] proxy_authorization=[redacted] Bearer [redacted]'),
     'Authorization: [redacted] authHeader=Bearer [redacted] proxy_authorization=[redacted] Bearer [redacted]'
   );
-  assert.doesNotMatch(message, /auth-header-leak|authorization-header-leak|proxy-leak|proxy-header-leak/);
+  assert.doesNotMatch(message, /auth-header-leak|authorization-header-leak|proxy-leak|proxy-header-leak|alice|abc123|deadbeef|standalone-user|standalone-realm|standalone-nonce|standalone-response|standalone-cnonce|\/standalone\/path/);
+  const jsonHeader = redactOAuthErrorMessage('{"Authorization":"Digest username=\\"json-user\\", nonce=\\"json-nonce\\", response=\\"json-response\\""}');
+  assert.doesNotMatch(jsonHeader, /json-user|json-nonce|json-response/);
+  const escapedDigestHeader = redactOAuthErrorMessage('oauth: {"authorizationHeader":"Digest username=\\"digest-user\\", realm=\\"digest-realm\\", nonce=\\"digest-nonce\\", uri=\\"/digest/path\\", response=\\"digest-response\\", cnonce=\\"digest-cnonce\\"","setCookieHeader":"sid=digest-cookie"}');
+  assert.doesNotMatch(escapedDigestHeader, /digest-user|digest-realm|digest-nonce|digest-response|digest-cnonce|\/digest\/path|digest-cookie/);
+  const tokenAliasMessage = redactOAuthErrorMessage('bearerToken=bearer-token-secret oauthToken=oauth-token-secret authToken=auth-token-secret authorizationToken=authorization-token-secret clientToken=client-token-secret next=ok');
+  assert.doesNotMatch(tokenAliasMessage, /bearer-token-secret|oauth-token-secret|auth-token-secret|authorization-token-secret|client-token-secret/);
+  assert.match(tokenAliasMessage, /next=ok/);
+});
+
+test('redacts OAuth provider error variants for signed auth and multi-word secret fields', () => {
+  const nestedEscaped = JSON.stringify({
+    output: JSON.stringify({
+      body: 'oauth-nested-json-body-secret',
+      bodyPreview: 'oauth-nested-json-preview-secret',
+      responseText: 'oauth-nested-json-response-secret',
+      'rendered-response': 'oauth-nested-json-rendered-secret'
+    })
+  });
+  const redacted = redactOAuthErrorMessage([
+    'code-verifier=hyphen verifier secret next=ok',
+    'client-assertion=hyphen assertion secret next=ok',
+    'code verifier code-verifier-label-secret client assertion client-assertion-label-secret',
+    'body=oauth-body-assignment-secret bodyPreview=oauth-body-preview-assignment-secret responseText=oauth-response-text-assignment-secret rendered-response=oauth-rendered-response-assignment-secret {"body":"oauth-json-body-secret"}',
+    nestedEscaped,
+    '{\\"body\\":\\"oauth-raw-escaped-body-secret\\",\\"responseText\\":\\"oauth-raw-escaped-response-secret\\"}',
+    'responseBodyText oauth-response-body-secret requestBodyText oauth-request-body-secret variables oauth-variables-secret text oauth-text-secret protocolMessages oauth-protocol-secret consoleOutput oauth-console-secret payloadIdentifier oauth-payload-secret',
+    'client-secret=hyphen client secret next=ok',
+    'authorization-code=secret authorization code words next=ok',
+    'client-secret=secret Bearer word next=ok',
+    'password=alpha beta gamma next=ok',
+    'passphrase="quoted passphrase secret"',
+    'credentials=credential bag with spaces next=ok',
+    'Hawk id="hawk-id", nonce="hawk-nonce", mac="hawk-mac"',
+    'OAuth oauth_consumer_key="oauth-consumer", oauth_token="oauth-token", oauth_signature="oauth-signature"',
+    'AWS4-HMAC-SHA256 Credential=aws-credential/20260502/us-east-1/service/aws4_request, SignedHeaders=host;x-amz-date, Signature=aws-signature',
+    'EG1-HMAC-SHA256 client_token=akamai-client;access_token=akamai-access;timestamp=20260502T000000Z;nonce=akamai-nonce;signature=akamai-signature',
+    'X-Amz-Credential=aws-query-credential x-amz-credential=aws-lower-credential xAmzCredential=aws-camel-credential X-Amz-Signature=aws-query-signature X-Amz-Security-Token=aws-security-token'
+  ].join(' '));
+
+  assert.doesNotMatch(redacted, /hyphen verifier secret|hyphen assertion secret|code-verifier-label-secret|client-assertion-label-secret|oauth-body-assignment-secret|oauth-body-preview-assignment-secret|oauth-response-text-assignment-secret|oauth-rendered-response-assignment-secret|oauth-json-body-secret|oauth-nested-json-body-secret|oauth-nested-json-preview-secret|oauth-nested-json-response-secret|oauth-nested-json-rendered-secret|oauth-raw-escaped-body-secret|oauth-raw-escaped-response-secret|oauth-response-body-secret|oauth-request-body-secret|oauth-variables-secret|oauth-text-secret|oauth-protocol-secret|oauth-console-secret|oauth-payload-secret|hyphen client secret|client secret next|authorization code words|Bearer word|alpha beta gamma|quoted passphrase secret|credential bag with spaces/);
+  assert.doesNotMatch(redacted, /hawk-id|hawk-nonce|hawk-mac|oauth-consumer|oauth-token|oauth-signature|aws-credential|aws-signature|akamai-client|akamai-access|akamai-nonce|akamai-signature|aws-query-credential|aws-lower-credential|aws-camel-credential|aws-query-signature|aws-security-token/);
+  assert.match(redacted, /next=ok/);
+  const bareLabels = redactOAuthErrorMessage('provider failed authorization code authcodevalue client secret clientSecretValue device code deviceCodeValue user code userCodeValue code verifier verifierValue client assertion assertionValue cert passphrase passphraseSecret private key privateKeyValue');
+  assert.doesNotMatch(bareLabels, /authcodevalue|clientSecretValue|deviceCodeValue|userCodeValue|verifierValue|assertionValue|passphraseSecret|privateKeyValue/);
+  assert.equal(
+    redactOAuthErrorMessage('OAuth 2.0 provider returned invalid_grant'),
+    'OAuth 2.0 provider returned invalid_grant'
+  );
+  assert.equal(
+    redactOAuthErrorMessage('token endpoint returned invalid_grant'),
+    'token endpoint returned invalid_grant'
+  );
+  assert.equal(
+    redactOAuthErrorMessage('Basic authentication failed. Bearer authentication is required.'),
+    'Basic authentication failed. Bearer authentication is required.'
+  );
+});
+
+test('redacts OAuth provider error URLs credentials file URLs and local paths', () => {
+  const redacted = redactOAuthErrorMessage([
+    'provider failed at https://user:password@example.test/callback?access_token=url-token&visible=1',
+    'provider failed at file:///Users/Alice/oauth.json?token=file-token',
+    'provider failed at C:\\Users\\Alice\\oauth.json and /home/alice/oauth.json',
+    'provider said access_token%3Dsingle-token-secret code%3Dsingle-code-secret state%253Ddouble-state-secret access_token%3Dprovider-token%26code%3Dprovider-code%26state%3Dprovider-state',
+    'provider failed at C:\\Users\\Alice\\oauth.json Digest realm="digest-private-realm", nonce="digest-secret-nonce", response="digest-secret-response"',
+    'provider failed with -----BEGIN PRIVATE KEY-----\nprivate-key-secret\n-----END PRIVATE KEY-----',
+    'provider returned Cookie sid=bare-cookie-secret; csrftoken=second-bare-cookie-secret authentication failed',
+    'provider returned Set-Cookie sid=bare-set-cookie-secret; Path=/; HttpOnly token endpoint failed',
+    'provider returned Cookie: sid=first-cookie-secret; csrftoken=second-cookie-secret',
+    'provider returned Set-Cookie: sid=first-set-cookie-secret; Path=/; HttpOnly; csrfToken=second-set-cookie-secret',
+    '{"cookieHeader":"sid=json-cookie-header-secret; csrf=json-cookie-header-second-secret"}'
+  ].join(' '));
+
+  assert.doesNotMatch(redacted, /user:password|example\.test|url-token|file-token|file:\/\/\/Users\/Alice|C:\\Users\\Alice|\/home\/alice|single-token-secret|single-code-secret|double-state-secret|provider-token|provider-code|provider-state|digest-private-realm|digest-secret-nonce|digest-secret-response|private-key-secret|bare-cookie-secret|second-bare-cookie-secret|bare-set-cookie-secret|first-cookie-secret|second-cookie-secret|first-set-cookie-secret|second-set-cookie-secret|json-cookie-header-secret|json-cookie-header-second-secret/);
+  assert.match(redacted, /\[url\]/);
+  assert.match(redacted, /\[path\]/);
+  assert.match(redacted, /\[redacted-auth\]|\[redacted\]/);
+  assert.match(redacted, /\[redacted-private-key\]/);
+  assert.equal(
+    redactOAuthErrorMessage('Basic authentication failed. Bearer authentication is required. token endpoint failed.'),
+    'Basic authentication failed. Bearer authentication is required. token endpoint failed.'
+  );
+  assert.equal(
+    redactOAuthErrorMessage('Cookie authentication failed. Cookie jar disabled. Set-Cookie handling unavailable.'),
+    'Cookie authentication failed. Cookie jar disabled. Set-Cookie handling unavailable.'
+  );
+
+  const multilineCookieContext = redactOAuthErrorMessage(
+    'provider returned Cookie: sid=first-cookie-secret; csrftoken=second-cookie-secret\nOAuth 2.0 provider returned invalid_grant token endpoint failed.'
+  );
+  assert.doesNotMatch(multilineCookieContext, /first-cookie-secret|second-cookie-secret/);
+  assert.match(multilineCookieContext, /Cookie: \[redacted\] OAuth 2\.0 provider returned invalid_grant token endpoint failed\./);
+
+  const sameLineCookieContext = redactOAuthErrorMessage(
+    'provider returned Set-Cookie: sid=first-set-cookie-secret; Path=/; HttpOnly; csrfToken=second-set-cookie-secret; token endpoint failed.'
+  );
+  assert.doesNotMatch(sameLineCookieContext, /first-set-cookie-secret|second-set-cookie-secret/);
+  assert.match(sameLineCookieContext, /Set-Cookie: \[redacted\] token endpoint failed\./);
+
+  const sameLineAuthContext = redactOAuthErrorMessage(
+    'Cookie: sid=auth-cookie-secret Basic authentication failed. Bearer authentication is required.'
+  );
+  assert.doesNotMatch(sameLineAuthContext, /auth-cookie-secret/);
+  assert.equal(
+    sameLineAuthContext,
+    'Cookie: [redacted] Basic authentication failed. Bearer authentication is required.'
+  );
 });
 
 test('rejects unsafe OAuth 2.0 device verification URLs', async () => {

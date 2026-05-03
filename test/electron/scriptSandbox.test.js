@@ -2,9 +2,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
+const { EventEmitter } = require('node:events');
 const test = require('node:test');
 const {
   OS_SANDBOX_MODES,
+  _createStdioChildTransportForTest,
   osSandboxStatus,
   runPostmanScriptIsolated,
   scriptWorkerEnv,
@@ -21,6 +23,7 @@ const {
 const {
   MemoryVaultStore
 } = require('../../src/core/vaultStore');
+const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../src/core/diagnostics');
 
 test('runs scripts in an isolated worker and returns variable mutations', async () => {
   const environment = { variables: [{ enabled: true, key: 'token', value: 'old' }] };
@@ -229,7 +232,33 @@ test('falls back in auto mode when a Linux OS sandbox backend exists but cannot 
   );
 });
 
+test('records OS sandbox backend selection diagnostics for script workers', async () => {
+  const events = [];
+  const launch = createScriptWorkerLaunch(
+    path.join(__dirname, '..', '..', 'src', 'core', 'scriptWorker.js'),
+    [],
+    scriptWorkerEnv(),
+    {
+      osSandboxMode: OS_SANDBOX_MODES.OFF,
+      recordDiagnosticEvent: async (event) => {
+        events.push(event);
+      }
+    }
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(launch.sandboxed, false);
+  assert.ok(events.some((event) => (
+    event.type === 'sandbox.os-backend.selected'
+      && event.outcome === 'degraded'
+      && event.failureCode === 'os_sandbox_backend_unavailable'
+      && event.fields.backend === 'none'
+      && event.fields.sandboxed === false
+  )));
+});
+
 test('fails closed when the required OS sandbox backend is unavailable', async () => {
+  const events = [];
   const unavailableBackendOptions = process.platform === 'win32'
     ? { windowsSandboxHelperPath: path.join(os.tmpdir(), 'definitely-not-postmeter-helper.exe') }
     : process.platform === 'darwin'
@@ -241,10 +270,25 @@ test('fails closed when the required OS sandbox backend is unavailable', async (
       path.join(__dirname, '..', '..', 'src', 'core', 'scriptWorker.js'),
       [],
       scriptWorkerEnv(),
-      { osSandboxMode: OS_SANDBOX_MODES.REQUIRED, ...unavailableBackendOptions }
+      {
+        osSandboxMode: OS_SANDBOX_MODES.REQUIRED,
+        ...unavailableBackendOptions,
+        recordDiagnosticEvent: async (event) => {
+          events.push(sanitizeDiagnosticEvent(event, defaultDiagnosticsSettings()));
+        }
+      }
     ),
     /OS-level script sandboxing is required/
   );
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.ok(events.some((event) => (
+    event.type === 'sandbox.os-backend.launch.failed'
+      && event.outcome === 'failed'
+      && event.failureCode === 'os_sandbox_backend_required_unavailable'
+      && event.fields.sandboxed === false
+      && event.fields.error
+  )));
+  assert.doesNotMatch(JSON.stringify(events), /definitely\/not|definitely-not/);
 
   const execution = await runPostmanScriptIsolated(`
     pm.environment.set('shouldNotCommit', 'true');
@@ -452,6 +496,30 @@ test('terminates isolated script workers that exceed the parent timeout', async 
 
   assert.equal(execution.result.passed, false);
   assert.match(execution.result.error, /worker timed out|exited before returning/i);
+});
+
+test('rejects oversized stdio worker protocol lines before parent memory can grow without bound', () => {
+  const child = {
+    stdout: new EventEmitter(),
+    stderr: new EventEmitter(),
+    stdin: { destroyed: false, end() {}, on() {}, write() {} },
+    killSignal: '',
+    kill(signal) {
+      this.killSignal = signal;
+    }
+  };
+  child.stdout.setEncoding = () => {};
+  child.stderr.setEncoding = () => {};
+  const transport = _createStdioChildTransportForTest(child);
+  let error = null;
+  transport.onError((nextError) => {
+    error = nextError;
+  });
+
+  child.stdout.emit('data', 'x'.repeat(2 * 1024 * 1024));
+
+  assert.match(error?.message || '', /stdout line exceeded/);
+  assert.equal(child.killSignal, 'SIGKILL');
 });
 
 test('supports async tests and brokered timers in isolated scripts', async () => {

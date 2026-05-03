@@ -44,28 +44,34 @@ const BACKEND_PROBE_CACHE = new Map();
 
 function createScriptWorkerLaunch(workerPath, execArgv = [], env = {}, options = {}) {
   const mode = normalizeOsSandboxMode(options.osSandboxMode);
-  const sandbox = createOsSandboxedProcessLaunch({
-    executablePath: process.execPath,
-    args: [
-      ...execArgv,
-      workerPath,
-      '--postmeter-stdio-worker'
-    ],
-    env,
-    mode,
-    readOnlyPaths: scriptWorkerReadOnlyPaths(workerPath),
-    bubblewrapPath: options.bubblewrapPath,
-    macosSandboxExecPath: options.macosSandboxExecPath,
-    probeArgs: [
-      ...execArgv,
-      '-e',
-      'process.exit(0)'
-    ],
-    windowsSandboxHelperPath: options.windowsSandboxHelperPath
-  });
+  let sandbox;
+  try {
+    sandbox = createOsSandboxedProcessLaunch({
+      executablePath: process.execPath,
+      args: [
+        ...execArgv,
+        workerPath,
+        '--postmeter-stdio-worker'
+      ],
+      env,
+      mode,
+      readOnlyPaths: scriptWorkerReadOnlyPaths(workerPath),
+      bubblewrapPath: options.bubblewrapPath,
+      macosSandboxExecPath: options.macosSandboxExecPath,
+      probeArgs: [
+        ...execArgv,
+        '-e',
+        'process.exit(0)'
+      ],
+      windowsSandboxHelperPath: options.windowsSandboxHelperPath
+    });
+  } catch (error) {
+    recordOsSandboxLaunchFailure(options, error, mode);
+    throw error;
+  }
 
   if (!sandbox.sandboxed) {
-    return {
+    const launch = {
       sandboxed: false,
       backend: OS_SANDBOX_BACKENDS.NONE,
       transport: 'ipc',
@@ -73,12 +79,16 @@ function createScriptWorkerLaunch(workerPath, execArgv = [], env = {}, options =
       execArgv,
       env
     };
+    recordOsSandboxSelection(options, launch);
+    return launch;
   }
 
-  return {
+  const launch = {
     ...sandbox,
     transport: 'stdio'
   };
+  recordOsSandboxSelection(options, launch);
+  return launch;
 }
 
 function createOsSandboxedProcessLaunch(options = {}) {
@@ -227,6 +237,47 @@ function createOsSandboxedProcessLaunch(options = {}) {
     env: {},
     seccompPolicy
   };
+}
+
+function recordOsSandboxSelection(options = {}, launch = {}) {
+  const record = options.recordDiagnosticEvent;
+  if (typeof record !== 'function') {
+    return;
+  }
+  Promise.resolve(record({
+    type: 'sandbox.os-backend.selected',
+    level: launch.sandboxed ? 'info' : 'warn',
+    outcome: launch.sandboxed ? 'completed' : 'degraded',
+    failureCode: launch.sandboxed ? undefined : 'os_sandbox_backend_unavailable',
+    fields: {
+      backend: launch.backend || OS_SANDBOX_BACKENDS.NONE,
+      platform: process.platform,
+      sandboxed: launch.sandboxed === true,
+      transport: launch.transport || ''
+    }
+  })).catch(() => {});
+}
+
+function recordOsSandboxLaunchFailure(options = {}, error, mode) {
+  const record = options.recordDiagnosticEvent;
+  if (typeof record !== 'function') {
+    return;
+  }
+  Promise.resolve(record({
+    type: 'sandbox.os-backend.launch.failed',
+    level: 'error',
+    outcome: 'failed',
+    failureCode: mode === OS_SANDBOX_MODES.REQUIRED
+      ? 'os_sandbox_backend_required_unavailable'
+      : 'os_sandbox_backend_launch_failed',
+    fields: {
+      backend: OS_SANDBOX_BACKENDS.NONE,
+      mode,
+      platform: process.platform,
+      sandboxed: false,
+      error: error?.message || String(error)
+    }
+  })).catch(() => {});
 }
 
 function osSandboxStatus(options = {}) {

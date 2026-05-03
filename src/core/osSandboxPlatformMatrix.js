@@ -183,7 +183,7 @@ function buildOsSandboxPlatformMatrix() {
     row('release-gate.platform-matrix-validation', 'all', 'release-gating', 'The OS-sandbox platform matrix is generated, committed, validated, and wired into check, CI, release workflow, and release-gate manifest validation.', 'validation-hook', {
       claimBlocking: false,
       claimSurface: RELEASE_GATE_CLAIM,
-      securityDecision: 'Require matrix freshness and structure in normal validation, while keeping the stronger platform-equivalent claim as a separate intentionally failing gate until blockers are resolved.',
+      securityDecision: 'Require matrix freshness and structure in normal validation, while production readiness remains responsible for moving native-runner/manual evidence from implemented to validated.',
       sourceRefs: ['releaseGate', 'ciWorkflow', 'releaseWorkflow', 'nextSteps'],
       verificationRefs: [
         'npm run sandbox:platform:validate',
@@ -199,14 +199,14 @@ function buildOsSandboxPlatformMatrix() {
     generatedFrom: 'src/core/osSandboxPlatformMatrix.js',
     deterministic: true,
     target: {
-      claim: 'Platform-equivalent full OS sandbox coverage for script workers',
+      claim: 'Implemented tier-one OS sandbox backend coverage for script workers',
       separation: 'This matrix is separate from Postman API parity and from scripted load-test support.',
       postmanParityCommand: 'npm run postman:parity:claim',
       postmanDocsCommand: 'npm run postman:docs:validate',
       platformClaimCommand: 'npm run sandbox:platform:claim'
     },
     claimSurfaces: {
-      [PLATFORM_OS_SANDBOX_CLAIM]: 'Native OS sandbox coverage and packaged validation across tier-one desktop platforms.',
+      [PLATFORM_OS_SANDBOX_CLAIM]: 'Implemented native OS sandbox backends and packaged validation wiring across tier-one desktop platforms. Stable production readiness still requires native-runner evidence in the production readiness matrix.',
       [POSTMAN_API_PARITY_CLAIM]: 'Postman script API behavior and imported-script observable output.',
       [LOAD_TEST_SCRIPTING_CLAIM]: 'Future scripted load-test contract; currently out of scope.',
       [RELEASE_GATE_CLAIM]: 'Validation plumbing required to keep the matrix current.'
@@ -278,7 +278,7 @@ function validateOsSandboxPlatformClaim(matrix, options = {}) {
   }
   const blockers = platformClaimBlockers(matrix);
   if (blockers.length) {
-    errors.push(`Platform-equivalent full OS sandbox claim is blocked by ${blockers.length} row(s).`);
+    errors.push(`Implemented tier-one OS sandbox backend claim is blocked by ${blockers.length} row(s).`);
   }
   return {
     blockers,

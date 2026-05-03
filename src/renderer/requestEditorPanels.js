@@ -56,6 +56,7 @@
       const name = doc.createElement('input');
       name.value = example.name || 'Example Response';
       name.placeholder = 'Example name';
+      name.setAttribute('aria-label', `Example ${index + 1} name`);
       name.addEventListener('input', () => {
         example.name = name.value;
         onDirty();
@@ -67,6 +68,7 @@
       status.max = '999';
       status.value = example.statusCode || '';
       status.placeholder = 'Status';
+      status.setAttribute('aria-label', `Example ${index + 1} status code`);
       status.addEventListener('input', () => {
         example.statusCode = Number(status.value) || 0;
         onDirty();
@@ -77,10 +79,12 @@
         bodyType.append(new Option(type, type));
       }
       bodyType.value = bodyTypes.includes(example.bodyType) ? example.bodyType : 'RAW_TEXT';
+      bodyType.setAttribute('aria-label', `Example ${index + 1} body type`);
 
       const body = doc.createElement('textarea');
       body.spellcheck = false;
       body.value = formatExampleBody(example);
+      body.setAttribute('aria-label', `Example ${index + 1} body`);
       body.addEventListener('input', () => {
         example.body = body.value;
         onDirty();
@@ -94,11 +98,13 @@
 
       const duplicate = doc.createElement('button');
       duplicate.textContent = 'Duplicate';
+      duplicate.setAttribute('aria-label', `Duplicate example ${example.name || index + 1}`);
       duplicate.addEventListener('click', () => onDuplicate(index));
 
       const remove = doc.createElement('button');
       remove.className = 'danger';
       remove.textContent = 'Delete';
+      remove.setAttribute('aria-label', `Delete example ${example.name || index + 1}`);
       remove.addEventListener('click', () => onDelete(index));
 
       header.append(name, status, bodyType, duplicate, remove);
@@ -107,6 +113,7 @@
       headers.spellcheck = false;
       headers.value = exampleHeadersToText(example.headers || []);
       headers.placeholder = 'Header-Name: value';
+      headers.setAttribute('aria-label', `Example ${index + 1} headers`);
       headers.addEventListener('input', () => {
         example.headers = parseHeadersText(headers.value);
         onDirty();
@@ -200,6 +207,7 @@
       const enabled = doc.createElement('input');
       enabled.type = 'checkbox';
       enabled.checked = pair.enabled !== false;
+      enabled.setAttribute('aria-label', `${keyPlaceholder} ${index + 1} enabled`);
       enabled.addEventListener('change', () => {
         pair.enabled = enabled.checked;
         onChange(index, pair);
@@ -207,6 +215,7 @@
 
       const key = doc.createElement('input');
       key.placeholder = keyPlaceholder;
+      key.setAttribute('aria-label', `${keyPlaceholder} ${index + 1}`);
       key.value = pair.key || '';
       key.addEventListener('input', () => {
         pair.key = key.value;
@@ -216,6 +225,7 @@
       const value = doc.createElement('input');
       value.placeholder = valuePlaceholder;
       value.type = 'text';
+      value.setAttribute('aria-label', `${valuePlaceholder} ${index + 1}`);
       value.value = pair.value || '';
       value.addEventListener('input', () => {
         pair.value = value.value;
@@ -224,6 +234,7 @@
 
       const remove = doc.createElement('button');
       remove.textContent = 'Remove';
+      remove.setAttribute('aria-label', `Remove ${keyPlaceholder.toLowerCase()} ${pair.key || index + 1}`);
       remove.addEventListener('click', () => {
         pairs.splice(index, 1);
         onRemove(index);
@@ -251,6 +262,7 @@
       const enabled = doc.createElement('input');
       enabled.type = 'checkbox';
       enabled.checked = pair.enabled !== false;
+      enabled.setAttribute('aria-label', `${keyPlaceholder} ${index + 1} enabled`);
       enabled.addEventListener('change', () => {
         pair.enabled = enabled.checked;
         onDirty();
@@ -258,6 +270,7 @@
 
       const key = doc.createElement('input');
       key.placeholder = keyPlaceholder;
+      key.setAttribute('aria-label', `${keyPlaceholder} ${index + 1}`);
       key.value = pair.key || '';
       key.addEventListener('input', () => {
         pair.key = key.value;
@@ -266,6 +279,7 @@
 
       const value = doc.createElement('input');
       value.placeholder = valuePlaceholder;
+      value.setAttribute('aria-label', `${valuePlaceholder} ${index + 1}`);
       value.value = pair.value || '';
       value.addEventListener('input', () => {
         pair.value = value.value;
@@ -274,6 +288,7 @@
 
       const remove = doc.createElement('button');
       remove.textContent = 'Remove';
+      remove.setAttribute('aria-label', `Remove ${keyPlaceholder.toLowerCase()} ${pair.key || index + 1}`);
       remove.addEventListener('click', () => {
         pairs.splice(index, 1);
         onDirty();
@@ -301,6 +316,7 @@
       const enabled = doc.createElement('input');
       enabled.type = 'checkbox';
       enabled.checked = assertion.enabled !== false;
+      enabled.setAttribute('aria-label', `Assertion ${index + 1} enabled`);
       enabled.addEventListener('change', () => {
         assertion.enabled = enabled.checked;
         onDirty();
@@ -324,6 +340,7 @@
         type.append(new Option(label, value));
       }
       type.value = assertion.type || 'statusCode';
+      type.setAttribute('aria-label', `Assertion ${index + 1} type`);
       type.addEventListener('change', () => {
         assertion.type = type.value;
         applyAssertionTypeDefaults(assertion);
@@ -336,10 +353,10 @@
         if (assertion.type === 'extractVariable' || assertion.type === 'extractXml' || assertion.type === 'extractHtml' || assertion.type === 'extractRegex') {
           assertion.variableName = value;
         }
-      }, onDirty);
+      }, onDirty, `Assertion ${index + 1} name`);
       const path = assertionInput(doc, assertionPathPlaceholder(assertion), assertion.path || '', (value) => {
         assertion.path = value;
-      }, onDirty);
+      }, onDirty, `Assertion ${index + 1} path`);
 
       const operator = doc.createElement('select');
       for (const [value, label] of [
@@ -353,6 +370,7 @@
         operator.append(new Option(label, value));
       }
       operator.value = assertion.operator || 'equals';
+      operator.setAttribute('aria-label', `Assertion ${index + 1} operator`);
       operator.addEventListener('change', () => {
         assertion.operator = operator.value;
         onDirty();
@@ -360,11 +378,12 @@
 
       const expected = assertionInput(doc, assertionExpectedPlaceholder(assertion), assertion.expected ?? '', (value) => {
         assertion.expected = value;
-      }, onDirty);
+      }, onDirty, `Assertion ${index + 1} expected value`);
 
       const remove = doc.createElement('button');
       remove.type = 'button';
       remove.textContent = 'Remove';
+      remove.setAttribute('aria-label', `Remove assertion ${assertion.name || index + 1}`);
       remove.addEventListener('click', () => {
         assertions.splice(index, 1);
         onDirty();
@@ -376,9 +395,10 @@
     });
   }
 
-  function assertionInput(doc, placeholder, value, onInput, onDirty) {
+  function assertionInput(doc, placeholder, value, onInput, onDirty, ariaLabel = placeholder) {
     const input = doc.createElement('input');
     input.placeholder = placeholder;
+    input.setAttribute('aria-label', ariaLabel);
     input.value = value;
     input.addEventListener('input', () => {
       onInput(input.value);
@@ -478,31 +498,33 @@
       const enabled = doc.createElement('input');
       enabled.type = 'checkbox';
       enabled.checked = cookie.enabled !== false;
+      enabled.setAttribute('aria-label', `Cookie ${cookie.name || index + 1} enabled`);
       enabled.addEventListener('change', () => {
         onDirty();
         cookie.enabled = enabled.checked;
       });
 
+      const cookieLabel = cookie.name || index + 1;
       const name = cookieInput(doc, cookie.name || '', 'Name', (value) => {
         onDirty();
         cookie.name = value;
-      });
+      }, 'text', `Cookie ${cookieLabel} name`);
       const value = cookieInput(doc, cookie.value || '', 'Value', (next) => {
         onDirty();
         cookie.value = next;
-      });
+      }, 'text', `Cookie ${cookieLabel} value`);
       const domain = cookieInput(doc, cookie.domain || '', 'Domain', (next) => {
         onDirty();
         cookie.domain = next;
-      });
+      }, 'text', `Cookie ${cookieLabel} domain`);
       const path = cookieInput(doc, cookie.path || '/', 'Path', (next) => {
         onDirty();
         cookie.path = next || '/';
-      });
+      }, 'text', `Cookie ${cookieLabel} path`);
       const expires = cookieInput(doc, cookie.expiresAt || '', 'Expires ISO', (next) => {
         onDirty();
         cookie.expiresAt = next;
-      });
+      }, 'text', `Cookie ${cookieLabel} expiration`);
 
       const secureLabel = checkboxLabel(doc, 'Secure', cookie.secure === true, (checked) => {
         onDirty();
@@ -528,6 +550,7 @@
         sameSite.append(new Option(option || 'SameSite', option));
       }
       sameSite.value = cookie.sameSite || '';
+      sameSite.setAttribute('aria-label', `Cookie ${cookie.name || index + 1} SameSite`);
       sameSite.addEventListener('change', () => {
         if (sameSite.value === 'None' && cookie.secure !== true) {
           cookie.sameSite = '';
@@ -542,6 +565,7 @@
       const remove = doc.createElement('button');
       remove.className = 'danger';
       remove.textContent = 'Remove';
+      remove.setAttribute('aria-label', `Remove cookie ${cookie.name || index + 1}`);
       remove.addEventListener('click', () => {
         onDirty();
         workspace.cookies.splice(index, 1);
@@ -554,10 +578,11 @@
     });
   }
 
-  function cookieInput(doc, initialValue, placeholder, onInput, type = 'text') {
+  function cookieInput(doc, initialValue, placeholder, onInput, type = 'text', ariaLabel = `Cookie ${placeholder}`) {
     const input = doc.createElement('input');
     input.type = type;
     input.placeholder = placeholder;
+    input.setAttribute('aria-label', ariaLabel);
     input.value = initialValue;
     input.addEventListener('input', () => onInput(input.value));
     return input;
@@ -588,6 +613,7 @@
     const input = doc.createElement('input');
     input.type = 'checkbox';
     input.checked = checked;
+    input.setAttribute('aria-label', label);
     input.addEventListener('change', () => onChange(input.checked));
     const text = doc.createElement('span');
     text.textContent = label;

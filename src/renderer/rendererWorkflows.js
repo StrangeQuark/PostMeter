@@ -47,17 +47,38 @@
       return doc.getElementById(id);
     }
 
-    function confirmAction(message) {
+    function clearFailedResponseDetails(message) {
+      state.lastResponse = null;
+      updateCaptureResponseButton();
+      element('responseStatus').textContent = 'ERR';
+      element('responseTime').textContent = '-';
+      element('responseSize').textContent = '-';
+      element('finalUrl').textContent = '-';
+      element('responseHeaders').value = '';
+      element('responseBody').value = message;
+      if (element('visualizerFrame')) {
+        element('visualizerFrame').srcdoc = '';
+      }
+    }
+
+    function clearLoadResultState() {
+      state.lastLoadResult = null;
+      element('exportLoadJsonButton').disabled = true;
+      element('exportLoadCsvButton').disabled = true;
+    }
+
+    function clearRunnerResultState() {
+      state.lastRunnerResult = null;
+      element('exportRunnerJsonButton').disabled = true;
+      element('exportRunnerCsvButton').disabled = true;
+    }
+
+    async function confirmAction(message) {
       if (typeof options.confirm === 'function') {
-        return options.confirm(message);
+        return await options.confirm(message);
       }
-      if (typeof windowObject.confirm === 'function') {
-        return windowObject.confirm(message);
-      }
-      if (typeof globalThis.confirm === 'function') {
-        return globalThis.confirm(message);
-      }
-      return true;
+      setStatus(String(message || 'Action requires confirmation.'));
+      return false;
     }
 
     function runtimeId() {
@@ -68,17 +89,12 @@
       return `runtime-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     }
 
-    function promptInput(message, defaultValue = '') {
+    async function promptInput(message, defaultValue = '') {
       if (typeof options.prompt === 'function') {
-        return options.prompt(message, defaultValue);
+        return await options.prompt(message, defaultValue);
       }
-      if (typeof windowObject.prompt === 'function') {
-        return windowObject.prompt(message, defaultValue);
-      }
-      if (typeof globalThis.prompt === 'function') {
-        return globalThis.prompt(message, defaultValue);
-      }
-      return defaultValue;
+      setStatus(String(message || 'Action requires input.'));
+      return '';
     }
 
     function collectActiveEditorState() {
@@ -608,20 +624,22 @@
         return setStatus('Select a request before sending.');
       }
       collectRequestFromEditor();
-      await saveWorkspace(false, { allowDraftBypass: true });
       const environment = activeEnvironment();
-      if (!request.scripts?.preRequest?.trim()) {
-        const errors = await windowObject.postmeter.request.validate(request, environment);
-        if (errors.length) {
-          element('validationLabel').textContent = errors.join(' ');
-          return setStatus('Fix validation errors.');
-        }
-      }
-      element('validationLabel').textContent = '';
-      setStatus('Sending request...');
       const requestContext = createRequestContext(request, environment);
       try {
-        const response = await windowObject.postmeter.request.send(request, environment);
+        await saveWorkspace(false, { allowDraftBypass: true });
+        if (!request.scripts?.preRequest?.trim()) {
+          const validateRequest = windowObject.__postmeterValidateRequest || windowObject.postmeter.request.validate;
+          const errors = await validateRequest(request, environment);
+          if (errors.length) {
+            element('validationLabel').textContent = errors.join(' ');
+            return setStatus('Fix validation errors.');
+          }
+        }
+        element('validationLabel').textContent = '';
+        setStatus('Sending request...');
+        const sendRequest = windowObject.__postmeterSendRequest || windowObject.postmeter.request.send;
+        const response = await sendRequest(request, environment);
         const failedBeforeSend = response?.requestSent === false && response?.preRequestScriptResult?.passed === false;
         if (isActiveWorkspaceContext(requestContext)) {
           const targetRequest = findContextRequest(requestContext);
@@ -662,13 +680,7 @@
       } catch (error) {
         const message = error.message || String(error);
         if (isActiveWorkspaceContext(requestContext)) {
-          state.lastResponse = null;
-          updateCaptureResponseButton();
-          element('responseStatus').textContent = 'ERR';
-          element('responseBody').value = message;
-          if (element('visualizerFrame')) {
-            element('visualizerFrame').srcdoc = '';
-          }
+          clearFailedResponseDetails(message);
         }
         setStatus(`Request failed: ${message}`);
       }
@@ -680,35 +692,44 @@
         return setStatus('Select a request before running a load test.');
       }
       collectRequestFromEditor();
-      await saveWorkspace(false, { allowDraftBypass: true });
       const environment = activeEnvironment();
-      const errors = await windowObject.postmeter.request.validate(request, environment);
-      if (errors.length) {
-        element('validationLabel').textContent = errors.join(' ');
-        return setStatus('Fix validation errors.');
-      }
-      const concurrency = Number(element('loadConcurrency').value);
-      let confirmedHighConcurrency = false;
-      if (concurrency >= 50) {
-        confirmedHighConcurrency = confirmAction(`Run load test with concurrency ${concurrency}?`);
-        if (!confirmedHighConcurrency) {
-          return setStatus('Load test cancelled.');
-        }
-      }
-      state.activeLoadId = runtimeId();
-      element('runLoadButton').disabled = true;
-      element('cancelLoadButton').disabled = false;
-      element('exportLoadJsonButton').disabled = true;
-      element('exportLoadCsvButton').disabled = true;
-      element('loadResults').textContent = 'Starting load test...';
+      const requestContext = createRequestContext(request, environment);
+      let loadStarted = false;
+      let loadId = '';
+      clearLoadResultState();
       try {
-        state.lastLoadResult = await windowObject.postmeter.loadTest.start(state.activeLoadId, request, environment, {
+        await saveWorkspace(false, { allowDraftBypass: true });
+        const errors = await windowObject.postmeter.request.validate(request, environment);
+        if (errors.length) {
+          element('validationLabel').textContent = errors.join(' ');
+          return setStatus('Fix validation errors.');
+        }
+        element('validationLabel').textContent = '';
+        const concurrency = Number(element('loadConcurrency').value);
+        let confirmedHighConcurrency = false;
+        if (concurrency >= 50) {
+          confirmedHighConcurrency = await confirmAction(`Run load test with concurrency ${concurrency}?`);
+          if (!confirmedHighConcurrency) {
+            return setStatus('Load test cancelled.');
+          }
+        }
+        loadId = runtimeId();
+        state.activeLoadId = loadId;
+        loadStarted = true;
+        element('runLoadButton').disabled = true;
+        element('cancelLoadButton').disabled = false;
+        element('loadResults').textContent = 'Starting load test...';
+        const result = await windowObject.postmeter.loadTest.start(loadId, request, environment, {
           ...loadConfigFromControls(),
           concurrency,
           confirmedHighConcurrency
         });
-        if (Array.isArray(state.lastLoadResult.cookies)) {
-          state.workspace.cookies = state.lastLoadResult.cookies;
+        if (state.activeLoadId !== loadId || !isActiveWorkspaceContext(requestContext)) {
+          return;
+        }
+        state.lastLoadResult = result;
+        if (Array.isArray(result.cookies)) {
+          state.workspace.cookies = result.cookies;
           renderCookieJarEditor();
         }
         element('loadResults').textContent = runFormatting.formatLoadResult(state.lastLoadResult);
@@ -717,20 +738,35 @@
         setStatus(state.lastLoadResult.cancelled ? 'Load test cancelled.' : 'Load test completed.');
       } catch (error) {
         const message = error.message || String(error);
+        const stillCurrentRun = isActiveWorkspaceContext(requestContext)
+          && (!loadStarted || state.activeLoadId === loadId);
+        if (!stillCurrentRun) {
+          return;
+        }
+        clearLoadResultState();
         element('loadResults').textContent = message;
         setStatus('Load test failed.');
         notifyUser('Load Test Failed', message);
       } finally {
-        element('runLoadButton').disabled = false;
-        element('cancelLoadButton').disabled = true;
-        state.activeLoadId = null;
+        if (loadStarted && state.activeLoadId === loadId) {
+          element('runLoadButton').disabled = false;
+          element('cancelLoadButton').disabled = true;
+          state.activeLoadId = null;
+        }
       }
     }
 
     async function cancelLoadTest() {
       if (state.activeLoadId) {
-        await windowObject.postmeter.loadTest.cancel(state.activeLoadId);
-        setStatus('Cancelling load test...');
+        try {
+          await windowObject.postmeter.loadTest.cancel(state.activeLoadId);
+          setStatus('Cancelling load test...');
+        } catch (error) {
+          const message = error.message || String(error);
+          element('loadResults').textContent = message;
+          setStatus('Load test cancellation failed.');
+          notifyUser('Load Test Cancellation Failed', message);
+        }
       }
     }
 
@@ -740,18 +776,27 @@
         return setStatus('Select a collection before running it.');
       }
       collectRequestFromEditor();
-      await saveWorkspace(false);
-      state.activeRunnerId = runtimeId();
-      state.lastRunnerResult = null;
-      element('runCollectionButton').disabled = true;
-      element('cancelRunnerButton').disabled = false;
-      element('exportRunnerJsonButton').disabled = true;
-      element('exportRunnerCsvButton').disabled = true;
-      element('runnerResults').textContent = 'Starting collection run...';
+      let runnerStarted = false;
+      let runnerId = '';
+      const runnerContext = {
+        collectionId: collection.id || '',
+        workspaceId: state.activeWorkspaceId
+      };
+      clearRunnerResultState();
       try {
-        const result = await windowObject.postmeter.runner.start(state.activeRunnerId, collection, activeEnvironment(), {
+        await saveWorkspace(false);
+        runnerId = runtimeId();
+        state.activeRunnerId = runnerId;
+        runnerStarted = true;
+        element('runCollectionButton').disabled = true;
+        element('cancelRunnerButton').disabled = false;
+        element('runnerResults').textContent = 'Starting collection run...';
+        const result = await windowObject.postmeter.runner.start(runnerId, collection, activeEnvironment(), {
           stopOnFailure: element('runnerStopOnFailure').checked
         });
+        if (state.activeRunnerId !== runnerId || !isActiveWorkspaceContext(runnerContext)) {
+          return;
+        }
         if (Array.isArray(result.cookies)) {
           state.workspace.cookies = result.cookies;
           renderCookieJarEditor();
@@ -764,20 +809,35 @@
         setStatus(result.cancelled ? 'Collection run cancelled.' : 'Collection run completed.');
       } catch (error) {
         const message = error.message || String(error);
+        const stillCurrentRun = isActiveWorkspaceContext(runnerContext)
+          && (!runnerStarted || state.activeRunnerId === runnerId);
+        if (!stillCurrentRun) {
+          return;
+        }
+        clearRunnerResultState();
         element('runnerResults').textContent = message;
         setStatus('Collection run failed.');
         notifyUser('Collection Run Failed', message);
       } finally {
-        element('runCollectionButton').disabled = false;
-        element('cancelRunnerButton').disabled = true;
-        state.activeRunnerId = null;
+        if (runnerStarted && state.activeRunnerId === runnerId) {
+          element('runCollectionButton').disabled = false;
+          element('cancelRunnerButton').disabled = true;
+          state.activeRunnerId = null;
+        }
       }
     }
 
     async function cancelCollectionRun() {
       if (state.activeRunnerId) {
-        await windowObject.postmeter.runner.cancel(state.activeRunnerId);
-        setStatus('Cancelling collection run...');
+        try {
+          await windowObject.postmeter.runner.cancel(state.activeRunnerId);
+          setStatus('Cancelling collection run...');
+        } catch (error) {
+          const message = error.message || String(error);
+          element('runnerResults').textContent = message;
+          setStatus('Collection run cancellation failed.');
+          notifyUser('Collection Run Cancellation Failed', message);
+        }
       }
     }
 
@@ -785,9 +845,15 @@
       if (!state.lastRunnerResult) {
         return;
       }
-      const result = await windowObject.postmeter.runner.export(state.lastRunnerResult, format);
-      if (!result.cancelled) {
-        setStatus(`Collection run exported to ${result.path}.`);
+      try {
+        const result = await windowObject.postmeter.runner.export(state.lastRunnerResult, format);
+        if (!result.cancelled) {
+          setStatus(`Collection run exported to ${result.path}.`);
+        }
+      } catch (error) {
+        const message = error.message || String(error);
+        setStatus('Collection run export failed.');
+        notifyUser('Collection Run Export Failed', message);
       }
     }
 
@@ -795,9 +861,15 @@
       if (!state.lastLoadResult) {
         return;
       }
-      const result = await windowObject.postmeter.loadTest.export(state.lastLoadResult, format);
-      if (!result.cancelled) {
-        setStatus(`Load test exported to ${result.path}.`);
+      try {
+        const result = await windowObject.postmeter.loadTest.export(state.lastLoadResult, format);
+        if (!result.cancelled) {
+          setStatus(`Load test exported to ${result.path}.`);
+        }
+      } catch (error) {
+        const message = error.message || String(error);
+        setStatus('Load test export failed.');
+        notifyUser('Load Test Export Failed', message);
       }
     }
 
@@ -852,6 +924,11 @@
         const message = error.message || String(error);
         setStatus('OAuth device authorization failed.');
         element('validationLabel').textContent = message;
+        renderOauthProgress({
+          type: 'device',
+          status: 'failed',
+          message
+        });
         notifyUser('OAuth Device Authorization Failed', message);
       } finally {
         if (state.activeOauthFlowId === flowId) {
@@ -917,6 +994,11 @@
         const message = error.message || String(error);
         setStatus('OAuth authorization failed.');
         element('validationLabel').textContent = message;
+        renderOauthProgress({
+          type: 'pkce',
+          status: 'failed',
+          message
+        });
         notifyUser('OAuth Authorization Failed', message);
       } finally {
         if (state.activeOauthFlowId === flowId) {
@@ -928,8 +1010,15 @@
 
     async function cancelOauthFlow() {
       if (state.activeOauthFlowId) {
-        await windowObject.postmeter.oauth.cancelFlow(state.activeOauthFlowId);
-        setStatus('Cancelling OAuth flow...');
+        try {
+          await windowObject.postmeter.oauth.cancelFlow(state.activeOauthFlowId);
+          setStatus('Cancelling OAuth flow...');
+        } catch (error) {
+          const message = error.message || String(error);
+          setStatus('OAuth cancellation failed.');
+          element('validationLabel').textContent = message;
+          notifyUser('OAuth Cancellation Failed', message);
+        }
       }
     }
 
@@ -998,7 +1087,16 @@
 
     async function importWorkspace() {
       collectActiveEditorState();
-      const result = await windowObject.postmeter.workspace.importWorkspace();
+      const importWorkspaceBoundary = windowObject.__postmeterImportWorkspace || windowObject.postmeter.workspace.importWorkspace;
+      let result = null;
+      try {
+        result = await importWorkspaceBoundary();
+      } catch (error) {
+        const message = error.message || String(error);
+        setStatus(`Workspace import failed: ${message}`);
+        notifyUser('Workspace Import Failed', message);
+        return;
+      }
       if (result.cancelled) {
         return;
       }
@@ -1021,11 +1119,17 @@
     }
 
     async function exportWorkspace() {
-      await saveWorkspace(false, { scope: 'all' });
-      const exportWorkspaceBoundary = windowObject.__postmeterExportWorkspace || windowObject.postmeter.workspace.exportWorkspace;
-      const result = await exportWorkspaceBoundary(state.workspace);
-      if (!result.cancelled) {
-        setStatus(`Workspace exported to ${result.path}.`);
+      try {
+        await saveWorkspace(false, { scope: 'all' });
+        const exportWorkspaceBoundary = windowObject.__postmeterExportWorkspace || windowObject.postmeter.workspace.exportWorkspace;
+        const result = await exportWorkspaceBoundary(state.workspace);
+        if (!result.cancelled) {
+          setStatus(`Workspace exported to ${result.path}.`);
+        }
+      } catch (error) {
+        const message = error.message || String(error);
+        setStatus(`Workspace export failed: ${message}`);
+        notifyUser('Workspace Export Failed', message);
       }
     }
 
@@ -1044,7 +1148,7 @@
           return;
         }
         setStatus(`PostMeter ${result.latestVersion} is available.`);
-        if (result.releaseUrl && confirmAction(`PostMeter ${result.latestVersion} is available. Open GitHub Releases?`)) {
+        if (result.releaseUrl && await confirmAction(`PostMeter ${result.latestVersion} is available. Open GitHub Releases?`)) {
           const openExternal = windowObject.__postmeterOpenExternal || windowObject.postmeter.app.openExternal;
           await openExternal(result.releaseUrl);
         }
@@ -1058,17 +1162,40 @@
     async function importCollection() {
       collectActiveEditorState();
       const importCollectionBoundary = windowObject.__postmeterImportCollection || windowObject.postmeter.collection.importCollection;
-      const result = await importCollectionBoundary();
+      let result = null;
+      try {
+        result = await importCollectionBoundary();
+      } catch (error) {
+        const message = error.message || String(error);
+        setStatus(`Collection import failed: ${message}`);
+        notifyUser('Collection Import Failed', message);
+        return;
+      }
       if (result.cancelled) {
         return;
       }
+      const previousWorkspace = cloneJson(state.workspace, state.workspace);
+      const previousActiveCollectionId = state.activeCollectionId;
+      const previousActiveFolderId = state.activeFolderId;
+      const previousActiveRequestId = state.activeRequestId;
       result.collection.name = uniqueName(result.collection.name, state.workspace.collections.map((collection) => collection.name));
       promoteCookieHeadersToJar(result.collection);
       state.workspace.collections.push(result.collection);
       state.activeCollectionId = result.collection.id;
       selectFirstRequest(result.collection);
       renderAll();
-      await saveWorkspace(true, { scope: 'all' });
+      try {
+        await saveWorkspace(true, { scope: 'all', collectEditors: false });
+      } catch (error) {
+        const message = error.message || String(error);
+        state.workspace = previousWorkspace;
+        state.activeCollectionId = previousActiveCollectionId;
+        state.activeFolderId = previousActiveFolderId;
+        state.activeRequestId = previousActiveRequestId;
+        renderAll();
+        setStatus(`Collection import save failed: ${message}`);
+        notifyUser('Collection Import Save Failed', message);
+      }
     }
 
     async function exportCollection(collection = null, format = 'postmeter') {
@@ -1086,13 +1213,16 @@
             return setStatus('Create a collection before exporting.');
           }
           const preferredCollection = activeCollection() || collections[0];
+          if (typeof options.prompt !== 'function') {
+            selectedCollection = preferredCollection;
+          } else {
           const promptMessage = [
             'Choose a collection to export:',
             ...collections.map((candidate, index) => `${index + 1}. ${candidate.name}`),
             '',
             'Enter a number or collection name.'
           ].join('\n');
-          const selection = String(promptInput(promptMessage, preferredCollection?.name || collections[0].name || '') || '').trim();
+          const selection = String(await promptInput(promptMessage, preferredCollection?.name || collections[0].name || '') || '').trim();
           if (!selection) {
             return;
           }
@@ -1103,6 +1233,7 @@
             selectedCollection = collections.find((candidate) => candidate.name === selection)
               || collections.find((candidate) => candidate.name.toLowerCase() === selection.toLowerCase())
               || null;
+            }
           }
         }
       }
@@ -1110,9 +1241,15 @@
         return setStatus('Select a valid collection to export.');
       }
       const exportCollectionBoundary = windowObject.__postmeterExportCollection || windowObject.postmeter.collection.exportCollection;
-      const result = await exportCollectionBoundary(selectedCollection, format);
-      if (!result.cancelled) {
-        setStatus(`Collection exported to ${result.path}.`);
+      try {
+        const result = await exportCollectionBoundary(selectedCollection, format);
+        if (!result.cancelled) {
+          setStatus(`Collection exported to ${result.path}.`);
+        }
+      } catch (error) {
+        const message = error.message || String(error);
+        setStatus(`Collection export failed: ${message}`);
+        notifyUser('Collection Export Failed', message);
       }
     }
 

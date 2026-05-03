@@ -9,9 +9,11 @@ const {
 
 const PROJECT_ROOT = path.join(__dirname, '..');
 const MATRIX_FILES = Object.freeze({
+  'diagnostics-privacy': path.join(PROJECT_ROOT, 'docs', 'diagnostics-privacy-matrix.json'),
   'electron-security': path.join(PROJECT_ROOT, 'docs', 'electron-security-matrix.json'),
   'workspace-durability': path.join(PROJECT_ROOT, 'docs', 'workspace-durability-matrix.json'),
-  'non-postman-compatibility': path.join(PROJECT_ROOT, 'docs', 'non-postman-compatibility-matrix.json')
+  'non-postman-compatibility': path.join(PROJECT_ROOT, 'docs', 'non-postman-compatibility-matrix.json'),
+  'ux-accessibility': path.join(PROJECT_ROOT, 'docs', 'ux-accessibility-matrix.json')
 });
 
 async function main() {
@@ -56,6 +58,8 @@ async function validateCommittedMatrix(name) {
   const generated = buildMatrix(name);
   const committed = JSON.parse(await fs.readFile(filePath, 'utf8'));
   const errors = validateMatrix(committed, name);
+  errors.push(...await validateEvidenceRefs(committed));
+  errors.push(...await validateTestRefs(committed));
   if (JSON.stringify(committed) !== JSON.stringify(generated)) {
     errors.push(`Committed ${name} matrix is stale. Regenerate ${path.relative(PROJECT_ROOT, filePath)}.`);
   }
@@ -64,6 +68,82 @@ async function validateCommittedMatrix(name) {
     matrix: committed,
     ok: errors.length === 0
   };
+}
+
+async function validateEvidenceRefs(matrix) {
+  const errors = [];
+  for (const row of Array.isArray(matrix?.rows) ? matrix.rows : []) {
+    for (const ref of Array.isArray(row.evidenceRefs) ? row.evidenceRefs : []) {
+      if (typeof ref !== 'string' || !ref.trim()) {
+        errors.push(`${matrix.name} matrix row ${row.id || '<unknown>'} has an empty evidence ref.`);
+        continue;
+      }
+      const resolvedRef = resolveRepoRelativeRef(ref);
+      if (!resolvedRef) {
+        errors.push(`${matrix.name} matrix row ${row.id || '<unknown>'} has invalid evidence ref: ${ref}`);
+        continue;
+      }
+      try {
+        await fs.access(resolvedRef);
+      } catch {
+        errors.push(`${matrix.name} matrix row ${row.id || '<unknown>'} evidence ref does not exist: ${ref}`);
+      }
+    }
+  }
+  return errors;
+}
+
+async function validateTestRefs(matrix) {
+  const errors = [];
+  const packageJson = JSON.parse(await fs.readFile(path.join(PROJECT_ROOT, 'package.json'), 'utf8'));
+  const scripts = packageJson.scripts || {};
+  for (const row of Array.isArray(matrix?.rows) ? matrix.rows : []) {
+    for (const ref of Array.isArray(row.tests) ? row.tests : []) {
+      if (typeof ref !== 'string' || !ref.trim()) {
+        errors.push(`${matrix.name} matrix row ${row.id || '<unknown>'} has an empty test ref.`);
+        continue;
+      }
+      if (ref.startsWith('npm run ')) {
+        const scriptName = ref.slice('npm run '.length).trim().split(/\s+/)[0];
+        if (!scriptName || typeof scripts[scriptName] !== 'string') {
+          errors.push(`${matrix.name} matrix row ${row.id || '<unknown>'} references unknown npm script: ${ref}`);
+        }
+        continue;
+      }
+      const resolvedRef = resolveRepoRelativeRef(ref);
+      if (!resolvedRef) {
+        errors.push(`${matrix.name} matrix row ${row.id || '<unknown>'} has invalid test ref: ${ref}`);
+        continue;
+      }
+      if (!isExecutableTestRef(ref)) {
+        errors.push(`${matrix.name} matrix row ${row.id || '<unknown>'} test ref is not an executable test file or npm script: ${ref}`);
+        continue;
+      }
+      try {
+        await fs.access(resolvedRef);
+      } catch {
+        errors.push(`${matrix.name} matrix row ${row.id || '<unknown>'} test ref does not exist: ${ref}`);
+      }
+    }
+  }
+  return errors;
+}
+
+function resolveRepoRelativeRef(ref) {
+  if (typeof ref !== 'string' || !ref.trim() || path.isAbsolute(ref) || ref.includes('\0')) {
+    return null;
+  }
+  const resolved = path.resolve(PROJECT_ROOT, ref);
+  const relative = path.relative(PROJECT_ROOT, resolved);
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+    return null;
+  }
+  return resolved;
+}
+
+function isExecutableTestRef(ref) {
+  const normalized = String(ref || '').replace(/\\/g, '/');
+  return normalized.startsWith('test/') && /\.(?:cjs|mjs|js|ts)$/.test(normalized);
 }
 
 if (require.main === module) {
@@ -75,6 +155,10 @@ if (require.main === module) {
 
 module.exports = {
   MATRIX_FILES,
+  resolveRepoRelativeRef,
+  isExecutableTestRef,
+  validateEvidenceRefs,
+  validateTestRefs,
   validateCommittedMatrix,
   writeMatrix
 };

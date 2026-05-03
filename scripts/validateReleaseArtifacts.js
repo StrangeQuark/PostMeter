@@ -1,7 +1,7 @@
 const fs = require('node:fs/promises');
-const { spawn } = require('node:child_process');
 const os = require('node:os');
 const path = require('node:path');
+const { spawnWithTimeout } = require('./smokeProcess');
 const { findArtifacts, sha256File, UNSUPPORTED_DISTRIBUTABLE_EXTENSIONS } = require('./writeReleaseChecksums');
 
 const RELEASE_DIR = process.env.POSTMETER_RELEASE_DIR
@@ -16,6 +16,7 @@ const MANIFEST_FILE = process.env.POSTMETER_RELEASE_MANIFEST
 const CHECKSUM_FILE = process.env.POSTMETER_RELEASE_CHECKSUMS
   ? path.resolve(process.env.POSTMETER_RELEASE_CHECKSUMS)
   : path.join(RELEASE_DIR, 'SHA256SUMS');
+const DEFAULT_COMMAND_TIMEOUT_MILLIS = 30_000;
 
 async function main() {
   const packageJson = await validatePackageMetadata(PACKAGE_JSON);
@@ -380,22 +381,24 @@ async function desktopFilesRegisterProtocol(desktopFiles) {
   return false;
 }
 
-function runCommand(command, args, options = {}) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd: options.cwd, stdio: ['ignore', 'pipe', 'pipe'] });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
-    child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
-    child.on('error', reject);
-    child.on('exit', (code) => {
-      if (code === 0) {
-        resolve(stdout);
-        return;
-      }
-      reject(new Error(`${command} exited with ${code}: ${stderr.trim()}`));
-    });
+async function runCommand(command, args, options = {}) {
+  const timeoutMillis = releaseValidationCommandTimeoutMillis(options.timeoutMillis);
+  const result = await spawnWithTimeout(command, args, {
+    cwd: options.cwd,
+    killGraceMillis: options.killGraceMillis,
+    timeoutMillis,
+    timeoutMessage: `${command} timed out after ${timeoutMillis} ms.`
   });
+  if (result.code === 0) {
+    return result.stdout;
+  }
+  const stderr = String(result.stderr || '').trim();
+  throw new Error(stderr ? `${command} exited with ${result.code}: ${stderr}` : `${command} exited with ${result.code}.`);
+}
+
+function releaseValidationCommandTimeoutMillis(value = process.env.POSTMETER_RELEASE_VALIDATE_COMMAND_TIMEOUT_MS) {
+  const parsed = Number.parseInt(String(value || ''), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_COMMAND_TIMEOUT_MILLIS;
 }
 
 function csvSet(value) {
@@ -417,5 +420,7 @@ module.exports = {
   validateLinuxDebProtocol,
   validateMacZipProtocol,
   macInfoPlistPathFromListing,
+  releaseValidationCommandTimeoutMillis,
+  runCommand,
   validateReleaseManifest
 };

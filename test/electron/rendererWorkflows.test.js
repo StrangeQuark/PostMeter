@@ -777,8 +777,128 @@ test('renderer workflows collect the active request editor before importing a co
 
   await workflows.importCollection();
 
-  assert.deepEqual(collectionCountsAtCollect, [0, 1, 1]);
+  assert.deepEqual(collectionCountsAtCollect, [0, 1]);
   assert.equal(state.workspace.collections.length, 1);
+});
+
+test('renderer workflows report workspace import failure without replacing the active workspace', async () => {
+  const state = createRendererState();
+  const originalWorkspace = { collections: [{ id: 'collection-1', name: 'Current' }], environments: [], settings: {} };
+  state.workspace = originalWorkspace;
+  let status = '';
+  let notification = null;
+
+  const workflows = createRendererWorkflows({
+    state,
+    collectActiveEditorState: () => {},
+    doc: createDocument(),
+    notifyUser: (title, message) => { notification = { title, message }; },
+    runFormatting: createRunFormatting(),
+    setStatus: (value) => { status = value; },
+    windowObject: {
+      postmeter: {
+        workspace: {
+          importWorkspace: async () => {
+            throw new Error('parse failed');
+          }
+        }
+      }
+    }
+  });
+
+  await workflows.importWorkspace();
+
+  assert.equal(state.workspace, originalWorkspace);
+  assert.equal(status, 'Workspace import failed: parse failed');
+  assert.deepEqual(notification, { title: 'Workspace Import Failed', message: 'parse failed' });
+});
+
+test('renderer workflows report collection import failure without mutating collections', async () => {
+  const state = createRendererState();
+  state.workspace = { collections: [{ id: 'collection-1', name: 'Current' }], environments: [], settings: {} };
+  let status = '';
+  let notification = null;
+
+  const workflows = createRendererWorkflows({
+    state,
+    collectActiveEditorState: () => {},
+    doc: createDocument(),
+    notifyUser: (title, message) => { notification = { title, message }; },
+    runFormatting: createRunFormatting(),
+    setStatus: (value) => { status = value; },
+    windowObject: {
+      postmeter: {
+        collection: {
+          importCollection: async () => {
+            throw new Error('unsupported format');
+          }
+        }
+      }
+    }
+  });
+
+  await workflows.importCollection();
+
+  assert.equal(state.workspace.collections.length, 1);
+  assert.equal(status, 'Collection import failed: unsupported format');
+  assert.deepEqual(notification, { title: 'Collection Import Failed', message: 'unsupported format' });
+});
+
+test('renderer workflows roll back imported collections when persistence fails', async () => {
+  const state = createRendererState();
+  const originalCollection = { id: 'collection-1', name: 'Current', requests: [{ id: 'request-1', name: 'Current Request' }], folders: [] };
+  state.workspace = { collections: [originalCollection], environments: [], settings: {} };
+  state.activeCollectionId = 'collection-1';
+  state.activeFolderId = 'folder-1';
+  state.activeRequestId = 'request-1';
+  let status = '';
+  let notification = null;
+  let renderCount = 0;
+
+  const workflows = createRendererWorkflows({
+    state,
+    doc: createDocument(),
+    notifyUser: (title, message) => { notification = { title, message }; },
+    renderAll: () => { renderCount += 1; },
+    runFormatting: createRunFormatting(),
+    selectFirstRequest: (collection) => {
+      state.activeFolderId = null;
+      state.activeRequestId = collection.requests[0].id;
+    },
+    setStatus: (value) => { status = value; },
+    uniqueName: (value) => value,
+    windowObject: {
+      postmeter: {
+        collection: {
+          importCollection: async () => ({
+            cancelled: false,
+            collection: {
+              id: 'imported-collection',
+              name: 'Imported Collection',
+              requests: [{ id: 'imported-request-1', name: 'Imported Request', url: '', method: 'GET' }],
+              folders: []
+            }
+          })
+        },
+        workspace: {
+          save: async () => {
+            throw new Error('disk full');
+          }
+        }
+      }
+    }
+  });
+
+  await workflows.importCollection();
+
+  assert.equal(state.workspace.collections.length, 1);
+  assert.equal(state.workspace.collections[0].id, 'collection-1');
+  assert.equal(state.activeCollectionId, 'collection-1');
+  assert.equal(state.activeFolderId, 'folder-1');
+  assert.equal(state.activeRequestId, 'request-1');
+  assert.equal(status, 'Collection import save failed: disk full');
+  assert.deepEqual(notification, { title: 'Collection Import Save Failed', message: 'disk full' });
+  assert.equal(renderCount, 2);
 });
 
 test('renderer workflows use the collection export modal callback when exporting from the dropdown', async () => {
@@ -823,6 +943,67 @@ test('renderer workflows use the collection export modal callback when exporting
   assert.equal(exportedCollection, collectionTwo);
   assert.equal(exportedFormat, 'openapi');
   assert.equal(status, 'Collection exported to /tmp/BillingCollection.openapi.json.');
+});
+
+test('renderer workflows report workspace export failure without throwing from toolbar handlers', async () => {
+  const state = createRendererState();
+  state.workspace = { collections: [], environments: [], settings: {} };
+  let status = '';
+  let notification = null;
+
+  const workflows = createRendererWorkflows({
+    state,
+    doc: createDocument(),
+    notifyUser: (title, message) => { notification = { title, message }; },
+    runFormatting: createRunFormatting(),
+    setStatus: (value) => { status = value; },
+    windowObject: {
+      __postmeterExportWorkspace: async () => {
+        throw new Error('permission denied');
+      },
+      postmeter: {
+        workspace: {
+          save: async (workspace) => workspace
+        }
+      }
+    }
+  });
+
+  await workflows.exportWorkspace();
+
+  assert.equal(status, 'Workspace export failed: permission denied');
+  assert.deepEqual(notification, { title: 'Workspace Export Failed', message: 'permission denied' });
+});
+
+test('renderer workflows report collection export failure without throwing from toolbar handlers', async () => {
+  const state = createRendererState();
+  const collection = { id: 'collection-1', name: 'Current', requests: [], folders: [] };
+  state.workspace = { collections: [collection], environments: [], settings: {} };
+  let status = '';
+  let notification = null;
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => collection,
+    doc: createDocument(),
+    notifyUser: (title, message) => { notification = { title, message }; },
+    runFormatting: createRunFormatting(),
+    setStatus: (value) => { status = value; },
+    windowObject: {
+      postmeter: {
+        collection: {
+          exportCollection: async () => {
+            throw new Error('disk full');
+          }
+        }
+      }
+    }
+  });
+
+  await workflows.exportCollection(undefined, 'postmeter');
+
+  assert.equal(status, 'Collection export failed: disk full');
+  assert.deepEqual(notification, { title: 'Collection Export Failed', message: 'disk full' });
 });
 
 test('renderer workflows refuse collection export when the workspace has no collections', async () => {
@@ -1306,7 +1487,11 @@ test('renderer workflows clear stale OAuth validation errors when a later flow s
     renderAuthEditor: () => {},
     renderCollections: () => {},
     renderRequestTabs: () => {},
-    runFormatting: createRunFormatting(),
+    runFormatting: {
+      ...createRunFormatting(),
+      oauthProgressDetail: (progress) => progress.message || '',
+      oauthStatusText: (progress) => `${progress.type}:${progress.status}`
+    },
     windowObject: {
       postmeter: {
         oauth: {
@@ -1330,10 +1515,86 @@ test('renderer workflows clear stale OAuth validation errors when a later flow s
 
   await workflows.startPkceFlow();
   assert.equal(doc.getElementById('validationLabel').textContent, 'provider denied access_token=[redacted]');
+  assert.equal(doc.getElementById('oauthProgressStatus').textContent, 'pkce:failed');
+  assert.equal(doc.getElementById('oauthProgressDetail').textContent, 'provider denied access_token=[redacted]');
 
   await workflows.startPkceFlow();
   assert.equal(doc.getElementById('validationLabel').textContent, '');
   assert.equal(request.auth.accessToken, 'fresh-token');
+});
+
+test('renderer workflows move OAuth device progress to failed on immediate start errors', async () => {
+  const state = createRendererState();
+  const request = {
+    id: 'request-1',
+    name: 'Authorize Device',
+    method: 'GET',
+    url: 'https://example.test/widgets',
+    auth: {
+      type: 'oauth2',
+      grantType: 'deviceCode',
+      deviceAuthorizationUrl: 'https://auth.example.test/device',
+      tokenUrl: 'https://auth.example.test/token',
+      clientId: 'widget-client',
+      accessToken: ''
+    },
+    scripts: { preRequest: '', tests: '' }
+  };
+  const collection = {
+    id: 'collection-1',
+    name: 'OAuth',
+    variables: [],
+    requests: [request],
+    folders: []
+  };
+  state.workspace = { collections: [collection], environments: [], history: [], cookies: [], settings: {} };
+  state.activeCollectionId = collection.id;
+  state.activeRequestId = request.id;
+  const doc = createDocument();
+  let status = '';
+  let notification = null;
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => activeCollectionForState(state),
+    activeEnvironment: () => null,
+    activeRequest: () => activeRequestForState(state),
+    collectRequestFromEditor: () => {},
+    doc,
+    notifyUser: (title, message) => { notification = { title, message }; },
+    renderAuthEditor: () => {},
+    renderCollections: () => {},
+    renderRequestTabs: () => {},
+    runFormatting: {
+      ...createRunFormatting(),
+      oauthProgressDetail: (progress) => progress.message || '',
+      oauthStatusText: (progress) => `${progress.type}:${progress.status}`
+    },
+    setStatus: (value) => { status = value; },
+    windowObject: {
+      postmeter: {
+        oauth: {
+          startDeviceFlow: async () => {
+            throw new Error('device provider denied');
+          }
+        },
+        workspace: {
+          save: async (workspace) => workspace
+        }
+      }
+    }
+  });
+
+  await workflows.startDeviceFlow();
+
+  assert.equal(status, 'OAuth device authorization failed.');
+  assert.equal(doc.getElementById('validationLabel').textContent, 'device provider denied');
+  assert.equal(doc.getElementById('oauthProgressStatus').textContent, 'device:failed');
+  assert.equal(doc.getElementById('oauthProgressDetail').textContent, 'device provider denied');
+  assert.deepEqual(notification, {
+    title: 'OAuth Device Authorization Failed',
+    message: 'device provider denied'
+  });
 });
 
 test('renderer workflows ignore stale OAuth completions after a newer flow starts', async () => {
@@ -1484,6 +1745,291 @@ test('renderer workflows apply load-test cookie updates back into the renderer w
   assert.equal(cookieRenders, 1);
 });
 
+test('renderer workflows recover load-test start failures without leaving active controls stuck', async () => {
+  const state = createRendererState();
+  state.lastLoadResult = { totalRequests: 9, successfulRequests: 9, failedRequests: 0 };
+  const request = {
+    id: 'request-1',
+    name: 'Load Widgets',
+    method: 'GET',
+    url: 'https://example.test/widgets',
+    scripts: { preRequest: '', tests: '' }
+  };
+  state.workspace = { collections: [], environments: [], history: [], cookies: [], settings: {} };
+  const doc = createDocument();
+  doc.getElementById('loadConcurrency').value = '1';
+  let status = '';
+  let notification = null;
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => request,
+    collectRequestFromEditor: () => {},
+    doc,
+    loadConfigFromControls: () => ({ totalRequests: 2 }),
+    notifyUser: (title, message) => { notification = { title, message }; },
+    runFormatting: createRunFormatting(),
+    setStatus: (value) => { status = value; },
+    windowObject: {
+      postmeter: {
+        request: {
+          validate: async () => []
+        },
+        loadTest: {
+          start: async () => {
+            throw new Error('load backend unavailable');
+          }
+        },
+        workspace: {
+          save: async (workspace) => workspace
+        }
+      }
+    }
+  });
+
+  await workflows.runLoadTest();
+
+  assert.equal(doc.getElementById('loadResults').textContent, 'load backend unavailable');
+  assert.equal(doc.getElementById('runLoadButton').disabled, false);
+  assert.equal(doc.getElementById('cancelLoadButton').disabled, true);
+  assert.equal(doc.getElementById('exportLoadJsonButton').disabled, true);
+  assert.equal(doc.getElementById('exportLoadCsvButton').disabled, true);
+  assert.equal(state.activeLoadId, null);
+  assert.equal(state.lastLoadResult, null);
+  assert.equal(status, 'Load test failed.');
+  assert.deepEqual(notification, {
+    title: 'Load Test Failed',
+    message: 'load backend unavailable'
+  });
+});
+
+test('renderer workflows recover collection-run start failures without leaving active controls stuck', async () => {
+  const state = createRendererState();
+  const collection = {
+    id: 'collection-1',
+    name: 'Runner Collection',
+    requests: [],
+    folders: []
+  };
+  state.workspace = { collections: [collection], environments: [], history: [], cookies: [], settings: {} };
+  state.activeCollectionId = collection.id;
+  const doc = createDocument();
+  let status = '';
+  let notification = null;
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => collection,
+    activeEnvironment: () => null,
+    collectRequestFromEditor: () => {},
+    doc,
+    notifyUser: (title, message) => { notification = { title, message }; },
+    runFormatting: createRunFormatting(),
+    setStatus: (value) => { status = value; },
+    windowObject: {
+      postmeter: {
+        runner: {
+          start: async () => {
+            throw new Error('runner backend unavailable');
+          }
+        },
+        workspace: {
+          save: async (workspace) => workspace
+        }
+      }
+    }
+  });
+
+  await workflows.runActiveCollection();
+
+  assert.equal(doc.getElementById('runnerResults').textContent, 'runner backend unavailable');
+  assert.equal(doc.getElementById('runCollectionButton').disabled, false);
+  assert.equal(doc.getElementById('cancelRunnerButton').disabled, true);
+  assert.equal(doc.getElementById('exportRunnerJsonButton').disabled, true);
+  assert.equal(doc.getElementById('exportRunnerCsvButton').disabled, true);
+  assert.equal(state.activeRunnerId, null);
+  assert.equal(state.lastRunnerResult, null);
+  assert.equal(status, 'Collection run failed.');
+  assert.deepEqual(notification, {
+    title: 'Collection Run Failed',
+    message: 'runner backend unavailable'
+  });
+});
+
+test('renderer workflows surface load-test cancellation failures visibly', async () => {
+  const state = createRendererState();
+  state.activeLoadId = 'load-1';
+  const doc = createDocument();
+  let status = '';
+  let notification = null;
+  let cancelledId = '';
+  const workflows = createRendererWorkflows({
+    state,
+    doc,
+    notifyUser: (title, message) => { notification = { title, message }; },
+    runFormatting: createRunFormatting(),
+    setStatus: (value) => { status = value; },
+    windowObject: {
+      postmeter: {
+        loadTest: {
+          cancel: async (id) => {
+            cancelledId = id;
+            throw new Error('load cancel ipc failed');
+          }
+        }
+      }
+    }
+  });
+
+  await workflows.cancelLoadTest();
+
+  assert.equal(cancelledId, 'load-1');
+  assert.equal(doc.getElementById('loadResults').textContent, 'load cancel ipc failed');
+  assert.equal(status, 'Load test cancellation failed.');
+  assert.deepEqual(notification, {
+    title: 'Load Test Cancellation Failed',
+    message: 'load cancel ipc failed'
+  });
+});
+
+test('renderer workflows surface collection-run cancellation failures visibly', async () => {
+  const state = createRendererState();
+  state.activeRunnerId = 'runner-1';
+  const doc = createDocument();
+  let status = '';
+  let notification = null;
+  let cancelledId = '';
+  const workflows = createRendererWorkflows({
+    state,
+    doc,
+    notifyUser: (title, message) => { notification = { title, message }; },
+    runFormatting: createRunFormatting(),
+    setStatus: (value) => { status = value; },
+    windowObject: {
+      postmeter: {
+        runner: {
+          cancel: async (id) => {
+            cancelledId = id;
+            throw new Error('runner cancel ipc failed');
+          }
+        }
+      }
+    }
+  });
+
+  await workflows.cancelCollectionRun();
+
+  assert.equal(cancelledId, 'runner-1');
+  assert.equal(doc.getElementById('runnerResults').textContent, 'runner cancel ipc failed');
+  assert.equal(status, 'Collection run cancellation failed.');
+  assert.deepEqual(notification, {
+    title: 'Collection Run Cancellation Failed',
+    message: 'runner cancel ipc failed'
+  });
+});
+
+test('renderer workflows surface OAuth cancellation failures visibly', async () => {
+  const state = createRendererState();
+  state.activeOauthFlowId = 'oauth-1';
+  const doc = createDocument();
+  let status = '';
+  let notification = null;
+  let cancelledId = '';
+  const workflows = createRendererWorkflows({
+    state,
+    doc,
+    notifyUser: (title, message) => { notification = { title, message }; },
+    runFormatting: createRunFormatting(),
+    setStatus: (value) => { status = value; },
+    windowObject: {
+      postmeter: {
+        oauth: {
+          cancelFlow: async (id) => {
+            cancelledId = id;
+            throw new Error('oauth cancel ipc failed');
+          }
+        }
+      }
+    }
+  });
+
+  await workflows.cancelOauthFlow();
+
+  assert.equal(cancelledId, 'oauth-1');
+  assert.equal(doc.getElementById('validationLabel').textContent, 'oauth cancel ipc failed');
+  assert.equal(status, 'OAuth cancellation failed.');
+  assert.deepEqual(notification, {
+    title: 'OAuth Cancellation Failed',
+    message: 'oauth cancel ipc failed'
+  });
+});
+
+test('renderer workflows report runner export failure without throwing from toolbar handlers', async () => {
+  const state = createRendererState();
+  state.lastRunnerResult = { collectionName: 'Smoke Runner', results: [] };
+  let status = '';
+  let notification = null;
+
+  const workflows = createRendererWorkflows({
+    state,
+    doc: createDocument(),
+    notifyUser: (title, message) => { notification = { title, message }; },
+    runFormatting: createRunFormatting(),
+    setStatus: (value) => { status = value; },
+    windowObject: {
+      postmeter: {
+        runner: {
+          export: async () => {
+            throw new Error('runner export denied');
+          }
+        }
+      }
+    }
+  });
+
+  await workflows.exportRunnerResult('json');
+
+  assert.equal(status, 'Collection run export failed.');
+  assert.deepEqual(notification, {
+    title: 'Collection Run Export Failed',
+    message: 'runner export denied'
+  });
+});
+
+test('renderer workflows report load-test export failure without throwing from toolbar handlers', async () => {
+  const state = createRendererState();
+  state.lastLoadResult = { totalRequests: 1, successfulRequests: 1, failedRequests: 0 };
+  let status = '';
+  let notification = null;
+
+  const workflows = createRendererWorkflows({
+    state,
+    doc: createDocument(),
+    notifyUser: (title, message) => { notification = { title, message }; },
+    runFormatting: createRunFormatting(),
+    setStatus: (value) => { status = value; },
+    windowObject: {
+      postmeter: {
+        loadTest: {
+          export: async () => {
+            throw new Error('load export denied');
+          }
+        }
+      }
+    }
+  });
+
+  await workflows.exportLoadResult('csv');
+
+  assert.equal(status, 'Load test export failed.');
+  assert.deepEqual(notification, {
+    title: 'Load Test Export Failed',
+    message: 'load export denied'
+  });
+});
+
 test('renderer workflows clear stale captured responses after a send failure', async () => {
   const state = createRendererState();
   const request = {
@@ -1529,6 +2075,407 @@ test('renderer workflows clear stale captured responses after a send failure', a
   assert.equal(doc.getElementById('captureResponseExampleButton').disabled, true);
 });
 
+test('renderer workflows surface request save failures inline before sending', async () => {
+  const state = createRendererState();
+  const request = {
+    id: 'request-1',
+    name: 'Get Widgets',
+    method: 'GET',
+    url: 'https://example.test/widgets',
+    scripts: { preRequest: '', tests: '' }
+  };
+  const collection = {
+    id: 'collection-1',
+    name: 'Requests',
+    requests: [request],
+    folders: []
+  };
+  state.workspace = { collections: [collection], environments: [], history: [], settings: {} };
+  state.activeCollectionId = collection.id;
+  state.activeRequestId = request.id;
+  state.lastLoadResult = { totalRequests: 7, successfulRequests: 7, failedRequests: 0 };
+  state.openRequestTabs = [{
+    key: 'request:collection-1:request-1',
+    collectionId: collection.id,
+    requestId: request.id,
+    dirty: true
+  }];
+  state.lastResponse = { requestId: request.id, statusCode: 200 };
+  const doc = createDocument();
+  doc.getElementById('responseTime').textContent = '99 ms';
+  doc.getElementById('responseSize').textContent = '1 KB';
+  doc.getElementById('finalUrl').textContent = 'https://old.example.test';
+  doc.getElementById('responseHeaders').value = 'x-old: yes';
+  let requestSends = 0;
+  let validations = 0;
+  let status = '';
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => collection,
+    activeEnvironment: () => null,
+    activeRequest: () => request,
+    collectRequestFromEditor: () => {},
+    doc,
+    notifyUser: () => {},
+    renderAuthEditor: () => {},
+    renderCookieJarEditor: () => {},
+    renderHistory: () => {},
+    runFormatting: createRunFormatting(),
+    setStatus: (value) => { status = value; },
+    windowObject: {
+      postmeter: {
+        request: {
+          validate: async () => {
+            validations += 1;
+            return [];
+          },
+          send: async () => {
+            requestSends += 1;
+            return { statusCode: 200, finalUrl: request.url, durationMillis: 1 };
+          }
+        },
+        workspace: {
+          saveRequest: async () => {
+            throw new Error('disk full before send');
+          }
+        }
+      }
+    }
+  });
+
+  await workflows.sendActiveRequest();
+
+  assert.equal(validations, 0);
+  assert.equal(requestSends, 0);
+  assert.equal(state.lastResponse, null);
+  assert.equal(doc.getElementById('responseStatus').textContent, 'ERR');
+  assert.equal(doc.getElementById('responseTime').textContent, '-');
+  assert.equal(doc.getElementById('responseSize').textContent, '-');
+  assert.equal(doc.getElementById('finalUrl').textContent, '-');
+  assert.equal(doc.getElementById('responseHeaders').value, '');
+  assert.equal(doc.getElementById('responseBody').value, 'disk full before send');
+  assert.equal(status, 'Request failed: disk full before send');
+});
+
+test('renderer workflows surface load-test save failures without starting a load', async () => {
+  const state = createRendererState();
+  const request = {
+    id: 'request-1',
+    name: 'Load Widgets',
+    method: 'GET',
+    url: 'https://example.test/widgets',
+    scripts: { preRequest: '', tests: '' }
+  };
+  const collection = {
+    id: 'collection-1',
+    name: 'Requests',
+    requests: [request],
+    folders: []
+  };
+  state.workspace = { collections: [collection], environments: [], history: [], settings: {} };
+  state.activeCollectionId = collection.id;
+  state.activeRequestId = request.id;
+  state.openRequestTabs = [{
+    key: 'request:collection-1:request-1',
+    collectionId: collection.id,
+    requestId: request.id,
+    dirty: true
+  }];
+  const doc = createDocument();
+  doc.getElementById('loadConcurrency').value = '1';
+  doc.getElementById('exportLoadJsonButton').disabled = false;
+  doc.getElementById('exportLoadCsvButton').disabled = false;
+  let loadStarts = 0;
+  let validations = 0;
+  let status = '';
+  let notification = null;
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => collection,
+    activeEnvironment: () => null,
+    activeRequest: () => request,
+    collectRequestFromEditor: () => {},
+    doc,
+    loadConfigFromControls: () => ({ totalRequests: 1 }),
+    notifyUser: (title, message) => { notification = { title, message }; },
+    runFormatting: createRunFormatting(),
+    setStatus: (value) => { status = value; },
+    windowObject: {
+      postmeter: {
+        request: {
+          validate: async () => {
+            validations += 1;
+            return [];
+          }
+        },
+        loadTest: {
+          start: async () => {
+            loadStarts += 1;
+            return { totalRequests: 1, successfulRequests: 1, failedRequests: 0, cancelled: false };
+          }
+        },
+        workspace: {
+          saveRequest: async () => {
+            throw new Error('disk full before load');
+          }
+        }
+      }
+    }
+  });
+
+  await workflows.runLoadTest();
+
+  assert.equal(validations, 0);
+  assert.equal(loadStarts, 0);
+  assert.equal(doc.getElementById('loadResults').textContent, 'disk full before load');
+  assert.equal(doc.getElementById('exportLoadJsonButton').disabled, true);
+  assert.equal(doc.getElementById('exportLoadCsvButton').disabled, true);
+  assert.equal(state.activeLoadId, null);
+  assert.equal(state.lastLoadResult, null);
+  assert.equal(status, 'Load test failed.');
+  assert.deepEqual(notification, {
+    title: 'Load Test Failed',
+    message: 'disk full before load'
+  });
+});
+
+test('renderer workflows surface collection-run save failures without starting a run', async () => {
+  const state = createRendererState();
+  const collection = {
+    id: 'collection-1',
+    name: 'Runner Collection',
+    requests: [],
+    folders: []
+  };
+  state.workspace = { collections: [collection], environments: [], history: [], settings: {} };
+  state.activeCollectionId = collection.id;
+  state.activeRequestId = null;
+  state.lastRunnerResult = { totalRequests: 4, passedRequests: 4, failedRequests: 0 };
+  const doc = createDocument();
+  doc.getElementById('exportRunnerJsonButton').disabled = false;
+  doc.getElementById('exportRunnerCsvButton').disabled = false;
+  let runnerStarts = 0;
+  let status = '';
+  let notification = null;
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => collection,
+    activeEnvironment: () => null,
+    collectRequestFromEditor: () => {},
+    doc,
+    notifyUser: (title, message) => { notification = { title, message }; },
+    runFormatting: createRunFormatting(),
+    setStatus: (value) => { status = value; },
+    windowObject: {
+      postmeter: {
+        runner: {
+          start: async () => {
+            runnerStarts += 1;
+            return { cancelled: false, results: [], cookies: [] };
+          }
+        },
+        workspace: {
+          save: async () => {
+            throw new Error('disk full before runner');
+          }
+        }
+      }
+    }
+  });
+
+  await workflows.runActiveCollection();
+
+  assert.equal(runnerStarts, 0);
+  assert.equal(doc.getElementById('runnerResults').textContent, 'disk full before runner');
+  assert.equal(doc.getElementById('exportRunnerJsonButton').disabled, true);
+  assert.equal(doc.getElementById('exportRunnerCsvButton').disabled, true);
+  assert.equal(state.activeRunnerId, null);
+  assert.equal(state.lastRunnerResult, null);
+  assert.equal(status, 'Collection run failed.');
+  assert.deepEqual(notification, {
+    title: 'Collection Run Failed',
+    message: 'disk full before runner'
+  });
+});
+
+test('renderer workflows ignore stale load-test completions after workspace context reset', async () => {
+  const state = createRendererState();
+  state.activeWorkspaceId = 'workspace-1';
+  state.workspace = { collections: [], environments: [], history: [], cookies: [], settings: {} };
+  const request = {
+    id: 'request-1',
+    name: 'Load Widgets',
+    method: 'GET',
+    url: 'https://example.test/widgets',
+    scripts: { preRequest: '', tests: '' }
+  };
+  const doc = createDocument();
+  doc.getElementById('loadConcurrency').value = '1';
+  let resolveLoad = null;
+  let cookieRenders = 0;
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => request,
+    collectRequestFromEditor: () => {},
+    doc,
+    loadConfigFromControls: () => ({ totalRequests: 1 }),
+    notifyUser: () => {},
+    renderCookieJarEditor: () => { cookieRenders += 1; },
+    runFormatting: createRunFormatting(),
+    setStatus: () => {},
+    windowObject: {
+      postmeter: {
+        request: {
+          validate: async () => []
+        },
+        loadTest: {
+          start: async () => new Promise((resolve) => {
+            resolveLoad = resolve;
+          })
+        },
+        workspace: {
+          save: async (workspace) => workspace
+        }
+      }
+    }
+  });
+
+  const run = workflows.runLoadTest();
+  await flushMicrotasks();
+  assert.equal(typeof resolveLoad, 'function');
+  state.activeWorkspaceId = 'workspace-2';
+  state.activeLoadId = null;
+  doc.getElementById('loadResults').textContent = 'Workspace reset.';
+  resolveLoad({
+    totalRequests: 1,
+    successfulRequests: 1,
+    failedRequests: 0,
+    cancelled: false,
+    cookies: [{ name: 'staleLoad', value: 'stale', domain: 'example.test', path: '/' }]
+  });
+  await run;
+
+  assert.equal(state.lastLoadResult, null);
+  assert.equal(state.workspace.cookies.length, 0);
+  assert.equal(cookieRenders, 0);
+  assert.equal(doc.getElementById('loadResults').textContent, 'Workspace reset.');
+});
+
+test('renderer workflows ignore stale collection-run completions after workspace context reset', async () => {
+  const state = createRendererState();
+  const collection = {
+    id: 'collection-1',
+    name: 'Runner Collection',
+    requests: [],
+    folders: []
+  };
+  state.activeWorkspaceId = 'workspace-1';
+  state.activeCollectionId = collection.id;
+  state.workspace = { collections: [collection], environments: [], history: [], cookies: [], settings: {} };
+  const doc = createDocument();
+  let resolveRun = null;
+  let cookieRenders = 0;
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => collection,
+    activeEnvironment: () => null,
+    collectRequestFromEditor: () => {},
+    doc,
+    notifyUser: () => {},
+    renderCookieJarEditor: () => { cookieRenders += 1; },
+    runFormatting: createRunFormatting(),
+    setStatus: () => {},
+    windowObject: {
+      postmeter: {
+        runner: {
+          start: async () => new Promise((resolve) => {
+            resolveRun = resolve;
+          })
+        },
+        workspace: {
+          save: async (workspace) => workspace
+        }
+      }
+    }
+  });
+
+  const run = workflows.runActiveCollection();
+  await flushMicrotasks();
+  assert.equal(typeof resolveRun, 'function');
+  state.activeWorkspaceId = 'workspace-2';
+  state.activeRunnerId = null;
+  doc.getElementById('runnerResults').textContent = 'Workspace reset.';
+  resolveRun({
+    cancelled: false,
+    results: [],
+    cookies: [{ name: 'staleRunner', value: 'stale', domain: 'example.test', path: '/' }]
+  });
+  await run;
+
+  assert.equal(state.lastRunnerResult, null);
+  assert.equal(state.workspace.cookies.length, 0);
+  assert.equal(cookieRenders, 0);
+  assert.equal(doc.getElementById('runnerResults').textContent, 'Workspace reset.');
+});
+
+test('renderer workflows clear stale load validation errors before a later valid run', async () => {
+  const state = createRendererState();
+  state.workspace = { collections: [], environments: [], history: [], cookies: [], settings: {} };
+  const request = {
+    id: 'request-1',
+    name: 'Load Widgets',
+    method: 'GET',
+    url: 'https://example.test/widgets',
+    scripts: { preRequest: '', tests: '' }
+  };
+  const doc = createDocument();
+  doc.getElementById('loadConcurrency').value = '1';
+  let validations = 0;
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => request,
+    collectRequestFromEditor: () => {},
+    doc,
+    loadConfigFromControls: () => ({ totalRequests: 1 }),
+    notifyUser: () => {},
+    runFormatting: createRunFormatting(),
+    setStatus: () => {},
+    windowObject: {
+      postmeter: {
+        request: {
+          validate: async () => {
+            validations += 1;
+            return validations === 1 ? ['URL is required.'] : [];
+          }
+        },
+        loadTest: {
+          start: async () => ({ totalRequests: 1, successfulRequests: 1, failedRequests: 0, cancelled: false })
+        },
+        workspace: {
+          save: async (workspace) => workspace
+        }
+      }
+    }
+  });
+
+  await workflows.runLoadTest();
+  assert.equal(doc.getElementById('validationLabel').textContent, 'URL is required.');
+
+  await workflows.runLoadTest();
+  assert.equal(doc.getElementById('validationLabel').textContent, '');
+  assert.equal(state.lastLoadResult.totalRequests, 1);
+});
+
 function createDocument() {
   const elements = new Map();
   return {
@@ -1545,6 +2492,12 @@ function createDocument() {
       return elements.get(id);
     }
   };
+}
+
+async function flushMicrotasks() {
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise((resolve) => setImmediate(resolve));
 }
 
 function createRunFormatting() {

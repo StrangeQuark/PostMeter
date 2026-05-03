@@ -36,6 +36,21 @@ test('creates a default schema 11 workspace when no file exists', async () => {
   assert.equal(workspace.schemaVersion, 11);
   assert.deepEqual(workspace.settings, {
     appearance: { theme: 'system' },
+    diagnostics: {
+      logging: {
+        enabled: true,
+        level: 'info'
+      },
+      requestResponseLogging: {
+        urls: false,
+        headers: false,
+        cookies: false,
+        bodies: false,
+        protocolMessages: false,
+        scriptConsole: false,
+        payloadIdentifiers: false
+      }
+    },
     sandbox: {
       fileBindings: [],
       packageCache: [],
@@ -801,6 +816,15 @@ test('round-trips native PostMeter workspaces and collection exports with metada
   await store.exportWorkspace(workspace, workspaceExportPath);
   const importedWorkspace = await store.importWorkspace(workspaceExportPath);
   assertLegacyMetadataPreserved(importedWorkspace, CURRENT_SCHEMA_VERSION);
+  assert.deepEqual(importedWorkspace.settings.diagnostics.requestResponseLogging, {
+    urls: false,
+    headers: false,
+    cookies: false,
+    bodies: false,
+    protocolMessages: false,
+    scriptConsole: false,
+    payloadIdentifiers: false
+  });
 
   await store.exportCollection(importedWorkspace.collections[0], collectionExportPath, { format: 'postmeter' });
   const importedCollection = await store.importCollection(collectionExportPath);
@@ -825,6 +849,52 @@ test('round-trips native PostMeter workspaces and collection exports with metada
   assert.equal(request.examples[0].postman.ids.original, 'postman-request-1-example');
   assert.equal(request.postman.bindings.vaultKeys[0], 'apiToken');
   assert.equal(request.postman.fileReferences[0].source, 'fixtures/upload.bin');
+});
+
+test('workspace import resets diagnostics request response logging opt-ins', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-import-diagnostics-reset-'));
+  const workspacePath = path.join(temp, 'workspace.json');
+  const importPath = path.join(temp, 'imported-workspace.json');
+  const store = new WorkspaceStore(workspacePath);
+  await fs.writeFile(importPath, JSON.stringify({
+    schemaVersion: CURRENT_SCHEMA_VERSION,
+    settings: {
+      diagnostics: {
+        logging: { enabled: true, level: 'debug' },
+        requestResponseLogging: {
+          urls: true,
+          headers: true,
+          cookies: true,
+          bodies: true,
+          protocolMessages: true,
+          scriptConsole: true,
+          payloadIdentifiers: true
+        }
+      }
+    },
+    collections: [],
+    environments: [],
+    cookies: [],
+    history: []
+  }));
+
+  const imported = await store.importWorkspace(importPath);
+
+  assert.deepEqual(imported.settings.diagnostics, {
+    logging: {
+      enabled: true,
+      level: 'info'
+    },
+    requestResponseLogging: {
+      urls: false,
+      headers: false,
+      cookies: false,
+      bodies: false,
+      protocolMessages: false,
+      scriptConsole: false,
+      payloadIdentifiers: false
+    }
+  });
 });
 
 test('rejects workspace import when the file is not a native PostMeter workspace', async () => {

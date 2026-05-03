@@ -89,7 +89,8 @@ async function runCollection(collection, environment, options = {}) {
         clientCertificates: collection?.certificates || [],
         fileBindings: options.fileBindings || options.scriptOptions?.fileBindings || [],
         vault: options.vault || options.scriptOptions?.vault,
-        vaultPrompt: options.vaultPrompt || options.scriptOptions?.vaultPrompt
+        vaultPrompt: options.vaultPrompt || options.scriptOptions?.vaultPrompt,
+        recordDiagnosticEvent: options.recordDiagnosticEvent || options.scriptOptions?.recordDiagnosticEvent
       },
       sandboxPackages: options.sandboxPackages || options.scriptOptions?.sandboxPackages || [],
       clientCertificates: collection?.certificates || [],
@@ -104,7 +105,8 @@ async function runCollection(collection, environment, options = {}) {
       iteration: options.iteration || 0,
       iterationCount: options.iterationCount || 1,
       workspaceId: options.workspaceId || options.scriptOptions?.workspaceId || '',
-      workspaceName: options.workspaceName || options.scriptOptions?.workspaceName || ''
+      workspaceName: options.workspaceName || options.scriptOptions?.workspaceName || '',
+      recordDiagnosticEvent: options.recordDiagnosticEvent || options.scriptOptions?.recordDiagnosticEvent
     });
     if (Array.isArray(scriptedRequest.cookies)) {
       scopeState.cookies = scriptedRequest.cookies;
@@ -169,7 +171,8 @@ async function runCollection(collection, environment, options = {}) {
           iteration: options.iteration || 0,
           iterationCount: options.iterationCount || 1,
           workspaceId: options.workspaceId || options.scriptOptions?.workspaceId || '',
-          workspaceName: options.workspaceName || options.scriptOptions?.workspaceName || ''
+          workspaceName: options.workspaceName || options.scriptOptions?.workspaceName || '',
+          recordDiagnosticEvent: options.recordDiagnosticEvent || options.scriptOptions?.recordDiagnosticEvent
         }
       );
       if (Array.isArray(scriptedRequest.cookies)) {

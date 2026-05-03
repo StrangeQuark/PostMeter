@@ -1,9 +1,11 @@
 const { fork } = require('node:child_process');
+const os = require('node:os');
 const path = require('node:path');
 const { performance } = require('node:perf_hooks');
 const { buildUrl, sendRequest } = require('./httpClient');
 const { maybeRefreshOAuthToken } = require('./auth');
 const { LOAD_EXECUTION_MODES } = require('./payloadSchemas');
+const { redactText } = require('./diagnostics');
 
 const MAX_CONCURRENCY = 512;
 const MAX_TOTAL_REQUESTS = 100_000;
@@ -14,6 +16,9 @@ const HIGH_CONCURRENCY_THRESHOLD = 50;
 const MAX_TARGET_RATE_PER_SECOND = 10_000;
 const MAX_WORKER_PROCESSES = 8;
 const MAX_MULTIPROCESS_AGGREGATED_SAMPLES = MAX_TOTAL_REQUESTS;
+const DEFAULT_LOAD_WORKER_TIMEOUT_MILLIS = (MAX_DURATION_SECONDS * 1000) + 60_000;
+const DEFAULT_LOAD_WORKER_KILL_GRACE_MILLIS = 2_000;
+const MAX_LOAD_WORKER_STDERR_BYTES = 64 * 1024;
 const HISTOGRAM_BUCKETS_MILLIS = [50, 100, 200, 500, 1000, 2000, 5000, 10000];
 
 function validateLoadConfig(config, request, environment) {
@@ -71,12 +76,19 @@ function validateLoadConfig(config, request, environment) {
       message: `Effective target rate defaults to the configured rate cap of ${maxRatePerSecond} requests per second.`
     });
   }
+  const effectiveTargetRatePerSecond = targetRatePerSecond > 0 ? targetRatePerSecond : maxRatePerSecond;
+  if (durationSeconds <= 0 && effectiveTargetRatePerSecond > 0) {
+    const estimatedScheduleSeconds = Math.max(0, (totalRequests - 1) / effectiveTargetRatePerSecond);
+    if (estimatedScheduleSeconds > MAX_DURATION_SECONDS) {
+      throw new Error(`Request-count load tests with a target rate must complete within ${MAX_DURATION_SECONDS} seconds; increase the target rate or reduce total requests.`);
+    }
+  }
   return {
     concurrency,
     totalRequests,
     durationSeconds,
     rampUpSeconds,
-    targetRatePerSecond: targetRatePerSecond > 0 ? targetRatePerSecond : maxRatePerSecond,
+    targetRatePerSecond: effectiveTargetRatePerSecond,
     maxRatePerSecond,
     executionMode,
     workerProcesses: executionMode === 'multiProcess' ? workerProcesses : 1,
@@ -264,12 +276,22 @@ async function runMultiProcessLoadTest(request, environment, normalizedConfig, o
     cookieJar: initialCookies,
     abortController,
     workerProcess: index + 1,
+    workerKillGraceMillis: options.workerKillGraceMillis,
+    workerScript: options.workerScript,
+    workerTimeoutMillis: options.workerTimeoutMillis,
     onProgress: (event) => {
       workerProgress.set(index, event);
       progress(aggregateWorkerProgress(workerProgress, normalizedConfig, started));
     }
   }));
-  const workerResults = await Promise.all(workers);
+  let workerResults;
+  try {
+    workerResults = await Promise.all(workers);
+  } catch (error) {
+    abortController.abort();
+    await Promise.allSettled(workers);
+    throw error;
+  }
   const stats = createLoadStats(normalizedConfig);
   for (const [workerIndex, result] of workerResults.entries()) {
     mergeLoadResult(stats, result, (sample) => ({
@@ -339,17 +361,36 @@ function splitRate(rate, parts) {
   return Array.from({ length: parts }, () => perWorker);
 }
 
-function runLoadWorker({ request, environment, config, cookieJar, abortController, workerProcess, onProgress }) {
+function runLoadWorker({
+  request,
+  environment,
+  config,
+  cookieJar,
+  abortController,
+  workerProcess,
+  workerKillGraceMillis,
+  workerScript,
+  workerTimeoutMillis,
+  onProgress
+}) {
   return new Promise((resolve, reject) => {
-    const child = fork(path.join(__dirname, 'loadTestWorker.js'), [], {
+    const child = fork(workerScript || path.join(__dirname, 'loadTestWorker.js'), [], {
       env: loadWorkerEnvironment(process.env),
       stdio: ['ignore', 'ignore', 'pipe', 'ipc']
     });
     let settled = false;
     let stderr = '';
-    let killTimer;
+    let stderrTruncated = false;
+    let terminateTimer;
+    let forceKillTimer;
+    let exitObserved = false;
+    let workerTimedOut = false;
+    const normalizedWorkerTimeoutMillis = normalizedLoadWorkerTimeoutMillis(workerTimeoutMillis);
+    const normalizedWorkerKillGraceMillis = normalizedLoadWorkerKillGraceMillis(workerKillGraceMillis);
     const cleanup = () => {
-      clearTimeout(killTimer);
+      clearTimeout(workerTimeoutTimer);
+      clearTimeout(terminateTimer);
+      clearTimeout(forceKillTimer);
       abortController.signal.removeEventListener('abort', onAbort);
     };
     const finish = (callback, value) => {
@@ -360,18 +401,45 @@ function runLoadWorker({ request, environment, config, cookieJar, abortControlle
       cleanup();
       callback(value);
     };
-    const onAbort = () => {
+    const requestWorkerExit = (options = {}) => {
       if (child.connected) {
         child.send({ type: 'cancel' });
       }
-      killTimer = setTimeout(() => {
-        if (!child.killed) {
+      const terminate = () => {
+        if (!exitObserved) {
           child.kill('SIGTERM');
         }
-      }, 1000);
+        forceKillTimer = setTimeout(() => {
+          if (!exitObserved) {
+            child.kill('SIGKILL');
+          }
+        }, normalizedWorkerKillGraceMillis);
+        forceKillTimer.unref?.();
+      };
+      if (options.immediate === true) {
+        terminate();
+        return;
+      }
+      terminateTimer = setTimeout(terminate, 1000);
+      terminateTimer.unref?.();
     };
-    child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+    const onAbort = () => {
+      requestWorkerExit();
+    };
+    const workerTimeoutTimer = setTimeout(() => {
+      workerTimedOut = true;
+      requestWorkerExit({ immediate: true });
+    }, normalizedWorkerTimeoutMillis);
+    workerTimeoutTimer.unref?.();
+    child.stderr.on('data', (chunk) => {
+      const next = appendBoundedWorkerStderr(stderr, chunk);
+      stderr = next.text;
+      stderrTruncated ||= next.truncated;
+    });
     child.on('message', (message) => {
+      if (workerTimedOut) {
+        return;
+      }
       if (message?.type === 'progress') {
         onProgress({ ...message.progress, workerProcess });
       } else if (message?.type === 'result') {
@@ -382,8 +450,16 @@ function runLoadWorker({ request, environment, config, cookieJar, abortControlle
     });
     child.on('error', (error) => finish(reject, error));
     child.on('exit', (code, signal) => {
+      exitObserved = true;
       if (!settled) {
-        finish(reject, new Error(`Load worker exited before returning a result (${signal || code}). ${stderr.trim()}`.trim()));
+        const stderrPreview = redactLoadWorkerStderr(stderr.trim());
+        const stderrDetail = stderrPreview
+          ? ` ${stderrPreview}${stderrTruncated ? ' [stderr truncated]' : ''}`
+          : '';
+        const reason = workerTimedOut
+          ? `Load worker timed out after ${normalizedWorkerTimeoutMillis} ms.`
+          : `Load worker exited before returning a result (${signal || code}).`;
+        finish(reject, new Error(`${reason}${stderrDetail}`.trim()));
       }
     });
     abortController.signal.addEventListener('abort', onAbort, { once: true });
@@ -392,6 +468,42 @@ function runLoadWorker({ request, environment, config, cookieJar, abortControlle
     }
     child.send({ type: 'start', request, environment, config, cookieJar });
   });
+}
+
+function redactLoadWorkerStderr(value) {
+  return redactText(value);
+}
+
+function normalizedLoadWorkerTimeoutMillis(value) {
+  const candidate = Number(value || process.env.POSTMETER_LOAD_WORKER_TIMEOUT_MS || DEFAULT_LOAD_WORKER_TIMEOUT_MILLIS);
+  if (!Number.isFinite(candidate) || candidate < 1) {
+    return DEFAULT_LOAD_WORKER_TIMEOUT_MILLIS;
+  }
+  return Math.max(1, Math.floor(candidate));
+}
+
+function normalizedLoadWorkerKillGraceMillis(value) {
+  const candidate = Number(value || process.env.POSTMETER_LOAD_WORKER_KILL_GRACE_MS || DEFAULT_LOAD_WORKER_KILL_GRACE_MILLIS);
+  if (!Number.isFinite(candidate) || candidate < 1) {
+    return DEFAULT_LOAD_WORKER_KILL_GRACE_MILLIS;
+  }
+  return Math.max(1, Math.floor(candidate));
+}
+
+function appendBoundedWorkerStderr(current, chunk) {
+  const combined = Buffer.concat([
+    Buffer.from(String(current || ''), 'utf8'),
+    Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk || ''), 'utf8')
+  ]);
+  if (combined.length <= MAX_LOAD_WORKER_STDERR_BYTES) {
+    return { text: combined.toString('utf8'), truncated: false };
+  }
+  const marker = Buffer.from('[stderr truncated]\n', 'utf8');
+  const tailLength = Math.max(0, MAX_LOAD_WORKER_STDERR_BYTES - marker.length);
+  return {
+    text: Buffer.concat([marker, combined.subarray(combined.length - tailLength)]).toString('utf8'),
+    truncated: true
+  };
 }
 
 function loadWorkerEnvironment(source = process.env) {

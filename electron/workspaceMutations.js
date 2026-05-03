@@ -1,4 +1,7 @@
-const { walkRequests } = require('../src/core/models');
+const {
+  normalizeSettings,
+  walkRequests
+} = require('../src/core/models');
 const {
   normalizeCookieDomain,
   normalizeCookiePath
@@ -309,7 +312,7 @@ function applyRequestSaveToWorkspace(workspace, payload) {
   }
 
   if (payload?.settings && typeof payload.settings === 'object') {
-    nextWorkspace.settings = cloneJson(payload.settings);
+    nextWorkspace.settings = normalizeSettings(mergeWorkspaceSettingsForSave(workspace?.settings, payload.settings));
   }
 
   return nextWorkspace;
@@ -328,7 +331,7 @@ function applyEnvironmentSaveToWorkspace(workspace, payload) {
     nextWorkspace.environments.push(cloneJson(payload.environment));
   }
   if (payload?.settings && typeof payload.settings === 'object') {
-    nextWorkspace.settings = cloneJson(payload.settings);
+    nextWorkspace.settings = normalizeSettings(mergeWorkspaceSettingsForSave(workspace?.settings, payload.settings));
   }
   return nextWorkspace;
 }
@@ -336,8 +339,42 @@ function applyEnvironmentSaveToWorkspace(workspace, payload) {
 function applyWorkspaceSettingsSaveToWorkspace(workspace, settings) {
   return {
     ...workspace,
-    settings: cloneJson(settings || {})
+    settings: normalizeSettings(mergeWorkspaceSettingsForSave(workspace?.settings, settings))
   };
+}
+
+function mergeWorkspaceSettingsForSave(currentSettings, nextSettings) {
+  const current = normalizeSettings(currentSettings || {});
+  const next = nextSettings && typeof nextSettings === 'object' && !Array.isArray(nextSettings)
+    ? nextSettings
+    : {};
+  return {
+    ...current,
+    appearance: mergeObject(current.appearance, next.appearance),
+    diagnostics: {
+      ...current.diagnostics,
+      ...(isPlainObject(next.diagnostics) ? next.diagnostics : {}),
+      logging: mergeObject(current.diagnostics?.logging, next.diagnostics?.logging),
+      requestResponseLogging: mergeObject(current.diagnostics?.requestResponseLogging, next.diagnostics?.requestResponseLogging)
+    },
+    sandbox: {
+      ...current.sandbox,
+      ...(isPlainObject(next.sandbox) ? next.sandbox : {}),
+      trustedCapabilities: mergeObject(current.sandbox?.trustedCapabilities, next.sandbox?.trustedCapabilities)
+    },
+    updates: mergeObject(current.updates, next.updates)
+  };
+}
+
+function mergeObject(current, next) {
+  return {
+    ...(isPlainObject(current) ? current : {}),
+    ...(isPlainObject(next) ? next : {})
+  };
+}
+
+function isPlainObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value);
 }
 
 function replaceRequestInCollection(collection, requestId, request) {

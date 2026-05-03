@@ -28,7 +28,8 @@ function createVaultPrompt(options = {}) {
   const {
     dialog,
     getMainWindow = () => undefined,
-    persistDecision = async () => {}
+    persistDecision = async () => {},
+    recordDiagnosticEvent = async () => {}
   } = options;
   return async function promptForVaultAccess(payload = {}) {
     const safePayload = safePromptPayload(payload);
@@ -44,6 +45,17 @@ function createVaultPrompt(options = {}) {
     if (normalizedDecision.granted || normalizedDecision.reset === true) {
       await persistDecision(normalizedDecision, safePayload);
     }
+    await recordDiagnosticEvent({
+      type: normalizedDecision.granted ? 'vault.prompt.granted' : 'vault.prompt.denied',
+      level: normalizedDecision.granted ? 'info' : 'warn',
+      outcome: normalizedDecision.granted ? 'completed' : 'denied',
+      failureCode: normalizedDecision.granted ? undefined : 'vault_prompt_denied',
+      fields: {
+        operation: safePayload.operation,
+        reset: normalizedDecision.reset === true,
+        scope: normalizedDecision.scope
+      }
+    });
     return normalizedDecision;
   };
 }
@@ -77,7 +89,7 @@ async function promptViaDialog(dialog, mainWindow, payload) {
   }
   const result = await dialog.showMessageBox(mainWindow, {
     type: 'warning',
-    buttons: ['Deny once', 'Allow request', 'Allow collection', 'Allow workspace'],
+    buttons: ['Deny once', 'Allow request', 'Allow collection', 'Allow workspace', 'Reset grants'],
     defaultId: 0,
     cancelId: 0,
     noLink: true,
@@ -91,6 +103,9 @@ async function promptViaDialog(dialog, mainWindow, payload) {
   });
   if (result.response === 3) {
     return { granted: true, scope: 'workspace' };
+  }
+  if (result.response === 4) {
+    return { granted: false, reset: true, scope: 'request' };
   }
   if (result.response === 2) {
     return { granted: true, scope: 'collection' };

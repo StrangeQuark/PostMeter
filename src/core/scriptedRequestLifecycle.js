@@ -327,7 +327,8 @@ function scriptOptionsForLifecycle(options = {}, overrides = {}) {
     trustedCapabilities: options.trustedCapabilities || options.scriptOptions?.trustedCapabilities || {},
     vault: options.scriptOptions?.vault || options.vault,
     vaultPrompt: options.scriptOptions?.vaultPrompt || options.vaultPrompt,
-    fileBindings: options.scriptOptions?.fileBindings || options.fileBindings || []
+    fileBindings: options.scriptOptions?.fileBindings || options.fileBindings || [],
+    recordDiagnosticEvent: options.scriptOptions?.recordDiagnosticEvent || options.recordDiagnosticEvent
   };
 }
 

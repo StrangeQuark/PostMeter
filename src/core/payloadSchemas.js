@@ -41,6 +41,7 @@ const OAUTH_PROGRESS_STATUSES = [
 const LOAD_EXPORT_FORMATS = ['json', 'csv'];
 const COLLECTION_EXPORT_FORMATS = ['postmeter', 'postman', 'openapi', 'jmeter', 'curl', 'har'];
 const THEME_VALUES = ['system', 'light', 'dark'];
+const DIAGNOSTIC_LOG_LEVELS = ['debug', 'info', 'warn', 'error'];
 const ASSERTION_TYPES = [
   'statusCode',
   'header',
@@ -87,7 +88,8 @@ const SCHEMA_ENUMS = {
   bodyMethods: BODY_METHODS,
   bodyTypes: BODY_TYPE_VALUES,
   collectionExportFormats: COLLECTION_EXPORT_FORMATS,
-  cookiePriorities: ['', 'Low', 'Medium', 'High'],
+    cookiePriorities: ['', 'Low', 'Medium', 'High'],
+    diagnosticLogLevels: DIAGNOSTIC_LOG_LEVELS,
   httpMethods: HTTP_METHODS,
   loadExecutionModes: LOAD_EXECUTION_MODES,
   loadExportFormats: LOAD_EXPORT_FORMATS,
@@ -104,6 +106,19 @@ const SCHEMA_ENUMS = {
 const FIELD_SCHEMAS = {
   appearance: {
     theme: { type: 'string', limit: 'tiny', enum: 'themeValues', optional: true }
+  },
+  diagnosticsLogging: {
+    enabled: { type: 'boolean', optional: true },
+    level: { type: 'string', limit: 'tiny', enum: 'diagnosticLogLevels', optional: true }
+  },
+  requestResponseLoggingSettings: {
+    bodies: { type: 'boolean', optional: true },
+    cookies: { type: 'boolean', optional: true },
+    headers: { type: 'boolean', optional: true },
+    payloadIdentifiers: { type: 'boolean', optional: true },
+    protocolMessages: { type: 'boolean', optional: true },
+    scriptConsole: { type: 'boolean', optional: true },
+    urls: { type: 'boolean', optional: true }
   },
   sandboxSettings: {
     sendRequest: { type: 'boolean', optional: true },
@@ -267,11 +282,14 @@ const FIELD_SCHEMAS = {
   scriptTestResult: {
     name: { type: 'string', limit: 'name', optional: true },
     passed: { type: 'boolean', optional: true },
-    error: { type: 'string', limit: 'value', optional: true }
+    error: { type: 'string', limit: 'value', optional: true },
+    skipped: { type: 'boolean', optional: true },
+    index: { type: 'number', optional: true }
   },
   scriptVisualizer: {
     html: { type: 'string', limit: 'body', optional: true },
-    template: { type: 'string', limit: 'body', optional: true }
+    template: { type: 'string', limit: 'body', optional: true },
+    interactive: { type: 'boolean', optional: true }
   },
   updateCheckOptions: {
     includePrereleases: { type: 'boolean', optional: true }

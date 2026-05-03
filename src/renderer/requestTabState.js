@@ -11,6 +11,7 @@
     const collectEnvironmentFromEditor = options.collectEnvironmentFromEditor || (() => {});
     const collectRequestFromEditor = options.collectRequestFromEditor || (() => {});
     const findRequest = options.findRequest || (() => null);
+    const notifyUser = options.notifyUser || (() => {});
     const persistWorkspace = options.persistWorkspace || (async () => true);
     const promptUnsavedRequestClose = options.promptUnsavedRequestClose || (async () => 'cancel');
     const removeRequestFromCollection = options.removeRequestFromCollection || (() => false);
@@ -21,6 +22,7 @@
     const selectEnvironmentTabCallback = options.selectEnvironmentTab || (() => {});
     const selectRequestTabCallback = options.selectRequestTab || (() => {});
     const selectWorkspaceTabCallback = options.selectWorkspaceTab || (() => {});
+    const setStatus = options.setStatus || (() => {});
     const workspaceListItems = options.workspaceListItems || (() => []);
 
     function requestForTab(tab) {
@@ -106,6 +108,13 @@
       const restoredCollection = restoreCollectionVariablesSnapshot(tab?.collectionId, ownerKey);
       const restoredCookies = restoreCookieJarSnapshot(ownerKey);
       return restoredCollection || restoredCookies;
+    }
+
+    function reportCloseSaveFailure(title, error) {
+      const message = error?.message || String(error || 'Unknown error');
+      setStatus(`${title}: ${message}`);
+      notifyUser(title, message);
+      renderRequestTabs();
     }
 
     function pruneOpenTabs() {
@@ -374,7 +383,12 @@
           return;
         }
         if (action === 'save') {
-          await persistWorkspace(false, { environmentTabKey: tab.key });
+          try {
+            await persistWorkspace(false, { environmentTabKey: tab.key });
+          } catch (error) {
+            reportCloseSaveFailure('Environment Save Failed', error);
+            return;
+          }
         } else {
           discardEnvironmentTabChanges(tab);
         }
@@ -462,12 +476,23 @@
         let restoredSharedState = false;
         if (action === 'save') {
           if (tab.draft) {
-            const savedTab = await saveDraftRequestWithPrompt(request, { showStatus: false, tab });
+            let savedTab = null;
+            try {
+              savedTab = await saveDraftRequestWithPrompt(request, { showStatus: false, tab });
+            } catch (error) {
+              reportCloseSaveFailure('Request Save Failed', error);
+              return;
+            }
             if (!savedTab) {
               return;
             }
           } else {
-            await persistWorkspace(false, { requestTabKey: tab.key });
+            try {
+              await persistWorkspace(false, { requestTabKey: tab.key });
+            } catch (error) {
+              reportCloseSaveFailure('Request Save Failed', error);
+              return;
+            }
           }
         } else {
           restoredSharedState = discardRequestTabChanges(tab);

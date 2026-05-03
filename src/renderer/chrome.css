@@ -106,7 +106,20 @@
 
 .environment-control {
   min-width: 220px;
+  margin-left: 8px;
+}
+
+.app-status {
+  flex: 1 1 auto;
+  min-width: 120px;
+  max-width: 360px;
   margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .theme-control {
@@ -673,12 +686,30 @@ h2 {
 
 .workspace-file-bindings,
 .workspace-package-cache,
-.workspace-vault-panel {
+.workspace-vault-panel,
+.workspace-diagnostics-panel {
   display: grid;
   gap: 8px;
   min-width: 0;
   padding-top: 8px;
   border-top: 1px solid var(--line);
+}
+
+.workspace-diagnostics-panel {
+  margin: 0;
+  padding-inline: 0;
+  padding-bottom: 0;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+}
+
+.workspace-diagnostics-panel legend {
+  padding: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 
 .workspace-package-list {
@@ -746,33 +777,47 @@ h2 {
   display: none;
 }
 
-.request-tab-button {
+.request-tab-item {
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
   flex: 0 0 auto;
   max-width: 240px;
   min-width: 128px;
   min-height: 38px;
   margin: 0;
+  border-right: 1px solid var(--line);
+  background: transparent;
+}
+
+.request-tab-item:hover {
+  background: var(--surface-muted);
+}
+
+.request-tab-item.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: inset 0 -3px 0 var(--primary);
+}
+
+.request-tab-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 38px;
+  margin: 0;
   padding: 0 6px 0 12px;
   border: 0;
-  border-right: 1px solid var(--line);
   border-radius: 0;
   background: transparent;
   color: var(--muted);
   cursor: default;
 }
 
-.request-tab-button:hover:not(:disabled) {
-  background: var(--surface-muted);
-}
-
 .request-tab-button.active {
-  background: var(--surface);
   color: var(--text);
-  box-shadow: inset 0 -3px 0 var(--primary);
 }
 
 .request-tab-method {

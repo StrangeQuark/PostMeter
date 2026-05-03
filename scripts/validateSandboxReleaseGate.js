@@ -2,14 +2,22 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const YAML = require('yaml');
 
 const PROJECT_ROOT = path.join(__dirname, '..');
+const errors = [];
 const packageJson = readJson('package.json');
 const ciWorkflow = readText('.github/workflows/ci.yml');
 const releaseWorkflow = readText('.github/workflows/release.yml');
 const releaseValidationWorkflow = readText('.github/workflows/release-validation.yml');
 const oauthProviderCertificationWorkflow = readText('.github/workflows/oauth-provider-certification.yml');
-const errors = [];
+const ciWorkflowDocument = parseWorkflow('CI workflow', ciWorkflow);
+const releaseWorkflowDocument = parseWorkflow('Release workflow', releaseWorkflow);
+const releaseValidationWorkflowDocument = parseWorkflow('Manual native release validation workflow', releaseValidationWorkflow);
+const validateSandboxRuntimeScript = readText('scripts/validateSandboxRuntime.js');
+const validatePackagedSandboxRuntimeScript = readText('scripts/validatePackagedSandboxRuntime.js');
+const productionSupportMatricesSource = readText('src/core/productionSupportMatrices.js');
+const productionReadinessMatrixSource = readText('src/core/productionReadinessMatrix.js');
 
 requireScript('check', [
   'npm test',
@@ -21,8 +29,17 @@ requireScript('check', [
   'npm run oauth:certify:validate',
   'npm run oauth:certify:mock',
   'npm run production:readiness:validate',
+  'npm run electron:security:validate',
+  'npm run workspace:durability:validate',
+  'npm run compatibility:non-postman:validate',
+  'npm run ux:accessibility:validate',
+  'npm run diagnostics:privacy:validate',
   'npm run release:gate',
+  'npm run test:smoke',
+  'npm run test:ui',
+  'npm run test:ui:regression',
   'npm run test:ui:oauth',
+  'npm run test:ui:snapshot',
   'npm audit --audit-level=high',
   'npm run electron:version'
 ]);
@@ -53,7 +70,15 @@ for (const scriptName of [
   'electron:security:validate',
   'workspace:durability:validate',
   'compatibility:non-postman:validate',
+  'ux:accessibility:validate',
+  'diagnostics:privacy:write',
+  'diagnostics:privacy:validate',
+  'test:smoke',
+  'test:ui',
+  'test:ui:regression',
   'release:gate',
+  'test:ui:oauth',
+  'test:ui:snapshot',
   'release:validate',
   'release:validate:packaged-smoke',
   'release:validate:win-protocol',
@@ -66,6 +91,26 @@ for (const scriptName of ['pack:linux', 'dist:linux', 'dist:win', 'dist:mac']) {
 }
 requireScript('dist:win', ['npm run native:windows-sandbox:build']);
 requireWindowsSandboxHelperPackaging();
+
+requireFile('Source-tree sandbox validation timeout guard', validateSandboxRuntimeScript, [
+  /spawnWithTimeout/,
+  /POSTMETER_SANDBOX_VALIDATE_TIMEOUT_MS/,
+  /timed out/
+]);
+requireFile('Packaged sandbox validation timeout guard', validatePackagedSandboxRuntimeScript, [
+  /spawnWithTimeout/,
+  /POSTMETER_PACKAGED_SANDBOX_VALIDATE_TIMEOUT_MS/,
+  /timed out/
+]);
+requireFile('UX/accessibility source matrix', productionSupportMatricesSource, [
+  /npm run test:smoke/,
+  /test\/electron\/smokeProcess\.test\.js/,
+  /scripts\/smokeProcess\.js/
+]);
+requireFile('Production readiness source matrix', productionReadinessMatrixSource, [
+  /npm run test:smoke/,
+  /scripts\/smokeProcess\.js/
+]);
 
 requireWorkflow('CI workflow', ciWorkflow, [
   /node-version:\s*22/,
@@ -81,8 +126,14 @@ requireWorkflow('CI workflow', ciWorkflow, [
   /npm run electron:security:validate/,
   /npm run workspace:durability:validate/,
   /npm run compatibility:non-postman:validate/,
+  /npm run ux:accessibility:validate/,
+  /npm run diagnostics:privacy:validate/,
   /npm run release:gate/,
+  /xvfb-run -a npm run test:smoke/,
+  /xvfb-run -a npm run test:ui/,
+  /xvfb-run -a npm run test:ui:regression/,
   /xvfb-run -a npm run test:ui:oauth/,
+  /xvfb-run -a npm run test:ui:snapshot/,
   /npm audit --audit-level=high/,
   /npm run sandbox:validate/,
   /npm run sandbox:platform:validate/,
@@ -121,8 +172,18 @@ requireWorkflow('Release workflow', releaseWorkflow, [
   /npm run electron:security:validate/,
   /npm run workspace:durability:validate/,
   /npm run compatibility:non-postman:validate/,
+  /npm run ux:accessibility:validate/,
+  /npm run diagnostics:privacy:validate/,
   /npm run release:gate/,
+  /npm run test:smoke/,
+  /xvfb-run -a npm run test:smoke/,
+  /npm run test:ui/,
+  /npm run test:ui:regression/,
+  /xvfb-run -a npm run test:ui/,
+  /xvfb-run -a npm run test:ui:regression/,
   /xvfb-run -a npm run test:ui:oauth/,
+  /npm run test:ui:snapshot/,
+  /xvfb-run -a npm run test:ui:snapshot/,
   /npm run release:validate:packaged-smoke/,
   /POSTMETER_VALIDATION_ARTIFACT_DIR/,
   /npm run sandbox:validate:packaged/,
@@ -153,8 +214,18 @@ requireWorkflow('Manual native release validation workflow', releaseValidationWo
   /npm run electron:security:validate/,
   /npm run workspace:durability:validate/,
   /npm run compatibility:non-postman:validate/,
+  /npm run ux:accessibility:validate/,
+  /npm run diagnostics:privacy:validate/,
   /npm run release:gate/,
+  /npm run test:smoke/,
+  /xvfb-run -a npm run test:smoke/,
+  /npm run test:ui/,
+  /npm run test:ui:regression/,
+  /xvfb-run -a npm run test:ui/,
+  /xvfb-run -a npm run test:ui:regression/,
   /xvfb-run -a npm run test:ui:oauth/,
+  /npm run test:ui:snapshot/,
+  /xvfb-run -a npm run test:ui:snapshot/,
   /npm run release:validate:packaged-smoke/,
   /POSTMETER_VALIDATION_ARTIFACT_DIR/,
   /npm run sandbox:validate:packaged/,
@@ -168,6 +239,104 @@ requireWorkflow('Manual native release validation workflow', releaseValidationWo
   /actions\/upload-artifact@v4/,
   /actions\/download-artifact@v4/
 ]);
+
+for (const [label, workflowDocument, requiredRunSteps] of [
+  ['CI workflow', ciWorkflowDocument, [
+    /npm test/,
+    /npm run sandbox:validate/,
+    /npm run sandbox:platform:validate/,
+    /npm run postman:parity:validate/,
+    /npm run postman:docs:validate/,
+    /npm run postman:newman-reports:validate/,
+    /npm run oauth:certify:validate/,
+    /npm run oauth:certify:mock/,
+    /npm run production:readiness:validate/,
+    /npm run electron:security:validate/,
+    /npm run workspace:durability:validate/,
+    /npm run compatibility:non-postman:validate/,
+    /npm run ux:accessibility:validate/,
+    /npm run diagnostics:privacy:validate/,
+    /npm run release:gate/,
+    /xvfb-run -a npm run test:smoke/,
+    /xvfb-run -a npm run test:ui\b/,
+    /xvfb-run -a npm run test:ui:regression/,
+    /xvfb-run -a npm run test:ui:oauth/,
+    /xvfb-run -a npm run test:ui:snapshot/,
+    /npm audit --audit-level=high/,
+    /npm run pack:linux/,
+    /\$\{\{\s*matrix\.command\s*\}\}/,
+    /npm run release:validate:packaged-smoke/,
+    /xvfb-run -a npm run sandbox:validate:packaged/,
+    /npm run release:validate:win-protocol/,
+    /npm run release:validate:mac-protocol/
+  ]],
+  ['Release workflow', releaseWorkflowDocument, [
+    /npm test/,
+    /npm run sandbox:validate/,
+    /npm run sandbox:platform:validate/,
+    /npm run postman:parity:validate/,
+    /npm run postman:docs:validate/,
+    /npm run postman:newman-reports:validate/,
+    /npm run oauth:certify:validate/,
+    /npm run oauth:certify:mock/,
+    /npm run production:readiness:validate/,
+    /npm run production:readiness:claim:stable/,
+    /npm run electron:security:validate/,
+    /npm run workspace:durability:validate/,
+    /npm run compatibility:non-postman:validate/,
+    /npm run ux:accessibility:validate/,
+    /npm run diagnostics:privacy:validate/,
+    /npm run release:gate/,
+    /npm run test:smoke/,
+    /npm run test:ui\b/,
+    /npm run test:ui:regression/,
+    /npm run test:ui:oauth/,
+    /npm run test:ui:snapshot/,
+    /npm run sandbox:validate:packaged/,
+    /npm run release:validate:packaged-smoke/,
+    /npm run release:validate:win-protocol/,
+    /npm run release:validate:mac-protocol/,
+    /npm run release:prepare/,
+    /npm run release:validate/
+  ]],
+  ['Manual native release validation workflow', releaseValidationWorkflowDocument, [
+    /npm test/,
+    /npm run sandbox:validate/,
+    /npm run sandbox:platform:validate/,
+    /npm run postman:parity:validate/,
+    /npm run postman:docs:validate/,
+    /npm run postman:newman-reports:validate/,
+    /npm run oauth:certify:validate/,
+    /npm run oauth:certify:mock/,
+    /npm run production:readiness:validate/,
+    /npm run electron:security:validate/,
+    /npm run workspace:durability:validate/,
+    /npm run compatibility:non-postman:validate/,
+    /npm run ux:accessibility:validate/,
+    /npm run diagnostics:privacy:validate/,
+    /npm run release:gate/,
+    /npm run test:smoke/,
+    /npm run test:ui\b/,
+    /npm run test:ui:regression/,
+    /npm run test:ui:oauth/,
+    /npm run test:ui:snapshot/,
+    /npm run sandbox:validate:packaged/,
+    /npm run release:validate:packaged-smoke/,
+    /npm run release:validate:win-protocol/,
+    /npm run release:validate:mac-protocol/,
+    /npm run release:prepare/,
+    /npm run release:validate/
+  ]]
+]) {
+  requireWorkflowRunSteps(label, workflowDocument, requiredRunSteps);
+}
+for (const [label, workflowDocument] of [
+  ['CI workflow', ciWorkflowDocument],
+  ['Release workflow', releaseWorkflowDocument],
+  ['Manual native release validation workflow', releaseValidationWorkflowDocument]
+]) {
+  requireValidationLogUploads(label, workflowDocument);
+}
 
 requireWorkflow('OAuth provider certification workflow', oauthProviderCertificationWorkflow, [
   /workflow_dispatch:/,
@@ -230,6 +399,57 @@ function requireWorkflow(label, content, patterns) {
   }
 }
 
+function requireWorkflowRunSteps(label, workflowDocument, patterns) {
+  const runSteps = workflowRunSteps(workflowDocument);
+  for (const pattern of patterns) {
+    if (!runSteps.some((run) => pattern.test(run))) {
+      errors.push(`${label} is missing executable run step ${pattern}.`);
+    }
+  }
+}
+
+function workflowRunSteps(workflowDocument) {
+  return Object.values(workflowDocument?.jobs || {})
+    .flatMap((job) => Array.isArray(job?.steps) ? job.steps : [])
+    .map((step) => step?.run)
+    .filter((run) => typeof run === 'string');
+}
+
+function workflowSteps(workflowDocument) {
+  return Object.values(workflowDocument?.jobs || {})
+    .flatMap((job) => Array.isArray(job?.steps) ? job.steps : [])
+    .filter((step) => step && typeof step === 'object');
+}
+
+function requireValidationLogUploads(label, workflowDocument) {
+  const uploadSteps = workflowSteps(workflowDocument).filter((step) => (
+    /validation logs/i.test(String(step.name || ''))
+    && /^actions\/upload-artifact@/.test(String(step.uses || ''))
+  ));
+  if (!uploadSteps.length) {
+    errors.push(`${label} is missing a validation-log artifact upload step.`);
+    return;
+  }
+  for (const step of uploadSteps) {
+    const missingPolicy = String(step.with?.['if-no-files-found'] || '');
+    if (missingPolicy !== 'error') {
+      errors.push(`${label} validation-log upload "${step.name}" must use if-no-files-found: error.`);
+    }
+    const artifactPath = String(step.with?.path || '');
+    if (!artifactPath.includes('validation-artifacts')) {
+      errors.push(`${label} validation-log upload "${step.name}" must upload validation-artifacts.`);
+    }
+  }
+}
+
+function requireFile(label, content, patterns) {
+  for (const pattern of patterns) {
+    if (!pattern.test(content)) {
+      errors.push(`${label} is missing release-gate pattern ${pattern}.`);
+    }
+  }
+}
+
 function requireWindowsSandboxHelperPackaging() {
   const resources = packageJson.build?.win?.extraResources;
   if (!Array.isArray(resources) || !resources.some((entry) => (
@@ -242,6 +462,15 @@ function requireWindowsSandboxHelperPackaging() {
 
 function readJson(relativePath) {
   return JSON.parse(readText(relativePath));
+}
+
+function parseWorkflow(label, content) {
+  try {
+    return YAML.parse(content);
+  } catch (error) {
+    errors.push(`${label} is not valid YAML: ${error.message || String(error)}`);
+    return {};
+  }
 }
 
 function readText(relativePath) {

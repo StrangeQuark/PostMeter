@@ -24,8 +24,10 @@ function registerRequestIpc(options = {}) {
     getVaultStore = () => null,
     getVaultPrompt = () => null,
     ipcMain,
+    recordDiagnosticEvent = async () => {},
+    runRequestWithScripts: runRequest = runRequestWithScripts,
     mutateWorkspace = async (mutator) => {
-      const nextWorkspace = await mutator(getWorkspace());
+      const nextWorkspace = await mutator(cloneJson(getWorkspace()));
       const savedWorkspace = await saveWorkspace(nextWorkspace);
       setWorkspace(savedWorkspace);
       return savedWorkspace;
@@ -52,8 +54,8 @@ function registerRequestIpc(options = {}) {
     const baseGlobals = cloneJson(workspaceSnapshot.globals || []);
     const baseCookies = cloneJson(workspaceSnapshot.cookies || []);
     const startedAt = Date.now();
-    try {
-      const { response: result, environment: nextEnvironment, collectionVariables, localVariables, globals } = await runRequestWithScripts(request, environment, {
+      try {
+        const { response: result, environment: nextEnvironment, collectionVariables, localVariables, globals } = await runRequest(request, environment, {
         collectionId: requestContext?.collection?.id || '',
         collectionVariables: requestContext?.collection?.variables || [],
         globals: workspaceSnapshot.globals || [],
@@ -66,9 +68,14 @@ function registerRequestIpc(options = {}) {
         vaultPrompt: getVaultPrompt(workspaceId),
         workspaceId,
         workspaceName: workspaceId,
-        collectionName: requestContext?.collection?.name || ''
+        collectionName: requestContext?.collection?.name || '',
+        recordDiagnosticEvent
       });
+      const validationResult = publicRequestResult(result);
+      assertResponsePayload(validationResult);
+      let workspaceMutationApplied = false;
       await mutateWorkspace(async (latestWorkspace) => {
+        workspaceMutationApplied = true;
         const latestRequestContext = request.id ? findWorkspaceRequestContext(latestWorkspace, request.id) : null;
         if (result.updatedAuth && request.id) {
           if (latestRequestContext?.request) {
@@ -103,8 +110,24 @@ function registerRequestIpc(options = {}) {
         ].slice(0, 100);
         return latestWorkspace;
       }, { workspaceId });
-      const publicResult = publicRequestResult(result);
+      const publicResult = publicRequestResult(result, {
+        updatedAuthPersisted: workspaceMutationApplied && Boolean(result.updatedAuth)
+      });
       assertResponsePayload(publicResult);
+      await recordDiagnosticEvent({
+        type: 'request.send.completed',
+        level: 'info',
+        outcome: 'completed',
+        durationMillis: publicResult.durationMillis,
+        fields: {
+          method: request.method,
+          protocol: request.protocol || 'http',
+          requestBodyBytes: Buffer.byteLength(String(request.body || ''), 'utf8'),
+          responseBytes: publicResult.responseBytes || 0,
+          statusCategory: statusCategory(publicResult.statusCode),
+          statusCode: publicResult.statusCode
+        }
+      });
       return publicResult;
     } catch (error) {
       const isPreRequestScriptFailure = Boolean(error?.preRequestScriptResult);
@@ -137,8 +160,35 @@ function registerRequestIpc(options = {}) {
           localVariables: shouldCommitPreRequestSideEffects ? error.localVariables : baseLocalVariables
         });
         assertResponsePayload(result);
+        await recordDiagnosticEvent({
+          type: 'request.send.failed',
+          level: 'warn',
+          outcome: 'failed',
+          failureCode: failureCodeFromError(error, 'pre_request_script_failed'),
+          durationMillis: result.durationMillis,
+          fields: {
+            method: request.method,
+            protocol: request.protocol || 'http',
+            requestBodyBytes: Buffer.byteLength(String(request.body || ''), 'utf8'),
+            requestSent: false,
+            responseBytes: result.responseBytes || 0
+          }
+        });
         return result;
       }
+      await recordDiagnosticEvent({
+        type: 'request.send.failed',
+        level: 'error',
+        outcome: 'failed',
+        failureCode: failureCodeFromError(error, 'request_send_failed'),
+        durationMillis: Date.now() - startedAt,
+        fields: {
+          method: request.method,
+          protocol: request.protocol || 'http',
+          requestBodyBytes: Buffer.byteLength(String(request.body || ''), 'utf8'),
+          error: error?.message || String(error)
+        }
+      });
       throw error;
     }
   });
@@ -172,13 +222,37 @@ function cloneJson(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-function publicRequestResult(result) {
+function publicRequestResult(result, options = {}) {
   const publicResult = cloneJson(result) || {};
   if (result?.updatedAuth) {
     delete publicResult.updatedAuth;
-    publicResult.updatedAuthPersisted = true;
+    if (options.updatedAuthPersisted === true) {
+      publicResult.updatedAuthPersisted = true;
+    }
   }
   return publicResult;
+}
+
+function statusCategory(statusCode) {
+  const code = Number(statusCode);
+  if (!Number.isFinite(code) || code <= 0) {
+    return 'none';
+  }
+  return `${Math.floor(code / 100)}xx`;
+}
+
+function failureCodeFromError(error, fallback) {
+  const text = String(error?.message || error?.preRequestScriptResult?.error || fallback || 'error').toLowerCase();
+  if (/sendrequest|send request|pm\.sendrequest/.test(text)) {
+    return 'script_send_request_denied_or_failed';
+  }
+  if (/pm\.vault|vault/.test(text)) {
+    return 'script_vault_denied_or_failed';
+  }
+  if (/pm\.cookies|cookie/.test(text)) {
+    return 'script_cookie_denied_or_failed';
+  }
+  return String(fallback || 'request_failed');
 }
 
 module.exports = {

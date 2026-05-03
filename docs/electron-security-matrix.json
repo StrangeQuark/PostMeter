@@ -244,6 +244,22 @@
       "notes": ""
     },
     {
+      "id": "ipc.channel.diagnostics-export",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `diagnostics:export`: Diagnostic export opens a main-process save dialog and writes a sanitized local bundle only to the selected path.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/diagnosticsIpc.js",
+        "electron/preload.js",
+        "src/core/diagnostics.js"
+      ],
+      "tests": [
+        "test/electron/diagnosticsIpc.test.js",
+        "test/electron/diagnostics.test.js"
+      ],
+      "notes": ""
+    },
+    {
       "id": "ipc.channel.load-cancel",
       "area": "IPC channel",
       "target": "renderer-to-main channel `load:cancel`: Load-test cancellation validates the active run ID before aborting.",
@@ -818,7 +834,7 @@
     {
       "id": "ipc.channel.workspace-savesync",
       "area": "IPC channel",
-      "target": "renderer-to-main-sync channel `workspace:saveSync`: Synchronous shutdown workspace save validates the workspace payload before persistence.",
+      "target": "renderer-to-main-sync channel `workspace:saveSync`: Synchronous shutdown workspace save validates the workspace payload and skips stale full-workspace writes while queued workspace mutations are pending.",
       "status": "implemented",
       "evidenceRefs": [
         "electron/workspaceIpc.js",
@@ -842,6 +858,22 @@
       ],
       "tests": [
         "test/electron/workspaceIpc.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.diagnostics",
+      "area": "IPC",
+      "target": "Diagnostics export IPC is save-dialog-only and writes sanitized local diagnostic bundles without accepting renderer-provided paths or upload destinations.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/diagnosticsIpc.js",
+        "src/core/diagnostics.js",
+        "electron/preload.js"
+      ],
+      "tests": [
+        "test/electron/diagnosticsIpc.test.js",
+        "test/electron/diagnostics.test.js"
       ],
       "notes": ""
     },

@@ -3,6 +3,7 @@
   const SUPPORTED_INPUT_TYPES = new Set(['', 'text', 'search', 'url', 'email', 'password', 'tel']);
   const MENU_ID = 'variableAutocompleteMenu';
   const MEASUREMENT_SURFACE_ID = 'variableAutocompleteMeasurementSurface';
+  const previousAutocompleteRoles = new WeakMap();
 
   function isVariableAutocompleteEligible(target) {
     if (!target || typeof target !== 'object') {
@@ -145,6 +146,7 @@
           event.stopPropagation();
           state.selectedIndex = Math.min(state.selectedIndex + 1, state.items.length - 1);
           renderMenu(doc, menu, state, chooseItem);
+          connectTargetToMenu(state.target, menu, state);
           positionMenu(menu, state.target, state.token, measurement, windowObject);
           return;
         }
@@ -153,6 +155,7 @@
           event.stopPropagation();
           state.selectedIndex = Math.max(state.selectedIndex - 1, 0);
           renderMenu(doc, menu, state, chooseItem);
+          connectTargetToMenu(state.target, menu, state);
           positionMenu(menu, state.target, state.token, measurement, windowObject);
           return;
         }
@@ -210,11 +213,15 @@
         close();
         return false;
       }
+      if (state.target && state.target !== target) {
+        disconnectTargetFromMenu(state.target);
+      }
       state.target = target;
       state.token = token;
       state.items = items;
       state.selectedIndex = resetSelection ? 0 : Math.max(0, Math.min(state.selectedIndex, items.length - 1));
       renderMenu(doc, menu, state, chooseItem);
+      connectTargetToMenu(target, menu, state);
       positionMenu(menu, target, token, measurement, windowObject);
       return true;
     }
@@ -241,6 +248,7 @@
     }
 
     function close() {
+      disconnectTargetFromMenu(state.target);
       state.items = [];
       state.selectedIndex = 0;
       state.target = null;
@@ -303,8 +311,8 @@
   function renderMenu(doc, menu, state, chooseItem) {
     menu.textContent = '';
     state.items.forEach((item, index) => {
-      const option = doc.createElement('button');
-      option.type = 'button';
+      const option = doc.createElement('div');
+      option.id = `${MENU_ID}Option${index}`;
       option.className = 'variable-autocomplete-option';
       option.setAttribute('role', 'option');
       option.setAttribute('aria-selected', index === state.selectedIndex ? 'true' : 'false');
@@ -328,6 +336,45 @@
       menu.append(option);
     });
     menu.hidden = false;
+  }
+
+  function connectTargetToMenu(target, menu, state) {
+    if (!target?.setAttribute) {
+      return;
+    }
+    const activeOption = menu.querySelector?.(`#${MENU_ID}Option${state.selectedIndex}`);
+    const tagName = String(target.tagName || '').toUpperCase();
+    if (tagName === 'INPUT' && !previousAutocompleteRoles.has(target)) {
+      previousAutocompleteRoles.set(target, target.getAttribute?.('role') ?? null);
+      target.setAttribute('role', 'combobox');
+    }
+    target.setAttribute('aria-autocomplete', 'list');
+    target.setAttribute('aria-controls', menu.id || MENU_ID);
+    target.setAttribute('aria-expanded', 'true');
+    target.setAttribute('aria-haspopup', 'listbox');
+    if (activeOption?.id) {
+      target.setAttribute('aria-activedescendant', activeOption.id);
+    }
+  }
+
+  function disconnectTargetFromMenu(target) {
+    if (!target?.removeAttribute) {
+      return;
+    }
+    target.removeAttribute('aria-activedescendant');
+    target.removeAttribute('aria-autocomplete');
+    target.removeAttribute('aria-controls');
+    target.removeAttribute('aria-expanded');
+    target.removeAttribute('aria-haspopup');
+    if (previousAutocompleteRoles.has(target)) {
+      const previousRole = previousAutocompleteRoles.get(target);
+      previousAutocompleteRoles.delete(target);
+      if (previousRole == null) {
+        target.removeAttribute('role');
+      } else {
+        target.setAttribute('role', previousRole);
+      }
+    }
   }
 
   function positionMenu(menu, target, token, measurement, windowObject) {

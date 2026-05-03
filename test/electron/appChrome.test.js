@@ -20,7 +20,8 @@ const {
   createTrustedIpcMain,
   isMainFrameSender,
   isTrustedIpcSender,
-  isTrustedRendererUrl
+  isTrustedRendererUrl,
+  sanitizeIpcError
 } = require('../../electron/ipcSecurity');
 const {
   buildElectronSecurityMatrix,
@@ -54,6 +55,7 @@ test('Electron shell keeps custom File/Edit/View/Help menus without the default 
   assert.match(appMenuSource, /label:\s*'Help'/);
   assert.match(appMenuSource, /label:\s*'PostMeter Documentation'/);
   assert.match(appMenuSource, /label:\s*'Report Issue'/);
+  assert.match(appMenuSource, /label:\s*'Export Local Diagnostics\.\.\.'[\s\S]*sendMenuAction\('export-diagnostics'\)/);
   assert.match(appMenuSource, /label:\s*'Prereleases'[\s\S]*type:\s*'checkbox'[\s\S]*label:\s*'Check for Updates'/);
   assert.match(appMenuSource, /label:\s*'Check for Updates'/);
   assert.doesNotMatch(`${mainSource}\n${appMenuSource}`, /role:\s*['"]windowMenu['"]/);
@@ -66,10 +68,18 @@ test('Electron shell keeps custom File/Edit/View/Help menus without the default 
   assert.match(preloadSource, /process\.isMainFrame\s*===\s*true/);
   assert.match(preloadSource, /contextBridge\.exposeInMainWorld\('postmeter',\s*postmeterApi\)/);
   assert.match(preloadSource, /ipcRenderer\.on\('menu:action'/);
+  assert.match(preloadSource, /'export-diagnostics'/);
   assert.match(preloadSource, /'set-prereleases'/);
   assert.match(preloadSource, /includePrereleases/);
   assert.match(rendererSource, /handleAppMenuAction/);
   assert.match(rendererSource, /setIncludePrereleases/);
+  assert.match(mainSource, /app\.whenReady\(\)\.then\(startApplication\)\.catch\(\(error\) => failStartup\(error\)\)/);
+  assert.match(mainSource, /async function failStartup/);
+  assert.match(mainSource, /writeStartupSmokeFailureArtifacts\(mainWindow,\s*process\.env,\s*error\)/);
+  assert.ok(
+    mainSource.indexOf('writeStartupSmokeFailureArtifacts(mainWindow, process.env, error)') < mainSource.indexOf('dialog.showErrorBox(title, message)'),
+    'startup failure artifacts must be written before native error dialogs'
+  );
 });
 
 test('Electron BrowserWindow hardening denies renderer navigation, window-open, webview, and permissions', async () => {
@@ -104,7 +114,7 @@ test('Electron BrowserWindow hardening denies renderer navigation, window-open, 
   assert.equal(isTrustedAppRendererUrl(createAppRendererUrl({ unexpected: '1' })), false);
 });
 
-test('Electron IPC sender hardening trusts only the packaged renderer URL', () => {
+test('Electron IPC sender hardening trusts only the packaged renderer URL', async () => {
   const indexUrl = createAppRendererUrl();
   const fakeIpcMain = {
     handlers: new Map(),
@@ -119,8 +129,8 @@ test('Electron IPC sender hardening trusts only the packaged renderer URL', () =
   const trustedIpcMain = createTrustedIpcMain(fakeIpcMain);
 
   trustedIpcMain.handle('app:versions', () => 'ok');
-  assert.equal(fakeIpcMain.handlers.get('app:versions')({ senderFrame: { url: indexUrl } }), 'ok');
-  assert.equal(fakeIpcMain.handlers.get('app:versions')({ senderFrame: { url: createAppRendererUrl({ uiWorkflowSmoke: '1' }) } }), 'ok');
+  assert.equal(await fakeIpcMain.handlers.get('app:versions')({ senderFrame: { url: indexUrl } }), 'ok');
+  assert.equal(await fakeIpcMain.handlers.get('app:versions')({ senderFrame: { url: createAppRendererUrl({ uiWorkflowSmoke: '1' }) } }), 'ok');
   const mainFrame = { url: indexUrl, parent: null };
   const subFrame = { url: indexUrl, parent: mainFrame, top: mainFrame };
   assert.equal(isMainFrameSender({ senderFrame: mainFrame, sender: { mainFrame } }), true);
@@ -129,25 +139,38 @@ test('Electron IPC sender hardening trusts only the packaged renderer URL', () =
   assert.equal(isTrustedIpcSender({ senderFrame: mainFrame, sender: { mainFrame } }), true);
   assert.equal(isTrustedIpcSender({ senderFrame: subFrame, sender: { mainFrame } }), false);
   assert.equal(isTrustedIpcSender({ sender: { getURL: () => indexUrl } }), false);
-  assert.throws(
+  await assert.rejects(
     () => fakeIpcMain.handlers.get('app:versions')({ sender: { getURL: () => indexUrl } }),
     /IPC sender is not the trusted PostMeter renderer/
   );
-  assert.throws(
+  await assert.rejects(
     () => fakeIpcMain.handlers.get('app:versions')({ senderFrame: { url: 'https://example.test/' } }),
     /IPC sender is not the trusted PostMeter renderer/
   );
-  assert.throws(
+  await assert.rejects(
     () => fakeIpcMain.handlers.get('app:versions')({ senderFrame: subFrame, sender: { mainFrame } }),
     /IPC sender is not the trusted PostMeter renderer/
   );
-  assert.throws(
+  await assert.rejects(
     () => fakeIpcMain.handlers.get('app:versions')({ senderFrame: { url: `${APP_PROTOCOL_SCHEME}://bundle/README.md` } }),
     /IPC sender is not the trusted PostMeter renderer/
   );
-  assert.throws(
+  await assert.rejects(
     () => fakeIpcMain.handlers.get('app:versions')({ senderFrame: { url: createAppRendererUrl({ unexpected: '1' }) } }),
     /IPC sender is not the trusted PostMeter renderer/
+  );
+
+  trustedIpcMain.handle('request:send', async () => {
+    throw new Error('request failed for https://api.example.test/customer?token=url-token body=customer-body Authorization: Bearer raw-token /home/alice/customer.json');
+  });
+  await assert.rejects(
+    () => fakeIpcMain.handlers.get('request:send')({ senderFrame: { url: indexUrl } }),
+    (error) => {
+      const message = error?.message || '';
+      assert.doesNotMatch(message, /api\.example\.test|url-token|customer-body|raw-token|\/home\/alice/);
+      assert.match(message, /\[url\]|\[redacted|\[omitted:bodies\]|\[path\]/);
+      return true;
+    }
   );
 
   trustedIpcMain.on('workspace:saveSync', (event) => {
@@ -165,6 +188,29 @@ test('Electron IPC sender hardening trusts only the packaged renderer URL', () =
   assert.equal(isTrustedRendererUrl(createAppRendererUrl({ uiSnapshotSmoke: '1' })), true);
   assert.equal(isTrustedRendererUrl(createAppRendererUrl({ snapshot: '1' })), false);
   assert.equal(isTrustedRendererUrl('about:blank'), false);
+});
+
+test('Electron IPC error sanitizer redacts traffic-shaped values while preserving safe metadata', () => {
+  const error = new TypeError('POST https://api.example.test/path?access_token=secret body=customer-body Cookie: sid=secret Authorization: Digest username="alice", nonce="abc123", response="deadbeef" Digest username="standalone-user", realm="standalone-realm", nonce="standalone-nonce", uri="/standalone/path", response="standalone-response", cnonce="standalone-cnonce" {"Authorization":"Digest username=\\"json-user\\", nonce=\\"json-nonce\\", response=\\"json-response\\""} password=alpha beta gamma client-assertion=hyphen assertion secret next=ok C:\\Users\\Alice\\file.json');
+  error.code = 'ERR_TEST';
+
+  const sanitized = sanitizeIpcError(error);
+
+  assert.equal(sanitized.name, 'TypeError');
+  assert.equal(sanitized.code, 'ERR_TEST');
+  assert.doesNotMatch(sanitized.message, /api\.example\.test|secret|customer-body|alice|abc123|deadbeef|standalone-user|standalone-realm|standalone-nonce|standalone-response|standalone-cnonce|json-user|json-nonce|json-response|alpha beta gamma|hyphen assertion secret|Users\\Alice/);
+  assert.match(sanitized.message, /\[url\]|\[omitted:bodies\]|\[redacted|\[path\]/);
+
+  const secretCodeError = new Error('safe IPC failure');
+  secretCodeError.code = 'ACCESS_TOKEN_SUPERSECRET12345';
+  assert.equal(sanitizeIpcError(secretCodeError).code, '[redacted]');
+
+  const secretNameError = new Error('safe IPC failure');
+  secretNameError.name = 'SecretAccessKeySuperSecret12345';
+  secretNameError.code = 'SECRET_ACCESS_KEY_SUPERSECRET12345';
+  const secretNameSanitized = sanitizeIpcError(secretNameError);
+  assert.equal(secretNameSanitized.name, 'Error');
+  assert.equal(secretNameSanitized.code, '[redacted]');
 });
 
 test('PostMeter app protocol only serves allowlisted renderer bundle assets', async () => {
