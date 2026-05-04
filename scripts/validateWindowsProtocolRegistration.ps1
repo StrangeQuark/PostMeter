@@ -1,5 +1,6 @@
 param(
-  [string]$ReleaseDir = "release"
+  [string]$ReleaseDir = "release",
+  [int]$MaxInstallAttempts = 2
 )
 
 $ErrorActionPreference = "Stop"
@@ -104,6 +105,59 @@ function Stop-PostMeterProcesses {
     }
 }
 
+function New-ProtocolInstallDirectory {
+  return Join-Path $env:TEMP ("PostMeterProtocolTest-" + [guid]::NewGuid().ToString("N"))
+}
+
+function Format-InstallerExitCode {
+  param([int]$ExitCode)
+  $hex = [System.BitConverter]::ToUInt32([System.BitConverter]::GetBytes([int]$ExitCode), 0).ToString("X8")
+  return "$ExitCode (0x$hex)"
+}
+
+function Write-InstallerSnapshot {
+  param([System.IO.FileInfo]$Installer)
+  $hash = Get-FileHash -Algorithm SHA256 -Path $Installer.FullName
+  Write-Host "Windows installer snapshot: name=$($Installer.Name) size=$($Installer.Length) sha256=$($hash.Hash)"
+}
+
+function Write-RecentApplicationErrorEvents {
+  param([datetime]$Since)
+  try {
+    $events = Get-WinEvent -FilterHashtable @{ LogName = "Application"; StartTime = $Since } -MaxEvents 20 -ErrorAction Stop |
+      Where-Object {
+        $_.ProviderName -match "Application Error|Windows Error Reporting" -or
+        $_.Message -match "PostMeter|Setup|NSIS"
+      } |
+      Select-Object -First 8
+    foreach ($event in $events) {
+      $message = (($event.Message -replace "`r?`n", " ") -replace "\s+", " ").Trim()
+      Write-Host "Recent application error event: time=$($event.TimeCreated) provider=$($event.ProviderName) id=$($event.Id) message=$message"
+    }
+  } catch {
+    Write-Warning "Unable to read recent Windows application error events: $($_.Exception.Message)"
+  }
+}
+
+function Install-PostMeter {
+  param(
+    [System.IO.FileInfo]$Installer,
+    [string]$InstallDir,
+    [int]$Attempt,
+    [int]$MaxAttempts
+  )
+  New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
+  Stop-PostMeterProcesses
+  $arguments = @("/S", "/D=$InstallDir")
+  $startTime = Get-Date
+  Write-Host "Installing $($Installer.Name) into $InstallDir for Windows protocol validation. Attempt $Attempt of $MaxAttempts."
+  $install = Start-Process -FilePath $Installer.FullName -ArgumentList $arguments -WorkingDirectory $Installer.DirectoryName -PassThru -Wait
+  if ($install.ExitCode -ne 0) {
+    Write-RecentApplicationErrorEvents -Since $startTime.AddSeconds(-5)
+    throw "PostMeter installer exited with $(Format-InstallerExitCode -ExitCode $install.ExitCode)."
+  }
+}
+
 function Test-ProtocolLaunch {
   param([string]$ExpectedInstallDir)
   Stop-PostMeterProcesses
@@ -163,15 +217,30 @@ function Test-ProtocolRoot {
 
 $releasePath = Resolve-Path $ReleaseDir
 $installer = Find-Installer -Directory $releasePath
-$installDir = Join-Path $env:TEMP ("PostMeterProtocolTest-" + [guid]::NewGuid().ToString("N"))
-New-Item -ItemType Directory -Path $installDir | Out-Null
+$installDir = $null
+$maxAttempts = [Math]::Max(1, $MaxInstallAttempts)
 
 try {
-  $arguments = @("/S", "/D=$installDir")
-  Write-Host "Installing $($installer.Name) into $installDir for Windows protocol validation."
-  $install = Start-Process -FilePath $installer.FullName -ArgumentList $arguments -PassThru -Wait
-  if ($install.ExitCode -ne 0) {
-    throw "PostMeter installer exited with $($install.ExitCode)."
+  Write-InstallerSnapshot -Installer $installer
+  for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+    $installDir = New-ProtocolInstallDirectory
+    try {
+      Install-PostMeter -Installer $installer -InstallDir $installDir -Attempt $attempt -MaxAttempts $maxAttempts
+      break
+    } catch {
+      $failure = $_
+      Stop-PostMeterProcesses
+      $uninstaller = Find-Uninstaller -Directory $installDir
+      if ($uninstaller) {
+        Start-Process -FilePath $uninstaller.FullName -ArgumentList "/S" -Wait -ErrorAction SilentlyContinue
+      }
+      Remove-Item -Path $installDir -Recurse -Force -ErrorAction SilentlyContinue
+      if ($attempt -ge $maxAttempts) {
+        throw $failure
+      }
+      Write-Warning "Windows installer attempt $attempt failed: $($failure.Exception.Message). Retrying with a fresh install directory."
+      Start-Sleep -Seconds (2 * $attempt)
+    }
   }
   Write-ProtocolRegistrySnapshot -ExpectedInstallDir $installDir
 
@@ -191,11 +260,13 @@ try {
   Write-Host "Validated Windows postmeter:// protocol registration and launch from $($installer.Name)."
 } finally {
   Stop-PostMeterProcesses
-  $uninstaller = Find-Uninstaller -Directory $installDir
-  if ($uninstaller) {
-    Start-Process -FilePath $uninstaller.FullName -ArgumentList "/S" -Wait -ErrorAction SilentlyContinue
+  if ($installDir) {
+    $uninstaller = Find-Uninstaller -Directory $installDir
+    if ($uninstaller) {
+      Start-Process -FilePath $uninstaller.FullName -ArgumentList "/S" -Wait -ErrorAction SilentlyContinue
+    }
+    Remove-Item -Path $installDir -Recurse -Force -ErrorAction SilentlyContinue
   }
-  Remove-Item -Path $installDir -Recurse -Force -ErrorAction SilentlyContinue
   if ($ProtocolTranscriptStarted) {
     Stop-Transcript | Out-Null
   }

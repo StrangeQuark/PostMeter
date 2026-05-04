@@ -306,6 +306,11 @@ test('native protocol validators exercise actual custom-scheme launches', async 
   assert.match(windowsScript, /matchesExpectedInstall/);
   assert.match(windowsScript, /Start-Transcript/);
   assert.match(windowsScript, /windows-protocol-validation\.log/);
+  assert.match(windowsScript, /MaxInstallAttempts/);
+  assert.match(windowsScript, /Write-InstallerSnapshot/);
+  assert.match(windowsScript, /Write-RecentApplicationErrorEvents/);
+  assert.match(windowsScript, /Attempt \$Attempt of \$MaxAttempts/);
+  assert.match(windowsScript, /Start-Sleep -Seconds/);
   assert.match(windowsScript, /did not create an uninstaller/);
   assert.match(macScript, /open -g -b "com\.strangequark\.postmeter" "\$url"/);
   assert.match(macScript, /postmeter:\/\/oauth\/callback/);
