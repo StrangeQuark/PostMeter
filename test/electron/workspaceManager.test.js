@@ -164,8 +164,10 @@ test('workspace manager case-only renames recover through a temporary file witho
   assert.equal(renamed.activeWorkspaceId, 'Local Workspace.json');
   assert.equal(renamed.workspaces.some((item) => item.id === 'workspace.json'), true);
   await fs.access(path.join(temp, 'workspace.json'));
-  await assert.rejects(() => fs.access(path.join(temp, 'Workspace.json')));
-  const tempFiles = (await fs.readdir(temp)).filter((entry) => entry.includes('postmeter-workspace-rename'));
+  const entries = await fs.readdir(temp);
+  assert.equal(entries.includes('workspace.json'), true);
+  assert.equal(entries.includes('Workspace.json'), false);
+  const tempFiles = entries.filter((entry) => entry.includes('postmeter-workspace-rename'));
   assert.deepEqual(tempFiles, []);
 });
 

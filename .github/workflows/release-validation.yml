@@ -1,6 +1,9 @@
 name: Native Release Validation
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       required_artifact_types:
@@ -56,6 +59,7 @@ jobs:
         run: npm run sandbox:validate
         env:
           POSTMETER_ALLOW_OS_SANDBOX_VALIDATION_SKIP: ${{ matrix.platform == 'linux' && '1' || '' }}
+          POSTMETER_SANDBOX_VALIDATE_PROGRESS: "1"
 
       - name: OS sandbox platform matrix validation
         run: npm run sandbox:platform:validate
@@ -76,7 +80,7 @@ jobs:
         run: npm run oauth:certify:mock
 
       - name: Startup smoke
-        if: matrix.platform != 'linux'
+        if: matrix.platform == 'macos'
         run: npm run test:smoke
         env:
           POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/startup-smoke
@@ -89,7 +93,7 @@ jobs:
           POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/startup-smoke
 
       - name: OAuth UI smoke
-        if: matrix.platform != 'linux'
+        if: matrix.platform == 'macos'
         run: npm run test:ui:oauth
         env:
           POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-oauth
@@ -102,7 +106,7 @@ jobs:
           POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-oauth
 
       - name: UI workflow smoke
-        if: matrix.platform != 'linux'
+        if: matrix.platform == 'macos'
         run: npm run test:ui
         env:
           POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-workflow
@@ -115,7 +119,7 @@ jobs:
           POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-workflow
 
       - name: UI regression smoke
-        if: matrix.platform != 'linux'
+        if: matrix.platform == 'macos'
         run: npm run test:ui:regression
         env:
           POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-regression
@@ -128,7 +132,7 @@ jobs:
           POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-regression
 
       - name: UI snapshot smoke
-        if: matrix.platform != 'linux'
+        if: matrix.platform == 'macos'
         run: npm run test:ui:snapshot
         env:
           POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-snapshot

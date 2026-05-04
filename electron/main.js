@@ -70,7 +70,6 @@ if (!hasSingleInstanceLock) {
 app.disableHardwareAcceleration();
 if (process.env.POSTMETER_STARTUP_SMOKE === '1') {
   app.commandLine.appendSwitch('disable-gpu');
-  app.commandLine.appendSwitch('disable-software-rasterizer');
 }
 
 async function runSandboxRuntimeValidation() {

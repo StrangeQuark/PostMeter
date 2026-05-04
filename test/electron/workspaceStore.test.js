@@ -404,6 +404,41 @@ test('no-overwrite atomic copy fallback removes target when target fsync fails',
   assert.deepEqual(tempFiles, []);
 });
 
+test('no-overwrite atomic copy fallback tolerates unsupported target fsync', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-store-atomic-copy-fsync-unsupported-'));
+  const targetPath = path.join(temp, 'backup.json');
+  const originalLink = fs.link;
+  const originalOpen = fs.open;
+  fs.link = async () => {
+    const error = new Error('hard links unavailable');
+    error.code = 'ENOTSUP';
+    throw error;
+  };
+  fs.open = async (filePath, flags, mode) => {
+    if (filePath === targetPath && flags === 'r') {
+      return {
+        sync: async () => {
+          const error = new Error('operation not permitted');
+          error.code = 'EPERM';
+          throw error;
+        },
+        close: async () => {}
+      };
+    }
+    return originalOpen(filePath, flags, mode);
+  };
+  try {
+    await writeTextFileAtomic(targetPath, 'backup', { prefix: 'postmeter-atomic-copy-fsync-unsupported', overwrite: false });
+  } finally {
+    fs.link = originalLink;
+    fs.open = originalOpen;
+  }
+
+  assert.equal(await fs.readFile(targetPath, 'utf8'), 'backup');
+  const tempFiles = (await fs.readdir(temp)).filter((entry) => entry.includes('postmeter-atomic-copy-fsync-unsupported'));
+  assert.deepEqual(tempFiles, []);
+});
+
 test('no-overwrite atomic copy fallback removes target when copy fails after creating it', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-store-atomic-copy-fail-'));
   const targetPath = path.join(temp, 'backup.json');

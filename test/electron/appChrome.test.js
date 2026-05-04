@@ -114,6 +114,14 @@ test('Electron BrowserWindow hardening denies renderer navigation, window-open, 
   assert.equal(isTrustedAppRendererUrl(createAppRendererUrl({ unexpected: '1' })), false);
 });
 
+test('Electron startup smoke keeps software rasterization available for GPU-less CI runners', async () => {
+  const root = path.join(__dirname, '..', '..');
+  const mainSource = await fs.readFile(path.join(root, 'electron', 'main.js'), 'utf8');
+
+  assert.match(mainSource, /POSTMETER_STARTUP_SMOKE === '1'[\s\S]*appendSwitch\('disable-gpu'\)/);
+  assert.doesNotMatch(mainSource, /appendSwitch\('disable-software-rasterizer'\)/);
+});
+
 test('Electron IPC sender hardening trusts only the packaged renderer URL', async () => {
   const indexUrl = createAppRendererUrl();
   const fakeIpcMain = {

@@ -11,7 +11,7 @@ const {
 
 const PROJECT_ROOT = path.join(__dirname, '..');
 const MATRIX_PATH = path.join(PROJECT_ROOT, 'docs', 'oauth-provider-certification-matrix.json');
-const LIVE_EVIDENCE_DIRECTORY = path.join('validation-artifacts', 'oauth-provider-certification');
+const LIVE_EVIDENCE_DIRECTORY = 'validation-artifacts/oauth-provider-certification';
 
 async function main() {
   const command = process.argv[2] || 'validate';

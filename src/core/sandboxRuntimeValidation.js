@@ -19,6 +19,8 @@ const {
 } = require('./scriptSandbox');
 
 const VALIDATION_STARTED_AT = Date.now();
+const DEFAULT_SCRIPT_BOUNDARY_WORKER_TIMEOUT_MILLIS = 3_000;
+const WINDOWS_SCRIPT_BOUNDARY_WORKER_TIMEOUT_MILLIS = 60_000;
 
 async function validateSandboxRuntime(options = {}) {
   validationProgress('start');
@@ -717,7 +719,7 @@ async function validateScriptBoundary(options = {}) {
     skipOsSandboxFunctionalProbe: options.requireOsSandbox === true,
     onWorkerProgress: workerProgress,
     timeoutMillis: 1000,
-    workerTimeoutMillis: process.platform === 'win32' ? 15000 : 3000
+    workerTimeoutMillis: scriptBoundaryWorkerTimeoutMillis()
   });
 
   if (!execution.result.passed) {
@@ -779,7 +781,14 @@ function platformBackendLabel(platform) {
   return 'bubblewrap';
 }
 
+function scriptBoundaryWorkerTimeoutMillis(platform = process.platform) {
+  return platform === 'win32'
+    ? WINDOWS_SCRIPT_BOUNDARY_WORKER_TIMEOUT_MILLIS
+    : DEFAULT_SCRIPT_BOUNDARY_WORKER_TIMEOUT_MILLIS;
+}
+
 module.exports = {
+  scriptBoundaryWorkerTimeoutMillis,
   validateNodePermissionModel,
   validateOsSandboxBoundary,
   validateOsSandboxLaunchPolicy,

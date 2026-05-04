@@ -319,7 +319,8 @@ test('builds Windows AppContainer helper launches with private temp and explicit
     executablePath: process.execPath,
     args: ['-e', 'process.exit(0)'],
     env: scriptWorkerEnv(),
-    readOnlyPaths: [path.join(__dirname, '..', '..', 'src', 'core')]
+    readOnlyPaths: [path.join(__dirname, '..', '..', 'src', 'core')],
+    skipFunctionalProbe: true
   });
 
   try {
@@ -359,7 +360,8 @@ test('builds macOS seatbelt launches with private temp and no broad process allo
     executablePath: process.execPath,
     args: ['-e', 'process.exit(0)'],
     env: scriptWorkerEnv(),
-    readOnlyPaths: [path.join(__dirname, '..', '..', 'src', 'core')]
+    readOnlyPaths: [path.join(__dirname, '..', '..', 'src', 'core')],
+    skipFunctionalProbe: true
   });
 
   try {
@@ -379,7 +381,8 @@ test('builds macOS seatbelt launches with private temp and no broad process allo
     assert.match(profile, /\(allow ipc-posix\*\)/);
     assert.match(profile, /\(allow file-map-executable/);
     assert.doesNotMatch(profile, /\(allow process\*\)/);
-    assert.match(profile, new RegExp(escapeRegExp(launch.privateTempDir)));
+    const escapedPrivateTempDir = String(launch.privateTempDir).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    assert.match(profile, new RegExp(escapeRegExp(escapedPrivateTempDir)));
     assert.doesNotMatch(profile, /\(subpath "\\?\/tmp"\\?\)/);
   } finally {
     cleanupPrivateTempDir(launch.privateTempDir);

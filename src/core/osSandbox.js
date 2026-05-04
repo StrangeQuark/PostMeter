@@ -166,7 +166,7 @@ function createOsSandboxedProcessLaunch(options = {}) {
   }
 
   if (platform === 'darwin') {
-    const sandboxExecPath = findMacosSandboxExec(options.macosSandboxExecPath);
+    const sandboxExecPath = findMacosSandboxExec(options.macosSandboxExecPath, platform);
     if (!sandboxExecPath) {
       if (mode === OS_SANDBOX_MODES.REQUIRED) {
         throw new Error('OS-level script sandboxing is required but no macOS seatbelt launcher was found.');
@@ -345,7 +345,7 @@ function osSandboxStatus(options = {}) {
   const mode = normalizeOsSandboxMode(options.mode);
   const platform = options.platform || process.platform;
   const bubblewrapPath = platform === 'linux' ? findBubblewrap(options.bubblewrapPath) : '';
-  const macosSandboxExecPath = platform === 'darwin' ? findMacosSandboxExec(options.macosSandboxExecPath) : '';
+  const macosSandboxExecPath = platform === 'darwin' ? findMacosSandboxExec(options.macosSandboxExecPath, platform) : '';
   const windowsHelperPath = platform === 'win32' ? findWindowsSandboxHelper(options.windowsSandboxHelperPath, platform) : '';
   const linuxProbe = {
     env: process.versions.electron ? { ELECTRON_RUN_AS_NODE: '1' } : {},
@@ -424,9 +424,9 @@ function findBubblewrap(explicitPath) {
   return BUBBLEWRAP_CANDIDATES.find(executableFile) || '';
 }
 
-function findMacosSandboxExec(explicitPath) {
+function findMacosSandboxExec(explicitPath, platform = process.platform) {
   if (explicitPath) {
-    return executableFile(explicitPath) ? explicitPath : '';
+    return executableFile(explicitPath, platform) ? explicitPath : '';
   }
   return MACOS_SANDBOX_EXEC_CANDIDATES.find(executableFile) || '';
 }
