@@ -178,6 +178,78 @@ test('renderer workflows render pre-request script failures inline without histo
   assert.equal(status, 'Request failed.');
 });
 
+test('renderer workflows render skipped pre-request results without history', async () => {
+  const state = createRendererState();
+  const draftRequest = {
+    id: 'draft-skip',
+    name: 'Draft Skip',
+    method: 'GET',
+    url: 'https://example.test',
+    scripts: { preRequest: 'pm.execution.skipRequest();', tests: '' }
+  };
+  state.workspace = { collections: [], environments: [], history: [], settings: {} };
+  state.activeMainPanel = 'request';
+  state.activeRequestId = draftRequest.id;
+  state.openRequestTabs = [{ key: 'draft:draft-skip', requestId: draftRequest.id, draft: true, dirty: true }];
+  state.draftRequests.set(draftRequest.id, draftRequest);
+  let displayedResponse = null;
+  let historyRenders = 0;
+  let status = '';
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => draftRequest,
+    collectRequestFromEditor: () => {},
+    displayResponse: (response) => { displayedResponse = response; },
+    doc: createDocument(),
+    renderHistory: () => { historyRenders += 1; },
+    runFormatting: createRunFormatting(),
+    setStatus: (value) => { status = value; },
+    windowObject: {
+      postmeter: {
+        request: {
+          validate: async () => [],
+          send: async () => ({
+            statusCode: 0,
+            headers: {},
+            body: 'Request skipped by pre-request script.',
+            durationMillis: 0,
+            responseBytes: 38,
+            finalUrl: 'https://example.test',
+            requestSent: false,
+            skipped: true,
+            preRequestScriptResult: {
+              passed: true,
+              tests: [{ name: 'pre-request can skip', passed: true, error: '' }],
+              error: '',
+              logs: []
+            },
+            testScriptResult: { passed: true, tests: [], error: '', logs: [] },
+            environment: null,
+            collectionVariables: [],
+            globals: [],
+            localVariables: []
+          })
+        },
+        workspace: {
+          save: async (workspace) => workspace
+        }
+      }
+    }
+  });
+
+  await workflows.sendActiveRequest();
+
+  assert.equal(displayedResponse.skipped, true);
+  assert.equal(displayedResponse.preRequestScriptResult.tests[0].passed, true);
+  assert.equal(state.lastResponse, null);
+  assert.equal(state.workspace.history.length, 0);
+  assert.equal(historyRenders, 0);
+  assert.equal(status, 'Request skipped.');
+});
+
 test('renderer workflows render request send exceptions inline without blocking notification', async () => {
   const state = createRendererState();
   const draftRequest = {

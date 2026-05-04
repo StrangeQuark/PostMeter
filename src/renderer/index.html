@@ -51,7 +51,6 @@
       <button id="themeLightButton" type="button" data-theme-option="light" aria-pressed="false">Light</button>
       <button id="themeDarkButton" type="button" data-theme-option="dark" aria-pressed="false">Dark</button>
     </div>
-    <div id="statusLabel" class="app-status" role="status" aria-live="polite" aria-atomic="true">Ready.</div>
     <label class="field inline environment-control">
       <span>Environment</span>
       <select id="environmentSelect"></select>
@@ -326,7 +325,7 @@
               <option value="RAW_TEXT">Raw Text</option>
             </select>
           </label>
-          <textarea id="bodyInput" spellcheck="false" placeholder="Request body" aria-label="Request body"></textarea>
+          <textarea id="bodyInput" spellcheck="false" placeholder="Request body" aria-label="Request body" data-code-editor data-code-language="text"></textarea>
         </div>
 
         <div id="testsTab" class="tab-panel" role="tabpanel" aria-labelledby="requestTestsTabButton">
@@ -355,11 +354,11 @@
           <div class="script-grid">
             <label class="field script-field">
               <span>Pre-request Script</span>
-              <textarea id="preRequestScriptInput" spellcheck="false" placeholder="pm.environment.set('token', 'value');"></textarea>
+              <textarea id="preRequestScriptInput" spellcheck="false" placeholder="pm.environment.set('token', 'value');" data-code-editor data-code-language="javascript"></textarea>
             </label>
             <label class="field script-field">
               <span>Test Script</span>
-              <textarea id="testScriptInput" spellcheck="false" placeholder="pm.test('status is 200', function () { pm.response.to.have.status(200); });"></textarea>
+              <textarea id="testScriptInput" spellcheck="false" placeholder="pm.test('status is 200', function () { pm.response.to.have.status(200); });" data-code-editor data-code-language="javascript"></textarea>
             </label>
           </div>
         </div>
@@ -412,11 +411,9 @@
       <section id="environmentMainPanel" class="panel environment-main-panel" role="tabpanel" hidden>
         <div class="environment-main-header">
           <div>
-            <h2>Environment</h2>
-            <div id="environmentMainTitle" class="environment-main-title">Select an environment</div>
+            <div id="environmentMainTitle" class="environment-main-title editable-title" tabindex="0" aria-label="Environment name">Select an environment</div>
           </div>
           <div class="environment-actions">
-            <input id="environmentNameInput" placeholder="Environment name" aria-label="Environment name">
             <button id="deleteEnvironmentButton">Delete</button>
             <button id="addVariableButton">Add Variable</button>
           </div>
@@ -563,6 +560,7 @@
       <section class="results">
         <div class="tabs" role="tablist" aria-label="Result sections" data-tab-group="results">
           <button id="resultsResponseTabButton" class="tab active" type="button" role="tab" data-tab-group="results" data-tab="response" aria-selected="true" aria-controls="responseTab">Response</button>
+          <button id="resultsTestResultsTabButton" class="tab" type="button" role="tab" data-tab-group="results" data-tab="testResults" aria-selected="false" aria-controls="testResultsTab">Test Results <span id="testResultsTabCount" class="tab-count" hidden></span></button>
           <button id="resultsVisualizerTabButton" class="tab" type="button" role="tab" data-tab-group="results" data-tab="visualizer" aria-selected="false" aria-controls="visualizerTab">Visualizer</button>
           <button id="resultsLoadTabButton" class="tab" type="button" role="tab" data-tab-group="results" data-tab="load" aria-selected="false" aria-controls="loadTab">Load Test</button>
           <button id="resultsRunnerTabButton" class="tab" type="button" role="tab" data-tab-group="results" data-tab="runner" aria-selected="false" aria-controls="runnerTab">Runner</button>
@@ -576,9 +574,33 @@
           </div>
           <div id="finalUrl" class="final-url" aria-label="Final URL">-</div>
           <div class="response-grid">
-            <textarea id="responseBody" readonly spellcheck="false" aria-label="Response body"></textarea>
+            <textarea id="responseBody" readonly spellcheck="false" aria-label="Response body" data-code-editor data-code-language="text"></textarea>
             <div id="responsePaneResize" class="splitter vertical" role="separator" aria-orientation="vertical" tabindex="0"></div>
-            <textarea id="responseHeaders" readonly spellcheck="false" aria-label="Response headers"></textarea>
+            <textarea id="responseHeaders" readonly spellcheck="false" aria-label="Response headers" data-code-editor data-code-language="headers"></textarea>
+          </div>
+        </div>
+
+        <div id="testResultsTab" class="tab-panel" role="tabpanel" aria-labelledby="resultsTestResultsTabButton">
+          <div id="testResultsSummary" class="test-results-summary" role="status" aria-live="polite">No test results yet.</div>
+          <div class="script-results-grid">
+            <section class="script-results-section" aria-labelledby="preRequestResultsTitle">
+              <div class="script-results-header">
+                <h3 id="preRequestResultsTitle">Pre-request</h3>
+                <span id="preRequestResultsSummary" class="script-results-count">No tests</span>
+              </div>
+              <div id="preRequestTestResults" class="test-result-list" aria-live="polite">
+                <p class="test-result-empty">No test results yet.</p>
+              </div>
+            </section>
+            <section class="script-results-section" aria-labelledby="postRequestResultsTitle">
+              <div class="script-results-header">
+                <h3 id="postRequestResultsTitle">Post-request</h3>
+                <span id="postRequestResultsSummary" class="script-results-count">No tests</span>
+              </div>
+              <div id="postRequestTestResults" class="test-result-list" aria-live="polite">
+                <p class="test-result-empty">No test results yet.</p>
+              </div>
+            </section>
           </div>
         </div>
 
@@ -736,6 +758,7 @@
   <script src="cookieModel.js"></script>
   <script src="exampleModel.js"></script>
   <script src="loadPolicy.js"></script>
+  <script src="codeEditor.js"></script>
   <script src="requestEditorPanels.js"></script>
   <script src="variableAutocomplete.js"></script>
   <script src="rendererState.js"></script>

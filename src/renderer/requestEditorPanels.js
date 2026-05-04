@@ -23,6 +23,10 @@
     return doc.getElementById(id);
   }
 
+  function bodyTypeCodeLanguage(bodyType) {
+    return bodyType === 'RAW_JSON' ? 'json' : 'text';
+  }
+
   function renderExamples(examples, options = {}) {
     const doc = options.doc || document;
     const container = element(doc, options.containerId || 'examplesList');
@@ -84,6 +88,8 @@
       const body = doc.createElement('textarea');
       body.spellcheck = false;
       body.value = formatExampleBody(example);
+      body.dataset.codeEditor = 'true';
+      body.dataset.codeLanguage = bodyTypeCodeLanguage(bodyType.value);
       body.setAttribute('aria-label', `Example ${index + 1} body`);
       body.addEventListener('input', () => {
         example.body = body.value;
@@ -93,6 +99,7 @@
       bodyType.addEventListener('change', () => {
         example.bodyType = bodyType.value;
         body.value = formatExampleBody(example);
+        global.PostMeterCodeEditor?.setLanguage?.(body, bodyTypeCodeLanguage(bodyType.value));
         onDirty();
       });
 
@@ -113,6 +120,8 @@
       headers.spellcheck = false;
       headers.value = exampleHeadersToText(example.headers || []);
       headers.placeholder = 'Header-Name: value';
+      headers.dataset.codeEditor = 'true';
+      headers.dataset.codeLanguage = 'headers';
       headers.setAttribute('aria-label', `Example ${index + 1} headers`);
       headers.addEventListener('input', () => {
         example.headers = parseHeadersText(headers.value);
@@ -121,6 +130,7 @@
 
       item.append(header, headers, body);
       container.append(item);
+      global.PostMeterCodeEditor?.enhanceCodeTextareas?.(item);
     });
   }
 
@@ -622,6 +632,7 @@
   }
 
   const exported = {
+    bodyTypeCodeLanguage,
     buildVariablePreviewText,
     collectAuthFromEditor,
     renderAuthEditor,

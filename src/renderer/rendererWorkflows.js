@@ -21,6 +21,7 @@
     const collectRequestFromEditor = options.collectRequestFromEditor || (() => {});
     const collectSettingsFromEditor = options.collectSettingsFromEditor || (() => {});
     const displayResponse = options.displayResponse || (() => {});
+    const displayTestResults = options.displayTestResults || (() => {});
     const domainFromRequestUrl = options.domainFromRequestUrl || (() => '');
     const loadConfigFromControls = options.loadConfigFromControls || (() => ({}));
     const notifyUser = options.notifyUser || (() => {});
@@ -59,6 +60,7 @@
       if (element('visualizerFrame')) {
         element('visualizerFrame').srcdoc = '';
       }
+      displayTestResults(null);
     }
 
     function clearLoadResultState() {
@@ -640,7 +642,9 @@
         setStatus('Sending request...');
         const sendRequest = windowObject.__postmeterSendRequest || windowObject.postmeter.request.send;
         const response = await sendRequest(request, environment);
-        const failedBeforeSend = response?.requestSent === false && response?.preRequestScriptResult?.passed === false;
+        const requestActuallySent = response?.requestSent !== false;
+        const failedBeforeSend = !requestActuallySent && response?.preRequestScriptResult?.passed === false;
+        const skippedBeforeSend = !requestActuallySent && response?.skipped === true;
         if (isActiveWorkspaceContext(requestContext)) {
           const targetRequest = findContextRequest(requestContext);
           const updatedAuth = response.updatedAuth || (response.updatedAuthPersisted
@@ -658,10 +662,10 @@
           }
           applySingleRequestScriptMutations(response, requestContext);
           const publicResponse = publicResponseResult(response);
-          state.lastResponse = failedBeforeSend ? null : { ...publicResponse, requestId: requestContext.requestId };
+          state.lastResponse = requestActuallySent ? { ...publicResponse, requestId: requestContext.requestId } : null;
           updateCaptureResponseButton();
           displayResponse(publicResponse);
-          if (!failedBeforeSend) {
+          if (requestActuallySent) {
             state.workspace.history = [
               {
                 timestamp: new Date().toISOString(),
@@ -676,7 +680,7 @@
           }
           syncSavedRequestContextTabs(requestContext);
         }
-        setStatus(failedBeforeSend ? 'Request failed.' : 'Request completed.');
+        setStatus(skippedBeforeSend ? 'Request skipped.' : failedBeforeSend ? 'Request failed.' : 'Request completed.');
       } catch (error) {
         const message = error.message || String(error);
         if (isActiveWorkspaceContext(requestContext)) {

@@ -78,7 +78,8 @@ test('executes simple imported Postman collection, folder, and request scripts w
             "  pm.expect(pm.variables.get('ephemeral')).to.equal('ephemeral-local');",
             "  pm.expect(pm.iterationData.get('row')).to.equal('row-1');",
             "  pm.expect(pm.environment.name).to.equal('Simple Env');",
-            "  pm.expect(pm.execution.location.current.join(' > ')).to.include('Simple Folder');",
+            "  pm.expect(pm.execution.location.join(' > ')).to.include('Simple Folder');",
+            "  pm.expect(pm.execution.location.current).to.equal('Simple GET');",
             "});",
             "pm.environment.set('simpleDone', pm.response.json().scope);"
           ])

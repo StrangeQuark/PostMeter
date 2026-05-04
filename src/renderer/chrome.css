@@ -106,20 +106,7 @@
 
 .environment-control {
   min-width: 220px;
-  margin-left: 8px;
-}
-
-.app-status {
-  flex: 1 1 auto;
-  min-width: 120px;
-  max-width: 360px;
   margin-left: auto;
-  color: var(--muted);
-  font-size: 12px;
-  overflow: hidden;
-  text-align: right;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .theme-control {
@@ -620,6 +607,12 @@ h2 {
   padding: 14px;
 }
 
+.workspace-main-panel {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .environment-main-panel[hidden],
 .workspace-main-panel[hidden] {
   display: none;
@@ -635,15 +628,52 @@ h2 {
   border-bottom: 1px solid var(--line);
 }
 
+.environment-main-header > div:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .environment-main-title,
 .workspace-main-title {
-  margin-top: 4px;
   font-size: 18px;
   font-weight: 800;
 }
 
+.environment-main-title.editable-title {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  margin-left: -4px;
+  padding: 2px 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: text;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  outline: none;
+}
+
+.environment-main-title.editable-title:hover,
+.environment-main-title.editable-title:focus-visible {
+  border-color: var(--line);
+  background: var(--surface-muted);
+}
+
+.environment-main-title.editable-title.is-editing {
+  border-color: var(--primary);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px rgba(255, 108, 55, 0.18);
+}
+
+.environment-main-title.editable-title[aria-disabled="true"] {
+  cursor: default;
+}
+
 .environment-main-header .environment-actions,
 .workspace-main-header .workspace-actions {
+  flex: 0 0 auto;
   justify-content: flex-end;
   max-width: 620px;
 }
@@ -746,10 +776,6 @@ h2 {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 6px;
-}
-
-.environment-main-header #environmentNameInput {
-  min-width: 260px;
 }
 
 .environment-table {

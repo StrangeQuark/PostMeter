@@ -99,15 +99,17 @@ function registerRequestIpc(options = {}) {
           baseLocalVariables,
           baseGlobals
         });
-        latestWorkspace.history = [
-          historyEntry({
-            method: request.method,
-            url: result.finalUrl,
-            statusCode: result.statusCode,
-            durationMillis: result.durationMillis
-          }),
-          ...(latestWorkspace.history || [])
-        ].slice(0, 100);
+        if (result.requestSent !== false) {
+          latestWorkspace.history = [
+            historyEntry({
+              method: request.method,
+              url: result.finalUrl,
+              statusCode: result.statusCode,
+              durationMillis: result.durationMillis
+            }),
+            ...(latestWorkspace.history || [])
+          ].slice(0, 100);
+        }
         return latestWorkspace;
       }, { workspaceId });
       const publicResult = publicRequestResult(result, {

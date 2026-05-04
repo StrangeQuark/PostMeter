@@ -528,6 +528,7 @@ test('renderer Step 11 workflows do not rely on native prompt alert or confirm d
     'src/renderer/rendererBootstrap.js',
     'src/renderer/requestTabState.js',
     'src/renderer/contextMenu.js',
+    'src/renderer/codeEditor.js',
     'src/renderer/variableAutocomplete.js',
     'src/renderer/requestTabs.js'
   ]) {
@@ -585,6 +586,18 @@ test('renderer loads vault prompt queue before the app renderer', () => {
   assert.ok(queueIndex >= 0, 'vaultPromptQueue.js should be loaded');
   assert.ok(rendererIndex >= 0, 'renderer.js should be loaded');
   assert.ok(queueIndex < rendererIndex, 'vaultPromptQueue.js should load before renderer.js');
+});
+
+test('renderer loads code editor helpers before request editor panels and renderer bootstrap', () => {
+  const indexHtml = fs.readFileSync(path.join(__dirname, '../../src/renderer/index.html'), 'utf8');
+  const codeEditorIndex = indexHtml.indexOf('src="codeEditor.js"');
+  const requestPanelsIndex = indexHtml.indexOf('src="requestEditorPanels.js"');
+  const rendererIndex = indexHtml.indexOf('src="renderer.js"');
+  assert.ok(codeEditorIndex >= 0, 'codeEditor.js should be loaded');
+  assert.ok(requestPanelsIndex >= 0, 'requestEditorPanels.js should be loaded');
+  assert.ok(rendererIndex >= 0, 'renderer.js should be loaded');
+  assert.ok(codeEditorIndex < requestPanelsIndex, 'codeEditor.js should load before dynamic example editors are rendered.');
+  assert.ok(codeEditorIndex < rendererIndex, 'codeEditor.js should load before renderer.js initializes textareas.');
 });
 
 function createElement({ tagName = 'BUTTON', value = '' } = {}) {

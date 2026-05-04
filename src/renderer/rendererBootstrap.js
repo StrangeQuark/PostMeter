@@ -169,7 +169,6 @@
     bindChange(doc, 'requestCookieJarEnabledInput', options.onRequestCookieJarChange);
     bindChange(doc, 'requestCookieJarStoreInput', options.onRequestCookieJarChange);
     bindChange(doc, 'filterCookiesToRequestHostInput', options.onFilterCookiesChange);
-    bindInput(doc, 'environmentNameInput', options.onEnvironmentNameInput);
     bindChange(doc, 'trustedScriptSendRequestInput', options.onTrustedScriptCapabilityChange);
     bindChange(doc, 'trustedScriptCookiesInput', options.onTrustedScriptCapabilityChange);
     bindChange(doc, 'trustedScriptVaultInput', options.onTrustedScriptCapabilityChange);

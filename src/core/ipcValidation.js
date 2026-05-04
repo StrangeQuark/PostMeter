@@ -667,6 +667,9 @@ function assertResponsePayload(value, field = 'response') {
   if (value.requestSent != null) {
     optionalBoolean(value.requestSent, `${field}.requestSent`);
   }
+  if (value.skipped != null) {
+    optionalBoolean(value.skipped, `${field}.skipped`);
+  }
   if (value.error != null) {
     string(value.error, `${field}.error`, LIMITS.value);
   }

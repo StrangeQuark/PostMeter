@@ -7,6 +7,7 @@ const {
   requestModel,
   workspaceModel
 } = require('../../src/core/models');
+const { runRequestWithScripts } = require('../../src/core/requestScriptRunner');
 const { registerRequestIpc } = require('../../electron/requestIpc');
 
 test('request IPC registers stable request channels', () => {
@@ -282,7 +283,7 @@ test('request IPC diagnostic events do not include request URLs or bodies by def
   assert.doesNotMatch(JSON.stringify(events[0]), /api\.example\.test|request-token|customer-request-body|script-token/);
 });
 
-test('request IPC returns detailed callback-style pre-request test failures without throwing', async () => {
+test('request IPC returns callback-style pre-request test failures while still sending the request', async () => {
   const handlers = new Map();
   const workspace = workspaceModel({
     collections: [
@@ -341,6 +342,17 @@ test('request IPC returns detailed callback-style pre-request test failures with
       saveCalls += 1;
       return nextWorkspace;
     },
+    runRequestWithScripts: (request, environment, options) => runRequestWithScripts(request, environment, {
+      ...options,
+      sendRequest: async () => ({
+        statusCode: 200,
+        headers: { 'content-type': ['text/plain'] },
+        body: 'main response',
+        durationMillis: 7,
+        responseBytes: 13,
+        finalUrl: 'https://api.example.test'
+      })
+    }),
     setWorkspace: (nextWorkspace) => {
       for (const key of Object.keys(workspace)) {
         delete workspace[key];
@@ -355,16 +367,79 @@ test('request IPC returns detailed callback-style pre-request test failures with
     structuredClone(workspace.environments[0])
   );
 
-  assert.equal(response.requestSent, false);
-  assert.equal(response.statusCode, 0);
-  assert.match(response.body, /Pre-request script failed/);
-  assert.match(response.body, /script network request should be available/);
-  assert.match(response.body, /pm\.sendRequest is disabled/);
+  assert.equal(response.requestSent, true);
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body, 'main response');
   assert.equal(response.preRequestScriptResult.error, '');
   assert.equal(response.preRequestScriptResult.tests[0].passed, false);
   assert.match(response.preRequestScriptResult.tests[0].error, /pm\.sendRequest is disabled/);
   assert.equal(response.environment.variables.find((item) => item.key === 'beforeDenied').value, 'committed');
   assert.equal(workspace.environments[0].variables.find((item) => item.key === 'beforeDenied').value, 'committed');
+  assert.equal(workspace.history.length, 1);
+  assert.equal(workspace.history[0].statusCode, 200);
+  assert.equal(saveCalls, 1);
+});
+
+test('request IPC returns valid skipped responses for pre-request skipRequest', async () => {
+  const handlers = new Map();
+  const workspace = workspaceModel({
+    collections: [
+      collectionModel({
+        id: 'collection-1',
+        name: 'Skipped Requests',
+        requests: [
+          requestModel({
+            id: 'request-1',
+            name: 'Skipped',
+            method: 'GET',
+            url: 'https://api.example.test/skipped',
+            scripts: {
+              preRequest: `
+                pm.test('skip main request', function () {
+                  pm.execution.skipRequest();
+                });
+              `
+            }
+          })
+        ]
+      })
+    ],
+    environments: [],
+    cookies: [],
+    history: []
+  });
+  let saveCalls = 0;
+
+  registerRequestIpc({
+    getWorkspace: () => workspace,
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    },
+    saveWorkspace: async (nextWorkspace) => {
+      saveCalls += 1;
+      return nextWorkspace;
+    },
+    setWorkspace: (nextWorkspace) => {
+      for (const key of Object.keys(workspace)) {
+        delete workspace[key];
+      }
+      Object.assign(workspace, structuredClone(nextWorkspace));
+    }
+  });
+
+  const response = await handlers.get('request:send')(
+    null,
+    structuredClone(workspace.collections[0].requests[0]),
+    null
+  );
+
+  assert.equal(response.requestSent, false);
+  assert.equal(response.skipped, true);
+  assert.equal(response.statusCode, 0);
+  assert.match(response.body, /skipped/i);
+  assert.equal(response.preRequestScriptResult.tests[0].passed, true);
   assert.equal(workspace.history.length, 0);
   assert.equal(saveCalls, 1);
 });

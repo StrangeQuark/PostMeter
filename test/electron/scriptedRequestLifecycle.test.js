@@ -99,7 +99,7 @@ test('runs the shared scripted request lifecycle and applies script mutations ac
   assert.equal(request.variables[0].value, 'local-token');
 });
 
-test('returns pre-request failures from the shared lifecycle without sending the request', async () => {
+test('returns top-level pre-request errors from the shared lifecycle without sending the request', async () => {
   let sends = 0;
 
   const result = await runScriptedRequestLifecycle(
@@ -130,6 +130,167 @@ test('returns pre-request failures from the shared lifecycle without sending the
   assert.equal(result.response, null);
   assert.equal(result.preRequestScriptResult.error, 'no send');
   assert.deepEqual(result.testScriptResult, emptyScriptResult());
+});
+
+test('continues the main request when pre-request assertions fail', async () => {
+  const sent = [];
+  const scripts = [];
+
+  const result = await runScriptedRequestLifecycle(
+    createScriptedRequestState({
+      id: 'pre-test-fail',
+      scripts: { preRequest: 'pre', tests: 'tests' }
+    }, null),
+    {
+      scriptRunner: async (scriptText) => {
+        scripts.push(scriptText);
+        if (scriptText === 'pre') {
+          return {
+            result: {
+              passed: false,
+              tests: [{ name: 'pre assertion', passed: false, error: 'expected true to equal false' }],
+              error: '',
+              logs: []
+            },
+            environmentVariables: [],
+            collectionVariables: [],
+            localVariables: []
+          };
+        }
+        return {
+          result: {
+            passed: true,
+            tests: [{ name: 'post assertion', passed: true, error: '' }],
+            error: '',
+            logs: []
+          },
+          environmentVariables: [],
+          collectionVariables: [],
+          localVariables: []
+        };
+      },
+      sendRequest: async (request) => {
+        sent.push(request);
+        return response(200, '{"ok":true}');
+      }
+    }
+  );
+
+  assert.equal(sent.length, 1);
+  assert.deepEqual(scripts, ['pre', 'tests']);
+  assert.equal(result.requestSent, true);
+  assert.equal(result.response.statusCode, 200);
+  assert.equal(result.preRequestScriptResult.passed, false);
+  assert.equal(result.preRequestScriptResult.tests[0].passed, false);
+  assert.equal(result.testScriptResult.passed, true);
+});
+
+test('returns a valid skipped response for single-request pre-request skipRequest', async () => {
+  let sends = 0;
+
+  const result = await runRequestWithScripts({
+    id: 'single-skip',
+    method: 'GET',
+    url: 'https://api.example.test/main',
+    scripts: {
+      preRequest: `
+        pm.environment.set('beforeSkip', 'yes');
+        pm.test('pre-request can skip the main request', function () {
+          pm.execution.skipRequest();
+          pm.environment.set('afterSkip', 'no');
+        });
+        pm.environment.set('afterTest', 'no');
+      `
+    }
+  }, null, {
+    sendRequest: async () => {
+      sends += 1;
+      return response(200, '{}');
+    }
+  });
+
+  assert.equal(sends, 0);
+  assert.equal(result.response.statusCode, 0);
+  assert.equal(result.response.requestSent, false);
+  assert.equal(result.response.skipped, true);
+  assert.match(result.response.body, /skipped/i);
+  assert.equal(result.response.preRequestScriptResult.tests[0].passed, true);
+  assert.equal(result.environment.variables.find((item) => item.key === 'beforeSkip')?.value, 'yes');
+  assert.equal(result.environment.variables.find((item) => item.key === 'afterSkip'), undefined);
+  assert.equal(result.environment.variables.find((item) => item.key === 'afterTest'), undefined);
+});
+
+test('honors skipRequest inside a pre-request pm.sendRequest callback test', async () => {
+  const sent = [];
+
+  const result = await runRequestWithScripts({
+    id: 'callback-skip',
+    method: 'GET',
+    url: 'https://google.com',
+    scripts: {
+      preRequest: `
+        pm.sendRequest('https://postman-echo.com/get?probe=sendRequest', function (err, res) {
+          pm.test('pm.sendRequest can reach brokered HTTPS endpoint', function () {
+            pm.expect(err).to.equal(null);
+            pm.expect(res.code).to.equal(200);
+            pm.expect(res.json().args.probe).to.equal('sendRequest');
+            pm.execution.skipRequest();
+            pm.environment.set('afterSkip', 'no');
+          });
+          pm.environment.set('afterTest', 'no');
+        });
+      `
+    }
+  }, null, {
+    trustedCapabilities: { sendRequest: true },
+    sendRequest: async (request) => {
+      const url = String(request?.url || '');
+      sent.push(url);
+      if (url.includes('postman-echo.com')) {
+        return response(200, '{"args":{"probe":"sendRequest"}}');
+      }
+      return response(200, '<html>google</html>');
+    }
+  });
+
+  assert.deepEqual(sent, ['https://postman-echo.com/get?probe=sendRequest']);
+  assert.equal(result.response.requestSent, false);
+  assert.equal(result.response.skipped, true);
+  assert.equal(result.preRequestScriptResult.passed, true);
+  assert.equal(result.preRequestScriptResult.tests[0].passed, true);
+  assert.equal(result.environment.variables.find((item) => item.key === 'afterSkip'), undefined);
+  assert.equal(result.environment.variables.find((item) => item.key === 'afterTest'), undefined);
+});
+
+test('does not let post-response skipRequest cancel an already-sent request', async () => {
+  const sent = [];
+
+  const result = await runRequestWithScripts({
+    id: 'post-skip',
+    method: 'GET',
+    url: 'https://google.com',
+    scripts: {
+      tests: `
+        pm.test('post-response skipRequest is unsupported', function () {
+          pm.execution.skipRequest();
+          pm.environment.set('afterPostSkip', 'no');
+        });
+      `
+    }
+  }, null, {
+    sendRequest: async (request) => {
+      sent.push(request.url);
+      return response(200, '<html>google</html>');
+    }
+  });
+
+  assert.deepEqual(sent, ['https://google.com']);
+  assert.equal(result.response.requestSent, true);
+  assert.equal(result.response.statusCode, 200);
+  assert.equal(result.response.body, '<html>google</html>');
+  assert.equal(result.testScriptResult.passed, false);
+  assert.match(result.testScriptResult.tests[0].error, /skipRequest.*function/);
+  assert.equal(result.environment.variables.find((item) => item.key === 'afterPostSkip'), undefined);
 });
 
 test('ignores script-injected primary request client-certificate file paths', async () => {
@@ -245,33 +406,33 @@ test('throws enriched pre-request errors for single-request execution', async ()
 test('propagates diagnostics callbacks into single-request sandbox broker denials', async () => {
   const events = [];
 
-  await assert.rejects(
-    () => runRequestWithScripts({
-      id: 'diagnostic-denial',
-      method: 'GET',
-      url: 'https://api.example.test/root',
-      scripts: {
-        preRequest: `
+  const result = await runRequestWithScripts({
+    id: 'diagnostic-denial',
+    method: 'GET',
+    url: 'https://api.example.test/root',
+    scripts: {
+      preRequest: `
           pm.test('sendRequest denial is diagnosed', async function () {
             await pm.sendRequest('https://api.example.test/denied');
           });
         `
-      }
-    }, { id: 'env', name: 'Env', variables: [] }, {
-      trustedCapabilities: { sendRequest: false },
-      recordDiagnosticEvent: async (event) => {
-        events.push(event);
-      },
-      scriptOptions: {
-        timeoutMillis: 500,
-        workerTimeoutMillis: 1000
-      },
-      sendRequest: async () => response(200, '{}')
-    }),
-    /Pre-request script failed/
-  );
+    }
+  }, { id: 'env', name: 'Env', variables: [] }, {
+    trustedCapabilities: { sendRequest: false },
+    recordDiagnosticEvent: async (event) => {
+      events.push(event);
+    },
+    scriptOptions: {
+      timeoutMillis: 500,
+      workerTimeoutMillis: 1000
+    },
+    sendRequest: async () => response(200, '{}')
+  });
   await new Promise((resolve) => setImmediate(resolve));
 
+  assert.equal(result.response.statusCode, 200);
+  assert.equal(result.preRequestScriptResult.passed, false);
+  assert.match(result.preRequestScriptResult.tests[0].error, /pm\.sendRequest is disabled/);
   assert.ok(events.some((event) => (
     event.type === 'sandbox.broker.denied'
       && event.failureCode === 'script_send_request_disabled'

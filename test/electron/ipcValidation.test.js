@@ -158,7 +158,8 @@ test('accepts structurally valid IPC payloads', () => {
     testScriptResult: { passed: true, tests: [{ name: 'saved token', passed: true }], logs: ['done'], visualizer: { html: '<h1>ok</h1>', template: '<h1>{{value}}</h1>' } },
     environment: { id: 'e1', name: 'Runtime', variables: [{ enabled: true, key: 'REFRESH_TOKEN', value: 'abc' }] },
     collectionVariables: [{ enabled: true, key: 'baseUrl', value: 'https://example.test' }],
-    localVariables: [{ enabled: true, key: 'local', value: 'value' }]
+    localVariables: [{ enabled: true, key: 'local', value: 'value' }],
+    skipped: true
   }));
   assert.doesNotThrow(() => assertWorkspaceLoadResultPayload({
     workspace: { schemaVersion: 11, name: 'Workspace', settings: { updates: { includePrereleases: false } }, collections: [], environments: [], cookies: [], history: [] },
