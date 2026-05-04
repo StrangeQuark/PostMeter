@@ -3,7 +3,8 @@
 const path = require('node:path');
 const { redactSmokeOutputText, spawnWithTimeout } = require('./smokeProcess');
 
-const DEFAULT_TIMEOUT_MILLIS = 30_000;
+const DEFAULT_TIMEOUT_MILLIS = 60_000;
+const WINDOWS_TIMEOUT_MILLIS = 120_000;
 
 if (require.main === module) {
   if (process.env.POSTMETER_SANDBOX_RUNTIME_CHILD === '1') {
@@ -58,14 +59,20 @@ function redactForOutput(value, executablePath = '') {
 }
 
 function validationTimeoutMillis(value) {
-  const timeout = Number(value || DEFAULT_TIMEOUT_MILLIS);
+  const defaultTimeout = defaultValidationTimeoutMillis();
+  const timeout = Number(value || defaultTimeout);
   if (!Number.isFinite(timeout) || timeout <= 0) {
-    return DEFAULT_TIMEOUT_MILLIS;
+    return defaultTimeout;
   }
   return Math.max(1_000, Math.floor(timeout));
 }
 
+function defaultValidationTimeoutMillis(platform = process.platform) {
+  return platform === 'win32' ? WINDOWS_TIMEOUT_MILLIS : DEFAULT_TIMEOUT_MILLIS;
+}
+
 module.exports = {
+  defaultValidationTimeoutMillis,
   redactForOutput,
   validationTimeoutMillis
 };

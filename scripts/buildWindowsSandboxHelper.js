@@ -33,11 +33,23 @@ function build() {
 
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   const vcvarsPath = findVcvars64();
-  const command = [
-    `"${vcvarsPath}"`,
-    '>',
-    'nul',
-    '&&',
+  const result = runCompilerBatch(vcvarsPath);
+  if (result.status !== 0) {
+    throw new Error(`Windows sandbox helper build failed.\n${result.stdout || ''}${result.stderr || ''}`);
+  }
+  const validation = spawnSync(OUTPUT, ['--validate-helper'], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  if (validation.status !== 0) {
+    throw new Error(`Windows sandbox helper self-check failed.\n${validation.stdout || ''}${validation.stderr || ''}`);
+  }
+  console.log(`Built Windows sandbox helper: ${path.relative(PROJECT_ROOT, OUTPUT)}`);
+}
+
+function runCompilerBatch(vcvarsPath) {
+  const scriptPath = path.join(OUTPUT_DIR, `build-${process.pid}-${Date.now()}.cmd`);
+  const compileCommand = [
     'cl',
     '/nologo',
     '/EHsc',
@@ -52,23 +64,26 @@ function build() {
     'Userenv.lib',
     `/OUT:"${OUTPUT}"`
   ].join(' ');
+  const script = [
+    '@echo off',
+    'setlocal',
+    `call "${vcvarsPath}" > nul`,
+    'if errorlevel 1 exit /b %errorlevel%',
+    compileCommand
+  ].join('\r\n') + '\r\n';
 
-  const result = spawnSync('cmd.exe', ['/d', '/s', '/c', command], {
-    cwd: PROJECT_ROOT,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe']
-  });
-  if (result.status !== 0) {
-    throw new Error(`Windows sandbox helper build failed.\n${result.stdout || ''}${result.stderr || ''}`);
+  fs.writeFileSync(scriptPath, script, 'utf8');
+  try {
+    return spawnSync('cmd.exe', ['/d', '/c', scriptPath], {
+      cwd: PROJECT_ROOT,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+  } finally {
+    try {
+      fs.rmSync(scriptPath, { force: true });
+    } catch {}
   }
-  const validation = spawnSync(OUTPUT, ['--validate-helper'], {
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe']
-  });
-  if (validation.status !== 0) {
-    throw new Error(`Windows sandbox helper self-check failed.\n${validation.stdout || ''}${validation.stderr || ''}`);
-  }
-  console.log(`Built Windows sandbox helper: ${path.relative(PROJECT_ROOT, OUTPUT)}`);
 }
 
 function isOutputFresh() {

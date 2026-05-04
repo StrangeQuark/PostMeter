@@ -7,7 +7,9 @@ const {
   cleanupPrivateTempDir,
   createOsSandboxedProcessLaunch,
   osSandboxStatus,
-  prepareSeccompStdio
+  prepareSeccompStdio,
+  scriptWorkerAppReadOnlyPaths,
+  scriptWorkerRuntimeReadOnlyPaths
 } = require('./osSandbox');
 const {
   runPostmanScriptIsolated,
@@ -16,7 +18,10 @@ const {
   supportsNodePermissionFlags
 } = require('./scriptSandbox');
 
+const VALIDATION_STARTED_AT = Date.now();
+
 async function validateSandboxRuntime(options = {}) {
+  validationProgress('start');
   if (options.requireElectron !== false && !process.versions.electron) {
     throw new Error('Sandbox runtime validation must run inside the pinned Electron runtime.');
   }
@@ -24,24 +29,41 @@ async function validateSandboxRuntime(options = {}) {
     throw new Error('Pinned runtime does not support required Node permission flags.');
   }
 
+  validationProgress('worker launch policy');
   validateWorkerLaunchPolicy(scriptWorkerExecArgv({ requireNodePermission: true }), scriptWorkerEnv());
+  validationProgress('node permission model');
   validateNodePermissionModel();
   let requireOsSandbox = false;
   if (platformRequiresOsSandbox(process.platform)) {
+    validationProgress('os sandbox status');
     const status = osSandboxStatus({ mode: OS_SANDBOX_MODES.REQUIRED });
     if (status.supported) {
+      validationProgress('os sandbox launch policy');
       validateOsSandboxLaunchPolicy();
+      validationProgress('os sandbox boundary');
       validateOsSandboxBoundary();
       requireOsSandbox = true;
     } else if (process.platform === 'linux' && process.env.POSTMETER_ALLOW_OS_SANDBOX_VALIDATION_SKIP === '1') {
       console.warn('Linux OS-level script sandbox validation skipped because no functional bubblewrap backend is available in this environment.');
     } else {
-      throw new Error(`${platformLabel(process.platform)} OS-level script sandboxing requires a functional ${platformBackendLabel(process.platform)} backend.`);
+      throw new Error([
+        `${platformLabel(process.platform)} OS-level script sandboxing requires a functional ${platformBackendLabel(process.platform)} backend.`,
+        status.probeFailure ? `Probe failure: ${status.probeFailure}` : ''
+      ].filter(Boolean).join(' '));
     }
   }
+  validationProgress('script boundary');
   await validateScriptBoundary({
     requireOsSandbox
   });
+  validationProgress('complete');
+}
+
+function validationProgress(label) {
+  if (process.env.POSTMETER_SANDBOX_VALIDATE_PROGRESS !== '1') {
+    return;
+  }
+  console.error(`[sandbox-runtime] +${Date.now() - VALIDATION_STARTED_AT}ms ${label}`);
 }
 
 function validateWorkerLaunchPolicy(execArgv, env) {
@@ -180,8 +202,22 @@ function validateWindowsSandboxLaunchPolicy(launch) {
   if (!hasArgPair(launch.args, '--profile', 'PostMeter.ScriptWorkerSandbox')) {
     throw new Error('Windows OS sandbox launch must use the stable PostMeter AppContainer profile.');
   }
+  if (launch.args.includes('--inherit-environment')) {
+    throw new Error('Windows OS sandbox launch must not depend on inherited helper environment state.');
+  }
   if (!hasArgPair(launch.args, '--env', 'POSTMETER_SCRIPT_WORKER=1')) {
-    throw new Error('Windows OS sandbox launch must pass the script-worker marker to the helper child environment.');
+    throw new Error('Windows OS sandbox launch must pass the worker marker through an explicit sanitized child environment block.');
+  }
+  if (!launch.args.some((value, index) => launch.args[index - 1] === '--env' && value.startsWith('TEMP='))) {
+    throw new Error('Windows OS sandbox launch must pass private temp variables through an explicit child environment block.');
+  }
+  for (const key of ['APPDATA', 'LOCALAPPDATA', 'USERPROFILE']) {
+    if (!hasArgPair(launch.args, '--env', `${key}=${launch.privateTempDir}`) || launch.env[key] !== launch.privateTempDir) {
+      throw new Error(`Windows OS sandbox launch must map ${key} to the private temp directory.`);
+    }
+  }
+  if (launch.env.POSTMETER_SCRIPT_WORKER !== '1') {
+    throw new Error('Windows OS sandbox launch must pass the script-worker marker through the sanitized helper launcher environment.');
   }
   if (!launch.args.includes('--read-only')) {
     throw new Error('Windows OS sandbox launch must pass explicit read-only runtime/app paths to the helper.');
@@ -189,8 +225,38 @@ function validateWindowsSandboxLaunchPolicy(launch) {
   if (!launch.args.includes('--')) {
     throw new Error('Windows OS sandbox launch must delimit helper options from the child command.');
   }
-  if (Object.keys(launch.env || {}).length !== 0) {
-    throw new Error('Windows OS sandbox helper process must not inherit the script-worker child environment.');
+  const childArgs = windowsSandboxChildArgs(launch);
+  const isStdioWorkerLaunch = childArgs.includes('--postmeter-stdio-worker');
+  const isFileWorkerLaunch = childArgs.includes('--postmeter-file-worker');
+  if (launch.env.ELECTRON_RUN_AS_NODE === '1' && !isStdioWorkerLaunch && !childArgs.includes('--no-stdio-init')) {
+    throw new Error('Windows Electron Node-mode sandbox probes must disable Electron stdio initialization.');
+  }
+  if (isStdioWorkerLaunch && childArgs.includes('--no-stdio-init')) {
+    throw new Error('Windows stdio script worker launches must preserve Electron stdio initialization for the worker protocol.');
+  }
+  if (isFileWorkerLaunch) {
+    if (!childArgs.includes('--no-stdio-init')) {
+      throw new Error('Windows file-transport script worker launches must disable Electron stdio initialization.');
+    }
+    if (
+      launch.env.POSTMETER_SCRIPT_WORKER_TRANSPORT_DIR !== launch.privateTempDir
+      || !hasArgPair(launch.args, '--env', `POSTMETER_SCRIPT_WORKER_TRANSPORT_DIR=${launch.privateTempDir}`)
+    ) {
+      throw new Error('Windows file-transport script worker launches must pass the private transport directory through the sanitized environment.');
+    }
+    if (childArgs.includes('--permission')) {
+      if (
+        !childArgs.includes(`--allow-fs-read=${launch.privateTempDir}`)
+        || !childArgs.includes(`--allow-fs-write=${launch.privateTempDir}`)
+      ) {
+        throw new Error('Windows file-transport script worker launches must grant Node permission access to the private transport directory.');
+      }
+    }
+  }
+  for (const denied of ['PATH', 'HOME']) {
+    if (launch.env[denied] != null) {
+      throw new Error(`Windows OS sandbox launch leaked ${denied}.`);
+    }
   }
 }
 
@@ -200,22 +266,48 @@ function validateMacosSandboxLaunchPolicy(launch) {
   if (!profile) {
     throw new Error('macOS OS sandbox launch must pass a seatbelt profile.');
   }
-  if (!launch.privateTempDir || launch.env.TMPDIR !== launch.privateTempDir) {
-    throw new Error('macOS OS sandbox launch must provide a private writable temp directory.');
+  if (
+    !launch.privateTempDir
+    || launch.env.TMPDIR !== launch.privateTempDir
+    || launch.env.HOME !== launch.privateTempDir
+    || launch.env.CFFIXED_USER_HOME !== launch.privateTempDir
+  ) {
+    throw new Error('macOS OS sandbox launch must provide a private writable temp directory and CoreFoundation HOME.');
   }
   if (!profile.includes('(deny default)') || !profile.includes('(deny network*)')) {
     throw new Error('macOS seatbelt profile must deny by default and deny network access.');
   }
-  if (!profile.includes('(deny process-exec)') || !profile.includes('(deny process-fork)')) {
-    throw new Error('macOS seatbelt profile must explicitly deny process execution and forking.');
+  const executablePath = launch.args[profileIndex + 1] || '';
+  if (!profile.includes('(allow process-exec') || !profile.includes(executablePath)) {
+    throw new Error('macOS seatbelt profile must allow process execution for the script worker executable.');
+  }
+  if (!profile.includes('(allow process-fork)')) {
+    throw new Error('macOS seatbelt profile must allow runtime process forking while keeping process execution scoped.');
   }
   if (profile.includes('(allow process*)')) {
     throw new Error('macOS seatbelt profile must not allow broad process operations.');
   }
+  if (!profile.includes('(allow ipc-posix*)')) {
+    throw new Error('macOS seatbelt profile must allow POSIX shared memory needed by the Electron runtime.');
+  }
+  for (const required of ['(allow mach-register)', '(allow system-socket)', '(allow iokit-open)']) {
+    if (!profile.includes(required)) {
+      throw new Error(`macOS seatbelt profile is missing Electron runtime compatibility allowance ${required}.`);
+    }
+  }
+  if (
+    !profile.includes('(allow file-read-metadata')
+    || !profile.includes('(allow file-map-executable')
+    || !profile.includes('/Library/Keychains')
+    || !profile.includes('/Library/Preferences')
+    || !profile.includes('/System/Volumes/Preboot/Cryptexes/OS/usr/lib')
+  ) {
+    throw new Error('macOS seatbelt profile must allow parent metadata traversal, executable image mapping, and macOS cryptex/runtime/bootstrap reads.');
+  }
   if (!profile.includes(launch.privateTempDir)) {
     throw new Error('macOS seatbelt profile must limit file writes to the private temp directory.');
   }
-  for (const denied of ['PATH', 'HOME', 'USERPROFILE']) {
+  for (const denied of ['PATH', 'USERPROFILE']) {
     if (launch.env[denied] != null) {
       throw new Error(`macOS OS sandbox launch leaked ${denied}.`);
     }
@@ -231,36 +323,67 @@ function validateOsSandboxBoundary() {
   fs.writeFileSync(forbiddenFile, 'secret');
   fs.writeFileSync(forbiddenHomeFile, 'secret');
   try {
+    if (process.platform === 'win32') {
+      validateWindowsOsSandboxBoundary({
+        forbiddenFile,
+        forbiddenHomeFile,
+        forbiddenWriteFile
+      });
+      return;
+    }
+
+    validationProgress('os boundary: host filesystem read');
     expectOsSandboxProbeDenied('host filesystem read', `
       const fs = require('node:fs');
       try {
         fs.readFileSync(${JSON.stringify(forbiddenFile)}, 'utf8');
         process.exit(2);
       } catch (error) {
-        process.exit(error && (error.code === 'ENOENT' || error.code === 'EACCES') ? 0 : 1);
+        if (isDeniedFilesystemError(error)) {
+          process.exit(0);
+        }
+        console.error(error && (error.code || error.message) || 'read failed without an error object');
+        process.exit(1);
+      }
+      function isDeniedFilesystemError(error) {
+        return error && ['ENOENT', 'EACCES', 'EPERM', 'ERR_ACCESS_DENIED'].includes(error.code);
       }
     `);
 
+    validationProgress('os boundary: home filesystem read');
     expectOsSandboxProbeDenied('home directory filesystem read', `
       const fs = require('node:fs');
       try {
         fs.readFileSync(${JSON.stringify(forbiddenHomeFile)}, 'utf8');
         process.exit(2);
       } catch (error) {
-        process.exit(error && (error.code === 'ENOENT' || error.code === 'EACCES') ? 0 : 1);
+        if (isDeniedFilesystemError(error)) {
+          process.exit(0);
+        }
+        console.error(error && (error.code || error.message) || 'read failed without an error object');
+        process.exit(1);
+      }
+      function isDeniedFilesystemError(error) {
+        return error && ['ENOENT', 'EACCES', 'EPERM', 'ERR_ACCESS_DENIED'].includes(error.code);
       }
     `);
 
+    validationProgress('os boundary: host filesystem write');
     expectOsSandboxProbeDenied('host filesystem write', `
       const fs = require('node:fs');
       try {
         fs.writeFileSync(${JSON.stringify(forbiddenWriteFile)}, 'modified');
         process.exit(2);
       } catch (error) {
-        process.exit(error && (error.code === 'ENOENT' || error.code === 'EACCES' || error.code === 'EPERM') ? 0 : 1);
+        if (error && ['ENOENT', 'EACCES', 'EPERM', 'ERR_ACCESS_DENIED'].includes(error.code)) {
+          process.exit(0);
+        }
+        console.error(error && (error.code || error.message) || 'write failed without an error object');
+        process.exit(1);
       }
     `);
 
+    validationProgress('os boundary: host network access');
     expectOsSandboxProbeDenied('host network access', `
       const net = require('node:net');
       const socket = net.createConnection({ host: '1.1.1.1', port: 443, timeout: 500 });
@@ -269,10 +392,11 @@ function validateOsSandboxBoundary() {
       socket.on('timeout', () => process.exit(0));
     `);
 
+    validationProgress('os boundary: child process spawn');
     expectOsSandboxProbeDenied('child process spawn', `
       const { spawnSync } = require('node:child_process');
       try {
-        const result = spawnSync(process.execPath, ['--version']);
+        const result = spawnSync(process.execPath, ['--version'], { timeout: 1000 });
         process.exit(result && result.status === 0 ? 2 : 0);
       } catch (_) {
         process.exit(0);
@@ -281,22 +405,152 @@ function validateOsSandboxBoundary() {
       execArgv: scriptWorkerExecArgv({ requireNodePermission: true })
     });
 
+    validationProgress('os boundary: environment stripping');
     expectOsSandboxProbePass('environment stripping', `
-      const leaked = ['PATH', 'HOME', 'USERPROFILE', 'POSTMETER_OS_SANDBOX_SECRET']
+      const leaked = ['PATH', 'POSTMETER_OS_SANDBOX_SECRET']
         .filter((key) => process.env[key] != null);
-      process.exit(leaked.length === 0 && process.env.POSTMETER_SCRIPT_WORKER === '1' ? 0 : 2);
+      const userProfileIsAllowed = process.platform === 'win32'
+        ? true
+        : process.env.USERPROFILE == null;
+      const homeIsAllowed = process.platform === 'darwin'
+        ? Boolean(process.env.HOME) && process.env.HOME === process.env.TMPDIR
+        : process.env.HOME == null;
+      const passed = leaked.length === 0 && userProfileIsAllowed && homeIsAllowed && process.env.POSTMETER_SCRIPT_WORKER === '1';
+      if (!passed) {
+        console.error([
+          'environment stripping check failed',
+          'leaked=' + (leaked.join(',') || 'none'),
+          'userProfileIsAllowed=' + userProfileIsAllowed,
+          'homeIsAllowed=' + homeIsAllowed,
+          'hasWorkerMarker=' + (process.env.POSTMETER_SCRIPT_WORKER === '1')
+        ].join('; '));
+      }
+      process.exit(passed ? 0 : 2);
     `);
 
+    validationProgress('os boundary: required runtime read access');
     expectOsSandboxProbePass('required runtime read access', `
       require(${JSON.stringify(path.join(__dirname, 'scriptRuntime.js'))});
       process.exit(0);
     `, {
-      readOnlyPaths: [__dirname]
+      readOnlyPaths: scriptWorkerRuntimeReadOnlyPaths(path.join(__dirname, 'scriptWorker.js'))
     });
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
     fs.rmSync(homeTempDir, { recursive: true, force: true });
   }
+}
+
+function validateWindowsOsSandboxBoundary(paths) {
+  validationProgress('os boundary: windows combined read/write/network/env/runtime');
+  expectOsSandboxProbePass('Windows combined filesystem, network, environment, and runtime boundaries', `
+    const fs = require('node:fs');
+    const net = require('node:net');
+    const nodePath = require('node:path');
+    const failures = [];
+    deniedFileRead('host filesystem read', ${JSON.stringify(paths.forbiddenFile)});
+    deniedFileRead('home directory filesystem read', ${JSON.stringify(paths.forbiddenHomeFile)});
+    deniedFileWrite('host filesystem write', ${JSON.stringify(paths.forbiddenWriteFile)});
+    checkEnvironment();
+    checkRuntimeRead();
+    checkNetworkDenied();
+
+    function deniedFileRead(label, filePath) {
+      try {
+        fs.readFileSync(filePath, 'utf8');
+        failures.push(label + ':allowed');
+      } catch (error) {
+        if (!isDeniedFilesystemError(error)) {
+          failures.push(label + ':' + ((error && (error.code || error.message)) || 'unknown'));
+        }
+      }
+    }
+    function deniedFileWrite(label, filePath) {
+      try {
+        fs.writeFileSync(filePath, 'modified');
+        failures.push(label + ':allowed');
+      } catch (error) {
+        if (!isDeniedFilesystemError(error)) {
+          failures.push(label + ':' + ((error && (error.code || error.message)) || 'unknown'));
+        }
+      }
+    }
+    function isDeniedFilesystemError(error) {
+      return error && ['ENOENT', 'EACCES', 'EPERM', 'ERR_ACCESS_DENIED'].includes(error.code);
+    }
+    function checkEnvironment() {
+      const leaked = ['PATH', 'POSTMETER_OS_SANDBOX_SECRET']
+        .filter((key) => process.env[key] != null);
+      if (leaked.length > 0 || process.env.POSTMETER_SCRIPT_WORKER !== '1') {
+        failures.push('environment stripping failed');
+      }
+    }
+    function checkRuntimeRead() {
+      try {
+        require(${JSON.stringify(path.join(__dirname, 'scriptRuntime.js'))});
+      } catch (error) {
+        failures.push('runtime read:' + runtimeReadErrorDetail(error));
+      }
+    }
+    function runtimeReadErrorDetail(error) {
+      const failedPath = error && typeof error.path === 'string' ? error.path : '';
+      const failedParts = failedPath.split(/[\\\\/]+/).filter(Boolean);
+      return [
+        (error && (error.code || error.message)) || 'unknown',
+        error && error.syscall ? 'syscall=' + error.syscall : '',
+        failedParts.length ? 'failedName=' + failedParts[failedParts.length - 1] : '',
+        failedParts.length > 1 ? 'failedParent=' + failedParts[failedParts.length - 2] : '',
+        failedPath ? 'basename=' + nodePath.basename(failedPath) : ''
+      ].filter(Boolean).join(':');
+    }
+    function finish() {
+      if (failures.length > 0) {
+        console.error(failures.join('; '));
+      }
+      process.exit(failures.length === 0 ? 0 : 2);
+    }
+    function checkNetworkDenied() {
+      let settled = false;
+      const done = (failure) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        if (failure) {
+          failures.push(failure);
+        }
+        finish();
+      };
+      const socket = net.createConnection({ host: '1.1.1.1', port: 443, timeout: 500 });
+      socket.on('connect', () => {
+        socket.destroy();
+        done('host network access:allowed');
+      });
+      socket.on('error', () => done(''));
+      socket.on('timeout', () => {
+        socket.destroy();
+        done('');
+      });
+      setTimeout(() => done(''), 1000).unref();
+    }
+  `, {
+    readOnlyPaths: scriptWorkerAppReadOnlyPaths(path.join(__dirname, 'scriptWorker.js')),
+    timeoutMillis: 20_000
+  });
+
+  validationProgress('os boundary: child process spawn');
+  expectOsSandboxProbeDenied('child process spawn', `
+    const { spawnSync } = require('node:child_process');
+    try {
+      const result = spawnSync(process.execPath, ['--version'], { timeout: 1000 });
+      process.exit(result && result.status === 0 ? 2 : 0);
+    } catch (_) {
+      process.exit(0);
+    }
+  `, {
+    execArgv: scriptWorkerExecArgv({ requireNodePermission: true }),
+    timeoutMillis: 20_000
+  });
 }
 
 function createSandboxProbeDirectory(rootDirectory, prefix) {
@@ -311,15 +565,19 @@ function createSandboxProbeDirectory(rootDirectory, prefix) {
 function expectOsSandboxProbeDenied(label, code, options = {}) {
   const result = runOsSandboxProbe(code, options);
   if (result.status !== 0) {
-    throw new Error(`OS sandbox probe did not deny ${label}: ${result.stderr || result.stdout || `status ${result.status}`}`);
+    throw new Error(`OS sandbox probe did not deny ${label}: ${probeResultOutput(result)}`);
   }
 }
 
 function expectOsSandboxProbePass(label, code, options = {}) {
   const result = runOsSandboxProbe(code, options);
   if (result.status !== 0) {
-    throw new Error(`OS sandbox probe did not allow ${label}: ${result.stderr || result.stdout || `status ${result.status}`}`);
+    throw new Error(`OS sandbox probe did not allow ${label}: ${probeResultOutput(result)}`);
   }
+}
+
+function probeResultOutput(result = {}) {
+  return result.error?.message || result.stderr || result.stdout || `status ${result.status}`;
 }
 
 function runOsSandboxProbe(code, options = {}) {
@@ -331,14 +589,16 @@ function runOsSandboxProbe(code, options = {}) {
       code
     ],
     env: scriptWorkerEnv(),
-    readOnlyPaths: options.readOnlyPaths || []
+    readOnlyPaths: options.readOnlyPaths || [],
+    skipFunctionalProbe: true
   });
   const seccomp = prepareSeccompStdio(launch, ['ignore', 'pipe', 'pipe']);
   try {
     const result = spawnSync(launch.command, launch.args, {
       encoding: 'utf8',
       env: launch.env,
-      stdio: seccomp.stdio
+      stdio: seccomp.stdio,
+      timeout: options.timeoutMillis || 20_000
     });
     if (result.error) {
       throw result.error;
@@ -371,6 +631,15 @@ function expectPermissionProbeDenied(label, code, extraEnv = {}) {
 }
 
 async function validateScriptBoundary(options = {}) {
+  const workerProgress = (event = {}) => {
+    const label = typeof event.label === 'string' ? event.label : '';
+    if (!label) {
+      return;
+    }
+    const backend = event.backend ? ` ${event.backend}` : '';
+    const transport = event.transport ? `/${event.transport}` : '';
+    validationProgress(`script boundary: ${label}${backend}${transport}`);
+  };
   const execution = await runPostmanScriptIsolated(`
     pm.test('host constructors and promises are blocked', async function () {
       pm.expect(pm.constructor).to.be.undefined;
@@ -445,8 +714,10 @@ async function validateScriptBoundary(options = {}) {
       durationMillis: 1,
       responseBytes: 28
     }),
+    skipOsSandboxFunctionalProbe: options.requireOsSandbox === true,
+    onWorkerProgress: workerProgress,
     timeoutMillis: 1000,
-    workerTimeoutMillis: 3000
+    workerTimeoutMillis: process.platform === 'win32' ? 15000 : 3000
   });
 
   if (!execution.result.passed) {
@@ -473,6 +744,15 @@ function assertDeepEqual(actual, expected) {
 
 function hasArgPair(args, flag, value) {
   return args.some((arg, index) => arg === flag && args[index + 1] === value);
+}
+
+function windowsSandboxChildArgs(launch = {}) {
+  const args = Array.isArray(launch.args) ? launch.args : [];
+  const delimiterIndex = args.indexOf('--');
+  if (delimiterIndex === -1) {
+    return [];
+  }
+  return args.slice(delimiterIndex + 2);
 }
 
 function platformRequiresOsSandbox(platform) {

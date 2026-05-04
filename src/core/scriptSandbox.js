@@ -1,4 +1,5 @@
 const { fork, spawn } = require('node:child_process');
+const fs = require('node:fs');
 const path = require('node:path');
 const { BODY_TYPES } = require('./models');
 const {
@@ -44,6 +45,9 @@ const MAX_PM_MOCK_STATE_VALUE_BYTES = 64 * 1024;
 const MAX_PM_MOCK_STATE_TOTAL_BYTES = 256 * 1024;
 const MAX_WORKER_STDERR_BYTES = 4096;
 const MAX_WORKER_STDOUT_LINE_BYTES = MAX_BROKER_PAYLOAD_BYTES * 2;
+const MAX_WORKER_FILE_MESSAGE_BYTES = MAX_SCRIPT_RESULT_BYTES * 2;
+const FILE_TRANSPORT_POLL_MILLIS = 10;
+const FILE_TRANSPORT_PRECREATE_MESSAGES = 256;
 const MAX_PENDING_BROKER_TIMERS = 64;
 const MAX_BROKER_TIMER_DELAY_MILLIS = 30_000;
 const SCRIPT_WORKER_ALLOWED_FILES = [
@@ -119,6 +123,7 @@ function runPostmanScriptIsolated(scriptText, context = {}, options = {}) {
   const workerPath = path.join(__dirname, 'scriptWorker.js');
   const executionId = `script-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const brokerState = createBrokerState(context, options);
+  const workerProgress = scriptWorkerProgressReporter(options);
   const payload = {
     type: 'script:start',
     version: PROTOCOL_VERSION,
@@ -139,16 +144,24 @@ function runPostmanScriptIsolated(scriptText, context = {}, options = {}) {
   let execArgv;
   let launch;
   try {
+    workerProgress({ label: 'preparing worker launch' });
     execArgv = scriptWorkerExecArgv(options);
     launch = createScriptWorkerLaunch(workerPath, execArgv, scriptWorkerEnv(options), options);
+    workerProgress({
+      label: 'worker launch selected',
+      backend: launch.backend || '',
+      sandboxed: launch.sandboxed === true,
+      transport: launch.transport || ''
+    });
   } catch (error) {
     return Promise.resolve(failedExecution(error, context));
   }
 
   return new Promise((resolve) => {
-    const child = startScriptWorkerProcess(launch);
-    const transport = createChildTransport(child, launch.transport);
+    let child;
+    let transport;
     let settled = false;
+    let timeout = null;
     const finish = (value) => {
       if (settled) {
         return;
@@ -158,7 +171,7 @@ function runPostmanScriptIsolated(scriptText, context = {}, options = {}) {
       brokerState.cancelAllTimers();
       clearTimeout(timeout);
       options.signal?.removeEventListener('abort', onAbort);
-      if (!child.killed) {
+      if (child && transport && !child.killed) {
         transport.disconnect();
         setTimeout(() => {
           if (!child.killed && child.exitCode == null) {
@@ -169,15 +182,36 @@ function runPostmanScriptIsolated(scriptText, context = {}, options = {}) {
       resolve(finalized);
     };
     const fail = (error) => finish(failedExecution(error, context));
-    const timeout = setTimeout(() => {
-      child.kill('SIGKILL');
-      fail(new Error('Script worker timed out and was terminated.'));
-    }, workerTimeoutMillis);
-    timeout.unref?.();
     const onAbort = () => {
-      child.kill('SIGKILL');
+      child?.kill('SIGKILL');
+      workerProgress({ label: 'worker cancelled' });
       fail(new Error('Script execution cancelled.'));
     };
+    try {
+      child = startScriptWorkerProcess(launch);
+      transport = createChildTransport(child, launch);
+      workerProgress({
+        label: 'worker process started',
+        backend: launch.backend || '',
+        sandboxed: launch.sandboxed === true,
+        transport: launch.transport || ''
+      });
+    } catch (error) {
+      fail(error);
+      return;
+    }
+    timeout = setTimeout(() => {
+      const stderr = transport.stderrText?.();
+      const detail = stderr ? `: ${stderr}` : '';
+      workerProgress({
+        label: 'worker timeout',
+        backend: launch.backend || '',
+        sandboxed: launch.sandboxed === true,
+        transport: launch.transport || ''
+      });
+      child.kill('SIGKILL');
+      fail(new Error(`Script worker timed out and was terminated${detail}.`));
+    }, workerTimeoutMillis);
     options.signal?.addEventListener('abort', onAbort, { once: true });
     child.once('error', fail);
     transport.onError(fail);
@@ -185,7 +219,22 @@ function runPostmanScriptIsolated(scriptText, context = {}, options = {}) {
       if (settled) {
         return;
       }
+      if (message?.type === 'worker:ready') {
+        workerProgress({
+          label: 'worker file transport ready',
+          backend: launch.backend || '',
+          sandboxed: launch.sandboxed === true,
+          transport: launch.transport || ''
+        });
+        return;
+      }
       if (message?.type === 'broker:request') {
+        workerProgress({
+          label: 'worker broker request received',
+          backend: launch.backend || '',
+          sandboxed: launch.sandboxed === true,
+          transport: launch.transport || ''
+        });
         handleBrokerRequest(transport, brokerState, executionId, message);
         return;
       }
@@ -193,6 +242,12 @@ function runPostmanScriptIsolated(scriptText, context = {}, options = {}) {
         fail(new Error('Script worker sent an unknown message.'));
         return;
       }
+      workerProgress({
+        label: 'worker result received',
+        backend: launch.backend || '',
+        sandboxed: launch.sandboxed === true,
+        transport: launch.transport || ''
+      });
       try {
         validateWorkerResultMessage(message, executionId);
       } catch (error) {
@@ -223,11 +278,35 @@ function runPostmanScriptIsolated(scriptText, context = {}, options = {}) {
       if (!settled) {
         const stderr = transport.stderrText?.();
         const detail = stderr ? `: ${stderr}` : '';
+        workerProgress({
+          label: 'worker exited before result',
+          backend: launch.backend || '',
+          sandboxed: launch.sandboxed === true,
+          transport: launch.transport || ''
+        });
         fail(new Error(`Script worker exited before returning a result (${signal || code})${detail}.`));
       }
     });
     transport.send(payload);
+    workerProgress({
+      label: 'worker start message sent',
+      backend: launch.backend || '',
+      sandboxed: launch.sandboxed === true,
+      transport: launch.transport || ''
+    });
   });
+}
+
+function scriptWorkerProgressReporter(options = {}) {
+  const report = options.onWorkerProgress;
+  if (typeof report !== 'function') {
+    return () => {};
+  }
+  return (event) => {
+    try {
+      report(event);
+    } catch {}
+  };
 }
 
 function startScriptWorkerProcess(launch) {
@@ -259,6 +338,13 @@ function startScriptWorkerProcess(launch) {
       seccomp.cleanup();
     }
   }
+  if (launch.transport === 'file') {
+    prepareFileTransportPool(launch.privateTempDir || launch.env?.POSTMETER_SCRIPT_WORKER_TRANSPORT_DIR);
+    return attachCleanup(spawn(launch.command, launch.args, {
+      env: launch.env,
+      stdio: ['ignore', 'ignore', 'pipe']
+    }));
+  }
   return attachCleanup(fork(launch.workerPath, [], {
     env: launch.env,
     execArgv: launch.execArgv,
@@ -267,9 +353,12 @@ function startScriptWorkerProcess(launch) {
   }));
 }
 
-function createChildTransport(child, type) {
-  if (type === 'stdio') {
+function createChildTransport(child, launch = {}) {
+  if (launch.transport === 'stdio') {
     return createStdioChildTransport(child);
+  }
+  if (launch.transport === 'file') {
+    return createFileChildTransport(child, launch);
   }
   return {
     ...createStderrCapture(child),
@@ -289,6 +378,137 @@ function createChildTransport(child, type) {
       return child.connected;
     }
   };
+}
+
+function createFileChildTransport(child, launch = {}) {
+  const transportDir = launch.privateTempDir || launch.env?.POSTMETER_SCRIPT_WORKER_TRANSPORT_DIR;
+  if (!transportDir) {
+    throw new Error('Script worker file transport is missing its private transport directory.');
+  }
+  const stderr = createStderrCapture(child);
+  let messageHandler = () => {};
+  let errorHandler = () => {};
+  let sequence = 0;
+  const incomingState = { nextSequence: 1 };
+  let closed = false;
+  const fail = (error) => {
+    if (closed) {
+      return;
+    }
+    errorHandler(error);
+    child.kill?.('SIGKILL');
+  };
+  const poll = () => {
+    if (closed) {
+      return;
+    }
+    try {
+      for (const message of readTransportMessages(transportDir, 'to-parent-', incomingState)) {
+        messageHandler(message);
+      }
+    } catch (error) {
+      fail(error);
+    }
+  };
+  const interval = setInterval(poll, FILE_TRANSPORT_POLL_MILLIS);
+  child.once('exit', () => {
+    closed = true;
+    clearInterval(interval);
+  });
+  child.once('error', () => {
+    closed = true;
+    clearInterval(interval);
+  });
+  return {
+    ...stderr,
+    send(message) {
+      if (closed || child.killed || child.exitCode != null) {
+        return;
+      }
+      try {
+        writeTransportMessage(transportDir, `to-worker-${++sequence}.json`, message);
+      } catch (error) {
+        fail(error);
+      }
+    },
+    onMessage(handler) {
+      messageHandler = handler;
+      poll();
+    },
+    onError(handler) {
+      errorHandler = handler;
+    },
+    disconnect() {
+      closed = true;
+      clearInterval(interval);
+    },
+    isConnected() {
+      return !closed && !child.killed && child.exitCode == null;
+    }
+  };
+}
+
+function writeTransportMessage(transportDir, basename, message) {
+  fs.mkdirSync(transportDir, { recursive: true });
+  const target = path.join(transportDir, basename);
+  const ready = readyPathForMessage(target);
+  fs.writeFileSync(target, JSON.stringify(message), 'utf8');
+  fs.writeFileSync(ready, '1', 'utf8');
+}
+
+function readTransportMessages(transportDir, prefix, incomingState = { nextSequence: 1 }) {
+  const messages = [];
+  while (true) {
+    const sequence = incomingState.nextSequence || 1;
+    const readyPath = path.join(transportDir, `${prefix}${sequence}.ready`);
+    const filePath = path.join(transportDir, `${prefix}${sequence}.json`);
+    let text;
+    try {
+      const readyStat = fs.statSync(readyPath);
+      if (readyStat.size <= 0) {
+        break;
+      }
+      const stat = fs.statSync(filePath);
+      if (stat.size > MAX_WORKER_FILE_MESSAGE_BYTES) {
+        throw new Error('Script worker file transport message exceeded the maximum allowed size.');
+      }
+      text = fs.readFileSync(filePath, 'utf8');
+    } catch (error) {
+      if (error?.code === 'ENOENT') {
+        break;
+      }
+      throw error;
+    }
+    try {
+      messages.push(JSON.parse(text));
+      incomingState.nextSequence = sequence + 1;
+    } catch (error) {
+      throw new Error(`Script worker file transport JSON was invalid: ${error.message || String(error)}`);
+    }
+  }
+  return messages;
+}
+
+function readyPathForMessage(messagePath) {
+  return messagePath.replace(/\.json$/, '.ready');
+}
+
+function prepareFileTransportPool(transportDir) {
+  if (!transportDir) {
+    return;
+  }
+  fs.mkdirSync(transportDir, { recursive: true });
+  for (const prefix of ['to-worker-', 'to-parent-']) {
+    for (let index = 1; index <= FILE_TRANSPORT_PRECREATE_MESSAGES; index += 1) {
+      touchFile(path.join(transportDir, `${prefix}${index}.json`));
+      touchFile(path.join(transportDir, `${prefix}${index}.ready`));
+    }
+  }
+}
+
+function touchFile(filePath) {
+  const handle = fs.openSync(filePath, 'a');
+  fs.closeSync(handle);
 }
 
 function createStderrCapture(child) {
@@ -2133,6 +2353,7 @@ function cloneForWorker(value) {
 
 module.exports = {
   OS_SANDBOX_MODES,
+  _createFileChildTransportForTest: createFileChildTransport,
   _createStdioChildTransportForTest: createStdioChildTransport,
   osSandboxStatus,
   runPostmanScriptIsolated,

@@ -6,6 +6,7 @@ const { withCiNoSandboxArgs } = require('./electronCiSandboxWaiver');
 const { redactSmokeOutputText, spawnWithTimeout } = require('./smokeProcess');
 
 const DEFAULT_TIMEOUT_MILLIS = 60_000;
+const WINDOWS_TIMEOUT_MILLIS = 120_000;
 
 if (require.main === module) {
   main().catch((error) => {
@@ -21,16 +22,14 @@ async function main() {
     process.exit(1);
   }
 
-  const env = {
-    ...process.env,
-    POSTMETER_VALIDATE_SANDBOX_RUNTIME: '1'
-  };
-  delete env.ELECTRON_RUN_AS_NODE;
-  delete env.NODE_OPTIONS;
+  const launchMode = packagedSandboxLaunchMode(process.platform);
+  const env = packagedSandboxLaunchEnv(process.env, process.platform);
+  const launchArgs = packagedSandboxLaunchArgs(appPath, process.platform);
 
   const timeoutMillis = validationTimeoutMillis(process.env.POSTMETER_PACKAGED_SANDBOX_VALIDATE_TIMEOUT_MS);
-  const result = await spawnWithTimeout(appPath, withCiNoSandboxArgs([], env), {
+  const result = await spawnWithTimeout(appPath, withCiNoSandboxArgs(launchArgs, env), {
     env,
+    stdio: packagedSandboxStdioMode(process.platform, launchMode),
     timeoutMillis,
     timeoutMessage: `Packaged sandbox runtime validation timed out after ${timeoutMillis} ms.`
   });
@@ -114,17 +113,65 @@ function pathMatchesSuffix(filePath, suffixParts) {
 }
 
 function validationTimeoutMillis(value) {
-  const timeout = Number(value || DEFAULT_TIMEOUT_MILLIS);
+  const defaultTimeout = defaultValidationTimeoutMillis();
+  const timeout = Number(value || defaultTimeout);
   if (!Number.isFinite(timeout) || timeout <= 0) {
-    return DEFAULT_TIMEOUT_MILLIS;
+    return defaultTimeout;
   }
   return Math.max(1_000, Math.floor(timeout));
 }
 
+function defaultValidationTimeoutMillis(platform = process.platform) {
+  return platform === 'win32' ? WINDOWS_TIMEOUT_MILLIS : DEFAULT_TIMEOUT_MILLIS;
+}
+
+function packagedSandboxLaunchMode(platform = process.platform) {
+  return platform === 'win32' ? 'node-main-process' : 'app-main-process';
+}
+
+function packagedSandboxLaunchEnv(source = process.env, platform = process.platform) {
+  const env = {
+    ...source,
+    POSTMETER_VALIDATE_SANDBOX_RUNTIME: '1'
+  };
+  delete env.NODE_OPTIONS;
+  if (packagedSandboxLaunchMode(platform) === 'node-main-process') {
+    env.ELECTRON_RUN_AS_NODE = '1';
+  } else {
+    delete env.ELECTRON_RUN_AS_NODE;
+  }
+  return env;
+}
+
+function packagedSandboxLaunchArgs(appPath, platform = process.platform) {
+  return packagedSandboxLaunchMode(platform) === 'node-main-process'
+    ? [packagedAppResourcePath(appPath, ['electron', 'packagedSandboxRuntimeCli.js'])]
+    : [];
+}
+
+function packagedSandboxStdioMode(platform = process.platform, mode = packagedSandboxLaunchMode(platform)) {
+  return platform === 'win32' && mode !== 'node-main-process' ? 'ignore' : undefined;
+}
+
+function packagedAppResourcePath(executable, relativeParts = []) {
+  const resourcesPath = path.join(path.dirname(path.resolve(executable)), 'resources');
+  const appAsar = path.join(resourcesPath, 'app.asar');
+  const appRoot = fs.existsSync(appAsar)
+    ? appAsar
+    : path.join(resourcesPath, 'app');
+  return path.join(appRoot, ...relativeParts);
+}
+
 module.exports = {
   defaultPackagedAppPath,
+  defaultValidationTimeoutMillis,
   findPackagedExecutable,
   firstExistingPath,
+  packagedAppResourcePath,
+  packagedSandboxLaunchArgs,
+  packagedSandboxLaunchEnv,
+  packagedSandboxLaunchMode,
+  packagedSandboxStdioMode,
   pathMatchesSuffix,
   redactForOutput,
   validationTimeoutMillis

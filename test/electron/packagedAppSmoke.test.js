@@ -8,9 +8,16 @@ const {
   expectedDefaultUserDataRoot,
   isolatedDefaultPathEnv,
   loadPersistedSmokeWorkspace,
+  minimalEnv,
+  packagedAppResourcePath,
   packagedSmokeCliErrorText,
   packagedSmokeFailureMessage,
+  packagedSmokeLaunchArgs,
+  packagedSmokeLaunchMode,
+  packagedSmokeStdioMode,
+  packagedSmokeTimeoutMillis,
   redactPackagedSmokeLogText,
+  shouldUseMainProcessPackagedSmoke,
   validateDefaultPersistenceArtifacts,
   validatePersistenceArtifacts,
   writeSmokeLog
@@ -90,6 +97,54 @@ test('packaged smoke writes validation logs when an artifact directory is config
     }
     await fs.rm(directory, { recursive: true, force: true });
   }
+});
+
+test('packaged smoke uses Electron node mode for Windows packaged validation', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-packaged-app-resource-'));
+  try {
+    const executable = path.join(directory, 'PostMeter.exe');
+    const resources = path.join(directory, 'resources');
+    await fs.mkdir(resources, { recursive: true });
+    await fs.writeFile(path.join(resources, 'app.asar'), '');
+
+    assert.equal(packagedSmokeLaunchMode({}, 'win32'), 'node-main-process');
+    assert.equal(packagedSmokeLaunchMode({}, 'linux'), 'renderer');
+    assert.equal(shouldUseMainProcessPackagedSmoke({}, 'win32'), true);
+    assert.equal(packagedSmokeStdioMode('win32', 'renderer'), 'ignore');
+    assert.equal(packagedSmokeStdioMode('win32', 'node-main-process'), undefined);
+    assert.equal(packagedSmokeTimeoutMillis('', 'win32'), 90_000);
+    assert.deepEqual(packagedSmokeLaunchArgs(executable, { mode: 'node-main-process' }), [
+      path.join(resources, 'app.asar', 'electron', 'packagedStartupSmokeNode.js')
+    ]);
+    assert.equal(
+      packagedAppResourcePath(executable, ['electron', 'packagedStartupSmokeNode.js']),
+      path.join(resources, 'app.asar', 'electron', 'packagedStartupSmokeNode.js')
+    );
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('packaged smoke preserves Windows runtime env without copying unrelated values', () => {
+  const env = minimalEnv({
+    APPDATA: 'C:\\Users\\runner\\AppData\\Roaming',
+    COMSPEC: 'C:\\Windows\\System32\\cmd.exe',
+    PATH: 'C:\\Windows\\System32',
+    PATHEXT: '.COM;.EXE;.BAT;.CMD',
+    ProgramFiles: 'C:\\Program Files',
+    SystemDrive: 'C:',
+    SystemRoot: 'C:\\Windows',
+    USERPROFILE: 'C:\\Users\\runner',
+    WINDIR: 'C:\\Windows',
+    POSTMETER_SECRET: 'do-not-copy'
+  }, 'win32');
+
+  assert.equal(env.APPDATA, 'C:\\Users\\runner\\AppData\\Roaming');
+  assert.equal(env.COMSPEC, 'C:\\Windows\\System32\\cmd.exe');
+  assert.equal(env.PATHEXT, '.COM;.EXE;.BAT;.CMD');
+  assert.equal(env.ProgramFiles, 'C:\\Program Files');
+  assert.equal(env.SystemDrive, 'C:');
+  assert.equal(env.POSTMETER_SECRET, undefined);
 });
 
 test('packaged smoke log redaction removes local paths and secret-bearing values', () => {

@@ -21,6 +21,7 @@ test('package metadata points to a valid production PNG icon', async () => {
 test('package metadata declares canonical release repository and desktop protocol', async () => {
   const root = path.join(__dirname, '..', '..');
   const packageJson = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
+  const installerInclude = await fs.readFile(path.join(root, 'build', 'installer.nsh'), 'utf8');
 
   assert.equal(packageJson.repository.url, 'git+https://github.com/StrangeQuark/PostMeter.git');
   assert.equal(packageJson.homepage, 'https://github.com/StrangeQuark/PostMeter#readme');
@@ -33,5 +34,10 @@ test('package metadata declares canonical release repository and desktop protoco
     entry.from === 'native/windows-sandbox-helper/bin/PostMeterWindowsSandboxHelper.exe'
     && entry.to === 'native/windows/PostMeterWindowsSandboxHelper.exe'
   )));
+  assert.equal(packageJson.build.nsis.include, 'build/installer.nsh');
   assert.ok(packageJson.build.protocols.some((protocol) => protocol.schemes.includes('postmeter')));
+  assert.match(installerInclude, /WriteRegStr HKCU "Software\\Classes\\postmeter"/);
+  assert.match(installerInclude, /URL Protocol/);
+  assert.match(installerInclude, /%1/);
+  assert.match(installerInclude, /DeleteRegKey HKCU "Software\\Classes\\postmeter"/);
 });
