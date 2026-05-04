@@ -47,6 +47,7 @@ let sessionPersistenceEnabled = false;
 let lastRenderedRequestEditorContextKey = '';
 let lastModalFocusTarget = null;
 let notificationModalActive = false;
+let environmentTitleEditOriginal = '';
 let pendingDiagnosticsSettingsSave = null;
 const pendingNotificationModals = [];
 
@@ -84,6 +85,7 @@ const {
 } = PostMeterRendererBootstrap;
 const { createVaultPromptQueue } = PostMeterVaultPromptQueue;
 const { createVariableAutocomplete } = PostMeterVariableAutocomplete;
+const CodeEditor = window.PostMeterCodeEditor || {};
 const {
   activeEnvironmentTabKey: buildActiveEnvironmentTabKey,
   activeRequestTabKey: buildActiveRequestTabKey,
@@ -256,6 +258,8 @@ initializeRenderer({
   getStoredThemePreference: () => localStorage.getItem('postmeter.theme') || 'system',
   onReady: async ({ registerCleanup }) => {
     bindUi();
+    CodeEditor.enhanceCodeTextareas?.(document);
+    updateRequestEditorLanguages();
     registerCleanup(bindForcedColorsPreference());
     registerCleanup(() => {
       if (window.__postmeterSkipWorkspaceShutdownSave === true) {
@@ -300,7 +304,6 @@ initializeRenderer({
     activateTab('results', restoredTabs.activeResultsTab);
     sessionPersistenceEnabled = true;
     scheduleSessionSave({ immediate: true });
-    setStatus(`Workspace loaded: ${workspacePath}`);
     queueUiWorkflowSmoke();
     queueUiRegressionSmoke();
     queueUiSnapshotSmoke();
@@ -386,13 +389,15 @@ function bindUi() {
       collectRequestAndMarkDirty();
       renderCookieJarEditor();
     },
-    onBodyTypeChange: collectRequestAndMarkDirty,
+    onBodyTypeChange: () => {
+      updateRequestBodyEditorLanguage();
+      collectRequestAndMarkDirty();
+    },
     onBodyInput: collectRequestAndMarkDirty,
     onPreRequestScriptInput: collectRequestAndMarkDirty,
     onTestScriptInput: collectRequestAndMarkDirty,
     onRequestCookieJarChange: collectRequestAndMarkDirty,
     onFilterCookiesChange: renderCookieJarEditor,
-    onEnvironmentNameInput: collectEnvironmentAndMarkDirty,
     onTrustedScriptCapabilityChange: setTrustedScriptCapabilitiesFromInputs,
     onDiagnosticsSettingsChange: setDiagnosticsSettingsFromInputs,
     onAuthTypeChange: showAuthSection,
@@ -408,6 +413,93 @@ function bindUi() {
     onCloseContextMenu: closeContextMenu,
     onInitResizablePanes: initResizablePanes
   });
+  bindEnvironmentTitleEditor();
+}
+
+function bindEnvironmentTitleEditor() {
+  const title = $('environmentMainTitle');
+  if (!title) {
+    return;
+  }
+  title.addEventListener('click', beginEnvironmentTitleEdit);
+  title.addEventListener('keydown', handleEnvironmentTitleKeydown);
+  title.addEventListener('input', collectEnvironmentAndMarkDirty);
+  title.addEventListener('blur', () => finishEnvironmentTitleEdit());
+}
+
+function beginEnvironmentTitleEdit() {
+  const environment = activeEnvironment();
+  const title = $('environmentMainTitle');
+  if (!environment || !title || title.dataset.editing === 'true') {
+    return;
+  }
+  environmentTitleEditOriginal = environment.name || 'Untitled Environment';
+  title.dataset.editing = 'true';
+  title.classList.add('is-editing');
+  title.setAttribute('contenteditable', 'plaintext-only');
+  title.setAttribute('role', 'textbox');
+  title.setAttribute('aria-label', 'Environment name');
+  title.focus();
+  selectElementContents(title);
+}
+
+function handleEnvironmentTitleKeydown(event) {
+  const title = $('environmentMainTitle');
+  if (!title) {
+    return;
+  }
+  if (title.dataset.editing !== 'true') {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      beginEnvironmentTitleEdit();
+    }
+    return;
+  }
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    finishEnvironmentTitleEdit();
+    title.blur();
+  } else if (event.key === 'Escape') {
+    event.preventDefault();
+    finishEnvironmentTitleEdit({ revert: true });
+    title.blur();
+  }
+}
+
+function finishEnvironmentTitleEdit(options = {}) {
+  const title = $('environmentMainTitle');
+  if (!title || title.dataset.editing !== 'true') {
+    return;
+  }
+  const environment = activeEnvironment();
+  if (environment && options.revert === true) {
+    environment.name = environmentTitleEditOriginal || 'Untitled Environment';
+    title.textContent = environment.name;
+    renderEnvironmentSelect();
+    renderEnvironments();
+    renderWorkspacePanel();
+  } else {
+    collectEnvironmentFromEditor();
+    if (environment) {
+      title.textContent = environment.name;
+    }
+  }
+  delete title.dataset.editing;
+  title.classList.remove('is-editing');
+  title.setAttribute('contenteditable', 'false');
+  title.removeAttribute('role');
+  title.setAttribute('aria-label', 'Environment name');
+}
+
+function selectElementContents(element) {
+  const selection = window.getSelection?.();
+  if (!selection || !document.createRange) {
+    return;
+  }
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  selection.removeAllRanges();
+  selection.addRange(range);
 }
 
 async function handleAppMenuAction(action) {
@@ -573,6 +665,7 @@ function collectEnvironmentAndMarkDirty() {
 
 function collectActiveEditorState() {
   if (activeMainPanel === 'environment') {
+    finishEnvironmentTitleEdit();
     collectEnvironmentFromEditor();
     return;
   }
@@ -1896,6 +1989,13 @@ async function promptTextInput(options = {}) {
   }
   textarea.rows = options.multiline === true ? 10 : 3;
   input.setAttribute('aria-label', String(options.label || 'Value'));
+  if (useSingleLine) {
+    CodeEditor.refreshEditor?.(textarea);
+  } else {
+    textarea.dataset.codeEditor = 'true';
+    CodeEditor.enhanceTextarea?.(textarea, { language: options.codeLanguage || 'text' });
+    CodeEditor.setLanguage?.(textarea, options.codeLanguage || 'text');
+  }
   const result = await showModal('textInputModal', null);
   return result == null ? null : String(result);
 }
@@ -1956,7 +2056,8 @@ async function addSandboxPackageFromPrompt(defaultSpecifier = '') {
     message: `Paste reviewed source for ${specifier}. This source becomes available to imported scripts that require the package.`,
     label: 'Reviewed source',
     defaultValue: '',
-    multiline: true
+    multiline: true,
+    codeLanguage: 'javascript'
   }) || '');
   if (!source.trim()) {
     return;
@@ -2030,7 +2131,8 @@ async function fetchSandboxPackageFromPrompt(defaultSpecifier = '') {
     message: `Review or edit the fetched source for ${specifier} before it is cached.`,
     label: 'Reviewed source',
     defaultValue: fetched.source || '',
-    multiline: true
+    multiline: true,
+    codeLanguage: 'javascript'
   }) || '');
   if (!source.trim()) {
     setStatus(`Fetched package ${specifier} was not added.`);
@@ -3064,6 +3166,17 @@ function updateMethodSelectClass() {
   }
 }
 
+function updateRequestEditorLanguages() {
+  updateRequestBodyEditorLanguage();
+  CodeEditor.setLanguage?.($('preRequestScriptInput'), 'javascript');
+  CodeEditor.setLanguage?.($('testScriptInput'), 'javascript');
+}
+
+function updateRequestBodyEditorLanguage() {
+  const bodyType = $('bodyTypeSelect')?.value || 'NONE';
+  CodeEditor.setLanguage?.($('bodyInput'), bodyType === 'RAW_JSON' ? 'json' : 'text');
+}
+
 function renderRequestEditor() {
   resetRequestEditorTransientStateOnContextChange();
   const request = activeRequest();
@@ -3089,6 +3202,7 @@ function renderRequestEditor() {
     $('captureResponseExampleButton').disabled = true;
     $('exportExamplesButton').disabled = true;
     renderAuthEditor({ type: 'none' });
+    updateRequestEditorLanguages();
     return;
   }
   $('addRequestVariableButton').disabled = false;
@@ -3114,6 +3228,7 @@ function renderRequestEditor() {
   renderExamples(request.examples || []);
   renderCookieJarEditor();
   renderAuthEditor(request.auth || { type: 'none' });
+  updateRequestEditorLanguages();
 }
 
 function renderExamples(examples) {
@@ -3124,6 +3239,7 @@ function renderExamples(examples) {
     onDuplicate: duplicateExample,
     onDelete: deleteExample
   });
+  CodeEditor.enhanceCodeTextareas?.($('examplesList'));
 }
 
 function renderAuthEditor(auth) {
@@ -3178,9 +3294,16 @@ function renderEnvironmentSelect() {
 
 function renderEnvironmentEditor() {
   const environment = activeEnvironment();
-  $('environmentMainTitle').textContent = environment?.name || 'Select an environment';
-  $('environmentNameInput').value = environment?.name || '';
-  $('environmentNameInput').disabled = !environment;
+  const title = $('environmentMainTitle');
+  if (title.dataset.editing !== 'true') {
+    title.textContent = environment?.name || 'Select an environment';
+    title.setAttribute('contenteditable', 'false');
+    title.removeAttribute('role');
+    title.classList.remove('is-editing');
+  }
+  title.tabIndex = environment ? 0 : -1;
+  title.setAttribute('aria-disabled', environment ? 'false' : 'true');
+  title.setAttribute('aria-label', 'Environment name');
   $('deleteEnvironmentButton').disabled = !environment;
   $('addVariableButton').disabled = !environment;
   if (!environment) {
@@ -3369,8 +3492,23 @@ function displayResponse(response) {
     .map(([key, values]) => `${key}: ${values.join(', ')}`)
     .join('\n');
   $('responseBody').value = PostMeterResponseFormatting.formatBody(response);
+  CodeEditor.setLanguage?.($('responseHeaders'), 'headers');
+  CodeEditor.setLanguage?.($('responseBody'), responseBodyCodeLanguage(response, $('responseBody').value));
   displayTestResults(response);
   displayVisualizer(response.testScriptResult?.visualizer);
+}
+
+function responseBodyCodeLanguage(response, formattedBody = '') {
+  const body = String(formattedBody || response?.body || '').trim();
+  const contentType = Object.entries(response?.headers || {})
+    .find(([key]) => key.toLowerCase() === 'content-type')?.[1]?.join(',').toLowerCase() || '';
+  if (contentType.includes('json') || body.startsWith('{') || body.startsWith('[')) {
+    return 'json';
+  }
+  if (contentType.includes('html') || contentType.includes('xml') || body.startsWith('<')) {
+    return 'markup';
+  }
+  return 'text';
 }
 
 function displayTestResults(response) {
@@ -4426,12 +4564,21 @@ function collectAuthFromEditor() {
 function collectEnvironmentFromEditor() {
   const environment = activeEnvironment();
   if (environment) {
-    environment.name = $('environmentNameInput').value.trim() || 'Untitled Environment';
-    $('environmentMainTitle').textContent = environment.name;
+    const title = $('environmentMainTitle');
+    environment.name = environmentTitleInputValue() || 'Untitled Environment';
+    if (title.dataset.editing !== 'true') {
+      title.textContent = environment.name;
+    }
     renderEnvironmentSelect();
     renderEnvironments();
     renderWorkspacePanel();
   }
+}
+
+function environmentTitleInputValue() {
+  return String($('environmentMainTitle')?.textContent || '')
+    .replace(/[\r\n]+/g, ' ')
+    .trim();
 }
 
 function activeCollection() {
@@ -4484,10 +4631,6 @@ function formatBytes(bytes) {
 
 function setStatus(message) {
   lastStatusMessage = String(message || '');
-  const statusLabel = typeof document !== 'undefined' ? document.getElementById('statusLabel') : null;
-  if (statusLabel) {
-    statusLabel.textContent = lastStatusMessage || 'Ready.';
-  }
 }
 
 function notifyUser(title, message) {

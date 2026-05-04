@@ -27,11 +27,12 @@
     assertConstrainedViewportSmoke();
     await assertForcedColorsStylesheetSmoke();
     assertAccessibilitySemanticsSmoke();
+    assertCodeEditorSmoke();
     await assertSidebarPanelSmoke();
     await assertModalFocusSmoke();
-    assertUiSmoke($('statusLabel')?.getAttribute('role') === 'status', 'App status should render as a live status region.');
-    setStatus('Regression status visible.');
-    assertStatusIncludes('Regression status visible', 'setStatus should update visible app status.');
+    assertUiSmoke(!$('statusLabel'), 'Top-bar status text should not render.');
+    setStatus('Regression status tracked.');
+    assertStatusIncludes('Regression status tracked', 'setStatus should update the internal app status.');
     assertUiSmoke(!$('checkUpdatesButton'), 'Updates toolbar button should be handled by the Help menu.');
     assertUiSmoke(!$('includePrereleasesInput'), 'Prereleases setting should be handled by the Help menu.');
     await assertUpdateCheckSmoke();
@@ -212,12 +213,30 @@
     assertUiSmoke($('resultsLoadTabButton').getAttribute('aria-selected') === 'true', 'Active results tab should update aria-selected.');
     assertUiSmoke($('loadResults').getAttribute('aria-live') === 'polite', 'Load results should be announced as a live region.');
     assertUiSmoke($('runnerResults').getAttribute('aria-live') === 'polite', 'Runner results should be announced as a live region.');
-    assertUiSmoke($('statusLabel').getAttribute('aria-live') === 'polite', 'App status should be announced as a live region.');
     assertUiSmoke($('validationLabel').getAttribute('role') === 'status', 'Validation output should expose role=status.');
     assertUiSmoke($('oauthProgressPanel').getAttribute('aria-live') === 'polite', 'OAuth progress should be a live region.');
     assertUiSmoke($('responseBody').getAttribute('aria-label') === 'Response body', 'Response body textarea should have an accessible label.');
     activateTab('request', 'params');
     activateTab('results', 'response');
+  }
+
+  function assertCodeEditorSmoke() {
+    const bodyInput = $('bodyInput');
+    bodyInput.value = '';
+    bodyInput.setSelectionRange(0, 0);
+    bodyInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+    assertUiSmoke(bodyInput.value === '\t', 'Request body editor should insert a tab character instead of moving focus.');
+    assertUiSmoke(bodyInput.closest('.code-editor'), 'Request body editor should be wrapped by the syntax highlight editor.');
+
+    const scriptInput = $('preRequestScriptInput');
+    scriptInput.value = '';
+    scriptInput.setSelectionRange(0, 0);
+    scriptInput.dispatchEvent(new KeyboardEvent('keydown', { key: '{', bubbles: true, cancelable: true }));
+    assertUiSmoke(scriptInput.value === '{}', 'Script editor should create closing braces for JavaScript input.');
+    bodyInput.value = '';
+    scriptInput.value = '';
+    dispatchInput(bodyInput);
+    dispatchInput(scriptInput);
   }
 
   async function assertModalFocusSmoke() {
@@ -879,7 +898,7 @@
     activeEnvironmentId = firstEnvironment.id;
     ensureOpenEnvironmentTabForActive();
     renderAll();
-    $('environmentNameInput').value = 'Pending Environment Rename';
+    editEnvironmentTitle('Pending Environment Rename', { commit: false });
     const secondEnvironmentButton = Array.from($('environmentsList').querySelectorAll('button'))
       .find((button) => button.textContent.includes(secondEnvironment.name));
     assertUiSmoke(secondEnvironmentButton, 'Environment list did not render the second environment for navigation smoke.');
@@ -1312,13 +1331,22 @@
 
   function assertStatusIncludes(text, message) {
     assertUiSmoke(lastStatusMessage.includes(text), message);
-    assertUiSmoke($('statusLabel').textContent.includes(text), `${message} Visible app status did not update.`);
+  }
+
+  function editEnvironmentTitle(value, options = {}) {
+    const title = $('environmentMainTitle');
+    title.click();
+    title.textContent = value;
+    dispatchInput(title);
+    if (options.commit !== false) {
+      title.dispatchEvent(new Event('blur'));
+    }
   }
 
   async function waitForStatusIncludes(text, message) {
     await waitForUiSmoke(
-      () => lastStatusMessage.includes(text) && $('statusLabel').textContent.includes(text),
-      `${message} Visible app status did not update.`,
+      () => lastStatusMessage.includes(text),
+      `${message} Internal app status did not update.`,
       3000,
       global
     );
@@ -1378,14 +1406,27 @@
       assertUiSmoke($('environmentMainPanel').getBoundingClientRect().bottom > document.querySelector('.workspace').getBoundingClientRect().bottom - 24, 'Environment editor should fill the main workspace area.');
       assertUiSmoke($('requestTabBar').textContent.includes(environment.name), 'Creating an environment should open an environment tab.');
       assertUiSmoke($('requestTabBar').getAttribute('aria-label') === 'Open requests, environments, and workspaces', 'Opened tablist label should cover request, environment, and workspace tabs.');
-      assertUiSmoke($('environmentNameInput').getAttribute('aria-label') === 'Environment name', 'Environment name input should expose an accessible label.');
+      const environmentTitle = $('environmentMainTitle');
+      assertUiSmoke(!document.getElementById('environmentNameInput'), 'Environment editor should not render a separate name text box.');
+      assertUiSmoke(!$('environmentMainPanel').querySelector('.environment-main-header h2'), 'Environment editor should not render a redundant Environment label above the title.');
+      assertUiSmoke(environmentTitle.getAttribute('aria-label') === 'Environment name', 'Environment title should expose an accessible name.');
+      assertUiSmoke(getComputedStyle(environmentTitle).whiteSpace === 'nowrap', 'Environment title should stay on a single line.');
+      const environmentHeader = $('environmentMainPanel').querySelector('.environment-main-header');
+      const environmentActions = environmentHeader.querySelector('.environment-actions');
+      const titleWidth = environmentTitle.getBoundingClientRect().width;
+      const expectedTitleWidth = environmentHeader.getBoundingClientRect().width - environmentActions.getBoundingClientRect().width - 36;
+      assertUiSmoke(titleWidth >= expectedTitleWidth, 'Environment title editor should use nearly all available header width.');
+      environmentTitle.click();
+      assertUiSmoke(environmentTitle.getAttribute('contenteditable') === 'plaintext-only', 'Clicking the environment title should make it editable inline.');
+      editEnvironmentTitle('Inline Environment Rename');
+      assertUiSmoke(environment.name === 'Inline Environment Rename', 'Editing the environment title should update the environment name.');
       const environmentVariableRow = $('environmentTable').querySelector('.env-row');
       assertUiSmoke(environmentVariableRow, 'Environment variable editor did not render the default row.');
       assertUiSmoke(environmentVariableRow.querySelector('[aria-label="Environment variable 1 enabled"]'), 'Environment variable enabled control should expose a contextual accessible label.');
       assertUiSmoke(environmentVariableRow.querySelector('[aria-label="Environment variable 1 name"]'), 'Environment variable name input should expose a contextual accessible label.');
       assertUiSmoke(environmentVariableRow.querySelector('[aria-label="Environment variable 1 value"]'), 'Environment variable value input should expose a contextual accessible label.');
       assertUiSmoke(environmentVariableRow.querySelector('[aria-label^="Remove environment variable"]'), 'Environment variable remove button should expose a contextual accessible label.');
-      assertUiSmoke(!$('environmentsSidebarPanel').querySelector('#environmentNameInput'), 'Environment editor controls should not render in the sidebar.');
+      assertUiSmoke(!$('environmentsSidebarPanel').querySelector('#environmentMainTitle'), 'Environment editor controls should not render in the sidebar.');
       assertUiSmoke($('environmentsList').textContent.includes(environment.name), 'Environments panel did not render the new environment.');
       openRequestTabs = [];
       openWorkspaceTabs = [];
@@ -1413,6 +1454,11 @@
       assertUiSmoke($('requestEditorPanel').hidden, 'Request editor should be hidden while viewing workspace details.');
       assertUiSmoke(document.querySelector('.results').hidden, 'Response panel should be hidden while viewing workspace details.');
       assertUiSmoke($('workspaceSummary').textContent.includes('Workspace File'), 'Workspace main panel did not render workspace details.');
+      assertUiSmoke(getComputedStyle($('workspaceMainPanel')).overflowY === 'auto', 'Workspace details panel should scroll vertically when diagnostics settings exceed the viewport.');
+      const workspaceMainPanel = $('workspaceMainPanel');
+      workspaceMainPanel.scrollTop = 0;
+      workspaceMainPanel.scrollTop = workspaceMainPanel.scrollHeight;
+      assertUiSmoke(workspaceMainPanel.scrollHeight <= workspaceMainPanel.clientHeight || workspaceMainPanel.scrollTop > 0, 'Workspace details panel should allow reaching diagnostics controls below the fold.');
       assertUiSmoke($('switchWorkspacePanelButton').disabled, 'Current workspace details should disable the switch button.');
       assertUiSmoke($('requestTabBar').textContent.includes(workspaceDisplayName()), 'Selecting Workspaces should open a workspace tab.');
       openRequestTabs = [];
@@ -1639,8 +1685,7 @@
       const environment = newEnvironment();
       await saveWorkspace(false);
       const savedEnvironmentName = environment.name;
-      $('environmentNameInput').value = 'Changed Saved Environment';
-      dispatchInput($('environmentNameInput'));
+      editEnvironmentTitle('Changed Saved Environment');
       const environmentTab = openEnvironmentTabs.find((tab) => tab.environmentId === environment.id);
       assertUiSmoke(environmentTab?.dirty === true, 'Editing an environment should mark its tab as dirty.');
       assertUiSmoke(!$('requestTabBar').querySelector('.environment-tab-button .request-tab-dirty').hidden, 'Dirty environment tab should show an unsaved marker.');

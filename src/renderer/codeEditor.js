@@ -1,0 +1,658 @@
+(function attachCodeEditor(global) {
+  const EDITOR_STATE = new WeakMap();
+  const PAIRING_LANGUAGES = new Set(['javascript', 'json']);
+  const JS_KEYWORDS = new Set([
+    'async',
+    'await',
+    'break',
+    'case',
+    'catch',
+    'class',
+    'const',
+    'continue',
+    'debugger',
+    'default',
+    'delete',
+    'do',
+    'else',
+    'export',
+    'extends',
+    'finally',
+    'for',
+    'from',
+    'function',
+    'if',
+    'import',
+    'in',
+    'instanceof',
+    'let',
+    'new',
+    'of',
+    'return',
+    'static',
+    'super',
+    'switch',
+    'this',
+    'throw',
+    'try',
+    'typeof',
+    'var',
+    'void',
+    'while',
+    'with',
+    'yield'
+  ]);
+  const JS_LITERALS = new Set(['false', 'Infinity', 'NaN', 'null', 'true', 'undefined']);
+  const OPENING_PAIRS = {
+    javascript: {
+      '"': '"',
+      "'": "'",
+      '`': '`',
+      '(': ')',
+      '[': ']',
+      '{': '}'
+    },
+    json: {
+      '"': '"',
+      '(': ')',
+      '[': ']',
+      '{': '}'
+    }
+  };
+
+  function enhanceCodeTextareas(root = global.document) {
+    const textareas = codeTextareasFromRoot(root);
+    for (const textarea of textareas) {
+      enhanceTextarea(textarea);
+    }
+    return textareas.length;
+  }
+
+  function enhanceTextarea(textarea, options = {}) {
+    if (!isTextarea(textarea)) {
+      return null;
+    }
+    if (options.language) {
+      textarea.dataset.codeLanguage = normalizeLanguage(options.language);
+    }
+    if (!('codeEditor' in textarea.dataset)) {
+      textarea.dataset.codeEditor = 'true';
+    }
+    const existing = EDITOR_STATE.get(textarea);
+    if (existing) {
+      refreshEditor(textarea);
+      return existing;
+    }
+
+    const doc = textarea.ownerDocument || global.document;
+    const wrapper = doc.createElement('div');
+    wrapper.className = 'code-editor';
+    wrapper.hidden = textarea.hidden === true;
+    const highlight = doc.createElement('pre');
+    highlight.className = 'code-editor-highlight';
+    highlight.setAttribute('aria-hidden', 'true');
+    const code = doc.createElement('code');
+    highlight.append(code);
+
+    const parent = textarea.parentNode;
+    if (parent) {
+      parent.insertBefore(wrapper, textarea);
+      wrapper.append(highlight, textarea);
+    }
+    textarea.classList.add('code-editor-input');
+    textarea.autocapitalize = 'off';
+    textarea.autocomplete = 'off';
+
+    const state = {
+      code,
+      highlight,
+      onInput: () => refreshEditor(textarea),
+      onKeydown: (event) => handleTextareaKeydown(event, textarea),
+      onScroll: () => syncScroll(textarea),
+      wrapper
+    };
+    textarea.addEventListener('input', state.onInput);
+    textarea.addEventListener('change', state.onInput);
+    textarea.addEventListener('keydown', state.onKeydown);
+    textarea.addEventListener('scroll', state.onScroll);
+    EDITOR_STATE.set(textarea, state);
+    refreshEditor(textarea);
+    return state;
+  }
+
+  function refreshCodeEditors(root = global.document) {
+    const textareas = codeTextareasFromRoot(root);
+    for (const textarea of textareas) {
+      refreshEditor(textarea);
+    }
+    return textareas.length;
+  }
+
+  function refreshEditor(textarea) {
+    const state = EDITOR_STATE.get(textarea);
+    if (!state) {
+      return false;
+    }
+    state.wrapper.hidden = textarea.hidden === true;
+    state.code.innerHTML = highlightCode(textarea.value || '', textarea.dataset.codeLanguage || 'text');
+    copyTextareaMetrics(textarea, state.highlight);
+    syncScroll(textarea);
+    return true;
+  }
+
+  function setLanguage(textarea, language) {
+    if (!isTextarea(textarea)) {
+      return false;
+    }
+    textarea.dataset.codeLanguage = normalizeLanguage(language);
+    if (!EDITOR_STATE.has(textarea) && 'codeEditor' in textarea.dataset) {
+      enhanceTextarea(textarea);
+    }
+    return refreshEditor(textarea);
+  }
+
+  function codeTextareasFromRoot(root) {
+    if (!root) {
+      return [];
+    }
+    const textareas = [];
+    if (isCodeTextarea(root)) {
+      textareas.push(root);
+    }
+    if (typeof root.querySelectorAll === 'function') {
+      textareas.push(...root.querySelectorAll('textarea[data-code-editor]'));
+    }
+    return [...new Set(textareas)];
+  }
+
+  function isCodeTextarea(element) {
+    return isTextarea(element)
+      && (('codeEditor' in element.dataset) || element.getAttribute?.('data-code-editor') != null);
+  }
+
+  function isTextarea(element) {
+    return String(element?.tagName || '').toUpperCase() === 'TEXTAREA';
+  }
+
+  function handleTextareaKeydown(event, textarea) {
+    if (textarea.readOnly || textarea.disabled) {
+      return;
+    }
+    const edit = editTextForKey({
+      key: event.key,
+      language: textarea.dataset.codeLanguage || 'text',
+      selectionEnd: textarea.selectionEnd,
+      selectionStart: textarea.selectionStart,
+      shiftKey: event.shiftKey === true,
+      value: textarea.value
+    });
+    if (!edit.handled) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation?.();
+    textarea.value = edit.value;
+    textarea.setSelectionRange(edit.selectionStart, edit.selectionEnd);
+    dispatchInput(textarea);
+    refreshEditor(textarea);
+  }
+
+  function editTextForKey(options = {}) {
+    const value = String(options.value || '');
+    const start = clampIndex(options.selectionStart, value.length);
+    const end = clampIndex(options.selectionEnd ?? start, value.length);
+    const key = String(options.key || '');
+    const language = normalizeLanguage(options.language || 'text');
+    if (key === 'Tab') {
+      return options.shiftKey === true
+        ? outdentSelection(value, start, end)
+        : indentSelection(value, start, end);
+    }
+    if (!PAIRING_LANGUAGES.has(language)) {
+      return unchanged(value, start, end);
+    }
+    if (key === 'Backspace') {
+      return deleteEmptyPair(value, start, end, language);
+    }
+    if (key === 'Enter') {
+      return expandNewline(value, start, end, language);
+    }
+    if (key.length !== 1) {
+      return unchanged(value, start, end);
+    }
+    return editPairCharacter(value, start, end, key, language);
+  }
+
+  function indentSelection(value, start, end) {
+    if (start === end) {
+      return handled(`${value.slice(0, start)}\t${value.slice(end)}`, start + 1, start + 1);
+    }
+    const range = selectedLineRange(value, start, end);
+    const original = value.slice(range.start, range.end);
+    const lines = original.split('\n');
+    const replacement = lines.map((line) => `\t${line}`).join('\n');
+    const lineCount = lines.length;
+    return handled(
+      `${value.slice(0, range.start)}${replacement}${value.slice(range.end)}`,
+      start + 1,
+      end + lineCount
+    );
+  }
+
+  function outdentSelection(value, start, end) {
+    const range = selectedLineRange(value, start, end);
+    const original = value.slice(range.start, range.end);
+    const lines = original.split('\n');
+    const starts = [];
+    const removals = [];
+    let cursor = range.start;
+    const replacement = lines.map((line) => {
+      starts.push(cursor);
+      const count = line.startsWith('\t') ? 1 : (line.startsWith('  ') ? 2 : 0);
+      removals.push(count);
+      cursor += line.length + 1;
+      return line.slice(count);
+    }).join('\n');
+    const nextValue = `${value.slice(0, range.start)}${replacement}${value.slice(range.end)}`;
+    const nextStart = start - removedBeforePosition(starts, removals, start);
+    const nextEnd = end - removedBeforePosition(starts, removals, end);
+    return handled(nextValue, nextStart, Math.max(nextStart, nextEnd));
+  }
+
+  function deleteEmptyPair(value, start, end, language) {
+    if (start !== end || start === 0 || start >= value.length) {
+      return unchanged(value, start, end);
+    }
+    const pairs = OPENING_PAIRS[language] || {};
+    const before = value[start - 1];
+    const after = value[start];
+    if (pairs[before] !== after) {
+      return unchanged(value, start, end);
+    }
+    return handled(`${value.slice(0, start - 1)}${value.slice(start + 1)}`, start - 1, start - 1);
+  }
+
+  function expandNewline(value, start, end, language) {
+    if (start !== end) {
+      return unchanged(value, start, end);
+    }
+    const pairs = OPENING_PAIRS[language] || {};
+    const before = value[start - 1] || '';
+    const after = value[start] || '';
+    if (!pairs[before]) {
+      return unchanged(value, start, end);
+    }
+    const indent = lineIndentBefore(value, start);
+    if (pairs[before] === after) {
+      const insert = `\n${indent}\t\n${indent}`;
+      const caret = start + indent.length + 2;
+      return handled(`${value.slice(0, start)}${insert}${value.slice(end)}`, caret, caret);
+    }
+    const insert = `\n${indent}\t`;
+    const caret = start + insert.length;
+    return handled(`${value.slice(0, start)}${insert}${value.slice(end)}`, caret, caret);
+  }
+
+  function editPairCharacter(value, start, end, key, language) {
+    const pairs = OPENING_PAIRS[language] || {};
+    const openForClose = closeToOpenMap(pairs);
+    if (pairs[key]) {
+      if (pairs[key] === key && start === end && value[start] === key) {
+        return handled(value, start + 1, start + 1);
+      }
+      const selected = value.slice(start, end);
+      const nextValue = `${value.slice(0, start)}${key}${selected}${pairs[key]}${value.slice(end)}`;
+      if (start === end) {
+        return handled(nextValue, start + 1, start + 1);
+      }
+      return handled(nextValue, start + 1, end + 1);
+    }
+    if (openForClose[key] && start === end && value[start] === key) {
+      return handled(value, start + 1, start + 1);
+    }
+    return unchanged(value, start, end);
+  }
+
+  function selectedLineRange(value, start, end) {
+    const lineStart = value.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
+    const selectionEnd = end > start && value[end - 1] === '\n' ? end - 1 : end;
+    const nextBreak = value.indexOf('\n', selectionEnd);
+    return {
+      end: nextBreak === -1 ? value.length : nextBreak,
+      start: lineStart
+    };
+  }
+
+  function removedBeforePosition(starts, removals, position) {
+    let total = 0;
+    for (let index = 0; index < starts.length; index += 1) {
+      const lineStart = starts[index];
+      if (lineStart >= position) {
+        continue;
+      }
+      total += Math.min(removals[index], Math.max(0, position - lineStart));
+    }
+    return total;
+  }
+
+  function lineIndentBefore(value, index) {
+    const lineStart = value.lastIndexOf('\n', Math.max(0, index - 1)) + 1;
+    const match = /^[\t ]*/.exec(value.slice(lineStart, index));
+    return match ? match[0] : '';
+  }
+
+  function closeToOpenMap(pairs) {
+    const map = {};
+    for (const [open, close] of Object.entries(pairs)) {
+      map[close] = open;
+    }
+    return map;
+  }
+
+  function clampIndex(index, length) {
+    const parsed = Number.isInteger(index) ? index : Number.parseInt(index, 10);
+    if (!Number.isFinite(parsed)) {
+      return 0;
+    }
+    return Math.max(0, Math.min(length, parsed));
+  }
+
+  function handled(value, selectionStart, selectionEnd) {
+    return { handled: true, selectionEnd, selectionStart, value };
+  }
+
+  function unchanged(value, selectionStart, selectionEnd) {
+    return { handled: false, selectionEnd, selectionStart, value };
+  }
+
+  function highlightCode(value, language = 'text') {
+    const text = String(value || '');
+    const normalized = normalizeLanguage(language);
+    let html = '';
+    if (normalized === 'javascript') {
+      html = highlightJavaScript(text);
+    } else if (normalized === 'json') {
+      html = highlightJson(text);
+    } else if (normalized === 'headers') {
+      html = highlightHeaders(text);
+    } else if (normalized === 'markup') {
+      html = highlightMarkup(text);
+    } else {
+      html = escapeHtml(text);
+    }
+    if (!html) {
+      return '<br>';
+    }
+    return text.endsWith('\n') ? `${html}<br>` : html;
+  }
+
+  function highlightJson(text) {
+    let output = '';
+    let index = 0;
+    while (index < text.length) {
+      const char = text[index];
+      if (/\s/.test(char)) {
+        const end = readWhile(text, index, (item) => /\s/.test(item));
+        output += escapeHtml(text.slice(index, end));
+        index = end;
+        continue;
+      }
+      if (char === '"') {
+        const end = readQuoted(text, index, '"');
+        const token = text.slice(index, end);
+        output += span(nextNonWhitespace(text, end) === ':' ? 'tok-key' : 'tok-string', token);
+        index = end;
+        continue;
+      }
+      const numberMatch = text.slice(index).match(/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/);
+      if (numberMatch) {
+        output += span('tok-number', numberMatch[0]);
+        index += numberMatch[0].length;
+        continue;
+      }
+      const literalMatch = text.slice(index).match(/^(?:true|false|null)\b/);
+      if (literalMatch) {
+        output += span('tok-literal', literalMatch[0]);
+        index += literalMatch[0].length;
+        continue;
+      }
+      if (/[\[\]{}:,]/.test(char)) {
+        output += span('tok-punctuation', char);
+        index += 1;
+        continue;
+      }
+      output += escapeHtml(char);
+      index += 1;
+    }
+    return output;
+  }
+
+  function highlightJavaScript(text) {
+    let output = '';
+    let index = 0;
+    while (index < text.length) {
+      const char = text[index];
+      const next = text[index + 1];
+      if (char === '/' && next === '/') {
+        const end = text.indexOf('\n', index + 2);
+        const tokenEnd = end === -1 ? text.length : end;
+        output += span('tok-comment', text.slice(index, tokenEnd));
+        index = tokenEnd;
+        continue;
+      }
+      if (char === '/' && next === '*') {
+        const end = text.indexOf('*/', index + 2);
+        const tokenEnd = end === -1 ? text.length : end + 2;
+        output += span('tok-comment', text.slice(index, tokenEnd));
+        index = tokenEnd;
+        continue;
+      }
+      if (char === '"' || char === "'" || char === '`') {
+        const end = readQuoted(text, index, char);
+        output += span('tok-string', text.slice(index, end));
+        index = end;
+        continue;
+      }
+      if (/\s/.test(char)) {
+        const end = readWhile(text, index, (item) => /\s/.test(item));
+        output += escapeHtml(text.slice(index, end));
+        index = end;
+        continue;
+      }
+      const numberMatch = text.slice(index).match(/^(?:0[xX][\dA-Fa-f]+|0[bB][01]+|0[oO][0-7]+|\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/);
+      if (numberMatch) {
+        output += span('tok-number', numberMatch[0]);
+        index += numberMatch[0].length;
+        continue;
+      }
+      const identifierMatch = text.slice(index).match(/^[A-Za-z_$][\w$]*/);
+      if (identifierMatch) {
+        const token = identifierMatch[0];
+        const previous = previousNonWhitespace(text, index);
+        if (JS_KEYWORDS.has(token)) {
+          output += span('tok-keyword', token);
+        } else if (JS_LITERALS.has(token)) {
+          output += span('tok-literal', token);
+        } else if (token === 'pm') {
+          output += span('tok-builtin', token);
+        } else if (previous === '.') {
+          output += span('tok-property', token);
+        } else {
+          output += escapeHtml(token);
+        }
+        index += token.length;
+        continue;
+      }
+      if (/[\[\]{}().,;:?+\-*/%=&|!<>~^]/.test(char)) {
+        output += span('tok-punctuation', char);
+        index += 1;
+        continue;
+      }
+      output += escapeHtml(char);
+      index += 1;
+    }
+    return output;
+  }
+
+  function highlightHeaders(text) {
+    return String(text || '').split(/(\n)/).map((line) => {
+      if (line === '\n') {
+        return line;
+      }
+      const colon = line.indexOf(':');
+      if (colon <= 0) {
+        return escapeHtml(line);
+      }
+      return `${span('tok-key', line.slice(0, colon))}${span('tok-punctuation', ':')}${escapeHtml(line.slice(colon + 1))}`;
+    }).join('');
+  }
+
+  function highlightMarkup(text) {
+    return escapeHtml(text).replace(
+      /(&lt;\/?)([A-Za-z_][\w:.-]*)([^&]*?)(\/?&gt;)/g,
+      (_match, open, name, rest, close) => `${span('tok-punctuation', unescapeHtml(open))}${span('tok-key', name)}${escapeHtml(unescapeHtml(rest))}${span('tok-punctuation', unescapeHtml(close))}`
+    );
+  }
+
+  function readQuoted(text, start, quote) {
+    let index = start + 1;
+    while (index < text.length) {
+      if (text[index] === '\\') {
+        index += 2;
+        continue;
+      }
+      if (text[index] === quote) {
+        return index + 1;
+      }
+      index += 1;
+    }
+    return text.length;
+  }
+
+  function readWhile(text, start, predicate) {
+    let index = start;
+    while (index < text.length && predicate(text[index])) {
+      index += 1;
+    }
+    return index;
+  }
+
+  function nextNonWhitespace(text, start) {
+    for (let index = start; index < text.length; index += 1) {
+      if (!/\s/.test(text[index])) {
+        return text[index];
+      }
+    }
+    return '';
+  }
+
+  function previousNonWhitespace(text, start) {
+    for (let index = start - 1; index >= 0; index -= 1) {
+      if (!/\s/.test(text[index])) {
+        return text[index];
+      }
+    }
+    return '';
+  }
+
+  function span(className, text) {
+    return `<span class="code-editor-token ${className}">${escapeHtml(text)}</span>`;
+  }
+
+  function escapeHtml(value) {
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  function unescapeHtml(value) {
+    return String(value || '')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&');
+  }
+
+  function normalizeLanguage(language) {
+    const value = String(language || '').toLowerCase();
+    if (value === 'js' || value === 'javascript') {
+      return 'javascript';
+    }
+    if (value === 'json') {
+      return 'json';
+    }
+    if (value === 'headers' || value === 'http-headers') {
+      return 'headers';
+    }
+    if (value === 'html' || value === 'xml' || value === 'markup') {
+      return 'markup';
+    }
+    return 'text';
+  }
+
+  function copyTextareaMetrics(textarea, highlight) {
+    const view = textarea.ownerDocument?.defaultView || global;
+    if (typeof view.getComputedStyle !== 'function') {
+      return;
+    }
+    const style = view.getComputedStyle(textarea);
+    for (const property of [
+      'borderBottomWidth',
+      'borderLeftWidth',
+      'borderRightWidth',
+      'borderTopWidth',
+      'boxSizing',
+      'fontFamily',
+      'fontSize',
+      'fontStyle',
+      'fontVariant',
+      'fontWeight',
+      'letterSpacing',
+      'lineHeight',
+      'paddingBottom',
+      'paddingLeft',
+      'paddingRight',
+      'paddingTop',
+      'tabSize',
+      'textAlign',
+      'textIndent',
+      'textTransform',
+      'wordSpacing'
+    ]) {
+      highlight.style[property] = style[property];
+    }
+  }
+
+  function syncScroll(textarea) {
+    const state = EDITOR_STATE.get(textarea);
+    if (!state) {
+      return;
+    }
+    state.code.style.transform = `translate(${-textarea.scrollLeft}px, ${-textarea.scrollTop}px)`;
+  }
+
+  function dispatchInput(textarea) {
+    const view = textarea.ownerDocument?.defaultView || global;
+    const EventConstructor = view.Event || global.Event;
+    if (typeof textarea.dispatchEvent === 'function' && typeof EventConstructor === 'function') {
+      textarea.dispatchEvent(new EventConstructor('input', { bubbles: true }));
+    }
+  }
+
+  const exported = {
+    editTextForKey,
+    enhanceCodeTextareas,
+    enhanceTextarea,
+    highlightCode,
+    normalizeLanguage,
+    refreshCodeEditors,
+    refreshEditor,
+    setLanguage
+  };
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = exported;
+  }
+
+  global.PostMeterCodeEditor = exported;
+})(typeof window === 'undefined' ? globalThis : window);

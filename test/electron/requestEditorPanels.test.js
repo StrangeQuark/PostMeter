@@ -1,9 +1,16 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const {
+  bodyTypeCodeLanguage,
   buildVariablePreviewText,
   collectAuthFromEditor
 } = require('../../src/renderer/requestEditorPanels');
+
+test('request editor panels choose code editor language from body type', () => {
+  assert.equal(bodyTypeCodeLanguage('RAW_JSON'), 'json');
+  assert.equal(bodyTypeCodeLanguage('RAW_TEXT'), 'text');
+  assert.equal(bodyTypeCodeLanguage('NONE'), 'text');
+});
 
 test('request editor panels build variable preview text using request-over-environment-over-collection precedence', () => {
   const text = buildVariablePreviewText(
