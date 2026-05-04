@@ -57,6 +57,43 @@ function Test-ProtocolCommand {
   return $false
 }
 
+function Write-ProtocolRegistrySnapshot {
+  param([string]$ExpectedInstallDir)
+  $rootPaths = @(
+    "Registry::HKEY_CURRENT_USER\Software\Classes\postmeter",
+    "Registry::HKEY_LOCAL_MACHINE\Software\Classes\postmeter",
+    "Registry::HKEY_CLASSES_ROOT\postmeter"
+  )
+  $commandPaths = @(
+    "Registry::HKEY_CURRENT_USER\Software\Classes\postmeter\shell\open\command",
+    "Registry::HKEY_LOCAL_MACHINE\Software\Classes\postmeter\shell\open\command",
+    "Registry::HKEY_CLASSES_ROOT\postmeter\shell\open\command"
+  )
+
+  foreach ($rootPath in $rootPaths) {
+    $exists = Test-Path $rootPath
+    $defaultValue = ""
+    $hasUrlProtocol = $false
+    if ($exists) {
+      $item = Get-Item -Path $rootPath
+      $defaultValue = [string]$item.GetValue("")
+      $hasUrlProtocol = $null -ne $item.GetValue("URL Protocol")
+    }
+    Write-Host "Protocol root snapshot: path=$rootPath exists=$exists default=$defaultValue urlProtocol=$hasUrlProtocol"
+  }
+
+  foreach ($commandPath in $commandPaths) {
+    $command = Read-DefaultValue -Path $commandPath
+    $matchesExpectedInstall = $false
+    $hasPercentArg = $false
+    if ($command) {
+      $matchesExpectedInstall = $command.IndexOf($ExpectedInstallDir, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+      $hasPercentArg = $command -match "%1"
+    }
+    Write-Host "Protocol command snapshot: path=$commandPath exists=$($null -ne $command) matchesInstall=$matchesExpectedInstall hasPercentArg=$hasPercentArg"
+  }
+}
+
 function Stop-PostMeterProcesses {
   Get-Process -Name "PostMeter" -ErrorAction SilentlyContinue |
     ForEach-Object {
@@ -131,10 +168,12 @@ New-Item -ItemType Directory -Path $installDir | Out-Null
 
 try {
   $arguments = @("/S", "/D=$installDir")
+  Write-Host "Installing $($installer.Name) into $installDir for Windows protocol validation."
   $install = Start-Process -FilePath $installer.FullName -ArgumentList $arguments -PassThru -Wait
   if ($install.ExitCode -ne 0) {
     throw "PostMeter installer exited with $($install.ExitCode)."
   }
+  Write-ProtocolRegistrySnapshot -ExpectedInstallDir $installDir
 
   if (-not (Test-ProtocolRoot)) {
     throw "postmeter protocol root registry key was not registered."

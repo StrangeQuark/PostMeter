@@ -1,8 +1,20 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { appendBoundedText, redactSmokeOutputText, spawnWithTimeout } = require('../../scripts/smokeProcess');
-const { redactForOutput: redactPackagedSandboxOutput, validationTimeoutMillis } = require('../../scripts/validatePackagedSandboxRuntime');
-const { redactForOutput: redactSourceSandboxOutput } = require('../../scripts/validateSandboxRuntime');
+const {
+  defaultValidationTimeoutMillis: defaultPackagedSandboxTimeoutMillis,
+  packagedAppResourcePath,
+  packagedSandboxLaunchArgs,
+  packagedSandboxLaunchEnv,
+  packagedSandboxLaunchMode,
+  packagedSandboxStdioMode,
+  redactForOutput: redactPackagedSandboxOutput,
+  validationTimeoutMillis
+} = require('../../scripts/validatePackagedSandboxRuntime');
+const {
+  defaultValidationTimeoutMillis: defaultSourceSandboxTimeoutMillis,
+  redactForOutput: redactSourceSandboxOutput
+} = require('../../scripts/validateSandboxRuntime');
 
 test('smoke process helper captures successful child stdout and stderr', async () => {
   const result = await spawnWithTimeout(process.execPath, [
@@ -263,6 +275,24 @@ test('source sandbox validation redactor removes runtime paths and auth-shaped c
 test('packaged sandbox validation timeout parsing keeps the fail-closed timeout exit path bounded', () => {
   assert.equal(validationTimeoutMillis('1'), 1000);
   assert.equal(validationTimeoutMillis('bad'), 60000);
+});
+
+test('sandbox validators use larger Windows budgets and node-mode packaged launch', () => {
+  const executable = 'C:\\PostMeter\\PostMeter.exe';
+
+  assert.equal(defaultSourceSandboxTimeoutMillis('win32'), 120_000);
+  assert.equal(defaultSourceSandboxTimeoutMillis('linux'), 60_000);
+  assert.equal(defaultPackagedSandboxTimeoutMillis('win32'), 120_000);
+  assert.equal(packagedSandboxLaunchMode('win32'), 'node-main-process');
+  assert.equal(packagedSandboxLaunchMode('darwin'), 'app-main-process');
+  assert.equal(packagedSandboxLaunchEnv({ NODE_OPTIONS: '--inspect' }, 'win32').ELECTRON_RUN_AS_NODE, '1');
+  assert.equal(packagedSandboxLaunchEnv({ ELECTRON_RUN_AS_NODE: '1' }, 'linux').ELECTRON_RUN_AS_NODE, undefined);
+  assert.deepEqual(packagedSandboxLaunchArgs(executable, 'win32'), [
+    packagedAppResourcePath(executable, ['electron', 'packagedSandboxRuntimeCli.js'])
+  ]);
+  assert.deepEqual(packagedSandboxLaunchArgs(executable, 'linux'), []);
+  assert.equal(packagedSandboxStdioMode('win32', 'app-main-process'), 'ignore');
+  assert.equal(packagedSandboxStdioMode('win32', 'node-main-process'), undefined);
 });
 
 function escapeRegExp(value) {

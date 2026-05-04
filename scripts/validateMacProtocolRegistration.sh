@@ -28,6 +28,19 @@ stop_postmeter_processes() {
   pkill -x PostMeter >/dev/null 2>&1 || true
 }
 
+canonical_path() {
+  local target="$1"
+  if command -v realpath >/dev/null 2>&1; then
+    realpath "$target"
+    return
+  fi
+  local target_dir
+  local target_name
+  target_dir="$(cd "$(dirname "$target")" && pwd -P)"
+  target_name="$(basename "$target")"
+  printf '%s/%s\n' "$target_dir" "$target_name"
+}
+
 validate_app() {
   local app_path="$1"
   local plist_path="$app_path/Contents/Info.plist"
@@ -42,14 +55,17 @@ validate_app() {
   if [[ -x "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister" ]]; then
     "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister" -f "$app_path"
   fi
-  validate_protocol_launch "$app_path"
+  if [[ "$launches" -eq 0 ]]; then
+    validate_protocol_launch "$app_path"
+  fi
   echo "Validated macOS postmeter:// registration metadata in $app_path"
   validated=$((validated + 1))
 }
 
 validate_protocol_launch() {
   local app_path="$1"
-  local expected_executable="$app_path/Contents/MacOS/PostMeter"
+  local expected_executable
+  expected_executable="$(canonical_path "$app_path/Contents/MacOS/PostMeter")"
   local url="postmeter://oauth/callback?code=release-validation&state=release-validation"
   local launch_seen=0
   stop_postmeter_processes

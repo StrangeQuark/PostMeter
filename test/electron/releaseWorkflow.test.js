@@ -289,11 +289,23 @@ test('native protocol validators exercise actual custom-scheme launches', async 
   assert.match(macScript, /postmeter:\/\/oauth\/callback/);
   assert.match(macScript, /Launch Services/);
   assert.match(macScript, /pgrep -x PostMeter/);
-  assert.match(macScript, /expected_executable="\$app_path\/Contents\/MacOS\/PostMeter"/);
+  assert.match(macScript, /canonical_path\(\)/);
+  assert.match(macScript, /expected_executable="\$\(canonical_path "\$app_path\/Contents\/MacOS\/PostMeter"\)"/);
+  assert.match(macScript, /if \[\[ "\$launches" -eq 0 \]\]; then/);
   assert.match(macScript, /ps -p "\$pid" -o command=/);
   assert.match(macScript, /mac-protocol-validation\.log/);
   assert.match(macScript, /Validated \$validated macOS app bundle\(s\) and \$launches Launch Services protocol launch\(es\)\./);
   assert.doesNotMatch(macScript, /if \[\[ "\$launched" -eq 0 \]\]/);
   assert.match(macScript, /instead of \$expected_executable/);
   assert.match(macScript, /did not launch/);
+});
+
+test('Windows sandbox helper build preserves quoted Visual Studio setup paths', async () => {
+  const root = path.join(__dirname, '..', '..');
+  const buildScript = await fs.readFile(path.join(root, 'scripts', 'buildWindowsSandboxHelper.js'), 'utf8');
+
+  assert.match(buildScript, /function runCompilerBatch\(vcvarsPath\)/);
+  assert.ok(buildScript.includes('call "${vcvarsPath}" > nul'));
+  assert.ok(buildScript.includes("spawnSync('cmd.exe', ['/d', '/c', scriptPath]"));
+  assert.doesNotMatch(buildScript, /spawnSync\('cmd\.exe', \['\/d', '\/s', '\/c', command\]/);
 });

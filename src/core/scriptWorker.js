@@ -2,8 +2,12 @@ const {
   MAX_SCRIPT_RESULT_BYTES,
   runPostmanScriptAsync
 } = require('./scriptRuntime');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const PROTOCOL_VERSION = 1;
+const FILE_TRANSPORT_POLL_MILLIS = 10;
+const MAX_FILE_TRANSPORT_MESSAGE_BYTES = MAX_SCRIPT_RESULT_BYTES * 2;
 const pendingBrokerRequests = new Map();
 const transport = createWorkerTransport();
 let requestSequence = 0;
@@ -103,6 +107,9 @@ function brokerRequest(executionId, operation, payload = {}) {
 }
 
 function createWorkerTransport() {
+  if (process.argv.includes('--postmeter-file-worker')) {
+    return createFileTransport();
+  }
   if (process.argv.includes('--postmeter-stdio-worker')) {
     return createStdioTransport();
   }
@@ -114,6 +121,47 @@ function createWorkerTransport() {
       process.send?.(message);
     }
   };
+}
+
+function createFileTransport() {
+  const transportDir = process.env.POSTMETER_SCRIPT_WORKER_TRANSPORT_DIR || '';
+  if (!transportDir) {
+    process.exit(1);
+  }
+  let messageHandler = () => {};
+  let sequence = 0;
+  const incomingState = { nextSequence: 1 };
+  const poll = () => {
+    for (const message of readTransportMessages(transportDir, 'to-worker-', incomingState)) {
+      messageHandler(message);
+    }
+  };
+  setInterval(() => {
+    try {
+      poll();
+    } catch {
+      process.exit(1);
+    }
+  }, FILE_TRANSPORT_POLL_MILLIS);
+  const transport = {
+    onMessage(handler) {
+      messageHandler = handler;
+      try {
+        poll();
+      } catch {
+        process.exit(1);
+      }
+    },
+    send(message) {
+      try {
+        writeTransportMessage(transportDir, `to-parent-${++sequence}.json`, message);
+      } catch {
+        process.exit(1);
+      }
+    }
+  };
+  transport.send({ type: 'worker:ready', version: PROTOCOL_VERSION });
+  return transport;
 }
 
 function createStdioTransport() {
@@ -145,6 +193,46 @@ function createStdioTransport() {
       process.stdout.write(`${JSON.stringify(message)}\n`);
     }
   };
+}
+
+function writeTransportMessage(transportDir, basename, message) {
+  const target = path.join(transportDir, basename);
+  const ready = readyPathForMessage(target);
+  fs.writeFileSync(target, JSON.stringify(message), 'utf8');
+  fs.writeFileSync(ready, '1', 'utf8');
+}
+
+function readTransportMessages(transportDir, prefix, incomingState = { nextSequence: 1 }) {
+  const messages = [];
+  while (true) {
+    const sequence = incomingState.nextSequence || 1;
+    const readyPath = path.join(transportDir, `${prefix}${sequence}.ready`);
+    const filePath = path.join(transportDir, `${prefix}${sequence}.json`);
+    let text;
+    try {
+      const readyStat = fs.statSync(readyPath);
+      if (readyStat.size <= 0) {
+        break;
+      }
+      const stat = fs.statSync(filePath);
+      if (stat.size > MAX_FILE_TRANSPORT_MESSAGE_BYTES) {
+        process.exit(1);
+      }
+      text = fs.readFileSync(filePath, 'utf8');
+    } catch (error) {
+      if (error?.code === 'ENOENT') {
+        break;
+      }
+      throw error;
+    }
+    messages.push(JSON.parse(text));
+    incomingState.nextSequence = sequence + 1;
+  }
+  return messages;
+}
+
+function readyPathForMessage(messagePath) {
+  return messagePath.replace(/\.json$/, '.ready');
 }
 
 function cloneJson(value) {
