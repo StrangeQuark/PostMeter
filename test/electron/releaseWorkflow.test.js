@@ -123,13 +123,15 @@ test('release workflow builds unsigned artifacts for all tier-one desktop platfo
   assert.match(workflow, /if-no-files-found:\s*error/);
 });
 
-test('manual native release validation workflow exercises release evidence without publishing', async () => {
+test('native release validation workflow exercises release evidence without publishing', async () => {
   const root = path.join(__dirname, '..', '..');
   const workflow = await fs.readFile(path.join(root, '.github', 'workflows', 'release-validation.yml'), 'utf8');
+  const workflowDocument = YAML.parse(workflow);
   const packageJson = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
-  assertValidationLogUploadsFailClosed(YAML.parse(workflow), 'release-validation.yml');
+  assertValidationLogUploadsFailClosed(workflowDocument, 'release-validation.yml');
 
   assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /push:\s*\n\s*branches:\s*\n\s*-\s*main/);
   assert.match(workflow, /contents:\s*read/);
   assert.match(workflow, /platform:\s*linux/);
   assert.match(workflow, /platform:\s*windows/);
@@ -173,6 +175,20 @@ test('manual native release validation workflow exercises release evidence witho
   assert.match(workflow, /actions\/upload-artifact@v4/);
   assert.match(workflow, /actions\/download-artifact@v4/);
   assert.match(workflow, /if-no-files-found:\s*error/);
+  for (const stepName of [
+    'Startup smoke',
+    'OAuth UI smoke',
+    'UI workflow smoke',
+    'UI regression smoke',
+    'UI snapshot smoke'
+  ]) {
+    assert.equal(
+      findWorkflowStep(workflowDocument, stepName)?.if,
+      "matrix.platform == 'macos'",
+      `${stepName} must not run source renderer smoke on Windows release-validation runners`
+    );
+  }
+  assert.equal(findWorkflowStep(workflowDocument, 'Packaged app startup smoke')?.if, "matrix.platform != 'linux'");
   assert.doesNotMatch(workflow, /release\/\*\.msi/);
   assert.doesNotMatch(workflow, /release\/\*\.rpm/);
   assert.doesNotMatch(workflow, /gh release create/);
@@ -237,6 +253,12 @@ function assertWorkflowHasRunStep(workflow, pattern, workflowName) {
     runSteps.some((run) => pattern.test(run)),
     `${workflowName} is missing executable run step ${pattern}`
   );
+}
+
+function findWorkflowStep(workflow, stepName) {
+  return Object.values(workflow?.jobs || {})
+    .flatMap((job) => Array.isArray(job?.steps) ? job.steps : [])
+    .find((step) => step?.name === stepName);
 }
 
 function assertValidationLogUploadsFailClosed(workflow, workflowName) {

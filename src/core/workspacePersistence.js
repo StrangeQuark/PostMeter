@@ -234,7 +234,13 @@ async function fsyncFile(filePath) {
   let handle = null;
   try {
     handle = await fs.open(filePath, 'r');
-    await handle.sync();
+    try {
+      await handle.sync();
+    } catch (error) {
+      if (!isUnsupportedFsyncError(error)) {
+        throw error;
+      }
+    }
   } finally {
     if (handle) {
       await handle.close().catch(() => {});
@@ -245,10 +251,20 @@ async function fsyncFile(filePath) {
 function fsyncFileSync(filePath) {
   const fd = syncFs.openSync(filePath, 'r');
   try {
-    syncFs.fsyncSync(fd);
+    try {
+      syncFs.fsyncSync(fd);
+    } catch (error) {
+      if (!isUnsupportedFsyncError(error)) {
+        throw error;
+      }
+    }
   } finally {
     syncFs.closeSync(fd);
   }
+}
+
+function isUnsupportedFsyncError(error) {
+  return ['EINVAL', 'ENOTSUP', 'EPERM'].includes(error?.code);
 }
 
 function temporaryJsonPath(targetPath, prefix) {

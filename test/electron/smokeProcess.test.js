@@ -15,6 +15,7 @@ const {
   defaultValidationTimeoutMillis: defaultSourceSandboxTimeoutMillis,
   redactForOutput: redactSourceSandboxOutput
 } = require('../../scripts/validateSandboxRuntime');
+const { scriptBoundaryWorkerTimeoutMillis } = require('../../src/core/sandboxRuntimeValidation');
 
 test('smoke process helper captures successful child stdout and stderr', async () => {
   const result = await spawnWithTimeout(process.execPath, [
@@ -274,7 +275,7 @@ test('source sandbox validation redactor removes runtime paths and auth-shaped c
 
 test('packaged sandbox validation timeout parsing keeps the fail-closed timeout exit path bounded', () => {
   assert.equal(validationTimeoutMillis('1'), 1000);
-  assert.equal(validationTimeoutMillis('bad'), 60000);
+  assert.equal(validationTimeoutMillis('bad'), defaultPackagedSandboxTimeoutMillis(process.platform));
 });
 
 test('sandbox validators use larger Windows budgets and node-mode packaged launch', () => {
@@ -282,6 +283,8 @@ test('sandbox validators use larger Windows budgets and node-mode packaged launc
 
   assert.equal(defaultSourceSandboxTimeoutMillis('win32'), 120_000);
   assert.equal(defaultSourceSandboxTimeoutMillis('linux'), 60_000);
+  assert.equal(scriptBoundaryWorkerTimeoutMillis('win32'), 60_000);
+  assert.equal(scriptBoundaryWorkerTimeoutMillis('linux'), 3_000);
   assert.equal(defaultPackagedSandboxTimeoutMillis('win32'), 120_000);
   assert.equal(packagedSandboxLaunchMode('win32'), 'node-main-process');
   assert.equal(packagedSandboxLaunchMode('darwin'), 'app-main-process');
