@@ -293,6 +293,24 @@ textarea.code-editor-input:placeholder-shown {
   gap: 8px;
   min-height: 0;
   flex: 1;
+  overflow: hidden;
+}
+
+.response-grid > .code-editor {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.response-grid #responseBody,
+.response-grid #responseHeaders {
+  height: 100%;
+  min-height: 0;
+}
+
+.response-grid .code-editor-highlight {
+  min-height: 0;
 }
 
 .metrics {

@@ -3669,6 +3669,37 @@ function renderEnvironmentPairs(pairs) {
   });
 }
 
+function normalizeHistoryRequestMethod(item) {
+  return METHODS.includes(item?.method) ? item.method : 'GET';
+}
+
+function historyRequestName(item) {
+  const method = normalizeHistoryRequestMethod(item);
+  const url = String(item?.url || '').trim();
+  return url ? `${method} ${url}` : `${method} History Request`;
+}
+
+function openHistoryItemAsDraftRequest(item) {
+  collectActiveEditorState();
+  const method = normalizeHistoryRequestMethod(item);
+  const url = String(item?.url || '');
+  const draftRequest = newRequestObject(uniqueName(
+    historyRequestName(item),
+    Array.from(draftRequests.values()).map((request) => request.name)
+  ));
+  draftRequest.method = method;
+  draftRequest.url = url;
+  draftRequests.set(draftRequest.id, draftRequest);
+  activeMainPanel = 'request';
+  activeCollectionId = null;
+  activeFolderId = null;
+  activeRequestId = draftRequest.id;
+  ensureOpenRequestTabForActive();
+  renderAll();
+  setStatus('Opened history entry as an unsaved request.');
+  return draftRequest;
+}
+
 function renderHistory() {
   const container = $('historyList');
   container.textContent = '';
@@ -3677,16 +3708,7 @@ function renderHistory() {
     button.className = 'history-item';
     button.textContent = `${item.method} ${item.statusCode || 'ERR'} ${item.url}`;
     button.addEventListener('click', () => {
-      activeMainPanel = 'request';
-      const request = activeRequest();
-      if (request) {
-        request.method = item.method;
-        request.url = item.url;
-        request.name = `${item.method} ${item.url}`;
-        markActiveRequestDirty();
-        renderCollections();
-        renderRequestEditor();
-      }
+      openHistoryItemAsDraftRequest(item);
     });
     container.append(button);
   }

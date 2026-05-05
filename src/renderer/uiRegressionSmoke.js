@@ -237,6 +237,21 @@
     scriptInput.value = '';
     dispatchInput(bodyInput);
     dispatchInput(scriptInput);
+
+    activateTab('results', 'response');
+    const responseGrid = document.querySelector('.response-grid');
+    const responseBody = $('responseBody');
+    const responseEditor = responseBody.closest('.code-editor');
+    const responseHighlight = responseEditor?.querySelector('.code-editor-highlight');
+    const gridRect = responseGrid.getBoundingClientRect();
+    const editorRect = responseEditor.getBoundingClientRect();
+    const bodyRect = responseBody.getBoundingClientRect();
+    const highlightRect = responseHighlight.getBoundingClientRect();
+    assertUiSmoke(Math.abs(editorRect.height - gridRect.height) <= 2, 'Response body editor should fill the response grid height.');
+    assertUiSmoke(Math.abs(bodyRect.height - editorRect.height) <= 2, 'Response body textarea should match the visible response editor height.');
+    assertUiSmoke(Math.abs(bodyRect.width - editorRect.width) <= 2, 'Response body textarea should match the visible response editor width.');
+    assertUiSmoke(Math.abs(highlightRect.height - bodyRect.height) <= 2, 'Response body syntax layer should match the textarea height.');
+    assertUiSmoke(Math.abs(highlightRect.width - bodyRect.width) <= 2, 'Response body syntax layer should match the textarea width.');
   }
 
   async function assertModalFocusSmoke() {
@@ -1792,7 +1807,56 @@
       activeRequestId = request.id;
       ensureOpenRequestTabForActive();
       renderAll();
+      $('urlInput').value = 'https://saved-request.example.test/widgets';
+      dispatchInput($('urlInput'));
+      await saveWorkspace(false);
+      const savedRequestId = request.id;
+      const savedRequestMethod = request.method;
       const savedRequestUrl = request.url;
+      const savedRequestCount = collection.requests.length;
+      workspace.history = [{
+        timestamp: new Date(0).toISOString(),
+        method: savedRequestMethod,
+        url: savedRequestUrl,
+        statusCode: 200,
+        durationMillis: 36
+      }];
+      openRequestTabs = [];
+      activeCollectionId = null;
+      activeFolderId = null;
+      activeRequestId = null;
+      activeMainPanel = 'environment';
+      activeSidebarPanel = 'history';
+      renderAll();
+      assertUiSmoke($('requestEditorPanel').hidden, 'Request editor should be hidden before applying history from another main pane.');
+      $('historyList').querySelector('.history-item').click();
+      assertUiSmoke(activeMainPanel === 'request', 'Clicking a history entry should switch back to the request main pane.');
+      assertUiSmoke(!$('requestEditorPanel').hidden, 'Clicking a history entry should show the request editor.');
+      assertUiSmoke(!document.querySelector('.results').hidden, 'Clicking a history entry should show the response panel.');
+      const noOpenHistoryDraft = activeRequest();
+      assertUiSmoke(noOpenHistoryDraft, 'Clicking a history entry with no open requests should create an active draft request.');
+      assertUiSmoke(activeCollectionId === null, 'Clicking a history entry with no open requests should open a draft request.');
+      assertUiSmoke(noOpenHistoryDraft?.method === savedRequestMethod, 'History draft should use the history method when no request is open.');
+      assertUiSmoke(noOpenHistoryDraft?.url === savedRequestUrl, 'History draft should use the history URL when no request is open.');
+      assertUiSmoke(noOpenHistoryDraft?.name !== enterSavedRequestName, 'Opening history should not reuse the saved request name as the active draft name.');
+      const noOpenHistoryTab = openRequestTabs.find((tab) => tab.requestId === noOpenHistoryDraft?.id);
+      assertUiSmoke(noOpenHistoryTab?.draft === true && noOpenHistoryTab?.dirty === true, 'History entries should open as dirty draft request tabs.');
+      const unchangedRequestAfterNoOpenHistory = collection.requests.find((item) => item.id === savedRequestId);
+      assertUiSmoke(collection.requests.length === savedRequestCount, 'Opening history with no open request should not add a saved collection request.');
+      assertUiSmoke(unchangedRequestAfterNoOpenHistory?.name === enterSavedRequestName, 'Opening history with no open request should not overwrite the saved request name.');
+      assertUiSmoke(unchangedRequestAfterNoOpenHistory?.url === savedRequestUrl, 'Opening history with no open request should not change the saved request URL.');
+      const closeNoOpenHistory = closeRequestTab(noOpenHistoryTab);
+      assertUiSmoke(!$('unsavedRequestModal').hidden, 'Closing a history draft should show the unsaved request modal.');
+      $('closeWithoutSavingButton').click();
+      await closeNoOpenHistory;
+      assertUiSmoke(!draftRequests.has(noOpenHistoryDraft.id), 'Closing a history draft without saving should discard the draft.');
+
+      activeCollectionId = collection.id;
+      activeFolderId = null;
+      activeRequestId = savedRequestId;
+      ensureOpenRequestTabForActive();
+      renderAll();
+      const savedRequestTabBeforeHistory = openRequestTabs.find((tab) => tab.requestId === savedRequestId);
       workspace.history = [{
         timestamp: new Date(0).toISOString(),
         method: 'POST',
@@ -1806,15 +1870,22 @@
       historyItem.click();
       assertUiSmoke(activeRequest().method === 'POST', 'Clicking a history entry did not update the active request method.');
       assertUiSmoke(activeRequest().url === 'https://history.example.test/widgets', 'Clicking a history entry did not update the active request URL.');
-      const historyTab = openRequestTabs.find((tab) => tab.requestId === request.id);
-      assertUiSmoke(historyTab?.dirty === true, 'Selecting a history entry should mark the active request tab as dirty.');
+      assertUiSmoke(activeCollectionId === null && activeRequestId !== savedRequestId, 'Clicking history with an open request should switch to a separate draft request.');
+      const unchangedRequestAfterOpenHistory = collection.requests.find((item) => item.id === savedRequestId);
+      assertUiSmoke(collection.requests.length === savedRequestCount, 'Opening history with an open request should not add a saved collection request.');
+      assertUiSmoke(unchangedRequestAfterOpenHistory?.method === savedRequestMethod, 'Opening history with an open request should not change the saved request method.');
+      assertUiSmoke(unchangedRequestAfterOpenHistory?.url === savedRequestUrl, 'Opening history with an open request should not change the saved request URL.');
+      assertUiSmoke(unchangedRequestAfterOpenHistory?.name === enterSavedRequestName, 'Opening history with an open request should preserve the saved request name.');
+      assertUiSmoke(savedRequestTabBeforeHistory?.dirty === false, 'Opening history with an open request should not mark the saved request tab dirty.');
+      const historyTab = openRequestTabs.find((tab) => tab.requestId === activeRequestId);
+      assertUiSmoke(historyTab?.draft === true && historyTab?.dirty === true, 'Selecting a history entry should open a dirty draft request tab.');
       const closeHistory = closeRequestTab(historyTab);
-      assertUiSmoke(!$('unsavedRequestModal').hidden, 'Closing a request updated from history should show the unsaved request modal.');
+      assertUiSmoke(!$('unsavedRequestModal').hidden, 'Closing a history-opened draft should show the unsaved request modal.');
       $('closeWithoutSavingButton').click();
       await closeHistory;
       const restoredHistoryRequest = collection.requests.find((item) => item.id === request.id);
-      assertUiSmoke(restoredHistoryRequest?.name === enterSavedRequestName, 'Closing a history-updated request without saving should restore the saved request name.');
-      assertUiSmoke(restoredHistoryRequest?.url === savedRequestUrl, 'Closing a history-updated request without saving should restore the saved request URL.');
+      assertUiSmoke(restoredHistoryRequest?.name === enterSavedRequestName, 'Closing a history draft without saving should keep the saved request name.');
+      assertUiSmoke(restoredHistoryRequest?.url === savedRequestUrl, 'Closing a history draft without saving should keep the saved request URL.');
 
       workspace.environments = [];
       activeEnvironmentId = 'none';
