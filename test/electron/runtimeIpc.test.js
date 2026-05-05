@@ -280,6 +280,110 @@ test('runtime IPC validates collection-run results before mutating workspace sta
   assert.deepEqual(workspace.cookies, []);
 });
 
+test('runtime IPC rejects invalid workspace-owned runner payloads before execution', async () => {
+  const handlers = new Map();
+  let runCalls = 0;
+
+  registerRuntimeIpc({
+    dialog: { showSaveDialog: async () => ({ canceled: true }) },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => ({ cookies: [], globals: [], settings: {} }),
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    },
+    runRunner: async () => {
+      runCalls += 1;
+      return {};
+    },
+    saveWorkspace: async (nextWorkspace) => nextWorkspace,
+    setWorkspace: () => {}
+  });
+
+  await assert.rejects(
+    () => handlers.get('runner:start')({ sender: { send() {} } }, 'invalid-runner-payload', {
+      id: 'runner-1',
+      name: 'Runner',
+      environmentId: 'none',
+      allowEnvironmentMutation: false,
+      requests: 'bad'
+    }, null, {}),
+    /runner.requests must be an array/
+  );
+  assert.equal(runCalls, 0);
+});
+
+test('runtime IPC only persists workspace-owned runner environment mutations when allowed', async () => {
+  const handlers = new Map();
+  const workspace = {
+    cookies: [],
+    globals: [],
+    environments: [{ id: 'env', name: 'Env', variables: [{ enabled: true, key: 'token', value: 'base' }] }],
+    settings: { sandbox: { fileBindings: [], packageCache: [], trustedCapabilities: {} } }
+  };
+  registerRuntimeIpc({
+    dialog: { showSaveDialog: async () => ({ canceled: true }) },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => workspace,
+    getWorkspaceId: () => 'workspace-1',
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    },
+    mutateWorkspace: async (mutator) => mutator(workspace),
+    runRunner: async (runner, environment) => {
+      const mutatedEnvironment = {
+        ...(environment || { id: 'runtime', name: 'Runtime' }),
+        variables: [{ enabled: true, key: 'token', value: runner.allowEnvironmentMutation ? 'persisted' : 'temporary' }]
+      };
+      return {
+        runnerId: runner.id,
+        runnerName: runner.name,
+        runnerEnvironmentId: runner.environmentId,
+        environmentMutationAllowed: runner.allowEnvironmentMutation === true,
+        mutatedEnvironment: runner.allowEnvironmentMutation === true ? mutatedEnvironment : undefined,
+        collectionId: '',
+        collectionName: runner.name,
+        totalRequests: 1,
+        passedRequests: 1,
+        failedRequests: 0,
+        passed: true,
+        cancelled: false,
+        results: [],
+        environment: mutatedEnvironment,
+        cookies: []
+      };
+    },
+    saveWorkspace: async (nextWorkspace) => nextWorkspace,
+    setWorkspace: () => {}
+  });
+
+  const runner = {
+    id: 'runner-1',
+    name: 'Runner',
+    environmentId: 'env',
+    allowEnvironmentMutation: false,
+    stopOnFailure: false,
+    requests: [{ id: 'runner-request-1', name: 'Request', method: 'GET', url: 'https://example.test' }]
+  };
+  const event = { sender: { send() {} } };
+
+  const temporaryResult = await handlers.get('runner:start')(event, 'runner-temp', runner, workspace.environments[0], {});
+  assert.equal(temporaryResult.environment.variables[0].value, 'temporary');
+  assert.equal(workspace.environments[0].variables[0].value, 'base');
+
+  const persistedResult = await handlers.get('runner:start')(event, 'runner-persist', {
+    ...runner,
+    allowEnvironmentMutation: true
+  }, workspace.environments[0], {});
+  assert.equal(persistedResult.mutatedEnvironment.variables[0].value, 'persisted');
+  assert.equal(workspace.environments[0].variables[0].value, 'persisted');
+});
+
 test('runtime IPC persists load-test cookie updates back to the workspace', async () => {
   const handlers = new Map();
   const workspace = { cookies: [] };

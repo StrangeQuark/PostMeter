@@ -1,11 +1,12 @@
 const { loadTestResultToCsv, runLoadTest } = require('../src/core/loadTestRunner');
-const { collectionRunResultToCsv, runCollection } = require('../src/core/collectionRunner');
+const { collectionRunResultToCsv, runCollection, runRunner } = require('../src/core/collectionRunner');
 const { writeTextFileAtomic } = require('../src/core/workspacePersistence');
 const { selectedSaveFilePath } = require('./fileDialogs');
 const {
   applyCollectionRunMutationsToWorkspace,
   findWorkspaceRequestContext,
-  mergeCookieJarByDelta
+  mergeCookieJarByDelta,
+  mergeVariableScopeByDelta
 } = require('./workspaceMutations');
 const {
   assertCollectionPayload,
@@ -18,6 +19,7 @@ const {
   assertOptionalEnvironmentPayload,
   assertRequestPayload,
   assertRunnerConfigPayload,
+  assertRunnerPayload,
   assertRunnerProgressPayload
 } = require('../src/core/ipcValidation');
 
@@ -33,6 +35,7 @@ function registerRuntimeIpc(options = {}) {
     ipcMain,
     runCollection: runCollectionImpl = runCollection,
     runLoadTest: runLoadTestImpl = runLoadTest,
+    runRunner: runRunnerImpl = runRunner,
     recordDiagnosticEvent = async () => {},
     mutateWorkspace = async (mutator) => {
       const nextWorkspace = await mutator(cloneJson(getWorkspace()));
@@ -143,7 +146,12 @@ function registerRuntimeIpc(options = {}) {
 
   ipcMain.handle('runner:start', async (event, id, collection, environment, config = {}) => {
     assertLoadId(id);
-    assertCollectionPayload(collection);
+    const firstClassRunner = looksLikeRunnerPayload(collection);
+    if (firstClassRunner) {
+      assertRunnerPayload(collection);
+    } else {
+      assertCollectionPayload(collection);
+    }
     assertOptionalEnvironmentPayload(environment);
     assertRunnerConfigPayload(config);
     if (activeCollectionRuns.has(id)) {
@@ -167,7 +175,7 @@ function registerRuntimeIpc(options = {}) {
       const baseGlobals = cloneJson(workspace.globals || []);
       const baseCookies = cloneJson(workspace.cookies || []);
       const baseLocalVariablesByRequestId = requestLocalVariablesById(collection);
-      const result = await runCollectionImpl(collection, environment, {
+      const runnerOptions = {
         abortController,
         signal: abortController.signal,
         cookieJar: workspace.cookies || [],
@@ -179,10 +187,14 @@ function registerRuntimeIpc(options = {}) {
         vaultPrompt: getVaultPrompt(workspaceId),
         workspaceId,
         workspaceName: workspaceId,
-        stopOnFailure: config.stopOnFailure === true,
+        stopOnFailure: config.stopOnFailure ?? collection?.stopOnFailure,
+        allowEnvironmentMutation: config.allowEnvironmentMutation ?? collection?.allowEnvironmentMutation,
         onProgress: progressDelivery.send,
         recordDiagnosticEvent
-      });
+      };
+      const result = firstClassRunner
+        ? await runRunnerImpl(collection, environment, runnerOptions)
+        : await runCollectionImpl(collection, environment, runnerOptions);
       progressDelivery.throwIfFailed();
       const publicResult = publicCollectionRunResult(result);
       assertCollectionRunResultPayload(publicResult);
@@ -194,10 +206,21 @@ function registerRuntimeIpc(options = {}) {
           cancelled: publicResult.cancelled === true,
           failedRequests: publicResult.failedRequests || 0,
           passedRequests: publicResult.passedRequests || 0,
-          requestCount: publicResult.totalRequests || 0
+          requestCount: publicResult.totalRequests || 0,
+          runnerOwned: firstClassRunner
         }
       });
-      if (Array.isArray(result.cookies)) {
+      if (firstClassRunner) {
+        await mutateWorkspace(async (latestWorkspace) => {
+          if (Array.isArray(result.cookies)) {
+            latestWorkspace.cookies = mergeCookieJarByDelta(latestWorkspace.cookies || [], baseCookies, result.cookies);
+          }
+          if (result.environmentMutationAllowed === true) {
+            applyRunnerEnvironmentMutationToWorkspace(latestWorkspace, result.mutatedEnvironment || result.environment, baseEnvironment);
+          }
+          return latestWorkspace;
+        }, { workspaceId });
+      } else if (Array.isArray(result.cookies)) {
         await mutateWorkspace(async (latestWorkspace) => {
           latestWorkspace.cookies = mergeCookieJarByDelta(latestWorkspace.cookies || [], baseCookies, result.cookies);
           applyCollectionRunMutationsToWorkspace(latestWorkspace, result, {
@@ -227,7 +250,8 @@ function registerRuntimeIpc(options = {}) {
         outcome: 'failed',
         failureCode: failureCodeFromError(error, 'runner_start_failed'),
         fields: {
-          requestCount: countCollectionRequests(collection),
+          requestCount: firstClassRunner ? countRunnerRequests(collection) : countCollectionRequests(collection),
+          runnerOwned: firstClassRunner,
           error: error?.message || String(error)
         }
       });
@@ -310,6 +334,19 @@ function requestLocalVariablesById(collection) {
   return byId;
 }
 
+function looksLikeRunnerPayload(value) {
+  return Boolean(
+    value
+    && typeof value === 'object'
+    && !Array.isArray(value)
+    && (
+      Object.hasOwn(value, 'environmentId')
+      || Object.hasOwn(value, 'allowEnvironmentMutation')
+      || Object.hasOwn(value, 'stopOnFailure')
+    )
+  );
+}
+
 function cloneJson(value) {
   if (value == null) {
     return value;
@@ -361,12 +398,29 @@ function publicCollectionRunResult(result) {
   return publicResult;
 }
 
+function applyRunnerEnvironmentMutationToWorkspace(workspace, environment, baseEnvironment) {
+  if (!environment?.id || environment.id === 'runtime' || environment.id === 'none' || !Array.isArray(environment.variables)) {
+    return;
+  }
+  const workspaceEnvironment = (workspace.environments || []).find((candidate) => candidate.id === environment.id);
+  if (!workspaceEnvironment) {
+    return;
+  }
+  workspaceEnvironment.variables = baseEnvironment?.id === environment.id
+    ? mergeVariableScopeByDelta(workspaceEnvironment.variables, baseEnvironment.variables, environment.variables)
+    : cloneJson(environment.variables);
+}
+
 function countCollectionRequests(collection = {}) {
   let count = Array.isArray(collection.requests) ? collection.requests.length : 0;
   for (const folder of collection.folders || []) {
     count += countCollectionRequests(folder);
   }
   return count;
+}
+
+function countRunnerRequests(runner = {}) {
+  return Array.isArray(runner.requests) ? runner.requests.length : 0;
 }
 
 function failureCodeFromError(error, fallback) {

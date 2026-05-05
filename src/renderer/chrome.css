@@ -225,7 +225,8 @@
 }
 
 .environment-list,
-.workspace-list {
+.workspace-list,
+.runner-list {
   flex: 1 1 auto;
   min-height: 90px;
 }
@@ -492,40 +493,64 @@ h2 {
 
 .workspace.environment-mode,
 .workspace.workspace-mode,
+.workspace.runner-mode,
 .workspace.document-mode,
 .workspace.request-empty-mode,
 .workspace.environment-empty-mode,
-.workspace.workspace-empty-mode {
+.workspace.workspace-empty-mode,
+.workspace.runner-empty-mode {
   grid-template-rows: auto minmax(0, 1fr);
 }
 
 .workspace.document-mode #workspacePaneResize,
 .workspace.document-mode #requestEditorPanel,
+.workspace.document-mode #requestEmptyPanel,
 .workspace.document-mode .results,
 .workspace.environment-mode #workspacePaneResize,
 .workspace.environment-mode #requestEditorPanel,
 .workspace.environment-mode #requestEmptyPanel,
+.workspace.environment-mode #workspaceEmptyPanel,
+.workspace.environment-mode #runnerEmptyPanel,
 .workspace.environment-mode .results,
 .workspace.workspace-mode #workspacePaneResize,
 .workspace.workspace-mode #requestEditorPanel,
+.workspace.workspace-mode #requestEmptyPanel,
+.workspace.workspace-mode #environmentEmptyPanel,
+.workspace.workspace-mode #runnerEmptyPanel,
 .workspace.workspace-mode .results,
+.workspace.runner-mode #workspacePaneResize,
+.workspace.runner-mode #requestEditorPanel,
+.workspace.runner-mode #requestEmptyPanel,
+.workspace.runner-mode #environmentEmptyPanel,
+.workspace.runner-mode #workspaceEmptyPanel,
+.workspace.runner-mode .results,
 .workspace.request-empty-mode #workspacePaneResize,
 .workspace.request-empty-mode #requestEditorPanel,
 .workspace.request-empty-mode .results,
 .workspace.environment-empty-mode #environmentMainPanel,
-.workspace.workspace-empty-mode #workspaceMainPanel {
+.workspace.workspace-empty-mode #workspaceMainPanel,
+.workspace.runner-empty-mode #runnerMainPanel {
   display: none;
 }
 
 .workspace.document-mode #environmentMainPanel,
 .workspace.document-mode #workspaceMainPanel,
+.workspace.document-mode #runnerMainPanel,
 .workspace.environment-mode #environmentMainPanel,
 .workspace.workspace-mode #workspaceMainPanel,
+.workspace.runner-mode #runnerMainPanel,
 .workspace.request-empty-mode #requestEmptyPanel,
 .workspace.environment-empty-mode #environmentEmptyPanel,
-.workspace.workspace-empty-mode #workspaceEmptyPanel {
+.workspace.workspace-empty-mode #workspaceEmptyPanel,
+.workspace.runner-empty-mode #runnerEmptyPanel {
   grid-row: 2 / -1;
+  align-self: stretch;
+  height: 100%;
   min-height: 0;
+}
+
+.workspace [hidden] {
+  display: none !important;
 }
 
 .panel,
@@ -601,27 +626,31 @@ h2 {
 }
 
 .environment-main-panel,
-.workspace-main-panel {
+.workspace-main-panel,
+.runner-main-panel {
   display: flex;
   flex-direction: column;
   min-height: 0;
   padding: 14px;
 }
 
-.workspace-main-panel {
+.workspace-main-panel,
+.runner-main-panel {
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
 
 .environment-main-panel[hidden],
-.workspace-main-panel[hidden] {
+.workspace-main-panel[hidden],
+.runner-main-panel[hidden] {
   display: none;
 }
 
 .request-main-header,
 .environment-main-header,
-.workspace-main-header {
+.workspace-main-header,
+.runner-main-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -638,21 +667,24 @@ h2 {
 
 .request-main-header > div:first-child,
 .environment-main-header > div:first-child,
-.workspace-main-header > div:first-child {
+.workspace-main-header > div:first-child,
+.runner-main-header > div:first-child {
   flex: 1 1 auto;
   min-width: 0;
 }
 
 .request-main-title,
 .environment-main-title,
-.workspace-main-title {
+.workspace-main-title,
+.runner-main-title {
   font-size: 18px;
   font-weight: 800;
 }
 
 .request-main-title.editable-title,
 .environment-main-title.editable-title,
-.workspace-main-title.editable-title {
+.workspace-main-title.editable-title,
+.runner-main-title.editable-title {
   display: block;
   box-sizing: border-box;
   width: 100%;
@@ -670,6 +702,8 @@ h2 {
 
 .environment-main-title.editable-title:hover,
 .environment-main-title.editable-title:focus-visible,
+.runner-main-title.editable-title:hover,
+.runner-main-title.editable-title:focus-visible,
 .request-main-title.editable-title:hover,
 .request-main-title.editable-title:focus-visible,
 .workspace-main-title.editable-title:hover,
@@ -679,6 +713,7 @@ h2 {
 }
 
 .environment-main-title.editable-title.is-editing,
+.runner-main-title.editable-title.is-editing,
 .request-main-title.editable-title.is-editing,
 .workspace-main-title.editable-title.is-editing {
   border-color: var(--primary);
@@ -687,6 +722,7 @@ h2 {
 }
 
 .environment-main-title.editable-title[aria-disabled="true"],
+.runner-main-title.editable-title[aria-disabled="true"],
 .request-main-title.editable-title[aria-disabled="true"],
 .workspace-main-title.editable-title[aria-disabled="true"] {
   cursor: default;
@@ -694,13 +730,15 @@ h2 {
 
 .request-main-header .request-actions,
 .environment-main-header .environment-actions,
-.workspace-main-header .workspace-actions {
+.workspace-main-header .workspace-actions,
+.runner-main-header .runner-actions {
   flex: 0 0 auto;
   justify-content: flex-end;
   max-width: 620px;
 }
 
-.workspace-actions {
+.workspace-actions,
+.runner-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -709,6 +747,66 @@ h2 {
 .workspace-main-summary {
   margin-top: 12px;
   align-content: start;
+}
+
+.runner-settings,
+.runner-request-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.runner-request-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.runner-request-row {
+  display: grid;
+  grid-template-columns: 34px 54px minmax(130px, 1fr) minmax(180px, 1.4fr) auto auto auto auto;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-muted);
+}
+
+.runner-request-row.is-dragging {
+  opacity: 0.6;
+}
+
+.runner-row-handle {
+  min-width: 28px;
+  padding: 4px;
+  font-family: var(--mono);
+}
+
+.runner-row-method {
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.runner-row-name,
+.runner-row-url {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runner-row-url {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.runner-results {
+  margin-top: 12px;
 }
 
 .workspace-sandbox-settings {

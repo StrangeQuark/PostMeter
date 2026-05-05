@@ -83,6 +83,37 @@
   flex: 0 0 auto;
 }
 
+.runner-import-modal {
+  width: min(680px, 100%);
+}
+
+.runner-import-list {
+  max-height: min(420px, 60vh);
+}
+
+.runner-import-option.collection {
+  font-weight: 700;
+}
+
+.runner-import-option.request {
+  margin-left: 24px;
+}
+
+.runner-import-option span {
+  min-width: 0;
+}
+
+.runner-import-option .runner-import-meta {
+  display: block;
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .context-menu {
   position: fixed;
   z-index: 1000;

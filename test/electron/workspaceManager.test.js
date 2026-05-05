@@ -3,6 +3,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
+const { CURRENT_SCHEMA_VERSION } = require('../../src/core/models');
 const { WorkspaceManager } = require('../../src/core/workspaceManager');
 const { WorkspaceRecoveryError } = require('../../src/core/workspaceStore');
 
@@ -24,7 +25,8 @@ test('workspace manager creates and describes a default managed workspace', asyn
   assert.equal(loaded.workspaces[0].theme, 'system');
   assert.equal(loaded.workspaces[0].collectionCount, 0);
   assert.equal(loaded.workspaces[0].requestCount, 0);
-  assert.equal(loaded.workspace.schemaVersion, 11);
+  assert.equal(loaded.workspaces[0].runnerCount, 0);
+  assert.equal(loaded.workspace.schemaVersion, CURRENT_SCHEMA_VERSION);
 });
 
 test('workspace manager default creation allocates around unrecognized existing workspace files', async () => {
@@ -41,7 +43,7 @@ test('workspace manager default creation allocates around unrecognized existing 
   assert.equal(loaded.workspaces.length, 1);
   assert.equal(loaded.workspaces[0].id, 'Local Workspace 2.json');
   assert.equal(await fs.readFile(unrecognizedPath, 'utf8'), '{not-managed-json');
-  assert.equal(JSON.parse(await fs.readFile(path.join(temp, 'Local Workspace 2.json'), 'utf8')).schemaVersion, 11);
+  assert.equal(JSON.parse(await fs.readFile(path.join(temp, 'Local Workspace 2.json'), 'utf8')).schemaVersion, CURRENT_SCHEMA_VERSION);
 });
 
 test('workspace manager creates, switches, and deletes managed workspaces', async () => {
@@ -77,6 +79,7 @@ test('workspace manager creates, switches, and deletes managed workspaces', asyn
   const switchedWorkspaceItem = switched.workspaces.find((item) => item.id === 'Workspace.json');
   assert.equal(switchedWorkspaceItem.collectionCount, 1);
   assert.equal(switchedWorkspaceItem.requestCount, 0);
+  assert.equal(switchedWorkspaceItem.runnerCount, 0);
 
   const deleted = await manager.deleteWorkspace('Workspace.json');
   assert.equal(deleted.deletedWorkspaceId, 'Workspace.json');
@@ -190,6 +193,7 @@ test('workspace manager imports a workspace into the managed set without replaci
       requests: [{ id: 'request-1', name: 'Imported Request', method: 'GET', url: 'https://example.com' }],
       folders: []
     }],
+    runners: [{ id: 'runner-1', name: 'Imported Runner', environmentId: 'none', requests: [] }],
     environments: [],
     cookies: [],
     history: [],
@@ -207,6 +211,7 @@ test('workspace manager imports a workspace into the managed set without replaci
   assert.equal(importedWorkspaceItem?.name, 'Imported Workspace');
   assert.equal(importedWorkspaceItem?.collectionCount, 1);
   assert.equal(importedWorkspaceItem?.requestCount, 1);
+  assert.equal(importedWorkspaceItem?.runnerCount, 1);
   await fs.access(path.join(temp, importedWorkspaceId));
 
   const switched = await manager.switchWorkspace(importedWorkspaceId);
@@ -310,7 +315,7 @@ test('workspace manager regenerates a workspace when all managed workspace files
   assert.equal(reloaded.workspaces.length, 1);
   assert.equal(reloaded.activeWorkspaceId, 'Local Workspace.json');
   assert.equal(reloaded.path, path.join(temp, 'Local Workspace.json'));
-  assert.equal(reloaded.workspace.schemaVersion, 11);
+  assert.equal(reloaded.workspace.schemaVersion, CURRENT_SCHEMA_VERSION);
   await fs.access(path.join(temp, 'Local Workspace.json'));
 });
 
@@ -379,7 +384,7 @@ test('workspace manager recovers a corrupt preferred workspace instead of silent
   const loaded = await manager.load();
   assert.equal(loaded.activeWorkspaceId, 'workspace.json');
   assert.equal(loaded.path, preferredWorkspacePath);
-  assert.equal(JSON.parse(await fs.readFile(preferredWorkspacePath, 'utf8')).schemaVersion, 11);
+  assert.equal(JSON.parse(await fs.readFile(preferredWorkspacePath, 'utf8')).schemaVersion, CURRENT_SCHEMA_VERSION);
   const quarantined = (await fs.readdir(temp)).filter((entry) => entry.includes('workspace.json.corrupt'));
   assert.equal(quarantined.length, 1);
 });

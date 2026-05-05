@@ -34,6 +34,15 @@ function findWorkspaceRequestContext(workspace, requestId) {
   return null;
 }
 
+function findWorkspaceRunnerRequestContext(workspace, runnerId, requestId) {
+  const runner = (workspace?.runners || []).find((candidate) => candidate.id === runnerId);
+  if (!runner) {
+    return null;
+  }
+  const request = (runner.requests || []).find((candidate) => candidate.id === requestId);
+  return request ? { runner, request } : null;
+}
+
 function findRequestInCollection(collection, requestId) {
   let match = null;
   walkRequests(collection, (request) => {
@@ -270,6 +279,9 @@ function removeDuplicateCookiesByIdentity(cookies, identity, keepIndex) {
 }
 
 function applyRequestSaveToWorkspace(workspace, payload) {
+  if (payload?.runnerId) {
+    return applyRunnerRequestSaveToWorkspace(workspace, payload);
+  }
   const nextWorkspace = {
     ...workspace,
     collections: Array.isArray(workspace?.collections) ? [...workspace.collections] : []
@@ -310,6 +322,47 @@ function applyRequestSaveToWorkspace(workspace, payload) {
   if (Array.isArray(payload.cookies)) {
     nextWorkspace.cookies = cloneJson(payload.cookies);
   }
+
+  if (payload?.settings && typeof payload.settings === 'object') {
+    nextWorkspace.settings = normalizeSettings(mergeWorkspaceSettingsForSave(workspace?.settings, payload.settings));
+  }
+
+  return nextWorkspace;
+}
+
+function applyRunnerRequestSaveToWorkspace(workspace, payload) {
+  const nextWorkspace = {
+    ...workspace,
+    runners: Array.isArray(workspace?.runners) ? [...workspace.runners] : []
+  };
+  const runnerId = payload?.runnerId || '';
+  const requestId = payload?.requestId || payload?.request?.id || '';
+  let runnerIndex = nextWorkspace.runners.findIndex((runner) => runner.id === runnerId);
+  let runner = runnerIndex >= 0 ? cloneJson(nextWorkspace.runners[runnerIndex]) : null;
+
+  if (!runner) {
+    if (!payload?.runnerShell) {
+      throw new Error(`Runner "${runnerId}" was not found.`);
+    }
+    runner = {
+      id: runnerId,
+      name: payload.runnerShell.name || 'Untitled Runner',
+      environmentId: payload.runnerShell.environmentId || 'none',
+      stopOnFailure: payload.runnerShell.stopOnFailure === true,
+      allowEnvironmentMutation: payload.runnerShell.allowEnvironmentMutation === true,
+      requests: []
+    };
+    runnerIndex = nextWorkspace.runners.length;
+  }
+
+  runner.requests = Array.isArray(runner.requests) ? runner.requests : [];
+  const requestIndex = runner.requests.findIndex((request) => request.id === requestId);
+  if (requestIndex >= 0) {
+    runner.requests[requestIndex] = cloneJson(payload.request);
+  } else {
+    runner.requests.push(cloneJson(payload.request));
+  }
+  nextWorkspace.runners[runnerIndex] = runner;
 
   if (payload?.settings && typeof payload.settings === 'object') {
     nextWorkspace.settings = normalizeSettings(mergeWorkspaceSettingsForSave(workspace?.settings, payload.settings));
@@ -437,6 +490,7 @@ module.exports = {
   applyRequestSaveToWorkspace,
   applyWorkspaceSettingsSaveToWorkspace,
   applyScriptVariableMutationsToWorkspace,
+  findWorkspaceRunnerRequestContext,
   findWorkspaceRequestContext,
   mergeCookieJarByDelta,
   mergeVariableScopeByDelta,

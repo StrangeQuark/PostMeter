@@ -78,11 +78,25 @@ test('session IPC accepts many tabs under the bounded limit and rejects invalid 
   });
 
   const validManyTabs = {
-    openRequestTabs: Array.from({ length: 13 }, (_, index) => ({
-      collectionId: 'collection',
-      key: `request:${index}`,
-      requestId: `request-${index}`
-    }))
+    activeRunnerRequestRunnerId: 'runner-1',
+    openRequestTabs: [
+      ...Array.from({ length: 12 }, (_, index) => ({
+        collectionId: 'collection',
+        key: `request:${index}`,
+        requestId: `request-${index}`
+      })),
+      {
+        key: 'runner-request:runner-1:runner-request-1',
+        runnerId: 'runner-1',
+        requestId: 'runner-request-1',
+        runnerRequest: true
+      }
+    ],
+    openRunnerTabs: [{
+      key: 'runner:runner-1',
+      runnerId: 'runner-1',
+      dirty: false
+    }]
   };
   assert.equal((await handlers.get('session:save')(null, validManyTabs)).openRequestTabs.length, 13);
   const validSyncEvent = { returnValue: undefined };

@@ -120,7 +120,7 @@ Required broker capabilities for sandbox v1 implementation:
 - Async completion tracking.
 - Bounded `pm.sendRequest`.
 - Cookie read/mutation operations for the current URL scope.
-- Runner execution control and bounded collection-local `pm.execution.runRequest`.
+- Runner execution control and bounded collection-local or runner-local `pm.execution.runRequest`.
 - Bounded `pm.visualizer` result capture for isolated UI rendering.
 - Explicitly granted, brokered `pm.vault` access backed by an encrypted local vault store.
 - Bundled allowlisted package loading plus reviewed cached team/external package bundles, including scoped npm and latest-version import forms, for safe Postman import compatibility.
@@ -128,6 +128,12 @@ Required broker capabilities for sandbox v1 implementation:
 - Final result and side-effect commit reporting.
 
 ## Completion And Cancellation
+
+## Runner Environment Mutation
+
+Workspace-owned desktop runners execute runner-owned request copies. The sandbox sees those runner-local request IDs for request execution control, including bounded `pm.execution.runRequest`.
+
+The runner environment is selected on the runner itself and is independent from the top-right request environment selector. When the runner's environment mutation option is disabled, scripts and extractors receive a temporary copy. Mutations to that copy are available to later requests in the same runner execution but are discarded after success, failure, or cancellation. When the option is enabled, the Electron main process applies the environment mutation delta back to the selected saved environment after validating the public runner result.
 
 Completion rules:
 

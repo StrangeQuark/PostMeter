@@ -4,7 +4,7 @@ const THEME_OPTIONS = ['system', 'light', 'dark'];
 const RENDERER_STATE_DEFAULTS = PostMeterRendererState.createRendererState();
 const TAB_PANEL_IDS = {
   request: ['paramsTab', 'headersTab', 'authTab', 'cookiesTab', 'bodyTab', 'testsTab', 'scriptsTab', 'examplesTab', 'collectionVariablesTab'],
-  results: ['responseTab', 'testResultsTab', 'visualizerTab', 'loadTab', 'runnerTab']
+  results: ['responseTab', 'testResultsTab', 'visualizerTab', 'loadTab']
 };
 
 let workspace = RENDERER_STATE_DEFAULTS.workspace;
@@ -14,6 +14,8 @@ let selectedWorkspaceId = RENDERER_STATE_DEFAULTS.selectedWorkspaceId;
 let activeCollectionId = RENDERER_STATE_DEFAULTS.activeCollectionId;
 let activeFolderId = RENDERER_STATE_DEFAULTS.activeFolderId;
 let activeRequestId = RENDERER_STATE_DEFAULTS.activeRequestId;
+let activeRunnerRequestRunnerId = RENDERER_STATE_DEFAULTS.activeRunnerRequestRunnerId;
+let activeRunnerConfigId = RENDERER_STATE_DEFAULTS.activeRunnerConfigId;
 let activeEnvironmentId = RENDERER_STATE_DEFAULTS.activeEnvironmentId;
 let activeWorkspaceId = RENDERER_STATE_DEFAULTS.activeWorkspaceId;
 let activeSidebarPanel = RENDERER_STATE_DEFAULTS.activeSidebarPanel;
@@ -22,6 +24,7 @@ let draftRequests = RENDERER_STATE_DEFAULTS.draftRequests;
 let openRequestTabs = RENDERER_STATE_DEFAULTS.openRequestTabs;
 let openEnvironmentTabs = RENDERER_STATE_DEFAULTS.openEnvironmentTabs;
 let openWorkspaceTabs = RENDERER_STATE_DEFAULTS.openWorkspaceTabs;
+let openRunnerTabs = RENDERER_STATE_DEFAULTS.openRunnerTabs;
 let collectionDirtySnapshots = RENDERER_STATE_DEFAULTS.collectionDirtySnapshots;
 let collectionDirtyOwners = RENDERER_STATE_DEFAULTS.collectionDirtyOwners;
 let cookieJarDirtySnapshot = RENDERER_STATE_DEFAULTS.cookieJarDirtySnapshot;
@@ -41,6 +44,8 @@ let activeModalCancelValue = RENDERER_STATE_DEFAULTS.activeModalCancelValue;
 let activeModalResolver = RENDERER_STATE_DEFAULTS.activeModalResolver;
 let selectedDraftSaveCollectionId = RENDERER_STATE_DEFAULTS.selectedDraftSaveCollectionId;
 let selectedExportCollectionId = RENDERER_STATE_DEFAULTS.selectedExportCollectionId;
+let selectedRunnerImportTarget = null;
+let expandedRunnerImportCollectionId = '';
 let activeVaultPromptPayload = null;
 let sessionSaveTimer = null;
 let sessionPersistenceEnabled = false;
@@ -50,6 +55,7 @@ let notificationModalActive = false;
 let requestTitleEditOriginal = '';
 let environmentTitleEditOriginal = '';
 let workspaceTitleEditOriginal = '';
+let runnerTitleEditOriginal = '';
 let pendingDiagnosticsSettingsSave = null;
 const pendingNotificationModals = [];
 
@@ -91,15 +97,19 @@ const CodeEditor = window.PostMeterCodeEditor || {};
 const {
   activeEnvironmentTabKey: buildActiveEnvironmentTabKey,
   activeRequestTabKey: buildActiveRequestTabKey,
+  activeRunnerTabKey: buildActiveRunnerTabKey,
   activeWorkspaceTabKey: buildActiveWorkspaceTabKey,
   clearSavedEnvironmentDirtyState: clearRendererSavedEnvironmentDirtyState,
+  clearSavedRunnerDirtyState: clearRendererSavedRunnerDirtyState,
   clearSharedRequestDirtyState: clearRendererSharedRequestDirtyState,
   clearSavedRequestDirtyState: clearRendererSavedRequestDirtyState,
   isActiveEnvironmentTab: isRendererActiveEnvironmentTab,
   isActiveRequestTab: isRendererActiveRequestTab,
+  isActiveRunnerTab: isRendererActiveRunnerTab,
   isActiveWorkspaceTab: isRendererActiveWorkspaceTab,
   openModalState,
   requestSnapshot: snapshotRequest,
+  runnerSnapshot: snapshotRunner,
   resetTabState: resetRendererTabState,
   resolveModalState
 } = PostMeterRendererState;
@@ -127,6 +137,10 @@ const state = {
   set activeFolderId(value) { activeFolderId = value; },
   get activeRequestId() { return activeRequestId; },
   set activeRequestId(value) { activeRequestId = value; },
+  get activeRunnerRequestRunnerId() { return activeRunnerRequestRunnerId; },
+  set activeRunnerRequestRunnerId(value) { activeRunnerRequestRunnerId = value; },
+  get activeRunnerConfigId() { return activeRunnerConfigId; },
+  set activeRunnerConfigId(value) { activeRunnerConfigId = value; },
   get activeEnvironmentId() { return activeEnvironmentId; },
   set activeEnvironmentId(value) { activeEnvironmentId = value; },
   get activeWorkspaceId() { return activeWorkspaceId; },
@@ -143,6 +157,8 @@ const state = {
   set openEnvironmentTabs(value) { openEnvironmentTabs = value; },
   get openWorkspaceTabs() { return openWorkspaceTabs; },
   set openWorkspaceTabs(value) { openWorkspaceTabs = value; },
+  get openRunnerTabs() { return openRunnerTabs; },
+  set openRunnerTabs(value) { openRunnerTabs = value; },
   get collectionDirtySnapshots() { return collectionDirtySnapshots; },
   set collectionDirtySnapshots(value) { collectionDirtySnapshots = value; },
   get collectionDirtyOwners() { return collectionDirtyOwners; },
@@ -185,10 +201,12 @@ const requestTabState = createRequestTabState({
   activeCollection,
   activeEnvironment,
   activeRequest,
+  activeRunner,
   activeWorkspaceItem,
   clearActiveWorkspaceItem,
   collectEnvironmentFromEditor,
   collectRequestFromEditor,
+  collectRunnerFromEditor,
   findRequest,
   persistWorkspace: (...args) => persistWorkspace(...args),
   promptUnsavedRequestClose,
@@ -201,6 +219,7 @@ const requestTabState = createRequestTabState({
   setStatus,
   selectEnvironmentTab: (tab) => selectEnvironmentTabWithoutCollect(tab),
   selectRequestTab: (tab) => selectRequestTabWithoutCollect(tab),
+  selectRunnerTab: (tab) => selectRunnerTabWithoutCollect(tab),
   selectWorkspaceTab: (tab) => selectWorkspaceTabWithoutCollect(tab),
   workspaceListItems
 });
@@ -288,7 +307,7 @@ initializeRenderer({
     }));
     registerCleanup(window.postmeter.runner.onProgress(({ id, progress }) => {
       if (id === activeRunnerId) {
-        $('runnerResults').textContent = `Running collection...\nCompleted ${progress.completedRequests} of ${progress.totalRequests} requests.\nLast: ${progress.requestName} ${progress.passed ? 'passed' : 'failed'}`;
+        $('runnerResults').textContent = `Running...\nCompleted ${progress.completedRequests} of ${progress.totalRequests} requests.\nLast: ${progress.requestName} ${progress.passed ? 'passed' : 'failed'}`;
       }
     }));
     if (window.postmeter.vault?.onPrompt) {
@@ -320,6 +339,7 @@ function bindUi() {
     onNewCollection: newCollection,
     onNewFolder: () => newFolder(),
     onNewRequest: newRequest,
+    onNewRunner: () => newRunner(),
     onNewWorkspace: () => { void newWorkspace(); },
     onNewEnvironment: () => newEnvironment(),
     onSaveRequest: () => { void saveRequestFromPane(); },
@@ -367,6 +387,9 @@ function bindUi() {
     onCancelCollectionRun: cancelCollectionRun,
     onExportRunnerJson: () => exportRunnerResult('json'),
     onExportRunnerCsv: () => exportRunnerResult('csv'),
+    onSaveRunner: () => { void saveRunnerFromPane(); },
+    onDeleteRunner: () => { void deleteRunner(); },
+    onAddRunnerRequest: (event) => showAddRunnerRequestMenu(event),
     onStartPkceFlow: startPkceFlow,
     onStartDeviceFlow: startDeviceFlow,
     onCancelOauthFlow: cancelOauthFlow,
@@ -376,6 +399,17 @@ function bindUi() {
       renderEnvironmentEditor();
       scheduleSessionSave();
     },
+    onRunnerEnvironmentSelectChange: (environmentId) => {
+      const runner = activeRunner();
+      if (!runner) {
+        return;
+      }
+      runner.environmentId = environmentId;
+      markActiveRunnerDirty();
+      renderRunnerEditor();
+      scheduleSessionSave();
+    },
+    onRunnerConfigChange: collectRunnerAndMarkDirty,
     onMethodChange: () => {
       updateMethodSelectClass();
       collectRequestAndMarkDirty();
@@ -405,12 +439,14 @@ function bindUi() {
     onTrapActiveModalFocus: trapActiveModalFocus,
     getSelectedDraftSaveCollectionId: () => selectedDraftSaveCollectionId,
     getSelectedExportCollectionId: () => selectedExportCollectionId,
+    getSelectedRunnerImportTarget: () => selectedRunnerImportTarget,
     onCloseContextMenu: closeContextMenu,
     onInitResizablePanes: initResizablePanes
   });
   bindRequestTitleEditor();
   bindWorkspaceTitleEditor();
   bindEnvironmentTitleEditor();
+  bindRunnerTitleEditor();
   bindHistoryContextMenu();
 }
 
@@ -455,7 +491,8 @@ function openTabRefs() {
   return [
     ...openRequestTabs.map((tab) => openTabRef('request', tab)),
     ...openEnvironmentTabs.map((tab) => openTabRef('environment', tab)),
-    ...openWorkspaceTabs.map((tab) => openTabRef('workspace', tab))
+    ...openWorkspaceTabs.map((tab) => openTabRef('workspace', tab)),
+    ...openRunnerTabs.map((tab) => openTabRef('runner', tab))
   ];
 }
 
@@ -506,6 +543,8 @@ async function closeOpenTab(ref) {
     await closeEnvironmentTab(ref.tab);
   } else if (ref?.kind === 'workspace') {
     await closeWorkspaceTab(ref.tab);
+  } else if (ref?.kind === 'runner') {
+    await closeRunnerTab(ref.tab);
   }
   return !openTabRefStillExists(ref);
 }
@@ -518,6 +557,8 @@ async function forceCloseOpenTab(ref) {
     await forceCloseEnvironmentTab(ref.tab, options);
   } else if (ref?.kind === 'workspace') {
     await forceCloseWorkspaceTab(ref.tab, options);
+  } else if (ref?.kind === 'runner') {
+    await forceCloseRunnerTab(ref.tab, options);
   }
   return !openTabRefStillExists(ref);
 }
@@ -659,7 +700,11 @@ function handleRequestTitleKeydown(event) {
 
 function handleRequestTitleInput() {
   if (collectRequestNameFromTitle({ markDirty: true, render: false })) {
-    renderCollections();
+    if (activeRunnerRequestRunnerId) {
+      renderRunnerEditor();
+    } else {
+      renderCollections();
+    }
     renderRequestTabs();
   }
 }
@@ -678,7 +723,11 @@ function finishRequestTitleEdit(options = {}) {
   if (request && options.revert === true) {
     request.name = requestTitleEditOriginal || 'Untitled Request';
     title.textContent = requestDisplayName(request);
-    renderCollections();
+    if (activeRunnerRequestRunnerId) {
+      renderRunnerEditor();
+    } else {
+      renderCollections();
+    }
     renderRequestTabs();
     return;
   }
@@ -686,7 +735,11 @@ function finishRequestTitleEdit(options = {}) {
   if (request) {
     title.textContent = requestDisplayName(request);
   }
-  renderCollections();
+  if (activeRunnerRequestRunnerId) {
+    renderRunnerEditor();
+  } else {
+    renderCollections();
+  }
   renderRequestTabs();
 }
 
@@ -764,6 +817,87 @@ async function finishWorkspaceTitleEdit(options = {}) {
     renderWorkspacePanel();
   }
   return renamedWorkspace;
+}
+
+function bindRunnerTitleEditor() {
+  const title = $('runnerMainTitle');
+  if (!title) {
+    return;
+  }
+  title.addEventListener('click', beginRunnerTitleEdit);
+  title.addEventListener('keydown', handleRunnerTitleKeydown);
+  title.addEventListener('input', collectRunnerAndMarkDirty);
+  title.addEventListener('blur', () => finishRunnerTitleEdit());
+}
+
+function beginRunnerTitleEdit() {
+  const runner = activeRunner();
+  const title = $('runnerMainTitle');
+  if (!runner || !title || title.dataset.editing === 'true') {
+    return;
+  }
+  runnerTitleEditOriginal = runnerDisplayName(runner);
+  title.dataset.editing = 'true';
+  title.classList.add('is-editing');
+  title.setAttribute('contenteditable', 'plaintext-only');
+  title.setAttribute('role', 'textbox');
+  title.setAttribute('aria-label', 'Runner name');
+  title.focus();
+  selectElementContents(title);
+}
+
+function handleRunnerTitleKeydown(event) {
+  const title = $('runnerMainTitle');
+  if (!title) {
+    return;
+  }
+  if (title.dataset.editing !== 'true') {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      beginRunnerTitleEdit();
+    }
+    return;
+  }
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    const shouldSave = (runnerTitleInputValue() || 'Untitled Runner')
+      !== (runnerTitleEditOriginal || 'Untitled Runner');
+    finishRunnerTitleEdit();
+    title.blur();
+    if (shouldSave) {
+      void saveRunnerFromPane();
+    }
+  } else if (event.key === 'Escape') {
+    event.preventDefault();
+    finishRunnerTitleEdit({ revert: true });
+    title.blur();
+  }
+}
+
+function finishRunnerTitleEdit(options = {}) {
+  const title = $('runnerMainTitle');
+  if (!title || title.dataset.editing !== 'true') {
+    return;
+  }
+  const runner = activeRunner();
+  delete title.dataset.editing;
+  title.classList.remove('is-editing');
+  title.setAttribute('contenteditable', 'false');
+  title.removeAttribute('role');
+  title.setAttribute('aria-label', 'Runner name');
+  if (runner && options.revert === true) {
+    runner.name = runnerTitleEditOriginal || 'Untitled Runner';
+    title.textContent = runnerDisplayName(runner);
+    renderRunners();
+    renderRequestTabs();
+    return;
+  }
+  collectRunnerFromEditor();
+  if (runner) {
+    title.textContent = runnerDisplayName(runner);
+  }
+  renderRunners();
+  renderRequestTabs();
 }
 
 function selectElementContents(element) {
@@ -870,6 +1004,22 @@ function renderRequestTabs() {
         onContextMenu: (event, tab, item, menuOptions) => showOpenTabContextMenu(event, 'environment', tab, item, menuOptions)
       },
       {
+        kind: 'runner',
+        tabs: openRunnerTabs,
+        resolve: requestTabState.runnerForTab,
+        isActive: isActiveRunnerTab,
+        idPrefix: 'open-runner-tab',
+        controlsId: 'runnerMainPanel',
+        buttonClassName: 'request-tab-button runner-tab-button',
+        methodText: () => 'RUN',
+        title: (runner) => runner.name || 'Untitled Runner',
+        closeTitle: () => 'Close runner',
+        closeAriaLabel: (runner) => `Close ${runner.name || 'Untitled Runner'}`,
+        onSelect: (tab) => selectRunnerTab(tab),
+        onClose: closeRunnerTab,
+        onContextMenu: (event, tab, item, menuOptions) => showOpenTabContextMenu(event, 'runner', tab, item, menuOptions)
+      },
+      {
         kind: 'workspace',
         tabs: openWorkspaceTabs,
         resolve: workspaceForTab,
@@ -910,6 +1060,10 @@ function canOpenRequestTabFor(collectionId, requestId, options = {}) {
   return requestTabState.canOpenRequestTabFor(collectionId, requestId, options);
 }
 
+function canOpenRunnerRequestTabFor(runnerId, requestId, options = {}) {
+  return requestTabState.canOpenRunnerRequestTabFor(runnerId, requestId, options);
+}
+
 function canOpenAdditionalEnvironmentTab(options = {}) {
   return requestTabState.canOpenAdditionalEnvironmentTab(options);
 }
@@ -924,6 +1078,14 @@ function canOpenAdditionalWorkspaceTab(options = {}) {
 
 function canOpenWorkspaceTabFor(workspaceId, options = {}) {
   return requestTabState.canOpenWorkspaceTabFor(workspaceId, options);
+}
+
+function canOpenAdditionalRunnerTab(options = {}) {
+  return requestTabState.canOpenAdditionalRunnerTab(options);
+}
+
+function canOpenRunnerTabFor(runnerId, options = {}) {
+  return requestTabState.canOpenRunnerTabFor(runnerId, options);
 }
 
 function selectRequestTab(tab) {
@@ -953,12 +1115,25 @@ function selectWorkspaceTabWithoutCollect(tab) {
   requestTabState.selectWorkspaceTab(tab);
 }
 
+function selectRunnerTab(tab) {
+  collectActiveEditorState();
+  requestTabState.selectRunnerTab(tab);
+}
+
+function selectRunnerTabWithoutCollect(tab) {
+  requestTabState.selectRunnerTab(tab);
+}
+
 function markActiveRequestDirty() {
   requestTabState.markActiveRequestDirty();
 }
 
 function markActiveEnvironmentDirty() {
   requestTabState.markActiveEnvironmentDirty();
+}
+
+function markActiveRunnerDirty() {
+  requestTabState.markActiveRunnerDirty();
 }
 
 function collectRequestAndMarkDirty() {
@@ -971,6 +1146,11 @@ function collectEnvironmentAndMarkDirty() {
   markActiveEnvironmentDirty();
 }
 
+function collectRunnerAndMarkDirty() {
+  collectRunnerFromEditor();
+  markActiveRunnerDirty();
+}
+
 function collectActiveEditorState() {
   if (activeMainPanel === 'environment') {
     finishEnvironmentTitleEdit();
@@ -979,6 +1159,11 @@ function collectActiveEditorState() {
   }
   if (activeMainPanel === 'workspace') {
     void finishWorkspaceTitleEdit();
+    return;
+  }
+  if (activeMainPanel === 'runner') {
+    finishRunnerTitleEdit();
+    collectRunnerFromEditor();
     return;
   }
   if (activeMainPanel === 'request') {
@@ -994,6 +1179,10 @@ function clearSavedRequestDirtyState() {
   });
   clearRendererSavedEnvironmentDirtyState(state, {
     environmentForTab: requestTabState.environmentForTab,
+    onAfterClear: () => {}
+  });
+  clearRendererSavedRunnerDirtyState(state, {
+    runnerForTab: requestTabState.runnerForTab,
     onAfterClear: renderRequestTabs
   });
   clearRendererSharedRequestDirtyState(state);
@@ -1062,6 +1251,10 @@ function activeWorkspaceTabKey() {
   return buildActiveWorkspaceTabKey(state);
 }
 
+function activeRunnerTabKey() {
+  return buildActiveRunnerTabKey(state);
+}
+
 function isActiveRequestTab(tab) {
   return isRendererActiveRequestTab(state, tab);
 }
@@ -1074,6 +1267,10 @@ function isActiveWorkspaceTab(tab) {
   return isRendererActiveWorkspaceTab(state, tab);
 }
 
+function isActiveRunnerTab(tab) {
+  return isRendererActiveRunnerTab(state, tab);
+}
+
 function requestForTab(tab) {
   return requestTabState.requestForTab(tab);
 }
@@ -1084,6 +1281,10 @@ function environmentForTab(tab) {
 
 function workspaceForTab(tab) {
   return requestTabState.workspaceForTab(tab);
+}
+
+function runnerForTab(tab) {
+  return requestTabState.runnerForTab(tab);
 }
 
 function pruneOpenRequestTabs() {
@@ -1106,12 +1307,24 @@ function removeOpenWorkspaceTab(keyOrWorkspaceId) {
   requestTabState.removeOpenWorkspaceTab(keyOrWorkspaceId);
 }
 
+function removeOpenRunnerTab(keyOrRunnerId) {
+  requestTabState.removeOpenRunnerTab(keyOrRunnerId);
+}
+
 function closeWorkspaceTab(tab) {
   return requestTabState.closeWorkspaceTab(tab);
 }
 
 function forceCloseWorkspaceTab(tab, options = {}) {
   return requestTabState.forceCloseWorkspaceTab(tab, options);
+}
+
+function closeRunnerTab(tab) {
+  return requestTabState.closeRunnerTab(tab);
+}
+
+function forceCloseRunnerTab(tab, options = {}) {
+  return requestTabState.forceCloseRunnerTab(tab, options);
 }
 
 function closeEnvironmentTab(tab) {
@@ -1136,6 +1349,13 @@ function promptUnsavedRequestClose(tab, request) {
     $('unsavedRequestMessage').textContent = tab.createdUnsaved
       ? `"${request.name || 'Untitled Environment'}" is not saved to the workspace. Save it before closing?`
       : `"${request.name || 'Untitled Environment'}" has unsaved changes. Save those changes before closing?`;
+    return showModal('unsavedRequestModal', 'cancel');
+  }
+  if (tab.runnerId && tab.runnerRequest !== true) {
+    $('unsavedRequestTitle').textContent = tab.createdUnsaved ? 'Close unsaved runner?' : 'Close runner with unsaved changes?';
+    $('unsavedRequestMessage').textContent = tab.createdUnsaved
+      ? `"${request.name || 'Untitled Runner'}" is not saved to the workspace. Save it before closing?`
+      : `"${request.name || 'Untitled Runner'}" has unsaved changes. Save those changes before closing?`;
     return showModal('unsavedRequestModal', 'cancel');
   }
   $('unsavedRequestTitle').textContent = tab.draft ? 'Close unsaved request?' : 'Close request with unsaved changes?';
@@ -1171,6 +1391,7 @@ async function saveDraftRequestToCollection(draftRequest, collectionId, options 
   const previousActiveCollectionId = activeCollectionId;
   const previousActiveFolderId = activeFolderId;
   const previousActiveRequestId = activeRequestId;
+  const previousActiveRunnerRequestRunnerId = activeRunnerRequestRunnerId;
   const oldKey = `draft:${draftId}`;
   const existingTab = options.tab || openRequestTabs.find((candidate) => candidate.key === oldKey);
   if (!existingTab && !canOpenRequestTabFor(collection.id, draftId)) {
@@ -1183,6 +1404,7 @@ async function saveDraftRequestToCollection(draftRequest, collectionId, options 
   collection.requests.push(request);
   draftRequests.delete(draftId);
   activeMainPanel = 'request';
+  activeRunnerRequestRunnerId = null;
   activeCollectionId = collection.id;
   activeFolderId = null;
   activeRequestId = request.id;
@@ -1219,6 +1441,7 @@ async function saveDraftRequestToCollection(draftRequest, collectionId, options 
     activeCollectionId = previousActiveCollectionId;
     activeFolderId = previousActiveFolderId;
     activeRequestId = previousActiveRequestId;
+    activeRunnerRequestRunnerId = previousActiveRunnerRequestRunnerId;
     if (createdTab && tab) {
       const index = openRequestTabs.indexOf(tab);
       if (index >= 0) {
@@ -1372,6 +1595,7 @@ function focusInitialModalElement(modalId) {
     unsavedRequestModal: 'cancelCloseRequestButton',
     saveDraftRequestModal: 'cancelSaveDraftButton',
     exportCollectionModal: 'cancelExportCollectionButton',
+    runnerImportModal: 'cancelRunnerImportButton',
     textInputModal: $('textInputModal')?.dataset?.valueControl || 'textInputModalInput',
     confirmActionModal: 'cancelConfirmActionButton',
     notificationModal: 'closeNotificationModalButton',
@@ -1631,6 +1855,7 @@ async function persistSessionState() {
 function buildWorkspaceStateForPersistence() {
   collectRequestFromEditor();
   collectEnvironmentFromEditor();
+  collectRunnerFromEditor();
   collectSettingsFromEditor();
   return workspace;
 }
@@ -1708,7 +1933,9 @@ function renderAll() {
   renderCollections();
   renderEnvironments();
   renderWorkspaces();
+  renderRunners();
   renderWorkspacePanel();
+  renderRunnerEditor();
   renderHistory();
   renderRequestTabs();
   renderRequestEditor();
@@ -1718,13 +1945,21 @@ function renderAll() {
 }
 
 function selectSidebarPanel(panel) {
-  if (!['collections', 'environments', 'workspaces', 'history'].includes(panel)) {
+  if (!['collections', 'environments', 'workspaces', 'runners', 'history'].includes(panel)) {
     return;
   }
   collectActiveEditorState();
   activeSidebarPanel = panel;
   if (panel === 'collections') {
     activeMainPanel = 'request';
+    if (activeRunnerRequestRunnerId) {
+      const fallbackTab = [...openRequestTabs].reverse().find((tab) => tab.runnerRequest !== true && !tab.runnerId);
+      if (fallbackTab) {
+        selectRequestTabWithoutCollect(fallbackTab);
+        return;
+      }
+      clearActiveWorkspaceItem();
+    }
   } else if (panel === 'environments') {
     const activeTab = openEnvironmentTabs.find((tab) => tab.key === activeEnvironmentTabKey());
     const fallbackTab = activeTab || openEnvironmentTabs[openEnvironmentTabs.length - 1] || null;
@@ -1732,6 +1967,7 @@ function selectSidebarPanel(panel) {
       selectEnvironmentTabWithoutCollect(fallbackTab);
       return;
     }
+    activeRunnerRequestRunnerId = null;
     activeEnvironmentId = 'none';
     activeMainPanel = 'environment';
   } else if (panel === 'workspaces') {
@@ -1743,6 +1979,16 @@ function selectSidebarPanel(panel) {
     }
     selectedWorkspaceId = '';
     activeMainPanel = 'workspace';
+  } else if (panel === 'runners') {
+    const activeTab = openRunnerTabs.find((tab) => tab.key === activeRunnerTabKey());
+    const fallbackTab = activeTab || openRunnerTabs[openRunnerTabs.length - 1] || null;
+    if (fallbackTab) {
+      selectRunnerTabWithoutCollect(fallbackTab);
+      return;
+    }
+    activeRunnerConfigId = null;
+    activeRunnerRequestRunnerId = null;
+    activeMainPanel = 'runner';
   }
   renderAll();
 }
@@ -1776,22 +2022,28 @@ function renderSidebarPanels() {
 function renderMainPanels() {
   const showEnvironment = activeMainPanel === 'environment';
   const showWorkspace = activeMainPanel === 'workspace';
-  const showDocument = showEnvironment || showWorkspace;
+  const showRunner = activeMainPanel === 'runner';
+  const showDocument = showEnvironment || showWorkspace || showRunner;
   const showRequestEmpty = activeMainPanel === 'request' && !activeRequest();
   const showEnvironmentEmpty = showEnvironment && !activeEnvironment();
   const showWorkspaceEmpty = showWorkspace && !activeWorkspaceItem();
+  const showRunnerEmpty = showRunner && !activeRunner();
   document.querySelector('.workspace').classList.toggle('document-mode', showDocument);
   document.querySelector('.workspace').classList.toggle('environment-mode', showEnvironment);
   document.querySelector('.workspace').classList.toggle('workspace-mode', showWorkspace);
+  document.querySelector('.workspace').classList.toggle('runner-mode', showRunner);
   document.querySelector('.workspace').classList.toggle('request-empty-mode', showRequestEmpty);
   document.querySelector('.workspace').classList.toggle('environment-empty-mode', showEnvironmentEmpty);
   document.querySelector('.workspace').classList.toggle('workspace-empty-mode', showWorkspaceEmpty);
+  document.querySelector('.workspace').classList.toggle('runner-empty-mode', showRunnerEmpty);
   $('requestEmptyPanel').hidden = !showRequestEmpty;
   $('environmentEmptyPanel').hidden = !showEnvironmentEmpty;
   $('workspaceEmptyPanel').hidden = !showWorkspaceEmpty;
+  $('runnerEmptyPanel').hidden = !showRunnerEmpty;
   $('requestEditorPanel').hidden = showDocument || showRequestEmpty;
   $('environmentMainPanel').hidden = !showEnvironment || showEnvironmentEmpty;
   $('workspaceMainPanel').hidden = !showWorkspace || showWorkspaceEmpty;
+  $('runnerMainPanel').hidden = !showRunner || showRunnerEmpty;
   $('workspacePaneResize').hidden = showDocument || showRequestEmpty;
   document.querySelector('.results').hidden = showDocument || showRequestEmpty;
 }
@@ -1809,6 +2061,7 @@ function renderSettings() {
 }
 
 function ensureSettings() {
+  workspace.runners = normalizeWorkspaceRunners(workspace.runners);
   workspace.settings ||= {};
   workspace.settings.updates ||= { includePrereleases: false };
   workspace.settings.appearance ||= { theme: 'system' };
@@ -2780,6 +3033,8 @@ function vaultApi() {
 function selectInitialWorkspaceItem() {
   selectedWorkspaceId ||= activeWorkspaceId || workspaceListItems()[0]?.id || null;
   activeMainPanel = 'request';
+  activeRunnerConfigId = null;
+  activeRunnerRequestRunnerId = null;
   resetRequestTabs();
   const collection = workspace.collections[0];
   activeCollectionId = collection?.id;
@@ -2793,6 +3048,7 @@ function selectInitialWorkspaceItem() {
 
 function selectFirstRequest(collection) {
   const request = firstRequestInCollection(collection);
+  activeRunnerRequestRunnerId = null;
   activeFolderId = request?.folderId || null;
   activeRequestId = request?.request?.id || null;
 }
@@ -2839,6 +3095,7 @@ function environmentNode(environment) {
       return;
     }
     collectActiveEditorState();
+    activeRunnerRequestRunnerId = null;
     activeEnvironmentId = environment.id;
     activeSidebarPanel = 'environments';
     activeMainPanel = 'environment';
@@ -2859,6 +3116,42 @@ function renderWorkspaces() {
   for (const workspaceItem of workspaceListItems()) {
     root.append(workspaceNode(workspaceItem));
   }
+}
+
+function renderRunners() {
+  ensureWorkspaceRunners();
+  const root = $('runnersList');
+  root.textContent = '';
+  if (!workspace.runners.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state runner-empty-sidebar';
+    const message = document.createElement('div');
+    message.textContent = 'No runners';
+    empty.append(message);
+    root.append(empty);
+    return;
+  }
+  for (const runner of workspace.runners) {
+    root.append(runnerNode(runner));
+  }
+}
+
+function runnerNode(runner) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'tree-node runner-node';
+  const button = treeButton(runnerDisplayName(runner), activeMainPanel === 'runner' && runner.id === activeRunnerConfigId, 'RUN', {
+    treeKind: 'runner',
+    treeId: runner.id
+  });
+  button.addEventListener('click', () => {
+    selectRunnerItem(runner.id);
+  });
+  attachTreeContextMenu(button, [
+    ['Rename', () => renameRunner(runner)],
+    ['Delete', () => { void deleteRunner(runner); }, 'danger']
+  ]);
+  wrapper.append(button);
+  return wrapper;
 }
 
 function workspaceNode(workspaceItem) {
@@ -2931,6 +3224,7 @@ function renderWorkspacePanel() {
     ['Folders', String(summary.folders)],
     ['Requests', String(summary.requests)],
     ['Environments', String(summary.environments)],
+    ['Runners', String(summary.runners)],
     ['Cookies', String(summary.cookies)],
     ['History Entries', String(summary.historyEntries)]
   ];
@@ -2945,6 +3239,497 @@ function renderWorkspacePanel() {
     valueElement.textContent = value;
     row.append(labelElement, valueElement);
     container.append(row);
+  }
+}
+
+function renderRunnerEditor() {
+  const runner = activeRunner();
+  const title = $('runnerMainTitle');
+  if (title && title.dataset.editing !== 'true') {
+    title.textContent = runner ? runnerDisplayName(runner) : 'Select a runner';
+    title.setAttribute('contenteditable', 'false');
+    title.removeAttribute('role');
+    title.classList.remove('is-editing');
+  }
+  if (title) {
+    title.tabIndex = runner ? 0 : -1;
+    title.setAttribute('aria-disabled', runner ? 'false' : 'true');
+    title.setAttribute('aria-label', 'Runner name');
+  }
+  $('saveRunnerButton').disabled = !runner;
+  $('deleteRunnerButton').disabled = !runner;
+  $('runCollectionButton').disabled = !runner || activeRunnerId != null;
+  $('cancelRunnerButton').disabled = !activeRunnerId;
+  renderRunnerEnvironmentSelect(runner);
+  $('runnerStopOnFailure').checked = runner?.stopOnFailure === true;
+  $('runnerStopOnFailure').disabled = !runner;
+  $('runnerAllowEnvironmentMutation').checked = runner?.allowEnvironmentMutation === true;
+  $('runnerAllowEnvironmentMutation').disabled = !runner;
+  $('addRunnerRequestButton').disabled = !runner;
+  renderRunnerRequestList(runner);
+}
+
+function renderRunnerEnvironmentSelect(runner) {
+  const select = $('runnerEnvironmentSelect');
+  select.textContent = '';
+  const none = document.createElement('option');
+  none.value = 'none';
+  none.textContent = 'No Environment';
+  select.append(none);
+  for (const environment of workspace.environments || []) {
+    const option = document.createElement('option');
+    option.value = environment.id;
+    option.textContent = environment.name || 'Untitled Environment';
+    select.append(option);
+  }
+  select.value = runner?.environmentId || 'none';
+  if (select.value !== (runner?.environmentId || 'none')) {
+    select.value = 'none';
+  }
+  select.disabled = !runner;
+}
+
+function renderRunnerRequestList(runner) {
+  const root = $('runnerRequestList');
+  root.textContent = '';
+  if (!runner) {
+    return;
+  }
+  runner.requests = normalizeRunnerRequests(runner.requests);
+  if (!runner.requests.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state runner-request-empty';
+    empty.textContent = 'No requests in this runner';
+    root.append(empty);
+    return;
+  }
+  runner.requests.forEach((request, index) => {
+    root.append(runnerRequestRow(runner, request, index));
+  });
+}
+
+function runnerRequestRow(runner, request, index) {
+  const row = document.createElement('div');
+  row.className = 'runner-request-row';
+  row.draggable = true;
+  row.dataset.runnerRequestIndex = String(index);
+
+  const handle = document.createElement('button');
+  handle.type = 'button';
+  handle.className = 'runner-row-handle';
+  handle.textContent = '::';
+  handle.title = 'Drag to reorder';
+  handle.setAttribute('aria-label', `Reorder ${request.name || 'runner request'}`);
+
+  const method = document.createElement('span');
+  method.className = `runner-row-method ${methodClassName(request.method || 'GET')}`;
+  method.textContent = request.method || 'GET';
+
+  const name = document.createElement('span');
+  name.className = 'runner-row-name';
+  name.textContent = request.name || 'Untitled Request';
+
+  const url = document.createElement('span');
+  url.className = 'runner-row-url';
+  url.textContent = request.url || '';
+
+  const editButton = document.createElement('button');
+  editButton.type = 'button';
+  editButton.textContent = 'Edit';
+  editButton.setAttribute('aria-label', `Edit ${request.name || 'request'} from runner`);
+  editButton.addEventListener('click', () => editRunnerRequest(runner, request));
+
+  const moveUp = document.createElement('button');
+  moveUp.type = 'button';
+  moveUp.textContent = 'Up';
+  moveUp.disabled = index === 0;
+  moveUp.setAttribute('aria-label', `Move ${request.name || 'request'} up`);
+  moveUp.addEventListener('click', () => moveRunnerRequest(runner, index, index - 1));
+
+  const moveDown = document.createElement('button');
+  moveDown.type = 'button';
+  moveDown.textContent = 'Down';
+  moveDown.disabled = index >= runner.requests.length - 1;
+  moveDown.setAttribute('aria-label', `Move ${request.name || 'request'} down`);
+  moveDown.addEventListener('click', () => moveRunnerRequest(runner, index, index + 1));
+
+  const deleteButton = document.createElement('button');
+  deleteButton.type = 'button';
+  deleteButton.textContent = 'Delete';
+  deleteButton.setAttribute('aria-label', `Delete ${request.name || 'request'} from runner`);
+  deleteButton.addEventListener('click', () => deleteRunnerRequest(runner, index));
+
+  row.addEventListener('dragstart', (event) => {
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', String(index));
+    row.classList.add('is-dragging');
+  });
+  row.addEventListener('dragend', () => row.classList.remove('is-dragging'));
+  row.addEventListener('dragover', (event) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  });
+  row.addEventListener('drop', (event) => {
+    event.preventDefault();
+    const fromIndex = Number(event.dataTransfer.getData('text/plain'));
+    if (Number.isInteger(fromIndex)) {
+      moveRunnerRequest(runner, fromIndex, index);
+    }
+  });
+
+  row.append(handle, method, name, url, editButton, moveUp, moveDown, deleteButton);
+  return row;
+}
+
+function showAddRunnerRequestMenu(event) {
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+  const runner = activeRunner();
+  if (!runner) {
+    return;
+  }
+  const trigger = $('addRunnerRequestButton');
+  const rect = trigger.getBoundingClientRect();
+  const items = [
+    ['New Request', () => addNewRunnerLocalRequest()],
+    ['Import', () => { void promptAndImportRunnerRequests(); }]
+  ];
+  showContextMenu(event?.clientX || rect.left, event?.clientY || rect.bottom + 4, items, {
+    trigger,
+    focusFirst: event?.detail === 0
+  });
+}
+
+async function promptAndImportRunnerRequests() {
+  const target = await promptRunnerRequestImport();
+  if (!target) {
+    return null;
+  }
+  return importRunnerSelection(target);
+}
+
+function promptRunnerRequestImport() {
+  selectedRunnerImportTarget = null;
+  expandedRunnerImportCollectionId = '';
+  const collections = workspace.collections || [];
+  $('runnerImportMessage').textContent = collections.length
+    ? 'Choose a collection to expand, then add the collection or one of its requests to this runner.'
+    : 'There are no collections to import from.';
+  renderRunnerImportList(collections);
+  return showModal('runnerImportModal', null);
+}
+
+function renderRunnerImportList(collections = workspace.collections || []) {
+  const list = $('runnerImportList');
+  list.textContent = '';
+  $('confirmRunnerImportButton').disabled = !selectedRunnerImportTarget;
+  const availableCollections = Array.isArray(collections) ? collections : [];
+  if (!availableCollections.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.textContent = 'There are no collections to import from.';
+    list.append(empty);
+    return;
+  }
+  for (const collection of availableCollections) {
+    const entries = collectionRequestEntries(collection);
+    const expanded = expandedRunnerImportCollectionId === collection.id;
+    list.append(runnerImportOption({
+      type: 'collection',
+      collectionId: collection.id,
+      label: collection.name || 'Untitled Collection',
+      meta: `${entries.length} request${entries.length === 1 ? '' : 's'}`,
+      checked: selectedRunnerImportTarget?.type === 'collection' && selectedRunnerImportTarget.collectionId === collection.id
+    }));
+    if (!expanded) {
+      continue;
+    }
+    for (const entry of entries) {
+      const folderPath = entry.folderPath?.length ? `${entry.folderPath.join(' / ')} / ` : '';
+      list.append(runnerImportOption({
+        type: 'request',
+        collectionId: collection.id,
+        requestId: entry.request.id,
+        label: `${folderPath}${entry.request.name || 'Untitled Request'}`,
+        meta: `${entry.request.method || 'GET'} ${entry.request.url || ''}`.trim(),
+        checked: selectedRunnerImportTarget?.type === 'request'
+          && selectedRunnerImportTarget.collectionId === collection.id
+          && selectedRunnerImportTarget.requestId === entry.request.id
+      }));
+    }
+  }
+}
+
+function runnerImportOption(option) {
+  const label = document.createElement('label');
+  label.className = `collection-pick-option runner-import-option ${option.type}`;
+  const input = document.createElement('input');
+  input.type = 'radio';
+  input.name = 'runnerImportTarget';
+  input.dataset.runnerImportType = option.type;
+  input.dataset.collectionId = option.collectionId || '';
+  input.dataset.requestId = option.requestId || '';
+  input.checked = option.checked === true;
+  input.addEventListener('change', () => {
+    selectedRunnerImportTarget = {
+      type: input.dataset.runnerImportType,
+      collectionId: input.dataset.collectionId || '',
+      requestId: input.dataset.requestId || ''
+    };
+    $('confirmRunnerImportButton').disabled = false;
+    if (input.dataset.runnerImportType === 'collection') {
+      expandedRunnerImportCollectionId = input.dataset.collectionId || '';
+      renderRunnerImportList();
+    }
+  });
+  const text = document.createElement('span');
+  text.textContent = option.label;
+  if (option.meta) {
+    const meta = document.createElement('span');
+    meta.className = 'runner-import-meta';
+    meta.textContent = option.meta;
+    text.append(meta);
+  }
+  label.append(input, text);
+  return label;
+}
+
+function importRunnerSelection(target) {
+  const collection = (workspace.collections || []).find((item) => item.id === target?.collectionId);
+  if (!collection) {
+    return null;
+  }
+  if (target.type === 'collection') {
+    return importCollectionIntoRunner(collection);
+  }
+  const entry = collectionRequestEntries(collection)
+    .find((candidate) => candidate.request?.id === target.requestId);
+  return entry ? addCollectionRequestToRunner(entry) : null;
+}
+
+function addNewRunnerLocalRequest() {
+  const runner = activeRunner();
+  if (!runner) {
+    return null;
+  }
+  runner.requests = normalizeRunnerRequests(runner.requests);
+  runner.requests.push(newRequestObject(uniqueName('New Request', runner.requests.map((request) => request.name))));
+  markActiveRunnerDirty();
+  renderRunnerEditor();
+  setStatus('Runner request added.');
+  return runner.requests.at(-1);
+}
+
+function editRunnerRequest(runner, request) {
+  if (!runner || !request) {
+    return null;
+  }
+  collectActiveEditorState();
+  runner.requests = Array.isArray(runner.requests) ? runner.requests : [];
+  const target = runner.requests.find((item) => item.id === request.id);
+  if (!target || !canOpenRunnerRequestTabFor(runner.id, target.id)) {
+    return null;
+  }
+  activeCollectionId = null;
+  activeFolderId = null;
+  activeRequestId = target.id;
+  activeRunnerRequestRunnerId = runner.id;
+  activeRunnerConfigId = runner.id;
+  activeSidebarPanel = 'runners';
+  activeMainPanel = 'request';
+  ensureOpenRequestTabForActive();
+  renderAll();
+  setStatus('Opened runner request for editing.');
+  return target;
+}
+
+function addCollectionRequestToRunner(entry) {
+  const runner = activeRunner();
+  const request = entry?.request || entry;
+  if (!runner || !request) {
+    return null;
+  }
+  runner.requests = normalizeRunnerRequests(runner.requests);
+  runner.requests.push(cloneRequestForRunner(request, runnerRequestSourceFromEntry(entry)));
+  markActiveRunnerDirty();
+  renderRunnerEditor();
+  setStatus('Request added to runner.');
+  return runner.requests.at(-1);
+}
+
+function importCollectionIntoRunner(collection) {
+  const runner = activeRunner();
+  if (!runner || !collection) {
+    return 0;
+  }
+  const requests = collectionRequestEntries(collection).map((entry) => cloneRequestForRunner(entry.request, runnerRequestSourceFromEntry(entry)));
+  runner.requests = [...normalizeRunnerRequests(runner.requests), ...requests];
+  markActiveRunnerDirty();
+  renderRunnerEditor();
+  setStatus(`${requests.length} request${requests.length === 1 ? '' : 's'} imported into runner.`);
+  return requests.length;
+}
+
+function collectionRequestEntries(collection) {
+  const entries = [];
+  for (const request of collection?.requests || []) {
+    entries.push({ collection, request, folder: null, folderPath: [] });
+  }
+  const walkFolder = (folder, folderPath) => {
+    const nextFolderPath = [...folderPath, folder.name || 'Untitled Folder'];
+    for (const request of folder.requests || []) {
+      entries.push({ collection, request, folder, folderPath: nextFolderPath });
+    }
+    for (const child of folder.folders || []) {
+      walkFolder(child, nextFolderPath);
+    }
+  };
+  for (const folder of collection?.folders || []) {
+    walkFolder(folder, []);
+  }
+  return entries;
+}
+
+function runnerRequestSourceFromEntry(entry = {}) {
+  const collection = entry.collection || null;
+  const request = entry.request || entry;
+  const folder = entry.folder || null;
+  const source = {
+    collectionId: collection?.id || '',
+    collectionName: collection?.name || '',
+    folderId: folder?.id || '',
+    folderName: folder?.name || '',
+    requestId: request?.id || '',
+    requestName: request?.name || ''
+  };
+  if (Array.isArray(entry.folderPath) && entry.folderPath.length) {
+    source.folderPath = entry.folderPath;
+  }
+  return source;
+}
+
+function normalizeRunnerRequestSource(source) {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) {
+    return {};
+  }
+  const normalized = {};
+  for (const key of ['collectionId', 'collectionName', 'folderId', 'folderName', 'requestId', 'requestName']) {
+    const value = String(source[key] || '').trim();
+    if (value) {
+      normalized[key] = value.slice(0, 512);
+    }
+  }
+  if (Array.isArray(source.folderPath)) {
+    const folderPath = source.folderPath
+      .map((item) => String(item || '').trim())
+      .filter(Boolean)
+      .slice(0, 20);
+    if (folderPath.length) {
+      normalized.folderPath = folderPath;
+    }
+  }
+  return normalized;
+}
+
+function cloneRequestForRunner(request, source = {}) {
+  const clone = cloneJson(request) || newRequestObject(request?.name || 'Untitled Request');
+  clone.id = crypto.randomUUID();
+  clone.name = String(clone.name || request?.name || 'Untitled Request');
+  const normalizedSource = normalizeRunnerRequestSource(source);
+  if (Object.keys(normalizedSource).length) {
+    clone.source = normalizedSource;
+  } else {
+    delete clone.source;
+  }
+  return normalizeRunnerRequest(clone);
+}
+
+function moveRunnerRequest(runner, fromIndex, toIndex) {
+  runner.requests = normalizeRunnerRequests(runner.requests);
+  if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= runner.requests.length || toIndex >= runner.requests.length) {
+    return;
+  }
+  const [request] = runner.requests.splice(fromIndex, 1);
+  runner.requests.splice(toIndex, 0, request);
+  markActiveRunnerDirty();
+  renderRunnerEditor();
+}
+
+function deleteRunnerRequest(runner, index) {
+  runner.requests = normalizeRunnerRequests(runner.requests);
+  if (index < 0 || index >= runner.requests.length) {
+    return;
+  }
+  runner.requests.splice(index, 1);
+  markActiveRunnerDirty();
+  renderRunnerEditor();
+}
+
+function ensureWorkspaceRunners() {
+  workspace ||= {};
+  workspace.runners = normalizeWorkspaceRunners(workspace.runners);
+  return workspace.runners;
+}
+
+function normalizeWorkspaceRunners(value) {
+  return Array.isArray(value)
+    ? value.filter((runner) => runner && typeof runner === 'object').map(normalizeRunner)
+    : [];
+}
+
+function normalizeRunner(runner) {
+  runner.id = String(runner.id || crypto.randomUUID());
+  runner.name = String(runner.name || 'Untitled Runner');
+  runner.environmentId = String(runner.environmentId || 'none') || 'none';
+  runner.stopOnFailure = runner.stopOnFailure === true;
+  runner.allowEnvironmentMutation = runner.allowEnvironmentMutation === true;
+  runner.requests = normalizeRunnerRequests(runner.requests);
+  if (runner.environmentId !== 'none' && !(workspace.environments || []).some((environment) => environment.id === runner.environmentId)) {
+    runner.environmentId = 'none';
+  }
+  return runner;
+}
+
+function normalizeRunnerRequests(value) {
+  return Array.isArray(value)
+    ? value.filter((request) => request && typeof request === 'object').map(normalizeRunnerRequest)
+    : [];
+}
+
+function normalizeRunnerRequest(request) {
+  const normalized = {
+    ...newRequestObject(request.name || 'Untitled Request'),
+    ...request
+  };
+  normalized.id = String(request.id || crypto.randomUUID());
+  normalized.method = METHODS.includes(String(normalized.method || '').toUpperCase()) ? String(normalized.method).toUpperCase() : 'GET';
+  normalized.name = String(normalized.name || 'Untitled Request');
+  normalized.url = String(normalized.url || '');
+  normalized.queryParams = Array.isArray(normalized.queryParams) ? normalized.queryParams : [];
+  normalized.headers = Array.isArray(normalized.headers) ? normalized.headers : [];
+  normalized.assertions = Array.isArray(normalized.assertions) ? normalized.assertions : [];
+  normalized.variables = Array.isArray(normalized.variables) ? normalized.variables : [];
+  normalized.examples = Array.isArray(normalized.examples) ? normalized.examples : [];
+  normalized.scripts = normalized.scripts && typeof normalized.scripts === 'object' ? normalized.scripts : { preRequest: '', tests: '' };
+  normalized.auth = normalized.auth && typeof normalized.auth === 'object' ? normalized.auth : { type: 'none' };
+  return normalized;
+}
+
+function cloneJson(value) {
+  if (value == null) {
+    return null;
+  }
+  if (typeof structuredClone === 'function') {
+    try {
+      return structuredClone(value);
+    } catch {
+      return null;
+    }
+  }
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return null;
   }
 }
 
@@ -3282,12 +4067,144 @@ function selectWorkspaceItem(workspaceId) {
     return null;
   }
   collectActiveEditorState();
+  activeRunnerRequestRunnerId = null;
   selectedWorkspaceId = workspaceItem.id;
   activeSidebarPanel = 'workspaces';
   activeMainPanel = 'workspace';
   ensureOpenWorkspaceTabForActive();
   renderAll();
   return workspaceItem;
+}
+
+function selectRunnerItem(runnerId) {
+  ensureWorkspaceRunners();
+  if (!runnerId) {
+    return null;
+  }
+  const runner = workspace.runners.find((item) => item.id === runnerId);
+  if (!runner) {
+    return null;
+  }
+  if (!canOpenRunnerTabFor(runner.id)) {
+    return null;
+  }
+  collectActiveEditorState();
+  activeRunnerRequestRunnerId = null;
+  activeRunnerConfigId = runner.id;
+  activeSidebarPanel = 'runners';
+  activeMainPanel = 'runner';
+  ensureOpenRunnerTabForActive();
+  renderAll();
+  return runner;
+}
+
+function ensureOpenRunnerTabForActive(options = {}) {
+  return requestTabState.ensureOpenRunnerTabForActive(options);
+}
+
+function newRunner() {
+  if (!canOpenAdditionalRunnerTab()) {
+    return null;
+  }
+  ensureWorkspaceRunners();
+  collectActiveEditorState();
+  activeRunnerRequestRunnerId = null;
+  const runner = newRunnerObject(uniqueName('New Runner', workspace.runners.map((existing) => existing.name)));
+  workspace.runners.push(runner);
+  activeRunnerConfigId = runner.id;
+  activeSidebarPanel = 'runners';
+  activeMainPanel = 'runner';
+  ensureOpenRunnerTabForActive({ dirty: true, createdUnsaved: true });
+  renderAll();
+  setStatus('Created a runner.');
+  return runner;
+}
+
+function newRunnerObject(name) {
+  return {
+    id: crypto.randomUUID(),
+    name,
+    environmentId: 'none',
+    stopOnFailure: false,
+    allowEnvironmentMutation: false,
+    requests: []
+  };
+}
+
+async function renameRunner(runner) {
+  if (!runner) {
+    return null;
+  }
+  const name = String(await promptTextInput({
+    title: 'Rename runner',
+    message: 'Enter a name for this runner.',
+    label: 'Runner name',
+    defaultValue: runnerDisplayName(runner),
+    singleLine: true
+  }) || '').trim();
+  if (!name) {
+    return null;
+  }
+  runner.name = name;
+  activeRunnerConfigId = runner.id;
+  markActiveRunnerDirty();
+  renderAll();
+  return runner;
+}
+
+async function deleteRunner(runner = activeRunner()) {
+  ensureWorkspaceRunners();
+  if (!runner) {
+    return false;
+  }
+  const confirmed = await confirmActionModal({
+    title: 'Delete runner',
+    message: `Delete "${runnerDisplayName(runner)}"?`,
+    confirmLabel: 'Delete',
+    danger: true
+  });
+  if (!confirmed) {
+    return false;
+  }
+  workspace.runners = workspace.runners.filter((item) => item.id !== runner.id);
+  removeOpenRunnerTab(runner.id);
+  if (activeRunnerConfigId === runner.id) {
+    activeRunnerConfigId = workspace.runners[0]?.id || null;
+  }
+  activeSidebarPanel = 'runners';
+  activeMainPanel = 'runner';
+  if (activeRunnerConfigId) {
+    ensureOpenRunnerTabForActive();
+  }
+  renderAll();
+  await saveWorkspace(false, { scope: 'runners', collectEditors: false });
+  setStatus('Runner deleted.');
+  return true;
+}
+
+async function saveRunnerFromPane() {
+  const runner = activeRunner();
+  if (!runner) {
+    return false;
+  }
+  collectRunnerFromEditor();
+  try {
+    await saveWorkspace(false, { scope: 'runners', collectEditors: false });
+    const tab = openRunnerTabs.find((candidate) => candidate.runnerId === runner.id);
+    if (tab) {
+      tab.dirty = false;
+      tab.createdUnsaved = false;
+      tab.snapshot = snapshotRunner(runner);
+    }
+    renderRequestTabs();
+    setStatus('Runner saved.');
+    return true;
+  } catch (error) {
+    const message = error.message || String(error);
+    setStatus(`Runner save failed: ${message}`);
+    notifyUser('Runner Save Failed', message);
+    return false;
+  }
 }
 
 function liveWorkspaceSummary() {
@@ -3298,6 +4215,7 @@ function liveWorkspaceSummary() {
     folders: countWorkspaceFolders(),
     requests: countWorkspaceRequests(),
     environments: workspace?.environments?.length || 0,
+    runners: workspace?.runners?.length || 0,
     cookies: workspace?.cookies?.length || 0,
     historyEntries: workspace?.history?.length || 0
   };
@@ -3314,6 +4232,7 @@ function workspaceSummaryForItem(workspaceItem) {
     folders: Number.isFinite(Number(workspaceItem?.folderCount)) ? Number(workspaceItem.folderCount) : 0,
     requests: Number.isFinite(Number(workspaceItem?.requestCount)) ? Number(workspaceItem.requestCount) : 0,
     environments: Number.isFinite(Number(workspaceItem?.environmentCount)) ? Number(workspaceItem.environmentCount) : 0,
+    runners: Number.isFinite(Number(workspaceItem?.runnerCount)) ? Number(workspaceItem.runnerCount) : 0,
     cookies: Number.isFinite(Number(workspaceItem?.cookieCount)) ? Number(workspaceItem.cookieCount) : 0,
     historyEntries: Number.isFinite(Number(workspaceItem?.historyCount)) ? Number(workspaceItem.historyCount) : 0
   };
@@ -3358,6 +4277,7 @@ function collectionNode(collection) {
       return;
     }
     collectActiveEditorState();
+    activeRunnerRequestRunnerId = null;
     activeMainPanel = 'request';
     activeCollectionId = collection.id;
     selectFirstRequest(collection);
@@ -3394,6 +4314,7 @@ function folderNode(collection, folder) {
       return;
     }
     collectActiveEditorState();
+    activeRunnerRequestRunnerId = null;
     activeMainPanel = 'request';
     activeCollectionId = collection.id;
     activeFolderId = folder.id;
@@ -3429,6 +4350,7 @@ function requestNode(collection, folder, request) {
       return;
     }
     collectActiveEditorState();
+    activeRunnerRequestRunnerId = null;
     activeMainPanel = 'request';
     activeCollectionId = collection.id;
     activeFolderId = folder?.id || null;
@@ -3892,6 +4814,7 @@ function openHistoryItemAsDraftRequest(item) {
   draftRequest.url = url;
   draftRequests.set(draftRequest.id, draftRequest);
   activeMainPanel = 'request';
+  activeRunnerRequestRunnerId = null;
   activeCollectionId = null;
   activeFolderId = null;
   activeRequestId = draftRequest.id;
@@ -4220,7 +5143,88 @@ async function cancelLoadTest() {
 }
 
 async function runActiveCollection() {
+  if (activeMainPanel === 'runner') {
+    return runActiveRunner();
+  }
   return rendererWorkflows.runActiveCollection();
+}
+
+async function runActiveRunner() {
+  const runner = activeRunner();
+  if (!runner) {
+    return setStatus('Select a runner before running it.');
+  }
+  collectRunnerFromEditor();
+  runner.requests = normalizeRunnerRequests(runner.requests);
+  if (!runner.requests.length) {
+    return setStatus('Add at least one request before running a runner.');
+  }
+  const runnerId = crypto.randomUUID();
+  const runnerContext = {
+    runnerConfigId: runner.id,
+    workspaceId: activeWorkspaceId
+  };
+  const runnerEnvironment = runner.environmentId && runner.environmentId !== 'none'
+    ? (workspace.environments || []).find((environment) => environment.id === runner.environmentId) || null
+    : null;
+  lastRunnerResult = null;
+  $('exportRunnerJsonButton').disabled = true;
+  $('exportRunnerCsvButton').disabled = true;
+  try {
+    await saveWorkspace(false, { scope: 'runners', collectEditors: false });
+    activeRunnerId = runnerId;
+    $('runCollectionButton').disabled = true;
+    $('cancelRunnerButton').disabled = false;
+    $('runnerResults').textContent = 'Starting runner...';
+    const result = await window.postmeter.runner.start(runnerId, cloneJson(runner), cloneJson(runnerEnvironment), {
+      stopOnFailure: runner.stopOnFailure === true,
+      allowEnvironmentMutation: runner.allowEnvironmentMutation === true
+    });
+    if (activeRunnerId !== runnerId || !isActiveRunnerContext(runnerContext)) {
+      return;
+    }
+    const mutatedEnvironment = result?.mutatedEnvironment || result?.environment;
+    if (result?.environmentMutationAllowed === true && runnerEnvironment && mutatedEnvironment) {
+      for (const key of Object.keys(runnerEnvironment)) {
+        delete runnerEnvironment[key];
+      }
+      Object.assign(runnerEnvironment, mutatedEnvironment);
+      renderEnvironmentSelect();
+      renderEnvironments();
+      renderEnvironmentEditor();
+    }
+    if (Array.isArray(result?.cookies)) {
+      workspace.cookies = result.cookies;
+      renderCookieJarEditor();
+    }
+    lastRunnerResult = result;
+    $('runnerResults').textContent = PostMeterRunFormatting.formatRunnerResult(result);
+    $('exportRunnerJsonButton').disabled = false;
+    $('exportRunnerCsvButton').disabled = false;
+    setStatus(result.cancelled ? 'Runner cancelled.' : 'Runner completed.');
+  } catch (error) {
+    const message = error.message || String(error);
+    if (isActiveRunnerContext(runnerContext) && activeRunnerId === runnerId) {
+      lastRunnerResult = null;
+      $('runnerResults').textContent = message;
+      $('exportRunnerJsonButton').disabled = true;
+      $('exportRunnerCsvButton').disabled = true;
+      setStatus('Runner failed.');
+      notifyUser('Runner Failed', message);
+    }
+  } finally {
+    if (activeRunnerId === runnerId) {
+      activeRunnerId = null;
+      $('runCollectionButton').disabled = false;
+      $('cancelRunnerButton').disabled = true;
+    }
+  }
+}
+
+function isActiveRunnerContext(context) {
+  return context?.workspaceId === activeWorkspaceId
+    && context?.runnerConfigId === activeRunnerConfigId
+    && activeMainPanel === 'runner';
 }
 
 async function cancelCollectionRun() {
@@ -4261,6 +5265,13 @@ async function saveRequestFromPane() {
     return false;
   }
   try {
+    if (activeRunnerRequestRunnerId) {
+      const saved = await saveWorkspace(false);
+      if (saved) {
+        setStatus('Runner request saved.');
+      }
+      return saved;
+    }
     const saved = await saveWorkspace(true, { promptForDraft: true });
     if (saved) {
       setStatus('Request saved.');
@@ -4582,6 +5593,9 @@ function cloneVariablePairs(pairs) {
 
 function collectSettingsFromEditor() {
   ensureSettings();
+  if (activeMainPanel === 'runner') {
+    collectRunnerFromEditor();
+  }
 }
 
 async function exportCollection(collection = activeCollection(), format = 'postmeter') {
@@ -4592,6 +5606,7 @@ function newCollection() {
   collectActiveEditorState();
   activeSidebarPanel = 'collections';
   activeMainPanel = 'request';
+  activeRunnerRequestRunnerId = null;
   const collection = {
     id: crypto.randomUUID(),
     name: uniqueName('New Collection', workspace.collections.map((existing) => existing.name)),
@@ -4615,6 +5630,7 @@ function newRequest(collectionId = activeCollectionId, folderId = activeFolderId
   }
   collectActiveEditorState();
   activeMainPanel = 'request';
+  activeRunnerRequestRunnerId = null;
   const collection = workspace.collections.find((item) => item.id === collectionId);
   if (!collection) {
     const draftRequest = newRequestObject(uniqueName('New Request', Array.from(draftRequests.values()).map((request) => request.name)));
@@ -4646,6 +5662,7 @@ function newRequest(collectionId = activeCollectionId, folderId = activeFolderId
 function newFolder(collectionId = activeCollectionId, parentFolderId = activeFolderId) {
   collectActiveEditorState();
   activeMainPanel = 'request';
+  activeRunnerRequestRunnerId = null;
   const collection = workspace.collections.find((item) => item.id === collectionId);
   if (!collection) {
     setStatus('Select a collection before creating a folder.');
@@ -4696,6 +5713,7 @@ function newEnvironment() {
     return null;
   }
   collectActiveEditorState();
+  activeRunnerRequestRunnerId = null;
   workspace.environments ||= [];
   const environment = {
     id: crypto.randomUUID(),
@@ -4722,6 +5740,7 @@ async function deleteEnvironment(environment = activeEnvironment()) {
   }
   removeOpenEnvironmentTab(environment.id);
   workspace.environments = workspace.environments.filter((item) => item.id !== environment.id);
+  activeRunnerRequestRunnerId = null;
   if (activeEnvironmentId === environment.id) {
     activeEnvironmentId = workspace.environments[0]?.id || 'none';
   }
@@ -4745,6 +5764,7 @@ async function renameEnvironment(environment) {
   });
   if (value?.trim()) {
     environment.name = value.trim();
+    activeRunnerRequestRunnerId = null;
     activeEnvironmentId = environment.id;
     activeSidebarPanel = 'environments';
     activeMainPanel = 'environment';
@@ -4962,6 +5982,7 @@ function renameRequest(collection, folder, request) {
     return null;
   }
   collectActiveEditorState();
+  activeRunnerRequestRunnerId = null;
   activeSidebarPanel = 'collections';
   activeMainPanel = 'request';
   activeCollectionId = collection?.id || activeCollectionId;
@@ -4981,6 +6002,7 @@ function duplicateRequest(collection, folder, request) {
   duplicate.id = crypto.randomUUID();
   duplicate.name = uniqueName(`${request.name} Copy`, allRequestNames(collection));
   (folder ? folder.requests : collection.requests).push(duplicate);
+  activeRunnerRequestRunnerId = null;
   activeCollectionId = collection.id;
   activeFolderId = folder?.id || null;
   activeRequestId = duplicate.id;
@@ -5014,6 +6036,7 @@ function clearActiveWorkspaceItem() {
   activeCollectionId = null;
   activeFolderId = null;
   activeRequestId = null;
+  activeRunnerRequestRunnerId = null;
 }
 
 async function deleteRequest(collection, folder, request) {
@@ -5071,7 +6094,11 @@ function collectRequestNameFromTitle(options = {}) {
     markActiveRequestDirty();
   }
   if (options.render !== false && changed) {
-    renderCollections();
+    if (activeRunnerRequestRunnerId) {
+      renderRunnerEditor();
+    } else {
+      renderCollections();
+    }
     renderRequestTabs();
   }
   const title = $('requestNameTitle');
@@ -5102,6 +6129,23 @@ function collectEnvironmentFromEditor() {
   }
 }
 
+function collectRunnerFromEditor() {
+  const runner = activeRunner();
+  if (!runner) {
+    return;
+  }
+  runner.name = runnerTitleInputValue() || 'Untitled Runner';
+  runner.environmentId = $('runnerEnvironmentSelect')?.value || runner.environmentId || 'none';
+  runner.stopOnFailure = $('runnerStopOnFailure')?.checked === true;
+  runner.allowEnvironmentMutation = $('runnerAllowEnvironmentMutation')?.checked === true;
+  runner.requests = normalizeRunnerRequests(runner.requests);
+  const title = $('runnerMainTitle');
+  if (title && title.dataset.editing !== 'true') {
+    title.textContent = runnerDisplayName(runner);
+  }
+  renderRunners();
+}
+
 function environmentTitleInputValue() {
   return String($('environmentMainTitle')?.textContent || '')
     .replace(/[\r\n]+/g, ' ')
@@ -5110,6 +6154,12 @@ function environmentTitleInputValue() {
 
 function workspaceTitleInputValue() {
   return String($('workspaceMainTitle')?.textContent || '')
+    .replace(/[\r\n]+/g, ' ')
+    .trim();
+}
+
+function runnerTitleInputValue() {
+  return String($('runnerMainTitle')?.textContent || '')
     .replace(/[\r\n]+/g, ' ')
     .trim();
 }
@@ -5124,11 +6174,24 @@ function activeCollection() {
   return (workspace?.collections || []).find((collection) => collection.id === activeCollectionId) || null;
 }
 
+function activeRunner() {
+  ensureWorkspaceRunners();
+  return (workspace?.runners || []).find((runner) => runner.id === activeRunnerConfigId) || null;
+}
+
+function runnerDisplayName(runner = activeRunner()) {
+  return String(runner?.name || '').trim() || 'Untitled Runner';
+}
+
 function activeEnvironment() {
   return (workspace?.environments || []).find((environment) => environment.id === activeEnvironmentId) || null;
 }
 
 function activeRequest() {
+  if (activeRunnerRequestRunnerId && activeRequestId) {
+    const runner = (workspace?.runners || []).find((item) => item.id === activeRunnerRequestRunnerId);
+    return (runner?.requests || []).find((request) => request.id === activeRequestId) || null;
+  }
   if (!activeCollectionId && activeRequestId) {
     return draftRequests.get(activeRequestId) || null;
   }

@@ -33,6 +33,15 @@ Helpful, non-blocking input:
 
 PostMeter must remain a standalone local desktop application. Do not add PostMeter user account creation, app login, required cloud sign-in, or any account gate for core usage. OAuth work is strictly for authenticating outbound API requests, not for authenticating users into PostMeter.
 
+## Recently Completed
+
+- Moved Runner into a dedicated workspace-owned section.
+  - The left sidebar now includes `Runner` between `Workspaces` and `History`; the request result-panel Runner tab has been removed.
+  - Workspaces persist first-class `workspace.runners` data under schema 12, with runner-owned request copies, selected environment IDs, stop-on-failure, and environment-mutation policy.
+  - Runner tabs participate in the same open-tab, dirty-close, force-close, 128-tab-limit, and session restore model as requests, environments, and workspaces.
+  - Runner execution now accepts runner payloads directly, preserves runner-local request order/IDs, supports the existing script/assertion/cookie/vault/package lifecycle, and only writes environment mutations back when `allowEnvironmentMutation` is enabled.
+  - Tests cover runner model normalization, migration, IPC validation/runtime mutation policy, session persistence, tab cap enforcement, dirty runner tab save/discard failure paths, and first-class renderer wiring.
+
 ## Highest Priority Steps
 
 1. Prepare public beta/release candidate documentation.
@@ -43,53 +52,6 @@ PostMeter must remain a standalone local desktop application. Do not add PostMet
    - Make release notes templates call out security-sensitive changes, sandbox changes, compatibility changes, migration notes, signing/notarization status, native-runner validation results, and known issues.
    - Document the unsigned-release path and the signed/notarized-release path separately. Signing and notarization stay blocked until maintainer-controlled certificates are available.
    - Ensure public docs do not overclaim: Postman script parity is claim-gated for the tracked target, platform OS sandbox coverage is tracked separately, distributed/cloud load testing is deferred, and full JMeter execution semantics are not claimed.
-
-2. Move Runner into a dedicated workspace-owned section.
-   - Product shape:
-     - Remove the request-result-panel `Runner` tab from request editing and add a `Runner` section in the left sidebar between `Workspaces` and `History`.
-     - The Runner sidebar panel should list saved runners, support selecting a runner, and provide a clear empty state plus a create-new-runner action.
-     - Selecting a runner should open a main-pane runner tab, using the same open-tab model and close/dirty behavior as request, environment, and workspace tabs. The main pane should show runner controls, environment selection, request rows, run progress, results, cancellation, and JSON/CSV export controls.
-   - Workspace data model:
-     - Add a first-class `workspace.runners` array and bump the workspace schema version with a migration that defaults older workspaces to `runners: []`.
-     - Model each runner as `{ id, name, environmentId, allowEnvironmentMutation, stopOnFailure, requests }`.
-     - Model runner requests as independent request objects with their own IDs, order, request body/auth/assertions/scripts/examples/variables, and optional provenance metadata such as `{ source: "collection", collectionId, folderId, requestId, importedAt }`.
-     - Imported collection requests must be deep cloned into the runner. Editing a runner request must never mutate the source collection request, folder, or collection variables unless a future explicit "sync back" feature is added.
-     - Native workspace save/export/import, managed workspace summaries, IPC payload validation, diagnostics redaction, and durability tests must preserve runner data without leaking request bodies beyond existing opt-in diagnostics categories.
-   - Navigation and tabs:
-     - Extend sidebar/session state from `collections/environments/workspaces/history` to include `runners`, and extend main-panel/open-tab state to include runner tabs.
-     - Clicking the Runner sidebar button should show the runner list/empty state. If a runner tab is already open, it should restore the active or most-recently-opened runner tab, matching the current request/environment/workspace sidebar behavior.
-     - Enforce the existing 128 total open-tab cap across request, environment, workspace, and runner tabs, including new-runner creation, runner row selection, and session restore.
-     - Persist and restore selected runner IDs, open runner tabs, dirty runner tabs, and closed-runner empty states through `session:save` and `session:load`.
-   - Runner editor UI:
-     - Add a clickable/editable runner name title, Save Runner button, Delete Runner button, Run, Cancel, Export JSON, Export CSV, Stop on failure, Environment selector, and `Allow runner to modify environment` checkbox.
-     - Display runner requests as reorderable rows with method, name, URL summary, run status/result summary, an edit/open affordance, and a Delete button for removing the request from that runner only.
-     - Support drag and drop plus keyboard-accessible move controls for reordering runner requests. Reordering marks only the runner tab dirty and must survive save/reload.
-     - Editing a runner request should use the existing request editor components where possible, but route all changes into the runner-owned request object rather than the collection tree.
-   - Add-request menu:
-     - `Add request` should open an in-app popup menu, not a native prompt.
-     - The menu should allow selecting an individual request from the Collections tree, importing all requests from an entire collection in collection order, or creating a brand-new unsaved runner-owned request.
-     - Imported collection requests should retain source metadata for display/debugging, but all mutable request fields should be cloned.
-     - The menu must handle empty collections, deleted source requests, duplicate names, unsupported request shapes, and the open-tab cap without partial mutation.
-   - Execution semantics:
-     - Keep reusing the existing scripted request lifecycle and collection-run IPC where possible, but introduce a runner execution adapter that accepts a runner object rather than a collection-only model.
-     - Runner execution order must follow the runner request row order and support pre-request scripts, post-response/test scripts, assertions, cookies, OAuth refresh propagation, vault prompts, package review bindings, `pm.execution.setNextRequest`, `pm.execution.skipRequest`, and bounded `pm.execution.runRequest` against runner-local request IDs.
-     - The selected runner environment is independent from the top-right active request environment. It may be `none`, and it should be stored on the runner.
-     - If `allowEnvironmentMutation` is enabled, script/extractor changes should be applied back to the selected saved environment using the existing targeted environment-save path.
-     - If `allowEnvironmentMutation` is disabled, execute against a temporary cloned environment. Scripts can mutate that temporary environment for later requests in the same run, but the saved environment must remain unchanged after success, failure, or cancellation.
-     - Define and test cancellation, failed pre-run save, failed environment persistence, stale completion after workspace switch/reset, and concurrent duplicate-runner-ID behavior.
-   - Migration from the old request panel:
-     - Remove request editor result-tab runner controls and update snapshots, accessibility labels, and docs so "Runner" is no longer presented as request-local UI.
-     - Keep existing collection-run capability by offering "import collection into runner" and by allowing a new runner to be created from a collection from the Add-request menu or a collection context action.
-     - Preserve current runner report formatting/export behavior, but attach it to the selected runner tab and runner ID.
-   - Test coverage:
-     - Add model/schema tests for runner normalization, schema migration, workspace save/export/import, managed workspace summaries, and native workspace detection.
-     - Add unit tests for cloning collection requests into runners, preserving source requests unchanged, adding entire collections in order, creating runner-local requests, deleting rows, and drag/drop or keyboard reorder behavior.
-     - Add execution tests for environment mutation enabled/disabled, temporary environment chaining across requests, pre-request/test scripts, extractor updates, cookies, OAuth refreshed auth, vault prompts, `setNextRequest`, `skipRequest`, `runRequest`, stop-on-failure, cancellation, and stale workspace-context completions.
-     - Add IPC/session tests for runner tab state, 128-tab cap enforcement, progress/result validation, export validation, and invalid payload rejection.
-     - Add UI regression/snapshot/accessibility tests for the new sidebar item order, empty state, runner list, runner tab open/close/dirty behavior, Add-request menu, request-row deletion, reorder affordances, environment selector, mutation checkbox, run/cancel/export states, and long-label/constrained-width behavior.
-   - Documentation:
-     - Update `README.md`, `docs/ARCHITECTURE.md`, `docs/SANDBOX_CONTRACT.md`, release-readiness docs, and UX/accessibility matrix references to describe first-class workspace runners, runner-owned requests, environment mutation behavior, and the removal of the request-local Runner result tab.
-     - Document that runner-owned requests are independent copies, that source collection requests are not modified, and that disabled environment mutation uses a temporary environment copy for the duration of the run.
 
 ## Blocked External Validation
 

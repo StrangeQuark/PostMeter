@@ -73,7 +73,7 @@ Core modules must not depend on Electron or renderer globals.
 
 - `scriptedRequestLifecycle.js` owns the shared pre-request/send/test pipeline used by both single-request and collection-run execution. It also sanitizes primary-request client-certificate auth mutations so scripts can select reviewed certificate bindings by `certificateId` but cannot inject direct local certificate, key, PFX/P12, CA, or passphrase fields before parent transport execution.
 - `requestScriptRunner.js` adapts the shared scripted-request lifecycle for single-request execution and returns the response plus runtime variable mutations.
-- `collectionRunner.js` sequences collection requests and layers assertions, runner progress, cookies, stop-on-failure, and runner reports on top of the shared scripted-request lifecycle.
+- `collectionRunner.js` sequences collection requests and layers assertions, runner progress, cookies, stop-on-failure, and runner reports on top of the shared scripted-request lifecycle. It also adapts first-class workspace runners by executing runner-owned request copies in runner order while preserving the same script/assertion/cookie/vault/package lifecycle.
 - `httpClient.js` prepares and sends HTTP requests.
 - `pfxCertificate.js` owns parent-side PFX/P12 bundle extraction and encrypted PEM private-key normalization into in-memory PEM buffers for HTTP and gRPC client-certificate transports. It uses regular-file, byte-capped descriptor reads plus the reviewed `node-forge` PKCS#12/PEM parser in the parent process, and does not shell out or write decrypted PEM material to temp files.
 - `grpcClient.js` owns the parent-side live gRPC transport for imported gRPC requests. It loads trusted proto definitions, builds parent-owned gRPC clients, normalizes metadata/messages/status/trailers/errors, and keeps proto/TLS/client-certificate filesystem access outside the script worker. gRPC mTLS supports PEM cert/key material and the shared parent-side PFX/P12 extraction path used by HTTP client-certificate requests, with configured certificate bindings failing closed instead of falling back to script-mutated direct paths.
@@ -86,11 +86,19 @@ Core modules must not depend on Electron or renderer globals.
 - `collectionFormatUtils.js` owns the small set of cross-format helpers such as URL parsing, JSON/XML escaping, shell splitting/quoting, and request flattening.
 - `collectionImportRegistry.js` owns collection import detection/dispatch and format-specific export dispatch without changing the `WorkspaceStore` API.
 - `scriptRuntime.js`, `sandboxPackageCache.js`, `postmanBuiltinPackages.js`, `postmanSandboxBootcodeBundle.js`, `visualizerHandlebarsBundle.js`, `scriptSandbox.js`, `scriptWorker.js`, and `osSandbox.js` implement the constrained Postman-style script environment, reviewed package-cache policy, version-pinned Postman package bundle, isolated Handlebars visualizer runtime, worker transport, broker boundary, and OS sandbox launcher layer.
-- `models.js`, `payloadSchemas.js`, and `ipcValidation.js` define normalized payload shape and validation contracts.
+- `models.js`, `payloadSchemas.js`, and `ipcValidation.js` define normalized payload shape and validation contracts, including schema-12 `workspace.runners` data and runner-owned request payloads.
 - `workspacePersistence.js` owns workspace-path defaults, workspace normalization, structured-content parsing, and JSON persistence helpers.
 - `importedCollectionIds.js` owns imported collection/folder/request/example/certificate ID regeneration.
 - `workspaceStore.js` owns high-level workspace orchestration and file-facing service methods.
-- `workspaceMigrations.js` owns workspace schema migration.
+- `workspaceMigrations.js` owns workspace schema migration, including the schema-12 default `runners: []` migration for older workspaces.
+
+## Workspace-Owned Runners
+
+Desktop runners are workspace data, not request result-panel state. The renderer exposes a dedicated Runner sidebar section and runner tabs beside request, environment, and workspace tabs. Runner tabs use the same session persistence, 128-open-tab cap, dirty close prompts, and force-close behavior as the other tab types.
+
+Each runner stores `{ id, name, environmentId, allowEnvironmentMutation, stopOnFailure, requests }`. Runner requests are independent request objects with local IDs. Importing an individual collection request or an entire collection deep-clones those requests into the runner, so runner edits and request-local script mutations do not change the source collection request unless a future explicit sync feature is introduced.
+
+Runtime IPC accepts first-class runner payloads on the existing `runner:start` channel. When `allowEnvironmentMutation` is disabled, the run receives a temporary environment copy and any script/extractor mutations are visible only to later requests in that run. When enabled, the Electron main process applies the mutation delta back to the selected saved environment after the run completes.
 
 Managed workspace discovery is now filesystem-based. `WorkspaceManager` scans the workspace directory for native workspace JSON files and no longer depends on a separate manifest file for the workspace catalog or startup selection.
 

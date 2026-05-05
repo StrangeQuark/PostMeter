@@ -1,9 +1,9 @@
 const HTTP_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']);
 const BODY_TYPES = new Set(['NONE', 'RAW_JSON', 'RAW_TEXT']);
-const SIDEBAR_PANELS = new Set(['collections', 'environments', 'workspaces', 'history']);
-const MAIN_PANELS = new Set(['request', 'environment', 'workspace']);
+const SIDEBAR_PANELS = new Set(['collections', 'environments', 'workspaces', 'runners', 'history']);
+const MAIN_PANELS = new Set(['request', 'environment', 'workspace', 'runner']);
 const REQUEST_EDITOR_TABS = new Set(['params', 'headers', 'auth', 'cookies', 'body', 'tests', 'scripts', 'examples', 'collectionVariables']);
-const RESULTS_TABS = new Set(['response', 'load', 'runner']);
+const RESULTS_TABS = new Set(['response', 'load']);
 const SESSION_VERSION = 1;
 const MAX_OPEN_TABS = 128;
 
@@ -16,6 +16,8 @@ function defaultSessionState() {
     activeCollectionId: '',
     activeFolderId: '',
     activeRequestId: '',
+    activeRunnerRequestRunnerId: '',
+    activeRunnerConfigId: '',
     activeSidebarPanel: 'collections',
     activeMainPanel: 'request',
     activeRequestTab: 'params',
@@ -23,6 +25,7 @@ function defaultSessionState() {
     openRequestTabs: [],
     openEnvironmentTabs: [],
     openWorkspaceTabs: [],
+    openRunnerTabs: [],
     draftRequests: [],
     dirtyCollectionStates: [],
     dirtyCookieJarState: null
@@ -39,6 +42,8 @@ function normalizeSessionState(value = {}) {
     activeCollectionId: normalizeId(value.activeCollectionId),
     activeFolderId: normalizeId(value.activeFolderId),
     activeRequestId: normalizeId(value.activeRequestId),
+    activeRunnerRequestRunnerId: normalizeId(value.activeRunnerRequestRunnerId),
+    activeRunnerConfigId: normalizeId(value.activeRunnerConfigId),
     activeSidebarPanel: normalizeEnum(value.activeSidebarPanel, SIDEBAR_PANELS, defaults.activeSidebarPanel),
     activeMainPanel: normalizeEnum(value.activeMainPanel, MAIN_PANELS, defaults.activeMainPanel),
     activeRequestTab: normalizeEnum(value.activeRequestTab, REQUEST_EDITOR_TABS, defaults.activeRequestTab),
@@ -46,6 +51,7 @@ function normalizeSessionState(value = {}) {
     openRequestTabs: normalizeArray(value.openRequestTabs, MAX_OPEN_TABS, normalizeRequestTab),
     openEnvironmentTabs: normalizeArray(value.openEnvironmentTabs, MAX_OPEN_TABS, normalizeEnvironmentTab),
     openWorkspaceTabs: normalizeArray(value.openWorkspaceTabs, MAX_OPEN_TABS, normalizeWorkspaceTab),
+    openRunnerTabs: normalizeArray(value.openRunnerTabs, MAX_OPEN_TABS, normalizeRunnerTab),
     draftRequests: normalizeArray(value.draftRequests, MAX_OPEN_TABS, normalizeSessionRequest),
     dirtyCollectionStates: normalizeArray(value.dirtyCollectionStates, MAX_OPEN_TABS, normalizeDirtyCollectionState),
     dirtyCookieJarState: normalizeDirtyCookieJarState(value.dirtyCookieJarState)
@@ -57,18 +63,25 @@ function normalizeRequestTab(value) {
     return null;
   }
   const draft = value.draft === true;
-  const collectionId = draft ? '' : normalizeId(value.collectionId);
+  const runnerRequest = value.runnerRequest === true;
+  const runnerId = runnerRequest ? normalizeId(value.runnerId) : '';
+  const collectionId = draft || runnerRequest ? '' : normalizeId(value.collectionId);
   const requestId = normalizeId(value.requestId);
-  const key = normalizeTabKey(value.key, draft ? `draft:${requestId}` : `request:${collectionId}:${requestId}`);
-  if (!requestId || (!draft && !collectionId)) {
+  const fallbackKey = runnerRequest
+    ? `runner-request:${runnerId}:${requestId}`
+    : draft ? `draft:${requestId}` : `request:${collectionId}:${requestId}`;
+  const key = normalizeTabKey(value.key, fallbackKey);
+  if (!requestId || (!draft && !runnerRequest && !collectionId) || (runnerRequest && !runnerId)) {
     return null;
   }
   return {
     key,
     collectionId,
+    runnerId,
     requestId,
     folderId: normalizeId(value.folderId),
     draft,
+    runnerRequest,
     dirty: value.dirty === true,
     createdUnsaved: value.createdUnsaved === true,
     snapshot: normalizeSnapshot(value.snapshot),
@@ -106,6 +119,24 @@ function normalizeWorkspaceTab(value) {
     key: normalizeTabKey(value.key, `workspace:${workspaceId}`),
     workspaceId,
     dirty: value.dirty === true
+  };
+}
+
+function normalizeRunnerTab(value) {
+  if (!isObject(value)) {
+    return null;
+  }
+  const runnerId = normalizeId(value.runnerId);
+  if (!runnerId) {
+    return null;
+  }
+  return {
+    key: normalizeTabKey(value.key, `runner:${runnerId}`),
+    runnerId,
+    dirty: value.dirty === true,
+    createdUnsaved: value.createdUnsaved === true,
+    snapshot: normalizeSnapshot(value.snapshot),
+    currentState: normalizeSessionRunner(value.currentState)
   };
 }
 
@@ -181,6 +212,24 @@ function normalizeSessionEnvironment(value) {
     id,
     name: normalizeNonEmptyString(value.name, 'Untitled Environment'),
     variables: normalizePairs(value.variables)
+  };
+}
+
+function normalizeSessionRunner(value) {
+  if (!isObject(value)) {
+    return null;
+  }
+  const id = normalizeId(value.id);
+  if (!id) {
+    return null;
+  }
+  return {
+    id,
+    name: normalizeNonEmptyString(value.name, 'Untitled Runner'),
+    environmentId: normalizeEnvironmentId(value.environmentId),
+    stopOnFailure: value.stopOnFailure === true,
+    allowEnvironmentMutation: value.allowEnvironmentMutation === true,
+    requests: normalizeArray(value.requests, 1000, normalizeSessionRequest)
   };
 }
 

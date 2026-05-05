@@ -123,9 +123,16 @@
     }, global);
 
     await captureUiSnapshotState('runner', () => {
-      activateTab('results', 'runner');
+      selectSidebarPanel('runners');
+      const runner = newRunner();
+      runner.name = 'Snapshot Runner';
+      runner.requests = [
+        { ...newRequestObject('Snapshot Health'), method: 'GET', url: 'https://api.snapshot.test/health' },
+        { ...newRequestObject('Snapshot Create'), method: 'POST', url: 'https://api.snapshot.test/widgets' }
+      ];
+      renderAll();
       $('runnerResults').textContent = [
-        'Collection: Snapshot Collection',
+        'Collection: Snapshot Runner',
         'Passed: true',
         'Total: 2',
         'Passed requests: 2',

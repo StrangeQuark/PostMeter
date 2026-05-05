@@ -14,8 +14,19 @@ test('renderer session persistence serializes active tabs, drafts, and dirty tab
   state.activeEnvironmentId = 'environment-1';
   state.activeCollectionId = 'collection-1';
   state.activeRequestId = 'request-1';
+  state.activeRunnerConfigId = 'runner-1';
   state.activeSidebarPanel = 'environments';
   state.activeMainPanel = 'environment';
+  state.workspace = {
+    runners: [
+      {
+        id: 'runner-1',
+        name: 'Dirty Runner',
+        environmentId: 'none',
+        requests: [{ id: 'runner-request-1', name: 'Runner Request', method: 'GET', url: 'https://runner.test' }]
+      }
+    ]
+  };
   state.draftRequests.set('draft-1', { id: 'draft-1', name: 'Draft Request', method: 'GET', url: '' });
   state.openRequestTabs = [
     {
@@ -47,6 +58,14 @@ test('renderer session persistence serializes active tabs, drafts, and dirty tab
       dirty: false
     }
   ];
+  state.openRunnerTabs = [
+    {
+      key: 'runner:runner-1',
+      runnerId: 'runner-1',
+      dirty: true,
+      snapshot: '{"saved":true}'
+    }
+  ];
 
   const doc = {
     querySelector(selector) {
@@ -70,12 +89,120 @@ test('renderer session persistence serializes active tabs, drafts, and dirty tab
   });
 
   assert.equal(session.activeRequestTab, 'headers');
-  assert.equal(session.activeResultsTab, 'runner');
+  assert.equal(session.activeResultsTab, 'response');
   assert.equal(session.selectedWorkspaceId, 'Workspace 2.json');
   assert.equal(session.openRequestTabs[0].currentState.url, 'https://example.test');
   assert.equal(session.openRequestTabs[1].currentState, null);
   assert.equal(session.openEnvironmentTabs[0].currentState.name, 'Dirty Environment');
+  assert.equal(session.openRunnerTabs[0].currentState.name, 'Dirty Runner');
   assert.equal(session.draftRequests.length, 1);
+});
+
+test('renderer session persistence serializes and restores runner-owned request tabs', () => {
+  const state = createRendererState();
+  const runnerRequest = {
+    id: 'runner-request-1',
+    name: 'Runner Request',
+    method: 'PATCH',
+    url: 'https://edited-runner.test'
+  };
+  state.activeWorkspaceId = 'Local Workspace.json';
+  state.selectedWorkspaceId = 'Local Workspace.json';
+  state.activeMainPanel = 'request';
+  state.activeSidebarPanel = 'runners';
+  state.activeRunnerConfigId = 'runner-1';
+  state.activeRunnerRequestRunnerId = 'runner-1';
+  state.activeRequestId = runnerRequest.id;
+  state.workspace = {
+    collections: [],
+    environments: [],
+    runners: [
+      {
+        id: 'runner-1',
+        name: 'Runner',
+        environmentId: 'none',
+        requests: [runnerRequest]
+      }
+    ]
+  };
+  state.openRequestTabs = [
+    {
+      key: 'runner-request:runner-1:runner-request-1',
+      runnerId: 'runner-1',
+      requestId: runnerRequest.id,
+      runnerRequest: true,
+      dirty: true,
+      snapshot: JSON.stringify({ ...runnerRequest, url: 'https://saved-runner.test' })
+    }
+  ];
+
+  const session = buildRendererSession({
+    state,
+    doc: { querySelector: () => null },
+    requestForTab: () => runnerRequest,
+    environmentForTab: () => null
+  });
+
+  assert.equal(session.activeRunnerRequestRunnerId, 'runner-1');
+  assert.equal(session.openRequestTabs[0].key, 'runner-request:runner-1:runner-request-1');
+  assert.equal(session.openRequestTabs[0].runnerId, 'runner-1');
+  assert.equal(session.openRequestTabs[0].runnerRequest, true);
+  assert.equal(session.openRequestTabs[0].collectionId, '');
+  assert.equal(session.openRequestTabs[0].currentState.url, 'https://edited-runner.test');
+
+  const restoredState = createRendererState();
+  restoredState.workspace = {
+    collections: [],
+    environments: [],
+    runners: [
+      {
+        id: 'runner-1',
+        name: 'Runner',
+        environmentId: 'none',
+        requests: [
+          {
+            id: 'runner-request-1',
+            name: 'Runner Request',
+            method: 'GET',
+            url: 'https://saved-runner.test'
+          }
+        ]
+      }
+    ]
+  };
+
+  restoreRendererSession({
+    state: restoredState,
+    session,
+    workspaceListItems: () => [
+      { id: 'Local Workspace.json', name: 'Local Workspace', path: '/tmp/Local Workspace.json', current: true, deletable: false }
+    ],
+    findFolder,
+    findRequest
+  });
+
+  assert.equal(restoredState.workspace.runners[0].requests[0].method, 'PATCH');
+  assert.equal(restoredState.workspace.runners[0].requests[0].url, 'https://edited-runner.test');
+  assert.equal(restoredState.activeSidebarPanel, 'runners');
+  assert.equal(restoredState.activeMainPanel, 'request');
+  assert.equal(restoredState.activeRunnerConfigId, 'runner-1');
+  assert.equal(restoredState.activeRunnerRequestRunnerId, 'runner-1');
+  assert.equal(restoredState.activeCollectionId, null);
+  assert.equal(restoredState.activeRequestId, 'runner-request-1');
+  assert.deepEqual(restoredState.openRequestTabs, [
+    {
+      key: 'runner-request:runner-1:runner-request-1',
+      collectionId: null,
+      folderId: null,
+      runnerId: 'runner-1',
+      requestId: 'runner-request-1',
+      draft: false,
+      runnerRequest: true,
+      dirty: true,
+      createdUnsaved: false,
+      snapshot: JSON.stringify({ ...runnerRequest, url: 'https://saved-runner.test' })
+    }
+  ]);
 });
 
 test('renderer session persistence preserves an empty workspace selection after closing the workspace tab', () => {
@@ -386,6 +513,111 @@ test('renderer session persistence does not auto-open an environment tab for the
 
   assert.equal(state.activeEnvironmentId, 'environment-1');
   assert.deepEqual(state.openEnvironmentTabs, []);
+});
+
+test('renderer session persistence restores dirty runner tabs and created-unsaved runners', () => {
+  const state = createRendererState();
+  state.workspace = {
+    collections: [],
+    environments: [],
+    runners: [
+      {
+        id: 'runner-1',
+        name: 'Saved Runner',
+        environmentId: 'none',
+        requests: []
+      }
+    ]
+  };
+
+  const restored = restoreRendererSession({
+    state,
+    session: {
+      activeWorkspaceId: 'Local Workspace.json',
+      selectedWorkspaceId: 'Local Workspace.json',
+      activeRunnerConfigId: 'runner-2',
+      activeSidebarPanel: 'runners',
+      activeMainPanel: 'runner',
+      openRunnerTabs: [
+        {
+          key: 'runner:runner-1',
+          runnerId: 'runner-1',
+          dirty: true,
+          snapshot: '{"saved":true}',
+          currentState: {
+            id: 'runner-1',
+            name: 'Dirty Runner',
+            environmentId: 'none',
+            allowEnvironmentMutation: true,
+            requests: [{ id: 'request-1', name: 'Runner Request', method: 'POST', url: 'https://runner.test' }]
+          }
+        },
+        {
+          key: 'runner:runner-2',
+          runnerId: 'runner-2',
+          createdUnsaved: true,
+          dirty: true,
+          snapshot: '',
+          currentState: {
+            id: 'runner-2',
+            name: 'Unsaved Runner',
+            environmentId: 'none',
+            stopOnFailure: true,
+            requests: []
+          }
+        }
+      ]
+    },
+    workspaceListItems: () => [
+      { id: 'Local Workspace.json', name: 'Local Workspace', path: '/tmp/Local Workspace.json', current: true, deletable: false }
+    ],
+    findFolder,
+    findRequest
+  });
+
+  assert.equal(state.workspace.runners[0].name, 'Dirty Runner');
+  assert.equal(state.workspace.runners[0].allowEnvironmentMutation, true);
+  assert.equal(state.workspace.runners[0].requests[0].method, 'POST');
+  assert.equal(state.workspace.runners[1].id, 'runner-2');
+  assert.equal(state.workspace.runners[1].stopOnFailure, true);
+  assert.equal(state.activeRunnerConfigId, 'runner-2');
+  assert.equal(state.activeSidebarPanel, 'runners');
+  assert.equal(state.activeMainPanel, 'runner');
+  assert.deepEqual(state.openRunnerTabs.map((tab) => tab.runnerId), ['runner-1', 'runner-2']);
+  assert.equal(restored.activeResultsTab, 'response');
+});
+
+test('renderer session persistence restores a closed runner tab as the empty runner pane', () => {
+  const state = createRendererState();
+  state.workspace = {
+    collections: [],
+    environments: [],
+    runners: [
+      { id: 'runner-1', name: 'Saved Runner', environmentId: 'none', requests: [] }
+    ]
+  };
+
+  restoreRendererSession({
+    state,
+    session: {
+      activeWorkspaceId: 'Local Workspace.json',
+      selectedWorkspaceId: 'Local Workspace.json',
+      activeRunnerConfigId: 'runner-1',
+      activeSidebarPanel: 'runners',
+      activeMainPanel: 'runner',
+      openRunnerTabs: []
+    },
+    workspaceListItems: () => [
+      { id: 'Local Workspace.json', name: 'Local Workspace', path: '/tmp/Local Workspace.json', current: true, deletable: false }
+    ],
+    findFolder,
+    findRequest
+  });
+
+  assert.equal(state.activeRunnerConfigId, null);
+  assert.equal(state.activeSidebarPanel, 'runners');
+  assert.equal(state.activeMainPanel, 'runner');
+  assert.deepEqual(state.openRunnerTabs, []);
 });
 
 test('renderer session persistence does not restore the default first request when no request tabs were open', () => {

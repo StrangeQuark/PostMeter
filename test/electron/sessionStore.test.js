@@ -56,18 +56,31 @@ test('session store saves normalized renderer session state', async () => {
     activeCollectionId: 'collection-1',
     activeFolderId: 'folder-1',
     activeRequestId: 'request-1',
+    activeRunnerRequestRunnerId: 'runner-1',
+    activeRunnerConfigId: 'runner-1',
     activeSidebarPanel: 'workspaces',
     activeMainPanel: 'workspace',
     activeRequestTab: 'auth',
     activeResultsTab: 'runner',
-    openRequestTabs: [{
-      key: 'request:collection-1:request-1',
-      collectionId: 'collection-1',
-      requestId: 'request-1',
-      dirty: true,
-      snapshot: '{"saved":true}',
-      currentState: { id: 'request-1', name: 'Dirty Request', method: 'post', url: ' https://example.test ', bodyType: 'RAW_JSON', body: '{}' }
-    }],
+    openRequestTabs: [
+      {
+        key: 'request:collection-1:request-1',
+        collectionId: 'collection-1',
+        requestId: 'request-1',
+        dirty: true,
+        snapshot: '{"saved":true}',
+        currentState: { id: 'request-1', name: 'Dirty Request', method: 'post', url: ' https://example.test ', bodyType: 'RAW_JSON', body: '{}' }
+      },
+      {
+        key: 'runner-request:runner-1:runner-request-1',
+        runnerId: 'runner-1',
+        requestId: 'runner-request-1',
+        runnerRequest: true,
+        dirty: true,
+        snapshot: '{"saved":true}',
+        currentState: { id: 'runner-request-1', name: 'Runner Tab Request', method: 'patch', url: 'https://runner-tab.test' }
+      }
+    ],
     openEnvironmentTabs: [{
       key: 'environment:environment-1',
       environmentId: 'environment-1',
@@ -77,6 +90,18 @@ test('session store saves normalized renderer session state', async () => {
     openWorkspaceTabs: [{
       key: 'workspace:Workspace.json',
       workspaceId: 'Workspace.json'
+    }],
+    openRunnerTabs: [{
+      key: 'runner:runner-1',
+      runnerId: 'runner-1',
+      dirty: true,
+      snapshot: '{"saved":true}',
+      currentState: {
+        id: 'runner-1',
+        name: 'Dirty Runner',
+        environmentId: 'none',
+        requests: [{ id: 'runner-request-1', name: 'Runner Request', method: 'post', url: 'https://runner.test' }]
+      }
     }],
     draftRequests: [{
       id: 'draft-1',
@@ -94,11 +119,21 @@ test('session store saves normalized renderer session state', async () => {
   assert.equal(saved.selectedWorkspaceId, 'Workspace 2.json');
   assert.equal(saved.openRequestTabs[0].currentState.method, 'POST');
   assert.equal(saved.openRequestTabs[0].currentState.url, ' https://example.test ');
+  assert.equal(saved.openRequestTabs[1].runnerRequest, true);
+  assert.equal(saved.openRequestTabs[1].runnerId, 'runner-1');
+  assert.equal(saved.openRequestTabs[1].collectionId, '');
+  assert.equal(saved.openRequestTabs[1].currentState.method, 'PATCH');
+  assert.equal(saved.activeResultsTab, 'response');
+  assert.equal(saved.activeRunnerRequestRunnerId, 'runner-1');
+  assert.equal(saved.activeRunnerConfigId, 'runner-1');
+  assert.equal(saved.openRunnerTabs[0].currentState.requests[0].method, 'POST');
   assert.equal(saved.draftRequests[0].method, 'PATCH');
 
   const raw = JSON.parse(await fs.readFile(sessionPath, 'utf8'));
   assert.equal(raw.activeMainPanel, 'workspace');
+  assert.equal(raw.openRequestTabs[1].key, 'runner-request:runner-1:runner-request-1');
   assert.equal(raw.openEnvironmentTabs[0].currentState.name, 'Dirty Environment');
+  assert.equal(raw.openRunnerTabs[0].currentState.name, 'Dirty Runner');
 });
 
 test('session store can synchronously save normalized renderer session state', async () => {

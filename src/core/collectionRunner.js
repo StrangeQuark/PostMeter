@@ -1,6 +1,6 @@
 const { evaluateAssertions } = require('./assertions');
 const { sendRequest } = require('./httpClient');
-const { walkRequests } = require('./models');
+const { runnerModel, walkRequests } = require('./models');
 const {
   createScriptedRequestState,
   emptyScriptResult,
@@ -276,6 +276,33 @@ async function runCollection(collection, environment, options = {}) {
     cookies: runnerCookies
   };
   attachInternalAuthUpdates(result, refreshedAuthByRequestId);
+  return result;
+}
+
+async function runRunner(runner, environment, options = {}) {
+  const normalizedRunner = runnerModel(runner);
+  const runnerCollection = {
+    id: normalizedRunner.id,
+    name: normalizedRunner.name,
+    description: '',
+    variables: [],
+    certificates: [],
+    requests: normalizedRunner.requests,
+    folders: []
+  };
+  const result = await runCollection(runnerCollection, environment, {
+    ...options,
+    stopOnFailure: options.stopOnFailure ?? normalizedRunner.stopOnFailure
+  });
+  result.runnerId = normalizedRunner.id;
+  result.runnerName = normalizedRunner.name;
+  result.runnerEnvironmentId = normalizedRunner.environmentId;
+  result.environmentMutationAllowed = options.allowEnvironmentMutation ?? normalizedRunner.allowEnvironmentMutation === true;
+  result.collectionId = '';
+  result.collectionName = normalizedRunner.name;
+  if (result.environmentMutationAllowed) {
+    result.mutatedEnvironment = result.environment;
+  }
   return result;
 }
 
@@ -715,5 +742,6 @@ function csvValue(value) {
 
 module.exports = {
   collectionRunResultToCsv,
-  runCollection
+  runCollection,
+  runRunner
 };

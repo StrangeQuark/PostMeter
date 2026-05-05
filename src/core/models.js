@@ -14,7 +14,7 @@ const {
 const { normalizeSandboxFileBindings } = require('./fileAttachmentBindings');
 const { normalizeDiagnosticsSettings } = require('./diagnosticsSettings');
 
-const CURRENT_SCHEMA_VERSION = 11;
+const CURRENT_SCHEMA_VERSION = 12;
 const MIN_SUPPORTED_SCHEMA_VERSION = 1;
 const SUPPORTED_METHODS = new Set(HTTP_METHODS);
 const BODY_METHODS = new Set(BODY_METHOD_VALUES);
@@ -89,6 +89,50 @@ function requestModel({
   return request;
 }
 
+function runnerModel({
+  id,
+  name,
+  environmentId,
+  allowEnvironmentMutation,
+  stopOnFailure,
+  requests
+} = {}) {
+  return {
+    id: id || newId(),
+    name: normalizeName(name, 'Untitled Runner'),
+    environmentId: normalizeRunnerEnvironmentId(environmentId),
+    allowEnvironmentMutation: allowEnvironmentMutation === true,
+    stopOnFailure: stopOnFailure === true,
+    requests: Array.isArray(requests) ? requests.map(runnerRequestModel) : []
+  };
+}
+
+function runnerRequestModel(request = {}) {
+  const normalized = requestModel(request);
+  const source = normalizeRunnerRequestSource(request.source);
+  if (Object.keys(source).length) {
+    normalized.source = source;
+  }
+  return normalized;
+}
+
+function cloneRequestForRunner(request, source = {}) {
+  const clonedRequest = cloneJson(request || {});
+  return runnerRequestModel({
+    ...clonedRequest,
+    id: newId(),
+    source: normalizeRunnerRequestSource({
+      collectionId: source.collectionId,
+      collectionName: source.collectionName,
+      folderId: source.folderId,
+      folderName: source.folderName,
+      folderPath: source.folderPath,
+      requestId: source.requestId || request?.id,
+      requestName: source.requestName || request?.name
+    })
+  });
+}
+
 function folderModel({ id, name, requests, folders, postman } = {}) {
   const folder = {
     id: id || newId(),
@@ -132,7 +176,7 @@ function historyEntry({ timestamp, method, url, statusCode, durationMillis } = {
   };
 }
 
-function workspaceModel({ schemaVersion, collections, environments, globals, history, settings, cookies } = {}) {
+function workspaceModel({ schemaVersion, collections, environments, globals, history, settings, cookies, runners } = {}) {
   return {
     schemaVersion: schemaVersion || CURRENT_SCHEMA_VERSION,
     settings: normalizeSettings(settings),
@@ -140,6 +184,7 @@ function workspaceModel({ schemaVersion, collections, environments, globals, his
     environments: Array.isArray(environments) ? environments.map(environmentModel) : [],
     globals: normalizePairs(globals),
     cookies: normalizeCookies(cookies),
+    runners: Array.isArray(runners) ? runners.map(runnerModel) : [],
     history: Array.isArray(history) ? history.map(historyEntry) : []
   };
 }
@@ -411,6 +456,41 @@ function normalizeCookies(cookies) {
   return normalizeCookieCollection(cookies, { createId: newId });
 }
 
+function normalizeRunnerEnvironmentId(value) {
+  const environmentId = String(value || '').trim();
+  return environmentId || 'none';
+}
+
+function normalizeRunnerRequestSource(source) {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) {
+    return {};
+  }
+  const normalized = {};
+  for (const key of [
+    'collectionId',
+    'collectionName',
+    'folderId',
+    'folderName',
+    'requestId',
+    'requestName'
+  ]) {
+    const value = String(source[key] || '').trim();
+    if (value) {
+      normalized[key] = value.slice(0, 512);
+    }
+  }
+  if (Array.isArray(source.folderPath)) {
+    const folderPath = source.folderPath
+      .map((item) => String(typeof item === 'object' && item ? item.name || item.id || '' : item || '').trim())
+      .filter(Boolean)
+      .slice(0, 20);
+    if (folderPath.length) {
+      normalized.folderPath = folderPath;
+    }
+  }
+  return normalized;
+}
+
 function normalizeCertificates(certificates) {
   if (!Array.isArray(certificates)) {
     return [];
@@ -452,8 +532,16 @@ function defaultWorkspace() {
     environments: [],
     globals: [],
     cookies: [],
+    runners: [],
     history: []
   });
+}
+
+function cloneJson(value) {
+  if (typeof structuredClone === 'function') {
+    return structuredClone(value);
+  }
+  return JSON.parse(JSON.stringify(value));
 }
 
 function walkRequests(collection, visitor) {
@@ -529,6 +617,7 @@ module.exports = {
   CURRENT_SCHEMA_VERSION,
   MIN_SUPPORTED_SCHEMA_VERSION,
   SUPPORTED_METHODS,
+  cloneRequestForRunner,
   collectionModel,
   defaultWorkspace,
   environmentModel,
@@ -540,8 +629,11 @@ module.exports = {
   normalizeLoadTestPolicy,
   normalizeRequestCookieJar,
   normalizeRequestLoadTestPolicy,
+  normalizeRunnerRequestSource,
   normalizeSettings,
   requestModel,
+  runnerModel,
+  runnerRequestModel,
   walkRequests,
   workspaceModel
 };

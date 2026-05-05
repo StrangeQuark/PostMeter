@@ -8,6 +8,7 @@ const {
   CURRENT_SCHEMA_VERSION,
   collectionModel,
   defaultWorkspace,
+  runnerModel,
   workspaceModel
 } = require('./models');
 
@@ -60,6 +61,7 @@ function normalizeWorkspace(workspace) {
     environments: Array.isArray(workspace?.environments) ? workspace.environments : [],
     globals: Array.isArray(workspace?.globals) ? workspace.globals : [],
     cookies: Array.isArray(workspace?.cookies) ? workspace.cookies : [],
+    runners: Array.isArray(workspace?.runners) ? workspace.runners.map(runnerModel) : [],
     history: Array.isArray(workspace?.history) ? workspace.history : []
   });
   return normalized;
@@ -73,6 +75,7 @@ function looksLikeNativeWorkspace(value) {
       Object.hasOwn(value, 'schemaVersion')
       || Array.isArray(value.collections)
       || Array.isArray(value.environments)
+      || Array.isArray(value.runners)
       || Array.isArray(value.history)
     )
   );

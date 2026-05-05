@@ -56,6 +56,8 @@ test('defines shared payload schema metadata for IPC and contributors', () => {
   assert.equal(payloadSchemas.fields.scriptTestResult.name.limit, 'name');
   assert.equal(payloadSchemas.fields.updateCheckOptions.includePrereleases.type, 'boolean');
   assert.equal(payloadSchemas.fields.runnerConfig.stopOnFailure.type, 'boolean');
+  assert.equal(payloadSchemas.fields.runner.allowEnvironmentMutation.type, 'boolean');
+  assert.equal(payloadSchemas.fields.runnerRequestSource.requestId.limit, 'name');
   assert.equal(payloadSchemas.fields.runnerProgress.requestId.limit, 'name');
   assert.equal(payloadSchemas.fields.oauthProgress.type.enum, 'oauthProgressTypes');
   assert.ok(payloadSchemas.auth.oauthProgressStatuses.includes('polling'));
@@ -65,6 +67,8 @@ test('defines shared payload schema metadata for IPC and contributors', () => {
   assert.equal(payloadSchemas.fields.response.finalUrl.limit, 'url');
   assert.equal(payloadSchemas.fields.collectionRunRequestResult.error.limit, 'value');
   assert.equal(payloadSchemas.entities.request.nested[0], 'auth');
+  assert.ok(payloadSchemas.entities.workspace.arrays.includes('runners'));
+  assert.deepEqual(payloadSchemas.entities.runner.arrays, ['requests']);
   assert.equal(payloadSchemas.auth.oauth2GrantTypes[0], 'authorizationCode');
   assert.deepEqual(payloadSchemas.load.executionModes, ['singleProcess', 'multiProcess']);
   assert.deepEqual(payloadSchemas.enums.diagnosticLogLevels, ['debug', 'info', 'warn', 'error']);
