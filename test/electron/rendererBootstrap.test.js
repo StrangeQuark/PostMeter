@@ -611,7 +611,7 @@ test('renderer exposes first-class runner UI and sends runner payloads through r
   const bootstrapSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/rendererBootstrap.js'), 'utf8');
   const indexHtml = fs.readFileSync(path.join(__dirname, '../../src/renderer/index.html'), 'utf8');
 
-  assert.match(indexHtml, /id="runnersPanelTab"[^>]*>Runner<\/button>/);
+  assert.match(indexHtml, /id="runnersPanelTab"[^>]*>Runners<\/button>/);
   assert.match(indexHtml, /id="newRunnerMenuButton"[^>]*>Runner<\/button>/);
   assert.match(indexHtml, /id="runnerMainPanel"/);
   assert.match(indexHtml, /id="runnerImportModal"/);
