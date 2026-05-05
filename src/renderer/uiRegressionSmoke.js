@@ -1804,6 +1804,78 @@
         imported.name = 'Mutated Runner Clone';
         assertUiSmoke(source.name !== 'Mutated Runner Clone', 'Imported runner request should not mutate the source collection request.');
       }
+      lastRunnerResult = {
+        collectionName: runner.name,
+        totalRequests: 2,
+        passedRequests: 1,
+        failedRequests: 1,
+        passed: false,
+        cancelled: false,
+        collectionVariables: [],
+        environment: { id: 'runtime', name: 'Runtime', variables: [{ enabled: true, key: 'runnerEnvToken', value: 'env-value' }] },
+        results: [
+          {
+            requestId: runner.requests[0].id,
+            requestName: runner.requests[0].name,
+            statusCode: 200,
+            durationMillis: 21,
+            passed: true,
+            assertionResults: [],
+            preRequestScriptResult: { passed: true, tests: [] },
+            testScriptResult: { passed: true, tests: [{ name: 'runner request passed', passed: true }] },
+            extractedVariables: [],
+            localVariables: [{ enabled: true, key: 'runnerLocalToken', value: 'local-value' }]
+          },
+          {
+            requestId: runner.requests[1].id,
+            requestName: runner.requests[1].name,
+            statusCode: 500,
+            durationMillis: 33,
+            passed: false,
+            assertionResults: [],
+            preRequestScriptResult: { passed: true, tests: [] },
+            testScriptResult: { passed: false, tests: [{ name: 'runner request failed', passed: false, error: 'Expected HTTP 200.' }] },
+            extractedVariables: [],
+            localVariables: [],
+            error: 'Expected HTTP 200.'
+          }
+        ]
+      };
+      renderRunnerExecutionResult(lastRunnerResult);
+      const executionRows = Array.from($('runnerExecutionList').querySelectorAll('.runner-execution-row'));
+      assertUiSmoke(executionRows.length === 2, 'Runner execution pane should render one row per request result.');
+      assertUiSmoke(executionRows[0].querySelector('.runner-status-badge')?.textContent === '200', 'Runner execution row should show the HTTP status code.');
+      assertUiSmoke(executionRows[1].querySelector('.runner-status-badge')?.textContent === '500', 'Runner execution row should show failing HTTP status codes.');
+      executionRows[1].click();
+      assertUiSmoke($('runnerExecutionDetailsStatus').textContent === '500', 'Runner details should update when selecting an execution row.');
+      assertUiSmoke($('runnerExecutionDetails').textContent.includes('runner request failed'), 'Runner details should show selected request script results.');
+      assertUiSmoke($('runnerExecutionDetails').textContent.includes('Expected HTTP 200.'), 'Runner details should show selected request errors.');
+      executionRows[0].click();
+      assertUiSmoke($('runnerExecutionDetails').textContent.includes('runnerLocalToken'), 'Runner details should show selected request variables.');
+      assertUiSmoke($('runnerExecutionDetails').textContent.includes('runnerEnvToken'), 'Runner details should show runner environment variables.');
+      const existingRunnerRequestCount = runner.requests.length;
+      for (let index = existingRunnerRequestCount; index < existingRunnerRequestCount + 36; index += 1) {
+        const overflowRequest = newRequestObject(`Overflow Runner Request ${index + 1}`);
+        overflowRequest.url = `https://runner-overflow.example.test/${index + 1}`;
+        runner.requests.push(overflowRequest);
+      }
+      renderRunnerRequestList(runner);
+      await nextPaint();
+      const runnerMainPanel = $('runnerMainPanel');
+      const runnerRequestList = $('runnerRequestList');
+      const runnerPanelStyle = getComputedStyle(runnerMainPanel);
+      const runnerRequestListStyle = getComputedStyle(runnerRequestList);
+      const runnerResultsStyle = getComputedStyle($('runnerResults'));
+      assertUiSmoke(runnerPanelStyle.overflowY === 'hidden', 'Runner editor panel should not become the scroll container for many requests.');
+      assertUiSmoke(runnerRequestListStyle.overflowY === 'auto', 'Runner request list should own vertical scrolling for many requests.');
+      assertUiSmoke(runnerResultsStyle.flexShrink === '0', 'Runner results pane should remain visible below the request list.');
+      if (runnerMainPanel.clientHeight > 0) {
+        assertUiSmoke(runnerRequestList.scrollHeight > runnerRequestList.clientHeight, 'Runner request list should scroll when many requests are present.');
+        assertUiSmoke(
+          $('runnerResults').getBoundingClientRect().bottom <= runnerMainPanel.getBoundingClientRect().bottom + 1,
+          'Runner results pane should stay inside the visible runner editor when the request list overflows.'
+        );
+      }
       const firstRequestId = runner.requests[0].id;
       moveRunnerRequest(runner, 0, 1);
       assertUiSmoke(runner.requests[1].id === firstRequestId, 'Runner request move down did not reorder rows.');

@@ -597,7 +597,29 @@
           <button id="addRunnerRequestButton" type="button" aria-haspopup="menu" aria-expanded="false">Add Request</button>
         </div>
         <div id="runnerRequestList" class="runner-request-list" aria-label="Runner requests"></div>
-        <pre id="runnerResults" class="load-results runner-results" role="status" aria-live="polite">No collection run yet.</pre>
+        <div id="runnerResults" class="runner-results" role="status" aria-live="polite">
+          <div id="runnerResultsSummary" class="test-results-summary">No runner run yet.</div>
+          <div class="runner-execution-grid">
+            <section class="script-results-section runner-execution-section" aria-labelledby="runnerExecutionTitle">
+              <div class="script-results-header">
+                <h3 id="runnerExecutionTitle">Execution</h3>
+                <span id="runnerExecutionSummary" class="script-results-count">No requests</span>
+              </div>
+              <div id="runnerExecutionList" class="runner-execution-list" aria-live="polite">
+                <p class="test-result-empty">No runner execution yet.</p>
+              </div>
+            </section>
+            <section class="script-results-section runner-detail-section" aria-labelledby="runnerExecutionDetailsTitle">
+              <div class="script-results-header">
+                <h3 id="runnerExecutionDetailsTitle">Request details</h3>
+                <span id="runnerExecutionDetailsStatus" class="script-results-count">No selection</span>
+              </div>
+              <div id="runnerExecutionDetails" class="runner-execution-details">
+                <p class="test-result-empty">Select a completed request to inspect its execution details.</p>
+              </div>
+            </section>
+          </div>
+        </div>
       </section>
 
       <section id="runnerEmptyPanel" class="panel request-empty-panel runner-empty-panel" hidden>

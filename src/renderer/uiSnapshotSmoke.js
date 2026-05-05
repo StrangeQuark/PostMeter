@@ -131,15 +131,43 @@
         { ...newRequestObject('Snapshot Create'), method: 'POST', url: 'https://api.snapshot.test/widgets' }
       ];
       renderAll();
-      $('runnerResults').textContent = [
-        'Collection: Snapshot Runner',
-        'Passed: true',
-        'Total: 2',
-        'Passed requests: 2',
-        '',
-        'Runtime Variables',
-        'Collection baseUrl = https://api.snapshot.test'
-      ].join('\n');
+      lastRunnerResult = {
+        collectionName: 'Snapshot Runner',
+        totalRequests: 2,
+        passedRequests: 1,
+        failedRequests: 1,
+        passed: false,
+        cancelled: false,
+        collectionVariables: [{ enabled: true, key: 'baseUrl', value: 'https://api.snapshot.test' }],
+        environment: { id: 'snapshot-env', name: 'Snapshot Env', variables: [] },
+        results: [
+          {
+            requestId: runner.requests[0].id,
+            requestName: 'Snapshot Health',
+            statusCode: 200,
+            durationMillis: 42,
+            passed: true,
+            assertionResults: [],
+            preRequestScriptResult: { passed: true, tests: [] },
+            testScriptResult: { passed: true, tests: [{ name: 'health response is OK', passed: true }] },
+            extractedVariables: [],
+            localVariables: []
+          },
+          {
+            requestId: runner.requests[1].id,
+            requestName: 'Snapshot Create',
+            statusCode: 500,
+            durationMillis: 57,
+            passed: false,
+            assertionResults: [],
+            preRequestScriptResult: { passed: true, tests: [] },
+            testScriptResult: { passed: false, tests: [{ name: 'create response is accepted', passed: false, error: 'Expected 202.' }] },
+            extractedVariables: [],
+            localVariables: []
+          }
+        ]
+      };
+      renderRunnerExecutionResult(lastRunnerResult);
       $('exportRunnerJsonButton').disabled = false;
       $('exportRunnerCsvButton').disabled = false;
     }, global);

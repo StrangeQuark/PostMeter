@@ -34,6 +34,7 @@ let activeOauthFlowId = RENDERER_STATE_DEFAULTS.activeOauthFlowId;
 let activeRunnerId = RENDERER_STATE_DEFAULTS.activeRunnerId;
 let lastLoadResult = RENDERER_STATE_DEFAULTS.lastLoadResult;
 let lastRunnerResult = RENDERER_STATE_DEFAULTS.lastRunnerResult;
+let selectedRunnerExecutionIndex = 0;
 let lastResponse = RENDERER_STATE_DEFAULTS.lastResponse;
 let lastVaultMetadata = null;
 let lastVaultMetadataWorkspaceId = null;
@@ -307,7 +308,7 @@ initializeRenderer({
     }));
     registerCleanup(window.postmeter.runner.onProgress(({ id, progress }) => {
       if (id === activeRunnerId) {
-        $('runnerResults').textContent = `Running...\nCompleted ${progress.completedRequests} of ${progress.totalRequests} requests.\nLast: ${progress.requestName} ${progress.passed ? 'passed' : 'failed'}`;
+        renderRunnerExecutionProgress(progress);
       }
     }));
     if (window.postmeter.vault?.onPrompt) {
@@ -1773,7 +1774,7 @@ function resetWorkspaceTransientUi() {
   lastRenderedRequestEditorContextKey = '';
   $('validationLabel').textContent = '';
   $('loadResults').textContent = '';
-  $('runnerResults').textContent = '';
+  renderRunnerExecutionMessage('No runner run yet.');
   displayTestResults(null);
   $('runLoadButton').disabled = false;
   $('cancelLoadButton').disabled = true;
@@ -5069,6 +5070,336 @@ function testResultStatusLabel(status) {
   return 'FAILED';
 }
 
+function ensureRunnerResultsStructure() {
+  const root = $('runnerResults');
+  if (!root) {
+    return null;
+  }
+  if ($('runnerResultsSummary') && $('runnerExecutionList') && $('runnerExecutionDetails')) {
+    return root;
+  }
+  root.textContent = '';
+
+  const summary = document.createElement('div');
+  summary.id = 'runnerResultsSummary';
+  summary.className = 'test-results-summary';
+  summary.textContent = 'No runner run yet.';
+
+  const grid = document.createElement('div');
+  grid.className = 'runner-execution-grid';
+  grid.append(
+    runnerExecutionSection('runnerExecutionTitle', 'Execution', 'runnerExecutionSummary', 'No requests', 'runnerExecutionList', 'runner-execution-list'),
+    runnerExecutionSection('runnerExecutionDetailsTitle', 'Request details', 'runnerExecutionDetailsStatus', 'No selection', 'runnerExecutionDetails', 'runner-execution-details')
+  );
+  root.append(summary, grid);
+  return root;
+}
+
+function runnerExecutionSection(titleId, titleText, summaryId, summaryText, bodyId, bodyClassName) {
+  const section = document.createElement('section');
+  section.className = `script-results-section ${bodyClassName === 'runner-execution-list' ? 'runner-execution-section' : 'runner-detail-section'}`;
+  section.setAttribute('aria-labelledby', titleId);
+
+  const header = document.createElement('div');
+  header.className = 'script-results-header';
+  const title = document.createElement('h3');
+  title.id = titleId;
+  title.textContent = titleText;
+  const summary = document.createElement('span');
+  summary.id = summaryId;
+  summary.className = 'script-results-count';
+  summary.textContent = summaryText;
+  header.append(title, summary);
+
+  const body = document.createElement('div');
+  body.id = bodyId;
+  body.className = bodyClassName;
+  if (bodyId === 'runnerExecutionList') {
+    body.setAttribute('aria-live', 'polite');
+  }
+  appendEmptyTestResult(body, bodyId === 'runnerExecutionList'
+    ? 'No runner execution yet.'
+    : 'Select a completed request to inspect its execution details.');
+
+  section.append(header, body);
+  return section;
+}
+
+function renderRunnerExecutionMessage(message, options = {}) {
+  if (options.plain === true) {
+    $('runnerResults').textContent = message;
+    return;
+  }
+  ensureRunnerResultsStructure();
+  $('runnerResultsSummary').textContent = message || 'No runner run yet.';
+  $('runnerExecutionSummary').textContent = 'No requests';
+  $('runnerExecutionList').textContent = '';
+  appendEmptyTestResult($('runnerExecutionList'), message || 'No runner execution yet.');
+  $('runnerExecutionDetailsStatus').textContent = 'No selection';
+  $('runnerExecutionDetails').textContent = '';
+  appendEmptyTestResult($('runnerExecutionDetails'), 'Select a completed request to inspect its execution details.');
+}
+
+function renderRunnerExecutionProgress(progress = {}) {
+  ensureRunnerResultsStructure();
+  const completed = Number(progress.completedRequests || 0);
+  const total = Number(progress.totalRequests || 0);
+  const requestName = progress.requestName ? ` Last: ${progress.requestName}.` : '';
+  $('runnerResultsSummary').textContent = `Running runner... ${completed}/${total} completed.${requestName}`;
+  $('runnerExecutionSummary').textContent = total ? `${completed}/${total} completed` : 'Running';
+  $('runnerExecutionList').textContent = '';
+  appendEmptyTestResult($('runnerExecutionList'), completed ? 'Waiting for final request details.' : 'Waiting for the first request to complete.');
+  $('runnerExecutionDetailsStatus').textContent = 'Running';
+  $('runnerExecutionDetails').textContent = '';
+  appendEmptyTestResult($('runnerExecutionDetails'), 'Runner execution is still in progress.');
+}
+
+function renderRunnerExecutionResult(result = lastRunnerResult) {
+  ensureRunnerResultsStructure();
+  const results = Array.isArray(result?.results) ? result.results : [];
+  selectedRunnerExecutionIndex = clampRunnerExecutionIndex(selectedRunnerExecutionIndex, results);
+  const failedRequests = Number(result?.failedRequests ?? results.filter((item) => item?.passed !== true).length);
+  const completedRequests = Number(result?.totalRequests ?? results.length);
+  const httpResponses = results.filter((item) => Number(item?.statusCode) > 0).length;
+  const cancelled = result?.cancelled === true ? ', cancelled' : '';
+  $('runnerResultsSummary').textContent = results.length
+    ? `${completedRequests} ${plural(completedRequests, 'request', 'requests')} completed, ${httpResponses} HTTP ${plural(httpResponses, 'response', 'responses')}, ${failedRequests} failed${cancelled}.`
+    : 'No runner execution results were returned.';
+  $('runnerExecutionSummary').textContent = results.length
+    ? `${results.length} ${plural(results.length, 'result', 'results')}`
+    : 'No requests';
+
+  const list = $('runnerExecutionList');
+  list.textContent = '';
+  if (!results.length) {
+    appendEmptyTestResult(list, 'No request results were recorded.');
+  } else {
+    results.forEach((item, index) => list.append(runnerExecutionRow(item, index)));
+  }
+  renderRunnerExecutionDetails(result);
+}
+
+function clampRunnerExecutionIndex(index, results) {
+  if (!Array.isArray(results) || !results.length) {
+    return 0;
+  }
+  const numeric = Number(index);
+  if (!Number.isInteger(numeric) || numeric < 0) {
+    return 0;
+  }
+  return Math.min(numeric, results.length - 1);
+}
+
+function runnerExecutionRow(item, index) {
+  const row = document.createElement('button');
+  row.type = 'button';
+  row.className = `runner-execution-row${index === selectedRunnerExecutionIndex ? ' active' : ''}`;
+  row.dataset.runnerExecutionIndex = String(index);
+  row.setAttribute('aria-pressed', index === selectedRunnerExecutionIndex ? 'true' : 'false');
+  row.setAttribute('aria-label', `Show details for ${item?.requestName || 'request'} with status ${runnerStatusLabel(item)}`);
+  row.addEventListener('click', () => {
+    selectedRunnerExecutionIndex = index;
+    renderRunnerExecutionResult(lastRunnerResult);
+  });
+
+  const badge = document.createElement('span');
+  badge.className = `runner-status-badge ${runnerStatusClass(item)}`;
+  badge.textContent = runnerStatusLabel(item);
+
+  const content = document.createElement('span');
+  const name = document.createElement('span');
+  name.className = 'runner-execution-name';
+  name.textContent = item?.requestName || 'Untitled Request';
+  const meta = document.createElement('span');
+  meta.className = 'runner-execution-meta';
+  meta.textContent = runnerExecutionMeta(item);
+  content.append(name, meta);
+  row.append(badge, content);
+  return row;
+}
+
+function runnerExecutionMeta(item = {}) {
+  const request = runnerRequestForExecutionItem(item);
+  const method = request?.method || '';
+  const url = request?.url || '';
+  const duration = Number.isFinite(Number(item.durationMillis)) ? `${Number(item.durationMillis)} ms` : '';
+  return [method, url, duration].filter(Boolean).join(' ');
+}
+
+function renderRunnerExecutionDetails(result = lastRunnerResult) {
+  const results = Array.isArray(result?.results) ? result.results : [];
+  const item = results[selectedRunnerExecutionIndex] || null;
+  const status = $('runnerExecutionDetailsStatus');
+  const details = $('runnerExecutionDetails');
+  if (!details || !status) {
+    return;
+  }
+  details.textContent = '';
+  if (!item) {
+    status.textContent = 'No selection';
+    appendEmptyTestResult(details, 'Select a completed request to inspect its execution details.');
+    return;
+  }
+  status.textContent = runnerStatusLabel(item);
+  const request = runnerRequestForExecutionItem(item);
+  details.append(runnerExecutionOverview(item, request));
+  if (item.error) {
+    details.append(runnerDetailTextBlock('Error', item.error, 'runner-detail-error'));
+  }
+  appendRunnerAssertionDetails(details, item.assertionResults || []);
+  appendRunnerScriptResultDetails(details, 'Pre-request', item.preRequestScriptResult);
+  appendRunnerScriptResultDetails(details, 'Post-request', item.testScriptResult);
+  appendRunnerVariableDetails(details, 'Extracted variables', item.extractedVariables || []);
+  appendRunnerVariableDetails(details, 'Request variables', item.localVariables || []);
+  appendRunnerVariableDetails(details, 'Collection variables', result?.collectionVariables || []);
+  appendRunnerVariableDetails(details, 'Environment variables', result?.environment?.variables || []);
+  appendRunnerVariableDetails(details, 'Global variables', result?.globals || []);
+}
+
+function runnerExecutionOverview(item = {}, request = null) {
+  const block = document.createElement('div');
+  block.className = 'runner-detail-block';
+  const heading = document.createElement('h4');
+  heading.className = 'runner-detail-heading';
+  heading.textContent = item.requestName || request?.name || 'Untitled Request';
+  const target = document.createElement('div');
+  target.className = 'runner-detail-meta';
+  target.textContent = [request?.method || '', request?.url || ''].filter(Boolean).join(' ');
+  const metrics = document.createElement('div');
+  metrics.className = 'runner-detail-meta';
+  metrics.textContent = [
+    `Status ${runnerStatusLabel(item)}`,
+    Number.isFinite(Number(item.durationMillis)) ? `${Number(item.durationMillis)} ms` : '',
+    item.folderName ? `Folder ${item.folderName}` : '',
+    item.startedAt ? `Started ${item.startedAt}` : ''
+  ].filter(Boolean).join(' | ');
+  block.append(heading, target, metrics);
+  return block;
+}
+
+function appendRunnerAssertionDetails(details, assertions) {
+  const block = runnerDetailBlock('Assertions');
+  const list = document.createElement('div');
+  list.className = 'test-result-list';
+  if (!Array.isArray(assertions) || !assertions.length) {
+    appendEmptyTestResult(list, 'No assertions recorded.');
+  } else {
+    for (const assertion of assertions) {
+      appendTestResultRow(list, {
+        status: assertion?.passed === true ? 'passed' : 'failed',
+        name: assertion?.message || assertion?.assertion?.name || 'Assertion',
+        detail: assertion?.passed === true ? '' : String(assertion?.error || assertion?.message || '')
+      });
+    }
+  }
+  block.append(list);
+  details.append(block);
+}
+
+function appendRunnerScriptResultDetails(details, title, scriptResult) {
+  const block = runnerDetailBlock(title);
+  const list = document.createElement('div');
+  list.className = 'test-result-list';
+  const normalized = normalizeScriptResult(scriptResult);
+  if (!normalized) {
+    appendEmptyTestResult(list, 'No script result recorded.');
+  } else {
+    const topLevelError = scriptResultTopLevelError(normalized);
+    if (topLevelError) {
+      appendTestResultRow(list, { status: 'error', name: 'Script error', detail: topLevelError });
+    }
+    for (const test of Array.isArray(normalized.tests) ? normalized.tests : []) {
+      appendTestResultRow(list, {
+        status: scriptTestStatus(test),
+        name: String(test?.name || 'Unnamed test'),
+        detail: String(test?.error || '')
+      });
+    }
+    for (const log of Array.isArray(normalized.logs) ? normalized.logs : []) {
+      appendTestResultRow(list, { status: 'log', name: 'Console', detail: String(log || '') });
+    }
+    if (!list.children.length) {
+      appendEmptyTestResult(list, 'No tests recorded.');
+    }
+  }
+  block.append(list);
+  details.append(block);
+}
+
+function appendRunnerVariableDetails(details, title, variables) {
+  const visible = (variables || []).filter((variable) => variable?.enabled !== false && variable?.key);
+  if (!visible.length) {
+    return;
+  }
+  const block = runnerDetailBlock(title);
+  for (const variable of visible) {
+    const row = document.createElement('div');
+    row.className = 'runner-detail-variable';
+    const key = document.createElement('span');
+    key.textContent = variable.key;
+    const value = document.createElement('span');
+    value.textContent = variable.value ?? '';
+    row.append(key, value);
+    block.append(row);
+  }
+  details.append(block);
+}
+
+function runnerDetailBlock(title) {
+  const block = document.createElement('div');
+  block.className = 'runner-detail-block';
+  const heading = document.createElement('h4');
+  heading.className = 'runner-detail-title';
+  heading.textContent = title;
+  block.append(heading);
+  return block;
+}
+
+function runnerDetailTextBlock(title, value, className = 'runner-detail-code') {
+  const block = runnerDetailBlock(title);
+  const content = document.createElement('pre');
+  content.className = className;
+  content.textContent = String(value || '');
+  block.append(content);
+  return block;
+}
+
+function runnerRequestForExecutionItem(item = {}) {
+  const runner = activeRunner();
+  return (runner?.requests || []).find((request) => request.id === item.requestId) || null;
+}
+
+function runnerStatusLabel(item = {}) {
+  const statusCode = Number(item.statusCode);
+  if (Number.isFinite(statusCode) && statusCode > 0) {
+    return String(statusCode);
+  }
+  if (item.skipped === true) {
+    return 'SKIP';
+  }
+  return item.passed === false || item.error ? 'ERR' : '-';
+}
+
+function runnerStatusClass(item = {}) {
+  const statusCode = Number(item.statusCode);
+  if (!Number.isFinite(statusCode) || statusCode <= 0) {
+    return item.passed === false || item.error ? 'status-error' : 'status-none';
+  }
+  if (statusCode >= 200 && statusCode < 300) {
+    return 'status-2xx';
+  }
+  if (statusCode >= 300 && statusCode < 400) {
+    return 'status-3xx';
+  }
+  if (statusCode >= 400 && statusCode < 500) {
+    return 'status-4xx';
+  }
+  if (statusCode >= 500) {
+    return 'status-5xx';
+  }
+  return 'status-none';
+}
+
 function plural(count, singular, pluralValue) {
   return count === 1 ? singular : pluralValue;
 }
@@ -5168,6 +5499,7 @@ async function runActiveRunner() {
     ? (workspace.environments || []).find((environment) => environment.id === runner.environmentId) || null
     : null;
   lastRunnerResult = null;
+  selectedRunnerExecutionIndex = 0;
   $('exportRunnerJsonButton').disabled = true;
   $('exportRunnerCsvButton').disabled = true;
   try {
@@ -5175,7 +5507,7 @@ async function runActiveRunner() {
     activeRunnerId = runnerId;
     $('runCollectionButton').disabled = true;
     $('cancelRunnerButton').disabled = false;
-    $('runnerResults').textContent = 'Starting runner...';
+    renderRunnerExecutionMessage('Starting runner...');
     const result = await window.postmeter.runner.start(runnerId, cloneJson(runner), cloneJson(runnerEnvironment), {
       stopOnFailure: runner.stopOnFailure === true,
       allowEnvironmentMutation: runner.allowEnvironmentMutation === true
@@ -5198,7 +5530,8 @@ async function runActiveRunner() {
       renderCookieJarEditor();
     }
     lastRunnerResult = result;
-    $('runnerResults').textContent = PostMeterRunFormatting.formatRunnerResult(result);
+    selectedRunnerExecutionIndex = 0;
+    renderRunnerExecutionResult(result);
     $('exportRunnerJsonButton').disabled = false;
     $('exportRunnerCsvButton').disabled = false;
     setStatus(result.cancelled ? 'Runner cancelled.' : 'Runner completed.');
@@ -5206,7 +5539,7 @@ async function runActiveRunner() {
     const message = error.message || String(error);
     if (isActiveRunnerContext(runnerContext) && activeRunnerId === runnerId) {
       lastRunnerResult = null;
-      $('runnerResults').textContent = message;
+      renderRunnerExecutionMessage(message);
       $('exportRunnerJsonButton').disabled = true;
       $('exportRunnerCsvButton').disabled = true;
       setStatus('Runner failed.');

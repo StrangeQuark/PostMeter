@@ -634,11 +634,14 @@ h2 {
   padding: 14px;
 }
 
-.workspace-main-panel,
-.runner-main-panel {
+.workspace-main-panel {
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+.runner-main-panel {
+  overflow: hidden;
 }
 
 .environment-main-panel[hidden],
@@ -760,8 +763,13 @@ h2 {
 
 .runner-request-list {
   display: grid;
+  flex: 1 1 auto;
+  align-content: start;
   gap: 6px;
   margin-top: 10px;
+  min-height: 96px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .runner-request-row {
@@ -806,7 +814,166 @@ h2 {
 }
 
 .runner-results {
+  display: flex;
+  flex: 0 0 clamp(260px, 36%, 360px);
+  flex-direction: column;
+  min-height: 260px;
   margin-top: 12px;
+  overflow: hidden;
+}
+
+.runner-execution-grid {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(340px, 1.1fr);
+  gap: 10px;
+  min-height: 0;
+}
+
+.runner-execution-list,
+.runner-execution-details {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.runner-execution-row {
+  display: grid;
+  width: 100%;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  padding: 9px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.runner-execution-row:hover,
+.runner-execution-row:focus-visible {
+  background: var(--surface-muted);
+}
+
+.runner-execution-row.active {
+  background: color-mix(in srgb, var(--orange) 14%, var(--surface));
+}
+
+.runner-execution-row:last-child {
+  border-bottom: 0;
+}
+
+.runner-status-badge {
+  align-self: start;
+  min-width: 48px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.runner-status-badge.status-2xx {
+  background: color-mix(in srgb, var(--green) 14%, var(--surface));
+  color: var(--green);
+}
+
+.runner-status-badge.status-3xx {
+  background: color-mix(in srgb, var(--blue) 12%, var(--surface));
+  color: var(--blue);
+}
+
+.runner-status-badge.status-4xx,
+.runner-status-badge.status-5xx,
+.runner-status-badge.status-error {
+  background: color-mix(in srgb, var(--danger) 14%, var(--surface));
+  color: var(--danger);
+}
+
+.runner-status-badge.status-none {
+  background: var(--surface-muted);
+  color: var(--muted);
+}
+
+.runner-execution-name {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runner-execution-meta,
+.runner-detail-meta {
+  display: block;
+  margin-top: 3px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runner-detail-block {
+  padding: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.runner-detail-block:last-child {
+  border-bottom: 0;
+}
+
+.runner-detail-title {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.runner-detail-heading {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.runner-detail-code,
+.runner-detail-error {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.runner-detail-error {
+  color: var(--danger);
+}
+
+.runner-detail-variable {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.4fr) minmax(0, 1fr);
+  gap: 8px;
+  padding: 3px 0;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.runner-detail-variable span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .runner-execution-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .workspace-sandbox-settings {
