@@ -114,6 +114,7 @@ function refreshApplicationMenu() {
   installApplicationMenu({
     appName: app.name,
     includePrereleases: workspace?.settings?.updates?.includePrereleases === true,
+    saveOnForceClose: workspace?.settings?.tabs?.saveOnForceClose === true,
     platform: process.platform,
     sendMenuAction,
     openExternal: (url) => shell.openExternal(safeExternalUrl(url).toString())

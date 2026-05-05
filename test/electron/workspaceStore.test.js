@@ -67,6 +67,7 @@ test('creates a default schema 11 workspace when no file exists', async () => {
         }
       }
     },
+    tabs: { saveOnForceClose: false },
     updates: { includePrereleases: false }
   });
   assert.deepEqual(workspace.collections, []);

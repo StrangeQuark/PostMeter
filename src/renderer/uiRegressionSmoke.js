@@ -370,6 +370,11 @@
       assertUiSmoke(workspace.settings.updates.includePrereleases === false, 'Failed prerelease setting save should roll back the in-memory setting.');
       assertStatusIncludes('Prerelease setting save failed', 'Failed prerelease setting save should surface a user-visible status.');
 
+      workspace.settings.tabs.saveOnForceClose = false;
+      await setSaveOnForceClose(true, { save: true });
+      assertUiSmoke(workspace.settings.tabs.saveOnForceClose === false, 'Failed force-close setting save should roll back the in-memory setting.');
+      assertStatusIncludes('Force close setting save failed', 'Failed force-close setting save should surface a user-visible status.');
+
       workspace.settings.diagnostics = normalizeDiagnosticsSettings({
         logging: { enabled: true, level: 'info' },
         requestResponseLogging: { urls: false }
@@ -1364,6 +1369,21 @@
     assertUiSmoke(!$('contextMenu').hidden, 'Keyboard context menu should open for tree items.');
   }
 
+  function openOpenTabContextMenu(tab) {
+    assertUiSmoke(tab?.key, 'Open-tab context menu smoke needs a tab key.');
+    renderRequestTabs();
+    const button = document.querySelector(`[data-open-tab-key="${cssAttributeValue(tab.key)}"]`);
+    assertUiSmoke(button, `Open-tab context menu trigger missing for ${tab.key}.`);
+    button.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 240,
+      clientY: 120
+    }));
+    assertUiSmoke(!$('contextMenu').hidden, 'Right-clicking an open tab should show the tab context menu.');
+    return button;
+  }
+
   function activateContextMenuItem(label) {
     const item = Array.from($('contextMenu').querySelectorAll('button'))
       .find((button) => button.textContent.trim() === label);
@@ -1886,6 +1906,102 @@
       const restoredHistoryRequest = collection.requests.find((item) => item.id === request.id);
       assertUiSmoke(restoredHistoryRequest?.name === enterSavedRequestName, 'Closing a history draft without saving should keep the saved request name.');
       assertUiSmoke(restoredHistoryRequest?.url === savedRequestUrl, 'Closing a history draft without saving should keep the saved request URL.');
+
+      workspace.collections = [];
+      workspace.environments = [];
+      clearActiveWorkspaceItem();
+      resetRequestTabs();
+      renderAll();
+      const tabCollection = newCollection();
+      tabCollection.name = 'Tab Context Collection';
+      const closeTarget = newRequest(tabCollection.id, null);
+      editRequestTitle('Tab Context Close Target');
+      const closeTargetTab = openRequestTabs.find((tab) => tab.requestId === closeTarget.id);
+      openOpenTabContextMenu(closeTargetTab);
+      const tabContextLabels = Array.from($('contextMenu').querySelectorAll('button')).map((button) => button.textContent.trim());
+      for (const label of ['New Request', 'Close Tab', 'Close Other Tabs', 'Close All Tabs', 'Force Close Tab', 'Force Close All Tabs']) {
+        assertUiSmoke(tabContextLabels.includes(label), `Open-tab context menu should include ${label}.`);
+      }
+      activateContextMenuItem('Close Tab');
+      await waitForUiSmoke(() => !$('unsavedRequestModal').hidden, 'Close Tab should prompt for a dirty request tab.', 3000, global);
+      $('cancelCloseRequestButton').click();
+      await Promise.resolve();
+      assertUiSmoke(openRequestTabs.some((tab) => tab.key === closeTargetTab.key), 'Cancelling Close Tab should keep the dirty request tab open.');
+      openOpenTabContextMenu(closeTargetTab);
+      activateContextMenuItem('Force Close Tab');
+      await waitForUiSmoke(() => !openRequestTabs.some((tab) => tab.key === closeTargetTab.key), 'Force Close Tab should close without prompting.', 3000, global);
+      assertUiSmoke($('unsavedRequestModal').hidden, 'Force Close Tab should not leave an unsaved changes modal open.');
+      assertUiSmoke(!tabCollection.requests.some((item) => item.id === closeTarget.id), 'Force Close Tab should discard an unsaved request by default.');
+
+      const cleanOther = newRequest(tabCollection.id, null);
+      editRequestTitle('Tab Context Clean Other', { commit: false });
+      pressEditableTitleEnter($('requestNameTitle'));
+      await waitForUiSmoke(() => !openRequestTabs.find((tab) => tab.requestId === cleanOther.id)?.dirty, 'Clean tab setup should save the request.', 3000, global);
+      const cleanOtherTab = openRequestTabs.find((tab) => tab.requestId === cleanOther.id);
+      const dirtyOther = newRequest(tabCollection.id, null);
+      editRequestTitle('Tab Context Dirty Other');
+      const dirtyOtherTab = openRequestTabs.find((tab) => tab.requestId === dirtyOther.id);
+      const dirtyTarget = newRequest(tabCollection.id, null);
+      editRequestTitle('Tab Context Dirty Target');
+      const dirtyTargetTab = openRequestTabs.find((tab) => tab.requestId === dirtyTarget.id);
+      openOpenTabContextMenu(dirtyTargetTab);
+      activateContextMenuItem('Close Other Tabs');
+      await waitForUiSmoke(() => !openRequestTabs.some((tab) => tab.key === cleanOtherTab.key), 'Close Other Tabs should close clean tabs before prompting for dirty tabs.', 3000, global);
+      await waitForUiSmoke(() => !$('unsavedRequestModal').hidden, 'Close Other Tabs should prompt when it reaches a dirty tab.', 3000, global);
+      $('cancelCloseRequestButton').click();
+      await waitForUiSmoke(() => $('unsavedRequestModal').hidden, 'Cancelling Close Other Tabs should close the prompt.', 3000, global);
+      assertUiSmoke(openRequestTabs.some((tab) => tab.key === dirtyOtherTab.key), 'Cancelling Close Other Tabs should keep the dirty tab that prompted.');
+      assertUiSmoke(openRequestTabs.some((tab) => tab.key === dirtyTargetTab.key), 'Cancelling Close Other Tabs should keep the clicked tab.');
+      openOpenTabContextMenu(dirtyTargetTab);
+      activateContextMenuItem('Close All Tabs');
+      await waitForUiSmoke(() => !$('unsavedRequestModal').hidden, 'Close All Tabs should prompt for dirty tabs.', 3000, global);
+      $('cancelCloseRequestButton').click();
+      await waitForUiSmoke(() => $('unsavedRequestModal').hidden, 'Cancelling Close All Tabs should close the prompt.', 3000, global);
+      assertUiSmoke(openRequestTabs.some((tab) => tab.key === dirtyOtherTab.key), 'Cancelling Close All Tabs should keep dirty tabs open.');
+      assertUiSmoke(openRequestTabs.some((tab) => tab.key === dirtyTargetTab.key), 'Cancelling Close All Tabs should keep the clicked dirty tab open.');
+      openOpenTabContextMenu(dirtyTargetTab);
+      activateContextMenuItem('Force Close All Tabs');
+      await waitForUiSmoke(() => openRequestTabs.length === 0, 'Force Close All Tabs should close every request tab without prompting.', 3000, global);
+      assertUiSmoke($('unsavedRequestModal').hidden, 'Force Close All Tabs should not prompt by default.');
+
+      await setSaveOnForceClose(true, { save: false, showStatus: false });
+      const saveOnForceRequest = newRequest(tabCollection.id, null);
+      editRequestTitle('Tab Context Save On Force', { commit: false });
+      pressEditableTitleEnter($('requestNameTitle'));
+      await waitForUiSmoke(() => !openRequestTabs.find((tab) => tab.requestId === saveOnForceRequest.id)?.dirty, 'Save-on-force setup should persist the request.', 3000, global);
+      const requestSaveCallsBeforeForceSave = requestSaveCalls;
+      $('urlInput').value = 'https://force-close-save.example.test/widgets';
+      dispatchInput($('urlInput'));
+      const saveOnForceTab = openRequestTabs.find((tab) => tab.requestId === saveOnForceRequest.id);
+      openOpenTabContextMenu(saveOnForceTab);
+      activateContextMenuItem('Force Close Tab');
+      await waitForUiSmoke(() => !openRequestTabs.some((tab) => tab.key === saveOnForceTab.key), 'Force Close Tab with saving enabled should close after saving.', 3000, global);
+      assertUiSmoke(requestSaveCalls === requestSaveCallsBeforeForceSave + 1, 'Save on force close should save dirty saved request tabs.');
+      assertUiSmoke(tabCollection.requests.find((item) => item.id === saveOnForceRequest.id)?.url === 'https://force-close-save.example.test/widgets', 'Save on force close should persist dirty request changes.');
+      await setSaveOnForceClose(false, { save: false, showStatus: false });
+
+      const activeDiscardRequest = newRequest(tabCollection.id, null);
+      editRequestTitle('Tab Context Active Discard', { commit: false });
+      pressEditableTitleEnter($('requestNameTitle'));
+      await waitForUiSmoke(() => !openRequestTabs.find((tab) => tab.requestId === activeDiscardRequest.id)?.dirty, 'Active discard setup should save the first request.', 3000, global);
+      const activeDiscardSavedUrl = tabCollection.requests.find((item) => item.id === activeDiscardRequest.id)?.url || '';
+      const activeDiscardTab = openRequestTabs.find((tab) => tab.requestId === activeDiscardRequest.id);
+      const rightClickOtherRequest = newRequest(tabCollection.id, null);
+      editRequestTitle('Tab Context Right Click Other', { commit: false });
+      pressEditableTitleEnter($('requestNameTitle'));
+      await waitForUiSmoke(() => !openRequestTabs.find((tab) => tab.requestId === rightClickOtherRequest.id)?.dirty, 'Active discard setup should save the second request.', 3000, global);
+      const rightClickOtherTab = openRequestTabs.find((tab) => tab.requestId === rightClickOtherRequest.id);
+      selectRequestTab(activeDiscardTab);
+      $('urlInput').value = 'https://active-discard.example.test/should-not-save';
+      dispatchInput($('urlInput'));
+      const requestSaveCallsBeforeActiveDiscard = requestSaveCalls;
+      openOpenTabContextMenu(rightClickOtherTab);
+      activateContextMenuItem('Close Other Tabs');
+      await waitForUiSmoke(() => !$('unsavedRequestModal').hidden, 'Close Other Tabs from an inactive tab should prompt for the active dirty tab.', 3000, global);
+      $('closeWithoutSavingButton').click();
+      await waitForUiSmoke(() => !openRequestTabs.some((tab) => tab.key === activeDiscardTab.key), 'Close without saving should close the active dirty tab.', 3000, global);
+      assertUiSmoke(requestSaveCalls === requestSaveCallsBeforeActiveDiscard, 'Close without saving from Close Other Tabs should not save the active dirty tab.');
+      assertUiSmoke(tabCollection.requests.find((item) => item.id === activeDiscardRequest.id)?.url === activeDiscardSavedUrl, 'Close without saving from Close Other Tabs should restore the active dirty tab snapshot.');
 
       workspace.environments = [];
       activeEnvironmentId = 'none';

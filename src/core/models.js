@@ -160,6 +160,9 @@ function normalizeSettings(settings) {
       }
     },
     diagnostics: normalizeDiagnosticsSettings(settings?.diagnostics),
+    tabs: {
+      saveOnForceClose: settings?.tabs?.saveOnForceClose === true
+    },
     updates: {
       includePrereleases: settings?.updates?.includePrereleases === true
     }

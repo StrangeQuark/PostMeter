@@ -125,6 +125,9 @@ const FIELD_SCHEMAS = {
     cookies: { type: 'boolean', optional: true },
     vault: { type: 'boolean', optional: true }
   },
+  tabSettings: {
+    saveOnForceClose: { type: 'boolean', optional: true }
+  },
   keyValue: {
     enabled: { type: 'boolean', optional: true },
     key: { type: 'string', limit: 'key', optional: true },

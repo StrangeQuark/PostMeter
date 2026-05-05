@@ -141,6 +141,10 @@ function assertSettingsPayload(value, field) {
   if (value.appearance != null) {
     assertSchemaFields('appearance', value.appearance, `${field}.appearance`);
   }
+  if (value.tabs != null) {
+    assertSchemaFields('tabSettings', value.tabs, `${field}.tabs`);
+    assertNoUnexpectedFields('tabSettings', value.tabs, `${field}.tabs`);
+  }
   if (value.diagnostics != null) {
     object(value.diagnostics, `${field}.diagnostics`);
     assertAllowedObjectFields(value.diagnostics, `${field}.diagnostics`, [

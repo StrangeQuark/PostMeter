@@ -282,6 +282,78 @@ test('request tab state restores shared collection-variable and cookie changes w
   assert.equal(renders, 1);
 });
 
+test('request tab state does not re-collect a discarded active request when selecting the fallback tab', async () => {
+  const state = createRendererState();
+  const firstRequest = { id: 'request-1', name: 'First Request', method: 'GET', url: 'https://saved.example.test/first' };
+  const secondRequest = { id: 'request-2', name: 'Second Request', method: 'GET', url: 'https://saved.example.test/second' };
+  state.workspace = {
+    collections: [
+      {
+        id: 'collection-1',
+        requests: [firstRequest, secondRequest],
+        folders: []
+      }
+    ],
+    environments: []
+  };
+  state.activeCollectionId = 'collection-1';
+  state.activeRequestId = firstRequest.id;
+  state.activeMainPanel = 'request';
+  state.openRequestTabs = [
+    {
+      key: 'request:collection-1:request-1',
+      collectionId: 'collection-1',
+      requestId: firstRequest.id,
+      dirty: true,
+      createdUnsaved: false,
+      draft: false,
+      snapshot: JSON.stringify(firstRequest)
+    },
+    {
+      key: 'request:collection-1:request-2',
+      collectionId: 'collection-1',
+      requestId: secondRequest.id,
+      dirty: false,
+      createdUnsaved: false,
+      draft: false,
+      snapshot: JSON.stringify(secondRequest)
+    }
+  ];
+  let collected = 0;
+  let tabState;
+  tabState = createRequestTabState({
+    state,
+    activeCollection: () => state.workspace.collections[0],
+    activeEnvironment: () => null,
+    activeRequest: () => state.workspace.collections[0].requests.find((request) => request.id === state.activeRequestId) || null,
+    activeWorkspaceItem: () => null,
+    collectRequestFromEditor: () => {
+      collected += 1;
+      const request = state.workspace.collections[0].requests.find((item) => item.id === state.activeRequestId);
+      if (request) {
+        request.url = 'https://edited.example.test/should-not-survive-discard';
+      }
+    },
+    findRequest(collection, requestId) {
+      const found = collection.requests.find((item) => item.id === requestId);
+      return found ? { request: found, folder: null } : null;
+    },
+    promptUnsavedRequestClose: async () => 'discard',
+    renderAll: () => {},
+    renderCollections: () => {},
+    renderRequestTabs: () => {},
+    selectRequestTab: (tab, options) => tabState.selectRequestTab(tab, options),
+    workspaceListItems: () => []
+  });
+
+  await tabState.closeRequestTab(state.openRequestTabs[0]);
+
+  assert.equal(collected, 1);
+  assert.deepEqual(state.openRequestTabs.map((tab) => tab.key), ['request:collection-1:request-2']);
+  assert.equal(state.activeRequestId, secondRequest.id);
+  assert.equal(firstRequest.url, 'https://saved.example.test/first');
+});
+
 test('request tab state saves the requested environment tab when closing an inactive dirty environment', async () => {
   const state = createRendererState();
   const savedEnvironment = { id: 'environment-1', name: 'Saved Environment', variables: [] };

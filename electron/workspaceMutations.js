@@ -362,6 +362,7 @@ function mergeWorkspaceSettingsForSave(currentSettings, nextSettings) {
       ...(isPlainObject(next.sandbox) ? next.sandbox : {}),
       trustedCapabilities: mergeObject(current.sandbox?.trustedCapabilities, next.sandbox?.trustedCapabilities)
     },
+    tabs: mergeObject(current.tabs, next.tabs),
     updates: mergeObject(current.updates, next.updates)
   };
 }

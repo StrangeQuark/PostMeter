@@ -233,8 +233,10 @@
       return tab;
     }
 
-    function selectRequestTab(tab) {
-      collectRequestFromEditor();
+    function selectRequestTab(tab, options = {}) {
+      if (options.collect !== false) {
+        collectRequestFromEditor();
+      }
       state.activeSidebarPanel = 'collections';
       state.activeMainPanel = 'request';
       if (tab.draft) {
@@ -363,6 +365,20 @@
       renderAll();
     }
 
+    async function forceCloseWorkspaceTab(tab) {
+      if (!tab) {
+        renderRequestTabs();
+        return false;
+      }
+      const existed = state.openWorkspaceTabs.some((candidate) => candidate === tab || candidate.key === tab.key);
+      if (!existed) {
+        renderRequestTabs();
+        return false;
+      }
+      await closeWorkspaceTab(tab);
+      return true;
+    }
+
     async function closeEnvironmentTab(tab) {
       if (!tab) {
         renderRequestTabs();
@@ -394,6 +410,34 @@
         }
       }
       closeEnvironmentTabAfterResolved(tab, { wasActive });
+    }
+
+    async function forceCloseEnvironmentTab(tab, options = {}) {
+      if (!tab) {
+        renderRequestTabs();
+        return false;
+      }
+      const wasActive = rendererState.isActiveEnvironmentTab(state, tab);
+      if (wasActive) {
+        collectEnvironmentFromEditor();
+      }
+      const environment = environmentForTab(tab);
+      if (!environment) {
+        closeEnvironmentTabAfterResolved(tab, { wasActive });
+        return true;
+      }
+      if (options.save === true && tab.dirty) {
+        try {
+          await persistWorkspace(false, { environmentTabKey: tab.key, collectEditors: false });
+        } catch (error) {
+          reportCloseSaveFailure('Environment Save Failed', error);
+          return false;
+        }
+      } else {
+        discardEnvironmentTabChanges(tab);
+      }
+      closeEnvironmentTabAfterResolved(tab, { wasActive });
+      return true;
     }
 
     function closeEnvironmentTabAfterResolved(tab, options = {}) {
@@ -503,6 +547,34 @@
       closeRequestTabAfterResolved(tab);
     }
 
+    async function forceCloseRequestTab(tab, options = {}) {
+      if (!tab) {
+        renderRequestTabs();
+        return false;
+      }
+      if (rendererState.isActiveRequestTab(state, tab)) {
+        collectRequestFromEditor();
+      }
+      const request = requestForTab(tab);
+      if (!request) {
+        closeRequestTabAfterResolved(tab);
+        return true;
+      }
+      let restoredSharedState = false;
+      if (options.save === true && !tab.draft && (tab.dirty || requestTabHasSharedDirtyState(tab))) {
+        try {
+          await persistWorkspace(false, { requestTabKey: tab.key, collectEditors: false });
+        } catch (error) {
+          reportCloseSaveFailure('Request Save Failed', error);
+          return false;
+        }
+      } else {
+        restoredSharedState = discardRequestTabChanges(tab);
+      }
+      closeRequestTabAfterResolved(tab, { forceRenderAll: restoredSharedState });
+      return true;
+    }
+
     function closeRequestTabAfterResolved(tab, options = {}) {
       const index = state.openRequestTabs.findIndex((candidate) => candidate === tab || candidate.key === tab.key);
       if (index < 0) {
@@ -522,7 +594,7 @@
       }
       const fallback = state.openRequestTabs[Math.min(index, state.openRequestTabs.length - 1)] || state.openRequestTabs[index - 1] || null;
       if (fallback) {
-        selectRequestTabCallback(fallback);
+        selectRequestTabCallback(fallback, { collect: false });
         return;
       }
       clearActiveWorkspaceItem();
@@ -571,6 +643,9 @@
       ensureOpenRequestTabForActive,
       ensureOpenWorkspaceTabForActive,
       environmentForTab,
+      forceCloseEnvironmentTab,
+      forceCloseRequestTab,
+      forceCloseWorkspaceTab,
       markActiveEnvironmentDirty,
       markActiveRequestDirty,
       pruneOpenTabs,

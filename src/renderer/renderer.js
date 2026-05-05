@@ -424,6 +424,104 @@ function bindHistoryContextMenu() {
   ]);
 }
 
+function showOpenTabContextMenu(event, kind, tab, _item, options = {}) {
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+  const targetRef = openTabRef(kind, tab);
+  const x = Number.isFinite(options.x) ? options.x : event?.clientX || 0;
+  const y = Number.isFinite(options.y) ? options.y : event?.clientY || 0;
+  showContextMenu(x, y, [
+    ['New Request', () => newRequest()],
+    ['Close Tab', () => { void queueOpenTabCloseSequence([targetRef]); }],
+    ['Close Other Tabs', () => { void queueOpenTabCloseSequence(openTabRefs().filter((ref) => ref.key !== targetRef.key)); }],
+    ['Close All Tabs', () => { void queueOpenTabCloseSequence(openTabRefs()); }],
+    ['Force Close Tab', () => { void queueOpenTabCloseSequence([targetRef], { force: true }); }, 'danger'],
+    ['Force Close All Tabs', () => { void queueOpenTabCloseSequence(openTabRefs(), { force: true }); }, 'danger']
+  ], {
+    focusFirst: options.keyboard === true,
+    trigger: options.trigger || event?.currentTarget || null
+  });
+}
+
+function openTabRef(kind, tab) {
+  return {
+    kind,
+    key: tab?.key || '',
+    tab
+  };
+}
+
+function openTabRefs() {
+  return [
+    ...openRequestTabs.map((tab) => openTabRef('request', tab)),
+    ...openEnvironmentTabs.map((tab) => openTabRef('environment', tab)),
+    ...openWorkspaceTabs.map((tab) => openTabRef('workspace', tab))
+  ];
+}
+
+function openTabRefStillExists(ref) {
+  if (!ref?.key) {
+    return false;
+  }
+  return openTabRefs().some((candidate) => candidate.key === ref.key);
+}
+
+let openTabCloseSequence = Promise.resolve(true);
+
+function queueOpenTabCloseSequence(refs, options = {}) {
+  const refsSnapshot = Array.isArray(refs) ? refs.slice() : [];
+  openTabCloseSequence = openTabCloseSequence
+    .catch(() => false)
+    .then(async () => {
+      try {
+        return await closeOpenTabsSequential(refsSnapshot, options);
+      } catch (error) {
+        const message = error?.message || String(error || 'Unknown error');
+        setStatus(`Tab close failed: ${message}`);
+        return false;
+      }
+    });
+  return openTabCloseSequence;
+}
+
+async function closeOpenTabsSequential(refs, options = {}) {
+  for (const ref of refs) {
+    if (!openTabRefStillExists(ref)) {
+      continue;
+    }
+    const closed = options.force === true
+      ? await forceCloseOpenTab(ref)
+      : await closeOpenTab(ref);
+    if (!closed && openTabRefStillExists(ref)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+async function closeOpenTab(ref) {
+  if (ref?.kind === 'request') {
+    await closeRequestTab(ref.tab);
+  } else if (ref?.kind === 'environment') {
+    await closeEnvironmentTab(ref.tab);
+  } else if (ref?.kind === 'workspace') {
+    await closeWorkspaceTab(ref.tab);
+  }
+  return !openTabRefStillExists(ref);
+}
+
+async function forceCloseOpenTab(ref) {
+  const options = { save: forceCloseSavesChanges() };
+  if (ref?.kind === 'request') {
+    await forceCloseRequestTab(ref.tab, options);
+  } else if (ref?.kind === 'environment') {
+    await forceCloseEnvironmentTab(ref.tab, options);
+  } else if (ref?.kind === 'workspace') {
+    await forceCloseWorkspaceTab(ref.tab, options);
+  }
+  return !openTabRefStillExists(ref);
+}
+
 function bindEnvironmentTitleEditor() {
   const title = $('environmentMainTitle');
   if (!title) {
@@ -713,6 +811,9 @@ async function handleAppMenuAction(action) {
       case 'set-prereleases':
         await setIncludePrereleases(action.includePrereleases === true, { save: true });
         break;
+      case 'set-save-on-force-close':
+        await setSaveOnForceClose(action.saveOnForceClose === true, { save: true });
+        break;
       case 'check-updates':
         await checkForUpdates();
         break;
@@ -736,6 +837,7 @@ function renderRequestTabs() {
     doc: document,
     groups: [
       {
+        kind: 'request',
         tabs: openRequestTabs,
         resolve: requestTabState.requestForTab,
         isActive: isActiveRequestTab,
@@ -748,9 +850,11 @@ function renderRequestTabs() {
         closeTitle: () => 'Close request',
         closeAriaLabel: (request) => `Close ${request.name || 'Untitled Request'}`,
         onSelect: (tab) => selectRequestTab(tab),
-        onClose: closeRequestTab
+        onClose: closeRequestTab,
+        onContextMenu: (event, tab, item, menuOptions) => showOpenTabContextMenu(event, 'request', tab, item, menuOptions)
       },
       {
+        kind: 'environment',
         tabs: openEnvironmentTabs,
         resolve: requestTabState.environmentForTab,
         isActive: isActiveEnvironmentTab,
@@ -762,9 +866,11 @@ function renderRequestTabs() {
         closeTitle: () => 'Close environment',
         closeAriaLabel: (environment) => `Close ${environment.name || 'Untitled Environment'}`,
         onSelect: (tab) => selectEnvironmentTab(tab),
-        onClose: closeEnvironmentTab
+        onClose: closeEnvironmentTab,
+        onContextMenu: (event, tab, item, menuOptions) => showOpenTabContextMenu(event, 'environment', tab, item, menuOptions)
       },
       {
+        kind: 'workspace',
         tabs: openWorkspaceTabs,
         resolve: workspaceForTab,
         isActive: isActiveWorkspaceTab,
@@ -776,7 +882,8 @@ function renderRequestTabs() {
         closeTitle: () => 'Close workspace',
         closeAriaLabel: (workspaceItem) => `Close ${workspaceItem.name}`,
         onSelect: (tab) => selectWorkspaceTab(tab),
-        onClose: closeWorkspaceTab
+        onClose: closeWorkspaceTab,
+        onContextMenu: (event, tab, item, menuOptions) => showOpenTabContextMenu(event, 'workspace', tab, item, menuOptions)
       }
     ]
   });
@@ -797,11 +904,11 @@ function ensureOpenRequestTabForActive(options = {}) {
 
 function selectRequestTab(tab) {
   collectActiveEditorState();
-  requestTabState.selectRequestTab(tab);
+  requestTabState.selectRequestTab(tab, { collect: false });
 }
 
 function selectRequestTabWithoutCollect(tab) {
-  requestTabState.selectRequestTab(tab);
+  requestTabState.selectRequestTab(tab, { collect: false });
 }
 
 function selectEnvironmentTab(tab) {
@@ -979,12 +1086,24 @@ function closeWorkspaceTab(tab) {
   return requestTabState.closeWorkspaceTab(tab);
 }
 
+function forceCloseWorkspaceTab(tab, options = {}) {
+  return requestTabState.forceCloseWorkspaceTab(tab, options);
+}
+
 function closeEnvironmentTab(tab) {
   return requestTabState.closeEnvironmentTab(tab);
 }
 
+function forceCloseEnvironmentTab(tab, options = {}) {
+  return requestTabState.forceCloseEnvironmentTab(tab, options);
+}
+
 async function closeRequestTab(tab) {
   return requestTabState.closeRequestTab(tab);
+}
+
+async function forceCloseRequestTab(tab, options = {}) {
+  return requestTabState.forceCloseRequestTab(tab, options);
 }
 
 function promptUnsavedRequestClose(tab, request) {
@@ -1658,6 +1777,8 @@ function ensureSettings() {
   workspace.settings ||= {};
   workspace.settings.updates ||= { includePrereleases: false };
   workspace.settings.appearance ||= { theme: 'system' };
+  workspace.settings.tabs ||= { saveOnForceClose: false };
+  workspace.settings.tabs.saveOnForceClose = workspace.settings.tabs.saveOnForceClose === true;
   workspace.settings.diagnostics = normalizeDiagnosticsSettings(workspace.settings.diagnostics);
   workspace.settings.sandbox ||= { trustedCapabilities: { sendRequest: true, cookies: true, vault: false } };
   workspace.settings.sandbox.fileBindings = normalizeSandboxFileBindings(workspace.settings.sandbox.fileBindings);
@@ -2055,6 +2176,31 @@ async function setIncludePrereleases(includePrereleases, options = {}) {
     setStatus(`Prerelease update checks ${workspace.settings.updates.includePrereleases ? 'enabled' : 'disabled'}.`);
   }
   return true;
+}
+
+async function setSaveOnForceClose(saveOnForceClose, options = {}) {
+  ensureSettings();
+  const previousSettings = cloneWorkspaceSettings();
+  workspace.settings.tabs.saveOnForceClose = saveOnForceClose === true;
+  if (options.save === true) {
+    return saveWorkspaceSettingsWithRollback(
+      previousSettings,
+      options.showStatus === false
+        ? ''
+        : `Save on force close ${workspace.settings.tabs.saveOnForceClose ? 'enabled' : 'disabled'}.`,
+      'Force close setting save failed',
+      'Force Close Settings Save Failed'
+    );
+  }
+  if (options.showStatus !== false) {
+    setStatus(`Save on force close ${workspace.settings.tabs.saveOnForceClose ? 'enabled' : 'disabled'}.`);
+  }
+  return true;
+}
+
+function forceCloseSavesChanges() {
+  ensureSettings();
+  return workspace.settings.tabs.saveOnForceClose === true;
 }
 
 function cloneWorkspaceSettings() {
