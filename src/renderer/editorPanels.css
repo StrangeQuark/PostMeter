@@ -2,14 +2,8 @@
   padding: 0;
 }
 
-.title-input {
-  width: 100%;
+.request-main-title.editable-title {
   margin-bottom: 8px;
-  padding: 8px 10px;
-  border-color: transparent;
-  background: var(--surface-muted);
-  font-size: 14px;
-  font-weight: 700;
 }
 
 .request-line {

@@ -47,7 +47,9 @@ let sessionPersistenceEnabled = false;
 let lastRenderedRequestEditorContextKey = '';
 let lastModalFocusTarget = null;
 let notificationModalActive = false;
+let requestTitleEditOriginal = '';
 let environmentTitleEditOriginal = '';
+let workspaceTitleEditOriginal = '';
 let pendingDiagnosticsSettingsSave = null;
 const pendingNotificationModals = [];
 
@@ -327,7 +329,6 @@ function bindUi() {
         notifyUser('Workspace Save Failed', message);
       });
     },
-    onRenameWorkspace: () => { void renameWorkspace(); },
     onImportWorkspace: importWorkspace,
     onExportWorkspace: exportWorkspace,
     onImportCollection: importCollection,
@@ -380,7 +381,6 @@ function bindUi() {
       renderEnvironmentEditor();
       scheduleSessionSave();
     },
-    onRequestNameInput: collectRequestAndMarkDirty,
     onMethodChange: () => {
       updateMethodSelectClass();
       collectRequestAndMarkDirty();
@@ -413,6 +413,8 @@ function bindUi() {
     onCloseContextMenu: closeContextMenu,
     onInitResizablePanes: initResizablePanes
   });
+  bindRequestTitleEditor();
+  bindWorkspaceTitleEditor();
   bindEnvironmentTitleEditor();
 }
 
@@ -489,6 +491,165 @@ function finishEnvironmentTitleEdit(options = {}) {
   title.setAttribute('contenteditable', 'false');
   title.removeAttribute('role');
   title.setAttribute('aria-label', 'Environment name');
+}
+
+function bindRequestTitleEditor() {
+  const title = $('requestNameTitle');
+  if (!title) {
+    return;
+  }
+  title.addEventListener('click', beginRequestTitleEdit);
+  title.addEventListener('keydown', handleRequestTitleKeydown);
+  title.addEventListener('input', handleRequestTitleInput);
+  title.addEventListener('blur', () => finishRequestTitleEdit());
+}
+
+function beginRequestTitleEdit() {
+  const request = activeRequest();
+  const title = $('requestNameTitle');
+  if (!request || !title || title.dataset.editing === 'true') {
+    return;
+  }
+  requestTitleEditOriginal = requestDisplayName(request);
+  title.dataset.editing = 'true';
+  title.classList.add('is-editing');
+  title.setAttribute('contenteditable', 'plaintext-only');
+  title.setAttribute('role', 'textbox');
+  title.setAttribute('aria-label', 'Request name');
+  title.focus();
+  selectElementContents(title);
+}
+
+function handleRequestTitleKeydown(event) {
+  const title = $('requestNameTitle');
+  if (!title) {
+    return;
+  }
+  if (title.dataset.editing !== 'true') {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      beginRequestTitleEdit();
+    }
+    return;
+  }
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    finishRequestTitleEdit();
+    title.blur();
+  } else if (event.key === 'Escape') {
+    event.preventDefault();
+    finishRequestTitleEdit({ revert: true });
+    title.blur();
+  }
+}
+
+function handleRequestTitleInput() {
+  if (collectRequestNameFromTitle({ markDirty: true, render: false })) {
+    renderCollections();
+    renderRequestTabs();
+  }
+}
+
+function finishRequestTitleEdit(options = {}) {
+  const title = $('requestNameTitle');
+  if (!title || title.dataset.editing !== 'true') {
+    return;
+  }
+  const request = activeRequest();
+  delete title.dataset.editing;
+  title.classList.remove('is-editing');
+  title.setAttribute('contenteditable', 'false');
+  title.removeAttribute('role');
+  title.setAttribute('aria-label', 'Request name');
+  if (request && options.revert === true) {
+    request.name = requestTitleEditOriginal || 'Untitled Request';
+    title.textContent = requestDisplayName(request);
+    renderCollections();
+    renderRequestTabs();
+    return;
+  }
+  collectRequestNameFromTitle({ markDirty: true, render: false });
+  if (request) {
+    title.textContent = requestDisplayName(request);
+  }
+  renderCollections();
+  renderRequestTabs();
+}
+
+function bindWorkspaceTitleEditor() {
+  const title = $('workspaceMainTitle');
+  if (!title) {
+    return;
+  }
+  title.addEventListener('click', beginWorkspaceTitleEdit);
+  title.addEventListener('keydown', handleWorkspaceTitleKeydown);
+  title.addEventListener('blur', () => { void finishWorkspaceTitleEdit(); });
+}
+
+function beginWorkspaceTitleEdit() {
+  const workspaceItem = activeWorkspaceItem();
+  const title = $('workspaceMainTitle');
+  if (!workspaceItem || !title || title.dataset.editing === 'true') {
+    return;
+  }
+  workspaceTitleEditOriginal = workspaceDisplayName(workspaceItem);
+  title.dataset.editing = 'true';
+  title.dataset.workspaceId = workspaceItem.id;
+  title.classList.add('is-editing');
+  title.setAttribute('contenteditable', 'plaintext-only');
+  title.setAttribute('role', 'textbox');
+  title.setAttribute('aria-label', 'Workspace name');
+  title.focus();
+  selectElementContents(title);
+}
+
+function handleWorkspaceTitleKeydown(event) {
+  const title = $('workspaceMainTitle');
+  if (!title) {
+    return;
+  }
+  if (title.dataset.editing !== 'true') {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      beginWorkspaceTitleEdit();
+    }
+    return;
+  }
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    void finishWorkspaceTitleEdit().then(() => title.blur());
+  } else if (event.key === 'Escape') {
+    event.preventDefault();
+    void finishWorkspaceTitleEdit({ revert: true }).then(() => title.blur());
+  }
+}
+
+async function finishWorkspaceTitleEdit(options = {}) {
+  const title = $('workspaceMainTitle');
+  if (!title || title.dataset.editing !== 'true') {
+    return null;
+  }
+  const workspaceId = title.dataset.workspaceId || selectedWorkspaceId || activeWorkspaceId;
+  const workspaceItem = workspaceListItems().find((item) => item.id === workspaceId);
+  const originalName = workspaceTitleEditOriginal || workspaceDisplayName(workspaceItem);
+  const nextName = workspaceTitleInputValue();
+  delete title.dataset.editing;
+  delete title.dataset.workspaceId;
+  title.classList.remove('is-editing');
+  title.setAttribute('contenteditable', 'false');
+  title.removeAttribute('role');
+  title.setAttribute('aria-label', 'Workspace name');
+  if (options.revert === true || !nextName || nextName === originalName) {
+    title.textContent = originalName;
+    return null;
+  }
+  const renamedWorkspace = await renameWorkspaceToName(workspaceId, nextName);
+  if (title.dataset.editing !== 'true') {
+    const visibleWorkspaceItem = activeWorkspaceItem();
+    title.textContent = visibleWorkspaceItem ? workspaceDisplayName(visibleWorkspaceItem) : 'Select a workspace';
+    renderWorkspacePanel();
+  }
+  return renamedWorkspace;
 }
 
 function selectElementContents(element) {
@@ -669,7 +830,12 @@ function collectActiveEditorState() {
     collectEnvironmentFromEditor();
     return;
   }
+  if (activeMainPanel === 'workspace') {
+    void finishWorkspaceTitleEdit();
+    return;
+  }
   if (activeMainPanel === 'request') {
+    finishRequestTitleEdit();
     collectRequestFromEditor();
   }
 }
@@ -2507,7 +2673,7 @@ function workspaceNode(workspaceItem) {
   });
   const menuItems = [
     ['View Details', () => { selectWorkspaceItem(workspaceItem.id); }],
-    ['Rename', () => { void renameWorkspace(workspaceItem.id); }]
+    ['Rename', () => { renameWorkspace(workspaceItem.id); }]
   ];
   if (workspaceItem.current !== true) {
     menuItems.splice(1, 0, ['Switch to This Workspace', () => { void switchWorkspace(workspaceItem.id, { focus: 'workspace' }); }]);
@@ -2522,9 +2688,17 @@ function workspaceNode(workspaceItem) {
 
 function renderWorkspacePanel() {
   const workspaceItem = activeWorkspaceItem();
-  $('workspaceMainTitle').textContent = workspaceItem ? workspaceDisplayName(workspaceItem) : 'Select a workspace';
+  const title = $('workspaceMainTitle');
+  if (title.dataset.editing !== 'true') {
+    title.textContent = workspaceItem ? workspaceDisplayName(workspaceItem) : 'Select a workspace';
+    title.setAttribute('contenteditable', 'false');
+    title.removeAttribute('role');
+    title.classList.remove('is-editing');
+  }
+  title.tabIndex = workspaceItem ? 0 : -1;
+  title.setAttribute('aria-disabled', workspaceItem ? 'false' : 'true');
+  title.setAttribute('aria-label', 'Workspace name');
   $('switchWorkspacePanelButton').disabled = !workspaceItem || workspaceItem.current === true;
-  $('renameWorkspacePanelButton').disabled = !workspaceItem;
   $('deleteWorkspacePanelButton').disabled = !workspaceItem || workspaceListItems().length <= 1;
   $('exportWorkspacePanelButton').disabled = !workspaceItem;
   if ($('trustedScriptSendRequestInput')) {
@@ -2892,6 +3066,10 @@ function workspaceDisplayName(workspaceItem = activeWorkspaceItem()) {
   return filename.replace(/\.json$/i, '') || 'Workspace';
 }
 
+function requestDisplayName(request = activeRequest()) {
+  return String(request?.name || '').trim() || 'Untitled Request';
+}
+
 function selectWorkspaceItem(workspaceId) {
   if (!workspaceId) {
     return null;
@@ -3045,7 +3223,7 @@ function requestNode(collection, folder, request) {
     renderAll();
   });
   attachTreeContextMenu(button, [
-    ['Rename', () => renameRequest(request)],
+    ['Rename', () => renameRequest(collection, folder, request)],
     ['Duplicate', () => duplicateRequest(collection, folder, request)],
     ['Delete', () => deleteRequest(collection, folder, request), 'danger']
   ]);
@@ -3181,7 +3359,7 @@ function renderRequestEditor() {
   resetRequestEditorTransientStateOnContextChange();
   const request = activeRequest();
   if (!request) {
-    $('requestNameInput').value = '';
+    renderRequestTitle(null);
     $('methodSelect').value = 'GET';
     updateMethodSelectClass();
     $('urlInput').value = '';
@@ -3209,7 +3387,7 @@ function renderRequestEditor() {
   $('addExampleButton').disabled = false;
   $('captureResponseExampleButton').disabled = !canCaptureResponseExampleForRequest(request);
   $('exportExamplesButton').disabled = !(request.examples || []).length;
-  $('requestNameInput').value = request.name;
+  renderRequestTitle(request);
   $('methodSelect').value = request.method;
   updateMethodSelectClass();
   $('urlInput').value = request.url;
@@ -3229,6 +3407,22 @@ function renderRequestEditor() {
   renderCookieJarEditor();
   renderAuthEditor(request.auth || { type: 'none' });
   updateRequestEditorLanguages();
+}
+
+function renderRequestTitle(request) {
+  const title = $('requestNameTitle');
+  if (!title) {
+    return;
+  }
+  if (title.dataset.editing !== 'true') {
+    title.textContent = request ? requestDisplayName(request) : 'Select a request';
+    title.setAttribute('contenteditable', 'false');
+    title.removeAttribute('role');
+    title.classList.remove('is-editing');
+  }
+  title.tabIndex = request ? 0 : -1;
+  title.setAttribute('aria-disabled', request ? 'false' : 'true');
+  title.setAttribute('aria-label', 'Request name');
 }
 
 function renderExamples(examples) {
@@ -3931,23 +4125,25 @@ function currentPanelFocus() {
   return 'request';
 }
 
-async function renameWorkspace(workspaceId = selectedWorkspaceId || activeWorkspaceId) {
+function renameWorkspace(workspaceId = selectedWorkspaceId || activeWorkspaceId) {
+  const workspaceItem = selectWorkspaceItem(workspaceId);
+  if (!workspaceItem) {
+    setStatus('Select a workspace before renaming.');
+    return null;
+  }
+  beginWorkspaceTitleEdit();
+  return workspaceItem;
+}
+
+async function renameWorkspaceToName(workspaceId, workspaceName) {
   try {
     const workspaceItem = workspaceListItems().find((item) => item.id === workspaceId);
     if (!workspaceItem) {
       setStatus('Select a workspace before renaming.');
       return null;
     }
-    const currentName = workspaceDisplayName(workspaceItem);
-    const value = await promptTextInput({
-      title: 'Rename workspace',
-      message: 'Enter a workspace name.',
-      label: 'Workspace name',
-      defaultValue: currentName,
-      singleLine: true
-    });
-    const nextName = String(value || '').trim();
-    if (!nextName) {
+    const nextName = String(workspaceName || '').trim();
+    if (!nextName || nextName === workspaceDisplayName(workspaceItem)) {
       return null;
     }
     const renamingActiveWorkspace = workspaceId === activeWorkspaceId;
@@ -3957,8 +4153,9 @@ async function renameWorkspace(workspaceId = selectedWorkspaceId || activeWorksp
     const previousWorkspaceIds = new Set(workspaceListItems().map((item) => item.id));
     const renameBoundary = window.__postmeterRenameWorkspace || window.postmeter.workspace.rename;
     const loaded = await renameBoundary(workspaceId, nextName);
-    const renamedWorkspaceId = loaded.workspaces?.find((item) => item.id !== workspaceId && !previousWorkspaceIds.has(item.id))?.id
-      || (renamingActiveWorkspace ? loaded.activeWorkspaceId : workspaceId);
+    const renamedWorkspaceId = loaded?.renamedWorkspaceId
+      || loaded?.workspaces?.find((item) => item.id !== workspaceId && !previousWorkspaceIds.has(item.id))?.id
+      || (renamingActiveWorkspace ? loaded?.activeWorkspaceId : workspaceId);
     if (renamingActiveWorkspace) {
       applyLoadedWorkspace(loaded, {
         focus: activeMainPanel === 'workspace' ? 'workspace' : currentPanelFocus(),
@@ -3972,7 +4169,7 @@ async function renameWorkspace(workspaceId = selectedWorkspaceId || activeWorksp
     }
     restoreTreeFocus(treeFocusTarget('workspace', renamedWorkspaceId || workspaceId), activeWorkspaceTreeFocusTargets());
     setStatus(renamingActiveWorkspace ? `Renamed workspace: ${workspaceDisplayName()}.` : 'Workspace renamed.');
-    return loaded.workspace;
+    return loaded?.workspace || null;
   } catch (error) {
     const message = error.message || String(error);
     setStatus(`Workspace rename failed: ${message}`);
@@ -4449,26 +4646,20 @@ async function deleteFolder(collection, folder) {
   restoreTreeFocus(null, activeCollectionTreeFocusTargets());
 }
 
-async function renameRequest(request) {
-  const restoreTarget = treeFocusTarget('request', request?.id);
-  const value = await promptTextInput({
-    title: 'Rename request',
-    message: 'Enter a request name.',
-    label: 'Request name',
-    defaultValue: request.name,
-    singleLine: true
-  });
-  if (value?.trim()) {
-    request.name = value.trim();
-    const tab = openRequestTabs.find((candidate) => requestForTab(candidate) === request);
-    if (tab) {
-      tab.dirty = true;
-    }
-    renderCollections();
-    renderRequestTabs();
-    renderRequestEditor();
-    restoreTreeFocus(restoreTarget, activeCollectionTreeFocusTargets());
+function renameRequest(collection, folder, request) {
+  if (!request) {
+    return null;
   }
+  collectActiveEditorState();
+  activeSidebarPanel = 'collections';
+  activeMainPanel = 'request';
+  activeCollectionId = collection?.id || activeCollectionId;
+  activeFolderId = folder?.id || null;
+  activeRequestId = request.id;
+  ensureOpenRequestTabForActive();
+  renderAll();
+  beginRequestTitleEdit();
+  return request;
 }
 
 function duplicateRequest(collection, folder, request) {
@@ -4537,7 +4728,7 @@ function collectRequestFromEditor() {
   if (!request) {
     return;
   }
-  request.name = $('requestNameInput').value.trim() || 'Untitled Request';
+  collectRequestNameFromTitle({ render: false });
   request.method = METHODS.includes($('methodSelect').value) ? $('methodSelect').value : 'GET';
   request.url = $('urlInput').value.trim();
   request.bodyType = BODY_TYPES.includes($('bodyTypeSelect').value) ? $('bodyTypeSelect').value : 'NONE';
@@ -4552,6 +4743,28 @@ function collectRequestFromEditor() {
     enabled: $('requestCookieJarEnabledInput').checked,
     storeResponses: $('requestCookieJarStoreInput').checked
   };
+}
+
+function collectRequestNameFromTitle(options = {}) {
+  const request = activeRequest();
+  if (!request) {
+    return false;
+  }
+  const nextName = requestTitleInputValue() || 'Untitled Request';
+  const changed = request.name !== nextName;
+  request.name = nextName;
+  if (changed && options.markDirty === true) {
+    markActiveRequestDirty();
+  }
+  if (options.render !== false && changed) {
+    renderCollections();
+    renderRequestTabs();
+  }
+  const title = $('requestNameTitle');
+  if (title && title.dataset.editing !== 'true') {
+    title.textContent = requestDisplayName(request);
+  }
+  return changed;
 }
 
 function collectAuthFromEditor() {
@@ -4577,6 +4790,18 @@ function collectEnvironmentFromEditor() {
 
 function environmentTitleInputValue() {
   return String($('environmentMainTitle')?.textContent || '')
+    .replace(/[\r\n]+/g, ' ')
+    .trim();
+}
+
+function workspaceTitleInputValue() {
+  return String($('workspaceMainTitle')?.textContent || '')
+    .replace(/[\r\n]+/g, ' ')
+    .trim();
+}
+
+function requestTitleInputValue() {
+  return String($('requestNameTitle')?.textContent || '')
     .replace(/[\r\n]+/g, ' ')
     .trim();
 }

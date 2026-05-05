@@ -122,7 +122,6 @@
     bindClick(doc, 'captureResponseExampleButton', options.onCaptureResponseExample);
     bindClick(doc, 'exportExamplesButton', options.onExportExamples);
     bindClick(doc, 'deleteEnvironmentButton', options.onDeleteEnvironment);
-    bindClick(doc, 'renameWorkspacePanelButton', options.onRenameWorkspace);
     bindClick(doc, 'deleteWorkspacePanelButton', options.onDeleteWorkspace);
     bindClick(doc, 'addVariableButton', options.onAddEnvironmentVariable);
     bindClick(doc, 'switchWorkspacePanelButton', options.onSwitchWorkspace);
@@ -159,7 +158,6 @@
     bindChange(doc, 'environmentSelect', () => {
       options.onEnvironmentSelectChange?.(getElement(doc, 'environmentSelect')?.value || 'none');
     });
-    bindInput(doc, 'requestNameInput', options.onRequestNameInput);
     bindChange(doc, 'methodSelect', options.onMethodChange);
     bindInput(doc, 'urlInput', options.onUrlInput);
     bindChange(doc, 'bodyTypeSelect', options.onBodyTypeChange);

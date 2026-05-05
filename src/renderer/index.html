@@ -110,7 +110,7 @@
         </div>
       </section>
       <section id="requestEditorPanel" class="panel request-panel" role="tabpanel">
-        <input id="requestNameInput" class="title-input" placeholder="Request name" aria-label="Request name">
+        <div id="requestNameTitle" class="request-main-title editable-title" tabindex="0" aria-label="Request name">Select a request</div>
         <div class="request-line">
           <select id="methodSelect" aria-label="HTTP method">
             <option class="method-get">GET</option>
@@ -434,12 +434,10 @@
       <section id="workspaceMainPanel" class="panel workspace-main-panel" role="tabpanel" hidden>
         <div class="workspace-main-header">
           <div>
-            <h2>Workspace</h2>
-            <div id="workspaceMainTitle" class="workspace-main-title">Local Workspace</div>
+            <div id="workspaceMainTitle" class="workspace-main-title editable-title" tabindex="0" aria-label="Workspace name">Local Workspace</div>
           </div>
           <div class="workspace-actions">
             <button id="switchWorkspacePanelButton" type="button">Switch to this Workspace</button>
-            <button id="renameWorkspacePanelButton" type="button">Rename Workspace</button>
             <button id="exportWorkspacePanelButton" type="button">Export Workspace</button>
             <button id="deleteWorkspacePanelButton" type="button">Delete Workspace</button>
           </div>

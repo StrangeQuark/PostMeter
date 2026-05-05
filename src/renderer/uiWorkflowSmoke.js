@@ -43,8 +43,7 @@
     assertUiSmoke($('variablePreview').textContent.includes('collectionToken = from-collection'), 'Collection variable preview did not render.');
     await setIncludePrereleases(true, { showStatus: false });
 
-    $('requestNameInput').value = 'Smoke Request';
-    dispatchInput($('requestNameInput'));
+    editRequestTitle('Smoke Request');
     $('methodSelect').value = 'POST';
     dispatchChange($('methodSelect'));
     $('urlInput').value = `${baseUrl}/echo`;
@@ -166,6 +165,14 @@
     assertUiSmoke($('runnerResults').textContent.includes('Request variable requestToken = from-request'), 'Collection runner did not render request variables.');
     assertUiSmoke(!$('exportRunnerJsonButton').disabled, 'Runner JSON export button was not enabled after a run.');
     assertUiSmoke(!$('exportRunnerCsvButton').disabled, 'Runner CSV export button was not enabled after a run.');
+  }
+
+  function editRequestTitle(value) {
+    const title = $('requestNameTitle');
+    title.click();
+    title.textContent = value;
+    dispatchInput(title);
+    title.dispatchEvent(new Event('blur'));
   }
 
   function assertResizeSmoke() {

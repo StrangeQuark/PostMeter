@@ -444,12 +444,33 @@
       assertUiSmoke(!$('deleteWorkspacePanelButton').disabled, 'Workspace delete should enable when multiple workspaces exist.');
       const createdWorkspaceId = selectedWorkspaceId;
       assertUiSmoke(Boolean(createdWorkspaceId && createdWorkspaceId !== originalWorkspaceId), 'Creating a workspace should select the new workspace in the UI.');
-      const renamePromise = renameWorkspace(createdWorkspaceId);
-      await resolveTextInputModal('Renamed Workspace', 'Workspace rename should use the in-app text input modal.');
-      await renamePromise;
+      const workspaceTitle = $('workspaceMainTitle');
+      assertUiSmoke(!document.getElementById('renameWorkspacePanelButton'), 'Workspace details should not render a separate rename button.');
+      assertUiSmoke(!$('workspaceMainPanel').querySelector('.workspace-main-header h2'), 'Workspace details should not render a redundant Workspace label above the title.');
+      assertUiSmoke(workspaceTitle.getAttribute('aria-label') === 'Workspace name', 'Workspace title should expose an accessible name.');
+      assertUiSmoke(getComputedStyle(workspaceTitle).whiteSpace === 'nowrap', 'Workspace title should stay on a single line.');
+      workspaceTitle.click();
+      assertUiSmoke(workspaceTitle.getAttribute('contenteditable') === 'plaintext-only', 'Clicking the workspace title should make it editable inline.');
+      workspaceTitle.textContent = '';
+      workspaceTitle.dispatchEvent(new Event('blur'));
+      assertUiSmoke(selectedWorkspaceId === createdWorkspaceId, 'Submitting an empty workspace title should keep the current workspace id.');
+      assertUiSmoke(workspaceDisplayName() !== '', 'Submitting an empty workspace title should restore the previous visible name.');
+      await editWorkspaceTitle('Renamed Workspace', {
+        waitFor: () => selectedWorkspaceId === 'Renamed Workspace.json',
+        message: 'Workspace inline rename did not update the selected workspace id.'
+      });
+      assertUiSmoke($('textInputModal').hidden, 'Workspace inline rename should not open the text input modal.');
       assertUiSmoke(activeWorkspaceId === originalWorkspaceId, 'Renaming a non-current workspace should not switch the loaded workspace.');
       assertUiSmoke(selectedWorkspaceId === 'Renamed Workspace.json', 'Renaming the selected workspace should update the selected workspace id.');
       assertUiSmoke(workspaceDisplayName() === 'Renamed Workspace', 'Renaming the selected workspace should update the viewed workspace name.');
+      const renamedTitle = $('workspaceMainTitle');
+      renamedTitle.click();
+      renamedTitle.textContent = 'Discarded Workspace Rename';
+      dispatchInput(renamedTitle);
+      renamedTitle.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape' }));
+      await nextPaint();
+      assertUiSmoke(selectedWorkspaceId === 'Renamed Workspace.json', 'Escaping a workspace title edit should keep the selected workspace id.');
+      assertUiSmoke(workspaceDisplayName() === 'Renamed Workspace', 'Escaping a workspace title edit should restore the original name.');
       const renamedWorkspaceId = selectedWorkspaceId;
       newCollection();
       assertUiSmoke(workspace.collections.length === 1, 'Current workspace should accept collection edits before switching away.');
@@ -469,7 +490,7 @@
       assertUiSmoke($('diagnosticLogUrlsInput').disabled, 'Viewing a non-current workspace should disable diagnostics privacy settings.');
       assertUiSmoke($('diagnosticsPrivacySummary').textContent.includes('Switch to this workspace'), 'Non-current workspace diagnostics controls should explain the switch requirement.');
       assertUiSmoke(!$('switchWorkspacePanelButton').hidden, 'Workspace details should render the switch action.');
-      assertUiSmoke(!$('renameWorkspacePanelButton').hidden, 'Workspace details should still render rename.');
+      assertUiSmoke(!document.getElementById('renameWorkspacePanelButton'), 'Workspace details should rely on inline title rename instead of a rename button.');
       let diagnosticsExported = false;
       window.__postmeterDiagnostics = {
         export: async () => {
@@ -798,7 +819,7 @@
       const openMillis = performance.now() - openStarted;
       assertUiSmoke(openMillis <= 3000, `Large request open exceeded budget: ${openMillis.toFixed(1)}ms.`);
       assertUiSmoke(activeRequestId === targetRequestId, 'Large request open did not select the target request.');
-      assertUiSmoke($('requestNameInput').value === 'Large Request 29.1.3', 'Large request open did not populate the editor.');
+      assertUiSmoke($('requestNameTitle').textContent === 'Large Request 29.1.3', 'Large request open did not populate the editor title.');
     } finally {
       workspace = originalWorkspace;
       workspaces = originalWorkspaces;
@@ -888,7 +909,7 @@
 
     const collection = newCollection();
     const request = newRequest(collection.id, null);
-    $('requestNameInput').value = 'Pending Navigation Request';
+    editRequestTitle('Pending Navigation Request', { commit: false });
     selectSidebarPanel('workspaces');
     assertUiSmoke(request.name === 'Pending Navigation Request', 'Switching sidebar panels should collect the active request editor before rerendering.');
 
@@ -1271,11 +1292,18 @@
       requestRenameButton.focus();
       openKeyboardContextMenu(requestRenameButton);
       activateContextMenuItem('Rename');
-      await resolveTextInputModal('Focus Request Renamed', 'Request rename should use the in-app text input modal.');
+      await nextPaint();
+      const requestTitle = $('requestNameTitle');
+      assertUiSmoke(document.activeElement === requestTitle, 'Request rename should focus the inline request title.');
+      assertUiSmoke(requestTitle.getAttribute('contenteditable') === 'plaintext-only', 'Request rename should make the request title editable inline.');
+      assertUiSmoke($('textInputModal').hidden, 'Request rename should not use the text input modal.');
+      requestTitle.textContent = 'Focus Request Renamed';
+      dispatchInput(requestTitle);
+      requestTitle.dispatchEvent(new Event('blur'));
       await nextPaint();
       const renamedRequestButton = treeButtonByTarget('request', renameRequestTarget.id);
       assertUiSmoke(renamedRequestButton?.textContent.includes('Focus Request Renamed'), 'Request rename did not rerender the replacement tree button.');
-      assertUiSmoke(document.activeElement === renamedRequestButton, 'Request rename should restore focus to the replacement tree button.');
+      assertUiSmoke(renameRequestTarget.name === 'Focus Request Renamed', 'Request inline rename did not update the request model.');
 
       const deleteRequestTarget = newRequest(requestCollection.id, null);
       deleteRequestTarget.name = 'Focus Delete Request';
@@ -1340,6 +1368,29 @@
     dispatchInput(title);
     if (options.commit !== false) {
       title.dispatchEvent(new Event('blur'));
+    }
+  }
+
+  function editRequestTitle(value, options = {}) {
+    const title = $('requestNameTitle');
+    title.click();
+    title.textContent = value;
+    dispatchInput(title);
+    if (options.commit !== false) {
+      title.dispatchEvent(new Event('blur'));
+    }
+  }
+
+  async function editWorkspaceTitle(value, options = {}) {
+    const title = $('workspaceMainTitle');
+    title.click();
+    title.textContent = value;
+    dispatchInput(title);
+    if (options.commit !== false) {
+      title.dispatchEvent(new Event('blur'));
+    }
+    if (typeof options.waitFor === 'function') {
+      await waitForUiSmoke(options.waitFor, options.message || 'Workspace title edit did not settle.', 3000, global);
     }
   }
 
@@ -1507,8 +1558,12 @@
     assertUiSmoke(activeSidebarPanel === 'collections', 'Selecting a request tab should switch the sidebar to Collections.');
     assertUiSmoke(activeMainPanel === 'request', 'Selecting a request tab should switch the main pane to request mode.');
     assertUiSmoke(activeRequest() === draft, 'Selecting a request tab should restore the active request.');
-    $('requestNameInput').value = 'Draft Request';
-    dispatchInput($('requestNameInput'));
+    assertUiSmoke(!document.getElementById('requestNameInput'), 'Request editor should not render a separate request name text box.');
+    assertUiSmoke($('requestNameTitle').getAttribute('aria-label') === 'Request name', 'Request title should expose an accessible name.');
+    assertUiSmoke(getComputedStyle($('requestNameTitle')).whiteSpace === 'nowrap', 'Request title should stay on a single line.');
+    $('requestNameTitle').click();
+    assertUiSmoke($('requestNameTitle').getAttribute('contenteditable') === 'plaintext-only', 'Clicking the request title should make it editable inline.');
+    editRequestTitle('Draft Request');
     collectRequestFromEditor();
     assertUiSmoke(draft.name === 'Draft Request', 'Draft request should be editable before being saved anywhere.');
 
@@ -1567,8 +1622,7 @@
       renderAll();
 
       const draft = newRequest();
-      $('requestNameInput').value = 'Draft Close Smoke';
-      dispatchInput($('requestNameInput'));
+      editRequestTitle('Draft Close Smoke');
       const collection = newCollection();
       const draftTab = openRequestTabs.find((tab) => tab.draft && tab.requestId === draft.id);
       assertUiSmoke(draftTab, 'Draft request tab should remain open after creating a collection.');
@@ -1639,12 +1693,11 @@
       activeRequestId = null;
       renderAll();
 
-      const request = newRequest(collection.id, null);
-      await saveWorkspace(false);
-      const savedRequestName = request.name;
-      $('requestNameInput').value = 'Changed Saved Request';
-      dispatchInput($('requestNameInput'));
-      const savedTab = openRequestTabs.find((tab) => tab.requestId === request.id);
+	      const request = newRequest(collection.id, null);
+	      await saveWorkspace(false);
+	      const savedRequestName = request.name;
+	      editRequestTitle('Changed Saved Request');
+	      const savedTab = openRequestTabs.find((tab) => tab.requestId === request.id);
       const closeSaved = closeRequestTab(savedTab);
       assertUiSmoke(!$('unsavedRequestModal').hidden, 'Closing a dirty saved request should show the unsaved request modal.');
       $('closeWithoutSavingButton').click();

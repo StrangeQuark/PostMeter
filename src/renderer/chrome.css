@@ -628,18 +628,22 @@ h2 {
   border-bottom: 1px solid var(--line);
 }
 
-.environment-main-header > div:first-child {
+.environment-main-header > div:first-child,
+.workspace-main-header > div:first-child {
   flex: 1 1 auto;
   min-width: 0;
 }
 
+.request-main-title,
 .environment-main-title,
 .workspace-main-title {
   font-size: 18px;
   font-weight: 800;
 }
 
-.environment-main-title.editable-title {
+.request-main-title.editable-title,
+.environment-main-title.editable-title,
+.workspace-main-title.editable-title {
   display: block;
   box-sizing: border-box;
   width: 100%;
@@ -656,18 +660,26 @@ h2 {
 }
 
 .environment-main-title.editable-title:hover,
-.environment-main-title.editable-title:focus-visible {
+.environment-main-title.editable-title:focus-visible,
+.request-main-title.editable-title:hover,
+.request-main-title.editable-title:focus-visible,
+.workspace-main-title.editable-title:hover,
+.workspace-main-title.editable-title:focus-visible {
   border-color: var(--line);
   background: var(--surface-muted);
 }
 
-.environment-main-title.editable-title.is-editing {
+.environment-main-title.editable-title.is-editing,
+.request-main-title.editable-title.is-editing,
+.workspace-main-title.editable-title.is-editing {
   border-color: var(--primary);
   background: var(--surface);
   box-shadow: 0 0 0 3px rgba(255, 108, 55, 0.18);
 }
 
-.environment-main-title.editable-title[aria-disabled="true"] {
+.environment-main-title.editable-title[aria-disabled="true"],
+.request-main-title.editable-title[aria-disabled="true"],
+.workspace-main-title.editable-title[aria-disabled="true"] {
   cursor: default;
 }
 
