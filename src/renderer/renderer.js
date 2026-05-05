@@ -45,8 +45,9 @@ let activeModalCancelValue = RENDERER_STATE_DEFAULTS.activeModalCancelValue;
 let activeModalResolver = RENDERER_STATE_DEFAULTS.activeModalResolver;
 let selectedDraftSaveCollectionId = RENDERER_STATE_DEFAULTS.selectedDraftSaveCollectionId;
 let selectedExportCollectionId = RENDERER_STATE_DEFAULTS.selectedExportCollectionId;
-let selectedRunnerImportTarget = null;
-let expandedRunnerImportCollectionId = '';
+let selectedRunnerImportTarget = [];
+let expandedRunnerImportCollectionIds = [];
+let lastRunnerImportSelectionKey = '';
 let activeVaultPromptPayload = null;
 let sessionSaveTimer = null;
 let sessionPersistenceEnabled = false;
@@ -3410,11 +3411,12 @@ async function promptAndImportRunnerRequests() {
 }
 
 function promptRunnerRequestImport() {
-  selectedRunnerImportTarget = null;
-  expandedRunnerImportCollectionId = '';
+  selectedRunnerImportTarget = [];
+  expandedRunnerImportCollectionIds = [];
+  lastRunnerImportSelectionKey = '';
   const collections = workspace.collections || [];
   $('runnerImportMessage').textContent = collections.length
-    ? 'Choose a collection to expand, then add the collection or one of its requests to this runner.'
+    ? 'Choose a collection to expand, then select one or more requests to add to this runner.'
     : 'There are no collections to import from.';
   renderRunnerImportList(collections);
   return showModal('runnerImportModal', null);
@@ -3423,7 +3425,7 @@ function promptRunnerRequestImport() {
 function renderRunnerImportList(collections = workspace.collections || []) {
   const list = $('runnerImportList');
   list.textContent = '';
-  $('confirmRunnerImportButton').disabled = !selectedRunnerImportTarget;
+  $('confirmRunnerImportButton').disabled = !selectedRunnerImportTargets().length;
   const availableCollections = Array.isArray(collections) ? collections : [];
   if (!availableCollections.length) {
     const empty = document.createElement('div');
@@ -3434,13 +3436,13 @@ function renderRunnerImportList(collections = workspace.collections || []) {
   }
   for (const collection of availableCollections) {
     const entries = collectionRequestEntries(collection);
-    const expanded = expandedRunnerImportCollectionId === collection.id;
+    const expanded = expandedRunnerImportCollectionIds.includes(collection.id);
     list.append(runnerImportOption({
       type: 'collection',
       collectionId: collection.id,
       label: collection.name || 'Untitled Collection',
       meta: `${entries.length} request${entries.length === 1 ? '' : 's'}`,
-      checked: selectedRunnerImportTarget?.type === 'collection' && selectedRunnerImportTarget.collectionId === collection.id
+      expanded
     }));
     if (!expanded) {
       continue;
@@ -3453,35 +3455,48 @@ function renderRunnerImportList(collections = workspace.collections || []) {
         requestId: entry.request.id,
         label: `${folderPath}${entry.request.name || 'Untitled Request'}`,
         meta: `${entry.request.method || 'GET'} ${entry.request.url || ''}`.trim(),
-        checked: selectedRunnerImportTarget?.type === 'request'
-          && selectedRunnerImportTarget.collectionId === collection.id
-          && selectedRunnerImportTarget.requestId === entry.request.id
+        checked: runnerImportTargetSelected({
+          type: 'request',
+          collectionId: collection.id,
+          requestId: entry.request.id
+        })
       }));
     }
   }
 }
 
 function runnerImportOption(option) {
+  if (option.type === 'collection') {
+    return runnerImportCollectionOption(option);
+  }
   const label = document.createElement('label');
   label.className = `collection-pick-option runner-import-option ${option.type}`;
+  label.dataset.runnerImportKey = runnerImportTargetKey(option);
   const input = document.createElement('input');
-  input.type = 'radio';
+  input.type = 'checkbox';
   input.name = 'runnerImportTarget';
   input.dataset.runnerImportType = option.type;
   input.dataset.collectionId = option.collectionId || '';
   input.dataset.requestId = option.requestId || '';
+  input.dataset.runnerImportKey = runnerImportTargetKey(option);
   input.checked = option.checked === true;
+  input.addEventListener('click', (event) => {
+    event.preventDefault();
+    updateRunnerImportSelection(runnerImportTargetFromInput(input), {
+      shiftKey: event.shiftKey === true
+    });
+  });
   input.addEventListener('change', () => {
-    selectedRunnerImportTarget = {
-      type: input.dataset.runnerImportType,
-      collectionId: input.dataset.collectionId || '',
-      requestId: input.dataset.requestId || ''
-    };
-    $('confirmRunnerImportButton').disabled = false;
-    if (input.dataset.runnerImportType === 'collection') {
-      expandedRunnerImportCollectionId = input.dataset.collectionId || '';
-      renderRunnerImportList();
+    setRunnerImportTargetChecked(runnerImportTargetFromInput(input), input.checked);
+  });
+  label.addEventListener('click', (event) => {
+    if (event.target === input) {
+      return;
     }
+    event.preventDefault();
+    updateRunnerImportSelection(option, {
+      shiftKey: event.shiftKey === true
+    });
   });
   const text = document.createElement('span');
   text.textContent = option.label;
@@ -3495,17 +3510,202 @@ function runnerImportOption(option) {
   return label;
 }
 
+function runnerImportCollectionOption(option) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'collection-pick-option runner-import-option collection';
+  button.dataset.runnerImportType = 'collection';
+  button.dataset.collectionId = option.collectionId || '';
+  button.setAttribute('aria-expanded', option.expanded === true ? 'true' : 'false');
+  button.addEventListener('click', (event) => {
+    event.preventDefault();
+    toggleRunnerImportCollectionExpansion(option.collectionId);
+  });
+  const text = document.createElement('span');
+  text.textContent = option.label;
+  if (option.meta) {
+    const meta = document.createElement('span');
+    meta.className = 'runner-import-meta';
+    meta.textContent = option.meta;
+    text.append(meta);
+  }
+  button.append(text);
+  return button;
+}
+
+function selectedRunnerImportTargets() {
+  if (Array.isArray(selectedRunnerImportTarget)) {
+    return selectedRunnerImportTarget.filter((target) => target?.type === 'request' && target.collectionId && target.requestId);
+  }
+  return selectedRunnerImportTarget?.type === 'request' && selectedRunnerImportTarget.collectionId && selectedRunnerImportTarget.requestId
+    ? [selectedRunnerImportTarget]
+    : [];
+}
+
+function setSelectedRunnerImportTargets(targets) {
+  const uniqueTargets = [];
+  const seen = new Set();
+  for (const target of Array.isArray(targets) ? targets : []) {
+    const normalized = normalizeRunnerImportTarget(target);
+    const key = runnerImportTargetKey(normalized);
+    if (normalized.type !== 'request' || !normalized.collectionId || !normalized.requestId || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    uniqueTargets.push(normalized);
+  }
+  selectedRunnerImportTarget = uniqueTargets;
+  $('confirmRunnerImportButton').disabled = !uniqueTargets.length;
+}
+
+function normalizeRunnerImportTarget(target = {}) {
+  return {
+    type: target.type === 'collection' ? 'collection' : 'request',
+    collectionId: target.collectionId || '',
+    requestId: target.type === 'collection' ? '' : target.requestId || ''
+  };
+}
+
+function runnerImportTargetKey(target = {}) {
+  const normalized = normalizeRunnerImportTarget(target);
+  return `${normalized.type}:${normalized.collectionId}:${normalized.requestId}`;
+}
+
+function runnerImportTargetSelected(target) {
+  const key = runnerImportTargetKey(target);
+  return selectedRunnerImportTargets().some((selected) => runnerImportTargetKey(selected) === key);
+}
+
+function runnerImportTargetFromInput(input) {
+  return {
+    type: input.dataset.runnerImportType,
+    collectionId: input.dataset.collectionId || '',
+    requestId: input.dataset.requestId || ''
+  };
+}
+
+function updateRunnerImportSelection(target, options = {}) {
+  const normalized = normalizeRunnerImportTarget(target);
+  if (!normalized.collectionId) {
+    return;
+  }
+  if (normalized.type === 'collection') {
+    toggleRunnerImportCollectionExpansion(normalized.collectionId);
+    return;
+  }
+  let nextTargets = selectedRunnerImportTargets();
+  if (options.shiftKey && lastRunnerImportSelectionKey) {
+    const visibleTargets = visibleRunnerImportTargets();
+    const keys = visibleTargets.map(runnerImportTargetKey);
+    const anchorIndex = keys.indexOf(lastRunnerImportSelectionKey);
+    const targetIndex = keys.indexOf(runnerImportTargetKey(normalized));
+    if (anchorIndex >= 0 && targetIndex >= 0) {
+      const [from, to] = anchorIndex < targetIndex ? [anchorIndex, targetIndex] : [targetIndex, anchorIndex];
+      nextTargets = [...nextTargets, ...visibleTargets.slice(from, to + 1)];
+    } else {
+      nextTargets = toggleRunnerImportTarget(nextTargets, normalized);
+    }
+  } else {
+    nextTargets = toggleRunnerImportTarget(nextTargets, normalized);
+  }
+  lastRunnerImportSelectionKey = runnerImportTargetKey(normalized);
+  setSelectedRunnerImportTargets(nextTargets);
+  renderRunnerImportList();
+}
+
+function setRunnerImportTargetChecked(target, checked) {
+  const normalized = normalizeRunnerImportTarget(target);
+  if (normalized.type !== 'request' || !normalized.collectionId || !normalized.requestId) {
+    return;
+  }
+  const existing = selectedRunnerImportTargets()
+    .filter((selected) => runnerImportTargetKey(selected) !== runnerImportTargetKey(normalized));
+  if (checked) {
+    existing.push(normalized);
+  }
+  lastRunnerImportSelectionKey = runnerImportTargetKey(normalized);
+  setSelectedRunnerImportTargets(existing);
+  renderRunnerImportList();
+}
+
+function toggleRunnerImportTarget(targets, target) {
+  const key = runnerImportTargetKey(target);
+  if (targets.some((selected) => runnerImportTargetKey(selected) === key)) {
+    return targets.filter((selected) => runnerImportTargetKey(selected) !== key);
+  }
+  return [...targets, target];
+}
+
+function visibleRunnerImportTargets() {
+  return Array.from($('runnerImportList').querySelectorAll('input[data-runner-import-key]'))
+    .map(runnerImportTargetFromInput);
+}
+
+function expandRunnerImportCollection(collectionId) {
+  if (!collectionId || expandedRunnerImportCollectionIds.includes(collectionId)) {
+    return;
+  }
+  expandedRunnerImportCollectionIds = [...expandedRunnerImportCollectionIds, collectionId];
+}
+
+function toggleRunnerImportCollectionExpansion(collectionId) {
+  if (!collectionId) {
+    return;
+  }
+  expandedRunnerImportCollectionIds = expandedRunnerImportCollectionIds.includes(collectionId)
+    ? expandedRunnerImportCollectionIds.filter((id) => id !== collectionId)
+    : [...expandedRunnerImportCollectionIds, collectionId];
+  renderRunnerImportList();
+}
+
 function importRunnerSelection(target) {
-  const collection = (workspace.collections || []).find((item) => item.id === target?.collectionId);
-  if (!collection) {
+  const targets = Array.isArray(target)
+    ? target
+    : target?.collectionId
+      ? [target]
+      : selectedRunnerImportTargets();
+  if (targets.length) {
+    return importRunnerSelections(targets);
+  }
+  return null;
+}
+
+function importRunnerSelections(targets) {
+  const runner = activeRunner();
+  if (!runner) {
     return null;
   }
-  if (target.type === 'collection') {
-    return importCollectionIntoRunner(collection);
+  const entries = [];
+  const seenRequests = new Set();
+  for (const target of targets.map(normalizeRunnerImportTarget)) {
+    if (target.type !== 'request' || !target.requestId) {
+      continue;
+    }
+    const collection = (workspace.collections || []).find((item) => item.id === target.collectionId);
+    if (!collection) {
+      continue;
+    }
+    const collectionEntries = collectionRequestEntries(collection);
+    const selectedEntries = collectionEntries.filter((entry) => entry.request?.id === target.requestId);
+    for (const entry of selectedEntries) {
+      const requestKey = `${collection.id}:${entry.request?.id || ''}`;
+      if (!entry.request || seenRequests.has(requestKey)) {
+        continue;
+      }
+      seenRequests.add(requestKey);
+      entries.push(entry);
+    }
   }
-  const entry = collectionRequestEntries(collection)
-    .find((candidate) => candidate.request?.id === target.requestId);
-  return entry ? addCollectionRequestToRunner(entry) : null;
+  if (!entries.length) {
+    setStatus('No runner requests were selected to import.');
+    return 0;
+  }
+  const imported = entries.map((entry) => cloneRequestForRunner(entry.request, runnerRequestSourceFromEntry(entry)));
+  runner.requests = [...normalizeRunnerRequests(runner.requests), ...imported];
+  markActiveRunnerDirty();
+  renderRunnerEditor();
+  setStatus(`${imported.length} request${imported.length === 1 ? '' : 's'} imported into runner.`);
+  return imported.length;
 }
 
 function addNewRunnerLocalRequest() {

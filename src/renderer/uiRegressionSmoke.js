@@ -1746,11 +1746,39 @@
       const sourceCollection = {
         id: crypto.randomUUID(),
         name: 'Runner Source Collection',
-        requests: [newRequestObject('Runner Source Request')],
+        requests: [
+          newRequestObject('Runner Source Request'),
+          newRequestObject('Runner Source Request 2'),
+          newRequestObject('Runner Source Request 3')
+        ],
         folders: []
       };
-      workspace.collections.push(sourceCollection);
+      const secondSourceCollection = {
+        id: crypto.randomUUID(),
+        name: 'Runner Second Source Collection',
+        requests: [
+          newRequestObject('Runner Second Source Request'),
+          newRequestObject('Runner Second Source Request 2')
+        ],
+        folders: []
+      };
+      workspace.collections.push(sourceCollection, secondSourceCollection);
       const source = sourceCollection.requests[0];
+      const clickRunnerImportControl = (control, options = {}) => {
+        control.dispatchEvent(new MouseEvent('click', {
+          bubbles: true,
+          cancelable: true,
+          ctrlKey: options.ctrlKey === true,
+          metaKey: options.metaKey === true,
+          shiftKey: options.shiftKey === true
+        }));
+      };
+      const runnerImportCollection = (collectionId) => Array.from($('runnerImportList').querySelectorAll('[data-runner-import-type="collection"]'))
+        .find((control) => control.dataset.collectionId === collectionId);
+      const runnerImportInput = (type, collectionId, requestId = '') => Array.from($('runnerImportList').querySelectorAll('input'))
+        .find((input) => input.dataset.runnerImportType === type
+          && input.dataset.collectionId === collectionId
+          && input.dataset.requestId === requestId);
       $('addRunnerRequestButton').click();
       runnerAddLabels = Array.from($('contextMenu').querySelectorAll('button')).map((button) => button.textContent.trim());
       assertUiSmoke(runnerAddLabels.join('|') === 'New Request|Import', `Runner Add Request menu should stay simplified after collections exist. labels=${runnerAddLabels.join('|')}`);
@@ -1759,15 +1787,21 @@
       assertUiSmoke($('confirmRunnerImportButton').disabled, 'Runner Import Add button should be disabled until a target is selected.');
       assertUiSmoke($('runnerImportList').textContent.includes(sourceCollection.name), 'Runner Import modal should list collections.');
       assertUiSmoke(!$('runnerImportList').textContent.includes(source.name), 'Runner Import modal should hide collection requests until the collection is expanded.');
-      const collectionImportInput = Array.from($('runnerImportList').querySelectorAll('input'))
-        .find((input) => input.dataset.runnerImportType === 'collection' && input.dataset.collectionId === sourceCollection.id);
-      assertUiSmoke(collectionImportInput, 'Runner Import modal should expose a collection import option.');
-      collectionImportInput.checked = true;
-      dispatchChange(collectionImportInput);
-      const expandedRequestImportInput = Array.from($('runnerImportList').querySelectorAll('input'))
-        .find((input) => input.dataset.runnerImportType === 'request' && input.dataset.requestId === source.id);
+      const collectionImportControl = runnerImportCollection(sourceCollection.id);
+      assertUiSmoke(collectionImportControl, 'Runner Import modal should expose an expandable collection row.');
+      assertUiSmoke(!runnerImportInput('collection', sourceCollection.id), 'Runner Import modal should not make collection rows selectable import targets.');
+      clickRunnerImportControl(collectionImportControl);
+      const expandedRequestImportInput = runnerImportInput('request', sourceCollection.id, source.id);
       assertUiSmoke(expandedRequestImportInput, 'Runner Import modal should expose request options after expanding a collection.');
-      assertUiSmoke(!$('confirmRunnerImportButton').disabled, 'Selecting a runner import target should enable Add.');
+      assertUiSmoke($('confirmRunnerImportButton').disabled, 'Expanding a runner import collection should not enable Add.');
+      assertUiSmoke(Array.isArray(selectedRunnerImportTarget) && selectedRunnerImportTarget.length === 0, 'Expanding a runner import collection should not select the collection.');
+      const secondCollectionImportControl = runnerImportCollection(secondSourceCollection.id);
+      assertUiSmoke(secondCollectionImportControl, 'Runner Import modal should expose every collection row.');
+      clickRunnerImportControl(secondCollectionImportControl, { ctrlKey: true });
+      assertUiSmoke(
+        Array.isArray(selectedRunnerImportTarget) && selectedRunnerImportTarget.length === 0,
+        'Ctrl-clicking runner import collections should still only expand collections.'
+      );
       const requestCountBeforeCancel = runner.requests.length;
       $('cancelRunnerImportButton').click();
       await nextPaint();
@@ -1775,28 +1809,46 @@
 
       $('addRunnerRequestButton').click();
       activateContextMenuItem('Import');
-      const requestCollectionInputAfterCancel = Array.from($('runnerImportList').querySelectorAll('input'))
-        .find((input) => input.dataset.runnerImportType === 'collection' && input.dataset.collectionId === sourceCollection.id);
-      requestCollectionInputAfterCancel.checked = true;
-      dispatchChange(requestCollectionInputAfterCancel);
-      const requestImportInputAfterCancel = Array.from($('runnerImportList').querySelectorAll('input'))
-        .find((input) => input.dataset.runnerImportType === 'request' && input.dataset.requestId === source.id);
-      assertUiSmoke(requestImportInputAfterCancel, 'Runner Import request option should be available after expanding the collection.');
-      requestImportInputAfterCancel.checked = true;
-      dispatchChange(requestImportInputAfterCancel);
+      clickRunnerImportControl(runnerImportCollection(sourceCollection.id));
+      const requestImportInputAfterCancel = runnerImportInput('request', sourceCollection.id, source.id);
+      const thirdRequestImportInputAfterCancel = runnerImportInput('request', sourceCollection.id, sourceCollection.requests[2].id);
+      assertUiSmoke(requestImportInputAfterCancel && thirdRequestImportInputAfterCancel, 'Runner Import request options should be available after expanding the collection.');
+      clickRunnerImportControl(requestImportInputAfterCancel, { ctrlKey: true });
+      clickRunnerImportControl(thirdRequestImportInputAfterCancel, { shiftKey: true });
+      assertUiSmoke(
+        Array.isArray(selectedRunnerImportTarget)
+          && selectedRunnerImportTarget.length === 3
+          && selectedRunnerImportTarget.every((target) => target.type === 'request'),
+        'Shift-clicking runner import requests should select the visible request range.'
+      );
       $('confirmRunnerImportButton').click();
-      await waitForUiSmoke(() => runner.requests.length === requestCountBeforeCancel + 1, 'Adding a selected request from Runner Import should clone the request.', 3000, global);
+      await waitForUiSmoke(() => runner.requests.length === requestCountBeforeCancel + 3, 'Adding selected requests from Runner Import should clone every selected request.', 3000, global);
 
       $('addRunnerRequestButton').click();
       activateContextMenuItem('Import');
-      const collectionImportInputAfterRequest = Array.from($('runnerImportList').querySelectorAll('input'))
-        .find((input) => input.dataset.runnerImportType === 'collection' && input.dataset.collectionId === sourceCollection.id);
-      collectionImportInputAfterRequest.checked = true;
-      dispatchChange(collectionImportInputAfterRequest);
+      clickRunnerImportControl(runnerImportCollection(sourceCollection.id));
+      clickRunnerImportControl(runnerImportCollection(secondSourceCollection.id));
+      const sourceRequestInputAfterRequest = runnerImportInput('request', sourceCollection.id, source.id);
+      const secondSourceRequestInputAfterRequest = runnerImportInput('request', secondSourceCollection.id, secondSourceCollection.requests[0].id);
+      assertUiSmoke(sourceRequestInputAfterRequest && secondSourceRequestInputAfterRequest, 'Expanded runner import collections should expose request rows for Ctrl-click selection.');
+      clickRunnerImportControl(sourceRequestInputAfterRequest, { ctrlKey: true });
+      clickRunnerImportControl(secondSourceRequestInputAfterRequest, { ctrlKey: true });
+      assertUiSmoke(
+        Array.isArray(selectedRunnerImportTarget)
+          && selectedRunnerImportTarget.length === 2
+          && selectedRunnerImportTarget.every((target) => target.type === 'request'),
+        'Ctrl-clicking runner import requests should preserve multiple request selections before Add.'
+      );
       const requestCountBeforeCollectionImport = runner.requests.length;
       $('confirmRunnerImportButton').click();
-      await waitForUiSmoke(() => runner.requests.length === requestCountBeforeCollectionImport + 1, 'Adding a selected collection from Runner Import should clone every collection request.', 3000, global);
-      const imported = runner.requests.at(-1);
+      await waitForUiSmoke(
+        () => runner.requests.length === requestCountBeforeCollectionImport + 2,
+        'Adding Ctrl-selected requests from Runner Import should clone only the selected requests.',
+        3000,
+        global
+      );
+      const imported = runner.requests.find((request) => request.source?.collectionId === sourceCollection.id
+        && request.source?.requestId === source.id);
       if (source) {
         assertUiSmoke(imported.id !== source.id, 'Imported runner request should get a runner-local request id.');
         assertUiSmoke(imported.source?.requestId === source.id, 'Imported runner request should keep source request metadata.');
