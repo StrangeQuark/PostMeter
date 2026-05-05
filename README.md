@@ -1,161 +1,86 @@
 # PostMeter
 
-PostMeter is a standalone Electron desktop API client and local load-testing tool.
+PostMeter is a local-first desktop API client for building, sending, testing, and load-checking API workflows.
 
-It is local-first software. It does not require a PostMeter account, app login, cloud sign-in, or registration.
+## Features
 
-## Highlights
+- Send HTTP requests with params, headers, auth, cookies, and body editors.
+- Organize collections, folders, examples, environments, variables, and workspaces.
+- Import and export PostMeter, Postman Collection v2.1, OpenAPI, JMeter, curl, and HAR files.
+- Run pre-request scripts, test scripts, assertions, and collection runs.
+- Use the desktop runner or a CI-friendly CLI runner.
+- Run bounded local load tests with rate caps, percentiles, and JSON/CSV export.
+- Work with OAuth 2.0, HTTPS client certificates, cookies, and GitHub Releases update checks.
 
-- Managed multi-workspace desktop app with non-destructive workspace import
-- Saved collections, folders, variables, environments, request examples, and a local cookie jar
-- Native PostMeter, Postman Collection v2.1, OpenAPI, JMeter, curl, and HAR import/export
-- Assertions, pre-request/test scripts, local mock script support, collection runs, and a CI-friendly CLI runner
-- Local load tests with rate caps, percentiles, JSON/CSV export, and optional multi-process execution
-- OAuth 2.0 helpers, HTTPS client certificates, theme modes, and GitHub Releases update checks
+## Quick Start
 
-## Requirements
+Requirements:
 
 - Node.js 22 or newer
 - npm 10 or newer
 
-## Quick Start
-
 ```bash
 npm install
 npm start
 ```
 
-## Commands
+## Common Commands
 
-### Development
-
-```bash
-npm install
-npm start
-npm test
-npm run check
-npm run electron:version
-npm run sandbox:platform:validate
-npm run sandbox:platform:claim
-npm run postman:parity:validate
-npm run postman:parity:claim
-npm run postman:parity:diff
-npm run postman:docs:validate
-npm run postman:docs:live
-npm run production:readiness:validate
-npm run ux:accessibility:validate
-npm run diagnostics:privacy:validate
-```
-
-### UI And Smoke
-
-```bash
-npm run test:smoke
-npm run test:ui
-npm run test:ui:regression
-npm run test:ui:oauth
-npm run test:ui:snapshot
-```
-
-### Packaging And Release
-
-```bash
-npm run pack:linux
-npm run dist:linux
-npm run dist:win
-npm run dist:mac
-npm run release:checksums
-npm run release:prepare
-npm run release:validate
-```
-
-Linux builds produce AppImage and deb artifacts, Windows builds produce an unsigned NSIS installer, and macOS builds produce dmg and zip artifacts. Release validation checks artifact hashes, exact `SHA256SUMS`/manifest coverage, packaged startup smoke, Linux protocol metadata, Windows `postmeter://` registry plus launch behavior for the temporary install, and macOS URL-scheme metadata plus Launch Services launch behavior for the bundle under validation on native runners. Tag pushes matching `v*` publish unsigned GitHub Release artifacts plus `SHA256SUMS` and `release-manifest.json` only after the fail-closed stable readiness gate passes.
-
-## Project Layout
-
-- `electron/main.js` owns desktop lifecycle, window hardening, and IPC registration.
-- `electron/preload.js` exposes the explicit main-frame renderer API.
-- `src/renderer/` contains the browser UI.
-- `src/core/` contains request execution, persistence, import/export, and load-test logic.
-- `scripts/postmeter-cli.js` is the headless CLI runner.
+| Command | Purpose |
+| --- | --- |
+| `npm start` | Start the desktop app. |
+| `npm test` | Run the Electron test suite. |
+| `npm run check` | Run the main local validation suite. |
+| `npm run test:ui` | Run the primary UI smoke workflow. |
+| `npm run cli -- run --file ./workspace.json` | Run collections from the CLI. |
+| `npm run dist:linux` | Build Linux release artifacts. |
+| `npm run dist:win` | Build the Windows installer. |
+| `npm run dist:mac` | Build macOS release artifacts. |
 
 ## CLI Runner
 
 ```bash
-npm run cli -- run --file ./workspace.json --collection "Smoke" --environment "Local" --var token="$API_TOKEN" --report ./runner-report.json
+npm run cli -- run --file ./workspace.json --collection "Smoke" --environment "Local" --report ./runner-report.json
 ```
 
-The CLI accepts native PostMeter workspace/collection files and the same import pipeline used by the desktop app for Postman, OpenAPI, JMeter, curl, and HAR inputs. It exits with code `0` only when all executed requests pass their assertions and scripts. Reports support `json` and `csv`, and runtime overrides can be passed with `--var` and `--collection-var`.
+The CLI uses the same import and runner logic as the desktop app. It exits with code `0` only when every executed request passes.
 
-## Workspace Data
+## Data And Privacy
 
-Default managed workspace directory:
+PostMeter stores managed workspaces as local JSON files under:
 
 ```text
 ~/.postmeter/
 ```
 
-Override the preferred startup workspace path:
+You can override the startup workspace path:
 
 ```bash
 POSTMETER_DATA_PATH=/tmp/postmeter-workspace.json npm start
 ```
 
-- PostMeter scans the directory containing the preferred workspace path for native managed workspace JSON files.
-- Empty directories get a default workspace such as `Local Workspace.json`.
-- Workspace data is stored as plain JSON, including auth fields, variables, cookies, and certificate passphrases.
-- Schema migrations create sibling `pre-migration.backup` files. Unreadable workspace JSON is quarantined to a timestamped `corrupt` file and replaced with a fresh default workspace.
-- Workspace import adds another managed workspace without replacing the current workspace, switching the current workspace, or creating an import backup.
-- Desktop workspace export can write the current workspace or another managed workspace from the Workspaces list.
-- `Export > Collection` opens an in-app picker modal, still opens with a warning when no collections exist, keeps Export disabled in that state, and defaults native collection exports to `<collection-name>.json`.
+Workspace JSON can include auth fields, variables, cookies, and certificate passphrases. Review workspace and collection exports before sharing them.
 
-## Typical Workflow
-
-1. Create or select a collection, folder, and request.
-2. Configure method, URL, query params, headers, body, and auth.
-3. Use collection variables, request-local variables, and environments with `{{variableName}}`.
-4. Send requests and inspect status, timing, size, headers, formatted bodies, and assertions.
-5. Add examples, cookies, pre-request scripts, and test scripts as needed.
-6. Run the active collection from the Runner tab or from the CLI.
-7. Use the Load Test tab for bounded local load tests with JSON/CSV export.
-8. Import or export PostMeter, Postman, OpenAPI, JMeter, curl, and HAR formats.
+Diagnostics are local and user-initiated. See [Troubleshooting](docs/TROUBLESHOOTING.md) and [Release Readiness](docs/RELEASE_READINESS.md) for the detailed privacy and validation model.
 
 ## Documentation
 
-| File | Purpose |
+| Start Here | What It Covers |
 | --- | --- |
-| [README.md](README.md) | Quick start, command reference, and product overview. |
-| [TECH_SPECS.MD](TECH_SPECS.MD) | Detailed product scope, persistence, IPC, schema, and implementation reference. |
-| [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) | Format, scripting, and load-testing compatibility matrix. |
+| [docs/TECH_SPECS.md](TECH_SPECS.md) | Full product and implementation reference. |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Renderer, Electron, and core ownership boundaries. |
-| [docs/SANDBOX_CONTRACT.md](docs/SANDBOX_CONTRACT.md) | Sandbox contract for script security and compatibility. |
-| [docs/RELEASE_READINESS.md](docs/RELEASE_READINESS.md) | Production readiness dashboard, release gates, and native-runner validation policy. |
-| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | User-facing diagnosis notes for OAuth setup, vault prompts, encrypted vault storage, and recovery behavior. |
-| [docs/OAUTH_PROVIDER_CERTIFICATION.md](docs/OAUTH_PROVIDER_CERTIFICATION.md) | Outbound OAuth provider certification plan, mock harness, live-provider env contract, and evidence redaction rules. |
-| [docs/diagnostics-privacy-matrix.json](docs/diagnostics-privacy-matrix.json) | Source-generated diagnostics/privacy coverage matrix. |
-| [SECURITY.md](SECURITY.md) | Security boundaries, reporting, and release-gate summary. |
-| [NEXT_STEPS.MD](NEXT_STEPS.MD) | Backlog, readiness gaps, and next-iteration priorities. |
+| [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) | Import/export, scripting, auth, and load-testing compatibility. |
+| [docs/SANDBOX_CONTRACT.md](docs/SANDBOX_CONTRACT.md) | Request-script sandbox behavior and security contract. |
+| [docs/RELEASE_READINESS.md](docs/RELEASE_READINESS.md) | Release gates, validation policy, and readiness status. |
+| [docs/SECURITY.md](SECURITY.md) | Security boundaries and vulnerability reporting. |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | OAuth setup, diagnostics, vault prompts, and recovery notes. |
+| [docs/OAUTH_PROVIDER_CERTIFICATION.md](docs/OAUTH_PROVIDER_CERTIFICATION.md) | OAuth provider certification workflow. |
+| [docs/THIRD_PARTY_NOTICES.md](docs/THIRD_PARTY_NOTICES.md) | Third-party notices. |
 
-## Updates
+Generated validation matrices live in `docs/*.json`, including Postman parity, diagnostics privacy, production readiness, Electron security, workspace durability, OAuth provider certification, and UX accessibility coverage.
 
-The desktop app can check GitHub Releases from `Help > Check for Updates`. Stable releases are checked by default. Prereleases are included only when the `Help > Prereleases` option is enabled. For forks or development builds:
+## Notes
 
-```bash
-POSTMETER_UPDATE_URL=https://api.github.com/repos/OWNER/REPO/releases/latest npm start
-```
+Load tests intentionally skip pre-request and test scripts; collection runs and single requests execute scripts. See [Sandbox Contract](docs/SANDBOX_CONTRACT.md) for the detailed policy.
 
-## Security And Status
-
-- Renderer `nodeIntegration` is disabled, `contextIsolation` is enabled, the renderer is sandboxed, and app UI assets are served through an allowlisted secure `postmeter-app://bundle` protocol with CSP, `nosniff`, and `no-referrer` response headers instead of `file://`.
-- The renderer talks to core logic only through explicit preload IPC bindings.
-- Request scripts run in constrained child processes with brokered privileged APIs, Postman-compatible test/assertion/variable/dynamic-variable behavior, version-pinned Postman bundled packages, global/module/Collection-SDK object facades, GraphQL hook execution, live parent-owned gRPC hook transport including parent-side PEM and PFX/P12 mTLS material handling, local mock `pm.mock`/`pm.state` support, reviewed package-cache loading with parent-side fetch/review, isolated Handlebars visualizer rendering with reviewed assets, metadata-only vault prompts and scoped vault grants, hardened script bridges, fail-closed Node permission flags in production runtimes, Linux `bubblewrap` OS isolation plus seccomp syscall policy, Windows AppContainer helper isolation, macOS seatbelt isolation, timeouts, and bounded resources.
-- Postman import parity is tracked by a generated matrix at `docs/postman-sandbox-parity-matrix.json`; `npm run postman:parity:validate` checks the matrix, and `npm run postman:parity:diff` exercises the HTTP-core, broad, dynamic-host-globals, runtime-limits, HttpOnly-cookies, sendRequest-advanced, and file-binding Newman-compatible differential harness. The official-docs sweep is separately committed at `docs/postman-docs-coverage-audit.json`; `npm run postman:docs:validate` gates the checked-in token mapping, and `npm run postman:docs:live` refetches official Postman/Newman docs to catch upstream drift. `npm run postman:parity:claim` is green for the tracked default Postman import profile with zero default-import blockers; behavior-sensitive Desktop rows are backed by row-specific evidence metadata.
-- Current audited parity targets are Postman Desktop 11.71.7 with `postman-sandbox@6.2.2` and Postman Runtime 7.50.0, plus Newman 6.2.2 with Postman Runtime 7.39.1 for Newman-compatible surfaces. The claim covers the current official Postman/Newman scripting docs and those audited runtime targets, not undocumented future Postman releases.
-- Checked-in Newman evidence lives under `test/fixtures/postman/newman-reports/` with raw Newman reporter JSON, raw PostMeter harness JSON, and normalized PostMeter/Newman comparison output for the approved differential suites. Refresh it with `npm run postman:newman-reports:refresh -- --download-newman`; validate the committed evidence offline with `npm run postman:newman-reports:validate`.
-- Production readiness is tracked at `docs/production-readiness-matrix.json`; `npm run production:readiness:validate` keeps the dashboard fresh, `npm run production:readiness:claim` is the fail-closed stable-release gate, and beta/RC thresholds are available through `npm run production:readiness:claim:beta` and `npm run production:readiness:claim:rc`. Rows marked `external-validation-required` need native GitHub Actions runner logs, maintainer-owned provider credentials plus sanitized checksum-verified evidence, or signing assets before they can become stable-ready.
-- Production diagnostics and logging are implemented as local-only, user-controlled diagnostics. `Help > Export Local Diagnostics...` and the current Workspace panel write a sanitized JSON bundle to a path the user chooses after pending diagnostics settings are saved; the main-process export path also waits for queued workspace privacy-setting saves before opening the save dialog. PostMeter does not upload diagnostics, require an account, or perform telemetry. Logs and diagnostic bundles omit inbound or outbound API traffic details by default, including URLs, path/query values, methods, status codes/categories, sizes, headers, HTTP/gRPC metadata, cookies, auth material, request/response bodies, GraphQL variables, form-data parts, protocol messages, rendered response text, script-console traffic echoes, and payload-derived identifiers. Workspace-scoped request/response logging categories are explicit, off by default, preserve prior privacy choices on partial settings saves, and warn that they may expose PII or customer data; auth/token/cookie/certificate-passphrase/credential/body-alias/private-key/JWT/path/file-URL/JSON-escaped-slash-URL/JSON-escaped-POSIX-path/mixed-path/bare-host/custom-URL/OAuth-provider-error/OAuth-callback/fragment-token/structured-query/path-param-secret redaction still applies when categories are enabled, including standalone Bearer/Basic/Digest/Hawk/Token/OAuth/NTLM/Negotiate auth tokens, comma/semicolon-delimited compound auth header parameters with optional whitespace around equals, assigned exact token/code/state fields plus assigned and bare whitespace-only snake_case/kebab-case/camelCase OAuth/token fields, broad camelCase/snake_case/kebab-case token/secret/password/passwd/passphrase/credential suffix aliases, X-API-key, X-access/auth/authorization-token, CSRF/XSRF-token, JWT-token, secret-key, API-secret, subscription-key, access-key, shared-access-key, account/storage/signing/webhook/license/public key, consumer-key/secret, and OAuth-consumer-key/secret aliases, repeated-whitespace multi-word secret labels, JSON-escaped/double-escaped/nested-JSON camelCase auth-header aliases, sensitive object keys, unescaped JSON/annotated/class-style and parenthesized util-inspect URL/header/metadata array/object aliases with whitespace/colon/equals separators, structured header/metadata key/name pairs with sensitive value/raw/currentValue/schema fields, object/array request/response assignments, URL path label/value and inline same-segment token forms, bare, assigned/free-form, escaped, double-escaped, and nested-JSON camelCase/snake_case/kebab-case request/response aliases with escaped newline/quote/backslash sequences, unquoted multi-word secrets, source/UI/packaged smoke failure output, source/packaged sandbox validation child output, IPC/export failure messages, diagnostic event type/outcome/failure-code metadata including compact/delimiter-free token/code/state labels and one-letter token aliases plus secret-shaped IPC/export error names and codes, and structured key/value/raw/currentValue/example/schema-default parameter forms.
-- Diagnostics/privacy coverage is tracked at `docs/diagnostics-privacy-matrix.json`; `npm run diagnostics:privacy:validate` keeps that matrix fresh and validates evidence/test references.
-- Production UX/accessibility/failure-recovery coverage is tracked at `docs/ux-accessibility-matrix.json`; `npm run ux:accessibility:validate` keeps that matrix fresh and verifies evidence plus executable test references. Production renderer workflows use accessible in-app text, secret, confirmation, notification, export, save-draft, and vault-access modals instead of raw native prompt/confirm/alert dialogs; splitters, tabs, and autocomplete expose keyboard/screen-reader relationships; toolbar/tree context menus support keyboard open, item navigation, activation, Escape/Tab close, and focus restoration after modal rerenders; and app-level status messages are visible through a live status region. Sandbox package review/fetch, imported-file binding, vault operations, settings/theme/prerelease changes, collection import saves, pre-send/pre-load/pre-run saves, workspace context resets during load/runner execution, and shutdown sync saves with pending mutations fail visibly, ignore stale completions, skip stale writes, or roll back in-memory changes if persistence fails. Startup and UI smoke failures can write screenshot, redacted structural DOM-state including active-element ARIA metadata, and log artifacts through `POSTMETER_VALIDATION_ARTIFACT_DIR` or `POSTMETER_UI_SMOKE_ARTIFACT_DIR`; source UI, source/packaged sandbox validation output, packaged smoke launcher output, and load-worker stderr previews use the shared diagnostics redactor for local paths, private keys, request/response alias values, JSON-escaped slash URLs/file URLs, Bearer/Basic/Digest/Hawk/Token/OAuth/NTLM/Negotiate auth-shaped values, JSON-escaped/double-escaped/nested-JSON camelCase auth-header aliases, and OAuth code/verifier/assertion fields; smoke/log child output and worker protocol buffers are bounded; and CI/release workflows upload those artifacts on failure.
-- Platform OS sandbox implementation is tracked separately at `docs/os-sandbox-platform-matrix.json`; `npm run sandbox:platform:validate` keeps the matrix fresh, and `npm run sandbox:platform:claim` must pass before claiming the tier-one OS sandbox backends are implemented. Stable production readiness still requires native-runner/manual validation evidence in `docs/production-readiness-matrix.json`.
-- Workspace data is stored as plain JSON without local encryption or redacted export modes. Script vault secrets are stored separately in encrypted per-workspace vault files when OS-backed desktop encryption is available.
-- Release builds are currently unsigned. Full security and production-readiness detail lives in [TECH_SPECS.MD](TECH_SPECS.MD) and [NEXT_STEPS.MD](NEXT_STEPS.MD).
+Release builds are currently unsigned. See [Release Readiness](docs/RELEASE_READINESS.md) for the current release validation state.
