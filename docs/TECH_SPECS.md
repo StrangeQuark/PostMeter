@@ -1,6 +1,6 @@
 # PostMeter Technical Specifications
 
-This document is the detailed implementation reference. For quick setup, common commands, and the top-level product overview, use [README.md](README.md).
+This document is the detailed implementation reference. For quick setup, common commands, and the top-level product overview, use [README.md](../README.md).
 
 ## Current Migration Status
 

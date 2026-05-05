@@ -108,7 +108,7 @@
       "status": "implemented",
       "evidenceRefs": [
         "src/core/workspaceManager.js",
-        "TECH_SPECS.MD",
+        "docs/TECH_SPECS.md",
         "docs/TROUBLESHOOTING.md"
       ],
       "tests": [
@@ -124,7 +124,7 @@
       "status": "implemented",
       "evidenceRefs": [
         "src/core/workspaceMigrations.js",
-        "TECH_SPECS.MD"
+        "docs/TECH_SPECS.md"
       ],
       "tests": [
         "test/electron/workspaceStore.test.js"
