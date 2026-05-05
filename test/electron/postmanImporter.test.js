@@ -133,6 +133,231 @@ test('imports common Postman auth helpers with collection and folder inheritance
   assert.equal(collection.requests[2].auth.tokenUrl, 'https://auth.example.test/token');
 });
 
+test('round-trips Postman request cookie source metadata without promoting disabled cookies', () => {
+  const sourceCookies = [{
+    name: 'expiresCookie',
+    value: 'alpha',
+    domain: '.example.test',
+    path: '/expires',
+    expires: 'Wed, 21 Oct 2099 07:28:00 GMT',
+    secure: true,
+    httpOnly: true,
+    sameSite: 'no_restriction',
+    priority: 'high',
+    partitioned: true,
+    extensions: ['SameParty', 'Source=Postman'],
+    _postman_cookie_id: 'expires-cookie-id',
+    rawAttributes: { size: 42, customFlag: true }
+  }, {
+    name: 'expiresAtCookie',
+    value: 'beta',
+    domain: 'api.example.test',
+    path: '/',
+    expiresAt: '2100-01-02T03:04:05.000Z',
+    maxAge: 3600,
+    sameSite: 'strict',
+    priority: 'low',
+    hostOnly: true
+  }, {
+    name: 'maxAgeCookie',
+    value: 'gamma',
+    domain: 'api.example.test',
+    path: '/max-age',
+    maxAge: '7200',
+    sameSite: 'lax',
+    priority: 'medium',
+    partitioned: 'true',
+    hostOnly: 'true'
+  }, {
+    name: 'session',
+    value: 'root',
+    domain: 'api.example.test',
+    path: '/',
+    expires: 'Wed, 21 Oct 2099 07:28:00 GMT',
+    sameSite: 'none',
+    hostOnly: false
+  }, {
+    name: 'session',
+    value: 'admin',
+    domain: 'api.example.test',
+    path: '/admin',
+    expirationDate: '2101-03-04T05:06:07.000Z',
+    sameSite: 'None',
+    hostOnly: 'false'
+  }, {
+    name: 'emptyValue',
+    domain: '.example.test',
+    path: '/empty',
+    value: '',
+    expiresAt: '',
+    sameSite: 'Lax'
+  }, {
+    name: '__Host-session',
+    value: 'host-prefix',
+    path: '/',
+    secure: true,
+    httpOnly: true,
+    hostOnly: true,
+    sameSite: 'lax',
+    priority: 'medium',
+    extensions: ['HostPrefix']
+  }, {
+    name: '__Secure-device',
+    value: 'secure-prefix',
+    domain: '.example.test',
+    path: '/',
+    secure: true,
+    sameSite: 'strict',
+    priority: 'high'
+  }, {
+    name: 'rawUnknown',
+    value: 'delta',
+    domain: 'api.example.test',
+    path: '/raw',
+    expires: 'not-a-date',
+    sameSite: 'future-mode',
+    priority: 'urgent',
+    unknownScalar: 'preserved',
+    unknownObject: { nested: ['yes'] }
+  }, {
+    name: 'disabledCookie',
+    value: 'disabled',
+    domain: 'api.example.test',
+    path: '/disabled',
+    expires: 'Tue, 19 Jan 2038 03:14:07 GMT',
+    disabled: true,
+    sameSite: 'lax',
+    priority: 'medium',
+    partitioned: true,
+    unknownDisabledField: 'still exported'
+  }];
+  const collection = importPostmanCollection({
+    info: {
+      name: 'Postman Cookie Matrix',
+      schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
+    },
+    item: [{
+      name: 'Cookie Matrix',
+      request: {
+        method: 'GET',
+        url: 'https://api.example.test/cookies',
+        cookie: sourceCookies
+      }
+    }]
+  });
+  const request = collection.requests[0];
+
+  assert.deepEqual(request.postman.request.cookie, sourceCookies);
+  assert.equal(
+    request.headers.find((header) => header.key === 'Cookie').value,
+    'expiresCookie=alpha; expiresAtCookie=beta; maxAgeCookie=gamma; session=root; session=admin; emptyValue=; __Host-session=host-prefix; __Secure-device=secure-prefix; rawUnknown=delta'
+  );
+  const metadata = JSON.parse(request.variables.find((variable) => variable.key === 'postman.cookies').value);
+  const cookiesByName = new Map(metadata.map((cookie) => [cookie.name, cookie]));
+  const sessionCookies = metadata.filter((cookie) => cookie.name === 'session');
+
+  assert.equal(cookiesByName.has('disabledCookie'), false);
+  assert.equal(sessionCookies.length, 2);
+  assert.deepEqual(sessionCookies.map((cookie) => cookie.path), ['/', '/admin']);
+  assert.equal(sessionCookies[0].expiresAt, '2099-10-21T07:28:00.000Z');
+  assert.equal(sessionCookies[0].hostOnly, false);
+  assert.equal(sessionCookies[0].sameSite, 'None');
+  assert.equal(sessionCookies[1].expiresAt, '2101-03-04T05:06:07.000Z');
+  assert.equal(sessionCookies[1].hostOnly, false);
+  assert.equal(sessionCookies[1].sameSite, 'None');
+  assert.equal(cookiesByName.get('emptyValue').value, '');
+  assert.equal(cookiesByName.get('emptyValue').expiresAt, '');
+  assert.equal(cookiesByName.get('expiresCookie').expiresAt, '2099-10-21T07:28:00.000Z');
+  assert.equal(cookiesByName.get('expiresCookie').sameSite, 'None');
+  assert.equal(cookiesByName.get('expiresCookie').priority, 'High');
+  assert.equal(cookiesByName.get('expiresCookie').partitioned, true);
+  assert.deepEqual(cookiesByName.get('expiresCookie').extensions, ['SameParty', 'Source=Postman']);
+  assert.equal(cookiesByName.get('expiresAtCookie').expiresAt, '2100-01-02T03:04:05.000Z');
+  assert.equal(cookiesByName.get('expiresAtCookie').maxAge, '3600');
+  assert.equal(cookiesByName.get('expiresAtCookie').sameSite, 'Strict');
+  assert.equal(cookiesByName.get('expiresAtCookie').priority, 'Low');
+  assert.equal(cookiesByName.get('expiresAtCookie').hostOnly, true);
+  assert.equal(cookiesByName.get('maxAgeCookie').expiresAt, '');
+  assert.equal(cookiesByName.get('maxAgeCookie').maxAge, '7200');
+  assert.equal(cookiesByName.get('maxAgeCookie').sameSite, 'Lax');
+  assert.equal(cookiesByName.get('maxAgeCookie').priority, 'Medium');
+  assert.equal(cookiesByName.get('maxAgeCookie').hostOnly, true);
+  assert.equal(cookiesByName.get('maxAgeCookie').partitioned, true);
+  assert.equal(cookiesByName.get('__Host-session').secure, true);
+  assert.equal(cookiesByName.get('__Host-session').httpOnly, true);
+  assert.equal(cookiesByName.get('__Host-session').hostOnly, true);
+  assert.equal(cookiesByName.get('__Host-session').path, '/');
+  assert.deepEqual(cookiesByName.get('__Host-session').extensions, ['HostPrefix']);
+  assert.equal(cookiesByName.get('__Secure-device').secure, true);
+  assert.equal(cookiesByName.get('__Secure-device').sameSite, 'Strict');
+  assert.equal(cookiesByName.get('rawUnknown').expiresAt, 'not-a-date');
+  assert.equal(cookiesByName.get('rawUnknown').sameSite, '');
+  assert.equal(cookiesByName.get('rawUnknown').priority, '');
+
+  const exported = exportPostmanCollection(collection);
+  assert.deepEqual(exported.item[0].request.cookie, sourceCookies);
+  assert.equal(exported.item[0].request.cookie.find((cookie) => cookie.name === 'disabledCookie').disabled, true);
+  assert.deepEqual(
+    exported.item[0].request.cookie.find((cookie) => cookie.name === 'rawUnknown').unknownObject,
+    { nested: ['yes'] }
+  );
+});
+
+test('imports real-world Postman request cookie fixture coverage without broadening claims', () => {
+  const fixture = JSON.parse(fs.readFileSync(
+    path.join(__dirname, '../fixtures/postman/real-world-cookie-corpus.collection.json'),
+    'utf8'
+  ));
+  const collection = importPostmanCollection(fixture);
+  const request = collection.requests[0];
+  const cookieHeader = request.headers.find((header) => header.key === 'Cookie');
+  const metadata = JSON.parse(request.variables.find((variable) => variable.key === 'postman.cookies').value);
+  const duplicateSessions = metadata.filter((cookie) => cookie.name === 'session');
+  const byName = new Map(metadata.map((cookie) => [cookie.name, cookie]));
+
+  assert.equal(cookieHeader.value, [
+    'session=root',
+    'session=admin',
+    'empty=',
+    'expiresOnly=legacy',
+    'expiresAtOnly=iso',
+    'expirationDateOnly=browser',
+    'maxAgeOnly=ttl',
+    '__Host-fixture=host',
+    '__Secure-fixture=secure',
+    'partitioned=chips',
+    'unknownVendor=raw'
+  ].join('; '));
+  assert.equal(byName.has('disabledSession'), false);
+  assert.equal(duplicateSessions.length, 2);
+  assert.deepEqual(duplicateSessions.map((cookie) => cookie.path), ['/', '/admin']);
+  assert.deepEqual(duplicateSessions.map((cookie) => cookie.domain), ['api.example.test', '.example.test']);
+  assert.equal(byName.get('empty').value, '');
+  assert.equal(byName.get('expiresOnly').expiresAt, '2099-10-21T07:28:00.000Z');
+  assert.equal(byName.get('expiresAtOnly').expiresAt, '2100-01-02T03:04:05.000Z');
+  assert.equal(byName.get('expirationDateOnly').expiresAt, '2101-03-04T05:06:07.000Z');
+  assert.equal(byName.get('maxAgeOnly').maxAge, '86400');
+  assert.equal(byName.get('expiresOnly').sameSite, 'Strict');
+  assert.equal(byName.get('expiresAtOnly').sameSite, 'Lax');
+  assert.equal(byName.get('expirationDateOnly').sameSite, 'None');
+  assert.equal(byName.get('unknownVendor').sameSite, '');
+  assert.equal(byName.get('__Host-fixture').hostOnly, true);
+  assert.equal(byName.get('__Host-fixture').secure, true);
+  assert.equal(byName.get('__Secure-fixture').secure, true);
+  assert.equal(byName.get('partitioned').partitioned, true);
+  assert.equal(byName.get('partitioned').priority, 'High');
+  assert.deepEqual(byName.get('partitioned').extensions, ['SameParty', 'PartitionKey=https://example.test']);
+
+  const exported = exportPostmanCollection(collection);
+  const exportedCookies = exported.item[0].request.cookie;
+  assert.deepEqual(exportedCookies, fixture.item[0].request.cookie);
+  assert.equal(exportedCookies.find((cookie) => cookie.name === 'disabledSession').disabled, ' true ');
+  assert.deepEqual(
+    exportedCookies.find((cookie) => cookie.name === 'unknownVendor').vendorMetadata,
+    { owner: 'browser-extension', flags: ['nonstandard'] }
+  );
+});
+
 test('imports and exports advanced Postman auth helper shapes', () => {
   const collection = importPostmanCollection({
     info: {

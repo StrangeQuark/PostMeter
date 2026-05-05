@@ -1,0 +1,138 @@
+{
+  "info": {
+    "_postman_id": "real-world-cookie-corpus",
+    "name": "Real World Cookie Corpus",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "id": "cookie-matrix-request",
+      "name": "Cookie Matrix Request",
+      "request": {
+        "method": "GET",
+        "url": "https://api.example.test/admin/dashboard",
+        "cookie": [
+          {
+            "name": "session",
+            "value": "root",
+            "domain": "api.example.test",
+            "path": "/",
+            "expires": "Wed, 21 Oct 2099 07:28:00 GMT",
+            "sameSite": "strict",
+            "hostOnly": true
+          },
+          {
+            "name": "session",
+            "value": "admin",
+            "domain": ".example.test",
+            "path": "/admin",
+            "expires": "Wed, 21 Oct 2099 07:28:00 GMT",
+            "sameSite": "lax",
+            "hostOnly": false
+          },
+          {
+            "name": "empty",
+            "value": "",
+            "domain": "api.example.test",
+            "path": "/empty",
+            "expiresAt": ""
+          },
+          {
+            "name": "expiresOnly",
+            "value": "legacy",
+            "domain": "api.example.test",
+            "path": "/expires",
+            "expires": "Wed, 21 Oct 2099 07:28:00 GMT",
+            "sameSite": "Strict"
+          },
+          {
+            "name": "expiresAtOnly",
+            "value": "iso",
+            "domain": "api.example.test",
+            "path": "/expires-at",
+            "expiresAt": "2100-01-02T03:04:05.000Z",
+            "sameSite": "Lax"
+          },
+          {
+            "name": "expirationDateOnly",
+            "value": "browser",
+            "domain": "api.example.test",
+            "path": "/expiration-date",
+            "expiresAt": "",
+            "expirationDate": 4139355967,
+            "sameSite": "no_restriction"
+          },
+          {
+            "name": "maxAgeOnly",
+            "value": "ttl",
+            "domain": "api.example.test",
+            "path": "/ttl",
+            "maxAge": 86400,
+            "sameSite": "none",
+            "secure": true
+          },
+          {
+            "name": "__Host-fixture",
+            "value": "host",
+            "path": "/",
+            "secure": " true ",
+            "httpOnly": " true ",
+            "hostOnly": " true ",
+            "sameSite": "lax",
+            "extensions": [
+              "HostPrefix"
+            ]
+          },
+          {
+            "name": "__Secure-fixture",
+            "value": "secure",
+            "domain": ".example.test",
+            "path": "/",
+            "secure": true,
+            "sameSite": "strict"
+          },
+          {
+            "name": "partitioned",
+            "value": "chips",
+            "domain": "api.example.test",
+            "path": "/chips",
+            "secure": true,
+            "sameSite": "none",
+            "priority": "high",
+            "partitioned": " true ",
+            "extensions": [
+              "SameParty",
+              "PartitionKey=https://example.test"
+            ]
+          },
+          {
+            "name": "unknownVendor",
+            "value": "raw",
+            "domain": "api.example.test",
+            "path": "/vendor",
+            "sameSite": "future-mode",
+            "priority": "urgent",
+            "vendorMetadata": {
+              "owner": "browser-extension",
+              "flags": [
+                "nonstandard"
+              ]
+            },
+            "_postman_cookie_id": "vendor-cookie-id"
+          },
+          {
+            "name": "disabledSession",
+            "value": "disabled",
+            "domain": "api.example.test",
+            "path": "/",
+            "disabled": " true ",
+            "sameSite": "lax",
+            "vendorMetadata": {
+              "owner": "disabled-row"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

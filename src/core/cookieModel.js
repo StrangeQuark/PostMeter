@@ -12,7 +12,20 @@
   }
 
   function normalizeCookieDomain(domain) {
-    return String(domain || '').trim().replace(/^\./, '').replace(/\.$/, '').toLowerCase();
+    const value = String(domain || '')
+      .trim()
+      .replace(/[\u3002\uFF0E\uFF61]/g, '.')
+      .replace(/^\.+/, '')
+      .replace(/\.+$/, '')
+      .toLowerCase();
+    if (!value || /[\s/:]/.test(value)) {
+      return value;
+    }
+    try {
+      return new URL(`http://${value}`).hostname.replace(/\.$/, '').toLowerCase();
+    } catch {
+      return value;
+    }
   }
 
   function normalizeCookiePath(path) {
@@ -99,7 +112,7 @@
 
   function domainFromRequestUrl(url) {
     try {
-      return new URL(String(url || '')).hostname.toLowerCase();
+      return normalizeCookieDomain(new URL(String(url || '')).hostname);
     } catch {
       return '';
     }

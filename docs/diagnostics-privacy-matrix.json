@@ -112,7 +112,7 @@
         "src/core/diagnostics.js",
         "src/core/diagnosticsSettings.js",
         "src/core/models.js",
-        "TECH_SPECS.MD"
+        "docs/TECH_SPECS.md"
       ],
       "tests": [
         "test/electron/diagnostics.test.js",

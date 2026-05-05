@@ -229,7 +229,7 @@ function validateMatrix(matrix, expectedName) {
 function buildDiagnosticsPrivacyMatrix() {
   return matrix('diagnostics-privacy', 'src/core/productionSupportMatrices.js', [
     row('privacy.default-deny-request-response', 'Privacy boundary', 'Request and response URLs, query/path values, methods, status codes/categories, sizes, headers, gRPC/HTTP metadata, cookies, body aliases, GraphQL variables, form-data parts, protocol messages, script console output, and payload-derived identifiers are omitted from diagnostics by default.', 'implemented', {
-      evidenceRefs: ['src/core/diagnostics.js', 'src/core/diagnosticsSettings.js', 'src/core/models.js', 'TECH_SPECS.MD'],
+      evidenceRefs: ['src/core/diagnostics.js', 'src/core/diagnosticsSettings.js', 'src/core/models.js', 'docs/TECH_SPECS.md'],
       tests: ['test/electron/diagnostics.test.js', 'test/electron/ipcValidation.test.js']
     }),
     row('privacy.redaction-engine', 'Redaction', 'Auth schemes including header-shaped and standalone Bearer/Basic/Digest/Hawk/Token/OAuth/NTLM/Negotiate tokens, comma/semicolon-delimited compound Digest-style auth parameters with optional whitespace around equals, JSON-escaped/double-escaped/nested-JSON camelCase auth-header aliases, AWS SigV4 and Akamai-style signature parameters, chained AWS query credentials adjacent to kebab-case OAuth secret assignments, assigned exact token/code/state fields, assigned and bare whitespace-only snake_case, kebab-case, camelCase, unquoted multi-word, and repeated-whitespace OAuth/token/secret fields, broad camelCase/snake_case/kebab-case token/secret/password/passwd/passphrase/credential suffix aliases, X-API-key, X-access/auth/authorization-token, CSRF/XSRF-token, JWT-token, secret-key, API-secret, subscription-key, access-key, shared-access-key, account/storage/signing/webhook/license/public key, consumer-key/secret, and OAuth-consumer-key/secret aliases, certificate passphrases, generic credential fields, sensitive object keys, bare/quoted/structured/object-array/escaped/double-escaped/nested-JSON with escaped newline/quote/backslash sequences/multi-word/multiline camelCase/snake_case/kebab-case body/bodyPreview/data/responseText/text/variables/rendered-response aliases, quoted/escaped JSON request/response context containers, plus unescaped JSON/annotated/class-style and parenthesized util-inspect URL/header/metadata array/object aliases with whitespace/colon/equals separators in diagnostic text, structured header/metadata key/name pairs with sensitive value/raw/currentValue/schema fields, cookies, JWTs including JWT-shaped URL path/query/fragment values, private keys, Windows/UNC/extended UNC and Windows device/macOS/broad POSIX local paths including file:// URLs, JSON-escaped slash URLs, JSON-escaped POSIX paths, file URLs, and mixed Windows/POSIX/URL path chains, URL credentials across supported and custom URL schemes, OAuth provider/progress error URL and path references, OAuth callback code/state params and token fragments, URL-encoded free-text OAuth/token parameter strings, bare DNS/IP/localhost transport endpoints, secret query/fragment/path params including path label/value and inline same-segment forms with encoded slashes, routed fragment path forms, single- and multi-encoded delimiter forms including recursively nested encoded wrapper params and structured key/value/raw/currentValue/example/schema-default arrays, source/UI/packaged smoke failure output, source/packaged sandbox validation child output, diagnostic event type/outcome/failure-code metadata including compact/delimiter-free token/code/state labels and one-letter token aliases, IPC handler/export failure messages, and secret-shaped IPC/export error names and codes are redacted even when a narrow request/response logging category is enabled; auth-scheme words embedded inside hyphenated values are not treated as standalone auth schemes, and URL opt-ins preserve non-sensitive query, fragment, and path context while redacting sensitive query, fragment, path label/value, inline path, routed fragment path, encoded delimiter, auth, and token values.', 'implemented', {
@@ -302,7 +302,7 @@ function buildElectronSecurityMatrix() {
       tests: ['test/electron/appChrome.test.js']
     }),
     row('renderer.csp', 'Renderer', 'Renderer HTML and the custom app-content protocol both enforce a restrictive local CSP that blocks remote scripts, remote connects, object/embed content, form submission, workers, and media loading.', 'implemented', {
-      evidenceRefs: ['src/renderer/index.html', 'electron/appProtocol.js', 'TECH_SPECS.MD'],
+      evidenceRefs: ['src/renderer/index.html', 'electron/appProtocol.js', 'docs/TECH_SPECS.md'],
       tests: ['test/electron/appChrome.test.js', 'npm run test:ui']
     }),
     row('protocol.app-content', 'Protocol', 'The renderer is served through the secure standard postmeter-app:// custom protocol with a narrow allowlist for renderer assets, reviewed shared browser-safe core files, the app icon, and known renderer smoke query keys instead of loading the UI with file://; the handler uses no renderer fetch privilege and adds no-store, nosniff, no-referrer, and CSP response headers.', 'implemented', {
@@ -388,7 +388,7 @@ function buildElectronSecurityMatrix() {
       notes: 'Source and workflow wiring are implemented here; native runner execution evidence remains tracked by the production readiness packaging rows.'
     }),
     row('electron.fuses-reviewed', 'Packaging', 'Electron fuse hardening is reviewed; fuses that cannot be flipped without breaking Electron-run-as-Node script workers remain documented instead of silently assumed.', 'documented-gap', {
-      evidenceRefs: ['SECURITY.md', 'docs/RELEASE_READINESS.md'],
+      evidenceRefs: ['docs/SECURITY.md', 'docs/RELEASE_READINESS.md'],
       tests: ['npm run release:gate']
     }),
     row('visualizer.csp', 'Visualizer', 'Visualizer iframe output remains sandboxed with CSP/reviewed asset controls and no unreviewed remote script loading.', 'implemented', {
@@ -413,11 +413,11 @@ function buildWorkspaceDurabilityMatrix() {
       tests: ['test/electron/workspaceStore.test.js', 'test/electron/workspaceManager.test.js']
     }),
     row('workspace.managed-catalog-discovery', 'Recovery', 'Managed workspace discovery is source-of-truth filesystem discovery; stale legacy manifests, stale temp files, missing workspace files, and unrecognized existing JSON files cannot silently replace or be overwritten by default creation, create/import/rename, publication races, or active-workspace recovery.', 'implemented', {
-      evidenceRefs: ['src/core/workspaceManager.js', 'TECH_SPECS.MD', 'docs/TROUBLESHOOTING.md'],
+      evidenceRefs: ['src/core/workspaceManager.js', 'docs/TECH_SPECS.md', 'docs/TROUBLESHOOTING.md'],
       tests: ['test/electron/workspaceManager.test.js', 'test/electron/workspaceStore.test.js']
     }),
     row('workspace.schema-migrations', 'Migrations', 'Workspace schema migrations preserve imported Postman metadata, globals, cookies, vault grants, package cache metadata, and protocol profiles.', 'implemented', {
-      evidenceRefs: ['src/core/workspaceMigrations.js', 'TECH_SPECS.MD'],
+      evidenceRefs: ['src/core/workspaceMigrations.js', 'docs/TECH_SPECS.md'],
       tests: ['test/electron/workspaceStore.test.js']
     }),
     row('workspace.side-effect-merge', 'Concurrent script effects', 'Sandbox variable/cookie side effects are merged by delta with workspace identity guards.', 'implemented', {

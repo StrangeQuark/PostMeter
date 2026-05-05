@@ -102,7 +102,7 @@
         "electron/main.js",
         "src/renderer/index.html",
         "README.md",
-        "TECH_SPECS.MD",
+        "docs/TECH_SPECS.md",
         "docs/RELEASE_READINESS.md",
         "docs/TROUBLESHOOTING.md"
       ],
@@ -121,9 +121,9 @@
       ],
       "evidenceRefs": [
         "README.md",
-        "TECH_SPECS.MD",
+        "docs/TECH_SPECS.md",
         "docs/RELEASE_READINESS.md",
-        "SECURITY.md"
+        "docs/SECURITY.md"
       ],
       "owner": "PostMeter",
       "lastVerified": "",

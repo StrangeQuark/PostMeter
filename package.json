@@ -142,6 +142,7 @@
     "handlebars": "4.7.9",
     "node-forge": "^1.4.0",
     "node-html-parser": "^7.1.0",
+    "psl": "^1.15.0",
     "xpath": "^0.0.34",
     "yaml": "^2.8.3"
   }

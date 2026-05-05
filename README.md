@@ -67,12 +67,12 @@ Diagnostics are local and user-initiated. See [Troubleshooting](docs/TROUBLESHOO
 
 | Start Here | What It Covers |
 | --- | --- |
-| [docs/TECH_SPECS.md](TECH_SPECS.md) | Full product and implementation reference. |
+| [docs/TECH_SPECS.md](docs/TECH_SPECS.md) | Full product and implementation reference. |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Renderer, Electron, and core ownership boundaries. |
 | [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) | Import/export, scripting, auth, and load-testing compatibility. |
 | [docs/SANDBOX_CONTRACT.md](docs/SANDBOX_CONTRACT.md) | Request-script sandbox behavior and security contract. |
 | [docs/RELEASE_READINESS.md](docs/RELEASE_READINESS.md) | Release gates, validation policy, and readiness status. |
-| [docs/SECURITY.md](SECURITY.md) | Security boundaries and vulnerability reporting. |
+| [docs/SECURITY.md](docs/SECURITY.md) | Security boundaries and vulnerability reporting. |
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | OAuth setup, diagnostics, vault prompts, and recovery notes. |
 | [docs/OAUTH_PROVIDER_CERTIFICATION.md](docs/OAUTH_PROVIDER_CERTIFICATION.md) | OAuth provider certification workflow. |
 | [docs/THIRD_PARTY_NOTICES.md](docs/THIRD_PARTY_NOTICES.md) | Third-party notices. |

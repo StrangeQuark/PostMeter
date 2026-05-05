@@ -78,7 +78,7 @@
       "target": "Electron fuse hardening is reviewed; fuses that cannot be flipped without breaking Electron-run-as-Node script workers remain documented instead of silently assumed.",
       "status": "documented-gap",
       "evidenceRefs": [
-        "SECURITY.md",
+        "docs/SECURITY.md",
         "docs/RELEASE_READINESS.md"
       ],
       "tests": [
@@ -1124,7 +1124,7 @@
       "evidenceRefs": [
         "src/renderer/index.html",
         "electron/appProtocol.js",
-        "TECH_SPECS.MD"
+        "docs/TECH_SPECS.md"
       ],
       "tests": [
         "test/electron/appChrome.test.js",

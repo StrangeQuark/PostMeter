@@ -168,18 +168,32 @@ function harCookieToSetCookieHeader(cookie) {
   if (cookie.expires) {
     parts.push(`Expires=${cookie.expires}`);
   }
+  if (cookie.maxAge != null && cookie.maxAge !== '') {
+    parts.push(`Max-Age=${cookie.maxAge}`);
+  }
   if (cookie.httpOnly) {
     parts.push('HttpOnly');
   }
   if (cookie.secure) {
     parts.push('Secure');
   }
+  const sameSite = normalizeHarSameSite(cookie.sameSite);
+  if (sameSite) {
+    parts.push(`SameSite=${sameSite}`);
+  }
+  const priority = normalizeHarPriority(cookie.priority);
+  if (priority) {
+    parts.push(`Priority=${priority}`);
+  }
+  if (cookie.partitioned === true || String(cookie.partitioned || '').toLowerCase() === 'true') {
+    parts.push('Partitioned');
+  }
   return parts.join('; ');
 }
 
 function harCookiesFromRequestHeaders(headers) {
-  const cookieHeader = headers.find((header) => header.enabled !== false && header.key?.toLowerCase() === 'cookie');
-  return parseCookieHeader(cookieHeader?.value).map((cookie) => ({
+  const cookieHeaders = headers.filter((header) => header.enabled !== false && header.key?.toLowerCase() === 'cookie');
+  return cookieHeaders.flatMap((header) => parseCookieHeader(header.value)).map((cookie) => ({
     name: cookie.name,
     value: '<redacted>'
   }));
@@ -205,6 +219,34 @@ function harHeaderExportValue(name, value) {
     return '<redacted>';
   }
   return value ?? '';
+}
+
+function normalizeHarSameSite(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'strict') {
+    return 'Strict';
+  }
+  if (normalized === 'lax') {
+    return 'Lax';
+  }
+  if (normalized === 'none' || normalized === 'no_restriction') {
+    return 'None';
+  }
+  return '';
+}
+
+function normalizeHarPriority(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'high') {
+    return 'High';
+  }
+  if (normalized === 'medium') {
+    return 'Medium';
+  }
+  if (normalized === 'low') {
+    return 'Low';
+  }
+  return '';
 }
 
 module.exports = {

@@ -114,7 +114,12 @@ async function sendRequest(request, environment, options = {}) {
     fetchOptions.body = body;
   }
   applyAuth(requestForSend, environment, { body: body || '', headers, method, now: options.now, url });
-  applyCookieJar(requestForSend, headers, url, options.cookieJar || []);
+  const cookieJarState = createCookieJarState(requestForSend, headers, url, options.cookieJar || []);
+  if (cookieJarState) {
+    applyCookieJarStateHeader(headers, url, cookieJarState);
+  } else {
+    applyCookieJar(requestForSend, headers, url, options.cookieJar || []);
+  }
 
   const started = performance.now();
   const tlsOptions = await loadClientCertificateOptions(requestForSend.auth, environment, url, options.clientCertificates || []);
@@ -123,7 +128,8 @@ async function sendRequest(request, environment, options = {}) {
     body: body || '',
     now: options.now,
     proxyOptions,
-    tlsOptions
+    tlsOptions,
+    cookieJarState
   });
   const responseBody = typeof response.text === 'function' ? await response.text() : response.body;
   const durationMillis = Math.max(0, Math.round(performance.now() - started));
@@ -137,7 +143,8 @@ async function sendRequest(request, environment, options = {}) {
     finalUrl: response.url || url.toString()
   };
   if (requestForSend.cookieJar?.enabled === true && requestForSend.cookieJar?.storeResponses !== false) {
-    result.updatedCookies = updateCookiesFromResponse(options.cookieJar || [], responseHeaders['set-cookie'], new URL(result.finalUrl || url.toString()));
+    result.updatedCookies = cookieJarState?.cookies
+      || updateCookiesFromResponse(options.cookieJar || [], responseHeaders['set-cookie'], new URL(result.finalUrl || url.toString()));
   }
   if (prepared.updatedAuth) {
     result.updatedAuth = prepared.updatedAuth;
@@ -169,6 +176,7 @@ async function sendWithAuthRetries(request, environment, url, fetchOptions, opti
       headers: { ...fetchOptions.headers }
     };
     retryOptions.headers.Authorization = buildNtlmType3AuthorizationHeader(request.auth, environment, challenge, { now: options.now });
+    applyCookieJarStateHeader(retryOptions.headers, url, options.cookieJarState);
     const retryResponse = await sendWithTransport(url, retryOptions, transportOptions);
     ntlmAgent?.destroy?.();
     return retryResponse;
@@ -194,17 +202,71 @@ async function sendWithAuthRetries(request, environment, url, fetchOptions, opti
     now: options.now,
     url
   }, challenge);
+  applyCookieJarStateHeader(retryOptions.headers, url, options.cookieJarState);
   return sendWithTransport(url, retryOptions, options);
 }
 
-function sendWithTransport(url, fetchOptions, options = {}) {
+async function sendWithTransport(url, fetchOptions, options = {}) {
   if (options.forceNode || options.tlsOptions || options.proxyOptions) {
     return sendNodeRequest(url, fetchOptions, options.tlsOptions, 0, url.origin, {
       agent: options.agent,
+      cookieJarState: options.cookieJarState,
       proxyOptions: options.proxyOptions
     });
   }
-  return fetch(url, fetchOptions);
+  if (options.cookieJarState?.storeResponses === true && fetchOptions.redirect === 'follow') {
+    return sendFetchRequestWithCookieRedirects(url, fetchOptions, options);
+  }
+  const response = await fetch(url, fetchOptions);
+  recordResponseCookies(response, response.url || url.toString(), options.cookieJarState);
+  return response;
+}
+
+async function sendFetchRequestWithCookieRedirects(url, fetchOptions, options = {}) {
+  let currentUrl = url;
+  let currentOptions = {
+    ...fetchOptions,
+    headers: { ...fetchOptions.headers },
+    redirect: 'manual'
+  };
+  for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
+    applyCookieJarStateHeader(currentOptions.headers, currentUrl, options.cookieJarState, {
+      includeExplicit: currentOptions.includeExplicitCookies !== false
+    });
+    const { includeExplicitCookies, ...requestOptions } = currentOptions;
+    const response = await fetch(currentUrl, requestOptions);
+    recordResponseCookies(response, currentUrl.toString(), options.cookieJarState);
+    const responseHeaders = headersToObject(response.headers);
+    const location = responseHeaders.location?.[0];
+    if (!REDIRECT_STATUS_CODES.has(response.status) || !location) {
+      return response;
+    }
+    if (redirectCount >= MAX_REDIRECTS) {
+      await response.arrayBuffer().catch(() => {});
+      throw new Error(`Request exceeded ${MAX_REDIRECTS} redirects.`);
+    }
+    await response.arrayBuffer().catch(() => {});
+    const redirectUrl = new URL(location, currentUrl);
+    if (redirectUrl.protocol !== 'http:' && redirectUrl.protocol !== 'https:') {
+      throw new Error('Redirect target must use http or https.');
+    }
+    const nextOptions = {
+      ...currentOptions,
+      headers: { ...currentOptions.headers }
+    };
+    if (redirectUrl.origin !== currentUrl.origin) {
+      stripCrossOriginRedirectHeaders(nextOptions.headers);
+      nextOptions.includeExplicitCookies = false;
+    }
+    if ([301, 302, 303].includes(response.status) && nextOptions.method !== 'GET' && nextOptions.method !== 'HEAD') {
+      nextOptions.method = 'GET';
+      delete nextOptions.body;
+      deleteHeader(nextOptions.headers, 'content-type');
+    }
+    currentUrl = redirectUrl;
+    currentOptions = nextOptions;
+  }
+  throw new Error(`Request exceeded ${MAX_REDIRECTS} redirects.`);
 }
 
 function nodeAgentForUrl(url, tlsOptions = null) {
@@ -234,6 +296,66 @@ function applyCookieJar(request, headers, url, cookieJar) {
   } else {
     headers.Cookie = merged;
   }
+}
+
+function createCookieJarState(request, headers, url, cookieJar) {
+  if (request.cookieJar?.enabled !== true || request.cookieJar?.storeResponses === false) {
+    return null;
+  }
+  const existingName = cookieHeaderName(headers);
+  return {
+    cookies: updateCookiesFromResponse(cookieJar || [], [], url),
+    explicitCookieHeader: existingName ? headers[existingName] : '',
+    storeResponses: true
+  };
+}
+
+function applyCookieJarStateHeader(headers, url, cookieJarState, options = {}) {
+  if (!cookieJarState) {
+    return;
+  }
+  const cookies = cookiesForRequest(cookieJarState.cookies || [], url);
+  const explicitCookieHeader = options.includeExplicit === false ? '' : cookieJarState.explicitCookieHeader || '';
+  const merged = mergeCookieHeader(explicitCookieHeader, cookies);
+  setCookieHeader(headers, merged);
+}
+
+function recordResponseCookies(response, responseUrl, cookieJarState) {
+  if (!cookieJarState?.storeResponses) {
+    return;
+  }
+  const headers = headersToObject(response?.headers);
+  if (!headers['set-cookie']?.length) {
+    return;
+  }
+  cookieJarState.cookies = updateCookiesFromResponse(
+    cookieJarState.cookies || [],
+    headers['set-cookie'],
+    new URL(responseUrl)
+  );
+}
+
+function cookieHeaderName(headers) {
+  return Object.keys(headers || {}).find((name) => name.toLowerCase() === 'cookie') || '';
+}
+
+function setCookieHeader(headers, value) {
+  const existingName = cookieHeaderName(headers);
+  if (!value) {
+    deleteHeader(headers, 'cookie');
+    return;
+  }
+  if (existingName) {
+    headers[existingName] = value;
+  } else {
+    headers.Cookie = value;
+  }
+}
+
+function stripCrossOriginRedirectHeaders(headers) {
+  deleteHeader(headers, 'authorization');
+  deleteHeader(headers, 'proxy-authorization');
+  deleteHeader(headers, 'cookie');
 }
 
 async function loadClientCertificateOptions(auth = {}, environment, url, clientCertificates = []) {
@@ -291,6 +413,7 @@ async function readCertificateFile(filePath, label) {
 
 async function sendNodeRequest(url, requestOptions, tlsOptions, redirectCount = 0, originalOrigin = url.origin, options = {}) {
   const response = await sendSingleNodeRequest(url, requestOptions, tlsOptions, options.proxyOptions, options.agent);
+  recordResponseCookies(response, url.toString(), options.cookieJarState);
   const location = response.headers.location?.[0];
   if (requestOptions.redirect === 'manual' || !REDIRECT_STATUS_CODES.has(response.statusCode) || !location) {
     return response;
@@ -319,7 +442,17 @@ async function sendNodeRequest(url, requestOptions, tlsOptions, redirectCount = 
     delete nextOptions.body;
     deleteHeader(nextOptions.headers, 'content-type');
   }
-  return sendNodeRequest(redirectUrl, nextOptions, tlsOptions, redirectCount + 1, originalOrigin, options);
+  const includeExplicitCookies = options.includeExplicitCookies !== false && redirectUrl.origin === url.origin;
+  if (redirectUrl.origin !== url.origin) {
+    stripCrossOriginRedirectHeaders(nextOptions.headers);
+  }
+  applyCookieJarStateHeader(nextOptions.headers, redirectUrl, options.cookieJarState, {
+    includeExplicit: includeExplicitCookies
+  });
+  return sendNodeRequest(redirectUrl, nextOptions, tlsOptions, redirectCount + 1, originalOrigin, {
+    ...options,
+    includeExplicitCookies
+  });
 }
 
 function sendSingleNodeRequest(url, requestOptions, tlsOptions, proxyOptions = null, agent = null) {
