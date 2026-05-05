@@ -267,7 +267,7 @@ function importCookies(cookies, request) {
   if (!Array.isArray(cookies) || !cookies.length) {
     return;
   }
-  const importedCookies = cookies.filter((cookie) => cookie && cookie.disabled !== true && cookie.name);
+  const importedCookies = cookies.filter((cookie) => cookie && !isDisabledPostmanCookie(cookie) && cookie.name);
   const cookieHeader = importedCookies
     .map((cookie) => `${cookie.name}=${cookie.value ?? ''}`)
     .join('; ');
@@ -289,14 +289,14 @@ function postmanCookieMetadata(cookie) {
     value: cookie.value == null ? '' : String(cookie.value),
     domain: cookie.domain == null ? '' : String(cookie.domain),
     path: cookie.path == null ? '' : String(cookie.path),
-    expiresAt: postmanCookieExpiresAt(cookie.expiresAt ?? cookie.expires ?? cookie.expirationDate),
+    expiresAt: postmanCookieExpiresAt(firstPostmanCookieExpiry(cookie)),
     maxAge: cookie.maxAge == null ? '' : String(cookie.maxAge),
-    secure: cookie.secure === true,
-    httpOnly: cookie.httpOnly === true,
+    secure: postmanBooleanFlag(cookie.secure),
+    httpOnly: postmanBooleanFlag(cookie.httpOnly),
     sameSite: normalizePostmanSameSite(cookie.sameSite),
-    hostOnly: cookie.hostOnly === true || cookie.hostOnly === 'true',
+    hostOnly: postmanBooleanFlag(cookie.hostOnly),
     priority: normalizePostmanCookiePriority(cookie.priority),
-    partitioned: cookie.partitioned === true || cookie.partitioned === 'true',
+    partitioned: postmanBooleanFlag(cookie.partitioned),
     extensions: Array.isArray(cookie.extensions) ? cookie.extensions.map(String).slice(0, 25) : []
   };
 }
@@ -305,8 +305,41 @@ function postmanCookieExpiresAt(value) {
   if (value == null || value === '') {
     return '';
   }
+  const text = String(value).trim();
+  if (/^-?\d+(?:\.\d+)?$/.test(text)) {
+    const number = Number(text);
+    if (!Number.isFinite(number) || number <= 0) {
+      return String(value);
+    }
+    const millis = number >= 100000000000 ? number : number >= 100000000 ? number * 1000 : NaN;
+    if (Number.isFinite(millis)) {
+      const numericDate = new Date(millis);
+      return Number.isNaN(numericDate.getTime()) ? String(value) : numericDate.toISOString();
+    }
+    return String(value);
+  }
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? String(value) : date.toISOString();
+}
+
+function firstPostmanCookieExpiry(cookie) {
+  for (const value of [cookie?.expiresAt, cookie?.expires, cookie?.expirationDate]) {
+    if (value != null && String(value).trim() !== '') {
+      return value;
+    }
+  }
+  return '';
+}
+
+function isDisabledPostmanCookie(cookie) {
+  if (cookie?.disabled === true || String(cookie?.disabled || '').trim().toLowerCase() === 'true') {
+    return true;
+  }
+  return cookie?.enabled === false || String(cookie?.enabled || '').trim().toLowerCase() === 'false';
+}
+
+function postmanBooleanFlag(value) {
+  return value === true || String(value || '').trim().toLowerCase() === 'true';
 }
 
 function normalizePostmanSameSite(value) {

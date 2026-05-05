@@ -117,6 +117,125 @@ test('sends matching cookie jar cookies and stores response cookies', async () =
   }
 });
 
+test('stores redirect-hop cookies and sends them to later hops', async () => {
+  const seenCookies = [];
+  const server = await createServer(async (request, response) => {
+    seenCookies.push({ url: request.url, cookie: request.headers.cookie || '' });
+    if (request.url === '/start') {
+      response.statusCode = 302;
+      response.setHeader('Location', '/final');
+      response.setHeader('Set-Cookie', 'hop=one; Path=/; HttpOnly');
+      response.end('redirect');
+      return;
+    }
+    response.setHeader('Content-Type', 'application/json');
+    response.setHeader('Set-Cookie', 'final=two; Path=/; HttpOnly');
+    response.end(JSON.stringify({ cookie: request.headers.cookie || '' }));
+  });
+
+  try {
+    const result = await sendRequest({
+      method: 'GET',
+      url: `${server.baseUrl}/start`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      cookieJar: { enabled: true, storeResponses: true }
+    }, null);
+
+    assert.equal(result.finalUrl, `${server.baseUrl}/final`);
+    assert.deepEqual(seenCookies, [
+      { url: '/start', cookie: '' },
+      { url: '/final', cookie: 'hop=one' }
+    ]);
+    assert.equal(JSON.parse(result.body).cookie, 'hop=one');
+    assert.equal(result.updatedCookies.find((cookie) => cookie.name === 'hop')?.value, 'one');
+    assert.equal(result.updatedCookies.find((cookie) => cookie.name === 'final')?.value, 'two');
+  } finally {
+    await server.close();
+  }
+});
+
+test('stores redirect-hop cookies on node transport redirects', async () => {
+  const seenCookies = [];
+  const server = await createServer(async (request, response) => {
+    seenCookies.push({ url: request.url, cookie: request.headers.cookie || '' });
+    if (request.url === '/node-start') {
+      response.statusCode = 302;
+      response.setHeader('Location', '/node-final');
+      response.setHeader('Set-Cookie', 'nodeHop=one; Path=/; HttpOnly');
+      response.end('redirect');
+      return;
+    }
+    response.setHeader('Content-Type', 'application/json');
+    response.setHeader('Set-Cookie', 'nodeFinal=two; Path=/; HttpOnly');
+    response.end(JSON.stringify({ cookie: request.headers.cookie || '' }));
+  });
+
+  try {
+    const result = await sendRequest({
+      method: 'GET',
+      url: `${server.baseUrl}/node-start`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      auth: { type: 'ntlm', username: 'user', password: 'pass' },
+      cookieJar: { enabled: true, storeResponses: true }
+    }, null);
+
+    assert.equal(result.finalUrl, `${server.baseUrl}/node-final`);
+    assert.deepEqual(seenCookies, [
+      { url: '/node-start', cookie: '' },
+      { url: '/node-final', cookie: 'nodeHop=one' }
+    ]);
+    assert.equal(JSON.parse(result.body).cookie, 'nodeHop=one');
+    assert.equal(result.updatedCookies.find((cookie) => cookie.name === 'nodeHop')?.value, 'one');
+    assert.equal(result.updatedCookies.find((cookie) => cookie.name === 'nodeFinal')?.value, 'two');
+  } finally {
+    await server.close();
+  }
+});
+
+test('does not forward explicit auth or cookie headers across redirect origins', async () => {
+  let redirectedHeaders = null;
+  const target = await createServer(async (request, response) => {
+    redirectedHeaders = request.headers;
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({ cookie: request.headers.cookie || '' }));
+  });
+  const source = await createServer(async (_request, response) => {
+    response.statusCode = 302;
+    response.setHeader('Location', `${target.baseUrl}/landing`);
+    response.setHeader('Set-Cookie', 'hop=one; Path=/; HttpOnly');
+    response.end('redirect');
+  });
+
+  try {
+    const result = await sendRequest({
+      method: 'GET',
+      url: `${source.baseUrl}/start`,
+      queryParams: [],
+      headers: [
+        { enabled: true, key: 'Authorization', value: 'Bearer explicit-token' },
+        { enabled: true, key: 'Cookie', value: 'explicit=secret' }
+      ],
+      bodyType: 'NONE',
+      body: '',
+      cookieJar: { enabled: true, storeResponses: true }
+    }, null);
+
+    assert.equal(result.finalUrl, `${target.baseUrl}/landing`);
+    assert.equal(redirectedHeaders.authorization, undefined);
+    assert.equal(redirectedHeaders.cookie, 'hop=one');
+    assert.equal(JSON.parse(result.body).cookie, 'hop=one');
+  } finally {
+    await source.close();
+    await target.close();
+  }
+});
+
 test('sends user-bound file and multipart Postman bodies without arbitrary path reads', async (t) => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-attachments-'));
   t.after(async () => {
