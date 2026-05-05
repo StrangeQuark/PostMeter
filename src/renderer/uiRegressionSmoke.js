@@ -1430,6 +1430,7 @@
 
   async function assertSidebarPanelSmoke() {
     const originalEnvironments = structuredClone(workspace.environments || []);
+    const originalHistory = structuredClone(workspace.history || []);
     const originalActiveEnvironmentId = activeEnvironmentId;
     const originalActiveWorkspaceId = activeWorkspaceId;
     const originalSelectedWorkspaceId = selectedWorkspaceId;
@@ -1446,6 +1447,47 @@
         selectSidebarPanel(panel);
         assertUiSmoke(!document.querySelector(`[data-sidebar-panel-content="${panel}"]`).hidden, `Sidebar panel ${panel} did not open.`);
       }
+      workspace.history = [{
+        timestamp: new Date(0).toISOString(),
+        method: 'GET',
+        url: 'https://history-clear.example.test/widgets',
+        statusCode: 200,
+        durationMillis: 25
+      }];
+      renderHistory();
+      const historyTab = $('historyPanelTab');
+      assertUiSmoke(historyTab.getAttribute('aria-haspopup') === 'menu', 'History tab should expose a context menu.');
+      historyTab.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true,
+        cancelable: true,
+        clientX: 32,
+        clientY: 240
+      }));
+      const clearHistoryMenuItem = Array.from($('contextMenu').querySelectorAll('button'))
+        .find((button) => button.textContent.trim() === 'Clear History');
+      assertUiSmoke(!$('contextMenu').hidden, 'Right-clicking History should open its context menu.');
+      assertUiSmoke(clearHistoryMenuItem, 'History context menu should include Clear History.');
+      assertUiSmoke(clearHistoryMenuItem.classList.contains('danger'), 'Clear History should use the danger context menu style.');
+      clearHistoryMenuItem.click();
+      assertUiSmoke(!$('confirmActionModal').hidden, 'Clear History should ask for confirmation.');
+      assertUiSmoke($('confirmActionModalTitle').textContent === 'Clear history?', 'Clear History confirmation should use a specific title.');
+      assertUiSmoke($('confirmActionModalMessage').textContent.includes('cannot be undone'), 'Clear History confirmation should warn that clearing cannot be undone.');
+      assertUiSmoke($('confirmActionButton').textContent === 'Clear History', 'Clear History confirmation should label the destructive action.');
+      $('cancelConfirmActionButton').click();
+      await Promise.resolve();
+      assertUiSmoke(workspace.history.length === 1, 'Cancelling Clear History should keep history entries.');
+      historyTab.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true,
+        cancelable: true,
+        clientX: 32,
+        clientY: 240
+      }));
+      activateContextMenuItem('Clear History');
+      assertUiSmoke(!$('confirmActionModal').hidden, 'Activating Clear History should reopen the confirmation modal.');
+      $('confirmActionButton').click();
+      await waitForUiSmoke(() => workspace.history.length === 0, 'Confirming Clear History should remove history entries.', 3000, global);
+      assertUiSmoke(!$('historyList').querySelector('.history-item'), 'Confirming Clear History should clear the rendered history list.');
+      assertStatusIncludes('History cleared', 'Confirming Clear History should update the visible status.');
       workspace.environments = [];
       activeEnvironmentId = 'none';
       selectSidebarPanel('environments');
@@ -1533,6 +1575,7 @@
       assertUiSmoke($('requestEmptyPanel').hidden, 'Closing the last workspace tab should not show the create request screen.');
     } finally {
       workspace.environments = originalEnvironments;
+      workspace.history = originalHistory;
       activeEnvironmentId = originalActiveEnvironmentId;
       activeWorkspaceId = originalActiveWorkspaceId;
       selectedWorkspaceId = originalSelectedWorkspaceId;

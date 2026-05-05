@@ -411,6 +411,17 @@ function bindUi() {
   bindRequestTitleEditor();
   bindWorkspaceTitleEditor();
   bindEnvironmentTitleEditor();
+  bindHistoryContextMenu();
+}
+
+function bindHistoryContextMenu() {
+  const tab = $('historyPanelTab');
+  if (!tab) {
+    return;
+  }
+  attachTreeContextMenu(tab, [
+    ['Clear History', () => { void clearHistory(); }, 'danger']
+  ]);
 }
 
 function bindEnvironmentTitleEditor() {
@@ -3679,6 +3690,22 @@ function renderHistory() {
     });
     container.append(button);
   }
+}
+
+async function clearHistory() {
+  if (!(await confirmActionModal({
+    title: 'Clear history?',
+    message: 'Clearing the history cannot be undone. Do you want to proceed?',
+    confirmLabel: 'Clear History',
+    danger: true
+  }))) {
+    return false;
+  }
+  workspace.history = [];
+  renderHistory();
+  renderWorkspacePanel();
+  setStatus('History cleared.');
+  return true;
 }
 
 async function sendActiveRequest() {
