@@ -123,11 +123,73 @@
       state.openWorkspaceTabs = state.openWorkspaceTabs.filter((tab) => Boolean(workspaceForTab(tab)));
     }
 
-    function trimTabs(fieldName, activeKey) {
-      while (state[fieldName].length > state.maxOpenRequestTabs) {
-        const removableIndex = state[fieldName].findIndex((tab) => tab.key !== activeKey);
-        state[fieldName].splice(removableIndex >= 0 ? removableIndex : 0, 1);
+    function openTabLimit() {
+      return Number.isInteger(state.maxOpenRequestTabs) && state.maxOpenRequestTabs > 0
+        ? state.maxOpenRequestTabs
+        : rendererState.MAX_OPEN_TABS || 128;
+    }
+
+    function openTabCount() {
+      return (state.openRequestTabs || []).length
+        + (state.openEnvironmentTabs || []).length
+        + (state.openWorkspaceTabs || []).length;
+    }
+
+    function reportOpenTabLimit() {
+      const limit = openTabLimit();
+      const message = `Cannot open more than ${limit} tabs. Close an existing tab before opening another.`;
+      setStatus(message);
+      notifyUser('Open Tab Limit Reached', message);
+    }
+
+    function canOpenTab(tabs, key, options = {}) {
+      if (!key) {
+        return false;
       }
+      if ((tabs || []).some((tab) => tab.key === key)) {
+        return true;
+      }
+      if (openTabCount() < openTabLimit()) {
+        return true;
+      }
+      if (options.report !== false) {
+        reportOpenTabLimit();
+      }
+      return false;
+    }
+
+    function canOpenAdditionalRequestTab(options = {}) {
+      return canOpenTab(state.openRequestTabs, '__new-request-tab__', options);
+    }
+
+    function canOpenRequestTabFor(collectionId, requestId, options = {}) {
+      if (!requestId) {
+        return false;
+      }
+      const key = collectionId ? `request:${collectionId}:${requestId}` : `draft:${requestId}`;
+      return canOpenTab(state.openRequestTabs, key, options);
+    }
+
+    function canOpenEnvironmentTabFor(environmentId, options = {}) {
+      if (!environmentId) {
+        return false;
+      }
+      return canOpenTab(state.openEnvironmentTabs, `environment:${environmentId}`, options);
+    }
+
+    function canOpenAdditionalEnvironmentTab(options = {}) {
+      return canOpenTab(state.openEnvironmentTabs, '__new-environment-tab__', options);
+    }
+
+    function canOpenWorkspaceTabFor(workspaceId, options = {}) {
+      if (!workspaceId) {
+        return false;
+      }
+      return canOpenTab(state.openWorkspaceTabs, `workspace:${workspaceId}`, options);
+    }
+
+    function canOpenAdditionalWorkspaceTab(options = {}) {
+      return canOpenTab(state.openWorkspaceTabs, '__new-workspace-tab__', options);
     }
 
     function ensureOpenEnvironmentTabForActive(config = {}) {
@@ -138,6 +200,9 @@
       const key = rendererState.activeEnvironmentTabKey(state);
       let tab = state.openEnvironmentTabs.find((candidate) => candidate.key === key);
       if (!tab) {
+        if (!canOpenTab(state.openEnvironmentTabs, key)) {
+          return null;
+        }
         tab = {
           key,
           environmentId: state.activeEnvironmentId,
@@ -155,7 +220,6 @@
       if (config.dirty === true) {
         tab.dirty = true;
       }
-      trimTabs('openEnvironmentTabs', key);
       renderRequestTabs();
       return tab;
     }
@@ -168,6 +232,9 @@
       const key = rendererState.activeWorkspaceTabKey(state);
       let tab = state.openWorkspaceTabs.find((candidate) => candidate.key === key);
       if (!tab) {
+        if (!canOpenTab(state.openWorkspaceTabs, key)) {
+          return null;
+        }
         tab = {
           key,
           workspaceId: workspaceItem.id,
@@ -179,7 +246,6 @@
       if (config.dirty === true) {
         tab.dirty = true;
       }
-      trimTabs('openWorkspaceTabs', key);
       renderRequestTabs();
       return tab;
     }
@@ -192,6 +258,9 @@
       const key = rendererState.activeRequestTabKey(state);
       let tab = state.openRequestTabs.find((candidate) => candidate.key === key);
       if (!tab) {
+        if (!canOpenTab(state.openRequestTabs, key)) {
+          return null;
+        }
         tab = state.activeCollectionId
           ? {
               key,
@@ -228,7 +297,6 @@
       if (config.dirty === true || tab.draft) {
         tab.dirty = true;
       }
-      trimTabs('openRequestTabs', key);
       renderRequestTabs();
       return tab;
     }
@@ -636,6 +704,12 @@
     }
 
     return {
+      canOpenAdditionalEnvironmentTab,
+      canOpenAdditionalRequestTab,
+      canOpenAdditionalWorkspaceTab,
+      canOpenEnvironmentTabFor,
+      canOpenRequestTabFor,
+      canOpenWorkspaceTabFor,
       closeEnvironmentTab,
       closeRequestTab,
       closeWorkspaceTab,

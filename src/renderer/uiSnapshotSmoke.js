@@ -151,7 +151,7 @@
     }, global);
 
     await captureUiSnapshotState('workspace-sandbox', () => {
-      selectSidebarPanel('workspaces');
+      selectWorkspaceItem(activeWorkspaceId || workspaceListItems()[0]?.id);
       refreshSandboxPackageStatus();
       refreshSandboxFileBindings();
       renderWorkspacePanel();

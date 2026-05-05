@@ -5,7 +5,7 @@ const MAIN_PANELS = new Set(['request', 'environment', 'workspace']);
 const REQUEST_EDITOR_TABS = new Set(['params', 'headers', 'auth', 'cookies', 'body', 'tests', 'scripts', 'examples', 'collectionVariables']);
 const RESULTS_TABS = new Set(['response', 'load', 'runner']);
 const SESSION_VERSION = 1;
-const MAX_OPEN_TABS = 12;
+const MAX_OPEN_TABS = 128;
 
 function defaultSessionState() {
   return {

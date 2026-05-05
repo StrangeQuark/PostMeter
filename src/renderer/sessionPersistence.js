@@ -14,7 +14,7 @@
 
     return {
       activeWorkspaceId: normalizeId(state.activeWorkspaceId),
-      selectedWorkspaceId: normalizeId(state.selectedWorkspaceId) || normalizeId(state.activeWorkspaceId),
+      selectedWorkspaceId: normalizeId(state.selectedWorkspaceId),
       activeEnvironmentId: normalizeEnvironmentId(state.activeEnvironmentId),
       activeCollectionId: normalizeId(state.activeCollectionId),
       activeFolderId: normalizeId(state.activeFolderId),
@@ -80,6 +80,12 @@
       state.selectedWorkspaceId = session.selectedWorkspaceId;
     } else if (workspaceItems().some((item) => item.id === state.activeWorkspaceId)) {
       state.selectedWorkspaceId = state.activeWorkspaceId;
+    }
+    if (
+      session.activeMainPanel === 'workspace'
+      && !(state.openWorkspaceTabs || []).some((tab) => tab.workspaceId === state.selectedWorkspaceId)
+    ) {
+      state.selectedWorkspaceId = '';
     }
     if (session.activeEnvironmentId === 'none' || environmentExists(state, session.activeEnvironmentId)) {
       state.activeEnvironmentId = session.activeEnvironmentId;
@@ -299,7 +305,8 @@
 
   function shouldRestoreMainPanel(panel, state, workspaceItems, findRequest) {
     if (panel === 'workspace') {
-      return workspaceItems.some((item) => item.id === state.selectedWorkspaceId);
+      return !state.selectedWorkspaceId
+        || (state.openWorkspaceTabs || []).some((tab) => tab.workspaceId === state.selectedWorkspaceId);
     }
     if (panel === 'environment') {
       return state.activeEnvironmentId === 'none' || environmentExists(state, state.activeEnvironmentId);
@@ -315,7 +322,8 @@
 
   function shouldRestoreSidebarPanel(panel, state, workspaceItems) {
     if (panel === 'workspaces') {
-      return workspaceItems.some((item) => item.id === state.selectedWorkspaceId);
+      return !state.selectedWorkspaceId
+        || workspaceItems.some((item) => item.id === state.selectedWorkspaceId);
     }
     if (panel === 'environments') {
       return state.activeEnvironmentId === 'none' || environmentExists(state, state.activeEnvironmentId);

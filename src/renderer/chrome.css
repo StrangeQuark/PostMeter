@@ -811,6 +811,9 @@ h2 {
 
 .request-tab-bar {
   display: flex;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   min-height: 38px;
   margin: 0;
   padding: 0 8px;
@@ -829,9 +832,9 @@ h2 {
   position: relative;
   display: inline-flex;
   align-items: center;
-  flex: 0 0 auto;
+  flex: 1 0 84px;
   max-width: 240px;
-  min-width: 128px;
+  min-width: 84px;
   min-height: 38px;
   margin: 0;
   border-right: 1px solid var(--line);
@@ -856,7 +859,7 @@ h2 {
   min-width: 0;
   min-height: 38px;
   margin: 0;
-  padding: 0 6px 0 12px;
+  padding: 0 10px 0 12px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -866,6 +869,11 @@ h2 {
 
 .request-tab-button.active {
   color: var(--text);
+}
+
+.request-tab-item:hover .request-tab-button,
+.request-tab-item.active .request-tab-button {
+  padding-right: 30px;
 }
 
 .request-tab-method {
@@ -898,10 +906,13 @@ h2 {
 .request-tab-close {
   display: inline-grid;
   place-items: center;
-  flex: 0 0 auto;
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  z-index: 1;
   width: 22px;
   height: 22px;
-  margin-left: 2px;
+  transform: translateY(-50%);
   padding: 0;
   border: 0;
   border-radius: 4px;
@@ -909,6 +920,15 @@ h2 {
   color: var(--muted);
   font-size: 16px;
   line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.request-tab-item:hover .request-tab-close,
+.request-tab-item.active .request-tab-close,
+.request-tab-close:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .request-tab-close:hover:not(:disabled),

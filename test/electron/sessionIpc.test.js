@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { registerSessionIpc } = require('../../electron/sessionIpc');
+const { MAX_OPEN_TABS } = require('../../src/core/sessionState');
 
 test('session IPC registers stable load/save channels', async () => {
   const handlers = new Map();
@@ -46,7 +47,7 @@ test('session IPC registers stable load/save channels', async () => {
   assert.equal(session.activeWorkspaceId, 'Synced Workspace.json');
 });
 
-test('session IPC rejects invalid session payloads before persistence', async () => {
+test('session IPC accepts many tabs under the bounded limit and rejects invalid payloads before persistence', async () => {
   const handlers = new Map();
   const syncHandlers = new Map();
   let saveCalls = 0;
@@ -76,8 +77,21 @@ test('session IPC rejects invalid session payloads before persistence', async ()
     setSession: () => {}
   });
 
-  const tooManyTabs = {
+  const validManyTabs = {
     openRequestTabs: Array.from({ length: 13 }, (_, index) => ({
+      collectionId: 'collection',
+      key: `request:${index}`,
+      requestId: `request-${index}`
+    }))
+  };
+  assert.equal((await handlers.get('session:save')(null, validManyTabs)).openRequestTabs.length, 13);
+  const validSyncEvent = { returnValue: undefined };
+  syncHandlers.get('session:saveSync')(validSyncEvent, validManyTabs);
+  assert.equal(validSyncEvent.returnValue.openRequestTabs.length, 13);
+  assert.equal(saveCalls, 2);
+
+  const tooManyTabs = {
+    openRequestTabs: Array.from({ length: MAX_OPEN_TABS + 1 }, (_, index) => ({
       collectionId: 'collection',
       key: `request:${index}`,
       requestId: `request-${index}`
@@ -85,9 +99,9 @@ test('session IPC rejects invalid session payloads before persistence', async ()
   };
   await assert.rejects(
     () => handlers.get('session:save')(null, tooManyTabs),
-    /Invalid IPC payload: session\.openRequestTabs cannot contain more than 12 items/
+    new RegExp(`Invalid IPC payload: session\\.openRequestTabs cannot contain more than ${MAX_OPEN_TABS} items`)
   );
-  assert.equal(saveCalls, 0);
+  assert.equal(saveCalls, 2);
 
   assert.throws(
     () => syncHandlers.get('session:saveSync')({ returnValue: undefined }, {
@@ -95,5 +109,5 @@ test('session IPC rejects invalid session payloads before persistence', async ()
     }),
     /Invalid IPC payload: session\.openRequestTabs\[0\]\.dirty must be a boolean/
   );
-  assert.equal(saveCalls, 0);
+  assert.equal(saveCalls, 2);
 });

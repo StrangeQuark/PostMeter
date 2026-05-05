@@ -1,4 +1,6 @@
 (function attachRendererState(global) {
+  const MAX_OPEN_TABS = 128;
+
   function createRendererState() {
     return {
       workspace: null,
@@ -33,7 +35,7 @@
       activeModalResolver: null,
       selectedDraftSaveCollectionId: '',
       selectedExportCollectionId: '',
-      maxOpenRequestTabs: 12
+      maxOpenRequestTabs: MAX_OPEN_TABS
     };
   }
 
@@ -157,6 +159,7 @@
   }
 
   const exported = {
+    MAX_OPEN_TABS,
     activeEnvironmentTabKey,
     activeRequestTabKey,
     activeWorkspaceTabKey,

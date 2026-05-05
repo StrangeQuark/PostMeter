@@ -902,6 +902,30 @@ function ensureOpenRequestTabForActive(options = {}) {
   return requestTabState.ensureOpenRequestTabForActive(options);
 }
 
+function canOpenAdditionalRequestTab(options = {}) {
+  return requestTabState.canOpenAdditionalRequestTab(options);
+}
+
+function canOpenRequestTabFor(collectionId, requestId, options = {}) {
+  return requestTabState.canOpenRequestTabFor(collectionId, requestId, options);
+}
+
+function canOpenAdditionalEnvironmentTab(options = {}) {
+  return requestTabState.canOpenAdditionalEnvironmentTab(options);
+}
+
+function canOpenEnvironmentTabFor(environmentId, options = {}) {
+  return requestTabState.canOpenEnvironmentTabFor(environmentId, options);
+}
+
+function canOpenAdditionalWorkspaceTab(options = {}) {
+  return requestTabState.canOpenAdditionalWorkspaceTab(options);
+}
+
+function canOpenWorkspaceTabFor(workspaceId, options = {}) {
+  return requestTabState.canOpenWorkspaceTabFor(workspaceId, options);
+}
+
 function selectRequestTab(tab) {
   collectActiveEditorState();
   requestTabState.selectRequestTab(tab, { collect: false });
@@ -1149,6 +1173,9 @@ async function saveDraftRequestToCollection(draftRequest, collectionId, options 
   const previousActiveRequestId = activeRequestId;
   const oldKey = `draft:${draftId}`;
   const existingTab = options.tab || openRequestTabs.find((candidate) => candidate.key === oldKey);
+  if (!existingTab && !canOpenRequestTabFor(collection.id, draftId)) {
+    return null;
+  }
   const previousTab = existingTab ? structuredClone(existingTab) : null;
   const request = structuredClone(draftRequest);
   request.name = uniqueName(request.name || 'Untitled Request', allRequestNames(collection));
@@ -1699,15 +1726,23 @@ function selectSidebarPanel(panel) {
   if (panel === 'collections') {
     activeMainPanel = 'request';
   } else if (panel === 'environments') {
-    if (activeEnvironmentId === 'none' && workspace.environments?.length) {
-      activeEnvironmentId = workspace.environments[0].id;
+    const activeTab = openEnvironmentTabs.find((tab) => tab.key === activeEnvironmentTabKey());
+    const fallbackTab = activeTab || openEnvironmentTabs[openEnvironmentTabs.length - 1] || null;
+    if (fallbackTab) {
+      selectEnvironmentTabWithoutCollect(fallbackTab);
+      return;
     }
+    activeEnvironmentId = 'none';
     activeMainPanel = 'environment';
-    ensureOpenEnvironmentTabForActive();
   } else if (panel === 'workspaces') {
-    selectedWorkspaceId ||= activeWorkspaceId || workspaceListItems()[0]?.id || null;
+    const activeTab = openWorkspaceTabs.find((tab) => tab.key === activeWorkspaceTabKey());
+    const fallbackTab = activeTab || openWorkspaceTabs[openWorkspaceTabs.length - 1] || null;
+    if (fallbackTab) {
+      selectWorkspaceTabWithoutCollect(fallbackTab);
+      return;
+    }
+    selectedWorkspaceId = '';
     activeMainPanel = 'workspace';
-    ensureOpenWorkspaceTabForActive();
   }
   renderAll();
 }
@@ -2800,6 +2835,9 @@ function environmentNode(environment) {
     treeId: environment.id
   });
   button.addEventListener('click', () => {
+    if (!canOpenEnvironmentTabFor(environment.id)) {
+      return;
+    }
     collectActiveEditorState();
     activeEnvironmentId = environment.id;
     activeSidebarPanel = 'environments';
@@ -3240,6 +3278,9 @@ function selectWorkspaceItem(workspaceId) {
   if (!workspaceItem) {
     return null;
   }
+  if (!canOpenWorkspaceTabFor(workspaceItem.id)) {
+    return null;
+  }
   collectActiveEditorState();
   selectedWorkspaceId = workspaceItem.id;
   activeSidebarPanel = 'workspaces';
@@ -3312,6 +3353,10 @@ function collectionNode(collection) {
     treeId: collection.id
   });
   button.addEventListener('click', () => {
+    const firstRequest = firstRequestInCollection(collection);
+    if (firstRequest?.request && !canOpenRequestTabFor(collection.id, firstRequest.request.id)) {
+      return;
+    }
     collectActiveEditorState();
     activeMainPanel = 'request';
     activeCollectionId = collection.id;
@@ -3344,6 +3389,10 @@ function folderNode(collection, folder) {
     treeId: folder.id
   });
   button.addEventListener('click', () => {
+    const firstRequest = firstRequestInFolder(folder);
+    if (firstRequest?.request && !canOpenRequestTabFor(collection.id, firstRequest.request.id)) {
+      return;
+    }
     collectActiveEditorState();
     activeMainPanel = 'request';
     activeCollectionId = collection.id;
@@ -3376,6 +3425,9 @@ function requestNode(collection, folder, request) {
     treeId: request.id
   });
   button.addEventListener('click', () => {
+    if (!canOpenRequestTabFor(collection.id, request.id)) {
+      return;
+    }
     collectActiveEditorState();
     activeMainPanel = 'request';
     activeCollectionId = collection.id;
@@ -3826,6 +3878,9 @@ function historyRequestName(item) {
 }
 
 function openHistoryItemAsDraftRequest(item) {
+  if (!canOpenAdditionalRequestTab()) {
+    return null;
+  }
   collectActiveEditorState();
   const method = normalizeHistoryRequestMethod(item);
   const url = String(item?.url || '');
@@ -4332,6 +4387,9 @@ async function prepareForWorkspaceChange(actionLabel) {
 
 async function newWorkspace() {
   try {
+    if (!canOpenAdditionalWorkspaceTab()) {
+      return null;
+    }
     collectActiveEditorState();
     const previousWorkspaceIds = new Set(workspaceListItems().map((item) => item.id));
     const loaded = await window.postmeter.workspace.create();
@@ -4552,6 +4610,9 @@ function newCollection() {
 }
 
 function newRequest(collectionId = activeCollectionId, folderId = activeFolderId) {
+  if (!canOpenAdditionalRequestTab()) {
+    return null;
+  }
   collectActiveEditorState();
   activeMainPanel = 'request';
   const collection = workspace.collections.find((item) => item.id === collectionId);
@@ -4631,6 +4692,9 @@ function newRequestObject(name) {
 }
 
 function newEnvironment() {
+  if (!canOpenAdditionalEnvironmentTab()) {
+    return null;
+  }
   collectActiveEditorState();
   workspace.environments ||= [];
   const environment = {
@@ -4669,6 +4733,9 @@ async function deleteEnvironment(environment = activeEnvironment()) {
 }
 
 async function renameEnvironment(environment) {
+  if (!canOpenEnvironmentTabFor(environment?.id)) {
+    return;
+  }
   const value = await promptTextInput({
     title: 'Rename environment',
     message: 'Enter an environment name.',
@@ -4891,6 +4958,9 @@ function renameRequest(collection, folder, request) {
   if (!request) {
     return null;
   }
+  if (!canOpenRequestTabFor(collection?.id || activeCollectionId, request.id)) {
+    return null;
+  }
   collectActiveEditorState();
   activeSidebarPanel = 'collections';
   activeMainPanel = 'request';
@@ -4904,6 +4974,9 @@ function renameRequest(collection, folder, request) {
 }
 
 function duplicateRequest(collection, folder, request) {
+  if (!canOpenAdditionalRequestTab()) {
+    return null;
+  }
   const duplicate = structuredClone(request);
   duplicate.id = crypto.randomUUID();
   duplicate.name = uniqueName(`${request.name} Copy`, allRequestNames(collection));

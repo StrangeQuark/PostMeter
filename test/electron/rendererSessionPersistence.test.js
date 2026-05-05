@@ -78,6 +78,27 @@ test('renderer session persistence serializes active tabs, drafts, and dirty tab
   assert.equal(session.draftRequests.length, 1);
 });
 
+test('renderer session persistence preserves an empty workspace selection after closing the workspace tab', () => {
+  const state = createRendererState();
+  state.activeWorkspaceId = 'Local Workspace.json';
+  state.selectedWorkspaceId = '';
+  state.activeSidebarPanel = 'workspaces';
+  state.activeMainPanel = 'workspace';
+  state.openWorkspaceTabs = [];
+
+  const session = buildRendererSession({
+    state,
+    doc: { querySelector: () => null },
+    requestForTab: () => null,
+    environmentForTab: () => null
+  });
+
+  assert.equal(session.activeWorkspaceId, 'Local Workspace.json');
+  assert.equal(session.selectedWorkspaceId, '');
+  assert.equal(session.activeMainPanel, 'workspace');
+  assert.deepEqual(session.openWorkspaceTabs, []);
+});
+
 test('renderer session persistence serializes and restores shared request-owned collection-variable and cookie state', () => {
   const state = createRendererState();
   state.workspace = {
@@ -305,6 +326,35 @@ test('renderer session persistence does not auto-open a workspace tab for the se
   });
 
   assert.equal(state.selectedWorkspaceId, 'Local Workspace.json');
+  assert.deepEqual(state.openWorkspaceTabs, []);
+});
+
+test('renderer session persistence restores a closed workspace tab as the empty workspace pane', () => {
+  const state = createRendererState();
+  state.workspace = {
+    collections: [],
+    environments: []
+  };
+
+  restoreRendererSession({
+    state,
+    session: {
+      activeWorkspaceId: 'Local Workspace.json',
+      selectedWorkspaceId: 'Local Workspace.json',
+      activeSidebarPanel: 'workspaces',
+      activeMainPanel: 'workspace',
+      openWorkspaceTabs: []
+    },
+    workspaceListItems: () => [
+      { id: 'Local Workspace.json', name: 'Local Workspace', path: '/tmp/Local Workspace.json', current: true, deletable: false }
+    ],
+    findFolder,
+    findRequest
+  });
+
+  assert.equal(state.selectedWorkspaceId, '');
+  assert.equal(state.activeSidebarPanel, 'workspaces');
+  assert.equal(state.activeMainPanel, 'workspace');
   assert.deepEqual(state.openWorkspaceTabs, []);
 });
 

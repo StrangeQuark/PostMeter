@@ -1525,7 +1525,11 @@
       assertStatusIncludes('History cleared', 'Confirming Clear History should update the visible status.');
       workspace.environments = [];
       activeEnvironmentId = 'none';
+      openEnvironmentTabs = [];
       selectSidebarPanel('environments');
+      assertUiSmoke(activeSidebarPanel === 'environments', 'Selecting Environments should switch the sidebar panel.');
+      assertUiSmoke(activeMainPanel === 'environment', 'Selecting Environments should switch the main pane to environment mode.');
+      assertUiSmoke(openEnvironmentTabs.length === 0, 'Selecting Environments should not automatically open an environment tab.');
       assertUiSmoke(!$('environmentEmptyPanel').hidden, 'Environments without a selection should show the create environment screen.');
       assertUiSmoke($('environmentMainPanel').hidden, 'Environment editor should be hidden when no environment is selected.');
       assertUiSmoke($('requestEditorPanel').hidden, 'Request editor should be hidden when no environment is selected.');
@@ -1567,6 +1571,12 @@
       assertUiSmoke(environmentVariableRow.querySelector('[aria-label^="Remove environment variable"]'), 'Environment variable remove button should expose a contextual accessible label.');
       assertUiSmoke(!$('environmentsSidebarPanel').querySelector('#environmentMainTitle'), 'Environment editor controls should not render in the sidebar.');
       assertUiSmoke($('environmentsList').textContent.includes(environment.name), 'Environments panel did not render the new environment.');
+      const environmentOpenTabCount = openEnvironmentTabs.length;
+      selectSidebarPanel('collections');
+      selectSidebarPanel('environments');
+      assertUiSmoke(activeEnvironmentId === environment.id, 'Selecting Environments with an open environment tab should restore that tab.');
+      assertUiSmoke(!$('environmentMainPanel').hidden, 'Selecting Environments with an open environment tab should show the environment editor.');
+      assertUiSmoke(openEnvironmentTabs.length === environmentOpenTabCount, 'Selecting Environments should not open a duplicate environment tab.');
       openRequestTabs = [];
       openWorkspaceTabs = [];
       const closeEnvironment = closeEnvironmentTab(openEnvironmentTabs.find((tab) => tab.environmentId === environment.id));
@@ -1585,8 +1595,16 @@
         assertUiSmoke(!$('requestEmptyPanel').hidden, 'Selecting Collections without an active request should show the create request screen.');
         assertUiSmoke($('requestEditorPanel').hidden, 'Selecting Collections without an active request should keep the request editor hidden.');
       }
+      openWorkspaceTabs = [];
+      selectedWorkspaceId = '';
       selectSidebarPanel('workspaces');
       assertUiSmoke($('workspacesList').textContent.includes(workspaceDisplayName()), 'Workspaces panel did not render the current workspace list item.');
+      assertUiSmoke(activeMainPanel === 'workspace', 'Selecting Workspaces should switch the main pane to workspace mode.');
+      assertUiSmoke(!$('workspaceEmptyPanel').hidden, 'Selecting Workspaces should show the select workspace screen.');
+      assertUiSmoke(openWorkspaceTabs.length === 0, 'Selecting Workspaces should not automatically open a workspace tab.');
+      const currentWorkspaceButton = $('workspacesList').querySelector('button');
+      assertUiSmoke(currentWorkspaceButton, 'Workspaces panel did not render a selectable workspace row.');
+      currentWorkspaceButton.click();
       assertUiSmoke(!$('workspaceMainPanel').hidden, 'Selecting Workspaces should show the main workspace editor.');
       assertUiSmoke(!$('saveWorkspacePanelButton'), 'Workspace details should not render a Save Workspace button.');
       assertUiSmoke(!$('importWorkspacePanelButton'), 'Workspace details should not render an import button.');
@@ -1600,6 +1618,13 @@
       assertUiSmoke(workspaceMainPanel.scrollHeight <= workspaceMainPanel.clientHeight || workspaceMainPanel.scrollTop > 0, 'Workspace details panel should allow reaching diagnostics controls below the fold.');
       assertUiSmoke($('switchWorkspacePanelButton').disabled, 'Current workspace details should disable the switch button.');
       assertUiSmoke($('requestTabBar').textContent.includes(workspaceDisplayName()), 'Selecting Workspaces should open a workspace tab.');
+      const workspaceOpenTabCount = openWorkspaceTabs.length;
+      const selectedWorkspaceTabId = selectedWorkspaceId;
+      selectSidebarPanel('collections');
+      selectSidebarPanel('workspaces');
+      assertUiSmoke(selectedWorkspaceId === selectedWorkspaceTabId, 'Selecting Workspaces with an open workspace tab should restore that tab.');
+      assertUiSmoke(!$('workspaceMainPanel').hidden, 'Selecting Workspaces with an open workspace tab should show workspace details.');
+      assertUiSmoke(openWorkspaceTabs.length === workspaceOpenTabCount, 'Selecting Workspaces should not open a duplicate workspace tab.');
       openRequestTabs = [];
       openEnvironmentTabs = [];
       closeWorkspaceTab(openWorkspaceTabs.find((tab) => tab.workspaceId === selectedWorkspaceId));
@@ -1685,6 +1710,76 @@
     assertUiSmoke(tabCloseButtons.every((button) => button.tabIndex === -1), 'Opened tab close buttons should not enter the sequential tab order.');
     activeOpenTab.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
     assertUiSmoke(activeRequest()?.id === secondRequest.id, 'ArrowRight on an opened request tab should activate the next tab.');
+    const tabBarWidth = $('requestTabBar').clientWidth || 800;
+    const targetTabCount = Math.max(6, Math.floor(tabBarWidth / 100));
+    for (let index = openRequestTabs.length; index < targetTabCount; index += 1) {
+      const extraRequest = newRequest(collection.id, null);
+      extraRequest.name = `Shrink Fit Request ${index + 1}`;
+      renderAll();
+    }
+    assertUiSmoke(
+      $('requestTabBar').scrollWidth <= $('requestTabBar').clientWidth + 4,
+      `Opened tabs should shrink before the tab bar scrolls. scrollWidth=${$('requestTabBar').scrollWidth} clientWidth=${$('requestTabBar').clientWidth} tabs=${openRequestTabs.length} widths=${Array.from($('requestTabBar').querySelectorAll('.request-tab-item')).map((item) => Math.round(item.getBoundingClientRect().width)).join(',')}.`
+    );
+    const overflowTargetTabCount = Math.max(16, Math.ceil(tabBarWidth / 84) + 3);
+    for (let index = openRequestTabs.length; index < overflowTargetTabCount; index += 1) {
+      const extraRequest = newRequest(collection.id, null);
+      extraRequest.name = `Overflow Tab Request ${index + 1}`;
+      renderAll();
+    }
+    const renderedOpenTabItems = Array.from($('requestTabBar').querySelectorAll('.request-tab-item'));
+    const totalOpenTabs = openRequestTabs.length + openEnvironmentTabs.length + openWorkspaceTabs.length;
+    assertUiSmoke(openRequestTabs.length >= overflowTargetTabCount, 'Opening tabs past the old twelve-tab threshold should keep all opened tabs in state.');
+    assertUiSmoke(renderedOpenTabItems.length === totalOpenTabs, 'Rendered opened tabs should match the open tab state after overflow.');
+    assertUiSmoke($('requestTabBar').textContent.includes('First Tab Request'), 'Older opened tabs should remain available after the tab bar overflows.');
+    assertUiSmoke(
+      $('requestTabBar').scrollWidth > $('requestTabBar').clientWidth + 4,
+      `Opened tabs should expand the scrollable tab strip after reaching minimum width. scrollWidth=${$('requestTabBar').scrollWidth} clientWidth=${$('requestTabBar').clientWidth} tabs=${openRequestTabs.length}.`
+    );
+    const activeCloseButton = $('requestTabBar').querySelector('.request-tab-item.active .request-tab-close');
+    const inactiveCloseButton = $('requestTabBar').querySelector('.request-tab-item:not(.active) .request-tab-close');
+    assertUiSmoke(getComputedStyle(activeCloseButton).opacity === '1', 'Active opened tab should show its close button.');
+    assertUiSmoke(getComputedStyle(inactiveCloseButton).opacity === '0', 'Inactive opened tabs should hide close buttons until hover.');
+    const openTabLimit = PostMeterRendererState.MAX_OPEN_TABS || 128;
+    const cappedRequests = Array.from({ length: openTabLimit }, (_value, index) => ({
+      id: `cap-request-${index + 1}`,
+      name: `Cap Request ${index + 1}`,
+      method: 'GET',
+      url: '',
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      auth: { type: 'none' },
+      assertions: [],
+      variables: [],
+      examples: []
+    }));
+    collection.requests = cappedRequests;
+    collection.folders = [];
+    activeCollectionId = collection.id;
+    activeFolderId = null;
+    activeRequestId = cappedRequests[0].id;
+    openRequestTabs = cappedRequests.map((request) => ({
+      key: `request:${collection.id}:${request.id}`,
+      collectionId: collection.id,
+      requestId: request.id,
+      folderId: null,
+      draft: false,
+      dirty: false,
+      createdUnsaved: false,
+      snapshot: JSON.stringify(request)
+    }));
+    renderAll();
+    const cappedRequestCount = collection.requests.length;
+    const cappedFirstTabKey = openRequestTabs[0]?.key;
+    const blockedRequest = newRequest(collection.id, null);
+    assertUiSmoke(blockedRequest === null, 'New Request should be refused when the request tab limit is reached.');
+    assertUiSmoke(collection.requests.length === cappedRequestCount, 'Refusing a new request tab should not create a request.');
+    assertUiSmoke(openRequestTabs.length === openTabLimit, 'Refusing a new request tab should not change the open tab count.');
+    assertUiSmoke(openRequestTabs[0]?.key === cappedFirstTabKey, 'Refusing a new request tab should not evict older tabs.');
+    assertUiSmoke(lastStatusMessage.includes(`Cannot open more than ${openTabLimit} tabs`), 'Tab limit refusal should set a visible status message.');
+    assertUiSmoke(lastUserNotification?.title === 'Open Tab Limit Reached', 'Tab limit refusal should notify the user.');
 
     workspace.collections = [];
     clearActiveWorkspaceItem();

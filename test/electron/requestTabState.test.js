@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { createRendererState } = require('../../src/renderer/rendererState');
+const { MAX_OPEN_TABS, createRendererState } = require('../../src/renderer/rendererState');
 const { createRequestTabState } = require('../../src/renderer/requestTabState');
 
 test('request tab state opens a saved request tab with a snapshot and folder metadata', () => {
@@ -47,6 +47,250 @@ test('request tab state opens a saved request tab with a snapshot and folder met
   assert.equal(tab.createdUnsaved, true);
   assert.equal(tab.snapshot, JSON.stringify({ id: 'request-1', name: 'Fetch Users' }));
   assert.equal(tabRenders, 1);
+});
+
+test('request tab state keeps more than the old twelve-tab threshold open', () => {
+  const state = createRendererState();
+  const requests = Array.from({ length: 16 }, (_value, index) => ({
+    id: `request-${index + 1}`,
+    name: `Request ${index + 1}`
+  }));
+  state.workspace = {
+    collections: [
+      {
+        id: 'collection-1',
+        requests,
+        folders: []
+      }
+    ],
+    environments: []
+  };
+  state.activeCollectionId = 'collection-1';
+  let tabRenders = 0;
+
+  const tabState = createRequestTabState({
+    state,
+    activeCollection: () => state.workspace.collections[0],
+    activeEnvironment: () => null,
+    activeRequest: () => requests.find((request) => request.id === state.activeRequestId),
+    activeWorkspaceItem: () => null,
+    findRequest(collection, requestId) {
+      const request = collection.requests.find((item) => item.id === requestId);
+      return request ? { request, folder: null } : null;
+    },
+    renderRequestTabs: () => { tabRenders += 1; },
+    workspaceListItems: () => []
+  });
+
+  for (const request of requests) {
+    state.activeRequestId = request.id;
+    tabState.ensureOpenRequestTabForActive();
+  }
+
+  assert.equal(state.openRequestTabs.length, 16);
+  assert.equal(state.openRequestTabs[0].requestId, 'request-1');
+  assert.equal(state.openRequestTabs.at(-1).requestId, 'request-16');
+  assert.equal(tabRenders, 16);
+});
+
+test('request tab state refuses to open request tabs beyond the bounded limit', () => {
+  const state = createRendererState();
+  const requests = Array.from({ length: MAX_OPEN_TABS + 1 }, (_value, index) => ({
+    id: `request-${index + 1}`,
+    name: `Request ${index + 1}`
+  }));
+  state.workspace = {
+    collections: [
+      {
+        id: 'collection-1',
+        requests,
+        folders: []
+      }
+    ],
+    environments: []
+  };
+  state.activeCollectionId = 'collection-1';
+  state.activeRequestId = requests.at(-1).id;
+  state.openRequestTabs = requests.slice(0, MAX_OPEN_TABS).map((request) => ({
+    key: `request:collection-1:${request.id}`,
+    collectionId: 'collection-1',
+    requestId: request.id,
+    dirty: false,
+    snapshot: JSON.stringify(request)
+  }));
+  const statuses = [];
+  const notifications = [];
+  let tabRenders = 0;
+
+  const tabState = createRequestTabState({
+    state,
+    activeCollection: () => state.workspace.collections[0],
+    activeEnvironment: () => null,
+    activeRequest: () => requests.at(-1),
+    activeWorkspaceItem: () => null,
+    findRequest(collection, requestId) {
+      const request = collection.requests.find((item) => item.id === requestId);
+      return request ? { request, folder: null } : null;
+    },
+    notifyUser: (title, message) => notifications.push({ title, message }),
+    renderRequestTabs: () => { tabRenders += 1; },
+    setStatus: (message) => statuses.push(message),
+    workspaceListItems: () => []
+  });
+
+  const tab = tabState.ensureOpenRequestTabForActive();
+
+  assert.equal(tab, null);
+  assert.equal(state.openRequestTabs.length, MAX_OPEN_TABS);
+  assert.equal(state.openRequestTabs[0].requestId, 'request-1');
+  assert.equal(state.openRequestTabs.at(-1).requestId, `request-${MAX_OPEN_TABS}`);
+  assert.equal(state.openRequestTabs.some((candidate) => candidate.requestId === `request-${MAX_OPEN_TABS + 1}`), false);
+  assert.equal(tabRenders, 0);
+  assert.match(statuses.at(-1), new RegExp(`Cannot open more than ${MAX_OPEN_TABS} tabs`));
+  assert.deepEqual(notifications.at(-1), {
+    title: 'Open Tab Limit Reached',
+    message: statuses.at(-1)
+  });
+});
+
+test('request tab state refuses tab-open checks with missing target ids', () => {
+  const state = createRendererState();
+  const statuses = [];
+  const notifications = [];
+  const tabState = createRequestTabState({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => null,
+    activeWorkspaceItem: () => null,
+    notifyUser: (title, message) => notifications.push({ title, message }),
+    renderRequestTabs: () => {},
+    setStatus: (message) => statuses.push(message),
+    workspaceListItems: () => []
+  });
+
+  assert.equal(tabState.canOpenRequestTabFor('collection-1', ''), false);
+  assert.equal(tabState.canOpenEnvironmentTabFor(null), false);
+  assert.equal(tabState.canOpenWorkspaceTabFor(undefined), false);
+  assert.deepEqual(statuses, []);
+  assert.deepEqual(notifications, []);
+});
+
+test('request tab state refuses to open environment and workspace tabs beyond the bounded limit', () => {
+  const state = createRendererState();
+  const environments = Array.from({ length: MAX_OPEN_TABS + 1 }, (_value, index) => ({
+    id: `environment-${index + 1}`,
+    name: `Environment ${index + 1}`,
+    variables: []
+  }));
+  const workspaceItems = Array.from({ length: MAX_OPEN_TABS + 1 }, (_value, index) => ({
+    id: `Workspace ${index + 1}.json`,
+    name: `Workspace ${index + 1}`
+  }));
+  state.workspace = {
+    collections: [],
+    environments
+  };
+  state.activeEnvironmentId = environments.at(-1).id;
+  state.selectedWorkspaceId = workspaceItems.at(-1).id;
+  state.openEnvironmentTabs = environments.slice(0, MAX_OPEN_TABS).map((environment) => ({
+    key: `environment:${environment.id}`,
+    environmentId: environment.id,
+    dirty: false,
+    snapshot: JSON.stringify(environment)
+  }));
+  state.openWorkspaceTabs = workspaceItems.slice(0, MAX_OPEN_TABS).map((workspaceItem) => ({
+    key: `workspace:${workspaceItem.id}`,
+    workspaceId: workspaceItem.id,
+    dirty: false
+  }));
+  const statuses = [];
+  const notifications = [];
+
+  const tabState = createRequestTabState({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => environments.at(-1),
+    activeRequest: () => null,
+    activeWorkspaceItem: () => workspaceItems.at(-1),
+    notifyUser: (title, message) => notifications.push({ title, message }),
+    renderRequestTabs: () => {},
+    setStatus: (message) => statuses.push(message),
+    workspaceListItems: () => workspaceItems
+  });
+
+  assert.equal(tabState.ensureOpenEnvironmentTabForActive(), null);
+  assert.equal(state.openEnvironmentTabs.length, MAX_OPEN_TABS);
+  assert.equal(state.openEnvironmentTabs.some((candidate) => candidate.environmentId === environments.at(-1).id), false);
+  assert.match(statuses.at(-1), new RegExp(`Cannot open more than ${MAX_OPEN_TABS} tabs`));
+  assert.deepEqual(notifications.at(-1), {
+    title: 'Open Tab Limit Reached',
+    message: statuses.at(-1)
+  });
+
+  assert.equal(tabState.ensureOpenWorkspaceTabForActive(), null);
+  assert.equal(state.openWorkspaceTabs.length, MAX_OPEN_TABS);
+  assert.equal(state.openWorkspaceTabs.some((candidate) => candidate.workspaceId === workspaceItems.at(-1).id), false);
+  assert.match(statuses.at(-1), new RegExp(`Cannot open more than ${MAX_OPEN_TABS} tabs`));
+  assert.deepEqual(notifications.at(-1), {
+    title: 'Open Tab Limit Reached',
+    message: statuses.at(-1)
+  });
+});
+
+test('request tab state applies the open tab limit across request environment and workspace tabs', () => {
+  const state = createRendererState();
+  const requests = Array.from({ length: MAX_OPEN_TABS }, (_value, index) => ({
+    id: `request-${index + 1}`,
+    name: `Request ${index + 1}`
+  }));
+  const environment = { id: 'environment-1', name: 'Environment 1', variables: [] };
+  const workspaceItem = { id: 'Workspace.json', name: 'Workspace' };
+  state.workspace = {
+    collections: [
+      {
+        id: 'collection-1',
+        requests,
+        folders: []
+      }
+    ],
+    environments: [environment]
+  };
+  state.activeEnvironmentId = environment.id;
+  state.selectedWorkspaceId = workspaceItem.id;
+  state.openRequestTabs = requests.map((request) => ({
+    key: `request:collection-1:${request.id}`,
+    collectionId: 'collection-1',
+    requestId: request.id,
+    dirty: false,
+    snapshot: JSON.stringify(request)
+  }));
+  const statuses = [];
+  const notifications = [];
+
+  const tabState = createRequestTabState({
+    state,
+    activeCollection: () => state.workspace.collections[0],
+    activeEnvironment: () => environment,
+    activeRequest: () => null,
+    activeWorkspaceItem: () => workspaceItem,
+    notifyUser: (title, message) => notifications.push({ title, message }),
+    renderRequestTabs: () => {},
+    setStatus: (message) => statuses.push(message),
+    workspaceListItems: () => [workspaceItem]
+  });
+
+  assert.equal(tabState.ensureOpenEnvironmentTabForActive(), null);
+  assert.equal(state.openEnvironmentTabs.length, 0);
+  assert.match(statuses.at(-1), new RegExp(`Cannot open more than ${MAX_OPEN_TABS} tabs`));
+  assert.deepEqual(notifications.at(-1), {
+    title: 'Open Tab Limit Reached',
+    message: statuses.at(-1)
+  });
+
+  assert.equal(tabState.ensureOpenWorkspaceTabForActive(), null);
+  assert.equal(state.openWorkspaceTabs.length, 0);
+  assert.match(statuses.at(-1), new RegExp(`Cannot open more than ${MAX_OPEN_TABS} tabs`));
 });
 
 test('request tab state discards and closes an active draft tab', async () => {
