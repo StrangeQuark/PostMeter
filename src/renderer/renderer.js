@@ -322,13 +322,8 @@ function bindUi() {
     onNewRequest: newRequest,
     onNewWorkspace: () => { void newWorkspace(); },
     onNewEnvironment: () => newEnvironment(),
-    onSaveWorkspace: () => {
-      void saveWorkspace(true, { promptForDraft: true }).catch((error) => {
-        const message = error.message || String(error);
-        setStatus(`Workspace save failed: ${message}`);
-        notifyUser('Workspace Save Failed', message);
-      });
-    },
+    onSaveRequest: () => { void saveRequestFromPane(); },
+    onSaveEnvironment: () => { void saveEnvironmentFromPane(); },
     onImportWorkspace: importWorkspace,
     onExportWorkspace: exportWorkspace,
     onImportCollection: importCollection,
@@ -459,8 +454,13 @@ function handleEnvironmentTitleKeydown(event) {
   }
   if (event.key === 'Enter') {
     event.preventDefault();
+    const shouldSave = (environmentTitleInputValue() || 'Untitled Environment')
+      !== (environmentTitleEditOriginal || 'Untitled Environment');
     finishEnvironmentTitleEdit();
     title.blur();
+    if (shouldSave) {
+      void saveEnvironmentFromPane();
+    }
   } else if (event.key === 'Escape') {
     event.preventDefault();
     finishEnvironmentTitleEdit({ revert: true });
@@ -534,8 +534,13 @@ function handleRequestTitleKeydown(event) {
   }
   if (event.key === 'Enter') {
     event.preventDefault();
+    const shouldSave = (requestTitleInputValue() || 'Untitled Request')
+      !== (requestTitleEditOriginal || 'Untitled Request');
     finishRequestTitleEdit();
     title.blur();
+    if (shouldSave) {
+      void saveRequestFromPane();
+    }
   } else if (event.key === 'Escape') {
     event.preventDefault();
     finishRequestTitleEdit({ revert: true });
@@ -3360,6 +3365,7 @@ function renderRequestEditor() {
   const request = activeRequest();
   if (!request) {
     renderRequestTitle(null);
+    $('saveRequestButton').disabled = true;
     $('methodSelect').value = 'GET';
     updateMethodSelectClass();
     $('urlInput').value = '';
@@ -3383,6 +3389,7 @@ function renderRequestEditor() {
     updateRequestEditorLanguages();
     return;
   }
+  $('saveRequestButton').disabled = false;
   $('addRequestVariableButton').disabled = false;
   $('addExampleButton').disabled = false;
   $('captureResponseExampleButton').disabled = !canCaptureResponseExampleForRequest(request);
@@ -3498,6 +3505,7 @@ function renderEnvironmentEditor() {
   title.tabIndex = environment ? 0 : -1;
   title.setAttribute('aria-disabled', environment ? 'false' : 'true');
   title.setAttribute('aria-label', 'Environment name');
+  $('saveEnvironmentButton').disabled = !environment;
   $('deleteEnvironmentButton').disabled = !environment;
   $('addVariableButton').disabled = !environment;
   if (!environment) {
@@ -3995,6 +4003,44 @@ function setOauthButtonsBusy(isBusy) {
 
 function renderOauthProgress(progress) {
   rendererWorkflows.renderOauthProgress(progress);
+}
+
+async function saveRequestFromPane() {
+  if (!activeRequest()) {
+    setStatus('Select a request before saving.');
+    return false;
+  }
+  try {
+    const saved = await saveWorkspace(true, { promptForDraft: true });
+    if (saved) {
+      setStatus('Request saved.');
+    }
+    return saved;
+  } catch (error) {
+    const message = error.message || String(error);
+    setStatus(`Request save failed: ${message}`);
+    notifyUser('Request Save Failed', message);
+    return false;
+  }
+}
+
+async function saveEnvironmentFromPane() {
+  if (!activeEnvironment()) {
+    setStatus('Select an environment before saving.');
+    return false;
+  }
+  try {
+    const saved = await saveWorkspace(true);
+    if (saved) {
+      setStatus('Environment saved.');
+    }
+    return saved;
+  } catch (error) {
+    const message = error.message || String(error);
+    setStatus(`Environment save failed: ${message}`);
+    notifyUser('Environment Save Failed', message);
+    return false;
+  }
 }
 
 async function saveWorkspace(showStatus = true, options = {}) {

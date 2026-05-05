@@ -319,6 +319,7 @@
 }
 
 .request-line,
+.request-actions,
 .table-actions,
 .environment-actions,
 .load-controls,
@@ -618,6 +619,7 @@ h2 {
   display: none;
 }
 
+.request-main-header,
 .environment-main-header,
 .workspace-main-header {
   display: flex;
@@ -628,6 +630,13 @@ h2 {
   border-bottom: 1px solid var(--line);
 }
 
+.request-main-header {
+  margin-bottom: 8px;
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.request-main-header > div:first-child,
 .environment-main-header > div:first-child,
 .workspace-main-header > div:first-child {
   flex: 1 1 auto;
@@ -683,6 +692,7 @@ h2 {
   cursor: default;
 }
 
+.request-main-header .request-actions,
 .environment-main-header .environment-actions,
 .workspace-main-header .workspace-actions {
   flex: 0 0 auto;

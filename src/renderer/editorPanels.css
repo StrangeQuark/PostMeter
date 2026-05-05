@@ -3,7 +3,7 @@
 }
 
 .request-main-title.editable-title {
-  margin-bottom: 8px;
+  margin-bottom: 0;
 }
 
 .request-line {
@@ -98,7 +98,6 @@
 }
 
 .table-actions,
-.environment-actions,
 .load-controls {
   margin-bottom: 8px;
 }

@@ -295,7 +295,7 @@
     assertUiSmoke(await notificationResult === true, 'Notification modal should resolve when closed.');
     assertUiSmoke(document.activeElement === notificationTrigger, 'Notification modal should restore focus to the opener.');
 
-    const draftTrigger = $('saveButton');
+    const draftTrigger = $('exportMenuButton');
     draftTrigger.focus();
     renderSaveDraftCollectionList();
     const draftResult = showModal('saveDraftRequestModal', null);
@@ -304,7 +304,7 @@
     assertUiSmoke(await draftResult === null, 'Save-draft modal should resolve null when cancelled.');
     assertUiSmoke(document.activeElement === draftTrigger, 'Save-draft modal should restore focus to the opener.');
 
-    const vaultTrigger = $('saveButton');
+    const vaultTrigger = $('exportMenuButton');
     vaultTrigger.focus();
     activeVaultPromptPayload = {
       collectionName: 'Smoke Collection',
@@ -1381,6 +1381,14 @@
     }
   }
 
+  function pressEditableTitleEnter(title) {
+    title.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'Enter'
+    }));
+  }
+
   async function editWorkspaceTitle(value, options = {}) {
     const title = $('workspaceMainTitle');
     title.click();
@@ -1460,6 +1468,9 @@
       const environmentTitle = $('environmentMainTitle');
       assertUiSmoke(!document.getElementById('environmentNameInput'), 'Environment editor should not render a separate name text box.');
       assertUiSmoke(!$('environmentMainPanel').querySelector('.environment-main-header h2'), 'Environment editor should not render a redundant Environment label above the title.');
+      assertUiSmoke($('saveEnvironmentButton')?.textContent === 'Save Environment', 'Environment editor should render a Save Environment button.');
+      assertUiSmoke(!$('saveEnvironmentButton').disabled, 'Environment editor should enable the environment save button.');
+      assertUiSmoke($('deleteEnvironmentButton')?.textContent === 'Delete Environment', 'Environment delete button should use the full Delete Environment label.');
       assertUiSmoke(environmentTitle.getAttribute('aria-label') === 'Environment name', 'Environment title should expose an accessible name.');
       assertUiSmoke(getComputedStyle(environmentTitle).whiteSpace === 'nowrap', 'Environment title should stay on a single line.');
       const environmentHeader = $('environmentMainPanel').querySelector('.environment-main-header');
@@ -1500,7 +1511,7 @@
       selectSidebarPanel('workspaces');
       assertUiSmoke($('workspacesList').textContent.includes(workspaceDisplayName()), 'Workspaces panel did not render the current workspace list item.');
       assertUiSmoke(!$('workspaceMainPanel').hidden, 'Selecting Workspaces should show the main workspace editor.');
-      assertUiSmoke(!$('saveWorkspacePanelButton'), 'Workspace details should not render a save button.');
+      assertUiSmoke(!$('saveWorkspacePanelButton'), 'Workspace details should not render a Save Workspace button.');
       assertUiSmoke(!$('importWorkspacePanelButton'), 'Workspace details should not render an import button.');
       assertUiSmoke($('requestEditorPanel').hidden, 'Request editor should be hidden while viewing workspace details.');
       assertUiSmoke(document.querySelector('.results').hidden, 'Response panel should be hidden while viewing workspace details.');
@@ -1559,6 +1570,8 @@
     assertUiSmoke(activeMainPanel === 'request', 'Selecting a request tab should switch the main pane to request mode.');
     assertUiSmoke(activeRequest() === draft, 'Selecting a request tab should restore the active request.');
     assertUiSmoke(!document.getElementById('requestNameInput'), 'Request editor should not render a separate request name text box.');
+    assertUiSmoke($('saveRequestButton')?.textContent === 'Save Request', 'Request editor should render a Save Request button.');
+    assertUiSmoke(!$('saveRequestButton').disabled, 'Request editor should enable the request save button.');
     assertUiSmoke($('requestNameTitle').getAttribute('aria-label') === 'Request name', 'Request title should expose an accessible name.');
     assertUiSmoke(getComputedStyle($('requestNameTitle')).whiteSpace === 'nowrap', 'Request title should stay on a single line.');
     $('requestNameTitle').click();
@@ -1606,16 +1619,24 @@
     const originalPostmeterWorkspaceSave = window.postmeter?.workspace?.save;
     const originalSaveRequest = window.__postmeterSaveRequest;
     const originalSaveEnvironment = window.__postmeterSaveEnvironment;
+    let requestSaveCalls = 0;
+    let environmentSaveCalls = 0;
     try {
       window.__postmeterSaveWorkspace = async (nextWorkspace) => nextWorkspace;
-      window.__postmeterSaveRequest = async (payload) => ({
-        request: payload.request,
-        collectionVariables: payload.collectionVariables,
-        cookies: payload.cookies
-      });
-      window.__postmeterSaveEnvironment = async (payload) => ({
-        environment: payload.environment
-      });
+      window.__postmeterSaveRequest = async (payload) => {
+        requestSaveCalls += 1;
+        return {
+          request: payload.request,
+          collectionVariables: payload.collectionVariables,
+          cookies: payload.cookies
+        };
+      };
+      window.__postmeterSaveEnvironment = async (payload) => {
+        environmentSaveCalls += 1;
+        return {
+          environment: payload.environment
+        };
+      };
       workspace.collections = [];
       clearActiveWorkspaceItem();
       resetRequestTabs();
@@ -1677,11 +1698,14 @@
       if (window.postmeter?.workspace && originalPostmeterWorkspaceSave) {
         window.postmeter.workspace.save = async (nextWorkspace) => nextWorkspace;
       }
-      window.__postmeterSaveRequest = async (payload) => ({
-        request: payload.request,
-        collectionVariables: payload.collectionVariables,
-        cookies: payload.cookies
-      });
+      window.__postmeterSaveRequest = async (payload) => {
+        requestSaveCalls += 1;
+        return {
+          request: payload.request,
+          collectionVariables: payload.collectionVariables,
+          cookies: payload.cookies
+        };
+      };
       draftRequests.delete(failedDraft.id);
       for (let index = openRequestTabs.length - 1; index >= 0; index -= 1) {
         if (openRequestTabs[index].requestId === failedDraft.id) {
@@ -1693,16 +1717,32 @@
       activeRequestId = null;
       renderAll();
 
-	      const request = newRequest(collection.id, null);
-	      await saveWorkspace(false);
-	      const savedRequestName = request.name;
-	      editRequestTitle('Changed Saved Request');
-	      const savedTab = openRequestTabs.find((tab) => tab.requestId === request.id);
+      const request = newRequest(collection.id, null);
+      await saveWorkspace(false);
+      const savedRequestName = request.name;
+      const requestSaveCallsBeforeBlurEdit = requestSaveCalls;
+      editRequestTitle('Changed Saved Request');
+      const savedTab = openRequestTabs.find((tab) => tab.requestId === request.id);
+      assertUiSmoke(requestSaveCalls === requestSaveCallsBeforeBlurEdit, 'Blurring a changed request title should not save the request.');
       const closeSaved = closeRequestTab(savedTab);
       assertUiSmoke(!$('unsavedRequestModal').hidden, 'Closing a dirty saved request should show the unsaved request modal.');
       $('closeWithoutSavingButton').click();
       await closeSaved;
       assertUiSmoke(collection.requests.some((item) => item.id === request.id && item.name === savedRequestName), 'Closing without saving should restore the saved request snapshot.');
+
+      activeCollectionId = collection.id;
+      activeFolderId = null;
+      activeRequestId = request.id;
+      ensureOpenRequestTabForActive();
+      renderAll();
+      const requestSaveCallsBeforeEnterEdit = requestSaveCalls;
+      const enterSavedRequestName = 'Enter Saved Request';
+      editRequestTitle(enterSavedRequestName, { commit: false });
+      pressEditableTitleEnter($('requestNameTitle'));
+      await waitForUiSmoke(() => requestSaveCalls === requestSaveCallsBeforeEnterEdit + 1, 'Pressing Enter after changing the request title should save the request.', 3000, global);
+      const enterSavedRequestTab = openRequestTabs.find((tab) => tab.requestId === request.id);
+      assertUiSmoke(enterSavedRequestTab?.dirty === false, 'Saving a request title with Enter should clear the request dirty state.');
+      assertUiSmoke(collection.requests.some((item) => item.id === request.id && item.name === enterSavedRequestName), 'Saving a request title with Enter should persist the request name.');
 
       activeCollectionId = collection.id;
       activeFolderId = null;
@@ -1730,7 +1770,7 @@
       $('closeWithoutSavingButton').click();
       await closeHistory;
       const restoredHistoryRequest = collection.requests.find((item) => item.id === request.id);
-      assertUiSmoke(restoredHistoryRequest?.name === savedRequestName, 'Closing a history-updated request without saving should restore the saved request name.');
+      assertUiSmoke(restoredHistoryRequest?.name === enterSavedRequestName, 'Closing a history-updated request without saving should restore the saved request name.');
       assertUiSmoke(restoredHistoryRequest?.url === savedRequestUrl, 'Closing a history-updated request without saving should restore the saved request URL.');
 
       workspace.environments = [];
@@ -1738,8 +1778,10 @@
       const environment = newEnvironment();
       await saveWorkspace(false);
       const savedEnvironmentName = environment.name;
+      const environmentSaveCallsBeforeBlurEdit = environmentSaveCalls;
       editEnvironmentTitle('Changed Saved Environment');
       const environmentTab = openEnvironmentTabs.find((tab) => tab.environmentId === environment.id);
+      assertUiSmoke(environmentSaveCalls === environmentSaveCallsBeforeBlurEdit, 'Blurring a changed environment title should not save the environment.');
       assertUiSmoke(environmentTab?.dirty === true, 'Editing an environment should mark its tab as dirty.');
       assertUiSmoke(!$('requestTabBar').querySelector('.environment-tab-button .request-tab-dirty').hidden, 'Dirty environment tab should show an unsaved marker.');
       const closeEnvironment = closeEnvironmentTab(environmentTab);
@@ -1747,6 +1789,19 @@
       $('closeWithoutSavingButton').click();
       await closeEnvironment;
       assertUiSmoke(workspace.environments.some((item) => item.id === environment.id && item.name === savedEnvironmentName), 'Closing an environment without saving should restore the saved snapshot.');
+
+      activeEnvironmentId = environment.id;
+      activeSidebarPanel = 'environments';
+      activeMainPanel = 'environment';
+      ensureOpenEnvironmentTabForActive();
+      renderAll();
+      const environmentSaveCallsBeforeEnterEdit = environmentSaveCalls;
+      editEnvironmentTitle('Enter Saved Environment', { commit: false });
+      pressEditableTitleEnter($('environmentMainTitle'));
+      await waitForUiSmoke(() => environmentSaveCalls === environmentSaveCallsBeforeEnterEdit + 1, 'Pressing Enter after changing the environment title should save the environment.', 3000, global);
+      const enterSavedEnvironmentTab = openEnvironmentTabs.find((tab) => tab.environmentId === environment.id);
+      assertUiSmoke(enterSavedEnvironmentTab?.dirty === false, 'Saving an environment title with Enter should clear the environment dirty state.');
+      assertUiSmoke(workspace.environments.some((item) => item.id === environment.id && item.name === 'Enter Saved Environment'), 'Saving an environment title with Enter should persist the environment name.');
     } finally {
       window.__postmeterSaveWorkspace = originalSaveWorkspace;
       if (window.postmeter?.workspace && originalPostmeterWorkspaceSave) {

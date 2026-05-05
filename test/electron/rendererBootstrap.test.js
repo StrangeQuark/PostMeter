@@ -89,7 +89,7 @@ test('renderer bootstrap closes toolbar menus and resets trigger aria state', ()
   assert.equal(triggers.every((button) => button.attributes['aria-expanded'] === 'false'), true);
 });
 
-test('renderer accessibility source keeps splitters body editor and toolbar save recovery wired', async () => {
+test('renderer accessibility source keeps splitters body editor and pane save recovery wired', async () => {
   const root = path.join(__dirname, '..', '..');
   const indexSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'index.html'), 'utf8');
   const chromeSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'chrome.css'), 'utf8');
@@ -107,8 +107,10 @@ test('renderer accessibility source keeps splitters body editor and toolbar save
   assert.match(bootstrapSource, /aria-orientation/);
   assert.match(bootstrapSource, /ArrowDown/);
   assert.match(bootstrapSource, /ArrowUp/);
-  assert.match(rendererSource, /Workspace save failed:/);
-  assert.match(rendererSource, /Workspace Save Failed/);
+  assert.match(rendererSource, /Request save failed:/);
+  assert.match(rendererSource, /Request Save Failed/);
+  assert.match(rendererSource, /Environment save failed:/);
+  assert.match(rendererSource, /Environment Save Failed/);
   assert.match(rendererSource, /const previousSettings = structuredClone\(workspace\.settings\)/);
   assert.match(rendererSource, /workspace\.settings = previousSettings/);
   assert.match(indexSource, /<fieldset class="workspace-diagnostics-panel" aria-describedby="diagnosticsPrivacySummary diagnosticsSensitiveWarning">/);
@@ -342,12 +344,12 @@ test('tree context menus close on Tab and reset trigger expanded state', () => {
   }
 });
 
-test('renderer bootstrap routes toolbar save failures to visible recovery state', async () => {
+test('renderer bootstrap binds pane save buttons', () => {
   const elements = new Map([
-    ['saveButton', createElement()]
+    ['saveRequestButton', createElement()],
+    ['saveEnvironmentButton', createElement()]
   ]);
-  let status = '';
-  let notification = null;
+  const calls = [];
 
   bindUi({
     doc: {
@@ -360,23 +362,14 @@ test('renderer bootstrap routes toolbar save failures to visible recovery state'
       addEventListener() {}
     },
     windowObject: { addEventListener() {} },
-    onSaveWorkspace: () => {
-      Promise.reject(new Error('disk full')).catch((error) => {
-        const message = error.message || String(error);
-        status = `Workspace save failed: ${message}`;
-        notification = { title: 'Workspace Save Failed', message };
-      });
-    }
+    onSaveRequest: () => calls.push('request'),
+    onSaveEnvironment: () => calls.push('environment')
   });
 
-  elements.get('saveButton').dispatch('click');
-  await Promise.resolve();
+  elements.get('saveRequestButton').dispatch('click');
+  elements.get('saveEnvironmentButton').dispatch('click');
 
-  assert.equal(status, 'Workspace save failed: disk full');
-  assert.deepEqual(notification, {
-    title: 'Workspace Save Failed',
-    message: 'disk full'
-  });
+  assert.deepEqual(calls, ['request', 'environment']);
 });
 
 test('renderer bootstrap binds workspace sandbox control buttons', () => {

@@ -24,9 +24,6 @@
         <button id="newEnvironmentMenuButton" role="menuitem">Environment</button>
       </div>
     </div>
-    <div class="toolbar-group workspace-group" aria-label="Workspace">
-      <button id="saveButton">Save</button>
-    </div>
     <div class="toolbar-group menu-group" aria-label="Import">
       <button id="importMenuButton" class="menu-trigger" aria-haspopup="menu" aria-expanded="false">Import</button>
       <div id="importMenu" class="toolbar-menu" role="menu" aria-labelledby="importMenuButton" hidden>
@@ -110,7 +107,12 @@
         </div>
       </section>
       <section id="requestEditorPanel" class="panel request-panel" role="tabpanel">
-        <div id="requestNameTitle" class="request-main-title editable-title" tabindex="0" aria-label="Request name">Select a request</div>
+        <div class="request-main-header">
+          <div id="requestNameTitle" class="request-main-title editable-title" tabindex="0" aria-label="Request name">Select a request</div>
+          <div class="request-actions">
+            <button id="saveRequestButton" type="button">Save Request</button>
+          </div>
+        </div>
         <div class="request-line">
           <select id="methodSelect" aria-label="HTTP method">
             <option class="method-get">GET</option>
@@ -414,7 +416,8 @@
             <div id="environmentMainTitle" class="environment-main-title editable-title" tabindex="0" aria-label="Environment name">Select an environment</div>
           </div>
           <div class="environment-actions">
-            <button id="deleteEnvironmentButton">Delete</button>
+            <button id="saveEnvironmentButton" type="button">Save Environment</button>
+            <button id="deleteEnvironmentButton">Delete Environment</button>
             <button id="addVariableButton">Add Variable</button>
           </div>
         </div>
