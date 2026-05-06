@@ -27,24 +27,6 @@ function initResizablePanes() {
       return event.clientY - rect.top - 10;
     }
   });
-  setupDragResize('responsePaneResize', {
-    cssVariable: '--response-body-width',
-    fallbackPixels: 420,
-    label: 'Resize response body and headers panels',
-    orientation: 'vertical',
-    currentPixels: () => measuredElementPixels('#responseBody', 'width'),
-    max: () => {
-      const grid = document.querySelector('.response-grid');
-      const rect = grid.getBoundingClientRect();
-      return Math.max(220, rect.width - 220);
-    },
-    min: 220,
-    valueFromEvent: (event) => {
-      const grid = document.querySelector('.response-grid');
-      const rect = grid.getBoundingClientRect();
-      return event.clientX - rect.left;
-    }
-  });
 }
 
 function setupDragResize(id, config) {
@@ -192,8 +174,7 @@ function readLayoutVar(name) {
 function defaultLayoutVars() {
   return {
     '--sidebar-width': '300px',
-    '--request-height': '52%',
-    '--response-body-width': '1.25fr'
+    '--request-height': '52%'
   };
 }
 

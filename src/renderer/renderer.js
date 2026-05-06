@@ -4,7 +4,7 @@ const THEME_OPTIONS = ['system', 'light', 'dark'];
 const RENDERER_STATE_DEFAULTS = PostMeterRendererState.createRendererState();
 const TAB_PANEL_IDS = {
   request: ['paramsTab', 'headersTab', 'authTab', 'cookiesTab', 'bodyTab', 'testsTab', 'scriptsTab', 'examplesTab', 'collectionVariablesTab'],
-  results: ['responseTab', 'testResultsTab', 'visualizerTab', 'loadTab']
+  results: ['responseTab', 'responseHeadersTab', 'responseCookiesTab', 'testResultsTab', 'visualizerTab', 'loadTab']
 };
 
 let workspace = RENDERER_STATE_DEFAULTS.workspace;
@@ -6016,14 +6016,33 @@ function displayResponse(response) {
   $('responseTime').textContent = `${response.durationMillis} ms`;
   $('responseSize').textContent = formatBytes(response.responseBytes);
   $('finalUrl').textContent = response.finalUrl;
-  $('responseHeaders').value = Object.entries(response.headers || {})
-    .map(([key, values]) => `${key}: ${values.join(', ')}`)
-    .join('\n');
+  $('responseHeaders').value = formatResponseHeaders(response);
+  $('responseCookies').value = formatResponseCookies(response);
   $('responseBody').value = PostMeterResponseFormatting.formatBody(response);
   CodeEditor.setLanguage?.($('responseHeaders'), 'headers');
+  CodeEditor.setLanguage?.($('responseCookies'), 'headers');
   CodeEditor.setLanguage?.($('responseBody'), responseBodyCodeLanguage(response, $('responseBody').value));
   displayTestResults(response);
   displayVisualizer(response.testScriptResult?.visualizer);
+}
+
+function formatResponseHeaders(response) {
+  return Object.entries(response?.headers || {})
+    .map(([key, values]) => `${key}: ${normalizeResponseHeaderValues(values).join(', ')}`)
+    .join('\n');
+}
+
+function formatResponseCookies(response) {
+  return Object.entries(response?.headers || {})
+    .filter(([key]) => key.toLowerCase() === 'set-cookie')
+    .flatMap(([, values]) => normalizeResponseHeaderValues(values))
+    .join('\n');
+}
+
+function normalizeResponseHeaderValues(values) {
+  return (Array.isArray(values) ? values : [values])
+    .filter((value) => value != null)
+    .map((value) => String(value));
 }
 
 function responseBodyCodeLanguage(response, formattedBody = '') {

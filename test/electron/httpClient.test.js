@@ -7,13 +7,17 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const { promisify } = require('node:util');
-const { loadClientCertificateOptions, sendRequest, validateRequest } = require('../../src/core/httpClient');
+const { buildUrl, loadClientCertificateOptions, sendRequest, validateRequest } = require('../../src/core/httpClient');
 
 const execFileAsync = promisify(execFile);
 
 test('validates URL, scheme, method, and header names before sending', () => {
   assert.deepEqual(validateRequest({ method: 'GET', url: '' }, null), ['Request URL is required.']);
+  assert.deepEqual(validateRequest({ method: 'GET', url: 'not-a-url' }, null), ['URL is not a valid URI.']);
+  assert.deepEqual(validateRequest({ method: 'GET', url: 'google.com' }, null), []);
+  assert.deepEqual(validateRequest({ method: 'GET', url: 'localhost:3000/health' }, null), []);
   assert.deepEqual(validateRequest({ method: 'GET', url: 'file:///tmp/example' }, null), ['Only http and https URLs are supported.']);
+  assert.deepEqual(validateRequest({ method: 'GET', url: 'ftp://example.test' }, null), ['Only http and https URLs are supported.']);
   assert.deepEqual(validateRequest({ method: 'TRACE', url: 'https://example.test' }, null), ['Unsupported HTTP method: TRACE.']);
   assert.deepEqual(
     validateRequest({ method: 'GET', url: 'https://example.test', headers: [{ enabled: true, key: 'Bad Header', value: 'x' }] }, null),
@@ -29,6 +33,36 @@ test('validates URL, scheme, method, and header names before sending', () => {
     }, null),
     ['Client certificate auth requires an https URL.']
   );
+});
+
+test('normalizes scheme-less request URLs before sending', async () => {
+  assert.equal(buildUrl({ method: 'GET', url: 'google.com', queryParams: [] }, null).toString(), 'http://google.com/');
+  assert.equal(buildUrl({ method: 'GET', url: '//api.example.test/v1', queryParams: [] }, null).toString(), 'http://api.example.test/v1');
+  assert.equal(buildUrl({ method: 'GET', url: 'localhost:3000/health', queryParams: [] }, null).toString(), 'http://localhost:3000/health');
+  assert.equal(buildUrl({ method: 'GET', url: '127.0.0.1:3000/health', queryParams: [] }, null).toString(), 'http://127.0.0.1:3000/health');
+
+  const server = await createServer(async (request, response) => {
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({ method: request.method, url: request.url }));
+  });
+
+  try {
+    const port = new URL(server.baseUrl).port;
+    const result = await sendRequest({
+      method: 'GET',
+      url: `127.0.0.1:${port}/scheme-less`,
+      queryParams: [{ enabled: true, key: 'q', value: 'alpha' }],
+      headers: [],
+      bodyType: 'NONE',
+      body: ''
+    }, null);
+
+    assert.equal(result.statusCode, 200);
+    assert.equal(result.finalUrl, `http://127.0.0.1:${port}/scheme-less?q=alpha`);
+    assert.deepEqual(JSON.parse(result.body), { method: 'GET', url: '/scheme-less?q=alpha' });
+  } finally {
+    await server.close();
+  }
 });
 
 test('sends requests with environment-resolved URL, query params, headers, and body', async () => {

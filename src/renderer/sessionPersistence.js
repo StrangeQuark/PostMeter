@@ -4,7 +4,7 @@
   const SIDEBAR_PANELS = new Set(['collections', 'environments', 'workspaces', 'runners', 'history']);
   const MAIN_PANELS = new Set(['request', 'environment', 'workspace', 'runner']);
   const REQUEST_TABS = new Set(['params', 'headers', 'auth', 'cookies', 'body', 'tests', 'scripts', 'examples', 'collectionVariables']);
-  const RESULTS_TABS = new Set(['response', 'load']);
+  const RESULTS_TABS = new Set(['response', 'responseHeaders', 'responseCookies', 'testResults', 'visualizer', 'load']);
 
   function buildRendererSession(options = {}) {
     const state = options.state || {};

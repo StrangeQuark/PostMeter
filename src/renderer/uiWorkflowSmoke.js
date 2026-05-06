@@ -134,6 +134,7 @@
     await sendActiveRequest();
     assertUiSmoke($('responseStatus').textContent === '200', 'Smoke request did not receive HTTP 200.');
     assertUiSmoke($('responseBody').value.includes('"method": "POST"'), 'Smoke response body was not rendered.');
+    assertUiSmoke($('responseCookies').value.includes('uiSession=smoke'), 'Smoke response cookies were not rendered in the Cookies result tab.');
     assertUiSmoke(activeEnvironment().variables.some((variable) => variable.key === 'responseMethod' && variable.value === 'POST'), 'Single request test script did not update the active environment.');
     assertUiSmoke(workspace.history.length > 0, 'Smoke request did not add history.');
     assertUiSmoke(workspace.cookies.some((cookie) => cookie.name === 'uiSession'), 'Smoke response cookie was not stored.');

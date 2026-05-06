@@ -27,6 +27,7 @@ const MANAGED_HEADERS = new Set(['content-length']);
 const REQUEST_TIMEOUT_MILLIS = 3 * 60 * 1000;
 const MAX_REDIRECTS = 10;
 const REDIRECT_STATUS_CODES = new Set([301, 302, 303, 307, 308]);
+const DEFAULT_SCHEMELESS_REQUEST_PROTOCOL = 'http:';
 
 function validateRequest(request, environment) {
   const errors = [];
@@ -871,7 +872,7 @@ function buildUrl(request, environment) {
   const resolvedUrl = resolveEnvironmentValue(request.url, environment).trim();
   let url;
   try {
-    url = new URL(resolvedUrl);
+    url = new URL(normalizeRequestUrlText(resolvedUrl));
   } catch (error) {
     throw new Error('URL is not a valid URI.');
   }
@@ -894,6 +895,86 @@ function buildUrl(request, environment) {
     );
   }
   return url;
+}
+
+function normalizeRequestUrlText(value) {
+  const text = String(value || '').trim();
+  if (!text) {
+    return text;
+  }
+  if (text.startsWith('//')) {
+    return `${DEFAULT_SCHEMELESS_REQUEST_PROTOCOL}${text}`;
+  }
+  if (hasUrlScheme(text)) {
+    return looksLikeSchemeLessHostPort(text) ? `${DEFAULT_SCHEMELESS_REQUEST_PROTOCOL}//${text}` : text;
+  }
+  return looksLikeSchemeLessHttpUrl(text) ? `${DEFAULT_SCHEMELESS_REQUEST_PROTOCOL}//${text}` : text;
+}
+
+function hasUrlScheme(text) {
+  return /^[A-Za-z][A-Za-z0-9+.-]*:/.test(text);
+}
+
+function looksLikeSchemeLessHostPort(text) {
+  const match = /^([^/?#\s]+):(?=\d{1,5}(?:[/?#]|$))/.exec(text);
+  return !!match && looksLikeHttpHostname(match[1], { allowSingleLabel: true });
+}
+
+function looksLikeSchemeLessHttpUrl(text) {
+  if (/[\s\u0000-\u001f\u007f]/.test(text) || /^[/?#]/.test(text)) {
+    return false;
+  }
+  const authority = text.split(/[/?#]/, 1)[0];
+  const hostWithPort = authority.split('@').pop();
+  const host = hostnameFromAuthority(hostWithPort);
+  return looksLikeHttpHostname(host, { allowSingleLabel: !!portFromAuthority(hostWithPort) });
+}
+
+function hostnameFromAuthority(authority) {
+  const value = String(authority || '').trim();
+  if (!value) {
+    return '';
+  }
+  if (value.startsWith('[')) {
+    const closingBracketIndex = value.indexOf(']');
+    return closingBracketIndex >= 0 ? value.slice(0, closingBracketIndex + 1) : value;
+  }
+  const port = portFromAuthority(value);
+  return port ? value.slice(0, -(port.length + 1)) : value;
+}
+
+function portFromAuthority(authority) {
+  const value = String(authority || '');
+  if (value.startsWith('[')) {
+    const closingBracketIndex = value.indexOf(']');
+    if (closingBracketIndex < 0) {
+      return '';
+    }
+    const suffix = value.slice(closingBracketIndex + 1);
+    return /^:\d{1,5}$/.test(suffix) ? suffix.slice(1) : '';
+  }
+  const match = value.match(/:(\d{1,5})$/);
+  return match ? match[1] : '';
+}
+
+function looksLikeHttpHostname(hostname, options = {}) {
+  const value = String(hostname || '').trim().replace(/\.$/, '');
+  if (!value) {
+    return false;
+  }
+  if (/^\[[0-9A-Fa-f:.]+\]$/.test(value)) {
+    return true;
+  }
+  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(value)) {
+    return true;
+  }
+  if (value.toLowerCase() === 'localhost') {
+    return true;
+  }
+  if (!/^[\p{L}\p{N}.-]+$/u.test(value)) {
+    return false;
+  }
+  return value.includes('.') || options.allowSingleLabel === true;
 }
 
 function validateHeaderName(name) {
