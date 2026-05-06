@@ -7,14 +7,11 @@ const {
   assertExternalUrlPayload,
   assertExportFormat,
   assertFileOperationResultPayload,
-  assertLoadConfigPayload,
-  assertLoadId,
-  assertLoadProgressPayload,
-  assertLoadResultPayload,
   assertOAuthProgressPayload,
   assertOptionalEnvironmentPayload,
   assertResponsePayload,
   assertRequestPayload,
+  assertRuntimeId,
   assertRunnerConfigPayload,
   assertRunnerPayload,
   assertRunnerProgressPayload,
@@ -50,7 +47,6 @@ test('accepts structurally valid IPC payloads', () => {
     variables: [{ enabled: true, key: 'local', value: 'value' }],
     examples: [{ name: 'Example', statusCode: 200, headers: [{ enabled: true, key: 'Content-Type', value: 'application/json' }], bodyType: 'RAW_JSON', body: '{}' }],
     cookieJar: { enabled: true, storeResponses: true },
-    loadTestPolicy: { enabled: true, concurrency: 2, totalRequests: 10, maxRatePerSecond: 5 },
     auth: { type: 'bearer', token: 'secret' }
   }));
   assert.doesNotThrow(() => assertCollectionPayload({
@@ -129,27 +125,6 @@ test('accepts structurally valid IPC payloads', () => {
     history: []
   }));
   assert.doesNotThrow(() => assertOptionalEnvironmentPayload(null));
-  assert.doesNotThrow(() => assertLoadConfigPayload({
-    concurrency: 1,
-    totalRequests: 1,
-    durationSeconds: 0,
-    rampUpSeconds: 0,
-    targetRatePerSecond: 10,
-    maxRatePerSecond: 10,
-    executionMode: 'multiProcess',
-    workerProcesses: 2,
-    recordSamples: true,
-    confirmedHighConcurrency: false
-  }));
-  assert.doesNotThrow(() => assertLoadResultPayload({
-    totalRequests: 1,
-    maxRatePerSecond: 10,
-    policyDecisions: [{ scope: 'rate', message: 'Effective target rate defaults to the configured rate cap.' }],
-    statusCounts: { 200: 1 },
-    errors: [],
-    latencyHistogram: [{ upperBoundMillis: 50, count: 1 }, { upperBoundMillis: null, count: 0 }],
-    samples: [{ index: 1, workerIndex: 1, workerProcess: 1, startedAtMillis: 0, durationMillis: 4, success: true, statusCode: 200 }]
-  }));
   assert.doesNotThrow(() => assertCollectionRunResultPayload({
     collectionId: 'c1',
     collectionName: 'Collection',
@@ -310,19 +285,7 @@ test('accepts structurally valid IPC payloads', () => {
     cancelled: false,
     collection: { id: 'c1', name: 'Collection', requests: [], folders: [] }
   }));
-  assert.doesNotThrow(() => assertLoadId('load-1'));
-  assert.doesNotThrow(() => assertLoadProgressPayload({
-    completedRequests: 1,
-    requestedRequests: 2,
-    mode: 'requestCount',
-    targetRatePerSecond: 5,
-    maxRatePerSecond: 10,
-    executionMode: 'singleProcess',
-    workerProcesses: 1,
-    elapsedMillis: 25,
-    activeWorkers: 1,
-    policyDecisions: [{ scope: 'rate', message: 'Rate cap applied.' }]
-  }));
+  assert.doesNotThrow(() => assertRuntimeId('runner-1'));
   assert.doesNotThrow(() => assertRunnerConfigPayload({ stopOnFailure: true }));
   assert.doesNotThrow(() => assertRunnerPayload({
     id: 'runner-1',
@@ -374,7 +337,7 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', scripts: { tests: 42 } }), /request.scripts.tests must be a string/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', examples: [{ statusCode: 200, bodyType: 'bad' }] }), /request.examples\[0\].bodyType must be one of/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', cookieJar: { enabled: 'yes' } }), /request.cookieJar.enabled must be a boolean/);
-  assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', loadTestPolicy: { hostPolicies: [{ host: 42 }] } }), /request.loadTestPolicy.hostPolicies is no longer supported/);
+  assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', loadTestPolicy: { hostPolicies: [{ host: 42 }] } }), /request.loadTestPolicy is no longer supported/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', auth: { type: 'oauth2', grantType: 'password' } }), /request.auth.grantType must be one of/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', auth: { type: 'apiKey', location: 'body' } }), /request.auth.location must be one of/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', auth: { type: 'oauth2', redirectStrategy: 'embeddedWebView' } }), /request.auth.redirectStrategy must be one of/);
@@ -399,20 +362,8 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertWorkspacePayload({ collections: [], environments: [], cookies: [{ sameSite: 'Loose' }], history: [] }), /workspace.cookies\[0\].sameSite must be one of/);
   assert.throws(() => assertWorkspacePayload({ collections: [], environments: [], cookies: [{ priority: 'Urgent' }], history: [] }), /workspace.cookies\[0\].priority must be one of/);
   assert.throws(() => assertWorkspacePayload({ collections: [], environments: [], cookies: [{ extensions: [42] }], history: [] }), /workspace.cookies\[0\].extensions\[0\] must be a string/);
-  assert.throws(() => assertLoadConfigPayload({ concurrency: Number.NaN, totalRequests: 1 }), /config.concurrency must be a finite number/);
-  assert.throws(() => assertLoadConfigPayload({ concurrency: 1, totalRequests: 1, recordSamples: 'yes' }), /config.recordSamples must be a boolean/);
   assert.throws(() => assertUpdateCheckOptionsPayload({ includePrereleases: 'yes' }), /options.includePrereleases must be a boolean/);
   assert.throws(() => assertExternalUrlPayload(42), /external.url must be a string/);
-  assert.throws(() => assertLoadConfigPayload({ concurrency: 1, totalRequests: 1, executionMode: 'cluster' }), /config.executionMode must be one of/);
-  assert.throws(() => assertLoadConfigPayload({ concurrency: 1, totalRequests: 1, allowedHosts: ['example.test'] }), /config.allowedHosts is no longer supported/);
-  assert.throws(() => assertLoadConfigPayload({ concurrency: 1, totalRequests: 1, hostPolicies: [{ host: 'example.test', enabled: true }] }), /config.hostPolicies is no longer supported/);
-  assert.throws(() => assertLoadResultPayload({ executionMode: 'cluster' }), /result.executionMode must be one of/);
-  assert.throws(() => assertLoadResultPayload({ statusCounts: { 200: 'one' } }), /result.statusCounts.200 must be a finite number/);
-  assert.throws(() => assertLoadResultPayload({ policyDecisions: [{ message: 42 }] }), /result.policyDecisions\[0\].message must be a string/);
-  assert.throws(() => assertLoadResultPayload({ latencyHistogram: [{ count: 'one' }] }), /result.latencyHistogram\[0\].count must be a finite number/);
-  assert.throws(() => assertLoadResultPayload({ samples: [{ success: 'yes' }] }), /result.samples\[0\].success must be a boolean/);
-  assert.throws(() => assertLoadProgressPayload({ executionMode: 'cluster' }), /progress.executionMode must be one of/);
-  assert.throws(() => assertLoadProgressPayload({ completedRequests: 1, accessToken: 'raw-token' }), /progress.accessToken is not allowed in public IPC payloads/);
   assert.throws(() => assertRunnerConfigPayload({ stopOnFailure: 'yes' }), /config.stopOnFailure must be a boolean/);
   assert.throws(() => assertRunnerPayload({ id: 'runner', environmentId: 'none', allowEnvironmentMutation: 'yes', requests: [] }), /runner.allowEnvironmentMutation must be a boolean/);
   assert.throws(() => assertRunnerPayload({ id: 'runner', requests: [{ method: 'TRACE', url: 'https:\/\/example.test' }] }), /runner.requests\[0\].method is not supported/);
@@ -429,8 +380,6 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertCollectionRunResultPayload({ results: [{ updatedAuth: { type: 'oauth2', accessToken: 'raw-token' } }] }), /result.results\[0\].updatedAuth must not be included in public IPC payloads/);
   assert.throws(() => assertCollectionRunResultPayload({ results: [{ accessToken: 'raw-token' }] }), /result.results\[0\].accessToken is not allowed in public IPC payloads/);
   assert.throws(() => assertCollectionRunResultPayload({ accessToken: 'raw-token' }), /result.accessToken is not allowed in public IPC payloads/);
-  assert.throws(() => assertLoadResultPayload({ updatedAuth: { type: 'oauth2', accessToken: 'raw-token' } }), /result.updatedAuth must not be included in public IPC payloads/);
-  assert.throws(() => assertLoadResultPayload({ accessToken: 'raw-token' }), /result.accessToken is not allowed in public IPC payloads/);
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: '', durationMillis: 'slow', responseBytes: 0, finalUrl: '', headers: {} }), /response.durationMillis must be a finite number/);
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: 42, durationMillis: 1, responseBytes: 2, finalUrl: 'https://example.test', headers: {} }), /response.body must be a string/);
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: '{}', durationMillis: 1, responseBytes: 2, finalUrl: 'https://example.test', headers: {}, updatedAuth: { type: 'oauth2', accessToken: 'raw-token' } }), /response.updatedAuth must not be included in public IPC payloads/);
@@ -451,7 +400,7 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertWorkspaceLoadResultPayload({ workspace: null }), /result.workspace must be an object/);
   assert.throws(() => assertFileOperationResultPayload({ cancelled: 'yes' }), /result.cancelled must be a boolean/);
   assert.throws(() => assertFileOperationResultPayload({ cancelled: false, collection: [] }), /result.collection must be an object/);
-  assert.throws(() => assertLoadId({ bad: true }), /id must be a string/);
+  assert.throws(() => assertRuntimeId({ bad: true }), /id must be a string/);
   assert.throws(() => assertExportFormat('xml'), /format must be one of/);
   assert.throws(() => assertCollectionExportFormat('bad'), /format must be one of/);
 });

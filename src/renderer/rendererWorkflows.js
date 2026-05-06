@@ -23,7 +23,6 @@
     const displayResponse = options.displayResponse || (() => {});
     const displayTestResults = options.displayTestResults || (() => {});
     const domainFromRequestUrl = options.domainFromRequestUrl || (() => '');
-    const loadConfigFromControls = options.loadConfigFromControls || (() => ({}));
     const notifyUser = options.notifyUser || (() => {});
     const parseCookieHeaderForJar = options.parseCookieHeaderForJar || (() => []);
     const postmanCookieMetadataByName = options.postmanCookieMetadataByName || (() => new Map());
@@ -62,12 +61,6 @@
         element('visualizerFrame').srcdoc = '';
       }
       displayTestResults(null);
-    }
-
-    function clearLoadResultState() {
-      state.lastLoadResult = null;
-      element('exportLoadJsonButton').disabled = true;
-      element('exportLoadCsvButton').disabled = true;
     }
 
     function clearRunnerResultState() {
@@ -738,90 +731,6 @@
       }
     }
 
-    async function runLoadTest() {
-      const request = activeRequest();
-      if (!request) {
-        return setStatus('Select a request before running a load test.');
-      }
-      collectRequestFromEditor();
-      const environment = activeEnvironment();
-      const requestContext = createRequestContext(request, environment);
-      let loadStarted = false;
-      let loadId = '';
-      clearLoadResultState();
-      try {
-        await saveWorkspace(false, { allowDraftBypass: true });
-        const errors = await windowObject.postmeter.request.validate(request, environment);
-        if (errors.length) {
-          element('validationLabel').textContent = errors.join(' ');
-          return setStatus('Fix validation errors.');
-        }
-        element('validationLabel').textContent = '';
-        const concurrency = Number(element('loadConcurrency').value);
-        let confirmedHighConcurrency = false;
-        if (concurrency >= 50) {
-          confirmedHighConcurrency = await confirmAction(`Run load test with concurrency ${concurrency}?`);
-          if (!confirmedHighConcurrency) {
-            return setStatus('Load test cancelled.');
-          }
-        }
-        loadId = runtimeId();
-        state.activeLoadId = loadId;
-        loadStarted = true;
-        element('runLoadButton').disabled = true;
-        element('cancelLoadButton').disabled = false;
-        element('loadResults').textContent = 'Starting load test...';
-        const result = await windowObject.postmeter.loadTest.start(loadId, request, environment, {
-          ...loadConfigFromControls(),
-          concurrency,
-          confirmedHighConcurrency
-        });
-        if (state.activeLoadId !== loadId || !isActiveWorkspaceContext(requestContext)) {
-          return;
-        }
-        state.lastLoadResult = result;
-        if (Array.isArray(result.cookies)) {
-          state.workspace.cookies = result.cookies;
-          renderCookieJarEditor();
-        }
-        element('loadResults').textContent = runFormatting.formatLoadResult(state.lastLoadResult);
-        element('exportLoadJsonButton').disabled = false;
-        element('exportLoadCsvButton').disabled = false;
-        setStatus(state.lastLoadResult.cancelled ? 'Load test cancelled.' : 'Load test completed.');
-      } catch (error) {
-        const message = error.message || String(error);
-        const stillCurrentRun = isActiveWorkspaceContext(requestContext)
-          && (!loadStarted || state.activeLoadId === loadId);
-        if (!stillCurrentRun) {
-          return;
-        }
-        clearLoadResultState();
-        element('loadResults').textContent = message;
-        setStatus('Load test failed.');
-        notifyUser('Load Test Failed', message);
-      } finally {
-        if (loadStarted && state.activeLoadId === loadId) {
-          element('runLoadButton').disabled = false;
-          element('cancelLoadButton').disabled = true;
-          state.activeLoadId = null;
-        }
-      }
-    }
-
-    async function cancelLoadTest() {
-      if (state.activeLoadId) {
-        try {
-          await windowObject.postmeter.loadTest.cancel(state.activeLoadId);
-          setStatus('Cancelling load test...');
-        } catch (error) {
-          const message = error.message || String(error);
-          element('loadResults').textContent = message;
-          setStatus('Load test cancellation failed.');
-          notifyUser('Load Test Cancellation Failed', message);
-        }
-      }
-    }
-
     async function runActiveCollection() {
       const collection = activeCollection();
       if (!collection) {
@@ -906,22 +815,6 @@
         const message = error.message || String(error);
         setStatus('Collection run export failed.');
         notifyUser('Collection Run Export Failed', message);
-      }
-    }
-
-    async function exportLoadResult(format) {
-      if (!state.lastLoadResult) {
-        return;
-      }
-      try {
-        const result = await windowObject.postmeter.loadTest.export(state.lastLoadResult, format);
-        if (!result.cancelled) {
-          setStatus(`Load test exported to ${result.path}.`);
-        }
-      } catch (error) {
-        const message = error.message || String(error);
-        setStatus('Load test export failed.');
-        notifyUser('Load Test Export Failed', message);
       }
     }
 
@@ -1415,12 +1308,10 @@
       applyRunnerScriptMutations,
       applySingleRequestScriptMutations,
       cancelCollectionRun,
-      cancelLoadTest,
       cancelOauthFlow,
       checkForUpdates,
       cloneVariablePairs,
       exportCollection,
-      exportLoadResult,
       exportRunnerResult,
       exportWorkspace,
       importCollection,
@@ -1430,7 +1321,6 @@
       renderOauthProgress,
       renderScriptMutationEditors,
       runActiveCollection,
-      runLoadTest,
       saveWorkspace,
       sendActiveRequest,
       setOauthButtonsBusy,

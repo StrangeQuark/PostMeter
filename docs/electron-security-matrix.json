@@ -120,7 +120,7 @@
     {
       "id": "file-dialogs.collection-and-examples",
       "area": "File dialogs",
-      "target": "Collection import/export, request-example export, load-result export, and collection-run export dialogs are main-process owned, use constrained filters/default filenames, validate selected path shape, and validate cancellation/result payloads.",
+      "target": "Collection import/export, request-example export, and collection-run export dialogs are main-process owned, use constrained filters/default filenames, validate selected path shape, and validate cancellation/result payloads.",
       "status": "implemented",
       "evidenceRefs": [
         "electron/workspaceIpc.js",
@@ -256,71 +256,6 @@
       "tests": [
         "test/electron/diagnosticsIpc.test.js",
         "test/electron/diagnostics.test.js"
-      ],
-      "notes": ""
-    },
-    {
-      "id": "ipc.channel.load-cancel",
-      "area": "IPC channel",
-      "target": "renderer-to-main channel `load:cancel`: Load-test cancellation validates the active run ID before aborting.",
-      "status": "implemented",
-      "evidenceRefs": [
-        "electron/runtimeIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js"
-      ],
-      "tests": [
-        "test/electron/runtimeIpc.test.js",
-        "test/electron/ipcValidation.test.js"
-      ],
-      "notes": ""
-    },
-    {
-      "id": "ipc.channel.load-export",
-      "area": "IPC channel",
-      "target": "renderer-to-main channel `load:export`: Load-test export validates result/format payloads before a main-process save picker.",
-      "status": "implemented",
-      "evidenceRefs": [
-        "electron/runtimeIpc.js",
-        "electron/preload.js",
-        "electron/fileDialogs.js",
-        "src/core/ipcValidation.js"
-      ],
-      "tests": [
-        "test/electron/runtimeIpc.test.js",
-        "test/electron/ipcValidation.test.js"
-      ],
-      "notes": ""
-    },
-    {
-      "id": "ipc.channel.load-progress",
-      "area": "IPC channel",
-      "target": "main-to-renderer channel `load:progress`: Load-test progress events are asserted before delivery to the renderer subscription.",
-      "status": "implemented",
-      "evidenceRefs": [
-        "electron/runtimeIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js"
-      ],
-      "tests": [
-        "test/electron/runtimeIpc.test.js",
-        "test/electron/ipcValidation.test.js"
-      ],
-      "notes": ""
-    },
-    {
-      "id": "ipc.channel.load-start",
-      "area": "IPC channel",
-      "target": "renderer-to-main channel `load:start`: Load-test start validates ID, request, environment, and config payloads.",
-      "status": "implemented",
-      "evidenceRefs": [
-        "electron/runtimeIpc.js",
-        "electron/preload.js",
-        "src/core/ipcValidation.js"
-      ],
-      "tests": [
-        "test/electron/runtimeIpc.test.js",
-        "test/electron/ipcValidation.test.js"
       ],
       "notes": ""
     },
@@ -910,7 +845,7 @@
     {
       "id": "ipc.runtime",
       "area": "IPC",
-      "target": "Load-test and collection-run IPC validates start/cancel/export payloads and progress events while keeping cancellation state parent-owned.",
+      "target": "Collection-run IPC validates start/cancel/export payloads and progress events while keeping cancellation state parent-owned.",
       "status": "implemented",
       "evidenceRefs": [
         "electron/runtimeIpc.js",

@@ -92,15 +92,13 @@
 #responseTab.active,
 #responseHeadersTab.active,
 #responseCookiesTab.active,
-#testResultsTab.active,
-#loadTab.active {
+#testResultsTab.active {
   display: flex;
   flex-direction: column;
   padding: 10px;
 }
 
-.table-actions,
-.load-controls {
+.table-actions {
   margin-bottom: 8px;
 }
 
@@ -468,37 +466,6 @@ textarea.code-editor-input:placeholder-shown {
   white-space: pre-wrap;
 }
 
-.load-controls label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--muted);
-  font-weight: 700;
-}
-
-.load-controls input {
-  min-height: 32px;
-  padding: 6px 8px;
-}
-
-#loadConcurrency,
-#loadRequests,
-#loadDurationSeconds,
-#loadRampUpSeconds,
-#loadTargetRate,
-#loadMaxRate {
-  width: 96px;
-}
-
-.load-policy-controls {
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--line);
-}
-
-.checkbox-field {
-  min-height: 32px;
-}
-
 .compact-setting {
   display: inline-flex;
   align-items: center;
@@ -508,24 +475,6 @@ textarea.code-editor-input:placeholder-shown {
   color: var(--muted);
   font-weight: 700;
   white-space: nowrap;
-}
-
-.checkbox-field input {
-  min-height: auto;
-  width: auto;
-}
-
-.load-results {
-  flex: 1;
-  min-height: 0;
-  margin: 0;
-  padding: 10px;
-  overflow: auto;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--pre-bg);
-  color: var(--pre-text);
-  font-family: var(--mono);
 }
 
 .variable-preview {

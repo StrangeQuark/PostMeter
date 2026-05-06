@@ -38,8 +38,7 @@ const OAUTH_PROGRESS_STATUSES = [
   'cancelled',
   'failed'
 ];
-const LOAD_EXPORT_FORMATS = ['json', 'csv'];
-const COLLECTION_EXPORT_FORMATS = ['postmeter', 'postman', 'openapi', 'jmeter', 'curl', 'har'];
+const COLLECTION_EXPORT_FORMATS = ['postmeter', 'postman', 'openapi', 'curl', 'har'];
 const THEME_VALUES = ['system', 'light', 'dark'];
 const DIAGNOSTIC_LOG_LEVELS = ['debug', 'info', 'warn', 'error'];
 const ASSERTION_TYPES = [
@@ -57,7 +56,6 @@ const ASSERTION_TYPES = [
   'extractRegex'
 ];
 const ASSERTION_OPERATORS = ['equals', 'notEquals', 'contains', 'exists', 'lessThan', 'greaterThan'];
-const LOAD_EXECUTION_MODES = ['singleProcess', 'multiProcess'];
 const LIMITS = {
   collections: 500,
   foldersPerLevel: 500,
@@ -67,15 +65,13 @@ const LIMITS = {
   history: 1000,
   pairs: 1000,
   cookies: 2000,
-  loadSamples: 50000,
-  histogramBuckets: 100,
   folderDepth: 20,
   name: 256,
   url: 8192,
   key: 512,
   value: 32768,
   body: 10 * 1024 * 1024,
-  loadResultJson: 10 * 1024 * 1024,
+  resultJson: 10 * 1024 * 1024,
   host: 253,
   method: 12,
   short: 64,
@@ -92,8 +88,6 @@ const SCHEMA_ENUMS = {
     cookiePriorities: ['', 'Low', 'Medium', 'High'],
     diagnosticLogLevels: DIAGNOSTIC_LOG_LEVELS,
   httpMethods: HTTP_METHODS,
-  loadExecutionModes: LOAD_EXECUTION_MODES,
-  loadExportFormats: LOAD_EXPORT_FORMATS,
   oauth2GrantTypes: OAUTH2_GRANT_TYPES,
   oauth2RedirectStrategies: OAUTH2_REDIRECT_STRATEGIES,
   oauth2TokenTypes: OAUTH2_TOKEN_TYPES,
@@ -199,85 +193,6 @@ const FIELD_SCHEMAS = {
   requestCookieJar: {
     enabled: { type: 'boolean', optional: true },
     storeResponses: { type: 'boolean', optional: true }
-  },
-  loadPolicy: {
-    enabled: { type: 'boolean', optional: true },
-    concurrency: { type: 'number', optional: true },
-    totalRequests: { type: 'number', optional: true },
-    durationSeconds: { type: 'number', optional: true },
-    rampUpSeconds: { type: 'number', optional: true },
-    targetRatePerSecond: { type: 'number', optional: true },
-    maxRatePerSecond: { type: 'number', optional: true },
-    executionMode: { type: 'string', limit: 'short', enum: 'loadExecutionModes', optional: true },
-    workerProcesses: { type: 'number', optional: true },
-    recordSamples: { type: 'boolean', optional: true }
-  },
-  loadConfig: {
-    concurrency: { type: 'number' },
-    totalRequests: { type: 'number' },
-    durationSeconds: { type: 'number', optional: true },
-    rampUpSeconds: { type: 'number', optional: true },
-    targetRatePerSecond: { type: 'number', optional: true },
-    maxRatePerSecond: { type: 'number', optional: true },
-    executionMode: { type: 'string', limit: 'short', enum: 'loadExecutionModes', optional: true },
-    workerProcesses: { type: 'number', optional: true },
-    recordSamples: { type: 'boolean', optional: true },
-    confirmedHighConcurrency: { type: 'boolean', optional: true }
-  },
-  loadResult: {
-    requestedRequests: { type: 'number', optional: true },
-    totalRequests: { type: 'number', optional: true },
-    successfulRequests: { type: 'number', optional: true },
-    failedRequests: { type: 'number', optional: true },
-    cancelled: { type: 'boolean', optional: true },
-    mode: { type: 'string', limit: 'short', optional: true },
-    durationSeconds: { type: 'number', optional: true },
-    rampUpSeconds: { type: 'number', optional: true },
-    targetRatePerSecond: { type: 'number', optional: true },
-    maxRatePerSecond: { type: 'number', optional: true },
-    executionMode: { type: 'string', limit: 'short', enum: 'loadExecutionModes', optional: true },
-    workerProcesses: { type: 'number', optional: true },
-    elapsedMillis: { type: 'number', optional: true },
-    minMillis: { type: 'number', optional: true },
-    maxMillis: { type: 'number', optional: true },
-    averageMillis: { type: 'number', optional: true },
-    p50Millis: { type: 'number', optional: true },
-    p90Millis: { type: 'number', optional: true },
-    p95Millis: { type: 'number', optional: true },
-    p99Millis: { type: 'number', optional: true },
-    errorRate: { type: 'number', optional: true },
-    requestsPerSecond: { type: 'number', optional: true }
-  },
-  loadPolicyDecision: {
-    scope: { type: 'string', limit: 'short', optional: true },
-    host: { type: 'string', limit: 'host', optional: true },
-    message: { type: 'string', limit: 'value' }
-  },
-  loadProgress: {
-    completedRequests: { type: 'number', optional: true },
-    requestedRequests: { type: 'number', optional: true },
-    mode: { type: 'string', limit: 'short', optional: true },
-    durationSeconds: { type: 'number', optional: true },
-    targetRatePerSecond: { type: 'number', optional: true },
-    maxRatePerSecond: { type: 'number', optional: true },
-    executionMode: { type: 'string', limit: 'short', enum: 'loadExecutionModes', optional: true },
-    workerProcesses: { type: 'number', optional: true },
-    elapsedMillis: { type: 'number', optional: true },
-    activeWorkers: { type: 'number', optional: true }
-  },
-  loadHistogramBucket: {
-    upperBoundMillis: { type: 'number', optional: true },
-    count: { type: 'number' }
-  },
-  loadSample: {
-    index: { type: 'number', optional: true },
-    workerIndex: { type: 'number', optional: true },
-    workerProcess: { type: 'number', optional: true },
-    startedAtMillis: { type: 'number', optional: true },
-    durationMillis: { type: 'number', optional: true },
-    success: { type: 'boolean', optional: true },
-    statusCode: { type: 'number', optional: true },
-    error: { type: 'string', limit: 'value', optional: true }
   },
   scriptRunResult: {
     passed: { type: 'boolean', optional: true },
@@ -484,9 +399,6 @@ const payloadSchemas = {
     types: ASSERTION_TYPES,
     operators: ASSERTION_OPERATORS
   },
-  load: {
-    executionModes: LOAD_EXECUTION_MODES
-  },
   enums: SCHEMA_ENUMS,
   limits: LIMITS,
   fields: FIELD_SCHEMAS,
@@ -494,7 +406,7 @@ const payloadSchemas = {
     request: {
       required: ['method', 'url'],
       arrays: ['queryParams', 'headers', 'assertions', 'variables', 'examples', 'metadata', 'messages'],
-      nested: ['auth', 'scripts', 'cookieJar', 'loadTestPolicy']
+      nested: ['auth', 'scripts', 'cookieJar']
     },
   workspace: {
       arrays: ['collections', 'environments', 'globals', 'cookies', 'runners', 'history'],
@@ -502,10 +414,6 @@ const payloadSchemas = {
     },
     response: {
       required: ['statusCode', 'headers', 'body', 'durationMillis', 'responseBytes', 'finalUrl']
-    },
-    loadConfig: {
-      required: ['concurrency', 'totalRequests'],
-      optional: ['durationSeconds', 'rampUpSeconds', 'targetRatePerSecond', 'maxRatePerSecond', 'executionMode', 'workerProcesses', 'recordSamples', 'confirmedHighConcurrency']
     },
     runnerConfig: {
       optional: ['allowEnvironmentMutation', 'stopOnFailure']
@@ -575,8 +483,6 @@ const exported = {
   FIELD_SCHEMAS,
   HTTP_METHODS,
   LIMITS,
-  LOAD_EXECUTION_MODES,
-  LOAD_EXPORT_FORMATS,
   OAUTH2_GRANT_TYPES,
   OAUTH2_REDIRECT_STRATEGIES,
   OAUTH2_TOKEN_TYPES,

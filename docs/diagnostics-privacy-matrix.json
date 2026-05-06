@@ -59,7 +59,7 @@
     {
       "id": "logging.event-coverage",
       "area": "Event coverage",
-      "target": "Failed imports, sends, load tests, collection runs, OAuth flows, package fetches, vault prompts, sandbox denials, OS sandbox backend selection and required-launch failures, workspace recovery, update checks, and packaged/startup validation failures emit non-secret structured diagnostic events while preserving documented internal denial failure codes.",
+      "target": "Failed imports, sends, collection runs, OAuth flows, package fetches, vault prompts, sandbox denials, OS sandbox backend selection and required-launch failures, workspace recovery, update checks, and packaged/startup validation failures emit non-secret structured diagnostic events while preserving documented internal denial failure codes.",
       "status": "implemented",
       "evidenceRefs": [
         "electron/requestIpc.js",

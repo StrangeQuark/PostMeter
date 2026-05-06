@@ -127,14 +127,15 @@ function assertRequestPayload(value, field = 'request') {
   assertSchemaNested('request', value, field, {
     auth: assertAuthPayload,
     scripts: assertScripts,
-    cookieJar: assertRequestCookieJar,
-    loadTestPolicy: assertLoadPolicyPayload
+    cookieJar: assertRequestCookieJar
   }, {
     auth: { type: 'none' },
     cookieJar: {},
-    loadTestPolicy: undefined,
     scripts: undefined
   });
+  if (value.loadTestPolicy != null) {
+    fail(`${field}.loadTestPolicy is no longer supported.`);
+  }
 }
 
 function assertRunnerPayload(value, field = 'runner') {
@@ -157,7 +158,6 @@ function assertRunnerRequestPayload(value, field = 'request') {
     'grpc',
     'headers',
     'id',
-    'loadTestPolicy',
     'method',
     'methodPath',
     'messages',
@@ -241,7 +241,7 @@ function assertSettingsPayload(value, field) {
     }
   }
   if (value.loadTestPolicy != null) {
-    fail(`${field}.loadTestPolicy is no longer supported; configure load tests from the Load Test panel.`);
+    fail(`${field}.loadTestPolicy is no longer supported.`);
   }
 }
 
@@ -512,103 +512,10 @@ function assertOptionalEnvironmentPayload(value, field = 'environment') {
   assertEnvironmentPayload(value, field);
 }
 
-function assertLoadConfigPayload(value, field = 'config') {
-  assertSchemaFields('loadConfig', value, field);
-  if (value.allowedHosts != null) {
-    fail(`${field}.allowedHosts is no longer supported; load tests run against the active request URL.`);
-  }
-  if (value.hostPolicies != null) {
-    fail(`${field}.hostPolicies is no longer supported; use the global rate cap instead.`);
-  }
-}
-
-function assertLoadPolicyPayload(value, field = 'loadTestPolicy') {
-  assertSchemaFields('loadPolicy', value || {}, field);
-  if (value?.allowedHosts != null) {
-    fail(`${field}.allowedHosts is no longer supported.`);
-  }
-  if (value?.hostPolicies != null) {
-    fail(`${field}.hostPolicies is no longer supported.`);
-  }
-}
-
-function assertLoadResultPayload(value, field = 'result') {
-  object(value, field);
-  const size = Buffer.byteLength(JSON.stringify(value), 'utf8');
-  if (size > LIMITS.loadResultJson) {
-    fail(`${field} is too large to export.`);
-  }
-  assertSchemaFields('loadResult', value, field);
-  if (value.updatedAuth != null) {
-    fail(`${field}.updatedAuth must not be included in public IPC payloads.`);
-  }
-  assertNoUnexpectedFields('loadResult', value, field, [
-    'cookies',
-    'errors',
-    'latencyHistogram',
-    'policyDecisions',
-    'sampleLimit',
-    'sampleLimitReached',
-    'samples',
-    'statusCounts'
-  ]);
-  if (value.statusCounts != null) {
-    object(value.statusCounts, `${field}.statusCounts`);
-    for (const [statusCode, count] of Object.entries(value.statusCounts)) {
-      string(statusCode, `${field}.statusCounts key`, LIMITS.tiny);
-      number(count, `${field}.statusCounts.${statusCode}`);
-    }
-  }
-  if (value.errors != null) {
-    assertStringArray(value.errors, `${field}.errors`, LIMITS.pairs, LIMITS.value);
-  }
-  if (value.policyDecisions != null) {
-    assertLoadPolicyDecisions(value.policyDecisions, `${field}.policyDecisions`);
-  }
-  if (value.latencyHistogram != null) {
-    array(value.latencyHistogram, `${field}.latencyHistogram`, LIMITS.histogramBuckets).forEach((bucket, index) => {
-      assertSchemaFields('loadHistogramBucket', bucket, `${field}.latencyHistogram[${index}]`);
-      assertNoUnexpectedFields('loadHistogramBucket', bucket, `${field}.latencyHistogram[${index}]`);
-    });
-  }
-  if (value.samples != null) {
-    array(value.samples, `${field}.samples`, LIMITS.loadSamples).forEach((sample, index) => {
-      assertSchemaFields('loadSample', sample, `${field}.samples[${index}]`);
-      assertNoUnexpectedFields('loadSample', sample, `${field}.samples[${index}]`);
-    });
-  }
-  if (value.sampleLimit != null) {
-    number(value.sampleLimit, `${field}.sampleLimit`);
-  }
-  if (value.sampleLimitReached != null) {
-    optionalBoolean(value.sampleLimitReached, `${field}.sampleLimitReached`);
-  }
-  if (value.cookies != null) {
-    assertCookies(value.cookies, `${field}.cookies`);
-  }
-}
-
-function assertLoadProgressPayload(value, field = 'progress') {
-  assertSchemaFields('loadProgress', value, field);
-  assertNoUnexpectedFields('loadProgress', value, field, [
-    'policyDecisions'
-  ]);
-  if (value.policyDecisions != null) {
-    assertLoadPolicyDecisions(value.policyDecisions, `${field}.policyDecisions`);
-  }
-}
-
-function assertLoadPolicyDecisions(values, field) {
-  array(values, field, LIMITS.pairs).forEach((decision, index) => {
-    assertSchemaFields('loadPolicyDecision', decision, `${field}[${index}]`);
-    assertNoUnexpectedFields('loadPolicyDecision', decision, `${field}[${index}]`);
-  });
-}
-
 function assertCollectionRunResultPayload(value, field = 'result') {
   object(value, field);
   const size = Buffer.byteLength(JSON.stringify(value), 'utf8');
-  if (size > LIMITS.loadResultJson) {
+  if (size > LIMITS.resultJson) {
     fail(`${field} is too large to export.`);
   }
   assertSchemaFields('collectionRunResult', value, field);
@@ -823,7 +730,7 @@ function assertOAuthProgressPayload(value, field = 'progress') {
 
 function assertExportFormat(value, field = 'format') {
   try {
-    oneOf(value, 'loadExportFormats', field);
+    oneOf(value, ['json', 'csv'], field);
   } catch (error) {
     fail(error.message);
   }
@@ -837,7 +744,7 @@ function assertCollectionExportFormat(value, field = 'format') {
   }
 }
 
-function assertLoadId(value, field = 'id') {
+function assertRuntimeId(value, field = 'id') {
   string(value, field, 128);
 }
 
@@ -1296,10 +1203,6 @@ module.exports = {
   assertCollectionExportFormat,
   assertEnvironmentPayload,
   assertExportFormat,
-  assertLoadConfigPayload,
-  assertLoadId,
-  assertLoadProgressPayload,
-  assertLoadResultPayload,
   assertOAuthProgressPayload,
   assertOptionalEnvironmentPayload,
   assertRunnerConfigPayload,
@@ -1309,6 +1212,7 @@ module.exports = {
   assertFileOperationResultPayload,
   assertResponsePayload,
   assertRequestPayload,
+  assertRuntimeId,
   assertRunnerPayload,
   assertUpdateCheckOptionsPayload,
   assertWorkspaceEnvironmentSavePayload,

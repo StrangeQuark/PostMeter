@@ -11,7 +11,7 @@ const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../s
 
 test('file dialog helpers validate selected paths before IPC file operations', () => {
   assert.deepEqual(collectionImportFilters(), [
-    { name: 'API Collections', extensions: ['json', 'yaml', 'yml', 'har', 'jmx', 'sh'] },
+    { name: 'API Collections', extensions: ['json', 'yaml', 'yml', 'har', 'sh'] },
     { name: 'All Files', extensions: ['*'] }
   ]);
   assert.equal(selectedOpenFilePath({ canceled: true, filePaths: ['/tmp/workspace.json'] }), '');
@@ -520,7 +520,6 @@ test('workspace IPC suggests collection filenames, filters, and formats for ever
     ['postmeter', 'AuthServiceCollection.json', 'POSTMETER Collection', 'json'],
     ['postman', 'AuthServiceCollection.postman_collection.json', 'POSTMAN Collection', 'json'],
     ['openapi', 'AuthServiceCollection.openapi.json', 'OPENAPI Collection', 'json'],
-    ['jmeter', 'AuthServiceCollection.jmx', 'JMETER Collection', 'jmx'],
     ['curl', 'AuthServiceCollection.sh', 'CURL Collection', 'sh'],
     ['har', 'AuthServiceCollection.har', 'HAR Collection', 'har']
   ]) {

@@ -10,7 +10,7 @@ No blocking engineering questions are required for the next local production-har
 - OAuth is only outbound request authentication for target APIs.
 - When choosing between partial and production-ready implementations, build the production-ready path.
 - Tier-one release validation targets Linux, Windows, and macOS together.
-- Compatibility import/export includes OpenAPI, JMeter, curl, HAR, and Postman collections.
+- Compatibility import/export includes OpenAPI, curl, HAR, and Postman collections.
 - Production release artifacts stay unsigned until maintainer certificates are available.
 - Production release hosting uses GitHub Releases.
 - The canonical public release/update repository is `StrangeQuark/PostMeter`.
@@ -20,14 +20,12 @@ No blocking engineering questions are required for the next local production-har
 - The current production app icon source is `build/icon.png`.
 - Manual OAuth provider certification targets are Google OAuth 2.0, Microsoft Entra ID / Azure AD, and GitHub OAuth Apps.
 - Windows/macOS packaged protocol validation should be CI-only native-runner validation, not a maintainer manual checklist.
-- JMeter compatibility work should prioritize timers and assertion types.
-- Load-test governance should stay in the Load Test panel with global rate caps; workspace-level, request-level, allowed-host, and per-host policies are intentionally removed.
+- The legacy Load Test panel and JMeter bridge have been removed so the next load-testing implementation can start from a clean PostMeter-owned model.
 
 Helpful, non-blocking input:
 
-1. Provide any real-world JMeter timer/assertion-heavy `.jmx` files you want PostMeter to prioritize for import/export parity.
-2. Provide live OAuth provider tenant/client details only when you are ready for manual certification runs.
-3. Provide signing/notarization credentials only when you want release artifacts to become signed instead of unsigned GitHub Release builds.
+1. Provide live OAuth provider tenant/client details only when you are ready for manual certification runs.
+2. Provide signing/notarization credentials only when you want release artifacts to become signed instead of unsigned GitHub Release builds.
 
 ## Standing Product Constraint
 
@@ -61,7 +59,12 @@ PostMeter must remain a standalone local desktop application. Do not add PostMet
    - Add an optional Windows manual QA checklist for the maintainer's Windows machine, while keeping `windows-latest` GitHub Actions validation as the required pre-production evidence.
    - Make release notes templates call out security-sensitive changes, sandbox changes, compatibility changes, migration notes, signing/notarization status, native-runner validation results, and known issues.
    - Document the unsigned-release path and the signed/notarized-release path separately. Signing and notarization stay blocked until maintainer-controlled certificates are available.
-   - Ensure public docs do not overclaim: Postman script parity is claim-gated for the tracked target, platform OS sandbox coverage is tracked separately, distributed/cloud load testing is deferred, and full JMeter execution semantics are not claimed.
+   - Ensure public docs do not overclaim: Postman script parity is claim-gated for the tracked target, platform OS sandbox coverage is tracked separately, the legacy Load Test implementation has been removed pending the V1 redesign, and JMeter import/export/execution is not supported.
+
+2. Design and implement the new V1 Load Test section from a clean PostMeter-owned model.
+   - Target seven first-class test types: latency, RPS/throughput, concurrency, stress, spike, soak, and ramp.
+   - Define saved test configuration shape, UI flows, execution engine ownership, result summaries, failure reporting, export format, and safety limits before implementation.
+   - Keep request scripts, environment mutation policy, cookies, cancellation, diagnostics, and runner interaction explicit in the new design instead of inheriting behavior from the removed legacy panel.
 
 ## Blocked External Validation
 
@@ -91,7 +94,6 @@ These are production-readiness items that cannot be fully proven by local Linux 
 - Team collaboration and shared remote workspaces.
 - Plugin system for custom auth, assertions, importers, reporters, and scripting extensions.
 - True auto-download/auto-install updates beyond opening GitHub Releases.
-- Full JMeter execution semantics beyond the focused HTTP sampler compatibility target.
 - Advanced local automation / unsafe script mode is deferred and should not be part of the v1.0.0 release scope. If revisited later, consider a plugin system or settings panel that can grant selected local capabilities or disable sandboxing entirely for users who intentionally want scripts to modify local files. The maintainer has not chosen between those two models yet; any future design must treat this as dangerous, off by default, and visibly separate from the default safe sandbox.
 - Direct first-party Postman account/provider integration for fetching team Package Library `@team/package` sources remains deferred. The current reviewed HTTPS source-URL workflow stays the supported path until a future provider-specific auth/import contract is approved.
 - Maintainer-provided real-world Postman collection corpora remain deferred until a sanitized folder of collections is available. When provided, add them as compatibility fixtures or external report inputs without copying third-party copyrighted content blindly.
@@ -99,16 +101,14 @@ These are production-readiness items that cannot be fully proven by local Linux 
 
 ## Risks / Gaps Blocking Production Readiness
 
-- Load tests intentionally skip request scripts under sandbox v1; they use the normal HTTP sender directly and report the skip when scripts are present.
 - Native Windows/macOS packaged OS-sandbox assertions are wired into CI/release evidence paths. gRPC PFX/P12 client-certificate extraction, Postman-style per-request vault prompts, and checked-in `newman@6.2.2` JSON evidence reports are implemented locally and covered by focused validation.
 - Live OAuth provider tooling is implemented and mocked certification passes locally, but live Google, Microsoft Entra ID / Azure AD, and GitHub tenant evidence is not captured yet.
-- JMeter import/export covers common HTTP sampler metadata, assertion mappings including XPath, extractors, selected timer/controller metadata round-tripping, Size Assertion mapping, nested-controller metadata preservation, representative timer metadata, mapped disabled-state preservation, and unsupported metadata preservation, but it is still not a full JMeter test-plan model.
 - Automated Electron UI coverage is broader and includes screenshot, mocked OAuth, and XML/HTML formatting smokes, but it is still Linux/headless focused and not broad cross-platform UI automation.
 - Custom URI-scheme OAuth redirects are implemented and mocked; Linux deb/AppImage desktop-entry registration, macOS zip app-bundle metadata, Windows/macOS protocol validators, and native-runner validation jobs are wired. The remaining requirement is executing and monitoring those GitHub Actions jobs for release evidence.
-- IPC validation uses shared schema metadata for common fields, update/external payloads, file-operation results, OAuth progress, runner config/progress, load-test progress/results/policies, and result payloads, but some complex validators are still partly handwritten rather than fully generated.
+- IPC validation uses shared schema metadata for common fields, update/external payloads, file-operation results, OAuth progress, runner config/progress, and result payloads, but some complex validators are still partly handwritten rather than fully generated.
 - Signing/notarization remains incomplete; unsigned GitHub Release artifact publishing is configured.
 - In-app update checks can open GitHub Releases, but PostMeter does not yet auto-download or auto-install updates.
-- Load testing is local-only. It supports target arrival-rate scheduling, global rate caps, policy-decision reporting, bounded multi-process execution, streamed worker summary aggregation, and capped optional sample capture, but not distributed execution or cross-machine policy governance.
+- The legacy Load Test implementation is removed; the new seven-type V1 load-testing model still needs implementation.
 
 ## Next Iteration Starting Point
 

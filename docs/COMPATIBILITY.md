@@ -1,8 +1,8 @@
 # PostMeter Compatibility Matrix
 
-Use this document when you need the exact supported surface for imports, exports, scripting, and load testing.
+Use this document when you need the exact supported surface for imports, exports, scripting, and compatibility boundaries.
 
-PostMeter aims for practical compatibility with common API-client and load-test formats, with the Postman script import profile now tracked by a generated claim gate.
+PostMeter aims for practical compatibility with common API-client formats, with the Postman script import profile now tracked by a generated claim gate.
 
 The source-owned non-Postman production matrix is committed at `docs/non-postman-compatibility-matrix.json` and generated from `src/core/productionSupportMatrices.js`; validate it with `npm run compatibility:non-postman:validate`.
 
@@ -76,28 +76,6 @@ Known gaps:
 - Schema examples are best-effort.
 - Device-code OAuth export uses PostMeter vendor extensions because OpenAPI does not define a device-code flow.
 
-## JMeter
-
-Supported:
-
-- Basic `.jmx` `HTTPSamplerProxy` import.
-- Basic `.jmx` HTTP sampler export.
-- Method, protocol, host, path, query/body data, and headers where represented in common sampler fields.
-- Header Manager import/export for request headers.
-- User Defined Variables import/export as collection variables.
-- CSV Data Set Config metadata import as collection variables.
-- Thread group, timer, listener, and simple or nested controller metadata import as collection variables where practical.
-- Constant Timer, Constant Throughput Timer, and representative generic timer metadata such as Uniform/Gaussian/Poisson random timers and Precise Throughput Timer export back to JMX elements when preserved in collection variables.
-- Simple response-code, response-body, duration, size, JSON-path, and XPath assertions mapped to PostMeter assertions where practical, including disabled-state preservation for mapped assertions and XPath assertion variants in nested-controller fixtures.
-- Regex Extractor import/export as PostMeter regex variable extraction.
-- JSON Extractor import/export as PostMeter JSON variable extraction.
-- Known unsupported assertions, pre/post processors, and sampler/script elements such as JSR223 processors, HTML validity assertions, MD5 assertions, XML schema assertions, compare assertions, and SMIME assertions are preserved as explicit `jmeter.unsupported.*` collection variables instead of being silently dropped, and are re-exported as disabled JMX elements where the original class can be represented safely. PostMeter does not claim full arbitrary JMX object-graph preservation or JMeter execution parity.
-
-Known gaps:
-
-- JMeter HTML Assertion validity semantics, listeners, complex assertions, advanced controller execution semantics, full thread-group behavior, and distributed test plans are not fully modeled.
-- Import/export is intended as a bridge for simple HTTP sampler plans, not a full JMeter clone.
-
 ## curl
 
 Supported:
@@ -134,12 +112,10 @@ Supported:
 - HTML response bodies are formatted in the response viewer when the content type or body shape indicates HTML.
 - XML XPath assertions and XML value extraction run in collection and CLI workflows.
 - HTML CSS selector assertions and HTML text extraction run in collection and CLI workflows.
-- JMeter XPath Assertion imports to PostMeter XML XPath assertions and `xmlPath` existence assertions export back to JMeter XPath Assertion.
 
 Known gaps:
 
 - HTML selector assertions check parsed text content; they do not perform full browser layout, JavaScript execution, or accessibility-tree validation.
-- JMeter HTML Assertion document-validity behavior remains preserve-only because it is not equivalent to CSS selector checks.
 
 ## Scripting
 
@@ -187,18 +163,15 @@ Known gaps:
 
 - Keep `npm run postman:parity:claim`, `npm run postman:docs:validate`, and a current `npm run postman:docs:live` sweep green before preserving the tracked Postman script import claim; future Postman/Newman changes should be added as explicit matrix rows. Native OS sandbox coverage is separate platform-security work tracked by `npm run sandbox:platform:claim` and is not part of the Postman API parity claim.
 - Linux's current `bubblewrap` plus dangerous-syscall seccomp policy is accepted for the current Linux claim; a maintained deny-by-default seccomp-BPF allowlist is optional future hardening.
-- Load tests do not execute request pre-request scripts or test scripts.
-
 ## Load Testing
 
-Supported:
+Status:
 
-- Local request-count and duration modes.
-- Concurrency, ramp-up, target arrival-rate scheduling, global rate caps, policy-decision reporting, single-process or bounded multi-process execution, high-concurrency confirmation, cancellation, progress, latency summaries, histograms, optional capped samples, JSON/CSV export.
-- Multi-process execution merges worker summaries without retaining every raw sample in the parent process, and worker child processes inherit only a minimal environment.
+- The legacy local Load Test panel, runtime, result formatting, and JSON/CSV export path have been removed.
+- PostMeter does not currently claim load-test execution support while the new V1 Load Test model is being designed.
+- The planned V1 model targets seven first-class test types: latency, RPS/throughput, concurrency, stress, spike, soak, and ramp.
 
 Known gaps:
 
+- No load-test execution UI/API is currently exposed.
 - No distributed execution.
-- Pre-request and test scripts are skipped during load tests; sandbox v1 keeps scripted load testing out of scope.
-- No advanced cross-machine policy governance beyond target arrival-rate scheduling, local rate caps, local policy-decision reporting, and bounded request/concurrency/duration/process controls.

@@ -39,7 +39,6 @@
         <button id="exportCollectionButton" role="menuitem">Collection</button>
         <button id="exportPostmanButton" role="menuitem">Postman</button>
         <button id="exportOpenApiButton" role="menuitem">OpenAPI</button>
-        <button id="exportJMeterButton" role="menuitem">JMeter</button>
         <button id="exportCurlButton" role="menuitem">curl</button>
         <button id="exportHarButton" role="menuitem">HAR</button>
       </div>
@@ -368,7 +367,7 @@
               <textarea id="preRequestScriptInput" spellcheck="false" placeholder="pm.environment.set('token', 'value');" data-code-editor data-code-language="javascript"></textarea>
             </label>
             <label class="field script-field">
-              <span>Test Script</span>
+              <span>Post-request Script</span>
               <textarea id="testScriptInput" spellcheck="false" placeholder="pm.test('status is 200', function () { pm.response.to.have.status(200); });" data-code-editor data-code-language="javascript"></textarea>
             </label>
           </div>
@@ -641,7 +640,6 @@
           <button id="resultsCookiesTabButton" class="tab" type="button" role="tab" data-tab-group="results" data-tab="responseCookies" aria-selected="false" aria-controls="responseCookiesTab">Cookies</button>
           <button id="resultsTestResultsTabButton" class="tab" type="button" role="tab" data-tab-group="results" data-tab="testResults" aria-selected="false" aria-controls="testResultsTab">Test Results <span id="testResultsTabCount" class="tab-count" hidden></span></button>
           <button id="resultsVisualizerTabButton" class="tab" type="button" role="tab" data-tab-group="results" data-tab="visualizer" aria-selected="false" aria-controls="visualizerTab">Visualizer</button>
-          <button id="resultsLoadTabButton" class="tab" type="button" role="tab" data-tab-group="results" data-tab="load" aria-selected="false" aria-controls="loadTab">Load Test</button>
         </div>
 
         <div id="responseTab" class="tab-panel active" role="tabpanel" aria-labelledby="resultsResponseTabButton">
@@ -690,30 +688,6 @@
 
         <div id="visualizerTab" class="tab-panel" role="tabpanel" aria-labelledby="resultsVisualizerTabButton">
           <iframe id="visualizerFrame" class="visualizer-frame" sandbox="allow-scripts" title="Response visualizer"></iframe>
-        </div>
-
-        <div id="loadTab" class="tab-panel" role="tabpanel" aria-labelledby="resultsLoadTabButton">
-          <div class="load-controls">
-            <label>Concurrency <input id="loadConcurrency" type="number" min="1" max="512" value="5"></label>
-            <label>Max Requests <input id="loadRequests" type="number" min="1" max="100000" value="25"></label>
-            <label>Duration (s) <input id="loadDurationSeconds" type="number" min="0" max="3600" step="0.1" value="0"></label>
-            <label>Ramp-up (s) <input id="loadRampUpSeconds" type="number" min="0" max="3600" step="0.1" value="0"></label>
-            <label>Target RPS <input id="loadTargetRate" type="number" min="0" max="10000" step="0.1" value="0"></label>
-            <label>Rate Cap RPS <input id="loadMaxRate" type="number" min="0" max="10000" step="0.1" value="0"></label>
-            <label>Execution
-              <select id="loadExecutionMode">
-                <option value="singleProcess">Single process</option>
-                <option value="multiProcess">Multi-process</option>
-              </select>
-            </label>
-            <label>Processes <input id="loadWorkerProcesses" type="number" min="1" max="8" value="2"></label>
-            <label class="checkbox-field"><input id="loadRecordSamples" type="checkbox"> Samples</label>
-            <button id="runLoadButton" class="primary">Run Load Test</button>
-            <button id="cancelLoadButton" disabled>Cancel</button>
-            <button id="exportLoadJsonButton" disabled>Export JSON</button>
-            <button id="exportLoadCsvButton" disabled>Export CSV</button>
-          </div>
-          <pre id="loadResults" class="load-results" role="status" aria-live="polite">No load test run yet.</pre>
         </div>
 
       </section>
@@ -836,12 +810,10 @@
   <script src="../core/payloadSchemas.js"></script>
   <script src="../core/authModel.js"></script>
   <script src="../core/cookieModel.js"></script>
-  <script src="../core/loadPolicyModel.js"></script>
   <script src="collectionModel.js"></script>
   <script src="assertionModel.js"></script>
   <script src="cookieModel.js"></script>
   <script src="exampleModel.js"></script>
-  <script src="loadPolicy.js"></script>
   <script src="codeEditor.js"></script>
   <script src="requestEditorPanels.js"></script>
   <script src="variableAutocomplete.js"></script>

@@ -107,16 +107,6 @@ const postmeterApi = {
   diagnostics: {
     export: () => ipcRenderer.invoke('diagnostics:export')
   },
-  loadTest: {
-    start: (id, request, environment, config) => ipcRenderer.invoke('load:start', id, request, environment, config),
-    cancel: (id) => ipcRenderer.invoke('load:cancel', id),
-    export: (result, format) => ipcRenderer.invoke('load:export', result, format),
-    onProgress: (callback) => {
-      const listener = (_event, payload) => callback(payload);
-      ipcRenderer.on('load:progress', listener);
-      return () => ipcRenderer.removeListener('load:progress', listener);
-    }
-  },
   runner: {
     start: (id, collection, environment, config) => ipcRenderer.invoke('runner:start', id, collection, environment, config),
     cancel: (id) => ipcRenderer.invoke('runner:cancel', id),

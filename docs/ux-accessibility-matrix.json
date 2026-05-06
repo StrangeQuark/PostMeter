@@ -26,7 +26,7 @@
     {
       "id": "a11y.live-regions",
       "area": "Accessibility",
-      "target": "App status, validation, OAuth progress, response metrics, runner results, load-test results, package status, vault status, and file-binding status are announced through appropriate live regions.",
+      "target": "App status, validation, OAuth progress, response metrics, runner results, package status, vault status, and file-binding status are announced through appropriate live regions.",
       "status": "implemented",
       "evidenceRefs": [
         "src/renderer/index.html",
@@ -90,7 +90,7 @@
     {
       "id": "coverage.failure-artifacts",
       "area": "UI coverage",
-      "target": "Startup and UI smoke failures can write timeout-bounded screenshot, redacted structural DOM-state including active-element ARIA metadata, and redacted failure-log artifacts for CI upload through POSTMETER_VALIDATION_ARTIFACT_DIR or POSTMETER_UI_SMOKE_ARTIFACT_DIR; source UI, packaged smoke launcher, packaged sandbox-validation stdout/stderr/stacks, and multi-process load-worker stderr previews use the shared diagnostics redactor for local paths, private keys, request/response alias values, JSON-escaped slash URLs/file URLs, Bearer/Basic/Digest/Hawk/Token/OAuth/NTLM/Negotiate auth-shaped values, JSON-escaped/double-escaped/nested-JSON camelCase auth-header aliases, and OAuth code/verifier/assertion fields; smoke child processes fail closed with exit code 124 on timeout.",
+      "target": "Startup and UI smoke failures can write timeout-bounded screenshot, redacted structural DOM-state including active-element ARIA metadata, and redacted failure-log artifacts for CI upload through POSTMETER_VALIDATION_ARTIFACT_DIR or POSTMETER_UI_SMOKE_ARTIFACT_DIR; source UI, packaged smoke launcher, and packaged sandbox-validation stdout/stderr/stacks use the shared diagnostics redactor for local paths, private keys, request/response alias values, JSON-escaped slash URLs/file URLs, Bearer/Basic/Digest/Hawk/Token/OAuth/NTLM/Negotiate auth-shaped values, JSON-escaped/double-escaped/nested-JSON camelCase auth-header aliases, and OAuth code/verifier/assertion fields; smoke child processes fail closed with exit code 124 on timeout.",
       "status": "implemented",
       "evidenceRefs": [
         "electron/main.js",
@@ -108,8 +108,7 @@
         "npm run test:ui:oauth",
         "npm run test:ui:snapshot",
         "test/electron/mainWindowSmoke.test.js",
-        "test/electron/smokeProcess.test.js",
-        "test/electron/loadTestRunner.test.js"
+        "test/electron/smokeProcess.test.js"
       ],
       "notes": ""
     },
@@ -195,7 +194,7 @@
     {
       "id": "workflow.import-export",
       "area": "Imports/exports",
-      "target": "Workspace, collection, example, runner, and load-test import/export cancellation and failure paths stay parent-owned and report actionable errors without clobbering active state.",
+      "target": "Workspace, collection, example, and runner import/export cancellation and failure paths stay parent-owned and report actionable errors without clobbering active state.",
       "status": "implemented",
       "evidenceRefs": [
         "electron/workspaceIpc.js",
@@ -208,23 +207,6 @@
         "test/electron/workspaceIpc.test.js",
         "test/electron/runtimeIpc.test.js",
         "test/electron/collectionFormats.test.js"
-      ],
-      "notes": ""
-    },
-    {
-      "id": "workflow.load-test",
-      "area": "Load tests",
-      "target": "Load tests expose idle, running, cancellation, export, validation, pre-load save failure, and failed-operation states with bounded configuration controls.",
-      "status": "implemented",
-      "evidenceRefs": [
-        "src/renderer/index.html",
-        "src/renderer/rendererWorkflows.js",
-        "electron/runtimeIpc.js"
-      ],
-      "tests": [
-        "npm run test:ui:regression",
-        "test/electron/runtimeIpc.test.js",
-        "test/electron/rendererWorkflows.test.js"
       ],
       "notes": ""
     },
@@ -302,7 +284,7 @@
     {
       "id": "workflow.settings-theme",
       "area": "Settings/theme",
-      "target": "Workspace-scoped sandbox capability toggles, update settings, load policy, and system/light/dark theme preference save and reload without leaking into request payloads.",
+      "target": "Workspace-scoped sandbox capability toggles, update settings, and system/light/dark theme preference save and reload without leaking into request payloads.",
       "status": "implemented",
       "evidenceRefs": [
         "src/renderer/index.html",

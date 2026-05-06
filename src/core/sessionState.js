@@ -3,7 +3,7 @@ const BODY_TYPES = new Set(['NONE', 'RAW_JSON', 'RAW_TEXT']);
 const SIDEBAR_PANELS = new Set(['collections', 'environments', 'workspaces', 'runners', 'history']);
 const MAIN_PANELS = new Set(['request', 'environment', 'workspace', 'runner']);
 const REQUEST_EDITOR_TABS = new Set(['params', 'headers', 'auth', 'cookies', 'body', 'tests', 'scripts', 'examples', 'collectionVariables']);
-const RESULTS_TABS = new Set(['response', 'load']);
+const RESULTS_TABS = new Set(['response', 'responseHeaders', 'responseCookies', 'testResults', 'visualizer']);
 const SESSION_VERSION = 1;
 const MAX_OPEN_TABS = 128;
 
@@ -197,8 +197,7 @@ function normalizeSessionRequest(value) {
     cookieJar: {
       enabled: value?.cookieJar?.enabled === true,
       storeResponses: value?.cookieJar?.storeResponses !== false
-    },
-    loadTestPolicy: clonePlainObject(value.loadTestPolicy, {})
+    }
   };
 }
 

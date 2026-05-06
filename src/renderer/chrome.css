@@ -323,7 +323,6 @@
 .request-actions,
 .table-actions,
 .environment-actions,
-.load-controls,
 .metrics {
   display: flex;
   gap: 8px;
