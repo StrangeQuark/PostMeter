@@ -172,19 +172,6 @@
       $('exportRunnerCsvButton').disabled = false;
     }, global);
 
-    await captureUiSnapshotState('load', () => {
-      activateTab('results', 'load');
-      $('loadResults').textContent = [
-        'Completed requests: 12',
-        'Successful: 12',
-        'Failed: 0',
-        'Throughput: 24.00 req/s',
-        'Latency histogram: <=50ms:8 <=100ms:4'
-      ].join('\n');
-      $('exportLoadJsonButton').disabled = false;
-      $('exportLoadCsvButton').disabled = false;
-    }, global);
-
     await captureUiSnapshotState('workspace-sandbox', () => {
       selectWorkspaceItem(activeWorkspaceId || workspaceListItems()[0]?.id);
       refreshSandboxPackageStatus();

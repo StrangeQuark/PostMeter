@@ -21,23 +21,22 @@ Renderer files are loaded directly from `src/renderer/index.html`.
 - `layoutControls.js` owns resizable pane wiring and persisted layout CSS variables.
 - `collectionModel.js` owns pure collection/folder/request tree traversal and mutation helpers used by the renderer.
 - `exampleModel.js` owns request example formatting, header parsing, and example factory helpers.
-- `loadPolicy.js` owns renderer control reads and thin adapters over the shared core load-policy model.
 - `requestEditorPanels.js` owns request editor subpanel rendering: auth editor wiring, request pair/assertion tables, request example rendering, cookie panel rendering, and variable preview/editor helpers.
 - `rendererState.js` owns renderer state defaults plus shared active-tab, modal, and dirty-state helpers.
 - `requestTabs.js` owns generic request/environment/workspace/runner tab-bar rendering from tab descriptors, including shrink-before-scroll sizing and hover/active close buttons.
 - `requestTabState.js` owns request/environment/workspace/runner tab lifecycle, selection, dirty handling, sequential close/discard flows, force-close behavior, and the 128-open-tab cap.
 - `rendererBootstrap.js` owns renderer startup/theme bootstrap, toolbar-menu helpers, and DOM event registration driven by injected callbacks.
 - `sessionPersistence.js` owns renderer-side session serialization/restoration for open tabs, active panels, active selection, drafts, dirty editor state, workspace order, and the no-tab empty-pane restore state for environments, workspaces, and runners.
-- `rendererWorkflows.js` owns request send/load/runner/OAuth/workspace import-export-save workflows, collection-export selection flows, non-destructive workspace import handling, and script-mutation application.
+- `rendererWorkflows.js` owns request send, runner, OAuth, workspace import/export/save workflows, collection-export selection flows, non-destructive workspace import handling, and script-mutation application.
 - `responseFormatting.js` owns renderer-side response body formatting for JSON, XML, and HTML display.
-- `runResultFormatting.js` owns renderer-side text formatting for runner, load-test, and OAuth progress/result displays.
+- `runResultFormatting.js` owns renderer-side text formatting for runner and OAuth progress/result displays.
 - `uiSmokeCommon.js` owns shared test-only UI smoke helpers such as queueing, waits, DOM dispatch helpers, assertions, and snapshot capture.
 - `uiWorkflowSmoke.js`, `uiRegressionSmoke.js`, `uiSnapshotSmoke.js`, and `uiOauthSmoke.js` each own one Electron UI smoke suite instead of sharing a single renderer test harness file.
 - `uiSmoke.js` is the stable test-only queue/entry-point layer. Production code should only call the `queueUi*Smoke` entry points.
 - `theme.css` owns design tokens, method colors, and light/dark/system theme variables.
 - `base.css` owns element defaults and common control states.
 - `chrome.css` owns application chrome, sidebar, tree, drag/drop insertion bars, workspace framing, runner framing, and request-tab layout rules.
-- `editorPanels.css` owns request, response, auth, cookie, example, and load-test/editor component rules.
+- `editorPanels.css` owns request, response, auth, cookie, example, and editor component rules.
 - `overlays.css` owns modal and context-menu presentation.
 - `styles.css` is the renderer stylesheet entry point and imports the modular CSS slices.
 
@@ -56,7 +55,7 @@ Keep DOM IDs stable unless tests and IPC-facing workflows are migrated at the sa
 - `oauthIpc.js` owns OAuth IPC channel registration and payload validation.
 - `oauthFlows.js` owns OAuth authorization-code/device-code orchestration, callback routing, protocol registration, credential-free http/https shell-launch validation, and expected `postmeter://oauth/callback` route matching.
 - `requestIpc.js` owns single-request validation/send IPC and persistence of response-side workspace mutations.
-- `runtimeIpc.js` owns load-test and collection-run IPC channels, cancellation maps, progress events, and result exports.
+- `runtimeIpc.js` owns collection-run IPC channels, cancellation maps, progress events, and result exports.
 - `sessionIpc.js` owns renderer session load/save IPC, including the synchronous shutdown flush path.
 - `sessionStore.js` owns persisted UI session state in Electron `userData/session.json`.
 - `workspaceIpc.js` owns workspace import/export, collection import/export, workspace save/load, request-example export IPC channels, and the refreshed managed-workspace payloads returned after workspace import.
@@ -78,11 +77,11 @@ Core modules must not depend on Electron or renderer globals.
 - `pfxCertificate.js` owns parent-side PFX/P12 bundle extraction and encrypted PEM private-key normalization into in-memory PEM buffers for HTTP and gRPC client-certificate transports. It uses regular-file, byte-capped descriptor reads plus the reviewed `node-forge` PKCS#12/PEM parser in the parent process, and does not shell out or write decrypted PEM material to temp files.
 - `grpcClient.js` owns the parent-side live gRPC transport for imported gRPC requests. It loads trusted proto definitions, builds parent-owned gRPC clients, normalizes metadata/messages/status/trailers/errors, and keeps proto/TLS/client-certificate filesystem access outside the script worker. gRPC mTLS supports PEM cert/key material and the shared parent-side PFX/P12 extraction path used by HTTP client-certificate requests, with configured certificate bindings failing closed instead of falling back to script-mutated direct paths.
 - `productionReadinessMatrix.js` and `productionSupportMatrices.js` own release-readiness, Electron-security, workspace-durability, and non-Postman compatibility dashboards. Generated JSON lives in `docs/`.
-- `docs/SANDBOX_CONTRACT.md` is the source of truth for script sandbox compatibility, security boundaries, broker behavior, side-effect transactions, and load-test scripting scope. The current claim-gated Postman script parity target is Postman Desktop 11.71.7 with `postman-sandbox@6.2.2` and Postman Runtime 7.50.0, plus Newman 6.2.2 with Postman Runtime 7.39.1 for Newman-compatible surfaces.
-- `authModel.js`, `cookieModel.js`, and `loadPolicyModel.js` own shared runtime-neutral model defaults and normalization used by both core and renderer modules.
+- `docs/SANDBOX_CONTRACT.md` is the source of truth for script sandbox compatibility, security boundaries, broker behavior, side-effect transactions, and future high-volume execution scripting scope. The current claim-gated Postman script parity target is Postman Desktop 11.71.7 with `postman-sandbox@6.2.2` and Postman Runtime 7.50.0, plus Newman 6.2.2 with Postman Runtime 7.39.1 for Newman-compatible surfaces.
+- `authModel.js` and `cookieModel.js` own shared runtime-neutral model defaults and normalization used by both core and renderer modules.
 - `payloadSchemas.js` owns shared field schemas, enum sets, and basic string-length limits consumed by IPC validation and shared normalization helpers.
 - `collectionFormats.js` is the stable public import/export boundary for collection format handling.
-- `openApiFormats.js`, `harFormats.js`, `curlFormats.js`, and `jmeterFormats.js` each own one import/export family instead of sharing a single god module.
+- `openApiFormats.js`, `harFormats.js`, and `curlFormats.js` each own one import/export family instead of sharing a single god module.
 - `collectionFormatUtils.js` owns the small set of cross-format helpers such as URL parsing, JSON/XML escaping, shell splitting/quoting, and request flattening.
 - `collectionImportRegistry.js` owns collection import detection/dispatch and format-specific export dispatch without changing the `WorkspaceStore` API.
 - `scriptRuntime.js`, `sandboxPackageCache.js`, `postmanBuiltinPackages.js`, `postmanSandboxBootcodeBundle.js`, `visualizerHandlebarsBundle.js`, `scriptSandbox.js`, `scriptWorker.js`, and `osSandbox.js` implement the constrained Postman-style script environment, reviewed package-cache policy, version-pinned Postman package bundle, isolated Handlebars visualizer runtime, worker transport, broker boundary, and OS sandbox launcher layer.

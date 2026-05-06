@@ -9,10 +9,6 @@ const {
   looksLikeHarDocument
 } = require('./harFormats');
 const {
-  exportJMeterPlan,
-  importJMeterPlan
-} = require('./jmeterFormats');
-const {
   exportOpenApiCollection,
   importOpenApiDocument,
   looksLikeOpenApiDocument
@@ -26,12 +22,10 @@ const {
 module.exports = {
   exportCurlCollection,
   exportHarCollection,
-  exportJMeterPlan,
   exportOpenApiCollection,
   exportPostmanCollection,
   importCurlCommand,
   importHarDocument,
-  importJMeterPlan,
   importOpenApiDocument,
   importPostmanCollection,
   looksLikeHarDocument,

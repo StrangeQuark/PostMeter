@@ -390,10 +390,6 @@ function requiredPreloadApiSurface() {
     ['vault', 'reset'],
     ['vault', 'unsetSecret'],
     ['sandboxPackages', 'fetch'],
-    ['loadTest', 'start'],
-    ['loadTest', 'cancel'],
-    ['loadTest', 'export'],
-    ['loadTest', 'onProgress'],
     ['runner', 'start'],
     ['runner', 'cancel'],
     ['runner', 'export'],
@@ -734,7 +730,7 @@ function loadQuery(env) {
 }
 
 function bindUiSnapshotSmoke(app, mainWindow, env) {
-  const expectedCaptures = new Set(['empty-state', 'request', 'context-menu', 'cookies', 'auth-oauth', 'response', 'runner', 'load', 'workspace-sandbox', 'long-labels', 'export-menu']);
+  const expectedCaptures = new Set(['empty-state', 'request', 'context-menu', 'cookies', 'auth-oauth', 'response', 'test-results', 'runner', 'workspace-sandbox', 'long-labels', 'export-menu']);
   const captured = new Set();
   let finished = false;
   const failSnapshot = async (message) => {

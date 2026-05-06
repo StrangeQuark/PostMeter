@@ -4,7 +4,7 @@
   "deterministic": true,
   "target": {
     "claim": "Implemented tier-one OS sandbox backend coverage for script workers",
-    "separation": "This matrix is separate from Postman API parity and from scripted load-test support.",
+    "separation": "This matrix is separate from Postman API parity and from future scripted high-volume execution support.",
     "postmanParityCommand": "npm run postman:parity:claim",
     "postmanDocsCommand": "npm run postman:docs:validate",
     "platformClaimCommand": "npm run sandbox:platform:claim"
@@ -12,7 +12,7 @@
   "claimSurfaces": {
     "platform-os-sandbox": "Implemented native OS sandbox backends and packaged validation wiring across tier-one desktop platforms. Stable production readiness still requires native-runner evidence in the production readiness matrix.",
     "postman-api-parity": "Postman script API behavior and imported-script observable output.",
-    "load-test-scripting": "Future scripted load-test contract; currently out of scope.",
+    "high-volume-scripting": "Future scripted high-volume execution contract; currently out of scope.",
     "release-gate": "Validation plumbing required to keep the matrix current."
   },
   "statuses": {
@@ -60,6 +60,25 @@
     }
   },
   "rows": [
+    {
+      "id": "high-volume.scripted-sandbox-contract",
+      "platform": "all",
+      "area": "claim-boundary",
+      "target": "Future scripted high-volume execution remains outside the Postman scripting parity claim unless a separate contract is written and implemented.",
+      "status": "out-of-scope",
+      "claimSurface": "high-volume-scripting",
+      "claimBlocking": false,
+      "securityDecision": "Do not imply partial scripted high-volume execution compatibility until the future feature has its own sandbox contract.",
+      "sourceRefs": [
+        "sandboxContract",
+        "nextSteps"
+      ],
+      "verificationRefs": [
+        "docs/SANDBOX_CONTRACT.md high-volume execution decision",
+        "docs/SANDBOX_CONTRACT.md future high-volume execution decision"
+      ],
+      "notes": ""
+    },
     {
       "id": "linux.namespace-bubblewrap",
       "platform": "linux",
@@ -141,25 +160,6 @@
         "NEXT_STEPS.MD Questions For Maintainer After Implementation",
         "npm run sandbox:validate",
         "test/electron/scriptSandbox.test.js"
-      ],
-      "notes": ""
-    },
-    {
-      "id": "load-tests.scripted-sandbox-contract",
-      "platform": "all",
-      "area": "claim-boundary",
-      "target": "Scripted load tests remain outside the Postman scripting parity claim unless a separate scripted-load-test contract is written and implemented.",
-      "status": "out-of-scope",
-      "claimSurface": "load-test-scripting",
-      "claimBlocking": false,
-      "securityDecision": "Do not execute request scripts during load tests in sandbox v1; avoid implying partial scripted-load compatibility.",
-      "sourceRefs": [
-        "sandboxContract",
-        "nextSteps"
-      ],
-      "verificationRefs": [
-        "docs/SANDBOX_CONTRACT.md Load-Test Decision",
-        "docs/COMPATIBILITY.md load-test limitation"
       ],
       "notes": ""
     },

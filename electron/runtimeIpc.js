@@ -1,10 +1,8 @@
-const { loadTestResultToCsv, runLoadTest } = require('../src/core/loadTestRunner');
 const { collectionRunResultToCsv, runCollection, runRunner } = require('../src/core/collectionRunner');
 const { writeTextFileAtomic } = require('../src/core/workspacePersistence');
 const { selectedSaveFilePath } = require('./fileDialogs');
 const {
   applyCollectionRunMutationsToWorkspace,
-  findWorkspaceRequestContext,
   mergeCookieJarByDelta,
   mergeVariableScopeByDelta
 } = require('./workspaceMutations');
@@ -12,12 +10,8 @@ const {
   assertCollectionPayload,
   assertCollectionRunResultPayload,
   assertExportFormat,
-  assertLoadConfigPayload,
-  assertLoadId,
-  assertLoadProgressPayload,
-  assertLoadResultPayload,
   assertOptionalEnvironmentPayload,
-  assertRequestPayload,
+  assertRuntimeId,
   assertRunnerConfigPayload,
   assertRunnerPayload,
   assertRunnerProgressPayload
@@ -34,7 +28,6 @@ function registerRuntimeIpc(options = {}) {
     getVaultPrompt = () => null,
     ipcMain,
     runCollection: runCollectionImpl = runCollection,
-    runLoadTest: runLoadTestImpl = runLoadTest,
     runRunner: runRunnerImpl = runRunner,
     recordDiagnosticEvent = async () => {},
     mutateWorkspace = async (mutator) => {
@@ -46,106 +39,10 @@ function registerRuntimeIpc(options = {}) {
     saveWorkspace,
     setWorkspace
   } = options;
-  const activeLoadTests = new Map();
   const activeCollectionRuns = new Map();
 
-  ipcMain.handle('load:start', async (event, id, request, environment, config) => {
-    assertLoadId(id);
-    assertRequestPayload(request);
-    assertOptionalEnvironmentPayload(environment);
-    assertLoadConfigPayload(config);
-    if (activeLoadTests.has(id)) {
-      throw new Error(`Load test is already running for id "${id}".`);
-    }
-    const abortController = new AbortController();
-    const workspace = getWorkspace();
-    const workspaceId = getWorkspaceId();
-    const baseCookies = cloneJson(workspace.cookies || []);
-    const progressDelivery = createProgressDelivery({
-      abortController,
-      assertPayload: assertLoadProgressPayload,
-      channel: 'load:progress',
-      event,
-      id,
-      label: 'Load-test progress'
-    });
-    activeLoadTests.set(id, abortController);
-    try {
-      const result = await runLoadTestImpl(request, environment, config, {
-        abortController,
-        cookieJar: workspace.cookies || [],
-        onProgress: progressDelivery.send
-      });
-      progressDelivery.throwIfFailed();
-      const publicResult = publicLoadResult(result);
-      assertLoadResultPayload(publicResult);
-      await recordDiagnosticEvent({
-        type: 'load.start.completed',
-        level: 'info',
-        outcome: 'completed',
-        durationMillis: publicResult.elapsedMillis,
-        fields: {
-          executionMode: publicResult.executionMode || config.executionMode || 'singleProcess',
-          failedRequests: publicResult.failedRequests || 0,
-          requestBodyBytes: Buffer.byteLength(String(request.body || ''), 'utf8'),
-          statusCodeBucketCount: Object.keys(result.statusCounts || {}).length,
-          successfulRequests: publicResult.successfulRequests || 0,
-          totalRequests: publicResult.totalRequests || 0
-        }
-      });
-      if (Array.isArray(result.cookies)) {
-        await mutateWorkspace(async (latestWorkspace) => {
-          if (result.updatedAuth && request.id) {
-            const latestRequestContext = findWorkspaceRequestContext(latestWorkspace, request.id);
-            if (latestRequestContext?.request) {
-              latestRequestContext.request.auth = result.updatedAuth;
-            }
-          }
-          latestWorkspace.cookies = mergeCookieJarByDelta(latestWorkspace.cookies || [], baseCookies, result.cookies);
-          return latestWorkspace;
-        }, { workspaceId });
-      } else if (result.updatedAuth && request.id) {
-        await mutateWorkspace(async (latestWorkspace) => {
-          const latestRequestContext = findWorkspaceRequestContext(latestWorkspace, request.id);
-          if (latestRequestContext?.request) {
-            latestRequestContext.request.auth = result.updatedAuth;
-          }
-          return latestWorkspace;
-        }, { workspaceId });
-      }
-      return publicResult;
-    } catch (error) {
-      await recordDiagnosticEvent({
-        type: 'load.start.failed',
-        level: 'error',
-        outcome: 'failed',
-        failureCode: failureCodeFromError(error, 'load_start_failed'),
-        fields: {
-          executionMode: config?.executionMode || 'singleProcess',
-          requestBodyBytes: Buffer.byteLength(String(request.body || ''), 'utf8'),
-          error: error?.message || String(error)
-        }
-      });
-      throw error;
-    } finally {
-      if (activeLoadTests.get(id) === abortController) {
-        activeLoadTests.delete(id);
-      }
-    }
-  });
-
-  ipcMain.handle('load:cancel', (_event, id) => {
-    assertLoadId(id);
-    const abortController = activeLoadTests.get(id);
-    if (!abortController) {
-      return false;
-    }
-    abortController.abort();
-    return true;
-  });
-
   ipcMain.handle('runner:start', async (event, id, collection, environment, config = {}) => {
-    assertLoadId(id);
+    assertRuntimeId(id);
     const firstClassRunner = looksLikeRunnerPayload(collection);
     if (firstClassRunner) {
       assertRunnerPayload(collection);
@@ -264,7 +161,7 @@ function registerRuntimeIpc(options = {}) {
   });
 
   ipcMain.handle('runner:cancel', (_event, id) => {
-    assertLoadId(id);
+    assertRuntimeId(id);
     const abortController = activeCollectionRuns.get(id);
     if (!abortController) {
       return false;
@@ -295,27 +192,6 @@ function registerRuntimeIpc(options = {}) {
     return fileOperationResult({ cancelled: false, path: filePath });
   });
 
-  ipcMain.handle('load:export', async (_event, result, format) => {
-    const publicResult = publicLoadResult(result);
-    assertLoadResultPayload(publicResult);
-    assertExportFormat(format);
-    const extension = format === 'csv' ? 'csv' : 'json';
-    const saveResult = await dialog.showSaveDialog(getMainWindow(), {
-      title: `Export Load Test ${extension.toUpperCase()}`,
-      defaultPath: `postmeter-load-test.${extension}`,
-      filters: [
-        { name: extension.toUpperCase(), extensions: [extension] },
-        { name: 'All Files', extensions: ['*'] }
-      ]
-    });
-    const filePath = selectedSaveFilePath(saveResult);
-    if (!filePath) {
-      return fileOperationResult({ cancelled: true });
-    }
-    const content = format === 'csv' ? loadTestResultToCsv(publicResult) : JSON.stringify(publicResult, null, 2);
-    await writeTextFileAtomic(filePath, content, { prefix: 'postmeter-load-export' });
-    return fileOperationResult({ cancelled: false, path: filePath });
-  });
 }
 
 function requestLocalVariablesById(collection) {
@@ -379,12 +255,6 @@ function createProgressDelivery({ abortController, assertPayload, channel, event
       }
     }
   };
-}
-
-function publicLoadResult(result) {
-  const publicResult = cloneJson(result) || {};
-  delete publicResult.updatedAuth;
-  return publicResult;
 }
 
 function publicCollectionRunResult(result) {

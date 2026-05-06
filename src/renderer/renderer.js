@@ -4,7 +4,7 @@ const THEME_OPTIONS = ['system', 'light', 'dark'];
 const RENDERER_STATE_DEFAULTS = PostMeterRendererState.createRendererState();
 const TAB_PANEL_IDS = {
   request: ['paramsTab', 'headersTab', 'authTab', 'cookiesTab', 'bodyTab', 'testsTab', 'scriptsTab', 'examplesTab', 'collectionVariablesTab'],
-  results: ['responseTab', 'responseHeadersTab', 'responseCookiesTab', 'testResultsTab', 'visualizerTab', 'loadTab']
+  results: ['responseTab', 'responseHeadersTab', 'responseCookiesTab', 'testResultsTab', 'visualizerTab']
 };
 
 let workspace = RENDERER_STATE_DEFAULTS.workspace;
@@ -29,10 +29,8 @@ let collectionDirtySnapshots = RENDERER_STATE_DEFAULTS.collectionDirtySnapshots;
 let collectionDirtyOwners = RENDERER_STATE_DEFAULTS.collectionDirtyOwners;
 let cookieJarDirtySnapshot = RENDERER_STATE_DEFAULTS.cookieJarDirtySnapshot;
 let cookieJarDirtyOwner = RENDERER_STATE_DEFAULTS.cookieJarDirtyOwner;
-let activeLoadId = RENDERER_STATE_DEFAULTS.activeLoadId;
 let activeOauthFlowId = RENDERER_STATE_DEFAULTS.activeOauthFlowId;
 let activeRunnerId = RENDERER_STATE_DEFAULTS.activeRunnerId;
-let lastLoadResult = RENDERER_STATE_DEFAULTS.lastLoadResult;
 let lastRunnerResult = RENDERER_STATE_DEFAULTS.lastRunnerResult;
 let selectedRunnerExecutionIndex = 0;
 let lastResponse = RENDERER_STATE_DEFAULTS.lastResponse;
@@ -170,14 +168,10 @@ const state = {
   set cookieJarDirtySnapshot(value) { cookieJarDirtySnapshot = value; },
   get cookieJarDirtyOwner() { return cookieJarDirtyOwner; },
   set cookieJarDirtyOwner(value) { cookieJarDirtyOwner = value; },
-  get activeLoadId() { return activeLoadId; },
-  set activeLoadId(value) { activeLoadId = value; },
   get activeOauthFlowId() { return activeOauthFlowId; },
   set activeOauthFlowId(value) { activeOauthFlowId = value; },
   get activeRunnerId() { return activeRunnerId; },
   set activeRunnerId(value) { activeRunnerId = value; },
-  get lastLoadResult() { return lastLoadResult; },
-  set lastLoadResult(value) { lastLoadResult = value; },
   get lastRunnerResult() { return lastRunnerResult; },
   set lastRunnerResult(value) { lastRunnerResult = value; },
   get lastResponse() { return lastResponse; },
@@ -244,7 +238,6 @@ const rendererWorkflows = createRendererWorkflows({
   displayResponse,
   displayTestResults,
   domainFromRequestUrl,
-  loadConfigFromControls: () => PostMeterLoadPolicy.loadConfigFromControls(),
   notifyUser,
   parseCookieHeaderForJar,
   postmanCookieMetadataByName,
@@ -298,11 +291,6 @@ initializeRenderer({
       getVariables: () => activeEnvironment()?.variables || []
     }).destroy);
     registerCleanup(window.postmeter.app.onMenuAction(handleAppMenuAction));
-    registerCleanup(window.postmeter.loadTest.onProgress(({ id, progress }) => {
-      if (id === activeLoadId) {
-        $('loadResults').textContent = PostMeterRunFormatting.formatLoadProgress(progress);
-      }
-    }));
     registerCleanup(window.postmeter.oauth.onProgress((progress) => {
       if (progress.id === activeOauthFlowId) {
         renderOauthProgress(progress);
@@ -353,7 +341,6 @@ function bindUi() {
     onExportCollection: () => exportCollection(null, 'postmeter'),
     onExportPostman: () => exportCollection(null, 'postman'),
     onExportOpenApi: () => exportCollection(null, 'openapi'),
-    onExportJMeter: () => exportCollection(null, 'jmeter'),
     onExportCurl: () => exportCollection(null, 'curl'),
     onExportHar: () => exportCollection(null, 'har'),
     onSelectTheme: (themeOption) => setThemePreference(themeOption, { save: true }),
@@ -382,10 +369,6 @@ function bindUi() {
     onAddRequestVariable: addRequestVariable,
     onAddCookie: addCookie,
     onClearExpiredCookies: clearExpiredCookies,
-    onRunLoadTest: runLoadTest,
-    onCancelLoadTest: cancelLoadTest,
-    onExportLoadJson: () => exportLoadResult('json'),
-    onExportLoadCsv: () => exportLoadResult('csv'),
     onRunCollection: runActiveCollection,
     onCancelCollectionRun: cancelCollectionRun,
     onExportRunnerJson: () => exportRunnerResult('json'),
@@ -1747,11 +1730,9 @@ function applyLoadedWorkspace(loaded, options = {}) {
   updateWorkspaceCatalog(loaded, options);
   workspace = loaded?.workspace || workspace;
   lastResponse = null;
-  lastLoadResult = null;
   lastRunnerResult = null;
   lastVaultMetadata = null;
   lastVaultMetadataWorkspaceId = null;
-  activeLoadId = null;
   activeOauthFlowId = null;
   activeRunnerId = null;
   selectInitialWorkspaceItem();
@@ -1775,15 +1756,10 @@ function applyLoadedWorkspace(loaded, options = {}) {
 function resetWorkspaceTransientUi() {
   lastRenderedRequestEditorContextKey = '';
   $('validationLabel').textContent = '';
-  $('loadResults').textContent = '';
   renderRunnerExecutionMessage('No runner run yet.');
   displayTestResults(null);
-  $('runLoadButton').disabled = false;
-  $('cancelLoadButton').disabled = true;
   $('runCollectionButton').disabled = false;
   $('cancelRunnerButton').disabled = true;
-  $('exportLoadJsonButton').disabled = true;
-  $('exportLoadCsvButton').disabled = true;
   $('exportRunnerJsonButton').disabled = true;
   $('exportRunnerCsvButton').disabled = true;
   resetOauthProgressPanel();
@@ -2014,11 +1990,7 @@ function selectSidebarPanel(panel) {
 }
 
 function cancelActiveRuntimeForContextReset() {
-  const loadId = activeLoadId;
   const runnerId = activeRunnerId;
-  if (loadId && typeof window.postmeter?.loadTest?.cancel === 'function') {
-    void window.postmeter.loadTest.cancel(loadId).catch(() => {});
-  }
   if (runnerId && typeof window.postmeter?.runner?.cancel === 'function') {
     void window.postmeter.runner.cancel(runnerId).catch(() => {});
   }
@@ -6636,14 +6608,6 @@ function safeScriptJson(value) {
   }
 }
 
-async function runLoadTest() {
-  return rendererWorkflows.runLoadTest();
-}
-
-async function cancelLoadTest() {
-  return rendererWorkflows.cancelLoadTest();
-}
-
 async function runActiveCollection() {
   if (activeMainPanel === 'runner') {
     return runActiveRunner();
@@ -6737,10 +6701,6 @@ async function cancelCollectionRun() {
 
 async function exportRunnerResult(format) {
   return rendererWorkflows.exportRunnerResult(format);
-}
-
-async function exportLoadResult(format) {
-  return rendererWorkflows.exportLoadResult(format);
 }
 
 async function startDeviceFlow() {
@@ -7208,8 +7168,7 @@ function newRequestObject(name) {
     scripts: { preRequest: '', tests: '' },
     variables: [],
     examples: [],
-    cookieJar: { enabled: false, storeResponses: true },
-    loadTestPolicy: PostMeterLoadPolicy.defaultRequestLoadPolicy()
+    cookieJar: { enabled: false, storeResponses: true }
   };
 }
 

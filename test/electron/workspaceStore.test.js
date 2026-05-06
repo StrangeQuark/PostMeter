@@ -11,20 +11,6 @@ const {
   looksLikeNativeWorkspace
 } = require('../../src/core/workspaceStore');
 
-function defaultLoadTestPolicy() {
-  return {
-    concurrency: 5,
-    totalRequests: 25,
-    durationSeconds: 0,
-    rampUpSeconds: 0,
-    targetRatePerSecond: 0,
-    maxRatePerSecond: 0,
-    executionMode: 'singleProcess',
-    workerProcesses: 2,
-    recordSamples: false
-  };
-}
-
 test('creates a default schema 12 workspace when no file exists', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-store-'));
   const workspacePath = path.join(temp, 'workspace.json');
@@ -144,7 +130,7 @@ test('migrates schema 2 workspaces to schema 12 and creates a backup', async () 
   assert.deepEqual(workspace.collections[0].requests[0].variables, []);
   assert.deepEqual(workspace.collections[0].requests[0].examples, []);
   assert.deepEqual(workspace.collections[0].requests[0].cookieJar, { enabled: false, storeResponses: true });
-  assert.deepEqual(workspace.collections[0].requests[0].loadTestPolicy, { enabled: false, ...defaultLoadTestPolicy() });
+  assert.equal(workspace.collections[0].requests[0].loadTestPolicy, undefined);
   assert.equal(backups.length, 1);
   assert.equal(JSON.parse(await fs.readFile(path.join(temp, backups[0]), 'utf8')).schemaVersion, 2);
 });
@@ -686,7 +672,6 @@ function legacyRequestFixture(id, originalPostmanId) {
       postman: { ids: { original: `${originalPostmanId}-example` } }
     }],
     cookieJar: { enabled: true, storeResponses: true },
-    loadTestPolicy: { enabled: true, concurrency: 2 },
     methodPath: 'Greeter/SayHello',
     metadata: [{ enabled: true, key: 'grpc-status', value: '0' }],
     messages: [{ type: 'outgoing', name: 'hello', data: '{"name":"Ada"}' }],

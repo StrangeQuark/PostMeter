@@ -301,67 +301,6 @@ test('renderer workflows render request send exceptions inline without blocking 
   assert.equal(status, 'Request failed: network boom');
 });
 
-test('renderer workflows allow running a load test from an active draft request without forcing a save', async () => {
-  const state = createRendererState();
-  const draftRequest = {
-    id: 'draft-1',
-    name: 'Draft Load Request',
-    method: 'GET',
-    url: 'https://example.test',
-    scripts: { preRequest: '', tests: '' }
-  };
-  state.workspace = { collections: [], environments: [], history: [], settings: {} };
-  state.activeMainPanel = 'request';
-  state.activeRequestId = draftRequest.id;
-  state.openRequestTabs = [{ key: 'draft:draft-1', requestId: draftRequest.id, draft: true, dirty: true }];
-  state.draftRequests.set(draftRequest.id, draftRequest);
-  const doc = createDocument();
-  doc.getElementById('loadConcurrency').value = '1';
-  let workspaceSaveCalls = 0;
-  let loadStartCalls = 0;
-
-  const workflows = createRendererWorkflows({
-    state,
-    activeCollection: () => null,
-    activeEnvironment: () => null,
-    activeRequest: () => draftRequest,
-    collectRequestFromEditor: () => {},
-    doc,
-    loadConfigFromControls: () => ({ totalRequests: 1 }),
-    runFormatting: createRunFormatting(),
-    setStatus: () => {},
-    windowObject: {
-      postmeter: {
-        request: {
-          validate: async () => []
-        },
-        loadTest: {
-          start: async () => {
-            loadStartCalls += 1;
-            return {
-              totalRequests: 1,
-              successfulRequests: 1,
-              failedRequests: 0,
-              cancelled: false
-            };
-          }
-        },
-        workspace: {
-          save: async (workspace) => {
-            workspaceSaveCalls += 1;
-            return workspace;
-          }
-        }
-      }
-    }
-  });
-
-  await workflows.runLoadTest();
-
-  assert.equal(loadStartCalls, 1);
-  assert.equal(workspaceSaveCalls, 0);
-});
-
 test('renderer workflows persist the workspace and clear dirty state for explicit full saves', async () => {
   const state = createRendererState();
   state.workspace = {
@@ -1850,120 +1789,6 @@ test('renderer workflows ignore stale OAuth completions after a newer flow start
   assert.equal(request.auth.accessToken, 'fresh-flow-token');
 });
 
-test('renderer workflows apply load-test cookie updates back into the renderer workspace state', async () => {
-  const state = createRendererState();
-  const request = {
-    id: 'request-1',
-    name: 'Load Widgets',
-    method: 'GET',
-    url: 'https://example.test/widgets',
-    cookieJar: { enabled: true, storeResponses: true },
-    scripts: { preRequest: '', tests: '' }
-  };
-  state.workspace = { collections: [], environments: [], history: [], cookies: [], settings: {} };
-  const doc = createDocument();
-  doc.getElementById('loadConcurrency').value = '1';
-  let cookieRenders = 0;
-
-  const workflows = createRendererWorkflows({
-    state,
-    activeCollection: () => null,
-    activeEnvironment: () => null,
-    activeRequest: () => request,
-    collectRequestFromEditor: () => {},
-    doc,
-    loadConfigFromControls: () => ({ totalRequests: 2 }),
-    renderCookieJarEditor: () => { cookieRenders += 1; },
-    runFormatting: createRunFormatting(),
-    setStatus: () => {},
-    windowObject: {
-      postmeter: {
-        request: {
-          validate: async () => []
-        },
-        loadTest: {
-          start: async () => ({
-            totalRequests: 2,
-            successfulRequests: 2,
-            failedRequests: 0,
-            cancelled: false,
-            cookies: [{ name: 'loadSession', value: 'ready', domain: 'example.test', path: '/' }]
-          })
-        },
-        workspace: {
-          save: async (workspace) => workspace
-        }
-      }
-    }
-  });
-
-  await workflows.runLoadTest();
-
-  assert.equal(state.workspace.cookies.length, 1);
-  assert.equal(state.workspace.cookies[0].name, 'loadSession');
-  assert.equal(cookieRenders, 1);
-});
-
-test('renderer workflows recover load-test start failures without leaving active controls stuck', async () => {
-  const state = createRendererState();
-  state.lastLoadResult = { totalRequests: 9, successfulRequests: 9, failedRequests: 0 };
-  const request = {
-    id: 'request-1',
-    name: 'Load Widgets',
-    method: 'GET',
-    url: 'https://example.test/widgets',
-    scripts: { preRequest: '', tests: '' }
-  };
-  state.workspace = { collections: [], environments: [], history: [], cookies: [], settings: {} };
-  const doc = createDocument();
-  doc.getElementById('loadConcurrency').value = '1';
-  let status = '';
-  let notification = null;
-
-  const workflows = createRendererWorkflows({
-    state,
-    activeCollection: () => null,
-    activeEnvironment: () => null,
-    activeRequest: () => request,
-    collectRequestFromEditor: () => {},
-    doc,
-    loadConfigFromControls: () => ({ totalRequests: 2 }),
-    notifyUser: (title, message) => { notification = { title, message }; },
-    runFormatting: createRunFormatting(),
-    setStatus: (value) => { status = value; },
-    windowObject: {
-      postmeter: {
-        request: {
-          validate: async () => []
-        },
-        loadTest: {
-          start: async () => {
-            throw new Error('load backend unavailable');
-          }
-        },
-        workspace: {
-          save: async (workspace) => workspace
-        }
-      }
-    }
-  });
-
-  await workflows.runLoadTest();
-
-  assert.equal(doc.getElementById('loadResults').textContent, 'load backend unavailable');
-  assert.equal(doc.getElementById('runLoadButton').disabled, false);
-  assert.equal(doc.getElementById('cancelLoadButton').disabled, true);
-  assert.equal(doc.getElementById('exportLoadJsonButton').disabled, true);
-  assert.equal(doc.getElementById('exportLoadCsvButton').disabled, true);
-  assert.equal(state.activeLoadId, null);
-  assert.equal(state.lastLoadResult, null);
-  assert.equal(status, 'Load test failed.');
-  assert.deepEqual(notification, {
-    title: 'Load Test Failed',
-    message: 'load backend unavailable'
-  });
-});
-
 test('renderer workflows recover collection-run start failures without leaving active controls stuck', async () => {
   const state = createRendererState();
   const collection = {
@@ -2014,42 +1839,6 @@ test('renderer workflows recover collection-run start failures without leaving a
   assert.deepEqual(notification, {
     title: 'Collection Run Failed',
     message: 'runner backend unavailable'
-  });
-});
-
-test('renderer workflows surface load-test cancellation failures visibly', async () => {
-  const state = createRendererState();
-  state.activeLoadId = 'load-1';
-  const doc = createDocument();
-  let status = '';
-  let notification = null;
-  let cancelledId = '';
-  const workflows = createRendererWorkflows({
-    state,
-    doc,
-    notifyUser: (title, message) => { notification = { title, message }; },
-    runFormatting: createRunFormatting(),
-    setStatus: (value) => { status = value; },
-    windowObject: {
-      postmeter: {
-        loadTest: {
-          cancel: async (id) => {
-            cancelledId = id;
-            throw new Error('load cancel ipc failed');
-          }
-        }
-      }
-    }
-  });
-
-  await workflows.cancelLoadTest();
-
-  assert.equal(cancelledId, 'load-1');
-  assert.equal(doc.getElementById('loadResults').textContent, 'load cancel ipc failed');
-  assert.equal(status, 'Load test cancellation failed.');
-  assert.deepEqual(notification, {
-    title: 'Load Test Cancellation Failed',
-    message: 'load cancel ipc failed'
   });
 });
 
@@ -2157,38 +1946,6 @@ test('renderer workflows report runner export failure without throwing from tool
   });
 });
 
-test('renderer workflows report load-test export failure without throwing from toolbar handlers', async () => {
-  const state = createRendererState();
-  state.lastLoadResult = { totalRequests: 1, successfulRequests: 1, failedRequests: 0 };
-  let status = '';
-  let notification = null;
-
-  const workflows = createRendererWorkflows({
-    state,
-    doc: createDocument(),
-    notifyUser: (title, message) => { notification = { title, message }; },
-    runFormatting: createRunFormatting(),
-    setStatus: (value) => { status = value; },
-    windowObject: {
-      postmeter: {
-        loadTest: {
-          export: async () => {
-            throw new Error('load export denied');
-          }
-        }
-      }
-    }
-  });
-
-  await workflows.exportLoadResult('csv');
-
-  assert.equal(status, 'Load test export failed.');
-  assert.deepEqual(notification, {
-    title: 'Load Test Export Failed',
-    message: 'load export denied'
-  });
-});
-
 test('renderer workflows clear stale captured responses after a send failure', async () => {
   const state = createRendererState();
   const request = {
@@ -2252,7 +2009,6 @@ test('renderer workflows surface request save failures inline before sending', a
   state.workspace = { collections: [collection], environments: [], history: [], settings: {} };
   state.activeCollectionId = collection.id;
   state.activeRequestId = request.id;
-  state.lastLoadResult = { totalRequests: 7, successfulRequests: 7, failedRequests: 0 };
   state.openRequestTabs = [{
     key: 'request:collection-1:request-1',
     collectionId: collection.id,
@@ -2318,89 +2074,6 @@ test('renderer workflows surface request save failures inline before sending', a
   assert.equal(status, 'Request failed: disk full before send');
 });
 
-test('renderer workflows surface load-test save failures without starting a load', async () => {
-  const state = createRendererState();
-  const request = {
-    id: 'request-1',
-    name: 'Load Widgets',
-    method: 'GET',
-    url: 'https://example.test/widgets',
-    scripts: { preRequest: '', tests: '' }
-  };
-  const collection = {
-    id: 'collection-1',
-    name: 'Requests',
-    requests: [request],
-    folders: []
-  };
-  state.workspace = { collections: [collection], environments: [], history: [], settings: {} };
-  state.activeCollectionId = collection.id;
-  state.activeRequestId = request.id;
-  state.openRequestTabs = [{
-    key: 'request:collection-1:request-1',
-    collectionId: collection.id,
-    requestId: request.id,
-    dirty: true
-  }];
-  const doc = createDocument();
-  doc.getElementById('loadConcurrency').value = '1';
-  doc.getElementById('exportLoadJsonButton').disabled = false;
-  doc.getElementById('exportLoadCsvButton').disabled = false;
-  let loadStarts = 0;
-  let validations = 0;
-  let status = '';
-  let notification = null;
-
-  const workflows = createRendererWorkflows({
-    state,
-    activeCollection: () => collection,
-    activeEnvironment: () => null,
-    activeRequest: () => request,
-    collectRequestFromEditor: () => {},
-    doc,
-    loadConfigFromControls: () => ({ totalRequests: 1 }),
-    notifyUser: (title, message) => { notification = { title, message }; },
-    runFormatting: createRunFormatting(),
-    setStatus: (value) => { status = value; },
-    windowObject: {
-      postmeter: {
-        request: {
-          validate: async () => {
-            validations += 1;
-            return [];
-          }
-        },
-        loadTest: {
-          start: async () => {
-            loadStarts += 1;
-            return { totalRequests: 1, successfulRequests: 1, failedRequests: 0, cancelled: false };
-          }
-        },
-        workspace: {
-          saveRequest: async () => {
-            throw new Error('disk full before load');
-          }
-        }
-      }
-    }
-  });
-
-  await workflows.runLoadTest();
-
-  assert.equal(validations, 0);
-  assert.equal(loadStarts, 0);
-  assert.equal(doc.getElementById('loadResults').textContent, 'disk full before load');
-  assert.equal(doc.getElementById('exportLoadJsonButton').disabled, true);
-  assert.equal(doc.getElementById('exportLoadCsvButton').disabled, true);
-  assert.equal(state.activeLoadId, null);
-  assert.equal(state.lastLoadResult, null);
-  assert.equal(status, 'Load test failed.');
-  assert.deepEqual(notification, {
-    title: 'Load Test Failed',
-    message: 'disk full before load'
-  });
-});
-
 test('renderer workflows surface collection-run save failures without starting a run', async () => {
   const state = createRendererState();
   const collection = {
@@ -2461,72 +2134,6 @@ test('renderer workflows surface collection-run save failures without starting a
   });
 });
 
-test('renderer workflows ignore stale load-test completions after workspace context reset', async () => {
-  const state = createRendererState();
-  state.activeWorkspaceId = 'workspace-1';
-  state.workspace = { collections: [], environments: [], history: [], cookies: [], settings: {} };
-  const request = {
-    id: 'request-1',
-    name: 'Load Widgets',
-    method: 'GET',
-    url: 'https://example.test/widgets',
-    scripts: { preRequest: '', tests: '' }
-  };
-  const doc = createDocument();
-  doc.getElementById('loadConcurrency').value = '1';
-  let resolveLoad = null;
-  let cookieRenders = 0;
-
-  const workflows = createRendererWorkflows({
-    state,
-    activeCollection: () => null,
-    activeEnvironment: () => null,
-    activeRequest: () => request,
-    collectRequestFromEditor: () => {},
-    doc,
-    loadConfigFromControls: () => ({ totalRequests: 1 }),
-    notifyUser: () => {},
-    renderCookieJarEditor: () => { cookieRenders += 1; },
-    runFormatting: createRunFormatting(),
-    setStatus: () => {},
-    windowObject: {
-      postmeter: {
-        request: {
-          validate: async () => []
-        },
-        loadTest: {
-          start: async () => new Promise((resolve) => {
-            resolveLoad = resolve;
-          })
-        },
-        workspace: {
-          save: async (workspace) => workspace
-        }
-      }
-    }
-  });
-
-  const run = workflows.runLoadTest();
-  await flushMicrotasks();
-  assert.equal(typeof resolveLoad, 'function');
-  state.activeWorkspaceId = 'workspace-2';
-  state.activeLoadId = null;
-  doc.getElementById('loadResults').textContent = 'Workspace reset.';
-  resolveLoad({
-    totalRequests: 1,
-    successfulRequests: 1,
-    failedRequests: 0,
-    cancelled: false,
-    cookies: [{ name: 'staleLoad', value: 'stale', domain: 'example.test', path: '/' }]
-  });
-  await run;
-
-  assert.equal(state.lastLoadResult, null);
-  assert.equal(state.workspace.cookies.length, 0);
-  assert.equal(cookieRenders, 0);
-  assert.equal(doc.getElementById('loadResults').textContent, 'Workspace reset.');
-});
-
 test('renderer workflows ignore stale collection-run completions after workspace context reset', async () => {
   const state = createRendererState();
   const collection = {
@@ -2583,57 +2190,6 @@ test('renderer workflows ignore stale collection-run completions after workspace
   assert.equal(state.workspace.cookies.length, 0);
   assert.equal(cookieRenders, 0);
   assert.equal(doc.getElementById('runnerResults').textContent, 'Workspace reset.');
-});
-
-test('renderer workflows clear stale load validation errors before a later valid run', async () => {
-  const state = createRendererState();
-  state.workspace = { collections: [], environments: [], history: [], cookies: [], settings: {} };
-  const request = {
-    id: 'request-1',
-    name: 'Load Widgets',
-    method: 'GET',
-    url: 'https://example.test/widgets',
-    scripts: { preRequest: '', tests: '' }
-  };
-  const doc = createDocument();
-  doc.getElementById('loadConcurrency').value = '1';
-  let validations = 0;
-
-  const workflows = createRendererWorkflows({
-    state,
-    activeCollection: () => null,
-    activeEnvironment: () => null,
-    activeRequest: () => request,
-    collectRequestFromEditor: () => {},
-    doc,
-    loadConfigFromControls: () => ({ totalRequests: 1 }),
-    notifyUser: () => {},
-    runFormatting: createRunFormatting(),
-    setStatus: () => {},
-    windowObject: {
-      postmeter: {
-        request: {
-          validate: async () => {
-            validations += 1;
-            return validations === 1 ? ['URL is required.'] : [];
-          }
-        },
-        loadTest: {
-          start: async () => ({ totalRequests: 1, successfulRequests: 1, failedRequests: 0, cancelled: false })
-        },
-        workspace: {
-          save: async (workspace) => workspace
-        }
-      }
-    }
-  });
-
-  await workflows.runLoadTest();
-  assert.equal(doc.getElementById('validationLabel').textContent, 'URL is required.');
-
-  await workflows.runLoadTest();
-  assert.equal(doc.getElementById('validationLabel').textContent, '');
-  assert.equal(state.lastLoadResult.totalRequests, 1);
 });
 
 function createDocument() {

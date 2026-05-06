@@ -70,9 +70,6 @@ function migrate(workspace) {
   }
   if (schemaVersion < 9) {
     workspace.settings ||= { updates: { includePrereleases: false } };
-    for (const collection of workspace.collections || []) {
-      ensureCollectionLoadTestPolicyFields(collection);
-    }
     workspace.schemaVersion = 9;
     migrated = true;
   }
@@ -96,6 +93,7 @@ function migrate(workspace) {
     workspace.schemaVersion = 12;
     migrated = true;
   }
+  removeWorkspaceLoadTestPolicyFields(workspace);
   return migrated;
 }
 
@@ -147,30 +145,42 @@ function ensureRequestCookieJarFields(requests = []) {
   }
 }
 
-function ensureCollectionLoadTestPolicyFields(collection) {
-  ensureRequestLoadTestPolicyFields(collection.requests);
-  for (const folder of collection.folders || []) {
-    ensureFolderLoadTestPolicyFields(folder);
-  }
-}
-
-function ensureFolderLoadTestPolicyFields(folder) {
-  ensureRequestLoadTestPolicyFields(folder.requests);
-  for (const child of folder.folders || []) {
-    ensureFolderLoadTestPolicyFields(child);
-  }
-}
-
-function ensureRequestLoadTestPolicyFields(requests = []) {
-  for (const request of requests || []) {
-    request.loadTestPolicy ||= { enabled: false };
-  }
-}
-
 function ensureFolderRequestScripts(folders = []) {
   for (const folder of folders || []) {
     ensureRequestScripts(folder.requests);
     ensureFolderRequestScripts(folder.folders);
+  }
+}
+
+function removeWorkspaceLoadTestPolicyFields(workspace) {
+  if (workspace?.settings) {
+    delete workspace.settings.loadTestPolicy;
+  }
+  for (const collection of workspace?.collections || []) {
+    removeCollectionLoadTestPolicyFields(collection);
+  }
+  for (const runner of workspace?.runners || []) {
+    removeRequestLoadTestPolicyFields(runner.requests);
+  }
+}
+
+function removeCollectionLoadTestPolicyFields(collection) {
+  removeRequestLoadTestPolicyFields(collection.requests);
+  for (const folder of collection.folders || []) {
+    removeFolderLoadTestPolicyFields(folder);
+  }
+}
+
+function removeFolderLoadTestPolicyFields(folder) {
+  removeRequestLoadTestPolicyFields(folder.requests);
+  for (const child of folder.folders || []) {
+    removeFolderLoadTestPolicyFields(child);
+  }
+}
+
+function removeRequestLoadTestPolicyFields(requests = []) {
+  for (const request of requests || []) {
+    delete request.loadTestPolicy;
   }
 }
 

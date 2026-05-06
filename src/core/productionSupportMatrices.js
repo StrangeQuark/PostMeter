@@ -51,10 +51,6 @@ const ELECTRON_IPC_CHANNELS = Object.freeze([
   ipcChannel('vault:prompt', 'main-to-renderer', 'Vault prompt events carry metadata only and never include secret values.', ['electron/vaultPrompt.js', 'electron/preload.js'], ['test/electron/vaultPrompt.test.js', 'test/electron/vaultPromptQueue.test.js']),
   ipcChannel('vault:prompt-response', 'renderer-to-main', 'Vault prompt responses must come from the original trusted renderer sender and normalize grant decisions.', ['electron/vaultPrompt.js', 'electron/preload.js'], ['test/electron/vaultPrompt.test.js', 'test/electron/vaultPromptQueue.test.js']),
   ipcChannel('sandbox-package:fetch', 'renderer-to-main', 'Sandbox package review fetch normalizes source URL inputs and returns bounded reviewed package metadata.', ['electron/sandboxPackageIpc.js', 'electron/preload.js'], ['test/electron/sandboxPackageIpc.test.js', 'test/electron/sandboxPackageFetcher.test.js']),
-  ipcChannel('load:start', 'renderer-to-main', 'Load-test start validates ID, request, environment, and config payloads.', ['electron/runtimeIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/runtimeIpc.test.js', 'test/electron/ipcValidation.test.js']),
-  ipcChannel('load:cancel', 'renderer-to-main', 'Load-test cancellation validates the active run ID before aborting.', ['electron/runtimeIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/runtimeIpc.test.js', 'test/electron/ipcValidation.test.js']),
-  ipcChannel('load:export', 'renderer-to-main', 'Load-test export validates result/format payloads before a main-process save picker.', ['electron/runtimeIpc.js', 'electron/preload.js', 'electron/fileDialogs.js', 'src/core/ipcValidation.js'], ['test/electron/runtimeIpc.test.js', 'test/electron/ipcValidation.test.js']),
-  ipcChannel('load:progress', 'main-to-renderer', 'Load-test progress events are asserted before delivery to the renderer subscription.', ['electron/runtimeIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/runtimeIpc.test.js', 'test/electron/ipcValidation.test.js']),
   ipcChannel('runner:start', 'renderer-to-main', 'Collection-run start validates ID, collection, environment, and config payloads.', ['electron/runtimeIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/runtimeIpc.test.js', 'test/electron/ipcValidation.test.js']),
   ipcChannel('runner:cancel', 'renderer-to-main', 'Collection-run cancellation validates the active run ID before aborting.', ['electron/runtimeIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/runtimeIpc.test.js', 'test/electron/ipcValidation.test.js']),
   ipcChannel('runner:export', 'renderer-to-main', 'Collection-run export validates result/format payloads before a main-process save picker.', ['electron/runtimeIpc.js', 'electron/preload.js', 'electron/fileDialogs.js', 'src/core/ipcValidation.js'], ['test/electron/runtimeIpc.test.js', 'test/electron/ipcValidation.test.js']),
@@ -99,7 +95,6 @@ const REQUIRED_NON_POSTMAN_COMPATIBILITY_ROWS = Object.freeze([
   'curl.import-export',
   'har.import-export',
   'har.privacy-export-boundary',
-  'jmeter.bridge',
   'native-postmeter.roundtrip',
   'openapi.import-export',
   'openapi.invalid-common-specs',
@@ -111,7 +106,6 @@ const REQUIRED_UX_ACCESSIBILITY_ROWS = Object.freeze([
   'workflow.workspace-management',
   'workflow.request-edit-send',
   'workflow.collection-runner',
-  'workflow.load-test',
   'workflow.import-export',
   'workflow.oauth',
   'workflow.sandbox-package-review',
@@ -248,7 +242,7 @@ function buildDiagnosticsPrivacyMatrix() {
       evidenceRefs: ['src/core/diagnostics.js', 'electron/main.js'],
       tests: ['test/electron/diagnostics.test.js']
     }),
-    row('logging.event-coverage', 'Event coverage', 'Failed imports, sends, load tests, collection runs, OAuth flows, package fetches, vault prompts, sandbox denials, OS sandbox backend selection and required-launch failures, workspace recovery, update checks, and packaged/startup validation failures emit non-secret structured diagnostic events while preserving documented internal denial failure codes.', 'implemented', {
+    row('logging.event-coverage', 'Event coverage', 'Failed imports, sends, collection runs, OAuth flows, package fetches, vault prompts, sandbox denials, OS sandbox backend selection and required-launch failures, workspace recovery, update checks, and packaged/startup validation failures emit non-secret structured diagnostic events while preserving documented internal denial failure codes.', 'implemented', {
       evidenceRefs: ['electron/requestIpc.js', 'electron/runtimeIpc.js', 'electron/workspaceIpc.js', 'electron/oauthIpc.js', 'electron/sandboxPackageIpc.js', 'electron/vaultPrompt.js', 'electron/appIpc.js', 'electron/main.js', 'electron/mainDiagnostics.js', 'src/core/scriptSandbox.js', 'src/core/osSandbox.js'],
       tests: ['test/electron/requestIpc.test.js', 'test/electron/runtimeIpc.test.js', 'test/electron/workspaceIpc.test.js', 'test/electron/oauthIpc.test.js', 'test/electron/sandboxPackageIpc.test.js', 'test/electron/vaultPrompt.test.js', 'test/electron/appIpc.test.js', 'test/electron/diagnostics.test.js', 'test/electron/scriptedRequestLifecycle.test.js', 'test/electron/collectionRunner.test.js', 'test/electron/scriptSandbox.test.js']
     }),
@@ -349,7 +343,7 @@ function buildElectronSecurityMatrix() {
       evidenceRefs: ['electron/diagnosticsIpc.js', 'src/core/diagnostics.js', 'electron/preload.js'],
       tests: ['test/electron/diagnosticsIpc.test.js', 'test/electron/diagnostics.test.js']
     }),
-    row('ipc.runtime', 'IPC', 'Load-test and collection-run IPC validates start/cancel/export payloads and progress events while keeping cancellation state parent-owned.', 'implemented', {
+    row('ipc.runtime', 'IPC', 'Collection-run IPC validates start/cancel/export payloads and progress events while keeping cancellation state parent-owned.', 'implemented', {
       evidenceRefs: ['electron/runtimeIpc.js', 'src/core/ipcValidation.js'],
       tests: ['test/electron/runtimeIpc.test.js', 'test/electron/ipcValidation.test.js']
     }),
@@ -374,7 +368,7 @@ function buildElectronSecurityMatrix() {
       evidenceRefs: ['electron/workspaceIpc.js', 'electron/fileDialogs.js'],
       tests: ['test/electron/workspaceIpc.test.js', 'test/electron/workspaceStore.test.js']
     }),
-    row('file-dialogs.collection-and-examples', 'File dialogs', 'Collection import/export, request-example export, load-result export, and collection-run export dialogs are main-process owned, use constrained filters/default filenames, validate selected path shape, and validate cancellation/result payloads.', 'implemented', {
+    row('file-dialogs.collection-and-examples', 'File dialogs', 'Collection import/export, request-example export, and collection-run export dialogs are main-process owned, use constrained filters/default filenames, validate selected path shape, and validate cancellation/result payloads.', 'implemented', {
       evidenceRefs: ['electron/workspaceIpc.js', 'electron/runtimeIpc.js', 'electron/fileDialogs.js'],
       tests: ['test/electron/workspaceIpc.test.js', 'test/electron/runtimeIpc.test.js', 'test/electron/collectionFormats.test.js']
     }),
@@ -404,7 +398,7 @@ function buildWorkspaceDurabilityMatrix() {
       evidenceRefs: ['src/core/workspacePersistence.js', 'src/core/workspaceStore.js', 'electron/sessionStore.js'],
       tests: ['test/electron/workspaceStore.test.js', 'test/electron/sessionStore.test.js']
     }),
-    row('workspace.atomic-export-writes', 'Atomic writes', 'Workspace, collection, example, load-test, and collection-run exports write through same-directory temporary files before replacing the selected output path.', 'implemented', {
+    row('workspace.atomic-export-writes', 'Atomic writes', 'Workspace, collection, example, and collection-run exports write through same-directory temporary files before replacing the selected output path.', 'implemented', {
       evidenceRefs: ['src/core/workspacePersistence.js', 'src/core/workspaceStore.js', 'electron/workspaceIpc.js', 'electron/runtimeIpc.js'],
       tests: ['test/electron/workspaceStore.test.js', 'test/electron/workspaceDurabilityPerformance.test.js', 'test/electron/workspaceIpc.test.js', 'test/electron/runtimeIpc.test.js']
     }),
@@ -453,15 +447,11 @@ function buildNonPostmanCompatibilityMatrix() {
       evidenceRefs: ['src/core/curlFormats.js', 'docs/COMPATIBILITY.md'],
       tests: ['test/electron/collectionFormats.test.js']
     }),
-    row('jmeter.bridge', 'JMeter', 'JMeter import/export remains a bridge for HTTP sampler plans with mapped assertions/timers/controllers and preserve-only metadata for known unsupported assertion, processor, sampler, and script element classes.', 'implemented', {
-      evidenceRefs: ['src/core/jmeterFormats.js', 'test/fixtures/jmeter', 'docs/COMPATIBILITY.md'],
-      tests: ['test/electron/collectionFormats.test.js']
-    }),
     row('native-postmeter.roundtrip', 'Native PostMeter', 'Native workspace round trips preserve auth, variables, examples, cookies, certificates, package/vault/mock/visualizer metadata, protocols, and file bindings.', 'implemented', {
       evidenceRefs: ['src/core/workspaceStore.js', 'src/core/workspacePersistence.js'],
       tests: ['test/electron/workspaceStore.test.js', 'test/electron/postmanImporter.test.js']
     }),
-    row('unsupported.claim-boundaries', 'Claim boundaries', 'Unsupported or preserve-only behavior is documented without claiming full JMeter execution or source-format-perfect parity.', 'implemented', {
+    row('unsupported.claim-boundaries', 'Claim boundaries', 'Unsupported or preserve-only behavior is documented without claiming source-format-perfect parity.', 'implemented', {
       evidenceRefs: ['docs/COMPATIBILITY.md', 'NEXT_STEPS.MD'],
       tests: ['npm run compatibility:non-postman:validate']
     }),
@@ -498,11 +488,7 @@ function buildUxAccessibilityMatrix() {
       evidenceRefs: ['src/renderer/index.html', 'src/renderer/renderer.js', 'src/renderer/requestTabState.js', 'src/renderer/sessionPersistence.js', 'src/renderer/rendererWorkflows.js', 'electron/runtimeIpc.js'],
       tests: ['npm run test:ui:regression', 'npm run test:ui:snapshot', 'test/electron/requestTabState.test.js', 'test/electron/rendererSessionPersistence.test.js', 'test/electron/runtimeIpc.test.js', 'test/electron/collectionRunner.test.js', 'test/electron/rendererWorkflows.test.js']
     }),
-    row('workflow.load-test', 'Load tests', 'Load tests expose idle, running, cancellation, export, validation, pre-load save failure, and failed-operation states with bounded configuration controls.', 'implemented', {
-      evidenceRefs: ['src/renderer/index.html', 'src/renderer/rendererWorkflows.js', 'electron/runtimeIpc.js'],
-      tests: ['npm run test:ui:regression', 'test/electron/runtimeIpc.test.js', 'test/electron/rendererWorkflows.test.js']
-    }),
-    row('workflow.import-export', 'Imports/exports', 'Workspace, collection, example, runner, and load-test import/export cancellation and failure paths stay parent-owned and report actionable errors without clobbering active state.', 'implemented', {
+    row('workflow.import-export', 'Imports/exports', 'Workspace, collection, example, and runner import/export cancellation and failure paths stay parent-owned and report actionable errors without clobbering active state.', 'implemented', {
       evidenceRefs: ['electron/workspaceIpc.js', 'electron/runtimeIpc.js', 'electron/fileDialogs.js', 'docs/TROUBLESHOOTING.md'],
       tests: ['npm run test:ui:regression', 'test/electron/workspaceIpc.test.js', 'test/electron/runtimeIpc.test.js', 'test/electron/collectionFormats.test.js']
     }),
@@ -526,7 +512,7 @@ function buildUxAccessibilityMatrix() {
       evidenceRefs: ['src/core/localMockServer.js', 'docs/COMPATIBILITY.md', 'docs/SANDBOX_CONTRACT.md'],
       tests: ['test/electron/postmanScriptImportCoverage.test.js', 'test/electron/postmanSandboxCorpus.test.js', 'test/electron/localMockServer.test.js']
     }),
-    row('workflow.settings-theme', 'Settings/theme', 'Workspace-scoped sandbox capability toggles, update settings, load policy, and system/light/dark theme preference save and reload without leaking into request payloads.', 'implemented', {
+    row('workflow.settings-theme', 'Settings/theme', 'Workspace-scoped sandbox capability toggles, update settings, and system/light/dark theme preference save and reload without leaking into request payloads.', 'implemented', {
       evidenceRefs: ['src/renderer/index.html', 'src/renderer/theme.css', 'src/renderer/renderer.js', 'src/renderer/uiWorkflowSmoke.js'],
       tests: ['npm run test:ui', 'npm run test:ui:regression']
     }),
@@ -547,7 +533,7 @@ function buildUxAccessibilityMatrix() {
       evidenceRefs: ['src/renderer/renderer.js', 'src/renderer/rendererBootstrap.js', 'src/renderer/index.html'],
       tests: ['npm run test:ui:regression', 'test/electron/rendererBootstrap.test.js']
     }),
-    row('a11y.live-regions', 'Accessibility', 'App status, validation, OAuth progress, response metrics, runner results, load-test results, package status, vault status, and file-binding status are announced through appropriate live regions.', 'implemented', {
+    row('a11y.live-regions', 'Accessibility', 'App status, validation, OAuth progress, response metrics, runner results, package status, vault status, and file-binding status are announced through appropriate live regions.', 'implemented', {
       evidenceRefs: ['src/renderer/index.html', 'src/renderer/renderer.js'],
       tests: ['npm run test:ui:regression']
     }),
@@ -559,9 +545,9 @@ function buildUxAccessibilityMatrix() {
       evidenceRefs: ['src/renderer/uiRegressionSmoke.js', 'src/renderer/uiSnapshotSmoke.js', 'test/electron/uiRegressionSmoke.js', 'test/electron/uiSnapshotSmoke.js'],
       tests: ['npm run test:ui:regression', 'npm run test:ui:snapshot']
     }),
-    row('coverage.failure-artifacts', 'UI coverage', 'Startup and UI smoke failures can write timeout-bounded screenshot, redacted structural DOM-state including active-element ARIA metadata, and redacted failure-log artifacts for CI upload through POSTMETER_VALIDATION_ARTIFACT_DIR or POSTMETER_UI_SMOKE_ARTIFACT_DIR; source UI, packaged smoke launcher, packaged sandbox-validation stdout/stderr/stacks, and multi-process load-worker stderr previews use the shared diagnostics redactor for local paths, private keys, request/response alias values, JSON-escaped slash URLs/file URLs, Bearer/Basic/Digest/Hawk/Token/OAuth/NTLM/Negotiate auth-shaped values, JSON-escaped/double-escaped/nested-JSON camelCase auth-header aliases, and OAuth code/verifier/assertion fields; smoke child processes fail closed with exit code 124 on timeout.', 'implemented', {
+    row('coverage.failure-artifacts', 'UI coverage', 'Startup and UI smoke failures can write timeout-bounded screenshot, redacted structural DOM-state including active-element ARIA metadata, and redacted failure-log artifacts for CI upload through POSTMETER_VALIDATION_ARTIFACT_DIR or POSTMETER_UI_SMOKE_ARTIFACT_DIR; source UI, packaged smoke launcher, and packaged sandbox-validation stdout/stderr/stacks use the shared diagnostics redactor for local paths, private keys, request/response alias values, JSON-escaped slash URLs/file URLs, Bearer/Basic/Digest/Hawk/Token/OAuth/NTLM/Negotiate auth-shaped values, JSON-escaped/double-escaped/nested-JSON camelCase auth-header aliases, and OAuth code/verifier/assertion fields; smoke child processes fail closed with exit code 124 on timeout.', 'implemented', {
       evidenceRefs: ['electron/main.js', 'electron/mainWindow.js', 'scripts/smokeProcess.js', 'test/electron/startupSmoke.js', '.github/workflows/ci.yml', '.github/workflows/release.yml', '.github/workflows/release-validation.yml'],
-      tests: ['npm run test:smoke', 'npm run test:ui', 'npm run test:ui:regression', 'npm run test:ui:oauth', 'npm run test:ui:snapshot', 'test/electron/mainWindowSmoke.test.js', 'test/electron/smokeProcess.test.js', 'test/electron/loadTestRunner.test.js']
+      tests: ['npm run test:smoke', 'npm run test:ui', 'npm run test:ui:regression', 'npm run test:ui:oauth', 'npm run test:ui:snapshot', 'test/electron/mainWindowSmoke.test.js', 'test/electron/smokeProcess.test.js']
     })
   ]);
 }

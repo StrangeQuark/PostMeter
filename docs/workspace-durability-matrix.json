@@ -21,7 +21,7 @@
     {
       "id": "workspace.atomic-export-writes",
       "area": "Atomic writes",
-      "target": "Workspace, collection, example, load-test, and collection-run exports write through same-directory temporary files before replacing the selected output path.",
+      "target": "Workspace, collection, example, and collection-run exports write through same-directory temporary files before replacing the selected output path.",
       "status": "implemented",
       "evidenceRefs": [
         "src/core/workspacePersistence.js",

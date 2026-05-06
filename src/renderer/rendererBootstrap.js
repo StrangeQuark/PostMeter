@@ -111,7 +111,6 @@
     bindClick(doc, 'exportCollectionButton', options.onExportCollection);
     bindClick(doc, 'exportPostmanButton', options.onExportPostman);
     bindClick(doc, 'exportOpenApiButton', options.onExportOpenApi);
-    bindClick(doc, 'exportJMeterButton', options.onExportJMeter);
     bindClick(doc, 'exportCurlButton', options.onExportCurl);
     bindClick(doc, 'exportHarButton', options.onExportHar);
     bindClick(doc, 'sendButton', options.onSendRequest);
@@ -142,10 +141,6 @@
     bindClick(doc, 'addRequestVariableButton', options.onAddRequestVariable);
     bindClick(doc, 'addCookieButton', options.onAddCookie);
     bindClick(doc, 'clearExpiredCookiesButton', options.onClearExpiredCookies);
-    bindClick(doc, 'runLoadButton', options.onRunLoadTest);
-    bindClick(doc, 'cancelLoadButton', options.onCancelLoadTest);
-    bindClick(doc, 'exportLoadJsonButton', options.onExportLoadJson);
-    bindClick(doc, 'exportLoadCsvButton', options.onExportLoadCsv);
     bindClick(doc, 'runCollectionButton', options.onRunCollection);
     bindClick(doc, 'cancelRunnerButton', options.onCancelCollectionRun);
     bindClick(doc, 'exportRunnerJsonButton', options.onExportRunnerJson);

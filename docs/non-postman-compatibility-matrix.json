@@ -61,21 +61,6 @@
       "notes": ""
     },
     {
-      "id": "jmeter.bridge",
-      "area": "JMeter",
-      "target": "JMeter import/export remains a bridge for HTTP sampler plans with mapped assertions/timers/controllers and preserve-only metadata for known unsupported assertion, processor, sampler, and script element classes.",
-      "status": "implemented",
-      "evidenceRefs": [
-        "src/core/jmeterFormats.js",
-        "test/fixtures/jmeter",
-        "docs/COMPATIBILITY.md"
-      ],
-      "tests": [
-        "test/electron/collectionFormats.test.js"
-      ],
-      "notes": ""
-    },
-    {
       "id": "native-postmeter.roundtrip",
       "area": "Native PostMeter",
       "target": "Native workspace round trips preserve auth, variables, examples, cookies, certificates, package/vault/mock/visualizer metadata, protocols, and file bindings.",
@@ -121,7 +106,7 @@
     {
       "id": "unsupported.claim-boundaries",
       "area": "Claim boundaries",
-      "target": "Unsupported or preserve-only behavior is documented without claiming full JMeter execution or source-format-perfect parity.",
+      "target": "Unsupported or preserve-only behavior is documented without claiming source-format-perfect parity.",
       "status": "implemented",
       "evidenceRefs": [
         "docs/COMPATIBILITY.md",

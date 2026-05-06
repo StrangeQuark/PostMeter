@@ -7,7 +7,7 @@ const test = require('node:test');
 const { registerRuntimeIpc } = require('../../electron/runtimeIpc');
 const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../src/core/diagnostics');
 
-test('runtime IPC registers stable load and runner channels', async () => {
+test('runtime IPC registers stable runner channels', async () => {
   const handlers = new Map();
   registerRuntimeIpc({
     dialog: { showSaveDialog: async () => ({ canceled: true }) },
@@ -24,18 +24,14 @@ test('runtime IPC registers stable load and runner channels', async () => {
   });
 
   assert.deepEqual([...handlers.keys()].sort(), [
-    'load:cancel',
-    'load:export',
-    'load:start',
     'runner:cancel',
     'runner:export',
     'runner:start'
   ]);
-  assert.equal(await handlers.get('load:cancel')(null, 'load-id'), false);
   assert.equal(await handlers.get('runner:cancel')(null, 'runner-id'), false);
 });
 
-test('runtime IPC emits structured diagnostic events for load and collection run outcomes', async () => {
+test('runtime IPC emits structured diagnostic events for collection run outcomes', async () => {
   const handlers = new Map();
   const events = [];
   const workspace = { cookies: [], globals: [], settings: { sandbox: { fileBindings: [], packageCache: [], trustedCapabilities: {} } } };
@@ -64,30 +60,10 @@ test('runtime IPC emits structured diagnostic events for load and collection run
       cancelled: false,
       results: []
     }),
-    runLoadTest: async () => ({
-      totalRequests: 1,
-      successfulRequests: 1,
-      failedRequests: 0,
-      elapsedMillis: 5,
-      executionMode: 'singleProcess',
-      statusCounts: { 200: 1 }
-    }),
     saveWorkspace: async (nextWorkspace) => nextWorkspace,
     setWorkspace: () => {}
   });
 
-  await handlers.get('load:start')({ sender: { send() {} } }, 'load-id', {
-    method: 'GET',
-    url: 'https://api.example.test',
-    queryParams: [],
-    headers: [],
-    bodyType: 'NONE',
-    body: '',
-    cookieJar: { enabled: true, storeResponses: true }
-  }, { id: 'env', name: 'Env', variables: [] }, {
-    concurrency: 1,
-    totalRequests: 1
-  });
   await handlers.get('runner:start')({ sender: { send() {} } }, 'runner-id', {
     id: 'collection-1',
     name: 'Diagnostics',
@@ -98,14 +74,12 @@ test('runtime IPC emits structured diagnostic events for load and collection run
   });
 
   assert.deepEqual(events.map((event) => event.type), [
-    'load.start.completed',
     'runner.start.completed'
   ]);
-  assert.equal(events[0].fields.totalRequests, 1);
-  assert.equal(events[1].fields.requestCount, 1);
+  assert.equal(events[0].fields.requestCount, 1);
 });
 
-test('runtime IPC emits sanitized failed diagnostic events for load and collection run failures', async () => {
+test('runtime IPC emits sanitized failed diagnostic events for collection run failures', async () => {
   const handlers = new Map();
   const events = [];
   const workspace = { cookies: [], globals: [], settings: { sandbox: { fileBindings: [], packageCache: [], trustedCapabilities: {} } } };
@@ -127,28 +101,10 @@ test('runtime IPC emits sanitized failed diagnostic events for load and collecti
     runCollection: async () => {
       throw new Error('runner failed /srv/customer.json Authorization: Bearer runner-token body=runner-body https://api.example.test/run?token=url-token');
     },
-    runLoadTest: async () => {
-      throw new Error('load failed /data/customer.json Authorization: Bearer load-token body=load-body https://api.example.test/load?token=url-token');
-    },
     saveWorkspace: async (nextWorkspace) => nextWorkspace,
     setWorkspace: () => {}
   });
 
-  await assert.rejects(
-    () => handlers.get('load:start')({ sender: { send() {} } }, 'load-failed', {
-      method: 'GET',
-      url: 'https://api.example.test',
-      queryParams: [],
-      headers: [],
-      bodyType: 'RAW_TEXT',
-      body: 'customer-body',
-      cookieJar: { enabled: true, storeResponses: true }
-    }, { id: 'env', name: 'Env', variables: [] }, {
-      concurrency: 1,
-      totalRequests: 1
-    }),
-    /load failed/
-  );
   await assert.rejects(
     () => handlers.get('runner:start')({ sender: { send() {} } }, 'runner-failed', {
       id: 'collection-1',
@@ -162,67 +118,13 @@ test('runtime IPC emits sanitized failed diagnostic events for load and collecti
   );
 
   assert.deepEqual(events.map((event) => event.type), [
-    'load.start.failed',
     'runner.start.failed'
   ]);
-  assert.equal(events[0].failureCode, 'load_start_failed');
-  assert.equal(events[1].failureCode, 'runner_start_failed');
+  assert.equal(events[0].failureCode, 'runner_start_failed');
   const serialized = JSON.stringify(events);
-  assert.doesNotMatch(serialized, /load-token|runner-token|url-token|customer-body|load-body|runner-body|\/data\/customer|\/srv\/customer|api\.example\.test/);
+  assert.doesNotMatch(serialized, /runner-token|url-token|runner-body|\/srv\/customer|api\.example\.test/);
   assert.match(serialized, /\[path\]/);
   assert.match(serialized, /\[redacted/);
-});
-
-test('runtime IPC validates load-test results before mutating workspace state', async () => {
-  const handlers = new Map();
-  const workspace = { cookies: [] };
-  let mutationCalls = 0;
-
-  registerRuntimeIpc({
-    dialog: { showSaveDialog: async () => ({ canceled: true }) },
-    fileOperationResult: (result) => result,
-    getMainWindow: () => null,
-    getWorkspace: () => workspace,
-    getWorkspaceId: () => 'workspace-1',
-    ipcMain: {
-      handle(channel, handler) {
-        handlers.set(channel, handler);
-      }
-    },
-    mutateWorkspace: async (mutator) => {
-      mutationCalls += 1;
-      return mutator(workspace);
-    },
-    runLoadTest: async () => ({
-      totalRequests: 1,
-      successfulRequests: 1,
-      failedRequests: 0,
-      accessToken: 'leaked-token',
-      cookies: [{ enabled: true, name: 'sid', value: 'fresh', domain: 'example.test', path: '/' }]
-    }),
-    saveWorkspace: async (nextWorkspace) => nextWorkspace,
-    setWorkspace: () => {}
-  });
-
-  await assert.rejects(
-    () => handlers.get('load:start')({
-      sender: { send() {} }
-    }, 'invalid-load-result', {
-      method: 'GET',
-      url: 'https://example.test',
-      queryParams: [],
-      headers: [],
-      bodyType: 'NONE',
-      body: '',
-      cookieJar: { enabled: true, storeResponses: true }
-    }, null, {
-      concurrency: 1,
-      totalRequests: 1
-    }),
-    /result.accessToken is not allowed in public IPC payloads/
-  );
-  assert.equal(mutationCalls, 0);
-  assert.deepEqual(workspace.cookies, []);
 });
 
 test('runtime IPC validates collection-run results before mutating workspace state', async () => {
@@ -384,167 +286,6 @@ test('runtime IPC only persists workspace-owned runner environment mutations whe
   assert.equal(workspace.environments[0].variables[0].value, 'persisted');
 });
 
-test('runtime IPC persists load-test cookie updates back to the workspace', async () => {
-  const handlers = new Map();
-  const workspace = { cookies: [] };
-  let savedWorkspace = null;
-  let appliedWorkspace = null;
-  const seenCookies = [];
-  const server = await createServer((request, response) => {
-    seenCookies.push(request.headers.cookie || '');
-    response.setHeader('Set-Cookie', 'runtimeSession=ready; Path=/; HttpOnly');
-    response.statusCode = 200;
-    response.end('ok');
-  });
-
-  try {
-    registerRuntimeIpc({
-      dialog: { showSaveDialog: async () => ({ canceled: true }) },
-      fileOperationResult: (result) => result,
-      getMainWindow: () => null,
-      getWorkspace: () => workspace,
-      ipcMain: {
-        handle(channel, handler) {
-          handlers.set(channel, handler);
-        }
-      },
-      saveWorkspace: async (nextWorkspace) => {
-        savedWorkspace = structuredClone(nextWorkspace);
-        return nextWorkspace;
-      },
-      setWorkspace: (nextWorkspace) => {
-        appliedWorkspace = nextWorkspace;
-      }
-    });
-
-    const result = await handlers.get('load:start')({
-      sender: {
-        send() {}
-      }
-    }, 'load-id', {
-      method: 'GET',
-      url: `${server.baseUrl}/load`,
-      queryParams: [],
-      headers: [],
-      bodyType: 'NONE',
-      body: '',
-      cookieJar: { enabled: true, storeResponses: true }
-    }, null, {
-      concurrency: 1,
-      totalRequests: 2
-    });
-
-    assert.deepEqual(seenCookies, ['', 'runtimeSession=ready']);
-    assert.equal(result.cookies.length, 1);
-    assert.equal(savedWorkspace.cookies[0].name, 'runtimeSession');
-    assert.equal(appliedWorkspace.cookies[0].value, 'ready');
-  } finally {
-    await server.close();
-  }
-});
-
-test('runtime IPC default workspace mutation does not dirty live workspace when persistence fails', async () => {
-  const handlers = new Map();
-  const workspace = { cookies: [] };
-  const server = await createServer((_request, response) => {
-    response.setHeader('Set-Cookie', 'runtimeSession=ready; Path=/; HttpOnly');
-    response.statusCode = 200;
-    response.end('ok');
-  });
-
-  try {
-    registerRuntimeIpc({
-      dialog: { showSaveDialog: async () => ({ canceled: true }) },
-      fileOperationResult: (result) => result,
-      getMainWindow: () => null,
-      getWorkspace: () => workspace,
-      ipcMain: {
-        handle(channel, handler) {
-          handlers.set(channel, handler);
-        }
-      },
-      saveWorkspace: async () => {
-        throw new Error('disk full');
-      },
-      setWorkspace: () => {
-        throw new Error('setWorkspace should not run after a failed save');
-      }
-    });
-
-    await assert.rejects(
-      () => handlers.get('load:start')({
-        sender: { send() {} }
-      }, 'load-save-failure-id', {
-        method: 'GET',
-        url: `${server.baseUrl}/load`,
-        queryParams: [],
-        headers: [],
-        bodyType: 'NONE',
-        body: '',
-        cookieJar: { enabled: true, storeResponses: true }
-      }, null, {
-        concurrency: 1,
-        totalRequests: 1
-      }),
-      /disk full/
-    );
-
-    assert.deepEqual(workspace.cookies, []);
-  } finally {
-    await server.close();
-  }
-});
-
-test('runtime IPC treats load-test progress delivery failures as recoverable run failures', async () => {
-  const handlers = new Map();
-  const workspace = { cookies: [] };
-  const server = await createServer((_request, response) => {
-    response.statusCode = 200;
-    response.end('ok');
-  });
-
-  try {
-    registerRuntimeIpc({
-      dialog: { showSaveDialog: async () => ({ canceled: true }) },
-      fileOperationResult: (result) => result,
-      getMainWindow: () => null,
-      getWorkspace: () => workspace,
-      ipcMain: {
-        handle(channel, handler) {
-          handlers.set(channel, handler);
-        }
-      },
-      saveWorkspace: async (nextWorkspace) => nextWorkspace,
-      setWorkspace: () => {}
-    });
-
-    await assert.rejects(
-      () => handlers.get('load:start')({
-        sender: {
-          send() {
-            throw new Error('sender unavailable');
-          }
-        }
-      }, 'progress-failure-load-id', {
-        method: 'GET',
-        url: `${server.baseUrl}/load`,
-        queryParams: [],
-        headers: [],
-        bodyType: 'NONE',
-        body: '',
-        cookieJar: { enabled: false, storeResponses: false }
-      }, null, {
-        concurrency: 1,
-        totalRequests: 1
-      }),
-      /Load-test progress delivery failed: sender unavailable/
-    );
-    assert.equal(await handlers.get('load:cancel')(null, 'progress-failure-load-id'), false);
-  } finally {
-    await server.close();
-  }
-});
-
 test('runtime IPC treats collection-run progress delivery failures as recoverable run failures', async () => {
   const handlers = new Map();
   const workspace = { cookies: [], globals: [], settings: {} };
@@ -655,9 +396,8 @@ test('runtime IPC persists refreshed OAuth auth without returning or exporting r
   try {
     workspace.collections[0].requests[0].url = `${server.baseUrl}/resource`;
     workspace.collections[0].requests[0].auth.tokenUrl = `${server.baseUrl}/token`;
-    const loadExportPath = path.join(tempDir, 'load-result.json');
     const runnerExportPath = path.join(tempDir, 'runner-result.json');
-    const exportPaths = [loadExportPath, runnerExportPath];
+    const exportPaths = [runnerExportPath];
     registerRuntimeIpc({
       dialog: { showSaveDialog: async () => ({ filePath: exportPaths.shift(), canceled: false }) },
       fileOperationResult: (result) => result,
@@ -678,12 +418,9 @@ test('runtime IPC persists refreshed OAuth auth without returning or exporting r
       setWorkspace: () => {}
     });
 
-    const result = await handlers.get('load:start')({
+    const result = await handlers.get('runner:start')({
       sender: { send() {} }
-    }, 'load-id', workspace.collections[0].requests[0], null, {
-      concurrency: 1,
-      totalRequests: 1
-    });
+    }, 'runner-id', workspace.collections[0], null, { stopOnFailure: false });
 
     assert.equal(result.updatedAuth, undefined);
     assert.equal(JSON.stringify(result).includes('fresh-runtime-token'), false);
@@ -691,17 +428,6 @@ test('runtime IPC persists refreshed OAuth auth without returning or exporting r
     assert.equal(savedWorkspace.collections[0].requests[0].auth.accessToken, 'fresh-runtime-token');
     assert.equal(savedWorkspace.collections[0].requests[0].auth.refreshToken, 'rotated-runtime-refresh');
 
-    await handlers.get('load:export')(null, {
-      totalRequests: 1,
-      successfulRequests: 1,
-      failedRequests: 0,
-      updatedAuth: {
-        type: 'oauth2',
-        grantType: 'authorizationCode',
-        accessToken: 'exported-load-token',
-        refreshToken: 'exported-load-refresh'
-      }
-    }, 'json');
     await handlers.get('runner:export')(null, {
       collectionId: 'collection-1',
       collectionName: 'Runtime OAuth',
@@ -723,64 +449,11 @@ test('runtime IPC persists refreshed OAuth auth without returning or exporting r
         }
       }]
     }, 'json');
-    const loadExport = await fs.readFile(loadExportPath, 'utf8');
     const runnerExport = await fs.readFile(runnerExportPath, 'utf8');
-    assert.doesNotMatch(loadExport, /exported-load-token|exported-load-refresh/);
     assert.doesNotMatch(runnerExport, /exported-runner-token|exported-runner-refresh/);
   } finally {
     await server.close();
     await fs.rm(tempDir, { recursive: true, force: true });
-  }
-});
-
-test('runtime IPC rejects duplicate active load-test ids without replacing the active controller', async () => {
-  const handlers = new Map();
-  const workspace = { cookies: [] };
-  const server = await createServer((_request, response) => {
-    setTimeout(() => {
-      response.statusCode = 200;
-      response.end('ok');
-    }, 100);
-  });
-  try {
-    registerRuntimeIpc({
-      dialog: { showSaveDialog: async () => ({ canceled: true }) },
-      fileOperationResult: (result) => result,
-      getMainWindow: () => null,
-      getWorkspace: () => workspace,
-      ipcMain: {
-        handle(channel, handler) {
-          handlers.set(channel, handler);
-        }
-      },
-      mutateWorkspace: async (mutator) => mutator(workspace),
-      saveWorkspace: async (nextWorkspace) => nextWorkspace,
-      setWorkspace: () => {}
-    });
-    const event = { sender: { send() {} } };
-    const request = {
-      method: 'GET',
-      url: `${server.baseUrl}/load`,
-      queryParams: [],
-      headers: [],
-      bodyType: 'NONE',
-      body: '',
-      cookieJar: { enabled: false, storeResponses: false }
-    };
-    const firstRun = handlers.get('load:start')(event, 'duplicate-load-id', request, null, {
-      concurrency: 1,
-      totalRequests: 1
-    });
-
-    await assert.rejects(
-      () => handlers.get('load:start')(event, 'duplicate-load-id', request, null, { concurrency: 1, totalRequests: 1 }),
-      /already running/
-    );
-    assert.equal(await handlers.get('load:cancel')(null, 'duplicate-load-id'), true);
-    await firstRun.catch(() => null);
-    assert.equal(await handlers.get('load:cancel')(null, 'duplicate-load-id'), false);
-  } finally {
-    await server.close();
   }
 });
 

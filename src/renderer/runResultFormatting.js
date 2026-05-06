@@ -1,18 +1,4 @@
 (function attachRunResultFormatting(global) {
-  function formatLoadProgress(progress) {
-    const lines = [
-      'Running load test...',
-      `Mode: ${progress.mode === 'duration' ? `duration (${progress.durationSeconds}s)` : 'request count'}`,
-      `Completed ${progress.completedRequests} of ${progress.requestedRequests} max requests.`,
-      `Elapsed: ${progress.elapsedMillis || 0} ms`,
-      `Target RPS: ${progress.targetRatePerSecond || 0}`,
-      `Rate cap RPS: ${progress.maxRatePerSecond || 0}`,
-      `Execution: ${progress.executionMode || 'singleProcess'} (${progress.workerProcesses || 1} process${(progress.workerProcesses || 1) === 1 ? '' : 'es'})`,
-      `Active workers: ${progress.activeWorkers || 0}`
-    ];
-    return lines.join('\n');
-  }
-
   function formatRunnerResult(result) {
     const lines = [
       `Collection: ${result.collectionName || '-'}`,
@@ -100,42 +86,7 @@
     ].filter(Boolean).join('\n');
   }
 
-  function formatLoadResult(result) {
-    return [
-      `Mode: ${result.mode === 'duration' ? `duration (${result.durationSeconds}s)` : 'request count'}`,
-      `Requested requests: ${result.requestedRequests}`,
-      `Completed requests: ${result.totalRequests}`,
-      `Cancelled: ${result.cancelled}`,
-      `Elapsed: ${result.elapsedMillis || 0} ms`,
-      `Ramp-up: ${result.rampUpSeconds || 0} s`,
-      `Target RPS: ${result.targetRatePerSecond || 0}`,
-      `Rate cap RPS: ${result.maxRatePerSecond || 0}`,
-      `Execution: ${result.executionMode || 'singleProcess'} (${result.workerProcesses || 1} process${(result.workerProcesses || 1) === 1 ? '' : 'es'})`,
-      `Successful: ${result.successfulRequests}`,
-      `Failed: ${result.failedRequests}`,
-      `Error rate: ${(result.errorRate * 100).toFixed(2)}%`,
-      `Requests/sec: ${result.requestsPerSecond.toFixed(2)}`,
-      `Latency min/avg/p50/p90/p95/p99/max: ${result.minMillis} / ${result.averageMillis.toFixed(2)} / ${result.p50Millis} / ${result.p90Millis} / ${result.p95Millis} / ${result.p99Millis} / ${result.maxMillis} ms`,
-      `Latency histogram: ${formatLatencyHistogram(result.latencyHistogram)}`,
-      `Status counts: ${JSON.stringify(result.statusCounts)}`,
-      Array.isArray(result.policyDecisions) && result.policyDecisions.length ? `Policy decisions:\n- ${result.policyDecisions.map((decision) => decision.message || '').filter(Boolean).join('\n- ')}` : '',
-      Array.isArray(result.samples) ? `Samples recorded: ${result.samples.length}${result.sampleLimitReached ? ` (capped at ${result.sampleLimit})` : ''}` : '',
-      result.errors?.length ? `Errors:\n- ${result.errors.join('\n- ')}` : ''
-    ].filter(Boolean).join('\n');
-  }
-
-  function formatLatencyHistogram(histogram) {
-    if (!Array.isArray(histogram) || !histogram.length) {
-      return 'none';
-    }
-    return histogram
-      .map((bucket) => `${bucket.upperBoundMillis == null ? 'overflow' : `<=${bucket.upperBoundMillis}ms`}:${bucket.count}`)
-      .join(' ');
-  }
-
   global.PostMeterRunFormatting = {
-    formatLoadProgress,
-    formatLoadResult,
     formatRunnerResult,
     oauthProgressDetail,
     oauthStatusText

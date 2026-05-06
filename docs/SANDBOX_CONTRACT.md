@@ -10,7 +10,7 @@ Status: Postman-import compatibility contract and claim-gated implementation rec
 - Provide a Postman-compatible sandbox for single-request sends, collection runs, CLI collection runs, and every Postman script surface that can be represented in imported data, prioritizing direct execution of imported Postman scripts.
 - Treat the official Postman Sandbox API reference, related official Postman scripting/protocol/import documentation, official Postman Collection SDK references, and the latest Newman release targeted by the compatibility corpus as the minimum compatibility surface. Full import parity means the same observable request mutations, HTTP traffic, response parsing, variable/cookie/vault side effects, visualizer output, test names/order/results, console output shape, and script errors for the supported imported artifact.
 - The current audited parity target is Postman Desktop 11.71.7 with `postman-sandbox@6.2.2` and Postman Runtime 7.50.0, plus Newman 6.2.2 with Postman Runtime 7.39.1 for Newman-compatible surfaces. Advancing either target requires updating the generated matrix target, docs coverage audit, differential evidence, and Desktop evidence artifacts.
-- Keep load-test scripting out of the production sandbox v1 contract. Load tests must continue to use the direct HTTP sender unless a later explicit "scripted load test" contract is written.
+- Keep future scripted high-volume execution out of the production sandbox v1 contract unless a separate contract is written.
 - Make every privileged script capability available only through a brokered, validated message protocol.
 - Preserve deterministic completion, cancellation, side-effect, and error-reporting behavior across desktop and CLI execution.
 - Prefer Postman parity implemented through explicit brokers, validators, stores, and isolated renderers over compatibility gaps. When parity is not yet implemented, the unsupported behavior must be documented as a compatibility gap and tracked toward implementation.
@@ -21,7 +21,7 @@ Status: Postman-import compatibility contract and claim-gated implementation rec
 - Do not add a PostMeter account, cloud login, or account gate.
 - Do not let scripts read arbitrary local files, process environment variables, workspace files, Electron APIs, renderer DOM APIs, or Node modules.
 - Do not let scripts spawn processes, open native dialogs, register protocol handlers, load native modules, or modify app settings directly.
-- Do not run pre-request or test scripts during load tests in sandbox v1.
+- Do not run request scripts in any future high-volume executor until that contract exists.
 - Do not claim complete Postman script import parity unless `npm run postman:parity:claim`, `npm run postman:docs:validate`, and a current `npm run postman:docs:live` sweep are green for the generated default-import matrix and official-docs token inventory.
 
 ## Threat Model
@@ -50,7 +50,7 @@ Primary risks:
 - Secret leakage through logs, visualizer output, result exports, or error messages.
 - Denial of service through infinite loops, unbounded async scheduling, log flooding, large payloads, nested requests, or worker crashes.
 - Workspace corruption through ambiguous variable, cookie, or request mutation commits.
-- Races from overlapping request sends, collection runs, or future scripted load tests.
+- Races from overlapping request sends, collection runs, or future scripted high-volume execution.
 
 Security rule: a script is never trusted because it came from a local file. Imported and local scripts use the same sandbox boundary. Postman-compatible APIs may be enabled by default, but they must remain brokered and bounded; no setting may widen the worker's process privileges.
 
@@ -61,7 +61,6 @@ Security rule: a script is never trusted because it came from a local file. Impo
 | Single request send | Runs pre-request script, sends the request if pre-request succeeds, then runs test script. Commits allowed completed-phase side effects back to the workspace. |
 | Desktop collection runner | Runs the same pre-request/send/test lifecycle for each request. Supports runner control APIs such as `pm.execution.setNextRequest`, `pm.execution.skipRequest`, and brokered `pm.execution.runRequest`. |
 | CLI collection runner | Runs the same collection-run sandbox contract as desktop. Reports side effects in results but does not persist input files. |
-| Load testing | Does not execute scripts in sandbox v1. If the active request has scripts, UI/results/docs must make the skip explicit. |
 | Desktop session recovery | Restores editors and run results only. It must not resume partially completed scripts or broker operations. |
 
 ## Script Compatibility And Consent
@@ -521,21 +520,20 @@ This matrix is the full Postman import parity target. Rows marked as desktop-onl
 | Local mock scripts | Support mock-editor-only `pm.mock`, `pm.state`, saved examples, path variables, exact request/response helper behavior, persistent state, and desktop-only availability. |
 | Raw host access | Keep direct filesystem, process, shell, Electron, renderer DOM, native modules, and raw networking unavailable. All privileged behavior remains brokered, validated, and bounded. |
 
-## Load-Test Decision
+## Future High-Volume Execution Decision
 
-Sandbox v1 does not execute request scripts during load tests.
+Sandbox v1 does not cover scripted high-volume execution.
 
 Rationale:
 
-- Per-sample script execution changes load-test resource, timing, and result semantics.
-- Scripted load tests need separate budgets for worker processes, script workers, broker requests, cookie merging, variable mutation aggregation, and result sampling.
-- Silent partial support would make load results misleading.
+- Per-sample script execution changes high-volume execution resource, timing, and result semantics.
+- Scripted high-volume execution needs separate budgets for worker processes, script workers, broker requests, cookie merging, variable mutation aggregation, and result sampling.
+- Silent partial support would make high-volume results misleading.
 
 Required product behavior before claiming Postman-compatible production sandbox readiness:
 
-- Documentation must state that load tests skip pre-request and test scripts.
-- UI and exported load results should surface that scripts were skipped when the active request contains scripts.
-- A future scripted load-test feature must get its own contract before implementation.
+- Documentation must state that high-volume scripted execution is out of scope until a dedicated contract exists.
+- A future scripted high-volume feature must get its own contract before implementation.
 
 ## Error Reporting
 
@@ -560,7 +558,7 @@ Contract compliance requires:
 - `npm run postman:docs:validate` must pass, proving `docs/postman-docs-coverage-audit.json` maps the committed official-docs token inventory to matrix rows or explicit exclusions. `npm run postman:docs:live` must pass when checking against current upstream Postman/Newman docs.
 - `npm run postman:parity:claim` must pass before any full 1:1 Postman script compatibility claim. It is intentionally separate from normal validation so future claim blockers remain visible if a regression or new uncovered row is introduced.
 - `npm run postman:parity:diff` must pass for the local HTTP-core, broad, dynamic-host-globals, runtime-limits, HttpOnly-cookies, sendRequest-advanced, and file-binding Newman-compatible differential fixtures; `npm run postman:parity:diff -- --newman --download-newman` is the optional live comparison against the targeted `newman@6.2.2` release when network access is available.
-- `npm run sandbox:platform:validate` must pass, proving `docs/os-sandbox-platform-matrix.json` is current with `src/core/osSandboxPlatformMatrix.js` and structurally tracks Linux, Windows, macOS, Postman-parity separation, and load-test scripting separation.
+- `npm run sandbox:platform:validate` must pass, proving `docs/os-sandbox-platform-matrix.json` is current with `src/core/osSandboxPlatformMatrix.js` and structurally tracks Linux, Windows, macOS, Postman-parity separation, and future high-volume scripting separation.
 - `npm run sandbox:platform:claim` must pass before any claim that the tier-one OS sandbox backends and packaged-validation hooks are implemented. It is intentionally separate from `npm run postman:parity:claim` and now covers implemented Linux `bubblewrap`/seccomp, Windows AppContainer helper, macOS seatbelt, and packaged-validation rows. Linux is no longer blocked on a deny-by-default seccomp decision because the maintainer accepted the current `bubblewrap` plus dangerous-syscall seccomp policy for the current Linux implementation claim; stable production release still depends on native-runner/manual validation evidence tracked by production readiness.
 - Differential fixtures run against current Postman Desktop where automatable, latest targeted Newman where supported, and PostMeter. Differences must be classified as fixed, accepted extra support, or documented intentional security exception.
 - Compatibility fixtures for async ordering, promises, timers, intervals, microtasks, callback completion, failed async callbacks, skipped tests, `pm.test.index`, nested `pm.sendRequest`, `pm.execution.runRequest`, variable precedence, dynamic variables, globals, iteration data, cookie scope, request mutation, cancellation, and mixed assertion failures.

@@ -1,15 +1,14 @@
 # PostMeter
 
-PostMeter is a local-first desktop API client for building, sending, testing, and load-checking API workflows.
+PostMeter is a local-first desktop API client for building, sending, and testing API workflows.
 
 ## Features
 
 - Send HTTP requests with params, headers, auth, cookies, and body editors.
 - Organize collections, folders, examples, environments, variables, and workspaces.
-- Import and export PostMeter, Postman Collection v2.1, OpenAPI, JMeter, curl, and HAR files.
+- Import and export PostMeter, Postman Collection v2.1, OpenAPI, curl, and HAR files.
 - Run pre-request scripts, test scripts, assertions, and workspace-owned runners.
 - Use first-class desktop runners or the CI-friendly CLI runner.
-- Run bounded local load tests with rate caps, percentiles, and JSON/CSV export.
 - Work with OAuth 2.0, HTTPS client certificates, cookies, and GitHub Releases update checks.
 
 ## Quick Start
@@ -73,7 +72,7 @@ Diagnostics are local and user-initiated. See [Troubleshooting](docs/TROUBLESHOO
 | --- | --- |
 | [docs/TECH_SPECS.md](docs/TECH_SPECS.md) | Full product and implementation reference. |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Renderer, Electron, and core ownership boundaries. |
-| [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) | Import/export, scripting, auth, and load-testing compatibility. |
+| [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) | Import/export, scripting, auth, and compatibility boundaries. |
 | [docs/SANDBOX_CONTRACT.md](docs/SANDBOX_CONTRACT.md) | Request-script sandbox behavior and security contract. |
 | [docs/RELEASE_READINESS.md](docs/RELEASE_READINESS.md) | Release gates, validation policy, and readiness status. |
 | [docs/SECURITY.md](docs/SECURITY.md) | Security boundaries and vulnerability reporting. |

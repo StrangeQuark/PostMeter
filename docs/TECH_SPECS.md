@@ -6,7 +6,7 @@ This document is the detailed implementation reference. For quick setup, common 
 
 PostMeter is now implemented as an Electron desktop MVP. The JavaFX/Maven implementation has been removed from the tracked repository; Electron is the only supported runtime.
 
-The migration deliberately does not bridge Electron to the Java services. Core behavior was ported into Node modules so the desktop UI, IPC boundary, persistence, request execution, import/export, and load-test logic can evolve together without carrying JavaFX UI coupling forward.
+The migration deliberately does not bridge Electron to the Java services. Core behavior was ported into Node modules so the desktop UI, IPC boundary, persistence, request execution, import/export, and runner logic can evolve together without carrying JavaFX UI coupling forward.
 
 ## Product Scope Implemented
 
@@ -18,7 +18,7 @@ The migration deliberately does not bridge Electron to the Java services. Core b
 - Import/export native PostMeter workspaces, including filesystem-discovered managed workspaces and non-destructive workspace import.
 - Import/export native PostMeter collections, including a desktop collection-picker export modal, an empty-state warning when no collections exist, and `<collection-name>.json` native export defaults.
 - Import/export Postman Collection v2.1 JSON while preserving folder/request hierarchy order, variables and raw variable metadata, auth inheritance, HTTP/GraphQL/gRPC/local mock scripts, editable examples, cookies and richer cookie metadata including newer priority/partitioning hints where present, supported GraphQL/gRPC protocol metadata, local mock/vault/visualizer/package binding metadata, file/binary body references, request/example/certificate IDs, and supported collection certificate metadata.
-- Import/export OpenAPI, JMeter, curl, and HAR collection formats for compatibility workflows, including OpenAPI JSON/YAML input, local `$ref` resolution for common objects, server variables, path/query/header/cookie parameters, Swagger 2.0 body/form-data import, binary body hints, OpenAPI security scheme import/export, OpenAPI response examples and disabled generated response assertions, JMeter variables/assertions/headers/listeners/CSV/thread/timer/controller/extractor metadata where mappable, JMeter XPath and Size Assertion mapping, mapped JMeter assertion enabled-state preservation, representative timer metadata preservation, preserve-only metadata for known unsupported JMeter assertion/processor/sampler/script classes, HAR cookies/response examples/timing/redirect/compression metadata with sensitive header/cookie redaction on export, common curl auth/data/redirect/compression/cookie/file flags, and preserved curl proxy/retry/client-TLS import metadata.
+- Import/export OpenAPI, curl, and HAR collection formats for compatibility workflows, including OpenAPI JSON/YAML input, local `$ref` resolution for common objects, server variables, path/query/header/cookie parameters, Swagger 2.0 body/form-data import, binary body hints, OpenAPI security scheme import/export, OpenAPI response examples and disabled generated response assertions, HAR cookies/response examples/timing/redirect/compression metadata with sensitive header/cookie redaction on export, common curl auth/data/redirect/compression/cookie/file flags, and preserved curl proxy/retry/client-TLS import metadata.
 - Define request assertions for status, headers, JSON paths, XML XPath, HTML CSS selectors, response time, response size, body text, JSON/XML/HTML variable extraction, and regex variable extraction.
 - Run workspace-owned desktop runners locally, including stop-on-failure, extracted-variable/script-mutation propagation, runtime variable display, progress events, and JSON/CSV result export.
 - Manage runners from the dedicated left-sidebar Runners section, with runner-local request copies, runner request editing, runner request import from collections, row reorder/delete controls, and a split execution-results view.
@@ -33,7 +33,7 @@ The migration deliberately does not bridge Electron to the Java services. Core b
 - Send HTTP requests and display status, timing, size, final URL, headers, and formatted JSON bodies.
 - Record recent request history.
 - Check GitHub Releases for newer PostMeter versions and prompt before opening release pages. Stable releases are checked by default; prereleases are checked only when the user enables the opt-in setting.
-- Run bounded local concurrent load tests with request-count or duration modes, ramp-up scheduling, target arrival-rate scheduling, Load Test panel run configuration, global rate caps, policy-decision reporting, optional multi-process execution, high-concurrency confirmation, progress, cancellation, streamed worker summary aggregation, latency percentiles, latency histograms, optional capped per-sample capture, error summaries, and JSON/CSV export.
+- Track the planned V1 Load Test redesign separately; the legacy Load Test panel, runtime, worker, policy, and export path have been removed.
 
 ## Product Account Policy
 
@@ -59,7 +59,7 @@ OAuth support in PostMeter is only for outbound API request authentication, matc
 
 - Node.js 22 or newer.
 - npm 10 or newer.
-- Network access for request execution and load tests.
+- Network access for request execution.
 - Writable user-home directory, or a writable directory for the path specified by `POSTMETER_DATA_PATH`.
 
 ## Build, Run, And Test Commands
@@ -143,8 +143,6 @@ src/core/
   httpClient.js
   ipcValidation.js
   localMockServer.js
-  loadTestRunner.js
-  loadTestWorker.js
   models.js
   payloadSchemas.js
   postmanBuiltinPackages.js
@@ -172,7 +170,6 @@ src/renderer/
   exampleModel.js
   index.html
   layoutControls.js
-  loadPolicy.js
   overlays.css
   responseFormatting.js
   renderer.js
@@ -211,25 +208,25 @@ Main process responsibilities:
 - Deny renderer-controlled top-level navigation away from the exact initial packaged `postmeter-app://bundle/src/renderer/index.html` URL, including unexpected app-protocol query changes, deny `window.open`, deny `<webview>` attachment, and deny all permission requests.
 - Load and recover workspace data before creating the UI.
 - Own native open/save dialogs, including selected-path shape validation before import/export reads or writes.
-- Execute HTTP requests, collection runs, and load tests through core services.
+- Execute HTTP requests and collection runs through core services.
 - Start and cancel OAuth 2.0 authorization-code PKCE using loopback or custom URI-scheme redirects.
 - Start and cancel OAuth 2.0 device-code polling.
-- Validate renderer-originated IPC sender identity and payloads before handing them to persistence, request execution, or load testing.
+- Validate renderer-originated IPC sender identity and payloads before handing them to persistence, request execution, or collection-run behavior.
 - Persist and export normalized workspace data as plain JSON.
-- Export load-test and collection-run results to JSON or CSV.
+- Export collection-run results to JSON or CSV.
 - Persist request history after sends.
 - Check GitHub Releases for update metadata and open approved release URLs in the external browser. The Help menu owns update checks and the prerelease opt-in checkbox.
 - Own structured local diagnostics, bounded rotated diagnostic logs, and user-selected local diagnostic bundle export. The main process never uploads diagnostics and does not accept renderer-provided upload destinations.
 
 Renderer responsibilities:
 
-- Render the workspace, collections, folders, requests, collection variables, environments, response viewer, history, assertions, collection runner, update checks, and load-test controls.
+- Render the workspace, collections, folders, requests, collection variables, environments, response viewer, history, assertions, collection runner, and update checks.
 - Render dedicated Collections, Environments, Workspaces, Runners, and History sidebar sections. Empty environment/workspace/runner sidebar selections show the matching empty/create/select pane when no matching tab is open, and reselect the most recently opened matching tab when one exists.
 - Handle native File/Help menu actions received through the preload allowlist.
 - Maintain a visible app status live region for routine action feedback, while important failures also use popup notification behavior or contextual detail panels.
 - Render pre-request and test script editors for each request.
 - Maintain the active selection state.
-- Collect editor state before save/send/load.
+- Collect editor state before save/send.
 - Route explicit request/environment/runner-request saves through targeted preload APIs so normal pane saves persist only the selected item while still carrying current workspace settings and request-owned shared state. Workspace settings save through a dedicated settings-only preload API so workspace settings, theme/update toggles, and drag/drop structural saves do not flush unrelated dirty request, environment, or runner drafts.
 - Render toolbar and tree context menus, tab context menus, history clear confirmation, runner import selection, and dirty-save/discard prompts without raw native `prompt`, `confirm`, or `alert` dialogs.
 - Call only preload-exposed APIs.
@@ -259,10 +256,6 @@ window.postmeter.oauth.startDeviceFlow(id, auth, environment)
 window.postmeter.oauth.cancelFlow(id)
 window.postmeter.oauth.cancelDeviceFlow(id)
 window.postmeter.oauth.onProgress(callback)
-window.postmeter.loadTest.start(id, request, environment, config)
-window.postmeter.loadTest.cancel(id)
-window.postmeter.loadTest.export(result, format)
-window.postmeter.loadTest.onProgress(callback)
 window.postmeter.runner.start(id, collection, environment, config)
 window.postmeter.runner.cancel(id)
 window.postmeter.runner.export(result, format)
@@ -349,21 +342,7 @@ Request fields:
 - `variables`
 - `examples`
 - `cookieJar`
-- `loadTestPolicy`
 - Optional protocol and import/export fields for Postman parity: `protocol`, `methodPath`, `metadata`, `messages`, `postmanBody`, `protocolProfile`, `graphql`, `grpc`, `websocket`, and bounded `postman` compatibility metadata
-
-Request load-test compatibility policy fields:
-
-- `enabled` on request policies only
-- `concurrency`
-- `totalRequests`
-- `durationSeconds`
-- `rampUpSeconds`
-- `targetRatePerSecond`
-- `maxRatePerSecond`
-- `executionMode`
-- `workerProcesses`
-- `recordSamples`
 
 Request cookie jar fields:
 
@@ -467,9 +446,9 @@ Schema `7` adds workspace settings, request-local variables, request examples, a
 
 Schema `8` adds workspace cookies and per-request cookie jar options.
 
-Schema `9` adds request load-test policy compatibility fields.
+Schema `9` added request load-test policy compatibility fields, which are now removed during migration.
 
-Schema `10` removes workspace-level load-test defaults. Load-test run settings are configured from the Load Test panel instead of being stored on the workspace.
+Schema `10` removes workspace-level load-test defaults. Legacy load-test settings are no longer persisted.
 
 Schema `11` adds workspace-level globals for true `pm.globals` support and workspace settings that can disable brokered script network requests or cookie-helper access. These APIs are enabled by default for Postman import parity. It also carries the optional `sandbox.trustedCapabilities.vault` grant, scoped `sandbox.trustedCapabilities.vaultGrants`, and reviewed `sandbox.packageCache` entries for exact package-library/external package compatibility. Vault access defaults to disabled because it exposes user-managed secrets.
 
@@ -502,7 +481,7 @@ Behavior:
 - Quarantines unreadable workspace JSON by moving it through a no-overwrite file move to a timestamped, collision-resistant `corrupt` sibling file and best-effort fsyncing the directory, then creates a fresh default workspace through no-overwrite publication and raises a recovery error for the UI. If a replacement workspace file appears before recovery publication, PostMeter preserves that replacement instead of overwriting it.
 - Writes workspace, session, vault, and export files through collision-resistant same-directory temporary files, fsyncs file contents where supported, renames into place, and best-effort fsyncs the containing directory. Interrupted temporary files are ignored by workspace discovery.
 - Writes normalized workspace values directly to local JSON.
-- Normalizes IDs, names, body types, methods, arrays, settings, request load-test compatibility policies, collection variables, collection certificates, request variables, request examples, request cookie jar settings, workspace cookies, folders, environments, and history.
+- Normalizes IDs, names, body types, methods, arrays, settings, collection variables, collection certificates, request variables, request examples, request cookie jar settings, workspace cookies, folders, environments, and history, while removing legacy request load-test compatibility fields.
 - Native workspace import adds another managed workspace without replacing, switching away from, or backing up the current one.
 - Targeted renderer saves for request, runner-owned request, and environment tabs send only the selected item payload, the current workspace settings, and any owned shared request-side state such as collection variables or cookie-jar values; targeted settings saves send only `workspace.settings`; the main process applies that payload into the cached workspace before the normal full-file write.
 - Full workspace saves are still used for shutdown persistence, managed-workspace switching or active-workspace rename, whole-workspace export, and collection import. The shutdown synchronous save validates the workspace payload but skips the full-workspace write when queued workspace mutations are pending, returning the current main-process workspace instead of letting a stale renderer snapshot overwrite pending send/run/vault side effects.
@@ -536,20 +515,6 @@ OpenAPI import/export:
 - Imports inline response examples as editable request examples.
 - Imports response status/header metadata as disabled assertions so users can opt into generated checks without creating contradictory default assertions.
 - Exports PostMeter collections as OpenAPI 3.1 JSON with paths, methods, query/header/cookie parameters, raw body content, and mappable auth helpers as security schemes.
-
-JMeter import/export:
-
-- Imports basic JMeter `HTTPSamplerProxy` test plans into PostMeter requests.
-- Exports collections to a simple JMeter `.jmx` test plan with HTTP samplers.
-- Imports and exports Header Manager values as request headers.
-- Imports and exports User Defined Variables where they map to collection variables.
-- Imports CSV Data Set Config, thread group, timer, listener, and simple controller metadata as collection variables.
-- Imports simple response-code, response-body, duration, size, JSON-path, and XPath assertions into PostMeter assertions, preserving disabled state for mapped assertion types, and exports enabled mappable assertion types back to JMeter XML.
-- Imports Regex Extractor as PostMeter regex variable extraction and exports mappable regex extraction assertions back to JMeter `RegexExtractor`.
-- Imports JSON Extractor as PostMeter JSON variable extraction and exports mappable JSON extraction assertions back to JMeter `JSONPostProcessor`.
-- Exports preserved Constant Timer, Constant Throughput Timer, generic timers such as Uniform/Gaussian/Poisson random timers and Precise Throughput Timer, Loop Controller, Transaction Controller, Throughput Controller, and Runtime Controller metadata back into JMX elements.
-- Preserves known unsupported JMeter assertions, including HTML Assertion validity checks, MD5/XML schema/compare/SMIME assertions, pre/post processors, and sampler/script elements as `jmeter.unsupported.*` collection variables and re-exports preserved JMeter element metadata as disabled JMX elements where the original class can be represented safely. This is not a full arbitrary JMX object graph preservation model.
-- Current support targets common HTTP sampler and metadata fields and is not a full JMeter feature clone.
 
 curl import/export:
 
@@ -650,7 +615,7 @@ Auth values support environment substitution before use.
 
 Outbound OAuth certification is documented in `docs/OAUTH_PROVIDER_CERTIFICATION.md`, with Google OAuth 2.0, Microsoft Entra ID / Azure AD, and GitHub OAuth Apps as the first target providers. `npm run oauth:certify:validate` checks the source-owned provider matrix, `npm run oauth:certify:mock` runs the local mocked certification corpus, and `npm run oauth:certify:live` is skipped by default unless maintainer-owned provider credentials are explicitly enabled. When enabled, live certification fails closed unless provider URLs point to official Google, Microsoft Entra, or GitHub OAuth endpoints and a forward-slash repository-relative sanitized evidence JSON file is supplied through `POSTMETER_LIVE_OAUTH_EVIDENCE_FILE` or `--evidence`; credentials alone are not treated as evidence. Evidence must prove the required redirect strategies, provider-specific grant types, provider-console review, and redacted execution artifacts without printing OAuth values. The CLI requires the evidence JSON and referenced artifact files under `validation-artifacts/oauth-provider-certification/`, verifies artifact SHA-256 checksums, rejects paths outside that directory, rejects backslash/traversal paths, and scans structured evidence plus text artifacts for token-shaped values. This certification is for target API request auth only and must not introduce PostMeter account login or account creation.
 
-Collection-run and load-test OAuth refreshes are applied to workspace request auth through main-process mutation paths, but refreshed auth objects are internal-only on run/load result objects and are omitted from JSON serialization, renderer IPC result payloads, and exported run/load artifacts.
+Collection-run OAuth refreshes are applied to workspace request auth through main-process mutation paths, but refreshed auth objects are internal-only on run result objects and are omitted from JSON serialization, renderer IPC result payloads, and exported run artifacts.
 
 Auth validation:
 
@@ -668,7 +633,7 @@ Auth limitations:
 - Client-certificate requests use the Node `https` transport path instead of global `fetch`; that path intentionally follows redirects only when they stay on the original HTTPS origin to avoid leaking client certificate material to redirected hosts.
 ## Cookie Jar
 
-Cookie jar handling is implemented in `cookieJar.js` and integrated into `httpClient.js`, the Electron request send path, collection runs, load tests, and the renderer Cookies tab.
+Cookie jar handling is implemented in `cookieJar.js` and integrated into `httpClient.js`, the Electron request send path, collection runs, and the renderer Cookies tab.
 
 Implemented behavior:
 
@@ -865,14 +830,14 @@ Implemented runtime behavior:
 - Diagnostics default-deny inbound/outbound request and response data, including URLs, path/query values, methods, status codes/categories, sizes, headers, HTTP/gRPC metadata, cookies, auth material, request/response bodies and aliases, form-data parts, GraphQL variables, gRPC messages, rendered response text, examples/history payloads, script-echoed traffic values, console-output aliases, and payload-derived identifiers. Workspace-scoped opt-ins can enable narrow categories (`urls`, `headers`, `cookies`, `bodies`, `protocolMessages`, `scriptConsole`, and `payloadIdentifiers`), but auth schemes including header-shaped standalone Bearer/Basic/Digest/Hawk/Token/OAuth/NTLM/Negotiate tokens, comma/semicolon-delimited compound Digest-style parameters with optional whitespace around equals, JSON-escaped/double-escaped/nested-JSON camelCase auth-header aliases, AWS SigV4 and Akamai-style signature parameters, chained AWS query credentials next to kebab-case OAuth secret assignments, assigned exact token/code/state fields, assigned and bare whitespace-only snake_case/kebab-case/camelCase OAuth/token fields, unquoted multi-word and repeated-whitespace secret fields, certificate passphrases, generic credential fields, sensitive object keys, unescaped JSON/annotated/class-style and parenthesized util-inspect URL/header/metadata array/object aliases with whitespace/colon/equals separators, structured header/metadata key/name pairs with sensitive value/raw/currentValue/schema fields, object/array request/response assignments, bare, assigned, escaped, double-escaped, and nested-JSON including escaped newline/quote/backslash camelCase/snake_case/kebab-case body/bodyPreview/data/responseText/text/variables/rendered-response aliases, script-console aliases, payload-identifier aliases, protocol-message aliases, cookies, JWTs including JWT-shaped URL path/query/fragment values, private keys, UNC/extended UNC/Windows device/Windows/macOS/POSIX local paths including file:// URLs, JSON-escaped slash URLs, JSON-escaped POSIX paths, file URLs, mixed path/URL chains, URL credentials across supported and custom URL schemes, OAuth provider/progress error URL and path references, OAuth callback code/state params and token fragments, URL-encoded free-text OAuth/token parameter strings, bare DNS/IP/localhost transport endpoints, secret query/fragment/path params including path label/value and inline same-segment forms with encoded slashes, routed fragment path forms, single- and multi-encoded delimiter forms including recursively nested encoded wrapper params and structured key/value/raw/currentValue/example/schema-default arrays, source/UI/packaged smoke failure output, source/packaged sandbox validation child output, and IPC handler/export failure messages and diagnostic event type/outcome/failure-code metadata including compact/delimiter-free token/code/state labels and one-letter token aliases plus secret-shaped IPC/export error names and codes are still redacted. Auth-scheme words embedded inside hyphenated values are not treated as standalone auth schemes, and URL category opt-ins preserve non-sensitive query, fragment, and path context while redacting sensitive query, fragment, path label/value, inline path, routed fragment path, encoded delimiter, auth, and token values. Imported native workspaces reset diagnostics settings to defaults so a file cannot silently enable traffic logging, and partial settings saves preserve the current diagnostics privacy state unless a diagnostics field is explicitly changed.
 - Workspace diagnostics controls are current-workspace scoped: editing and export are disabled for selected non-current workspaces, PII warnings are programmatically tied to risky controls, failed settings saves roll back in-memory state, and diagnostics export waits for any pending diagnostics settings save before producing a bundle.
 - `npm run diagnostics:privacy:validate` validates the source-owned diagnostics/privacy matrix at `docs/diagnostics-privacy-matrix.json`; `npm run diagnostics:privacy:write` regenerates it. The production readiness row `diagnostics.privacy` is validated locally by diagnostics unit tests, IPC tests, renderer binding/UI regression tests, import-reset tests, event-emitter tests, matrix freshness, and `npm run check`.
-- `npm run ux:accessibility:validate` validates the source-owned production UX/accessibility/failure-recovery matrix at `docs/ux-accessibility-matrix.json` and rejects stale rows, escaped evidence paths, empty evidence/test arrays, invalid statuses, future or URL placeholders in executable test references, non-test files used as test references, missing evidence/test files, and unknown `npm run` script references. The matrix enumerates first launch, workspace management, request editing/sends, collection runs, load tests, imports/exports, OAuth flows, package review/fetch, vault prompts, file bindings, local mocks, settings/theme, update checks, keyboard/focus behavior, accessible tab/live-region semantics, keyboard-operable splitters, variable-autocomplete relationships, constrained desktop sizing, active forced-colors focus behavior, long labels, and startup/UI smoke failure artifacts. Production renderer workflows use in-app text-input, secret-input, confirmation, notification, export, save-draft, and vault-access modals instead of raw native prompt/confirm/alert dialogs. Toolbar and tree context menus expose menu semantics with keyboard-open focus, arrow/Home/End item navigation, keyboard activation, Escape/Tab close, and focus restoration after modal-triggered rerenders, opened tabs retain focus after selection rerenders, variable autocomplete refreshes the active descendant during keyboard navigation, and app-level status messages update a visible live status region. Package review/fetch, imported-file binding, vault operations, sandbox capability toggles, theme/prerelease settings, collection-import saves, pre-send/pre-load/pre-run saves, stale load/runner completions after workspace context reset, and pending-mutation shutdown sync saves fail visibly, roll back in-memory changes, ignore stale completions, or skip stale writes. Regression tests keep these boundaries in place. Startup and source UI smokes can write screenshot, redacted structural DOM-state including active-element ARIA metadata, and log artifacts through `POSTMETER_VALIDATION_ARTIFACT_DIR` or `POSTMETER_UI_SMOKE_ARTIFACT_DIR`; startup load/preload/early renderer failures fail fast with artifacts, source UI output, source/packaged sandbox validation child output, packaged smoke launcher output plus thrown failures, and multi-process load-worker stderr previews use the shared diagnostics redactor for local paths, private keys, request/response alias values, JSON-escaped slash URLs/file URLs, Bearer/Basic/Digest/Hawk/Token/OAuth/NTLM/Negotiate auth-shaped values, JSON-escaped/double-escaped/nested-JSON camelCase auth-header aliases, and OAuth authorization-code/device-code/user-code/code-verifier/client-assertion fields, smoke child stdout/stderr and script-worker stdio lines are byte-bounded, load workers have watchdog/kill escalation, and release artifact inspection commands plus smoke and sandbox-validation child processes are timeout-bounded and fail closed with timeout code 124 where applicable. CI, release, and manual native release validation all run startup, workflow, regression, OAuth, and snapshot smoke suites in the production gate; release/manual native validation run them before production-readiness validation, while CI runs the same individual validators and smokes in the pull-request gate and `npm run check` keeps the equivalent local aggregate gate.
+- `npm run ux:accessibility:validate` validates the source-owned production UX/accessibility/failure-recovery matrix at `docs/ux-accessibility-matrix.json` and rejects stale rows, escaped evidence paths, empty evidence/test arrays, invalid statuses, future or URL placeholders in executable test references, non-test files used as test references, missing evidence/test files, and unknown `npm run` script references. The matrix enumerates first launch, workspace management, request editing/sends, collection runs, imports/exports, OAuth flows, package review/fetch, vault prompts, file bindings, local mocks, settings/theme, update checks, keyboard/focus behavior, accessible tab/live-region semantics, keyboard-operable splitters, variable-autocomplete relationships, constrained desktop sizing, active forced-colors focus behavior, long labels, and startup/UI smoke failure artifacts. Production renderer workflows use in-app text-input, secret-input, confirmation, notification, export, save-draft, and vault-access modals instead of raw native prompt/confirm/alert dialogs. Toolbar and tree context menus expose menu semantics with keyboard-open focus, arrow/Home/End item navigation, keyboard activation, Escape/Tab close, and focus restoration after modal-triggered rerenders, opened tabs retain focus after selection rerenders, variable autocomplete refreshes the active descendant during keyboard navigation, and app-level status messages update a visible live status region. Package review/fetch, imported-file binding, vault operations, sandbox capability toggles, theme/prerelease settings, collection-import saves, pre-send/pre-run saves, stale runner completions after workspace context reset, and pending-mutation shutdown sync saves fail visibly, roll back in-memory changes, ignore stale completions, or skip stale writes. Regression tests keep these boundaries in place. Startup and source UI smokes can write screenshot, redacted structural DOM-state including active-element ARIA metadata, and log artifacts through `POSTMETER_VALIDATION_ARTIFACT_DIR` or `POSTMETER_UI_SMOKE_ARTIFACT_DIR`; startup load/preload/early renderer failures fail fast with artifacts, and source UI output, source/packaged sandbox validation child output, and packaged smoke launcher output plus thrown failures use the shared diagnostics redactor for local paths, private keys, request/response alias values, JSON-escaped slash URLs/file URLs, Bearer/Basic/Digest/Hawk/Token/OAuth/NTLM/Negotiate auth-shaped values, JSON-escaped/double-escaped/nested-JSON camelCase auth-header aliases, and OAuth authorization-code/device-code/user-code/code-verifier/client-assertion fields. Smoke child stdout/stderr and script-worker stdio lines are byte-bounded, and release artifact inspection commands plus smoke and sandbox-validation child processes are timeout-bounded and fail closed with timeout code 124 where applicable. CI, release, and manual native release validation all run startup, workflow, regression, OAuth, and snapshot smoke suites in the production gate; release/manual native validation run them before production-readiness validation, while CI runs the same individual validators and smokes in the pull-request gate and `npm run check` keeps the equivalent local aggregate gate.
 - `npm run sandbox:validate` runs the pinned Electron runtime, verifies Node permission enforcement for arbitrary filesystem reads and child-process spawning, checks the worker launch allowlist, verifies Linux OS-sandbox filesystem/network denial and seccomp-policy launch state where applicable, and runs an adversarial script-boundary probe.
 - `npm run sandbox:validate:packaged` runs the same validation entrypoint through a built desktop executable, covering packaged path, ASAR behavior, and the platform OS backend on Linux, Windows, and macOS runners.
 
 Limitations:
 
 - The platform OS-sandbox implementation is source-owned and matrixed separately from Postman API parity. Linux uses `bubblewrap` plus dangerous-syscall seccomp, Windows uses the release-owned AppContainer helper built by `npm run native:windows-sandbox:build` and packaged as an extra resource, and macOS uses a deny-default seatbelt `sandbox-exec` profile. `npm run sandbox:platform:claim` should pass when `docs/os-sandbox-platform-matrix.json` is current. Native runner packaging rows in the production readiness matrix still track release evidence separately from this implementation claim.
-- Load tests do not execute pre-request or test scripts; sandbox v1 keeps scripted load testing out of scope.
+- Future scripted high-volume execution remains out of scope until it has a separate sandbox contract.
 - Keep `npm run postman:parity:claim`, `npm run postman:docs:validate`, and a current `npm run postman:docs:live` sweep green before preserving the tracked Postman script compatibility claim. Local production resource ceilings remain documented safety policy for host-exhaustion-sized payloads, and the platform-equivalent OS sandbox claim remains tracked separately by `docs/os-sandbox-platform-matrix.json`.
 - Desktop mock-server management UI remains future work; the secure core local mock runner, script surface, and Postman export preservation for mock scripts/state metadata are implemented.
 
@@ -889,7 +854,7 @@ npm run cli -- run --file <workspace-or-collection> [--collection <id-or-name>] 
 Behavior:
 
 - Accepts native PostMeter workspace/collection files.
-- Uses the collection import pipeline for Postman, OpenAPI, JMeter, curl, and HAR inputs.
+- Uses the collection import pipeline for Postman, OpenAPI, curl, and HAR inputs.
 - Selects the first collection by default, or a collection by ID/name.
 - Selects no environment by default, or an environment by ID/name for native workspace inputs.
 - Accepts repeated `--var key=value` environment overrides and `--collection-var key=value` collection overrides for CI injection.
@@ -902,61 +867,19 @@ Limitations:
 
 ## Load Testing
 
-Load testing is handled by `loadTestRunner.js`.
+The legacy local Load Test implementation, renderer panel, runtime IPC channels, worker runner, policy model, result formatting, and JSON/CSV export path have been removed.
 
-Inputs:
+Planned V1 test types:
 
-- Active request.
-- Active environment.
-- `concurrency`
-- `totalRequests`
-- `durationSeconds`
-- `rampUpSeconds`
-- `targetRatePerSecond`
-- `maxRatePerSecond`
-- `executionMode`: `singleProcess` or `multiProcess`
-- `workerProcesses`
-- `recordSamples`
-- `confirmedHighConcurrency`
+- Latency
+- RPS / throughput
+- Concurrency
+- Stress
+- Spike
+- Soak
+- Ramp
 
-Limits:
-
-- Max concurrency: `512`
-- Max total requests: `100000`
-- Max duration: `3600` seconds
-- Max ramp-up: `3600` seconds
-- Max target rate: `10000` requests per second
-- Max rate cap: `10000` requests per second
-- Max worker processes: `8`
-- Max recorded samples in result payload: `50000`
-- High-concurrency confirmation threshold: `50`
-
-Behavior:
-
-- Runs a fixed number of requests across a local worker pool when `durationSeconds` is `0`.
-- Runs until the duration expires or `totalRequests` is reached when `durationSeconds` is greater than `0`.
-- Starts workers gradually across the configured ramp-up window.
-- When `targetRatePerSecond` is greater than `0`, schedules request starts against that target arrival rate instead of letting workers start as fast as possible.
-- When `maxRatePerSecond` is greater than `0`, rejects target rates above that cap and uses the cap as the effective local arrival rate when no target rate is set.
-- Load-test settings are read from the active Load Test panel controls for each run. Workspace-level defaults are intentionally not persisted.
-- Policy decisions explain cap-derived effective target rates in progress/result payloads and CSV export.
-- Defaults to single-process execution and can use bounded multi-process execution for heavier local tests when `executionMode` is `multiProcess`.
-- Starts load-test worker child processes with a minimal inherited environment instead of passing the full Electron process environment.
-- Merges multi-process worker summaries, status counts, latency histograms, first errors, and integer-millisecond latency distributions without requiring every raw sample in the parent process.
-- Uses the same HTTP validation and execution path as normal request send.
-- Rejects concurrency `50` or higher unless confirmation is present.
-- Supports cancellation with `AbortController` in single-process and multi-process execution.
-- Emits progress events with completed count, max request count, mode, duration, target rate, rate cap, policy decisions, elapsed time, and active worker count.
-- Records successful status codes and failed request error samples.
-- Summarizes min, average, p50, p90, p95, p99, max latency, throughput, error rate, status counts, latency histogram buckets, elapsed time, and first 10 errors.
-- Optionally records per-sample index, worker, start offset, duration, success, status, and error details up to the recorded-sample cap.
-- Exports summary, rate-cap metadata, policy decisions, histogram, and recorded samples as JSON or CSV.
-
-Limitations:
-
-- No distributed execution.
-- No distributed or cross-machine policy governance beyond target arrival-rate scheduling, local rate caps, confirmation, and request/concurrency/duration/process caps.
-- Optional sample capture is capped at `50000` samples per exported result; summaries and percentiles do not depend on retaining every raw sample.
+The next implementation should define a new saved test configuration model, execution engine, result model, diagnostics, exports, safety limits, and UI before exposing this section again.
 
 ## IPC Validation
 
@@ -974,22 +897,18 @@ Covered payloads:
 - Request assertion payloads.
 - Request-local variable and example payloads.
 - Request cookie jar option payloads.
-- Request load-test policy compatibility payloads and Load Test panel config payloads, including host-policy rows.
 - Optional active environment payloads.
-- Load-test ID, config, and export result payloads.
-- Load-result status counts, error lists, latency histogram buckets, and recorded sample arrays.
 - File-operation result payloads returned by import/export handlers, including optional workspace and collection results.
 - Collection-run result export payloads.
 - Collection-run nested assertion results, pre-request/test script result shapes, extracted variable rows, local variable rows, environment output, collection variable output, and cookie output.
-- Load export format.
 - App update-check option payloads.
 - External URL open payloads before credential-free `shell.openExternal` launches.
-- Main-process response payloads for request results, load-test results, and workspace load/save results.
+- Main-process response payloads for request results and workspace load/save results.
 
 Validation behavior:
 
 - Requires expected object/array/string/number/boolean shapes.
-- Bounds collection, folder, request, pair, history, string, body, allowed-host, folder-depth, and load-result sizes.
+- Bounds collection, folder, request, pair, history, string, body, allowed-host, and folder-depth sizes.
 - Rejects unsupported request methods and body types before core execution.
 - Validates key response shapes before returning them to the renderer.
 
@@ -1069,19 +988,19 @@ Node tests cover:
 - Environment variable resolution.
 - Auth normalization, validation, OAuth refresh-token renewal, OAuth client-credentials retrieval, OAuth authorization-code PKCE, OAuth device-code authorization/polling, client-certificate field validation, and request-time injection.
 - HTTP validation, request execution against a local server, client-certificate path material loading for PEM/PFX/P12/CA inputs, end-to-end local HTTP mTLS handshakes with PEM and PFX/P12 client certificates, and end-to-end local gRPC mTLS handshakes with plain PEM, encrypted PEM, and PFX/P12 client certificates across unary, client-streaming, server-streaming, and bidirectional calls.
-- IPC request, response, auth, cookie, request example, workspace, file-operation result, update-check option, external URL open, load-result, and collection-run result payload validation.
-- Load-test validation, high-concurrency confirmation, request-count mode, duration mode, ramp-up, target arrival-rate scheduling, Load Test panel configuration, global rate caps, bounded multi-process execution, child-worker environment filtering, streamed worker summary aggregation, metrics, histograms, sample capture caps, cancellation, cookie jar send support, and CSV export.
-- Collection format import/export for Postman, OpenAPI, JMeter, curl, and HAR, including Postman Collection v2.1 script/ID/order/metadata round-tripping, OpenAPI YAML/security import-export, OpenAPI local `$ref` resolution, OpenAPI server/path/cookie/binary metadata, Swagger 2.0 body/form-data import, OpenAPI response examples/generated disabled assertions, JMeter variables/assertions/headers/listeners/CSV/timer/controller/extractor metadata, JMeter XPath and Size Assertion mapping, realistic and nested JMeter fixture import, mapped JMeter assertion enabled-state preservation, broader unsupported JMeter assertion preservation, preserve-only metadata for known unsupported JMeter classes with disabled-element re-export, HAR cookie/example/timing/redirect/compression preservation with common response-cookie attributes and sensitive export redaction, common curl auth/data/redirect/compression/file compatibility flags, and preserved curl proxy/retry/client-TLS import metadata.
+- IPC request, response, auth, cookie, request example, workspace, file-operation result, update-check option, external URL open, and collection-run result payload validation.
+- Legacy load-test payload rejection and migration cleanup for removed request/workspace compatibility fields.
+- Collection format import/export for Postman, OpenAPI, curl, and HAR, including Postman Collection v2.1 script/ID/order/metadata round-tripping, OpenAPI YAML/security import-export, OpenAPI local `$ref` resolution, OpenAPI server/path/cookie/binary metadata, Swagger 2.0 body/form-data import, OpenAPI response examples/generated disabled assertions, HAR cookie/example/timing/redirect/compression preservation with common response-cookie attributes and sensitive export redaction, common curl auth/data/redirect/compression/file compatibility flags, and preserved curl proxy/retry/client-TLS import metadata.
 - Postman import for common inherited and request-level auth helpers, HTTP/GraphQL/gRPC scripts, protocol hook metadata, examples, cookies, prefix-constrained cookie metadata, real-world `request.cookie` source-format fixture coverage, variables and raw variable metadata, request/example/certificate IDs, file/binary body references, binding metadata, and collection certificates.
 - Postman sandbox parity matrix validation, the HTTP-core, broad, dynamic-host-globals, runtime-limits, HttpOnly-cookies, sendRequest-advanced, and file-binding Newman-compatible differential fixtures, and the protocol hook fixture, including request mutation, environment mutation, collection-variable behavior asserted inside the script, package/assertion/timer/dynamic-variable/cookie coverage, `pm.info`, `pm.message`, `pm.sendRequest` callback/object-body/advanced-auth/file-binding behavior, GraphQL hooks, and gRPC streaming message hooks.
 - Assertion evaluation, collection-run sequencing, request-local variables, cookie jar propagation, JSON/XML/HTML/regex extracted-variable propagation, script-mutation propagation, stop-on-failure, isolated request script execution, Node permission worker flags, minimal worker environments, bounded worker heap settings, bounded script console capture, explicit unsupported script API errors, and collection-run CSV export.
 - CLI collection execution with passing/failing exit codes and JSON/CSV report output.
 - Release manifest generation, release artifact validation, release workflow metadata, CI workflow validation, and GitHub release update checks.
-- Workspace default creation, schema `2` through `12` migration, corrupt-file recovery, settings normalization, workspace-level load-test policy removal, native import, Postman folder/script import, and native/Postman/OpenAPI YAML format detection.
-- Electron UI workflow smoke coverage for create/edit/save/reload/send, context menus, pane resizing, collection variables, request variables, editable examples, cookie jar capture, environment variables, Help-menu prerelease setting persistence, Load Test panel controls, assertions, collection runner, runtime variable output, first-class runner tabs, runner import/edit/reorder/delete controls, and runner export-control state.
+- Workspace default creation, schema `2` through `12` migration, corrupt-file recovery, settings normalization, legacy load-test policy removal, native import, Postman folder/script import, and native/Postman/OpenAPI YAML format detection.
+- Electron UI workflow smoke coverage for create/edit/save/reload/send, context menus, pane resizing, collection variables, request variables, editable examples, cookie jar capture, environment variables, Help-menu prerelease setting persistence, assertions, collection runner, runtime variable output, first-class runner tabs, runner import/edit/reorder/delete controls, and runner export-control state.
 - Electron UI regression smoke coverage for toolbar dropdowns, Help-menu update state, import/export menu options/cancellation, invalid-request error rendering, XML/HTML response formatting, mocked OAuth flow completion/failure, cookie/example/request-variable editor creation, active-host cookie filtering, assertion-template rendering, runner pre-run export state, runner empty-pane/sidebar behavior, tab context and tab-cap behavior, history clearing, sidebar drag/drop structural saves, insertion-bar feedback, and no app-account/login language.
 - Electron UI OAuth smoke coverage for mocked loopback PKCE success, custom-scheme callback success, wrong-state callback rejection without token persistence, token exchange failure, PKCE cancellation, device-code success, access denial, timeout, and cancellation.
-- Electron UI screenshot smoke coverage for request builder, context menu, cookies, auth/OAuth, response viewer, runner, load testing, and export menu states.
+- Electron UI screenshot smoke coverage for request builder, context menu, cookies, auth/OAuth, response viewer, runner, and export menu states.
 
 Missing tests:
 
@@ -1097,5 +1016,4 @@ Missing tests:
 - Continue monitoring native Windows/macOS packaged OS-sandbox validation in CI and release workflows. Linux's current `bubblewrap` namespace plus dangerous-syscall seccomp policy is accepted for the current Linux claim; a stricter deny-by-default seccomp-BPF allowlist is optional future hardening.
 - Keep `npm run postman:parity:claim`, `npm run postman:docs:validate`, and a current `npm run postman:docs:live` sweep green before making or preserving the full Postman script compatibility claim.
 - Continue monitoring obscure browser/export cookie variants against the expanded real-world fixture corpus; remaining cookie work is compatibility hardening, not a known v1 release blocker.
-- Extend local load-test governance only where it adds clear safety beyond current Load Test panel controls and global rate caps, such as run-budget presets or richer reporting around policy decisions.
-- Continue expanding JMeter import/export beyond common sampler, header, variable, CSV metadata, listener, timer/controller/extractor, thread, XPath, and simple response/duration/size/JSON-path assertion mappings.
+- Design and implement the new V1 Load Test section around the planned latency, RPS/throughput, concurrency, stress, spike, soak, and ramp test types.

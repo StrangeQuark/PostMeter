@@ -152,7 +152,7 @@ function buildProductionReadinessMatrix() {
       ],
       notes: 'The lower-level workspace-durability matrix has 9 implemented rows covering atomic workspace/session/backup/export writes, corrupt quarantine and no-overwrite recovery, filesystem-discovered managed workspaces, schema migrations, side-effect merge semantics, encrypted vault storage outside workspace JSON, large-workspace budgets, and import/export cancellation or parse-failure behavior. Diagnostics/privacy redaction remains tracked separately by the diagnostics.privacy readiness row.'
     }),
-    row('compatibility.non-postman', 'compatibility', 'OpenAPI, HAR, curl, JMeter, and native PostMeter import/export compatibility are matrixed and validated.', 'validated', {
+    row('compatibility.non-postman', 'compatibility', 'OpenAPI, HAR, curl, and native PostMeter import/export compatibility are matrixed and validated.', 'validated', {
       releaseBlocking: true,
       commands: ['npm run compatibility:non-postman:validate', 'npm test'],
       evidenceRefs: [
@@ -161,12 +161,11 @@ function buildProductionReadinessMatrix() {
         'src/core/openApiFormats.js',
         'src/core/harFormats.js',
         'src/core/curlFormats.js',
-        'src/core/jmeterFormats.js',
         'test/electron/collectionFormats.test.js',
         'test/electron/workspaceStore.test.js',
         'test/electron/postmanImporter.test.js'
       ],
-      notes: 'The source-owned non-Postman matrix has 9 implemented rows covering OpenAPI, HAR, curl, JMeter bridge, native PostMeter round trips, invalid input behavior, cross-shell quoting, privacy boundaries, and explicit preserve-only claim boundaries. Focused format tests exercise OpenAPI local references, server variables, path/query/header/cookie params, cookie API-key security, Swagger 2.0 body/form-data import, binary body hints, response examples and disabled assertions; HAR cookies, redirect, body-encoding/compression metadata, timing, and sensitive header/cookie export redaction; curl auth, redirects, compression, repeated/query data, binary/file intent, generated names, and Windows-style line-continuation quoting; JMeter realistic, nested-controller, timer/assertion, XPath, extractor, and unsupported-metadata fixtures; plus native workspace/Postman durability coverage for complex workspace features.'
+      notes: 'The source-owned non-Postman matrix has 8 implemented rows covering OpenAPI, HAR, curl, native PostMeter round trips, invalid input behavior, cross-shell quoting, privacy boundaries, and explicit preserve-only claim boundaries. Focused format tests exercise OpenAPI local references, server variables, path/query/header/cookie params, cookie API-key security, Swagger 2.0 body/form-data import, binary body hints, response examples and disabled assertions; HAR cookies, redirect, body-encoding/compression metadata, timing, and sensitive header/cookie export redaction; curl auth, redirects, compression, repeated/query data, binary/file intent, generated names, and Windows-style line-continuation quoting; plus native workspace/Postman durability coverage for complex workspace features.'
     }),
     row('dependencies.audit', 'security', 'Release dependency audit must pass with no high-severity vulnerabilities.', 'validated', {
       releaseBlocking: true,
@@ -182,7 +181,7 @@ function buildProductionReadinessMatrix() {
       releaseBlocking: true,
       commands: ['npm run ux:accessibility:validate', 'npm run test:smoke', 'npm run test:ui', 'npm run test:ui:regression', 'npm run test:ui:oauth', 'npm run test:ui:snapshot'],
       evidenceRefs: ['docs/ux-accessibility-matrix.json', 'docs/RELEASE_READINESS.md', 'src/renderer/index.html', 'src/renderer/uiRegressionSmoke.js', 'src/renderer/uiSnapshotSmoke.js', 'test/electron/startupSmoke.js', 'scripts/smokeProcess.js', 'electron/mainWindow.js'],
-      notes: 'The lower-level UX/accessibility matrix enumerates first launch, workspaces, request sends, collection runs, load tests, imports/exports, OAuth flows, package review/fetch, vault prompts, file bindings, local mocks, settings/theme, update checks, accessibility semantics, in-app prompt/confirmation/notification focus management, live regions, long labels, constrained sizes, active forced-colors behavior, startup smoke, timeout-bounded child-process failure behavior, and CI failure artifacts. Source-owned implementation and local validators are complete; this row stays external-validation-required until native runner smoke evidence and final manual QA evidence are attached. Full local diagnostic bundle export remains owned by the separate diagnostics/privacy row.'
+      notes: 'The lower-level UX/accessibility matrix enumerates first launch, workspaces, request sends, collection runs, imports/exports, OAuth flows, package review/fetch, vault prompts, file bindings, local mocks, settings/theme, update checks, accessibility semantics, in-app prompt/confirmation/notification focus management, live regions, long labels, constrained sizes, active forced-colors behavior, startup smoke, timeout-bounded child-process failure behavior, and CI failure artifacts. Source-owned implementation and local validators are complete; this row stays external-validation-required until native runner smoke evidence and final manual QA evidence are attached. Full local diagnostic bundle export remains owned by the separate diagnostics/privacy row.'
     }),
     row('diagnostics.privacy', 'privacy', 'Local diagnostics and logging remain user-controlled, cloud-free, and default-deny request/response data.', 'validated', {
       releaseBlocking: true,

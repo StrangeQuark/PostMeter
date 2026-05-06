@@ -7,10 +7,6 @@ const {
 } = require('./payloadSchemas');
 const { normalizePersistedAuth } = require('./authModel');
 const { normalizeCookies: normalizeCookieCollection } = require('./cookieModel');
-const {
-  normalizeLoadPolicy: normalizeLoadTestPolicy,
-  normalizeRequestLoadPolicy: normalizeRequestLoadTestPolicy
-} = require('./loadPolicyModel');
 const { normalizeSandboxFileBindings } = require('./fileAttachmentBindings');
 const { normalizeDiagnosticsSettings } = require('./diagnosticsSettings');
 
@@ -46,7 +42,6 @@ function requestModel({
   variables,
   examples,
   cookieJar,
-  loadTestPolicy,
   protocol,
   protocolProfile,
   postmanBody,
@@ -75,7 +70,6 @@ function requestModel({
     variables: normalizePairs(variables),
     examples: normalizeExamples(examples),
     cookieJar: normalizeRequestCookieJar(cookieJar),
-    loadTestPolicy: normalizeRequestLoadTestPolicy(loadTestPolicy),
     methodPath: methodPath == null ? '' : String(methodPath).slice(0, 512),
     metadata: normalizePairs(metadata),
     messages: normalizeMessages(messages),
@@ -626,9 +620,7 @@ module.exports = {
   keyValue,
   newId,
   normalizeCookies,
-  normalizeLoadTestPolicy,
   normalizeRequestCookieJar,
-  normalizeRequestLoadTestPolicy,
   normalizeRunnerRequestSource,
   normalizeSettings,
   requestModel,

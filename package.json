@@ -1,7 +1,7 @@
 {
   "name": "postmeter",
   "version": "0.2.0",
-  "description": "Electron desktop API client and local load-testing tool.",
+  "description": "Electron desktop API client for local API workflows.",
   "author": "StrangeQuark <support@qrksw.com>",
   "homepage": "https://github.com/StrangeQuark/PostMeter#readme",
   "bugs": {

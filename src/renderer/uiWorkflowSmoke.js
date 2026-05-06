@@ -141,22 +141,6 @@
     captureResponseExample();
     assertUiSmoke(activeRequest().examples.length >= 2, 'Captured response example was not stored.');
 
-    activateTab('results', 'load');
-    $('loadConcurrency').value = '1';
-    $('loadRequests').value = '2';
-    $('loadDurationSeconds').value = '0';
-    $('loadRampUpSeconds').value = '0';
-    $('loadTargetRate').value = '0';
-    $('loadMaxRate').value = '0';
-    $('loadExecutionMode').value = 'singleProcess';
-    $('loadWorkerProcesses').value = '1';
-    $('loadRecordSamples').checked = true;
-    await runLoadTest();
-    assertUiSmoke($('loadResults').textContent.includes('Completed requests: 2'), 'Load test did not complete two requests.');
-    assertUiSmoke($('loadResults').textContent.includes('Samples recorded: 2'), 'Load test samples were not recorded.');
-    const policyLoaded = await window.postmeter.workspace.load();
-    assertUiSmoke(policyLoaded.workspace.settings?.loadTestPolicy == null, 'Load-test policy should not be stored on the workspace.');
-
     selectSidebarPanel('runners');
     const runner = newRunner();
     runner.environmentId = activeEnvironmentId;

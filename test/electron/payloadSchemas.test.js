@@ -18,9 +18,7 @@ const {
 
 test('defines shared payload schema metadata for IPC and contributors', () => {
   assert.equal(PAYLOAD_SCHEMA_VERSION, 1);
-  assert.ok(COLLECTION_EXPORT_FORMATS.includes('postman'));
-  assert.ok(COLLECTION_EXPORT_FORMATS.includes('openapi'));
-  assert.ok(COLLECTION_EXPORT_FORMATS.includes('jmeter'));
+  assert.deepEqual(COLLECTION_EXPORT_FORMATS, ['postmeter', 'postman', 'openapi', 'curl', 'har']);
   assert.ok(HTTP_METHODS.includes('PATCH'));
   assert.ok(BODY_TYPE_VALUES.includes('RAW_JSON'));
   assert.ok(AUTH_TYPE_VALUES.includes('oauth2'));
@@ -42,16 +40,6 @@ test('defines shared payload schema metadata for IPC and contributors', () => {
   assert.equal(payloadSchemas.fields.auth.location.enum, 'apiKeyLocations');
   assert.equal(payloadSchemas.fields.auth.grantType.enum, 'oauth2GrantTypes');
   assert.equal(payloadSchemas.fields.scripts.tests.limit, 'body');
-  assert.equal(payloadSchemas.fields.loadConfig.concurrency.type, 'number');
-  assert.equal(payloadSchemas.fields.loadConfig.executionMode.enum, 'loadExecutionModes');
-  assert.equal(payloadSchemas.fields.loadPolicy.totalRequests.type, 'number');
-  assert.equal(payloadSchemas.fields.loadResult.targetRatePerSecond.type, 'number');
-  assert.equal(payloadSchemas.fields.loadConfig.maxRatePerSecond.type, 'number');
-  assert.equal(payloadSchemas.fields.loadResult.maxRatePerSecond.type, 'number');
-  assert.equal(payloadSchemas.fields.loadPolicyDecision.message.limit, 'value');
-  assert.equal(payloadSchemas.fields.loadProgress.executionMode.enum, 'loadExecutionModes');
-  assert.equal(payloadSchemas.fields.loadHistogramBucket.count.type, 'number');
-  assert.equal(payloadSchemas.fields.loadSample.success.type, 'boolean');
   assert.equal(payloadSchemas.fields.scriptRunResult.error.limit, 'value');
   assert.equal(payloadSchemas.fields.scriptTestResult.name.limit, 'name');
   assert.equal(payloadSchemas.fields.updateCheckOptions.includePrereleases.type, 'boolean');
@@ -70,7 +58,6 @@ test('defines shared payload schema metadata for IPC and contributors', () => {
   assert.ok(payloadSchemas.entities.workspace.arrays.includes('runners'));
   assert.deepEqual(payloadSchemas.entities.runner.arrays, ['requests']);
   assert.equal(payloadSchemas.auth.oauth2GrantTypes[0], 'authorizationCode');
-  assert.deepEqual(payloadSchemas.load.executionModes, ['singleProcess', 'multiProcess']);
   assert.deepEqual(payloadSchemas.enums.diagnosticLogLevels, ['debug', 'info', 'warn', 'error']);
   assert.deepEqual(payloadSchemas.enums.sameSiteValues, ['', 'Lax', 'Strict', 'None']);
   assert.equal(payloadSchemas.limits.url, 8192);

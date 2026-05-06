@@ -230,7 +230,6 @@ test('renderer bootstrap binds every collection export menu button', () => {
     ['exportCollectionButton', 'postmeter', 'onExportCollection'],
     ['exportPostmanButton', 'postman', 'onExportPostman'],
     ['exportOpenApiButton', 'openapi', 'onExportOpenApi'],
-    ['exportJMeterButton', 'jmeter', 'onExportJMeter'],
     ['exportCurlButton', 'curl', 'onExportCurl'],
     ['exportHarButton', 'har', 'onExportHar']
   ];
@@ -574,14 +573,13 @@ test('renderer cancels active OAuth flow when loaded workspace context resets', 
   assert.match(rendererSource, /window\.postmeter\.oauth\.cancelFlow\(flowId\)/);
   assert.match(rendererSource, /function applyLoadedWorkspace\(loaded, options = \{\}\) \{\s*cancelActiveOauthFlowForContextReset\(\);/);
   assert.match(rendererSource, /function cancelActiveRuntimeForContextReset\(\)/);
-  assert.match(rendererSource, /window\.postmeter\.loadTest\.cancel\(loadId\)/);
   assert.match(rendererSource, /window\.postmeter\.runner\.cancel\(runnerId\)/);
 });
 
 test('renderer clears and scopes vault metadata to the active workspace context', () => {
   const rendererSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/renderer.js'), 'utf8');
   assert.match(rendererSource, /let lastVaultMetadataWorkspaceId = null/);
-  assert.match(rendererSource, /lastVaultMetadata = null;\s*lastVaultMetadataWorkspaceId = null;\s*activeLoadId = null;/);
+  assert.match(rendererSource, /lastVaultMetadata = null;\s*lastVaultMetadataWorkspaceId = null;\s*activeOauthFlowId = null;\s*activeRunnerId = null;/);
   assert.match(rendererSource, /const metadataWorkspaceId = activeWorkspaceId \|\| ''/);
   assert.match(rendererSource, /if \(\(activeWorkspaceId \|\| ''\) !== metadataWorkspaceId\) \{\s*return;\s*\}/);
   assert.match(rendererSource, /lastVaultMetadataWorkspaceId = metadataWorkspaceId/);
@@ -594,7 +592,6 @@ test('renderer supplies explicit collection export format handlers', () => {
     ['onExportCollection', 'postmeter'],
     ['onExportPostman', 'postman'],
     ['onExportOpenApi', 'openapi'],
-    ['onExportJMeter', 'jmeter'],
     ['onExportCurl', 'curl'],
     ['onExportHar', 'har']
   ]) {

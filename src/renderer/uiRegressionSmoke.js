@@ -13,7 +13,7 @@
     assertUiSmoke(!/(sign in|log in|create account|register)/i.test(document.body.textContent), 'Standalone UI should not render app account/login language.');
     assertToolbarMenuSmoke('newMenuButton', 'newMenu', ['Workspace', 'Request', 'Collection', 'Folder', 'Environment', 'Runner']);
     assertToolbarMenuSmoke('importMenuButton', 'importMenu', ['Workspace', 'Collection']);
-    assertToolbarMenuSmoke('exportMenuButton', 'exportMenu', ['Workspace', 'Collection', 'Postman', 'OpenAPI', 'JMeter', 'curl', 'HAR']);
+    assertToolbarMenuSmoke('exportMenuButton', 'exportMenu', ['Workspace', 'Collection', 'Postman', 'OpenAPI', 'curl', 'HAR']);
     assertToolbarMenuKeyboardActivationSmoke();
     await setThemePreference('dark', { save: false, showStatus: false });
     assertUiSmoke(document.documentElement.dataset.theme === 'dark', 'Dark theme was not applied.');
@@ -218,8 +218,6 @@
     assertUiSmoke($('requestHeadersTabButton').getAttribute('aria-selected') === 'true', 'Active request tab should update aria-selected.');
     assertUiSmoke($('headersTab').getAttribute('aria-hidden') === 'false', 'Active request panel should update aria-hidden.');
     assertUiSmoke($('paramsTab').getAttribute('aria-hidden') === 'true', 'Inactive request panel should update aria-hidden.');
-    activateTab('results', 'load');
-    assertUiSmoke($('resultsLoadTabButton').getAttribute('aria-selected') === 'true', 'Active results tab should update aria-selected.');
     assertUiSmoke($('resultsHeadersTabButton').textContent.trim() === 'Headers', 'Results tabs should include a dedicated Headers section.');
     assertUiSmoke($('resultsCookiesTabButton').textContent.trim() === 'Cookies', 'Results tabs should include a dedicated Cookies section.');
     activateTab('results', 'responseHeaders');
@@ -228,7 +226,6 @@
     activateTab('results', 'responseCookies');
     assertUiSmoke($('resultsCookiesTabButton').getAttribute('aria-selected') === 'true', 'Cookies result tab should update aria-selected.');
     assertUiSmoke($('responseCookiesTab').getAttribute('aria-hidden') === 'false', 'Cookies result panel should update aria-hidden.');
-    assertUiSmoke($('loadResults').getAttribute('aria-live') === 'polite', 'Load results should be announced as a live region.');
     assertUiSmoke($('runnerResults').getAttribute('aria-live') === 'polite', 'Runner results should be announced as a live region.');
     assertUiSmoke($('validationLabel').getAttribute('role') === 'status', 'Validation output should expose role=status.');
     assertUiSmoke($('oauthProgressPanel').getAttribute('aria-live') === 'polite', 'OAuth progress should be a live region.');
@@ -948,8 +945,7 @@
       scripts: { preRequest: '', tests: '' },
       variables: [],
       examples: [],
-      cookieJar: { enabled: false, storeResponses: true },
-      loadTestPolicy: { enabled: false }
+      cookieJar: { enabled: false, storeResponses: true }
     };
   }
 

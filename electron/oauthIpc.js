@@ -1,6 +1,6 @@
 const {
   assertAuthPayload,
-  assertLoadId,
+  assertRuntimeId,
   assertOptionalEnvironmentPayload
 } = require('../src/core/ipcValidation');
 
@@ -12,7 +12,7 @@ function registerOAuthIpc(options = {}) {
   } = options;
 
   ipcMain.handle('oauth:pkce:start', async (_event, id, auth, environment, strategy) => {
-    assertLoadId(id, 'id');
+    assertRuntimeId(id, 'id');
     assertAuthPayload(auth);
     assertOptionalEnvironmentPayload(environment);
     try {
@@ -44,7 +44,7 @@ function registerOAuthIpc(options = {}) {
   });
 
   ipcMain.handle('oauth:device:start', async (_event, id, auth, environment) => {
-    assertLoadId(id, 'id');
+    assertRuntimeId(id, 'id');
     assertAuthPayload(auth);
     assertOptionalEnvironmentPayload(environment);
     try {
@@ -72,12 +72,12 @@ function registerOAuthIpc(options = {}) {
   });
 
   ipcMain.handle('oauth:device:cancel', (_event, id) => {
-    assertLoadId(id, 'id');
+    assertRuntimeId(id, 'id');
     return oauthFlows.cancelFlow(id);
   });
 
   ipcMain.handle('oauth:cancel', (_event, id) => {
-    assertLoadId(id, 'id');
+    assertRuntimeId(id, 'id');
     return oauthFlows.cancelFlow(id);
   });
 }
