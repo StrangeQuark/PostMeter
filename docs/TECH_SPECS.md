@@ -21,6 +21,11 @@ The migration deliberately does not bridge Electron to the Java services. Core b
 - Import/export OpenAPI, JMeter, curl, and HAR collection formats for compatibility workflows, including OpenAPI JSON/YAML input, local `$ref` resolution for common objects, server variables, path/query/header/cookie parameters, Swagger 2.0 body/form-data import, binary body hints, OpenAPI security scheme import/export, OpenAPI response examples and disabled generated response assertions, JMeter variables/assertions/headers/listeners/CSV/thread/timer/controller/extractor metadata where mappable, JMeter XPath and Size Assertion mapping, mapped JMeter assertion enabled-state preservation, representative timer metadata preservation, preserve-only metadata for known unsupported JMeter assertion/processor/sampler/script classes, HAR cookies/response examples/timing/redirect/compression metadata with sensitive header/cookie redaction on export, common curl auth/data/redirect/compression/cookie/file flags, and preserved curl proxy/retry/client-TLS import metadata.
 - Define request assertions for status, headers, JSON paths, XML XPath, HTML CSS selectors, response time, response size, body text, JSON/XML/HTML variable extraction, and regex variable extraction.
 - Run workspace-owned desktop runners locally, including stop-on-failure, extracted-variable/script-mutation propagation, runtime variable display, progress events, and JSON/CSV result export.
+- Manage runners from the dedicated left-sidebar Runners section, with runner-local request copies, runner request editing, runner request import from collections, row reorder/delete controls, and a split execution-results view.
+- Manage open request, environment, workspace, and runner tabs with dirty prompts, force-close actions, optional save-on-force-close behavior, hover/active close buttons, shrink-before-scroll tab sizing, and a 128-tab cap.
+- Edit request, environment, and workspace names inline; request/environment title edits save on Enter and remain dirty on blur, while workspace title edits save automatically.
+- Reorder collections, folders, requests, environments, workspaces, and runners from the sidebar by drag and drop, with single insertion-bar placement feedback and structural-only persistence for drag moves.
+- Clear request history from the History sidebar context menu after an irreversible-action confirmation.
 - Run collections headlessly through `npm run cli -- run ...` for CI usage with non-zero exits on failed assertions.
 - Configure request auth helpers for Bearer token, Basic Auth, API key, Cookie, static OAuth 2.0 access-token injection, refresh-token renewal, client-credentials token retrieval, authorization-code PKCE, device-code flow, and HTTPS client certificates using PEM certificate/key pairs or PFX/P12 bundles with optional CA certificate paths.
 - Persist workspace cookies in a local cookie jar, allow per-request cookie jar opt-in/out, capture response cookies when enabled, and validate common browser-parity edge cases.
@@ -219,12 +224,14 @@ Main process responsibilities:
 Renderer responsibilities:
 
 - Render the workspace, collections, folders, requests, collection variables, environments, response viewer, history, assertions, collection runner, update checks, and load-test controls.
+- Render dedicated Collections, Environments, Workspaces, Runners, and History sidebar sections. Empty environment/workspace/runner sidebar selections show the matching empty/create/select pane when no matching tab is open, and reselect the most recently opened matching tab when one exists.
 - Handle native File/Help menu actions received through the preload allowlist.
 - Maintain a visible app status live region for routine action feedback, while important failures also use popup notification behavior or contextual detail panels.
 - Render pre-request and test script editors for each request.
 - Maintain the active selection state.
 - Collect editor state before save/send/load.
-- Route explicit request/environment saves through targeted preload APIs so normal Save persists only the selected request or environment tab item while still carrying current workspace settings, and route workspace-level settings saves through a dedicated settings-only preload API so the workspace tab and update/theme toggles do not flush dirty request or environment tabs.
+- Route explicit request/environment/runner-request saves through targeted preload APIs so normal pane saves persist only the selected item while still carrying current workspace settings and request-owned shared state. Workspace settings save through a dedicated settings-only preload API so workspace settings, theme/update toggles, and drag/drop structural saves do not flush unrelated dirty request, environment, or runner drafts.
+- Render toolbar and tree context menus, tab context menus, history clear confirmation, runner import selection, and dirty-save/discard prompts without raw native `prompt`, `confirm`, or `alert` dialogs.
 - Call only preload-exposed APIs.
 
 Preload API:
@@ -282,7 +289,7 @@ Known security tradeoffs:
 Current schema version:
 
 ```text
-11
+12
 ```
 
 Root workspace fields:
@@ -293,6 +300,7 @@ Root workspace fields:
 - `globals`
 - `cookies`
 - `history`
+- `runners`
 - `settings`
 
 Settings fields:
@@ -301,6 +309,9 @@ Settings fields:
 - `sandbox.trustedCapabilities.sendRequest`
 - `sandbox.trustedCapabilities.cookies`
 - `sandbox.trustedCapabilities.vault`
+- `sandbox.trustedCapabilities.vaultGrants`
+- `sandbox.packageCache`
+- `tabs.saveOnForceClose`
 - `updates.includePrereleases`
 
 Collection fields:
@@ -374,6 +385,17 @@ Environment fields:
 - `id`
 - `name`
 - `variables`
+
+Runner fields:
+
+- `id`
+- `name`
+- `environmentId`
+- `allowEnvironmentMutation`
+- `stopOnFailure`
+- `requests`
+
+Runner request fields use the same shape as request fields, but they are runner-owned copies rather than references to collection requests.
 
 Workspace cookie fields:
 
@@ -451,6 +473,8 @@ Schema `10` removes workspace-level load-test defaults. Load-test run settings a
 
 Schema `11` adds workspace-level globals for true `pm.globals` support and workspace settings that can disable brokered script network requests or cookie-helper access. These APIs are enabled by default for Postman import parity. It also carries the optional `sandbox.trustedCapabilities.vault` grant, scoped `sandbox.trustedCapabilities.vaultGrants`, and reviewed `sandbox.packageCache` entries for exact package-library/external package compatibility. Vault access defaults to disabled because it exposes user-managed secrets.
 
+Schema `12` adds first-class `workspace.runners` data and the `tabs.saveOnForceClose` setting. Existing workspaces migrate with an empty runner list and disabled save-on-force-close behavior.
+
 ## Persistence Specifications
 
 Persistence is handled by `WorkspaceStore` and `WorkspaceManager`.
@@ -472,7 +496,7 @@ Behavior:
 - Uses `workspace.json` as the preferred startup path and scans the containing directory for native managed workspace JSON files. There is no persistent managed-workspace index or active-workspace pointer to go stale; the legacy manifest file is removed when found.
 - Creates a default managed workspace such as `Local Workspace.json` when no workspace files exist, allocating a suffixed name if that filename already exists as an unreadable or non-native file.
 - Allocates default, new, imported, and renamed managed workspace filenames around any existing filesystem entry, including unreadable or non-native JSON files, then publishes with no-overwrite semantics and retries suffixed names if a destination appears before publication.
-- Loads current schema `11` workspaces and migrates supported historical schema versions `1` through `10` to schema `11`.
+- Loads current schema `12` workspaces and migrates supported historical schema versions `1` through `11` to schema `12`.
 - Creates timestamped, collision-resistant `pre-migration.backup` sibling files through the atomic, no-overwrite write path before saving migrated workspaces.
 - Rejects future schema versions.
 - Quarantines unreadable workspace JSON by moving it through a no-overwrite file move to a timestamped, collision-resistant `corrupt` sibling file and best-effort fsyncing the directory, then creates a fresh default workspace through no-overwrite publication and raises a recovery error for the UI. If a replacement workspace file appears before recovery publication, PostMeter preserves that replacement instead of overwriting it.
@@ -480,7 +504,7 @@ Behavior:
 - Writes normalized workspace values directly to local JSON.
 - Normalizes IDs, names, body types, methods, arrays, settings, request load-test compatibility policies, collection variables, collection certificates, request variables, request examples, request cookie jar settings, workspace cookies, folders, environments, and history.
 - Native workspace import adds another managed workspace without replacing, switching away from, or backing up the current one.
-- Targeted renderer saves for request and environment tabs send only the selected tab payload, the current workspace settings, and any owned shared request-side state such as collection variables or cookie-jar values; targeted settings saves send only `workspace.settings`; the main process applies that payload into the cached workspace before the normal full-file write.
+- Targeted renderer saves for request, runner-owned request, and environment tabs send only the selected item payload, the current workspace settings, and any owned shared request-side state such as collection variables or cookie-jar values; targeted settings saves send only `workspace.settings`; the main process applies that payload into the cached workspace before the normal full-file write.
 - Full workspace saves are still used for shutdown persistence, managed-workspace switching or active-workspace rename, whole-workspace export, and collection import. The shutdown synchronous save validates the workspace payload but skips the full-workspace write when queued workspace mutations are pending, returning the current main-process workspace instead of letting a stale renderer snapshot overwrite pending send/run/vault side effects.
 - Renderer session persistence also carries request-owned shared dirty state for collection variables and the cookie jar so crash recovery can restore those unsaved edits without requiring a full workspace save.
 
@@ -761,6 +785,10 @@ Runner behavior:
 - Stores first-class desktop runners under `workspace.runners`.
 - Models each runner as `{ id, name, environmentId, allowEnvironmentMutation, stopOnFailure, requests }`.
 - Stores runner-owned requests as independent request objects. Importing collection requests deep-clones them into the runner with new runner-local IDs, so runner edits and executions do not mutate source collection requests.
+- Creates runners from `New` > `Runner` in the top toolbar or from the `New Runner` action in the empty Runners pane.
+- Adds runner requests through either local `New Request` creation or an `Import` modal. The modal shows collections first, expands a collection only when selected, and supports Shift+click/Ctrl+click multi-select across collections and requests before adding.
+- Opens runner-owned request copies in normal request editor tabs through each row's `Edit` action. Saving that tab persists only the runner request copy, and discard/close reverts the runner row back to the saved runner request state.
+- Lets users delete and reorder runner request rows. Drag/drop and row-order controls update runner-local order without touching source collections.
 - Walks runner requests in runner row order. Legacy collection execution still walks collection requests in collection/folder order.
 - Runs pre-request scripts before sending each request; failed pre-request scripts fail the request without sending it.
 - Executes requests sequentially through the same HTTP path as normal sends.
@@ -771,7 +799,7 @@ Runner behavior:
 - Runs test scripts after responses are received.
 - Applies extracted variables and script variable mutations to later requests.
 - Propagates cookie jar updates between sequential requests when request cookie jar storage is enabled.
-- Emits progress events to the renderer.
+- Emits progress events to the renderer and renders execution results as a split view: request/status rows on the left and selected request details on the right.
 - Supports cancellation and stop-on-failure.
 - Supports bounded `pm.execution.setNextRequest`, `pm.execution.skipRequest`, and `pm.execution.runRequest` against runner-local request IDs.
 - Reports per-request status, timing, pass/fail state, assertion results, script results, extracted variable names, and request errors.
@@ -1049,9 +1077,9 @@ Node tests cover:
 - Assertion evaluation, collection-run sequencing, request-local variables, cookie jar propagation, JSON/XML/HTML/regex extracted-variable propagation, script-mutation propagation, stop-on-failure, isolated request script execution, Node permission worker flags, minimal worker environments, bounded worker heap settings, bounded script console capture, explicit unsupported script API errors, and collection-run CSV export.
 - CLI collection execution with passing/failing exit codes and JSON/CSV report output.
 - Release manifest generation, release artifact validation, release workflow metadata, CI workflow validation, and GitHub release update checks.
-- Workspace default creation, schema `2` through `11` migration, corrupt-file recovery, settings normalization, workspace-level load-test policy removal, native import, Postman folder/script import, and native/Postman/OpenAPI YAML format detection.
-- Electron UI workflow smoke coverage for create/edit/save/reload/send, context menus, pane resizing, collection variables, request variables, editable examples, cookie jar capture, environment variables, Help-menu prerelease setting persistence, Load Test panel controls, assertions, collection runner, runtime variable output, and runner export-control state.
-- Electron UI regression smoke coverage for toolbar dropdowns, Help-menu update state, import/export menu options/cancellation, invalid-request error rendering, XML/HTML response formatting, mocked OAuth flow completion/failure, cookie/example/request-variable editor creation, active-host cookie filtering, assertion-template rendering, runner pre-run export state, and no app-account/login language.
+- Workspace default creation, schema `2` through `12` migration, corrupt-file recovery, settings normalization, workspace-level load-test policy removal, native import, Postman folder/script import, and native/Postman/OpenAPI YAML format detection.
+- Electron UI workflow smoke coverage for create/edit/save/reload/send, context menus, pane resizing, collection variables, request variables, editable examples, cookie jar capture, environment variables, Help-menu prerelease setting persistence, Load Test panel controls, assertions, collection runner, runtime variable output, first-class runner tabs, runner import/edit/reorder/delete controls, and runner export-control state.
+- Electron UI regression smoke coverage for toolbar dropdowns, Help-menu update state, import/export menu options/cancellation, invalid-request error rendering, XML/HTML response formatting, mocked OAuth flow completion/failure, cookie/example/request-variable editor creation, active-host cookie filtering, assertion-template rendering, runner pre-run export state, runner empty-pane/sidebar behavior, tab context and tab-cap behavior, history clearing, sidebar drag/drop structural saves, insertion-bar feedback, and no app-account/login language.
 - Electron UI OAuth smoke coverage for mocked loopback PKCE success, custom-scheme callback success, wrong-state callback rejection without token persistence, token exchange failure, PKCE cancellation, device-code success, access denial, timeout, and cancellation.
 - Electron UI screenshot smoke coverage for request builder, context menu, cookies, auth/OAuth, response viewer, runner, load testing, and export menu states.
 

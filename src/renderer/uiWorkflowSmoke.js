@@ -134,6 +134,7 @@
     await sendActiveRequest();
     assertUiSmoke($('responseStatus').textContent === '200', 'Smoke request did not receive HTTP 200.');
     assertUiSmoke($('responseBody').value.includes('"method": "POST"'), 'Smoke response body was not rendered.');
+    assertUiSmoke($('responseCookies').value.includes('uiSession=smoke'), 'Smoke response cookies were not rendered in the Cookies result tab.');
     assertUiSmoke(activeEnvironment().variables.some((variable) => variable.key === 'responseMethod' && variable.value === 'POST'), 'Single request test script did not update the active environment.');
     assertUiSmoke(workspace.history.length > 0, 'Smoke request did not add history.');
     assertUiSmoke(workspace.cookies.some((cookie) => cookie.name === 'uiSession'), 'Smoke response cookie was not stored.');
@@ -192,6 +193,20 @@
     document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: 360 }));
     document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
     assertUiSmoke(!document.body.classList.contains('is-resizing'), 'Main pane resize did not exit resizing state.');
+
+    const workspaceHandle = $('workspacePaneResize');
+    const workspaceHandleRect = workspaceHandle.getBoundingClientRect();
+    const startY = Math.round(workspaceHandleRect.top + (workspaceHandleRect.height / 2));
+    const startValue = Math.round($('requestEditorPanel').getBoundingClientRect().height);
+    workspaceHandle.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, clientY: startY }));
+    document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientY: startY }));
+    const samePositionValue = Number(workspaceHandle.getAttribute('aria-valuenow'));
+    assertUiSmoke(Math.abs(samePositionValue - startValue) <= 1, `Workspace pane resize should not jump on the first mouse move. start=${startValue} same=${samePositionValue}.`);
+    document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientY: startY + 24 }));
+    const movedValue = Number(workspaceHandle.getAttribute('aria-valuenow'));
+    assertUiSmoke(Math.abs(movedValue - (startValue + 24)) <= 2, `Workspace pane resize should track pointer delta. start=${startValue} moved=${movedValue}.`);
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+    assertUiSmoke(!document.body.classList.contains('is-resizing'), 'Workspace pane resize did not exit resizing state.');
   }
 
   function resolveUiSmokeCommon(runtimeGlobal) {

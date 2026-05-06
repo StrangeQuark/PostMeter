@@ -2313,6 +2313,7 @@ test('renderer workflows surface request save failures inline before sending', a
   assert.equal(doc.getElementById('responseSize').textContent, '-');
   assert.equal(doc.getElementById('finalUrl').textContent, '-');
   assert.equal(doc.getElementById('responseHeaders').value, '');
+  assert.equal(doc.getElementById('responseCookies').value, '');
   assert.equal(doc.getElementById('responseBody').value, 'disk full before send');
   assert.equal(status, 'Request failed: disk full before send');
 });

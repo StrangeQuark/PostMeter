@@ -90,6 +90,8 @@
 }
 
 #responseTab.active,
+#responseHeadersTab.active,
+#responseCookiesTab.active,
 #testResultsTab.active,
 #loadTab.active {
   display: flex;
@@ -163,7 +165,8 @@
 
 #bodyInput,
 #responseBody,
-#responseHeaders {
+#responseHeaders,
+#responseCookies {
   width: 100%;
   min-height: 180px;
   padding: 10px;
@@ -287,29 +290,33 @@ textarea.code-editor-input:placeholder-shown {
   resize: vertical;
 }
 
-.response-grid {
-  display: grid;
-  grid-template-columns: minmax(220px, var(--response-body-width)) 6px minmax(220px, 1fr);
-  gap: 8px;
+.response-editor-panel {
+  display: flex;
   min-height: 0;
   flex: 1;
   overflow: hidden;
 }
 
-.response-grid > .code-editor {
+.response-editor-panel > .code-editor,
+#responseHeadersTab > .code-editor,
+#responseCookiesTab > .code-editor {
   min-width: 0;
   min-height: 0;
+  width: 100%;
   height: 100%;
   overflow: hidden;
 }
 
-.response-grid #responseBody,
-.response-grid #responseHeaders {
+.response-editor-panel #responseBody,
+#responseHeadersTab #responseHeaders,
+#responseCookiesTab #responseCookies {
   height: 100%;
   min-height: 0;
 }
 
-.response-grid .code-editor-highlight {
+.response-editor-panel .code-editor-highlight,
+#responseHeadersTab .code-editor-highlight,
+#responseCookiesTab .code-editor-highlight {
   min-height: 0;
 }
 

@@ -77,7 +77,7 @@ test('renderer session persistence serializes active tabs, drafts, and dirty tab
         return { dataset: { tab: 'headers' } };
       }
       if (selector.includes('data-tab-group="results"')) {
-        return { dataset: { tab: 'runner' } };
+        return { dataset: { tab: 'responseHeaders' } };
       }
       return null;
     }
@@ -93,7 +93,7 @@ test('renderer session persistence serializes active tabs, drafts, and dirty tab
   });
 
   assert.equal(session.activeRequestTab, 'headers');
-  assert.equal(session.activeResultsTab, 'response');
+  assert.equal(session.activeResultsTab, 'responseHeaders');
   assert.equal(session.selectedWorkspaceId, 'Workspace 2.json');
   assert.deepEqual(session.workspaceOrder, ['Workspace 2.json', 'Workspace.json']);
   assert.equal(session.openRequestTabs[0].currentState.url, 'https://example.test');
@@ -381,7 +381,7 @@ test('renderer session persistence restores dirty saved tabs, created-unsaved en
     activeSidebarPanel: 'environments',
     activeMainPanel: 'environment',
     activeRequestTab: 'auth',
-    activeResultsTab: 'load',
+    activeResultsTab: 'responseCookies',
     draftRequests: [
       { id: 'draft-1', name: 'Draft Request', method: 'POST', url: 'https://draft.test' }
     ],
@@ -457,7 +457,7 @@ test('renderer session persistence restores dirty saved tabs, created-unsaved en
   assert.equal(state.openWorkspaceTabs.length, 1);
   assert.equal(state.openWorkspaceTabs[0].workspaceId, 'Workspace.json');
   assert.equal(restored.activeRequestTab, 'auth');
-  assert.equal(restored.activeResultsTab, 'load');
+  assert.equal(restored.activeResultsTab, 'responseCookies');
 });
 
 test('renderer session persistence does not auto-open a workspace tab for the selected workspace on startup', () => {

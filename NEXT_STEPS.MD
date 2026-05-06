@@ -35,12 +35,22 @@ PostMeter must remain a standalone local desktop application. Do not add PostMet
 
 ## Recently Completed
 
-- Moved Runner into a dedicated workspace-owned section.
-  - The left sidebar now includes `Runner` between `Workspaces` and `History`; the request result-panel Runner tab has been removed.
+- Moved runners into a dedicated workspace-owned section.
+  - The left sidebar now includes `Runners` between `Workspaces` and `History`; the request result-panel Runner tab has been removed.
   - Workspaces persist first-class `workspace.runners` data under schema 12, with runner-owned request copies, selected environment IDs, stop-on-failure, and environment-mutation policy.
   - Runner tabs participate in the same open-tab, dirty-close, force-close, 128-tab-limit, and session restore model as requests, environments, and workspaces.
+  - Runners can be created from `New` > `Runner` or the empty Runners pane, runner requests can be added as local copies or imported from expandable collection/request selections, and Shift+click/Ctrl+click can import multiple selections.
+  - Runner-owned requests open in normal request editor tabs through row `Edit`, save only that runner request copy, and can be reordered/deleted without mutating source collection requests.
+  - Runner execution results now use a split status/detail pane while keeping the request list scrollable independently.
   - Runner execution now accepts runner payloads directly, preserves runner-local request order/IDs, supports the existing script/assertion/cookie/vault/package lifecycle, and only writes environment mutations back when `allowEnvironmentMutation` is enabled.
   - Tests cover runner model normalization, migration, IPC validation/runtime mutation policy, session persistence, tab cap enforcement, dirty runner tab save/discard failure paths, and first-class renderer wiring.
+- Refined desktop tab and sidebar interactions.
+  - Request, environment, and workspace names are inline-editable; request/environment title edits save on Enter and stay dirty on blur, while workspace title edits save automatically.
+  - Pane-local save actions replaced the old top-toolbar Save button for requests and environments, and workspace settings continue through targeted settings saves.
+  - Open tabs shrink before scrolling, expose hover/active close buttons, support tab right-click close/force-close actions, and enforce the 128-tab cap across requests, environments, workspaces, and runners.
+  - Sidebar collections, folders, requests, environments, workspaces, and runners are draggable; structural drag/drop saves only the membership/order change and leaves dirty editor drafts dirty.
+  - Drag placement feedback is a single highlighted insertion bar per gap.
+  - The History sidebar tab has a `Clear History` context action with an irreversible-action confirmation.
 
 ## Highest Priority Steps
 

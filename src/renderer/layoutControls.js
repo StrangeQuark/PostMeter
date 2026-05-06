@@ -27,24 +27,6 @@ function initResizablePanes() {
       return event.clientY - rect.top - 10;
     }
   });
-  setupDragResize('responsePaneResize', {
-    cssVariable: '--response-body-width',
-    fallbackPixels: 420,
-    label: 'Resize response body and headers panels',
-    orientation: 'vertical',
-    currentPixels: () => measuredElementPixels('#responseBody', 'width'),
-    max: () => {
-      const grid = document.querySelector('.response-grid');
-      const rect = grid.getBoundingClientRect();
-      return Math.max(220, rect.width - 220);
-    },
-    min: 220,
-    valueFromEvent: (event) => {
-      const grid = document.querySelector('.response-grid');
-      const rect = grid.getBoundingClientRect();
-      return event.clientX - rect.left;
-    }
-  });
 }
 
 function setupDragResize(id, config) {
@@ -60,7 +42,12 @@ function setupDragResize(id, config) {
     event.preventDefault();
     const resizeClass = handle.classList.contains('horizontal') ? 'is-resizing-row' : 'is-resizing-col';
     document.body.classList.add('is-resizing', resizeClass);
-    const onMouseMove = (moveEvent) => applySplitterValue(handle, config, config.valueFromEvent(moveEvent));
+    const startPointerValue = config.valueFromEvent(event);
+    const startLayoutValue = currentLayoutPixels(config.cssVariable, config.fallbackPixels, config);
+    const onMouseMove = (moveEvent) => {
+      const pointerDelta = config.valueFromEvent(moveEvent) - startPointerValue;
+      applySplitterValue(handle, config, startLayoutValue + pointerDelta);
+    };
     const onMouseUp = () => {
       document.body.classList.remove('is-resizing', resizeClass);
       document.removeEventListener('mousemove', onMouseMove);
@@ -187,8 +174,7 @@ function readLayoutVar(name) {
 function defaultLayoutVars() {
   return {
     '--sidebar-width': '300px',
-    '--request-height': '52%',
-    '--response-body-width': '1.25fr'
+    '--request-height': '52%'
   };
 }
 

@@ -4,7 +4,7 @@ const THEME_OPTIONS = ['system', 'light', 'dark'];
 const RENDERER_STATE_DEFAULTS = PostMeterRendererState.createRendererState();
 const TAB_PANEL_IDS = {
   request: ['paramsTab', 'headersTab', 'authTab', 'cookiesTab', 'bodyTab', 'testsTab', 'scriptsTab', 'examplesTab', 'collectionVariablesTab'],
-  results: ['responseTab', 'testResultsTab', 'visualizerTab', 'loadTab']
+  results: ['responseTab', 'responseHeadersTab', 'responseCookiesTab', 'testResultsTab', 'visualizerTab', 'loadTab']
 };
 
 let workspace = RENDERER_STATE_DEFAULTS.workspace;
@@ -4515,10 +4515,7 @@ function collectionNode(collection) {
     ['Export', () => exportCollection(collection)],
     ['Delete', () => deleteCollection(collection), 'danger']
   ]);
-  appendSidebarTreeRows(wrapper, [
-    ...(collection.requests || []).map((request) => requestNode(collection, null, request)),
-    ...(collection.folders || []).map((folder) => folderNode(collection, folder))
-  ], { className: 'tree-folder' });
+  appendSidebarTreeRows(wrapper, sidebarTreeChildRows(collection, collection, null), { className: 'tree-folder' });
   return wrapper;
 }
 
@@ -4554,10 +4551,7 @@ function folderNode(collection, folder) {
     ['Rename', () => renameFolder(folder)],
     ['Delete', () => deleteFolder(collection, folder), 'danger']
   ]);
-  appendSidebarTreeRows(wrapper, [
-    ...(folder.requests || []).map((request) => requestNode(collection, folder, request)),
-    ...(folder.folders || []).map((child) => folderNode(collection, child))
-  ], { className: 'tree-folder' });
+  appendSidebarTreeRows(wrapper, sidebarTreeChildRows(folder, collection, folder), { className: 'tree-folder' });
   return wrapper;
 }
 
@@ -4653,6 +4647,98 @@ function appendSidebarTreeRows(parent, rows, options = {}) {
   }
 }
 
+function sidebarTreeChildRows(container, collection, folder) {
+  return sidebarTreeChildEntries(container).map((entry) => (
+    entry.kind === 'folder'
+      ? folderNode(collection, entry.value)
+      : requestNode(collection, folder, entry.value)
+  ));
+}
+
+function sidebarTreeChildEntries(container) {
+  const requests = (container?.requests || []).map((value) => ({ kind: 'request', value }));
+  const folders = (container?.folders || []).map((value) => ({ kind: 'folder', value }));
+  const entries = requests.concat(folders);
+  const order = Array.isArray(container?.postman?.itemOrder) ? container.postman.itemOrder : [];
+  if (!order.length) {
+    return entries;
+  }
+  const used = new Set();
+  const ordered = [];
+  for (const item of order) {
+    const match = entries.find((entry) => !used.has(entry.value) && sidebarTreeOrderMatches(entry, item));
+    if (match) {
+      used.add(match.value);
+      ordered.push(match);
+    }
+  }
+  for (const entry of entries) {
+    if (!used.has(entry.value)) {
+      ordered.push(entry);
+    }
+  }
+  return ordered;
+}
+
+function sidebarTreeOrderMatches(entry, item) {
+  if (item?.kind && item.kind !== entry.kind) {
+    return false;
+  }
+  const aliases = [
+    entry.value?.id,
+    entry.value?.name,
+    entry.value?.postman?.ids?.original,
+    entry.value?.postman?.ids?.id,
+    entry.value?.postman?.ids?.uid,
+    entry.value?.postman?.ids?._postman_id,
+    entry.value?.postman?.ids?.deterministic
+  ].map((value) => String(value || '').trim()).filter(Boolean);
+  const targets = [
+    item?.id,
+    item?.name,
+    item?.postmanId,
+    item?.uid,
+    item?.deterministic
+  ].map((value) => String(value || '').trim()).filter(Boolean);
+  return aliases.some((alias) => targets.includes(alias));
+}
+
+function setSidebarTreeItemOrder(container, entries) {
+  if (!container || !Array.isArray(entries)) {
+    return;
+  }
+  container.postman = {
+    ...(container.postman || {}),
+    itemOrder: entries.map((entry) => ({
+      kind: entry.kind,
+      id: entry.value?.id || '',
+      name: entry.value?.name || ''
+    }))
+  };
+}
+
+function removeSidebarTreeOrderEntry(container, entryToRemove) {
+  const entries = sidebarTreeChildEntries(container).filter((entry) => !sidebarTreeEntryMatches(entry, entryToRemove));
+  setSidebarTreeItemOrder(container, entries);
+}
+
+function insertSidebarTreeOrderEntry(container, movedEntry, target, position = 'after') {
+  const entries = sidebarTreeChildEntries(container).filter((entry) => !sidebarTreeEntryMatches(entry, movedEntry));
+  let insertIndex = entries.length;
+  if (target?.kind && target?.id && position !== 'inside') {
+    const targetIndex = entries.findIndex((entry) => entry.kind === target.kind && entry.value?.id === target.id);
+    if (targetIndex >= 0) {
+      insertIndex = position === 'before' ? targetIndex : targetIndex + 1;
+    }
+  }
+  entries.splice(Math.max(0, insertIndex), 0, movedEntry);
+  setSidebarTreeItemOrder(container, entries);
+}
+
+function sidebarTreeEntryMatches(entry, target) {
+  return entry?.kind === target?.kind && entry?.value?.id === target?.value?.id;
+}
+
 function sidebarTreeDropBar(candidates, options = {}) {
   const bar = document.createElement('div');
   bar.className = `tree-drop-bar${options.className ? ` ${options.className}` : ''}`;
@@ -4685,6 +4771,15 @@ function attachSidebarTreeDrag(button, payload) {
   });
   button.addEventListener('dragover', (event) => {
     const source = sidebarTreeDragPayload || sidebarTreeDragPayloadFromEvent(event);
+    const directDrop = sidebarTreeDirectDropCandidateForButton(source, payload, button, event);
+    if (directDrop) {
+      event.preventDefault();
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = 'move';
+      }
+      activateSidebarTreeFolderDropTarget(button, source, directDrop);
+      return;
+    }
     const position = sidebarDropPosition(button, event);
     const bar = button.__postmeterDropBars?.[position];
     if (!sidebarTreeDropCandidateForSource(source, bar)) {
@@ -4699,6 +4794,13 @@ function attachSidebarTreeDrag(button, payload) {
   });
   button.addEventListener('drop', (event) => {
     const source = sidebarTreeDragPayload || sidebarTreeDragPayloadFromEvent(event);
+    const directDrop = sidebarTreeDirectDropCandidateForButton(source, payload, button, event);
+    if (directDrop) {
+      event.preventDefault();
+      clearSidebarTreeDropTargets();
+      void handleSidebarTreeDrop(source, directDrop.target, directDrop.position);
+      return;
+    }
     const position = sidebarDropPosition(button, event);
     const bar = button.__postmeterDropBars?.[position];
     const dropTarget = sidebarTreeDropCandidateForSource(source, bar);
@@ -4723,9 +4825,6 @@ function attachSidebarTreeDropBar(bar) {
       event.dataTransfer.dropEffect = 'move';
     }
     activateSidebarTreeDropBar(bar, source);
-  });
-  bar.addEventListener('dragleave', () => {
-    bar.classList.remove('is-drop-target');
   });
   bar.addEventListener('drop', (event) => {
     const source = sidebarTreeDragPayload || sidebarTreeDragPayloadFromEvent(event);
@@ -4753,16 +4852,38 @@ function sidebarTreePayloadFromEvent(event) {
 }
 
 function clearSidebarTreeDropTargets() {
+  setSidebarTreeDropTargets(null, null);
+}
+
+function setSidebarTreeDropTargets(activeBar, activeFolder) {
   for (const item of document.querySelectorAll('.tree-drop-bar.is-drop-target')) {
-    item.classList.remove('is-drop-target');
+    if (item !== activeBar) {
+      item.classList.remove('is-drop-target');
+    }
+  }
+  for (const item of document.querySelectorAll('.folder-node.is-folder-drop-target')) {
+    if (item !== activeFolder) {
+      item.classList.remove('is-folder-drop-target');
+    }
+  }
+  if (activeBar && !activeBar.classList.contains('is-drop-target')) {
+    activeBar.classList.add('is-drop-target');
+  }
+  if (activeFolder && !activeFolder.classList.contains('is-folder-drop-target')) {
+    activeFolder.classList.add('is-folder-drop-target');
   }
 }
 
 function activateSidebarTreeDropBar(bar, source) {
-  clearSidebarTreeDropTargets();
-  if (sidebarTreeDropCandidateForSource(source, bar)) {
-    bar.classList.add('is-drop-target');
+  const candidate = sidebarTreeDropCandidateForSource(source, bar);
+  if (!candidate) {
+    clearSidebarTreeDropTargets();
+    return;
   }
+  const activeFolder = ['request', 'folder'].includes(source?.kind)
+    ? bar.closest('.folder-node')
+    : null;
+  setSidebarTreeDropTargets(bar, activeFolder);
 }
 
 function sidebarTreeDropCandidateForSource(source, bar) {
@@ -4774,6 +4895,40 @@ function sidebarTreeDropCandidateForSource(source, bar) {
   )) || null;
 }
 
+function sidebarTreeDirectDropCandidateForButton(source, payload, button, event) {
+  if (payload?.kind !== 'folder' || !['request', 'folder'].includes(source?.kind)) {
+    return null;
+  }
+  if (!sidebarInsideDropZone(button, event, { extendToBottom: true })) {
+    return null;
+  }
+  return canDropSidebarTreeItem(source, payload, 'inside')
+    ? { target: payload, position: 'inside' }
+    : null;
+}
+
+function sidebarInsideDropZone(button, event, options = {}) {
+  if (!event?.clientY || typeof button.getBoundingClientRect !== 'function') {
+    return true;
+  }
+  const rect = button.getBoundingClientRect();
+  if (!Number.isFinite(rect.height) || rect.height < 12) {
+    return true;
+  }
+  const ratio = (event.clientY - rect.top) / rect.height;
+  return options.extendToBottom
+    ? ratio >= 0.25
+    : ratio >= 0.25 && ratio <= 0.75;
+}
+
+function activateSidebarTreeFolderDropTarget(button, source, candidate) {
+  if (!candidate || !canDropSidebarTreeItem(source, candidate.target, candidate.position)) {
+    clearSidebarTreeDropTargets();
+    return;
+  }
+  setSidebarTreeDropTargets(null, button.closest('.folder-node'));
+}
+
 function sidebarDropPosition(button, event) {
   if (!event?.clientY || typeof button.getBoundingClientRect !== 'function') {
     return 'after';
@@ -4782,7 +4937,7 @@ function sidebarDropPosition(button, event) {
   return event.clientY < rect.top + (rect.height / 2) ? 'before' : 'after';
 }
 
-function canDropSidebarTreeItem(source, target) {
+function canDropSidebarTreeItem(source, target, position = 'after') {
   if (!source?.kind || !source?.id || !target?.kind || !target?.id) {
     return false;
   }
@@ -4796,10 +4951,17 @@ function canDropSidebarTreeItem(source, target) {
     return ['collection', 'folder', 'request'].includes(target.kind);
   }
   if (source.kind === 'folder') {
-    if (!['collection', 'folder'].includes(target.kind)) {
+    if (!['collection', 'folder', 'request'].includes(target.kind)) {
       return false;
     }
-    return !isFolderDescendantOrSelf(source.id, target.id);
+    if (target.kind === 'request') {
+      const requestContext = findRequestTreeContext(target.id);
+      return !!requestContext && (!requestContext.folder || !isFolderDescendantOrSelf(source.id, requestContext.folder.id));
+    }
+    if (position === 'inside' && target.kind !== 'folder' && target.kind !== 'collection') {
+      return false;
+    }
+    return target.kind !== 'folder' || !isFolderDescendantOrSelf(source.id, target.id);
   }
   return false;
 }
@@ -4899,6 +5061,7 @@ function moveRequestTreeItem(requestId, target, position = 'after') {
   if (!source?.request || source.request.id === target?.id) {
     return false;
   }
+  const sourceContainer = source.container;
   source.list.splice(source.index, 1);
   const destination = requestDropDestination(target, position);
   if (!destination?.list) {
@@ -4906,6 +5069,10 @@ function moveRequestTreeItem(requestId, target, position = 'after') {
     return false;
   }
   destination.list.splice(destination.index, 0, source.request);
+  if (sourceContainer && sourceContainer !== destination.container) {
+    removeSidebarTreeOrderEntry(sourceContainer, { kind: 'request', value: source.request });
+  }
+  insertSidebarTreeOrderEntry(destination.container, { kind: 'request', value: source.request }, destination.orderTarget, destination.position);
   updateOpenRequestTabsForMovedRequest(source.request.id, destination.collection.id, destination.folder?.id || '');
   if (activeRequestId === source.request.id && !activeRunnerRequestRunnerId) {
     activeCollectionId = destination.collection.id;
@@ -4919,6 +5086,13 @@ function moveFolderTreeItem(folderId, target, position = 'after') {
   if (!source?.folder || isFolderDescendantOrSelf(source.folder.id, target?.id)) {
     return false;
   }
+  if (target?.kind === 'request') {
+    const requestContext = findRequestTreeContext(target.id);
+    if (!requestContext || (requestContext.folder && isFolderDescendantOrSelf(source.folder.id, requestContext.folder.id))) {
+      return false;
+    }
+  }
+  const sourceContainer = source.container;
   source.list.splice(source.index, 1);
   const destination = folderDropDestination(target, position);
   if (!destination?.list) {
@@ -4926,6 +5100,10 @@ function moveFolderTreeItem(folderId, target, position = 'after') {
     return false;
   }
   destination.list.splice(destination.index, 0, source.folder);
+  if (sourceContainer && sourceContainer !== destination.container) {
+    removeSidebarTreeOrderEntry(sourceContainer, { kind: 'folder', value: source.folder });
+  }
+  insertSidebarTreeOrderEntry(destination.container, { kind: 'folder', value: source.folder }, destination.orderTarget, destination.position);
   updateOpenRequestTabsForMovedFolder(source.folder, destination.collection.id);
   if (!activeRunnerRequestRunnerId && activeFolderId === source.folder.id) {
     activeCollectionId = destination.collection.id;
@@ -4936,11 +5114,42 @@ function moveFolderTreeItem(folderId, target, position = 'after') {
 function requestDropDestination(target, position = 'after') {
   if (target.kind === 'collection') {
     const collection = workspace.collections.find((item) => item.id === target.id);
-    return collection ? { collection, folder: null, list: collection.requests ||= [], index: (collection.requests || []).length } : null;
+    return collection ? {
+      collection,
+      folder: null,
+      container: collection,
+      list: collection.requests ||= [],
+      index: (collection.requests || []).length,
+      orderTarget: null,
+      position: 'inside'
+    } : null;
   }
   if (target.kind === 'folder') {
     const folderContext = findFolderTreeContext(target.id);
-    return folderContext ? { collection: folderContext.collection, folder: folderContext.folder, list: folderContext.folder.requests ||= [], index: (folderContext.folder.requests || []).length } : null;
+    if (!folderContext) {
+      return null;
+    }
+    if (position === 'inside') {
+      return {
+        collection: folderContext.collection,
+        folder: folderContext.folder,
+        container: folderContext.folder,
+        list: folderContext.folder.requests ||= [],
+        index: (folderContext.folder.requests || []).length,
+        orderTarget: null,
+        position: 'inside'
+      };
+    }
+    const container = folderContext.parentFolder || folderContext.collection;
+    return {
+      collection: folderContext.collection,
+      folder: folderContext.parentFolder,
+      container,
+      list: container.requests ||= [],
+      index: (container.requests || []).length,
+      orderTarget: { kind: 'folder', id: target.id },
+      position
+    };
   }
   if (target.kind === 'request') {
     const requestContext = findRequestTreeContext(target.id);
@@ -4950,8 +5159,11 @@ function requestDropDestination(target, position = 'after') {
     return {
       collection: requestContext.collection,
       folder: requestContext.folder,
+      container: requestContext.container,
       list: requestContext.list,
-      index: position === 'before' ? requestContext.index : requestContext.index + 1
+      index: position === 'before' ? requestContext.index : requestContext.index + 1,
+      orderTarget: { kind: 'request', id: target.id },
+      position
     };
   }
   return null;
@@ -4960,18 +5172,56 @@ function requestDropDestination(target, position = 'after') {
 function folderDropDestination(target, position = 'after') {
   if (target.kind === 'collection') {
     const collection = workspace.collections.find((item) => item.id === target.id);
-    return collection ? { collection, parentFolder: null, list: collection.folders ||= [], index: (collection.folders || []).length } : null;
+    return collection ? {
+      collection,
+      parentFolder: null,
+      container: collection,
+      list: collection.folders ||= [],
+      index: (collection.folders || []).length,
+      orderTarget: null,
+      position: 'inside'
+    } : null;
   }
   if (target.kind === 'folder') {
     const folderContext = findFolderTreeContext(target.id);
     if (!folderContext) {
       return null;
     }
+    if (position === 'inside') {
+      return {
+        collection: folderContext.collection,
+        parentFolder: folderContext.folder,
+        container: folderContext.folder,
+        list: folderContext.folder.folders ||= [],
+        index: (folderContext.folder.folders || []).length,
+        orderTarget: null,
+        position: 'inside'
+      };
+    }
     return {
       collection: folderContext.collection,
       parentFolder: folderContext.parentFolder,
+      container: folderContext.container,
       list: folderContext.list,
-      index: position === 'before' ? folderContext.index : folderContext.index + 1
+      index: position === 'before' ? folderContext.index : folderContext.index + 1,
+      orderTarget: { kind: 'folder', id: target.id },
+      position
+    };
+  }
+  if (target.kind === 'request') {
+    const requestContext = findRequestTreeContext(target.id);
+    if (!requestContext) {
+      return null;
+    }
+    const container = requestContext.container;
+    return {
+      collection: requestContext.collection,
+      parentFolder: requestContext.folder,
+      container,
+      list: container.folders ||= [],
+      index: (container.folders || []).length,
+      orderTarget: { kind: 'request', id: target.id },
+      position
     };
   }
   return null;
@@ -4984,6 +5234,7 @@ function findRequestTreeContext(requestId) {
       return {
         collection,
         folder: null,
+        container: collection,
         list: collection.requests,
         index: directIndex,
         request: collection.requests[directIndex]
@@ -5005,6 +5256,7 @@ function findRequestTreeContextInFolder(collection, folder, requestId) {
     return {
       collection,
       folder,
+      container: folder,
       list: folder.requests,
       index,
       request: folder.requests[index]
@@ -5035,6 +5287,7 @@ function findFolderTreeContextInList(collection, parentFolder, list, folderId) {
     return {
       collection,
       parentFolder,
+      container: parentFolder || collection,
       list,
       index,
       folder: list[index]
@@ -5763,14 +6016,33 @@ function displayResponse(response) {
   $('responseTime').textContent = `${response.durationMillis} ms`;
   $('responseSize').textContent = formatBytes(response.responseBytes);
   $('finalUrl').textContent = response.finalUrl;
-  $('responseHeaders').value = Object.entries(response.headers || {})
-    .map(([key, values]) => `${key}: ${values.join(', ')}`)
-    .join('\n');
+  $('responseHeaders').value = formatResponseHeaders(response);
+  $('responseCookies').value = formatResponseCookies(response);
   $('responseBody').value = PostMeterResponseFormatting.formatBody(response);
   CodeEditor.setLanguage?.($('responseHeaders'), 'headers');
+  CodeEditor.setLanguage?.($('responseCookies'), 'headers');
   CodeEditor.setLanguage?.($('responseBody'), responseBodyCodeLanguage(response, $('responseBody').value));
   displayTestResults(response);
   displayVisualizer(response.testScriptResult?.visualizer);
+}
+
+function formatResponseHeaders(response) {
+  return Object.entries(response?.headers || {})
+    .map(([key, values]) => `${key}: ${normalizeResponseHeaderValues(values).join(', ')}`)
+    .join('\n');
+}
+
+function formatResponseCookies(response) {
+  return Object.entries(response?.headers || {})
+    .filter(([key]) => key.toLowerCase() === 'set-cookie')
+    .flatMap(([, values]) => normalizeResponseHeaderValues(values))
+    .join('\n');
+}
+
+function normalizeResponseHeaderValues(values) {
+  return (Array.isArray(values) ? values : [values])
+    .filter((value) => value != null)
+    .map((value) => String(value));
 }
 
 function responseBodyCodeLanguage(response, formattedBody = '') {

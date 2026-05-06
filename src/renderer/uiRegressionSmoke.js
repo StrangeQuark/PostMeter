@@ -110,10 +110,15 @@
       durationMillis: 1,
       responseBytes: 42,
       finalUrl: 'https://api.example.test/xml',
-      headers: { 'content-type': ['application/xml'] },
+      headers: {
+        'content-type': ['application/xml'],
+        'set-cookie': ['xmlSession=ready; Path=/; HttpOnly']
+      },
       body: '<response><title>Smoke</title></response>'
     });
     assertUiSmoke($('responseBody').value.includes('\n  <title>Smoke</title>'), `XML response body was not formatted: ${$('responseBody').value}`);
+    assertUiSmoke($('responseHeaders').value.includes('set-cookie: xmlSession=ready; Path=/; HttpOnly'), 'Response headers tab did not receive Set-Cookie values.');
+    assertUiSmoke($('responseCookies').value === 'xmlSession=ready; Path=/; HttpOnly', 'Response cookies tab did not isolate Set-Cookie values.');
     displayResponse({
       statusCode: 200,
       durationMillis: 1,
@@ -215,11 +220,21 @@
     assertUiSmoke($('paramsTab').getAttribute('aria-hidden') === 'true', 'Inactive request panel should update aria-hidden.');
     activateTab('results', 'load');
     assertUiSmoke($('resultsLoadTabButton').getAttribute('aria-selected') === 'true', 'Active results tab should update aria-selected.');
+    assertUiSmoke($('resultsHeadersTabButton').textContent.trim() === 'Headers', 'Results tabs should include a dedicated Headers section.');
+    assertUiSmoke($('resultsCookiesTabButton').textContent.trim() === 'Cookies', 'Results tabs should include a dedicated Cookies section.');
+    activateTab('results', 'responseHeaders');
+    assertUiSmoke($('resultsHeadersTabButton').getAttribute('aria-selected') === 'true', 'Headers result tab should update aria-selected.');
+    assertUiSmoke($('responseHeadersTab').getAttribute('aria-hidden') === 'false', 'Headers result panel should update aria-hidden.');
+    activateTab('results', 'responseCookies');
+    assertUiSmoke($('resultsCookiesTabButton').getAttribute('aria-selected') === 'true', 'Cookies result tab should update aria-selected.');
+    assertUiSmoke($('responseCookiesTab').getAttribute('aria-hidden') === 'false', 'Cookies result panel should update aria-hidden.');
     assertUiSmoke($('loadResults').getAttribute('aria-live') === 'polite', 'Load results should be announced as a live region.');
     assertUiSmoke($('runnerResults').getAttribute('aria-live') === 'polite', 'Runner results should be announced as a live region.');
     assertUiSmoke($('validationLabel').getAttribute('role') === 'status', 'Validation output should expose role=status.');
     assertUiSmoke($('oauthProgressPanel').getAttribute('aria-live') === 'polite', 'OAuth progress should be a live region.');
     assertUiSmoke($('responseBody').getAttribute('aria-label') === 'Response body', 'Response body textarea should have an accessible label.');
+    assertUiSmoke($('responseHeaders').getAttribute('aria-label') === 'Response headers', 'Response headers textarea should have an accessible label.');
+    assertUiSmoke($('responseCookies').getAttribute('aria-label') === 'Response cookies', 'Response cookies textarea should have an accessible label.');
     activateTab('request', 'params');
     activateTab('results', 'response');
   }
@@ -243,19 +258,34 @@
     dispatchInput(scriptInput);
 
     activateTab('results', 'response');
-    const responseGrid = document.querySelector('.response-grid');
+    const responsePanel = document.querySelector('.response-editor-panel');
     const responseBody = $('responseBody');
     const responseEditor = responseBody.closest('.code-editor');
     const responseHighlight = responseEditor?.querySelector('.code-editor-highlight');
-    const gridRect = responseGrid.getBoundingClientRect();
+    const panelRect = responsePanel.getBoundingClientRect();
     const editorRect = responseEditor.getBoundingClientRect();
     const bodyRect = responseBody.getBoundingClientRect();
     const highlightRect = responseHighlight.getBoundingClientRect();
-    assertUiSmoke(Math.abs(editorRect.height - gridRect.height) <= 2, 'Response body editor should fill the response grid height.');
+    assertUiSmoke(Math.abs(editorRect.height - panelRect.height) <= 2, 'Response body editor should fill the response panel height.');
     assertUiSmoke(Math.abs(bodyRect.height - editorRect.height) <= 2, 'Response body textarea should match the visible response editor height.');
     assertUiSmoke(Math.abs(bodyRect.width - editorRect.width) <= 2, 'Response body textarea should match the visible response editor width.');
     assertUiSmoke(Math.abs(highlightRect.height - bodyRect.height) <= 2, 'Response body syntax layer should match the textarea height.');
     assertUiSmoke(Math.abs(highlightRect.width - bodyRect.width) <= 2, 'Response body syntax layer should match the textarea width.');
+    activateTab('results', 'responseHeaders');
+    const responseHeaders = $('responseHeaders');
+    const headersEditor = responseHeaders.closest('.code-editor');
+    const headersPanelRect = $('responseHeadersTab').getBoundingClientRect();
+    const headersRect = responseHeaders.getBoundingClientRect();
+    assertUiSmoke(Math.abs(headersEditor.getBoundingClientRect().height - headersPanelRect.height) <= 2, 'Response headers editor should fill its result tab height.');
+    assertUiSmoke(Math.abs(headersRect.height - headersEditor.getBoundingClientRect().height) <= 2, 'Response headers textarea should match the visible editor height.');
+    activateTab('results', 'responseCookies');
+    const responseCookies = $('responseCookies');
+    const cookiesEditor = responseCookies.closest('.code-editor');
+    const cookiesPanelRect = $('responseCookiesTab').getBoundingClientRect();
+    const cookiesRect = responseCookies.getBoundingClientRect();
+    assertUiSmoke(Math.abs(cookiesEditor.getBoundingClientRect().height - cookiesPanelRect.height) <= 2, 'Response cookies editor should fill its result tab height.');
+    assertUiSmoke(Math.abs(cookiesRect.height - cookiesEditor.getBoundingClientRect().height) <= 2, 'Response cookies textarea should match the visible editor height.');
+    activateTab('results', 'response');
   }
 
   async function assertModalFocusSmoke() {
@@ -1210,6 +1240,81 @@
       assertUiSmoke(
         liveTargetCollection.folders.map((item) => item.id).slice(-2).join('|') === `${siblingFolder.id}|${folder.id}`,
         'Dragging a folder within a collection should reorder it relative to another folder.'
+      );
+      await moveCollectionTreeItem(
+        { kind: 'folder', id: folder.id },
+        { kind: 'request', id: targetRequest.id },
+        'before'
+      );
+      assertUiSmoke(
+        sidebarTreeChildEntries(liveTargetCollection).map((entry) => `${entry.kind}:${entry.value.id}`).slice(0, 3).join('|') === `request:${dragRequest.id}|folder:${folder.id}|request:${targetRequest.id}`,
+        'Dragging a folder relative to a request should preserve mixed request/folder order.'
+      );
+      assertUiSmoke(
+        savedPayloads.at(-1).collections.find((item) => item.id === 'drag-collection-b').postman.itemOrder.map((entry) => `${entry.kind}:${entry.id}`).slice(0, 3).join('|') === `request:${dragRequest.id}|folder:${folder.id}|request:${targetRequest.id}`,
+        'Mixed request/folder order should be saved in the collection item order.'
+      );
+
+      renderCollections();
+      sidebarTreeDragPayload = { kind: 'request', id: targetRequest.id };
+      const folderButton = treeButtonByTarget('folder', folder.id);
+      const folderWrapper = folderButton.closest('.folder-node');
+      folderButton.dispatchEvent(new MouseEvent('dragover', { bubbles: true, cancelable: true }));
+      assertUiSmoke(folderWrapper.classList.contains('is-folder-drop-target'), 'Dragging a request into a folder should highlight the whole folder subtree.');
+      assertUiSmoke(!document.querySelector('.tree-drop-bar.is-drop-target'), 'Dragging a request into a folder should not highlight an insertion bar.');
+      folderButton.dispatchEvent(new MouseEvent('dragleave', { bubbles: true, cancelable: true }));
+      assertUiSmoke(folderWrapper.classList.contains('is-folder-drop-target'), 'Folder drop highlight should remain stable across child dragleave events.');
+      clearSidebarTreeDropTargets();
+      Object.defineProperty(folderButton, 'getBoundingClientRect', {
+        configurable: true,
+        value: () => ({ top: 100, bottom: 130, height: 30, left: 0, right: 160, width: 160 })
+      });
+      const folderBeforeBar = treeDropBarByTarget('folder', folder.id, 'before');
+      folderButton.dispatchEvent(new MouseEvent('dragover', {
+        bubbles: true,
+        cancelable: true,
+        clientY: 101
+      }));
+      assertUiSmoke(folderBeforeBar.classList.contains('is-drop-target'), 'Dragging over the top edge of a folder should still allow before-folder placement.');
+      assertUiSmoke(!folderWrapper.classList.contains('is-folder-drop-target'), 'Dragging over the top edge of a folder should not select the folder as the drop container.');
+      folderButton.dispatchEvent(new MouseEvent('dragover', {
+        bubbles: true,
+        cancelable: true,
+        clientY: 129
+      }));
+      assertUiSmoke(folderWrapper.classList.contains('is-folder-drop-target'), 'Dragging over the lower edge of a folder should keep the item inside the folder.');
+      assertUiSmoke(!document.querySelector('.tree-drop-bar.is-drop-target'), 'Dragging over the lower edge of a folder should not activate the after-folder insertion bar.');
+      clearSidebarTreeDropTargets();
+      sidebarTreeDragPayload = null;
+
+      await moveCollectionTreeItem(
+        { kind: 'request', id: targetRequest.id },
+        { kind: 'folder', id: folder.id },
+        'inside'
+      );
+      assertUiSmoke(!liveTargetCollection.requests.some((request) => request.id === targetRequest.id), 'Dropping a request inside a folder should remove it from the parent request list.');
+      assertUiSmoke(folder.requests.some((request) => request.id === targetRequest.id), 'Dropping a request inside a folder should add it to the folder request list.');
+
+      renderCollections();
+      sidebarTreeDragPayload = { kind: 'request', id: dragRequest.id };
+      const nestedFolderWrapper = treeButtonByTarget('folder', folder.id)?.closest('.folder-node');
+      const nestedFolderDropBar = treeDropBarByTarget('request', targetRequest.id, 'before');
+      assertUiSmoke(nestedFolderWrapper && nestedFolderDropBar, 'Folder request drop smoke setup did not render nested request insertion targets.');
+      nestedFolderDropBar.dispatchEvent(new MouseEvent('dragover', { bubbles: true, cancelable: true }));
+      assertUiSmoke(nestedFolderDropBar.classList.contains('is-drop-target'), 'Dragging between requests inside a folder should highlight the insertion bar.');
+      assertUiSmoke(nestedFolderWrapper.classList.contains('is-folder-drop-target'), 'Dragging between requests inside a folder should highlight the containing folder subtree.');
+      nestedFolderDropBar.dispatchEvent(new MouseEvent('dragleave', { bubbles: true, cancelable: true }));
+      assertUiSmoke(nestedFolderDropBar.classList.contains('is-drop-target'), 'Nested insertion bar highlight should remain stable across child dragleave events.');
+      assertUiSmoke(nestedFolderWrapper.classList.contains('is-folder-drop-target'), 'Nested folder highlight should remain stable across child dragleave events.');
+      clearSidebarTreeDropTargets();
+      sidebarTreeDragPayload = null;
+
+      assertUiSmoke(
+        !canDropSidebarTreeItem(
+          { kind: 'folder', id: folder.id },
+          { kind: 'request', id: targetRequest.id }
+        ),
+        'Folders should not be droppable relative to requests contained inside themselves.'
       );
     } finally {
       workspace = originalWorkspace;

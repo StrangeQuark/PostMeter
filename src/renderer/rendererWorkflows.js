@@ -56,6 +56,7 @@
       element('responseSize').textContent = '-';
       element('finalUrl').textContent = '-';
       element('responseHeaders').value = '';
+      element('responseCookies').value = '';
       element('responseBody').value = message;
       if (element('visualizerFrame')) {
         element('visualizerFrame').srcdoc = '';

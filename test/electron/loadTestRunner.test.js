@@ -63,6 +63,11 @@ test('validates request URLs without requiring an allowlist', () => {
   const config = validateLoadConfig({ concurrency: 2, totalRequests: 5 }, request, null);
   assert.equal(config.totalRequests, 5);
   assert.equal(config.policyDecisions.length, 0);
+  const schemeLessConfig = validateLoadConfig({ concurrency: 2, totalRequests: 5 }, {
+    ...request,
+    url: 'google.com/load'
+  }, null);
+  assert.equal(schemeLessConfig.totalRequests, 5);
   const scriptedConfig = validateLoadConfig({ concurrency: 2, totalRequests: 5 }, {
     ...request,
     scripts: { preRequest: "pm.environment.set('x', 'y');", tests: "pm.test('ok', function () {});" }
