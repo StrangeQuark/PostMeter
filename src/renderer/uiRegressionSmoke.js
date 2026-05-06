@@ -1211,6 +1211,81 @@
         liveTargetCollection.folders.map((item) => item.id).slice(-2).join('|') === `${siblingFolder.id}|${folder.id}`,
         'Dragging a folder within a collection should reorder it relative to another folder.'
       );
+      await moveCollectionTreeItem(
+        { kind: 'folder', id: folder.id },
+        { kind: 'request', id: targetRequest.id },
+        'before'
+      );
+      assertUiSmoke(
+        sidebarTreeChildEntries(liveTargetCollection).map((entry) => `${entry.kind}:${entry.value.id}`).slice(0, 3).join('|') === `request:${dragRequest.id}|folder:${folder.id}|request:${targetRequest.id}`,
+        'Dragging a folder relative to a request should preserve mixed request/folder order.'
+      );
+      assertUiSmoke(
+        savedPayloads.at(-1).collections.find((item) => item.id === 'drag-collection-b').postman.itemOrder.map((entry) => `${entry.kind}:${entry.id}`).slice(0, 3).join('|') === `request:${dragRequest.id}|folder:${folder.id}|request:${targetRequest.id}`,
+        'Mixed request/folder order should be saved in the collection item order.'
+      );
+
+      renderCollections();
+      sidebarTreeDragPayload = { kind: 'request', id: targetRequest.id };
+      const folderButton = treeButtonByTarget('folder', folder.id);
+      const folderWrapper = folderButton.closest('.folder-node');
+      folderButton.dispatchEvent(new MouseEvent('dragover', { bubbles: true, cancelable: true }));
+      assertUiSmoke(folderWrapper.classList.contains('is-folder-drop-target'), 'Dragging a request into a folder should highlight the whole folder subtree.');
+      assertUiSmoke(!document.querySelector('.tree-drop-bar.is-drop-target'), 'Dragging a request into a folder should not highlight an insertion bar.');
+      folderButton.dispatchEvent(new MouseEvent('dragleave', { bubbles: true, cancelable: true }));
+      assertUiSmoke(folderWrapper.classList.contains('is-folder-drop-target'), 'Folder drop highlight should remain stable across child dragleave events.');
+      clearSidebarTreeDropTargets();
+      Object.defineProperty(folderButton, 'getBoundingClientRect', {
+        configurable: true,
+        value: () => ({ top: 100, bottom: 130, height: 30, left: 0, right: 160, width: 160 })
+      });
+      const folderBeforeBar = treeDropBarByTarget('folder', folder.id, 'before');
+      folderButton.dispatchEvent(new MouseEvent('dragover', {
+        bubbles: true,
+        cancelable: true,
+        clientY: 101
+      }));
+      assertUiSmoke(folderBeforeBar.classList.contains('is-drop-target'), 'Dragging over the top edge of a folder should still allow before-folder placement.');
+      assertUiSmoke(!folderWrapper.classList.contains('is-folder-drop-target'), 'Dragging over the top edge of a folder should not select the folder as the drop container.');
+      folderButton.dispatchEvent(new MouseEvent('dragover', {
+        bubbles: true,
+        cancelable: true,
+        clientY: 129
+      }));
+      assertUiSmoke(folderWrapper.classList.contains('is-folder-drop-target'), 'Dragging over the lower edge of a folder should keep the item inside the folder.');
+      assertUiSmoke(!document.querySelector('.tree-drop-bar.is-drop-target'), 'Dragging over the lower edge of a folder should not activate the after-folder insertion bar.');
+      clearSidebarTreeDropTargets();
+      sidebarTreeDragPayload = null;
+
+      await moveCollectionTreeItem(
+        { kind: 'request', id: targetRequest.id },
+        { kind: 'folder', id: folder.id },
+        'inside'
+      );
+      assertUiSmoke(!liveTargetCollection.requests.some((request) => request.id === targetRequest.id), 'Dropping a request inside a folder should remove it from the parent request list.');
+      assertUiSmoke(folder.requests.some((request) => request.id === targetRequest.id), 'Dropping a request inside a folder should add it to the folder request list.');
+
+      renderCollections();
+      sidebarTreeDragPayload = { kind: 'request', id: dragRequest.id };
+      const nestedFolderWrapper = treeButtonByTarget('folder', folder.id)?.closest('.folder-node');
+      const nestedFolderDropBar = treeDropBarByTarget('request', targetRequest.id, 'before');
+      assertUiSmoke(nestedFolderWrapper && nestedFolderDropBar, 'Folder request drop smoke setup did not render nested request insertion targets.');
+      nestedFolderDropBar.dispatchEvent(new MouseEvent('dragover', { bubbles: true, cancelable: true }));
+      assertUiSmoke(nestedFolderDropBar.classList.contains('is-drop-target'), 'Dragging between requests inside a folder should highlight the insertion bar.');
+      assertUiSmoke(nestedFolderWrapper.classList.contains('is-folder-drop-target'), 'Dragging between requests inside a folder should highlight the containing folder subtree.');
+      nestedFolderDropBar.dispatchEvent(new MouseEvent('dragleave', { bubbles: true, cancelable: true }));
+      assertUiSmoke(nestedFolderDropBar.classList.contains('is-drop-target'), 'Nested insertion bar highlight should remain stable across child dragleave events.');
+      assertUiSmoke(nestedFolderWrapper.classList.contains('is-folder-drop-target'), 'Nested folder highlight should remain stable across child dragleave events.');
+      clearSidebarTreeDropTargets();
+      sidebarTreeDragPayload = null;
+
+      assertUiSmoke(
+        !canDropSidebarTreeItem(
+          { kind: 'folder', id: folder.id },
+          { kind: 'request', id: targetRequest.id }
+        ),
+        'Folders should not be droppable relative to requests contained inside themselves.'
+      );
     } finally {
       workspace = originalWorkspace;
       workspaces = originalWorkspaces;

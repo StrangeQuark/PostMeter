@@ -418,6 +418,18 @@ h2 {
   box-shadow: 0 0 0 1px var(--primary);
 }
 
+.folder-node.is-folder-drop-target {
+  border-radius: 6px;
+  background: var(--primary-soft);
+  outline: 1px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.folder-node.is-folder-drop-target > .tree-item {
+  background: var(--primary-soft);
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
 .tree-item.active {
   background: var(--primary-soft);
   box-shadow: inset 3px 0 0 var(--primary);
