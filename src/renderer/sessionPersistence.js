@@ -37,6 +37,7 @@
       openRunnerTabs: (Array.isArray(state.openRunnerTabs) ? state.openRunnerTabs : [])
         .map((tab) => serializeRunnerTab(tab, runnerForTab(state, tab)))
         .filter(Boolean),
+      workspaceOrder: serializeWorkspaceOrder(state),
       draftRequests: Array.from(state.draftRequests instanceof Map ? state.draftRequests.values() : [])
         .map(cloneJson)
         .filter(Boolean),
@@ -52,6 +53,7 @@
     const findFolder = options.findFolder || (() => null);
     const findRequest = options.findRequest || (() => null);
 
+    applyWorkspaceOrder(state, session.workspaceOrder);
     state.draftRequests = new Map();
     for (const draftRequest of session.draftRequests) {
       if (draftRequest?.id) {
@@ -502,6 +504,7 @@
       openEnvironmentTabs: Array.isArray(session.openEnvironmentTabs) ? session.openEnvironmentTabs.filter(isObject) : [],
       openWorkspaceTabs: Array.isArray(session.openWorkspaceTabs) ? session.openWorkspaceTabs.filter(isObject) : [],
       openRunnerTabs: Array.isArray(session.openRunnerTabs) ? session.openRunnerTabs.filter(isObject) : [],
+      workspaceOrder: Array.isArray(session.workspaceOrder) ? session.workspaceOrder.map(normalizeId).filter(Boolean) : [],
       draftRequests: Array.isArray(session.draftRequests) ? session.draftRequests.filter(isObject) : [],
       dirtyCollectionStates: Array.isArray(session.dirtyCollectionStates) ? session.dirtyCollectionStates.filter(isObject) : [],
       dirtyCookieJarState: isObject(session.dirtyCookieJarState) ? session.dirtyCookieJarState : null
@@ -516,6 +519,27 @@
       delete target[key];
     }
     Object.assign(target, source);
+  }
+
+  function serializeWorkspaceOrder(state) {
+    return (Array.isArray(state.workspaces) ? state.workspaces : [])
+      .map((workspace) => normalizeId(workspace?.id))
+      .filter(Boolean);
+  }
+
+  function applyWorkspaceOrder(state, order) {
+    if (!Array.isArray(state.workspaces) || !Array.isArray(order) || !order.length) {
+      return;
+    }
+    const orderIndex = new Map(order.map((id, index) => [normalizeId(id), index]));
+    state.workspaces = [...state.workspaces].sort((left, right) => {
+      const leftIndex = orderIndex.has(left?.id) ? orderIndex.get(left.id) : Number.MAX_SAFE_INTEGER;
+      const rightIndex = orderIndex.has(right?.id) ? orderIndex.get(right.id) : Number.MAX_SAFE_INTEGER;
+      if (leftIndex !== rightIndex) {
+        return leftIndex - rightIndex;
+      }
+      return 0;
+    });
   }
 
   function safeSnapshot(value) {

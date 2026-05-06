@@ -379,6 +379,45 @@ h2 {
   background: var(--tree-hover);
 }
 
+.tree-item[draggable="true"] {
+  cursor: grab;
+}
+
+.tree-item[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.tree-item.is-dragging {
+  opacity: 0.55;
+}
+
+.tree-drop-bar {
+  position: relative;
+  height: 7px;
+  margin: -2px 0;
+  border-radius: 999px;
+}
+
+.tree-drop-bar::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  right: 8px;
+  left: 8px;
+  height: 2px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.tree-drop-bar.is-drop-target {
+  background: var(--primary-soft);
+}
+
+.tree-drop-bar.is-drop-target::before {
+  background: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
 .tree-item.active {
   background: var(--primary-soft);
   box-shadow: inset 3px 0 0 var(--primary);

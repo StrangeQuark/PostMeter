@@ -17,6 +17,10 @@ test('renderer session persistence serializes active tabs, drafts, and dirty tab
   state.activeRunnerConfigId = 'runner-1';
   state.activeSidebarPanel = 'environments';
   state.activeMainPanel = 'environment';
+  state.workspaces = [
+    { id: 'Workspace 2.json', name: 'Workspace 2' },
+    { id: 'Workspace.json', name: 'Workspace' }
+  ];
   state.workspace = {
     runners: [
       {
@@ -91,11 +95,38 @@ test('renderer session persistence serializes active tabs, drafts, and dirty tab
   assert.equal(session.activeRequestTab, 'headers');
   assert.equal(session.activeResultsTab, 'response');
   assert.equal(session.selectedWorkspaceId, 'Workspace 2.json');
+  assert.deepEqual(session.workspaceOrder, ['Workspace 2.json', 'Workspace.json']);
   assert.equal(session.openRequestTabs[0].currentState.url, 'https://example.test');
   assert.equal(session.openRequestTabs[1].currentState, null);
   assert.equal(session.openEnvironmentTabs[0].currentState.name, 'Dirty Environment');
   assert.equal(session.openRunnerTabs[0].currentState.name, 'Dirty Runner');
   assert.equal(session.draftRequests.length, 1);
+});
+
+test('renderer session persistence restores workspace list order', () => {
+  const state = createRendererState();
+  state.workspace = {
+    collections: [],
+    environments: [],
+    runners: []
+  };
+  state.workspaces = [
+    { id: 'a.json', name: 'A' },
+    { id: 'b.json', name: 'B' },
+    { id: 'c.json', name: 'C' }
+  ];
+  restoreRendererSession({
+    state,
+    session: {
+      workspaceOrder: ['c.json', 'a.json'],
+      activeWorkspaceId: 'a.json',
+      selectedWorkspaceId: 'a.json'
+    },
+    workspaceListItems: () => state.workspaces,
+    findFolder,
+    findRequest
+  });
+  assert.deepEqual(state.workspaces.map((workspace) => workspace.id), ['c.json', 'a.json', 'b.json']);
 });
 
 test('renderer session persistence serializes and restores runner-owned request tabs', () => {

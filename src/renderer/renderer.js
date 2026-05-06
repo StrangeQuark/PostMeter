@@ -59,6 +59,7 @@ let environmentTitleEditOriginal = '';
 let workspaceTitleEditOriginal = '';
 let runnerTitleEditOriginal = '';
 let pendingDiagnosticsSettingsSave = null;
+let sidebarTreeDragPayload = null;
 const pendingNotificationModals = [];
 
 const $ = (id) => document.getElementById(id);
@@ -1815,12 +1816,29 @@ function applyWorkspaceCatalogUpdate(loaded, options = {}) {
 
 function updateWorkspaceCatalog(loaded, options = {}) {
   workspacePath = loaded?.path || workspacePath;
-  workspaces = Array.isArray(loaded?.workspaces) ? loaded.workspaces : workspaces;
+  const previousOrder = workspaceOrder();
+  workspaces = Array.isArray(loaded?.workspaces) ? orderWorkspaceItems(loaded.workspaces, previousOrder) : workspaces;
   activeWorkspaceId = loaded?.activeWorkspaceId || activeWorkspaceId || workspaces[0]?.id || null;
   const requestedSelectedWorkspaceId = options.selectedWorkspaceId || selectedWorkspaceId || activeWorkspaceId;
   selectedWorkspaceId = workspaceListItems().some((item) => item.id === requestedSelectedWorkspaceId)
     ? requestedSelectedWorkspaceId
     : activeWorkspaceId || workspaces[0]?.id || null;
+}
+
+function workspaceOrder() {
+  return (Array.isArray(workspaces) ? workspaces : []).map((item) => item.id).filter(Boolean);
+}
+
+function orderWorkspaceItems(items, order = []) {
+  const orderIndex = new Map(order.map((id, index) => [id, index]));
+  return [...items].sort((left, right) => {
+    const leftIndex = orderIndex.has(left?.id) ? orderIndex.get(left.id) : Number.MAX_SAFE_INTEGER;
+    const rightIndex = orderIndex.has(right?.id) ? orderIndex.get(right.id) : Number.MAX_SAFE_INTEGER;
+    if (leftIndex !== rightIndex) {
+      return leftIndex - rightIndex;
+    }
+    return 0;
+  });
 }
 
 function restoreSessionState(session) {
@@ -3065,9 +3083,7 @@ function renderCollections() {
     root.append(empty);
     return;
   }
-  for (const collection of workspace.collections) {
-    root.append(collectionNode(collection));
-  }
+  appendSidebarTreeRows(root, workspace.collections.map(collectionNode));
 }
 
 function renderEnvironments() {
@@ -3080,9 +3096,7 @@ function renderEnvironments() {
     root.append(empty);
     return;
   }
-  for (const environment of workspace.environments) {
-    root.append(environmentNode(environment));
-  }
+  appendSidebarTreeRows(root, workspace.environments.map(environmentNode));
 }
 
 function environmentNode(environment) {
@@ -3091,6 +3105,10 @@ function environmentNode(environment) {
   const button = treeButton(environment.name || 'Untitled Environment', environment.id === activeEnvironmentId, 'ENV', {
     treeKind: 'environment',
     treeId: environment.id
+  });
+  appendSidebarTreeRow(wrapper, button, {
+    kind: 'environment',
+    id: environment.id
   });
   button.addEventListener('click', () => {
     if (!canOpenEnvironmentTabFor(environment.id)) {
@@ -3108,16 +3126,13 @@ function environmentNode(environment) {
     ['Rename', () => renameEnvironment(environment)],
     ['Delete', () => deleteEnvironment(environment), 'danger']
   ]);
-  wrapper.append(button);
   return wrapper;
 }
 
 function renderWorkspaces() {
   const root = $('workspacesList');
   root.textContent = '';
-  for (const workspaceItem of workspaceListItems()) {
-    root.append(workspaceNode(workspaceItem));
-  }
+  appendSidebarTreeRows(root, workspaceListItems().map(workspaceNode));
 }
 
 function renderRunners() {
@@ -3133,9 +3148,7 @@ function renderRunners() {
     root.append(empty);
     return;
   }
-  for (const runner of workspace.runners) {
-    root.append(runnerNode(runner));
-  }
+  appendSidebarTreeRows(root, workspace.runners.map(runnerNode));
 }
 
 function runnerNode(runner) {
@@ -3145,6 +3158,10 @@ function runnerNode(runner) {
     treeKind: 'runner',
     treeId: runner.id
   });
+  appendSidebarTreeRow(wrapper, button, {
+    kind: 'runner',
+    id: runner.id
+  });
   button.addEventListener('click', () => {
     selectRunnerItem(runner.id);
   });
@@ -3152,7 +3169,6 @@ function runnerNode(runner) {
     ['Rename', () => renameRunner(runner)],
     ['Delete', () => { void deleteRunner(runner); }, 'danger']
   ]);
-  wrapper.append(button);
   return wrapper;
 }
 
@@ -3162,6 +3178,10 @@ function workspaceNode(workspaceItem) {
   const button = treeButton(workspaceItem.name, activeMainPanel === 'workspace' && workspaceItem.id === selectedWorkspaceId, 'WRK', {
     treeKind: 'workspace',
     treeId: workspaceItem.id
+  });
+  appendSidebarTreeRow(wrapper, button, {
+    kind: 'workspace',
+    id: workspaceItem.id
   });
   button.addEventListener('click', () => {
     selectWorkspaceItem(workspaceItem.id);
@@ -3177,7 +3197,6 @@ function workspaceNode(workspaceItem) {
     menuItems.push(['Delete', () => { void deleteWorkspace(workspaceItem.id); }, 'danger']);
   }
   attachTreeContextMenu(button, menuItems);
-  wrapper.append(button);
   return wrapper;
 }
 
@@ -4472,6 +4491,10 @@ function collectionNode(collection) {
     treeKind: 'collection',
     treeId: collection.id
   });
+  appendSidebarTreeRow(wrapper, button, {
+    kind: 'collection',
+    id: collection.id
+  });
   button.addEventListener('click', () => {
     const firstRequest = firstRequestInCollection(collection);
     if (firstRequest?.request && !canOpenRequestTabFor(collection.id, firstRequest.request.id)) {
@@ -4492,13 +4515,10 @@ function collectionNode(collection) {
     ['Export', () => exportCollection(collection)],
     ['Delete', () => deleteCollection(collection), 'danger']
   ]);
-  wrapper.append(button);
-  for (const request of collection.requests || []) {
-    wrapper.append(requestNode(collection, null, request));
-  }
-  for (const folder of collection.folders || []) {
-    wrapper.append(folderNode(collection, folder));
-  }
+  appendSidebarTreeRows(wrapper, [
+    ...(collection.requests || []).map((request) => requestNode(collection, null, request)),
+    ...(collection.folders || []).map((folder) => folderNode(collection, folder))
+  ], { className: 'tree-folder' });
   return wrapper;
 }
 
@@ -4508,6 +4528,11 @@ function folderNode(collection, folder) {
   const button = treeButton(folder.name, folder.id === activeFolderId && !activeRequestId, 'DIR', {
     treeKind: 'folder',
     treeId: folder.id
+  });
+  appendSidebarTreeRow(wrapper, button, {
+    kind: 'folder',
+    id: folder.id,
+    collectionId: collection.id
   });
   button.addEventListener('click', () => {
     const firstRequest = firstRequestInFolder(folder);
@@ -4529,13 +4554,10 @@ function folderNode(collection, folder) {
     ['Rename', () => renameFolder(folder)],
     ['Delete', () => deleteFolder(collection, folder), 'danger']
   ]);
-  wrapper.append(button);
-  for (const request of folder.requests || []) {
-    wrapper.append(requestNode(collection, folder, request));
-  }
-  for (const child of folder.folders || []) {
-    wrapper.append(folderNode(collection, child));
-  }
+  appendSidebarTreeRows(wrapper, [
+    ...(folder.requests || []).map((request) => requestNode(collection, folder, request)),
+    ...(folder.folders || []).map((child) => folderNode(collection, child))
+  ], { className: 'tree-folder' });
   return wrapper;
 }
 
@@ -4545,6 +4567,12 @@ function requestNode(collection, folder, request) {
   const button = treeButton(request.name, request.id === activeRequestId, request.method, {
     treeKind: 'request',
     treeId: request.id
+  });
+  appendSidebarTreeRow(wrapper, button, {
+    kind: 'request',
+    id: request.id,
+    collectionId: collection.id,
+    folderId: folder?.id || ''
   });
   button.addEventListener('click', () => {
     if (!canOpenRequestTabFor(collection.id, request.id)) {
@@ -4564,7 +4592,6 @@ function requestNode(collection, folder, request) {
     ['Duplicate', () => duplicateRequest(collection, folder, request)],
     ['Delete', () => deleteRequest(collection, folder, request), 'danger']
   ]);
-  wrapper.append(button);
   return wrapper;
 }
 
@@ -4587,6 +4614,678 @@ function treeButton(text, active, kind, options = {}) {
   label.textContent = text;
   button.append(badge, label);
   return button;
+}
+
+function appendSidebarTreeRow(wrapper, button, payload) {
+  button.__postmeterDropBars = {};
+  attachSidebarTreeDrag(button, payload);
+  wrapper.__postmeterTreePayload = payload;
+  wrapper.__postmeterTreeButton = button;
+  wrapper.append(button);
+}
+
+function appendSidebarTreeRows(parent, rows, options = {}) {
+  const normalizedRows = rows.filter((row) => row?.__postmeterTreePayload && row?.__postmeterTreeButton);
+  let previousRow = null;
+  for (const row of normalizedRows) {
+    const payload = row.__postmeterTreePayload;
+    const button = row.__postmeterTreeButton;
+    const beforeCandidates = previousRow
+      ? [
+          { target: previousRow.__postmeterTreePayload, position: 'after' },
+          { target: payload, position: 'before' }
+        ]
+      : [{ target: payload, position: 'before' }];
+    const beforeBar = sidebarTreeDropBar(beforeCandidates, options);
+    button.__postmeterDropBars.before = beforeBar;
+    if (previousRow) {
+      previousRow.__postmeterTreeButton.__postmeterDropBars.after = beforeBar;
+    }
+    parent.append(beforeBar, row);
+    previousRow = row;
+  }
+  if (previousRow) {
+    const afterBar = sidebarTreeDropBar([
+      { target: previousRow.__postmeterTreePayload, position: 'after' }
+    ], options);
+    previousRow.__postmeterTreeButton.__postmeterDropBars.after = afterBar;
+    parent.append(afterBar);
+  }
+}
+
+function sidebarTreeDropBar(candidates, options = {}) {
+  const bar = document.createElement('div');
+  bar.className = `tree-drop-bar${options.className ? ` ${options.className}` : ''}`;
+  bar.__postmeterDropCandidates = candidates;
+  const primaryCandidate = candidates[0];
+  bar.dataset.dropKind = primaryCandidate?.target?.kind || '';
+  bar.dataset.dropId = primaryCandidate?.target?.id || '';
+  bar.dataset.dropPosition = primaryCandidate?.position || '';
+  bar.setAttribute('aria-hidden', 'true');
+  attachSidebarTreeDropBar(bar);
+  return bar;
+}
+
+function attachSidebarTreeDrag(button, payload) {
+  button.draggable = true;
+  button.dataset.dragKind = payload.kind;
+  button.addEventListener('dragstart', (event) => {
+    sidebarTreeDragPayload = { ...payload };
+    button.classList.add('is-dragging');
+    event.dataTransfer?.setData('application/x-postmeter-tree-item', JSON.stringify(sidebarTreeDragPayload));
+    event.dataTransfer?.setData('text/plain', `${payload.kind}:${payload.id}`);
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+    }
+  });
+  button.addEventListener('dragend', () => {
+    sidebarTreeDragPayload = null;
+    clearSidebarTreeDropTargets();
+    button.classList.remove('is-dragging');
+  });
+  button.addEventListener('dragover', (event) => {
+    const source = sidebarTreeDragPayload || sidebarTreeDragPayloadFromEvent(event);
+    const position = sidebarDropPosition(button, event);
+    const bar = button.__postmeterDropBars?.[position];
+    if (!sidebarTreeDropCandidateForSource(source, bar)) {
+      clearSidebarTreeDropTargets();
+      return;
+    }
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
+    activateSidebarTreeDropBar(bar, source);
+  });
+  button.addEventListener('drop', (event) => {
+    const source = sidebarTreeDragPayload || sidebarTreeDragPayloadFromEvent(event);
+    const position = sidebarDropPosition(button, event);
+    const bar = button.__postmeterDropBars?.[position];
+    const dropTarget = sidebarTreeDropCandidateForSource(source, bar);
+    if (!dropTarget) {
+      return;
+    }
+    event.preventDefault();
+    clearSidebarTreeDropTargets();
+    void handleSidebarTreeDrop(source, dropTarget.target, dropTarget.position);
+  });
+}
+
+function attachSidebarTreeDropBar(bar) {
+  bar.addEventListener('dragover', (event) => {
+    const source = sidebarTreeDragPayload || sidebarTreeDragPayloadFromEvent(event);
+    if (!sidebarTreeDropCandidateForSource(source, bar)) {
+      clearSidebarTreeDropTargets();
+      return;
+    }
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
+    activateSidebarTreeDropBar(bar, source);
+  });
+  bar.addEventListener('dragleave', () => {
+    bar.classList.remove('is-drop-target');
+  });
+  bar.addEventListener('drop', (event) => {
+    const source = sidebarTreeDragPayload || sidebarTreeDragPayloadFromEvent(event);
+    const dropTarget = sidebarTreeDropCandidateForSource(source, bar);
+    if (!dropTarget) {
+      return;
+    }
+    event.preventDefault();
+    clearSidebarTreeDropTargets();
+    void handleSidebarTreeDrop(source, dropTarget.target, dropTarget.position);
+  });
+}
+
+function sidebarTreePayloadFromEvent(event) {
+  const raw = event.dataTransfer?.getData?.('application/x-postmeter-tree-item');
+  if (!raw) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed?.kind && parsed?.id ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearSidebarTreeDropTargets() {
+  for (const item of document.querySelectorAll('.tree-drop-bar.is-drop-target')) {
+    item.classList.remove('is-drop-target');
+  }
+}
+
+function activateSidebarTreeDropBar(bar, source) {
+  clearSidebarTreeDropTargets();
+  if (sidebarTreeDropCandidateForSource(source, bar)) {
+    bar.classList.add('is-drop-target');
+  }
+}
+
+function sidebarTreeDropCandidateForSource(source, bar) {
+  if (!source?.kind || !bar?.__postmeterDropCandidates) {
+    return null;
+  }
+  return bar.__postmeterDropCandidates.find((candidate) => (
+    candidate?.target && canDropSidebarTreeItem(source, candidate.target)
+  )) || null;
+}
+
+function sidebarDropPosition(button, event) {
+  if (!event?.clientY || typeof button.getBoundingClientRect !== 'function') {
+    return 'after';
+  }
+  const rect = button.getBoundingClientRect();
+  return event.clientY < rect.top + (rect.height / 2) ? 'before' : 'after';
+}
+
+function canDropSidebarTreeItem(source, target) {
+  if (!source?.kind || !source?.id || !target?.kind || !target?.id) {
+    return false;
+  }
+  if (source.kind === target.kind && source.id === target.id) {
+    return false;
+  }
+  if (['environment', 'workspace', 'runner', 'collection'].includes(source.kind)) {
+    return source.kind === target.kind;
+  }
+  if (source.kind === 'request') {
+    return ['collection', 'folder', 'request'].includes(target.kind);
+  }
+  if (source.kind === 'folder') {
+    if (!['collection', 'folder'].includes(target.kind)) {
+      return false;
+    }
+    return !isFolderDescendantOrSelf(source.id, target.id);
+  }
+  return false;
+}
+
+async function handleSidebarTreeDrop(source, target, position = 'after') {
+  if (['environment', 'workspace', 'runner', 'collection'].includes(source.kind) && source.kind === target.kind) {
+    await moveTopLevelTreeItem(source, target, position);
+    return;
+  }
+  await moveCollectionTreeItem(source, target, position);
+}
+
+async function moveTopLevelTreeItem(source, target, position = 'after') {
+  if (!source?.id || !target?.id || source.id === target.id) {
+    return false;
+  }
+  if (source.kind === 'workspace') {
+    const nextWorkspaces = reorderItemsById(workspaces, source.id, target.id, position);
+    if (!nextWorkspaces) {
+      return false;
+    }
+    workspaces = nextWorkspaces;
+    renderWorkspaces();
+    await persistSessionState();
+    setStatus('Workspace list order saved.');
+    return true;
+  }
+  const listByKind = {
+    environment: workspace.environments,
+    runner: ensureWorkspaceRunners(),
+    collection: workspace.collections
+  };
+  const list = listByKind[source.kind];
+  const nextList = reorderItemsById(list, source.id, target.id, position);
+  if (!nextList) {
+    return false;
+  }
+  const previousWorkspace = cloneJson(workspace);
+  if (source.kind === 'environment') {
+    workspace.environments = nextList;
+    renderEnvironments();
+  } else if (source.kind === 'runner') {
+    workspace.runners = nextList;
+    renderRunners();
+  } else {
+    workspace.collections = nextList;
+    renderCollections();
+  }
+  if (!(await persistWorkspaceStructureOnly(`${titleCaseTreeKind(source.kind)} order saved.`, previousWorkspace))) {
+    return false;
+  }
+  return true;
+}
+
+async function moveCollectionTreeItem(source, target, position = 'after') {
+  const previousWorkspace = cloneJson(workspace);
+  const previousRequestTabs = cloneJson(openRequestTabs);
+  const previousActiveCollectionId = activeCollectionId;
+  const previousActiveFolderId = activeFolderId;
+  let moved = false;
+  if (source.kind === 'request') {
+    moved = moveRequestTreeItem(source.id, target, position);
+  } else if (source.kind === 'folder') {
+    moved = moveFolderTreeItem(source.id, target, position);
+  }
+  if (!moved) {
+    return false;
+  }
+  renderCollections();
+  renderRequestTabs();
+  if (!(await persistWorkspaceStructureOnly('Collection order saved.', previousWorkspace, {
+    previousRequestTabs,
+    previousActiveCollectionId,
+    previousActiveFolderId
+  }))) {
+    return false;
+  }
+  return true;
+}
+
+function reorderItemsById(items, sourceId, targetId, position = 'after') {
+  const list = Array.isArray(items) ? [...items] : [];
+  const fromIndex = list.findIndex((item) => item.id === sourceId);
+  const targetIndex = list.findIndex((item) => item.id === targetId);
+  if (fromIndex < 0 || targetIndex < 0 || fromIndex === targetIndex) {
+    return null;
+  }
+  const [item] = list.splice(fromIndex, 1);
+  const nextTargetIndex = list.findIndex((candidate) => candidate.id === targetId);
+  const insertIndex = position === 'before' ? nextTargetIndex : nextTargetIndex + 1;
+  list.splice(Math.max(0, insertIndex), 0, item);
+  return list;
+}
+
+function moveRequestTreeItem(requestId, target, position = 'after') {
+  const source = findRequestTreeContext(requestId);
+  if (!source?.request || source.request.id === target?.id) {
+    return false;
+  }
+  source.list.splice(source.index, 1);
+  const destination = requestDropDestination(target, position);
+  if (!destination?.list) {
+    source.list.splice(source.index, 0, source.request);
+    return false;
+  }
+  destination.list.splice(destination.index, 0, source.request);
+  updateOpenRequestTabsForMovedRequest(source.request.id, destination.collection.id, destination.folder?.id || '');
+  if (activeRequestId === source.request.id && !activeRunnerRequestRunnerId) {
+    activeCollectionId = destination.collection.id;
+    activeFolderId = destination.folder?.id || null;
+  }
+  return true;
+}
+
+function moveFolderTreeItem(folderId, target, position = 'after') {
+  const source = findFolderTreeContext(folderId);
+  if (!source?.folder || isFolderDescendantOrSelf(source.folder.id, target?.id)) {
+    return false;
+  }
+  source.list.splice(source.index, 1);
+  const destination = folderDropDestination(target, position);
+  if (!destination?.list) {
+    source.list.splice(source.index, 0, source.folder);
+    return false;
+  }
+  destination.list.splice(destination.index, 0, source.folder);
+  updateOpenRequestTabsForMovedFolder(source.folder, destination.collection.id);
+  if (!activeRunnerRequestRunnerId && activeFolderId === source.folder.id) {
+    activeCollectionId = destination.collection.id;
+  }
+  return true;
+}
+
+function requestDropDestination(target, position = 'after') {
+  if (target.kind === 'collection') {
+    const collection = workspace.collections.find((item) => item.id === target.id);
+    return collection ? { collection, folder: null, list: collection.requests ||= [], index: (collection.requests || []).length } : null;
+  }
+  if (target.kind === 'folder') {
+    const folderContext = findFolderTreeContext(target.id);
+    return folderContext ? { collection: folderContext.collection, folder: folderContext.folder, list: folderContext.folder.requests ||= [], index: (folderContext.folder.requests || []).length } : null;
+  }
+  if (target.kind === 'request') {
+    const requestContext = findRequestTreeContext(target.id);
+    if (!requestContext) {
+      return null;
+    }
+    return {
+      collection: requestContext.collection,
+      folder: requestContext.folder,
+      list: requestContext.list,
+      index: position === 'before' ? requestContext.index : requestContext.index + 1
+    };
+  }
+  return null;
+}
+
+function folderDropDestination(target, position = 'after') {
+  if (target.kind === 'collection') {
+    const collection = workspace.collections.find((item) => item.id === target.id);
+    return collection ? { collection, parentFolder: null, list: collection.folders ||= [], index: (collection.folders || []).length } : null;
+  }
+  if (target.kind === 'folder') {
+    const folderContext = findFolderTreeContext(target.id);
+    if (!folderContext) {
+      return null;
+    }
+    return {
+      collection: folderContext.collection,
+      parentFolder: folderContext.parentFolder,
+      list: folderContext.list,
+      index: position === 'before' ? folderContext.index : folderContext.index + 1
+    };
+  }
+  return null;
+}
+
+function findRequestTreeContext(requestId) {
+  for (const collection of workspace.collections || []) {
+    const directIndex = (collection.requests || []).findIndex((request) => request.id === requestId);
+    if (directIndex >= 0) {
+      return {
+        collection,
+        folder: null,
+        list: collection.requests,
+        index: directIndex,
+        request: collection.requests[directIndex]
+      };
+    }
+    for (const folder of collection.folders || []) {
+      const found = findRequestTreeContextInFolder(collection, folder, requestId);
+      if (found) {
+        return found;
+      }
+    }
+  }
+  return null;
+}
+
+function findRequestTreeContextInFolder(collection, folder, requestId) {
+  const index = (folder.requests || []).findIndex((request) => request.id === requestId);
+  if (index >= 0) {
+    return {
+      collection,
+      folder,
+      list: folder.requests,
+      index,
+      request: folder.requests[index]
+    };
+  }
+  for (const child of folder.folders || []) {
+    const found = findRequestTreeContextInFolder(collection, child, requestId);
+    if (found) {
+      return found;
+    }
+  }
+  return null;
+}
+
+function findFolderTreeContext(folderId) {
+  for (const collection of workspace.collections || []) {
+    const found = findFolderTreeContextInList(collection, null, collection.folders ||= [], folderId);
+    if (found) {
+      return found;
+    }
+  }
+  return null;
+}
+
+function findFolderTreeContextInList(collection, parentFolder, list, folderId) {
+  const index = list.findIndex((folder) => folder.id === folderId);
+  if (index >= 0) {
+    return {
+      collection,
+      parentFolder,
+      list,
+      index,
+      folder: list[index]
+    };
+  }
+  for (const folder of list) {
+    const found = findFolderTreeContextInList(collection, folder, folder.folders ||= [], folderId);
+    if (found) {
+      return found;
+    }
+  }
+  return null;
+}
+
+function isFolderDescendantOrSelf(sourceFolderId, targetFolderId) {
+  if (!sourceFolderId || !targetFolderId) {
+    return false;
+  }
+  if (sourceFolderId === targetFolderId) {
+    return true;
+  }
+  const source = findFolderTreeContext(sourceFolderId)?.folder;
+  if (!source) {
+    return false;
+  }
+  return folderContainsFolder(source, targetFolderId);
+}
+
+function folderContainsFolder(folder, targetFolderId) {
+  for (const child of folder.folders || []) {
+    if (child.id === targetFolderId || folderContainsFolder(child, targetFolderId)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function updateOpenRequestTabsForMovedRequest(requestId, collectionId, folderId = '') {
+  for (const tab of openRequestTabs || []) {
+    if (tab.runnerRequest === true || tab.runnerId || tab.draft || tab.requestId !== requestId) {
+      continue;
+    }
+    const oldKey = tab.key;
+    tab.collectionId = collectionId;
+    tab.folderId = folderId || null;
+    tab.key = `request:${collectionId}:${requestId}`;
+    updateDirtyRequestOwnerKey(oldKey, tab.key);
+  }
+}
+
+function updateOpenRequestTabsForMovedFolder(folder, collectionId) {
+  for (const request of folder.requests || []) {
+    updateOpenRequestTabsForMovedRequest(request.id, collectionId, folder.id);
+    if (activeRequestId === request.id && !activeRunnerRequestRunnerId) {
+      activeCollectionId = collectionId;
+      activeFolderId = folder.id;
+    }
+  }
+  for (const child of folder.folders || []) {
+    updateOpenRequestTabsForMovedFolder(child, collectionId);
+  }
+}
+
+function updateDirtyRequestOwnerKey(oldKey, nextKey) {
+  if (!oldKey || oldKey === nextKey) {
+    return;
+  }
+  if (collectionDirtyOwners instanceof Map) {
+    for (const [collectionId, owner] of Array.from(collectionDirtyOwners.entries())) {
+      if (owner === oldKey) {
+        collectionDirtyOwners.set(collectionId, nextKey);
+      }
+    }
+  }
+  if (cookieJarDirtyOwner === oldKey) {
+    cookieJarDirtyOwner = nextKey;
+  }
+}
+
+async function persistWorkspaceStructureOnly(successStatus, previousWorkspace, rollback = {}) {
+  try {
+    const save = window.__postmeterSaveWorkspace || window.postmeter.workspace.save;
+    await save(buildWorkspaceForStructuralSave());
+    setStatus(successStatus);
+    return true;
+  } catch (error) {
+    const message = error.message || String(error);
+    if (previousWorkspace) {
+      workspace = previousWorkspace;
+    }
+    if (rollback.previousRequestTabs) {
+      openRequestTabs = rollback.previousRequestTabs;
+    }
+    if (rollback.previousActiveCollectionId !== undefined) {
+      activeCollectionId = rollback.previousActiveCollectionId;
+    }
+    if (rollback.previousActiveFolderId !== undefined) {
+      activeFolderId = rollback.previousActiveFolderId;
+    }
+    renderAll();
+    setStatus(`Order save failed: ${message}`);
+    notifyUser('Order Save Failed', message);
+    return false;
+  }
+}
+
+function buildWorkspaceForStructuralSave() {
+  const payload = cloneJson(workspace) || {};
+  restoreDirtyRequestsForStructuralSave(payload);
+  restoreDirtyEnvironmentsForStructuralSave(payload);
+  restoreDirtyRunnersForStructuralSave(payload);
+  restoreDirtySharedStateForStructuralSave(payload);
+  return payload;
+}
+
+function restoreDirtyRequestsForStructuralSave(payload) {
+  for (const tab of openRequestTabs || []) {
+    if (tab.draft === true || tab.createdUnsaved === true) {
+      removeRequestFromStructuralPayload(payload, tab);
+      continue;
+    }
+    if (tab.dirty !== true || !tab.snapshot) {
+      continue;
+    }
+    const snapshot = parseSnapshot(tab.snapshot);
+    if (!snapshot) {
+      continue;
+    }
+    if (tab.runnerRequest === true || tab.runnerId) {
+      const runner = (payload.runners || []).find((item) => item.id === tab.runnerId);
+      const index = (runner?.requests || []).findIndex((request) => request.id === tab.requestId);
+      if (index >= 0) {
+        runner.requests[index] = snapshot;
+      }
+      continue;
+    }
+    const context = findRequestContextInWorkspacePayload(payload, tab.collectionId, tab.requestId);
+    if (context) {
+      context.list[context.index] = snapshot;
+    }
+  }
+}
+
+function restoreDirtyEnvironmentsForStructuralSave(payload) {
+  for (const tab of openEnvironmentTabs || []) {
+    const index = (payload.environments || []).findIndex((environment) => environment.id === tab.environmentId);
+    if (index < 0) {
+      continue;
+    }
+    if (tab.createdUnsaved === true) {
+      payload.environments.splice(index, 1);
+      continue;
+    }
+    if (tab.dirty === true && tab.snapshot) {
+      const snapshot = parseSnapshot(tab.snapshot);
+      if (snapshot) {
+        payload.environments[index] = snapshot;
+      }
+    }
+  }
+}
+
+function restoreDirtyRunnersForStructuralSave(payload) {
+  for (const tab of openRunnerTabs || []) {
+    const index = (payload.runners || []).findIndex((runner) => runner.id === tab.runnerId);
+    if (index < 0) {
+      continue;
+    }
+    if (tab.createdUnsaved === true) {
+      payload.runners.splice(index, 1);
+      continue;
+    }
+    if (tab.dirty === true && tab.snapshot) {
+      const snapshot = parseSnapshot(tab.snapshot);
+      if (snapshot) {
+        payload.runners[index] = snapshot;
+      }
+    }
+  }
+}
+
+function restoreDirtySharedStateForStructuralSave(payload) {
+  if (collectionDirtySnapshots instanceof Map) {
+    for (const [collectionId, snapshotValue] of collectionDirtySnapshots.entries()) {
+      const collection = (payload.collections || []).find((item) => item.id === collectionId);
+      const snapshot = parseSnapshot(snapshotValue);
+      if (collection && Array.isArray(snapshot)) {
+        collection.variables = snapshot;
+      }
+    }
+  }
+  if (cookieJarDirtySnapshot != null) {
+    const snapshot = parseSnapshot(cookieJarDirtySnapshot);
+    if (Array.isArray(snapshot)) {
+      payload.cookies = snapshot;
+    }
+  }
+}
+
+function removeRequestFromStructuralPayload(payload, tab) {
+  if (tab.runnerRequest === true || tab.runnerId) {
+    const runner = (payload.runners || []).find((item) => item.id === tab.runnerId);
+    if (runner) {
+      runner.requests = (runner.requests || []).filter((request) => request.id !== tab.requestId);
+    }
+    return;
+  }
+  const context = findRequestContextInWorkspacePayload(payload, tab.collectionId, tab.requestId);
+  if (context) {
+    context.list.splice(context.index, 1);
+  }
+}
+
+function findRequestContextInWorkspacePayload(workspaceValue, collectionId, requestId) {
+  const collection = (workspaceValue.collections || []).find((item) => item.id === collectionId);
+  if (!collection) {
+    return null;
+  }
+  return findRequestContextInPayloadContainer(collection, collection.requests ||= [], requestId)
+    || findRequestContextInPayloadFolders(collection.folders ||= [], requestId);
+}
+
+function findRequestContextInPayloadFolders(folders, requestId) {
+  for (const folder of folders || []) {
+    const direct = findRequestContextInPayloadContainer(folder, folder.requests ||= [], requestId);
+    if (direct) {
+      return direct;
+    }
+    const nested = findRequestContextInPayloadFolders(folder.folders ||= [], requestId);
+    if (nested) {
+      return nested;
+    }
+  }
+  return null;
+}
+
+function findRequestContextInPayloadContainer(container, list, requestId) {
+  const index = list.findIndex((request) => request.id === requestId);
+  return index >= 0 ? { container, list, index } : null;
+}
+
+function parseSnapshot(snapshotValue) {
+  try {
+    return JSON.parse(snapshotValue);
+  } catch {
+    return null;
+  }
+}
+
+function titleCaseTreeKind(kind) {
+  return String(kind || 'Item').charAt(0).toUpperCase() + String(kind || 'item').slice(1);
 }
 
 function treeFocusTarget(kind, id) {
@@ -5940,7 +6639,8 @@ async function newWorkspace() {
     const createdWorkspaceId = loaded.createdWorkspaceId
       || loaded.workspaces?.find((item) => !previousWorkspaceIds.has(item.id))?.id
       || null;
-    workspaces = Array.isArray(loaded?.workspaces) ? loaded.workspaces : workspaces;
+    const nextWorkspaceOrder = [...workspaceOrder(), createdWorkspaceId].filter(Boolean);
+    workspaces = Array.isArray(loaded?.workspaces) ? orderWorkspaceItems(loaded.workspaces, nextWorkspaceOrder) : workspaces;
     activeWorkspaceId = loaded?.activeWorkspaceId || activeWorkspaceId;
     workspacePath = loaded?.path || workspacePath;
     selectedWorkspaceId = createdWorkspaceId || selectedWorkspaceId || activeWorkspaceId;

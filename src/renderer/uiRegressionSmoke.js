@@ -41,6 +41,7 @@
     await assertWorkspaceSandboxAccessibilitySmoke();
     await assertLargeWorkspaceBudgetSmoke();
     await assertEditorCollectionSmoke();
+    await assertSidebarTreeDragSmoke();
     assertCreationSemanticsSmoke();
     await assertRequestTabCloseSmoke();
 
@@ -953,6 +954,287 @@
     );
   }
 
+  async function assertSidebarTreeDragSmoke() {
+    const originalWorkspace = structuredClone(workspace);
+    const originalWorkspaces = structuredClone(workspaces);
+    const originalActiveCollectionId = activeCollectionId;
+    const originalActiveFolderId = activeFolderId;
+    const originalActiveRequestId = activeRequestId;
+    const originalActiveEnvironmentId = activeEnvironmentId;
+    const originalActiveRunnerConfigId = activeRunnerConfigId;
+    const originalActiveRunnerRequestRunnerId = activeRunnerRequestRunnerId;
+    const originalActiveWorkspaceId = activeWorkspaceId;
+    const originalSelectedWorkspaceId = selectedWorkspaceId;
+    const originalSidebarPanel = activeSidebarPanel;
+    const originalMainPanel = activeMainPanel;
+    const originalOpenRequestTabs = structuredClone(openRequestTabs);
+    const originalEnvironmentTabs = structuredClone(openEnvironmentTabs);
+    const originalRunnerTabs = structuredClone(openRunnerTabs);
+    const originalWorkspaceTabs = structuredClone(openWorkspaceTabs);
+    const originalSessionPersistenceEnabled = sessionPersistenceEnabled;
+    const originalSaveWorkspace = window.__postmeterSaveWorkspace;
+    const originalSaveSession = window.__postmeterSaveSession;
+    const savedPayloads = [];
+    let savedSession = null;
+    try {
+      const dragRequest = newRequestObject('Drag Saved Request');
+      dragRequest.id = 'drag-request-saved';
+      dragRequest.url = 'https://saved-drag.example.test';
+      const siblingRequest = newRequestObject('Drag Sibling Request');
+      siblingRequest.id = 'drag-request-sibling';
+      siblingRequest.url = 'https://sibling-drag.example.test';
+      const targetRequest = newRequestObject('Drag Target Request');
+      targetRequest.id = 'drag-request-target';
+      targetRequest.url = 'https://target-drag.example.test';
+      const folderRequest = newRequestObject('Drag Folder Request');
+      folderRequest.id = 'drag-folder-request';
+      folderRequest.url = 'https://folder-drag.example.test';
+      const folder = {
+        id: 'drag-folder-a',
+        name: 'Drag Folder A',
+        requests: [folderRequest],
+        folders: []
+      };
+      const siblingFolder = {
+        id: 'drag-folder-b',
+        name: 'Drag Folder B',
+        requests: [],
+        folders: []
+      };
+      workspace = {
+        schemaVersion: 11,
+        collections: [
+          {
+            id: 'drag-collection-a',
+            name: 'Drag Collection A',
+            description: '',
+            variables: [],
+            certificates: [],
+            requests: [dragRequest, siblingRequest],
+            folders: [folder]
+          },
+          {
+            id: 'drag-collection-b',
+            name: 'Drag Collection B',
+            description: '',
+            variables: [],
+            certificates: [],
+            requests: [targetRequest],
+            folders: [siblingFolder]
+          }
+        ],
+        environments: [
+          { id: 'drag-environment-a', name: 'Drag Environment A', variables: [] },
+          { id: 'drag-environment-b', name: 'Drag Environment B', variables: [] }
+        ],
+        runners: [
+          { id: 'drag-runner-a', name: 'Drag Runner A', environmentId: 'none', requests: [] },
+          { id: 'drag-runner-b', name: 'Drag Runner B', environmentId: 'none', requests: [] }
+        ],
+        globals: [],
+        cookies: [],
+        history: [],
+        settings: {
+          appearance: { theme: 'system' },
+          updates: { includePrereleases: false },
+          tabs: { saveOnForceClose: false }
+        }
+      };
+      workspaces = [
+        { id: 'drag-workspace-a.json', name: 'Drag Workspace A', current: true, deletable: false },
+        { id: 'drag-workspace-b.json', name: 'Drag Workspace B', current: false, deletable: true }
+      ];
+      activeWorkspaceId = 'drag-workspace-a.json';
+      selectedWorkspaceId = 'drag-workspace-a.json';
+      activeSidebarPanel = 'collections';
+      activeMainPanel = 'request';
+      activeCollectionId = 'drag-collection-a';
+      activeFolderId = null;
+      activeRequestId = dragRequest.id;
+      activeEnvironmentId = 'none';
+      activeRunnerConfigId = null;
+      activeRunnerRequestRunnerId = null;
+      resetRequestTabs();
+      ensureOpenRequestTabForActive();
+      window.__postmeterSaveWorkspace = async (nextWorkspace) => {
+        savedPayloads.push(structuredClone(nextWorkspace));
+        return nextWorkspace;
+      };
+      sessionPersistenceEnabled = true;
+      window.__postmeterSaveSession = async (session) => {
+        savedSession = structuredClone(session);
+        return session;
+      };
+      renderAll();
+
+      for (const [kind, id] of [
+        ['collection', 'drag-collection-a'],
+        ['request', dragRequest.id],
+        ['folder', folder.id],
+        ['environment', 'drag-environment-a'],
+        ['runner', 'drag-runner-a'],
+        ['workspace', 'drag-workspace-a.json']
+      ]) {
+        const button = treeButtonByTarget(kind, id);
+        assertUiSmoke(button?.draggable === true, `${kind} tree item should be draggable.`);
+        assertUiSmoke(treeDropBarByTarget(kind, id, 'before'), `${kind} tree item should render a hidden before-drop bar.`);
+      }
+      assertUiSmoke($('environmentsList').querySelectorAll('.tree-drop-bar').length === workspace.environments.length + 1, 'Environment list should render one drop bar per insertion point.');
+      assertUiSmoke(treeDropBarByTarget('environment', 'drag-environment-b', 'after'), 'Environment list should render one trailing after-drop bar.');
+      sidebarTreeDragPayload = { kind: 'environment', id: 'drag-environment-b' };
+      const environmentTargetButton = treeButtonByTarget('environment', 'drag-environment-a');
+      const environmentBeforeBar = treeDropBarByTarget('environment', 'drag-environment-a', 'before');
+      const environmentAfterBar = treeDropBarByTarget('environment', 'drag-environment-b', 'before');
+      environmentBeforeBar.dispatchEvent(new MouseEvent('dragover', { bubbles: true, cancelable: true }));
+      assertUiSmoke(environmentBeforeBar.classList.contains('is-drop-target'), 'Dragging over a hidden drop bar should highlight that bar.');
+      assertUiSmoke(!environmentTargetButton.classList.contains('is-drop-target'), 'Dragging over a drop target should not highlight the tree item itself.');
+      environmentAfterBar.dispatchEvent(new MouseEvent('dragover', { bubbles: true, cancelable: true }));
+      assertUiSmoke(environmentAfterBar.classList.contains('is-drop-target'), 'Dragging over a different hidden drop bar should move the highlighted placement bar.');
+      assertUiSmoke(!environmentBeforeBar.classList.contains('is-drop-target'), 'Only one sidebar drop bar should be highlighted at a time.');
+      const environmentTargetRect = environmentTargetButton.getBoundingClientRect();
+      if (environmentTargetRect.height > 4) {
+        environmentTargetButton.dispatchEvent(new MouseEvent('dragover', {
+          bubbles: true,
+          cancelable: true,
+          clientY: environmentTargetRect.top + 1
+        }));
+        assertUiSmoke(environmentBeforeBar.classList.contains('is-drop-target'), 'Dragging over the upper half of a tree item should highlight its before bar.');
+        environmentTargetButton.dispatchEvent(new MouseEvent('dragover', {
+          bubbles: true,
+          cancelable: true,
+          clientY: environmentTargetRect.bottom - 1
+        }));
+        assertUiSmoke(environmentAfterBar.classList.contains('is-drop-target'), 'Dragging over the lower half of a tree item should highlight its after bar.');
+      }
+      clearSidebarTreeDropTargets();
+      sidebarTreeDragPayload = null;
+      assertUiSmoke(
+        !canDropSidebarTreeItem(
+          { kind: 'collection', id: 'drag-collection-a' },
+          { kind: 'folder', id: folder.id }
+        ),
+        'Collections should not be droppable into folders.'
+      );
+
+      await moveTopLevelTreeItem(
+        { kind: 'environment', id: 'drag-environment-b' },
+        { kind: 'environment', id: 'drag-environment-a' },
+        'before'
+      );
+      assertUiSmoke(workspace.environments.map((item) => item.id).join('|') === 'drag-environment-b|drag-environment-a', 'Environment drag reorder did not update the in-memory order.');
+      assertUiSmoke(savedPayloads.at(-1)?.environments?.map((item) => item.id).join('|') === 'drag-environment-b|drag-environment-a', 'Environment drag reorder did not save the new order.');
+
+      await moveTopLevelTreeItem(
+        { kind: 'runner', id: 'drag-runner-b' },
+        { kind: 'runner', id: 'drag-runner-a' },
+        'before'
+      );
+      assertUiSmoke(workspace.runners.map((item) => item.id).join('|') === 'drag-runner-b|drag-runner-a', 'Runner drag reorder did not update the in-memory order.');
+      assertUiSmoke(savedPayloads.at(-1)?.runners?.map((item) => item.id).join('|') === 'drag-runner-b|drag-runner-a', 'Runner drag reorder did not save the new order.');
+
+      await moveTopLevelTreeItem(
+        { kind: 'collection', id: 'drag-collection-b' },
+        { kind: 'collection', id: 'drag-collection-a' },
+        'before'
+      );
+      assertUiSmoke(workspace.collections.map((item) => item.id).join('|') === 'drag-collection-b|drag-collection-a', 'Collection drag reorder did not update the in-memory order.');
+      assertUiSmoke(savedPayloads.at(-1)?.collections?.map((item) => item.id).join('|') === 'drag-collection-b|drag-collection-a', 'Collection drag reorder did not save the new order.');
+
+      await moveTopLevelTreeItem(
+        { kind: 'workspace', id: 'drag-workspace-b.json' },
+        { kind: 'workspace', id: 'drag-workspace-a.json' },
+        'before'
+      );
+      assertUiSmoke(workspaces.map((item) => item.id).join('|') === 'drag-workspace-b.json|drag-workspace-a.json', 'Workspace drag reorder did not update the managed workspace order.');
+      assertUiSmoke(savedSession?.workspaceOrder?.join('|') === 'drag-workspace-b.json|drag-workspace-a.json', 'Workspace drag reorder did not save the session workspace order.');
+
+      selectRequestTab(openRequestTabs.find((tab) => tab.requestId === dragRequest.id));
+      $('urlInput').value = 'https://dirty-drag.example.test';
+      dispatchInput($('urlInput'));
+      const dirtyTab = openRequestTabs.find((tab) => tab.requestId === dragRequest.id);
+      assertUiSmoke(dirtyTab?.dirty === true, 'Editing the drag request should mark its tab dirty before moving it.');
+      const saveCallsBeforeRequestMove = savedPayloads.length;
+      await moveCollectionTreeItem(
+        { kind: 'request', id: dragRequest.id },
+        { kind: 'collection', id: 'drag-collection-b' },
+        'after'
+      );
+      assertUiSmoke(savedPayloads.length === saveCallsBeforeRequestMove + 1, 'Moving a request should save the structural collection change.');
+      const liveTargetCollection = workspace.collections.find((item) => item.id === 'drag-collection-b');
+      const liveSourceCollection = workspace.collections.find((item) => item.id === 'drag-collection-a');
+      assertUiSmoke(!liveSourceCollection.requests.some((request) => request.id === dragRequest.id), 'Moving a request should remove it from the source collection.');
+      assertUiSmoke(liveTargetCollection.requests.some((request) => request.id === dragRequest.id), 'Moving a request should add it to the target collection.');
+      assertUiSmoke(liveTargetCollection.requests.find((request) => request.id === dragRequest.id)?.url === 'https://dirty-drag.example.test', 'Moving a dirty request should keep the dirty editor state in memory.');
+      const savedAfterRequestMove = savedPayloads.at(-1);
+      const savedTargetCollection = savedAfterRequestMove.collections.find((item) => item.id === 'drag-collection-b');
+      const savedSourceCollection = savedAfterRequestMove.collections.find((item) => item.id === 'drag-collection-a');
+      const savedMovedRequest = savedTargetCollection.requests.find((request) => request.id === dragRequest.id);
+      assertUiSmoke(!savedSourceCollection.requests.some((request) => request.id === dragRequest.id), 'Structural request move should save removal from the source collection.');
+      assertUiSmoke(savedMovedRequest?.url === 'https://saved-drag.example.test', 'Structural request move should not save dirty request editor fields.');
+      assertUiSmoke(dirtyTab.collectionId === 'drag-collection-b', 'Moving an open request should retarget its open tab collection.');
+      assertUiSmoke(dirtyTab.key === `request:drag-collection-b:${dragRequest.id}`, 'Moving an open request should retarget its open tab key.');
+      assertUiSmoke(dirtyTab.dirty === true, 'Moving an open dirty request should keep the tab dirty.');
+
+      await moveCollectionTreeItem(
+        { kind: 'request', id: targetRequest.id },
+        { kind: 'request', id: dragRequest.id },
+        'after'
+      );
+      assertUiSmoke(
+        liveTargetCollection.requests.map((request) => request.id).slice(-2).join('|') === `${dragRequest.id}|${targetRequest.id}`,
+        'Dragging a request within a collection should reorder it relative to another request.'
+      );
+      assertUiSmoke(
+        savedPayloads.at(-1).collections.find((item) => item.id === 'drag-collection-b').requests.map((request) => request.id).slice(-2).join('|') === `${dragRequest.id}|${targetRequest.id}`,
+        'Request reorder should save the new request order.'
+      );
+
+      const saveCallsBeforeFolderMove = savedPayloads.length;
+      await moveCollectionTreeItem(
+        { kind: 'folder', id: folder.id },
+        { kind: 'collection', id: 'drag-collection-b' },
+        'after'
+      );
+      assertUiSmoke(savedPayloads.length === saveCallsBeforeFolderMove + 1, 'Moving a folder should save the structural collection change.');
+      assertUiSmoke(!liveSourceCollection.folders.some((item) => item.id === folder.id), 'Moving a folder should remove it from the source collection.');
+      assertUiSmoke(liveTargetCollection.folders.some((item) => item.id === folder.id), 'Moving a folder should add it to the target collection.');
+      assertUiSmoke(
+        savedPayloads.at(-1).collections.find((item) => item.id === 'drag-collection-b').folders.some((item) => item.id === folder.id),
+        'Folder move should save the target collection folder membership.'
+      );
+      await moveCollectionTreeItem(
+        { kind: 'folder', id: siblingFolder.id },
+        { kind: 'folder', id: folder.id },
+        'before'
+      );
+      assertUiSmoke(
+        liveTargetCollection.folders.map((item) => item.id).slice(-2).join('|') === `${siblingFolder.id}|${folder.id}`,
+        'Dragging a folder within a collection should reorder it relative to another folder.'
+      );
+    } finally {
+      workspace = originalWorkspace;
+      workspaces = originalWorkspaces;
+      activeCollectionId = originalActiveCollectionId;
+      activeFolderId = originalActiveFolderId;
+      activeRequestId = originalActiveRequestId;
+      activeEnvironmentId = originalActiveEnvironmentId;
+      activeRunnerConfigId = originalActiveRunnerConfigId;
+      activeRunnerRequestRunnerId = originalActiveRunnerRequestRunnerId;
+      activeWorkspaceId = originalActiveWorkspaceId;
+      selectedWorkspaceId = originalSelectedWorkspaceId;
+      activeSidebarPanel = originalSidebarPanel;
+      activeMainPanel = originalMainPanel;
+      openRequestTabs = originalOpenRequestTabs;
+      openEnvironmentTabs = originalEnvironmentTabs;
+      openRunnerTabs = originalRunnerTabs;
+      openWorkspaceTabs = originalWorkspaceTabs;
+      sessionPersistenceEnabled = originalSessionPersistenceEnabled;
+      window.__postmeterSaveWorkspace = originalSaveWorkspace;
+      window.__postmeterSaveSession = originalSaveSession;
+      renderAll();
+    }
+  }
+
   function assertOauthProgressSmoke() {
     activateTab('request', 'auth');
     $('authTypeSelect').value = 'oauth2';
@@ -1361,6 +1643,17 @@
 
   function treeButtonByTarget(kind, id) {
     return document.querySelector(`.tree-item[data-tree-kind="${cssAttributeValue(kind)}"][data-tree-id="${cssAttributeValue(id)}"]`);
+  }
+
+  function treeDropBarByTarget(kind, id, position) {
+    return Array.from(document.querySelectorAll('.tree-drop-bar')).find((bar) => (
+      Array.isArray(bar.__postmeterDropCandidates)
+      && bar.__postmeterDropCandidates.some((candidate) => (
+        candidate?.target?.kind === kind
+        && candidate.target.id === id
+        && candidate.position === position
+      ))
+    )) || null;
   }
 
   function cssAttributeValue(value) {

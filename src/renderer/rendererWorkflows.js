@@ -1086,7 +1086,9 @@
     }
 
     async function saveWorkspace(showStatus = true, config = {}) {
-      collectActiveEditorState();
+      if (config.collectActiveEditorState !== false) {
+        collectActiveEditorState();
+      }
       if (
         config.promptForDraft === true
         && state.activeMainPanel === 'request'

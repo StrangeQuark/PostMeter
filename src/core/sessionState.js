@@ -26,6 +26,7 @@ function defaultSessionState() {
     openEnvironmentTabs: [],
     openWorkspaceTabs: [],
     openRunnerTabs: [],
+    workspaceOrder: [],
     draftRequests: [],
     dirtyCollectionStates: [],
     dirtyCookieJarState: null
@@ -52,6 +53,7 @@ function normalizeSessionState(value = {}) {
     openEnvironmentTabs: normalizeArray(value.openEnvironmentTabs, MAX_OPEN_TABS, normalizeEnvironmentTab),
     openWorkspaceTabs: normalizeArray(value.openWorkspaceTabs, MAX_OPEN_TABS, normalizeWorkspaceTab),
     openRunnerTabs: normalizeArray(value.openRunnerTabs, MAX_OPEN_TABS, normalizeRunnerTab),
+    workspaceOrder: normalizeArray(value.workspaceOrder, MAX_OPEN_TABS, normalizeId).filter(Boolean),
     draftRequests: normalizeArray(value.draftRequests, MAX_OPEN_TABS, normalizeSessionRequest),
     dirtyCollectionStates: normalizeArray(value.dirtyCollectionStates, MAX_OPEN_TABS, normalizeDirtyCollectionState),
     dirtyCookieJarState: normalizeDirtyCookieJarState(value.dirtyCookieJarState)
