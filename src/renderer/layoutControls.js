@@ -60,7 +60,12 @@ function setupDragResize(id, config) {
     event.preventDefault();
     const resizeClass = handle.classList.contains('horizontal') ? 'is-resizing-row' : 'is-resizing-col';
     document.body.classList.add('is-resizing', resizeClass);
-    const onMouseMove = (moveEvent) => applySplitterValue(handle, config, config.valueFromEvent(moveEvent));
+    const startPointerValue = config.valueFromEvent(event);
+    const startLayoutValue = currentLayoutPixels(config.cssVariable, config.fallbackPixels, config);
+    const onMouseMove = (moveEvent) => {
+      const pointerDelta = config.valueFromEvent(moveEvent) - startPointerValue;
+      applySplitterValue(handle, config, startLayoutValue + pointerDelta);
+    };
     const onMouseUp = () => {
       document.body.classList.remove('is-resizing', resizeClass);
       document.removeEventListener('mousemove', onMouseMove);

@@ -192,6 +192,20 @@
     document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: 360 }));
     document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
     assertUiSmoke(!document.body.classList.contains('is-resizing'), 'Main pane resize did not exit resizing state.');
+
+    const workspaceHandle = $('workspacePaneResize');
+    const workspaceHandleRect = workspaceHandle.getBoundingClientRect();
+    const startY = Math.round(workspaceHandleRect.top + (workspaceHandleRect.height / 2));
+    const startValue = Math.round($('requestEditorPanel').getBoundingClientRect().height);
+    workspaceHandle.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, clientY: startY }));
+    document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientY: startY }));
+    const samePositionValue = Number(workspaceHandle.getAttribute('aria-valuenow'));
+    assertUiSmoke(Math.abs(samePositionValue - startValue) <= 1, `Workspace pane resize should not jump on the first mouse move. start=${startValue} same=${samePositionValue}.`);
+    document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientY: startY + 24 }));
+    const movedValue = Number(workspaceHandle.getAttribute('aria-valuenow'));
+    assertUiSmoke(Math.abs(movedValue - (startValue + 24)) <= 2, `Workspace pane resize should track pointer delta. start=${startValue} moved=${movedValue}.`);
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+    assertUiSmoke(!document.body.classList.contains('is-resizing'), 'Workspace pane resize did not exit resizing state.');
   }
 
   function resolveUiSmokeCommon(runtimeGlobal) {
