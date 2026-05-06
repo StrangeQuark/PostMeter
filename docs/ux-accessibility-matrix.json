@@ -7,7 +7,7 @@
     {
       "id": "a11y.dynamic-controls",
       "area": "Accessibility",
-      "target": "Dynamic workspace, package, file-binding, splitter, autocomplete combobox/listbox, context-menu, cookie, request-variable, response, and modal controls expose accessible names, keyboard focus behavior, and stable labels; production renderer workflows avoid raw native prompt, confirm, and alert dialogs.",
+      "target": "Dynamic workspace, package, file-binding, splitter, autocomplete combobox/listbox, toolbar/tree/tab/history context-menu, sidebar drag/drop insertion-bar, cookie, request-variable, response, runner import, history-clear, and modal controls expose accessible names, keyboard focus behavior, and stable labels; production renderer workflows avoid raw native prompt, confirm, and alert dialogs.",
       "status": "implemented",
       "evidenceRefs": [
         "src/renderer/index.html",
@@ -56,7 +56,7 @@
     {
       "id": "a11y.tabs-and-panels",
       "area": "Accessibility",
-      "target": "Request/result tabs, sidebar tabs, opened request/environment/workspace tabs, and tab panels expose roles, selected state, labels, relationships, and close controls that are not nested inside tab roles.",
+      "target": "Request/result tabs, sidebar tabs, opened request/environment/workspace/runner tabs, and tab panels expose roles, selected state, labels, relationships, hover/active close controls, and capped/scrollable tab behavior without nesting controls inside tab roles.",
       "status": "implemented",
       "evidenceRefs": [
         "src/renderer/index.html",
@@ -116,7 +116,7 @@
     {
       "id": "workflow.collection-runner",
       "area": "Collection runner",
-      "target": "Workspace-owned desktop runners expose idle, running, cancellation, export, pass/fail, pre-run save failure, dirty tab, environment mutation, row reorder, and failed-operation states without writing partial result exports or mutating source collection requests.",
+      "target": "Workspace-owned desktop runners expose empty-pane creation, toolbar creation, collection/request import with multi-select, runner-owned request editing, idle, running, cancellation, export, pass/fail, pre-run save failure, dirty tab, environment mutation, row reorder/delete, split result details, and failed-operation states without writing partial result exports or mutating source collection requests.",
       "status": "implemented",
       "evidenceRefs": [
         "src/renderer/index.html",
@@ -179,7 +179,7 @@
     {
       "id": "workflow.first-launch-empty-state",
       "area": "First launch",
-      "target": "First launch and empty workspace states give visible next actions without requiring existing collections, requests, environments, or history.",
+      "target": "First launch and empty workspace states give visible next actions without requiring existing collections, requests, environments, runners, or history, and sidebar environment/workspace/runner selections restore the correct empty or most-recent-tab pane.",
       "status": "implemented",
       "evidenceRefs": [
         "src/renderer/index.html",
@@ -267,7 +267,7 @@
     {
       "id": "workflow.request-edit-send",
       "area": "Requests",
-      "target": "Request editing, validation, pre-send save failure, send success, send failure, response display, updated OAuth persistence markers, failed request/environment/draft close-save persistence, and unsaved-close recovery remain visible and recoverable.",
+      "target": "Request editing, inline request/environment title editing, validation, pre-send save failure, send success, send failure, response display, updated OAuth persistence markers, tab context/close/cap behavior, failed request/environment/draft close-save persistence, and unsaved-close recovery remain visible and recoverable.",
       "status": "implemented",
       "evidenceRefs": [
         "src/renderer/index.html",
@@ -354,7 +354,7 @@
     {
       "id": "workflow.workspace-management",
       "area": "Workspaces",
-      "target": "Workspace create, open, switch, rename, export, and delete flows expose success/failure states and in-app destructive confirmation through main-process validated operations.",
+      "target": "Workspace create, open, switch, inline rename, export, delete, and sidebar reorder flows expose success/failure states and in-app destructive confirmation through main-process validated operations without saving unrelated dirty drafts.",
       "status": "implemented",
       "evidenceRefs": [
         "src/renderer/rendererWorkflows.js",

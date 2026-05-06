@@ -37,7 +37,7 @@ npm start
 | `npm run dist:win` | Build the Windows installer. |
 | `npm run dist:mac` | Build macOS release artifacts. |
 
-## CLI Runner
+## CLI
 
 ```bash
 npm run cli -- run --file ./workspace.json --collection "Smoke" --environment "Local" --report ./runner-report.json
@@ -45,15 +45,9 @@ npm run cli -- run --file ./workspace.json --collection "Smoke" --environment "L
 
 The CLI uses the same import and runner logic as the desktop app. It exits with code `0` only when every executed request passes.
 
-## Desktop Runners
+## Runners
 
-The desktop Runner section stores runners directly in the workspace. A runner owns independent request copies, so importing a request or collection into a runner does not mutate the source collection when the runner request is edited or executed.
-
-Create runners from the top toolbar with `New` > `Runner`, or from the `New Runner` button in the empty Runner pane. The left sidebar Runner section is for selecting existing runners and showing the empty runner state.
-
-Each runner stores its own environment selection. When `Allow runner to modify environment` is off, scripts can still mutate a temporary environment for later requests in that run, but the saved environment is left unchanged. When it is on, runner script and extractor mutations are written back to the selected saved environment.
-
-Runner `Add Request` offers a local `New Request` action or an `Import` modal for selecting a whole collection or a single collection request.
+Runners let you save and replay a sequence of requests from the desktop app. They are useful for API workflows where one request sets up data for the next, such as authentication, setup, validation, and cleanup steps.
 
 ## Data And Privacy
 

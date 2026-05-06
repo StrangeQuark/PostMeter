@@ -14,7 +14,7 @@ The main rule is that product behavior belongs in the lowest layer that can own 
 
 Renderer files are loaded directly from `src/renderer/index.html`.
 
-- `renderer.js` is the renderer shell/orchestrator. It should compose focused helpers rather than owning tab state, workflows, or editor subpanels inline, while still hosting shared modal rendering helpers used by flows such as draft-save and collection export selection, including the empty-state warning path when no collections exist.
+- `renderer.js` is the renderer shell/orchestrator. It should compose focused helpers rather than owning tab state, workflows, or editor subpanels inline, while still hosting shared modal rendering helpers used by flows such as draft-save, collection export selection, runner request import, history clearing, and draggable sidebar-tree placement.
 - `assertionModel.js` owns assertion templates, default values, and placeholder text.
 - `cookieModel.js` owns renderer-side cookie validation, Postman cookie metadata import, and thin adapters over the shared core cookie model.
 - `contextMenu.js` owns renderer context-menu display and positioning.
@@ -24,10 +24,10 @@ Renderer files are loaded directly from `src/renderer/index.html`.
 - `loadPolicy.js` owns renderer control reads and thin adapters over the shared core load-policy model.
 - `requestEditorPanels.js` owns request editor subpanel rendering: auth editor wiring, request pair/assertion tables, request example rendering, cookie panel rendering, and variable preview/editor helpers.
 - `rendererState.js` owns renderer state defaults plus shared active-tab, modal, and dirty-state helpers.
-- `requestTabs.js` owns generic request/environment/workspace tab-bar rendering from tab descriptors.
-- `requestTabState.js` owns request/environment/workspace tab lifecycle, selection, dirty handling, and close/discard flows.
+- `requestTabs.js` owns generic request/environment/workspace/runner tab-bar rendering from tab descriptors, including shrink-before-scroll sizing and hover/active close buttons.
+- `requestTabState.js` owns request/environment/workspace/runner tab lifecycle, selection, dirty handling, sequential close/discard flows, force-close behavior, and the 128-open-tab cap.
 - `rendererBootstrap.js` owns renderer startup/theme bootstrap, toolbar-menu helpers, and DOM event registration driven by injected callbacks.
-- `sessionPersistence.js` owns renderer-side session serialization/restoration for open tabs, active panels, active selection, drafts, and dirty editor state.
+- `sessionPersistence.js` owns renderer-side session serialization/restoration for open tabs, active panels, active selection, drafts, dirty editor state, workspace order, and the no-tab empty-pane restore state for environments, workspaces, and runners.
 - `rendererWorkflows.js` owns request send/load/runner/OAuth/workspace import-export-save workflows, collection-export selection flows, non-destructive workspace import handling, and script-mutation application.
 - `responseFormatting.js` owns renderer-side response body formatting for JSON, XML, and HTML display.
 - `runResultFormatting.js` owns renderer-side text formatting for runner, load-test, and OAuth progress/result displays.
@@ -36,7 +36,7 @@ Renderer files are loaded directly from `src/renderer/index.html`.
 - `uiSmoke.js` is the stable test-only queue/entry-point layer. Production code should only call the `queueUi*Smoke` entry points.
 - `theme.css` owns design tokens, method colors, and light/dark/system theme variables.
 - `base.css` owns element defaults and common control states.
-- `chrome.css` owns application chrome, sidebar, tree, workspace framing, and request-tab layout rules.
+- `chrome.css` owns application chrome, sidebar, tree, drag/drop insertion bars, workspace framing, runner framing, and request-tab layout rules.
 - `editorPanels.css` owns request, response, auth, cookie, example, and load-test/editor component rules.
 - `overlays.css` owns modal and context-menu presentation.
 - `styles.css` is the renderer stylesheet entry point and imports the modular CSS slices.
@@ -92,13 +92,17 @@ Core modules must not depend on Electron or renderer globals.
 - `workspaceStore.js` owns high-level workspace orchestration and file-facing service methods.
 - `workspaceMigrations.js` owns workspace schema migration, including the schema-12 default `runners: []` migration for older workspaces.
 
-## Workspace-Owned Runners
+## Sidebar, Tabs, And Workspace-Owned Runners
 
-Desktop runners are workspace data, not request result-panel state. The renderer exposes a dedicated Runner sidebar section and runner tabs beside request, environment, and workspace tabs. Runner tabs use the same session persistence, 128-open-tab cap, dirty close prompts, and force-close behavior as the other tab types.
+Desktop runners are workspace data, not request result-panel state. The renderer exposes a dedicated Runners sidebar section and runner tabs beside request, environment, and workspace tabs. Runner tabs use the same session persistence, 128-open-tab cap, dirty close prompts, and force-close behavior as the other tab types.
 
 Each runner stores `{ id, name, environmentId, allowEnvironmentMutation, stopOnFailure, requests }`. Runner requests are independent request objects with local IDs. Importing an individual collection request or an entire collection deep-clones those requests into the runner, so runner edits and request-local script mutations do not change the source collection request unless a future explicit sync feature is introduced.
 
+Runner request rows are editable through runner-owned request tabs. Targeted runner-request saves update only that runner request, while closing or discarding a dirty runner-owned request restores the runner row from the saved runner state. Runner import uses a modal that expands collections on demand and supports multi-select collection/request import.
+
 Runtime IPC accepts first-class runner payloads on the existing `runner:start` channel. When `allowEnvironmentMutation` is disabled, the run receives a temporary environment copy and any script/extractor mutations are visible only to later requests in that run. When enabled, the Electron main process applies the mutation delta back to the selected saved environment after the run completes.
+
+Sidebar collection, request, folder, environment, workspace, and runner lists are draggable. Top-level lists reorder within their own kind; requests and folders can move within or across collections/folders. Structural drag saves are intentionally scoped: they persist the changed membership/order but preserve unrelated dirty request/environment/runner editor drafts for the tab close/save flow. Placement feedback is a single insertion bar per gap, not per row side.
 
 Managed workspace discovery is now filesystem-based. `WorkspaceManager` scans the workspace directory for native workspace JSON files and no longer depends on a separate manifest file for the workspace catalog or startup selection.
 

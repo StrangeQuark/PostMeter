@@ -482,19 +482,19 @@ function buildNonPostmanCompatibilityMatrix() {
 
 function buildUxAccessibilityMatrix() {
   return matrix('ux-accessibility', 'src/core/productionSupportMatrices.js', [
-    row('workflow.first-launch-empty-state', 'First launch', 'First launch and empty workspace states give visible next actions without requiring existing collections, requests, environments, or history.', 'implemented', {
+    row('workflow.first-launch-empty-state', 'First launch', 'First launch and empty workspace states give visible next actions without requiring existing collections, requests, environments, runners, or history, and sidebar environment/workspace/runner selections restore the correct empty or most-recent-tab pane.', 'implemented', {
       evidenceRefs: ['src/renderer/index.html', 'src/renderer/uiRegressionSmoke.js', 'src/renderer/uiSnapshotSmoke.js'],
       tests: ['npm run test:ui:regression', 'npm run test:ui:snapshot']
     }),
-    row('workflow.workspace-management', 'Workspaces', 'Workspace create, open, switch, rename, export, and delete flows expose success/failure states and in-app destructive confirmation through main-process validated operations.', 'implemented', {
+    row('workflow.workspace-management', 'Workspaces', 'Workspace create, open, switch, inline rename, export, delete, and sidebar reorder flows expose success/failure states and in-app destructive confirmation through main-process validated operations without saving unrelated dirty drafts.', 'implemented', {
       evidenceRefs: ['src/renderer/rendererWorkflows.js', 'electron/workspaceIpc.js', 'docs/TROUBLESHOOTING.md'],
       tests: ['npm run test:ui:regression', 'test/electron/workspaceIpc.test.js', 'test/electron/workspaceManager.test.js']
     }),
-    row('workflow.request-edit-send', 'Requests', 'Request editing, validation, pre-send save failure, send success, send failure, response display, updated OAuth persistence markers, failed request/environment/draft close-save persistence, and unsaved-close recovery remain visible and recoverable.', 'implemented', {
+    row('workflow.request-edit-send', 'Requests', 'Request editing, inline request/environment title editing, validation, pre-send save failure, send success, send failure, response display, updated OAuth persistence markers, tab context/close/cap behavior, failed request/environment/draft close-save persistence, and unsaved-close recovery remain visible and recoverable.', 'implemented', {
       evidenceRefs: ['src/renderer/index.html', 'src/renderer/rendererWorkflows.js', 'electron/requestIpc.js'],
       tests: ['npm run test:ui', 'npm run test:ui:regression', 'test/electron/requestIpc.test.js']
     }),
-    row('workflow.collection-runner', 'Collection runner', 'Workspace-owned desktop runners expose idle, running, cancellation, export, pass/fail, pre-run save failure, dirty tab, environment mutation, row reorder, and failed-operation states without writing partial result exports or mutating source collection requests.', 'implemented', {
+    row('workflow.collection-runner', 'Collection runner', 'Workspace-owned desktop runners expose empty-pane creation, toolbar creation, collection/request import with multi-select, runner-owned request editing, idle, running, cancellation, export, pass/fail, pre-run save failure, dirty tab, environment mutation, row reorder/delete, split result details, and failed-operation states without writing partial result exports or mutating source collection requests.', 'implemented', {
       evidenceRefs: ['src/renderer/index.html', 'src/renderer/renderer.js', 'src/renderer/requestTabState.js', 'src/renderer/sessionPersistence.js', 'src/renderer/rendererWorkflows.js', 'electron/runtimeIpc.js'],
       tests: ['npm run test:ui:regression', 'npm run test:ui:snapshot', 'test/electron/requestTabState.test.js', 'test/electron/rendererSessionPersistence.test.js', 'test/electron/runtimeIpc.test.js', 'test/electron/collectionRunner.test.js', 'test/electron/rendererWorkflows.test.js']
     }),
@@ -539,7 +539,7 @@ function buildUxAccessibilityMatrix() {
       tests: ['npm run diagnostics:privacy:validate', 'test/electron/diagnosticsIpc.test.js', 'test/electron/rendererBootstrap.test.js', 'npm run test:ui:regression'],
       notes: 'The diagnostics/privacy matrix owns the strict redaction and no-telemetry proof; this UX row owns the visible controls and export path.'
     }),
-    row('a11y.tabs-and-panels', 'Accessibility', 'Request/result tabs, sidebar tabs, opened request/environment/workspace tabs, and tab panels expose roles, selected state, labels, relationships, and close controls that are not nested inside tab roles.', 'implemented', {
+    row('a11y.tabs-and-panels', 'Accessibility', 'Request/result tabs, sidebar tabs, opened request/environment/workspace/runner tabs, and tab panels expose roles, selected state, labels, relationships, hover/active close controls, and capped/scrollable tab behavior without nesting controls inside tab roles.', 'implemented', {
       evidenceRefs: ['src/renderer/index.html', 'src/renderer/renderer.js', 'src/renderer/requestTabs.js', 'src/renderer/requestTabState.js'],
       tests: ['npm run test:ui:regression', 'test/electron/requestTabs.test.js']
     }),
@@ -551,7 +551,7 @@ function buildUxAccessibilityMatrix() {
       evidenceRefs: ['src/renderer/index.html', 'src/renderer/renderer.js'],
       tests: ['npm run test:ui:regression']
     }),
-    row('a11y.dynamic-controls', 'Accessibility', 'Dynamic workspace, package, file-binding, splitter, autocomplete combobox/listbox, context-menu, cookie, request-variable, response, and modal controls expose accessible names, keyboard focus behavior, and stable labels; production renderer workflows avoid raw native prompt, confirm, and alert dialogs.', 'implemented', {
+    row('a11y.dynamic-controls', 'Accessibility', 'Dynamic workspace, package, file-binding, splitter, autocomplete combobox/listbox, toolbar/tree/tab/history context-menu, sidebar drag/drop insertion-bar, cookie, request-variable, response, runner import, history-clear, and modal controls expose accessible names, keyboard focus behavior, and stable labels; production renderer workflows avoid raw native prompt, confirm, and alert dialogs.', 'implemented', {
       evidenceRefs: ['src/renderer/index.html', 'src/renderer/layoutControls.js', 'src/renderer/variableAutocomplete.js', 'src/renderer/contextMenu.js', 'src/renderer/requestEditorPanels.js', 'src/renderer/renderer.js'],
       tests: ['npm run test:ui:regression', 'test/electron/rendererBootstrap.test.js']
     }),
