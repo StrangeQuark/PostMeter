@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { collectionModel, environmentModel, requestModel, workspaceModel } = require('../../src/core/models');
+const { collectionModel, environmentModel, requestModel, runnerModel, workspaceModel } = require('../../src/core/models');
 const {
   applyEnvironmentSaveToWorkspace,
   applyCollectionRunMutationsToWorkspace,
@@ -8,6 +8,7 @@ const {
   applyWorkspaceSettingsSaveToWorkspace,
   applyScriptVariableMutationsToWorkspace,
   findWorkspaceRequestContext,
+  findWorkspaceRunnerRequestContext,
   mergeCookieJarByDelta,
   mergeVariableScopeByDelta,
   updateWorkspaceRequestAuth
@@ -28,6 +29,22 @@ test('finds and updates requests within nested workspace collections', () => {
   assert.equal(context.collection.id, 'c1');
   assert.equal(context.request.id, 'r1');
   assert.deepEqual(workspace.collections[0].folders[0].requests[0].auth, { type: 'bearer', token: 'abc' });
+});
+
+test('finds runner-owned requests without matching collection requests', () => {
+  const workspace = workspaceModel({
+    collections: [collectionModel({ id: 'c1', requests: [requestModel({ id: 'shared-id', name: 'Collection Request' })] })],
+    runners: [runnerModel({
+      id: 'runner-1',
+      requests: [requestModel({ id: 'runner-request-1', name: 'Runner Request' })]
+    })]
+  });
+
+  const context = findWorkspaceRunnerRequestContext(workspace, 'runner-1', 'runner-request-1');
+
+  assert.equal(context.runner.id, 'runner-1');
+  assert.equal(context.request.name, 'Runner Request');
+  assert.equal(findWorkspaceRunnerRequestContext(workspace, 'runner-1', 'missing'), null);
 });
 
 test('applies single request script variable mutations to active workspace scopes', () => {
@@ -225,6 +242,50 @@ test('applies request saves by creating only the required collection and folder 
   assert.equal(savedWorkspace.collections[1].folders[0].folders[0].name, 'Folder Two');
   assert.equal(savedWorkspace.collections[1].folders[0].folders[0].requests[0].name, 'Saved Request');
   assert.equal(savedWorkspace.cookies[0].value, 'saved');
+  assert.equal(savedWorkspace.settings.updates.includePrereleases, true);
+});
+
+test('applies runner request saves without replacing other runner data', () => {
+  const workspace = workspaceModel({
+    collections: [],
+    runners: [
+      runnerModel({
+        id: 'runner-1',
+        name: 'Persisted Runner',
+        environmentId: 'environment-1',
+        stopOnFailure: false,
+        allowEnvironmentMutation: false,
+        requests: [
+          requestModel({ id: 'runner-request-1', name: 'Saved Request', method: 'GET', url: 'https://old.example.test' }),
+          requestModel({ id: 'runner-request-2', name: 'Untouched Request', method: 'POST', url: 'https://untouched.example.test' })
+        ]
+      })
+    ],
+    settings: { updates: { includePrereleases: false } }
+  });
+
+  const savedWorkspace = applyRequestSaveToWorkspace(workspace, {
+    runnerId: 'runner-1',
+    requestId: 'runner-request-1',
+    request: requestModel({ id: 'runner-request-1', name: 'Saved Request', method: 'PATCH', url: 'https://saved.example.test' }),
+    runnerShell: {
+      id: 'runner-1',
+      name: 'Unsaved Renderer Runner Name',
+      environmentId: 'environment-2',
+      stopOnFailure: true,
+      allowEnvironmentMutation: true
+    },
+    settings: { updates: { includePrereleases: true } }
+  });
+
+  assert.equal(workspace.runners[0].requests[0].url, 'https://old.example.test');
+  assert.equal(savedWorkspace.runners[0].name, 'Persisted Runner');
+  assert.equal(savedWorkspace.runners[0].environmentId, 'environment-1');
+  assert.equal(savedWorkspace.runners[0].stopOnFailure, false);
+  assert.equal(savedWorkspace.runners[0].allowEnvironmentMutation, false);
+  assert.equal(savedWorkspace.runners[0].requests[0].method, 'PATCH');
+  assert.equal(savedWorkspace.runners[0].requests[0].url, 'https://saved.example.test');
+  assert.equal(savedWorkspace.runners[0].requests[1].url, 'https://untouched.example.test');
   assert.equal(savedWorkspace.settings.updates.includePrereleases, true);
 });
 

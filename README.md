@@ -7,8 +7,8 @@ PostMeter is a local-first desktop API client for building, sending, testing, an
 - Send HTTP requests with params, headers, auth, cookies, and body editors.
 - Organize collections, folders, examples, environments, variables, and workspaces.
 - Import and export PostMeter, Postman Collection v2.1, OpenAPI, JMeter, curl, and HAR files.
-- Run pre-request scripts, test scripts, assertions, and collection runs.
-- Use the desktop runner or a CI-friendly CLI runner.
+- Run pre-request scripts, test scripts, assertions, and workspace-owned runners.
+- Use first-class desktop runners or the CI-friendly CLI runner.
 - Run bounded local load tests with rate caps, percentiles, and JSON/CSV export.
 - Work with OAuth 2.0, HTTPS client certificates, cookies, and GitHub Releases update checks.
 
@@ -44,6 +44,16 @@ npm run cli -- run --file ./workspace.json --collection "Smoke" --environment "L
 ```
 
 The CLI uses the same import and runner logic as the desktop app. It exits with code `0` only when every executed request passes.
+
+## Desktop Runners
+
+The desktop Runner section stores runners directly in the workspace. A runner owns independent request copies, so importing a request or collection into a runner does not mutate the source collection when the runner request is edited or executed.
+
+Create runners from the top toolbar with `New` > `Runner`, or from the `New Runner` button in the empty Runner pane. The left sidebar Runner section is for selecting existing runners and showing the empty runner state.
+
+Each runner stores its own environment selection. When `Allow runner to modify environment` is off, scripts can still mutate a temporary environment for later requests in that run, but the saved environment is left unchanged. When it is on, runner script and extractor mutations are written back to the selected saved environment.
+
+Runner `Add Request` offers a local `New Request` action or an `Import` modal for selecting a whole collection or a single collection request.
 
 ## Data And Privacy
 

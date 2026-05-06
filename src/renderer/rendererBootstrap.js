@@ -100,10 +100,11 @@
     bindClick(doc, 'newFolderButton', options.onNewFolder);
     bindClick(doc, 'newRequestButton', options.onNewRequest);
     bindClick(doc, 'newWorkspaceMenuButton', options.onNewWorkspace);
+    bindClick(doc, 'newRunnerMenuButton', options.onNewRunner);
     bindClick(doc, 'emptyCreateRequestButton', options.onNewRequest);
     bindClick(doc, 'emptyCreateEnvironmentButton', options.onNewEnvironment);
+    bindClick(doc, 'emptyCreateRunnerButton', options.onNewRunner);
     bindClick(doc, 'newEnvironmentMenuButton', options.onNewEnvironment);
-    bindClick(doc, 'saveButton', options.onSaveWorkspace);
     bindClick(doc, 'importWorkspaceButton', options.onImportWorkspace);
     bindClick(doc, 'exportWorkspaceButton', options.onExportWorkspace);
     bindClick(doc, 'importCollectionButton', options.onImportCollection);
@@ -121,8 +122,9 @@
     bindClick(doc, 'addExampleButton', options.onAddExample);
     bindClick(doc, 'captureResponseExampleButton', options.onCaptureResponseExample);
     bindClick(doc, 'exportExamplesButton', options.onExportExamples);
+    bindClick(doc, 'saveRequestButton', options.onSaveRequest);
+    bindClick(doc, 'saveEnvironmentButton', options.onSaveEnvironment);
     bindClick(doc, 'deleteEnvironmentButton', options.onDeleteEnvironment);
-    bindClick(doc, 'renameWorkspacePanelButton', options.onRenameWorkspace);
     bindClick(doc, 'deleteWorkspacePanelButton', options.onDeleteWorkspace);
     bindClick(doc, 'addVariableButton', options.onAddEnvironmentVariable);
     bindClick(doc, 'switchWorkspacePanelButton', options.onSwitchWorkspace);
@@ -148,6 +150,9 @@
     bindClick(doc, 'cancelRunnerButton', options.onCancelCollectionRun);
     bindClick(doc, 'exportRunnerJsonButton', options.onExportRunnerJson);
     bindClick(doc, 'exportRunnerCsvButton', options.onExportRunnerCsv);
+    bindClick(doc, 'saveRunnerButton', options.onSaveRunner);
+    bindClick(doc, 'deleteRunnerButton', options.onDeleteRunner);
+    bindClick(doc, 'addRunnerRequestButton', options.onAddRunnerRequest);
     bindClick(doc, 'startPkceFlowButton', options.onStartPkceFlow);
     bindClick(doc, 'startDeviceFlowButton', options.onStartDeviceFlow);
     bindClick(doc, 'cancelOauthFlowButton', options.onCancelOauthFlow);
@@ -159,7 +164,11 @@
     bindChange(doc, 'environmentSelect', () => {
       options.onEnvironmentSelectChange?.(getElement(doc, 'environmentSelect')?.value || 'none');
     });
-    bindInput(doc, 'requestNameInput', options.onRequestNameInput);
+    bindChange(doc, 'runnerEnvironmentSelect', () => {
+      options.onRunnerEnvironmentSelectChange?.(getElement(doc, 'runnerEnvironmentSelect')?.value || 'none');
+    });
+    bindChange(doc, 'runnerStopOnFailure', options.onRunnerConfigChange);
+    bindChange(doc, 'runnerAllowEnvironmentMutation', options.onRunnerConfigChange);
     bindChange(doc, 'methodSelect', options.onMethodChange);
     bindInput(doc, 'urlInput', options.onUrlInput);
     bindChange(doc, 'bodyTypeSelect', options.onBodyTypeChange);
@@ -234,6 +243,13 @@
       const selectedCollectionId = options.getSelectedExportCollectionId?.();
       if (selectedCollectionId) {
         options.onResolveActiveModal?.(selectedCollectionId);
+      }
+    });
+    bindClick(doc, 'cancelRunnerImportButton', () => options.onResolveActiveModal?.(null));
+    bindClick(doc, 'confirmRunnerImportButton', () => {
+      const selectedImportTarget = options.getSelectedRunnerImportTarget?.();
+      if (selectedImportTarget) {
+        options.onResolveActiveModal?.(selectedImportTarget);
       }
     });
     bindClick(doc, 'cancelTextInputModalButton', () => options.onResolveActiveModal?.(null));

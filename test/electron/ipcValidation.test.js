@@ -16,6 +16,7 @@ const {
   assertResponsePayload,
   assertRequestPayload,
   assertRunnerConfigPayload,
+  assertRunnerPayload,
   assertRunnerProgressPayload,
   assertUpdateCheckOptionsPayload,
   assertWorkspaceEnvironmentSavePayload,
@@ -67,6 +68,7 @@ test('accepts structurally valid IPC payloads', () => {
     name: 'Workspace',
     settings: {
       appearance: { theme: 'dark' },
+      tabs: { saveOnForceClose: true },
       sandbox: {
         fileBindings: [{
           source: 'fixtures/upload.txt',
@@ -99,6 +101,29 @@ test('accepts structurally valid IPC payloads', () => {
       updates: { includePrereleases: true }
     },
     collections: [],
+    runners: [{
+      id: 'runner-1',
+      name: 'API Smoke',
+      environmentId: 'none',
+      allowEnvironmentMutation: false,
+      stopOnFailure: true,
+      requests: [{
+        id: 'runner-request-1',
+        name: 'Runner Request',
+        method: 'GET',
+        url: 'https://example.test/runner',
+        queryParams: [],
+        headers: [],
+        bodyType: 'NONE',
+        source: {
+          collectionId: 'collection-1',
+          collectionName: 'Collection',
+          requestId: 'request-1',
+          requestName: 'Request',
+          folderPath: ['Folder']
+        }
+      }]
+    }],
     environments: [{ id: 'e1', name: 'Env', variables: [{ enabled: true, key: 'token', value: 'secret' }] }],
     cookies: [{ enabled: true, name: 'sid', value: 'secret', domain: 'example.test', path: '/', secure: true, httpOnly: true, sameSite: 'Lax', hostOnly: true, source: 'postman', extensions: ['SameParty'] }],
     history: []
@@ -144,6 +169,11 @@ test('accepts structurally valid IPC payloads', () => {
       localVariables: [{ enabled: true, key: 'local', value: 'value' }]
     }],
     environment: { id: 'e1', name: 'Runtime', variables: [] },
+    mutatedEnvironment: { id: 'e1', name: 'Runtime', variables: [{ enabled: true, key: 'token', value: 'abc' }] },
+    runnerId: 'runner-1',
+    runnerName: 'API Smoke',
+    runnerEnvironmentId: 'e1',
+    environmentMutationAllowed: true,
     collectionVariables: [{ enabled: true, key: 'baseUrl', value: 'https://example.test' }]
   }));
   assert.doesNotThrow(() => assertResponsePayload({
@@ -192,6 +222,31 @@ test('accepts structurally valid IPC payloads', () => {
     cookies: [{ enabled: true, name: 'sid', value: 'secret', domain: 'example.test', path: '/' }],
     settings: { updates: { includePrereleases: true } }
   }));
+  assert.doesNotThrow(() => assertWorkspaceRequestSavePayload({
+    runnerId: 'runner-1',
+    requestId: 'runner-request-1',
+    request: {
+      id: 'runner-request-1',
+      name: 'Runner Request',
+      method: 'GET',
+      url: 'https://example.test',
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      source: {
+        collectionId: 'c1',
+        requestId: 'r1'
+      }
+    },
+    runnerShell: {
+      id: 'runner-1',
+      name: 'Runner',
+      environmentId: 'none',
+      stopOnFailure: false,
+      allowEnvironmentMutation: true
+    },
+    settings: { updates: { includePrereleases: true } }
+  }));
   assert.doesNotThrow(() => assertWorkspaceRequestSaveResultPayload({
     request: {
       id: 'r1',
@@ -233,6 +288,7 @@ test('accepts structurally valid IPC payloads', () => {
       packageCache: [{ specifier: '@team/tools', source: 'module.exports = {};', integrity: 'sha256-reviewed' }],
       trustedCapabilities: { sendRequest: true, cookies: true, vault: true, vaultGrants: { workspace: true } }
     },
+    tabs: { saveOnForceClose: true },
     updates: { includePrereleases: true }
   }));
   assert.doesNotThrow(() => assertWorkspaceSettingsSaveResultPayload({
@@ -268,6 +324,22 @@ test('accepts structurally valid IPC payloads', () => {
     policyDecisions: [{ scope: 'rate', message: 'Rate cap applied.' }]
   }));
   assert.doesNotThrow(() => assertRunnerConfigPayload({ stopOnFailure: true }));
+  assert.doesNotThrow(() => assertRunnerPayload({
+    id: 'runner-1',
+    name: 'API Smoke',
+    environmentId: 'none',
+    allowEnvironmentMutation: true,
+    stopOnFailure: false,
+    requests: [{
+      id: 'runner-request-1',
+      name: 'Request',
+      method: 'GET',
+      url: 'https://example.test',
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE'
+    }]
+  }));
   assert.doesNotThrow(() => assertRunnerProgressPayload({
     completedRequests: 1,
     totalRequests: 2,
@@ -308,6 +380,7 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', auth: { type: 'oauth2', redirectStrategy: 'embeddedWebView' } }), /request.auth.redirectStrategy must be one of/);
   assert.throws(() => assertCollectionPayload({ certificates: [{ matches: [42] }], requests: [], folders: [] }), /collection.certificates\[0\].matches\[0\] must be a string/);
   assert.throws(() => assertWorkspacePayload({ collections: {}, environments: [], history: [] }), /workspace.collections must be an array/);
+  assert.throws(() => assertWorkspacePayload({ collections: [], runners: {}, environments: [], history: [] }), /workspace.runners must be an array/);
   assert.throws(() => assertWorkspacePayload({ settings: { updates: { includePrereleases: 'yes' } }, collections: [], environments: [], history: [] }), /workspace.settings.updates.includePrereleases must be a boolean/);
   assert.throws(() => assertWorkspacePayload({ settings: { appearance: { theme: 'sepia' } }, collections: [], environments: [], history: [] }), /workspace.settings.appearance.theme must be one of/);
   assert.throws(() => assertWorkspacePayload({ settings: { diagnostics: { requestResponseLogging: { bodies: 'yes' } } }, collections: [], environments: [], history: [] }), /workspace.settings.diagnostics.requestResponseLogging.bodies must be a boolean/);
@@ -341,6 +414,9 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertLoadProgressPayload({ executionMode: 'cluster' }), /progress.executionMode must be one of/);
   assert.throws(() => assertLoadProgressPayload({ completedRequests: 1, accessToken: 'raw-token' }), /progress.accessToken is not allowed in public IPC payloads/);
   assert.throws(() => assertRunnerConfigPayload({ stopOnFailure: 'yes' }), /config.stopOnFailure must be a boolean/);
+  assert.throws(() => assertRunnerPayload({ id: 'runner', environmentId: 'none', allowEnvironmentMutation: 'yes', requests: [] }), /runner.allowEnvironmentMutation must be a boolean/);
+  assert.throws(() => assertRunnerPayload({ id: 'runner', requests: [{ method: 'TRACE', url: 'https:\/\/example.test' }] }), /runner.requests\[0\].method is not supported/);
+  assert.throws(() => assertRunnerPayload({ id: 'runner', requests: [{ method: 'GET', url: 'https:\/\/example.test', source: { folderPath: [42] } }] }), /runner.requests\[0\].source.folderPath\[0\] must be a string/);
   assert.throws(() => assertRunnerProgressPayload({ passed: 'yes' }), /progress.passed must be a boolean/);
   assert.throws(() => assertRunnerProgressPayload({ completedRequests: 1, clientSecret: 'raw-secret' }), /progress.clientSecret is not allowed in public IPC payloads/);
   assert.throws(() => assertOAuthProgressPayload({ id: 'flow', type: 'password', status: 'starting' }), /progress.type must be one of/);
@@ -361,10 +437,12 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: '{}', durationMillis: 1, responseBytes: 2, finalUrl: 'https://example.test', headers: {}, accessToken: 'raw-token' }), /response.accessToken is not allowed in public IPC payloads/);
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: '{}', durationMillis: 1, responseBytes: 2, finalUrl: 'https://example.test', headers: {}, testScriptResult: { tests: [{ passed: 'yes' }] } }), /response.testScriptResult.tests\[0\].passed must be a boolean/);
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: '{}', durationMillis: 1, responseBytes: 2, finalUrl: 'https://example.test', headers: {}, testScriptResult: { visualizer: { html: 42 } } }), /response.testScriptResult.visualizer.html must be a string/);
-  assert.throws(() => assertWorkspaceRequestSavePayload({ requestId: 'r1', request: { method: 'GET', queryParams: [], headers: [], bodyType: 'NONE' } }), /payload.collectionId must be a string/);
+  assert.throws(() => assertWorkspaceRequestSavePayload({ requestId: 'r1', request: { method: 'GET', queryParams: [], headers: [], bodyType: 'NONE' } }), /payload must include collectionId or runnerId/);
+  assert.throws(() => assertWorkspaceRequestSavePayload({ collectionId: 'c1', runnerId: 'runner-1', requestId: 'r1', request: { method: 'GET', queryParams: [], headers: [], bodyType: 'NONE' } }), /payload must target either collectionId or runnerId/);
   assert.throws(() => assertWorkspaceRequestSavePayload({ collectionId: 'c1', requestId: 'r1', request: { method: 'GET', queryParams: [], headers: [], bodyType: 'NONE' }, folderPath: 'bad' }), /payload.folderPath must be an array/);
   assert.throws(() => assertWorkspaceEnvironmentSavePayload({ environment: { id: 'e1', name: 'Env', variables: [] } }), /payload.environmentId must be a string/);
   assert.throws(() => assertWorkspaceSettingsSavePayload({ appearance: { theme: 'sepia' } }), /settings.appearance.theme must be one of/);
+  assert.throws(() => assertWorkspaceSettingsSavePayload({ tabs: { saveOnForceClose: 'yes' } }), /settings.tabs.saveOnForceClose must be a boolean/);
   assert.throws(() => assertWorkspaceSettingsSavePayload({ diagnostics: { requestResponseLogging: { headers: 'yes' } } }), /settings.diagnostics.requestResponseLogging.headers must be a boolean/);
   assert.throws(() => assertWorkspaceSettingsSavePayload({ diagnostics: { logging: { enabled: 'yes' } } }), /settings.diagnostics.logging.enabled must be a boolean/);
   assert.throws(() => assertWorkspaceSettingsSavePayload({ diagnostics: { uploadUrl: 'https:\/\/example.test' } }), /settings.diagnostics.uploadUrl is not allowed/);

@@ -777,6 +777,97 @@ test('workspace IPC saves only the selected request payload through targeted req
   assert.equal(syncHandlers.has('workspace:saveSync'), true);
 });
 
+test('workspace IPC saves only the selected runner request payload through targeted request save', async () => {
+  const handlers = new Map();
+  const syncHandlers = new Map();
+  const currentWorkspace = {
+    schemaVersion: 11,
+    collections: [],
+    environments: [],
+    history: [],
+    cookies: [],
+    settings: { updates: { includePrereleases: false } },
+    runners: [{
+      id: 'runner-1',
+      name: 'Persisted Runner',
+      environmentId: 'none',
+      stopOnFailure: false,
+      allowEnvironmentMutation: false,
+      requests: [
+        { id: 'runner-request-1', name: 'Old Request', method: 'GET', url: 'https://old.example.test', queryParams: [], headers: [], bodyType: 'NONE' },
+        { id: 'runner-request-2', name: 'Other Request', method: 'POST', url: 'https://other.example.test', queryParams: [], headers: [], bodyType: 'NONE' }
+      ]
+    }]
+  };
+  let savedWorkspace = null;
+  let appliedWorkspace = null;
+  let refreshCalls = 0;
+
+  registerWorkspaceIpc({
+    dialog: {
+      showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+      showSaveDialog: async () => ({ canceled: true })
+    },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => currentWorkspace,
+    getWorkspaceStore: () => ({
+      describeCurrent: async (workspace) => ({ workspace, path: '/tmp/Local Workspace.json', activeWorkspaceId: 'Local Workspace.json', workspaces: [] })
+    }),
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      },
+      on(channel, handler) {
+        syncHandlers.set(channel, handler);
+      }
+    },
+    refreshApplicationMenu: () => { refreshCalls += 1; },
+    saveWorkspace: async (workspace) => {
+      savedWorkspace = workspace;
+      return workspace;
+    },
+    saveWorkspaceSync: (workspace) => workspace,
+    setWorkspace: (workspace) => {
+      appliedWorkspace = workspace;
+    }
+  });
+
+  const result = await handlers.get('workspace:saveRequest')(null, {
+    runnerId: 'runner-1',
+    requestId: 'runner-request-1',
+    request: {
+      id: 'runner-request-1',
+      name: 'Saved Runner Request',
+      method: 'PATCH',
+      url: 'https://saved.example.test',
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE'
+    },
+    runnerShell: {
+      id: 'runner-1',
+      name: 'Unsaved Renderer Runner Name',
+      environmentId: 'environment-2',
+      stopOnFailure: true,
+      allowEnvironmentMutation: true
+    },
+    settings: { updates: { includePrereleases: true } }
+  });
+
+  assert.equal(savedWorkspace.runners[0].name, 'Persisted Runner');
+  assert.equal(savedWorkspace.runners[0].environmentId, 'none');
+  assert.equal(savedWorkspace.runners[0].requests[0].method, 'PATCH');
+  assert.equal(savedWorkspace.runners[0].requests[1].url, 'https://other.example.test');
+  assert.equal(savedWorkspace.settings.updates.includePrereleases, true);
+  assert.equal(appliedWorkspace.runners[0].requests[0].name, 'Saved Runner Request');
+  assert.equal(refreshCalls, 1);
+  assert.deepEqual(result, {
+    request: appliedWorkspace.runners[0].requests[0]
+  });
+  assert.equal(syncHandlers.has('workspace:saveSync'), true);
+});
+
 test('workspace IPC saves only the selected environment payload through targeted environment save', async () => {
   const handlers = new Map();
   const syncHandlers = new Map();

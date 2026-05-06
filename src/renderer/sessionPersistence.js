@@ -1,10 +1,10 @@
 (function attachRendererSessionPersistence(global) {
   const DEFAULT_REQUEST_TAB = 'params';
   const DEFAULT_RESULTS_TAB = 'response';
-  const SIDEBAR_PANELS = new Set(['collections', 'environments', 'workspaces', 'history']);
-  const MAIN_PANELS = new Set(['request', 'environment', 'workspace']);
+  const SIDEBAR_PANELS = new Set(['collections', 'environments', 'workspaces', 'runners', 'history']);
+  const MAIN_PANELS = new Set(['request', 'environment', 'workspace', 'runner']);
   const REQUEST_TABS = new Set(['params', 'headers', 'auth', 'cookies', 'body', 'tests', 'scripts', 'examples', 'collectionVariables']);
-  const RESULTS_TABS = new Set(['response', 'load', 'runner']);
+  const RESULTS_TABS = new Set(['response', 'load']);
 
   function buildRendererSession(options = {}) {
     const state = options.state || {};
@@ -14,15 +14,17 @@
 
     return {
       activeWorkspaceId: normalizeId(state.activeWorkspaceId),
-      selectedWorkspaceId: normalizeId(state.selectedWorkspaceId) || normalizeId(state.activeWorkspaceId),
+      selectedWorkspaceId: normalizeId(state.selectedWorkspaceId),
       activeEnvironmentId: normalizeEnvironmentId(state.activeEnvironmentId),
       activeCollectionId: normalizeId(state.activeCollectionId),
       activeFolderId: normalizeId(state.activeFolderId),
       activeRequestId: normalizeId(state.activeRequestId),
+      activeRunnerRequestRunnerId: normalizeId(state.activeRunnerRequestRunnerId),
+      activeRunnerConfigId: normalizeId(state.activeRunnerConfigId),
       activeSidebarPanel: normalizeEnum(state.activeSidebarPanel, SIDEBAR_PANELS, 'collections'),
       activeMainPanel: normalizeEnum(state.activeMainPanel, MAIN_PANELS, 'request'),
-      activeRequestTab: activeTabName(doc, 'request', DEFAULT_REQUEST_TAB),
-      activeResultsTab: activeTabName(doc, 'results', DEFAULT_RESULTS_TAB),
+      activeRequestTab: normalizeEnum(activeTabName(doc, 'request', DEFAULT_REQUEST_TAB), REQUEST_TABS, DEFAULT_REQUEST_TAB),
+      activeResultsTab: normalizeEnum(activeTabName(doc, 'results', DEFAULT_RESULTS_TAB), RESULTS_TABS, DEFAULT_RESULTS_TAB),
       openRequestTabs: (Array.isArray(state.openRequestTabs) ? state.openRequestTabs : [])
         .map((tab) => serializeRequestTab(tab, requestForTab(tab)))
         .filter(Boolean),
@@ -32,6 +34,10 @@
       openWorkspaceTabs: (Array.isArray(state.openWorkspaceTabs) ? state.openWorkspaceTabs : [])
         .map(serializeWorkspaceTab)
         .filter(Boolean),
+      openRunnerTabs: (Array.isArray(state.openRunnerTabs) ? state.openRunnerTabs : [])
+        .map((tab) => serializeRunnerTab(tab, runnerForTab(state, tab)))
+        .filter(Boolean),
+      workspaceOrder: serializeWorkspaceOrder(state),
       draftRequests: Array.from(state.draftRequests instanceof Map ? state.draftRequests.values() : [])
         .map(cloneJson)
         .filter(Boolean),
@@ -47,6 +53,7 @@
     const findFolder = options.findFolder || (() => null);
     const findRequest = options.findRequest || (() => null);
 
+    applyWorkspaceOrder(state, session.workspaceOrder);
     state.draftRequests = new Map();
     for (const draftRequest of session.draftRequests) {
       if (draftRequest?.id) {
@@ -56,6 +63,7 @@
 
     restoreRequestStates(state, session.openRequestTabs, { findFolder, findRequest });
     restoreEnvironmentStates(state, session.openEnvironmentTabs);
+    restoreRunnerStates(state, session.openRunnerTabs);
 
     state.openRequestTabs = session.openRequestTabs
       .filter((tab) => requestTabExists(state, tab, findRequest))
@@ -66,12 +74,17 @@
     state.openWorkspaceTabs = session.openWorkspaceTabs
       .filter((tab) => workspaceItems().some((item) => item.id === tab.workspaceId))
       .map(stripWorkspaceTabState);
+    state.openRunnerTabs = session.openRunnerTabs
+      .filter((tab) => runnerExists(state, tab.runnerId))
+      .map(stripRunnerTabState);
     restoreSharedRequestStates(state, session);
 
     // Session restore should override the default request selection created during workspace load.
     state.activeCollectionId = null;
     state.activeFolderId = null;
     state.activeRequestId = null;
+    state.activeRunnerRequestRunnerId = null;
+    state.activeRunnerConfigId = null;
 
     if (workspaceItems().some((item) => item.id === session.activeWorkspaceId)) {
       state.activeWorkspaceId = session.activeWorkspaceId;
@@ -81,18 +94,48 @@
     } else if (workspaceItems().some((item) => item.id === state.activeWorkspaceId)) {
       state.selectedWorkspaceId = state.activeWorkspaceId;
     }
+    if (
+      session.activeMainPanel === 'workspace'
+      && !(state.openWorkspaceTabs || []).some((tab) => tab.workspaceId === state.selectedWorkspaceId)
+    ) {
+      state.selectedWorkspaceId = '';
+    }
+    let shouldRestoreActiveRunnerConfig = true;
+    if (
+      session.activeMainPanel === 'runner'
+      && !(state.openRunnerTabs || []).some((tab) => tab.runnerId === session.activeRunnerConfigId)
+    ) {
+      state.activeRunnerConfigId = null;
+      shouldRestoreActiveRunnerConfig = false;
+    }
     if (session.activeEnvironmentId === 'none' || environmentExists(state, session.activeEnvironmentId)) {
       state.activeEnvironmentId = session.activeEnvironmentId;
     }
+    if (shouldRestoreActiveRunnerConfig && runnerExists(state, session.activeRunnerConfigId)) {
+      state.activeRunnerConfigId = session.activeRunnerConfigId;
+    }
 
-    const activeDraftTab = (state.openRequestTabs || []).find((tab) => tab.draft === true && tab.requestId === session.activeRequestId);
-    if (activeDraftTab && state.draftRequests.has(session.activeRequestId)) {
+    const activeRunnerRequestTab = (state.openRequestTabs || []).find((tab) => (
+      tab.runnerRequest === true
+      && tab.runnerId === session.activeRunnerRequestRunnerId
+      && tab.requestId === session.activeRequestId
+    ));
+    if (activeRunnerRequestTab && findRunnerRequest(state, session.activeRunnerRequestRunnerId, session.activeRequestId)) {
       state.activeCollectionId = null;
       state.activeFolderId = null;
       state.activeRequestId = session.activeRequestId;
+      state.activeRunnerRequestRunnerId = session.activeRunnerRequestRunnerId;
+      state.activeRunnerConfigId = session.activeRunnerRequestRunnerId;
     } else {
+      const activeDraftTab = (state.openRequestTabs || []).find((tab) => tab.draft === true && tab.requestId === session.activeRequestId);
+      if (activeDraftTab && state.draftRequests.has(session.activeRequestId)) {
+      state.activeCollectionId = null;
+      state.activeFolderId = null;
+      state.activeRequestId = session.activeRequestId;
+      } else {
       const activeSavedTab = (state.openRequestTabs || []).find((tab) => (
         tab.draft !== true
+        && tab.runnerRequest !== true
         && tab.collectionId === session.activeCollectionId
         && tab.requestId === session.activeRequestId
       ));
@@ -103,6 +146,7 @@
         state.activeCollectionId = session.activeCollectionId;
         state.activeFolderId = restoredRequest.folder?.id || null;
         state.activeRequestId = restoredRequest.request.id;
+      }
       }
     }
 
@@ -123,12 +167,17 @@
     if (!tab?.requestId) {
       return null;
     }
+    const runnerRequest = tab.runnerRequest === true;
     return {
-      key: normalizeString(tab.key) || (tab.draft ? `draft:${tab.requestId}` : `request:${tab.collectionId}:${tab.requestId}`),
-      collectionId: tab.draft ? '' : normalizeId(tab.collectionId),
+      key: normalizeString(tab.key) || (runnerRequest
+        ? `runner-request:${tab.runnerId}:${tab.requestId}`
+        : tab.draft ? `draft:${tab.requestId}` : `request:${tab.collectionId}:${tab.requestId}`),
+      collectionId: tab.draft || runnerRequest ? '' : normalizeId(tab.collectionId),
+      runnerId: runnerRequest ? normalizeId(tab.runnerId) : '',
       requestId: normalizeId(tab.requestId),
       folderId: normalizeId(tab.folderId),
       draft: tab.draft === true,
+      runnerRequest,
       dirty: tab.dirty === true,
       createdUnsaved: tab.createdUnsaved === true,
       snapshot: typeof tab.snapshot === 'string' ? tab.snapshot : '',
@@ -158,6 +207,20 @@
       key: normalizeString(tab.key) || `workspace:${tab.workspaceId}`,
       workspaceId: normalizeId(tab.workspaceId),
       dirty: tab.dirty === true
+    };
+  }
+
+  function serializeRunnerTab(tab, runner) {
+    if (!tab?.runnerId) {
+      return null;
+    }
+    return {
+      key: normalizeString(tab.key) || `runner:${tab.runnerId}`,
+      runnerId: normalizeId(tab.runnerId),
+      dirty: tab.dirty === true,
+      createdUnsaved: tab.createdUnsaved === true,
+      snapshot: typeof tab.snapshot === 'string' ? tab.snapshot : '',
+      currentState: !(tab.dirty === true || tab.createdUnsaved === true) ? null : cloneJson(runner)
     };
   }
 
@@ -199,6 +262,13 @@
       if (tab.draft || !tab.currentState) {
         continue;
       }
+      if (tab.runnerRequest === true) {
+        const request = findRunnerRequest(state, tab.runnerId, tab.requestId);
+        if ((tab.dirty === true || tab.createdUnsaved === true) && request) {
+          replaceObject(request, cloneJson(tab.currentState));
+        }
+        continue;
+      }
       const collection = findCollection(state, tab.collectionId);
       if (!collection) {
         continue;
@@ -223,6 +293,23 @@
       const existing = state.workspace.environments.find((environment) => environment.id === tab.environmentId);
       if (tab.createdUnsaved === true && !existing) {
         state.workspace.environments.push(cloneJson(tab.currentState));
+        continue;
+      }
+      if ((tab.dirty === true || tab.createdUnsaved === true) && existing) {
+        replaceObject(existing, cloneJson(tab.currentState));
+      }
+    }
+  }
+
+  function restoreRunnerStates(state, tabs) {
+    state.workspace.runners ||= [];
+    for (const tab of tabs) {
+      if (!tab.currentState) {
+        continue;
+      }
+      const existing = state.workspace.runners.find((runner) => runner.id === tab.runnerId);
+      if (tab.createdUnsaved === true && !existing) {
+        state.workspace.runners.push(cloneJson(tab.currentState));
         continue;
       }
       if ((tab.dirty === true || tab.createdUnsaved === true) && existing) {
@@ -266,12 +353,28 @@
     if (tab.draft === true) {
       return state.draftRequests.has(tab.requestId);
     }
+    if (tab.runnerRequest === true) {
+      return Boolean(findRunnerRequest(state, tab.runnerId, tab.requestId));
+    }
     const collection = findCollection(state, tab.collectionId);
     return Boolean(collection && findRequest(collection, tab.requestId)?.request);
   }
 
   function environmentExists(state, environmentId) {
     return state.workspace?.environments?.some((environment) => environment.id === environmentId) === true;
+  }
+
+  function runnerExists(state, runnerId) {
+    return state.workspace?.runners?.some((runner) => runner.id === runnerId) === true;
+  }
+
+  function runnerForTab(state, tab) {
+    return state.workspace?.runners?.find((runner) => runner.id === tab?.runnerId) || null;
+  }
+
+  function findRunnerRequest(state, runnerId, requestId) {
+    const runner = runnerForTab(state, { runnerId });
+    return (runner?.requests || []).find((request) => request.id === requestId) || null;
   }
 
   function findSavedRequest(state, collectionId, requestId, findRequest) {
@@ -299,13 +402,20 @@
 
   function shouldRestoreMainPanel(panel, state, workspaceItems, findRequest) {
     if (panel === 'workspace') {
-      return workspaceItems.some((item) => item.id === state.selectedWorkspaceId);
+      return !state.selectedWorkspaceId
+        || (state.openWorkspaceTabs || []).some((tab) => tab.workspaceId === state.selectedWorkspaceId);
     }
     if (panel === 'environment') {
       return state.activeEnvironmentId === 'none' || environmentExists(state, state.activeEnvironmentId);
     }
+    if (panel === 'runner') {
+      return !state.activeRunnerConfigId || runnerExists(state, state.activeRunnerConfigId);
+    }
     if (panel !== 'request') {
       return false;
+    }
+    if (state.activeRunnerRequestRunnerId) {
+      return Boolean(findRunnerRequest(state, state.activeRunnerRequestRunnerId, state.activeRequestId));
     }
     if (state.draftRequests.has(state.activeRequestId)) {
       return true;
@@ -315,10 +425,14 @@
 
   function shouldRestoreSidebarPanel(panel, state, workspaceItems) {
     if (panel === 'workspaces') {
-      return workspaceItems.some((item) => item.id === state.selectedWorkspaceId);
+      return !state.selectedWorkspaceId
+        || workspaceItems.some((item) => item.id === state.selectedWorkspaceId);
     }
     if (panel === 'environments') {
       return state.activeEnvironmentId === 'none' || environmentExists(state, state.activeEnvironmentId);
+    }
+    if (panel === 'runners') {
+      return !state.activeRunnerConfigId || runnerExists(state, state.activeRunnerConfigId);
     }
     return SIDEBAR_PANELS.has(panel);
   }
@@ -333,8 +447,10 @@
       key: tab.key,
       collectionId: tab.collectionId || null,
       folderId: tab.folderId || null,
+      runnerId: tab.runnerId || null,
       requestId: tab.requestId,
       draft: tab.draft === true,
+      runnerRequest: tab.runnerRequest === true,
       dirty: tab.dirty === true,
       createdUnsaved: tab.createdUnsaved === true,
       snapshot: typeof tab.snapshot === 'string' ? tab.snapshot : ''
@@ -359,6 +475,16 @@
     };
   }
 
+  function stripRunnerTabState(tab) {
+    return {
+      key: tab.key,
+      runnerId: tab.runnerId,
+      dirty: tab.dirty === true,
+      createdUnsaved: tab.createdUnsaved === true,
+      snapshot: typeof tab.snapshot === 'string' ? tab.snapshot : ''
+    };
+  }
+
   function normalizeSession(value) {
     const session = isObject(value) ? value : {};
     return {
@@ -368,6 +494,8 @@
       activeCollectionId: normalizeId(session.activeCollectionId),
       activeFolderId: normalizeId(session.activeFolderId),
       activeRequestId: normalizeId(session.activeRequestId),
+      activeRunnerRequestRunnerId: normalizeId(session.activeRunnerRequestRunnerId),
+      activeRunnerConfigId: normalizeId(session.activeRunnerConfigId),
       activeSidebarPanel: normalizeEnum(session.activeSidebarPanel, SIDEBAR_PANELS, 'collections'),
       activeMainPanel: normalizeEnum(session.activeMainPanel, MAIN_PANELS, 'request'),
       activeRequestTab: normalizeEnum(session.activeRequestTab, REQUEST_TABS, DEFAULT_REQUEST_TAB),
@@ -375,6 +503,8 @@
       openRequestTabs: Array.isArray(session.openRequestTabs) ? session.openRequestTabs.filter(isObject) : [],
       openEnvironmentTabs: Array.isArray(session.openEnvironmentTabs) ? session.openEnvironmentTabs.filter(isObject) : [],
       openWorkspaceTabs: Array.isArray(session.openWorkspaceTabs) ? session.openWorkspaceTabs.filter(isObject) : [],
+      openRunnerTabs: Array.isArray(session.openRunnerTabs) ? session.openRunnerTabs.filter(isObject) : [],
+      workspaceOrder: Array.isArray(session.workspaceOrder) ? session.workspaceOrder.map(normalizeId).filter(Boolean) : [],
       draftRequests: Array.isArray(session.draftRequests) ? session.draftRequests.filter(isObject) : [],
       dirtyCollectionStates: Array.isArray(session.dirtyCollectionStates) ? session.dirtyCollectionStates.filter(isObject) : [],
       dirtyCookieJarState: isObject(session.dirtyCookieJarState) ? session.dirtyCookieJarState : null
@@ -389,6 +519,27 @@
       delete target[key];
     }
     Object.assign(target, source);
+  }
+
+  function serializeWorkspaceOrder(state) {
+    return (Array.isArray(state.workspaces) ? state.workspaces : [])
+      .map((workspace) => normalizeId(workspace?.id))
+      .filter(Boolean);
+  }
+
+  function applyWorkspaceOrder(state, order) {
+    if (!Array.isArray(state.workspaces) || !Array.isArray(order) || !order.length) {
+      return;
+    }
+    const orderIndex = new Map(order.map((id, index) => [normalizeId(id), index]));
+    state.workspaces = [...state.workspaces].sort((left, right) => {
+      const leftIndex = orderIndex.has(left?.id) ? orderIndex.get(left.id) : Number.MAX_SAFE_INTEGER;
+      const rightIndex = orderIndex.has(right?.id) ? orderIndex.get(right.id) : Number.MAX_SAFE_INTEGER;
+      if (leftIndex !== rightIndex) {
+        return leftIndex - rightIndex;
+      }
+      return 0;
+    });
   }
 
   function safeSnapshot(value) {

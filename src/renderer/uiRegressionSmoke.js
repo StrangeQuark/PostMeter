@@ -11,7 +11,7 @@
   async function runUiRegressionSmoke() {
     assertUiSmoke(workspace.collections.length === 0, 'Regression smoke should start with an empty workspace.');
     assertUiSmoke(!/(sign in|log in|create account|register)/i.test(document.body.textContent), 'Standalone UI should not render app account/login language.');
-    assertToolbarMenuSmoke('newMenuButton', 'newMenu', ['Workspace', 'Request', 'Collection', 'Folder', 'Environment']);
+    assertToolbarMenuSmoke('newMenuButton', 'newMenu', ['Workspace', 'Request', 'Collection', 'Folder', 'Environment', 'Runner']);
     assertToolbarMenuSmoke('importMenuButton', 'importMenu', ['Workspace', 'Collection']);
     assertToolbarMenuSmoke('exportMenuButton', 'exportMenu', ['Workspace', 'Collection', 'Postman', 'OpenAPI', 'JMeter', 'curl', 'HAR']);
     assertToolbarMenuKeyboardActivationSmoke();
@@ -41,6 +41,7 @@
     await assertWorkspaceSandboxAccessibilitySmoke();
     await assertLargeWorkspaceBudgetSmoke();
     await assertEditorCollectionSmoke();
+    await assertSidebarTreeDragSmoke();
     assertCreationSemanticsSmoke();
     await assertRequestTabCloseSmoke();
 
@@ -156,7 +157,10 @@
     await assertExportCancellationSmoke();
     await assertOauthFlowSmoke();
 
-    activateTab('results', 'runner');
+    assertUiSmoke(!$('resultsRunnerTabButton'), 'Runner should not appear in the request-local results tabs.');
+    selectSidebarPanel('runners');
+    const regressionRunner = newRunner();
+    assertUiSmoke(regressionRunner, 'Regression runner was not created.');
     assertUiSmoke($('exportRunnerJsonButton').disabled, 'Runner JSON export should be disabled before a run.');
     assertUiSmoke($('exportRunnerCsvButton').disabled, 'Runner CSV export should be disabled before a run.');
     assertUiSmoke($('runnerStopOnFailure'), 'Runner stop-on-failure control is missing.');
@@ -237,6 +241,21 @@
     scriptInput.value = '';
     dispatchInput(bodyInput);
     dispatchInput(scriptInput);
+
+    activateTab('results', 'response');
+    const responseGrid = document.querySelector('.response-grid');
+    const responseBody = $('responseBody');
+    const responseEditor = responseBody.closest('.code-editor');
+    const responseHighlight = responseEditor?.querySelector('.code-editor-highlight');
+    const gridRect = responseGrid.getBoundingClientRect();
+    const editorRect = responseEditor.getBoundingClientRect();
+    const bodyRect = responseBody.getBoundingClientRect();
+    const highlightRect = responseHighlight.getBoundingClientRect();
+    assertUiSmoke(Math.abs(editorRect.height - gridRect.height) <= 2, 'Response body editor should fill the response grid height.');
+    assertUiSmoke(Math.abs(bodyRect.height - editorRect.height) <= 2, 'Response body textarea should match the visible response editor height.');
+    assertUiSmoke(Math.abs(bodyRect.width - editorRect.width) <= 2, 'Response body textarea should match the visible response editor width.');
+    assertUiSmoke(Math.abs(highlightRect.height - bodyRect.height) <= 2, 'Response body syntax layer should match the textarea height.');
+    assertUiSmoke(Math.abs(highlightRect.width - bodyRect.width) <= 2, 'Response body syntax layer should match the textarea width.');
   }
 
   async function assertModalFocusSmoke() {
@@ -295,7 +314,7 @@
     assertUiSmoke(await notificationResult === true, 'Notification modal should resolve when closed.');
     assertUiSmoke(document.activeElement === notificationTrigger, 'Notification modal should restore focus to the opener.');
 
-    const draftTrigger = $('saveButton');
+    const draftTrigger = $('exportMenuButton');
     draftTrigger.focus();
     renderSaveDraftCollectionList();
     const draftResult = showModal('saveDraftRequestModal', null);
@@ -304,7 +323,7 @@
     assertUiSmoke(await draftResult === null, 'Save-draft modal should resolve null when cancelled.');
     assertUiSmoke(document.activeElement === draftTrigger, 'Save-draft modal should restore focus to the opener.');
 
-    const vaultTrigger = $('saveButton');
+    const vaultTrigger = $('exportMenuButton');
     vaultTrigger.focus();
     activeVaultPromptPayload = {
       collectionName: 'Smoke Collection',
@@ -354,6 +373,11 @@
       await setIncludePrereleases(true, { save: true });
       assertUiSmoke(workspace.settings.updates.includePrereleases === false, 'Failed prerelease setting save should roll back the in-memory setting.');
       assertStatusIncludes('Prerelease setting save failed', 'Failed prerelease setting save should surface a user-visible status.');
+
+      workspace.settings.tabs.saveOnForceClose = false;
+      await setSaveOnForceClose(true, { save: true });
+      assertUiSmoke(workspace.settings.tabs.saveOnForceClose === false, 'Failed force-close setting save should roll back the in-memory setting.');
+      assertStatusIncludes('Force close setting save failed', 'Failed force-close setting save should surface a user-visible status.');
 
       workspace.settings.diagnostics = normalizeDiagnosticsSettings({
         logging: { enabled: true, level: 'info' },
@@ -444,12 +468,33 @@
       assertUiSmoke(!$('deleteWorkspacePanelButton').disabled, 'Workspace delete should enable when multiple workspaces exist.');
       const createdWorkspaceId = selectedWorkspaceId;
       assertUiSmoke(Boolean(createdWorkspaceId && createdWorkspaceId !== originalWorkspaceId), 'Creating a workspace should select the new workspace in the UI.');
-      const renamePromise = renameWorkspace(createdWorkspaceId);
-      await resolveTextInputModal('Renamed Workspace', 'Workspace rename should use the in-app text input modal.');
-      await renamePromise;
+      const workspaceTitle = $('workspaceMainTitle');
+      assertUiSmoke(!document.getElementById('renameWorkspacePanelButton'), 'Workspace details should not render a separate rename button.');
+      assertUiSmoke(!$('workspaceMainPanel').querySelector('.workspace-main-header h2'), 'Workspace details should not render a redundant Workspace label above the title.');
+      assertUiSmoke(workspaceTitle.getAttribute('aria-label') === 'Workspace name', 'Workspace title should expose an accessible name.');
+      assertUiSmoke(getComputedStyle(workspaceTitle).whiteSpace === 'nowrap', 'Workspace title should stay on a single line.');
+      workspaceTitle.click();
+      assertUiSmoke(workspaceTitle.getAttribute('contenteditable') === 'plaintext-only', 'Clicking the workspace title should make it editable inline.');
+      workspaceTitle.textContent = '';
+      workspaceTitle.dispatchEvent(new Event('blur'));
+      assertUiSmoke(selectedWorkspaceId === createdWorkspaceId, 'Submitting an empty workspace title should keep the current workspace id.');
+      assertUiSmoke(workspaceDisplayName() !== '', 'Submitting an empty workspace title should restore the previous visible name.');
+      await editWorkspaceTitle('Renamed Workspace', {
+        waitFor: () => selectedWorkspaceId === 'Renamed Workspace.json',
+        message: 'Workspace inline rename did not update the selected workspace id.'
+      });
+      assertUiSmoke($('textInputModal').hidden, 'Workspace inline rename should not open the text input modal.');
       assertUiSmoke(activeWorkspaceId === originalWorkspaceId, 'Renaming a non-current workspace should not switch the loaded workspace.');
       assertUiSmoke(selectedWorkspaceId === 'Renamed Workspace.json', 'Renaming the selected workspace should update the selected workspace id.');
       assertUiSmoke(workspaceDisplayName() === 'Renamed Workspace', 'Renaming the selected workspace should update the viewed workspace name.');
+      const renamedTitle = $('workspaceMainTitle');
+      renamedTitle.click();
+      renamedTitle.textContent = 'Discarded Workspace Rename';
+      dispatchInput(renamedTitle);
+      renamedTitle.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape' }));
+      await nextPaint();
+      assertUiSmoke(selectedWorkspaceId === 'Renamed Workspace.json', 'Escaping a workspace title edit should keep the selected workspace id.');
+      assertUiSmoke(workspaceDisplayName() === 'Renamed Workspace', 'Escaping a workspace title edit should restore the original name.');
       const renamedWorkspaceId = selectedWorkspaceId;
       newCollection();
       assertUiSmoke(workspace.collections.length === 1, 'Current workspace should accept collection edits before switching away.');
@@ -469,7 +514,7 @@
       assertUiSmoke($('diagnosticLogUrlsInput').disabled, 'Viewing a non-current workspace should disable diagnostics privacy settings.');
       assertUiSmoke($('diagnosticsPrivacySummary').textContent.includes('Switch to this workspace'), 'Non-current workspace diagnostics controls should explain the switch requirement.');
       assertUiSmoke(!$('switchWorkspacePanelButton').hidden, 'Workspace details should render the switch action.');
-      assertUiSmoke(!$('renameWorkspacePanelButton').hidden, 'Workspace details should still render rename.');
+      assertUiSmoke(!document.getElementById('renameWorkspacePanelButton'), 'Workspace details should rely on inline title rename instead of a rename button.');
       let diagnosticsExported = false;
       window.__postmeterDiagnostics = {
         export: async () => {
@@ -798,7 +843,7 @@
       const openMillis = performance.now() - openStarted;
       assertUiSmoke(openMillis <= 3000, `Large request open exceeded budget: ${openMillis.toFixed(1)}ms.`);
       assertUiSmoke(activeRequestId === targetRequestId, 'Large request open did not select the target request.');
-      assertUiSmoke($('requestNameInput').value === 'Large Request 29.1.3', 'Large request open did not populate the editor.');
+      assertUiSmoke($('requestNameTitle').textContent === 'Large Request 29.1.3', 'Large request open did not populate the editor title.');
     } finally {
       workspace = originalWorkspace;
       workspaces = originalWorkspaces;
@@ -888,7 +933,7 @@
 
     const collection = newCollection();
     const request = newRequest(collection.id, null);
-    $('requestNameInput').value = 'Pending Navigation Request';
+    editRequestTitle('Pending Navigation Request', { commit: false });
     selectSidebarPanel('workspaces');
     assertUiSmoke(request.name === 'Pending Navigation Request', 'Switching sidebar panels should collect the active request editor before rerendering.');
 
@@ -907,6 +952,287 @@
       workspace.environments.find((item) => item.id === firstEnvironment.id)?.name === 'Pending Environment Rename',
       'Selecting a different environment should collect the current environment editor before rerendering.'
     );
+  }
+
+  async function assertSidebarTreeDragSmoke() {
+    const originalWorkspace = structuredClone(workspace);
+    const originalWorkspaces = structuredClone(workspaces);
+    const originalActiveCollectionId = activeCollectionId;
+    const originalActiveFolderId = activeFolderId;
+    const originalActiveRequestId = activeRequestId;
+    const originalActiveEnvironmentId = activeEnvironmentId;
+    const originalActiveRunnerConfigId = activeRunnerConfigId;
+    const originalActiveRunnerRequestRunnerId = activeRunnerRequestRunnerId;
+    const originalActiveWorkspaceId = activeWorkspaceId;
+    const originalSelectedWorkspaceId = selectedWorkspaceId;
+    const originalSidebarPanel = activeSidebarPanel;
+    const originalMainPanel = activeMainPanel;
+    const originalOpenRequestTabs = structuredClone(openRequestTabs);
+    const originalEnvironmentTabs = structuredClone(openEnvironmentTabs);
+    const originalRunnerTabs = structuredClone(openRunnerTabs);
+    const originalWorkspaceTabs = structuredClone(openWorkspaceTabs);
+    const originalSessionPersistenceEnabled = sessionPersistenceEnabled;
+    const originalSaveWorkspace = window.__postmeterSaveWorkspace;
+    const originalSaveSession = window.__postmeterSaveSession;
+    const savedPayloads = [];
+    let savedSession = null;
+    try {
+      const dragRequest = newRequestObject('Drag Saved Request');
+      dragRequest.id = 'drag-request-saved';
+      dragRequest.url = 'https://saved-drag.example.test';
+      const siblingRequest = newRequestObject('Drag Sibling Request');
+      siblingRequest.id = 'drag-request-sibling';
+      siblingRequest.url = 'https://sibling-drag.example.test';
+      const targetRequest = newRequestObject('Drag Target Request');
+      targetRequest.id = 'drag-request-target';
+      targetRequest.url = 'https://target-drag.example.test';
+      const folderRequest = newRequestObject('Drag Folder Request');
+      folderRequest.id = 'drag-folder-request';
+      folderRequest.url = 'https://folder-drag.example.test';
+      const folder = {
+        id: 'drag-folder-a',
+        name: 'Drag Folder A',
+        requests: [folderRequest],
+        folders: []
+      };
+      const siblingFolder = {
+        id: 'drag-folder-b',
+        name: 'Drag Folder B',
+        requests: [],
+        folders: []
+      };
+      workspace = {
+        schemaVersion: 11,
+        collections: [
+          {
+            id: 'drag-collection-a',
+            name: 'Drag Collection A',
+            description: '',
+            variables: [],
+            certificates: [],
+            requests: [dragRequest, siblingRequest],
+            folders: [folder]
+          },
+          {
+            id: 'drag-collection-b',
+            name: 'Drag Collection B',
+            description: '',
+            variables: [],
+            certificates: [],
+            requests: [targetRequest],
+            folders: [siblingFolder]
+          }
+        ],
+        environments: [
+          { id: 'drag-environment-a', name: 'Drag Environment A', variables: [] },
+          { id: 'drag-environment-b', name: 'Drag Environment B', variables: [] }
+        ],
+        runners: [
+          { id: 'drag-runner-a', name: 'Drag Runner A', environmentId: 'none', requests: [] },
+          { id: 'drag-runner-b', name: 'Drag Runner B', environmentId: 'none', requests: [] }
+        ],
+        globals: [],
+        cookies: [],
+        history: [],
+        settings: {
+          appearance: { theme: 'system' },
+          updates: { includePrereleases: false },
+          tabs: { saveOnForceClose: false }
+        }
+      };
+      workspaces = [
+        { id: 'drag-workspace-a.json', name: 'Drag Workspace A', current: true, deletable: false },
+        { id: 'drag-workspace-b.json', name: 'Drag Workspace B', current: false, deletable: true }
+      ];
+      activeWorkspaceId = 'drag-workspace-a.json';
+      selectedWorkspaceId = 'drag-workspace-a.json';
+      activeSidebarPanel = 'collections';
+      activeMainPanel = 'request';
+      activeCollectionId = 'drag-collection-a';
+      activeFolderId = null;
+      activeRequestId = dragRequest.id;
+      activeEnvironmentId = 'none';
+      activeRunnerConfigId = null;
+      activeRunnerRequestRunnerId = null;
+      resetRequestTabs();
+      ensureOpenRequestTabForActive();
+      window.__postmeterSaveWorkspace = async (nextWorkspace) => {
+        savedPayloads.push(structuredClone(nextWorkspace));
+        return nextWorkspace;
+      };
+      sessionPersistenceEnabled = true;
+      window.__postmeterSaveSession = async (session) => {
+        savedSession = structuredClone(session);
+        return session;
+      };
+      renderAll();
+
+      for (const [kind, id] of [
+        ['collection', 'drag-collection-a'],
+        ['request', dragRequest.id],
+        ['folder', folder.id],
+        ['environment', 'drag-environment-a'],
+        ['runner', 'drag-runner-a'],
+        ['workspace', 'drag-workspace-a.json']
+      ]) {
+        const button = treeButtonByTarget(kind, id);
+        assertUiSmoke(button?.draggable === true, `${kind} tree item should be draggable.`);
+        assertUiSmoke(treeDropBarByTarget(kind, id, 'before'), `${kind} tree item should render a hidden before-drop bar.`);
+      }
+      assertUiSmoke($('environmentsList').querySelectorAll('.tree-drop-bar').length === workspace.environments.length + 1, 'Environment list should render one drop bar per insertion point.');
+      assertUiSmoke(treeDropBarByTarget('environment', 'drag-environment-b', 'after'), 'Environment list should render one trailing after-drop bar.');
+      sidebarTreeDragPayload = { kind: 'environment', id: 'drag-environment-b' };
+      const environmentTargetButton = treeButtonByTarget('environment', 'drag-environment-a');
+      const environmentBeforeBar = treeDropBarByTarget('environment', 'drag-environment-a', 'before');
+      const environmentAfterBar = treeDropBarByTarget('environment', 'drag-environment-b', 'before');
+      environmentBeforeBar.dispatchEvent(new MouseEvent('dragover', { bubbles: true, cancelable: true }));
+      assertUiSmoke(environmentBeforeBar.classList.contains('is-drop-target'), 'Dragging over a hidden drop bar should highlight that bar.');
+      assertUiSmoke(!environmentTargetButton.classList.contains('is-drop-target'), 'Dragging over a drop target should not highlight the tree item itself.');
+      environmentAfterBar.dispatchEvent(new MouseEvent('dragover', { bubbles: true, cancelable: true }));
+      assertUiSmoke(environmentAfterBar.classList.contains('is-drop-target'), 'Dragging over a different hidden drop bar should move the highlighted placement bar.');
+      assertUiSmoke(!environmentBeforeBar.classList.contains('is-drop-target'), 'Only one sidebar drop bar should be highlighted at a time.');
+      const environmentTargetRect = environmentTargetButton.getBoundingClientRect();
+      if (environmentTargetRect.height > 4) {
+        environmentTargetButton.dispatchEvent(new MouseEvent('dragover', {
+          bubbles: true,
+          cancelable: true,
+          clientY: environmentTargetRect.top + 1
+        }));
+        assertUiSmoke(environmentBeforeBar.classList.contains('is-drop-target'), 'Dragging over the upper half of a tree item should highlight its before bar.');
+        environmentTargetButton.dispatchEvent(new MouseEvent('dragover', {
+          bubbles: true,
+          cancelable: true,
+          clientY: environmentTargetRect.bottom - 1
+        }));
+        assertUiSmoke(environmentAfterBar.classList.contains('is-drop-target'), 'Dragging over the lower half of a tree item should highlight its after bar.');
+      }
+      clearSidebarTreeDropTargets();
+      sidebarTreeDragPayload = null;
+      assertUiSmoke(
+        !canDropSidebarTreeItem(
+          { kind: 'collection', id: 'drag-collection-a' },
+          { kind: 'folder', id: folder.id }
+        ),
+        'Collections should not be droppable into folders.'
+      );
+
+      await moveTopLevelTreeItem(
+        { kind: 'environment', id: 'drag-environment-b' },
+        { kind: 'environment', id: 'drag-environment-a' },
+        'before'
+      );
+      assertUiSmoke(workspace.environments.map((item) => item.id).join('|') === 'drag-environment-b|drag-environment-a', 'Environment drag reorder did not update the in-memory order.');
+      assertUiSmoke(savedPayloads.at(-1)?.environments?.map((item) => item.id).join('|') === 'drag-environment-b|drag-environment-a', 'Environment drag reorder did not save the new order.');
+
+      await moveTopLevelTreeItem(
+        { kind: 'runner', id: 'drag-runner-b' },
+        { kind: 'runner', id: 'drag-runner-a' },
+        'before'
+      );
+      assertUiSmoke(workspace.runners.map((item) => item.id).join('|') === 'drag-runner-b|drag-runner-a', 'Runner drag reorder did not update the in-memory order.');
+      assertUiSmoke(savedPayloads.at(-1)?.runners?.map((item) => item.id).join('|') === 'drag-runner-b|drag-runner-a', 'Runner drag reorder did not save the new order.');
+
+      await moveTopLevelTreeItem(
+        { kind: 'collection', id: 'drag-collection-b' },
+        { kind: 'collection', id: 'drag-collection-a' },
+        'before'
+      );
+      assertUiSmoke(workspace.collections.map((item) => item.id).join('|') === 'drag-collection-b|drag-collection-a', 'Collection drag reorder did not update the in-memory order.');
+      assertUiSmoke(savedPayloads.at(-1)?.collections?.map((item) => item.id).join('|') === 'drag-collection-b|drag-collection-a', 'Collection drag reorder did not save the new order.');
+
+      await moveTopLevelTreeItem(
+        { kind: 'workspace', id: 'drag-workspace-b.json' },
+        { kind: 'workspace', id: 'drag-workspace-a.json' },
+        'before'
+      );
+      assertUiSmoke(workspaces.map((item) => item.id).join('|') === 'drag-workspace-b.json|drag-workspace-a.json', 'Workspace drag reorder did not update the managed workspace order.');
+      assertUiSmoke(savedSession?.workspaceOrder?.join('|') === 'drag-workspace-b.json|drag-workspace-a.json', 'Workspace drag reorder did not save the session workspace order.');
+
+      selectRequestTab(openRequestTabs.find((tab) => tab.requestId === dragRequest.id));
+      $('urlInput').value = 'https://dirty-drag.example.test';
+      dispatchInput($('urlInput'));
+      const dirtyTab = openRequestTabs.find((tab) => tab.requestId === dragRequest.id);
+      assertUiSmoke(dirtyTab?.dirty === true, 'Editing the drag request should mark its tab dirty before moving it.');
+      const saveCallsBeforeRequestMove = savedPayloads.length;
+      await moveCollectionTreeItem(
+        { kind: 'request', id: dragRequest.id },
+        { kind: 'collection', id: 'drag-collection-b' },
+        'after'
+      );
+      assertUiSmoke(savedPayloads.length === saveCallsBeforeRequestMove + 1, 'Moving a request should save the structural collection change.');
+      const liveTargetCollection = workspace.collections.find((item) => item.id === 'drag-collection-b');
+      const liveSourceCollection = workspace.collections.find((item) => item.id === 'drag-collection-a');
+      assertUiSmoke(!liveSourceCollection.requests.some((request) => request.id === dragRequest.id), 'Moving a request should remove it from the source collection.');
+      assertUiSmoke(liveTargetCollection.requests.some((request) => request.id === dragRequest.id), 'Moving a request should add it to the target collection.');
+      assertUiSmoke(liveTargetCollection.requests.find((request) => request.id === dragRequest.id)?.url === 'https://dirty-drag.example.test', 'Moving a dirty request should keep the dirty editor state in memory.');
+      const savedAfterRequestMove = savedPayloads.at(-1);
+      const savedTargetCollection = savedAfterRequestMove.collections.find((item) => item.id === 'drag-collection-b');
+      const savedSourceCollection = savedAfterRequestMove.collections.find((item) => item.id === 'drag-collection-a');
+      const savedMovedRequest = savedTargetCollection.requests.find((request) => request.id === dragRequest.id);
+      assertUiSmoke(!savedSourceCollection.requests.some((request) => request.id === dragRequest.id), 'Structural request move should save removal from the source collection.');
+      assertUiSmoke(savedMovedRequest?.url === 'https://saved-drag.example.test', 'Structural request move should not save dirty request editor fields.');
+      assertUiSmoke(dirtyTab.collectionId === 'drag-collection-b', 'Moving an open request should retarget its open tab collection.');
+      assertUiSmoke(dirtyTab.key === `request:drag-collection-b:${dragRequest.id}`, 'Moving an open request should retarget its open tab key.');
+      assertUiSmoke(dirtyTab.dirty === true, 'Moving an open dirty request should keep the tab dirty.');
+
+      await moveCollectionTreeItem(
+        { kind: 'request', id: targetRequest.id },
+        { kind: 'request', id: dragRequest.id },
+        'after'
+      );
+      assertUiSmoke(
+        liveTargetCollection.requests.map((request) => request.id).slice(-2).join('|') === `${dragRequest.id}|${targetRequest.id}`,
+        'Dragging a request within a collection should reorder it relative to another request.'
+      );
+      assertUiSmoke(
+        savedPayloads.at(-1).collections.find((item) => item.id === 'drag-collection-b').requests.map((request) => request.id).slice(-2).join('|') === `${dragRequest.id}|${targetRequest.id}`,
+        'Request reorder should save the new request order.'
+      );
+
+      const saveCallsBeforeFolderMove = savedPayloads.length;
+      await moveCollectionTreeItem(
+        { kind: 'folder', id: folder.id },
+        { kind: 'collection', id: 'drag-collection-b' },
+        'after'
+      );
+      assertUiSmoke(savedPayloads.length === saveCallsBeforeFolderMove + 1, 'Moving a folder should save the structural collection change.');
+      assertUiSmoke(!liveSourceCollection.folders.some((item) => item.id === folder.id), 'Moving a folder should remove it from the source collection.');
+      assertUiSmoke(liveTargetCollection.folders.some((item) => item.id === folder.id), 'Moving a folder should add it to the target collection.');
+      assertUiSmoke(
+        savedPayloads.at(-1).collections.find((item) => item.id === 'drag-collection-b').folders.some((item) => item.id === folder.id),
+        'Folder move should save the target collection folder membership.'
+      );
+      await moveCollectionTreeItem(
+        { kind: 'folder', id: siblingFolder.id },
+        { kind: 'folder', id: folder.id },
+        'before'
+      );
+      assertUiSmoke(
+        liveTargetCollection.folders.map((item) => item.id).slice(-2).join('|') === `${siblingFolder.id}|${folder.id}`,
+        'Dragging a folder within a collection should reorder it relative to another folder.'
+      );
+    } finally {
+      workspace = originalWorkspace;
+      workspaces = originalWorkspaces;
+      activeCollectionId = originalActiveCollectionId;
+      activeFolderId = originalActiveFolderId;
+      activeRequestId = originalActiveRequestId;
+      activeEnvironmentId = originalActiveEnvironmentId;
+      activeRunnerConfigId = originalActiveRunnerConfigId;
+      activeRunnerRequestRunnerId = originalActiveRunnerRequestRunnerId;
+      activeWorkspaceId = originalActiveWorkspaceId;
+      selectedWorkspaceId = originalSelectedWorkspaceId;
+      activeSidebarPanel = originalSidebarPanel;
+      activeMainPanel = originalMainPanel;
+      openRequestTabs = originalOpenRequestTabs;
+      openEnvironmentTabs = originalEnvironmentTabs;
+      openRunnerTabs = originalRunnerTabs;
+      openWorkspaceTabs = originalWorkspaceTabs;
+      sessionPersistenceEnabled = originalSessionPersistenceEnabled;
+      window.__postmeterSaveWorkspace = originalSaveWorkspace;
+      window.__postmeterSaveSession = originalSaveSession;
+      renderAll();
+    }
   }
 
   function assertOauthProgressSmoke() {
@@ -1271,11 +1597,18 @@
       requestRenameButton.focus();
       openKeyboardContextMenu(requestRenameButton);
       activateContextMenuItem('Rename');
-      await resolveTextInputModal('Focus Request Renamed', 'Request rename should use the in-app text input modal.');
+      await nextPaint();
+      const requestTitle = $('requestNameTitle');
+      assertUiSmoke(document.activeElement === requestTitle, 'Request rename should focus the inline request title.');
+      assertUiSmoke(requestTitle.getAttribute('contenteditable') === 'plaintext-only', 'Request rename should make the request title editable inline.');
+      assertUiSmoke($('textInputModal').hidden, 'Request rename should not use the text input modal.');
+      requestTitle.textContent = 'Focus Request Renamed';
+      dispatchInput(requestTitle);
+      requestTitle.dispatchEvent(new Event('blur'));
       await nextPaint();
       const renamedRequestButton = treeButtonByTarget('request', renameRequestTarget.id);
       assertUiSmoke(renamedRequestButton?.textContent.includes('Focus Request Renamed'), 'Request rename did not rerender the replacement tree button.');
-      assertUiSmoke(document.activeElement === renamedRequestButton, 'Request rename should restore focus to the replacement tree button.');
+      assertUiSmoke(renameRequestTarget.name === 'Focus Request Renamed', 'Request inline rename did not update the request model.');
 
       const deleteRequestTarget = newRequest(requestCollection.id, null);
       deleteRequestTarget.name = 'Focus Delete Request';
@@ -1312,6 +1645,17 @@
     return document.querySelector(`.tree-item[data-tree-kind="${cssAttributeValue(kind)}"][data-tree-id="${cssAttributeValue(id)}"]`);
   }
 
+  function treeDropBarByTarget(kind, id, position) {
+    return Array.from(document.querySelectorAll('.tree-drop-bar')).find((bar) => (
+      Array.isArray(bar.__postmeterDropCandidates)
+      && bar.__postmeterDropCandidates.some((candidate) => (
+        candidate?.target?.kind === kind
+        && candidate.target.id === id
+        && candidate.position === position
+      ))
+    )) || null;
+  }
+
   function cssAttributeValue(value) {
     return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
   }
@@ -1319,6 +1663,21 @@
   function openKeyboardContextMenu(button) {
     button.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ContextMenu' }));
     assertUiSmoke(!$('contextMenu').hidden, 'Keyboard context menu should open for tree items.');
+  }
+
+  function openOpenTabContextMenu(tab) {
+    assertUiSmoke(tab?.key, 'Open-tab context menu smoke needs a tab key.');
+    renderRequestTabs();
+    const button = document.querySelector(`[data-open-tab-key="${cssAttributeValue(tab.key)}"]`);
+    assertUiSmoke(button, `Open-tab context menu trigger missing for ${tab.key}.`);
+    button.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 240,
+      clientY: 120
+    }));
+    assertUiSmoke(!$('contextMenu').hidden, 'Right-clicking an open tab should show the tab context menu.');
+    return button;
   }
 
   function activateContextMenuItem(label) {
@@ -1340,6 +1699,37 @@
     dispatchInput(title);
     if (options.commit !== false) {
       title.dispatchEvent(new Event('blur'));
+    }
+  }
+
+  function editRequestTitle(value, options = {}) {
+    const title = $('requestNameTitle');
+    title.click();
+    title.textContent = value;
+    dispatchInput(title);
+    if (options.commit !== false) {
+      title.dispatchEvent(new Event('blur'));
+    }
+  }
+
+  function pressEditableTitleEnter(title) {
+    title.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'Enter'
+    }));
+  }
+
+  async function editWorkspaceTitle(value, options = {}) {
+    const title = $('workspaceMainTitle');
+    title.click();
+    title.textContent = value;
+    dispatchInput(title);
+    if (options.commit !== false) {
+      title.dispatchEvent(new Event('blur'));
+    }
+    if (typeof options.waitFor === 'function') {
+      await waitForUiSmoke(options.waitFor, options.message || 'Workspace title edit did not settle.', 3000, global);
     }
   }
 
@@ -1371,25 +1761,114 @@
 
   async function assertSidebarPanelSmoke() {
     const originalEnvironments = structuredClone(workspace.environments || []);
+    const originalCollections = structuredClone(workspace.collections || []);
+    const originalHistory = structuredClone(workspace.history || []);
+    const originalRunners = structuredClone(workspace.runners || []);
+    const originalActiveCollectionId = activeCollectionId;
+    const originalActiveFolderId = activeFolderId;
+    const originalActiveRequestId = activeRequestId;
+    const originalActiveRunnerRequestRunnerId = activeRunnerRequestRunnerId;
     const originalActiveEnvironmentId = activeEnvironmentId;
+    const originalActiveRunnerConfigId = activeRunnerConfigId;
     const originalActiveWorkspaceId = activeWorkspaceId;
     const originalSelectedWorkspaceId = selectedWorkspaceId;
     const originalSidebarPanel = activeSidebarPanel;
     const originalMainPanel = activeMainPanel;
+    const originalRequestTabs = structuredClone(openRequestTabs);
     const originalEnvironmentTabs = structuredClone(openEnvironmentTabs);
     const originalWorkspaceTabs = structuredClone(openWorkspaceTabs);
+    const originalRunnerTabs = structuredClone(openRunnerTabs);
     try {
       assertUiSmoke(!$('environmentTab'), 'Environment request tab panel should be removed from the request editor.');
       assertUiSmoke(!document.querySelector('.tab[data-tab-group="request"][data-tab="environment"]'), 'Environment should not appear in the request tab row.');
       assertUiSmoke(!$('newEnvironmentButton'), 'Environments sidebar should not render its own New button.');
-      for (const panel of ['collections', 'environments', 'workspaces', 'history']) {
+      assertUiSmoke($('newRunnerMenuButton'), 'Toolbar New menu should include Runner creation.');
+      assertUiSmoke(!$('newRunnerButton'), 'Runner sidebar should not render its own New button.');
+      assertUiSmoke($('emptyCreateRunnerButton')?.textContent === 'New Runner', 'Runner empty state should render a New Runner button.');
+      const sidebarOrder = Array.from(document.querySelectorAll('.sidebar-tab')).map((button) => button.dataset.sidebarPanel);
+      assertUiSmoke(sidebarOrder.join('|') === 'collections|environments|workspaces|runners|history', `Sidebar order was ${sidebarOrder.join('|')}.`);
+      for (const panel of ['collections', 'environments', 'workspaces', 'runners', 'history']) {
         assertUiSmoke(document.querySelector(`.sidebar-tab[data-sidebar-panel="${panel}"]`), `Sidebar tab missing ${panel}.`);
         selectSidebarPanel(panel);
         assertUiSmoke(!document.querySelector(`[data-sidebar-panel-content="${panel}"]`).hidden, `Sidebar panel ${panel} did not open.`);
       }
       workspace.environments = [];
       activeEnvironmentId = 'none';
+      openEnvironmentTabs = [];
+      openWorkspaceTabs = [];
+      selectedWorkspaceId = '';
+      workspace.runners = [];
+      openRunnerTabs = [];
+      activeRunnerConfigId = null;
+      for (const expectation of [
+        ['environmentsPanelTab', 'environment', 'environmentEmptyPanel', 'Create a new environment'],
+        ['workspacesPanelTab', 'workspace', 'workspaceEmptyPanel', 'Select a workspace'],
+        ['runnersPanelTab', 'runner', 'runnerEmptyPanel', 'Create a runner']
+      ]) {
+        const [tabId, expectedMainPanel, expectedEmptyPanel, expectedText] = expectation;
+        $(tabId).click();
+        assertUiSmoke(activeMainPanel === expectedMainPanel, `Clicking ${tabId} should switch the main pane to ${expectedMainPanel}.`);
+        assertUiSmoke($('requestEditorPanel').hidden, `Clicking ${tabId} should hide the request editor.`);
+        assertUiSmoke(document.querySelector('.results').hidden, `Clicking ${tabId} should hide the response panel.`);
+        assertUiSmoke(!$(`${expectedEmptyPanel}`).hidden, `Clicking ${tabId} should show ${expectedEmptyPanel}.`);
+        assertUiSmoke($(`${expectedEmptyPanel}`).textContent.includes(expectedText), `${expectedEmptyPanel} should render the expected empty-state text.`);
+        assertUiSmoke(getComputedStyle($(`${expectedEmptyPanel}`)).display !== 'none', `${expectedEmptyPanel} should be visible in layout.`);
+        for (const panelId of ['requestEmptyPanel', 'environmentEmptyPanel', 'workspaceEmptyPanel', 'runnerEmptyPanel']) {
+          if (panelId === expectedEmptyPanel) {
+            continue;
+          }
+          assertUiSmoke($(panelId).hidden, `Clicking ${tabId} should keep ${panelId} hidden.`);
+          assertUiSmoke(getComputedStyle($(panelId)).display === 'none', `Clicking ${tabId} should keep ${panelId} out of layout.`);
+        }
+      }
+      workspace.history = [{
+        timestamp: new Date(0).toISOString(),
+        method: 'GET',
+        url: 'https://history-clear.example.test/widgets',
+        statusCode: 200,
+        durationMillis: 25
+      }];
+      renderHistory();
+      const historyTab = $('historyPanelTab');
+      assertUiSmoke(historyTab.getAttribute('aria-haspopup') === 'menu', 'History tab should expose a context menu.');
+      historyTab.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true,
+        cancelable: true,
+        clientX: 32,
+        clientY: 240
+      }));
+      const clearHistoryMenuItem = Array.from($('contextMenu').querySelectorAll('button'))
+        .find((button) => button.textContent.trim() === 'Clear History');
+      assertUiSmoke(!$('contextMenu').hidden, 'Right-clicking History should open its context menu.');
+      assertUiSmoke(clearHistoryMenuItem, 'History context menu should include Clear History.');
+      assertUiSmoke(clearHistoryMenuItem.classList.contains('danger'), 'Clear History should use the danger context menu style.');
+      clearHistoryMenuItem.click();
+      assertUiSmoke(!$('confirmActionModal').hidden, 'Clear History should ask for confirmation.');
+      assertUiSmoke($('confirmActionModalTitle').textContent === 'Clear history?', 'Clear History confirmation should use a specific title.');
+      assertUiSmoke($('confirmActionModalMessage').textContent.includes('cannot be undone'), 'Clear History confirmation should warn that clearing cannot be undone.');
+      assertUiSmoke($('confirmActionButton').textContent === 'Clear History', 'Clear History confirmation should label the destructive action.');
+      $('cancelConfirmActionButton').click();
+      await Promise.resolve();
+      assertUiSmoke(workspace.history.length === 1, 'Cancelling Clear History should keep history entries.');
+      historyTab.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true,
+        cancelable: true,
+        clientX: 32,
+        clientY: 240
+      }));
+      activateContextMenuItem('Clear History');
+      assertUiSmoke(!$('confirmActionModal').hidden, 'Activating Clear History should reopen the confirmation modal.');
+      $('confirmActionButton').click();
+      await waitForUiSmoke(() => workspace.history.length === 0, 'Confirming Clear History should remove history entries.', 3000, global);
+      assertUiSmoke(!$('historyList').querySelector('.history-item'), 'Confirming Clear History should clear the rendered history list.');
+      assertStatusIncludes('History cleared', 'Confirming Clear History should update the visible status.');
+      workspace.environments = [];
+      activeEnvironmentId = 'none';
+      openEnvironmentTabs = [];
       selectSidebarPanel('environments');
+      assertUiSmoke(activeSidebarPanel === 'environments', 'Selecting Environments should switch the sidebar panel.');
+      assertUiSmoke(activeMainPanel === 'environment', 'Selecting Environments should switch the main pane to environment mode.');
+      assertUiSmoke(openEnvironmentTabs.length === 0, 'Selecting Environments should not automatically open an environment tab.');
       assertUiSmoke(!$('environmentEmptyPanel').hidden, 'Environments without a selection should show the create environment screen.');
       assertUiSmoke($('environmentMainPanel').hidden, 'Environment editor should be hidden when no environment is selected.');
       assertUiSmoke($('requestEditorPanel').hidden, 'Request editor should be hidden when no environment is selected.');
@@ -1403,12 +1882,20 @@
       assertUiSmoke($('workspacePaneResize').hidden, 'Workspace response splitter should be hidden while editing an environment.');
       assertUiSmoke(document.querySelector('.results').hidden, 'Response panel should be hidden while editing an environment.');
       assertUiSmoke(getComputedStyle(document.querySelector('.results')).display === 'none', 'Response panel should not occupy layout space while editing an environment.');
-      assertUiSmoke($('environmentMainPanel').getBoundingClientRect().bottom > document.querySelector('.workspace').getBoundingClientRect().bottom - 24, 'Environment editor should fill the main workspace area.');
+      const environmentPanelRect = $('environmentMainPanel').getBoundingClientRect();
+      const workspaceRect = document.querySelector('.workspace').getBoundingClientRect();
+      assertUiSmoke(
+        environmentPanelRect.bottom > workspaceRect.bottom - 24,
+        `Environment editor should fill the main workspace area. panelBottom=${environmentPanelRect.bottom} workspaceBottom=${workspaceRect.bottom} class=${document.querySelector('.workspace').className} rows=${getComputedStyle(document.querySelector('.workspace')).gridTemplateRows}.`
+      );
       assertUiSmoke($('requestTabBar').textContent.includes(environment.name), 'Creating an environment should open an environment tab.');
-      assertUiSmoke($('requestTabBar').getAttribute('aria-label') === 'Open requests, environments, and workspaces', 'Opened tablist label should cover request, environment, and workspace tabs.');
+      assertUiSmoke($('requestTabBar').getAttribute('aria-label') === 'Open requests, environments, workspaces, and runners', 'Opened tablist label should cover request, environment, workspace, and runner tabs.');
       const environmentTitle = $('environmentMainTitle');
       assertUiSmoke(!document.getElementById('environmentNameInput'), 'Environment editor should not render a separate name text box.');
       assertUiSmoke(!$('environmentMainPanel').querySelector('.environment-main-header h2'), 'Environment editor should not render a redundant Environment label above the title.');
+      assertUiSmoke($('saveEnvironmentButton')?.textContent === 'Save Environment', 'Environment editor should render a Save Environment button.');
+      assertUiSmoke(!$('saveEnvironmentButton').disabled, 'Environment editor should enable the environment save button.');
+      assertUiSmoke($('deleteEnvironmentButton')?.textContent === 'Delete Environment', 'Environment delete button should use the full Delete Environment label.');
       assertUiSmoke(environmentTitle.getAttribute('aria-label') === 'Environment name', 'Environment title should expose an accessible name.');
       assertUiSmoke(getComputedStyle(environmentTitle).whiteSpace === 'nowrap', 'Environment title should stay on a single line.');
       const environmentHeader = $('environmentMainPanel').querySelector('.environment-main-header');
@@ -1428,6 +1915,12 @@
       assertUiSmoke(environmentVariableRow.querySelector('[aria-label^="Remove environment variable"]'), 'Environment variable remove button should expose a contextual accessible label.');
       assertUiSmoke(!$('environmentsSidebarPanel').querySelector('#environmentMainTitle'), 'Environment editor controls should not render in the sidebar.');
       assertUiSmoke($('environmentsList').textContent.includes(environment.name), 'Environments panel did not render the new environment.');
+      const environmentOpenTabCount = openEnvironmentTabs.length;
+      selectSidebarPanel('collections');
+      selectSidebarPanel('environments');
+      assertUiSmoke(activeEnvironmentId === environment.id, 'Selecting Environments with an open environment tab should restore that tab.');
+      assertUiSmoke(!$('environmentMainPanel').hidden, 'Selecting Environments with an open environment tab should show the environment editor.');
+      assertUiSmoke(openEnvironmentTabs.length === environmentOpenTabCount, 'Selecting Environments should not open a duplicate environment tab.');
       openRequestTabs = [];
       openWorkspaceTabs = [];
       const closeEnvironment = closeEnvironmentTab(openEnvironmentTabs.find((tab) => tab.environmentId === environment.id));
@@ -1446,10 +1939,18 @@
         assertUiSmoke(!$('requestEmptyPanel').hidden, 'Selecting Collections without an active request should show the create request screen.');
         assertUiSmoke($('requestEditorPanel').hidden, 'Selecting Collections without an active request should keep the request editor hidden.');
       }
+      openWorkspaceTabs = [];
+      selectedWorkspaceId = '';
       selectSidebarPanel('workspaces');
       assertUiSmoke($('workspacesList').textContent.includes(workspaceDisplayName()), 'Workspaces panel did not render the current workspace list item.');
+      assertUiSmoke(activeMainPanel === 'workspace', 'Selecting Workspaces should switch the main pane to workspace mode.');
+      assertUiSmoke(!$('workspaceEmptyPanel').hidden, 'Selecting Workspaces should show the select workspace screen.');
+      assertUiSmoke(openWorkspaceTabs.length === 0, 'Selecting Workspaces should not automatically open a workspace tab.');
+      const currentWorkspaceButton = $('workspacesList').querySelector('button');
+      assertUiSmoke(currentWorkspaceButton, 'Workspaces panel did not render a selectable workspace row.');
+      currentWorkspaceButton.click();
       assertUiSmoke(!$('workspaceMainPanel').hidden, 'Selecting Workspaces should show the main workspace editor.');
-      assertUiSmoke(!$('saveWorkspacePanelButton'), 'Workspace details should not render a save button.');
+      assertUiSmoke(!$('saveWorkspacePanelButton'), 'Workspace details should not render a Save Workspace button.');
       assertUiSmoke(!$('importWorkspacePanelButton'), 'Workspace details should not render an import button.');
       assertUiSmoke($('requestEditorPanel').hidden, 'Request editor should be hidden while viewing workspace details.');
       assertUiSmoke(document.querySelector('.results').hidden, 'Response panel should be hidden while viewing workspace details.');
@@ -1461,6 +1962,13 @@
       assertUiSmoke(workspaceMainPanel.scrollHeight <= workspaceMainPanel.clientHeight || workspaceMainPanel.scrollTop > 0, 'Workspace details panel should allow reaching diagnostics controls below the fold.');
       assertUiSmoke($('switchWorkspacePanelButton').disabled, 'Current workspace details should disable the switch button.');
       assertUiSmoke($('requestTabBar').textContent.includes(workspaceDisplayName()), 'Selecting Workspaces should open a workspace tab.');
+      const workspaceOpenTabCount = openWorkspaceTabs.length;
+      const selectedWorkspaceTabId = selectedWorkspaceId;
+      selectSidebarPanel('collections');
+      selectSidebarPanel('workspaces');
+      assertUiSmoke(selectedWorkspaceId === selectedWorkspaceTabId, 'Selecting Workspaces with an open workspace tab should restore that tab.');
+      assertUiSmoke(!$('workspaceMainPanel').hidden, 'Selecting Workspaces with an open workspace tab should show workspace details.');
+      assertUiSmoke(openWorkspaceTabs.length === workspaceOpenTabCount, 'Selecting Workspaces should not open a duplicate workspace tab.');
       openRequestTabs = [];
       openEnvironmentTabs = [];
       closeWorkspaceTab(openWorkspaceTabs.find((tab) => tab.workspaceId === selectedWorkspaceId));
@@ -1469,15 +1977,282 @@
       assertUiSmoke(!$('workspaceEmptyPanel').hidden, 'Closing the last workspace tab should show the select workspace screen.');
       assertUiSmoke($('workspaceEmptyPanel').textContent.includes('Select a workspace'), 'Workspace empty state should ask the user to select a workspace.');
       assertUiSmoke($('requestEmptyPanel').hidden, 'Closing the last workspace tab should not show the create request screen.');
+      workspace.runners = [];
+      openRunnerTabs = [];
+      activeRunnerConfigId = null;
+      selectSidebarPanel('runners');
+      assertUiSmoke(activeMainPanel === 'runner', 'Selecting Runner should switch the main pane to runner mode.');
+      assertUiSmoke(!$('runnerEmptyPanel').hidden, 'Runner panel without a selection should show an empty state.');
+      assertUiSmoke($('runnersList').textContent.includes('No runners'), 'Runner sidebar should show an empty state.');
+      assertUiSmoke(!$('runnersList').querySelector('button'), 'Runner sidebar empty state should not render a create button.');
+      $('emptyCreateRunnerButton').click();
+      const runner = activeRunner();
+      assertUiSmoke(runner && activeRunnerConfigId === runner.id, 'Creating a runner should select it.');
+      assertUiSmoke($('requestTabBar').textContent.includes(runner.name), 'Creating a runner should open a runner tab.');
+      assertUiSmoke(!$('runnerMainPanel').hidden, 'Creating a runner should show the runner editor.');
+      assertUiSmoke($('runnerEnvironmentSelect'), 'Runner environment selector is missing.');
+      assertUiSmoke($('runnerAllowEnvironmentMutation'), 'Runner environment mutation checkbox is missing.');
+      const runnerTreeButton = treeButtonByTarget('runner', runner.id);
+      assertUiSmoke(runnerTreeButton, 'Runner sidebar should render the created runner row.');
+      runnerTreeButton.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true,
+        cancelable: true,
+        clientX: 160,
+        clientY: 260
+      }));
+      const runnerContextLabels = Array.from($('contextMenu').querySelectorAll('button')).map((button) => button.textContent.trim());
+      assertUiSmoke(!runnerContextLabels.includes('Open'), 'Runner row context menu should not include Open.');
+      assertUiSmoke(runnerContextLabels.includes('Rename'), 'Runner row context menu should include Rename.');
+      assertUiSmoke(runnerContextLabels.includes('Delete'), 'Runner row context menu should include Delete.');
+      closeContextMenu();
+      const runnerTabCount = openRunnerTabs.length;
+      selectSidebarPanel('collections');
+      selectSidebarPanel('runners');
+      assertUiSmoke(activeRunnerConfigId === runner.id, 'Selecting Runner with an open runner tab should restore the runner tab.');
+      assertUiSmoke(openRunnerTabs.length === runnerTabCount, 'Selecting Runner should not open a duplicate runner tab.');
+      $('addRunnerRequestButton').click();
+      let runnerAddLabels = Array.from($('contextMenu').querySelectorAll('button')).map((button) => button.textContent.trim());
+      assertUiSmoke(runnerAddLabels.join('|') === 'New Request|Import', `Runner Add Request menu should only show New Request and Import. labels=${runnerAddLabels.join('|')}`);
+      activateContextMenuItem('New Request');
+      assertUiSmoke(runner.requests.length === 1, 'Runner local request was not added.');
+      const runnerLocalRequest = runner.requests[0];
+      const runnerLocalRow = $('runnerRequestList').querySelector('.runner-request-row');
+      const runnerLocalEditButton = Array.from(runnerLocalRow?.querySelectorAll('button') || [])
+        .find((button) => button.textContent.trim() === 'Edit');
+      assertUiSmoke(runnerLocalEditButton, 'Runner request rows should expose an Edit button.');
+      runnerLocalEditButton.click();
+      assertUiSmoke(activeSidebarPanel === 'runners', 'Editing a runner request should keep the Runner sidebar selected.');
+      assertUiSmoke(activeMainPanel === 'request', 'Editing a runner request should open the request editor pane.');
+      assertUiSmoke(activeRunnerRequestRunnerId === runner.id, 'Editing a runner request should bind the request editor to the runner.');
+      assertUiSmoke(activeRequest()?.id === runnerLocalRequest.id, 'Editing a runner request should activate the runner-owned request.');
+      assertUiSmoke(!$('requestEditorPanel').hidden, 'Runner request edit should show the standard request editor.');
+      $('urlInput').value = 'https://runner-local.example.test';
+      dispatchInput($('urlInput'));
+      collectRequestFromEditor();
+      assertUiSmoke(
+        runner.requests.find((request) => request.id === runnerLocalRequest.id)?.url === 'https://runner-local.example.test',
+        'Runner request editor changes should update the runner-local request.'
+      );
+      const runnerTab = openRunnerTabs.find((tab) => tab.runnerId === runner.id);
+      assertUiSmoke(runnerTab, 'Runner tab should remain open while editing a runner request.');
+      selectRunnerTab(runnerTab);
+      const sourceCollection = {
+        id: crypto.randomUUID(),
+        name: 'Runner Source Collection',
+        requests: [
+          newRequestObject('Runner Source Request'),
+          newRequestObject('Runner Source Request 2'),
+          newRequestObject('Runner Source Request 3')
+        ],
+        folders: []
+      };
+      const secondSourceCollection = {
+        id: crypto.randomUUID(),
+        name: 'Runner Second Source Collection',
+        requests: [
+          newRequestObject('Runner Second Source Request'),
+          newRequestObject('Runner Second Source Request 2')
+        ],
+        folders: []
+      };
+      workspace.collections.push(sourceCollection, secondSourceCollection);
+      const source = sourceCollection.requests[0];
+      const clickRunnerImportControl = (control, options = {}) => {
+        control.dispatchEvent(new MouseEvent('click', {
+          bubbles: true,
+          cancelable: true,
+          ctrlKey: options.ctrlKey === true,
+          metaKey: options.metaKey === true,
+          shiftKey: options.shiftKey === true
+        }));
+      };
+      const runnerImportCollection = (collectionId) => Array.from($('runnerImportList').querySelectorAll('[data-runner-import-type="collection"]'))
+        .find((control) => control.dataset.collectionId === collectionId);
+      const runnerImportInput = (type, collectionId, requestId = '') => Array.from($('runnerImportList').querySelectorAll('input'))
+        .find((input) => input.dataset.runnerImportType === type
+          && input.dataset.collectionId === collectionId
+          && input.dataset.requestId === requestId);
+      $('addRunnerRequestButton').click();
+      runnerAddLabels = Array.from($('contextMenu').querySelectorAll('button')).map((button) => button.textContent.trim());
+      assertUiSmoke(runnerAddLabels.join('|') === 'New Request|Import', `Runner Add Request menu should stay simplified after collections exist. labels=${runnerAddLabels.join('|')}`);
+      activateContextMenuItem('Import');
+      assertUiSmoke(!$('runnerImportModal').hidden, 'Runner Import should open the import selection modal.');
+      assertUiSmoke($('confirmRunnerImportButton').disabled, 'Runner Import Add button should be disabled until a target is selected.');
+      assertUiSmoke($('runnerImportList').textContent.includes(sourceCollection.name), 'Runner Import modal should list collections.');
+      assertUiSmoke(!$('runnerImportList').textContent.includes(source.name), 'Runner Import modal should hide collection requests until the collection is expanded.');
+      const collectionImportControl = runnerImportCollection(sourceCollection.id);
+      assertUiSmoke(collectionImportControl, 'Runner Import modal should expose an expandable collection row.');
+      assertUiSmoke(!runnerImportInput('collection', sourceCollection.id), 'Runner Import modal should not make collection rows selectable import targets.');
+      clickRunnerImportControl(collectionImportControl);
+      const expandedRequestImportInput = runnerImportInput('request', sourceCollection.id, source.id);
+      assertUiSmoke(expandedRequestImportInput, 'Runner Import modal should expose request options after expanding a collection.');
+      assertUiSmoke($('confirmRunnerImportButton').disabled, 'Expanding a runner import collection should not enable Add.');
+      assertUiSmoke(Array.isArray(selectedRunnerImportTarget) && selectedRunnerImportTarget.length === 0, 'Expanding a runner import collection should not select the collection.');
+      const secondCollectionImportControl = runnerImportCollection(secondSourceCollection.id);
+      assertUiSmoke(secondCollectionImportControl, 'Runner Import modal should expose every collection row.');
+      clickRunnerImportControl(secondCollectionImportControl, { ctrlKey: true });
+      assertUiSmoke(
+        Array.isArray(selectedRunnerImportTarget) && selectedRunnerImportTarget.length === 0,
+        'Ctrl-clicking runner import collections should still only expand collections.'
+      );
+      const requestCountBeforeCancel = runner.requests.length;
+      $('cancelRunnerImportButton').click();
+      await nextPaint();
+      assertUiSmoke(runner.requests.length === requestCountBeforeCancel, 'Cancelling Runner Import should not add requests.');
+
+      $('addRunnerRequestButton').click();
+      activateContextMenuItem('Import');
+      clickRunnerImportControl(runnerImportCollection(sourceCollection.id));
+      const requestImportInputAfterCancel = runnerImportInput('request', sourceCollection.id, source.id);
+      const thirdRequestImportInputAfterCancel = runnerImportInput('request', sourceCollection.id, sourceCollection.requests[2].id);
+      assertUiSmoke(requestImportInputAfterCancel && thirdRequestImportInputAfterCancel, 'Runner Import request options should be available after expanding the collection.');
+      clickRunnerImportControl(requestImportInputAfterCancel, { ctrlKey: true });
+      clickRunnerImportControl(thirdRequestImportInputAfterCancel, { shiftKey: true });
+      assertUiSmoke(
+        Array.isArray(selectedRunnerImportTarget)
+          && selectedRunnerImportTarget.length === 3
+          && selectedRunnerImportTarget.every((target) => target.type === 'request'),
+        'Shift-clicking runner import requests should select the visible request range.'
+      );
+      $('confirmRunnerImportButton').click();
+      await waitForUiSmoke(() => runner.requests.length === requestCountBeforeCancel + 3, 'Adding selected requests from Runner Import should clone every selected request.', 3000, global);
+
+      $('addRunnerRequestButton').click();
+      activateContextMenuItem('Import');
+      clickRunnerImportControl(runnerImportCollection(sourceCollection.id));
+      clickRunnerImportControl(runnerImportCollection(secondSourceCollection.id));
+      const sourceRequestInputAfterRequest = runnerImportInput('request', sourceCollection.id, source.id);
+      const secondSourceRequestInputAfterRequest = runnerImportInput('request', secondSourceCollection.id, secondSourceCollection.requests[0].id);
+      assertUiSmoke(sourceRequestInputAfterRequest && secondSourceRequestInputAfterRequest, 'Expanded runner import collections should expose request rows for Ctrl-click selection.');
+      clickRunnerImportControl(sourceRequestInputAfterRequest, { ctrlKey: true });
+      clickRunnerImportControl(secondSourceRequestInputAfterRequest, { ctrlKey: true });
+      assertUiSmoke(
+        Array.isArray(selectedRunnerImportTarget)
+          && selectedRunnerImportTarget.length === 2
+          && selectedRunnerImportTarget.every((target) => target.type === 'request'),
+        'Ctrl-clicking runner import requests should preserve multiple request selections before Add.'
+      );
+      const requestCountBeforeCollectionImport = runner.requests.length;
+      $('confirmRunnerImportButton').click();
+      await waitForUiSmoke(
+        () => runner.requests.length === requestCountBeforeCollectionImport + 2,
+        'Adding Ctrl-selected requests from Runner Import should clone only the selected requests.',
+        3000,
+        global
+      );
+      const imported = runner.requests.find((request) => request.source?.collectionId === sourceCollection.id
+        && request.source?.requestId === source.id);
+      if (source) {
+        assertUiSmoke(imported.id !== source.id, 'Imported runner request should get a runner-local request id.');
+        assertUiSmoke(imported.source?.requestId === source.id, 'Imported runner request should keep source request metadata.');
+        assertUiSmoke(imported.source?.collectionId === sourceCollection.id, 'Imported runner request should keep source collection metadata.');
+        imported.name = 'Mutated Runner Clone';
+        assertUiSmoke(source.name !== 'Mutated Runner Clone', 'Imported runner request should not mutate the source collection request.');
+      }
+      lastRunnerResult = {
+        collectionName: runner.name,
+        totalRequests: 2,
+        passedRequests: 1,
+        failedRequests: 1,
+        passed: false,
+        cancelled: false,
+        collectionVariables: [],
+        environment: { id: 'runtime', name: 'Runtime', variables: [{ enabled: true, key: 'runnerEnvToken', value: 'env-value' }] },
+        results: [
+          {
+            requestId: runner.requests[0].id,
+            requestName: runner.requests[0].name,
+            statusCode: 200,
+            durationMillis: 21,
+            passed: true,
+            assertionResults: [],
+            preRequestScriptResult: { passed: true, tests: [] },
+            testScriptResult: { passed: true, tests: [{ name: 'runner request passed', passed: true }] },
+            extractedVariables: [],
+            localVariables: [{ enabled: true, key: 'runnerLocalToken', value: 'local-value' }]
+          },
+          {
+            requestId: runner.requests[1].id,
+            requestName: runner.requests[1].name,
+            statusCode: 500,
+            durationMillis: 33,
+            passed: false,
+            assertionResults: [],
+            preRequestScriptResult: { passed: true, tests: [] },
+            testScriptResult: { passed: false, tests: [{ name: 'runner request failed', passed: false, error: 'Expected HTTP 200.' }] },
+            extractedVariables: [],
+            localVariables: [],
+            error: 'Expected HTTP 200.'
+          }
+        ]
+      };
+      renderRunnerExecutionResult(lastRunnerResult);
+      const executionRows = Array.from($('runnerExecutionList').querySelectorAll('.runner-execution-row'));
+      assertUiSmoke(executionRows.length === 2, 'Runner execution pane should render one row per request result.');
+      assertUiSmoke(executionRows[0].querySelector('.runner-status-badge')?.textContent === '200', 'Runner execution row should show the HTTP status code.');
+      assertUiSmoke(executionRows[1].querySelector('.runner-status-badge')?.textContent === '500', 'Runner execution row should show failing HTTP status codes.');
+      executionRows[1].click();
+      assertUiSmoke($('runnerExecutionDetailsStatus').textContent === '500', 'Runner details should update when selecting an execution row.');
+      assertUiSmoke($('runnerExecutionDetails').textContent.includes('runner request failed'), 'Runner details should show selected request script results.');
+      assertUiSmoke($('runnerExecutionDetails').textContent.includes('Expected HTTP 200.'), 'Runner details should show selected request errors.');
+      executionRows[0].click();
+      assertUiSmoke($('runnerExecutionDetails').textContent.includes('runnerLocalToken'), 'Runner details should show selected request variables.');
+      assertUiSmoke($('runnerExecutionDetails').textContent.includes('runnerEnvToken'), 'Runner details should show runner environment variables.');
+      const existingRunnerRequestCount = runner.requests.length;
+      for (let index = existingRunnerRequestCount; index < existingRunnerRequestCount + 36; index += 1) {
+        const overflowRequest = newRequestObject(`Overflow Runner Request ${index + 1}`);
+        overflowRequest.url = `https://runner-overflow.example.test/${index + 1}`;
+        runner.requests.push(overflowRequest);
+      }
+      renderRunnerRequestList(runner);
+      await nextPaint();
+      const runnerMainPanel = $('runnerMainPanel');
+      const runnerRequestList = $('runnerRequestList');
+      const runnerPanelStyle = getComputedStyle(runnerMainPanel);
+      const runnerRequestListStyle = getComputedStyle(runnerRequestList);
+      const runnerResultsStyle = getComputedStyle($('runnerResults'));
+      assertUiSmoke(runnerPanelStyle.overflowY === 'hidden', 'Runner editor panel should not become the scroll container for many requests.');
+      assertUiSmoke(runnerRequestListStyle.overflowY === 'auto', 'Runner request list should own vertical scrolling for many requests.');
+      assertUiSmoke(runnerResultsStyle.flexShrink === '0', 'Runner results pane should remain visible below the request list.');
+      if (runnerMainPanel.clientHeight > 0) {
+        assertUiSmoke(runnerRequestList.scrollHeight > runnerRequestList.clientHeight, 'Runner request list should scroll when many requests are present.');
+        assertUiSmoke(
+          $('runnerResults').getBoundingClientRect().bottom <= runnerMainPanel.getBoundingClientRect().bottom + 1,
+          'Runner results pane should stay inside the visible runner editor when the request list overflows.'
+        );
+      }
+      const firstRequestId = runner.requests[0].id;
+      moveRunnerRequest(runner, 0, 1);
+      assertUiSmoke(runner.requests[1].id === firstRequestId, 'Runner request move down did not reorder rows.');
+      moveRunnerRequest(runner, 1, 0);
+      assertUiSmoke(runner.requests[0].id === firstRequestId, 'Runner request move up did not reorder rows.');
+      deleteRunnerRequest(runner, 0);
+      assertUiSmoke(!runner.requests.some((request) => request.id === firstRequestId), 'Runner request delete did not remove the row.');
+      $('runnerStopOnFailure').checked = true;
+      dispatchChange($('runnerStopOnFailure'));
+      $('runnerAllowEnvironmentMutation').checked = true;
+      dispatchChange($('runnerAllowEnvironmentMutation'));
+      assertUiSmoke(runner.stopOnFailure === true, 'Runner stop-on-failure setting did not persist to state.');
+      assertUiSmoke(runner.allowEnvironmentMutation === true, 'Runner environment mutation setting did not persist to state.');
     } finally {
       workspace.environments = originalEnvironments;
+      workspace.collections = originalCollections;
+      workspace.history = originalHistory;
+      workspace.runners = originalRunners;
+      activeCollectionId = originalActiveCollectionId;
+      activeFolderId = originalActiveFolderId;
+      activeRequestId = originalActiveRequestId;
+      activeRunnerRequestRunnerId = originalActiveRunnerRequestRunnerId;
       activeEnvironmentId = originalActiveEnvironmentId;
+      activeRunnerConfigId = originalActiveRunnerConfigId;
       activeWorkspaceId = originalActiveWorkspaceId;
       selectedWorkspaceId = originalSelectedWorkspaceId;
       activeSidebarPanel = originalSidebarPanel;
       activeMainPanel = originalMainPanel;
+      openRequestTabs = originalRequestTabs;
       openEnvironmentTabs = originalEnvironmentTabs;
       openWorkspaceTabs = originalWorkspaceTabs;
+      openRunnerTabs = originalRunnerTabs;
       renderAll();
     }
   }
@@ -1507,8 +2282,14 @@
     assertUiSmoke(activeSidebarPanel === 'collections', 'Selecting a request tab should switch the sidebar to Collections.');
     assertUiSmoke(activeMainPanel === 'request', 'Selecting a request tab should switch the main pane to request mode.');
     assertUiSmoke(activeRequest() === draft, 'Selecting a request tab should restore the active request.');
-    $('requestNameInput').value = 'Draft Request';
-    dispatchInput($('requestNameInput'));
+    assertUiSmoke(!document.getElementById('requestNameInput'), 'Request editor should not render a separate request name text box.');
+    assertUiSmoke($('saveRequestButton')?.textContent === 'Save Request', 'Request editor should render a Save Request button.');
+    assertUiSmoke(!$('saveRequestButton').disabled, 'Request editor should enable the request save button.');
+    assertUiSmoke($('requestNameTitle').getAttribute('aria-label') === 'Request name', 'Request title should expose an accessible name.');
+    assertUiSmoke(getComputedStyle($('requestNameTitle')).whiteSpace === 'nowrap', 'Request title should stay on a single line.');
+    $('requestNameTitle').click();
+    assertUiSmoke($('requestNameTitle').getAttribute('contenteditable') === 'plaintext-only', 'Clicking the request title should make it editable inline.');
+    editRequestTitle('Draft Request');
     collectRequestFromEditor();
     assertUiSmoke(draft.name === 'Draft Request', 'Draft request should be editable before being saved anywhere.');
 
@@ -1539,6 +2320,76 @@
     assertUiSmoke(tabCloseButtons.every((button) => button.tabIndex === -1), 'Opened tab close buttons should not enter the sequential tab order.');
     activeOpenTab.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
     assertUiSmoke(activeRequest()?.id === secondRequest.id, 'ArrowRight on an opened request tab should activate the next tab.');
+    const tabBarWidth = $('requestTabBar').clientWidth || 800;
+    const targetTabCount = Math.max(6, Math.floor(tabBarWidth / 100));
+    for (let index = openRequestTabs.length; index < targetTabCount; index += 1) {
+      const extraRequest = newRequest(collection.id, null);
+      extraRequest.name = `Shrink Fit Request ${index + 1}`;
+      renderAll();
+    }
+    assertUiSmoke(
+      $('requestTabBar').scrollWidth <= $('requestTabBar').clientWidth + 4,
+      `Opened tabs should shrink before the tab bar scrolls. scrollWidth=${$('requestTabBar').scrollWidth} clientWidth=${$('requestTabBar').clientWidth} tabs=${openRequestTabs.length} widths=${Array.from($('requestTabBar').querySelectorAll('.request-tab-item')).map((item) => Math.round(item.getBoundingClientRect().width)).join(',')}.`
+    );
+    const overflowTargetTabCount = Math.max(16, Math.ceil(tabBarWidth / 84) + 3);
+    for (let index = openRequestTabs.length; index < overflowTargetTabCount; index += 1) {
+      const extraRequest = newRequest(collection.id, null);
+      extraRequest.name = `Overflow Tab Request ${index + 1}`;
+      renderAll();
+    }
+    const renderedOpenTabItems = Array.from($('requestTabBar').querySelectorAll('.request-tab-item'));
+    const totalOpenTabs = openRequestTabs.length + openEnvironmentTabs.length + openWorkspaceTabs.length;
+    assertUiSmoke(openRequestTabs.length >= overflowTargetTabCount, 'Opening tabs past the old twelve-tab threshold should keep all opened tabs in state.');
+    assertUiSmoke(renderedOpenTabItems.length === totalOpenTabs, 'Rendered opened tabs should match the open tab state after overflow.');
+    assertUiSmoke($('requestTabBar').textContent.includes('First Tab Request'), 'Older opened tabs should remain available after the tab bar overflows.');
+    assertUiSmoke(
+      $('requestTabBar').scrollWidth > $('requestTabBar').clientWidth + 4,
+      `Opened tabs should expand the scrollable tab strip after reaching minimum width. scrollWidth=${$('requestTabBar').scrollWidth} clientWidth=${$('requestTabBar').clientWidth} tabs=${openRequestTabs.length}.`
+    );
+    const activeCloseButton = $('requestTabBar').querySelector('.request-tab-item.active .request-tab-close');
+    const inactiveCloseButton = $('requestTabBar').querySelector('.request-tab-item:not(.active) .request-tab-close');
+    assertUiSmoke(getComputedStyle(activeCloseButton).opacity === '1', 'Active opened tab should show its close button.');
+    assertUiSmoke(getComputedStyle(inactiveCloseButton).opacity === '0', 'Inactive opened tabs should hide close buttons until hover.');
+    const openTabLimit = PostMeterRendererState.MAX_OPEN_TABS || 128;
+    const cappedRequests = Array.from({ length: openTabLimit }, (_value, index) => ({
+      id: `cap-request-${index + 1}`,
+      name: `Cap Request ${index + 1}`,
+      method: 'GET',
+      url: '',
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: '',
+      auth: { type: 'none' },
+      assertions: [],
+      variables: [],
+      examples: []
+    }));
+    collection.requests = cappedRequests;
+    collection.folders = [];
+    activeCollectionId = collection.id;
+    activeFolderId = null;
+    activeRequestId = cappedRequests[0].id;
+    openRequestTabs = cappedRequests.map((request) => ({
+      key: `request:${collection.id}:${request.id}`,
+      collectionId: collection.id,
+      requestId: request.id,
+      folderId: null,
+      draft: false,
+      dirty: false,
+      createdUnsaved: false,
+      snapshot: JSON.stringify(request)
+    }));
+    renderAll();
+    const cappedRequestCount = collection.requests.length;
+    const cappedFirstTabKey = openRequestTabs[0]?.key;
+    const blockedRequest = newRequest(collection.id, null);
+    assertUiSmoke(blockedRequest === null, 'New Request should be refused when the request tab limit is reached.');
+    assertUiSmoke(collection.requests.length === cappedRequestCount, 'Refusing a new request tab should not create a request.');
+    assertUiSmoke(openRequestTabs.length === openTabLimit, 'Refusing a new request tab should not change the open tab count.');
+    assertUiSmoke(openRequestTabs[0]?.key === cappedFirstTabKey, 'Refusing a new request tab should not evict older tabs.');
+    assertUiSmoke(lastStatusMessage.includes(`Cannot open more than ${openTabLimit} tabs`), 'Tab limit refusal should set a visible status message.');
+    assertUiSmoke(lastUserNotification?.title === 'Open Tab Limit Reached', 'Tab limit refusal should notify the user.');
 
     workspace.collections = [];
     clearActiveWorkspaceItem();
@@ -1551,24 +2402,31 @@
     const originalPostmeterWorkspaceSave = window.postmeter?.workspace?.save;
     const originalSaveRequest = window.__postmeterSaveRequest;
     const originalSaveEnvironment = window.__postmeterSaveEnvironment;
+    let requestSaveCalls = 0;
+    let environmentSaveCalls = 0;
     try {
       window.__postmeterSaveWorkspace = async (nextWorkspace) => nextWorkspace;
-      window.__postmeterSaveRequest = async (payload) => ({
-        request: payload.request,
-        collectionVariables: payload.collectionVariables,
-        cookies: payload.cookies
-      });
-      window.__postmeterSaveEnvironment = async (payload) => ({
-        environment: payload.environment
-      });
+      window.__postmeterSaveRequest = async (payload) => {
+        requestSaveCalls += 1;
+        return {
+          request: payload.request,
+          collectionVariables: payload.collectionVariables,
+          cookies: payload.cookies
+        };
+      };
+      window.__postmeterSaveEnvironment = async (payload) => {
+        environmentSaveCalls += 1;
+        return {
+          environment: payload.environment
+        };
+      };
       workspace.collections = [];
       clearActiveWorkspaceItem();
       resetRequestTabs();
       renderAll();
 
       const draft = newRequest();
-      $('requestNameInput').value = 'Draft Close Smoke';
-      dispatchInput($('requestNameInput'));
+      editRequestTitle('Draft Close Smoke');
       const collection = newCollection();
       const draftTab = openRequestTabs.find((tab) => tab.draft && tab.requestId === draft.id);
       assertUiSmoke(draftTab, 'Draft request tab should remain open after creating a collection.');
@@ -1623,11 +2481,14 @@
       if (window.postmeter?.workspace && originalPostmeterWorkspaceSave) {
         window.postmeter.workspace.save = async (nextWorkspace) => nextWorkspace;
       }
-      window.__postmeterSaveRequest = async (payload) => ({
-        request: payload.request,
-        collectionVariables: payload.collectionVariables,
-        cookies: payload.cookies
-      });
+      window.__postmeterSaveRequest = async (payload) => {
+        requestSaveCalls += 1;
+        return {
+          request: payload.request,
+          collectionVariables: payload.collectionVariables,
+          cookies: payload.cookies
+        };
+      };
       draftRequests.delete(failedDraft.id);
       for (let index = openRequestTabs.length - 1; index >= 0; index -= 1) {
         if (openRequestTabs[index].requestId === failedDraft.id) {
@@ -1642,9 +2503,10 @@
       const request = newRequest(collection.id, null);
       await saveWorkspace(false);
       const savedRequestName = request.name;
-      $('requestNameInput').value = 'Changed Saved Request';
-      dispatchInput($('requestNameInput'));
+      const requestSaveCallsBeforeBlurEdit = requestSaveCalls;
+      editRequestTitle('Changed Saved Request');
       const savedTab = openRequestTabs.find((tab) => tab.requestId === request.id);
+      assertUiSmoke(requestSaveCalls === requestSaveCallsBeforeBlurEdit, 'Blurring a changed request title should not save the request.');
       const closeSaved = closeRequestTab(savedTab);
       assertUiSmoke(!$('unsavedRequestModal').hidden, 'Closing a dirty saved request should show the unsaved request modal.');
       $('closeWithoutSavingButton').click();
@@ -1656,7 +2518,70 @@
       activeRequestId = request.id;
       ensureOpenRequestTabForActive();
       renderAll();
+      const requestSaveCallsBeforeEnterEdit = requestSaveCalls;
+      const enterSavedRequestName = 'Enter Saved Request';
+      editRequestTitle(enterSavedRequestName, { commit: false });
+      pressEditableTitleEnter($('requestNameTitle'));
+      await waitForUiSmoke(() => requestSaveCalls === requestSaveCallsBeforeEnterEdit + 1, 'Pressing Enter after changing the request title should save the request.', 3000, global);
+      const enterSavedRequestTab = openRequestTabs.find((tab) => tab.requestId === request.id);
+      assertUiSmoke(enterSavedRequestTab?.dirty === false, 'Saving a request title with Enter should clear the request dirty state.');
+      assertUiSmoke(collection.requests.some((item) => item.id === request.id && item.name === enterSavedRequestName), 'Saving a request title with Enter should persist the request name.');
+
+      activeCollectionId = collection.id;
+      activeFolderId = null;
+      activeRequestId = request.id;
+      ensureOpenRequestTabForActive();
+      renderAll();
+      $('urlInput').value = 'https://saved-request.example.test/widgets';
+      dispatchInput($('urlInput'));
+      await saveWorkspace(false);
+      const savedRequestId = request.id;
+      const savedRequestMethod = request.method;
       const savedRequestUrl = request.url;
+      const savedRequestCount = collection.requests.length;
+      workspace.history = [{
+        timestamp: new Date(0).toISOString(),
+        method: savedRequestMethod,
+        url: savedRequestUrl,
+        statusCode: 200,
+        durationMillis: 36
+      }];
+      openRequestTabs = [];
+      activeCollectionId = null;
+      activeFolderId = null;
+      activeRequestId = null;
+      activeMainPanel = 'environment';
+      activeSidebarPanel = 'history';
+      renderAll();
+      assertUiSmoke($('requestEditorPanel').hidden, 'Request editor should be hidden before applying history from another main pane.');
+      $('historyList').querySelector('.history-item').click();
+      assertUiSmoke(activeMainPanel === 'request', 'Clicking a history entry should switch back to the request main pane.');
+      assertUiSmoke(!$('requestEditorPanel').hidden, 'Clicking a history entry should show the request editor.');
+      assertUiSmoke(!document.querySelector('.results').hidden, 'Clicking a history entry should show the response panel.');
+      const noOpenHistoryDraft = activeRequest();
+      assertUiSmoke(noOpenHistoryDraft, 'Clicking a history entry with no open requests should create an active draft request.');
+      assertUiSmoke(activeCollectionId === null, 'Clicking a history entry with no open requests should open a draft request.');
+      assertUiSmoke(noOpenHistoryDraft?.method === savedRequestMethod, 'History draft should use the history method when no request is open.');
+      assertUiSmoke(noOpenHistoryDraft?.url === savedRequestUrl, 'History draft should use the history URL when no request is open.');
+      assertUiSmoke(noOpenHistoryDraft?.name !== enterSavedRequestName, 'Opening history should not reuse the saved request name as the active draft name.');
+      const noOpenHistoryTab = openRequestTabs.find((tab) => tab.requestId === noOpenHistoryDraft?.id);
+      assertUiSmoke(noOpenHistoryTab?.draft === true && noOpenHistoryTab?.dirty === true, 'History entries should open as dirty draft request tabs.');
+      const unchangedRequestAfterNoOpenHistory = collection.requests.find((item) => item.id === savedRequestId);
+      assertUiSmoke(collection.requests.length === savedRequestCount, 'Opening history with no open request should not add a saved collection request.');
+      assertUiSmoke(unchangedRequestAfterNoOpenHistory?.name === enterSavedRequestName, 'Opening history with no open request should not overwrite the saved request name.');
+      assertUiSmoke(unchangedRequestAfterNoOpenHistory?.url === savedRequestUrl, 'Opening history with no open request should not change the saved request URL.');
+      const closeNoOpenHistory = closeRequestTab(noOpenHistoryTab);
+      assertUiSmoke(!$('unsavedRequestModal').hidden, 'Closing a history draft should show the unsaved request modal.');
+      $('closeWithoutSavingButton').click();
+      await closeNoOpenHistory;
+      assertUiSmoke(!draftRequests.has(noOpenHistoryDraft.id), 'Closing a history draft without saving should discard the draft.');
+
+      activeCollectionId = collection.id;
+      activeFolderId = null;
+      activeRequestId = savedRequestId;
+      ensureOpenRequestTabForActive();
+      renderAll();
+      const savedRequestTabBeforeHistory = openRequestTabs.find((tab) => tab.requestId === savedRequestId);
       workspace.history = [{
         timestamp: new Date(0).toISOString(),
         method: 'POST',
@@ -1670,23 +2595,128 @@
       historyItem.click();
       assertUiSmoke(activeRequest().method === 'POST', 'Clicking a history entry did not update the active request method.');
       assertUiSmoke(activeRequest().url === 'https://history.example.test/widgets', 'Clicking a history entry did not update the active request URL.');
-      const historyTab = openRequestTabs.find((tab) => tab.requestId === request.id);
-      assertUiSmoke(historyTab?.dirty === true, 'Selecting a history entry should mark the active request tab as dirty.');
+      assertUiSmoke(activeCollectionId === null && activeRequestId !== savedRequestId, 'Clicking history with an open request should switch to a separate draft request.');
+      const unchangedRequestAfterOpenHistory = collection.requests.find((item) => item.id === savedRequestId);
+      assertUiSmoke(collection.requests.length === savedRequestCount, 'Opening history with an open request should not add a saved collection request.');
+      assertUiSmoke(unchangedRequestAfterOpenHistory?.method === savedRequestMethod, 'Opening history with an open request should not change the saved request method.');
+      assertUiSmoke(unchangedRequestAfterOpenHistory?.url === savedRequestUrl, 'Opening history with an open request should not change the saved request URL.');
+      assertUiSmoke(unchangedRequestAfterOpenHistory?.name === enterSavedRequestName, 'Opening history with an open request should preserve the saved request name.');
+      assertUiSmoke(savedRequestTabBeforeHistory?.dirty === false, 'Opening history with an open request should not mark the saved request tab dirty.');
+      const historyTab = openRequestTabs.find((tab) => tab.requestId === activeRequestId);
+      assertUiSmoke(historyTab?.draft === true && historyTab?.dirty === true, 'Selecting a history entry should open a dirty draft request tab.');
       const closeHistory = closeRequestTab(historyTab);
-      assertUiSmoke(!$('unsavedRequestModal').hidden, 'Closing a request updated from history should show the unsaved request modal.');
+      assertUiSmoke(!$('unsavedRequestModal').hidden, 'Closing a history-opened draft should show the unsaved request modal.');
       $('closeWithoutSavingButton').click();
       await closeHistory;
       const restoredHistoryRequest = collection.requests.find((item) => item.id === request.id);
-      assertUiSmoke(restoredHistoryRequest?.name === savedRequestName, 'Closing a history-updated request without saving should restore the saved request name.');
-      assertUiSmoke(restoredHistoryRequest?.url === savedRequestUrl, 'Closing a history-updated request without saving should restore the saved request URL.');
+      assertUiSmoke(restoredHistoryRequest?.name === enterSavedRequestName, 'Closing a history draft without saving should keep the saved request name.');
+      assertUiSmoke(restoredHistoryRequest?.url === savedRequestUrl, 'Closing a history draft without saving should keep the saved request URL.');
+
+      workspace.collections = [];
+      workspace.environments = [];
+      clearActiveWorkspaceItem();
+      resetRequestTabs();
+      renderAll();
+      const tabCollection = newCollection();
+      tabCollection.name = 'Tab Context Collection';
+      const closeTarget = newRequest(tabCollection.id, null);
+      editRequestTitle('Tab Context Close Target');
+      const closeTargetTab = openRequestTabs.find((tab) => tab.requestId === closeTarget.id);
+      openOpenTabContextMenu(closeTargetTab);
+      const tabContextLabels = Array.from($('contextMenu').querySelectorAll('button')).map((button) => button.textContent.trim());
+      for (const label of ['New Request', 'Close Tab', 'Close Other Tabs', 'Close All Tabs', 'Force Close Tab', 'Force Close All Tabs']) {
+        assertUiSmoke(tabContextLabels.includes(label), `Open-tab context menu should include ${label}.`);
+      }
+      activateContextMenuItem('Close Tab');
+      await waitForUiSmoke(() => !$('unsavedRequestModal').hidden, 'Close Tab should prompt for a dirty request tab.', 3000, global);
+      $('cancelCloseRequestButton').click();
+      await Promise.resolve();
+      assertUiSmoke(openRequestTabs.some((tab) => tab.key === closeTargetTab.key), 'Cancelling Close Tab should keep the dirty request tab open.');
+      openOpenTabContextMenu(closeTargetTab);
+      activateContextMenuItem('Force Close Tab');
+      await waitForUiSmoke(() => !openRequestTabs.some((tab) => tab.key === closeTargetTab.key), 'Force Close Tab should close without prompting.', 3000, global);
+      assertUiSmoke($('unsavedRequestModal').hidden, 'Force Close Tab should not leave an unsaved changes modal open.');
+      assertUiSmoke(!tabCollection.requests.some((item) => item.id === closeTarget.id), 'Force Close Tab should discard an unsaved request by default.');
+
+      const cleanOther = newRequest(tabCollection.id, null);
+      editRequestTitle('Tab Context Clean Other', { commit: false });
+      pressEditableTitleEnter($('requestNameTitle'));
+      await waitForUiSmoke(() => !openRequestTabs.find((tab) => tab.requestId === cleanOther.id)?.dirty, 'Clean tab setup should save the request.', 3000, global);
+      const cleanOtherTab = openRequestTabs.find((tab) => tab.requestId === cleanOther.id);
+      const dirtyOther = newRequest(tabCollection.id, null);
+      editRequestTitle('Tab Context Dirty Other');
+      const dirtyOtherTab = openRequestTabs.find((tab) => tab.requestId === dirtyOther.id);
+      const dirtyTarget = newRequest(tabCollection.id, null);
+      editRequestTitle('Tab Context Dirty Target');
+      const dirtyTargetTab = openRequestTabs.find((tab) => tab.requestId === dirtyTarget.id);
+      openOpenTabContextMenu(dirtyTargetTab);
+      activateContextMenuItem('Close Other Tabs');
+      await waitForUiSmoke(() => !openRequestTabs.some((tab) => tab.key === cleanOtherTab.key), 'Close Other Tabs should close clean tabs before prompting for dirty tabs.', 3000, global);
+      await waitForUiSmoke(() => !$('unsavedRequestModal').hidden, 'Close Other Tabs should prompt when it reaches a dirty tab.', 3000, global);
+      $('cancelCloseRequestButton').click();
+      await waitForUiSmoke(() => $('unsavedRequestModal').hidden, 'Cancelling Close Other Tabs should close the prompt.', 3000, global);
+      assertUiSmoke(openRequestTabs.some((tab) => tab.key === dirtyOtherTab.key), 'Cancelling Close Other Tabs should keep the dirty tab that prompted.');
+      assertUiSmoke(openRequestTabs.some((tab) => tab.key === dirtyTargetTab.key), 'Cancelling Close Other Tabs should keep the clicked tab.');
+      openOpenTabContextMenu(dirtyTargetTab);
+      activateContextMenuItem('Close All Tabs');
+      await waitForUiSmoke(() => !$('unsavedRequestModal').hidden, 'Close All Tabs should prompt for dirty tabs.', 3000, global);
+      $('cancelCloseRequestButton').click();
+      await waitForUiSmoke(() => $('unsavedRequestModal').hidden, 'Cancelling Close All Tabs should close the prompt.', 3000, global);
+      assertUiSmoke(openRequestTabs.some((tab) => tab.key === dirtyOtherTab.key), 'Cancelling Close All Tabs should keep dirty tabs open.');
+      assertUiSmoke(openRequestTabs.some((tab) => tab.key === dirtyTargetTab.key), 'Cancelling Close All Tabs should keep the clicked dirty tab open.');
+      openOpenTabContextMenu(dirtyTargetTab);
+      activateContextMenuItem('Force Close All Tabs');
+      await waitForUiSmoke(() => openRequestTabs.length === 0, 'Force Close All Tabs should close every request tab without prompting.', 3000, global);
+      assertUiSmoke($('unsavedRequestModal').hidden, 'Force Close All Tabs should not prompt by default.');
+
+      await setSaveOnForceClose(true, { save: false, showStatus: false });
+      const saveOnForceRequest = newRequest(tabCollection.id, null);
+      editRequestTitle('Tab Context Save On Force', { commit: false });
+      pressEditableTitleEnter($('requestNameTitle'));
+      await waitForUiSmoke(() => !openRequestTabs.find((tab) => tab.requestId === saveOnForceRequest.id)?.dirty, 'Save-on-force setup should persist the request.', 3000, global);
+      const requestSaveCallsBeforeForceSave = requestSaveCalls;
+      $('urlInput').value = 'https://force-close-save.example.test/widgets';
+      dispatchInput($('urlInput'));
+      const saveOnForceTab = openRequestTabs.find((tab) => tab.requestId === saveOnForceRequest.id);
+      openOpenTabContextMenu(saveOnForceTab);
+      activateContextMenuItem('Force Close Tab');
+      await waitForUiSmoke(() => !openRequestTabs.some((tab) => tab.key === saveOnForceTab.key), 'Force Close Tab with saving enabled should close after saving.', 3000, global);
+      assertUiSmoke(requestSaveCalls === requestSaveCallsBeforeForceSave + 1, 'Save on force close should save dirty saved request tabs.');
+      assertUiSmoke(tabCollection.requests.find((item) => item.id === saveOnForceRequest.id)?.url === 'https://force-close-save.example.test/widgets', 'Save on force close should persist dirty request changes.');
+      await setSaveOnForceClose(false, { save: false, showStatus: false });
+
+      const activeDiscardRequest = newRequest(tabCollection.id, null);
+      editRequestTitle('Tab Context Active Discard', { commit: false });
+      pressEditableTitleEnter($('requestNameTitle'));
+      await waitForUiSmoke(() => !openRequestTabs.find((tab) => tab.requestId === activeDiscardRequest.id)?.dirty, 'Active discard setup should save the first request.', 3000, global);
+      const activeDiscardSavedUrl = tabCollection.requests.find((item) => item.id === activeDiscardRequest.id)?.url || '';
+      const activeDiscardTab = openRequestTabs.find((tab) => tab.requestId === activeDiscardRequest.id);
+      const rightClickOtherRequest = newRequest(tabCollection.id, null);
+      editRequestTitle('Tab Context Right Click Other', { commit: false });
+      pressEditableTitleEnter($('requestNameTitle'));
+      await waitForUiSmoke(() => !openRequestTabs.find((tab) => tab.requestId === rightClickOtherRequest.id)?.dirty, 'Active discard setup should save the second request.', 3000, global);
+      const rightClickOtherTab = openRequestTabs.find((tab) => tab.requestId === rightClickOtherRequest.id);
+      selectRequestTab(activeDiscardTab);
+      $('urlInput').value = 'https://active-discard.example.test/should-not-save';
+      dispatchInput($('urlInput'));
+      const requestSaveCallsBeforeActiveDiscard = requestSaveCalls;
+      openOpenTabContextMenu(rightClickOtherTab);
+      activateContextMenuItem('Close Other Tabs');
+      await waitForUiSmoke(() => !$('unsavedRequestModal').hidden, 'Close Other Tabs from an inactive tab should prompt for the active dirty tab.', 3000, global);
+      $('closeWithoutSavingButton').click();
+      await waitForUiSmoke(() => !openRequestTabs.some((tab) => tab.key === activeDiscardTab.key), 'Close without saving should close the active dirty tab.', 3000, global);
+      assertUiSmoke(requestSaveCalls === requestSaveCallsBeforeActiveDiscard, 'Close without saving from Close Other Tabs should not save the active dirty tab.');
+      assertUiSmoke(tabCollection.requests.find((item) => item.id === activeDiscardRequest.id)?.url === activeDiscardSavedUrl, 'Close without saving from Close Other Tabs should restore the active dirty tab snapshot.');
 
       workspace.environments = [];
       activeEnvironmentId = 'none';
       const environment = newEnvironment();
       await saveWorkspace(false);
       const savedEnvironmentName = environment.name;
+      const environmentSaveCallsBeforeBlurEdit = environmentSaveCalls;
       editEnvironmentTitle('Changed Saved Environment');
       const environmentTab = openEnvironmentTabs.find((tab) => tab.environmentId === environment.id);
+      assertUiSmoke(environmentSaveCalls === environmentSaveCallsBeforeBlurEdit, 'Blurring a changed environment title should not save the environment.');
       assertUiSmoke(environmentTab?.dirty === true, 'Editing an environment should mark its tab as dirty.');
       assertUiSmoke(!$('requestTabBar').querySelector('.environment-tab-button .request-tab-dirty').hidden, 'Dirty environment tab should show an unsaved marker.');
       const closeEnvironment = closeEnvironmentTab(environmentTab);
@@ -1694,6 +2724,19 @@
       $('closeWithoutSavingButton').click();
       await closeEnvironment;
       assertUiSmoke(workspace.environments.some((item) => item.id === environment.id && item.name === savedEnvironmentName), 'Closing an environment without saving should restore the saved snapshot.');
+
+      activeEnvironmentId = environment.id;
+      activeSidebarPanel = 'environments';
+      activeMainPanel = 'environment';
+      ensureOpenEnvironmentTabForActive();
+      renderAll();
+      const environmentSaveCallsBeforeEnterEdit = environmentSaveCalls;
+      editEnvironmentTitle('Enter Saved Environment', { commit: false });
+      pressEditableTitleEnter($('environmentMainTitle'));
+      await waitForUiSmoke(() => environmentSaveCalls === environmentSaveCallsBeforeEnterEdit + 1, 'Pressing Enter after changing the environment title should save the environment.', 3000, global);
+      const enterSavedEnvironmentTab = openEnvironmentTabs.find((tab) => tab.environmentId === environment.id);
+      assertUiSmoke(enterSavedEnvironmentTab?.dirty === false, 'Saving an environment title with Enter should clear the environment dirty state.');
+      assertUiSmoke(workspace.environments.some((item) => item.id === environment.id && item.name === 'Enter Saved Environment'), 'Saving an environment title with Enter should persist the environment name.');
     } finally {
       window.__postmeterSaveWorkspace = originalSaveWorkspace;
       if (window.postmeter?.workspace && originalPostmeterWorkspaceSave) {

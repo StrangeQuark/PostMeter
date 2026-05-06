@@ -22,10 +22,8 @@
         <button id="newCollectionButton" role="menuitem">Collection</button>
         <button id="newFolderButton" role="menuitem">Folder</button>
         <button id="newEnvironmentMenuButton" role="menuitem">Environment</button>
+        <button id="newRunnerMenuButton" role="menuitem">Runner</button>
       </div>
-    </div>
-    <div class="toolbar-group workspace-group" aria-label="Workspace">
-      <button id="saveButton">Save</button>
     </div>
     <div class="toolbar-group menu-group" aria-label="Import">
       <button id="importMenuButton" class="menu-trigger" aria-haspopup="menu" aria-expanded="false">Import</button>
@@ -63,6 +61,7 @@
         <button id="collectionsPanelTab" class="sidebar-tab active" type="button" role="tab" data-sidebar-panel="collections" aria-selected="true" aria-controls="collectionsSidebarPanel">Collections</button>
         <button id="environmentsPanelTab" class="sidebar-tab" type="button" role="tab" data-sidebar-panel="environments" aria-selected="false" aria-controls="environmentsSidebarPanel">Environments</button>
         <button id="workspacesPanelTab" class="sidebar-tab" type="button" role="tab" data-sidebar-panel="workspaces" aria-selected="false" aria-controls="workspacesSidebarPanel">Workspaces</button>
+        <button id="runnersPanelTab" class="sidebar-tab" type="button" role="tab" data-sidebar-panel="runners" aria-selected="false" aria-controls="runnersSidebarPanel">Runners</button>
         <button id="historyPanelTab" class="sidebar-tab" type="button" role="tab" data-sidebar-panel="history" aria-selected="false" aria-controls="historySidebarPanel">History</button>
       </nav>
       <div class="sidebar-content">
@@ -87,6 +86,13 @@
           <div id="workspacesList" class="tree workspace-list"></div>
         </section>
 
+        <section id="runnersSidebarPanel" class="sidebar-panel" role="tabpanel" aria-labelledby="runnersPanelTab" data-sidebar-panel-content="runners" hidden>
+          <div class="sidebar-panel-header">
+            <h2>Runners</h2>
+          </div>
+          <div id="runnersList" class="tree runner-list"></div>
+        </section>
+
         <section id="historySidebarPanel" class="sidebar-panel" role="tabpanel" aria-labelledby="historyPanelTab" data-sidebar-panel-content="history" hidden>
           <div class="sidebar-panel-header">
             <h2>History</h2>
@@ -99,7 +105,7 @@
     <div id="mainPaneResize" class="splitter vertical" role="separator" aria-orientation="vertical" tabindex="0"></div>
 
     <section class="workspace">
-      <div id="requestTabBar" class="request-tab-bar" role="tablist" aria-label="Open requests, environments, and workspaces" hidden></div>
+      <div id="requestTabBar" class="request-tab-bar" role="tablist" aria-label="Open requests, environments, workspaces, and runners" hidden></div>
       <section id="requestEmptyPanel" class="panel request-empty-panel" hidden>
         <div class="request-empty-content">
           <div class="request-empty-icon" aria-hidden="true">
@@ -110,7 +116,12 @@
         </div>
       </section>
       <section id="requestEditorPanel" class="panel request-panel" role="tabpanel">
-        <input id="requestNameInput" class="title-input" placeholder="Request name" aria-label="Request name">
+        <div class="request-main-header">
+          <div id="requestNameTitle" class="request-main-title editable-title" tabindex="0" aria-label="Request name">Select a request</div>
+          <div class="request-actions">
+            <button id="saveRequestButton" type="button">Save Request</button>
+          </div>
+        </div>
         <div class="request-line">
           <select id="methodSelect" aria-label="HTTP method">
             <option class="method-get">GET</option>
@@ -414,7 +425,8 @@
             <div id="environmentMainTitle" class="environment-main-title editable-title" tabindex="0" aria-label="Environment name">Select an environment</div>
           </div>
           <div class="environment-actions">
-            <button id="deleteEnvironmentButton">Delete</button>
+            <button id="saveEnvironmentButton" type="button">Save Environment</button>
+            <button id="deleteEnvironmentButton">Delete Environment</button>
             <button id="addVariableButton">Add Variable</button>
           </div>
         </div>
@@ -434,12 +446,10 @@
       <section id="workspaceMainPanel" class="panel workspace-main-panel" role="tabpanel" hidden>
         <div class="workspace-main-header">
           <div>
-            <h2>Workspace</h2>
-            <div id="workspaceMainTitle" class="workspace-main-title">Local Workspace</div>
+            <div id="workspaceMainTitle" class="workspace-main-title editable-title" tabindex="0" aria-label="Workspace name">Local Workspace</div>
           </div>
           <div class="workspace-actions">
             <button id="switchWorkspacePanelButton" type="button">Switch to this Workspace</button>
-            <button id="renameWorkspacePanelButton" type="button">Rename Workspace</button>
             <button id="exportWorkspacePanelButton" type="button">Export Workspace</button>
             <button id="deleteWorkspacePanelButton" type="button">Delete Workspace</button>
           </div>
@@ -555,6 +565,73 @@
         </div>
       </section>
 
+      <section id="runnerMainPanel" class="panel runner-main-panel" role="tabpanel" hidden>
+        <div class="runner-main-header">
+          <div>
+            <div id="runnerMainTitle" class="runner-main-title editable-title" tabindex="0" aria-label="Runner name">Select a runner</div>
+          </div>
+          <div class="runner-actions">
+            <button id="saveRunnerButton" type="button">Save Runner</button>
+            <button id="deleteRunnerButton" type="button">Delete Runner</button>
+            <button id="runCollectionButton" type="button" class="primary">Run</button>
+            <button id="cancelRunnerButton" type="button" disabled>Cancel</button>
+            <button id="exportRunnerJsonButton" type="button" disabled>Export JSON</button>
+            <button id="exportRunnerCsvButton" type="button" disabled>Export CSV</button>
+          </div>
+        </div>
+        <div class="runner-settings">
+          <label class="field inline">
+            <span>Environment</span>
+            <select id="runnerEnvironmentSelect"></select>
+          </label>
+          <label class="checkbox-line">
+            <input id="runnerStopOnFailure" type="checkbox">
+            <span>Stop on failure</span>
+          </label>
+          <label class="checkbox-line">
+            <input id="runnerAllowEnvironmentMutation" type="checkbox">
+            <span>Allow runner to modify environment</span>
+          </label>
+        </div>
+        <div class="runner-request-actions">
+          <button id="addRunnerRequestButton" type="button" aria-haspopup="menu" aria-expanded="false">Add Request</button>
+        </div>
+        <div id="runnerRequestList" class="runner-request-list" aria-label="Runner requests"></div>
+        <div id="runnerResults" class="runner-results" role="status" aria-live="polite">
+          <div id="runnerResultsSummary" class="test-results-summary">No runner run yet.</div>
+          <div class="runner-execution-grid">
+            <section class="script-results-section runner-execution-section" aria-labelledby="runnerExecutionTitle">
+              <div class="script-results-header">
+                <h3 id="runnerExecutionTitle">Execution</h3>
+                <span id="runnerExecutionSummary" class="script-results-count">No requests</span>
+              </div>
+              <div id="runnerExecutionList" class="runner-execution-list" aria-live="polite">
+                <p class="test-result-empty">No runner execution yet.</p>
+              </div>
+            </section>
+            <section class="script-results-section runner-detail-section" aria-labelledby="runnerExecutionDetailsTitle">
+              <div class="script-results-header">
+                <h3 id="runnerExecutionDetailsTitle">Request details</h3>
+                <span id="runnerExecutionDetailsStatus" class="script-results-count">No selection</span>
+              </div>
+              <div id="runnerExecutionDetails" class="runner-execution-details">
+                <p class="test-result-empty">Select a completed request to inspect its execution details.</p>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <section id="runnerEmptyPanel" class="panel request-empty-panel runner-empty-panel" hidden>
+        <div class="request-empty-content">
+          <div class="request-empty-icon runner-empty-icon" aria-hidden="true">
+            <img src="../../build/icon.png" alt="">
+          </div>
+          <h2>Create a runner</h2>
+          <button id="emptyCreateRunnerButton" type="button" class="primary">New Runner</button>
+        </div>
+      </section>
+
       <div id="workspacePaneResize" class="splitter horizontal" role="separator" aria-orientation="horizontal" tabindex="0"></div>
 
       <section class="results">
@@ -563,7 +640,6 @@
           <button id="resultsTestResultsTabButton" class="tab" type="button" role="tab" data-tab-group="results" data-tab="testResults" aria-selected="false" aria-controls="testResultsTab">Test Results <span id="testResultsTabCount" class="tab-count" hidden></span></button>
           <button id="resultsVisualizerTabButton" class="tab" type="button" role="tab" data-tab-group="results" data-tab="visualizer" aria-selected="false" aria-controls="visualizerTab">Visualizer</button>
           <button id="resultsLoadTabButton" class="tab" type="button" role="tab" data-tab-group="results" data-tab="load" aria-selected="false" aria-controls="loadTab">Load Test</button>
-          <button id="resultsRunnerTabButton" class="tab" type="button" role="tab" data-tab-group="results" data-tab="runner" aria-selected="false" aria-controls="runnerTab">Runner</button>
         </div>
 
         <div id="responseTab" class="tab-panel active" role="tabpanel" aria-labelledby="resultsResponseTabButton">
@@ -632,16 +708,6 @@
           <pre id="loadResults" class="load-results" role="status" aria-live="polite">No load test run yet.</pre>
         </div>
 
-        <div id="runnerTab" class="tab-panel" role="tabpanel" aria-labelledby="resultsRunnerTabButton">
-          <div class="load-controls">
-            <label class="checkbox-field"><input id="runnerStopOnFailure" type="checkbox"> Stop on failure</label>
-            <button id="runCollectionButton" class="primary">Run Collection</button>
-            <button id="cancelRunnerButton" disabled>Cancel</button>
-            <button id="exportRunnerJsonButton" disabled>Export JSON</button>
-            <button id="exportRunnerCsvButton" disabled>Export CSV</button>
-          </div>
-          <pre id="runnerResults" class="load-results" role="status" aria-live="polite">No collection run yet.</pre>
-        </div>
       </section>
     </section>
   </main>
@@ -674,6 +740,16 @@
       <div class="modal-actions">
         <button id="cancelExportCollectionButton">Cancel</button>
         <button id="confirmExportCollectionButton" class="primary" disabled>Export</button>
+      </div>
+    </section>
+
+    <section id="runnerImportModal" class="modal runner-import-modal" role="dialog" aria-modal="true" aria-labelledby="runnerImportTitle" aria-describedby="runnerImportMessage" hidden>
+      <h2 id="runnerImportTitle">Import requests</h2>
+      <p id="runnerImportMessage">Choose a collection to expand, then select one or more requests to add to this runner.</p>
+      <div id="runnerImportList" class="collection-pick-list runner-import-list" role="group" aria-label="Collections and requests"></div>
+      <div class="modal-actions">
+        <button id="cancelRunnerImportButton" type="button">Cancel</button>
+        <button id="confirmRunnerImportButton" type="button" class="primary" disabled>Add</button>
       </div>
     </section>
 

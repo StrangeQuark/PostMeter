@@ -2,14 +2,8 @@
   padding: 0;
 }
 
-.title-input {
-  width: 100%;
-  margin-bottom: 8px;
-  padding: 8px 10px;
-  border-color: transparent;
-  background: var(--surface-muted);
-  font-size: 14px;
-  font-weight: 700;
+.request-main-title.editable-title {
+  margin-bottom: 0;
 }
 
 .request-line {
@@ -104,7 +98,6 @@
 }
 
 .table-actions,
-.environment-actions,
 .load-controls {
   margin-bottom: 8px;
 }
@@ -300,6 +293,24 @@ textarea.code-editor-input:placeholder-shown {
   gap: 8px;
   min-height: 0;
   flex: 1;
+  overflow: hidden;
+}
+
+.response-grid > .code-editor {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.response-grid #responseBody,
+.response-grid #responseHeaders {
+  height: 100%;
+  min-height: 0;
+}
+
+.response-grid .code-editor-highlight {
+  min-height: 0;
 }
 
 .metrics {

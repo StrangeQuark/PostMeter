@@ -467,12 +467,12 @@ test('UI smoke DOM-state capture redacts secret-like active text inputs', async 
         title: 'PostMeter UI Regression:FAIL:Authorization: Bearer title-secret requestHeaders Authorization Bearer title-header-secret',
         url: 'postmeter://renderer/index.html?authorization_code=url-code&next=1',
         activeElement: {
-          id: 'requestNameInput',
+          id: 'urlInput',
           tagName: 'INPUT',
           type: 'text',
           name: '',
-          ariaLabel: 'Request name',
-          text: 'Visible request name',
+          ariaLabel: 'Request URL',
+          text: 'https://api.example.test/users?token=visible',
           valueElement: true
         }
       })
@@ -522,9 +522,9 @@ test('UI smoke DOM-state capture redacts secret-like captured text fields', asyn
         title: 'PostMeter UI Regression:FAIL:Authorization: Bearer title-secret',
         url: 'postmeter://renderer/index.html?authorization_code=url-code&next=1',
         activeElement: {
-          id: 'requestNameInput',
-          tagName: 'INPUT',
-          type: 'text',
+          id: 'requestNameTitle',
+          tagName: 'DIV',
+          type: '',
           name: '',
           ariaLabel: 'Request name',
           text: 'Visible request name'

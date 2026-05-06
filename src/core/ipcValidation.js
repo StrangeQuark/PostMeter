@@ -28,6 +28,7 @@ function assertWorkspacePayload(value, field = 'workspace') {
     environments: assertEnvironmentArray,
     globals: assertPairs,
     cookies: assertCookies,
+    runners: assertRunnerArray,
     history: assertHistory
   });
 }
@@ -41,7 +42,9 @@ function assertSessionPayload(value, field = 'session') {
     'activeEnvironmentId',
     'activeCollectionId',
     'activeFolderId',
-    'activeRequestId'
+    'activeRequestId',
+    'activeRunnerRequestRunnerId',
+    'activeRunnerConfigId'
   ]) {
     optionalString(value[name], `${field}.${name}`, LIMITS.value);
   }
@@ -56,6 +59,7 @@ function assertSessionPayload(value, field = 'session') {
   assertSessionRequestTabs(value.openRequestTabs || [], `${field}.openRequestTabs`);
   assertSessionEnvironmentTabs(value.openEnvironmentTabs || [], `${field}.openEnvironmentTabs`);
   assertSessionWorkspaceTabs(value.openWorkspaceTabs || [], `${field}.openWorkspaceTabs`);
+  assertSessionRunnerTabs(value.openRunnerTabs || [], `${field}.openRunnerTabs`);
   assertSessionDraftRequests(value.draftRequests || [], `${field}.draftRequests`);
   assertDirtyCollectionStates(value.dirtyCollectionStates || [], `${field}.dirtyCollectionStates`);
   if (value.dirtyCookieJarState != null) {
@@ -133,6 +137,59 @@ function assertRequestPayload(value, field = 'request') {
   });
 }
 
+function assertRunnerPayload(value, field = 'runner') {
+  assertSchemaFields('runner', value, field);
+  assertNoUnexpectedFields('runner', value, field, [
+    'requests'
+  ]);
+  assertRunnerRequestArray(value.requests, `${field}.requests`);
+}
+
+function assertRunnerRequestPayload(value, field = 'request') {
+  assertRequestPayload(value, field);
+  assertAllowedObjectFields(value, field, [
+    'auth',
+    'body',
+    'bodyType',
+    'cookieJar',
+    'examples',
+    'graphql',
+    'grpc',
+    'headers',
+    'id',
+    'loadTestPolicy',
+    'method',
+    'methodPath',
+    'messages',
+    'metadata',
+    'name',
+    'postman',
+    'postmanBody',
+    'protocol',
+    'protocolProfile',
+    'queryParams',
+    'assertions',
+    'scripts',
+    'source',
+    'url',
+    'variables',
+    'websocket'
+  ]);
+  if (value.source != null) {
+    assertRunnerRequestSourcePayload(value.source, `${field}.source`);
+  }
+}
+
+function assertRunnerRequestSourcePayload(value, field = 'source') {
+  assertSchemaFields('runnerRequestSource', value, field);
+  assertNoUnexpectedFields('runnerRequestSource', value, field, [
+    'folderPath'
+  ]);
+  if (value.folderPath != null) {
+    assertStringArray(value.folderPath, `${field}.folderPath`, LIMITS.folderDepth, LIMITS.name);
+  }
+}
+
 function assertSettingsPayload(value, field) {
   object(value || {}, field);
   if (value.updates != null) {
@@ -140,6 +197,10 @@ function assertSettingsPayload(value, field) {
   }
   if (value.appearance != null) {
     assertSchemaFields('appearance', value.appearance, `${field}.appearance`);
+  }
+  if (value.tabs != null) {
+    assertSchemaFields('tabSettings', value.tabs, `${field}.tabs`);
+    assertNoUnexpectedFields('tabSettings', value.tabs, `${field}.tabs`);
   }
   if (value.diagnostics != null) {
     object(value.diagnostics, `${field}.diagnostics`);
@@ -357,9 +418,26 @@ function assertEnvironmentPayload(value, field = 'environment') {
 
 function assertWorkspaceRequestSavePayload(value, field = 'payload') {
   object(value, field);
-  string(value.collectionId, `${field}.collectionId`, LIMITS.name);
+  const hasCollectionTarget = typeof value.collectionId === 'string' && value.collectionId.length > 0;
+  const hasRunnerTarget = typeof value.runnerId === 'string' && value.runnerId.length > 0;
+  if (!hasCollectionTarget && !hasRunnerTarget) {
+    fail(`${field} must include collectionId or runnerId.`);
+  }
+  if (hasCollectionTarget && hasRunnerTarget) {
+    fail(`${field} must target either collectionId or runnerId, not both.`);
+  }
+  if (hasCollectionTarget) {
+    string(value.collectionId, `${field}.collectionId`, LIMITS.name);
+  }
+  if (hasRunnerTarget) {
+    string(value.runnerId, `${field}.runnerId`, LIMITS.name);
+  }
   string(value.requestId, `${field}.requestId`, LIMITS.name);
-  assertRequestPayload(value.request, `${field}.request`);
+  if (hasRunnerTarget) {
+    assertRunnerRequestPayload(value.request, `${field}.request`);
+  } else {
+    assertRequestPayload(value.request, `${field}.request`);
+  }
   optionalString(value.folderId, `${field}.folderId`, LIMITS.name);
   optionalBoolean(value.createdUnsaved, `${field}.createdUnsaved`);
   if (value.collectionShell != null) {
@@ -368,6 +446,14 @@ function assertWorkspaceRequestSavePayload(value, field = 'payload') {
     optionalString(value.collectionShell.name, `${field}.collectionShell.name`, LIMITS.name);
     optionalString(value.collectionShell.description, `${field}.collectionShell.description`, LIMITS.value);
     assertCertificates(value.collectionShell.certificates || [], `${field}.collectionShell.certificates`);
+  }
+  if (value.runnerShell != null) {
+    object(value.runnerShell, `${field}.runnerShell`);
+    optionalString(value.runnerShell.id, `${field}.runnerShell.id`, LIMITS.name);
+    optionalString(value.runnerShell.name, `${field}.runnerShell.name`, LIMITS.name);
+    optionalString(value.runnerShell.environmentId, `${field}.runnerShell.environmentId`, LIMITS.name);
+    optionalBoolean(value.runnerShell.stopOnFailure, `${field}.runnerShell.stopOnFailure`);
+    optionalBoolean(value.runnerShell.allowEnvironmentMutation, `${field}.runnerShell.allowEnvironmentMutation`);
   }
   if (value.folderPath != null) {
     array(value.folderPath, `${field}.folderPath`, LIMITS.folderDepth).forEach((folder, index) => {
@@ -531,6 +617,7 @@ function assertCollectionRunResultPayload(value, field = 'result') {
     'cookies',
     'environment',
     'globals',
+    'mutatedEnvironment',
     'results'
   ]);
   if (value.results != null) {
@@ -598,6 +685,9 @@ function assertCollectionRunResultPayload(value, field = 'result') {
   }
   if (value.environment != null) {
     assertEnvironmentPayload(value.environment, `${field}.environment`);
+  }
+  if (value.mutatedEnvironment != null) {
+    assertEnvironmentPayload(value.mutatedEnvironment, `${field}.mutatedEnvironment`);
   }
   if (value.collectionVariables != null) {
     assertPairs(value.collectionVariables, `${field}.collectionVariables`);
@@ -711,6 +801,7 @@ function assertWorkspaceListItemPayload(value, field = 'workspaceItem') {
   optionalNumber(value.folderCount, `${field}.folderCount`);
   optionalNumber(value.requestCount, `${field}.requestCount`);
   optionalNumber(value.environmentCount, `${field}.environmentCount`);
+  optionalNumber(value.runnerCount, `${field}.runnerCount`);
   optionalNumber(value.cookieCount, `${field}.cookieCount`);
   optionalNumber(value.historyCount, `${field}.historyCount`);
 }
@@ -767,6 +858,18 @@ function assertCollectionArray(values, field) {
   });
 }
 
+function assertRunnerArray(values, field) {
+  array(values, field, LIMITS.runners).forEach((runner, index) => {
+    assertRunnerPayload(runner, `${field}[${index}]`);
+  });
+}
+
+function assertRunnerRequestArray(values, field) {
+  array(values, field, LIMITS.requestsPerLevel).forEach((request, index) => {
+    assertRunnerRequestPayload(request, `${field}[${index}]`);
+  });
+}
+
 function assertEnvironmentArray(values, field) {
   array(values, field, LIMITS.environments).forEach((environment, index) => {
     assertEnvironmentPayload(environment, `${field}[${index}]`);
@@ -809,10 +912,11 @@ function assertSessionRequestTabs(values, field) {
   array(values, field, MAX_OPEN_TABS).forEach((tab, index) => {
     const itemField = `${field}[${index}]`;
     object(tab, itemField);
-    for (const name of ['key', 'collectionId', 'requestId', 'folderId']) {
+    for (const name of ['key', 'collectionId', 'runnerId', 'requestId', 'folderId']) {
       optionalString(tab[name], `${itemField}.${name}`, LIMITS.value);
     }
     optionalBoolean(tab.draft, `${itemField}.draft`);
+    optionalBoolean(tab.runnerRequest, `${itemField}.runnerRequest`);
     optionalBoolean(tab.dirty, `${itemField}.dirty`);
     optionalBoolean(tab.createdUnsaved, `${itemField}.createdUnsaved`);
     optionalString(tab.snapshot, `${itemField}.snapshot`, LIMITS.body);
@@ -844,6 +948,21 @@ function assertSessionWorkspaceTabs(values, field) {
     optionalString(tab.key, `${itemField}.key`, LIMITS.value);
     optionalString(tab.workspaceId, `${itemField}.workspaceId`, LIMITS.value);
     optionalBoolean(tab.dirty, `${itemField}.dirty`);
+  });
+}
+
+function assertSessionRunnerTabs(values, field) {
+  array(values, field, MAX_OPEN_TABS).forEach((tab, index) => {
+    const itemField = `${field}[${index}]`;
+    object(tab, itemField);
+    optionalString(tab.key, `${itemField}.key`, LIMITS.value);
+    optionalString(tab.runnerId, `${itemField}.runnerId`, LIMITS.value);
+    optionalBoolean(tab.dirty, `${itemField}.dirty`);
+    optionalBoolean(tab.createdUnsaved, `${itemField}.createdUnsaved`);
+    optionalString(tab.snapshot, `${itemField}.snapshot`, LIMITS.body);
+    if (tab.currentState != null) {
+      assertRunnerPayload(tab.currentState, `${itemField}.currentState`);
+    }
   });
 }
 
@@ -1190,6 +1309,7 @@ module.exports = {
   assertFileOperationResultPayload,
   assertResponsePayload,
   assertRequestPayload,
+  assertRunnerPayload,
   assertUpdateCheckOptionsPayload,
   assertWorkspaceEnvironmentSavePayload,
   assertWorkspaceEnvironmentSaveResultPayload,

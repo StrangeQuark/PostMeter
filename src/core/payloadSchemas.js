@@ -62,6 +62,7 @@ const LIMITS = {
   collections: 500,
   foldersPerLevel: 500,
   requestsPerLevel: 1000,
+  runners: 500,
   environments: 500,
   history: 1000,
   pairs: 1000,
@@ -124,6 +125,9 @@ const FIELD_SCHEMAS = {
     sendRequest: { type: 'boolean', optional: true },
     cookies: { type: 'boolean', optional: true },
     vault: { type: 'boolean', optional: true }
+  },
+  tabSettings: {
+    saveOnForceClose: { type: 'boolean', optional: true }
   },
   keyValue: {
     enabled: { type: 'boolean', optional: true },
@@ -295,7 +299,23 @@ const FIELD_SCHEMAS = {
     includePrereleases: { type: 'boolean', optional: true }
   },
   runnerConfig: {
+    allowEnvironmentMutation: { type: 'boolean', optional: true },
     stopOnFailure: { type: 'boolean', optional: true }
+  },
+  runner: {
+    id: { type: 'string', limit: 'name', optional: true },
+    name: { type: 'string', limit: 'name', optional: true },
+    environmentId: { type: 'string', limit: 'name', optional: true },
+    allowEnvironmentMutation: { type: 'boolean', optional: true },
+    stopOnFailure: { type: 'boolean', optional: true }
+  },
+  runnerRequestSource: {
+    collectionId: { type: 'string', limit: 'name', optional: true },
+    collectionName: { type: 'string', limit: 'name', optional: true },
+    folderId: { type: 'string', limit: 'name', optional: true },
+    folderName: { type: 'string', limit: 'name', optional: true },
+    requestId: { type: 'string', limit: 'name', optional: true },
+    requestName: { type: 'string', limit: 'name', optional: true }
   },
   runnerProgress: {
     completedRequests: { type: 'number', optional: true },
@@ -336,6 +356,10 @@ const FIELD_SCHEMAS = {
   collectionRunResult: {
     collectionId: { type: 'string', limit: 'name', optional: true },
     collectionName: { type: 'string', limit: 'name', optional: true },
+    runnerId: { type: 'string', limit: 'name', optional: true },
+    runnerName: { type: 'string', limit: 'name', optional: true },
+    runnerEnvironmentId: { type: 'string', limit: 'name', optional: true },
+    environmentMutationAllowed: { type: 'boolean', optional: true },
     totalRequests: { type: 'number', optional: true },
     passedRequests: { type: 'number', optional: true },
     failedRequests: { type: 'number', optional: true },
@@ -473,7 +497,7 @@ const payloadSchemas = {
       nested: ['auth', 'scripts', 'cookieJar', 'loadTestPolicy']
     },
   workspace: {
-      arrays: ['collections', 'environments', 'globals', 'cookies', 'history'],
+      arrays: ['collections', 'environments', 'globals', 'cookies', 'runners', 'history'],
       nested: ['settings']
     },
     response: {
@@ -484,7 +508,10 @@ const payloadSchemas = {
       optional: ['durationSeconds', 'rampUpSeconds', 'targetRatePerSecond', 'maxRatePerSecond', 'executionMode', 'workerProcesses', 'recordSamples', 'confirmedHighConcurrency']
     },
     runnerConfig: {
-      optional: ['stopOnFailure']
+      optional: ['allowEnvironmentMutation', 'stopOnFailure']
+    },
+    runner: {
+      arrays: ['requests']
     },
     runnerResult: {
       required: ['collectionId', 'collectionName', 'totalRequests', 'passedRequests', 'failedRequests', 'passed', 'cancelled', 'results']

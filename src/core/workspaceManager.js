@@ -442,6 +442,7 @@ class WorkspaceManager {
       folderCount: summary.folderCount,
       requestCount: summary.requestCount,
       environmentCount: summary.environmentCount,
+      runnerCount: summary.runnerCount,
       cookieCount: summary.cookieCount,
       historyCount: summary.historyCount
     };
@@ -528,6 +529,7 @@ function workspaceSummary(workspace) {
     folderCount: countWorkspaceFolders(workspace),
     requestCount,
     environmentCount: Array.isArray(workspace?.environments) ? workspace.environments.length : 0,
+    runnerCount: Array.isArray(workspace?.runners) ? workspace.runners.length : 0,
     cookieCount: Array.isArray(workspace?.cookies) ? workspace.cookies.length : 0,
     historyCount: Array.isArray(workspace?.history) ? workspace.history.length : 0
   };

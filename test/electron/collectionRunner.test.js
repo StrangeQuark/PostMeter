@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { evaluateAssertions, readHtmlSelector, readJsonPath, readXmlPath } = require('../../src/core/assertions');
-const { collectionRunResultToCsv, runCollection } = require('../../src/core/collectionRunner');
+const { collectionRunResultToCsv, runCollection, runRunner } = require('../../src/core/collectionRunner');
 const { collectionModel, requestModel } = require('../../src/core/models');
 const { importPostmanCollection } = require('../../src/core/postmanImporter');
 const { runRequestWithScripts } = require('../../src/core/requestScriptRunner');
@@ -346,6 +346,103 @@ test('runs pre-request and test scripts during collection runs', async () => {
   assert.equal(result.results[0].testScriptResult.tests[0].passed, true);
   assert.equal(result.results[0].localVariables.find((item) => item.key === 'requestToken').value, 'local-token');
   assert.equal(result.collectionVariables.find((item) => item.key === 'fromTests').value, 'done');
+});
+
+test('runs workspace-owned runner requests in runner-local order and exposes environment mutation policy', async () => {
+  const runner = {
+    id: 'runner-1',
+    name: 'Workspace Runner',
+    environmentId: 'env',
+    allowEnvironmentMutation: false,
+    stopOnFailure: false,
+    requests: [
+      requestModel({
+        id: 'runner-local-2',
+        name: 'Second Clone',
+        method: 'GET',
+        url: 'https://api.example.test/second',
+        scripts: { tests: "pm.environment.set('runnerToken', 'mutated');" }
+      }),
+      requestModel({
+        id: 'runner-local-1',
+        name: 'First Clone',
+        method: 'GET',
+        url: 'https://api.example.test/first',
+        scripts: {
+          preRequest: "pm.environment.set('seenBySend', 'yes');",
+          tests: "pm.test('runner script executed', function () { pm.expect(pm.environment.get('seenBySend')).to.equal('yes'); });"
+        }
+      })
+    ]
+  };
+  const sent = [];
+
+  const result = await runRunner(runner, { id: 'env', name: 'Env', variables: [{ enabled: true, key: 'runnerToken', value: 'base' }] }, {
+    sendRequest: async (request, environment) => {
+      sent.push({
+        id: request.id,
+        seenBySend: environment.variables.find((item) => item.key === 'seenBySend')?.value || ''
+      });
+      return response(200, '{"ok":true}');
+    }
+  });
+
+  assert.deepEqual(sent.map((item) => item.id), ['runner-local-2', 'runner-local-1']);
+  assert.equal(sent[1].seenBySend, 'yes');
+  assert.equal(result.runnerId, 'runner-1');
+  assert.equal(result.environmentMutationAllowed, false);
+  assert.equal(result.mutatedEnvironment, undefined);
+  assert.equal(result.results[0].requestId, 'runner-local-2');
+  assert.equal(result.environment.variables.find((item) => item.key === 'runnerToken').value, 'mutated');
+});
+
+test('workspace-owned runner exposes mutated environment when persistence is allowed', async () => {
+  const runner = {
+    id: 'runner-mutate',
+    name: 'Mutating Runner',
+    environmentId: 'env',
+    allowEnvironmentMutation: true,
+    stopOnFailure: false,
+    requests: [requestModel({
+      id: 'runner-request',
+      name: 'Mutates Env',
+      url: 'https://api.example.test/mutate',
+      scripts: { tests: "pm.environment.set('persistMe', 'yes');" }
+    })]
+  };
+  const sourceEnvironment = { id: 'env', name: 'Env', variables: [] };
+
+  const result = await runRunner(runner, sourceEnvironment, {
+    sendRequest: async () => response(200, '{}')
+  });
+
+  assert.equal(sourceEnvironment.variables.length, 0);
+  assert.equal(result.environmentMutationAllowed, true);
+  assert.equal(result.mutatedEnvironment.id, 'env');
+  assert.equal(result.mutatedEnvironment.variables.find((item) => item.key === 'persistMe').value, 'yes');
+});
+
+test('workspace-owned runner honors runtime environment mutation override', async () => {
+  const runner = {
+    id: 'runner-override',
+    name: 'Override Runner',
+    environmentId: 'env',
+    allowEnvironmentMutation: false,
+    requests: [requestModel({
+      id: 'runner-request',
+      name: 'Mutates Env',
+      url: 'https://api.example.test/mutate',
+      scripts: { tests: "pm.environment.set('persistViaConfig', 'yes');" }
+    })]
+  };
+
+  const result = await runRunner(runner, { id: 'env', name: 'Env', variables: [] }, {
+    allowEnvironmentMutation: true,
+    sendRequest: async () => response(200, '{}')
+  });
+
+  assert.equal(result.environmentMutationAllowed, true);
+  assert.equal(result.mutatedEnvironment.variables.find((item) => item.key === 'persistViaConfig').value, 'yes');
 });
 
 test('runs pre-request and test scripts around single requests', async () => {

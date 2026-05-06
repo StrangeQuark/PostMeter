@@ -89,6 +89,13 @@ function migrate(workspace) {
     workspace.schemaVersion = 11;
     migrated = true;
   }
+  if (schemaVersion < 12) {
+    if (!Array.isArray(workspace.runners)) {
+      workspace.runners = [];
+    }
+    workspace.schemaVersion = 12;
+    migrated = true;
+  }
   return migrated;
 }
 

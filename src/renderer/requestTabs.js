@@ -37,6 +37,8 @@
     button.setAttribute('role', 'tab');
     button.setAttribute('aria-selected', isActive ? 'true' : 'false');
     button.setAttribute('aria-label', group.title?.(item, tab) || 'Open tab');
+    button.setAttribute('data-open-tab-key', tab?.key || '');
+    button.setAttribute('data-open-tab-kind', group.kind || '');
     const tabId = group.tabId?.(tab, item) || stableTabId(group.idPrefix || 'open-tab', tab);
     button.id = tabId;
     if (group.controlsId) {
@@ -48,9 +50,36 @@
     }
     button.tabIndex = isActive ? 0 : -1;
     button.title = group.title?.(item, tab) || '';
+    button.setAttribute('aria-haspopup', 'menu');
+    button.setAttribute('aria-expanded', 'false');
+    const openContextMenu = (event, menuOptions = {}) => {
+      event.preventDefault();
+      event.stopPropagation();
+      group.onContextMenu?.(event, tab, item, {
+        trigger: button,
+        keyboard: menuOptions.keyboard === true,
+        x: menuOptions.x,
+        y: menuOptions.y
+      });
+    };
+    wrapper.addEventListener('contextmenu', (event) => {
+      openContextMenu(event, { keyboard: false });
+    });
     button.addEventListener('click', () => group.onSelect?.(tab, item));
+    button.addEventListener('contextmenu', (event) => {
+      openContextMenu(event, { keyboard: false });
+    });
     button.addEventListener('keydown', (event) => {
       if (moveOpenTabFocus(event, button)) {
+        return;
+      }
+      if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+        const rect = button.getBoundingClientRect?.() || { left: 0, bottom: 0 };
+        openContextMenu(event, {
+          keyboard: true,
+          x: rect.left + 16,
+          y: rect.bottom + 4
+        });
         return;
       }
       if (event.key === 'Enter' || event.key === ' ') {

@@ -20,7 +20,7 @@ The migration deliberately does not bridge Electron to the Java services. Core b
 - Import/export Postman Collection v2.1 JSON while preserving folder/request hierarchy order, variables and raw variable metadata, auth inheritance, HTTP/GraphQL/gRPC/local mock scripts, editable examples, cookies and richer cookie metadata including newer priority/partitioning hints where present, supported GraphQL/gRPC protocol metadata, local mock/vault/visualizer/package binding metadata, file/binary body references, request/example/certificate IDs, and supported collection certificate metadata.
 - Import/export OpenAPI, JMeter, curl, and HAR collection formats for compatibility workflows, including OpenAPI JSON/YAML input, local `$ref` resolution for common objects, server variables, path/query/header/cookie parameters, Swagger 2.0 body/form-data import, binary body hints, OpenAPI security scheme import/export, OpenAPI response examples and disabled generated response assertions, JMeter variables/assertions/headers/listeners/CSV/thread/timer/controller/extractor metadata where mappable, JMeter XPath and Size Assertion mapping, mapped JMeter assertion enabled-state preservation, representative timer metadata preservation, preserve-only metadata for known unsupported JMeter assertion/processor/sampler/script classes, HAR cookies/response examples/timing/redirect/compression metadata with sensitive header/cookie redaction on export, common curl auth/data/redirect/compression/cookie/file flags, and preserved curl proxy/retry/client-TLS import metadata.
 - Define request assertions for status, headers, JSON paths, XML XPath, HTML CSS selectors, response time, response size, body text, JSON/XML/HTML variable extraction, and regex variable extraction.
-- Run active collections locally through the desktop Runner tab, including stop-on-failure, extracted-variable/script-mutation propagation, runtime variable display, progress events, and JSON/CSV result export.
+- Run workspace-owned desktop runners locally, including stop-on-failure, extracted-variable/script-mutation propagation, runtime variable display, progress events, and JSON/CSV result export.
 - Run collections headlessly through `npm run cli -- run ...` for CI usage with non-zero exits on failed assertions.
 - Configure request auth helpers for Bearer token, Basic Auth, API key, Cookie, static OAuth 2.0 access-token injection, refresh-token renewal, client-credentials token retrieval, authorization-code PKCE, device-code flow, and HTTPS client certificates using PEM certificate/key pairs or PFX/P12 bundles with optional CA certificate paths.
 - Persist workspace cookies in a local cookie jar, allow per-request cookie jar opt-in/out, capture response cookies when enabled, and validate common browser-parity edge cases.
@@ -721,9 +721,9 @@ Body behavior:
 - `RAW_TEXT` sends body for `POST`, `PUT`, `PATCH`, and `DELETE`; default content type is `text/plain; charset=utf-8`.
 - Body content supports environment substitution.
 
-## Assertions And Collection Runner
+## Assertions And Runner
 
-Assertions are evaluated by `assertions.js`. Collection execution is handled by `collectionRunner.js`.
+Assertions are evaluated by `assertions.js`. Collection and workspace-owned runner execution are handled by `collectionRunner.js`.
 
 Implemented assertion types:
 
@@ -758,16 +758,22 @@ Supported operators:
 
 Runner behavior:
 
-- Walks collection requests in collection/folder order.
+- Stores first-class desktop runners under `workspace.runners`.
+- Models each runner as `{ id, name, environmentId, allowEnvironmentMutation, stopOnFailure, requests }`.
+- Stores runner-owned requests as independent request objects. Importing collection requests deep-clones them into the runner with new runner-local IDs, so runner edits and executions do not mutate source collection requests.
+- Walks runner requests in runner row order. Legacy collection execution still walks collection requests in collection/folder order.
 - Runs pre-request scripts before sending each request; failed pre-request scripts fail the request without sending it.
 - Executes requests sequentially through the same HTTP path as normal sends.
-- Clones the active environment before the run.
+- Uses the runner's selected environment, which can differ from the top-right request environment selector.
+- Clones the selected runner environment before the run when `allowEnvironmentMutation` is disabled. Scripts can mutate that temporary environment for later runner requests, but the saved environment is unchanged after the run.
+- Applies script/extractor environment mutations back to the selected saved environment when `allowEnvironmentMutation` is enabled.
 - Resolves collection variables, active environment variables, and request-local variables for request sends, with request-local values overriding environment values and environment values overriding collection values.
 - Runs test scripts after responses are received.
 - Applies extracted variables and script variable mutations to later requests.
 - Propagates cookie jar updates between sequential requests when request cookie jar storage is enabled.
 - Emits progress events to the renderer.
 - Supports cancellation and stop-on-failure.
+- Supports bounded `pm.execution.setNextRequest`, `pm.execution.skipRequest`, and `pm.execution.runRequest` against runner-local request IDs.
 - Reports per-request status, timing, pass/fail state, assertion results, script results, extracted variable names, and request errors.
 - Reports final runtime collection/environment variables plus per-request local variables in the desktop runner output and CSV export.
 - Returns the final cookie jar to the Electron main process so it can be saved with the workspace.

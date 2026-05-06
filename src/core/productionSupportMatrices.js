@@ -494,9 +494,9 @@ function buildUxAccessibilityMatrix() {
       evidenceRefs: ['src/renderer/index.html', 'src/renderer/rendererWorkflows.js', 'electron/requestIpc.js'],
       tests: ['npm run test:ui', 'npm run test:ui:regression', 'test/electron/requestIpc.test.js']
     }),
-    row('workflow.collection-runner', 'Collection runner', 'Collection runs expose idle, running, cancellation, export, pass/fail, pre-run save failure, and failed-operation states without writing partial result exports.', 'implemented', {
-      evidenceRefs: ['src/renderer/index.html', 'src/renderer/rendererWorkflows.js', 'electron/runtimeIpc.js'],
-      tests: ['npm run test:ui:regression', 'test/electron/runtimeIpc.test.js', 'test/electron/collectionRunner.test.js', 'test/electron/rendererWorkflows.test.js']
+    row('workflow.collection-runner', 'Collection runner', 'Workspace-owned desktop runners expose idle, running, cancellation, export, pass/fail, pre-run save failure, dirty tab, environment mutation, row reorder, and failed-operation states without writing partial result exports or mutating source collection requests.', 'implemented', {
+      evidenceRefs: ['src/renderer/index.html', 'src/renderer/renderer.js', 'src/renderer/requestTabState.js', 'src/renderer/sessionPersistence.js', 'src/renderer/rendererWorkflows.js', 'electron/runtimeIpc.js'],
+      tests: ['npm run test:ui:regression', 'npm run test:ui:snapshot', 'test/electron/requestTabState.test.js', 'test/electron/rendererSessionPersistence.test.js', 'test/electron/runtimeIpc.test.js', 'test/electron/collectionRunner.test.js', 'test/electron/rendererWorkflows.test.js']
     }),
     row('workflow.load-test', 'Load tests', 'Load tests expose idle, running, cancellation, export, validation, pre-load save failure, and failed-operation states with bounded configuration controls.', 'implemented', {
       evidenceRefs: ['src/renderer/index.html', 'src/renderer/rendererWorkflows.js', 'electron/runtimeIpc.js'],

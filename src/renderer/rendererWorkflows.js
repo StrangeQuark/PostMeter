@@ -165,6 +165,9 @@
       if (!state?.activeRequestId) {
         return '';
       }
+      if (state.activeRunnerRequestRunnerId) {
+        return `runner-request:${state.activeRunnerRequestRunnerId}:${state.activeRequestId}`;
+      }
       return state.activeCollectionId
         ? `request:${state.activeCollectionId}:${state.activeRequestId}`
         : `draft:${state.activeRequestId}`;
@@ -180,6 +183,7 @@
       return {
         workspaceId: state.activeWorkspaceId,
         collectionId: state.activeCollectionId || null,
+        runnerId: state.activeRunnerRequestRunnerId || null,
         requestId: request?.id || null,
         environmentId: environment?.id || null
       };
@@ -197,9 +201,17 @@
       return (state.workspace?.environments || []).find((environment) => environment.id === environmentId) || null;
     }
 
+    function findWorkspaceRunner(runnerId) {
+      return (state.workspace?.runners || []).find((runner) => runner.id === runnerId) || null;
+    }
+
     function findContextRequest(context) {
       if (!context?.requestId || !isActiveWorkspaceContext(context)) {
         return null;
+      }
+      if (context.runnerId) {
+        const runner = findWorkspaceRunner(context.runnerId);
+        return (runner?.requests || []).find((request) => request.id === context.requestId) || null;
       }
       if (!context.collectionId) {
         return state.draftRequests?.get(context.requestId) || null;
@@ -221,6 +233,9 @@
       if (!context?.requestId) {
         return '';
       }
+      if (context.runnerId) {
+        return `runner-request:${context.runnerId}:${context.requestId}`;
+      }
       return context.collectionId
         ? `request:${context.collectionId}:${context.requestId}`
         : `draft:${context.requestId}`;
@@ -236,7 +251,7 @@
       if (typeof config.requestTabKey === 'string') {
         return config.requestTabKey;
       }
-      if (config.scope === 'all') {
+      if (config.scope === 'all' || config.scope === 'runners') {
         return '';
       }
       if (typeof config.environmentTabKey === 'string') {
@@ -319,7 +334,14 @@
     }
 
     function requestForTabInWorkspace(workspaceValue, tab) {
-      if (!workspaceValue || !tab?.collectionId || !tab?.requestId) {
+      if (!workspaceValue || !tab?.requestId) {
+        return null;
+      }
+      if (tab.runnerRequest === true || tab.runnerId) {
+        const runner = (workspaceValue.runners || []).find((item) => item.id === tab.runnerId);
+        return (runner?.requests || []).find((request) => request.id === tab.requestId) || null;
+      }
+      if (!tab.collectionId) {
         return null;
       }
       return findRequestLocationInWorkspace(workspaceValue, tab.collectionId, tab.requestId)?.request || null;
@@ -400,6 +422,9 @@
     }
 
     function buildRequestSavePayload(requestTab) {
+      if (requestTab?.runnerRequest === true || requestTab?.runnerId) {
+        return buildRunnerRequestSavePayload(requestTab);
+      }
       const collection = findWorkspaceCollection(requestTab?.collectionId);
       const request = requestForTabInWorkspace(state.workspace, requestTab);
       if (!collection || !request) {
@@ -430,6 +455,27 @@
         payload.cookies = cloneValueArray(state.workspace?.cookies);
       }
       return payload;
+    }
+
+    function buildRunnerRequestSavePayload(requestTab) {
+      const runner = findWorkspaceRunner(requestTab?.runnerId);
+      const request = requestForTabInWorkspace(state.workspace, requestTab);
+      if (!runner || !request) {
+        throw new Error('The selected runner request could not be found for saving.');
+      }
+      return {
+        runnerId: requestTab.runnerId,
+        requestId: requestTab.requestId,
+        request,
+        runnerShell: {
+          id: runner.id,
+          name: runner.name,
+          environmentId: runner.environmentId || 'none',
+          stopOnFailure: runner.stopOnFailure === true,
+          allowEnvironmentMutation: runner.allowEnvironmentMutation === true
+        },
+        settings: cloneJson(state.workspace?.settings, {})
+      };
     }
 
     function buildEnvironmentSavePayload(environmentTab) {
@@ -535,6 +581,7 @@
         context?.requestId
         && isActiveWorkspaceContext(context)
         && state.activeRequestId === context.requestId
+        && (state.activeRunnerRequestRunnerId || null) === (context.runnerId || null)
         && (state.activeCollectionId || null) === (context.collectionId || null)
       );
     }
@@ -545,7 +592,7 @@
     }
 
     function syncSavedRequestContext(context) {
-      if (!context?.requestId || !context.collectionId || !isActiveWorkspaceContext(context)) {
+      if (!context?.requestId || !isActiveWorkspaceContext(context)) {
         return false;
       }
       const request = findContextRequest(context);
@@ -1039,8 +1086,16 @@
     }
 
     async function saveWorkspace(showStatus = true, config = {}) {
-      collectActiveEditorState();
-      if (config.promptForDraft === true && state.activeMainPanel === 'request' && !state.activeCollectionId && state.activeRequestId) {
+      if (config.collectActiveEditorState !== false) {
+        collectActiveEditorState();
+      }
+      if (
+        config.promptForDraft === true
+        && state.activeMainPanel === 'request'
+        && !state.activeCollectionId
+        && !state.activeRunnerRequestRunnerId
+        && state.activeRequestId
+      ) {
         const request = activeRequest();
         if (request) {
           return Boolean(await saveDraftRequestWithPrompt(request, { showStatus }));
@@ -1061,7 +1116,7 @@
           collectEnvironmentFromEditor();
         }
       }
-      if (config.scope === 'all' || (!settingsOnly && !requestTargetKey && !environmentTargetKey)) {
+      if (config.scope === 'all' || config.scope === 'runners' || (!settingsOnly && !requestTargetKey && !environmentTargetKey)) {
         const save = windowObject.__postmeterSaveWorkspace || windowObject.postmeter.workspace.save;
         state.workspace = await save(state.workspace);
         options.clearSavedRequestDirtyState?.();

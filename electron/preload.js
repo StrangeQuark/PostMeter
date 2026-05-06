@@ -18,7 +18,7 @@ const postmeterApi = {
         'export-diagnostics',
         'check-updates'
       ]);
-      const allowedPayloadActions = new Set(['set-prereleases']);
+      const allowedPayloadActions = new Set(['set-prereleases', 'set-save-on-force-close']);
       const listener = (_event, action) => {
         if (typeof action === 'string' && allowedStringActions.has(action)) {
           callback(action);
@@ -32,6 +32,17 @@ const postmeterApi = {
           callback({
             type: action.type,
             includePrereleases: action.includePrereleases
+          });
+          return;
+        }
+        if (action
+          && typeof action === 'object'
+          && allowedPayloadActions.has(action.type)
+          && action.type === 'set-save-on-force-close'
+          && typeof action.saveOnForceClose === 'boolean') {
+          callback({
+            type: action.type,
+            saveOnForceClose: action.saveOnForceClose
           });
         }
       };

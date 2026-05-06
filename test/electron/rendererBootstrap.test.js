@@ -89,7 +89,7 @@ test('renderer bootstrap closes toolbar menus and resets trigger aria state', ()
   assert.equal(triggers.every((button) => button.attributes['aria-expanded'] === 'false'), true);
 });
 
-test('renderer accessibility source keeps splitters body editor and toolbar save recovery wired', async () => {
+test('renderer accessibility source keeps splitters body editor and pane save recovery wired', async () => {
   const root = path.join(__dirname, '..', '..');
   const indexSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'index.html'), 'utf8');
   const chromeSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'chrome.css'), 'utf8');
@@ -107,8 +107,10 @@ test('renderer accessibility source keeps splitters body editor and toolbar save
   assert.match(bootstrapSource, /aria-orientation/);
   assert.match(bootstrapSource, /ArrowDown/);
   assert.match(bootstrapSource, /ArrowUp/);
-  assert.match(rendererSource, /Workspace save failed:/);
-  assert.match(rendererSource, /Workspace Save Failed/);
+  assert.match(rendererSource, /Request save failed:/);
+  assert.match(rendererSource, /Request Save Failed/);
+  assert.match(rendererSource, /Environment save failed:/);
+  assert.match(rendererSource, /Environment Save Failed/);
   assert.match(rendererSource, /const previousSettings = structuredClone\(workspace\.settings\)/);
   assert.match(rendererSource, /workspace\.settings = previousSettings/);
   assert.match(indexSource, /<fieldset class="workspace-diagnostics-panel" aria-describedby="diagnosticsPrivacySummary diagnosticsSensitiveWarning">/);
@@ -140,6 +142,7 @@ test('renderer bootstrap binds auth input and modal draft confirmation events', 
     ['authTypeSelect', createElement({ tagName: 'SELECT', value: 'oauth2' })],
     ['confirmSaveDraftButton', createElement()],
     ['confirmExportCollectionButton', createElement()],
+    ['confirmRunnerImportButton', createElement()],
     ['contextMenu', createElement()],
     ['modalBackdrop', createElement()]
   ]);
@@ -166,16 +169,18 @@ test('renderer bootstrap binds auth input and modal draft confirmation events', 
     onAuthInput: () => { calls.authInput += 1; },
     onResolveActiveModal: (value) => calls.resolveModal.push(value),
     getSelectedDraftSaveCollectionId: () => 'collection-1',
-    getSelectedExportCollectionId: () => 'collection-2'
+    getSelectedExportCollectionId: () => 'collection-2',
+    getSelectedRunnerImportTarget: () => ({ type: 'request', collectionId: 'collection-1', requestId: 'request-1' })
   });
 
   elements.get('authTypeSelect').dispatch('change');
   elements.get('confirmSaveDraftButton').dispatch('click');
   elements.get('confirmExportCollectionButton').dispatch('click');
+  elements.get('confirmRunnerImportButton').dispatch('click');
 
   assert.deepEqual(calls.authType, ['oauth2']);
   assert.equal(calls.authInput, 1);
-  assert.deepEqual(calls.resolveModal, ['collection-1', 'collection-2']);
+  assert.deepEqual(calls.resolveModal, ['collection-1', 'collection-2', { type: 'request', collectionId: 'collection-1', requestId: 'request-1' }]);
 });
 
 test('renderer bootstrap resolves text, confirmation, and notification modals', () => {
@@ -189,6 +194,7 @@ test('renderer bootstrap resolves text, confirmation, and notification modals', 
     ['confirmActionButton', createElement()],
     ['cancelConfirmActionButton', createElement()],
     ['closeNotificationModalButton', createElement()],
+    ['cancelRunnerImportButton', createElement()],
     ['contextMenu', createElement()],
     ['modalBackdrop', createElement()]
   ]);
@@ -213,8 +219,9 @@ test('renderer bootstrap resolves text, confirmation, and notification modals', 
   elements.get('confirmActionButton').dispatch('click');
   elements.get('cancelConfirmActionButton').dispatch('click');
   elements.get('closeNotificationModalButton').dispatch('click');
+  elements.get('cancelRunnerImportButton').dispatch('click');
 
-  assert.deepEqual(resolved, ['single-line-value', null, true, false, true]);
+  assert.deepEqual(resolved, ['single-line-value', null, true, false, true, null]);
 });
 
 test('renderer bootstrap binds every collection export menu button', () => {
@@ -342,12 +349,12 @@ test('tree context menus close on Tab and reset trigger expanded state', () => {
   }
 });
 
-test('renderer bootstrap routes toolbar save failures to visible recovery state', async () => {
+test('renderer bootstrap binds pane save buttons', () => {
   const elements = new Map([
-    ['saveButton', createElement()]
+    ['saveRequestButton', createElement()],
+    ['saveEnvironmentButton', createElement()]
   ]);
-  let status = '';
-  let notification = null;
+  const calls = [];
 
   bindUi({
     doc: {
@@ -360,23 +367,43 @@ test('renderer bootstrap routes toolbar save failures to visible recovery state'
       addEventListener() {}
     },
     windowObject: { addEventListener() {} },
-    onSaveWorkspace: () => {
-      Promise.reject(new Error('disk full')).catch((error) => {
-        const message = error.message || String(error);
-        status = `Workspace save failed: ${message}`;
-        notification = { title: 'Workspace Save Failed', message };
-      });
-    }
+    onSaveRequest: () => calls.push('request'),
+    onSaveEnvironment: () => calls.push('environment')
   });
 
-  elements.get('saveButton').dispatch('click');
-  await Promise.resolve();
+  elements.get('saveRequestButton').dispatch('click');
+  elements.get('saveEnvironmentButton').dispatch('click');
 
-  assert.equal(status, 'Workspace save failed: disk full');
-  assert.deepEqual(notification, {
-    title: 'Workspace Save Failed',
-    message: 'disk full'
+  assert.deepEqual(calls, ['request', 'environment']);
+});
+
+test('renderer bootstrap creates runners from the toolbar New menu and runner empty pane only', () => {
+  const elements = new Map([
+    ['newRunnerMenuButton', createElement()],
+    ['newRunnerButton', createElement()],
+    ['emptyCreateRunnerButton', createElement()]
+  ]);
+  const calls = [];
+
+  bindUi({
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} },
+    onNewRunner: () => calls.push('runner')
   });
+
+  elements.get('newRunnerButton').dispatch('click');
+  elements.get('emptyCreateRunnerButton').dispatch('click');
+  elements.get('newRunnerMenuButton').dispatch('click');
+
+  assert.deepEqual(calls, ['runner', 'runner']);
 });
 
 test('renderer bootstrap binds workspace sandbox control buttons', () => {
@@ -577,6 +604,29 @@ test('renderer supplies explicit collection export format handlers', () => {
       `${optionName} should pass the ${format} export format`
     );
   }
+});
+
+test('renderer exposes first-class runner UI and sends runner payloads through runtime IPC', () => {
+  const rendererSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/renderer.js'), 'utf8');
+  const bootstrapSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/rendererBootstrap.js'), 'utf8');
+  const indexHtml = fs.readFileSync(path.join(__dirname, '../../src/renderer/index.html'), 'utf8');
+
+  assert.match(indexHtml, /id="runnersPanelTab"[^>]*>Runners<\/button>/);
+  assert.match(indexHtml, /id="newRunnerMenuButton"[^>]*>Runner<\/button>/);
+  assert.match(indexHtml, /id="runnerMainPanel"/);
+  assert.match(indexHtml, /id="runnerImportModal"/);
+  assert.match(indexHtml, /id="addRunnerRequestButton"/);
+  assert.match(indexHtml, /id="runnerAllowEnvironmentMutation"/);
+  assert.doesNotMatch(indexHtml, /id="newRunnerButton"/);
+  assert.match(indexHtml, /id="emptyCreateRunnerButton"[^>]*>New Runner<\/button>/);
+  assert.match(bootstrapSource, /bindClick\(doc, 'newRunnerMenuButton', options\.onNewRunner\)/);
+  assert.match(bootstrapSource, /bindClick\(doc, 'emptyCreateRunnerButton', options\.onNewRunner\)/);
+  assert.match(bootstrapSource, /bindClick\(doc, 'confirmRunnerImportButton'/);
+  assert.doesNotMatch(bootstrapSource, /newRunnerButton/);
+  assert.doesNotMatch(indexHtml, /id="resultsRunnerTabButton"/);
+  assert.match(rendererSource, /window\.postmeter\.runner\.start\(runnerId, cloneJson\(runner\), cloneJson\(runnerEnvironment\)/);
+  assert.match(rendererSource, /result\?\.environmentMutationAllowed === true/);
+  assert.doesNotMatch(rendererSource, /const runnerCollection = \{/);
 });
 
 test('renderer loads vault prompt queue before the app renderer', () => {

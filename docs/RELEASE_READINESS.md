@@ -36,6 +36,8 @@ Status meanings:
 
 ## Native Runner Policy
 
+The desktop Runner UI is now a first-class workspace section rather than a request result-panel tab. Release validation should treat runner data as workspace data: schema-12 workspaces include `workspace.runners`, runner-owned requests are independent copies, and runner environment mutations persist only when the runner's mutation option is enabled.
+
 Windows and macOS packaged validation must run on GitHub Actions native runners. Docker is acceptable for Linux service-style checks and unit tests, but not for Windows AppContainer behavior, macOS seatbelt behavior, protocol-handler registration, installer behavior, packaged Electron launch, or platform-specific persistence paths.
 
 Current required native evidence:

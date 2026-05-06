@@ -33,6 +33,15 @@ Helpful, non-blocking input:
 
 PostMeter must remain a standalone local desktop application. Do not add PostMeter user account creation, app login, required cloud sign-in, or any account gate for core usage. OAuth work is strictly for authenticating outbound API requests, not for authenticating users into PostMeter.
 
+## Recently Completed
+
+- Moved Runner into a dedicated workspace-owned section.
+  - The left sidebar now includes `Runner` between `Workspaces` and `History`; the request result-panel Runner tab has been removed.
+  - Workspaces persist first-class `workspace.runners` data under schema 12, with runner-owned request copies, selected environment IDs, stop-on-failure, and environment-mutation policy.
+  - Runner tabs participate in the same open-tab, dirty-close, force-close, 128-tab-limit, and session restore model as requests, environments, and workspaces.
+  - Runner execution now accepts runner payloads directly, preserves runner-local request order/IDs, supports the existing script/assertion/cookie/vault/package lifecycle, and only writes environment mutations back when `allowEnvironmentMutation` is enabled.
+  - Tests cover runner model normalization, migration, IPC validation/runtime mutation policy, session persistence, tab cap enforcement, dirty runner tab save/discard failure paths, and first-class renderer wiring.
+
 ## Highest Priority Steps
 
 1. Prepare public beta/release candidate documentation.

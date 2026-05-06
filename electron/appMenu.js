@@ -8,6 +8,7 @@ function createApplicationMenuTemplate(options = {}) {
   const {
     appName = 'PostMeter',
     includePrereleases = false,
+    saveOnForceClose = false,
     platform = process.platform,
     sendMenuAction = () => {},
     openExternal = () => {}
@@ -36,6 +37,15 @@ function createApplicationMenuTemplate(options = {}) {
           label: 'Save Workspace',
           accelerator: 'CmdOrCtrl+S',
           click: () => sendMenuAction('save-workspace')
+        },
+        {
+          label: 'Save on Force Close',
+          type: 'checkbox',
+          checked: saveOnForceClose === true,
+          click: (menuItem) => sendMenuAction({
+            type: 'set-save-on-force-close',
+            saveOnForceClose: menuItem.checked === true
+          })
         },
         { type: 'separator' },
         {

@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { createRendererState } = require('../../src/renderer/rendererState');
+const { MAX_OPEN_TABS, createRendererState } = require('../../src/renderer/rendererState');
 const { createRequestTabState } = require('../../src/renderer/requestTabState');
 
 test('request tab state opens a saved request tab with a snapshot and folder metadata', () => {
@@ -47,6 +47,341 @@ test('request tab state opens a saved request tab with a snapshot and folder met
   assert.equal(tab.createdUnsaved, true);
   assert.equal(tab.snapshot, JSON.stringify({ id: 'request-1', name: 'Fetch Users' }));
   assert.equal(tabRenders, 1);
+});
+
+test('request tab state opens and selects runner-owned request tabs independently from collections', () => {
+  const state = createRendererState();
+  const runnerRequest = { id: 'runner-request-1', name: 'Runner Local Request', method: 'POST', url: 'https://runner.example.test' };
+  state.workspace = {
+    collections: [
+      {
+        id: 'collection-1',
+        requests: [{ id: 'request-1', name: 'Collection Request' }],
+        folders: []
+      }
+    ],
+    environments: [],
+    runners: [{ id: 'runner-1', name: 'Runner', requests: [runnerRequest] }]
+  };
+  state.activeMainPanel = 'request';
+  state.activeRunnerConfigId = 'runner-1';
+  state.activeRunnerRequestRunnerId = 'runner-1';
+  state.activeRequestId = 'runner-request-1';
+  let renders = 0;
+  let tabRenders = 0;
+
+  const tabState = createRequestTabState({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => runnerRequest,
+    activeRunner: () => state.workspace.runners[0],
+    activeWorkspaceItem: () => null,
+    findRequest: () => null,
+    renderAll: () => { renders += 1; },
+    renderRequestTabs: () => { tabRenders += 1; },
+    workspaceListItems: () => []
+  });
+
+  const tab = tabState.ensureOpenRequestTabForActive();
+
+  assert.equal(tab.key, 'runner-request:runner-1:runner-request-1');
+  assert.equal(tab.runnerRequest, true);
+  assert.equal(tab.runnerId, 'runner-1');
+  assert.equal(tab.collectionId, null);
+  assert.equal(tab.draft, false);
+  assert.equal(tab.snapshot, JSON.stringify(runnerRequest));
+  assert.equal(tabState.requestForTab(tab), runnerRequest);
+
+  state.activeRunnerRequestRunnerId = null;
+  state.activeRunnerConfigId = null;
+  state.activeRequestId = null;
+  tabState.selectRequestTab(tab, { collect: false });
+
+  assert.equal(state.activeSidebarPanel, 'runners');
+  assert.equal(state.activeMainPanel, 'request');
+  assert.equal(state.activeRunnerConfigId, 'runner-1');
+  assert.equal(state.activeRunnerRequestRunnerId, 'runner-1');
+  assert.equal(state.activeCollectionId, null);
+  assert.equal(state.activeRequestId, 'runner-request-1');
+  assert.equal(renders, 1);
+  assert.equal(tabRenders, 2);
+});
+
+test('request tab state keeps more than the old twelve-tab threshold open', () => {
+  const state = createRendererState();
+  const requests = Array.from({ length: 16 }, (_value, index) => ({
+    id: `request-${index + 1}`,
+    name: `Request ${index + 1}`
+  }));
+  state.workspace = {
+    collections: [
+      {
+        id: 'collection-1',
+        requests,
+        folders: []
+      }
+    ],
+    environments: []
+  };
+  state.activeCollectionId = 'collection-1';
+  let tabRenders = 0;
+
+  const tabState = createRequestTabState({
+    state,
+    activeCollection: () => state.workspace.collections[0],
+    activeEnvironment: () => null,
+    activeRequest: () => requests.find((request) => request.id === state.activeRequestId),
+    activeWorkspaceItem: () => null,
+    findRequest(collection, requestId) {
+      const request = collection.requests.find((item) => item.id === requestId);
+      return request ? { request, folder: null } : null;
+    },
+    renderRequestTabs: () => { tabRenders += 1; },
+    workspaceListItems: () => []
+  });
+
+  for (const request of requests) {
+    state.activeRequestId = request.id;
+    tabState.ensureOpenRequestTabForActive();
+  }
+
+  assert.equal(state.openRequestTabs.length, 16);
+  assert.equal(state.openRequestTabs[0].requestId, 'request-1');
+  assert.equal(state.openRequestTabs.at(-1).requestId, 'request-16');
+  assert.equal(tabRenders, 16);
+});
+
+test('request tab state refuses to open request tabs beyond the bounded limit', () => {
+  const state = createRendererState();
+  const requests = Array.from({ length: MAX_OPEN_TABS + 1 }, (_value, index) => ({
+    id: `request-${index + 1}`,
+    name: `Request ${index + 1}`
+  }));
+  state.workspace = {
+    collections: [
+      {
+        id: 'collection-1',
+        requests,
+        folders: []
+      }
+    ],
+    environments: []
+  };
+  state.activeCollectionId = 'collection-1';
+  state.activeRequestId = requests.at(-1).id;
+  state.openRequestTabs = requests.slice(0, MAX_OPEN_TABS).map((request) => ({
+    key: `request:collection-1:${request.id}`,
+    collectionId: 'collection-1',
+    requestId: request.id,
+    dirty: false,
+    snapshot: JSON.stringify(request)
+  }));
+  const statuses = [];
+  const notifications = [];
+  let tabRenders = 0;
+
+  const tabState = createRequestTabState({
+    state,
+    activeCollection: () => state.workspace.collections[0],
+    activeEnvironment: () => null,
+    activeRequest: () => requests.at(-1),
+    activeWorkspaceItem: () => null,
+    findRequest(collection, requestId) {
+      const request = collection.requests.find((item) => item.id === requestId);
+      return request ? { request, folder: null } : null;
+    },
+    notifyUser: (title, message) => notifications.push({ title, message }),
+    renderRequestTabs: () => { tabRenders += 1; },
+    setStatus: (message) => statuses.push(message),
+    workspaceListItems: () => []
+  });
+
+  const tab = tabState.ensureOpenRequestTabForActive();
+
+  assert.equal(tab, null);
+  assert.equal(state.openRequestTabs.length, MAX_OPEN_TABS);
+  assert.equal(state.openRequestTabs[0].requestId, 'request-1');
+  assert.equal(state.openRequestTabs.at(-1).requestId, `request-${MAX_OPEN_TABS}`);
+  assert.equal(state.openRequestTabs.some((candidate) => candidate.requestId === `request-${MAX_OPEN_TABS + 1}`), false);
+  assert.equal(tabRenders, 0);
+  assert.match(statuses.at(-1), new RegExp(`Cannot open more than ${MAX_OPEN_TABS} tabs`));
+  assert.deepEqual(notifications.at(-1), {
+    title: 'Open Tab Limit Reached',
+    message: statuses.at(-1)
+  });
+});
+
+test('request tab state refuses tab-open checks with missing target ids', () => {
+  const state = createRendererState();
+  const statuses = [];
+  const notifications = [];
+  const tabState = createRequestTabState({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => null,
+    activeWorkspaceItem: () => null,
+    notifyUser: (title, message) => notifications.push({ title, message }),
+    renderRequestTabs: () => {},
+    setStatus: (message) => statuses.push(message),
+    workspaceListItems: () => []
+  });
+
+  assert.equal(tabState.canOpenRequestTabFor('collection-1', ''), false);
+  assert.equal(tabState.canOpenEnvironmentTabFor(null), false);
+  assert.equal(tabState.canOpenWorkspaceTabFor(undefined), false);
+  assert.equal(tabState.canOpenRunnerTabFor(''), false);
+  assert.deepEqual(statuses, []);
+  assert.deepEqual(notifications, []);
+});
+
+test('request tab state refuses to open environment workspace and runner tabs beyond the bounded limit', () => {
+  const state = createRendererState();
+  const environments = Array.from({ length: MAX_OPEN_TABS + 1 }, (_value, index) => ({
+    id: `environment-${index + 1}`,
+    name: `Environment ${index + 1}`,
+    variables: []
+  }));
+  const runners = Array.from({ length: MAX_OPEN_TABS + 1 }, (_value, index) => ({
+    id: `runner-${index + 1}`,
+    name: `Runner ${index + 1}`,
+    requests: []
+  }));
+  const workspaceItems = Array.from({ length: MAX_OPEN_TABS + 1 }, (_value, index) => ({
+    id: `Workspace ${index + 1}.json`,
+    name: `Workspace ${index + 1}`
+  }));
+  state.workspace = {
+    collections: [],
+    environments,
+    runners
+  };
+  state.activeEnvironmentId = environments.at(-1).id;
+  state.activeRunnerConfigId = runners.at(-1).id;
+  state.selectedWorkspaceId = workspaceItems.at(-1).id;
+  state.openEnvironmentTabs = environments.slice(0, MAX_OPEN_TABS).map((environment) => ({
+    key: `environment:${environment.id}`,
+    environmentId: environment.id,
+    dirty: false,
+    snapshot: JSON.stringify(environment)
+  }));
+  state.openWorkspaceTabs = workspaceItems.slice(0, MAX_OPEN_TABS).map((workspaceItem) => ({
+    key: `workspace:${workspaceItem.id}`,
+    workspaceId: workspaceItem.id,
+    dirty: false
+  }));
+  state.openRunnerTabs = runners.slice(0, MAX_OPEN_TABS).map((runner) => ({
+    key: `runner:${runner.id}`,
+    runnerId: runner.id,
+    dirty: false,
+    snapshot: JSON.stringify(runner)
+  }));
+  const statuses = [];
+  const notifications = [];
+
+  const tabState = createRequestTabState({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => environments.at(-1),
+    activeRequest: () => null,
+    activeRunner: () => runners.at(-1),
+    activeWorkspaceItem: () => workspaceItems.at(-1),
+    notifyUser: (title, message) => notifications.push({ title, message }),
+    renderRequestTabs: () => {},
+    setStatus: (message) => statuses.push(message),
+    workspaceListItems: () => workspaceItems
+  });
+
+  assert.equal(tabState.ensureOpenEnvironmentTabForActive(), null);
+  assert.equal(state.openEnvironmentTabs.length, MAX_OPEN_TABS);
+  assert.equal(state.openEnvironmentTabs.some((candidate) => candidate.environmentId === environments.at(-1).id), false);
+  assert.match(statuses.at(-1), new RegExp(`Cannot open more than ${MAX_OPEN_TABS} tabs`));
+  assert.deepEqual(notifications.at(-1), {
+    title: 'Open Tab Limit Reached',
+    message: statuses.at(-1)
+  });
+
+  assert.equal(tabState.ensureOpenWorkspaceTabForActive(), null);
+  assert.equal(state.openWorkspaceTabs.length, MAX_OPEN_TABS);
+  assert.equal(state.openWorkspaceTabs.some((candidate) => candidate.workspaceId === workspaceItems.at(-1).id), false);
+  assert.match(statuses.at(-1), new RegExp(`Cannot open more than ${MAX_OPEN_TABS} tabs`));
+  assert.deepEqual(notifications.at(-1), {
+    title: 'Open Tab Limit Reached',
+    message: statuses.at(-1)
+  });
+
+  assert.equal(tabState.ensureOpenRunnerTabForActive(), null);
+  assert.equal(state.openRunnerTabs.length, MAX_OPEN_TABS);
+  assert.equal(state.openRunnerTabs.some((candidate) => candidate.runnerId === runners.at(-1).id), false);
+  assert.match(statuses.at(-1), new RegExp(`Cannot open more than ${MAX_OPEN_TABS} tabs`));
+  assert.deepEqual(notifications.at(-1), {
+    title: 'Open Tab Limit Reached',
+    message: statuses.at(-1)
+  });
+});
+
+test('request tab state applies the open tab limit across request environment workspace and runner tabs', () => {
+  const state = createRendererState();
+  const requests = Array.from({ length: MAX_OPEN_TABS }, (_value, index) => ({
+    id: `request-${index + 1}`,
+    name: `Request ${index + 1}`
+  }));
+  const environment = { id: 'environment-1', name: 'Environment 1', variables: [] };
+  const runner = { id: 'runner-1', name: 'Runner 1', requests: [] };
+  const workspaceItem = { id: 'Workspace.json', name: 'Workspace' };
+  state.workspace = {
+    collections: [
+      {
+        id: 'collection-1',
+        requests,
+        folders: []
+      }
+    ],
+    environments: [environment],
+    runners: [runner]
+  };
+  state.activeEnvironmentId = environment.id;
+  state.activeRunnerConfigId = runner.id;
+  state.selectedWorkspaceId = workspaceItem.id;
+  state.openRequestTabs = requests.map((request) => ({
+    key: `request:collection-1:${request.id}`,
+    collectionId: 'collection-1',
+    requestId: request.id,
+    dirty: false,
+    snapshot: JSON.stringify(request)
+  }));
+  const statuses = [];
+  const notifications = [];
+
+  const tabState = createRequestTabState({
+    state,
+    activeCollection: () => state.workspace.collections[0],
+    activeEnvironment: () => environment,
+    activeRequest: () => null,
+    activeRunner: () => runner,
+    activeWorkspaceItem: () => workspaceItem,
+    notifyUser: (title, message) => notifications.push({ title, message }),
+    renderRequestTabs: () => {},
+    setStatus: (message) => statuses.push(message),
+    workspaceListItems: () => [workspaceItem]
+  });
+
+  assert.equal(tabState.ensureOpenEnvironmentTabForActive(), null);
+  assert.equal(state.openEnvironmentTabs.length, 0);
+  assert.match(statuses.at(-1), new RegExp(`Cannot open more than ${MAX_OPEN_TABS} tabs`));
+  assert.deepEqual(notifications.at(-1), {
+    title: 'Open Tab Limit Reached',
+    message: statuses.at(-1)
+  });
+
+  assert.equal(tabState.ensureOpenWorkspaceTabForActive(), null);
+  assert.equal(state.openWorkspaceTabs.length, 0);
+  assert.match(statuses.at(-1), new RegExp(`Cannot open more than ${MAX_OPEN_TABS} tabs`));
+
+  assert.equal(tabState.ensureOpenRunnerTabForActive(), null);
+  assert.equal(state.openRunnerTabs.length, 0);
+  assert.match(statuses.at(-1), new RegExp(`Cannot open more than ${MAX_OPEN_TABS} tabs`));
 });
 
 test('request tab state discards and closes an active draft tab', async () => {
@@ -282,6 +617,78 @@ test('request tab state restores shared collection-variable and cookie changes w
   assert.equal(renders, 1);
 });
 
+test('request tab state does not re-collect a discarded active request when selecting the fallback tab', async () => {
+  const state = createRendererState();
+  const firstRequest = { id: 'request-1', name: 'First Request', method: 'GET', url: 'https://saved.example.test/first' };
+  const secondRequest = { id: 'request-2', name: 'Second Request', method: 'GET', url: 'https://saved.example.test/second' };
+  state.workspace = {
+    collections: [
+      {
+        id: 'collection-1',
+        requests: [firstRequest, secondRequest],
+        folders: []
+      }
+    ],
+    environments: []
+  };
+  state.activeCollectionId = 'collection-1';
+  state.activeRequestId = firstRequest.id;
+  state.activeMainPanel = 'request';
+  state.openRequestTabs = [
+    {
+      key: 'request:collection-1:request-1',
+      collectionId: 'collection-1',
+      requestId: firstRequest.id,
+      dirty: true,
+      createdUnsaved: false,
+      draft: false,
+      snapshot: JSON.stringify(firstRequest)
+    },
+    {
+      key: 'request:collection-1:request-2',
+      collectionId: 'collection-1',
+      requestId: secondRequest.id,
+      dirty: false,
+      createdUnsaved: false,
+      draft: false,
+      snapshot: JSON.stringify(secondRequest)
+    }
+  ];
+  let collected = 0;
+  let tabState;
+  tabState = createRequestTabState({
+    state,
+    activeCollection: () => state.workspace.collections[0],
+    activeEnvironment: () => null,
+    activeRequest: () => state.workspace.collections[0].requests.find((request) => request.id === state.activeRequestId) || null,
+    activeWorkspaceItem: () => null,
+    collectRequestFromEditor: () => {
+      collected += 1;
+      const request = state.workspace.collections[0].requests.find((item) => item.id === state.activeRequestId);
+      if (request) {
+        request.url = 'https://edited.example.test/should-not-survive-discard';
+      }
+    },
+    findRequest(collection, requestId) {
+      const found = collection.requests.find((item) => item.id === requestId);
+      return found ? { request: found, folder: null } : null;
+    },
+    promptUnsavedRequestClose: async () => 'discard',
+    renderAll: () => {},
+    renderCollections: () => {},
+    renderRequestTabs: () => {},
+    selectRequestTab: (tab, options) => tabState.selectRequestTab(tab, options),
+    workspaceListItems: () => []
+  });
+
+  await tabState.closeRequestTab(state.openRequestTabs[0]);
+
+  assert.equal(collected, 1);
+  assert.deepEqual(state.openRequestTabs.map((tab) => tab.key), ['request:collection-1:request-2']);
+  assert.equal(state.activeRequestId, secondRequest.id);
+  assert.equal(firstRequest.url, 'https://saved.example.test/first');
+});
+
 test('request tab state saves the requested environment tab when closing an inactive dirty environment', async () => {
   const state = createRendererState();
   const savedEnvironment = { id: 'environment-1', name: 'Saved Environment', variables: [] };
@@ -438,6 +845,108 @@ test('request tab state saves the requested request tab when closing an inactive
   assert.equal(tabRenders, 1);
 });
 
+test('request tab state saves dirty runner-owned request tabs with a targeted request save', async () => {
+  const state = createRendererState();
+  const runnerRequest = { id: 'runner-request-1', name: 'Runner Request', method: 'GET', url: 'https://runner.example.test' };
+  state.workspace = {
+    collections: [],
+    environments: [],
+    runners: [{ id: 'runner-1', name: 'Runner', requests: [runnerRequest] }]
+  };
+  state.activeMainPanel = 'runner';
+  state.openRequestTabs = [
+    {
+      key: 'runner-request:runner-1:runner-request-1',
+      runnerId: 'runner-1',
+      requestId: 'runner-request-1',
+      runnerRequest: true,
+      dirty: true,
+      createdUnsaved: false,
+      draft: false,
+      snapshot: JSON.stringify(runnerRequest)
+    }
+  ];
+  const persistCalls = [];
+  let collectionRenders = 0;
+  let tabRenders = 0;
+
+  const tabState = createRequestTabState({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => null,
+    activeRunner: () => state.workspace.runners[0],
+    activeWorkspaceItem: () => null,
+    persistWorkspace: async (showStatus, config) => {
+      persistCalls.push({ showStatus, config });
+      state.openRequestTabs[0].dirty = false;
+      return true;
+    },
+    promptUnsavedRequestClose: async () => 'save',
+    renderAll: () => {},
+    renderCollections: () => { collectionRenders += 1; },
+    renderRequestTabs: () => { tabRenders += 1; },
+    workspaceListItems: () => []
+  });
+
+  await tabState.closeRequestTab(state.openRequestTabs[0]);
+
+  assert.deepEqual(persistCalls, [{ showStatus: false, config: { requestTabKey: 'runner-request:runner-1:runner-request-1', collectEditors: false } }]);
+  assert.deepEqual(state.openRequestTabs, []);
+  assert.equal(collectionRenders, 1);
+  assert.equal(tabRenders, 1);
+});
+
+test('request tab state re-renders active runner pane after discarding runner-owned request changes', async () => {
+  const state = createRendererState();
+  const runnerRequest = { id: 'runner-request-1', name: 'Saved Runner Request', method: 'GET', url: 'https://saved.example.test' };
+  state.workspace = {
+    collections: [],
+    environments: [],
+    runners: [{ id: 'runner-1', name: 'Runner', requests: [runnerRequest] }]
+  };
+  state.activeMainPanel = 'runner';
+  state.activeSidebarPanel = 'runners';
+  state.activeRunnerConfigId = 'runner-1';
+  state.openRequestTabs = [
+    {
+      key: 'runner-request:runner-1:runner-request-1',
+      runnerId: 'runner-1',
+      requestId: 'runner-request-1',
+      runnerRequest: true,
+      dirty: true,
+      draft: false,
+      snapshot: JSON.stringify(runnerRequest)
+    }
+  ];
+  runnerRequest.name = 'Unsaved Runner Request';
+  let allRenders = 0;
+  let collectionRenders = 0;
+  let tabRenders = 0;
+
+  const tabState = createRequestTabState({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => null,
+    activeRunner: () => state.workspace.runners[0],
+    activeWorkspaceItem: () => null,
+    promptUnsavedRequestClose: async () => 'discard',
+    renderAll: () => { allRenders += 1; },
+    renderCollections: () => { collectionRenders += 1; },
+    renderRequestTabs: () => { tabRenders += 1; },
+    workspaceListItems: () => []
+  });
+
+  await tabState.closeRequestTab(state.openRequestTabs[0]);
+
+  assert.equal(runnerRequest.name, 'Saved Runner Request');
+  assert.deepEqual(state.openRequestTabs, []);
+  assert.equal(allRenders, 1);
+  assert.equal(collectionRenders, 0);
+  assert.equal(tabRenders, 0);
+});
+
 test('request tab state keeps a dirty request tab open and reports failed close-save persistence', async () => {
   const state = createRendererState();
   const request = { id: 'request-1', name: 'Saved Request', method: 'GET', url: 'https://saved.example.test' };
@@ -495,5 +1004,160 @@ test('request tab state keeps a dirty request tab open and reports failed close-
   assert.equal(state.openRequestTabs[0].dirty, true);
   assert.match(statuses.at(-1), /Request Save Failed: disk full/);
   assert.deepEqual(notifications.at(-1), { title: 'Request Save Failed', message: 'disk full' });
+  assert.equal(tabRenders, 1);
+});
+
+test('request tab state snapshots runners and restores saved changes when closing a dirty runner tab', async () => {
+  const state = createRendererState();
+  const savedRunner = {
+    id: 'runner-1',
+    name: 'Saved Runner',
+    environmentId: 'none',
+    requests: [{ id: 'request-1', name: 'Saved Runner Request', method: 'GET', url: 'https://saved.example.test' }]
+  };
+  state.workspace = {
+    collections: [],
+    environments: [],
+    runners: [savedRunner]
+  };
+  state.activeSidebarPanel = 'runners';
+  state.activeMainPanel = 'runner';
+  state.activeRunnerConfigId = savedRunner.id;
+  state.openRunnerTabs = [
+    {
+      key: 'runner:runner-1',
+      runnerId: savedRunner.id,
+      dirty: true,
+      createdUnsaved: false,
+      snapshot: JSON.stringify(savedRunner)
+    }
+  ];
+  let collected = 0;
+  let renders = 0;
+
+  const tabState = createRequestTabState({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => null,
+    activeRunner: () => state.workspace.runners.find((runner) => runner.id === state.activeRunnerConfigId) || null,
+    activeWorkspaceItem: () => null,
+    collectRunnerFromEditor: () => {
+      collected += 1;
+      state.workspace.runners[0].name = 'Edited Runner';
+      state.workspace.runners[0].requests[0].url = 'https://edited.example.test';
+    },
+    promptUnsavedRequestClose: async () => 'discard',
+    renderAll: () => { renders += 1; },
+    renderRequestTabs: () => {},
+    workspaceListItems: () => []
+  });
+
+  await tabState.closeRunnerTab(state.openRunnerTabs[0]);
+
+  assert.equal(collected, 1);
+  assert.deepEqual(state.workspace.runners, [savedRunner]);
+  assert.equal(state.workspace.runners[0].name, 'Saved Runner');
+  assert.equal(state.workspace.runners[0].requests[0].url, 'https://saved.example.test');
+  assert.deepEqual(state.openRunnerTabs, []);
+  assert.equal(state.activeRunnerConfigId, null);
+  assert.equal(state.activeSidebarPanel, 'runners');
+  assert.equal(state.activeMainPanel, 'runner');
+  assert.equal(renders, 1);
+});
+
+test('request tab state saves the requested runner tab when closing an inactive dirty runner', async () => {
+  const state = createRendererState();
+  const savedRunner = { id: 'runner-1', name: 'Saved Runner', requests: [] };
+  state.workspace = {
+    collections: [],
+    environments: [],
+    runners: [savedRunner]
+  };
+  state.activeMainPanel = 'request';
+  state.openRunnerTabs = [
+    {
+      key: 'runner:runner-1',
+      runnerId: savedRunner.id,
+      dirty: true,
+      createdUnsaved: false,
+      snapshot: JSON.stringify(savedRunner)
+    }
+  ];
+  const persistCalls = [];
+  let tabRenders = 0;
+
+  const tabState = createRequestTabState({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => null,
+    activeRunner: () => null,
+    activeWorkspaceItem: () => null,
+    persistWorkspace: async (showStatus, config) => {
+      persistCalls.push({ showStatus, config });
+      state.openRunnerTabs[0].dirty = false;
+      state.openRunnerTabs[0].createdUnsaved = false;
+      return true;
+    },
+    promptUnsavedRequestClose: async () => 'save',
+    renderAll: () => {},
+    renderRequestTabs: () => { tabRenders += 1; },
+    workspaceListItems: () => []
+  });
+
+  await tabState.closeRunnerTab(state.openRunnerTabs[0]);
+
+  assert.deepEqual(persistCalls, [{ showStatus: false, config: { runnerTabKey: 'runner:runner-1', collectEditors: false } }]);
+  assert.deepEqual(state.openRunnerTabs, []);
+  assert.equal(tabRenders, 1);
+});
+
+test('request tab state keeps a dirty runner tab open and reports failed close-save persistence', async () => {
+  const state = createRendererState();
+  const savedRunner = { id: 'runner-1', name: 'Saved Runner', requests: [] };
+  state.workspace = {
+    collections: [],
+    environments: [],
+    runners: [savedRunner]
+  };
+  state.activeMainPanel = 'request';
+  state.openRunnerTabs = [
+    {
+      key: 'runner:runner-1',
+      runnerId: savedRunner.id,
+      dirty: true,
+      createdUnsaved: false,
+      snapshot: JSON.stringify(savedRunner)
+    }
+  ];
+  const statuses = [];
+  const notifications = [];
+  let tabRenders = 0;
+
+  const tabState = createRequestTabState({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => null,
+    activeRunner: () => null,
+    activeWorkspaceItem: () => null,
+    notifyUser: (title, message) => notifications.push({ title, message }),
+    persistWorkspace: async () => {
+      throw new Error('disk full');
+    },
+    promptUnsavedRequestClose: async () => 'save',
+    renderAll: () => {},
+    renderRequestTabs: () => { tabRenders += 1; },
+    setStatus: (message) => statuses.push(message),
+    workspaceListItems: () => []
+  });
+
+  await tabState.closeRunnerTab(state.openRunnerTabs[0]);
+
+  assert.equal(state.openRunnerTabs.length, 1);
+  assert.equal(state.openRunnerTabs[0].dirty, true);
+  assert.match(statuses.at(-1), /Runner Save Failed: disk full/);
+  assert.deepEqual(notifications.at(-1), { title: 'Runner Save Failed', message: 'disk full' });
   assert.equal(tabRenders, 1);
 });

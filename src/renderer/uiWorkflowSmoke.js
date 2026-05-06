@@ -43,8 +43,7 @@
     assertUiSmoke($('variablePreview').textContent.includes('collectionToken = from-collection'), 'Collection variable preview did not render.');
     await setIncludePrereleases(true, { showStatus: false });
 
-    $('requestNameInput').value = 'Smoke Request';
-    dispatchInput($('requestNameInput'));
+    editRequestTitle('Smoke Request');
     $('methodSelect').value = 'POST';
     dispatchChange($('methodSelect'));
     $('urlInput').value = `${baseUrl}/echo`;
@@ -157,15 +156,33 @@
     const policyLoaded = await window.postmeter.workspace.load();
     assertUiSmoke(policyLoaded.workspace.settings?.loadTestPolicy == null, 'Load-test policy should not be stored on the workspace.');
 
-    activateTab('results', 'runner');
+    selectSidebarPanel('runners');
+    const runner = newRunner();
+    runner.environmentId = activeEnvironmentId;
+    importCollectionIntoRunner(workspace.collections[0]);
+    assertUiSmoke(runner.requests.length > 0, 'Workflow runner did not import collection requests.');
+    runner.requests[0].scripts.tests = "pm.environment.set('responseMethod', pm.response.json().method); pm.test('script token exists', function () { pm.expect(pm.environment.get('scriptToken')).to.equal('ui-script'); pm.response.to.have.status(200); });";
     await runActiveCollection();
-    assertUiSmoke($('runnerResults').textContent.includes('Passed: true'), 'Collection runner did not pass.');
-    assertUiSmoke($('runnerResults').textContent.includes('script token exists'), 'Collection runner did not render script test results.');
-    assertUiSmoke($('runnerResults').textContent.includes('Runtime Variables'), 'Collection runner did not render runtime variables.');
-    assertUiSmoke($('runnerResults').textContent.includes('Collection collectionToken = from-collection'), 'Collection runner did not render collection variables.');
-    assertUiSmoke($('runnerResults').textContent.includes('Request variable requestToken = from-request'), 'Collection runner did not render request variables.');
+    const runnerExecutionRows = Array.from($('runnerExecutionList').querySelectorAll('.runner-execution-row'));
+    assertUiSmoke(runnerExecutionRows.length > 0, 'Runner execution list did not render completed requests.');
+    assertUiSmoke(
+      runnerExecutionRows.some((row) => row.querySelector('.runner-status-badge')?.textContent === '200'),
+      `Runner execution list did not render response status badges. ${$('runnerResults').textContent.slice(0, 800)}`
+    );
+    runnerExecutionRows[0].click();
+    assertUiSmoke($('runnerExecutionDetails').textContent.includes('script token exists'), 'Runner execution details did not render script test results.');
+    assertUiSmoke($('runnerExecutionDetails').textContent.includes('scriptToken'), 'Runner execution details did not render environment variables.');
+    assertUiSmoke($('runnerExecutionDetails').textContent.includes('requestToken'), 'Runner execution details did not render request variables.');
     assertUiSmoke(!$('exportRunnerJsonButton').disabled, 'Runner JSON export button was not enabled after a run.');
     assertUiSmoke(!$('exportRunnerCsvButton').disabled, 'Runner CSV export button was not enabled after a run.');
+  }
+
+  function editRequestTitle(value) {
+    const title = $('requestNameTitle');
+    title.click();
+    title.textContent = value;
+    dispatchInput(title);
+    title.dispatchEvent(new Event('blur'));
   }
 
   function assertResizeSmoke() {

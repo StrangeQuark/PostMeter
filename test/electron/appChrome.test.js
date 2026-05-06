@@ -43,6 +43,7 @@ test('Electron shell keeps custom File/Edit/View/Help menus without the default 
     'New Collection',
     'New Folder',
     'Save Workspace',
+    'Save on Force Close',
     'Import Workspace...',
     'Import Collection...',
     'Export Workspace...',
@@ -71,8 +72,11 @@ test('Electron shell keeps custom File/Edit/View/Help menus without the default 
   assert.match(preloadSource, /'export-diagnostics'/);
   assert.match(preloadSource, /'set-prereleases'/);
   assert.match(preloadSource, /includePrereleases/);
+  assert.match(preloadSource, /'set-save-on-force-close'/);
+  assert.match(preloadSource, /saveOnForceClose/);
   assert.match(rendererSource, /handleAppMenuAction/);
   assert.match(rendererSource, /setIncludePrereleases/);
+  assert.match(rendererSource, /setSaveOnForceClose/);
   assert.match(mainSource, /app\.whenReady\(\)\.then\(startApplication\)\.catch\(\(error\) => failStartup\(error\)\)/);
   assert.match(mainSource, /async function failStartup/);
   assert.match(mainSource, /writeStartupSmokeFailureArtifacts\(mainWindow,\s*process\.env,\s*error\)/);
