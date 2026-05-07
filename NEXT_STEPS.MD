@@ -20,7 +20,7 @@ No blocking engineering questions are required for the next local production-har
 - The current production app icon source is `build/icon.png`.
 - Manual OAuth provider certification targets are Google OAuth 2.0, Microsoft Entra ID / Azure AD, and GitHub OAuth Apps.
 - Windows/macOS packaged protocol validation should be CI-only native-runner validation, not a maintainer manual checklist.
-- The legacy Load Test panel and JMeter bridge have been removed so the next load-testing implementation can start from a clean PostMeter-owned model.
+- The legacy Load Test panel and JMeter bridge have been removed so the new Performance implementation can start from a clean PostMeter-owned model.
 
 Helpful, non-blocking input:
 
@@ -35,7 +35,7 @@ PostMeter must remain a standalone local desktop application. Do not add PostMet
 
 - Moved runners into a dedicated workspace-owned section.
   - The left sidebar now includes `Runners` between `Workspaces` and `History`; the request result-panel Runner tab has been removed.
-  - Workspaces persist first-class `workspace.runners` data under schema 12, with runner-owned request copies, selected environment IDs, stop-on-failure, and environment-mutation policy.
+  - Workspaces persist first-class `workspace.runners` data under the current workspace schema, with runner-owned request copies, selected environment IDs, stop-on-failure, and environment-mutation policy.
   - Runner tabs participate in the same open-tab, dirty-close, force-close, 128-tab-limit, and session restore model as requests, environments, and workspaces.
   - Runners can be created from `New` > `Runner` or the empty Runners pane, runner requests can be added as local copies or imported from expandable collection/request selections, and Shift+click/Ctrl+click can import multiple selections.
   - Runner-owned requests open in normal request editor tabs through row `Edit`, save only that runner request copy, and can be reordered/deleted without mutating source collection requests.
@@ -45,10 +45,15 @@ PostMeter must remain a standalone local desktop application. Do not add PostMet
 - Refined desktop tab and sidebar interactions.
   - Request, environment, and workspace names are inline-editable; request/environment title edits save on Enter and stay dirty on blur, while workspace title edits save automatically.
   - Pane-local save actions replaced the old top-toolbar Save button for requests and environments, and workspace settings continue through targeted settings saves.
-  - Open tabs shrink before scrolling, expose hover/active close buttons, support tab right-click close/force-close actions, and enforce the 128-tab cap across requests, environments, workspaces, and runners.
-  - Sidebar collections, folders, requests, environments, workspaces, and runners are draggable; structural drag/drop saves only the membership/order change and leaves dirty editor drafts dirty.
+  - Open tabs shrink before scrolling, expose hover/active close buttons, support tab right-click close/force-close actions, and enforce the 128-tab cap across requests, environments, workspaces, runners, and performance tests.
+  - Sidebar collections, folders, requests, environments, workspaces, runners, and performance tests are draggable; structural drag/drop saves only the membership/order change and leaves dirty editor drafts dirty.
   - Drag placement feedback is a single highlighted insertion bar per gap.
   - The History sidebar tab has a `Clear History` context action with an irreversible-action confirmation.
+- Implemented the local Performance section.
+  - `Performance` now lives between `Runners` and `History`, persists workspace-owned `workspace.performanceTests` under schema 13, and uses dirty-aware tabs, session restore, close/force-close behavior, and the 128-tab cap.
+  - Users can create Performance tests from `New` or the empty Performance pane, import/export native Performance test files, import deep-copied collection requests, manually enter request details, choose an environment, configure safety limits, run/cancel tests, and review bounded result summaries.
+  - The seven V1 local types are `Latency`, `RPS / throughput`, `Concurrency`, `Stress`, `Spike`, `Soak`, and `Ramp`.
+  - Tests cover model normalization, import/export validation, request-copy isolation, environment copy-vs-mutate behavior, safety-cap rejection, cancellation, IPC progress/mutation behavior, renderer wiring, sidebar ordering, and tab-limit behavior.
 
 ## Highest Priority Steps
 
@@ -59,12 +64,7 @@ PostMeter must remain a standalone local desktop application. Do not add PostMet
    - Add an optional Windows manual QA checklist for the maintainer's Windows machine, while keeping `windows-latest` GitHub Actions validation as the required pre-production evidence.
    - Make release notes templates call out security-sensitive changes, sandbox changes, compatibility changes, migration notes, signing/notarization status, native-runner validation results, and known issues.
    - Document the unsigned-release path and the signed/notarized-release path separately. Signing and notarization stay blocked until maintainer-controlled certificates are available.
-   - Ensure public docs do not overclaim: Postman script parity is claim-gated for the tracked target, platform OS sandbox coverage is tracked separately, the legacy Load Test implementation has been removed pending the V1 redesign, and JMeter import/export/execution is not supported.
-
-2. Design and implement the new V1 Load Test section from a clean PostMeter-owned model.
-   - Target seven first-class test types: latency, RPS/throughput, concurrency, stress, spike, soak, and ramp.
-   - Define saved test configuration shape, UI flows, execution engine ownership, result summaries, failure reporting, export format, and safety limits before implementation.
-   - Keep request scripts, environment mutation policy, cookies, cancellation, diagnostics, and runner interaction explicit in the new design instead of inheriting behavior from the removed legacy panel.
+   - Ensure public docs do not overclaim: Postman script parity is claim-gated for the tracked target, platform OS sandbox coverage is tracked separately, local Performance remains desktop-bounded, and JMeter import/export/execution is not supported.
 
 ## Blocked External Validation
 
@@ -108,7 +108,7 @@ These are production-readiness items that cannot be fully proven by local Linux 
 - IPC validation uses shared schema metadata for common fields, update/external payloads, file-operation results, OAuth progress, runner config/progress, and result payloads, but some complex validators are still partly handwritten rather than fully generated.
 - Signing/notarization remains incomplete; unsigned GitHub Release artifact publishing is configured.
 - In-app update checks can open GitHub Releases, but PostMeter does not yet auto-download or auto-install updates.
-- The legacy Load Test implementation is removed; the new seven-type V1 load-testing model still needs implementation.
+- The legacy Load Test implementation is removed; the seven-type local V1 Performance model is implemented and should continue receiving result-presentation and real-world workload hardening.
 
 ## Next Iteration Starting Point
 

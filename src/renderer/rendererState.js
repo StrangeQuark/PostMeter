@@ -12,6 +12,7 @@
       activeRequestId: null,
       activeRunnerRequestRunnerId: null,
       activeRunnerConfigId: null,
+      activePerformanceTestId: null,
       activeEnvironmentId: 'none',
       activeWorkspaceId: 'current',
       activeSidebarPanel: 'collections',
@@ -21,6 +22,7 @@
       openEnvironmentTabs: [],
       openWorkspaceTabs: [],
       openRunnerTabs: [],
+      openPerformanceTabs: [],
       collectionDirtySnapshots: new Map(),
       collectionDirtyOwners: new Map(),
       cookieJarDirtySnapshot: null,
@@ -66,6 +68,10 @@
     return state?.activeRunnerConfigId ? `runner:${state.activeRunnerConfigId}` : '';
   }
 
+  function activePerformanceTabKey(state) {
+    return state?.activePerformanceTestId ? `performance:${state.activePerformanceTestId}` : '';
+  }
+
   function isActiveRequestTab(state, tab) {
     return state?.activeMainPanel === 'request' && tab?.key === activeRequestTabKey(state);
   }
@@ -80,6 +86,10 @@
 
   function isActiveRunnerTab(state, tab) {
     return state?.activeMainPanel === 'runner' && tab?.key === activeRunnerTabKey(state);
+  }
+
+  function isActivePerformanceTab(state, tab) {
+    return state?.activeMainPanel === 'performance' && tab?.key === activePerformanceTabKey(state);
   }
 
   function requestSnapshot(request) {
@@ -101,6 +111,14 @@
   function runnerSnapshot(runner) {
     try {
       return JSON.stringify(runner);
+    } catch {
+      return '{}';
+    }
+  }
+
+  function performanceTestSnapshot(test) {
+    try {
+      return JSON.stringify(test);
     } catch {
       return '{}';
     }
@@ -148,6 +166,19 @@
     options.onAfterClear?.();
   }
 
+  function clearSavedPerformanceDirtyState(state, options = {}) {
+    const performanceTestForTab = options.performanceTestForTab || (() => null);
+    for (const tab of state?.openPerformanceTabs || []) {
+      const test = performanceTestForTab(tab);
+      tab.dirty = false;
+      tab.createdUnsaved = false;
+      if (test) {
+        tab.snapshot = performanceTestSnapshot(test);
+      }
+    }
+    options.onAfterClear?.();
+  }
+
   function clearSharedRequestDirtyState(state) {
     if (!state) {
       return;
@@ -166,6 +197,7 @@
     state.openEnvironmentTabs = [];
     state.openWorkspaceTabs = [];
     state.openRunnerTabs = [];
+    state.openPerformanceTabs = [];
     if (options.clearDrafts !== false) {
       state.draftRequests = new Map();
     }
@@ -195,20 +227,24 @@
   const exported = {
     MAX_OPEN_TABS,
     activeEnvironmentTabKey,
+    activePerformanceTabKey,
     activeRequestTabKey,
     activeRunnerTabKey,
     activeWorkspaceTabKey,
     clearSavedEnvironmentDirtyState,
+    clearSavedPerformanceDirtyState,
     clearSavedRunnerDirtyState,
     clearSharedRequestDirtyState,
     clearSavedRequestDirtyState,
     createRendererState,
     environmentSnapshot,
     isActiveEnvironmentTab,
+    isActivePerformanceTab,
     isActiveRequestTab,
     isActiveRunnerTab,
     isActiveWorkspaceTab,
     openModalState,
+    performanceTestSnapshot,
     requestSnapshot,
     runnerSnapshot,
     resetTabState,

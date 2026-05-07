@@ -303,6 +303,33 @@
       "notes": ""
     },
     {
+      "id": "performance.local-v1",
+      "area": "deferred-features",
+      "target": "Local first-class saved Performance tests are implemented as workspace-owned performanceTests with local execution, IPC, diagnostics boundaries, safety caps, import/export validation, and seven-type coverage; distributed/cloud load execution remains deferred.",
+      "status": "implemented",
+      "releaseBlocking": false,
+      "commands": [
+        "npm run ux:accessibility:validate",
+        "npm run workspace:durability:validate",
+        "npm run compatibility:non-postman:validate",
+        "npm run diagnostics:privacy:validate"
+      ],
+      "evidenceRefs": [
+        "README.md",
+        "docs/TECH_SPECS.md",
+        "docs/ARCHITECTURE.md",
+        "docs/COMPATIBILITY.md",
+        "docs/RELEASE_READINESS.md",
+        "NEXT_STEPS.MD",
+        "src/core/performanceRunner.js",
+        "electron/runtimeIpc.js",
+        "src/renderer/renderer.js"
+      ],
+      "owner": "PostMeter",
+      "lastVerified": "",
+      "notes": "This row tracks the local desktop Performance implementation separately from distributed/cloud load execution, hosted agents, and JMeter compatibility."
+    },
+    {
       "id": "postman.newman-json-reports",
       "area": "compatibility",
       "target": "Deterministic Newman JSON evidence reports for approved differential fixtures are checked in and validated.",

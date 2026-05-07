@@ -96,13 +96,30 @@ test('session IPC accepts many tabs under the bounded limit and rejects invalid 
       key: 'runner:runner-1',
       runnerId: 'runner-1',
       dirty: false
+    }],
+    openPerformanceTabs: [{
+      key: 'performance:performance-1',
+      performanceTestId: 'performance-1',
+      dirty: false,
+      currentState: {
+        id: 'performance-1',
+        name: 'Performance',
+        type: 'latency',
+        request: { id: 'performance-request-1', name: 'Performance Request', method: 'GET', url: 'https://performance.test' },
+        source: { sourceType: 'manual' },
+        environmentId: 'none',
+        config: { iterations: 1 },
+        safetyLimits: { maxTotalRequests: 10, maxConcurrency: 2, maxDurationSeconds: 60 }
+      }
     }]
   };
   assert.equal((await handlers.get('session:save')(null, validManyTabs)).openRequestTabs.length, 13);
+  assert.equal((await handlers.get('session:save')(null, validManyTabs)).openPerformanceTabs.length, 1);
   const validSyncEvent = { returnValue: undefined };
   syncHandlers.get('session:saveSync')(validSyncEvent, validManyTabs);
   assert.equal(validSyncEvent.returnValue.openRequestTabs.length, 13);
-  assert.equal(saveCalls, 2);
+  assert.equal(validSyncEvent.returnValue.openPerformanceTabs.length, 1);
+  assert.equal(saveCalls, 3);
 
   const tooManyTabs = {
     openRequestTabs: Array.from({ length: MAX_OPEN_TABS + 1 }, (_, index) => ({
@@ -115,7 +132,7 @@ test('session IPC accepts many tabs under the bounded limit and rejects invalid 
     () => handlers.get('session:save')(null, tooManyTabs),
     new RegExp(`Invalid IPC payload: session\\.openRequestTabs cannot contain more than ${MAX_OPEN_TABS} items`)
   );
-  assert.equal(saveCalls, 2);
+  assert.equal(saveCalls, 3);
 
   assert.throws(
     () => syncHandlers.get('session:saveSync')({ returnValue: undefined }, {
@@ -123,5 +140,13 @@ test('session IPC accepts many tabs under the bounded limit and rejects invalid 
     }),
     /Invalid IPC payload: session\.openRequestTabs\[0\]\.dirty must be a boolean/
   );
-  assert.equal(saveCalls, 2);
+  assert.equal(saveCalls, 3);
+
+  assert.throws(
+    () => syncHandlers.get('session:saveSync')({ returnValue: undefined }, {
+      openPerformanceTabs: [{ key: 'performance:1', performanceTestId: 'performance-1', dirty: 'yes' }]
+    }),
+    /Invalid IPC payload: session\.openPerformanceTabs\[0\]\.dirty must be a boolean/
+  );
+  assert.equal(saveCalls, 3);
 });

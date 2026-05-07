@@ -226,7 +226,8 @@
 
 .environment-list,
 .workspace-list,
-.runner-list {
+.runner-list,
+.performance-list {
   flex: 1 1 auto;
   min-height: 90px;
 }
@@ -544,11 +545,13 @@ h2 {
 .workspace.environment-mode,
 .workspace.workspace-mode,
 .workspace.runner-mode,
+.workspace.performance-mode,
 .workspace.document-mode,
 .workspace.request-empty-mode,
 .workspace.environment-empty-mode,
 .workspace.workspace-empty-mode,
-.workspace.runner-empty-mode {
+.workspace.runner-empty-mode,
+.workspace.performance-empty-mode {
   grid-template-rows: auto minmax(0, 1fr);
 }
 
@@ -561,38 +564,52 @@ h2 {
 .workspace.environment-mode #requestEmptyPanel,
 .workspace.environment-mode #workspaceEmptyPanel,
 .workspace.environment-mode #runnerEmptyPanel,
+.workspace.environment-mode #performanceEmptyPanel,
 .workspace.environment-mode .results,
 .workspace.workspace-mode #workspacePaneResize,
 .workspace.workspace-mode #requestEditorPanel,
 .workspace.workspace-mode #requestEmptyPanel,
 .workspace.workspace-mode #environmentEmptyPanel,
 .workspace.workspace-mode #runnerEmptyPanel,
+.workspace.workspace-mode #performanceEmptyPanel,
 .workspace.workspace-mode .results,
 .workspace.runner-mode #workspacePaneResize,
 .workspace.runner-mode #requestEditorPanel,
 .workspace.runner-mode #requestEmptyPanel,
 .workspace.runner-mode #environmentEmptyPanel,
 .workspace.runner-mode #workspaceEmptyPanel,
+.workspace.runner-mode #performanceEmptyPanel,
 .workspace.runner-mode .results,
+.workspace.performance-mode #workspacePaneResize,
+.workspace.performance-mode #requestEditorPanel,
+.workspace.performance-mode #requestEmptyPanel,
+.workspace.performance-mode #environmentEmptyPanel,
+.workspace.performance-mode #workspaceEmptyPanel,
+.workspace.performance-mode #runnerEmptyPanel,
+.workspace.performance-mode .results,
 .workspace.request-empty-mode #workspacePaneResize,
 .workspace.request-empty-mode #requestEditorPanel,
 .workspace.request-empty-mode .results,
 .workspace.environment-empty-mode #environmentMainPanel,
 .workspace.workspace-empty-mode #workspaceMainPanel,
-.workspace.runner-empty-mode #runnerMainPanel {
+.workspace.runner-empty-mode #runnerMainPanel,
+.workspace.performance-empty-mode #performanceMainPanel {
   display: none;
 }
 
 .workspace.document-mode #environmentMainPanel,
 .workspace.document-mode #workspaceMainPanel,
 .workspace.document-mode #runnerMainPanel,
+.workspace.document-mode #performanceMainPanel,
 .workspace.environment-mode #environmentMainPanel,
 .workspace.workspace-mode #workspaceMainPanel,
 .workspace.runner-mode #runnerMainPanel,
+.workspace.performance-mode #performanceMainPanel,
 .workspace.request-empty-mode #requestEmptyPanel,
 .workspace.environment-empty-mode #environmentEmptyPanel,
 .workspace.workspace-empty-mode #workspaceEmptyPanel,
-.workspace.runner-empty-mode #runnerEmptyPanel {
+.workspace.runner-empty-mode #runnerEmptyPanel,
+.workspace.performance-empty-mode #performanceEmptyPanel {
   grid-row: 2 / -1;
   align-self: stretch;
   height: 100%;
@@ -677,7 +694,8 @@ h2 {
 
 .environment-main-panel,
 .workspace-main-panel,
-.runner-main-panel {
+.runner-main-panel,
+.performance-main-panel {
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -690,20 +708,23 @@ h2 {
   overscroll-behavior: contain;
 }
 
-.runner-main-panel {
+.runner-main-panel,
+.performance-main-panel {
   overflow: hidden;
 }
 
 .environment-main-panel[hidden],
 .workspace-main-panel[hidden],
-.runner-main-panel[hidden] {
+.runner-main-panel[hidden],
+.performance-main-panel[hidden] {
   display: none;
 }
 
 .request-main-header,
 .environment-main-header,
 .workspace-main-header,
-.runner-main-header {
+.runner-main-header,
+.performance-main-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -721,7 +742,8 @@ h2 {
 .request-main-header > div:first-child,
 .environment-main-header > div:first-child,
 .workspace-main-header > div:first-child,
-.runner-main-header > div:first-child {
+.runner-main-header > div:first-child,
+.performance-main-header > div:first-child {
   flex: 1 1 auto;
   min-width: 0;
 }
@@ -729,7 +751,8 @@ h2 {
 .request-main-title,
 .environment-main-title,
 .workspace-main-title,
-.runner-main-title {
+.runner-main-title,
+.performance-main-title {
   font-size: 18px;
   font-weight: 800;
 }
@@ -737,7 +760,8 @@ h2 {
 .request-main-title.editable-title,
 .environment-main-title.editable-title,
 .workspace-main-title.editable-title,
-.runner-main-title.editable-title {
+.runner-main-title.editable-title,
+.performance-main-title.editable-title {
   display: block;
   box-sizing: border-box;
   width: 100%;
@@ -757,6 +781,8 @@ h2 {
 .environment-main-title.editable-title:focus-visible,
 .runner-main-title.editable-title:hover,
 .runner-main-title.editable-title:focus-visible,
+.performance-main-title.editable-title:hover,
+.performance-main-title.editable-title:focus-visible,
 .request-main-title.editable-title:hover,
 .request-main-title.editable-title:focus-visible,
 .workspace-main-title.editable-title:hover,
@@ -767,6 +793,7 @@ h2 {
 
 .environment-main-title.editable-title.is-editing,
 .runner-main-title.editable-title.is-editing,
+.performance-main-title.editable-title.is-editing,
 .request-main-title.editable-title.is-editing,
 .workspace-main-title.editable-title.is-editing {
   border-color: var(--primary);
@@ -776,6 +803,7 @@ h2 {
 
 .environment-main-title.editable-title[aria-disabled="true"],
 .runner-main-title.editable-title[aria-disabled="true"],
+.performance-main-title.editable-title[aria-disabled="true"],
 .request-main-title.editable-title[aria-disabled="true"],
 .workspace-main-title.editable-title[aria-disabled="true"] {
   cursor: default;
@@ -784,14 +812,16 @@ h2 {
 .request-main-header .request-actions,
 .environment-main-header .environment-actions,
 .workspace-main-header .workspace-actions,
-.runner-main-header .runner-actions {
+.runner-main-header .runner-actions,
+.performance-main-header .performance-actions {
   flex: 0 0 auto;
   justify-content: flex-end;
   max-width: 620px;
 }
 
 .workspace-actions,
-.runner-actions {
+.runner-actions,
+.performance-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -811,12 +841,245 @@ h2 {
   margin-top: 12px;
 }
 
+.compact-number-field input {
+  width: 84px;
+}
+
+.runner-main-panel {
+  display: grid;
+  grid-template-rows: minmax(220px, var(--runner-editor-height)) 6px minmax(180px, 1fr);
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.runner-editor-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+.runner-editor-section .runner-settings,
+.runner-editor-section .runner-request-actions {
+  margin-top: 0;
+}
+
+.runner-results-resize {
+  margin: 0;
+}
+
+.performance-main-panel {
+  display: grid;
+  grid-template-rows: minmax(180px, var(--performance-editor-height)) 6px minmax(160px, 1fr);
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.performance-editor-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.performance-main-header {
+  margin-bottom: 0;
+  padding-bottom: 6px;
+}
+
+.performance-request-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 0;
+  min-height: 0;
+  min-width: 0;
+}
+
+.performance-request-line {
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+#performanceMethodSelect {
+  width: 96px;
+  min-height: 32px;
+  font-weight: 800;
+}
+
+#performanceUrlInput {
+  flex: 1;
+  min-width: 160px;
+  min-height: 32px;
+  padding: 6px 9px;
+  font-family: var(--mono);
+}
+
+#runPerformanceTestButton {
+  min-width: 70px;
+  min-height: 32px;
+}
+
+.performance-request-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+}
+
+.performance-body-field textarea {
+  min-height: 52px;
+  max-height: 96px;
+  resize: vertical;
+}
+
+.performance-body-field .code-editor {
+  min-height: 52px;
+}
+
+.performance-type-tabs {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.performance-type-panel {
+  flex: 0 0 auto;
+  overflow: visible;
+  padding: 6px 0 0;
+}
+
+.performance-type-panel.active {
+  display: block;
+}
+
+.performance-type-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  align-items: end;
+  min-width: 0;
+}
+
+.performance-type-grid .field {
+  flex: 0 0 auto;
+}
+
+.performance-mutation-option {
+  order: 51;
+  flex: 0 0 auto;
+  align-self: end;
+  max-width: 250px;
+  min-height: 30px;
+}
+
+.performance-mutation-option span {
+  line-height: 1.2;
+}
+
+.performance-environment-field {
+  order: 50;
+  flex-basis: 180px;
+  margin-left: 8px;
+}
+
+.performance-environment-field select {
+  width: 100%;
+}
+
+.performance-type-grid .compact-number-field input {
+  width: 78px;
+}
+
+.performance-import-source {
+  min-height: 18px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.performance-results-resize {
+  margin: 0;
+}
+
+.performance-main-panel .performance-results {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin-top: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  overflow: hidden;
+  overscroll-behavior: contain;
+  white-space: normal;
+}
+
+.performance-output-tabs {
+  flex: 0 0 auto;
+  margin: -10px -10px 0;
+  padding: 4px 10px 0;
+}
+
+.performance-output-panel {
+  min-height: 0;
+}
+
+.performance-main-panel .performance-output-panel.active {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+  padding-top: 10px;
+}
+
+.performance-run-details {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.performance-execution-grid {
+  min-height: 0;
+}
+
+.performance-main-panel .performance-graphs-panel.active {
+  display: grid;
+  place-items: start;
+}
+
+@media (max-width: 1100px) {
+  .performance-environment-field {
+    margin-left: 0;
+  }
+}
+
 .runner-request-list {
   display: grid;
   flex: 1 1 auto;
   align-content: start;
   gap: 6px;
-  margin-top: 10px;
+  margin-top: 0;
   min-height: 96px;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -872,6 +1135,16 @@ h2 {
   overflow: hidden;
 }
 
+.runner-main-panel .runner-results {
+  flex: initial;
+  min-height: 0;
+  margin-top: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
 .runner-execution-grid {
   display: grid;
   flex: 1;
@@ -885,6 +1158,36 @@ h2 {
   flex: 1;
   min-height: 0;
   overflow: auto;
+}
+
+.runner-execution-pagination {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-muted);
+}
+
+.runner-execution-pagination[hidden] {
+  display: none;
+}
+
+.runner-execution-pagination button {
+  padding: 4px 8px;
+}
+
+.runner-execution-page-status,
+.runner-execution-page-range {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.runner-execution-page-range {
+  margin-left: auto;
+  font-family: var(--mono);
 }
 
 .runner-execution-row {
@@ -907,7 +1210,7 @@ h2 {
 }
 
 .runner-execution-row.active {
-  background: color-mix(in srgb, var(--orange) 14%, var(--surface));
+  background: color-mix(in srgb, var(--primary) 14%, var(--surface));
 }
 
 .runner-execution-row:last-child {

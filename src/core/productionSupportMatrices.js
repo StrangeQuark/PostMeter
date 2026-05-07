@@ -54,7 +54,13 @@ const ELECTRON_IPC_CHANNELS = Object.freeze([
   ipcChannel('runner:start', 'renderer-to-main', 'Collection-run start validates ID, collection, environment, and config payloads.', ['electron/runtimeIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/runtimeIpc.test.js', 'test/electron/ipcValidation.test.js']),
   ipcChannel('runner:cancel', 'renderer-to-main', 'Collection-run cancellation validates the active run ID before aborting.', ['electron/runtimeIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/runtimeIpc.test.js', 'test/electron/ipcValidation.test.js']),
   ipcChannel('runner:export', 'renderer-to-main', 'Collection-run export validates result/format payloads before a main-process save picker.', ['electron/runtimeIpc.js', 'electron/preload.js', 'electron/fileDialogs.js', 'src/core/ipcValidation.js'], ['test/electron/runtimeIpc.test.js', 'test/electron/ipcValidation.test.js']),
-  ipcChannel('runner:progress', 'main-to-renderer', 'Collection-run progress events are asserted before delivery to the renderer subscription.', ['electron/runtimeIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/runtimeIpc.test.js', 'test/electron/ipcValidation.test.js'])
+  ipcChannel('runner:progress', 'main-to-renderer', 'Collection-run progress events are asserted before delivery to the renderer subscription.', ['electron/runtimeIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/runtimeIpc.test.js', 'test/electron/ipcValidation.test.js']),
+  ipcChannel('performance:start', 'renderer-to-main', 'Performance-test start validates ID, saved test payload, environment, safety limits, and progress payloads before local execution.', ['electron/runtimeIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js', 'src/core/performanceRunner.js'], ['test/electron/runtimeIpc.test.js', 'test/electron/ipcValidation.test.js', 'test/electron/performanceRunner.test.js']),
+  ipcChannel('performance:cancel', 'renderer-to-main', 'Performance-test cancellation validates the active run ID before aborting the local run.', ['electron/runtimeIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/runtimeIpc.test.js', 'test/electron/ipcValidation.test.js']),
+  ipcChannel('performance:import', 'renderer-to-main', 'Performance-test import opens a main-process picker constrained to native performance-test JSON files.', ['electron/runtimeIpc.js', 'electron/preload.js', 'electron/fileDialogs.js', 'src/core/performanceFormats.js'], ['test/electron/runtimeIpc.test.js', 'test/electron/performanceRunner.test.js']),
+  ipcChannel('performance:export', 'renderer-to-main', 'Performance-test export validates a saved test definition before writing native performance-test JSON through a main-process save picker.', ['electron/runtimeIpc.js', 'electron/preload.js', 'electron/fileDialogs.js', 'src/core/ipcValidation.js', 'src/core/performanceFormats.js'], ['test/electron/runtimeIpc.test.js', 'test/electron/ipcValidation.test.js', 'test/electron/performanceRunner.test.js']),
+  ipcChannel('performance:exportResult', 'renderer-to-main', 'Performance-result export validates bounded run output before writing JSON or CSV through a main-process save picker.', ['electron/runtimeIpc.js', 'electron/preload.js', 'electron/fileDialogs.js', 'src/core/ipcValidation.js', 'src/core/performanceFormats.js'], ['test/electron/runtimeIpc.test.js', 'test/electron/ipcValidation.test.js', 'test/electron/performanceRunner.test.js']),
+  ipcChannel('performance:progress', 'main-to-renderer', 'Performance-test progress events are asserted before delivery to the renderer subscription.', ['electron/runtimeIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/runtimeIpc.test.js', 'test/electron/ipcValidation.test.js'])
 ]);
 
 const REQUIRED_ELECTRON_SECURITY_ROWS = Object.freeze([
@@ -95,6 +101,7 @@ const REQUIRED_NON_POSTMAN_COMPATIBILITY_ROWS = Object.freeze([
   'curl.import-export',
   'har.import-export',
   'har.privacy-export-boundary',
+  'native-postmeter.performance-tests',
   'native-postmeter.roundtrip',
   'openapi.import-export',
   'openapi.invalid-common-specs',
@@ -112,6 +119,7 @@ const REQUIRED_UX_ACCESSIBILITY_ROWS = Object.freeze([
   'workflow.vault-prompts',
   'workflow.file-bindings',
   'workflow.local-mocks',
+  'workflow.performance',
   'workflow.settings-theme',
   'workflow.update-check',
   'workflow.diagnostics-export',
@@ -127,6 +135,7 @@ const REQUIRED_DIAGNOSTICS_PRIVACY_ROWS = Object.freeze([
   'privacy.default-deny-request-response',
   'privacy.redaction-engine',
   'privacy.settings-validation',
+  'privacy.performance-results',
   'privacy.import-reset',
   'logging.local-structured-rotation',
   'logging.event-coverage',
@@ -233,6 +242,10 @@ function buildDiagnosticsPrivacyMatrix() {
     row('privacy.settings-validation', 'Settings', 'Diagnostics settings are normalized and IPC-validated as a workspace-scoped allowlist; request/response categories remain false unless the user explicitly enables each category.', 'implemented', {
       evidenceRefs: ['src/core/diagnosticsSettings.js', 'src/core/ipcValidation.js', 'src/core/payloadSchemas.js', 'src/renderer/renderer.js'],
       tests: ['test/electron/diagnostics.test.js', 'test/electron/ipcValidation.test.js', 'test/electron/workspaceIpc.test.js']
+    }),
+    row('privacy.performance-results', 'Performance results', 'Local Performance tests keep configurations, progress, result samples, exports, diagnostics, and failure artifacts bounded and default-deny for request/response data; no Performance diagnostic path introduces telemetry, cloud upload, account-gated execution, or distributed result collection.', 'implemented', {
+      evidenceRefs: ['docs/TECH_SPECS.md', 'docs/RELEASE_READINESS.md', 'src/core/performanceRunner.js', 'electron/runtimeIpc.js'],
+      tests: ['test/electron/performanceFeatureCoverage.test.js', 'test/electron/performanceRunner.test.js', 'test/electron/runtimeIpc.test.js', 'test/electron/diagnostics.test.js', 'test/electron/diagnosticsIpc.test.js']
     }),
     row('privacy.import-reset', 'Workspace import', 'Imported native workspaces cannot silently enable request/response diagnostic logging; import resets diagnostics settings to the product defaults.', 'implemented', {
       evidenceRefs: ['src/core/workspaceStore.js', 'src/core/diagnosticsSettings.js'],
@@ -414,6 +427,10 @@ function buildWorkspaceDurabilityMatrix() {
       evidenceRefs: ['src/core/workspaceMigrations.js', 'docs/TECH_SPECS.md'],
       tests: ['test/electron/workspaceStore.test.js']
     }),
+    row('workspace.performance-tests', 'Performance tests', 'The local V1 Performance model persists as workspace.performanceTests with schema migration, normalization, native workspace import/export round trips, request-copy isolation, safety-limit defaults, and no vault/plaintext secret leakage into Performance exports.', 'implemented', {
+      evidenceRefs: ['docs/TECH_SPECS.md', 'docs/ARCHITECTURE.md', 'src/core/models.js', 'src/core/workspaceMigrations.js', 'src/core/performanceFormats.js'],
+      tests: ['test/electron/performanceFeatureCoverage.test.js', 'test/electron/performanceModel.test.js', 'test/electron/performanceFormats.test.js', 'test/electron/workspaceStore.test.js', 'test/electron/workspaceDurabilityPerformance.test.js']
+    }),
     row('workspace.side-effect-merge', 'Concurrent script effects', 'Sandbox variable/cookie side effects are merged by delta with workspace identity guards.', 'implemented', {
       evidenceRefs: ['electron/workspaceMutations.js'],
       tests: ['test/electron/workspaceMutations.test.js']
@@ -451,6 +468,10 @@ function buildNonPostmanCompatibilityMatrix() {
       evidenceRefs: ['src/core/workspaceStore.js', 'src/core/workspacePersistence.js'],
       tests: ['test/electron/workspaceStore.test.js', 'test/electron/postmanImporter.test.js']
     }),
+    row('native-postmeter.performance-tests', 'Native PostMeter', 'Native workspace and Performance-test import/export preserve local workspace-owned performanceTests, including request copies, source metadata, environment mutation policy, execution config, safety limits, result metadata, and schema validation without merging request copies back into Collections or claiming JMeter/distributed load compatibility.', 'implemented', {
+      evidenceRefs: ['docs/COMPATIBILITY.md', 'docs/TECH_SPECS.md', 'src/core/performanceFormats.js', 'electron/runtimeIpc.js'],
+      tests: ['test/electron/performanceFeatureCoverage.test.js', 'test/electron/performanceFormats.test.js', 'test/electron/workspaceStore.test.js']
+    }),
     row('unsupported.claim-boundaries', 'Claim boundaries', 'Unsupported or preserve-only behavior is documented without claiming source-format-perfect parity.', 'implemented', {
       evidenceRefs: ['docs/COMPATIBILITY.md', 'NEXT_STEPS.MD'],
       tests: ['npm run compatibility:non-postman:validate']
@@ -487,6 +508,10 @@ function buildUxAccessibilityMatrix() {
     row('workflow.collection-runner', 'Collection runner', 'Workspace-owned desktop runners expose empty-pane creation, toolbar creation, collection/request import with multi-select, runner-owned request editing, idle, running, cancellation, export, pass/fail, pre-run save failure, dirty tab, environment mutation, row reorder/delete, split result details, and failed-operation states without writing partial result exports or mutating source collection requests.', 'implemented', {
       evidenceRefs: ['src/renderer/index.html', 'src/renderer/renderer.js', 'src/renderer/requestTabState.js', 'src/renderer/sessionPersistence.js', 'src/renderer/rendererWorkflows.js', 'electron/runtimeIpc.js'],
       tests: ['npm run test:ui:regression', 'npm run test:ui:snapshot', 'test/electron/requestTabState.test.js', 'test/electron/rendererSessionPersistence.test.js', 'test/electron/runtimeIpc.test.js', 'test/electron/collectionRunner.test.js', 'test/electron/rendererWorkflows.test.js']
+    }),
+    row('workflow.performance', 'Performance', 'The Performance section exposes local workspace-owned saved tests in the sidebar between Runners and History, empty-pane creation, New > Performance Test creation, import-request and manual request-entry paths, seven local modes, dirty performance tabs, save/discard semantics, safety-cap rejection, cancellation, and local result panes without claiming distributed/cloud execution.', 'implemented', {
+      evidenceRefs: ['src/renderer/index.html', 'src/renderer/renderer.js', 'src/renderer/performanceTestModel.js', 'docs/ARCHITECTURE.md', 'docs/TECH_SPECS.md'],
+      tests: ['test/electron/performanceFeatureCoverage.test.js', 'test/electron/performanceRendererModel.test.js', 'test/electron/rendererBootstrap.test.js', 'test/electron/requestTabState.test.js', 'npm run test:ui:regression', 'npm run test:ui:snapshot']
     }),
     row('workflow.import-export', 'Imports/exports', 'Workspace, collection, example, and runner import/export cancellation and failure paths stay parent-owned and report actionable errors without clobbering active state.', 'implemented', {
       evidenceRefs: ['electron/workspaceIpc.js', 'electron/runtimeIpc.js', 'electron/fileDialogs.js', 'docs/TROUBLESHOOTING.md'],

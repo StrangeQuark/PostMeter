@@ -7,11 +7,13 @@
     const activeEnvironment = options.activeEnvironment || (() => null);
     const activeRequest = options.activeRequest || (() => null);
     const activeRunner = options.activeRunner || (() => null);
+    const activePerformanceTest = options.activePerformanceTest || (() => null);
     const activeWorkspaceItem = options.activeWorkspaceItem || (() => null);
     const clearActiveWorkspaceItem = options.clearActiveWorkspaceItem || (() => {});
     const collectEnvironmentFromEditor = options.collectEnvironmentFromEditor || (() => {});
     const collectRequestFromEditor = options.collectRequestFromEditor || (() => {});
     const collectRunnerFromEditor = options.collectRunnerFromEditor || (() => {});
+    const collectPerformanceTestFromEditor = options.collectPerformanceTestFromEditor || (() => {});
     const findRequest = options.findRequest || (() => null);
     const notifyUser = options.notifyUser || (() => {});
     const persistWorkspace = options.persistWorkspace || (async () => true);
@@ -24,6 +26,7 @@
     const selectEnvironmentTabCallback = options.selectEnvironmentTab || (() => {});
     const selectRequestTabCallback = options.selectRequestTab || (() => {});
     const selectRunnerTabCallback = options.selectRunnerTab || (() => {});
+    const selectPerformanceTabCallback = options.selectPerformanceTab || (() => {});
     const selectWorkspaceTabCallback = options.selectWorkspaceTab || (() => {});
     const setStatus = options.setStatus || (() => {});
     const workspaceListItems = options.workspaceListItems || (() => []);
@@ -53,6 +56,10 @@
 
     function runnerForTab(tab) {
       return state.workspace?.runners?.find((runner) => runner.id === tab?.runnerId) || null;
+    }
+
+    function performanceTestForTab(tab) {
+      return state.workspace?.performanceTests?.find((test) => test.id === tab?.performanceTestId) || null;
     }
 
     function requestTabHasSharedDirtyState(tab) {
@@ -133,6 +140,7 @@
       state.openEnvironmentTabs = state.openEnvironmentTabs.filter((tab) => Boolean(environmentForTab(tab)));
       state.openWorkspaceTabs = state.openWorkspaceTabs.filter((tab) => Boolean(workspaceForTab(tab)));
       state.openRunnerTabs = state.openRunnerTabs.filter((tab) => Boolean(runnerForTab(tab)));
+      state.openPerformanceTabs = state.openPerformanceTabs.filter((tab) => Boolean(performanceTestForTab(tab)));
     }
 
     function openTabLimit() {
@@ -145,7 +153,8 @@
       return (state.openRequestTabs || []).length
         + (state.openEnvironmentTabs || []).length
         + (state.openWorkspaceTabs || []).length
-        + (state.openRunnerTabs || []).length;
+        + (state.openRunnerTabs || []).length
+        + (state.openPerformanceTabs || []).length;
     }
 
     function reportOpenTabLimit() {
@@ -223,6 +232,17 @@
       return canOpenTab(state.openRunnerTabs, '__new-runner-tab__', options);
     }
 
+    function canOpenPerformanceTabFor(performanceTestId, options = {}) {
+      if (!performanceTestId) {
+        return false;
+      }
+      return canOpenTab(state.openPerformanceTabs, `performance:${performanceTestId}`, options);
+    }
+
+    function canOpenAdditionalPerformanceTab(options = {}) {
+      return canOpenTab(state.openPerformanceTabs, '__new-performance-tab__', options);
+    }
+
     function ensureOpenEnvironmentTabForActive(config = {}) {
       const environment = activeEnvironment();
       if (!environment || state.activeEnvironmentId === 'none') {
@@ -277,6 +297,38 @@
       }
       tab.runnerId = state.activeRunnerConfigId;
       tab.snapshot ||= rendererState.runnerSnapshot(runner);
+      if (config.createdUnsaved === true) {
+        tab.createdUnsaved = true;
+      }
+      if (config.dirty === true) {
+        tab.dirty = true;
+      }
+      renderRequestTabs();
+      return tab;
+    }
+
+    function ensureOpenPerformanceTabForActive(config = {}) {
+      const test = activePerformanceTest();
+      if (!test || !state.activePerformanceTestId) {
+        return null;
+      }
+      const key = rendererState.activePerformanceTabKey(state);
+      let tab = state.openPerformanceTabs.find((candidate) => candidate.key === key);
+      if (!tab) {
+        if (!canOpenTab(state.openPerformanceTabs, key)) {
+          return null;
+        }
+        tab = {
+          key,
+          performanceTestId: state.activePerformanceTestId,
+          dirty: config.dirty === true,
+          createdUnsaved: config.createdUnsaved === true,
+          snapshot: rendererState.performanceTestSnapshot(test)
+        };
+        state.openPerformanceTabs.push(tab);
+      }
+      tab.performanceTestId = state.activePerformanceTestId;
+      tab.snapshot ||= rendererState.performanceTestSnapshot(test);
       if (config.createdUnsaved === true) {
         tab.createdUnsaved = true;
       }
@@ -484,6 +536,21 @@
       renderAll();
     }
 
+    function selectPerformanceTab(tab) {
+      const test = performanceTestForTab(tab);
+      if (!test) {
+        removeOpenPerformanceTab(tab.key);
+        renderAll();
+        return;
+      }
+      state.activePerformanceTestId = test.id;
+      state.activeRunnerRequestRunnerId = null;
+      state.activeSidebarPanel = 'performance';
+      state.activeMainPanel = 'performance';
+      ensureOpenPerformanceTabForActive();
+      renderAll();
+    }
+
     function markActiveRequestDirty() {
       const tab = ensureOpenRequestTabForActive({ dirty: true });
       if (tab) {
@@ -502,6 +569,14 @@
 
     function markActiveRunnerDirty() {
       const tab = ensureOpenRunnerTabForActive({ dirty: true });
+      if (tab) {
+        tab.dirty = true;
+        renderRequestTabs();
+      }
+    }
+
+    function markActivePerformanceDirty() {
+      const tab = ensureOpenPerformanceTabForActive({ dirty: true });
       if (tab) {
         tab.dirty = true;
         renderRequestTabs();
@@ -538,6 +613,13 @@
       state.openRunnerTabs = state.openRunnerTabs.filter((tab) => tab.key !== key);
     }
 
+    function removeOpenPerformanceTab(keyOrPerformanceTestId) {
+      const key = String(keyOrPerformanceTestId || '').startsWith('performance:')
+        ? keyOrPerformanceTestId
+        : `performance:${keyOrPerformanceTestId}`;
+      state.openPerformanceTabs = state.openPerformanceTabs.filter((tab) => tab.key !== key);
+    }
+
     async function closeRunnerTab(tab) {
       if (!tab) {
         renderRequestTabs();
@@ -569,6 +651,132 @@
         }
       }
       closeRunnerTabAfterResolved(tab, { wasActive });
+    }
+
+    async function closePerformanceTab(tab) {
+      if (!tab) {
+        renderRequestTabs();
+        return;
+      }
+      const wasActive = rendererState.isActivePerformanceTab(state, tab);
+      if (wasActive) {
+        collectPerformanceTestFromEditor();
+      }
+      const test = performanceTestForTab(tab);
+      if (!test) {
+        closePerformanceTabAfterResolved(tab, { wasActive });
+        return;
+      }
+      if (tab.dirty) {
+        const action = await promptUnsavedRequestClose(tab, test);
+        if (action === 'cancel') {
+          return;
+        }
+        if (action === 'save') {
+          try {
+            await persistWorkspace(false, { performanceTabKey: tab.key, collectEditors: false });
+          } catch (error) {
+            reportCloseSaveFailure('Performance Test Save Failed', error);
+            return;
+          }
+        } else {
+          discardPerformanceTabChanges(tab);
+        }
+      }
+      closePerformanceTabAfterResolved(tab, { wasActive });
+    }
+
+    async function forceClosePerformanceTab(tab, options = {}) {
+      if (!tab) {
+        renderRequestTabs();
+        return false;
+      }
+      const wasActive = rendererState.isActivePerformanceTab(state, tab);
+      if (wasActive) {
+        collectPerformanceTestFromEditor();
+      }
+      if (options.save === true && tab.dirty) {
+        try {
+          await persistWorkspace(false, { performanceTabKey: tab.key, collectEditors: false });
+        } catch (error) {
+          reportCloseSaveFailure('Performance Test Save Failed', error);
+          return false;
+        }
+      } else {
+        discardPerformanceTabChanges(tab);
+      }
+      closePerformanceTabAfterResolved(tab, { wasActive });
+      return true;
+    }
+
+    function closePerformanceTabAfterResolved(tab, options = {}) {
+      const index = state.openPerformanceTabs.findIndex((candidate) => candidate === tab || candidate.key === tab.key);
+      if (index < 0) {
+        renderRequestTabs();
+        return;
+      }
+      const wasActive = options.wasActive === true || rendererState.isActivePerformanceTab(state, tab);
+      state.openPerformanceTabs.splice(index, 1);
+      if (!wasActive) {
+        renderRequestTabs();
+        return;
+      }
+      const fallbackPerformance = state.openPerformanceTabs[Math.min(index, state.openPerformanceTabs.length - 1)] || state.openPerformanceTabs[index - 1] || null;
+      if (fallbackPerformance) {
+        selectPerformanceTabCallback(fallbackPerformance);
+        return;
+      }
+      const fallbackRunner = state.openRunnerTabs[state.openRunnerTabs.length - 1] || null;
+      if (fallbackRunner) {
+        selectRunnerTabCallback(fallbackRunner);
+        return;
+      }
+      const fallbackWorkspace = state.openWorkspaceTabs[state.openWorkspaceTabs.length - 1] || null;
+      if (fallbackWorkspace) {
+        selectWorkspaceTabCallback(fallbackWorkspace);
+        return;
+      }
+      const fallbackEnvironment = state.openEnvironmentTabs[state.openEnvironmentTabs.length - 1] || null;
+      if (fallbackEnvironment) {
+        selectEnvironmentTabCallback(fallbackEnvironment);
+        return;
+      }
+      const fallbackRequest = state.openRequestTabs[state.openRequestTabs.length - 1] || null;
+      if (fallbackRequest) {
+        selectRequestTabCallback(fallbackRequest);
+        return;
+      }
+      state.activePerformanceTestId = null;
+      state.activeSidebarPanel = 'performance';
+      state.activeMainPanel = 'performance';
+      renderAll();
+    }
+
+    function discardPerformanceTabChanges(tab) {
+      if (tab.createdUnsaved) {
+        state.workspace.performanceTests = (state.workspace.performanceTests || []).filter((test) => test.id !== tab.performanceTestId);
+        if (state.activePerformanceTestId === tab.performanceTestId) {
+          state.activePerformanceTestId = state.workspace.performanceTests[0]?.id || null;
+        }
+        return;
+      }
+      restorePerformanceFromSnapshot(tab);
+    }
+
+    function restorePerformanceFromSnapshot(tab) {
+      const test = performanceTestForTab(tab);
+      if (!test || !tab.snapshot) {
+        return;
+      }
+      try {
+        const snapshot = JSON.parse(tab.snapshot);
+        for (const key of Object.keys(test)) {
+          delete test[key];
+        }
+        Object.assign(test, snapshot);
+      } catch {
+        return;
+      }
     }
 
     async function forceCloseRunnerTab(tab, options = {}) {
@@ -981,39 +1189,48 @@
 
     return {
       canOpenAdditionalEnvironmentTab,
+      canOpenAdditionalPerformanceTab,
       canOpenAdditionalRequestTab,
       canOpenAdditionalRunnerTab,
       canOpenAdditionalWorkspaceTab,
       canOpenEnvironmentTabFor,
+      canOpenPerformanceTabFor,
       canOpenRequestTabFor,
       canOpenRunnerRequestTabFor,
       canOpenRunnerTabFor,
       canOpenWorkspaceTabFor,
       closeEnvironmentTab,
+      closePerformanceTab,
       closeRequestTab,
       closeRunnerTab,
       closeWorkspaceTab,
       ensureOpenEnvironmentTabForActive,
+      ensureOpenPerformanceTabForActive,
       ensureOpenRequestTabForActive,
       ensureOpenRunnerTabForActive,
       ensureOpenWorkspaceTabForActive,
       environmentForTab,
       forceCloseEnvironmentTab,
+      forceClosePerformanceTab,
       forceCloseRequestTab,
       forceCloseRunnerTab,
       forceCloseWorkspaceTab,
       markActiveEnvironmentDirty,
+      markActivePerformanceDirty,
       markActiveRequestDirty,
       markActiveRunnerDirty,
       pruneOpenTabs,
       removeOpenEnvironmentTab,
+      removeOpenPerformanceTab,
       removeOpenRequestTab,
       removeOpenRequestTabsForCollection,
       removeOpenRunnerTab,
       removeOpenWorkspaceTab,
       requestForTab,
       runnerForTab,
+      performanceTestForTab,
       selectEnvironmentTab,
+      selectPerformanceTab,
       selectRequestTab,
       selectRunnerTab,
       selectWorkspaceTab,

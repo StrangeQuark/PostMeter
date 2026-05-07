@@ -48,6 +48,7 @@ test('production readiness matrix tracks release areas and stable-release blocke
     'updates.metadata',
     'vault.per-request-prompts',
     'release.signing',
+    'performance.local-v1',
     'load.distributed'
   ]) {
     assert.ok(ids.has(requiredId), `Missing readiness row ${requiredId}`);
@@ -65,6 +66,9 @@ test('production readiness matrix tracks release areas and stable-release blocke
   assert.equal(byId.get('grpc.pfx-p12-mtls').area, 'transport');
   assert.equal(byId.get('diagnostics.privacy').status, 'validated');
   assert.ok(byId.get('diagnostics.privacy').commands.includes('npm run diagnostics:privacy:validate'));
+  assert.equal(byId.get('performance.local-v1').status, 'implemented');
+  assert.equal(byId.get('performance.local-v1').releaseBlocking, false);
+  assert.ok(byId.get('performance.local-v1').commands.includes('npm run ux:accessibility:validate'));
   assert.deepEqual(matrix.releaseLevels, ['beta', 'rc', 'stable']);
   assert.deepEqual(matrix.releasePolicies.beta.allowedReleaseBlockingStatuses, ['implemented', 'validated', 'external-validation-required']);
   assert.equal(matrix.releasePolicies.beta.allowDocumentedWaivers, false);
@@ -271,6 +275,7 @@ test('non-Postman compatibility matrix keeps every Step 9 required row enumerate
     'curl.import-export',
     'har.import-export',
     'har.privacy-export-boundary',
+    'native-postmeter.performance-tests',
     'native-postmeter.roundtrip',
     'openapi.import-export',
     'openapi.invalid-common-specs',
@@ -296,6 +301,7 @@ test('UX accessibility matrix keeps every Step 11 required row enumerated', () =
     'workflow.import-export',
     'workflow.local-mocks',
     'workflow.oauth',
+    'workflow.performance',
     'workflow.request-edit-send',
     'workflow.sandbox-package-review',
     'workflow.settings-theme',
@@ -317,6 +323,7 @@ test('diagnostics privacy matrix keeps every Step 12 required row enumerated', (
     'logging.local-structured-rotation',
     'privacy.default-deny-request-response',
     'privacy.import-reset',
+    'privacy.performance-results',
     'privacy.redaction-engine',
     'privacy.settings-validation',
     'release.matrix-validation',

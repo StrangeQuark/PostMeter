@@ -1,6 +1,20 @@
+const fs = require('node:fs/promises');
 const { collectionRunResultToCsv, runCollection, runRunner } = require('../src/core/collectionRunner');
+const {
+  exportPerformanceTestToJson,
+  importPerformanceTestFromText,
+  performanceResultToCsv
+} = require('../src/core/performanceFormats');
+const { runPerformanceTest } = require('../src/core/performanceRunner');
 const { writeTextFileAtomic } = require('../src/core/workspacePersistence');
-const { selectedSaveFilePath } = require('./fileDialogs');
+const {
+  performanceExportExtension,
+  performanceExportFilters,
+  performanceImportFilters,
+  safeFilename,
+  selectedOpenFilePath,
+  selectedSaveFilePath
+} = require('./fileDialogs');
 const {
   applyCollectionRunMutationsToWorkspace,
   mergeCookieJarByDelta,
@@ -11,6 +25,10 @@ const {
   assertCollectionRunResultPayload,
   assertExportFormat,
   assertOptionalEnvironmentPayload,
+  assertPerformanceExportFormat,
+  assertPerformanceProgressPayload,
+  assertPerformanceResultPayload,
+  assertPerformanceTestPayload,
   assertRuntimeId,
   assertRunnerConfigPayload,
   assertRunnerPayload,
@@ -28,6 +46,7 @@ function registerRuntimeIpc(options = {}) {
     getVaultPrompt = () => null,
     ipcMain,
     runCollection: runCollectionImpl = runCollection,
+    runPerformanceTest: runPerformanceTestImpl = runPerformanceTest,
     runRunner: runRunnerImpl = runRunner,
     recordDiagnosticEvent = async () => {},
     mutateWorkspace = async (mutator) => {
@@ -40,6 +59,7 @@ function registerRuntimeIpc(options = {}) {
     setWorkspace
   } = options;
   const activeCollectionRuns = new Map();
+  const activePerformanceRuns = new Map();
 
   ipcMain.handle('runner:start', async (event, id, collection, environment, config = {}) => {
     assertRuntimeId(id);
@@ -192,6 +212,150 @@ function registerRuntimeIpc(options = {}) {
     return fileOperationResult({ cancelled: false, path: filePath });
   });
 
+  ipcMain.handle('performance:start', async (event, id, performanceTest, environment) => {
+    assertRuntimeId(id);
+    assertPerformanceTestPayload(performanceTest);
+    assertOptionalEnvironmentPayload(environment);
+    if (activePerformanceRuns.has(id)) {
+      throw new Error(`Performance test is already running for id "${id}".`);
+    }
+    const abortController = new AbortController();
+    const workspaceId = getWorkspaceId();
+    const progressDelivery = createProgressDelivery({
+      abortController,
+      assertPayload: assertPerformanceProgressPayload,
+      channel: 'performance:progress',
+      event,
+      id,
+      label: 'Performance-test progress'
+    });
+    activePerformanceRuns.set(id, abortController);
+    try {
+      const workspace = getWorkspace();
+      const baseEnvironment = cloneJson(environment);
+      const baseCookies = cloneJson(workspace.cookies || []);
+      const result = await runPerformanceTestImpl(performanceTest, environment, {
+        abortController,
+        signal: abortController.signal,
+        cookieJar: workspace.cookies || [],
+        globals: workspace.globals || [],
+        fileBindings: workspace.settings?.sandbox?.fileBindings || [],
+        sandboxPackages: workspace.settings?.sandbox?.packageCache || [],
+        trustedCapabilities: workspace.settings?.sandbox?.trustedCapabilities || {},
+        vault: getVaultStore(workspaceId),
+        vaultPrompt: getVaultPrompt(workspaceId),
+        workspaceId,
+        workspaceName: workspaceId,
+        onProgress: progressDelivery.send,
+        recordDiagnosticEvent
+      });
+      progressDelivery.throwIfFailed();
+      const publicResult = publicPerformanceResult(result);
+      assertPerformanceResultPayload(publicResult);
+      await recordDiagnosticEvent({
+        type: 'performance.start.completed',
+        level: 'info',
+        outcome: 'completed',
+        fields: {
+          cancelled: publicResult.cancelled === true,
+          failedRequests: publicResult.failedRequests || 0,
+          requestCount: publicResult.completedRequests || 0,
+          type: publicResult.type || ''
+        }
+      });
+      await mutateWorkspace(async (latestWorkspace) => {
+        if (Array.isArray(result.cookies)) {
+          latestWorkspace.cookies = mergeCookieJarByDelta(latestWorkspace.cookies || [], baseCookies, result.cookies);
+        }
+        if (result.environmentMutationAllowed === true) {
+          applyRunnerEnvironmentMutationToWorkspace(latestWorkspace, result.mutatedEnvironment || result.environment, baseEnvironment);
+        }
+        return latestWorkspace;
+      }, { workspaceId });
+      return publicResult;
+    } catch (error) {
+      await recordDiagnosticEvent({
+        type: 'performance.start.failed',
+        level: 'error',
+        outcome: 'failed',
+        failureCode: failureCodeFromError(error, 'performance_start_failed'),
+        fields: {
+          error: error?.message || String(error),
+          type: performanceTest?.type || ''
+        }
+      });
+      throw error;
+    } finally {
+      if (activePerformanceRuns.get(id) === abortController) {
+        activePerformanceRuns.delete(id);
+      }
+    }
+  });
+
+  ipcMain.handle('performance:cancel', (_event, id) => {
+    assertRuntimeId(id);
+    const abortController = activePerformanceRuns.get(id);
+    if (!abortController) {
+      return false;
+    }
+    abortController.abort();
+    return true;
+  });
+
+  ipcMain.handle('performance:import', async () => {
+    const result = await dialog.showOpenDialog(getMainWindow(), {
+      title: 'Import Performance Test',
+      properties: ['openFile'],
+      filters: performanceImportFilters()
+    });
+    const filePath = selectedOpenFilePath(result);
+    if (!filePath) {
+      return fileOperationResult({ cancelled: true });
+    }
+    const performanceTest = importPerformanceTestFromText(await fs.readFile(filePath, 'utf8'));
+    assertPerformanceTestPayload(performanceTest);
+    return fileOperationResult({ cancelled: false, performanceTest });
+  });
+
+  ipcMain.handle('performance:export', async (_event, performanceTest, format = 'postmeter') => {
+    assertPerformanceTestPayload(performanceTest);
+    assertPerformanceExportFormat(format);
+    if (format === 'csv') {
+      throw new Error('Performance test definitions can only be exported as JSON.');
+    }
+    const extension = performanceExportExtension(format);
+    const result = await dialog.showSaveDialog(getMainWindow(), {
+      title: 'Export Performance Test',
+      defaultPath: `${safeFilename(performanceTest?.name || 'performance-test')}.postmeter-performance.${extension}`,
+      filters: performanceExportFilters(format)
+    });
+    const filePath = selectedSaveFilePath(result);
+    if (!filePath) {
+      return fileOperationResult({ cancelled: true });
+    }
+    await writeTextFileAtomic(filePath, exportPerformanceTestToJson(performanceTest), { prefix: 'postmeter-performance-export' });
+    return fileOperationResult({ cancelled: false, path: filePath });
+  });
+
+  ipcMain.handle('performance:exportResult', async (_event, result, format = 'json') => {
+    const publicResult = publicPerformanceResult(result);
+    assertPerformanceResultPayload(publicResult);
+    assertPerformanceExportFormat(format);
+    const extension = performanceExportExtension(format);
+    const saveResult = await dialog.showSaveDialog(getMainWindow(), {
+      title: `Export Performance Result ${extension.toUpperCase()}`,
+      defaultPath: `postmeter-performance-result.${extension}`,
+      filters: performanceExportFilters(format)
+    });
+    const filePath = selectedSaveFilePath(saveResult);
+    if (!filePath) {
+      return fileOperationResult({ cancelled: true });
+    }
+    const content = format === 'csv' ? performanceResultToCsv(publicResult) : JSON.stringify(publicResult, null, 2);
+    await writeTextFileAtomic(filePath, content, { prefix: 'postmeter-performance-result-export' });
+    return fileOperationResult({ cancelled: false, path: filePath });
+  });
+
 }
 
 function requestLocalVariablesById(collection) {
@@ -266,6 +430,10 @@ function publicCollectionRunResult(result) {
   }
   delete publicResult.authUpdates;
   return publicResult;
+}
+
+function publicPerformanceResult(result) {
+  return cloneJson(result) || {};
 }
 
 function applyRunnerEnvironmentMutationToWorkspace(workspace, environment, baseEnvironment) {

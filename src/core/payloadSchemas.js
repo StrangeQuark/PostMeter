@@ -39,6 +39,8 @@ const OAUTH_PROGRESS_STATUSES = [
   'failed'
 ];
 const COLLECTION_EXPORT_FORMATS = ['postmeter', 'postman', 'openapi', 'curl', 'har'];
+const PERFORMANCE_TEST_TYPES = ['latency', 'throughput', 'concurrency', 'stress', 'spike', 'soak', 'ramp'];
+const PERFORMANCE_EXPORT_FORMATS = ['postmeter', 'json', 'csv'];
 const THEME_VALUES = ['system', 'light', 'dark'];
 const DIAGNOSTIC_LOG_LEVELS = ['debug', 'info', 'warn', 'error'];
 const ASSERTION_TYPES = [
@@ -61,6 +63,7 @@ const LIMITS = {
   foldersPerLevel: 500,
   requestsPerLevel: 1000,
   runners: 500,
+  performanceTests: 500,
   environments: 500,
   history: 1000,
   pairs: 1000,
@@ -85,6 +88,8 @@ const SCHEMA_ENUMS = {
   bodyMethods: BODY_METHODS,
   bodyTypes: BODY_TYPE_VALUES,
   collectionExportFormats: COLLECTION_EXPORT_FORMATS,
+  performanceExportFormats: PERFORMANCE_EXPORT_FORMATS,
+  performanceTestTypes: PERFORMANCE_TEST_TYPES,
     cookiePriorities: ['', 'Low', 'Medium', 'High'],
     diagnosticLogLevels: DIAGNOSTIC_LOG_LEVELS,
   httpMethods: HTTP_METHODS,
@@ -217,6 +222,68 @@ const FIELD_SCHEMAS = {
     allowEnvironmentMutation: { type: 'boolean', optional: true },
     stopOnFailure: { type: 'boolean', optional: true }
   },
+  performanceConfig: {
+    iterations: { type: 'number', optional: true },
+    concurrency: { type: 'number', optional: true },
+    durationSeconds: { type: 'number', optional: true },
+    rampSteps: { type: 'number', optional: true },
+    spikeMultiplier: { type: 'number', optional: true }
+  },
+  performanceSafetyLimits: {
+    maxTotalRequests: { type: 'number', optional: true },
+    maxConcurrency: { type: 'number', optional: true },
+    maxDurationSeconds: { type: 'number', optional: true }
+  },
+  performanceResultsMetadata: {
+    lastRunAt: { type: 'string', limit: 'name', optional: true },
+    lastResultId: { type: 'string', limit: 'name', optional: true },
+    lastStatus: { type: 'string', limit: 'short', optional: true },
+    runCount: { type: 'number', optional: true },
+    updatedAt: { type: 'string', limit: 'name', optional: true }
+  },
+  performanceTest: {
+    id: { type: 'string', limit: 'name', optional: true },
+    name: { type: 'string', limit: 'name', optional: true },
+    type: { type: 'string', limit: 'short', enum: 'performanceTestTypes', optional: true },
+    environmentId: { type: 'string', limit: 'name', optional: true },
+    allowEnvironmentMutation: { type: 'boolean', optional: true }
+  },
+  performanceTestSource: {
+    sourceType: { type: 'string', limit: 'short', optional: true },
+    collectionId: { type: 'string', limit: 'name', optional: true },
+    collectionName: { type: 'string', limit: 'name', optional: true },
+    folderId: { type: 'string', limit: 'name', optional: true },
+    folderName: { type: 'string', limit: 'name', optional: true },
+    requestId: { type: 'string', limit: 'name', optional: true },
+    requestName: { type: 'string', limit: 'name', optional: true },
+    importedAt: { type: 'string', limit: 'name', optional: true }
+  },
+  performanceProgress: {
+    completedRequests: { type: 'number', optional: true },
+    totalRequests: { type: 'number', optional: true },
+    activeRequests: { type: 'number', optional: true },
+    requestId: { type: 'string', limit: 'name', optional: true },
+    requestName: { type: 'string', limit: 'name', optional: true },
+    passed: { type: 'boolean', optional: true },
+    durationMillis: { type: 'number', optional: true }
+  },
+  performanceResult: {
+    id: { type: 'string', limit: 'name', optional: true },
+    performanceTestId: { type: 'string', limit: 'name', optional: true },
+    performanceTestName: { type: 'string', limit: 'name', optional: true },
+    type: { type: 'string', limit: 'short', enum: 'performanceTestTypes', optional: true },
+    environmentId: { type: 'string', limit: 'name', optional: true },
+    environmentMutationAllowed: { type: 'boolean', optional: true },
+    totalRequests: { type: 'number', optional: true },
+    completedRequests: { type: 'number', optional: true },
+    successfulRequests: { type: 'number', optional: true },
+    failedRequests: { type: 'number', optional: true },
+    passed: { type: 'boolean', optional: true },
+    cancelled: { type: 'boolean', optional: true },
+    startedAt: { type: 'string', limit: 'name', optional: true },
+    completedAt: { type: 'string', limit: 'name', optional: true },
+    durationMillis: { type: 'number', optional: true }
+  },
   runner: {
     id: { type: 'string', limit: 'name', optional: true },
     name: { type: 'string', limit: 'name', optional: true },
@@ -288,6 +355,8 @@ const FIELD_SCHEMAS = {
     startedAt: { type: 'string', limit: 'name', optional: true },
     statusCode: { type: 'number', optional: true },
     durationMillis: { type: 'number', optional: true },
+    responseBody: { type: 'string', limit: 'value', optional: true },
+    responseBytes: { type: 'number', optional: true },
     passed: { type: 'boolean', optional: true },
     error: { type: 'string', limit: 'value', optional: true }
   },
@@ -409,7 +478,7 @@ const payloadSchemas = {
       nested: ['auth', 'scripts', 'cookieJar']
     },
   workspace: {
-      arrays: ['collections', 'environments', 'globals', 'cookies', 'runners', 'history'],
+      arrays: ['collections', 'environments', 'globals', 'cookies', 'runners', 'performanceTests', 'history'],
       nested: ['settings']
     },
     response: {
@@ -420,6 +489,9 @@ const payloadSchemas = {
     },
     runner: {
       arrays: ['requests']
+    },
+    performanceTest: {
+      nested: ['request', 'source', 'config', 'safetyLimits', 'resultsMetadata']
     },
     runnerResult: {
       required: ['collectionId', 'collectionName', 'totalRequests', 'passedRequests', 'failedRequests', 'passed', 'cancelled', 'results']
@@ -489,6 +561,8 @@ const exported = {
   OAUTH_PROGRESS_STATUSES,
   OAUTH_PROGRESS_TYPES,
   PAYLOAD_SCHEMA_VERSION,
+  PERFORMANCE_EXPORT_FORMATS,
+  PERFORMANCE_TEST_TYPES,
   SCHEMA_ENUMS,
   THEME_VALUES,
   fieldLimit,

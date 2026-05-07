@@ -1,8 +1,8 @@
 (function attachRendererSessionPersistence(global) {
   const DEFAULT_REQUEST_TAB = 'params';
   const DEFAULT_RESULTS_TAB = 'response';
-  const SIDEBAR_PANELS = new Set(['collections', 'environments', 'workspaces', 'runners', 'history']);
-  const MAIN_PANELS = new Set(['request', 'environment', 'workspace', 'runner']);
+  const SIDEBAR_PANELS = new Set(['collections', 'environments', 'workspaces', 'runners', 'performance', 'history']);
+  const MAIN_PANELS = new Set(['request', 'environment', 'workspace', 'runner', 'performance']);
   const REQUEST_TABS = new Set(['params', 'headers', 'auth', 'cookies', 'body', 'tests', 'scripts', 'examples', 'collectionVariables']);
   const RESULTS_TABS = new Set(['response', 'responseHeaders', 'responseCookies', 'testResults', 'visualizer']);
 
@@ -21,6 +21,7 @@
       activeRequestId: normalizeId(state.activeRequestId),
       activeRunnerRequestRunnerId: normalizeId(state.activeRunnerRequestRunnerId),
       activeRunnerConfigId: normalizeId(state.activeRunnerConfigId),
+      activePerformanceTestId: normalizeId(state.activePerformanceTestId),
       activeSidebarPanel: normalizeEnum(state.activeSidebarPanel, SIDEBAR_PANELS, 'collections'),
       activeMainPanel: normalizeEnum(state.activeMainPanel, MAIN_PANELS, 'request'),
       activeRequestTab: normalizeEnum(activeTabName(doc, 'request', DEFAULT_REQUEST_TAB), REQUEST_TABS, DEFAULT_REQUEST_TAB),
@@ -36,6 +37,9 @@
         .filter(Boolean),
       openRunnerTabs: (Array.isArray(state.openRunnerTabs) ? state.openRunnerTabs : [])
         .map((tab) => serializeRunnerTab(tab, runnerForTab(state, tab)))
+        .filter(Boolean),
+      openPerformanceTabs: (Array.isArray(state.openPerformanceTabs) ? state.openPerformanceTabs : [])
+        .map((tab) => serializePerformanceTab(tab, performanceTestForTab(state, tab)))
         .filter(Boolean),
       workspaceOrder: serializeWorkspaceOrder(state),
       draftRequests: Array.from(state.draftRequests instanceof Map ? state.draftRequests.values() : [])
@@ -64,6 +68,7 @@
     restoreRequestStates(state, session.openRequestTabs, { findFolder, findRequest });
     restoreEnvironmentStates(state, session.openEnvironmentTabs);
     restoreRunnerStates(state, session.openRunnerTabs);
+    restorePerformanceStates(state, session.openPerformanceTabs);
 
     state.openRequestTabs = session.openRequestTabs
       .filter((tab) => requestTabExists(state, tab, findRequest))
@@ -77,6 +82,9 @@
     state.openRunnerTabs = session.openRunnerTabs
       .filter((tab) => runnerExists(state, tab.runnerId))
       .map(stripRunnerTabState);
+    state.openPerformanceTabs = session.openPerformanceTabs
+      .filter((tab) => performanceTestExists(state, tab.performanceTestId))
+      .map(stripPerformanceTabState);
     restoreSharedRequestStates(state, session);
 
     // Session restore should override the default request selection created during workspace load.
@@ -85,6 +93,7 @@
     state.activeRequestId = null;
     state.activeRunnerRequestRunnerId = null;
     state.activeRunnerConfigId = null;
+    state.activePerformanceTestId = null;
 
     if (workspaceItems().some((item) => item.id === session.activeWorkspaceId)) {
       state.activeWorkspaceId = session.activeWorkspaceId;
@@ -108,11 +117,22 @@
       state.activeRunnerConfigId = null;
       shouldRestoreActiveRunnerConfig = false;
     }
+    let shouldRestoreActivePerformanceTest = true;
+    if (
+      session.activeMainPanel === 'performance'
+      && !(state.openPerformanceTabs || []).some((tab) => tab.performanceTestId === session.activePerformanceTestId)
+    ) {
+      state.activePerformanceTestId = null;
+      shouldRestoreActivePerformanceTest = false;
+    }
     if (session.activeEnvironmentId === 'none' || environmentExists(state, session.activeEnvironmentId)) {
       state.activeEnvironmentId = session.activeEnvironmentId;
     }
     if (shouldRestoreActiveRunnerConfig && runnerExists(state, session.activeRunnerConfigId)) {
       state.activeRunnerConfigId = session.activeRunnerConfigId;
+    }
+    if (shouldRestoreActivePerformanceTest && performanceTestExists(state, session.activePerformanceTestId)) {
+      state.activePerformanceTestId = session.activePerformanceTestId;
     }
 
     const activeRunnerRequestTab = (state.openRequestTabs || []).find((tab) => (
@@ -224,6 +244,20 @@
     };
   }
 
+  function serializePerformanceTab(tab, test) {
+    if (!tab?.performanceTestId) {
+      return null;
+    }
+    return {
+      key: normalizeString(tab.key) || `performance:${tab.performanceTestId}`,
+      performanceTestId: normalizeId(tab.performanceTestId),
+      dirty: tab.dirty === true,
+      createdUnsaved: tab.createdUnsaved === true,
+      snapshot: typeof tab.snapshot === 'string' ? tab.snapshot : '',
+      currentState: !(tab.dirty === true || tab.createdUnsaved === true) ? null : cloneJson(test)
+    };
+  }
+
   function serializeDirtyCollectionStates(state) {
     if (!(state?.collectionDirtySnapshots instanceof Map) || !(state?.collectionDirtyOwners instanceof Map)) {
       return [];
@@ -318,6 +352,23 @@
     }
   }
 
+  function restorePerformanceStates(state, tabs) {
+    state.workspace.performanceTests ||= [];
+    for (const tab of tabs) {
+      if (!tab.currentState) {
+        continue;
+      }
+      const existing = state.workspace.performanceTests.find((test) => test.id === tab.performanceTestId);
+      if (tab.createdUnsaved === true && !existing) {
+        state.workspace.performanceTests.push(cloneJson(tab.currentState));
+        continue;
+      }
+      if ((tab.dirty === true || tab.createdUnsaved === true) && existing) {
+        replaceObject(existing, cloneJson(tab.currentState));
+      }
+    }
+  }
+
   function restoreSharedRequestStates(state, session) {
     state.workspace ||= {};
     state.workspace.cookies ||= [];
@@ -368,8 +419,16 @@
     return state.workspace?.runners?.some((runner) => runner.id === runnerId) === true;
   }
 
+  function performanceTestExists(state, testId) {
+    return state.workspace?.performanceTests?.some((test) => test.id === testId) === true;
+  }
+
   function runnerForTab(state, tab) {
     return state.workspace?.runners?.find((runner) => runner.id === tab?.runnerId) || null;
+  }
+
+  function performanceTestForTab(state, tab) {
+    return state.workspace?.performanceTests?.find((test) => test.id === tab?.performanceTestId) || null;
   }
 
   function findRunnerRequest(state, runnerId, requestId) {
@@ -411,6 +470,9 @@
     if (panel === 'runner') {
       return !state.activeRunnerConfigId || runnerExists(state, state.activeRunnerConfigId);
     }
+    if (panel === 'performance') {
+      return !state.activePerformanceTestId || performanceTestExists(state, state.activePerformanceTestId);
+    }
     if (panel !== 'request') {
       return false;
     }
@@ -433,6 +495,9 @@
     }
     if (panel === 'runners') {
       return !state.activeRunnerConfigId || runnerExists(state, state.activeRunnerConfigId);
+    }
+    if (panel === 'performance') {
+      return !state.activePerformanceTestId || performanceTestExists(state, state.activePerformanceTestId);
     }
     return SIDEBAR_PANELS.has(panel);
   }
@@ -485,6 +550,16 @@
     };
   }
 
+  function stripPerformanceTabState(tab) {
+    return {
+      key: tab.key,
+      performanceTestId: tab.performanceTestId,
+      dirty: tab.dirty === true,
+      createdUnsaved: tab.createdUnsaved === true,
+      snapshot: typeof tab.snapshot === 'string' ? tab.snapshot : ''
+    };
+  }
+
   function normalizeSession(value) {
     const session = isObject(value) ? value : {};
     return {
@@ -496,6 +571,7 @@
       activeRequestId: normalizeId(session.activeRequestId),
       activeRunnerRequestRunnerId: normalizeId(session.activeRunnerRequestRunnerId),
       activeRunnerConfigId: normalizeId(session.activeRunnerConfigId),
+      activePerformanceTestId: normalizeId(session.activePerformanceTestId),
       activeSidebarPanel: normalizeEnum(session.activeSidebarPanel, SIDEBAR_PANELS, 'collections'),
       activeMainPanel: normalizeEnum(session.activeMainPanel, MAIN_PANELS, 'request'),
       activeRequestTab: normalizeEnum(session.activeRequestTab, REQUEST_TABS, DEFAULT_REQUEST_TAB),
@@ -504,6 +580,7 @@
       openEnvironmentTabs: Array.isArray(session.openEnvironmentTabs) ? session.openEnvironmentTabs.filter(isObject) : [],
       openWorkspaceTabs: Array.isArray(session.openWorkspaceTabs) ? session.openWorkspaceTabs.filter(isObject) : [],
       openRunnerTabs: Array.isArray(session.openRunnerTabs) ? session.openRunnerTabs.filter(isObject) : [],
+      openPerformanceTabs: Array.isArray(session.openPerformanceTabs) ? session.openPerformanceTabs.filter(isObject) : [],
       workspaceOrder: Array.isArray(session.workspaceOrder) ? session.workspaceOrder.map(normalizeId).filter(Boolean) : [],
       draftRequests: Array.isArray(session.draftRequests) ? session.draftRequests.filter(isObject) : [],
       dirtyCollectionStates: Array.isArray(session.dirtyCollectionStates) ? session.dirtyCollectionStates.filter(isObject) : [],

@@ -353,6 +353,111 @@
       "notes": ""
     },
     {
+      "id": "ipc.channel.performance-cancel",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `performance:cancel`: Performance-test cancellation validates the active run ID before aborting the local run.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/runtimeIpc.js",
+        "electron/preload.js",
+        "src/core/ipcValidation.js"
+      ],
+      "tests": [
+        "test/electron/runtimeIpc.test.js",
+        "test/electron/ipcValidation.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.performance-export",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `performance:export`: Performance-test export validates a saved test definition before writing native performance-test JSON through a main-process save picker.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/runtimeIpc.js",
+        "electron/preload.js",
+        "electron/fileDialogs.js",
+        "src/core/ipcValidation.js",
+        "src/core/performanceFormats.js"
+      ],
+      "tests": [
+        "test/electron/runtimeIpc.test.js",
+        "test/electron/ipcValidation.test.js",
+        "test/electron/performanceRunner.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.performance-exportresult",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `performance:exportResult`: Performance-result export validates bounded run output before writing JSON or CSV through a main-process save picker.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/runtimeIpc.js",
+        "electron/preload.js",
+        "electron/fileDialogs.js",
+        "src/core/ipcValidation.js",
+        "src/core/performanceFormats.js"
+      ],
+      "tests": [
+        "test/electron/runtimeIpc.test.js",
+        "test/electron/ipcValidation.test.js",
+        "test/electron/performanceRunner.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.performance-import",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `performance:import`: Performance-test import opens a main-process picker constrained to native performance-test JSON files.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/runtimeIpc.js",
+        "electron/preload.js",
+        "electron/fileDialogs.js",
+        "src/core/performanceFormats.js"
+      ],
+      "tests": [
+        "test/electron/runtimeIpc.test.js",
+        "test/electron/performanceRunner.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.performance-progress",
+      "area": "IPC channel",
+      "target": "main-to-renderer channel `performance:progress`: Performance-test progress events are asserted before delivery to the renderer subscription.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/runtimeIpc.js",
+        "electron/preload.js",
+        "src/core/ipcValidation.js"
+      ],
+      "tests": [
+        "test/electron/runtimeIpc.test.js",
+        "test/electron/ipcValidation.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.performance-start",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `performance:start`: Performance-test start validates ID, saved test payload, environment, safety limits, and progress payloads before local execution.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/runtimeIpc.js",
+        "electron/preload.js",
+        "src/core/ipcValidation.js",
+        "src/core/performanceRunner.js"
+      ],
+      "tests": [
+        "test/electron/runtimeIpc.test.js",
+        "test/electron/ipcValidation.test.js",
+        "test/electron/performanceRunner.test.js"
+      ],
+      "notes": ""
+    },
+    {
       "id": "ipc.channel.request-examples-export",
       "area": "IPC channel",
       "target": "renderer-to-main channel `request:examples:export`: Request example export validates the request payload before writing a selected JSON file.",

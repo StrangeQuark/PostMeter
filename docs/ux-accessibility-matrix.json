@@ -247,6 +247,28 @@
       "notes": ""
     },
     {
+      "id": "workflow.performance",
+      "area": "Performance",
+      "target": "The Performance section exposes local workspace-owned saved tests in the sidebar between Runners and History, empty-pane creation, New > Performance Test creation, import-request and manual request-entry paths, seven local modes, dirty performance tabs, save/discard semantics, safety-cap rejection, cancellation, and local result panes without claiming distributed/cloud execution.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "src/renderer/index.html",
+        "src/renderer/renderer.js",
+        "src/renderer/performanceTestModel.js",
+        "docs/ARCHITECTURE.md",
+        "docs/TECH_SPECS.md"
+      ],
+      "tests": [
+        "test/electron/performanceFeatureCoverage.test.js",
+        "test/electron/performanceRendererModel.test.js",
+        "test/electron/rendererBootstrap.test.js",
+        "test/electron/requestTabState.test.js",
+        "npm run test:ui:regression",
+        "npm run test:ui:snapshot"
+      ],
+      "notes": ""
+    },
+    {
       "id": "workflow.request-edit-send",
       "area": "Requests",
       "target": "Request editing, inline request/environment title editing, validation, pre-send save failure, send success, send failure, response display, updated OAuth persistence markers, tab context/close/cap behavior, failed request/environment/draft close-save persistence, and unsaved-close recovery remain visible and recoverable.",

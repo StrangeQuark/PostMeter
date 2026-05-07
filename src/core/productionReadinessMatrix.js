@@ -47,6 +47,7 @@ const REQUIRED_ROW_IDS = Object.freeze([
   'updates.metadata',
   'vault.per-request-prompts',
   'release.signing',
+  'performance.local-v1',
   'load.distributed'
 ]);
 const REQUIRED_AREAS = Object.freeze([
@@ -198,6 +199,12 @@ function buildProductionReadinessMatrix() {
       releaseBlocking: true,
       commands: ['npm run release:manifest', 'npm run release:validate'],
       evidenceRefs: ['src/core/updateChecker.js', 'scripts/writeReleaseManifest.js', 'package.json']
+    }),
+    row('performance.local-v1', 'deferred-features', 'Local first-class saved Performance tests are implemented as workspace-owned performanceTests with local execution, IPC, diagnostics boundaries, safety caps, import/export validation, and seven-type coverage; distributed/cloud load execution remains deferred.', 'implemented', {
+      releaseBlocking: false,
+      commands: ['npm run ux:accessibility:validate', 'npm run workspace:durability:validate', 'npm run compatibility:non-postman:validate', 'npm run diagnostics:privacy:validate'],
+      evidenceRefs: ['README.md', 'docs/TECH_SPECS.md', 'docs/ARCHITECTURE.md', 'docs/COMPATIBILITY.md', 'docs/RELEASE_READINESS.md', 'NEXT_STEPS.MD', 'src/core/performanceRunner.js', 'electron/runtimeIpc.js', 'src/renderer/renderer.js'],
+      notes: 'This row tracks the local desktop Performance implementation separately from distributed/cloud load execution, hosted agents, and JMeter compatibility.'
     }),
     row('oauth.live-certification', 'oauth', 'Live provider certification requires maintainer-owned Google, Microsoft Entra ID, and GitHub OAuth apps.', 'external-validation-required', {
       releaseBlocking: true,

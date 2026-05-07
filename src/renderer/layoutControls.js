@@ -27,6 +27,42 @@ function initResizablePanes() {
       return event.clientY - rect.top - 10;
     }
   });
+  setupDragResize('runnerResultsResize', {
+    cssVariable: '--runner-editor-height',
+    fallbackPixels: 360,
+    label: 'Resize runner configuration and results panels',
+    orientation: 'horizontal',
+    currentPixels: () => measuredElementPixels('#runnerEditorSection', 'height'),
+    max: () => {
+      const panel = document.getElementById('runnerMainPanel');
+      const panelRect = panel?.getBoundingClientRect?.() || { height: 0 };
+      return Math.max(220, panelRect.height - 210);
+    },
+    min: 220,
+    valueFromEvent: (event) => {
+      const editor = document.getElementById('runnerEditorSection');
+      const rect = editor?.getBoundingClientRect?.() || { top: 0 };
+      return event.clientY - rect.top;
+    }
+  });
+  setupDragResize('performanceResultsResize', {
+    cssVariable: '--performance-editor-height',
+    fallbackPixels: 320,
+    label: 'Resize performance settings and results panels',
+    orientation: 'horizontal',
+    currentPixels: () => measuredElementPixels('#performanceEditorSection', 'height'),
+    max: () => {
+      const panel = document.getElementById('performanceMainPanel');
+      const panelRect = panel?.getBoundingClientRect?.() || { height: 0 };
+      return Math.max(180, panelRect.height - 190);
+    },
+    min: 180,
+    valueFromEvent: (event) => {
+      const editor = document.getElementById('performanceEditorSection');
+      const rect = editor?.getBoundingClientRect?.() || { top: 0 };
+      return event.clientY - rect.top;
+    }
+  });
 }
 
 function setupDragResize(id, config) {
@@ -174,7 +210,9 @@ function readLayoutVar(name) {
 function defaultLayoutVars() {
   return {
     '--sidebar-width': '300px',
-    '--request-height': '52%'
+    '--request-height': '52%',
+    '--runner-editor-height': '52%',
+    '--performance-editor-height': 'max-content'
   };
 }
 

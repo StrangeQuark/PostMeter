@@ -9,6 +9,7 @@ const {
   assertFileOperationResultPayload,
   assertOAuthProgressPayload,
   assertOptionalEnvironmentPayload,
+  assertPerformanceResultPayload,
   assertResponsePayload,
   assertRequestPayload,
   assertRuntimeId,
@@ -137,6 +138,8 @@ test('accepts structurally valid IPC payloads', () => {
       requestId: 'r1',
       requestName: 'Request',
       passed: true,
+      responseBody: '{"ok":true}',
+      responseBytes: 11,
       assertionResults: [],
       preRequestScriptResult: { passed: true, tests: [], logs: [] },
       testScriptResult: { passed: true, tests: [{ name: 'ok', passed: true }], logs: ['done'], visualizer: { html: '<h1>ok</h1>', template: '<h1>{{value}}</h1>' } },
@@ -150,6 +153,37 @@ test('accepts structurally valid IPC payloads', () => {
     runnerEnvironmentId: 'e1',
     environmentMutationAllowed: true,
     collectionVariables: [{ enabled: true, key: 'baseUrl', value: 'https://example.test' }]
+  }));
+  assert.doesNotThrow(() => assertPerformanceResultPayload({
+    id: 'performance-result',
+    performanceTestId: 'perf-1',
+    performanceTestName: 'Latency',
+    type: 'latency',
+    totalRequests: 1,
+    completedRequests: 1,
+    successfulRequests: 1,
+    failedRequests: 0,
+    passed: true,
+    cancelled: false,
+    durationMillis: 10,
+    summary: { requestsPerSecond: 1, statusCodes: { 200: 1 } },
+    samples: [{
+      iteration: 1,
+      requestId: 'request-1',
+      requestName: 'Request',
+      startedAt: '2026-05-06T00:00:00.000Z',
+      statusCode: 200,
+      durationMillis: 10,
+      responseBody: '{"ok":true}',
+      responseBytes: 11,
+      passed: true,
+      assertionResults: [{ passed: true, message: 'body contains ok' }],
+      preRequestScriptResult: { passed: true, tests: [{ name: 'pre', passed: true }] },
+      testScriptResult: { passed: true, tests: [{ name: 'post', passed: true }] },
+      extractedVariables: [{ enabled: true, key: 'token', value: 'abc' }],
+      localVariables: [{ enabled: true, key: 'local', value: 'value' }],
+      error: ''
+    }]
   }));
   assert.doesNotThrow(() => assertResponsePayload({
     statusCode: 200,
@@ -377,9 +411,12 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertCollectionRunResultPayload({ results: [{ assertionResults: 'bad' }] }), /result.results\[0\].assertionResults must be an array/);
   assert.throws(() => assertCollectionRunResultPayload({ results: [{ assertionResults: [{ passed: 'yes' }] }] }), /result.results\[0\].assertionResults\[0\].passed must be a boolean/);
   assert.throws(() => assertCollectionRunResultPayload({ results: [{ testScriptResult: { tests: [{ passed: 'yes' }] } }] }), /result.results\[0\].testScriptResult.tests\[0\].passed must be a boolean/);
+  assert.throws(() => assertCollectionRunResultPayload({ results: [{ responseBody: 42 }] }), /result.results\[0\].responseBody must be a string/);
   assert.throws(() => assertCollectionRunResultPayload({ results: [{ updatedAuth: { type: 'oauth2', accessToken: 'raw-token' } }] }), /result.results\[0\].updatedAuth must not be included in public IPC payloads/);
   assert.throws(() => assertCollectionRunResultPayload({ results: [{ accessToken: 'raw-token' }] }), /result.results\[0\].accessToken is not allowed in public IPC payloads/);
   assert.throws(() => assertCollectionRunResultPayload({ accessToken: 'raw-token' }), /result.accessToken is not allowed in public IPC payloads/);
+  assert.throws(() => assertPerformanceResultPayload({ samples: [{ responseBody: 42 }] }), /result.samples\[0\].responseBody must be a string/);
+  assert.throws(() => assertPerformanceResultPayload({ samples: [{ assertionResults: [{ passed: 'yes' }] }] }), /result.samples\[0\].assertionResults\[0\].passed must be a boolean/);
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: '', durationMillis: 'slow', responseBytes: 0, finalUrl: '', headers: {} }), /response.durationMillis must be a finite number/);
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: 42, durationMillis: 1, responseBytes: 2, finalUrl: 'https://example.test', headers: {} }), /response.body must be a string/);
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: '{}', durationMillis: 1, responseBytes: 2, finalUrl: 'https://example.test', headers: {}, updatedAuth: { type: 'oauth2', accessToken: 'raw-token' } }), /response.updatedAuth must not be included in public IPC payloads/);

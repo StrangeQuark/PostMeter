@@ -10,6 +10,7 @@ PostMeter is a local-first desktop API client for building, sending, and testing
 - Run pre-request scripts, test scripts, assertions, and workspace-owned runners.
 - Use first-class desktop runners or the CI-friendly CLI runner.
 - Work with OAuth 2.0, HTTPS client certificates, cookies, and GitHub Releases update checks.
+- Save and run local Performance tests for latency, throughput, concurrency, stress, spike, soak, and ramp checks.
 
 ## Quick Start
 
@@ -48,6 +49,12 @@ The CLI uses the same import and runner logic as the desktop app. It exits with 
 
 Runners let you save and replay a sequence of requests from the desktop app. They are useful for API workflows where one request sets up data for the next, such as authentication, setup, validation, and cleanup steps.
 
+## Performance
+
+Performance tests are saved workspace items for checking how an endpoint behaves under local load. You can create a test from scratch or import a copy of a request from Collections, choose an environment, set safety limits, run the test, and review status-code, error, latency, and request-rate summaries.
+
+The legacy Load Test panel has been removed. Distributed/cloud load execution, JMeter import/export/execution, and hosted load agents are not part of the current production claim.
+
 ## Data And Privacy
 
 PostMeter stores managed workspaces as local JSON files under:
@@ -83,7 +90,5 @@ Diagnostics are local and user-initiated. See [Troubleshooting](docs/TROUBLESHOO
 Generated validation matrices live in `docs/*.json`, including Postman parity, diagnostics privacy, production readiness, Electron security, workspace durability, OAuth provider certification, and UX accessibility coverage.
 
 ## Notes
-
-Load tests intentionally skip pre-request and test scripts; collection runs and single requests execute scripts. See [Sandbox Contract](docs/SANDBOX_CONTRACT.md) for the detailed policy.
 
 Release builds are currently unsigned. See [Release Readiness](docs/RELEASE_READINESS.md) for the current release validation state.

@@ -3,6 +3,7 @@ const {
   BODY_METHODS: BODY_METHOD_VALUES,
   BODY_TYPE_VALUES,
   HTTP_METHODS,
+  PERFORMANCE_TEST_TYPES,
   normalizeSchemaEnumValue
 } = require('./payloadSchemas');
 const { normalizePersistedAuth } = require('./authModel');
@@ -10,7 +11,7 @@ const { normalizeCookies: normalizeCookieCollection } = require('./cookieModel')
 const { normalizeSandboxFileBindings } = require('./fileAttachmentBindings');
 const { normalizeDiagnosticsSettings } = require('./diagnosticsSettings');
 
-const CURRENT_SCHEMA_VERSION = 12;
+const CURRENT_SCHEMA_VERSION = 13;
 const MIN_SUPPORTED_SCHEMA_VERSION = 1;
 const SUPPORTED_METHODS = new Set(HTTP_METHODS);
 const BODY_METHODS = new Set(BODY_METHOD_VALUES);
@@ -18,6 +19,19 @@ const BODY_TYPES = Object.freeze(Object.fromEntries(BODY_TYPE_VALUES.map((type) 
 const DEFAULT_REQUEST_BODY_TYPE = 'NONE';
 const DEFAULT_EXAMPLE_BODY_TYPE = 'RAW_TEXT';
 const POSTMAN_METADATA_MAX_BYTES = 10 * 1024 * 1024;
+const DEFAULT_PERFORMANCE_TEST_TYPE = 'latency';
+const DEFAULT_PERFORMANCE_CONFIG = Object.freeze({
+  iterations: 1,
+  concurrency: 1,
+  durationSeconds: 0,
+  rampSteps: 1,
+  spikeMultiplier: 1
+});
+const DEFAULT_PERFORMANCE_SAFETY_LIMITS = Object.freeze({
+  maxTotalRequests: 100,
+  maxConcurrency: 10,
+  maxDurationSeconds: 60
+});
 
 function newId() {
   return crypto.randomUUID();
@@ -110,6 +124,91 @@ function runnerRequestModel(request = {}) {
   return normalized;
 }
 
+function performanceTestModel({
+  id,
+  name,
+  type,
+  request,
+  source,
+  environmentId,
+  allowEnvironmentMutation,
+  config,
+  safetyLimits,
+  typeSettings,
+  resultsMetadata
+} = {}) {
+  const normalizedType = normalizePerformanceType(type);
+  const normalizedTypeSettings = normalizePerformanceTypeSettings(typeSettings, normalizedType, {
+    environmentId,
+    allowEnvironmentMutation,
+    config,
+    safetyLimits
+  });
+  const activeSettings = normalizedTypeSettings[normalizedType];
+  return {
+    id: id || newId(),
+    name: normalizeName(name, 'Untitled Performance Test'),
+    type: normalizedType,
+    request: performanceRequestModel(request, source),
+    source: normalizePerformanceSource(source),
+    environmentId: activeSettings.environmentId,
+    allowEnvironmentMutation: activeSettings.allowEnvironmentMutation,
+    config: activeSettings.config,
+    safetyLimits: activeSettings.safetyLimits,
+    typeSettings: normalizedTypeSettings,
+    resultsMetadata: normalizePerformanceResultsMetadata(resultsMetadata)
+  };
+}
+
+function performanceRequestModel(request = {}, source = {}) {
+  const hasRequest = request && typeof request === 'object' && !Array.isArray(request);
+  const normalized = requestModel(hasRequest ? request : {});
+  if (!hasRequest) {
+    normalized.name = normalizeName(source?.requestName, 'Performance Request');
+  }
+  return normalized;
+}
+
+function cloneRequestForPerformanceTest(request, source = {}, options = {}) {
+  const clonedRequest = cloneJson(request || {});
+  return performanceTestModel({
+    name: options.name || `${request?.name || 'Request'} Performance`,
+    type: options.type,
+    request: {
+      ...clonedRequest,
+      id: newId()
+    },
+    source: {
+      ...source,
+      sourceType: 'collection',
+      requestId: source.requestId || request?.id,
+      requestName: source.requestName || request?.name,
+      importedAt: source.importedAt || new Date().toISOString()
+    },
+    environmentId: options.environmentId,
+    allowEnvironmentMutation: options.allowEnvironmentMutation,
+    config: options.config,
+    safetyLimits: options.safetyLimits,
+    typeSettings: options.typeSettings,
+    resultsMetadata: options.resultsMetadata
+  });
+}
+
+function defaultPerformanceTest(options = {}) {
+  return performanceTestModel({
+    ...options,
+    source: {
+      sourceType: 'manual',
+      ...(options.source || {})
+    },
+    request: options.request || {
+      name: 'Performance Request',
+      method: 'GET',
+      url: ''
+    }
+  });
+}
+
 function cloneRequestForRunner(request, source = {}) {
   const clonedRequest = cloneJson(request || {});
   return runnerRequestModel({
@@ -170,7 +269,7 @@ function historyEntry({ timestamp, method, url, statusCode, durationMillis } = {
   };
 }
 
-function workspaceModel({ schemaVersion, collections, environments, globals, history, settings, cookies, runners } = {}) {
+function workspaceModel({ schemaVersion, collections, environments, globals, history, settings, cookies, runners, performanceTests } = {}) {
   return {
     schemaVersion: schemaVersion || CURRENT_SCHEMA_VERSION,
     settings: normalizeSettings(settings),
@@ -179,6 +278,7 @@ function workspaceModel({ schemaVersion, collections, environments, globals, his
     globals: normalizePairs(globals),
     cookies: normalizeCookies(cookies),
     runners: Array.isArray(runners) ? runners.map(runnerModel) : [],
+    performanceTests: Array.isArray(performanceTests) ? performanceTests.map(performanceTestModel) : [],
     history: Array.isArray(history) ? history.map(historyEntry) : []
   };
 }
@@ -485,6 +585,127 @@ function normalizeRunnerRequestSource(source) {
   return normalized;
 }
 
+function normalizePerformanceType(value) {
+  return normalizeSchemaEnumValue('performanceTestTypes', value, DEFAULT_PERFORMANCE_TEST_TYPE, { trim: true });
+}
+
+function normalizePerformanceConfig(config, type = DEFAULT_PERFORMANCE_TEST_TYPE) {
+  const input = config && typeof config === 'object' && !Array.isArray(config) ? config : {};
+  const defaults = defaultPerformanceConfigForType(type);
+  return {
+    iterations: boundedInteger(input.iterations, defaults.iterations, 1, 100000),
+    concurrency: boundedInteger(input.concurrency, defaults.concurrency, 1, 100000),
+    durationSeconds: boundedInteger(input.durationSeconds, defaults.durationSeconds, 0, 24 * 60 * 60),
+    rampSteps: boundedInteger(input.rampSteps, defaults.rampSteps, 1, 100000),
+    spikeMultiplier: boundedInteger(input.spikeMultiplier, defaults.spikeMultiplier, 1, 100000)
+  };
+}
+
+function normalizePerformanceTypeSettings(typeSettings, activeType = DEFAULT_PERFORMANCE_TEST_TYPE, activeSettings = {}) {
+  const input = typeSettings && typeof typeSettings === 'object' && !Array.isArray(typeSettings) ? typeSettings : {};
+  const hasTypeSettings = PERFORMANCE_TEST_TYPES.some((type) => input[type] && typeof input[type] === 'object' && !Array.isArray(input[type]));
+  const normalized = {};
+  for (const type of PERFORMANCE_TEST_TYPES) {
+    const candidate = input[type] && typeof input[type] === 'object' && !Array.isArray(input[type]) ? input[type] : {};
+    normalized[type] = normalizePerformanceTypeSetting(candidate, type);
+  }
+  if (PERFORMANCE_TEST_TYPES.includes(activeType) && (!hasTypeSettings || hasExplicitPerformanceActiveSettings(activeSettings))) {
+    normalized[activeType] = normalizePerformanceTypeSetting(mergePerformanceTypeSetting(normalized[activeType], activeSettings), activeType);
+  }
+  return normalized;
+}
+
+function normalizePerformanceTypeSetting(setting, type = DEFAULT_PERFORMANCE_TEST_TYPE) {
+  const input = setting && typeof setting === 'object' && !Array.isArray(setting) ? setting : {};
+  return {
+    environmentId: normalizeRunnerEnvironmentId(input.environmentId),
+    allowEnvironmentMutation: input.allowEnvironmentMutation === true,
+    config: normalizePerformanceConfig(input.config, type),
+    safetyLimits: normalizePerformanceSafetyLimits(input.safetyLimits)
+  };
+}
+
+function hasExplicitPerformanceActiveSettings(settings = {}) {
+  return settings.environmentId != null
+    || settings.allowEnvironmentMutation != null
+    || settings.config != null
+    || settings.safetyLimits != null;
+}
+
+function mergePerformanceTypeSetting(base = {}, override = {}) {
+  const baseConfig = { ...(base.config || {}) };
+  const overrideConfig = override.config || {};
+  if (overrideConfig.virtualUsers != null && overrideConfig.concurrency == null) {
+    delete baseConfig.concurrency;
+  }
+  if (overrideConfig.rampUpSeconds != null && overrideConfig.rampSteps == null) {
+    delete baseConfig.rampSteps;
+  }
+  return {
+    ...base,
+    ...override,
+    config: {
+      ...baseConfig,
+      ...overrideConfig
+    },
+    safetyLimits: {
+      ...(base.safetyLimits || {}),
+      ...(override.safetyLimits || {})
+    }
+  };
+}
+
+function defaultPerformanceConfigForType(type) {
+  return {
+    latency: { ...DEFAULT_PERFORMANCE_CONFIG, iterations: 1 },
+    throughput: { ...DEFAULT_PERFORMANCE_CONFIG, iterations: 10, concurrency: 1 },
+    concurrency: { ...DEFAULT_PERFORMANCE_CONFIG, iterations: 10, concurrency: 5 },
+    stress: { ...DEFAULT_PERFORMANCE_CONFIG, iterations: 25, concurrency: 5 },
+    spike: { ...DEFAULT_PERFORMANCE_CONFIG, iterations: 20, concurrency: 2, spikeMultiplier: 3 },
+    soak: { ...DEFAULT_PERFORMANCE_CONFIG, iterations: 30, concurrency: 2, durationSeconds: 30 },
+    ramp: { ...DEFAULT_PERFORMANCE_CONFIG, iterations: 20, concurrency: 5, rampSteps: 5 }
+  }[type] || DEFAULT_PERFORMANCE_CONFIG;
+}
+
+function normalizePerformanceSafetyLimits(safetyLimits) {
+  const input = safetyLimits && typeof safetyLimits === 'object' && !Array.isArray(safetyLimits) ? safetyLimits : {};
+  return {
+    maxTotalRequests: boundedInteger(input.maxTotalRequests, DEFAULT_PERFORMANCE_SAFETY_LIMITS.maxTotalRequests, 1, 100000),
+    maxConcurrency: boundedInteger(input.maxConcurrency, DEFAULT_PERFORMANCE_SAFETY_LIMITS.maxConcurrency, 1, 100000),
+    maxDurationSeconds: boundedInteger(input.maxDurationSeconds, DEFAULT_PERFORMANCE_SAFETY_LIMITS.maxDurationSeconds, 1, 24 * 60 * 60)
+  };
+}
+
+function normalizePerformanceResultsMetadata(metadata) {
+  const input = metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? metadata : {};
+  return {
+    lastRunAt: input.lastRunAt == null ? '' : String(input.lastRunAt).slice(0, 256),
+    lastResultId: input.lastResultId == null ? '' : String(input.lastResultId).slice(0, 256),
+    lastStatus: input.lastStatus == null ? '' : String(input.lastStatus).slice(0, 64),
+    runCount: Number.isFinite(Number(input.runCount)) && Number(input.runCount) > 0 ? Math.floor(Number(input.runCount)) : 0,
+    updatedAt: input.updatedAt == null ? '' : String(input.updatedAt).slice(0, 256)
+  };
+}
+
+function normalizePerformanceSource(source) {
+  const normalized = normalizeRunnerRequestSource(source);
+  const sourceType = String(source?.sourceType || source?.type || '').trim().toLowerCase();
+  normalized.sourceType = sourceType === 'collection' ? 'collection' : 'manual';
+  const importedAt = String(source?.importedAt || '').trim();
+  if (importedAt) {
+    normalized.importedAt = importedAt.slice(0, 256);
+  }
+  return normalized;
+}
+
+function boundedInteger(value, fallback, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, Math.floor(number)));
+}
+
 function normalizeCertificates(certificates) {
   if (!Array.isArray(certificates)) {
     return [];
@@ -527,6 +748,7 @@ function defaultWorkspace() {
     globals: [],
     cookies: [],
     runners: [],
+    performanceTests: [],
     history: []
   });
 }
@@ -609,10 +831,14 @@ module.exports = {
   BODY_METHODS,
   BODY_TYPES,
   CURRENT_SCHEMA_VERSION,
+  DEFAULT_PERFORMANCE_SAFETY_LIMITS,
   MIN_SUPPORTED_SCHEMA_VERSION,
+  PERFORMANCE_TEST_TYPES,
   SUPPORTED_METHODS,
+  cloneRequestForPerformanceTest,
   cloneRequestForRunner,
   collectionModel,
+  defaultPerformanceTest,
   defaultWorkspace,
   environmentModel,
   folderModel,
@@ -620,9 +846,14 @@ module.exports = {
   keyValue,
   newId,
   normalizeCookies,
+  normalizePerformanceConfig,
+  normalizePerformanceSafetyLimits,
+  normalizePerformanceSource,
+  normalizePerformanceTypeSettings,
   normalizeRequestCookieJar,
   normalizeRunnerRequestSource,
   normalizeSettings,
+  performanceTestModel,
   requestModel,
   runnerModel,
   runnerRequestModel,

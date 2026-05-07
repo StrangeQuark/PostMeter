@@ -33,7 +33,31 @@ The migration deliberately does not bridge Electron to the Java services. Core b
 - Send HTTP requests and display status, timing, size, final URL, headers, and formatted JSON bodies.
 - Record recent request history.
 - Check GitHub Releases for newer PostMeter versions and prompt before opening release pages. Stable releases are checked by default; prereleases are checked only when the user enables the opt-in setting.
-- Track the planned V1 Load Test redesign separately; the legacy Load Test panel, runtime, worker, policy, and export path have been removed.
+- Save and run local workspace-owned Performance tests separately from distributed/cloud load execution; the legacy Load Test panel, JMeter bridge, worker, policy, and export path have been removed.
+
+## Local Performance Scope
+
+Performance is implemented as local first-class saved performance tests, not a request result-panel tab and not a distributed/cloud load service. Saved tests live under `workspace.performanceTests`; each test owns its ID, name, type, request copy, optional source metadata, selected environment ID, environment mutation policy, execution config, safety limits, result metadata, and native export payload. Performance tests persist independently from Collections and Runners.
+
+Two request-entry paths are supported: importing a request from Collections as a deep copy, and manual request entry directly in the Performance pane. Imported request copies remain isolated from source collection requests across headers, auth, body, scripts, variables, examples, cookies, URL, and method. Saving a Performance test saves the performance-test configuration and its request copy without saving or clearing dirty collection request tabs.
+
+Environment handling is explicit. A Performance test selects an environment independently from the active global environment. When `Allow performance test to modify environment` is disabled, scripts may mutate only a temporary environment copy for the run; when enabled, validated mutation deltas are applied back to the selected saved environment.
+
+Required V1 type coverage:
+
+| Type | Positive scenario | Negative scenario |
+| --- | --- | --- |
+| Latency | positive: completes light-load measurement and records p50/p90/p95/p99, min/max, error rate, and baseline response size. | negative: rejects missing request URL, unsafe timeout, or impossible percentile/result-retention settings. |
+| RPS / throughput | positive: reaches or reports target/discovered sustainable requests per second with latency and failure summaries. | negative: rejects target RPS, duration, or in-flight settings that exceed local safety caps. |
+| Concurrency | positive: runs fixed virtual users and reports latency/error rate by user count with per-user progress. | negative: rejects virtual-user counts above the configured concurrency cap or zero/negative users. |
+| Stress | positive: steps or adapts pressure until saturation and captures the first failing threshold. | negative: rejects unbounded pressure growth or missing stop conditions. |
+| Spike | positive: applies a sudden jump, records peak errors, recovery time, and post-spike stability. | negative: rejects spike profiles with unsafe jump size, missing recovery window, or duration overflow. |
+| Soak | positive: runs steady load with rolling latency/error drift and degradation indicators. | negative: rejects long-duration runs above the local duration cap or result retention that would exceed storage limits. |
+| Ramp | positive: gradually increases load and marks thresholds where latency or errors rise. | negative: rejects malformed ramp steps, descending/overlapping phases where unsupported, or schedules beyond safety limits. |
+
+Import/export validation keeps native Performance-test export separate from collection/request export. Native Performance-test export preserves the full saved configuration and request copy. Import validates schema and safety limits, rejects malformed or unsafe payloads, and never merges imported request copies into Collections.
+
+Execution is local and bounded. The V1 engine runs the saved request copy through the existing request/script lifecycle, streams progress, supports cancellation, enforces request/concurrency/duration safety caps, aggregates latency/status/error summaries, and exports results. Distributed/cloud load execution remains deferred.
 
 ## Product Account Policy
 
@@ -528,7 +552,7 @@ HAR import/export:
 - Exports collection requests as a HAR 1.2 log with request entries, derives request cookies from all enabled `Cookie` headers, and redacts privacy-sensitive authorization/cookie headers and cookie values.
 - Non-Postman import/export support is a practical compatibility bridge and does not claim source-format-perfect round trips or full external engine parity unless explicitly stated.
 
-See `docs/COMPATIBILITY.md` for the current import/export, scripting, and load-testing compatibility matrix.
+See `docs/COMPATIBILITY.md` for the current import/export, scripting, and Performance compatibility matrix.
 
 Postman collection import supports:
 
@@ -865,11 +889,11 @@ Limitations:
 
 - CI usage can provide variables with `--var` and `--collection-var`, or run against local test workspaces directly.
 
-## Load Testing
+## Performance
 
-The legacy local Load Test implementation, renderer panel, runtime IPC channels, worker runner, policy model, result formatting, and JSON/CSV export path have been removed.
+The legacy local Load Test implementation, renderer panel, runtime IPC channels, worker runner, policy model, result formatting, and JMeter JSON/CSV export path have been removed.
 
-Planned V1 test types:
+The local V1 Performance section uses workspace-owned `performanceTests` and does not claim distributed/cloud load execution. V1 test types:
 
 - Latency
 - RPS / throughput
@@ -879,7 +903,7 @@ Planned V1 test types:
 - Soak
 - Ramp
 
-The next implementation should define a new saved test configuration model, execution engine, result model, diagnostics, exports, safety limits, and UI before exposing this section again.
+Performance tests can be created from the sidebar empty state or the top-level `New` menu, imported/exported as native PostMeter performance-test files, reordered in the sidebar, opened in dirty-aware tabs, and executed through dedicated `performance:*` IPC/preload channels.
 
 ## IPC Validation
 
@@ -997,7 +1021,7 @@ Node tests cover:
 - CLI collection execution with passing/failing exit codes and JSON/CSV report output.
 - Release manifest generation, release artifact validation, release workflow metadata, CI workflow validation, and GitHub release update checks.
 - Workspace default creation, schema `2` through `12` migration, corrupt-file recovery, settings normalization, legacy load-test policy removal, native import, Postman folder/script import, and native/Postman/OpenAPI YAML format detection.
-- Electron UI workflow smoke coverage for create/edit/save/reload/send, context menus, pane resizing, collection variables, request variables, editable examples, cookie jar capture, environment variables, Help-menu prerelease setting persistence, assertions, collection runner, runtime variable output, first-class runner tabs, runner import/edit/reorder/delete controls, and runner export-control state.
+- Electron UI workflow smoke coverage for create/edit/save/reload/send, context menus, pane resizing, collection variables, request variables, editable examples, cookie jar capture, environment variables, Help-menu prerelease setting persistence, assertions, collection runner, runtime variable output, first-class runner tabs, runner import/edit/reorder/delete controls, runner export-control state, and the Performance sidebar/pane/tab placement.
 - Electron UI regression smoke coverage for toolbar dropdowns, Help-menu update state, import/export menu options/cancellation, invalid-request error rendering, XML/HTML response formatting, mocked OAuth flow completion/failure, cookie/example/request-variable editor creation, active-host cookie filtering, assertion-template rendering, runner pre-run export state, runner empty-pane/sidebar behavior, tab context and tab-cap behavior, history clearing, sidebar drag/drop structural saves, insertion-bar feedback, and no app-account/login language.
 - Electron UI OAuth smoke coverage for mocked loopback PKCE success, custom-scheme callback success, wrong-state callback rejection without token persistence, token exchange failure, PKCE cancellation, device-code success, access denial, timeout, and cancellation.
 - Electron UI screenshot smoke coverage for request builder, context menu, cookies, auth/OAuth, response viewer, runner, and export menu states.
@@ -1016,4 +1040,4 @@ Missing tests:
 - Continue monitoring native Windows/macOS packaged OS-sandbox validation in CI and release workflows. Linux's current `bubblewrap` namespace plus dangerous-syscall seccomp policy is accepted for the current Linux claim; a stricter deny-by-default seccomp-BPF allowlist is optional future hardening.
 - Keep `npm run postman:parity:claim`, `npm run postman:docs:validate`, and a current `npm run postman:docs:live` sweep green before making or preserving the full Postman script compatibility claim.
 - Continue monitoring obscure browser/export cookie variants against the expanded real-world fixture corpus; remaining cookie work is compatibility hardening, not a known v1 release blocker.
-- Design and implement the new V1 Load Test section around the planned latency, RPS/throughput, concurrency, stress, spike, soak, and ramp test types.
+- Continue hardening local V1 Performance result presentation, pacing fidelity, and real-world workload fixtures around the latency, RPS/throughput, concurrency, stress, spike, soak, and ramp test types.

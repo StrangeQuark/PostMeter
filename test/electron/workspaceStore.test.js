@@ -11,7 +11,7 @@ const {
   looksLikeNativeWorkspace
 } = require('../../src/core/workspaceStore');
 
-test('creates a default schema 12 workspace when no file exists', async () => {
+test('creates a default current-schema workspace when no file exists', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-store-'));
   const workspacePath = path.join(temp, 'workspace.json');
   const store = new WorkspaceStore(workspacePath);
@@ -93,7 +93,7 @@ test('default workspace creation does not overwrite a file that appears before p
   }
 });
 
-test('migrates schema 2 workspaces to schema 12 and creates a backup', async () => {
+test('migrates schema 2 workspaces to the current schema and creates a backup', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-store-'));
   const workspacePath = path.join(temp, 'workspace.json');
   await fs.writeFile(workspacePath, JSON.stringify({
