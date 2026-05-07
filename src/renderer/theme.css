@@ -44,6 +44,8 @@
   --mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
   --sidebar-width: 300px;
   --request-height: 52%;
+  --runner-editor-height: 52%;
+  --performance-editor-height: max-content;
 }
 
 :root[data-theme="dark"] {

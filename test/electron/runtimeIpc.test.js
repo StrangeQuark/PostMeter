@@ -5,6 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const { registerRuntimeIpc } = require('../../electron/runtimeIpc');
+const { defaultPerformanceTest } = require('../../src/core/models');
 const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../src/core/diagnostics');
 
 test('runtime IPC registers stable runner channels', async () => {
@@ -24,11 +25,211 @@ test('runtime IPC registers stable runner channels', async () => {
   });
 
   assert.deepEqual([...handlers.keys()].sort(), [
+    'performance:cancel',
+    'performance:export',
+    'performance:exportResult',
+    'performance:import',
+    'performance:start',
     'runner:cancel',
     'runner:export',
     'runner:start'
   ]);
   assert.equal(await handlers.get('runner:cancel')(null, 'runner-id'), false);
+});
+
+test('runtime IPC starts performance runs with progress, diagnostics, and allowed environment mutation', async () => {
+  const handlers = new Map();
+  const progressMessages = [];
+  const events = [];
+  const workspace = {
+    cookies: [],
+    globals: [],
+    settings: { sandbox: { fileBindings: [], packageCache: [], trustedCapabilities: {} } },
+    environments: [{
+      id: 'env-1',
+      name: 'Env',
+      variables: [{ enabled: true, key: 'token', value: 'base' }]
+    }]
+  };
+  registerRuntimeIpc({
+    dialog: { showSaveDialog: async () => ({ canceled: true }) },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => workspace,
+    getWorkspaceId: () => 'workspace-1',
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    },
+    mutateWorkspace: async (mutator) => {
+      await mutator(workspace);
+      return workspace;
+    },
+    recordDiagnosticEvent: async (event) => {
+      events.push(event);
+    },
+    runPerformanceTest: async (performanceTest, environment, options) => {
+      options.onProgress({
+        completedRequests: 1,
+        totalRequests: 1,
+        activeRequests: 0,
+        requestId: performanceTest.request.id,
+        requestName: performanceTest.request.name,
+        passed: true,
+        durationMillis: 14
+      });
+      return {
+        id: 'perf-result-1',
+        performanceTestId: performanceTest.id,
+        performanceTestName: performanceTest.name,
+        type: performanceTest.type,
+        environmentId: environment.id,
+        environmentMutationAllowed: true,
+        totalRequests: 1,
+        completedRequests: 1,
+        successfulRequests: 1,
+        failedRequests: 0,
+        passed: true,
+        cancelled: false,
+        startedAt: '2026-05-06T00:00:00.000Z',
+        completedAt: '2026-05-06T00:00:01.000Z',
+        durationMillis: 14,
+        config: performanceTest.config,
+        safetyLimits: performanceTest.safetyLimits,
+        summary: { requestsPerSecond: 1, statusCodes: { 200: 1 } },
+        samples: [{
+          iteration: 1,
+          requestId: performanceTest.request.id,
+          requestName: performanceTest.request.name,
+          startedAt: '2026-05-06T00:00:00.000Z',
+          statusCode: 200,
+          durationMillis: 14,
+          passed: true,
+          error: ''
+        }],
+        environment: {
+          id: 'env-1',
+          name: 'Env',
+          variables: [{ enabled: true, key: 'token', value: 'runtime' }]
+        },
+        mutatedEnvironment: {
+          id: 'env-1',
+          name: 'Env',
+          variables: [{ enabled: true, key: 'token', value: 'runtime' }]
+        },
+        cookies: []
+      };
+    },
+    saveWorkspace: async (nextWorkspace) => nextWorkspace,
+    setWorkspace: () => {}
+  });
+
+  const performanceTest = defaultPerformanceTest({
+    id: 'perf-1',
+    name: 'Latency',
+    type: 'latency',
+    request: { id: 'request-1', name: 'Target', method: 'GET', url: 'https://example.test' },
+    allowEnvironmentMutation: true,
+    environmentId: 'env-1',
+    config: { iterations: 1 },
+    safetyLimits: { maxTotalRequests: 1, maxConcurrency: 1, maxDurationSeconds: 60 }
+  });
+  const result = await handlers.get('performance:start')({
+    sender: {
+      isDestroyed: () => false,
+      send(channel, payload) {
+        progressMessages.push({ channel, payload });
+      }
+    }
+  }, 'performance-run-1', performanceTest, workspace.environments[0]);
+
+  assert.equal(result.passed, true);
+  assert.equal(result.samples[0].statusCode, 200);
+  assert.equal(progressMessages[0].channel, 'performance:progress');
+  assert.equal(progressMessages[0].payload.id, 'performance-run-1');
+  assert.equal(workspace.environments[0].variables[0].value, 'runtime');
+  assert.deepEqual(events.map((event) => event.type), ['performance.start.completed']);
+});
+
+test('runtime IPC keeps performance environment mutations temporary unless the result explicitly allows persistence', async () => {
+  const handlers = new Map();
+  const workspace = {
+    cookies: [],
+    globals: [],
+    settings: { sandbox: { fileBindings: [], packageCache: [], trustedCapabilities: {} } },
+    environments: [{
+      id: 'env-1',
+      name: 'Env',
+      variables: [{ enabled: true, key: 'token', value: 'base' }]
+    }]
+  };
+  registerRuntimeIpc({
+    dialog: { showSaveDialog: async () => ({ canceled: true }) },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => workspace,
+    getWorkspaceId: () => 'workspace-1',
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    },
+    mutateWorkspace: async (mutator) => {
+      await mutator(workspace);
+      return workspace;
+    },
+    runPerformanceTest: async (performanceTest, environment) => ({
+      id: 'perf-result-2',
+      performanceTestId: performanceTest.id,
+      performanceTestName: performanceTest.name,
+      type: performanceTest.type,
+      environmentId: environment.id,
+      environmentMutationAllowed: false,
+      totalRequests: 1,
+      completedRequests: 1,
+      successfulRequests: 1,
+      failedRequests: 0,
+      passed: true,
+      cancelled: false,
+      startedAt: '2026-05-06T00:00:00.000Z',
+      completedAt: '2026-05-06T00:00:01.000Z',
+      durationMillis: 8,
+      config: performanceTest.config,
+      safetyLimits: performanceTest.safetyLimits,
+      summary: {},
+      samples: [],
+      environment: {
+        id: 'env-1',
+        name: 'Env',
+        variables: [{ enabled: true, key: 'token', value: 'temporary' }]
+      },
+      cookies: []
+    }),
+    saveWorkspace: async (nextWorkspace) => nextWorkspace,
+    setWorkspace: () => {}
+  });
+
+  const performanceTest = defaultPerformanceTest({
+    id: 'perf-2',
+    name: 'Temporary',
+    type: 'concurrency',
+    request: { id: 'request-1', name: 'Target', method: 'GET', url: 'https://example.test' },
+    allowEnvironmentMutation: false,
+    environmentId: 'env-1',
+    config: { iterations: 1, concurrency: 1 },
+    safetyLimits: { maxTotalRequests: 1, maxConcurrency: 1, maxDurationSeconds: 60 }
+  });
+  const result = await handlers.get('performance:start')({
+    sender: {
+      isDestroyed: () => false,
+      send() {}
+    }
+  }, 'performance-run-2', performanceTest, workspace.environments[0]);
+
+  assert.equal(result.environment.variables[0].value, 'temporary');
+  assert.equal(result.mutatedEnvironment, undefined);
+  assert.equal(workspace.environments[0].variables[0].value, 'base');
 });
 
 test('runtime IPC emits structured diagnostic events for collection run outcomes', async () => {

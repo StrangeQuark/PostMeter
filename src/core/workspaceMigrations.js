@@ -93,6 +93,13 @@ function migrate(workspace) {
     workspace.schemaVersion = 12;
     migrated = true;
   }
+  if (schemaVersion < 13) {
+    if (!Array.isArray(workspace.performanceTests)) {
+      workspace.performanceTests = [];
+    }
+    workspace.schemaVersion = 13;
+    migrated = true;
+  }
   removeWorkspaceLoadTestPolicyFields(workspace);
   return migrated;
 }

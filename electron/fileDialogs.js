@@ -30,6 +30,25 @@ function collectionExportFilters(format) {
   ];
 }
 
+function performanceImportFilters() {
+  return [
+    { name: 'PostMeter Performance Tests', extensions: ['json'] },
+    { name: 'All Files', extensions: ['*'] }
+  ];
+}
+
+function performanceExportExtension(format) {
+  return format === 'csv' ? 'csv' : 'json';
+}
+
+function performanceExportFilters(format) {
+  const extension = performanceExportExtension(format);
+  return [
+    { name: `${String(format || 'postmeter').toUpperCase()} Performance`, extensions: [extension] },
+    { name: 'All Files', extensions: ['*'] }
+  ];
+}
+
 function safeFilename(value) {
   const filename = String(value || 'collection').trim().replace(/[^A-Za-z0-9._-]+/g, '-');
   return filename || 'collection';
@@ -67,6 +86,9 @@ module.exports = {
   collectionExportFilters,
   collectionImportFilters,
   jsonFilters,
+  performanceExportExtension,
+  performanceExportFilters,
+  performanceImportFilters,
   safeFilename,
   selectedOpenFilePath,
   selectedSaveFilePath,

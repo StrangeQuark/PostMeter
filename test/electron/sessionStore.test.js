@@ -15,6 +15,7 @@ test('session store returns defaults when no session file exists', async () => {
   assert.equal(session.selectedWorkspaceId, '');
   assert.equal(session.activeEnvironmentId, 'none');
   assert.deepEqual(session.openRequestTabs, []);
+  assert.deepEqual(session.openPerformanceTabs, []);
   assert.deepEqual(session.draftRequests, []);
 });
 
@@ -58,8 +59,9 @@ test('session store saves normalized renderer session state', async () => {
     activeRequestId: 'request-1',
     activeRunnerRequestRunnerId: 'runner-1',
     activeRunnerConfigId: 'runner-1',
-    activeSidebarPanel: 'workspaces',
-    activeMainPanel: 'workspace',
+    activePerformanceTestId: 'performance-1',
+    activeSidebarPanel: 'performance',
+    activeMainPanel: 'performance',
     activeRequestTab: 'auth',
     activeResultsTab: 'runner',
     openRequestTabs: [
@@ -103,6 +105,22 @@ test('session store saves normalized renderer session state', async () => {
         requests: [{ id: 'runner-request-1', name: 'Runner Request', method: 'post', url: 'https://runner.test' }]
       }
     }],
+    openPerformanceTabs: [{
+      key: 'performance:performance-1',
+      performanceTestId: 'performance-1',
+      dirty: true,
+      snapshot: '{"saved":true}',
+      currentState: {
+        id: 'performance-1',
+        name: 'Dirty Performance',
+        type: 'throughput',
+        request: { id: 'performance-request-1', name: 'Performance Request', method: 'post', url: 'https://performance.test' },
+        source: { sourceType: 'manual' },
+        environmentId: 'none',
+        config: { iterations: 5, concurrency: 2 },
+        safetyLimits: { maxTotalRequests: 10, maxConcurrency: 3, maxDurationSeconds: 60 }
+      }
+    }],
     draftRequests: [{
       id: 'draft-1',
       name: 'Draft',
@@ -126,14 +144,21 @@ test('session store saves normalized renderer session state', async () => {
   assert.equal(saved.activeResultsTab, 'response');
   assert.equal(saved.activeRunnerRequestRunnerId, 'runner-1');
   assert.equal(saved.activeRunnerConfigId, 'runner-1');
+  assert.equal(saved.activePerformanceTestId, 'performance-1');
+  assert.equal(saved.activeSidebarPanel, 'performance');
+  assert.equal(saved.activeMainPanel, 'performance');
   assert.equal(saved.openRunnerTabs[0].currentState.requests[0].method, 'POST');
+  assert.equal(saved.openPerformanceTabs[0].currentState.name, 'Dirty Performance');
+  assert.equal(saved.openPerformanceTabs[0].currentState.request.method, 'POST');
+  assert.equal(saved.openPerformanceTabs[0].currentState.typeSettings.throughput.config.iterations, 5);
   assert.equal(saved.draftRequests[0].method, 'PATCH');
 
   const raw = JSON.parse(await fs.readFile(sessionPath, 'utf8'));
-  assert.equal(raw.activeMainPanel, 'workspace');
+  assert.equal(raw.activeMainPanel, 'performance');
   assert.equal(raw.openRequestTabs[1].key, 'runner-request:runner-1:runner-request-1');
   assert.equal(raw.openEnvironmentTabs[0].currentState.name, 'Dirty Environment');
   assert.equal(raw.openRunnerTabs[0].currentState.name, 'Dirty Runner');
+  assert.equal(raw.openPerformanceTabs[0].currentState.name, 'Dirty Performance');
 });
 
 test('session store can synchronously save normalized renderer session state', async () => {

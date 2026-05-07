@@ -116,6 +116,18 @@ const postmeterApi = {
       ipcRenderer.on('runner:progress', listener);
       return () => ipcRenderer.removeListener('runner:progress', listener);
     }
+  },
+  performance: {
+    start: (id, performanceTest, environment) => ipcRenderer.invoke('performance:start', id, performanceTest, environment),
+    cancel: (id) => ipcRenderer.invoke('performance:cancel', id),
+    importTest: () => ipcRenderer.invoke('performance:import'),
+    exportTest: (performanceTest, format) => ipcRenderer.invoke('performance:export', performanceTest, format),
+    exportResult: (result, format) => ipcRenderer.invoke('performance:exportResult', result, format),
+    onProgress: (callback) => {
+      const listener = (_event, payload) => callback(payload);
+      ipcRenderer.on('performance:progress', listener);
+      return () => ipcRenderer.removeListener('performance:progress', listener);
+    }
   }
 };
 

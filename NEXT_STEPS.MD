@@ -35,7 +35,7 @@ PostMeter must remain a standalone local desktop application. Do not add PostMet
 
 - Moved runners into a dedicated workspace-owned section.
   - The left sidebar now includes `Runners` between `Workspaces` and `History`; the request result-panel Runner tab has been removed.
-  - Workspaces persist first-class `workspace.runners` data under schema 12, with runner-owned request copies, selected environment IDs, stop-on-failure, and environment-mutation policy.
+  - Workspaces persist first-class `workspace.runners` data under the current workspace schema, with runner-owned request copies, selected environment IDs, stop-on-failure, and environment-mutation policy.
   - Runner tabs participate in the same open-tab, dirty-close, force-close, 128-tab-limit, and session restore model as requests, environments, and workspaces.
   - Runners can be created from `New` > `Runner` or the empty Runners pane, runner requests can be added as local copies or imported from expandable collection/request selections, and Shift+click/Ctrl+click can import multiple selections.
   - Runner-owned requests open in normal request editor tabs through row `Edit`, save only that runner request copy, and can be reordered/deleted without mutating source collection requests.
@@ -45,49 +45,26 @@ PostMeter must remain a standalone local desktop application. Do not add PostMet
 - Refined desktop tab and sidebar interactions.
   - Request, environment, and workspace names are inline-editable; request/environment title edits save on Enter and stay dirty on blur, while workspace title edits save automatically.
   - Pane-local save actions replaced the old top-toolbar Save button for requests and environments, and workspace settings continue through targeted settings saves.
-  - Open tabs shrink before scrolling, expose hover/active close buttons, support tab right-click close/force-close actions, and enforce the 128-tab cap across requests, environments, workspaces, and runners.
-  - Sidebar collections, folders, requests, environments, workspaces, and runners are draggable; structural drag/drop saves only the membership/order change and leaves dirty editor drafts dirty.
+  - Open tabs shrink before scrolling, expose hover/active close buttons, support tab right-click close/force-close actions, and enforce the 128-tab cap across requests, environments, workspaces, runners, and performance tests.
+  - Sidebar collections, folders, requests, environments, workspaces, runners, and performance tests are draggable; structural drag/drop saves only the membership/order change and leaves dirty editor drafts dirty.
   - Drag placement feedback is a single highlighted insertion bar per gap.
   - The History sidebar tab has a `Clear History` context action with an irreversible-action confirmation.
+- Implemented the local Performance section.
+  - `Performance` now lives between `Runners` and `History`, persists workspace-owned `workspace.performanceTests` under schema 13, and uses dirty-aware tabs, session restore, close/force-close behavior, and the 128-tab cap.
+  - Users can create Performance tests from `New` or the empty Performance pane, import/export native Performance test files, import deep-copied collection requests, manually enter request details, choose an environment, configure safety limits, run/cancel tests, and review bounded result summaries.
+  - The seven V1 local types are `Latency`, `RPS / throughput`, `Concurrency`, `Stress`, `Spike`, `Soak`, and `Ramp`.
+  - Tests cover model normalization, import/export validation, request-copy isolation, environment copy-vs-mutate behavior, safety-cap rejection, cancellation, IPC progress/mutation behavior, renderer wiring, sidebar ordering, and tab-limit behavior.
 
 ## Highest Priority Steps
 
-1. Design and implement the new Performance section from a clean PostMeter-owned model.
-   - Rename the planned load-testing work to `Performance` throughout the product surface. The left sidebar should add `Performance` between `Runners` and `History`, and the main tab strip should support saved performance-test tabs using the same dirty-state, close, force-close, session-restore, and 128-tab-limit behavior as requests, environments, workspaces, and runners.
-   - Replace the old request result-panel Load Test concept with a first-class Performance pane. Clicking the sidebar `Performance` section with no active performance test selected should show an empty-state pane with the PostMeter mark, `CREATE A PERFORMANCE TEST`, and a `New Performance Test` button. The top toolbar `New` dropdown should also include `Performance Test`.
-   - Define and migrate the saved data model before building UI controls. A performance test should be workspace-owned, have a stable ID, name, type, request configuration, optional source metadata, selected environment ID, environment mutation policy, execution policy, safety limits, result history, and export metadata. It must persist independently from collections and runners.
-   - Support two request-entry paths. Users can import a request from Collections, or they can manually enter request details directly in the Performance pane without importing anything. Imported requests must be deep-copied into the performance test; editing headers, auth, body, scripts, variables, examples, cookies, or URL/method inside Performance must never mutate the source collection request.
-   - Add a Performance request editor surface that reuses the mature request editor controls where practical, but stores changes only in the performance-test request copy. Saving a performance test should save the test configuration and its request copy only; it should not save or clear dirty collection request tabs.
-   - Add an `Import Request` flow for Performance that opens an expandable collection/request picker. It should show collections first, expand requests on collection click, support selecting a single request for V1, and be designed so multi-select can be added later without changing the data model. Include clear copy that imported requests become independent performance-test copies.
-   - Implement first-class saved performance tests in the sidebar list. Users should be able to create, rename, duplicate, delete, reorder, open, close, and save performance tests. Reordering should save only the performance-test ordering, not dirty edits inside an open performance-test tab.
-   - Define the seven V1 performance test types as explicit modes, not as one overloaded advanced form:
-     - `Latency`: light-load measurement of p50/p90/p95/p99, min/max, error rate, and baseline response size.
-     - `RPS / throughput`: target or discover sustainable requests per second, achieved RPS, latency at target, and failures.
-     - `Concurrency`: fixed virtual-user count, latency/error rate by virtual users, and per-user progress.
-     - `Stress`: stepped or adaptive pressure until saturation/breaking point, with the first failing threshold captured.
-     - `Spike`: sudden jump and recovery profile, including peak errors, recovery time, and post-spike stability.
-     - `Soak`: long-duration steady load, latency drift, error drift, memory-like degradation signals, and rolling windows.
-     - `Ramp`: gradual load increase with threshold markers where latency or errors rise.
-   - For each test type, design a compact mode-specific configuration panel with strong defaults, validation, and tooltips. Shared controls should include duration, warm-up, request timeout, max requests, concurrency caps, target RPS where applicable, stop conditions, retry policy, cookie behavior, redirect behavior, TLS/proxy behavior, and result-retention policy.
-   - Define environment handling explicitly. Performance tests should select an environment independently from the active global environment. Add an `Allow performance test to modify environment` setting. When disabled, scripts can mutate a temporary environment copy for the duration of the run, but the saved environment must remain unchanged.
-   - Decide script behavior deliberately. Pre-request and post-request scripts should run through the existing sandbox lifecycle, with clear policy for per-iteration execution, shared variables between iterations, temporary environment mutation, vault prompts, package review/fetch, diagnostics, cancellation, and script failures. Do not silently inherit runner behavior without tests documenting the contract.
-   - Build a new execution engine rather than reviving the removed Load Test runner. The engine should own scheduling, pacing, virtual-user state, cancellation, backpressure, result aggregation, streaming progress events, memory limits, and bounded result samples. It should use the existing brokered HTTP sender and script lifecycle where appropriate.
-   - Keep local safety limits mandatory. Cap concurrent workers, in-flight requests, result sample storage, response-body capture, console output, visualizer output, diagnostics payloads, export size, and run duration. Oversized or unsafe configurations should fail validation before execution.
-   - Design result panes before implementation. Results should expose a run summary, timeline, distribution chart/table, status-code/error breakdown, per-phase details, sampled requests/responses, script assertion output, and raw export preview. Each test type should highlight its core output without hiding shared diagnostics.
-   - Add import/export for performance tests. Native PostMeter performance-test export should preserve the full saved configuration and request copy. Collection/request exports should remain separate from performance-test exports. Import should validate schema/version, reject malformed or unsafe payloads, and never merge imported performance-test request copies into Collections unless the user explicitly creates a collection request later.
-   - Update workspace schemas and migrations. Add performance tests to default workspaces, normalize old/malformed performance-test payloads, preserve unknown future schema failure behavior, and make native workspace import/export round-trip performance tests without leaking local secrets or vault state.
-   - Update IPC and preload surfaces with dedicated performance channels. Validate payloads with shared schemas, sanitize errors, keep renderer APIs least-privilege, and include source-owned matrix rows for new channels where required.
-   - Update documentation and release matrices. `README.md`, `docs/TECH_SPECS.md`, `docs/ARCHITECTURE.md`, `docs/COMPATIBILITY.md`, `docs/RELEASE_READINESS.md`, diagnostics/privacy docs, UX/accessibility matrix, workspace durability matrix, Electron security matrix, and production readiness matrix should describe Performance accurately without overclaiming distributed/cloud load execution.
-   - Add rigorous test coverage before considering the feature complete. Cover model normalization, workspace migration, import/export round trips, request-copy isolation from Collections, manual request entry, environment copy-vs-mutate behavior, script lifecycle, cancellation, validation failures, result aggregation, safety caps, IPC schema rejection, diagnostics redaction, UI empty state, toolbar creation, sidebar ordering, dirty-tab save/discard, and one positive/negative scenario for each of the seven performance test types.
-
-2. Prepare public beta/release candidate documentation.
+1. Prepare public beta/release candidate documentation.
    - Add or update `docs/SECURITY.md`, privacy notes, threat model summary, install/uninstall docs, unsigned artifact warnings, known limitations, compatibility matrix links, OAuth certification docs, diagnostics docs, and support channels.
    - Create a release checklist with separate beta, release-candidate, and stable sections. Each section must name required commands, native GitHub Actions runner jobs, artifact validations, OAuth certification status, signing/notarization status, docs checks, and known waivers.
    - Add a Mac manual QA checklist for the later maintainer-owned Mac pass. Until then, `macos-latest` GitHub Actions validation is the required pre-production evidence, not a substitute for final manual production signoff.
    - Add an optional Windows manual QA checklist for the maintainer's Windows machine, while keeping `windows-latest` GitHub Actions validation as the required pre-production evidence.
    - Make release notes templates call out security-sensitive changes, sandbox changes, compatibility changes, migration notes, signing/notarization status, native-runner validation results, and known issues.
    - Document the unsigned-release path and the signed/notarized-release path separately. Signing and notarization stay blocked until maintainer-controlled certificates are available.
-   - Ensure public docs do not overclaim: Postman script parity is claim-gated for the tracked target, platform OS sandbox coverage is tracked separately, the legacy Load Test implementation has been removed pending the V1 Performance redesign, and JMeter import/export/execution is not supported.
+   - Ensure public docs do not overclaim: Postman script parity is claim-gated for the tracked target, platform OS sandbox coverage is tracked separately, local Performance remains desktop-bounded, and JMeter import/export/execution is not supported.
 
 ## Blocked External Validation
 
@@ -131,7 +108,7 @@ These are production-readiness items that cannot be fully proven by local Linux 
 - IPC validation uses shared schema metadata for common fields, update/external payloads, file-operation results, OAuth progress, runner config/progress, and result payloads, but some complex validators are still partly handwritten rather than fully generated.
 - Signing/notarization remains incomplete; unsigned GitHub Release artifact publishing is configured.
 - In-app update checks can open GitHub Releases, but PostMeter does not yet auto-download or auto-install updates.
-- The legacy Load Test implementation is removed; the new seven-type V1 Performance model still needs implementation.
+- The legacy Load Test implementation is removed; the seven-type local V1 Performance model is implemented and should continue receiving result-presentation and real-world workload hardening.
 
 ## Next Iteration Starting Point
 

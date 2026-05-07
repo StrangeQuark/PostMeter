@@ -29,6 +29,18 @@ test('renderer session persistence serializes active tabs, drafts, and dirty tab
         environmentId: 'none',
         requests: [{ id: 'runner-request-1', name: 'Runner Request', method: 'GET', url: 'https://runner.test' }]
       }
+    ],
+    performanceTests: [
+      {
+        id: 'performance-1',
+        name: 'Dirty Performance',
+        type: 'throughput',
+        request: { id: 'performance-request-1', name: 'Performance Request', method: 'GET', url: 'https://performance.test' },
+        source: { sourceType: 'manual' },
+        environmentId: 'none',
+        config: { iterations: 3 },
+        safetyLimits: { maxTotalRequests: 10, maxConcurrency: 2, maxDurationSeconds: 60 }
+      }
     ]
   };
   state.draftRequests.set('draft-1', { id: 'draft-1', name: 'Draft Request', method: 'GET', url: '' });
@@ -70,6 +82,14 @@ test('renderer session persistence serializes active tabs, drafts, and dirty tab
       snapshot: '{"saved":true}'
     }
   ];
+  state.openPerformanceTabs = [
+    {
+      key: 'performance:performance-1',
+      performanceTestId: 'performance-1',
+      dirty: true,
+      snapshot: '{"saved":true}'
+    }
+  ];
 
   const doc = {
     querySelector(selector) {
@@ -100,6 +120,7 @@ test('renderer session persistence serializes active tabs, drafts, and dirty tab
   assert.equal(session.openRequestTabs[1].currentState, null);
   assert.equal(session.openEnvironmentTabs[0].currentState.name, 'Dirty Environment');
   assert.equal(session.openRunnerTabs[0].currentState.name, 'Dirty Runner');
+  assert.equal(session.openPerformanceTabs[0].currentState.name, 'Dirty Performance');
   assert.equal(session.draftRequests.length, 1);
 });
 
@@ -618,6 +639,88 @@ test('renderer session persistence restores dirty runner tabs and created-unsave
   assert.equal(restored.activeResultsTab, 'response');
 });
 
+test('renderer session persistence restores dirty performance tabs and created-unsaved performance tests', () => {
+  const state = createRendererState();
+  state.workspace = {
+    collections: [],
+    environments: [],
+    performanceTests: [
+      {
+        id: 'performance-1',
+        name: 'Saved Performance',
+        type: 'latency',
+        request: { id: 'performance-request-1', name: 'Performance Request', method: 'GET', url: 'https://saved.test' },
+        source: { sourceType: 'manual' },
+        environmentId: 'none',
+        config: { iterations: 1 },
+        safetyLimits: { maxTotalRequests: 10, maxConcurrency: 2, maxDurationSeconds: 60 }
+      }
+    ]
+  };
+
+  const restored = restoreRendererSession({
+    state,
+    session: {
+      activeWorkspaceId: 'Local Workspace.json',
+      selectedWorkspaceId: 'Local Workspace.json',
+      activePerformanceTestId: 'performance-2',
+      activeSidebarPanel: 'performance',
+      activeMainPanel: 'performance',
+      openPerformanceTabs: [
+        {
+          key: 'performance:performance-1',
+          performanceTestId: 'performance-1',
+          dirty: true,
+          snapshot: '{"saved":true}',
+          currentState: {
+            id: 'performance-1',
+            name: 'Dirty Performance',
+            type: 'throughput',
+            request: { id: 'performance-request-1', name: 'Performance Request', method: 'POST', url: 'https://dirty.test' },
+            source: { sourceType: 'manual' },
+            environmentId: 'none',
+            config: { iterations: 5, concurrency: 2 },
+            safetyLimits: { maxTotalRequests: 10, maxConcurrency: 3, maxDurationSeconds: 60 }
+          }
+        },
+        {
+          key: 'performance:performance-2',
+          performanceTestId: 'performance-2',
+          createdUnsaved: true,
+          dirty: true,
+          snapshot: '',
+          currentState: {
+            id: 'performance-2',
+            name: 'Unsaved Performance',
+            type: 'spike',
+            request: { id: 'performance-request-2', name: 'Performance Request', method: 'GET', url: 'https://unsaved.test' },
+            source: { sourceType: 'manual' },
+            environmentId: 'none',
+            config: { iterations: 4, concurrency: 1, spikeMultiplier: 2 },
+            safetyLimits: { maxTotalRequests: 10, maxConcurrency: 3, maxDurationSeconds: 60 }
+          }
+        }
+      ]
+    },
+    workspaceListItems: () => [
+      { id: 'Local Workspace.json', name: 'Local Workspace', path: '/tmp/Local Workspace.json', current: true, deletable: false }
+    ],
+    findFolder,
+    findRequest
+  });
+
+  assert.equal(state.workspace.performanceTests[0].name, 'Dirty Performance');
+  assert.equal(state.workspace.performanceTests[0].type, 'throughput');
+  assert.equal(state.workspace.performanceTests[0].request.method, 'POST');
+  assert.equal(state.workspace.performanceTests[1].id, 'performance-2');
+  assert.equal(state.workspace.performanceTests[1].type, 'spike');
+  assert.equal(state.activePerformanceTestId, 'performance-2');
+  assert.equal(state.activeSidebarPanel, 'performance');
+  assert.equal(state.activeMainPanel, 'performance');
+  assert.deepEqual(state.openPerformanceTabs.map((tab) => tab.performanceTestId), ['performance-1', 'performance-2']);
+  assert.equal(restored.activeResultsTab, 'response');
+});
+
 test('renderer session persistence restores a closed runner tab as the empty runner pane', () => {
   const state = createRendererState();
   state.workspace = {
@@ -649,6 +752,48 @@ test('renderer session persistence restores a closed runner tab as the empty run
   assert.equal(state.activeSidebarPanel, 'runners');
   assert.equal(state.activeMainPanel, 'runner');
   assert.deepEqual(state.openRunnerTabs, []);
+});
+
+test('renderer session persistence restores a closed performance tab as the empty performance pane', () => {
+  const state = createRendererState();
+  state.workspace = {
+    collections: [],
+    environments: [],
+    performanceTests: [
+      {
+        id: 'performance-1',
+        name: 'Saved Performance',
+        type: 'latency',
+        request: { id: 'performance-request-1', name: 'Performance Request', method: 'GET', url: 'https://saved.test' },
+        source: { sourceType: 'manual' },
+        environmentId: 'none',
+        config: { iterations: 1 },
+        safetyLimits: { maxTotalRequests: 10, maxConcurrency: 2, maxDurationSeconds: 60 }
+      }
+    ]
+  };
+
+  restoreRendererSession({
+    state,
+    session: {
+      activeWorkspaceId: 'Local Workspace.json',
+      selectedWorkspaceId: 'Local Workspace.json',
+      activePerformanceTestId: 'performance-1',
+      activeSidebarPanel: 'performance',
+      activeMainPanel: 'performance',
+      openPerformanceTabs: []
+    },
+    workspaceListItems: () => [
+      { id: 'Local Workspace.json', name: 'Local Workspace', path: '/tmp/Local Workspace.json', current: true, deletable: false }
+    ],
+    findFolder,
+    findRequest
+  });
+
+  assert.equal(state.activePerformanceTestId, null);
+  assert.equal(state.activeSidebarPanel, 'performance');
+  assert.equal(state.activeMainPanel, 'performance');
+  assert.deepEqual(state.openPerformanceTabs, []);
 });
 
 test('renderer session persistence does not restore the default first request when no request tabs were open', () => {

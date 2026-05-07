@@ -20,6 +20,9 @@
     if (contentType.includes('html') || looksLikeHtml(trimmed)) {
       return formatMarkupBody(body, 'text/html');
     }
+    if (contentType.includes('form-urlencoded') || looksLikeUrlEncoded(trimmed)) {
+      return formatUrlEncodedBody(body);
+    }
     return body;
   }
 
@@ -29,6 +32,35 @@
 
   function looksLikeHtml(value) {
     return /<!doctype\s+html/i.test(value) || /^<html[\s>]/i.test(value) || /<(body|head|main|section|article|div|span|h1|p|table|form|script|style)(\s|>)/i.test(value);
+  }
+
+  function looksLikeUrlEncoded(value) {
+    const text = String(value || '').trim();
+    if (!text || /\s/.test(text) || /[{}\[\]<>]/.test(text) || !text.includes('&')) {
+      return false;
+    }
+    return text.split('&').every((part) => /^[^=&]+=[\s\S]*$/.test(part));
+  }
+
+  function formatUrlEncodedBody(body) {
+    return String(body || '')
+      .split('&')
+      .map((pair) => {
+        const [rawKey, ...rawValueParts] = pair.split('=');
+        const key = decodeUrlEncodedPart(rawKey);
+        const value = decodeUrlEncodedPart(rawValueParts.join('='));
+        return `${key}: ${value}`;
+      })
+      .join('\n');
+  }
+
+  function decodeUrlEncodedPart(value) {
+    const normalized = String(value || '').replace(/\+/g, ' ');
+    try {
+      return decodeURIComponent(normalized);
+    } catch {
+      return normalized;
+    }
   }
 
   function formatMarkupBody(body, mimeType) {
@@ -69,9 +101,11 @@
 
   global.PostMeterResponseFormatting = {
     formatBody,
+    formatUrlEncodedBody,
     formatMarkupBody,
     looksLikeHtml,
     looksLikeXml,
+    looksLikeUrlEncoded,
     prettyMarkup
   };
 })(window);

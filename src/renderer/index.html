@@ -23,6 +23,7 @@
         <button id="newFolderButton" role="menuitem">Folder</button>
         <button id="newEnvironmentMenuButton" role="menuitem">Environment</button>
         <button id="newRunnerMenuButton" role="menuitem">Runner</button>
+        <button id="newPerformanceTestMenuButton" role="menuitem">Performance Test</button>
       </div>
     </div>
     <div class="toolbar-group menu-group" aria-label="Import">
@@ -30,6 +31,7 @@
       <div id="importMenu" class="toolbar-menu" role="menu" aria-labelledby="importMenuButton" hidden>
         <button id="importWorkspaceButton" role="menuitem">Workspace</button>
         <button id="importCollectionButton" role="menuitem">Collection</button>
+        <button id="importPerformanceTestButton" role="menuitem">Performance Test</button>
       </div>
     </div>
     <div class="toolbar-group menu-group" aria-label="Export">
@@ -41,6 +43,7 @@
         <button id="exportOpenApiButton" role="menuitem">OpenAPI</button>
         <button id="exportCurlButton" role="menuitem">curl</button>
         <button id="exportHarButton" role="menuitem">HAR</button>
+        <button id="exportPerformanceTestMenuButton" role="menuitem">Performance Test</button>
       </div>
     </div>
     <div class="toolbar-group theme-control" role="group" aria-label="Theme">
@@ -61,6 +64,7 @@
         <button id="environmentsPanelTab" class="sidebar-tab" type="button" role="tab" data-sidebar-panel="environments" aria-selected="false" aria-controls="environmentsSidebarPanel">Environments</button>
         <button id="workspacesPanelTab" class="sidebar-tab" type="button" role="tab" data-sidebar-panel="workspaces" aria-selected="false" aria-controls="workspacesSidebarPanel">Workspaces</button>
         <button id="runnersPanelTab" class="sidebar-tab" type="button" role="tab" data-sidebar-panel="runners" aria-selected="false" aria-controls="runnersSidebarPanel">Runners</button>
+        <button id="performancePanelTab" class="sidebar-tab" type="button" role="tab" data-sidebar-panel="performance" aria-selected="false" aria-controls="performanceSidebarPanel">Performance</button>
         <button id="historyPanelTab" class="sidebar-tab" type="button" role="tab" data-sidebar-panel="history" aria-selected="false" aria-controls="historySidebarPanel">History</button>
       </nav>
       <div class="sidebar-content">
@@ -92,6 +96,13 @@
           <div id="runnersList" class="tree runner-list"></div>
         </section>
 
+        <section id="performanceSidebarPanel" class="sidebar-panel" role="tabpanel" aria-labelledby="performancePanelTab" data-sidebar-panel-content="performance" hidden>
+          <div class="sidebar-panel-header">
+            <h2>Performance</h2>
+          </div>
+          <div id="performanceList" class="tree performance-list"></div>
+        </section>
+
         <section id="historySidebarPanel" class="sidebar-panel" role="tabpanel" aria-labelledby="historyPanelTab" data-sidebar-panel-content="history" hidden>
           <div class="sidebar-panel-header">
             <h2>History</h2>
@@ -104,7 +115,7 @@
     <div id="mainPaneResize" class="splitter vertical" role="separator" aria-orientation="vertical" tabindex="0"></div>
 
     <section class="workspace">
-      <div id="requestTabBar" class="request-tab-bar" role="tablist" aria-label="Open requests, environments, workspaces, and runners" hidden></div>
+      <div id="requestTabBar" class="request-tab-bar" role="tablist" aria-label="Open requests, environments, workspaces, runners, and performance tests" hidden></div>
       <section id="requestEmptyPanel" class="panel request-empty-panel" hidden>
         <div class="request-empty-content">
           <div class="request-empty-icon" aria-hidden="true">
@@ -565,48 +576,60 @@
       </section>
 
       <section id="runnerMainPanel" class="panel runner-main-panel" role="tabpanel" hidden>
-        <div class="runner-main-header">
-          <div>
-            <div id="runnerMainTitle" class="runner-main-title editable-title" tabindex="0" aria-label="Runner name">Select a runner</div>
+        <div id="runnerEditorSection" class="runner-editor-section">
+          <div class="runner-main-header">
+            <div>
+              <div id="runnerMainTitle" class="runner-main-title editable-title" tabindex="0" aria-label="Runner name">Select a runner</div>
+            </div>
+            <div class="runner-actions">
+              <button id="saveRunnerButton" type="button">Save Runner</button>
+              <button id="deleteRunnerButton" type="button">Delete Runner</button>
+              <button id="runCollectionButton" type="button" class="primary">Run</button>
+              <button id="cancelRunnerButton" type="button" disabled>Cancel</button>
+              <button id="exportRunnerJsonButton" type="button" disabled>Export JSON</button>
+              <button id="exportRunnerCsvButton" type="button" disabled>Export CSV</button>
+            </div>
           </div>
-          <div class="runner-actions">
-            <button id="saveRunnerButton" type="button">Save Runner</button>
-            <button id="deleteRunnerButton" type="button">Delete Runner</button>
-            <button id="runCollectionButton" type="button" class="primary">Run</button>
-            <button id="cancelRunnerButton" type="button" disabled>Cancel</button>
-            <button id="exportRunnerJsonButton" type="button" disabled>Export JSON</button>
-            <button id="exportRunnerCsvButton" type="button" disabled>Export CSV</button>
+          <div class="runner-settings">
+            <label class="field inline">
+              <span>Environment</span>
+              <select id="runnerEnvironmentSelect"></select>
+            </label>
+            <label class="checkbox-line">
+              <input id="runnerStopOnFailure" type="checkbox">
+              <span>Stop on failure</span>
+            </label>
+            <label class="checkbox-line">
+              <input id="runnerAllowEnvironmentMutation" type="checkbox">
+              <span>Allow runner to modify environment</span>
+            </label>
           </div>
+          <div class="runner-request-actions">
+            <button id="addRunnerRequestButton" type="button" aria-haspopup="menu" aria-expanded="false">Add Request</button>
+          </div>
+          <div id="runnerRequestList" class="runner-request-list" aria-label="Runner requests"></div>
         </div>
-        <div class="runner-settings">
-          <label class="field inline">
-            <span>Environment</span>
-            <select id="runnerEnvironmentSelect"></select>
-          </label>
-          <label class="checkbox-line">
-            <input id="runnerStopOnFailure" type="checkbox">
-            <span>Stop on failure</span>
-          </label>
-          <label class="checkbox-line">
-            <input id="runnerAllowEnvironmentMutation" type="checkbox">
-            <span>Allow runner to modify environment</span>
-          </label>
-        </div>
-        <div class="runner-request-actions">
-          <button id="addRunnerRequestButton" type="button" aria-haspopup="menu" aria-expanded="false">Add Request</button>
-        </div>
-        <div id="runnerRequestList" class="runner-request-list" aria-label="Runner requests"></div>
+        <div id="runnerResultsResize" class="splitter horizontal runner-results-resize" role="separator" aria-orientation="horizontal" tabindex="0"></div>
         <div id="runnerResults" class="runner-results" role="status" aria-live="polite">
           <div id="runnerResultsSummary" class="test-results-summary">No runner run yet.</div>
           <div class="runner-execution-grid">
             <section class="script-results-section runner-execution-section" aria-labelledby="runnerExecutionTitle">
               <div class="script-results-header">
-                <h3 id="runnerExecutionTitle">Execution</h3>
+                <div class="script-results-title-row">
+                  <h3 id="runnerExecutionTitle">Execution</h3>
+                  <label class="runner-execution-filter">
+                    <span>Status</span>
+                    <select id="runnerExecutionStatusFilter" aria-label="Filter runner requests by status code">
+                      <option value="all">All</option>
+                    </select>
+                  </label>
+                </div>
                 <span id="runnerExecutionSummary" class="script-results-count">No requests</span>
               </div>
               <div id="runnerExecutionList" class="runner-execution-list" aria-live="polite">
                 <p class="test-result-empty">No runner execution yet.</p>
               </div>
+              <div id="runnerExecutionPagination" class="runner-execution-pagination" hidden></div>
             </section>
             <section class="script-results-section runner-detail-section" aria-labelledby="runnerExecutionDetailsTitle">
               <div class="script-results-header">
@@ -628,6 +651,192 @@
           </div>
           <h2>Create a runner</h2>
           <button id="emptyCreateRunnerButton" type="button" class="primary">New Runner</button>
+        </div>
+      </section>
+
+      <section id="performanceMainPanel" class="panel performance-main-panel" role="tabpanel" hidden>
+        <div id="performanceEditorSection" class="performance-editor-section">
+          <div class="performance-main-header">
+            <div>
+              <div id="performanceMainTitle" class="performance-main-title editable-title" tabindex="0" aria-label="Performance test name">Select a performance test</div>
+            </div>
+            <div class="performance-actions">
+              <button id="savePerformanceTestButton" type="button">Save Performance Test</button>
+              <button id="deletePerformanceTestButton" type="button">Delete Performance Test</button>
+              <button id="cancelPerformanceTestButton" type="button" disabled>Cancel</button>
+              <button id="exportPerformanceTestButton" type="button">Export Test</button>
+            </div>
+          </div>
+          <div class="performance-request-editor">
+            <div class="request-line performance-request-line">
+              <select id="performanceMethodSelect" aria-label="Performance request method">
+                <option class="method-get">GET</option>
+                <option class="method-post">POST</option>
+                <option class="method-put">PUT</option>
+                <option class="method-patch">PATCH</option>
+                <option class="method-delete">DELETE</option>
+                <option class="method-head">HEAD</option>
+                <option class="method-options">OPTIONS</option>
+              </select>
+              <input id="performanceUrlInput" placeholder="https://api.example.com/resource" aria-label="Performance request URL">
+              <button id="runPerformanceTestButton" type="button" class="primary">Run</button>
+            </div>
+            <div class="performance-request-tools">
+              <button id="importPerformanceRequestButton" type="button">Import Request</button>
+              <div id="performanceImportSource" class="performance-import-source" aria-live="polite"></div>
+            </div>
+            <label class="field performance-body-field">
+              <span>Request Body</span>
+              <textarea id="performanceBodyInput" spellcheck="false" placeholder="Optional request body" aria-label="Performance request body" data-code-editor data-code-language="text"></textarea>
+            </label>
+          </div>
+          <div class="tabs performance-type-tabs" role="tablist" aria-label="Performance test types" data-tab-group="performance">
+            <button id="performanceLatencyTabButton" class="tab active" type="button" role="tab" data-tab-group="performance" data-tab="latency" aria-selected="true" aria-controls="latencyTab">Latency</button>
+            <button id="performanceThroughputTabButton" class="tab" type="button" role="tab" data-tab-group="performance" data-tab="throughput" aria-selected="false" aria-controls="throughputTab">RPS / Throughput</button>
+            <button id="performanceConcurrencyTabButton" class="tab" type="button" role="tab" data-tab-group="performance" data-tab="concurrency" aria-selected="false" aria-controls="concurrencyTab">Concurrency</button>
+            <button id="performanceStressTabButton" class="tab" type="button" role="tab" data-tab-group="performance" data-tab="stress" aria-selected="false" aria-controls="stressTab">Stress</button>
+            <button id="performanceSpikeTabButton" class="tab" type="button" role="tab" data-tab-group="performance" data-tab="spike" aria-selected="false" aria-controls="spikeTab">Spike</button>
+            <button id="performanceSoakTabButton" class="tab" type="button" role="tab" data-tab-group="performance" data-tab="soak" aria-selected="false" aria-controls="soakTab">Soak</button>
+            <button id="performanceRampTabButton" class="tab" type="button" role="tab" data-tab-group="performance" data-tab="ramp" aria-selected="false" aria-controls="rampTab">Ramp</button>
+          </div>
+          <div id="latencyTab" class="tab-panel performance-type-panel active" role="tabpanel" aria-labelledby="performanceLatencyTabButton">
+            <div class="performance-type-grid">
+              <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
+              <label class="field compact-number-field"><span>Iterations</span><input data-performance-config="iterations" type="number" min="1" max="100000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="100000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="86400" step="1"></label>
+              <label class="checkbox-line performance-mutation-option"><input data-performance-mutation type="checkbox"><span>Allow performance test to modify environment</span></label>
+            </div>
+          </div>
+          <div id="throughputTab" class="tab-panel performance-type-panel" role="tabpanel" aria-labelledby="performanceThroughputTabButton">
+            <div class="performance-type-grid">
+              <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
+              <label class="field compact-number-field"><span>Iterations</span><input data-performance-config="iterations" type="number" min="1" max="100000" step="1"></label>
+              <label class="field compact-number-field"><span>Concurrency</span><input data-performance-config="concurrency" type="number" min="1" max="100000" step="1"></label>
+              <label class="field compact-number-field"><span>Duration (s)</span><input data-performance-config="durationSeconds" type="number" min="0" max="86400" step="1"></label>
+              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="100000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="100000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="86400" step="1"></label>
+              <label class="checkbox-line performance-mutation-option"><input data-performance-mutation type="checkbox"><span>Allow performance test to modify environment</span></label>
+            </div>
+          </div>
+          <div id="concurrencyTab" class="tab-panel performance-type-panel" role="tabpanel" aria-labelledby="performanceConcurrencyTabButton">
+            <div class="performance-type-grid">
+              <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
+              <label class="field compact-number-field"><span>Concurrency</span><input data-performance-config="concurrency" type="number" min="1" max="100000" step="1"></label>
+              <label class="field compact-number-field"><span>Iterations</span><input data-performance-config="iterations" type="number" min="1" max="100000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="100000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="100000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="86400" step="1"></label>
+              <label class="checkbox-line performance-mutation-option"><input data-performance-mutation type="checkbox"><span>Allow performance test to modify environment</span></label>
+            </div>
+          </div>
+          <div id="stressTab" class="tab-panel performance-type-panel" role="tabpanel" aria-labelledby="performanceStressTabButton">
+            <div class="performance-type-grid">
+              <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
+              <label class="field compact-number-field"><span>Concurrency</span><input data-performance-config="concurrency" type="number" min="1" max="100000" step="1"></label>
+              <label class="field compact-number-field"><span>Iterations</span><input data-performance-config="iterations" type="number" min="1" max="100000" step="1"></label>
+              <label class="field compact-number-field"><span>Ramp Steps</span><input data-performance-config="rampSteps" type="number" min="1" max="100000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="100000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="100000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="86400" step="1"></label>
+              <label class="checkbox-line performance-mutation-option"><input data-performance-mutation type="checkbox"><span>Allow performance test to modify environment</span></label>
+            </div>
+          </div>
+          <div id="spikeTab" class="tab-panel performance-type-panel" role="tabpanel" aria-labelledby="performanceSpikeTabButton">
+            <div class="performance-type-grid">
+              <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
+              <label class="field compact-number-field"><span>Concurrency</span><input data-performance-config="concurrency" type="number" min="1" max="100000" step="1"></label>
+              <label class="field compact-number-field"><span>Spike x</span><input data-performance-config="spikeMultiplier" type="number" min="1" max="100000" step="1"></label>
+              <label class="field compact-number-field"><span>Iterations</span><input data-performance-config="iterations" type="number" min="1" max="100000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="100000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="100000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="86400" step="1"></label>
+              <label class="checkbox-line performance-mutation-option"><input data-performance-mutation type="checkbox"><span>Allow performance test to modify environment</span></label>
+            </div>
+          </div>
+          <div id="soakTab" class="tab-panel performance-type-panel" role="tabpanel" aria-labelledby="performanceSoakTabButton">
+            <div class="performance-type-grid">
+              <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
+              <label class="field compact-number-field"><span>Duration (s)</span><input data-performance-config="durationSeconds" type="number" min="0" max="86400" step="1"></label>
+              <label class="field compact-number-field"><span>Concurrency</span><input data-performance-config="concurrency" type="number" min="1" max="100000" step="1"></label>
+              <label class="field compact-number-field"><span>Iterations</span><input data-performance-config="iterations" type="number" min="1" max="100000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="100000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="100000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="86400" step="1"></label>
+              <label class="checkbox-line performance-mutation-option"><input data-performance-mutation type="checkbox"><span>Allow performance test to modify environment</span></label>
+            </div>
+          </div>
+          <div id="rampTab" class="tab-panel performance-type-panel" role="tabpanel" aria-labelledby="performanceRampTabButton">
+            <div class="performance-type-grid">
+              <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
+              <label class="field compact-number-field"><span>Ramp Steps</span><input data-performance-config="rampSteps" type="number" min="1" max="100000" step="1"></label>
+              <label class="field compact-number-field"><span>Concurrency</span><input data-performance-config="concurrency" type="number" min="1" max="100000" step="1"></label>
+              <label class="field compact-number-field"><span>Iterations</span><input data-performance-config="iterations" type="number" min="1" max="100000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="100000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="100000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="86400" step="1"></label>
+              <label class="checkbox-line performance-mutation-option"><input data-performance-mutation type="checkbox"><span>Allow performance test to modify environment</span></label>
+            </div>
+          </div>
+        </div>
+        <div id="performanceResultsResize" class="splitter horizontal performance-results-resize" role="separator" aria-orientation="horizontal" tabindex="0"></div>
+        <div id="performanceResults" class="runner-results performance-results" role="status" aria-live="polite">
+          <div class="tabs performance-output-tabs" role="tablist" aria-label="Performance output sections" data-tab-group="performanceOutput">
+            <button id="performanceOutputResultsTabButton" class="tab active" type="button" role="tab" data-tab-group="performanceOutput" data-tab="performanceOutputResults" aria-selected="true" aria-controls="performanceOutputResultsTab">Results</button>
+            <button id="performanceOutputRequestsTabButton" class="tab" type="button" role="tab" data-tab-group="performanceOutput" data-tab="performanceOutputRequests" aria-selected="false" aria-controls="performanceOutputRequestsTab">Requests</button>
+            <button id="performanceOutputGraphsTabButton" class="tab" type="button" role="tab" data-tab-group="performanceOutput" data-tab="performanceOutputGraphs" aria-selected="false" aria-controls="performanceOutputGraphsTab">Graphs</button>
+          </div>
+          <div id="performanceOutputResultsTab" class="tab-panel performance-output-panel active" role="tabpanel" aria-labelledby="performanceOutputResultsTabButton">
+            <div id="performanceResultsSummary" class="test-results-summary">No performance run yet.</div>
+            <div id="performanceRunDetails" class="runner-execution-details performance-run-details">
+              <p class="test-result-empty">No performance run yet.</p>
+            </div>
+          </div>
+          <div id="performanceOutputRequestsTab" class="tab-panel performance-output-panel" role="tabpanel" aria-labelledby="performanceOutputRequestsTabButton">
+            <div class="runner-execution-grid performance-execution-grid">
+              <section class="script-results-section runner-execution-section" aria-labelledby="performanceExecutionTitle">
+                <div class="script-results-header">
+                  <div class="script-results-title-row">
+                    <h3 id="performanceExecutionTitle">Requests</h3>
+                    <label class="runner-execution-filter">
+                      <span>Status</span>
+                      <select id="performanceExecutionStatusFilter" aria-label="Filter performance requests by status code">
+                        <option value="all">All</option>
+                      </select>
+                    </label>
+                  </div>
+                  <span id="performanceExecutionSummary" class="script-results-count">No requests</span>
+                </div>
+                <div id="performanceExecutionList" class="runner-execution-list" aria-live="polite">
+                  <p class="test-result-empty">No performance execution yet.</p>
+                </div>
+                <div id="performanceExecutionPagination" class="runner-execution-pagination" hidden></div>
+              </section>
+              <section class="script-results-section runner-detail-section" aria-labelledby="performanceExecutionDetailsTitle">
+                <div class="script-results-header">
+                  <h3 id="performanceExecutionDetailsTitle">Request details</h3>
+                  <span id="performanceExecutionDetailsStatus" class="script-results-count">No selection</span>
+                </div>
+                <div id="performanceExecutionDetails" class="runner-execution-details">
+                  <p class="test-result-empty">Select a completed request to inspect its performance details.</p>
+                </div>
+              </section>
+            </div>
+          </div>
+          <div id="performanceOutputGraphsTab" class="tab-panel performance-output-panel performance-graphs-panel" role="tabpanel" aria-labelledby="performanceOutputGraphsTabButton">
+            <p class="test-result-empty">No graphs yet.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="performanceEmptyPanel" class="panel request-empty-panel performance-empty-panel" hidden>
+        <div class="request-empty-content">
+          <div class="request-empty-icon performance-empty-icon" aria-hidden="true">
+            <img src="../../build/icon.png" alt="">
+          </div>
+          <h2>CREATE A PERFORMANCE TEST</h2>
+          <button id="emptyCreatePerformanceTestButton" type="button" class="primary">New Performance Test</button>
         </div>
       </section>
 
@@ -814,6 +1023,7 @@
   <script src="assertionModel.js"></script>
   <script src="cookieModel.js"></script>
   <script src="exampleModel.js"></script>
+  <script src="performanceTestModel.js"></script>
   <script src="codeEditor.js"></script>
   <script src="requestEditorPanels.js"></script>
   <script src="variableAutocomplete.js"></script>

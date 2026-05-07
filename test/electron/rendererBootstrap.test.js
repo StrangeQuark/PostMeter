@@ -258,6 +258,113 @@ test('renderer bootstrap binds every collection export menu button', () => {
   assert.deepEqual(calls, controls.map(([, label]) => label));
 });
 
+test('renderer bootstrap binds performance creation import export run and config controls', () => {
+  const calls = [];
+  const controlIds = [
+    'newPerformanceTestMenuButton',
+    'emptyCreatePerformanceTestButton',
+    'importPerformanceTestButton',
+    'exportPerformanceTestMenuButton',
+    'savePerformanceTestButton',
+    'deletePerformanceTestButton',
+    'runPerformanceTestButton',
+    'cancelPerformanceTestButton',
+    'exportPerformanceTestButton',
+    'importPerformanceRequestButton',
+    'performanceMethodSelect',
+    'performanceUrlInput',
+    'performanceBodyInput'
+  ];
+  const elements = new Map(controlIds.map((id) => [id, createElement({ tagName: id.endsWith('Select') ? 'SELECT' : 'INPUT' })]));
+  const performanceEnvironmentControls = [createElement({ tagName: 'SELECT' })];
+  const performanceMutationControls = [createElement({ tagName: 'INPUT' })];
+  const performanceConfigControls = Array.from({ length: 5 }, () => createElement({ tagName: 'INPUT' }));
+  const performanceSafetyControls = Array.from({ length: 3 }, () => createElement({ tagName: 'INPUT' }));
+  const performanceTab = createElement();
+  performanceTab.dataset.tabGroup = 'performance';
+  performanceTab.dataset.tab = 'spike';
+
+  bindUi({
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll(selector) {
+        if (selector === '[data-performance-environment]') {
+          return performanceEnvironmentControls;
+        }
+        if (selector === '[data-performance-mutation]') {
+          return performanceMutationControls;
+        }
+        if (selector === '[data-performance-config]') {
+          return performanceConfigControls;
+        }
+        if (selector === '[data-performance-safety]') {
+          return performanceSafetyControls;
+        }
+        if (selector === '.tab' || selector === '.tab[data-tab-group="performance"]') {
+          return [performanceTab];
+        }
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} },
+    onNewPerformanceTest: () => calls.push('new'),
+    onImportPerformanceTest: () => calls.push('import-test'),
+    onExportPerformanceTest: () => calls.push('export-test'),
+    onSavePerformanceTest: () => calls.push('save'),
+    onDeletePerformanceTest: () => calls.push('delete'),
+    onRunPerformanceTest: () => calls.push('run'),
+    onCancelPerformanceTest: () => calls.push('cancel'),
+    onImportPerformanceRequest: () => calls.push('import-request'),
+    onPerformanceConfigChange: () => calls.push('config'),
+    onPerformanceRequestChange: () => calls.push('request'),
+    onActivateTab: (group, tab) => calls.push(`${group}:${tab}`)
+  });
+
+  for (const id of [
+    'newPerformanceTestMenuButton',
+    'emptyCreatePerformanceTestButton',
+    'importPerformanceTestButton',
+    'exportPerformanceTestMenuButton',
+    'savePerformanceTestButton',
+    'deletePerformanceTestButton',
+    'runPerformanceTestButton',
+    'cancelPerformanceTestButton',
+    'exportPerformanceTestButton',
+    'importPerformanceRequestButton'
+  ]) {
+    elements.get(id).dispatch('click');
+  }
+  for (const control of [...performanceEnvironmentControls, ...performanceMutationControls]) {
+    control.dispatch('change');
+  }
+  for (const control of [...performanceConfigControls, ...performanceSafetyControls]) {
+    control.dispatch('input');
+  }
+  performanceTab.dispatch('click');
+  elements.get('performanceMethodSelect').dispatch('change');
+  elements.get('performanceUrlInput').dispatch('input');
+  elements.get('performanceBodyInput').dispatch('input');
+
+  assert.deepEqual(calls.slice(0, 10), [
+    'new',
+    'new',
+    'import-test',
+    'export-test',
+    'save',
+    'delete',
+    'run',
+    'cancel',
+    'export-test',
+    'import-request'
+  ]);
+  assert.equal(calls.filter((call) => call === 'config').length, 10);
+  assert.equal(calls.filter((call) => call === 'request').length, 3);
+  assert.ok(calls.includes('performance:spike'));
+});
+
 test('renderer bootstrap closes open toolbar menus on Tab without native dialogs', () => {
   const button = createElement();
   const menu = createElement();

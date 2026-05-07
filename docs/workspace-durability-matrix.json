@@ -118,6 +118,27 @@
       "notes": ""
     },
     {
+      "id": "workspace.performance-tests",
+      "area": "Performance tests",
+      "target": "The local V1 Performance model persists as workspace.performanceTests with schema migration, normalization, native workspace import/export round trips, request-copy isolation, safety-limit defaults, and no vault/plaintext secret leakage into Performance exports.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "docs/TECH_SPECS.md",
+        "docs/ARCHITECTURE.md",
+        "src/core/models.js",
+        "src/core/workspaceMigrations.js",
+        "src/core/performanceFormats.js"
+      ],
+      "tests": [
+        "test/electron/performanceFeatureCoverage.test.js",
+        "test/electron/performanceModel.test.js",
+        "test/electron/performanceFormats.test.js",
+        "test/electron/workspaceStore.test.js",
+        "test/electron/workspaceDurabilityPerformance.test.js"
+      ],
+      "notes": ""
+    },
+    {
       "id": "workspace.schema-migrations",
       "area": "Migrations",
       "target": "Workspace schema migrations preserve imported Postman metadata, globals, cookies, vault grants, package cache metadata, and protocol profiles.",

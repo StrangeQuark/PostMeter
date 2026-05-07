@@ -1,11 +1,12 @@
 const HTTP_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']);
 const BODY_TYPES = new Set(['NONE', 'RAW_JSON', 'RAW_TEXT']);
-const SIDEBAR_PANELS = new Set(['collections', 'environments', 'workspaces', 'runners', 'history']);
-const MAIN_PANELS = new Set(['request', 'environment', 'workspace', 'runner']);
+const SIDEBAR_PANELS = new Set(['collections', 'environments', 'workspaces', 'runners', 'performance', 'history']);
+const MAIN_PANELS = new Set(['request', 'environment', 'workspace', 'runner', 'performance']);
 const REQUEST_EDITOR_TABS = new Set(['params', 'headers', 'auth', 'cookies', 'body', 'tests', 'scripts', 'examples', 'collectionVariables']);
 const RESULTS_TABS = new Set(['response', 'responseHeaders', 'responseCookies', 'testResults', 'visualizer']);
 const SESSION_VERSION = 1;
 const MAX_OPEN_TABS = 128;
+const { performanceTestModel } = require('./models');
 
 function defaultSessionState() {
   return {
@@ -18,6 +19,7 @@ function defaultSessionState() {
     activeRequestId: '',
     activeRunnerRequestRunnerId: '',
     activeRunnerConfigId: '',
+    activePerformanceTestId: '',
     activeSidebarPanel: 'collections',
     activeMainPanel: 'request',
     activeRequestTab: 'params',
@@ -26,6 +28,7 @@ function defaultSessionState() {
     openEnvironmentTabs: [],
     openWorkspaceTabs: [],
     openRunnerTabs: [],
+    openPerformanceTabs: [],
     workspaceOrder: [],
     draftRequests: [],
     dirtyCollectionStates: [],
@@ -45,6 +48,7 @@ function normalizeSessionState(value = {}) {
     activeRequestId: normalizeId(value.activeRequestId),
     activeRunnerRequestRunnerId: normalizeId(value.activeRunnerRequestRunnerId),
     activeRunnerConfigId: normalizeId(value.activeRunnerConfigId),
+    activePerformanceTestId: normalizeId(value.activePerformanceTestId),
     activeSidebarPanel: normalizeEnum(value.activeSidebarPanel, SIDEBAR_PANELS, defaults.activeSidebarPanel),
     activeMainPanel: normalizeEnum(value.activeMainPanel, MAIN_PANELS, defaults.activeMainPanel),
     activeRequestTab: normalizeEnum(value.activeRequestTab, REQUEST_EDITOR_TABS, defaults.activeRequestTab),
@@ -53,6 +57,7 @@ function normalizeSessionState(value = {}) {
     openEnvironmentTabs: normalizeArray(value.openEnvironmentTabs, MAX_OPEN_TABS, normalizeEnvironmentTab),
     openWorkspaceTabs: normalizeArray(value.openWorkspaceTabs, MAX_OPEN_TABS, normalizeWorkspaceTab),
     openRunnerTabs: normalizeArray(value.openRunnerTabs, MAX_OPEN_TABS, normalizeRunnerTab),
+    openPerformanceTabs: normalizeArray(value.openPerformanceTabs, MAX_OPEN_TABS, normalizePerformanceTab),
     workspaceOrder: normalizeArray(value.workspaceOrder, MAX_OPEN_TABS, normalizeId).filter(Boolean),
     draftRequests: normalizeArray(value.draftRequests, MAX_OPEN_TABS, normalizeSessionRequest),
     dirtyCollectionStates: normalizeArray(value.dirtyCollectionStates, MAX_OPEN_TABS, normalizeDirtyCollectionState),
@@ -139,6 +144,24 @@ function normalizeRunnerTab(value) {
     createdUnsaved: value.createdUnsaved === true,
     snapshot: normalizeSnapshot(value.snapshot),
     currentState: normalizeSessionRunner(value.currentState)
+  };
+}
+
+function normalizePerformanceTab(value) {
+  if (!isObject(value)) {
+    return null;
+  }
+  const performanceTestId = normalizeId(value.performanceTestId);
+  if (!performanceTestId) {
+    return null;
+  }
+  return {
+    key: normalizeTabKey(value.key, `performance:${performanceTestId}`),
+    performanceTestId,
+    dirty: value.dirty === true,
+    createdUnsaved: value.createdUnsaved === true,
+    snapshot: normalizeSnapshot(value.snapshot),
+    currentState: normalizeSessionPerformanceTest(value.currentState)
   };
 }
 
@@ -232,6 +255,20 @@ function normalizeSessionRunner(value) {
     allowEnvironmentMutation: value.allowEnvironmentMutation === true,
     requests: normalizeArray(value.requests, 1000, normalizeSessionRequest)
   };
+}
+
+function normalizeSessionPerformanceTest(value) {
+  if (!isObject(value)) {
+    return null;
+  }
+  const id = normalizeId(value.id);
+  if (!id) {
+    return null;
+  }
+  return performanceTestModel({
+    ...clonePlainObject(value, {}),
+    id
+  });
 }
 
 function normalizePairs(value) {

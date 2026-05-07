@@ -91,7 +91,7 @@ Core modules must not depend on Electron or renderer globals.
 - `workspaceStore.js` owns high-level workspace orchestration and file-facing service methods.
 - `workspaceMigrations.js` owns workspace schema migration, including the schema-12 default `runners: []` migration for older workspaces.
 
-## Sidebar, Tabs, And Workspace-Owned Runners
+## Sidebar, Tabs, Workspace-Owned Runners, And Performance
 
 Desktop runners are workspace data, not request result-panel state. The renderer exposes a dedicated Runners sidebar section and runner tabs beside request, environment, and workspace tabs. Runner tabs use the same session persistence, 128-open-tab cap, dirty close prompts, and force-close behavior as the other tab types.
 
@@ -101,7 +101,13 @@ Runner request rows are editable through runner-owned request tabs. Targeted run
 
 Runtime IPC accepts first-class runner payloads on the existing `runner:start` channel. When `allowEnvironmentMutation` is disabled, the run receives a temporary environment copy and any script/extractor mutations are visible only to later requests in that run. When enabled, the Electron main process applies the mutation delta back to the selected saved environment after the run completes.
 
-Sidebar collection, request, folder, environment, workspace, and runner lists are draggable. Top-level lists reorder within their own kind; requests and folders can move within or across collections/folders. Structural drag saves are intentionally scoped: they persist the changed membership/order but preserve unrelated dirty request/environment/runner editor drafts for the tab close/save flow. Placement feedback is a single insertion bar per gap, not per row side.
+The Performance section follows the same ownership rule: Performance tests are local first-class saved performance tests under `workspace.performanceTests`, not request result-panel state and not collection-owned data. The sidebar places Performance between Runners and History, and saved performance-test tabs use the same tab cap, session restore, dirty close, force-close, save, discard, and empty-pane semantics as requests, environments, workspaces, and runners.
+
+Performance request import must deep-copy a collection request into the performance test. Editing headers, auth, body, scripts, variables, examples, cookies, URL, or method inside Performance must never mutate the source collection request. Manual request entry should create the same request-copy shape without source metadata.
+
+Performance execution is owned by core/main-process modules. The engine runs local bounded iterations through the existing request/script lifecycle, streams progress, supports cancellation, aggregates latency/status/error summaries, rejects unsafe safety-cap combinations, and keeps result samples bounded. Dedicated `performance:*` IPC/preload channels are least-privilege, schema-validated, sender-validated, and listed in the Electron security matrix. Distributed/cloud load execution remains deferred.
+
+Sidebar collection, request, folder, environment, workspace, runner, and performance-test lists are draggable. Top-level lists reorder within their own kind; requests and folders can move within or across collections/folders. Structural drag saves are intentionally scoped: they persist the changed membership/order but preserve unrelated dirty request/environment/runner/performance editor drafts for the tab close/save flow. Placement feedback is a single insertion bar per gap, not per row side.
 
 Managed workspace discovery is now filesystem-based. `WorkspaceManager` scans the workspace directory for native workspace JSON files and no longer depends on a separate manifest file for the workspace catalog or startup selection.
 

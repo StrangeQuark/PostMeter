@@ -1,9 +1,14 @@
 const {
   fieldLimit,
   hasSchemaEnumValue,
+  normalizeSchemaEnumValue,
   oneOf,
   payloadSchemas
 } = require('./payloadSchemas');
+const {
+  normalizePerformanceConfig,
+  normalizePerformanceSafetyLimits
+} = require('./models');
 const { MAX_OPEN_TABS } = require('./sessionState');
 
 const FIELD_ENUMS = payloadSchemas.enums;
@@ -15,6 +20,11 @@ const MAX_SANDBOX_PACKAGE_DEPENDENCIES = 32;
 const MAX_SANDBOX_PACKAGE_PACKAGE_DEPENDENCIES = 64;
 const MAX_SANDBOX_PACKAGE_SOURCE_BYTES = 128 * 1024;
 const MAX_VAULT_GRANT_IDS = 1000;
+const HARD_PERFORMANCE_LIMITS = Object.freeze({
+  maxTotalRequests: 1000,
+  maxConcurrency: 25,
+  maxDurationSeconds: 60 * 60
+});
 
 function assertWorkspacePayload(value, field = 'workspace') {
   object(value, field);
@@ -29,6 +39,7 @@ function assertWorkspacePayload(value, field = 'workspace') {
     globals: assertPairs,
     cookies: assertCookies,
     runners: assertRunnerArray,
+    performanceTests: assertPerformanceTestArray,
     history: assertHistory
   });
 }
@@ -44,7 +55,8 @@ function assertSessionPayload(value, field = 'session') {
     'activeFolderId',
     'activeRequestId',
     'activeRunnerRequestRunnerId',
-    'activeRunnerConfigId'
+    'activeRunnerConfigId',
+    'activePerformanceTestId'
   ]) {
     optionalString(value[name], `${field}.${name}`, LIMITS.value);
   }
@@ -60,6 +72,7 @@ function assertSessionPayload(value, field = 'session') {
   assertSessionEnvironmentTabs(value.openEnvironmentTabs || [], `${field}.openEnvironmentTabs`);
   assertSessionWorkspaceTabs(value.openWorkspaceTabs || [], `${field}.openWorkspaceTabs`);
   assertSessionRunnerTabs(value.openRunnerTabs || [], `${field}.openRunnerTabs`);
+  assertSessionPerformanceTabs(value.openPerformanceTabs || [], `${field}.openPerformanceTabs`);
   assertSessionDraftRequests(value.draftRequests || [], `${field}.draftRequests`);
   assertDirtyCollectionStates(value.dirtyCollectionStates || [], `${field}.dirtyCollectionStates`);
   if (value.dirtyCookieJarState != null) {
@@ -187,6 +200,116 @@ function assertRunnerRequestSourcePayload(value, field = 'source') {
   ]);
   if (value.folderPath != null) {
     assertStringArray(value.folderPath, `${field}.folderPath`, LIMITS.folderDepth, LIMITS.name);
+  }
+}
+
+function assertPerformanceTestPayload(value, field = 'performanceTest') {
+  assertSchemaFields('performanceTest', value, field);
+  assertNoUnexpectedFields('performanceTest', value, field, [
+    'config',
+    'request',
+    'resultsMetadata',
+    'safetyLimits',
+    'source',
+    'typeSettings'
+  ]);
+  assertRequestPayload(value.request, `${field}.request`);
+  assertPerformanceTestSourcePayload(value.source || { sourceType: 'manual' }, `${field}.source`);
+  assertPerformanceConfigPayload(value.config || {}, `${field}.config`);
+  assertPerformanceSafetyLimitsPayload(value.safetyLimits || {}, `${field}.safetyLimits`);
+  if (value.typeSettings != null) {
+    assertPerformanceTypeSettingsPayload(value.typeSettings, `${field}.typeSettings`);
+  }
+  assertPerformanceResultsMetadataPayload(value.resultsMetadata || {}, `${field}.resultsMetadata`);
+  assertPerformanceSafety(value, field);
+}
+
+function assertPerformanceTestSourcePayload(value, field = 'source') {
+  assertSchemaFields('performanceTestSource', value, field);
+  assertNoUnexpectedFields('performanceTestSource', value, field, [
+    'folderPath'
+  ]);
+  if (value.sourceType != null && !['manual', 'collection'].includes(String(value.sourceType))) {
+    fail(`${field}.sourceType must be one of: manual, collection.`);
+  }
+  if (value.folderPath != null) {
+    assertStringArray(value.folderPath, `${field}.folderPath`, LIMITS.folderDepth, LIMITS.name);
+  }
+}
+
+function assertPerformanceConfigPayload(value, field = 'config') {
+  assertSchemaFields('performanceConfig', value || {}, field);
+  assertNoUnexpectedFields('performanceConfig', value || {}, field);
+  for (const name of ['iterations', 'concurrency', 'durationSeconds', 'rampSteps', 'spikeMultiplier']) {
+    assertOptionalInteger(value?.[name], `${field}.${name}`, name === 'durationSeconds' ? 0 : 1);
+  }
+}
+
+function assertPerformanceSafetyLimitsPayload(value, field = 'safetyLimits') {
+  assertSchemaFields('performanceSafetyLimits', value || {}, field);
+  assertNoUnexpectedFields('performanceSafetyLimits', value || {}, field);
+  for (const name of ['maxTotalRequests', 'maxConcurrency', 'maxDurationSeconds']) {
+    assertOptionalInteger(value?.[name], `${field}.${name}`, 1);
+  }
+}
+
+function assertPerformanceTypeSettingsPayload(value, field = 'typeSettings') {
+  object(value || {}, field);
+  const allowedTypes = FIELD_ENUMS.performanceTestTypes || [];
+  for (const [type, setting] of Object.entries(value || {})) {
+    const settingField = `${field}.${type}`;
+    if (!allowedTypes.includes(type)) {
+      fail(`${settingField} is not an allowed performance test type setting.`);
+    }
+    object(setting, settingField);
+    assertAllowedObjectFields(setting, settingField, [
+      'allowEnvironmentMutation',
+      'config',
+      'environmentId',
+      'safetyLimits'
+    ]);
+    optionalString(setting.environmentId, `${settingField}.environmentId`, LIMITS.name);
+    optionalBoolean(setting.allowEnvironmentMutation, `${settingField}.allowEnvironmentMutation`);
+    assertPerformanceConfigPayload(setting.config || {}, `${settingField}.config`);
+    assertPerformanceSafetyLimitsPayload(setting.safetyLimits || {}, `${settingField}.safetyLimits`);
+    assertPerformanceSafety({
+      type,
+      config: setting.config,
+      safetyLimits: setting.safetyLimits
+    }, settingField);
+  }
+}
+
+function assertPerformanceResultsMetadataPayload(value, field = 'resultsMetadata') {
+  assertSchemaFields('performanceResultsMetadata', value || {}, field);
+  assertNoUnexpectedFields('performanceResultsMetadata', value || {}, field);
+  assertOptionalInteger(value?.runCount, `${field}.runCount`, 0);
+}
+
+function assertPerformanceSafety(value, field = 'performanceTest') {
+  const type = normalizeSchemaEnumValue('performanceTestTypes', value?.type, 'latency', { trim: true });
+  const config = normalizePerformanceConfig(value?.config, type);
+  const safetyLimits = normalizePerformanceSafetyLimits(value?.safetyLimits);
+  if (safetyLimits.maxTotalRequests > HARD_PERFORMANCE_LIMITS.maxTotalRequests) {
+    fail(`${field}.safetyLimits.maxTotalRequests cannot exceed ${HARD_PERFORMANCE_LIMITS.maxTotalRequests}.`);
+  }
+  if (safetyLimits.maxConcurrency > HARD_PERFORMANCE_LIMITS.maxConcurrency) {
+    fail(`${field}.safetyLimits.maxConcurrency cannot exceed ${HARD_PERFORMANCE_LIMITS.maxConcurrency}.`);
+  }
+  if (safetyLimits.maxDurationSeconds > HARD_PERFORMANCE_LIMITS.maxDurationSeconds) {
+    fail(`${field}.safetyLimits.maxDurationSeconds cannot exceed ${HARD_PERFORMANCE_LIMITS.maxDurationSeconds}.`);
+  }
+  const effectiveConcurrency = type === 'spike'
+    ? config.concurrency * config.spikeMultiplier
+    : config.concurrency;
+  if (config.iterations > safetyLimits.maxTotalRequests) {
+    fail(`${field}.config.iterations exceeds safetyLimits.maxTotalRequests.`);
+  }
+  if (effectiveConcurrency > safetyLimits.maxConcurrency) {
+    fail(`${field}.config.concurrency exceeds safetyLimits.maxConcurrency.`);
+  }
+  if (config.durationSeconds > safetyLimits.maxDurationSeconds) {
+    fail(`${field}.config.durationSeconds exceeds safetyLimits.maxDurationSeconds.`);
   }
 }
 
@@ -541,6 +664,8 @@ function assertCollectionRunResultPayload(value, field = 'result') {
         'localVariables',
         'messageScriptResults',
         'preRequestScriptResult',
+        'responseBody',
+        'responseBytes',
         'testScriptResult'
       ]);
       if (result.assertionResults != null) {
@@ -614,6 +739,120 @@ function assertRunnerConfigPayload(value, field = 'config') {
 function assertRunnerProgressPayload(value, field = 'progress') {
   assertSchemaFields('runnerProgress', value, field);
   assertNoUnexpectedFields('runnerProgress', value, field);
+}
+
+function assertPerformanceProgressPayload(value, field = 'progress') {
+  assertSchemaFields('performanceProgress', value, field);
+  assertNoUnexpectedFields('performanceProgress', value, field);
+}
+
+function assertPerformanceResultPayload(value, field = 'result') {
+  object(value, field);
+  const size = Buffer.byteLength(JSON.stringify(value), 'utf8');
+  if (size > LIMITS.resultJson) {
+    fail(`${field} is too large to export.`);
+  }
+  assertSchemaFields('performanceResult', value, field);
+  assertNoUnexpectedFields('performanceResult', value, field, [
+    'config',
+    'cookies',
+    'environment',
+    'mutatedEnvironment',
+    'safetyLimits',
+    'samples',
+    'summary'
+  ]);
+  if (value.summary != null) {
+    optionalJsonObject(value.summary, `${field}.summary`, LIMITS.body);
+  }
+  if (value.config != null) {
+    assertPerformanceConfigPayload(value.config, `${field}.config`);
+  }
+  if (value.safetyLimits != null) {
+    assertPerformanceSafetyLimitsPayload(value.safetyLimits, `${field}.safetyLimits`);
+  }
+  if (value.samples != null) {
+    array(value.samples, `${field}.samples`, LIMITS.history).forEach((sample, index) => {
+      assertPerformanceSamplePayload(sample, `${field}.samples[${index}]`);
+    });
+  }
+  if (value.environment != null) {
+    assertEnvironmentPayload(value.environment, `${field}.environment`);
+  }
+  if (value.mutatedEnvironment != null) {
+    assertEnvironmentPayload(value.mutatedEnvironment, `${field}.mutatedEnvironment`);
+  }
+  if (value.cookies != null) {
+    assertCookies(value.cookies, `${field}.cookies`);
+  }
+}
+
+function assertPerformanceSamplePayload(value, field) {
+  object(value, field);
+  assertAllowedObjectFields(value, field, [
+    'assertionResults',
+    'error',
+    'extractedVariables',
+    'iteration',
+    'localVariables',
+    'passed',
+    'preRequestScriptResult',
+    'requestId',
+    'requestName',
+    'responseBody',
+    'responseBytes',
+    'startedAt',
+    'statusCode',
+    'durationMillis',
+    'testScriptResult'
+  ]);
+  optionalNumber(value.iteration, `${field}.iteration`);
+  optionalString(value.startedAt, `${field}.startedAt`, LIMITS.name);
+  optionalString(value.requestId, `${field}.requestId`, LIMITS.name);
+  optionalString(value.requestName, `${field}.requestName`, LIMITS.name);
+  optionalNumber(value.statusCode, `${field}.statusCode`);
+  optionalNumber(value.durationMillis, `${field}.durationMillis`);
+  optionalString(value.responseBody, `${field}.responseBody`, LIMITS.value);
+  optionalNumber(value.responseBytes, `${field}.responseBytes`);
+  optionalBoolean(value.passed, `${field}.passed`);
+  optionalString(value.error, `${field}.error`, LIMITS.value);
+  if (value.assertionResults != null) {
+    array(value.assertionResults, `${field}.assertionResults`, LIMITS.pairs).forEach((assertionResult, assertionIndex) => {
+      const assertionField = `${field}.assertionResults[${assertionIndex}]`;
+      assertSchemaFields('assertionResult', assertionResult, assertionField);
+      assertNoUnexpectedFields('assertionResult', assertionResult, assertionField, [
+        'actual',
+        'assertion',
+        'expected',
+        'extractedVariable'
+      ]);
+      if (assertionResult.actual != null) {
+        optionalJsonValue(assertionResult.actual, `${assertionField}.actual`, LIMITS.value);
+      }
+      if (assertionResult.assertion != null) {
+        assertSchemaFields('assertion', assertionResult.assertion, `${assertionField}.assertion`);
+        assertNoUnexpectedFields('assertion', assertionResult.assertion, `${assertionField}.assertion`);
+      }
+      if (assertionResult.expected != null) {
+        optionalJsonValue(assertionResult.expected, `${assertionField}.expected`, LIMITS.value);
+      }
+      if (assertionResult.extractedVariable != null) {
+        assertSchemaFields('keyValue', assertionResult.extractedVariable, `${assertionField}.extractedVariable`);
+      }
+    });
+  }
+  if (value.preRequestScriptResult != null) {
+    assertScriptResult(value.preRequestScriptResult, `${field}.preRequestScriptResult`);
+  }
+  if (value.testScriptResult != null) {
+    assertScriptResult(value.testScriptResult, `${field}.testScriptResult`);
+  }
+  if (value.extractedVariables != null) {
+    assertPairs(value.extractedVariables, `${field}.extractedVariables`);
+  }
+  if (value.localVariables != null) {
+    assertPairs(value.localVariables, `${field}.localVariables`);
+  }
 }
 
 function assertResponsePayload(value, field = 'response') {
@@ -721,6 +960,12 @@ function assertFileOperationResultPayload(value, field = 'result') {
   if (value.collection != null) {
     assertCollectionPayload(value.collection, `${field}.collection`);
   }
+  if (value.performanceTest != null) {
+    assertPerformanceTestPayload(value.performanceTest, `${field}.performanceTest`);
+  }
+  if (value.performanceResult != null) {
+    assertPerformanceResultPayload(value.performanceResult, `${field}.performanceResult`);
+  }
 }
 
 function assertOAuthProgressPayload(value, field = 'progress') {
@@ -739,6 +984,14 @@ function assertExportFormat(value, field = 'format') {
 function assertCollectionExportFormat(value, field = 'format') {
   try {
     oneOf(value || 'postmeter', 'collectionExportFormats', field);
+  } catch (error) {
+    fail(error.message);
+  }
+}
+
+function assertPerformanceExportFormat(value, field = 'format') {
+  try {
+    oneOf(value || 'postmeter', 'performanceExportFormats', field);
   } catch (error) {
     fail(error.message);
   }
@@ -768,6 +1021,12 @@ function assertCollectionArray(values, field) {
 function assertRunnerArray(values, field) {
   array(values, field, LIMITS.runners).forEach((runner, index) => {
     assertRunnerPayload(runner, `${field}[${index}]`);
+  });
+}
+
+function assertPerformanceTestArray(values, field) {
+  array(values, field, LIMITS.performanceTests).forEach((performanceTest, index) => {
+    assertPerformanceTestPayload(performanceTest, `${field}[${index}]`);
   });
 }
 
@@ -869,6 +1128,21 @@ function assertSessionRunnerTabs(values, field) {
     optionalString(tab.snapshot, `${itemField}.snapshot`, LIMITS.body);
     if (tab.currentState != null) {
       assertRunnerPayload(tab.currentState, `${itemField}.currentState`);
+    }
+  });
+}
+
+function assertSessionPerformanceTabs(values, field) {
+  array(values, field, MAX_OPEN_TABS).forEach((tab, index) => {
+    const itemField = `${field}[${index}]`;
+    object(tab, itemField);
+    optionalString(tab.key, `${itemField}.key`, LIMITS.value);
+    optionalString(tab.performanceTestId, `${itemField}.performanceTestId`, LIMITS.value);
+    optionalBoolean(tab.dirty, `${itemField}.dirty`);
+    optionalBoolean(tab.createdUnsaved, `${itemField}.createdUnsaved`);
+    optionalString(tab.snapshot, `${itemField}.snapshot`, LIMITS.body);
+    if (tab.currentState != null) {
+      assertPerformanceTestPayload(tab.currentState, `${itemField}.currentState`);
     }
   });
 }
@@ -1182,6 +1456,17 @@ function optionalNumber(value, field) {
   number(value, field);
 }
 
+function assertOptionalInteger(value, field, min) {
+  if (value == null) {
+    return;
+  }
+  number(value, field);
+  const numeric = Number(value);
+  if (!Number.isInteger(numeric) || numeric < min) {
+    fail(`${field} must be an integer greater than or equal to ${min}.`);
+  }
+}
+
 function optionalBoolean(value, field) {
   if (value == null) {
     return;
@@ -1205,6 +1490,12 @@ module.exports = {
   assertExportFormat,
   assertOAuthProgressPayload,
   assertOptionalEnvironmentPayload,
+  assertPerformanceConfigPayload,
+  assertPerformanceExportFormat,
+  assertPerformanceProgressPayload,
+  assertPerformanceResultPayload,
+  assertPerformanceSafetyLimitsPayload,
+  assertPerformanceTestPayload,
   assertRunnerConfigPayload,
   assertRunnerProgressPayload,
   assertSessionPayload,

@@ -16,9 +16,15 @@ Supported:
 - Collection import/export, including desktop collection-picker export that still opens with an explicit empty-state warning when no collections exist, and native collection export defaults of `<collection-name>.json`.
 - Collections, folders, requests, assertions, scripts, auth metadata, environments, globals, history, cookies, request examples, variables, certificates, package-cache metadata, vault grant metadata, mock scripts, visualizer binding metadata, GraphQL/gRPC/protocol metadata, file-binding metadata, and light/dark/system theme preference.
 
+Planned:
+
+- Local first-class saved performance tests under `workspace.performanceTests`, independent from Collections and Runners.
+- Native Performance-test import/export preserving each saved test's request copy, source metadata, selected environment ID, environment mutation policy, execution policy, safety limits, result-retention metadata, and export metadata.
+
 Known gaps:
 
 - Native files are JSON only.
+- Performance-test import/export validates native PostMeter performance-test payloads, rejects malformed or unsafe payloads, and keeps imported request copies out of Collections unless the user later creates a collection request explicitly.
 
 ## Postman Collections
 
@@ -163,15 +169,17 @@ Known gaps:
 
 - Keep `npm run postman:parity:claim`, `npm run postman:docs:validate`, and a current `npm run postman:docs:live` sweep green before preserving the tracked Postman script import claim; future Postman/Newman changes should be added as explicit matrix rows. Native OS sandbox coverage is separate platform-security work tracked by `npm run sandbox:platform:claim` and is not part of the Postman API parity claim.
 - Linux's current `bubblewrap` plus dangerous-syscall seccomp policy is accepted for the current Linux claim; a maintained deny-by-default seccomp-BPF allowlist is optional future hardening.
-## Load Testing
+## Performance
 
 Status:
 
-- The legacy local Load Test panel, runtime, result formatting, and JSON/CSV export path have been removed.
-- PostMeter does not currently claim load-test execution support while the new V1 Load Test model is being designed.
-- The planned V1 model targets seven first-class test types: latency, RPS/throughput, concurrency, stress, spike, soak, and ramp.
+- The legacy local Load Test panel, runtime, result formatting, and JMeter import/export path have been removed.
+- PostMeter supports local first-class saved Performance tests for seven explicit types: Latency, RPS / throughput, Concurrency, Stress, Spike, Soak, and Ramp.
+- Performance request import is a deep-copy operation from Collections. Performance edits do not mutate collection requests.
+- Manual request entry creates the same local request-copy shape without source collection metadata.
+- Environment behavior is copy-vs-mutate: saved environments remain unchanged unless the Performance test explicitly allows environment mutation.
 
 Known gaps:
 
-- No load-test execution UI/API is currently exposed.
-- No distributed execution.
+- Distributed/cloud load execution remains deferred.
+- JMeter import, export, conversion, or execution is not supported.

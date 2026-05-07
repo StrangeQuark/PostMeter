@@ -61,6 +61,24 @@
       "notes": ""
     },
     {
+      "id": "native-postmeter.performance-tests",
+      "area": "Native PostMeter",
+      "target": "Native workspace and Performance-test import/export preserve local workspace-owned performanceTests, including request copies, source metadata, environment mutation policy, execution config, safety limits, result metadata, and schema validation without merging request copies back into Collections or claiming JMeter/distributed load compatibility.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "docs/COMPATIBILITY.md",
+        "docs/TECH_SPECS.md",
+        "src/core/performanceFormats.js",
+        "electron/runtimeIpc.js"
+      ],
+      "tests": [
+        "test/electron/performanceFeatureCoverage.test.js",
+        "test/electron/performanceFormats.test.js",
+        "test/electron/workspaceStore.test.js"
+      ],
+      "notes": ""
+    },
+    {
       "id": "native-postmeter.roundtrip",
       "area": "Native PostMeter",
       "target": "Native workspace round trips preserve auth, variables, examples, cookies, certificates, package/vault/mock/visualizer metadata, protocols, and file bindings.",

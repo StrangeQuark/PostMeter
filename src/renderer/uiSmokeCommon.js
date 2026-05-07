@@ -5,18 +5,30 @@
     if (params.get(options.flag) !== '1') {
       return false;
     }
+    setUiSmokeState(runtimeGlobal, options.flag, 'queued');
     const schedule = runtimeGlobal.setTimeout || setTimeout;
     schedule(() => {
+      setUiSmokeState(runtimeGlobal, options.flag, 'running');
       Promise.resolve()
         .then(() => options.run(params))
         .then(() => {
+          setUiSmokeState(runtimeGlobal, options.flag, 'passed');
           runtimeGlobal.document.title = `${options.titlePrefix}:PASS`;
         })
         .catch((error) => {
+          setUiSmokeState(runtimeGlobal, options.flag, `failed:${smokeFailureText(error)}`);
           runtimeGlobal.document.title = `${options.titlePrefix}:FAIL:${smokeFailureText(error)}`;
         });
     }, options.delayMillis ?? 50);
     return true;
+  }
+
+  function setUiSmokeState(runtimeGlobal, flag, state) {
+    const doc = runtimeGlobal.document;
+    if (!doc?.documentElement) {
+      return;
+    }
+    doc.documentElement.dataset[flag] = String(state || '');
   }
 
   function smokeFailureText(error) {

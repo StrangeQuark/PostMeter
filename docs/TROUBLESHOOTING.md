@@ -34,7 +34,7 @@ Provider error messages are redacted before display when they contain token-shap
 
 ## Workspace Recovery Files
 
-PostMeter stores managed workspaces as local JSON files. When an older supported workspace schema is loaded, PostMeter first creates a collision-resistant sibling `pre-migration.backup` file through the same atomic no-overwrite write path used by normal workspace saves, then saves the migrated schema 12 workspace.
+PostMeter stores managed workspaces as local JSON files. When an older supported workspace schema is loaded, PostMeter first creates a collision-resistant sibling `pre-migration.backup` file through the same atomic no-overwrite write path used by normal workspace saves, then saves the migrated current-schema workspace.
 
 If the active workspace JSON cannot be parsed, PostMeter moves the unreadable file through a no-overwrite file move to a collision-resistant timestamped `corrupt` sibling file, best-effort fsyncs the containing directory, creates a fresh default workspace through no-overwrite publication, and shows a recovery error. If another valid workspace appears at the active path before the recovered default can be published, PostMeter preserves that replacement instead of overwriting it. The corrupt file is kept for manual inspection or support, but PostMeter does not load it automatically.
 

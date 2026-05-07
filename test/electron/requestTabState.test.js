@@ -232,11 +232,12 @@ test('request tab state refuses tab-open checks with missing target ids', () => 
   assert.equal(tabState.canOpenEnvironmentTabFor(null), false);
   assert.equal(tabState.canOpenWorkspaceTabFor(undefined), false);
   assert.equal(tabState.canOpenRunnerTabFor(''), false);
+  assert.equal(tabState.canOpenPerformanceTabFor(''), false);
   assert.deepEqual(statuses, []);
   assert.deepEqual(notifications, []);
 });
 
-test('request tab state refuses to open environment workspace and runner tabs beyond the bounded limit', () => {
+test('request tab state refuses to open environment workspace runner and performance tabs beyond the bounded limit', () => {
   const state = createRendererState();
   const environments = Array.from({ length: MAX_OPEN_TABS + 1 }, (_value, index) => ({
     id: `environment-${index + 1}`,
@@ -248,6 +249,10 @@ test('request tab state refuses to open environment workspace and runner tabs be
     name: `Runner ${index + 1}`,
     requests: []
   }));
+  const performanceTests = Array.from({ length: MAX_OPEN_TABS + 1 }, (_value, index) => ({
+    id: `performance-${index + 1}`,
+    name: `Performance ${index + 1}`
+  }));
   const workspaceItems = Array.from({ length: MAX_OPEN_TABS + 1 }, (_value, index) => ({
     id: `Workspace ${index + 1}.json`,
     name: `Workspace ${index + 1}`
@@ -255,10 +260,12 @@ test('request tab state refuses to open environment workspace and runner tabs be
   state.workspace = {
     collections: [],
     environments,
-    runners
+    runners,
+    performanceTests
   };
   state.activeEnvironmentId = environments.at(-1).id;
   state.activeRunnerConfigId = runners.at(-1).id;
+  state.activePerformanceTestId = performanceTests.at(-1).id;
   state.selectedWorkspaceId = workspaceItems.at(-1).id;
   state.openEnvironmentTabs = environments.slice(0, MAX_OPEN_TABS).map((environment) => ({
     key: `environment:${environment.id}`,
@@ -277,6 +284,12 @@ test('request tab state refuses to open environment workspace and runner tabs be
     dirty: false,
     snapshot: JSON.stringify(runner)
   }));
+  state.openPerformanceTabs = performanceTests.slice(0, MAX_OPEN_TABS).map((performanceTest) => ({
+    key: `performance:${performanceTest.id}`,
+    performanceTestId: performanceTest.id,
+    dirty: false,
+    snapshot: JSON.stringify(performanceTest)
+  }));
   const statuses = [];
   const notifications = [];
 
@@ -284,6 +297,7 @@ test('request tab state refuses to open environment workspace and runner tabs be
     state,
     activeCollection: () => null,
     activeEnvironment: () => environments.at(-1),
+    activePerformanceTest: () => performanceTests.at(-1),
     activeRequest: () => null,
     activeRunner: () => runners.at(-1),
     activeWorkspaceItem: () => workspaceItems.at(-1),
@@ -319,9 +333,18 @@ test('request tab state refuses to open environment workspace and runner tabs be
     title: 'Open Tab Limit Reached',
     message: statuses.at(-1)
   });
+
+  assert.equal(tabState.ensureOpenPerformanceTabForActive(), null);
+  assert.equal(state.openPerformanceTabs.length, MAX_OPEN_TABS);
+  assert.equal(state.openPerformanceTabs.some((candidate) => candidate.performanceTestId === performanceTests.at(-1).id), false);
+  assert.match(statuses.at(-1), new RegExp(`Cannot open more than ${MAX_OPEN_TABS} tabs`));
+  assert.deepEqual(notifications.at(-1), {
+    title: 'Open Tab Limit Reached',
+    message: statuses.at(-1)
+  });
 });
 
-test('request tab state applies the open tab limit across request environment workspace and runner tabs', () => {
+test('request tab state applies the open tab limit across request environment workspace runner and performance tabs', () => {
   const state = createRendererState();
   const requests = Array.from({ length: MAX_OPEN_TABS }, (_value, index) => ({
     id: `request-${index + 1}`,
@@ -329,6 +352,7 @@ test('request tab state applies the open tab limit across request environment wo
   }));
   const environment = { id: 'environment-1', name: 'Environment 1', variables: [] };
   const runner = { id: 'runner-1', name: 'Runner 1', requests: [] };
+  const performanceTest = { id: 'performance-1', name: 'Performance 1' };
   const workspaceItem = { id: 'Workspace.json', name: 'Workspace' };
   state.workspace = {
     collections: [
@@ -339,10 +363,12 @@ test('request tab state applies the open tab limit across request environment wo
       }
     ],
     environments: [environment],
-    runners: [runner]
+    runners: [runner],
+    performanceTests: [performanceTest]
   };
   state.activeEnvironmentId = environment.id;
   state.activeRunnerConfigId = runner.id;
+  state.activePerformanceTestId = performanceTest.id;
   state.selectedWorkspaceId = workspaceItem.id;
   state.openRequestTabs = requests.map((request) => ({
     key: `request:collection-1:${request.id}`,
@@ -358,6 +384,7 @@ test('request tab state applies the open tab limit across request environment wo
     state,
     activeCollection: () => state.workspace.collections[0],
     activeEnvironment: () => environment,
+    activePerformanceTest: () => performanceTest,
     activeRequest: () => null,
     activeRunner: () => runner,
     activeWorkspaceItem: () => workspaceItem,
@@ -381,6 +408,10 @@ test('request tab state applies the open tab limit across request environment wo
 
   assert.equal(tabState.ensureOpenRunnerTabForActive(), null);
   assert.equal(state.openRunnerTabs.length, 0);
+  assert.match(statuses.at(-1), new RegExp(`Cannot open more than ${MAX_OPEN_TABS} tabs`));
+
+  assert.equal(tabState.ensureOpenPerformanceTabForActive(), null);
+  assert.equal(state.openPerformanceTabs.length, 0);
   assert.match(statuses.at(-1), new RegExp(`Cannot open more than ${MAX_OPEN_TABS} tabs`));
 });
 

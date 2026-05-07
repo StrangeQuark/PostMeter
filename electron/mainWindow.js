@@ -393,7 +393,13 @@ function requiredPreloadApiSurface() {
     ['runner', 'start'],
     ['runner', 'cancel'],
     ['runner', 'export'],
-    ['runner', 'onProgress']
+    ['runner', 'onProgress'],
+    ['performance', 'start'],
+    ['performance', 'cancel'],
+    ['performance', 'importTest'],
+    ['performance', 'exportTest'],
+    ['performance', 'exportResult'],
+    ['performance', 'onProgress']
   ];
 }
 
@@ -500,9 +506,29 @@ async function captureUiSmokeDomState(mainWindow) {
         var validationText = document.getElementById('validationLabel')?.textContent || '';
         var oauthText = document.getElementById('oauthProgressPanel')?.innerText || '';
         var bodyText = document.body?.innerText || '';
+        var searchParams = new URLSearchParams(location.search || '');
         return {
           title: document.title,
           url: location.href,
+          uiSmoke: {
+            workflow: {
+              enabled: searchParams.get('uiWorkflowSmoke') === '1',
+              state: document.documentElement?.dataset?.uiWorkflowSmoke || '',
+              startupStep: document.documentElement?.dataset?.uiWorkflowStartupStep || ''
+            },
+            regression: {
+              enabled: searchParams.get('uiRegressionSmoke') === '1',
+              state: document.documentElement?.dataset?.uiRegressionSmoke || ''
+            },
+            snapshot: {
+              enabled: searchParams.get('uiSnapshotSmoke') === '1',
+              state: document.documentElement?.dataset?.uiSnapshotSmoke || ''
+            },
+            oauth: {
+              enabled: searchParams.get('uiOauthSmoke') === '1',
+              state: document.documentElement?.dataset?.uiOauthSmoke || ''
+            }
+          },
           activeElement: active ? {
             id: active.id || '',
             tagName: active.tagName || '',

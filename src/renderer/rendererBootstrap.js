@@ -101,18 +101,22 @@
     bindClick(doc, 'newRequestButton', options.onNewRequest);
     bindClick(doc, 'newWorkspaceMenuButton', options.onNewWorkspace);
     bindClick(doc, 'newRunnerMenuButton', options.onNewRunner);
+    bindClick(doc, 'newPerformanceTestMenuButton', options.onNewPerformanceTest);
     bindClick(doc, 'emptyCreateRequestButton', options.onNewRequest);
     bindClick(doc, 'emptyCreateEnvironmentButton', options.onNewEnvironment);
     bindClick(doc, 'emptyCreateRunnerButton', options.onNewRunner);
+    bindClick(doc, 'emptyCreatePerformanceTestButton', options.onNewPerformanceTest);
     bindClick(doc, 'newEnvironmentMenuButton', options.onNewEnvironment);
     bindClick(doc, 'importWorkspaceButton', options.onImportWorkspace);
     bindClick(doc, 'exportWorkspaceButton', options.onExportWorkspace);
     bindClick(doc, 'importCollectionButton', options.onImportCollection);
+    bindClick(doc, 'importPerformanceTestButton', options.onImportPerformanceTest);
     bindClick(doc, 'exportCollectionButton', options.onExportCollection);
     bindClick(doc, 'exportPostmanButton', options.onExportPostman);
     bindClick(doc, 'exportOpenApiButton', options.onExportOpenApi);
     bindClick(doc, 'exportCurlButton', options.onExportCurl);
     bindClick(doc, 'exportHarButton', options.onExportHar);
+    bindClick(doc, 'exportPerformanceTestMenuButton', options.onExportPerformanceTest);
     bindClick(doc, 'sendButton', options.onSendRequest);
     bindClick(doc, 'addParamButton', options.onAddParam);
     bindClick(doc, 'addHeaderButton', options.onAddHeader);
@@ -148,6 +152,12 @@
     bindClick(doc, 'saveRunnerButton', options.onSaveRunner);
     bindClick(doc, 'deleteRunnerButton', options.onDeleteRunner);
     bindClick(doc, 'addRunnerRequestButton', options.onAddRunnerRequest);
+    bindClick(doc, 'savePerformanceTestButton', options.onSavePerformanceTest);
+    bindClick(doc, 'deletePerformanceTestButton', options.onDeletePerformanceTest);
+    bindClick(doc, 'runPerformanceTestButton', options.onRunPerformanceTest);
+    bindClick(doc, 'cancelPerformanceTestButton', options.onCancelPerformanceTest);
+    bindClick(doc, 'exportPerformanceTestButton', options.onExportPerformanceTest);
+    bindClick(doc, 'importPerformanceRequestButton', options.onImportPerformanceRequest);
     bindClick(doc, 'startPkceFlowButton', options.onStartPkceFlow);
     bindClick(doc, 'startDeviceFlowButton', options.onStartDeviceFlow);
     bindClick(doc, 'cancelOauthFlowButton', options.onCancelOauthFlow);
@@ -164,6 +174,13 @@
     });
     bindChange(doc, 'runnerStopOnFailure', options.onRunnerConfigChange);
     bindChange(doc, 'runnerAllowEnvironmentMutation', options.onRunnerConfigChange);
+    bindAll(doc, '[data-performance-environment]', 'change', options.onPerformanceConfigChange);
+    bindAll(doc, '[data-performance-mutation]', 'change', options.onPerformanceConfigChange);
+    bindAll(doc, '[data-performance-config]', 'input', options.onPerformanceConfigChange);
+    bindAll(doc, '[data-performance-safety]', 'input', options.onPerformanceConfigChange);
+    bindChange(doc, 'performanceMethodSelect', options.onPerformanceRequestChange);
+    bindInput(doc, 'performanceUrlInput', options.onPerformanceRequestChange);
+    bindInput(doc, 'performanceBodyInput', options.onPerformanceRequestChange);
     bindChange(doc, 'methodSelect', options.onMethodChange);
     bindInput(doc, 'urlInput', options.onUrlInput);
     bindChange(doc, 'bodyTypeSelect', options.onBodyTypeChange);
@@ -437,6 +454,15 @@
 
   function bindChange(doc, id, handler) {
     bindEvent(doc, id, 'change', handler);
+  }
+
+  function bindAll(doc, selector, eventName, handler) {
+    if (typeof handler !== 'function') {
+      return;
+    }
+    for (const element of doc.querySelectorAll(selector) || []) {
+      element.addEventListener(eventName, handler);
+    }
   }
 
   function bindEvent(doc, id, eventName, handler) {

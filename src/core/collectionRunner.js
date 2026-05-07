@@ -17,6 +17,8 @@ const {
 
 const MAX_PM_EXECUTION_RUN_REQUEST_DEPTH = 5;
 const MAX_PM_EXECUTION_RUN_REQUESTS_PER_COLLECTION = 50;
+const MAX_RUN_RESULT_RESPONSE_BODY_CHARS = 32768;
+const RUN_RESULT_RESPONSE_BODY_TRUNCATION_NOTICE = '\n\n[Response body truncated for runner results.]';
 
 async function runCollection(collection, environment, options = {}) {
   const send = options.sendRequest || sendRequest;
@@ -220,6 +222,8 @@ async function runCollection(collection, environment, options = {}) {
         startedAt,
         statusCode: response.statusCode,
         durationMillis: response.durationMillis,
+        responseBody: boundedRunResultResponseBody(response.body),
+        responseBytes: response.responseBytes || Buffer.byteLength(response.body || '', 'utf8'),
         passed,
         assertionResults: assertions.results,
         preRequestScriptResult: scriptedRequest.preRequestScriptResult,
@@ -592,6 +596,8 @@ function skippedResult(entry, startedAt, scriptedRequest) {
     startedAt,
     statusCode: 0,
     durationMillis: 0,
+    responseBody: '',
+    responseBytes: 0,
     passed: true,
     assertionResults: [],
     preRequestScriptResult: scriptedRequest.preRequestScriptResult,
@@ -611,6 +617,8 @@ function scriptFailureResult(entry, startedAt, preRequestScriptResult, localVari
     startedAt,
     statusCode: 0,
     durationMillis: 0,
+    responseBody: '',
+    responseBytes: 0,
     passed: false,
     assertionResults: [],
     preRequestScriptResult,
@@ -619,6 +627,15 @@ function scriptFailureResult(entry, startedAt, preRequestScriptResult, localVari
     localVariables,
     error
   };
+}
+
+function boundedRunResultResponseBody(body) {
+  const text = String(body || '');
+  if (text.length <= MAX_RUN_RESULT_RESPONSE_BODY_CHARS) {
+    return text;
+  }
+  const sliceLength = Math.max(0, MAX_RUN_RESULT_RESPONSE_BODY_CHARS - RUN_RESULT_RESPONSE_BODY_TRUNCATION_NOTICE.length);
+  return `${text.slice(0, sliceLength)}${RUN_RESULT_RESPONSE_BODY_TRUNCATION_NOTICE}`;
 }
 
 function progressEvent(completedRequests, totalRequests, result) {

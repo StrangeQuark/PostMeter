@@ -384,11 +384,35 @@ textarea.code-editor-input:placeholder-shown {
   font-size: 13px;
 }
 
+.script-results-title-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+
 .script-results-count {
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
+}
+
+.runner-execution-filter {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.runner-execution-filter select {
+  width: 92px;
+  min-height: 24px;
+  padding: 2px 6px;
+  font-size: 12px;
 }
 
 .test-result-list {

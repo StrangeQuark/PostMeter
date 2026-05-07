@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const {
   cloneRequestForRunner,
+  CURRENT_SCHEMA_VERSION,
   requestModel,
   runnerModel,
   workspaceModel
@@ -61,7 +62,7 @@ test('imports collection requests into runners without mutating source request s
   assert.equal(sourceRequest.headers[0].value, 'yes');
 });
 
-test('migrates and normalizes workspaces to include first-class runners', () => {
+test('migrates and normalizes workspaces to include first-class runners and performance tests', () => {
   const legacyWorkspace = {
     schemaVersion: 11,
     collections: [],
@@ -72,8 +73,9 @@ test('migrates and normalizes workspaces to include first-class runners', () => 
   };
 
   assert.equal(migrate(legacyWorkspace), true);
-  assert.equal(legacyWorkspace.schemaVersion, 12);
+  assert.equal(legacyWorkspace.schemaVersion, CURRENT_SCHEMA_VERSION);
   assert.deepEqual(legacyWorkspace.runners, []);
+  assert.deepEqual(legacyWorkspace.performanceTests, []);
 
   const workspace = workspaceModel({
     collections: [],
@@ -82,7 +84,8 @@ test('migrates and normalizes workspaces to include first-class runners', () => 
   });
   const normalized = normalizeWorkspace(workspace);
 
-  assert.equal(normalized.schemaVersion, 12);
+  assert.equal(normalized.schemaVersion, CURRENT_SCHEMA_VERSION);
   assert.equal(normalized.runners.length, 1);
   assert.equal(normalized.runners[0].environmentId, 'none');
+  assert.deepEqual(normalized.performanceTests, []);
 });
