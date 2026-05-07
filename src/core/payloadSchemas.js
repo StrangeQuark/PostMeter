@@ -259,13 +259,24 @@ const FIELD_SCHEMAS = {
     importedAt: { type: 'string', limit: 'name', optional: true }
   },
   performanceProgress: {
+    kind: { type: 'string', limit: 'short', optional: true },
+    phase: { type: 'string', limit: 'short', optional: true },
+    phaseLabel: { type: 'string', limit: 'short', optional: true },
+    message: { type: 'string', limit: 'value', optional: true },
+    percent: { type: 'number', optional: true },
+    phasePercent: { type: 'number', optional: true },
+    targetRequestsPerSecond: { type: 'number', optional: true },
     completedRequests: { type: 'number', optional: true },
     totalRequests: { type: 'number', optional: true },
     activeRequests: { type: 'number', optional: true },
     requestId: { type: 'string', limit: 'name', optional: true },
     requestName: { type: 'string', limit: 'name', optional: true },
     passed: { type: 'boolean', optional: true },
-    durationMillis: { type: 'number', optional: true }
+    durationMillis: { type: 'number', optional: true },
+    stageIndex: { type: 'number', optional: true },
+    stageCount: { type: 'number', optional: true },
+    pass: { type: 'number', optional: true },
+    passes: { type: 'number', optional: true }
   },
   performanceResult: {
     id: { type: 'string', limit: 'name', optional: true },

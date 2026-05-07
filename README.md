@@ -51,7 +51,7 @@ Runners let you save and replay a sequence of requests from the desktop app. The
 
 ## Performance
 
-Performance tests are saved workspace items for checking how an endpoint behaves under local load. You can create a test from scratch or import a copy of a request from Collections, choose an environment, set safety limits, run the test, and review status-code, error, latency, and request-rate summaries.
+Performance tests are saved workspace items for checking how an endpoint behaves under local load. You can create a test from scratch or import a copy of a request from Collections, choose an environment, set safety limits, run a local-machine calibration to estimate maximum sustained local RPS and a conservative planning cap, run the test, and review status-code, error, latency, and request-rate summaries.
 
 The legacy Load Test panel has been removed. Distributed/cloud load execution, JMeter import/export/execution, and hosted load agents are not part of the current production claim.
 

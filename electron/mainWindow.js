@@ -396,6 +396,8 @@ function requiredPreloadApiSurface() {
     ['runner', 'onProgress'],
     ['performance', 'start'],
     ['performance', 'cancel'],
+    ['performance', 'calibrate'],
+    ['performance', 'cancelCalibration'],
     ['performance', 'importTest'],
     ['performance', 'exportTest'],
     ['performance', 'exportResult'],

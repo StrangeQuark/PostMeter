@@ -14,6 +14,7 @@ const EXPECTED_SNAPSHOTS = [
   'response',
   'test-results',
   'runner',
+  'performance-calibration',
   'workspace-sandbox',
   'long-labels',
   'export-menu'

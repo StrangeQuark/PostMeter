@@ -99,6 +99,7 @@
         <section id="performanceSidebarPanel" class="sidebar-panel" role="tabpanel" aria-labelledby="performancePanelTab" data-sidebar-panel-content="performance" hidden>
           <div class="sidebar-panel-header">
             <h2>Performance</h2>
+            <button id="calibratePerformanceButton" type="button" class="sidebar-header-action">Calibrate</button>
           </div>
           <div id="performanceList" class="tree performance-list"></div>
         </section>
@@ -972,6 +973,20 @@
       <p id="notificationModalMessage">Notification</p>
       <div class="modal-actions">
         <button id="closeNotificationModalButton" type="button" class="primary">OK</button>
+      </div>
+    </section>
+
+    <section id="performanceCalibrationModal" class="modal performance-calibration-modal" role="dialog" aria-modal="true" aria-labelledby="performanceCalibrationTitle" aria-describedby="performanceCalibrationBody" hidden>
+      <div class="modal-title-row">
+        <h2 id="performanceCalibrationTitle">Performance calibration</h2>
+        <button id="closePerformanceCalibrationModalButton" type="button" class="modal-close-button" aria-label="Close performance calibration">X</button>
+      </div>
+      <div id="performanceCalibrationBody" class="performance-calibration-body" role="status" aria-live="polite">
+        <div class="performance-calibration-running">
+          <span class="performance-calibration-spinner" aria-hidden="true"></span>
+          <span>Running extended local calibration...</span>
+        </div>
+        <p class="performance-calibration-note">This usually finishes in about two minutes while PostMeter runs warmup, bounded target-rate probes, and short verification passes.</p>
       </div>
     </section>
 

@@ -158,6 +158,7 @@
     bindClick(doc, 'cancelPerformanceTestButton', options.onCancelPerformanceTest);
     bindClick(doc, 'exportPerformanceTestButton', options.onExportPerformanceTest);
     bindClick(doc, 'importPerformanceRequestButton', options.onImportPerformanceRequest);
+    bindClick(doc, 'calibratePerformanceButton', options.onCalibratePerformance);
     bindClick(doc, 'startPkceFlowButton', options.onStartPkceFlow);
     bindClick(doc, 'startDeviceFlowButton', options.onStartDeviceFlow);
     bindClick(doc, 'cancelOauthFlowButton', options.onCancelOauthFlow);
@@ -273,6 +274,7 @@
     bindClick(doc, 'cancelConfirmActionButton', () => options.onResolveActiveModal?.(false));
     bindClick(doc, 'confirmActionButton', () => options.onResolveActiveModal?.(true));
     bindClick(doc, 'closeNotificationModalButton', () => options.onResolveActiveModal?.(true));
+    bindClick(doc, 'closePerformanceCalibrationModalButton', options.onClosePerformanceCalibration);
     bindClick(doc, 'denyVaultPromptButton', () => options.onResolveVaultPrompt?.({ granted: false, scope: 'request' }));
     bindClick(doc, 'allowVaultPromptRequestButton', () => options.onResolveVaultPrompt?.({ granted: true, scope: 'request' }));
     bindClick(doc, 'allowVaultPromptCollectionButton', () => options.onResolveVaultPrompt?.({ granted: true, scope: 'collection' }));

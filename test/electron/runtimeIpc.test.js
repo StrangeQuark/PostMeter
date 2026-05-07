@@ -25,6 +25,8 @@ test('runtime IPC registers stable runner channels', async () => {
   });
 
   assert.deepEqual([...handlers.keys()].sort(), [
+    'performance:calibrate',
+    'performance:calibrate:cancel',
     'performance:cancel',
     'performance:export',
     'performance:exportResult',
@@ -35,6 +37,93 @@ test('runtime IPC registers stable runner channels', async () => {
     'runner:start'
   ]);
   assert.equal(await handlers.get('runner:cancel')(null, 'runner-id'), false);
+  assert.equal(await handlers.get('performance:calibrate:cancel')(null, 'calibration-id'), false);
+});
+
+test('runtime IPC runs and cancels performance calibration', async () => {
+  const handlers = new Map();
+  const events = [];
+  const progressMessages = [];
+  let capturedSignal = null;
+  const fakeEvent = {
+    sender: {
+      isDestroyed: () => false,
+      send: (channel, payload) => progressMessages.push({ channel, payload })
+    }
+  };
+  registerRuntimeIpc({
+    dialog: { showSaveDialog: async () => ({ canceled: true }) },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => ({ cookies: [] }),
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    },
+    recordDiagnosticEvent: async (event) => {
+      events.push(event);
+    },
+    runPerformanceCalibration: async ({ signal, onProgress }) => {
+      capturedSignal = signal;
+      onProgress({
+        kind: 'calibration',
+        phase: 'warmup',
+        phaseLabel: 'Warmup',
+        message: 'Unit progress',
+        percent: 10,
+        phasePercent: 50,
+        completedRequests: 1,
+        totalRequests: 2
+      });
+      return await new Promise((resolve) => {
+        signal.addEventListener('abort', () => {
+          resolve({
+            id: 'calibration-result-1',
+            startedAt: '2026-05-06T00:00:00.000Z',
+            completedAt: '2026-05-06T00:00:01.000Z',
+            durationMillis: 1000,
+            cancelled: true,
+            endpoint: '127.0.0.1',
+            summary: {
+              peakRequestsPerSecond: 10,
+              peakConcurrency: 1,
+              averageLatencyMillis: 2,
+              p95LatencyMillis: 3,
+              completedRequests: 1,
+              failedRequests: 0,
+              notes: ['cancelled']
+            },
+            stages: [{
+              name: 'Unit',
+              concurrency: 1,
+              requestedRequests: 10,
+              completedRequests: 1,
+              failedRequests: 0,
+              durationMillis: 100,
+              requestsPerSecond: 10,
+              averageLatencyMillis: 2,
+              p95LatencyMillis: 3,
+              p99LatencyMillis: 4
+            }]
+          });
+        }, { once: true });
+      });
+    },
+    saveWorkspace: async (workspace) => workspace,
+    setWorkspace: () => {}
+  });
+
+  const run = handlers.get('performance:calibrate')(fakeEvent, 'calibration-run-1');
+  assert.equal(capturedSignal.aborted, false);
+  assert.equal(await handlers.get('performance:calibrate:cancel')(null, 'calibration-run-1'), true);
+  const result = await run;
+  assert.equal(result.cancelled, true);
+  assert.equal(capturedSignal.aborted, true);
+  assert.equal(progressMessages[0].channel, 'performance:progress');
+  assert.equal(progressMessages[0].payload.id, 'calibration-run-1');
+  assert.equal(progressMessages[0].payload.progress.kind, 'calibration');
+  assert.deepEqual(events.map((event) => event.type), ['performance.calibration.completed']);
 });
 
 test('runtime IPC starts performance runs with progress, diagnostics, and allowed environment mutation', async () => {

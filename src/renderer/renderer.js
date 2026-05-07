@@ -38,6 +38,7 @@ let activeOauthFlowId = RENDERER_STATE_DEFAULTS.activeOauthFlowId;
 let activeRunnerId = RENDERER_STATE_DEFAULTS.activeRunnerId;
 let lastRunnerResult = RENDERER_STATE_DEFAULTS.lastRunnerResult;
 let activePerformanceRunId = null;
+let activePerformanceCalibrationId = null;
 let lastPerformanceResult = null;
 let selectedRunnerExecutionIndex = 0;
 let selectedPerformanceResultIndex = 0;
@@ -338,7 +339,9 @@ initializeRenderer({
     }));
     if (window.postmeter.performance?.onProgress) {
       registerCleanup(window.postmeter.performance.onProgress(({ id, progress }) => {
-        if (id === activePerformanceRunId) {
+        if (id === activePerformanceCalibrationId && progress?.kind === 'calibration') {
+          renderPerformanceCalibrationProgress(progress);
+        } else if (id === activePerformanceRunId) {
           renderPerformanceProgress(progress);
         }
       }));
@@ -438,6 +441,8 @@ function bindUi() {
     onCancelPerformanceTest: () => { void cancelPerformanceTestRun(); },
     onExportPerformanceTest: () => { void exportActivePerformanceTest(); },
     onImportPerformanceRequest: () => { void promptAndImportPerformanceRequest(); },
+    onCalibratePerformance: () => { void startPerformanceCalibration(); },
+    onClosePerformanceCalibration: closePerformanceCalibrationModal,
     onStartPkceFlow: startPkceFlow,
     onStartDeviceFlow: startDeviceFlow,
     onCancelOauthFlow: cancelOauthFlow,
@@ -1822,6 +1827,7 @@ function focusInitialModalElement(modalId) {
     textInputModal: $('textInputModal')?.dataset?.valueControl || 'textInputModalInput',
     confirmActionModal: 'cancelConfirmActionButton',
     notificationModal: 'closeNotificationModalButton',
+    performanceCalibrationModal: 'closePerformanceCalibrationModalButton',
     vaultPromptModal: 'denyVaultPromptButton'
   };
   const preferred = preferredFocusIds[modalId] ? $(preferredFocusIds[modalId]) : null;
@@ -4207,6 +4213,217 @@ function importPerformanceRequestSelection(target) {
   renderPerformanceEditor();
   setStatus('Request imported into performance test.');
   return test.request;
+}
+
+async function startPerformanceCalibration() {
+  if (activePerformanceCalibrationId) {
+    return setStatus('Performance calibration is already running.');
+  }
+  const performanceApi = window.postmeter?.performance;
+  if (!performanceApi?.calibrate) {
+    return setStatus('Performance calibration is unavailable in this runtime.');
+  }
+  const calibrationId = crypto.randomUUID();
+  activePerformanceCalibrationId = calibrationId;
+  renderPerformanceCalibrationRunning();
+  const modalClosed = showModal('performanceCalibrationModal', null).then(() => {
+    if (activePerformanceCalibrationId === calibrationId) {
+      void cancelPerformanceCalibration(calibrationId);
+    }
+  });
+  try {
+    const result = await performanceApi.calibrate(calibrationId);
+    if (activePerformanceCalibrationId !== calibrationId) {
+      await modalClosed;
+      return result;
+    }
+    activePerformanceCalibrationId = null;
+    renderPerformanceCalibrationResult(result);
+    setStatus(result?.cancelled ? 'Performance calibration cancelled.' : 'Performance calibration completed.');
+    return result;
+  } catch (error) {
+    const message = error.message || String(error);
+    if (activePerformanceCalibrationId === calibrationId) {
+      activePerformanceCalibrationId = null;
+      renderPerformanceCalibrationError(message);
+      setStatus(`Performance calibration failed: ${message}`);
+      notifyUser('Performance Calibration Failed', message);
+    }
+    return null;
+  }
+}
+
+function closePerformanceCalibrationModal() {
+  const calibrationId = activePerformanceCalibrationId;
+  if (calibrationId) {
+    void cancelPerformanceCalibration(calibrationId);
+  }
+  resolveActiveModal(null);
+}
+
+async function cancelPerformanceCalibration(calibrationId) {
+  if (activePerformanceCalibrationId === calibrationId) {
+    activePerformanceCalibrationId = null;
+  }
+  try {
+    await window.postmeter?.performance?.cancelCalibration?.(calibrationId);
+    setStatus('Performance calibration cancelled.');
+    return true;
+  } catch (error) {
+    const message = error.message || String(error);
+    setStatus(`Performance calibration cancellation failed: ${message}`);
+    return false;
+  }
+}
+
+function renderPerformanceCalibrationRunning() {
+  const body = $('performanceCalibrationBody');
+  if (!body) {
+    return;
+  }
+  body.textContent = '';
+  const row = document.createElement('div');
+  row.className = 'performance-calibration-running';
+  const spinner = document.createElement('span');
+  spinner.className = 'performance-calibration-spinner';
+  spinner.setAttribute('aria-hidden', 'true');
+  const text = document.createElement('span');
+  text.textContent = 'Running extended local calibration...';
+  row.append(spinner, text);
+  const progressWrap = document.createElement('div');
+  progressWrap.className = 'performance-calibration-progress';
+  const progressLabel = document.createElement('div');
+  progressLabel.id = 'performanceCalibrationProgressLabel';
+  progressLabel.className = 'performance-calibration-progress-label';
+  progressLabel.textContent = 'Preparing calibration...';
+  const progressBar = document.createElement('progress');
+  progressBar.id = 'performanceCalibrationProgressBar';
+  progressBar.max = 100;
+  progressBar.value = 0;
+  const progressDetail = document.createElement('div');
+  progressDetail.id = 'performanceCalibrationProgressDetail';
+  progressDetail.className = 'performance-calibration-progress-detail';
+  progressDetail.textContent = 'Starting local loopback server.';
+  progressWrap.append(progressLabel, progressBar, progressDetail);
+  const note = document.createElement('p');
+  note.className = 'performance-calibration-note';
+  note.textContent = 'This usually finishes in about two minutes while PostMeter runs warmup, bounded target-rate probes, and short verification passes.';
+  body.append(row, progressWrap, note);
+}
+
+function renderPerformanceCalibrationProgress(progress = {}) {
+  const bar = $('performanceCalibrationProgressBar');
+  const label = $('performanceCalibrationProgressLabel');
+  const detail = $('performanceCalibrationProgressDetail');
+  if (!bar || !label || !detail) {
+    return;
+  }
+  const percent = Math.max(0, Math.min(100, Number(progress.percent) || 0));
+  bar.value = percent;
+  const phaseLabel = progress.phaseLabel || 'Calibration';
+  label.textContent = `${phaseLabel} ${Math.round(percent)}%`;
+  const pieces = [];
+  if (progress.targetRequestsPerSecond) {
+    pieces.push(`${formatNumber(progress.targetRequestsPerSecond)} RPS`);
+  }
+  if (progress.stageIndex && progress.stageCount) {
+    pieces.push(`stage ${formatNumber(progress.stageIndex)} of ${formatNumber(progress.stageCount)}`);
+  }
+  if (progress.pass && progress.passes) {
+    pieces.push(`pass ${formatNumber(progress.pass)} of ${formatNumber(progress.passes)}`);
+  }
+  if (progress.completedRequests || progress.totalRequests) {
+    pieces.push(`${formatNumber(progress.completedRequests || 0)} of ${formatNumber(progress.totalRequests || 0)} requests`);
+  }
+  detail.textContent = pieces.length ? pieces.join(' | ') : (progress.message || 'Running calibration...');
+}
+
+function renderPerformanceCalibrationResult(result = {}) {
+  const body = $('performanceCalibrationBody');
+  if (!body) {
+    return;
+  }
+  body.textContent = '';
+  const summary = result.summary || {};
+  const grid = document.createElement('div');
+  grid.className = 'performance-calibration-summary';
+  grid.append(
+    calibrationMetric('Max sustained local RPS', `${formatNumber(summary.reliableTargetRequestsPerSecond)} RPS`),
+    calibrationMetric('Planning cap', `${formatNumber(summary.recommendedMaxRequestsPerSecond)} RPS`),
+    calibrationMetric('Sustained RPS', formatNumber(summary.sustainedRequestsPerSecond)),
+    calibrationMetric('Peak RPS', formatNumber(summary.peakRequestsPerSecond)),
+    calibrationMetric('Next failed target', summary.edgeUpperBoundRequestsPerSecond ? `${formatNumber(summary.edgeUpperBoundRequestsPerSecond)} RPS` : 'Not found'),
+    calibrationMetric('Measurement variation', `${formatNumber(summary.measurementVariationPercent)}%`),
+    calibrationMetric('Repeatability', `${formatNumber(summary.repeatabilityPercent)}%`),
+    calibrationMetric('Confidence', summary.confidence || 'low'),
+    calibrationMetric('P95 latency', `${formatNumber(summary.p95LatencyMillis)} ms`),
+    calibrationMetric('P95 scheduler lag', `${formatNumber(summary.p95StartLagMillis)} ms`),
+    calibrationMetric('P95 event-loop delay', `${formatNumber(summary.p95EventLoopDelayMillis)} ms`),
+    calibrationMetric('Stability', `${formatNumber(summary.stabilityPercent)}%`)
+  );
+
+  const stages = document.createElement('div');
+  stages.className = 'performance-calibration-stages';
+  for (const stage of Array.isArray(result.stages) ? result.stages : []) {
+    const row = document.createElement('div');
+    row.className = 'performance-calibration-stage';
+    if (stage.accepted === true) {
+      row.classList.add('is-accepted');
+    } else if (stage.accepted === false) {
+      row.classList.add('is-rejected');
+    }
+    const status = stage.accepted === true ? 'PASS' : 'CHECK';
+    const target = stage.targetRequestsPerSecond ? `${formatNumber(stage.targetRequestsPerSecond)} target` : `${stage.concurrency || 0} clients`;
+    const failureReasons = Array.isArray(stage.failureReasons) ? stage.failureReasons.join('; ') : '';
+    if (failureReasons) {
+      row.title = failureReasons;
+    }
+    row.append(
+      calibrationStageCell(stage.name || 'Stage', true),
+      calibrationStageCell(target),
+      calibrationStageCell(`${formatNumber(stage.requestsPerSecond)} RPS`),
+      calibrationStageCell(`lag ${formatNumber(stage.p95StartLagMillis)} ms`),
+      calibrationStageCell(`EL ${formatNumber(stage.p95EventLoopDelayMillis)} ms`),
+      calibrationStageCell(`${stage.completedRequests || 0} requests`),
+      calibrationStageCell(status)
+    );
+    stages.append(row);
+  }
+
+  const note = document.createElement('p');
+  note.className = 'performance-calibration-note';
+  const notes = Array.isArray(summary.notes) ? summary.notes : [];
+  note.textContent = notes.join(' ');
+  body.append(grid, stages, note);
+}
+
+function renderPerformanceCalibrationError(message) {
+  const body = $('performanceCalibrationBody');
+  if (!body) {
+    return;
+  }
+  body.textContent = '';
+  const text = document.createElement('p');
+  text.className = 'performance-calibration-note';
+  text.textContent = `Calibration failed: ${message}`;
+  body.append(text);
+}
+
+function calibrationMetric(label, value) {
+  const item = document.createElement('div');
+  item.className = 'performance-calibration-metric';
+  const labelElement = document.createElement('span');
+  labelElement.textContent = label;
+  const valueElement = document.createElement('strong');
+  valueElement.textContent = value;
+  item.append(labelElement, valueElement);
+  return item;
+}
+
+function calibrationStageCell(value, strong = false) {
+  const element = document.createElement(strong ? 'strong' : 'span');
+  element.textContent = String(value || '');
+  return element;
 }
 
 async function runActivePerformanceTest() {

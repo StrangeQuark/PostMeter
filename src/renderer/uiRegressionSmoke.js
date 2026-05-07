@@ -1894,6 +1894,8 @@
     const originalWorkspaceTabs = structuredClone(openWorkspaceTabs);
     const originalRunnerTabs = structuredClone(openRunnerTabs);
     const originalPerformanceTabs = structuredClone(openPerformanceTabs);
+    const originalPerformanceCalibrate = window.postmeter?.performance?.calibrate;
+    const originalPerformanceCancelCalibration = window.postmeter?.performance?.cancelCalibration;
     try {
       assertUiSmoke(!$('environmentTab'), 'Environment request tab panel should be removed from the request editor.');
       assertUiSmoke(!document.querySelector('.tab[data-tab-group="request"][data-tab="environment"]'), 'Environment should not appear in the request tab row.');
@@ -1942,6 +1944,120 @@
           assertUiSmoke($(panelId).hidden, `Clicking ${tabId} should keep ${panelId} hidden.`);
           assertUiSmoke(getComputedStyle($(panelId)).display === 'none', `Clicking ${tabId} should keep ${panelId} out of layout.`);
         }
+      }
+      if (window.postmeter?.performance) {
+        let pendingCalibrationResolve = null;
+        let startedCalibrationId = '';
+        let cancelledCalibrationId = '';
+        window.postmeter.performance.calibrate = async (calibrationId) => {
+          startedCalibrationId = calibrationId;
+          return await new Promise((resolve) => {
+            pendingCalibrationResolve = resolve;
+          });
+        };
+        window.postmeter.performance.cancelCalibration = async (calibrationId) => {
+          cancelledCalibrationId = calibrationId;
+          pendingCalibrationResolve?.({
+            id: 'smoke-cancelled-calibration',
+            startedAt: '2026-05-06T00:00:00.000Z',
+            completedAt: '2026-05-06T00:00:01.000Z',
+            durationMillis: 10,
+            cancelled: true,
+            endpoint: '127.0.0.1',
+            summary: { peakRequestsPerSecond: 0, peakConcurrency: 0, reliableTargetRequestsPerSecond: 0, sustainedRequestsPerSecond: 0, recommendedMaxRequestsPerSecond: 0, repeatabilityPercent: 0, averageLatencyMillis: 0, p95LatencyMillis: 0, p95StartLagMillis: 0, p95EventLoopDelayMillis: 0, completedRequests: 0, failedRequests: 0, notes: ['cancelled'] },
+            stages: []
+          });
+          return true;
+        };
+        $('calibratePerformanceButton').click();
+        await waitForUiSmoke(() => !$('performanceCalibrationModal').hidden, 'Performance Calibrate should open the calibration modal.', 3000, global);
+        assertUiSmoke($('performanceCalibrationBody').textContent.includes('Running extended local calibration'), 'Performance calibration modal should show a running state.');
+        assertUiSmoke($('performanceCalibrationProgressBar'), 'Performance calibration modal should include a progress bar.');
+        $('closePerformanceCalibrationModalButton').click();
+        await waitForUiSmoke(() => cancelledCalibrationId === startedCalibrationId && $('performanceCalibrationModal').hidden, 'Closing calibration should cancel the active calibration.', 3000, global);
+
+        window.postmeter.performance.calibrate = async () => ({
+          id: 'smoke-complete-calibration',
+          startedAt: '2026-05-06T00:00:00.000Z',
+          completedAt: '2026-05-06T00:00:01.000Z',
+          durationMillis: 1000,
+          cancelled: false,
+          endpoint: '127.0.0.1',
+          summary: {
+            peakRequestsPerSecond: 1234.5,
+            peakConcurrency: 16,
+            sustainedRequestsPerSecond: 1100,
+            reliableTargetRequestsPerSecond: 1000,
+            edgeUpperBoundRequestsPerSecond: 1200,
+            measurementVariationPercent: 1,
+            confirmationTargetsTested: 2,
+            recommendedMaxRequestsPerSecond: 880,
+            saturationConcurrency: 16,
+            stabilityPercent: 92,
+            repeatabilityPercent: 96,
+            confidence: 'high',
+            averageLatencyMillis: 2.5,
+            p95LatencyMillis: 5,
+            p95StartLagMillis: 3,
+            p95EventLoopDelayMillis: 11,
+            completedRequests: 100,
+            failedRequests: 0,
+            notes: ['Loopback calibration estimates this machine and PostMeter runtime overhead only.']
+          },
+          stages: [{
+            name: 'Smoke stage',
+            mode: 'confirmation',
+            concurrency: 16,
+            requestedRequests: 100,
+            targetRequests: 100,
+            targetRequestsPerSecond: 1000,
+            startedRequests: 100,
+            completedRequests: 100,
+            onTimeCompletedRequests: 100,
+            failedRequests: 0,
+            durationMillis: 1000,
+            targetDurationMillis: 1000,
+            requestsPerSecond: 1234.5,
+            completionRatio: 1,
+            achievedTargetRatio: 1,
+            errorRate: 0,
+            averageLatencyMillis: 2.5,
+            p95LatencyMillis: 5,
+            p99LatencyMillis: 7,
+            averageStartLagMillis: 1,
+            p95StartLagMillis: 3,
+            intervalCount: 2,
+            medianIntervalRequestsPerSecond: 1200,
+            minIntervalRequestsPerSecond: 1100,
+            maxIntervalRequestsPerSecond: 1250,
+            stabilityPercent: 92,
+            eventLoopUtilizationPercent: 50,
+            p95EventLoopDelayMillis: 11,
+            maxInFlightRequests: 16,
+            maxInFlightLimit: 16,
+            maxStartBacklog: 1,
+            confirmationTargetRequestsPerSecond: 1000,
+            confirmationPass: 1,
+            confirmationPasses: 1,
+            confirmationCandidateRank: 1,
+            confirmationVariationPercent: 1,
+            accepted: true,
+            confirmed: true,
+            failureReasons: []
+          }]
+        });
+        window.postmeter.performance.cancelCalibration = async () => false;
+        $('calibratePerformanceButton').click();
+        await waitForUiSmoke(() => $('performanceCalibrationBody').textContent.includes('Peak RPS'), 'Completed calibration should render summary results.', 3000, global);
+        assertUiSmoke($('performanceCalibrationBody').textContent.includes('Peak RPS'), 'Calibration results should include peak RPS.');
+        assertUiSmoke($('performanceCalibrationBody').textContent.includes('Max sustained local RPS'), 'Calibration results should include max sustained local RPS.');
+        assertUiSmoke($('performanceCalibrationBody').textContent.includes('Planning cap'), 'Calibration results should include the planning cap.');
+        assertUiSmoke(
+          $('performanceCalibrationBody').querySelectorAll('.performance-calibration-stage').length >= 1,
+          'Calibration results should include per-stage rows.'
+        );
+        $('closePerformanceCalibrationModalButton').click();
+        await nextPaint();
       }
       $('emptyCreatePerformanceTestButton').click();
       const performanceTest = activePerformanceTest();
@@ -2717,6 +2833,10 @@
       openWorkspaceTabs = originalWorkspaceTabs;
       openRunnerTabs = originalRunnerTabs;
       openPerformanceTabs = originalPerformanceTabs;
+      if (window.postmeter?.performance) {
+        window.postmeter.performance.calibrate = originalPerformanceCalibrate;
+        window.postmeter.performance.cancelCalibration = originalPerformanceCancelCalibration;
+      }
       renderAll();
     }
   }

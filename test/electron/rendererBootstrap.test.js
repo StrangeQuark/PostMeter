@@ -271,6 +271,8 @@ test('renderer bootstrap binds performance creation import export run and config
     'cancelPerformanceTestButton',
     'exportPerformanceTestButton',
     'importPerformanceRequestButton',
+    'calibratePerformanceButton',
+    'closePerformanceCalibrationModalButton',
     'performanceMethodSelect',
     'performanceUrlInput',
     'performanceBodyInput'
@@ -318,6 +320,8 @@ test('renderer bootstrap binds performance creation import export run and config
     onRunPerformanceTest: () => calls.push('run'),
     onCancelPerformanceTest: () => calls.push('cancel'),
     onImportPerformanceRequest: () => calls.push('import-request'),
+    onCalibratePerformance: () => calls.push('calibrate'),
+    onClosePerformanceCalibration: () => calls.push('close-calibration'),
     onPerformanceConfigChange: () => calls.push('config'),
     onPerformanceRequestChange: () => calls.push('request'),
     onActivateTab: (group, tab) => calls.push(`${group}:${tab}`)
@@ -333,7 +337,9 @@ test('renderer bootstrap binds performance creation import export run and config
     'runPerformanceTestButton',
     'cancelPerformanceTestButton',
     'exportPerformanceTestButton',
-    'importPerformanceRequestButton'
+    'importPerformanceRequestButton',
+    'calibratePerformanceButton',
+    'closePerformanceCalibrationModalButton'
   ]) {
     elements.get(id).dispatch('click');
   }
@@ -348,7 +354,7 @@ test('renderer bootstrap binds performance creation import export run and config
   elements.get('performanceUrlInput').dispatch('input');
   elements.get('performanceBodyInput').dispatch('input');
 
-  assert.deepEqual(calls.slice(0, 10), [
+  assert.deepEqual(calls.slice(0, 12), [
     'new',
     'new',
     'import-test',
@@ -358,7 +364,9 @@ test('renderer bootstrap binds performance creation import export run and config
     'run',
     'cancel',
     'export-test',
-    'import-request'
+    'import-request',
+    'calibrate',
+    'close-calibration'
   ]);
   assert.equal(calls.filter((call) => call === 'config').length, 10);
   assert.equal(calls.filter((call) => call === 'request').length, 3);
