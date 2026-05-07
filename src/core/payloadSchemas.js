@@ -224,6 +224,7 @@ const FIELD_SCHEMAS = {
   },
   performanceConfig: {
     iterations: { type: 'number', optional: true },
+    startConcurrency: { type: 'number', optional: true },
     concurrency: { type: 'number', optional: true },
     durationSeconds: { type: 'number', optional: true },
     rampSteps: { type: 'number', optional: true },

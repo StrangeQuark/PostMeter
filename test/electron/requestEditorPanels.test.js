@@ -118,3 +118,49 @@ test('request editor panels read auth editor inputs through the shared auth mode
     devicePollIntervalSeconds: '5'
   });
 });
+
+test('request editor panels can read prefixed auth editor inputs for performance requests', () => {
+  const values = new Map([
+    ['performanceAuthTypeSelect', { value: 'apiKey' }],
+    ['performanceAuthBearerTokenInput', { value: '' }],
+    ['performanceAuthBasicUsernameInput', { value: '' }],
+    ['performanceAuthBasicPasswordInput', { value: '' }],
+    ['performanceAuthApiKeyLocationSelect', { value: 'query' }],
+    ['performanceAuthApiKeyNameInput', { value: 'token' }],
+    ['performanceAuthApiKeyValueInput', { value: 'abc123' }],
+    ['performanceAuthCookieValueInput', { value: '' }],
+    ['performanceAuthOauthGrantTypeSelect', { value: 'authorizationCode' }],
+    ['performanceAuthOauthTokenTypeSelect', { value: 'Bearer' }],
+    ['performanceAuthOauthAccessTokenInput', { value: '' }],
+    ['performanceAuthOauthRefreshTokenInput', { value: '' }],
+    ['performanceAuthOauthAuthorizationUrlInput', { value: '' }],
+    ['performanceAuthOauthRedirectStrategySelect', { value: 'loopback' }],
+    ['performanceAuthOauthDeviceAuthorizationUrlInput', { value: '' }],
+    ['performanceAuthOauthTokenUrlInput', { value: '' }],
+    ['performanceAuthOauthClientIdInput', { value: '' }],
+    ['performanceAuthOauthClientSecretInput', { value: '' }],
+    ['performanceAuthOauthScopesInput', { value: '' }],
+    ['performanceAuthOauthUserCodeInput', { value: '' }],
+    ['performanceAuthClientPfxPathInput', { value: '' }],
+    ['performanceAuthClientCertPathInput', { value: '' }],
+    ['performanceAuthClientKeyPathInput', { value: '' }],
+    ['performanceAuthClientCaPathInput', { value: '' }],
+    ['performanceAuthClientPassphraseInput', { value: '' }]
+  ]);
+  const fakeDoc = {
+    getElementById(id) {
+      const value = values.get(id);
+      if (!value) {
+        throw new Error(`Unexpected element lookup: ${id}`);
+      }
+      return value;
+    }
+  };
+
+  assert.deepEqual(collectAuthFromEditor({ doc: fakeDoc, idPrefix: 'performance' }), {
+    type: 'apiKey',
+    location: 'query',
+    key: 'token',
+    value: 'abc123'
+  });
+});

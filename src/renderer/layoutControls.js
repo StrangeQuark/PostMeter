@@ -45,18 +45,38 @@ function initResizablePanes() {
       return event.clientY - rect.top;
     }
   });
+  setupDragResize('performanceSettingsResize', {
+    cssVariable: '--performance-request-height',
+    fallbackPixels: 320,
+    label: 'Resize performance request builder and settings panels',
+    orientation: 'horizontal',
+    currentPixels: () => measuredElementPixels('#performanceRequestSection', 'height'),
+    max: () => {
+      const panel = document.getElementById('performanceMainPanel');
+      const panelRect = panel?.getBoundingClientRect?.() || { height: 0 };
+      return Math.max(220, panelRect.height - 276);
+    },
+    min: 220,
+    valueFromEvent: (event) => {
+      const section = document.getElementById('performanceRequestSection');
+      const rect = section?.getBoundingClientRect?.() || { top: 0 };
+      return event.clientY - rect.top;
+    }
+  });
   setupDragResize('performanceResultsResize', {
     cssVariable: '--performance-editor-height',
-    fallbackPixels: 320,
+    fallbackPixels: 160,
     label: 'Resize performance settings and results panels',
     orientation: 'horizontal',
     currentPixels: () => measuredElementPixels('#performanceEditorSection', 'height'),
     max: () => {
       const panel = document.getElementById('performanceMainPanel');
+      const requestSection = document.getElementById('performanceRequestSection');
       const panelRect = panel?.getBoundingClientRect?.() || { height: 0 };
-      return Math.max(180, panelRect.height - 190);
+      const requestHeight = requestSection?.getBoundingClientRect?.().height || currentLayoutPixels('--performance-request-height', 320);
+      return Math.max(96, panelRect.height - requestHeight - 140);
     },
-    min: 180,
+    min: 96,
     valueFromEvent: (event) => {
       const editor = document.getElementById('performanceEditorSection');
       const rect = editor?.getBoundingClientRect?.() || { top: 0 };
@@ -76,12 +96,14 @@ function setupDragResize(id, config) {
       return;
     }
     event.preventDefault();
-    const resizeClass = handle.classList.contains('horizontal') ? 'is-resizing-row' : 'is-resizing-col';
+    const isHorizontal = handle.classList.contains('horizontal');
+    const resizeClass = isHorizontal ? 'is-resizing-row' : 'is-resizing-col';
     document.body.classList.add('is-resizing', resizeClass);
-    const startPointerValue = config.valueFromEvent(event);
+    const startPointerValue = isHorizontal ? event.clientY : event.clientX;
     const startLayoutValue = currentLayoutPixels(config.cssVariable, config.fallbackPixels, config);
     const onMouseMove = (moveEvent) => {
-      const pointerDelta = config.valueFromEvent(moveEvent) - startPointerValue;
+      const pointerValue = isHorizontal ? moveEvent.clientY : moveEvent.clientX;
+      const pointerDelta = pointerValue - startPointerValue;
       applySplitterValue(handle, config, startLayoutValue + pointerDelta);
     };
     const onMouseUp = () => {
@@ -121,9 +143,12 @@ function setupDragResize(id, config) {
   });
 }
 
-function configureSplitterAccessibility(handle, config) {
+function configureSplitterAccessibility(handle, config, valueOverride) {
   const { min, max } = normalizedSplitterBounds(config);
-  const value = clampLayoutValue(currentLayoutPixels(config.cssVariable, config.fallbackPixels, config), min, max);
+  const rawValue = Number.isFinite(valueOverride)
+    ? valueOverride
+    : currentLayoutPixels(config.cssVariable, config.fallbackPixels, config);
+  const value = clampLayoutValue(rawValue, min, max);
   handle.setAttribute('aria-label', config.label);
   handle.setAttribute('aria-valuemin', String(Math.round(min)));
   handle.setAttribute('aria-valuemax', String(Math.round(max)));
@@ -134,7 +159,7 @@ function applySplitterValue(handle, config, value) {
   const { min, max } = normalizedSplitterBounds(config);
   const next = clampLayoutValue(value, min, max);
   setLayoutVar(config.cssVariable, `${next}px`);
-  configureSplitterAccessibility(handle, config);
+  configureSplitterAccessibility(handle, config, next);
 }
 
 function normalizedSplitterBounds(config) {
@@ -147,16 +172,16 @@ function normalizedSplitterBounds(config) {
 }
 
 function currentLayoutPixels(name, fallbackPixels, config = {}) {
-  const value = readLayoutVar(name) || getComputedStyle(document.documentElement).getPropertyValue(name);
-  const parsed = Number.parseFloat(value);
-  if (Number.isFinite(parsed) && /px\s*$/.test(String(value).trim())) {
-    return parsed;
-  }
   if (typeof config.currentPixels === 'function') {
     const measured = Number(config.currentPixels());
     if (Number.isFinite(measured) && measured > 0) {
       return measured;
     }
+  }
+  const value = readLayoutVar(name) || getComputedStyle(document.documentElement).getPropertyValue(name);
+  const parsed = Number.parseFloat(value);
+  if (Number.isFinite(parsed) && /px\s*$/.test(String(value).trim())) {
+    return parsed;
   }
   return fallbackPixels;
 }
@@ -212,6 +237,7 @@ function defaultLayoutVars() {
     '--sidebar-width': '300px',
     '--request-height': '52%',
     '--runner-editor-height': '52%',
+    '--performance-request-height': '320px',
     '--performance-editor-height': 'max-content'
   };
 }

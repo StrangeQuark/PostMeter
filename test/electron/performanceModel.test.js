@@ -42,12 +42,16 @@ test('Performance model accepts the seven V1 types and rejects unsafe limits for
 
     const unsafe = performanceTestModel({
       ...candidate,
-      config: { ...candidate.config, iterations: 2 },
-      safetyLimits: { ...candidate.safetyLimits, maxTotalRequests: 1 }
+      config: type === 'soak'
+        ? { ...candidate.config, durationSeconds: 2 }
+        : { ...candidate.config, iterations: 2 },
+      safetyLimits: type === 'soak'
+        ? { ...candidate.safetyLimits, maxDurationSeconds: 1 }
+        : { ...candidate.safetyLimits, maxTotalRequests: 1 }
     });
     assert.throws(
       () => assertPerformanceTestPayload(unsafe),
-      /config\.iterations exceeds safetyLimits\.maxTotalRequests/
+      type === 'soak' ? /maxDurationSeconds/ : /maxTotalRequests/
     );
   }
 });
@@ -73,6 +77,7 @@ test('Performance model preserves independent settings for each V1 type', () => 
   assert.equal(performanceTest.typeSettings.latency.config.iterations, 7);
   assert.equal(performanceTest.typeSettings.throughput.config.iterations, 13);
   assert.equal(performanceTest.typeSettings.concurrency.config.concurrency, 5);
+  assert.equal(performanceTest.typeSettings.ramp.config.startConcurrency, 1);
   assert.equal(performanceTest.config.iterations, 13);
   assert.equal(performanceTest.environmentId, 'env-throughput');
   assert.equal(performanceTest.allowEnvironmentMutation, true);
@@ -100,6 +105,60 @@ test('Performance model preserves independent settings for each V1 type', () => 
       }
     }),
     /typeSettings\.latency\.config\.iterations exceeds safetyLimits\.maxTotalRequests/
+  );
+});
+
+test('Performance safety validation uses type-specific effective request and concurrency counts', () => {
+  assert.throws(
+    () => assertPerformanceTestPayload(performanceTestModel({
+      type: 'concurrency',
+      request: { method: 'GET', url: 'https://example.test/concurrency' },
+      config: { iterations: 5, concurrency: 3 },
+      safetyLimits: { maxTotalRequests: 14, maxConcurrency: 3, maxDurationSeconds: 60 }
+    })),
+    /config\.iterations multiplied by config\.concurrency exceeds safetyLimits\.maxTotalRequests/
+  );
+
+  assert.throws(
+    () => assertPerformanceTestPayload(performanceTestModel({
+      type: 'ramp',
+      request: { method: 'GET', url: 'https://example.test/ramp' },
+      config: { iterations: 5, startConcurrency: 6, concurrency: 4, rampSteps: 2 },
+      safetyLimits: { maxTotalRequests: 20, maxConcurrency: 6, maxDurationSeconds: 60 }
+    })),
+    /config\.startConcurrency cannot exceed config\.concurrency/
+  );
+
+  assert.throws(
+    () => assertPerformanceTestPayload(performanceTestModel({
+      type: 'stress',
+      request: { method: 'GET', url: 'https://example.test/stress' },
+      config: { iterations: 5, startConcurrency: 1, concurrency: 4, rampSteps: 3 },
+      safetyLimits: { maxTotalRequests: 14, maxConcurrency: 4, maxDurationSeconds: 60 }
+    })),
+    /config\.iterations multiplied by config\.rampSteps exceeds safetyLimits\.maxTotalRequests/
+  );
+
+  assert.throws(
+    () => assertPerformanceTestPayload({
+      name: 'Raw Unsafe Cap',
+      type: 'throughput',
+      request: { method: 'GET', url: 'https://example.test/hard-cap' },
+      config: { iterations: 1, concurrency: 1 },
+      safetyLimits: { maxTotalRequests: 1001, maxConcurrency: 10, maxDurationSeconds: 60 }
+    }),
+    /safetyLimits\.maxTotalRequests cannot exceed 1000/
+  );
+
+  assert.throws(
+    () => assertPerformanceTestPayload({
+      name: 'Raw Unsafe Concurrency',
+      type: 'spike',
+      request: { method: 'GET', url: 'https://example.test/hard-cap' },
+      config: { iterations: 1, concurrency: 26, spikeMultiplier: 1 },
+      safetyLimits: { maxTotalRequests: 100, maxConcurrency: 25, maxDurationSeconds: 60 }
+    }),
+    /config\.concurrency cannot exceed 25/
   );
 });
 

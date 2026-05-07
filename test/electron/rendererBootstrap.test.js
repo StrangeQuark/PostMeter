@@ -273,8 +273,18 @@ test('renderer bootstrap binds performance creation import export run and config
     'importPerformanceRequestButton',
     'calibratePerformanceButton',
     'closePerformanceCalibrationModalButton',
+    'addPerformanceParamButton',
+    'addPerformanceHeaderButton',
+    'addPerformanceAssertionButton',
+    'addPerformanceAssertionTemplateButton',
+    'addPerformanceExampleButton',
+    'exportPerformanceExamplesButton',
+    'addPerformanceRequestVariableButton',
+    'addPerformanceCookieButton',
+    'clearExpiredPerformanceCookiesButton',
     'performanceMethodSelect',
     'performanceUrlInput',
+    'performanceBodyTypeSelect',
     'performanceBodyInput'
   ];
   const elements = new Map(controlIds.map((id) => [id, createElement({ tagName: id.endsWith('Select') ? 'SELECT' : 'INPUT' })]));
@@ -320,10 +330,20 @@ test('renderer bootstrap binds performance creation import export run and config
     onRunPerformanceTest: () => calls.push('run'),
     onCancelPerformanceTest: () => calls.push('cancel'),
     onImportPerformanceRequest: () => calls.push('import-request'),
+    onAddPerformanceParam: () => calls.push('add-param'),
+    onAddPerformanceHeader: () => calls.push('add-header'),
+    onAddPerformanceAssertion: () => calls.push('add-assertion'),
+    onAddPerformanceAssertionTemplate: () => calls.push('add-template'),
+    onAddPerformanceExample: () => calls.push('add-example'),
+    onExportPerformanceExamples: () => calls.push('export-examples'),
+    onAddPerformanceRequestVariable: () => calls.push('add-variable'),
+    onAddPerformanceCookie: () => calls.push('add-cookie'),
+    onClearExpiredPerformanceCookies: () => calls.push('clear-cookies'),
     onCalibratePerformance: () => calls.push('calibrate'),
     onClosePerformanceCalibration: () => calls.push('close-calibration'),
     onPerformanceConfigChange: () => calls.push('config'),
     onPerformanceRequestChange: () => calls.push('request'),
+    onPerformanceBodyTypeChange: () => calls.push('body-type'),
     onActivateTab: (group, tab) => calls.push(`${group}:${tab}`)
   });
 
@@ -338,6 +358,15 @@ test('renderer bootstrap binds performance creation import export run and config
     'cancelPerformanceTestButton',
     'exportPerformanceTestButton',
     'importPerformanceRequestButton',
+    'addPerformanceParamButton',
+    'addPerformanceHeaderButton',
+    'addPerformanceAssertionButton',
+    'addPerformanceAssertionTemplateButton',
+    'addPerformanceExampleButton',
+    'exportPerformanceExamplesButton',
+    'addPerformanceRequestVariableButton',
+    'addPerformanceCookieButton',
+    'clearExpiredPerformanceCookiesButton',
     'calibratePerformanceButton',
     'closePerformanceCalibrationModalButton'
   ]) {
@@ -352,9 +381,10 @@ test('renderer bootstrap binds performance creation import export run and config
   performanceTab.dispatch('click');
   elements.get('performanceMethodSelect').dispatch('change');
   elements.get('performanceUrlInput').dispatch('input');
+  elements.get('performanceBodyTypeSelect').dispatch('change');
   elements.get('performanceBodyInput').dispatch('input');
 
-  assert.deepEqual(calls.slice(0, 12), [
+  assert.deepEqual(calls.slice(0, 21), [
     'new',
     'new',
     'import-test',
@@ -365,11 +395,21 @@ test('renderer bootstrap binds performance creation import export run and config
     'cancel',
     'export-test',
     'import-request',
+    'add-param',
+    'add-header',
+    'add-assertion',
+    'add-template',
+    'add-example',
+    'export-examples',
+    'add-variable',
+    'add-cookie',
+    'clear-cookies',
     'calibrate',
     'close-calibration'
   ]);
   assert.equal(calls.filter((call) => call === 'config').length, 10);
   assert.equal(calls.filter((call) => call === 'request').length, 3);
+  assert.equal(calls.filter((call) => call === 'body-type').length, 1);
   assert.ok(calls.includes('performance:spike'));
 });
 

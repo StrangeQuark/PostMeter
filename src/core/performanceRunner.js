@@ -19,41 +19,52 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
   let currentCookies = Array.isArray(options.cookieJar) ? cloneJson(options.cookieJar) : [];
   let nextIteration = 0;
   let activeRequests = 0;
+  const endsAtMillis = plan.durationMillis > 0 ? startedMillis + plan.durationMillis : 0;
 
-  const workerCount = Math.min(plan.concurrency, plan.totalRequests);
-  const workers = Array.from({ length: workerCount }, async () => {
-    while (true) {
-      if (options.signal?.aborted === true) {
-        return;
-      }
-      const iteration = nextIteration;
-      nextIteration += 1;
-      if (iteration >= plan.totalRequests) {
-        return;
-      }
-      activeRequests += 1;
-      const sample = await executeIteration(normalized, currentEnvironment, currentCookies, iteration, options);
-      activeRequests -= 1;
-      samples.push(sample.publicSample);
-      if (sample.environment) {
-        currentEnvironment = sample.environment;
-      }
-      if (Array.isArray(sample.cookies)) {
-        currentCookies = sample.cookies;
-      }
-      progress({
-        completedRequests: samples.length,
-        totalRequests: plan.totalRequests,
-        activeRequests,
-        requestId: normalized.request.id,
-        requestName: normalized.request.name,
-        passed: sample.publicSample.passed === true,
-        durationMillis: sample.publicSample.durationMillis || 0
-      });
+  for (const stage of plan.stages) {
+    if (options.signal?.aborted === true || (endsAtMillis > 0 && Date.now() >= endsAtMillis)) {
+      break;
     }
-  });
-
-  await Promise.all(workers);
+    let stageNextIteration = 0;
+    const workerCount = Math.min(stage.concurrency, stage.totalRequests);
+    const workers = Array.from({ length: workerCount }, async () => {
+      while (true) {
+        if (options.signal?.aborted === true) {
+          return;
+        }
+        if (endsAtMillis > 0 && Date.now() >= endsAtMillis) {
+          return;
+        }
+        const stageIteration = stageNextIteration;
+        stageNextIteration += 1;
+        if (stageIteration >= stage.totalRequests || nextIteration >= plan.totalRequests) {
+          return;
+        }
+        const iteration = nextIteration;
+        nextIteration += 1;
+        activeRequests += 1;
+        const sample = await executeIteration(normalized, currentEnvironment, currentCookies, iteration, options);
+        activeRequests -= 1;
+        samples.push(sample.publicSample);
+        if (sample.environment) {
+          currentEnvironment = sample.environment;
+        }
+        if (Array.isArray(sample.cookies)) {
+          currentCookies = sample.cookies;
+        }
+        progress({
+          completedRequests: samples.length,
+          totalRequests: plan.totalRequests,
+          activeRequests,
+          requestId: normalized.request.id,
+          requestName: normalized.request.name,
+          passed: sample.publicSample.passed === true,
+          durationMillis: sample.publicSample.durationMillis || 0
+        });
+      }
+    });
+    await Promise.all(workers);
+  }
   const completedAt = new Date().toISOString();
   const summary = summarizeSamples(samples, Date.now() - startedMillis);
   const failedRequests = samples.filter((sample) => sample.passed !== true).length;
@@ -160,16 +171,94 @@ function runnerOptions(options) {
 }
 
 function createPerformancePlan(performanceTest) {
+  const type = performanceTest.type || 'latency';
   const config = performanceTest.config || {};
   const safetyLimits = performanceTest.safetyLimits || {};
-  const totalRequests = Math.min(config.iterations || 1, safetyLimits.maxTotalRequests || 1);
-  const baseConcurrency = performanceTest.type === 'spike'
-    ? (config.concurrency || 1) * (config.spikeMultiplier || 1)
-    : config.concurrency || 1;
+  const totalRequests = Math.min(
+    plannedRequestCount(type, config, safetyLimits),
+    integerAtLeast(safetyLimits.maxTotalRequests, 1, 1)
+  );
+  const baseConcurrency = plannedConcurrency(type, config);
+  const maxDurationSeconds = integerAtLeast(safetyLimits.maxDurationSeconds, 0, 0);
+  const requestedDurationSeconds = integerAtLeast(config.durationSeconds, 0, 0);
+  const durationSeconds = requestedDurationSeconds > 0
+    ? Math.min(requestedDurationSeconds, maxDurationSeconds)
+    : maxDurationSeconds;
   return {
     totalRequests,
-    concurrency: Math.min(totalRequests, baseConcurrency, safetyLimits.maxConcurrency || 1)
+    concurrency: Math.min(totalRequests, baseConcurrency, integerAtLeast(safetyLimits.maxConcurrency, 1, 1)),
+    durationMillis: durationSeconds > 0 ? durationSeconds * 1000 : 0,
+    stages: buildPerformanceStages(type, config, {
+      totalRequests,
+      maxConcurrency: integerAtLeast(safetyLimits.maxConcurrency, 1, 1)
+    })
   };
+}
+
+function buildPerformanceStages(type, config, plan) {
+  if (type === 'stress' || type === 'ramp') {
+    return buildSteppedStages(config, plan);
+  }
+  return [{
+    name: type,
+    totalRequests: plan.totalRequests,
+    concurrency: Math.min(plan.totalRequests, plannedConcurrency(type, config), plan.maxConcurrency)
+  }];
+}
+
+function buildSteppedStages(config, plan) {
+  const requestedSteps = integerAtLeast(config.rampSteps, 1, 1);
+  const requestsPerStep = integerAtLeast(config.iterations, 1, 1);
+  const start = integerAtLeast(config.startConcurrency, 1, 1);
+  const peak = integerAtLeast(config.concurrency, 1, 1);
+  const stages = [];
+  let remaining = plan.totalRequests;
+  for (let index = 0; index < requestedSteps && remaining > 0; index += 1) {
+    const totalRequests = Math.min(requestsPerStep, remaining);
+    const progress = requestedSteps <= 1 ? 1 : index / (requestedSteps - 1);
+    const stageConcurrency = Math.round(start + ((peak - start) * progress));
+    stages.push({
+      name: `step-${index + 1}`,
+      totalRequests,
+      concurrency: Math.min(totalRequests, Math.max(1, stageConcurrency), plan.maxConcurrency)
+    });
+    remaining -= totalRequests;
+  }
+  return stages;
+}
+
+function plannedRequestCount(type, config, safetyLimits) {
+  if (type === 'soak') {
+    return integerAtLeast(safetyLimits.maxTotalRequests, 1, 1);
+  }
+  if (type === 'concurrency') {
+    return integerAtLeast(config.iterations, 1, 1) * integerAtLeast(config.concurrency, 1, 1);
+  }
+  if (type === 'stress' || type === 'ramp') {
+    return integerAtLeast(config.iterations, 1, 1) * integerAtLeast(config.rampSteps, 1, 1);
+  }
+  return integerAtLeast(config.iterations, 1, 1);
+}
+
+function plannedConcurrency(type, config) {
+  if (type === 'latency') {
+    return 1;
+  }
+  if (type === 'spike') {
+    return integerAtLeast(config.concurrency, 1, 1) * integerAtLeast(config.spikeMultiplier, 1, 1);
+  }
+  if (type === 'stress' || type === 'ramp') {
+    return Math.max(
+      integerAtLeast(config.startConcurrency, 1, 1),
+      integerAtLeast(config.concurrency, 1, 1)
+    );
+  }
+  return integerAtLeast(config.concurrency, 1, 1);
+}
+
+function integerAtLeast(value, min, fallback) {
+  const number = Number.parseInt(value, 10);
+  return Number.isFinite(number) && number >= min ? Math.floor(number) : fallback;
 }
 
 function summarizeSamples(samples, wallClockMillis) {

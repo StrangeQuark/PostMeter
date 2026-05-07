@@ -44,7 +44,7 @@ test('rejects malformed and unsafe performance test imports', () => {
         safetyLimits: { maxTotalRequests: 100, maxConcurrency: 10, maxDurationSeconds: 60 }
       }
     }),
-    /config.iterations exceeds safetyLimits.maxTotalRequests/
+    /config.iterations multiplied by config.rampSteps exceeds safetyLimits.maxTotalRequests/
   );
   assert.throws(
     () => importPerformanceTestDocument({

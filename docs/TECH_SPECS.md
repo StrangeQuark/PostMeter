@@ -48,12 +48,14 @@ Required V1 type coverage:
 | Type | Positive scenario | Negative scenario |
 | --- | --- | --- |
 | Latency | positive: completes light-load measurement and records p50/p90/p95/p99, min/max, error rate, and baseline response size. | negative: rejects missing request URL, unsafe timeout, or impossible percentile/result-retention settings. |
-| RPS / throughput | positive: reaches or reports target/discovered sustainable requests per second with latency and failure summaries. | negative: rejects target RPS, duration, or in-flight settings that exceed local safety caps. |
+| RPS / throughput | positive: reports achieved requests per second for a fixed request count and concurrency with latency and failure summaries. | negative: rejects request count, concurrency, or safety settings that exceed local caps. |
 | Concurrency | positive: runs fixed virtual users and reports latency/error rate by user count with per-user progress. | negative: rejects virtual-user counts above the configured concurrency cap or zero/negative users. |
-| Stress | positive: steps or adapts pressure until saturation and captures the first failing threshold. | negative: rejects unbounded pressure growth or missing stop conditions. |
-| Spike | positive: applies a sudden jump, records peak errors, recovery time, and post-spike stability. | negative: rejects spike profiles with unsafe jump size, missing recovery window, or duration overflow. |
-| Soak | positive: runs steady load with rolling latency/error drift and degradation indicators. | negative: rejects long-duration runs above the local duration cap or result retention that would exceed storage limits. |
+| Stress | positive: steps pressure from start users to peak users and captures latency, status, and error summaries at each stage. | negative: rejects unbounded pressure growth, descending start/peak settings, or missing stop conditions. |
+| Spike | positive: applies a sudden concurrency jump and records status, error, and latency behavior under the spike. | negative: rejects spike profiles with unsafe effective concurrency, request count, or duration caps. |
+| Soak | positive: runs steady load for a bounded duration with latency, status, and error summaries. | negative: rejects zero-duration runs, long-duration runs above the local duration cap, or result retention that would exceed storage limits. |
 | Ramp | positive: gradually increases load and marks thresholds where latency or errors rise. | negative: rejects malformed ramp steps, descending/overlapping phases where unsupported, or schedules beyond safety limits. |
+
+The Performance editor exposes only fields that map to the active type. Latency uses samples only and runs single-user. Throughput uses request count plus concurrency. Concurrency treats iterations as requests per virtual user. Stress and Ramp use start users, peak users, step count, and requests per step, then execute stepped stages from the start user count to the peak user count. Spike uses baseline users, spike multiplier, and spike request count. Soak uses duration, users, and safety caps instead of a hidden iteration count. The local V1 safety envelope currently caps saved executions at 1,000 planned requests, 25 effective concurrent users, and 3,600 seconds; the engine validates each type against the effective planned request count, effective concurrency, and duration before execution.
 
 Import/export validation keeps native Performance-test export separate from collection/request export. Native Performance-test export preserves the full saved configuration and request copy. Import validates schema and safety limits, rejects malformed or unsafe payloads, and never merges imported request copies into Collections.
 

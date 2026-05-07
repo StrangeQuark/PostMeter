@@ -656,7 +656,7 @@
       </section>
 
       <section id="performanceMainPanel" class="panel performance-main-panel" role="tabpanel" hidden>
-        <div id="performanceEditorSection" class="performance-editor-section">
+        <div id="performanceRequestSection" class="performance-request-section">
           <div class="performance-main-header">
             <div>
               <div id="performanceMainTitle" class="performance-main-title editable-title" tabindex="0" aria-label="Performance test name">Select a performance test</div>
@@ -664,7 +664,7 @@
             <div class="performance-actions">
               <button id="savePerformanceTestButton" type="button">Save Performance Test</button>
               <button id="deletePerformanceTestButton" type="button">Delete Performance Test</button>
-              <button id="cancelPerformanceTestButton" type="button" disabled>Cancel</button>
+              <button id="importPerformanceRequestButton" type="button">Import Request</button>
               <button id="exportPerformanceTestButton" type="button">Export Test</button>
             </div>
           </div>
@@ -681,16 +681,278 @@
               </select>
               <input id="performanceUrlInput" placeholder="https://api.example.com/resource" aria-label="Performance request URL">
               <button id="runPerformanceTestButton" type="button" class="primary">Run</button>
+              <button id="cancelPerformanceTestButton" type="button" class="danger-button" disabled>Cancel</button>
             </div>
-            <div class="performance-request-tools">
-              <button id="importPerformanceRequestButton" type="button">Import Request</button>
-              <div id="performanceImportSource" class="performance-import-source" aria-live="polite"></div>
+
+            <div class="tabs performance-request-tabs" role="tablist" aria-label="Performance request editor sections" data-tab-group="performanceRequest">
+              <button id="performanceRequestParamsTabButton" class="tab active" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceParams" aria-selected="true" aria-controls="performanceParamsTab">Params</button>
+              <button id="performanceRequestHeadersTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceHeaders" aria-selected="false" aria-controls="performanceHeadersTab">Headers</button>
+              <button id="performanceRequestAuthTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceAuth" aria-selected="false" aria-controls="performanceAuthTab">Auth</button>
+              <button id="performanceRequestCookiesTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceCookies" aria-selected="false" aria-controls="performanceCookiesTab">Cookies</button>
+              <button id="performanceRequestBodyTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceBody" aria-selected="false" aria-controls="performanceBodyTab">Body</button>
+              <button id="performanceRequestTestsTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceTests" aria-selected="false" aria-controls="performanceTestsTab">Tests</button>
+              <button id="performanceRequestScriptsTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceScripts" aria-selected="false" aria-controls="performanceScriptsTab">Scripts</button>
+              <button id="performanceRequestExamplesTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceExamples" aria-selected="false" aria-controls="performanceExamplesTab">Examples</button>
+              <button id="performanceRequestVariablesTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceVariables" aria-selected="false" aria-controls="performanceVariablesTab">Variables</button>
             </div>
-            <label class="field performance-body-field">
-              <span>Request Body</span>
-              <textarea id="performanceBodyInput" spellcheck="false" placeholder="Optional request body" aria-label="Performance request body" data-code-editor data-code-language="text"></textarea>
-            </label>
+
+            <div id="performanceParamsTab" class="tab-panel active" role="tabpanel" aria-labelledby="performanceRequestParamsTabButton">
+              <div class="table-actions">
+                <button id="addPerformanceParamButton" type="button">Add Param</button>
+              </div>
+              <div id="performanceParamsTable" class="kv-table"></div>
+            </div>
+
+            <div id="performanceHeadersTab" class="tab-panel" role="tabpanel" aria-labelledby="performanceRequestHeadersTabButton">
+              <div class="table-actions">
+                <button id="addPerformanceHeaderButton" type="button">Add Header</button>
+              </div>
+              <div id="performanceHeadersTable" class="kv-table"></div>
+            </div>
+
+            <div id="performanceAuthTab" class="tab-panel" role="tabpanel" aria-labelledby="performanceRequestAuthTabButton">
+              <div class="auth-grid">
+                <label class="field">
+                  <span>Auth Type</span>
+                  <select id="performanceAuthTypeSelect">
+                    <option value="none">None</option>
+                    <option value="bearer">Bearer Token</option>
+                    <option value="basic">Basic Auth</option>
+                    <option value="apiKey">API Key</option>
+                    <option value="cookie">Cookie</option>
+                    <option value="oauth2">OAuth 2.0 Request Auth</option>
+                    <option value="clientCertificate">Client Certificate</option>
+                    <option value="digest">Digest Auth</option>
+                    <option value="hawk">Hawk Auth</option>
+                    <option value="aws">AWS Signature</option>
+                    <option value="oauth1">OAuth 1.0</option>
+                    <option value="ntlm">NTLM</option>
+                    <option value="akamaiEdgeGrid">Akamai EdgeGrid</option>
+                  </select>
+                </label>
+
+                <div class="auth-section" data-auth-section="bearer">
+                  <label class="field">
+                    <span>Token</span>
+                    <input id="performanceAuthBearerTokenInput" type="text" autocomplete="off">
+                  </label>
+                </div>
+
+                <div class="auth-section" data-auth-section="basic">
+                  <label class="field">
+                    <span>Username</span>
+                    <input id="performanceAuthBasicUsernameInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Password</span>
+                    <input id="performanceAuthBasicPasswordInput" type="text" autocomplete="off">
+                  </label>
+                </div>
+
+                <div class="auth-section" data-auth-section="apiKey">
+                  <label class="field">
+                    <span>Location</span>
+                    <select id="performanceAuthApiKeyLocationSelect">
+                      <option value="header">Header</option>
+                      <option value="query">Query Param</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Name</span>
+                    <input id="performanceAuthApiKeyNameInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Value</span>
+                    <input id="performanceAuthApiKeyValueInput" type="text" autocomplete="off">
+                  </label>
+                </div>
+
+                <div class="auth-section" data-auth-section="cookie">
+                  <label class="field">
+                    <span>Cookie</span>
+                    <input id="performanceAuthCookieValueInput" type="text" autocomplete="off">
+                  </label>
+                </div>
+
+                <div class="auth-section" data-auth-section="oauth2">
+                  <label class="field">
+                    <span>Grant Type</span>
+                    <select id="performanceAuthOauthGrantTypeSelect">
+                      <option value="authorizationCode">Authorization Code</option>
+                      <option value="clientCredentials">Client Credentials</option>
+                      <option value="deviceCode">Device Code</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Token Type</span>
+                    <select id="performanceAuthOauthTokenTypeSelect">
+                      <option value="Bearer">Bearer</option>
+                      <option value="MAC">MAC</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Access Token</span>
+                    <input id="performanceAuthOauthAccessTokenInput" type="text" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Refresh Token</span>
+                    <input id="performanceAuthOauthRefreshTokenInput" type="text" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Authorization URL</span>
+                    <input id="performanceAuthOauthAuthorizationUrlInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Redirect Strategy</span>
+                    <select id="performanceAuthOauthRedirectStrategySelect">
+                      <option value="loopback">Loopback</option>
+                      <option value="customScheme">Custom URI Scheme</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Device Authorization URL</span>
+                    <input id="performanceAuthOauthDeviceAuthorizationUrlInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Token URL</span>
+                    <input id="performanceAuthOauthTokenUrlInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Client ID</span>
+                    <input id="performanceAuthOauthClientIdInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Client Secret</span>
+                    <input id="performanceAuthOauthClientSecretInput" type="text" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Scopes</span>
+                    <input id="performanceAuthOauthScopesInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>User Code</span>
+                    <input id="performanceAuthOauthUserCodeInput" readonly>
+                  </label>
+                  <label class="field">
+                    <span>Verification URL</span>
+                    <input id="performanceAuthOauthVerificationUriInput" readonly>
+                  </label>
+                </div>
+
+                <div class="auth-section" data-auth-section="clientCertificate">
+                  <label class="field">
+                    <span>PFX/P12 Bundle Path</span>
+                    <input id="performanceAuthClientPfxPathInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>PEM Certificate Path</span>
+                    <input id="performanceAuthClientCertPathInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>PEM Key Path</span>
+                    <input id="performanceAuthClientKeyPathInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>CA Certificate Path</span>
+                    <input id="performanceAuthClientCaPathInput" autocomplete="off">
+                  </label>
+                  <label class="field">
+                    <span>Passphrase</span>
+                    <input id="performanceAuthClientPassphraseInput" type="text" autocomplete="off">
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div id="performanceCookiesTab" class="tab-panel" role="tabpanel" aria-labelledby="performanceRequestCookiesTabButton">
+              <div class="cookie-jar-options">
+                <label class="field inline">
+                  <input id="performanceRequestCookieJarEnabledInput" type="checkbox">
+                  <span>Use cookie jar for this request</span>
+                </label>
+                <label class="field inline">
+                  <input id="performanceRequestCookieJarStoreInput" type="checkbox">
+                  <span>Store response cookies</span>
+                </label>
+                <label class="field inline">
+                  <input id="performanceFilterCookiesToRequestHostInput" type="checkbox">
+                  <span>Active host only</span>
+                </label>
+                <span id="performanceCookieHostFilterLabel" class="muted-inline"></span>
+              </div>
+              <div class="environment-actions">
+                <button id="addPerformanceCookieButton" type="button">Add Cookie</button>
+                <button id="clearExpiredPerformanceCookiesButton" type="button">Clear Expired</button>
+              </div>
+              <div id="performanceCookiesTable" class="kv-table cookies-table"></div>
+            </div>
+
+            <div id="performanceBodyTab" class="tab-panel" role="tabpanel" aria-labelledby="performanceRequestBodyTabButton">
+              <label class="field">
+                <span>Body Type</span>
+                <select id="performanceBodyTypeSelect">
+                  <option value="NONE">None</option>
+                  <option value="RAW_JSON">Raw JSON</option>
+                  <option value="RAW_TEXT">Raw Text</option>
+                </select>
+              </label>
+              <textarea id="performanceBodyInput" spellcheck="false" placeholder="Request body" aria-label="Performance request body" data-code-editor data-code-language="text"></textarea>
+            </div>
+
+            <div id="performanceTestsTab" class="tab-panel" role="tabpanel" aria-labelledby="performanceRequestTestsTabButton">
+              <div class="table-actions">
+                <button id="addPerformanceAssertionButton" type="button">Add Assertion</button>
+                <select id="performanceAssertionTemplateSelect" aria-label="Performance assertion template">
+                  <option value="status200">Status 200</option>
+                  <option value="jsonPathExists">JSON path exists</option>
+                  <option value="xmlPathExists">XML XPath exists</option>
+                  <option value="htmlSelectorExists">HTML selector exists</option>
+                  <option value="headerContains">Header contains</option>
+                  <option value="responseUnderOneSecond">Response under 1s</option>
+                  <option value="responseUnder10Kb">Response under 10 KB</option>
+                  <option value="bodyContains">Body contains</option>
+                  <option value="extractVariable">Extract variable</option>
+                  <option value="extractXml">Extract XML</option>
+                  <option value="extractHtml">Extract HTML</option>
+                  <option value="extractRegex">Extract regex</option>
+                </select>
+                <button id="addPerformanceAssertionTemplateButton" type="button">Add Template</button>
+              </div>
+              <div id="performanceAssertionsTable" class="kv-table assertions-table"></div>
+            </div>
+
+            <div id="performanceScriptsTab" class="tab-panel" role="tabpanel" aria-labelledby="performanceRequestScriptsTabButton">
+              <div class="script-grid">
+                <label class="field script-field">
+                  <span>Pre-request Script</span>
+                  <textarea id="performancePreRequestScriptInput" spellcheck="false" placeholder="pm.environment.set('token', 'value');" data-code-editor data-code-language="javascript"></textarea>
+                </label>
+                <label class="field script-field">
+                  <span>Post-request Script</span>
+                  <textarea id="performanceTestScriptInput" spellcheck="false" placeholder="pm.test('status is 200', function () { pm.response.to.have.status(200); });" data-code-editor data-code-language="javascript"></textarea>
+                </label>
+              </div>
+            </div>
+
+            <div id="performanceExamplesTab" class="tab-panel" role="tabpanel" aria-labelledby="performanceRequestExamplesTabButton">
+              <div class="table-actions">
+                <button id="addPerformanceExampleButton" type="button">Add Example</button>
+                <button id="exportPerformanceExamplesButton" type="button">Export Examples</button>
+              </div>
+              <div id="performanceExamplesList" class="examples-list"></div>
+            </div>
+
+            <div id="performanceVariablesTab" class="tab-panel" role="tabpanel" aria-labelledby="performanceRequestVariablesTabButton">
+              <div class="environment-actions">
+                <button id="addPerformanceRequestVariableButton" type="button">Add Request Variable</button>
+              </div>
+              <div id="performanceRequestVariablesTable" class="kv-table"></div>
+              <pre id="performanceVariablePreview" class="variable-preview">No variables</pre>
+            </div>
           </div>
+        </div>
+        <div id="performanceSettingsResize" class="splitter horizontal performance-settings-resize" role="separator" aria-orientation="horizontal" tabindex="0"></div>
+        <div id="performanceEditorSection" class="performance-editor-section">
           <div class="tabs performance-type-tabs" role="tablist" aria-label="Performance test types" data-tab-group="performance">
             <button id="performanceLatencyTabButton" class="tab active" type="button" role="tab" data-tab-group="performance" data-tab="latency" aria-selected="true" aria-controls="latencyTab">Latency</button>
             <button id="performanceThroughputTabButton" class="tab" type="button" role="tab" data-tab-group="performance" data-tab="throughput" aria-selected="false" aria-controls="throughputTab">RPS / Throughput</button>
@@ -702,81 +964,80 @@
           </div>
           <div id="latencyTab" class="tab-panel performance-type-panel active" role="tabpanel" aria-labelledby="performanceLatencyTabButton">
             <div class="performance-type-grid">
+              <label class="field compact-number-field"><span>Samples</span><input data-performance-config="iterations" type="number" min="1" max="1000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
               <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
-              <label class="field compact-number-field"><span>Iterations</span><input data-performance-config="iterations" type="number" min="1" max="100000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="100000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="86400" step="1"></label>
               <label class="checkbox-line performance-mutation-option"><input data-performance-mutation type="checkbox"><span>Allow performance test to modify environment</span></label>
             </div>
           </div>
           <div id="throughputTab" class="tab-panel performance-type-panel" role="tabpanel" aria-labelledby="performanceThroughputTabButton">
             <div class="performance-type-grid">
+              <label class="field compact-number-field"><span>Requests</span><input data-performance-config="iterations" type="number" min="1" max="1000" step="1"></label>
+              <label class="field compact-number-field"><span>Concurrency</span><input data-performance-config="concurrency" type="number" min="1" max="25" step="1"></label>
+              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
+              <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
               <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
-              <label class="field compact-number-field"><span>Iterations</span><input data-performance-config="iterations" type="number" min="1" max="100000" step="1"></label>
-              <label class="field compact-number-field"><span>Concurrency</span><input data-performance-config="concurrency" type="number" min="1" max="100000" step="1"></label>
-              <label class="field compact-number-field"><span>Duration (s)</span><input data-performance-config="durationSeconds" type="number" min="0" max="86400" step="1"></label>
-              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="100000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="100000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="86400" step="1"></label>
               <label class="checkbox-line performance-mutation-option"><input data-performance-mutation type="checkbox"><span>Allow performance test to modify environment</span></label>
             </div>
           </div>
           <div id="concurrencyTab" class="tab-panel performance-type-panel" role="tabpanel" aria-labelledby="performanceConcurrencyTabButton">
             <div class="performance-type-grid">
+              <label class="field compact-number-field"><span>Virtual Users</span><input data-performance-config="concurrency" type="number" min="1" max="25" step="1"></label>
+              <label class="field compact-number-field"><span>Requests / User</span><input data-performance-config="iterations" type="number" min="1" max="1000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
+              <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
               <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
-              <label class="field compact-number-field"><span>Concurrency</span><input data-performance-config="concurrency" type="number" min="1" max="100000" step="1"></label>
-              <label class="field compact-number-field"><span>Iterations</span><input data-performance-config="iterations" type="number" min="1" max="100000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="100000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="100000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="86400" step="1"></label>
               <label class="checkbox-line performance-mutation-option"><input data-performance-mutation type="checkbox"><span>Allow performance test to modify environment</span></label>
             </div>
           </div>
           <div id="stressTab" class="tab-panel performance-type-panel" role="tabpanel" aria-labelledby="performanceStressTabButton">
             <div class="performance-type-grid">
+              <label class="field compact-number-field"><span>Start Users</span><input data-performance-config="startConcurrency" type="number" min="1" max="25" step="1"></label>
+              <label class="field compact-number-field"><span>Peak Users</span><input data-performance-config="concurrency" type="number" min="1" max="25" step="1"></label>
+              <label class="field compact-number-field"><span>Steps</span><input data-performance-config="rampSteps" type="number" min="1" max="1000" step="1"></label>
+              <label class="field compact-number-field"><span>Requests / Step</span><input data-performance-config="iterations" type="number" min="1" max="1000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
+              <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
               <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
-              <label class="field compact-number-field"><span>Concurrency</span><input data-performance-config="concurrency" type="number" min="1" max="100000" step="1"></label>
-              <label class="field compact-number-field"><span>Iterations</span><input data-performance-config="iterations" type="number" min="1" max="100000" step="1"></label>
-              <label class="field compact-number-field"><span>Ramp Steps</span><input data-performance-config="rampSteps" type="number" min="1" max="100000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="100000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="100000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="86400" step="1"></label>
               <label class="checkbox-line performance-mutation-option"><input data-performance-mutation type="checkbox"><span>Allow performance test to modify environment</span></label>
             </div>
           </div>
           <div id="spikeTab" class="tab-panel performance-type-panel" role="tabpanel" aria-labelledby="performanceSpikeTabButton">
             <div class="performance-type-grid">
+              <label class="field compact-number-field"><span>Baseline Users</span><input data-performance-config="concurrency" type="number" min="1" max="25" step="1"></label>
+              <label class="field compact-number-field"><span>Spike Multiplier</span><input data-performance-config="spikeMultiplier" type="number" min="1" max="25" step="1"></label>
+              <label class="field compact-number-field"><span>Spike Requests</span><input data-performance-config="iterations" type="number" min="1" max="1000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
+              <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
               <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
-              <label class="field compact-number-field"><span>Concurrency</span><input data-performance-config="concurrency" type="number" min="1" max="100000" step="1"></label>
-              <label class="field compact-number-field"><span>Spike x</span><input data-performance-config="spikeMultiplier" type="number" min="1" max="100000" step="1"></label>
-              <label class="field compact-number-field"><span>Iterations</span><input data-performance-config="iterations" type="number" min="1" max="100000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="100000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="100000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="86400" step="1"></label>
               <label class="checkbox-line performance-mutation-option"><input data-performance-mutation type="checkbox"><span>Allow performance test to modify environment</span></label>
             </div>
           </div>
           <div id="soakTab" class="tab-panel performance-type-panel" role="tabpanel" aria-labelledby="performanceSoakTabButton">
             <div class="performance-type-grid">
+              <label class="field compact-number-field"><span>Duration (s)</span><input data-performance-config="durationSeconds" type="number" min="1" max="3600" step="1"></label>
+              <label class="field compact-number-field"><span>Users</span><input data-performance-config="concurrency" type="number" min="1" max="25" step="1"></label>
+              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
+              <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
               <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
-              <label class="field compact-number-field"><span>Duration (s)</span><input data-performance-config="durationSeconds" type="number" min="0" max="86400" step="1"></label>
-              <label class="field compact-number-field"><span>Concurrency</span><input data-performance-config="concurrency" type="number" min="1" max="100000" step="1"></label>
-              <label class="field compact-number-field"><span>Iterations</span><input data-performance-config="iterations" type="number" min="1" max="100000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="100000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="100000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="86400" step="1"></label>
               <label class="checkbox-line performance-mutation-option"><input data-performance-mutation type="checkbox"><span>Allow performance test to modify environment</span></label>
             </div>
           </div>
           <div id="rampTab" class="tab-panel performance-type-panel" role="tabpanel" aria-labelledby="performanceRampTabButton">
             <div class="performance-type-grid">
+              <label class="field compact-number-field"><span>Start Users</span><input data-performance-config="startConcurrency" type="number" min="1" max="25" step="1"></label>
+              <label class="field compact-number-field"><span>Peak Users</span><input data-performance-config="concurrency" type="number" min="1" max="25" step="1"></label>
+              <label class="field compact-number-field"><span>Steps</span><input data-performance-config="rampSteps" type="number" min="1" max="1000" step="1"></label>
+              <label class="field compact-number-field"><span>Requests / Step</span><input data-performance-config="iterations" type="number" min="1" max="1000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
+              <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
               <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
-              <label class="field compact-number-field"><span>Ramp Steps</span><input data-performance-config="rampSteps" type="number" min="1" max="100000" step="1"></label>
-              <label class="field compact-number-field"><span>Concurrency</span><input data-performance-config="concurrency" type="number" min="1" max="100000" step="1"></label>
-              <label class="field compact-number-field"><span>Iterations</span><input data-performance-config="iterations" type="number" min="1" max="100000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="100000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="100000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="86400" step="1"></label>
               <label class="checkbox-line performance-mutation-option"><input data-performance-mutation type="checkbox"><span>Allow performance test to modify environment</span></label>
             </div>
           </div>

@@ -27,6 +27,7 @@
     'authClientCaPathInput',
     'authClientPassphraseInput'
   ];
+  const PERFORMANCE_AUTH_EDITOR_INPUT_IDS = AUTH_EDITOR_INPUT_IDS.map((id) => `performance${id[0].toUpperCase()}${id.slice(1)}`);
 
   function initializeRenderer(options = {}) {
     const doc = options.doc || document;
@@ -158,6 +159,15 @@
     bindClick(doc, 'cancelPerformanceTestButton', options.onCancelPerformanceTest);
     bindClick(doc, 'exportPerformanceTestButton', options.onExportPerformanceTest);
     bindClick(doc, 'importPerformanceRequestButton', options.onImportPerformanceRequest);
+    bindClick(doc, 'addPerformanceParamButton', options.onAddPerformanceParam);
+    bindClick(doc, 'addPerformanceHeaderButton', options.onAddPerformanceHeader);
+    bindClick(doc, 'addPerformanceAssertionButton', options.onAddPerformanceAssertion);
+    bindClick(doc, 'addPerformanceAssertionTemplateButton', options.onAddPerformanceAssertionTemplate);
+    bindClick(doc, 'addPerformanceExampleButton', options.onAddPerformanceExample);
+    bindClick(doc, 'exportPerformanceExamplesButton', options.onExportPerformanceExamples);
+    bindClick(doc, 'addPerformanceRequestVariableButton', options.onAddPerformanceRequestVariable);
+    bindClick(doc, 'addPerformanceCookieButton', options.onAddPerformanceCookie);
+    bindClick(doc, 'clearExpiredPerformanceCookiesButton', options.onClearExpiredPerformanceCookies);
     bindClick(doc, 'calibratePerformanceButton', options.onCalibratePerformance);
     bindClick(doc, 'startPkceFlowButton', options.onStartPkceFlow);
     bindClick(doc, 'startDeviceFlowButton', options.onStartDeviceFlow);
@@ -179,9 +189,15 @@
     bindAll(doc, '[data-performance-mutation]', 'change', options.onPerformanceConfigChange);
     bindAll(doc, '[data-performance-config]', 'input', options.onPerformanceConfigChange);
     bindAll(doc, '[data-performance-safety]', 'input', options.onPerformanceConfigChange);
-    bindChange(doc, 'performanceMethodSelect', options.onPerformanceRequestChange);
-    bindInput(doc, 'performanceUrlInput', options.onPerformanceRequestChange);
+    bindChange(doc, 'performanceMethodSelect', options.onPerformanceMethodChange || options.onPerformanceRequestChange);
+    bindInput(doc, 'performanceUrlInput', options.onPerformanceUrlInput || options.onPerformanceRequestChange);
+    bindChange(doc, 'performanceBodyTypeSelect', options.onPerformanceBodyTypeChange || options.onPerformanceRequestChange);
     bindInput(doc, 'performanceBodyInput', options.onPerformanceRequestChange);
+    bindInput(doc, 'performancePreRequestScriptInput', options.onPerformanceRequestChange);
+    bindInput(doc, 'performanceTestScriptInput', options.onPerformanceRequestChange);
+    bindChange(doc, 'performanceRequestCookieJarEnabledInput', options.onPerformanceRequestChange);
+    bindChange(doc, 'performanceRequestCookieJarStoreInput', options.onPerformanceRequestChange);
+    bindChange(doc, 'performanceFilterCookiesToRequestHostInput', options.onPerformanceFilterCookiesChange);
     bindChange(doc, 'methodSelect', options.onMethodChange);
     bindInput(doc, 'urlInput', options.onUrlInput);
     bindChange(doc, 'bodyTypeSelect', options.onBodyTypeChange);
@@ -218,6 +234,18 @@
           options.onAuthTypeChange?.(input.value);
         }
         options.onAuthInput?.();
+      });
+    }
+    for (const id of PERFORMANCE_AUTH_EDITOR_INPUT_IDS) {
+      const input = getElement(doc, id);
+      if (!input) {
+        continue;
+      }
+      input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', () => {
+        if (id === 'performanceAuthTypeSelect') {
+          options.onPerformanceAuthTypeChange?.(input.value);
+        }
+        options.onPerformanceAuthInput?.();
       });
     }
 

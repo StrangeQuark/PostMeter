@@ -20,19 +20,24 @@
   };
 
   const DEFAULT_PERFORMANCE_CONFIG = {
-    latency: { iterations: 1, concurrency: 1, durationSeconds: 0, rampSteps: 1, spikeMultiplier: 1 },
-    throughput: { iterations: 10, concurrency: 1, durationSeconds: 0, rampSteps: 1, spikeMultiplier: 1 },
-    concurrency: { iterations: 10, concurrency: 5, durationSeconds: 0, rampSteps: 1, spikeMultiplier: 1 },
-    stress: { iterations: 25, concurrency: 5, durationSeconds: 0, rampSteps: 1, spikeMultiplier: 1 },
-    spike: { iterations: 20, concurrency: 2, durationSeconds: 0, rampSteps: 1, spikeMultiplier: 3 },
-    soak: { iterations: 30, concurrency: 2, durationSeconds: 30, rampSteps: 1, spikeMultiplier: 1 },
-    ramp: { iterations: 20, concurrency: 5, durationSeconds: 0, rampSteps: 5, spikeMultiplier: 1 }
+    latency: { iterations: 1, startConcurrency: 1, concurrency: 1, durationSeconds: 0, rampSteps: 1, spikeMultiplier: 1 },
+    throughput: { iterations: 10, startConcurrency: 1, concurrency: 1, durationSeconds: 0, rampSteps: 1, spikeMultiplier: 1 },
+    concurrency: { iterations: 10, startConcurrency: 1, concurrency: 5, durationSeconds: 0, rampSteps: 1, spikeMultiplier: 1 },
+    stress: { iterations: 10, startConcurrency: 1, concurrency: 10, durationSeconds: 0, rampSteps: 5, spikeMultiplier: 1 },
+    spike: { iterations: 20, startConcurrency: 1, concurrency: 2, durationSeconds: 0, rampSteps: 1, spikeMultiplier: 3 },
+    soak: { iterations: 1, startConcurrency: 1, concurrency: 2, durationSeconds: 30, rampSteps: 1, spikeMultiplier: 1 },
+    ramp: { iterations: 10, startConcurrency: 1, concurrency: 10, durationSeconds: 0, rampSteps: 5, spikeMultiplier: 1 }
   };
 
   const DEFAULT_SAFETY_LIMITS = {
     maxTotalRequests: 100,
     maxConcurrency: 10,
     maxDurationSeconds: 60
+  };
+  const MAX_SAFETY_LIMITS = {
+    maxTotalRequests: 1000,
+    maxConcurrency: 25,
+    maxDurationSeconds: 60 * 60
   };
 
   const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
@@ -154,12 +159,14 @@
 
   function normalizePerformanceConfig(config = {}, type = 'latency') {
     const defaults = DEFAULT_PERFORMANCE_CONFIG[type] || DEFAULT_PERFORMANCE_CONFIG.latency;
+    const minimumDurationSeconds = type === 'soak' ? 1 : 0;
     return {
-      iterations: clampInteger(config.iterations, 1, 100000, defaults.iterations),
-      concurrency: clampInteger(config.concurrency ?? config.virtualUsers, 1, 100000, defaults.concurrency),
-      durationSeconds: clampInteger(config.durationSeconds, 0, 86400, defaults.durationSeconds),
-      rampSteps: clampInteger(config.rampSteps ?? config.rampUpSeconds, 1, 100000, defaults.rampSteps),
-      spikeMultiplier: clampInteger(config.spikeMultiplier, 1, 100000, defaults.spikeMultiplier)
+      iterations: clampInteger(config.iterations, 1, MAX_SAFETY_LIMITS.maxTotalRequests, defaults.iterations),
+      startConcurrency: clampInteger(config.startConcurrency, 1, MAX_SAFETY_LIMITS.maxConcurrency, defaults.startConcurrency),
+      concurrency: clampInteger(config.concurrency ?? config.virtualUsers, 1, MAX_SAFETY_LIMITS.maxConcurrency, defaults.concurrency),
+      durationSeconds: clampInteger(config.durationSeconds, minimumDurationSeconds, MAX_SAFETY_LIMITS.maxDurationSeconds, defaults.durationSeconds),
+      rampSteps: clampInteger(config.rampSteps ?? config.rampUpSeconds, 1, MAX_SAFETY_LIMITS.maxTotalRequests, defaults.rampSteps),
+      spikeMultiplier: clampInteger(config.spikeMultiplier, 1, MAX_SAFETY_LIMITS.maxConcurrency, defaults.spikeMultiplier)
     };
   }
 
@@ -245,9 +252,9 @@
 
   function normalizePerformanceSafetyLimits(safetyLimits = {}) {
     return {
-      maxTotalRequests: clampInteger(safetyLimits.maxTotalRequests, 1, 100000, DEFAULT_SAFETY_LIMITS.maxTotalRequests),
-      maxConcurrency: clampInteger(safetyLimits.maxConcurrency, 1, 100000, DEFAULT_SAFETY_LIMITS.maxConcurrency),
-      maxDurationSeconds: clampInteger(safetyLimits.maxDurationSeconds, 1, 86400, DEFAULT_SAFETY_LIMITS.maxDurationSeconds)
+      maxTotalRequests: clampInteger(safetyLimits.maxTotalRequests, 1, MAX_SAFETY_LIMITS.maxTotalRequests, DEFAULT_SAFETY_LIMITS.maxTotalRequests),
+      maxConcurrency: clampInteger(safetyLimits.maxConcurrency, 1, MAX_SAFETY_LIMITS.maxConcurrency, DEFAULT_SAFETY_LIMITS.maxConcurrency),
+      maxDurationSeconds: clampInteger(safetyLimits.maxDurationSeconds, 1, MAX_SAFETY_LIMITS.maxDurationSeconds, DEFAULT_SAFETY_LIMITS.maxDurationSeconds)
     };
   }
 
@@ -306,6 +313,7 @@
   const exported = {
     DEFAULT_PERFORMANCE_CONFIG,
     DEFAULT_SAFETY_LIMITS,
+    MAX_SAFETY_LIMITS,
     PERFORMANCE_TEST_TYPES,
     PERFORMANCE_TEST_TYPE_LABELS,
     cloneRequestForPerformanceTest,

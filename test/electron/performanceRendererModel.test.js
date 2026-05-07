@@ -23,8 +23,10 @@ test('renderer performance model uses the same seven V1 types and defaults as th
   assert.equal(created.type, 'latency');
   assert.equal(created.source.sourceType, 'manual');
   assert.equal(created.config.iterations, 1);
+  assert.equal(created.config.startConcurrency, 1);
   assert.equal(created.typeSettings.latency.config.iterations, 1);
   assert.equal(created.typeSettings.throughput.config.iterations, 10);
+  assert.equal(created.typeSettings.stress.config.rampSteps, 5);
   assert.equal(created.safetyLimits.maxTotalRequests, 100);
 });
 
@@ -42,6 +44,7 @@ test('renderer performance normalization migrates old placeholder options withou
   assert.equal(normalized.config.concurrency, 7);
   assert.equal(normalized.config.durationSeconds, 11);
   assert.equal(normalized.config.rampSteps, 3);
+  assert.equal(normalized.config.startConcurrency, 1);
   assert.equal(normalized.request.method, 'POST');
   assert.equal(normalized.request.bodyType, 'NONE');
   assert.equal('options' in normalized, false);

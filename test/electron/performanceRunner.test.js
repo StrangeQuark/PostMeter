@@ -41,15 +41,47 @@ test('creates type-specific bounded plans and rejects unsafe effective concurren
     config: { iterations: 10, concurrency: 2, spikeMultiplier: 3 },
     safetyLimits: { maxTotalRequests: 10, maxConcurrency: 6, maxDurationSeconds: 10 }
   });
-  assert.deepEqual(createPerformancePlan(spike), { totalRequests: 10, concurrency: 6 });
+  const spikePlan = createPerformancePlan(spike);
+  assert.equal(spikePlan.totalRequests, 10);
+  assert.equal(spikePlan.concurrency, 6);
+  assert.equal(spikePlan.durationMillis, 10000);
+  assert.deepEqual(spikePlan.stages.map((stage) => stage.concurrency), [6]);
 
   const ramp = performanceTestModel({
     type: 'ramp',
     request: { method: 'GET', url: 'https://api.example.test/ramp' },
-    config: { iterations: 20, concurrency: 5, rampSteps: 4 },
+    config: { iterations: 4, startConcurrency: 1, concurrency: 5, rampSteps: 4 },
     safetyLimits: { maxTotalRequests: 12, maxConcurrency: 3, maxDurationSeconds: 10 }
   });
-  assert.deepEqual(createPerformancePlan(ramp), { totalRequests: 12, concurrency: 3 });
+  const rampPlan = createPerformancePlan(ramp);
+  assert.equal(rampPlan.totalRequests, 12);
+  assert.equal(rampPlan.concurrency, 3);
+  assert.equal(rampPlan.durationMillis, 10000);
+  assert.deepEqual(rampPlan.stages.map((stage) => stage.totalRequests), [4, 4, 4]);
+  assert.deepEqual(rampPlan.stages.map((stage) => stage.concurrency), [1, 2, 3]);
+
+  const concurrency = performanceTestModel({
+    type: 'concurrency',
+    request: { method: 'GET', url: 'https://api.example.test/concurrency' },
+    config: { iterations: 4, concurrency: 3 },
+    safetyLimits: { maxTotalRequests: 12, maxConcurrency: 3, maxDurationSeconds: 10 }
+  });
+  const concurrencyPlan = createPerformancePlan(concurrency);
+  assert.equal(concurrencyPlan.totalRequests, 12);
+  assert.equal(concurrencyPlan.concurrency, 3);
+  assert.equal(concurrencyPlan.durationMillis, 10000);
+  assert.deepEqual(concurrencyPlan.stages.map((stage) => stage.concurrency), [3]);
+
+  const soak = performanceTestModel({
+    type: 'soak',
+    request: { method: 'GET', url: 'https://api.example.test/soak' },
+    config: { durationSeconds: 2, concurrency: 2 },
+    safetyLimits: { maxTotalRequests: 25, maxConcurrency: 2, maxDurationSeconds: 10 }
+  });
+  const soakPlan = createPerformancePlan(soak);
+  assert.equal(soakPlan.totalRequests, 25);
+  assert.equal(soakPlan.concurrency, 2);
+  assert.equal(soakPlan.durationMillis, 2000);
 
   assert.throws(
     () => assertPerformanceTestPayload(performanceTestModel({

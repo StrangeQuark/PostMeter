@@ -240,7 +240,7 @@ function assertPerformanceTestSourcePayload(value, field = 'source') {
 function assertPerformanceConfigPayload(value, field = 'config') {
   assertSchemaFields('performanceConfig', value || {}, field);
   assertNoUnexpectedFields('performanceConfig', value || {}, field);
-  for (const name of ['iterations', 'concurrency', 'durationSeconds', 'rampSteps', 'spikeMultiplier']) {
+  for (const name of ['iterations', 'startConcurrency', 'concurrency', 'durationSeconds', 'rampSteps', 'spikeMultiplier']) {
     assertOptionalInteger(value?.[name], `${field}.${name}`, name === 'durationSeconds' ? 0 : 1);
   }
 }
@@ -288,6 +288,17 @@ function assertPerformanceResultsMetadataPayload(value, field = 'resultsMetadata
 
 function assertPerformanceSafety(value, field = 'performanceTest') {
   const type = normalizeSchemaEnumValue('performanceTestTypes', value?.type, 'latency', { trim: true });
+  const rawConfig = value?.config && typeof value.config === 'object' && !Array.isArray(value.config) ? value.config : {};
+  const rawSafetyLimits = value?.safetyLimits && typeof value.safetyLimits === 'object' && !Array.isArray(value.safetyLimits) ? value.safetyLimits : {};
+  assertPerformanceMaximum(rawSafetyLimits.maxTotalRequests, `${field}.safetyLimits.maxTotalRequests`, HARD_PERFORMANCE_LIMITS.maxTotalRequests);
+  assertPerformanceMaximum(rawSafetyLimits.maxConcurrency, `${field}.safetyLimits.maxConcurrency`, HARD_PERFORMANCE_LIMITS.maxConcurrency);
+  assertPerformanceMaximum(rawSafetyLimits.maxDurationSeconds, `${field}.safetyLimits.maxDurationSeconds`, HARD_PERFORMANCE_LIMITS.maxDurationSeconds);
+  assertPerformanceMaximum(rawConfig.iterations, `${field}.config.iterations`, HARD_PERFORMANCE_LIMITS.maxTotalRequests);
+  assertPerformanceMaximum(rawConfig.rampSteps, `${field}.config.rampSteps`, HARD_PERFORMANCE_LIMITS.maxTotalRequests);
+  assertPerformanceMaximum(rawConfig.startConcurrency, `${field}.config.startConcurrency`, HARD_PERFORMANCE_LIMITS.maxConcurrency);
+  assertPerformanceMaximum(rawConfig.concurrency, `${field}.config.concurrency`, HARD_PERFORMANCE_LIMITS.maxConcurrency);
+  assertPerformanceMaximum(rawConfig.spikeMultiplier, `${field}.config.spikeMultiplier`, HARD_PERFORMANCE_LIMITS.maxConcurrency);
+  assertPerformanceMaximum(rawConfig.durationSeconds, `${field}.config.durationSeconds`, HARD_PERFORMANCE_LIMITS.maxDurationSeconds);
   const config = normalizePerformanceConfig(value?.config, type);
   const safetyLimits = normalizePerformanceSafetyLimits(value?.safetyLimits);
   if (safetyLimits.maxTotalRequests > HARD_PERFORMANCE_LIMITS.maxTotalRequests) {
@@ -299,10 +310,18 @@ function assertPerformanceSafety(value, field = 'performanceTest') {
   if (safetyLimits.maxDurationSeconds > HARD_PERFORMANCE_LIMITS.maxDurationSeconds) {
     fail(`${field}.safetyLimits.maxDurationSeconds cannot exceed ${HARD_PERFORMANCE_LIMITS.maxDurationSeconds}.`);
   }
-  const effectiveConcurrency = type === 'spike'
-    ? config.concurrency * config.spikeMultiplier
-    : config.concurrency;
-  if (config.iterations > safetyLimits.maxTotalRequests) {
+  if ((type === 'stress' || type === 'ramp') && config.startConcurrency > config.concurrency) {
+    fail(`${field}.config.startConcurrency cannot exceed config.concurrency.`);
+  }
+  const plannedRequests = performancePlannedRequests(type, config, safetyLimits);
+  const effectiveConcurrency = performanceEffectiveConcurrency(type, config);
+  if (type === 'concurrency' && plannedRequests > safetyLimits.maxTotalRequests) {
+    fail(`${field}.config.iterations multiplied by config.concurrency exceeds safetyLimits.maxTotalRequests.`);
+  }
+  if ((type === 'stress' || type === 'ramp') && plannedRequests > safetyLimits.maxTotalRequests) {
+    fail(`${field}.config.iterations multiplied by config.rampSteps exceeds safetyLimits.maxTotalRequests.`);
+  }
+  if (!['concurrency', 'stress', 'ramp', 'soak'].includes(type) && config.iterations > safetyLimits.maxTotalRequests) {
     fail(`${field}.config.iterations exceeds safetyLimits.maxTotalRequests.`);
   }
   if (effectiveConcurrency > safetyLimits.maxConcurrency) {
@@ -311,6 +330,42 @@ function assertPerformanceSafety(value, field = 'performanceTest') {
   if (config.durationSeconds > safetyLimits.maxDurationSeconds) {
     fail(`${field}.config.durationSeconds exceeds safetyLimits.maxDurationSeconds.`);
   }
+}
+
+function assertPerformanceMaximum(value, field, max) {
+  if (value == null) {
+    return;
+  }
+  const number = Number(value);
+  if (Number.isFinite(number) && number > max) {
+    fail(`${field} cannot exceed ${max}.`);
+  }
+}
+
+function performancePlannedRequests(type, config, safetyLimits) {
+  if (type === 'soak') {
+    return safetyLimits.maxTotalRequests;
+  }
+  if (type === 'concurrency') {
+    return config.iterations * config.concurrency;
+  }
+  if (type === 'stress' || type === 'ramp') {
+    return config.iterations * config.rampSteps;
+  }
+  return config.iterations;
+}
+
+function performanceEffectiveConcurrency(type, config) {
+  if (type === 'latency') {
+    return 1;
+  }
+  if (type === 'spike') {
+    return config.concurrency * config.spikeMultiplier;
+  }
+  if (type === 'stress' || type === 'ramp') {
+    return Math.max(config.startConcurrency, config.concurrency);
+  }
+  return config.concurrency;
 }
 
 function assertSettingsPayload(value, field) {
