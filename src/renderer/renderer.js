@@ -6,6 +6,7 @@ const RENDERER_STATE_DEFAULTS = PostMeterRendererState.createRendererState();
 const TAB_PANEL_IDS = {
   request: ['paramsTab', 'headersTab', 'authTab', 'cookiesTab', 'bodyTab', 'testsTab', 'scriptsTab', 'examplesTab', 'collectionVariablesTab'],
   results: ['responseTab', 'responseHeadersTab', 'responseCookiesTab', 'testResultsTab', 'visualizerTab'],
+  performanceRequest: ['performanceParamsTab', 'performanceHeadersTab', 'performanceAuthTab', 'performanceCookiesTab', 'performanceBodyTab', 'performanceTestsTab', 'performanceScriptsTab', 'performanceExamplesTab', 'performanceVariablesTab'],
   performance: ['latencyTab', 'throughputTab', 'concurrencyTab', 'stressTab', 'spikeTab', 'soakTab', 'rampTab'],
   performanceOutput: ['performanceOutputResultsTab', 'performanceOutputRequestsTab', 'performanceOutputGraphsTab']
 };
@@ -38,6 +39,7 @@ let activeOauthFlowId = RENDERER_STATE_DEFAULTS.activeOauthFlowId;
 let activeRunnerId = RENDERER_STATE_DEFAULTS.activeRunnerId;
 let lastRunnerResult = RENDERER_STATE_DEFAULTS.lastRunnerResult;
 let activePerformanceRunId = null;
+let activePerformanceCalibrationId = null;
 let lastPerformanceResult = null;
 let selectedRunnerExecutionIndex = 0;
 let selectedPerformanceResultIndex = 0;
@@ -84,6 +86,7 @@ const {
 } = PostMeterExampleModel;
 const {
   PERFORMANCE_TEST_TYPES: RENDERER_PERFORMANCE_TEST_TYPES,
+  MAX_SAFETY_LIMITS: PERFORMANCE_MAX_SAFETY_LIMITS,
   cloneRequestForPerformanceTest,
   newPerformanceTestObject,
   normalizePerformanceTest,
@@ -338,7 +341,9 @@ initializeRenderer({
     }));
     if (window.postmeter.performance?.onProgress) {
       registerCleanup(window.postmeter.performance.onProgress(({ id, progress }) => {
-        if (id === activePerformanceRunId) {
+        if (id === activePerformanceCalibrationId && progress?.kind === 'calibration') {
+          renderPerformanceCalibrationProgress(progress);
+        } else if (id === activePerformanceRunId) {
           renderPerformanceProgress(progress);
         }
       }));
@@ -438,6 +443,17 @@ function bindUi() {
     onCancelPerformanceTest: () => { void cancelPerformanceTestRun(); },
     onExportPerformanceTest: () => { void exportActivePerformanceTest(); },
     onImportPerformanceRequest: () => { void promptAndImportPerformanceRequest(); },
+    onAddPerformanceParam: () => addPerformancePair('queryParams'),
+    onAddPerformanceHeader: () => addPerformancePair('headers'),
+    onAddPerformanceAssertion: () => addPerformanceAssertion(),
+    onAddPerformanceAssertionTemplate: addPerformanceAssertionTemplate,
+    onAddPerformanceExample: addPerformanceExample,
+    onExportPerformanceExamples: () => { void exportPerformanceExamples(); },
+    onAddPerformanceRequestVariable: addPerformanceRequestVariable,
+    onAddPerformanceCookie: addPerformanceCookie,
+    onClearExpiredPerformanceCookies: clearExpiredPerformanceCookies,
+    onCalibratePerformance: () => { void startPerformanceCalibration(); },
+    onClosePerformanceCalibration: closePerformanceCalibrationModal,
     onStartPkceFlow: startPkceFlow,
     onStartDeviceFlow: startDeviceFlow,
     onCancelOauthFlow: cancelOauthFlow,
@@ -460,6 +476,21 @@ function bindUi() {
     onRunnerConfigChange: collectRunnerAndMarkDirty,
     onPerformanceConfigChange: collectPerformanceTestAndMarkDirty,
     onPerformanceRequestChange: collectPerformanceTestAndMarkDirty,
+    onPerformanceMethodChange: () => {
+      updatePerformanceMethodSelectClass();
+      collectPerformanceTestAndMarkDirty();
+    },
+    onPerformanceUrlInput: () => {
+      collectPerformanceTestAndMarkDirty();
+      renderPerformanceCookieJarEditor();
+    },
+    onPerformanceBodyTypeChange: () => {
+      updatePerformanceRequestBodyEditorLanguage();
+      collectPerformanceTestAndMarkDirty();
+    },
+    onPerformanceAuthTypeChange: showPerformanceAuthSection,
+    onPerformanceAuthInput: collectPerformanceTestAndMarkDirty,
+    onPerformanceFilterCookiesChange: renderPerformanceCookieJarEditor,
     onMethodChange: () => {
       updateMethodSelectClass();
       collectRequestAndMarkDirty();
@@ -1822,6 +1853,7 @@ function focusInitialModalElement(modalId) {
     textInputModal: $('textInputModal')?.dataset?.valueControl || 'textInputModalInput',
     confirmActionModal: 'cancelConfirmActionButton',
     notificationModal: 'closeNotificationModalButton',
+    performanceCalibrationModal: 'closePerformanceCalibrationModalButton',
     vaultPromptModal: 'denyVaultPromptButton'
   };
   const preferred = preferredFocusIds[modalId] ? $(preferredFocusIds[modalId]) : null;
@@ -3599,23 +3631,185 @@ function renderPerformanceEditor() {
   renderPerformanceConfigControls(test);
   renderPerformanceSafetyControls(test);
   renderPerformanceMutationControls(test);
-  for (const id of [
-    'performanceMethodSelect',
-    'performanceUrlInput',
-    'performanceBodyInput'
-  ]) {
-    const control = $(id);
-    if (control) {
-      control.disabled = !test;
+  renderPerformanceRequestEditor(test);
+}
+
+function renderPerformanceRequestEditor(test = activePerformanceTest()) {
+  const request = test?.request || null;
+  setPerformanceRequestSectionDisabled(!test);
+  if (!request) {
+    setValue('performanceMethodSelect', 'GET');
+    updatePerformanceMethodSelectClass();
+    setValue('performanceUrlInput', '');
+    setValue('performanceBodyTypeSelect', 'NONE');
+    setValue('performanceBodyInput', '');
+    setValue('performancePreRequestScriptInput', '');
+    setValue('performanceTestScriptInput', '');
+    setChecked('performanceRequestCookieJarEnabledInput', false);
+    setChecked('performanceRequestCookieJarStoreInput', true);
+    for (const id of [
+      'performanceParamsTable',
+      'performanceHeadersTable',
+      'performanceAssertionsTable',
+      'performanceRequestVariablesTable',
+      'performanceExamplesList',
+      'performanceCookiesTable'
+    ]) {
+      const container = $(id);
+      if (container) {
+        container.textContent = '';
+      }
     }
+    renderPerformanceAuthEditor({ type: 'none' });
+    renderPerformanceVariablePreview();
+    updatePerformanceRequestEditorLanguages();
+    return;
   }
-  setValue('performanceMethodSelect', test?.request?.method || 'GET');
-  setValue('performanceUrlInput', test?.request?.url || '');
-  setValue('performanceBodyInput', test?.request?.body || '');
-  const source = $('performanceImportSource');
-  if (source) {
-    source.textContent = performanceImportSourceLabel(test);
+
+  request.queryParams ||= [];
+  request.headers ||= [];
+  request.assertions ||= [];
+  request.variables ||= [];
+  request.examples ||= [];
+  request.scripts ||= { preRequest: '', tests: '' };
+  request.cookieJar ||= { enabled: false, storeResponses: true };
+  request.auth ||= { type: 'none' };
+
+  setValue('performanceMethodSelect', METHODS.includes(request.method) ? request.method : 'GET');
+  updatePerformanceMethodSelectClass();
+  setValue('performanceUrlInput', request.url || '');
+  setValue('performanceBodyTypeSelect', BODY_TYPES.includes(request.bodyType) ? request.bodyType : 'NONE');
+  setValue('performanceBodyInput', request.body || '');
+  setValue('performancePreRequestScriptInput', request.scripts.preRequest || '');
+  setValue('performanceTestScriptInput', request.scripts.tests || '');
+  setChecked('performanceRequestCookieJarEnabledInput', request.cookieJar.enabled === true);
+  setChecked('performanceRequestCookieJarStoreInput', request.cookieJar.storeResponses !== false);
+
+  renderPerformancePairs('performanceParamsTable', request.queryParams);
+  renderPerformancePairs('performanceHeadersTable', request.headers);
+  renderPerformanceAssertions(request.assertions);
+  renderPerformanceRequestVariablePairs(request.variables);
+  renderPerformanceExamples(request.examples);
+  renderPerformanceCookieJarEditor();
+  renderPerformanceAuthEditor(request.auth);
+  renderPerformanceVariablePreview();
+  updatePerformanceRequestEditorLanguages();
+}
+
+function setPerformanceRequestSectionDisabled(disabled) {
+  for (const control of document.querySelectorAll('#performanceRequestSection input, #performanceRequestSection select, #performanceRequestSection textarea, #performanceRequestSection button')) {
+    control.disabled = disabled;
   }
+  for (const button of document.querySelectorAll('.tab[data-tab-group="performanceRequest"]')) {
+    button.disabled = disabled;
+  }
+  const runButton = $('runPerformanceTestButton');
+  if (runButton) {
+    runButton.disabled = disabled || Boolean(activePerformanceRunId);
+  }
+  const cancelButton = $('cancelPerformanceTestButton');
+  if (cancelButton) {
+    cancelButton.disabled = !activePerformanceRunId;
+  }
+}
+
+function renderPerformancePairs(containerId, pairs) {
+  renderEditorRequestPairs({
+    doc: document,
+    containerId,
+    pairs,
+    onDirty: () => {
+      collectPerformanceTestFromEditor();
+      markActivePerformanceDirty();
+    },
+    onRemove: () => {
+      renderPerformanceRequestEditor();
+    }
+  });
+}
+
+function renderPerformanceAssertions(assertions) {
+  renderRequestAssertions({
+    doc: document,
+    containerId: 'performanceAssertionsTable',
+    assertions,
+    onDirty: markActivePerformanceDirty,
+    onRerender: () => renderPerformanceAssertions(assertions)
+  });
+}
+
+function renderPerformanceRequestVariablePairs(pairs) {
+  renderEditorVariablePairs({
+    doc: document,
+    containerId: 'performanceRequestVariablesTable',
+    pairs,
+    onChange: () => {
+      markActivePerformanceDirty();
+      renderPerformanceVariablePreview();
+    },
+    onRemove: () => {
+      renderPerformanceRequestEditor();
+    }
+  });
+}
+
+function renderPerformanceVariablePreview() {
+  const test = activePerformanceTest();
+  renderEditorVariablePreview({
+    doc: document,
+    containerId: 'performanceVariablePreview',
+    collection: null,
+    environment: performanceSelectedEnvironment(test),
+    request: test?.request || null
+  });
+}
+
+function renderPerformanceExamples(examples) {
+  renderRequestExamples(examples, {
+    doc: document,
+    containerId: 'performanceExamplesList',
+    exportButtonId: 'exportPerformanceExamplesButton',
+    bodyTypes: BODY_TYPES,
+    onDirty: markActivePerformanceDirty,
+    onDuplicate: duplicatePerformanceExample,
+    onDelete: deletePerformanceExample
+  });
+  CodeEditor.enhanceCodeTextareas?.($('performanceExamplesList'));
+}
+
+function renderPerformanceAuthEditor(auth) {
+  renderRequestAuthEditor(auth, {
+    doc: document,
+    idPrefix: 'performance',
+    showAuthSection: showPerformanceAuthSection
+  });
+}
+
+function showPerformanceAuthSection(type) {
+  for (const section of document.querySelectorAll('#performanceAuthTab .auth-section')) {
+    section.classList.toggle('active', section.dataset.authSection === type);
+  }
+}
+
+function renderPerformanceCookieJarEditor() {
+  renderRequestCookieJarEditor({
+    doc: document,
+    workspace,
+    containerId: 'performanceCookiesTable',
+    filterInputId: 'performanceFilterCookiesToRequestHostInput',
+    filterLabelId: 'performanceCookieHostFilterLabel',
+    activeRequestUrl: activePerformanceTest()?.request?.url || '',
+    onDirty: markCookieJarDirty,
+    rerender: renderPerformanceCookieJarEditor,
+    setStatus
+  });
+}
+
+function performanceSelectedEnvironment(test = activePerformanceTest()) {
+  const environmentId = test?.environmentId || performanceTypeSettings(test, test?.type || 'latency')?.environmentId || 'none';
+  return environmentId && environmentId !== 'none'
+    ? (workspace.environments || []).find((environment) => environment.id === environmentId) || null
+    : null;
 }
 
 function renderPerformanceTypeTabs(test) {
@@ -3667,6 +3861,7 @@ function renderPerformanceConfigControls(test) {
     const type = performanceTypeForElement(panel);
     const config = performanceTypeSettings(test, type).config || {};
     setPerformancePanelControlValue(panel, 'config', 'iterations', config.iterations || 1);
+    setPerformancePanelControlValue(panel, 'config', 'startConcurrency', config.startConcurrency || 1);
     setPerformancePanelControlValue(panel, 'config', 'concurrency', config.concurrency || 1);
     setPerformancePanelControlValue(panel, 'config', 'durationSeconds', config.durationSeconds || 0);
     setPerformancePanelControlValue(panel, 'config', 'rampSteps', config.rampSteps || 1);
@@ -4207,6 +4402,217 @@ function importPerformanceRequestSelection(target) {
   renderPerformanceEditor();
   setStatus('Request imported into performance test.');
   return test.request;
+}
+
+async function startPerformanceCalibration() {
+  if (activePerformanceCalibrationId) {
+    return setStatus('Performance calibration is already running.');
+  }
+  const performanceApi = window.postmeter?.performance;
+  if (!performanceApi?.calibrate) {
+    return setStatus('Performance calibration is unavailable in this runtime.');
+  }
+  const calibrationId = crypto.randomUUID();
+  activePerformanceCalibrationId = calibrationId;
+  renderPerformanceCalibrationRunning();
+  const modalClosed = showModal('performanceCalibrationModal', null).then(() => {
+    if (activePerformanceCalibrationId === calibrationId) {
+      void cancelPerformanceCalibration(calibrationId);
+    }
+  });
+  try {
+    const result = await performanceApi.calibrate(calibrationId);
+    if (activePerformanceCalibrationId !== calibrationId) {
+      await modalClosed;
+      return result;
+    }
+    activePerformanceCalibrationId = null;
+    renderPerformanceCalibrationResult(result);
+    setStatus(result?.cancelled ? 'Performance calibration cancelled.' : 'Performance calibration completed.');
+    return result;
+  } catch (error) {
+    const message = error.message || String(error);
+    if (activePerformanceCalibrationId === calibrationId) {
+      activePerformanceCalibrationId = null;
+      renderPerformanceCalibrationError(message);
+      setStatus(`Performance calibration failed: ${message}`);
+      notifyUser('Performance Calibration Failed', message);
+    }
+    return null;
+  }
+}
+
+function closePerformanceCalibrationModal() {
+  const calibrationId = activePerformanceCalibrationId;
+  if (calibrationId) {
+    void cancelPerformanceCalibration(calibrationId);
+  }
+  resolveActiveModal(null);
+}
+
+async function cancelPerformanceCalibration(calibrationId) {
+  if (activePerformanceCalibrationId === calibrationId) {
+    activePerformanceCalibrationId = null;
+  }
+  try {
+    await window.postmeter?.performance?.cancelCalibration?.(calibrationId);
+    setStatus('Performance calibration cancelled.');
+    return true;
+  } catch (error) {
+    const message = error.message || String(error);
+    setStatus(`Performance calibration cancellation failed: ${message}`);
+    return false;
+  }
+}
+
+function renderPerformanceCalibrationRunning() {
+  const body = $('performanceCalibrationBody');
+  if (!body) {
+    return;
+  }
+  body.textContent = '';
+  const row = document.createElement('div');
+  row.className = 'performance-calibration-running';
+  const spinner = document.createElement('span');
+  spinner.className = 'performance-calibration-spinner';
+  spinner.setAttribute('aria-hidden', 'true');
+  const text = document.createElement('span');
+  text.textContent = 'Running extended local calibration...';
+  row.append(spinner, text);
+  const progressWrap = document.createElement('div');
+  progressWrap.className = 'performance-calibration-progress';
+  const progressLabel = document.createElement('div');
+  progressLabel.id = 'performanceCalibrationProgressLabel';
+  progressLabel.className = 'performance-calibration-progress-label';
+  progressLabel.textContent = 'Preparing calibration...';
+  const progressBar = document.createElement('progress');
+  progressBar.id = 'performanceCalibrationProgressBar';
+  progressBar.max = 100;
+  progressBar.value = 0;
+  const progressDetail = document.createElement('div');
+  progressDetail.id = 'performanceCalibrationProgressDetail';
+  progressDetail.className = 'performance-calibration-progress-detail';
+  progressDetail.textContent = 'Starting local loopback server.';
+  progressWrap.append(progressLabel, progressBar, progressDetail);
+  const note = document.createElement('p');
+  note.className = 'performance-calibration-note';
+  note.textContent = 'This usually finishes in about two minutes while PostMeter runs warmup, bounded target-rate probes, and short verification passes.';
+  body.append(row, progressWrap, note);
+}
+
+function renderPerformanceCalibrationProgress(progress = {}) {
+  const bar = $('performanceCalibrationProgressBar');
+  const label = $('performanceCalibrationProgressLabel');
+  const detail = $('performanceCalibrationProgressDetail');
+  if (!bar || !label || !detail) {
+    return;
+  }
+  const percent = Math.max(0, Math.min(100, Number(progress.percent) || 0));
+  bar.value = percent;
+  const phaseLabel = progress.phaseLabel || 'Calibration';
+  label.textContent = `${phaseLabel} ${Math.round(percent)}%`;
+  const pieces = [];
+  if (progress.targetRequestsPerSecond) {
+    pieces.push(`${formatNumber(progress.targetRequestsPerSecond)} RPS`);
+  }
+  if (progress.stageIndex && progress.stageCount) {
+    pieces.push(`stage ${formatNumber(progress.stageIndex)} of ${formatNumber(progress.stageCount)}`);
+  }
+  if (progress.pass && progress.passes) {
+    pieces.push(`pass ${formatNumber(progress.pass)} of ${formatNumber(progress.passes)}`);
+  }
+  if (progress.completedRequests || progress.totalRequests) {
+    pieces.push(`${formatNumber(progress.completedRequests || 0)} of ${formatNumber(progress.totalRequests || 0)} requests`);
+  }
+  detail.textContent = pieces.length ? pieces.join(' | ') : (progress.message || 'Running calibration...');
+}
+
+function renderPerformanceCalibrationResult(result = {}) {
+  const body = $('performanceCalibrationBody');
+  if (!body) {
+    return;
+  }
+  body.textContent = '';
+  const summary = result.summary || {};
+  const grid = document.createElement('div');
+  grid.className = 'performance-calibration-summary';
+  grid.append(
+    calibrationMetric('Max sustained local RPS', `${formatNumber(summary.reliableTargetRequestsPerSecond)} RPS`),
+    calibrationMetric('Planning cap', `${formatNumber(summary.recommendedMaxRequestsPerSecond)} RPS`),
+    calibrationMetric('Sustained RPS', formatNumber(summary.sustainedRequestsPerSecond)),
+    calibrationMetric('Peak RPS', formatNumber(summary.peakRequestsPerSecond)),
+    calibrationMetric('Next failed target', summary.edgeUpperBoundRequestsPerSecond ? `${formatNumber(summary.edgeUpperBoundRequestsPerSecond)} RPS` : 'Not found'),
+    calibrationMetric('Measurement variation', `${formatNumber(summary.measurementVariationPercent)}%`),
+    calibrationMetric('Repeatability', `${formatNumber(summary.repeatabilityPercent)}%`),
+    calibrationMetric('Confidence', summary.confidence || 'low'),
+    calibrationMetric('P95 latency', `${formatNumber(summary.p95LatencyMillis)} ms`),
+    calibrationMetric('P95 scheduler lag', `${formatNumber(summary.p95StartLagMillis)} ms`),
+    calibrationMetric('P95 event-loop delay', `${formatNumber(summary.p95EventLoopDelayMillis)} ms`),
+    calibrationMetric('Stability', `${formatNumber(summary.stabilityPercent)}%`)
+  );
+
+  const stages = document.createElement('div');
+  stages.className = 'performance-calibration-stages';
+  for (const stage of Array.isArray(result.stages) ? result.stages : []) {
+    const row = document.createElement('div');
+    row.className = 'performance-calibration-stage';
+    if (stage.accepted === true) {
+      row.classList.add('is-accepted');
+    } else if (stage.accepted === false) {
+      row.classList.add('is-rejected');
+    }
+    const status = stage.accepted === true ? 'PASS' : 'CHECK';
+    const target = stage.targetRequestsPerSecond ? `${formatNumber(stage.targetRequestsPerSecond)} target` : `${stage.concurrency || 0} clients`;
+    const failureReasons = Array.isArray(stage.failureReasons) ? stage.failureReasons.join('; ') : '';
+    if (failureReasons) {
+      row.title = failureReasons;
+    }
+    row.append(
+      calibrationStageCell(stage.name || 'Stage', true),
+      calibrationStageCell(target),
+      calibrationStageCell(`${formatNumber(stage.requestsPerSecond)} RPS`),
+      calibrationStageCell(`lag ${formatNumber(stage.p95StartLagMillis)} ms`),
+      calibrationStageCell(`EL ${formatNumber(stage.p95EventLoopDelayMillis)} ms`),
+      calibrationStageCell(`${stage.completedRequests || 0} requests`),
+      calibrationStageCell(status)
+    );
+    stages.append(row);
+  }
+
+  const note = document.createElement('p');
+  note.className = 'performance-calibration-note';
+  const notes = Array.isArray(summary.notes) ? summary.notes : [];
+  note.textContent = notes.join(' ');
+  body.append(grid, stages, note);
+}
+
+function renderPerformanceCalibrationError(message) {
+  const body = $('performanceCalibrationBody');
+  if (!body) {
+    return;
+  }
+  body.textContent = '';
+  const text = document.createElement('p');
+  text.className = 'performance-calibration-note';
+  text.textContent = `Calibration failed: ${message}`;
+  body.append(text);
+}
+
+function calibrationMetric(label, value) {
+  const item = document.createElement('div');
+  item.className = 'performance-calibration-metric';
+  const labelElement = document.createElement('span');
+  labelElement.textContent = label;
+  const valueElement = document.createElement('strong');
+  valueElement.textContent = value;
+  item.append(labelElement, valueElement);
+  return item;
+}
+
+function calibrationStageCell(value, strong = false) {
+  const element = document.createElement(strong ? 'strong' : 'span');
+  element.textContent = String(value || '');
+  return element;
 }
 
 async function runActivePerformanceTest() {
@@ -6772,7 +7178,15 @@ function methodClassName(method) {
 }
 
 function updateMethodSelectClass() {
-  const select = $('methodSelect');
+  updateMethodSelectClassFor('methodSelect');
+}
+
+function updatePerformanceMethodSelectClass() {
+  updateMethodSelectClassFor('performanceMethodSelect');
+}
+
+function updateMethodSelectClassFor(selectId) {
+  const select = $(selectId);
   if (!select) {
     return;
   }
@@ -6787,9 +7201,20 @@ function updateRequestEditorLanguages() {
   CodeEditor.setLanguage?.($('testScriptInput'), 'javascript');
 }
 
+function updatePerformanceRequestEditorLanguages() {
+  updatePerformanceRequestBodyEditorLanguage();
+  CodeEditor.setLanguage?.($('performancePreRequestScriptInput'), 'javascript');
+  CodeEditor.setLanguage?.($('performanceTestScriptInput'), 'javascript');
+}
+
 function updateRequestBodyEditorLanguage() {
   const bodyType = $('bodyTypeSelect')?.value || 'NONE';
   CodeEditor.setLanguage?.($('bodyInput'), bodyType === 'RAW_JSON' ? 'json' : 'text');
+}
+
+function updatePerformanceRequestBodyEditorLanguage() {
+  const bodyType = $('performanceBodyTypeSelect')?.value || 'NONE';
+  CodeEditor.setLanguage?.($('performanceBodyInput'), bodyType === 'RAW_JSON' ? 'json' : 'text');
 }
 
 function renderRequestEditor() {
@@ -6883,7 +7308,7 @@ function renderAuthEditor(auth) {
 }
 
 function showAuthSection(type) {
-  for (const section of document.querySelectorAll('.auth-section')) {
+  for (const section of document.querySelectorAll('#authTab .auth-section')) {
     section.classList.toggle('active', section.dataset.authSection === type);
   }
 }
@@ -8761,6 +9186,20 @@ function addRequestVariable() {
   }
 }
 
+function addPerformanceRequestVariable() {
+  const test = activePerformanceTest();
+  if (test?.request) {
+    const draftAuth = collectPerformanceAuthFromEditor();
+    collectPerformanceTestFromEditor();
+    const request = activePerformanceTest()?.request || test.request;
+    request.auth = draftAuth;
+    request.variables ||= [];
+    request.variables.push({ enabled: true, key: '', value: '' });
+    markActivePerformanceDirty();
+    renderPerformanceRequestEditor();
+  }
+}
+
 function addCookie() {
   workspace.cookies ||= [];
   const request = activeRequest();
@@ -8779,6 +9218,24 @@ function clearExpiredCookies() {
   setStatus(`Removed ${before - workspace.cookies.length} expired cookies.`);
 }
 
+function addPerformanceCookie() {
+  workspace.cookies ||= [];
+  const request = activePerformanceTest()?.request;
+  const domain = domainFromRequestUrl(request?.url) || 'example.com';
+  markCookieJarDirty();
+  workspace.cookies.push(newWorkspaceCookie({ domain }));
+  renderPerformanceCookieJarEditor();
+}
+
+function clearExpiredPerformanceCookies() {
+  workspace.cookies ||= [];
+  const before = workspace.cookies.length;
+  markCookieJarDirty();
+  workspace.cookies = workspace.cookies.filter((cookie) => !isExpiredCookie(cookie));
+  renderPerformanceCookieJarEditor();
+  setStatus(`Removed ${before - workspace.cookies.length} expired cookies.`);
+}
+
 function addExample() {
   const request = activeRequest();
   if (!request) {
@@ -8790,6 +9247,19 @@ function addExample() {
   }));
   markActiveRequestDirty();
   renderExamples(request.examples);
+}
+
+function addPerformanceExample() {
+  const request = activePerformanceTest()?.request;
+  if (!request) {
+    return;
+  }
+  request.examples ||= [];
+  request.examples.push(newExampleObject({
+    existingNames: request.examples.map((example) => example.name)
+  }));
+  markActivePerformanceDirty();
+  renderPerformanceExamples(request.examples);
 }
 
 function captureResponseExample() {
@@ -8832,6 +9302,28 @@ async function exportRequestExamples() {
   }
 }
 
+async function exportPerformanceExamples() {
+  const request = activePerformanceTest()?.request;
+  if (!request) {
+    return setStatus('Select a performance test before exporting examples.');
+  }
+  if (!request.examples?.length) {
+    return setStatus('This performance request does not have examples to export.');
+  }
+  collectPerformanceTestFromEditor();
+  try {
+    const exportExamplesBoundary = window.__postmeterExportExamples || window.postmeter.request.exportExamples;
+    const result = await exportExamplesBoundary(request);
+    if (!result.cancelled) {
+      setStatus(`Examples exported to ${result.path}.`);
+    }
+  } catch (error) {
+    const message = error.message || String(error);
+    setStatus('Performance example export failed.');
+    notifyUser('Performance Example Export Failed', message);
+  }
+}
+
 function duplicateExample(index) {
   const request = activeRequest();
   if (!request?.examples?.[index]) {
@@ -8843,6 +9335,19 @@ function duplicateExample(index) {
   request.examples.splice(index + 1, 0, duplicate);
   markActiveRequestDirty();
   renderExamples(request.examples);
+}
+
+function duplicatePerformanceExample(index) {
+  const request = activePerformanceTest()?.request;
+  if (!request?.examples?.[index]) {
+    return;
+  }
+  const duplicate = structuredClone(request.examples[index]);
+  duplicate.id = crypto.randomUUID();
+  duplicate.name = uniqueName(`${duplicate.name || 'Example Response'} Copy`, request.examples.map((example) => example.name));
+  request.examples.splice(index + 1, 0, duplicate);
+  markActivePerformanceDirty();
+  renderPerformanceExamples(request.examples);
 }
 
 async function deleteExample(index) {
@@ -8860,12 +9365,41 @@ async function deleteExample(index) {
   renderExamples(request.examples);
 }
 
+async function deletePerformanceExample(index) {
+  const request = activePerformanceTest()?.request;
+  if (!request?.examples?.[index] || !(await confirmActionModal({
+    title: 'Delete example?',
+    message: `Delete ${request.examples[index].name || 'example'}?`,
+    confirmLabel: 'Delete Example',
+    danger: true
+  }))) {
+    return;
+  }
+  request.examples.splice(index, 1);
+  markActivePerformanceDirty();
+  renderPerformanceExamples(request.examples);
+}
+
 function addPair(fieldName) {
   const request = activeRequest();
   if (request) {
     request[fieldName].push({ enabled: true, key: '', value: '' });
     markActiveRequestDirty();
     renderRequestEditor();
+  }
+}
+
+function addPerformancePair(fieldName) {
+  const test = activePerformanceTest();
+  if (test?.request) {
+    const draftAuth = collectPerformanceAuthFromEditor();
+    collectPerformanceTestFromEditor();
+    const request = activePerformanceTest()?.request || test.request;
+    request.auth = draftAuth;
+    request[fieldName] ||= [];
+    request[fieldName].push({ enabled: true, key: '', value: '' });
+    markActivePerformanceDirty();
+    renderPerformanceRequestEditor();
   }
 }
 
@@ -8882,6 +9416,21 @@ function addAssertion(template = ASSERTION_TEMPLATES.status200) {
 function addAssertionTemplate() {
   const template = ASSERTION_TEMPLATES[$('assertionTemplateSelect').value] || ASSERTION_TEMPLATES.status200;
   addAssertion(template);
+}
+
+function addPerformanceAssertion(template = ASSERTION_TEMPLATES.status200) {
+  const request = activePerformanceTest()?.request;
+  if (request) {
+    request.assertions ||= [];
+    request.assertions.push(newAssertion(template));
+    markActivePerformanceDirty();
+    renderPerformanceAssertions(request.assertions);
+  }
+}
+
+function addPerformanceAssertionTemplate() {
+  const template = ASSERTION_TEMPLATES[$('performanceAssertionTemplateSelect')?.value] || ASSERTION_TEMPLATES.status200;
+  addPerformanceAssertion(template);
 }
 
 async function renameCollection(collection) {
@@ -9073,6 +9622,14 @@ function collectAuthFromEditor() {
   });
 }
 
+function collectPerformanceAuthFromEditor() {
+  return collectRequestAuthFromEditor({
+    doc: document,
+    idPrefix: 'performance',
+    existingAuth: activePerformanceTest()?.request?.auth || {}
+  });
+}
+
 function collectEnvironmentFromEditor() {
   const environment = activeEnvironment();
   if (environment) {
@@ -9121,8 +9678,24 @@ function collectPerformanceTestFromEditor() {
     ? String($('performanceMethodSelect').value).toUpperCase()
     : 'GET';
   test.request.url = $('performanceUrlInput')?.value.trim() || '';
+  test.request.bodyType = BODY_TYPES.includes($('performanceBodyTypeSelect')?.value)
+    ? $('performanceBodyTypeSelect').value
+    : 'NONE';
   test.request.body = $('performanceBodyInput')?.value || '';
-  test.request.bodyType = test.request.body ? (test.request.bodyType === 'RAW_JSON' ? 'RAW_JSON' : 'RAW_TEXT') : 'NONE';
+  test.request.auth = collectPerformanceAuthFromEditor();
+  test.request.assertions ||= [];
+  test.request.scripts = {
+    preRequest: $('performancePreRequestScriptInput')?.value || '',
+    tests: $('performanceTestScriptInput')?.value || ''
+  };
+  test.request.cookieJar = {
+    enabled: $('performanceRequestCookieJarEnabledInput')?.checked === true,
+    storeResponses: $('performanceRequestCookieJarStoreInput')?.checked !== false
+  };
+  test.request.queryParams = collectKeyValueRowsFromTable('performanceParamsTable', test.request.queryParams);
+  test.request.headers = collectKeyValueRowsFromTable('performanceHeadersTable', test.request.headers);
+  test.request.variables = collectKeyValueRowsFromTable('performanceRequestVariablesTable', test.request.variables);
+  test.request.examples = Array.isArray(test.request.examples) ? test.request.examples : [];
   test.source ||= { sourceType: 'manual' };
   const title = $('performanceMainTitle');
   if (title && title.dataset.editing !== 'true') {
@@ -9131,27 +9704,88 @@ function collectPerformanceTestFromEditor() {
   renderPerformanceTests();
 }
 
+function collectKeyValueRowsFromTable(containerId, fallback = []) {
+  const container = $(containerId);
+  if (!container) {
+    return Array.isArray(fallback) ? fallback : [];
+  }
+  const rows = Array.from(container.querySelectorAll('.kv-row'));
+  if (!rows.length) {
+    return [];
+  }
+  return rows.map((row) => {
+    const inputs = row.querySelectorAll('input');
+    return {
+      enabled: inputs[0]?.checked !== false,
+      key: inputs[1]?.value || '',
+      value: inputs[2]?.value || ''
+    };
+  });
+}
+
 function collectPerformanceTypeSettingsFromPanel(test, type, panel) {
   if (!test || !RENDERER_PERFORMANCE_TEST_TYPES.includes(type) || !panel) {
     return;
   }
   const previous = performanceTypeSettings(test, type);
+  const minimumDurationSeconds = type === 'soak' ? 1 : 0;
+  const config = {
+    iterations: clampPerformanceConfigInput('iterations', 1, PERFORMANCE_MAX_SAFETY_LIMITS.maxTotalRequests, previous.config?.iterations || 1, panel),
+    startConcurrency: clampPerformanceConfigInput('startConcurrency', 1, PERFORMANCE_MAX_SAFETY_LIMITS.maxConcurrency, previous.config?.startConcurrency || 1, panel),
+    concurrency: clampPerformanceConfigInput('concurrency', 1, PERFORMANCE_MAX_SAFETY_LIMITS.maxConcurrency, previous.config?.concurrency || 1, panel),
+    durationSeconds: clampPerformanceConfigInput('durationSeconds', minimumDurationSeconds, PERFORMANCE_MAX_SAFETY_LIMITS.maxDurationSeconds, previous.config?.durationSeconds || minimumDurationSeconds, panel),
+    rampSteps: clampPerformanceConfigInput('rampSteps', 1, PERFORMANCE_MAX_SAFETY_LIMITS.maxTotalRequests, previous.config?.rampSteps || 1, panel),
+    spikeMultiplier: clampPerformanceConfigInput('spikeMultiplier', 1, PERFORMANCE_MAX_SAFETY_LIMITS.maxConcurrency, previous.config?.spikeMultiplier || 1, panel)
+  };
+  const safetyLimits = {
+    maxTotalRequests: clampPerformanceSafetyInput('maxTotalRequests', 1, PERFORMANCE_MAX_SAFETY_LIMITS.maxTotalRequests, previous.safetyLimits?.maxTotalRequests || 100, panel),
+    maxConcurrency: clampPerformanceSafetyInput('maxConcurrency', 1, PERFORMANCE_MAX_SAFETY_LIMITS.maxConcurrency, previous.safetyLimits?.maxConcurrency || 10, panel),
+    maxDurationSeconds: clampPerformanceSafetyInput('maxDurationSeconds', 1, PERFORMANCE_MAX_SAFETY_LIMITS.maxDurationSeconds, previous.safetyLimits?.maxDurationSeconds || 60, panel)
+  };
+  if (!panel.querySelector('[data-performance-safety="maxTotalRequests"]')) {
+    safetyLimits.maxTotalRequests = Math.max(
+      safetyLimits.maxTotalRequests,
+      performancePlannedRequestCount(type, config, safetyLimits)
+    );
+  }
+  if (!panel.querySelector('[data-performance-safety="maxConcurrency"]')) {
+    safetyLimits.maxConcurrency = Math.max(
+      safetyLimits.maxConcurrency,
+      performanceEffectiveConcurrency(type, config)
+    );
+  }
   test.typeSettings[type] = {
     environmentId: panel.querySelector('[data-performance-environment]')?.value || previous.environmentId || 'none',
     allowEnvironmentMutation: panel.querySelector('[data-performance-mutation]')?.checked === true,
-    config: {
-      iterations: clampPerformanceConfigInput('iterations', 1, 100000, previous.config?.iterations || 1, panel),
-      concurrency: clampPerformanceConfigInput('concurrency', 1, 100000, previous.config?.concurrency || 1, panel),
-      durationSeconds: clampPerformanceConfigInput('durationSeconds', 0, 86400, previous.config?.durationSeconds || 0, panel),
-      rampSteps: clampPerformanceConfigInput('rampSteps', 1, 100000, previous.config?.rampSteps || 1, panel),
-      spikeMultiplier: clampPerformanceConfigInput('spikeMultiplier', 1, 100000, previous.config?.spikeMultiplier || 1, panel)
-    },
-    safetyLimits: {
-      maxTotalRequests: clampPerformanceSafetyInput('maxTotalRequests', 1, 100000, previous.safetyLimits?.maxTotalRequests || 100, panel),
-      maxConcurrency: clampPerformanceSafetyInput('maxConcurrency', 1, 100000, previous.safetyLimits?.maxConcurrency || 10, panel),
-      maxDurationSeconds: clampPerformanceSafetyInput('maxDurationSeconds', 1, 86400, previous.safetyLimits?.maxDurationSeconds || 60, panel)
-    }
+    config,
+    safetyLimits
   };
+}
+
+function performancePlannedRequestCount(type, config, safetyLimits) {
+  if (type === 'soak') {
+    return safetyLimits.maxTotalRequests || 1;
+  }
+  if (type === 'concurrency') {
+    return (config.iterations || 1) * (config.concurrency || 1);
+  }
+  if (type === 'stress' || type === 'ramp') {
+    return (config.iterations || 1) * (config.rampSteps || 1);
+  }
+  return config.iterations || 1;
+}
+
+function performanceEffectiveConcurrency(type, config) {
+  if (type === 'latency') {
+    return 1;
+  }
+  if (type === 'spike') {
+    return (config.concurrency || 1) * (config.spikeMultiplier || 1);
+  }
+  if (type === 'stress' || type === 'ramp') {
+    return Math.max(config.startConcurrency || 1, config.concurrency || 1);
+  }
+  return config.concurrency || 1;
 }
 
 function activePerformanceType() {

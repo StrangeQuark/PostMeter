@@ -9,6 +9,8 @@ const {
   assertFileOperationResultPayload,
   assertOAuthProgressPayload,
   assertOptionalEnvironmentPayload,
+  assertPerformanceCalibrationResultPayload,
+  assertPerformanceProgressPayload,
   assertPerformanceResultPayload,
   assertResponsePayload,
   assertRequestPayload,
@@ -184,6 +186,94 @@ test('accepts structurally valid IPC payloads', () => {
       localVariables: [{ enabled: true, key: 'local', value: 'value' }],
       error: ''
     }]
+  }));
+  assert.doesNotThrow(() => assertPerformanceCalibrationResultPayload({
+    id: 'calibration-result',
+    startedAt: '2026-05-06T00:00:00.000Z',
+    completedAt: '2026-05-06T00:00:01.000Z',
+    durationMillis: 1000,
+    cancelled: false,
+    endpoint: '127.0.0.1',
+    summary: {
+      peakRequestsPerSecond: 100,
+      peakConcurrency: 4,
+      sustainedRequestsPerSecond: 90,
+      reliableTargetRequestsPerSecond: 90,
+      edgeUpperBoundRequestsPerSecond: 100,
+      measurementVariationPercent: 2,
+      confirmationTargetsTested: 2,
+      recommendedMaxRequestsPerSecond: 72,
+      saturationConcurrency: 4,
+      stabilityPercent: 91,
+      repeatabilityPercent: 97,
+      confidence: 'high',
+      averageLatencyMillis: 2,
+      p95LatencyMillis: 5,
+      p95StartLagMillis: 3,
+      p95EventLoopDelayMillis: 11,
+      completedRequests: 10,
+      failedRequests: 0,
+      confirmationPasses: 2,
+      notes: ['Loopback calibration only.']
+    },
+    stages: [{
+      name: 'Unit',
+      mode: 'confirmation',
+      concurrency: 4,
+      requestedRequests: 10,
+      targetRequests: 10,
+      targetRequestsPerSecond: 100,
+      startedRequests: 10,
+      completedRequests: 10,
+      onTimeCompletedRequests: 10,
+      failedRequests: 0,
+      durationMillis: 100,
+      targetDurationMillis: 100,
+      requestsPerSecond: 100,
+      completionRatio: 1,
+      achievedTargetRatio: 1,
+      errorRate: 0,
+      averageLatencyMillis: 2,
+      p95LatencyMillis: 5,
+      p99LatencyMillis: 7,
+      averageStartLagMillis: 1,
+      p95StartLagMillis: 3,
+      intervalCount: 2,
+      medianIntervalRequestsPerSecond: 100,
+      minIntervalRequestsPerSecond: 90,
+      maxIntervalRequestsPerSecond: 110,
+      stabilityPercent: 91,
+      eventLoopUtilizationPercent: 55,
+      p95EventLoopDelayMillis: 11,
+      maxInFlightRequests: 4,
+      maxInFlightLimit: 4,
+      maxStartBacklog: 1,
+      confirmationTargetRequestsPerSecond: 100,
+      confirmationPass: 1,
+      confirmationPasses: 2,
+      confirmationCandidateRank: 1,
+      confirmationVariationPercent: 2,
+      accepted: true,
+      confirmed: true,
+      failureReasons: []
+    }]
+  }));
+  assert.doesNotThrow(() => assertPerformanceProgressPayload({
+    kind: 'calibration',
+    phase: 'confirm',
+    phaseLabel: 'Edge confirmation',
+    message: 'Confirming target',
+    percent: 75,
+    phasePercent: 50,
+    targetRequestsPerSecond: 1000,
+    completedRequests: 500,
+    totalRequests: 1000,
+    activeRequests: 4,
+    durationMillis: 1000,
+    stageIndex: 3,
+    stageCount: 5,
+    pass: 2,
+    passes: 5
   }));
   assert.doesNotThrow(() => assertResponsePayload({
     statusCode: 200,
@@ -417,6 +507,8 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertCollectionRunResultPayload({ accessToken: 'raw-token' }), /result.accessToken is not allowed in public IPC payloads/);
   assert.throws(() => assertPerformanceResultPayload({ samples: [{ responseBody: 42 }] }), /result.samples\[0\].responseBody must be a string/);
   assert.throws(() => assertPerformanceResultPayload({ samples: [{ assertionResults: [{ passed: 'yes' }] }] }), /result.samples\[0\].assertionResults\[0\].passed must be a boolean/);
+  assert.throws(() => assertPerformanceCalibrationResultPayload({ endpoint: 42 }), /result.endpoint must be a string/);
+  assert.throws(() => assertPerformanceCalibrationResultPayload({ stages: [{ requestsPerSecond: 'fast' }] }), /result.stages\[0\].requestsPerSecond must be a finite number/);
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: '', durationMillis: 'slow', responseBytes: 0, finalUrl: '', headers: {} }), /response.durationMillis must be a finite number/);
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: 42, durationMillis: 1, responseBytes: 2, finalUrl: 'https://example.test', headers: {} }), /response.body must be a string/);
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: '{}', durationMillis: 1, responseBytes: 2, finalUrl: 'https://example.test', headers: {}, updatedAuth: { type: 'oauth2', accessToken: 'raw-token' } }), /response.updatedAuth must not be included in public IPC payloads/);

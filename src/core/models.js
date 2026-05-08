@@ -22,6 +22,7 @@ const POSTMAN_METADATA_MAX_BYTES = 10 * 1024 * 1024;
 const DEFAULT_PERFORMANCE_TEST_TYPE = 'latency';
 const DEFAULT_PERFORMANCE_CONFIG = Object.freeze({
   iterations: 1,
+  startConcurrency: 1,
   concurrency: 1,
   durationSeconds: 0,
   rampSteps: 1,
@@ -32,6 +33,9 @@ const DEFAULT_PERFORMANCE_SAFETY_LIMITS = Object.freeze({
   maxConcurrency: 10,
   maxDurationSeconds: 60
 });
+const MAX_PERFORMANCE_TOTAL_REQUESTS = 1000;
+const MAX_PERFORMANCE_CONCURRENCY = 25;
+const MAX_PERFORMANCE_DURATION_SECONDS = 60 * 60;
 
 function newId() {
   return crypto.randomUUID();
@@ -592,12 +596,14 @@ function normalizePerformanceType(value) {
 function normalizePerformanceConfig(config, type = DEFAULT_PERFORMANCE_TEST_TYPE) {
   const input = config && typeof config === 'object' && !Array.isArray(config) ? config : {};
   const defaults = defaultPerformanceConfigForType(type);
+  const minimumDurationSeconds = type === 'soak' ? 1 : 0;
   return {
-    iterations: boundedInteger(input.iterations, defaults.iterations, 1, 100000),
-    concurrency: boundedInteger(input.concurrency, defaults.concurrency, 1, 100000),
-    durationSeconds: boundedInteger(input.durationSeconds, defaults.durationSeconds, 0, 24 * 60 * 60),
-    rampSteps: boundedInteger(input.rampSteps, defaults.rampSteps, 1, 100000),
-    spikeMultiplier: boundedInteger(input.spikeMultiplier, defaults.spikeMultiplier, 1, 100000)
+    iterations: boundedInteger(input.iterations, defaults.iterations, 1, MAX_PERFORMANCE_TOTAL_REQUESTS),
+    startConcurrency: boundedInteger(input.startConcurrency, defaults.startConcurrency, 1, MAX_PERFORMANCE_CONCURRENCY),
+    concurrency: boundedInteger(input.concurrency, defaults.concurrency, 1, MAX_PERFORMANCE_CONCURRENCY),
+    durationSeconds: boundedInteger(input.durationSeconds, defaults.durationSeconds, minimumDurationSeconds, MAX_PERFORMANCE_DURATION_SECONDS),
+    rampSteps: boundedInteger(input.rampSteps, defaults.rampSteps, 1, MAX_PERFORMANCE_TOTAL_REQUESTS),
+    spikeMultiplier: boundedInteger(input.spikeMultiplier, defaults.spikeMultiplier, 1, MAX_PERFORMANCE_CONCURRENCY)
   };
 }
 
@@ -660,19 +666,19 @@ function defaultPerformanceConfigForType(type) {
     latency: { ...DEFAULT_PERFORMANCE_CONFIG, iterations: 1 },
     throughput: { ...DEFAULT_PERFORMANCE_CONFIG, iterations: 10, concurrency: 1 },
     concurrency: { ...DEFAULT_PERFORMANCE_CONFIG, iterations: 10, concurrency: 5 },
-    stress: { ...DEFAULT_PERFORMANCE_CONFIG, iterations: 25, concurrency: 5 },
+    stress: { ...DEFAULT_PERFORMANCE_CONFIG, iterations: 10, startConcurrency: 1, concurrency: 10, rampSteps: 5 },
     spike: { ...DEFAULT_PERFORMANCE_CONFIG, iterations: 20, concurrency: 2, spikeMultiplier: 3 },
-    soak: { ...DEFAULT_PERFORMANCE_CONFIG, iterations: 30, concurrency: 2, durationSeconds: 30 },
-    ramp: { ...DEFAULT_PERFORMANCE_CONFIG, iterations: 20, concurrency: 5, rampSteps: 5 }
+    soak: { ...DEFAULT_PERFORMANCE_CONFIG, concurrency: 2, durationSeconds: 30 },
+    ramp: { ...DEFAULT_PERFORMANCE_CONFIG, iterations: 10, startConcurrency: 1, concurrency: 10, rampSteps: 5 }
   }[type] || DEFAULT_PERFORMANCE_CONFIG;
 }
 
 function normalizePerformanceSafetyLimits(safetyLimits) {
   const input = safetyLimits && typeof safetyLimits === 'object' && !Array.isArray(safetyLimits) ? safetyLimits : {};
   return {
-    maxTotalRequests: boundedInteger(input.maxTotalRequests, DEFAULT_PERFORMANCE_SAFETY_LIMITS.maxTotalRequests, 1, 100000),
-    maxConcurrency: boundedInteger(input.maxConcurrency, DEFAULT_PERFORMANCE_SAFETY_LIMITS.maxConcurrency, 1, 100000),
-    maxDurationSeconds: boundedInteger(input.maxDurationSeconds, DEFAULT_PERFORMANCE_SAFETY_LIMITS.maxDurationSeconds, 1, 24 * 60 * 60)
+    maxTotalRequests: boundedInteger(input.maxTotalRequests, DEFAULT_PERFORMANCE_SAFETY_LIMITS.maxTotalRequests, 1, MAX_PERFORMANCE_TOTAL_REQUESTS),
+    maxConcurrency: boundedInteger(input.maxConcurrency, DEFAULT_PERFORMANCE_SAFETY_LIMITS.maxConcurrency, 1, MAX_PERFORMANCE_CONCURRENCY),
+    maxDurationSeconds: boundedInteger(input.maxDurationSeconds, DEFAULT_PERFORMANCE_SAFETY_LIMITS.maxDurationSeconds, 1, MAX_PERFORMANCE_DURATION_SECONDS)
   };
 }
 

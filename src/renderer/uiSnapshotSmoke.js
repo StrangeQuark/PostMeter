@@ -172,6 +172,17 @@
       $('exportRunnerCsvButton').disabled = false;
     }, global);
 
+    await captureUiSnapshotState('performance-calibration', () => {
+      selectSidebarPanel('performance');
+      renderAll();
+      $('modalBackdrop').hidden = false;
+      for (const modal of $('modalBackdrop').querySelectorAll('.modal')) {
+        modal.hidden = modal.id !== 'performanceCalibrationModal';
+      }
+    }, global);
+    $('modalBackdrop').hidden = true;
+    $('performanceCalibrationModal').hidden = true;
+
     await captureUiSnapshotState('workspace-sandbox', () => {
       selectWorkspaceItem(activeWorkspaceId || workspaceListItems()[0]?.id);
       refreshSandboxPackageStatus();

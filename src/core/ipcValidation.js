@@ -240,7 +240,7 @@ function assertPerformanceTestSourcePayload(value, field = 'source') {
 function assertPerformanceConfigPayload(value, field = 'config') {
   assertSchemaFields('performanceConfig', value || {}, field);
   assertNoUnexpectedFields('performanceConfig', value || {}, field);
-  for (const name of ['iterations', 'concurrency', 'durationSeconds', 'rampSteps', 'spikeMultiplier']) {
+  for (const name of ['iterations', 'startConcurrency', 'concurrency', 'durationSeconds', 'rampSteps', 'spikeMultiplier']) {
     assertOptionalInteger(value?.[name], `${field}.${name}`, name === 'durationSeconds' ? 0 : 1);
   }
 }
@@ -288,6 +288,17 @@ function assertPerformanceResultsMetadataPayload(value, field = 'resultsMetadata
 
 function assertPerformanceSafety(value, field = 'performanceTest') {
   const type = normalizeSchemaEnumValue('performanceTestTypes', value?.type, 'latency', { trim: true });
+  const rawConfig = value?.config && typeof value.config === 'object' && !Array.isArray(value.config) ? value.config : {};
+  const rawSafetyLimits = value?.safetyLimits && typeof value.safetyLimits === 'object' && !Array.isArray(value.safetyLimits) ? value.safetyLimits : {};
+  assertPerformanceMaximum(rawSafetyLimits.maxTotalRequests, `${field}.safetyLimits.maxTotalRequests`, HARD_PERFORMANCE_LIMITS.maxTotalRequests);
+  assertPerformanceMaximum(rawSafetyLimits.maxConcurrency, `${field}.safetyLimits.maxConcurrency`, HARD_PERFORMANCE_LIMITS.maxConcurrency);
+  assertPerformanceMaximum(rawSafetyLimits.maxDurationSeconds, `${field}.safetyLimits.maxDurationSeconds`, HARD_PERFORMANCE_LIMITS.maxDurationSeconds);
+  assertPerformanceMaximum(rawConfig.iterations, `${field}.config.iterations`, HARD_PERFORMANCE_LIMITS.maxTotalRequests);
+  assertPerformanceMaximum(rawConfig.rampSteps, `${field}.config.rampSteps`, HARD_PERFORMANCE_LIMITS.maxTotalRequests);
+  assertPerformanceMaximum(rawConfig.startConcurrency, `${field}.config.startConcurrency`, HARD_PERFORMANCE_LIMITS.maxConcurrency);
+  assertPerformanceMaximum(rawConfig.concurrency, `${field}.config.concurrency`, HARD_PERFORMANCE_LIMITS.maxConcurrency);
+  assertPerformanceMaximum(rawConfig.spikeMultiplier, `${field}.config.spikeMultiplier`, HARD_PERFORMANCE_LIMITS.maxConcurrency);
+  assertPerformanceMaximum(rawConfig.durationSeconds, `${field}.config.durationSeconds`, HARD_PERFORMANCE_LIMITS.maxDurationSeconds);
   const config = normalizePerformanceConfig(value?.config, type);
   const safetyLimits = normalizePerformanceSafetyLimits(value?.safetyLimits);
   if (safetyLimits.maxTotalRequests > HARD_PERFORMANCE_LIMITS.maxTotalRequests) {
@@ -299,10 +310,18 @@ function assertPerformanceSafety(value, field = 'performanceTest') {
   if (safetyLimits.maxDurationSeconds > HARD_PERFORMANCE_LIMITS.maxDurationSeconds) {
     fail(`${field}.safetyLimits.maxDurationSeconds cannot exceed ${HARD_PERFORMANCE_LIMITS.maxDurationSeconds}.`);
   }
-  const effectiveConcurrency = type === 'spike'
-    ? config.concurrency * config.spikeMultiplier
-    : config.concurrency;
-  if (config.iterations > safetyLimits.maxTotalRequests) {
+  if ((type === 'stress' || type === 'ramp') && config.startConcurrency > config.concurrency) {
+    fail(`${field}.config.startConcurrency cannot exceed config.concurrency.`);
+  }
+  const plannedRequests = performancePlannedRequests(type, config, safetyLimits);
+  const effectiveConcurrency = performanceEffectiveConcurrency(type, config);
+  if (type === 'concurrency' && plannedRequests > safetyLimits.maxTotalRequests) {
+    fail(`${field}.config.iterations multiplied by config.concurrency exceeds safetyLimits.maxTotalRequests.`);
+  }
+  if ((type === 'stress' || type === 'ramp') && plannedRequests > safetyLimits.maxTotalRequests) {
+    fail(`${field}.config.iterations multiplied by config.rampSteps exceeds safetyLimits.maxTotalRequests.`);
+  }
+  if (!['concurrency', 'stress', 'ramp', 'soak'].includes(type) && config.iterations > safetyLimits.maxTotalRequests) {
     fail(`${field}.config.iterations exceeds safetyLimits.maxTotalRequests.`);
   }
   if (effectiveConcurrency > safetyLimits.maxConcurrency) {
@@ -311,6 +330,42 @@ function assertPerformanceSafety(value, field = 'performanceTest') {
   if (config.durationSeconds > safetyLimits.maxDurationSeconds) {
     fail(`${field}.config.durationSeconds exceeds safetyLimits.maxDurationSeconds.`);
   }
+}
+
+function assertPerformanceMaximum(value, field, max) {
+  if (value == null) {
+    return;
+  }
+  const number = Number(value);
+  if (Number.isFinite(number) && number > max) {
+    fail(`${field} cannot exceed ${max}.`);
+  }
+}
+
+function performancePlannedRequests(type, config, safetyLimits) {
+  if (type === 'soak') {
+    return safetyLimits.maxTotalRequests;
+  }
+  if (type === 'concurrency') {
+    return config.iterations * config.concurrency;
+  }
+  if (type === 'stress' || type === 'ramp') {
+    return config.iterations * config.rampSteps;
+  }
+  return config.iterations;
+}
+
+function performanceEffectiveConcurrency(type, config) {
+  if (type === 'latency') {
+    return 1;
+  }
+  if (type === 'spike') {
+    return config.concurrency * config.spikeMultiplier;
+  }
+  if (type === 'stress' || type === 'ramp') {
+    return Math.max(config.startConcurrency, config.concurrency);
+  }
+  return config.concurrency;
 }
 
 function assertSettingsPayload(value, field) {
@@ -784,6 +839,164 @@ function assertPerformanceResultPayload(value, field = 'result') {
   }
   if (value.cookies != null) {
     assertCookies(value.cookies, `${field}.cookies`);
+  }
+}
+
+function assertPerformanceCalibrationResultPayload(value, field = 'result') {
+  object(value, field);
+  assertAllowedObjectFields(value, field, [
+    'cancelled',
+    'completedAt',
+    'durationMillis',
+    'endpoint',
+    'id',
+    'stages',
+    'startedAt',
+    'summary'
+  ]);
+  optionalString(value.id, `${field}.id`, LIMITS.name);
+  optionalString(value.startedAt, `${field}.startedAt`, LIMITS.name);
+  optionalString(value.completedAt, `${field}.completedAt`, LIMITS.name);
+  optionalNumber(value.durationMillis, `${field}.durationMillis`);
+  optionalBoolean(value.cancelled, `${field}.cancelled`);
+  optionalString(value.endpoint, `${field}.endpoint`, LIMITS.url);
+  if (value.summary != null) {
+    object(value.summary, `${field}.summary`);
+    assertAllowedObjectFields(value.summary, `${field}.summary`, [
+      'averageLatencyMillis',
+      'confidence',
+      'completedRequests',
+      'confirmationPasses',
+      'confirmationTargetsTested',
+      'edgeUpperBoundRequestsPerSecond',
+      'failedRequests',
+      'measurementVariationPercent',
+      'notes',
+      'p95EventLoopDelayMillis',
+      'p95LatencyMillis',
+      'p95StartLagMillis',
+      'peakConcurrency',
+      'peakRequestsPerSecond',
+      'recommendedMaxRequestsPerSecond',
+      'reliableTargetRequestsPerSecond',
+      'repeatabilityPercent',
+      'saturationConcurrency',
+      'stabilityPercent',
+      'sustainedRequestsPerSecond'
+    ]);
+    optionalNumber(value.summary.peakRequestsPerSecond, `${field}.summary.peakRequestsPerSecond`);
+    optionalNumber(value.summary.peakConcurrency, `${field}.summary.peakConcurrency`);
+    optionalNumber(value.summary.sustainedRequestsPerSecond, `${field}.summary.sustainedRequestsPerSecond`);
+    optionalNumber(value.summary.reliableTargetRequestsPerSecond, `${field}.summary.reliableTargetRequestsPerSecond`);
+    optionalNumber(value.summary.edgeUpperBoundRequestsPerSecond, `${field}.summary.edgeUpperBoundRequestsPerSecond`);
+    optionalNumber(value.summary.measurementVariationPercent, `${field}.summary.measurementVariationPercent`);
+    optionalNumber(value.summary.confirmationTargetsTested, `${field}.summary.confirmationTargetsTested`);
+    optionalNumber(value.summary.recommendedMaxRequestsPerSecond, `${field}.summary.recommendedMaxRequestsPerSecond`);
+    optionalNumber(value.summary.saturationConcurrency, `${field}.summary.saturationConcurrency`);
+    optionalNumber(value.summary.stabilityPercent, `${field}.summary.stabilityPercent`);
+    optionalNumber(value.summary.repeatabilityPercent, `${field}.summary.repeatabilityPercent`);
+    optionalString(value.summary.confidence, `${field}.summary.confidence`, LIMITS.short);
+    optionalNumber(value.summary.averageLatencyMillis, `${field}.summary.averageLatencyMillis`);
+    optionalNumber(value.summary.p95LatencyMillis, `${field}.summary.p95LatencyMillis`);
+    optionalNumber(value.summary.p95StartLagMillis, `${field}.summary.p95StartLagMillis`);
+    optionalNumber(value.summary.p95EventLoopDelayMillis, `${field}.summary.p95EventLoopDelayMillis`);
+    optionalNumber(value.summary.completedRequests, `${field}.summary.completedRequests`);
+    optionalNumber(value.summary.failedRequests, `${field}.summary.failedRequests`);
+    optionalNumber(value.summary.confirmationPasses, `${field}.summary.confirmationPasses`);
+    if (value.summary.notes != null) {
+      assertStringArray(value.summary.notes, `${field}.summary.notes`, 16, LIMITS.value);
+    }
+  }
+  if (value.stages != null) {
+    array(value.stages, `${field}.stages`, 64).forEach((stage, index) => {
+      assertPerformanceCalibrationStagePayload(stage, `${field}.stages[${index}]`);
+    });
+  }
+}
+
+function assertPerformanceCalibrationStagePayload(value, field) {
+  object(value, field);
+  assertAllowedObjectFields(value, field, [
+    'averageLatencyMillis',
+    'averageStartLagMillis',
+    'accepted',
+    'completedRequests',
+    'completionRatio',
+    'confirmationCandidateRank',
+    'confirmationPass',
+    'confirmationPasses',
+    'confirmationTargetRequestsPerSecond',
+    'confirmationVariationPercent',
+    'confirmed',
+    'concurrency',
+    'durationMillis',
+    'errorRate',
+    'eventLoopUtilizationPercent',
+    'failedRequests',
+    'failureReasons',
+    'intervalCount',
+    'maxIntervalRequestsPerSecond',
+    'maxInFlightLimit',
+    'maxInFlightRequests',
+    'maxStartBacklog',
+    'medianIntervalRequestsPerSecond',
+    'minIntervalRequestsPerSecond',
+    'mode',
+    'name',
+    'onTimeCompletedRequests',
+    'p95EventLoopDelayMillis',
+    'p95LatencyMillis',
+    'p95StartLagMillis',
+    'p99LatencyMillis',
+    'requestedRequests',
+    'requestsPerSecond',
+    'startedRequests',
+    'stabilityPercent',
+    'targetDurationMillis',
+    'targetRequests',
+    'targetRequestsPerSecond',
+    'achievedTargetRatio'
+  ]);
+  optionalString(value.name, `${field}.name`, LIMITS.short);
+  optionalString(value.mode, `${field}.mode`, LIMITS.short);
+  optionalNumber(value.concurrency, `${field}.concurrency`);
+  optionalNumber(value.requestedRequests, `${field}.requestedRequests`);
+  optionalNumber(value.targetRequests, `${field}.targetRequests`);
+  optionalNumber(value.targetRequestsPerSecond, `${field}.targetRequestsPerSecond`);
+  optionalNumber(value.startedRequests, `${field}.startedRequests`);
+  optionalNumber(value.completedRequests, `${field}.completedRequests`);
+  optionalNumber(value.onTimeCompletedRequests, `${field}.onTimeCompletedRequests`);
+  optionalNumber(value.failedRequests, `${field}.failedRequests`);
+  optionalNumber(value.durationMillis, `${field}.durationMillis`);
+  optionalNumber(value.targetDurationMillis, `${field}.targetDurationMillis`);
+  optionalNumber(value.requestsPerSecond, `${field}.requestsPerSecond`);
+  optionalNumber(value.completionRatio, `${field}.completionRatio`);
+  optionalNumber(value.achievedTargetRatio, `${field}.achievedTargetRatio`);
+  optionalNumber(value.errorRate, `${field}.errorRate`);
+  optionalNumber(value.averageLatencyMillis, `${field}.averageLatencyMillis`);
+  optionalNumber(value.p95LatencyMillis, `${field}.p95LatencyMillis`);
+  optionalNumber(value.p99LatencyMillis, `${field}.p99LatencyMillis`);
+  optionalNumber(value.averageStartLagMillis, `${field}.averageStartLagMillis`);
+  optionalNumber(value.p95StartLagMillis, `${field}.p95StartLagMillis`);
+  optionalNumber(value.intervalCount, `${field}.intervalCount`);
+  optionalNumber(value.medianIntervalRequestsPerSecond, `${field}.medianIntervalRequestsPerSecond`);
+  optionalNumber(value.minIntervalRequestsPerSecond, `${field}.minIntervalRequestsPerSecond`);
+  optionalNumber(value.maxIntervalRequestsPerSecond, `${field}.maxIntervalRequestsPerSecond`);
+  optionalNumber(value.stabilityPercent, `${field}.stabilityPercent`);
+  optionalNumber(value.eventLoopUtilizationPercent, `${field}.eventLoopUtilizationPercent`);
+  optionalNumber(value.p95EventLoopDelayMillis, `${field}.p95EventLoopDelayMillis`);
+  optionalNumber(value.maxInFlightRequests, `${field}.maxInFlightRequests`);
+  optionalNumber(value.maxInFlightLimit, `${field}.maxInFlightLimit`);
+  optionalNumber(value.maxStartBacklog, `${field}.maxStartBacklog`);
+  optionalNumber(value.confirmationTargetRequestsPerSecond, `${field}.confirmationTargetRequestsPerSecond`);
+  optionalNumber(value.confirmationPass, `${field}.confirmationPass`);
+  optionalNumber(value.confirmationPasses, `${field}.confirmationPasses`);
+  optionalNumber(value.confirmationCandidateRank, `${field}.confirmationCandidateRank`);
+  optionalNumber(value.confirmationVariationPercent, `${field}.confirmationVariationPercent`);
+  optionalBoolean(value.accepted, `${field}.accepted`);
+  optionalBoolean(value.confirmed, `${field}.confirmed`);
+  if (value.failureReasons != null) {
+    assertStringArray(value.failureReasons, `${field}.failureReasons`, 16, LIMITS.value);
   }
 }
 
@@ -1490,6 +1703,7 @@ module.exports = {
   assertExportFormat,
   assertOAuthProgressPayload,
   assertOptionalEnvironmentPayload,
+  assertPerformanceCalibrationResultPayload,
   assertPerformanceConfigPayload,
   assertPerformanceExportFormat,
   assertPerformanceProgressPayload,

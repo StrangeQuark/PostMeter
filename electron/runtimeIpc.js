@@ -5,6 +5,7 @@ const {
   importPerformanceTestFromText,
   performanceResultToCsv
 } = require('../src/core/performanceFormats');
+const { runPerformanceCalibration } = require('../src/core/performanceCalibration');
 const { runPerformanceTest } = require('../src/core/performanceRunner');
 const { writeTextFileAtomic } = require('../src/core/workspacePersistence');
 const {
@@ -25,6 +26,7 @@ const {
   assertCollectionRunResultPayload,
   assertExportFormat,
   assertOptionalEnvironmentPayload,
+  assertPerformanceCalibrationResultPayload,
   assertPerformanceExportFormat,
   assertPerformanceProgressPayload,
   assertPerformanceResultPayload,
@@ -45,7 +47,9 @@ function registerRuntimeIpc(options = {}) {
     getVaultStore = () => null,
     getVaultPrompt = () => null,
     ipcMain,
+    env = process.env,
     runCollection: runCollectionImpl = runCollection,
+    runPerformanceCalibration: runPerformanceCalibrationImpl = runPerformanceCalibration,
     runPerformanceTest: runPerformanceTestImpl = runPerformanceTest,
     runRunner: runRunnerImpl = runRunner,
     recordDiagnosticEvent = async () => {},
@@ -60,6 +64,7 @@ function registerRuntimeIpc(options = {}) {
   } = options;
   const activeCollectionRuns = new Map();
   const activePerformanceRuns = new Map();
+  const activePerformanceCalibrations = new Map();
 
   ipcMain.handle('runner:start', async (event, id, collection, environment, config = {}) => {
     assertRuntimeId(id);
@@ -302,6 +307,69 @@ function registerRuntimeIpc(options = {}) {
     return true;
   });
 
+  ipcMain.handle('performance:calibrate', async (event, id) => {
+    assertRuntimeId(id);
+    if (activePerformanceCalibrations.has(id)) {
+      throw new Error(`Performance calibration is already running for id "${id}".`);
+    }
+    const abortController = new AbortController();
+    const progressDelivery = createProgressDelivery({
+      abortController,
+      assertPayload: assertPerformanceProgressPayload,
+      channel: 'performance:progress',
+      event,
+      id,
+      label: 'Performance calibration progress'
+    });
+    activePerformanceCalibrations.set(id, abortController);
+    try {
+      const result = await runPerformanceCalibrationImpl({
+        ...performanceCalibrationOptionsForRuntime(env),
+        signal: abortController.signal,
+        onProgress: progressDelivery.send
+      });
+      progressDelivery.throwIfFailed();
+      assertPerformanceCalibrationResultPayload(result);
+      await recordDiagnosticEvent({
+        type: 'performance.calibration.completed',
+        level: 'info',
+        outcome: 'completed',
+        fields: {
+          cancelled: result.cancelled === true,
+          completedRequests: result.summary?.completedRequests || 0,
+          failedRequests: result.summary?.failedRequests || 0,
+          peakRequestsPerSecond: result.summary?.peakRequestsPerSecond || 0
+        }
+      });
+      return result;
+    } catch (error) {
+      await recordDiagnosticEvent({
+        type: 'performance.calibration.failed',
+        level: 'error',
+        outcome: 'failed',
+        failureCode: failureCodeFromError(error, 'performance_calibration_failed'),
+        fields: {
+          error: error?.message || String(error)
+        }
+      });
+      throw error;
+    } finally {
+      if (activePerformanceCalibrations.get(id) === abortController) {
+        activePerformanceCalibrations.delete(id);
+      }
+    }
+  });
+
+  ipcMain.handle('performance:calibrate:cancel', (_event, id) => {
+    assertRuntimeId(id);
+    const abortController = activePerformanceCalibrations.get(id);
+    if (!abortController) {
+      return false;
+    }
+    abortController.abort();
+    return true;
+  });
+
   ipcMain.handle('performance:import', async () => {
     const result = await dialog.showOpenDialog(getMainWindow(), {
       title: 'Import Performance Test',
@@ -374,6 +442,31 @@ function requestLocalVariablesById(collection) {
   return byId;
 }
 
+function performanceCalibrationOptionsForRuntime(env = process.env) {
+  if (env?.POSTMETER_UI_REGRESSION_SMOKE !== '1') {
+    return {};
+  }
+  return {
+    profile: {
+      warmupTargetRequestsPerSecond: 10,
+      warmupDurationMillis: 50,
+      probeDurationMillis: 60,
+      confirmationDurationMillis: 60,
+      confirmationPasses: 1,
+      sampleIntervalMillis: 20,
+      schedulerTickMillis: 5,
+      maxLatencySamples: 1000,
+      maxConcurrency: 16,
+      targetRates: [10, 20],
+      minCompletionRatio: 0.5,
+      minIntervalRatio: 0,
+      maxP95StartLagMillis: 1000,
+      maxP95EventLoopDelayMillis: 1000,
+      maxConfirmationVariationPercent: 100
+    }
+  };
+}
+
 function looksLikeRunnerPayload(value) {
   return Boolean(
     value
@@ -403,7 +496,7 @@ function createProgressDelivery({ abortController, assertPayload, channel, event
       }
       try {
         assertPayload(progress);
-        if (event.sender?.isDestroyed?.() === true) {
+        if (!event?.sender || event.sender?.isDestroyed?.() === true) {
           throw new Error('renderer sender is destroyed');
         }
         event.sender.send(channel, { id, progress });

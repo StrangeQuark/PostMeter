@@ -79,10 +79,69 @@ test('Performance docs track model, UI, import/export, safety, and environment g
   }
 });
 
+test('Performance UI keeps type-specific input fields scoped to applicable test types', async () => {
+  const html = await readProjectFile('src/renderer/index.html');
+  const performanceRequest = htmlPanel(html, 'performanceRequestSection', 'performanceSettingsResize');
+  const latency = htmlPanel(html, 'latencyTab', 'throughputTab');
+  const throughput = htmlPanel(html, 'throughputTab', 'concurrencyTab');
+  const concurrency = htmlPanel(html, 'concurrencyTab', 'stressTab');
+  const stress = htmlPanel(html, 'stressTab', 'spikeTab');
+  const spike = htmlPanel(html, 'spikeTab', 'soakTab');
+  const soak = htmlPanel(html, 'soakTab', 'rampTab');
+  const ramp = htmlPanel(html, 'rampTab', 'performanceResultsResize');
+
+  assert.match(performanceRequest, /data-tab-group="performanceRequest"/);
+  for (const label of ['Params', 'Headers', 'Auth', 'Cookies', 'Body', 'Tests', 'Scripts', 'Examples', 'Variables']) {
+    assert.match(performanceRequest, new RegExp(`>${label}<`));
+  }
+  assert.match(performanceRequest, /id="performanceMethodSelect"/);
+  assert.match(performanceRequest, /class="method-get">GET/);
+  assert.match(performanceRequest, /id="performanceBodyTypeSelect"/);
+  assert.match(performanceRequest, /id="performanceAuthTypeSelect"/);
+  assert.match(performanceRequest, /id="performanceRequestCookieJarEnabledInput"/);
+  assert.doesNotMatch(performanceRequest, /performanceImportSource/);
+
+  assert.match(latency, />Samples</);
+  assert.doesNotMatch(latency, /data-performance-config="concurrency"/);
+  assert.doesNotMatch(latency, /data-performance-safety="maxTotalRequests"/);
+  assert.doesNotMatch(latency, /data-performance-config="durationSeconds"/);
+
+  assert.match(throughput, />Requests</);
+  assert.match(throughput, /data-performance-config="concurrency"/);
+  assert.doesNotMatch(throughput, /data-performance-config="durationSeconds"/);
+
+  assert.match(concurrency, />Virtual Users</);
+  assert.match(concurrency, />Requests \/ User</);
+
+  assert.match(stress, />Start Users</);
+  assert.match(stress, />Peak Users</);
+  assert.match(stress, />Requests \/ Step</);
+
+  assert.match(spike, />Baseline Users</);
+  assert.match(spike, />Spike Multiplier</);
+  assert.match(spike, />Spike Requests</);
+
+  assert.match(soak, /data-performance-config="durationSeconds"/);
+  assert.match(soak, />Users</);
+  assert.doesNotMatch(soak, /data-performance-config="iterations"/);
+
+  assert.match(ramp, />Start Users</);
+  assert.match(ramp, />Peak Users</);
+  assert.match(ramp, />Requests \/ Step</);
+});
+
 async function readProjectFile(relativePath) {
   return fs.readFile(path.join(PROJECT_ROOT, relativePath), 'utf8');
 }
 
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function htmlPanel(html, startId, nextId) {
+  const start = html.indexOf(`id="${startId}"`);
+  const end = html.indexOf(`id="${nextId}"`, start + 1);
+  assert.notEqual(start, -1, `Missing panel ${startId}.`);
+  assert.notEqual(end, -1, `Missing panel boundary ${nextId}.`);
+  return html.slice(start, end);
 }

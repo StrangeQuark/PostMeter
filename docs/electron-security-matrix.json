@@ -353,6 +353,40 @@
       "notes": ""
     },
     {
+      "id": "ipc.channel.performance-calibrate",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `performance:calibrate`: Performance calibration validates a runtime ID, starts a temporary 127.0.0.1 loopback server, streams progress, and returns bounded target-rate probe plus short edge-verification results with local latency-knee rejection for local client capacity.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/runtimeIpc.js",
+        "electron/preload.js",
+        "src/core/ipcValidation.js",
+        "src/core/performanceCalibration.js"
+      ],
+      "tests": [
+        "test/electron/runtimeIpc.test.js",
+        "test/electron/performanceCalibration.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.performance-calibrate-cancel",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `performance:calibrate:cancel`: Performance calibration cancellation validates the active calibration ID before aborting loopback requests and closing the temporary server.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/runtimeIpc.js",
+        "electron/preload.js",
+        "src/core/ipcValidation.js",
+        "src/core/performanceCalibration.js"
+      ],
+      "tests": [
+        "test/electron/runtimeIpc.test.js",
+        "test/electron/performanceCalibration.test.js"
+      ],
+      "notes": ""
+    },
+    {
       "id": "ipc.channel.performance-cancel",
       "area": "IPC channel",
       "target": "renderer-to-main channel `performance:cancel`: Performance-test cancellation validates the active run ID before aborting the local run.",
@@ -426,7 +460,7 @@
     {
       "id": "ipc.channel.performance-progress",
       "area": "IPC channel",
-      "target": "main-to-renderer channel `performance:progress`: Performance-test progress events are asserted before delivery to the renderer subscription.",
+      "target": "main-to-renderer channel `performance:progress`: Performance-test and calibration progress events are asserted before delivery to the renderer subscription.",
       "status": "implemented",
       "evidenceRefs": [
         "electron/runtimeIpc.js",

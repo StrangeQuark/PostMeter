@@ -120,6 +120,8 @@ const postmeterApi = {
   performance: {
     start: (id, performanceTest, environment) => ipcRenderer.invoke('performance:start', id, performanceTest, environment),
     cancel: (id) => ipcRenderer.invoke('performance:cancel', id),
+    calibrate: (id) => ipcRenderer.invoke('performance:calibrate', id),
+    cancelCalibration: (id) => ipcRenderer.invoke('performance:calibrate:cancel', id),
     importTest: () => ipcRenderer.invoke('performance:import'),
     exportTest: (performanceTest, format) => ipcRenderer.invoke('performance:export', performanceTest, format),
     exportResult: (result, format) => ipcRenderer.invoke('performance:exportResult', result, format),

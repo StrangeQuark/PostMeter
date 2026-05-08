@@ -23,6 +23,21 @@
     return doc.getElementById(id);
   }
 
+  function optionElement(doc, options, id) {
+    return element(doc, options.idPrefix ? `${options.idPrefix}${id[0].toUpperCase()}${id.slice(1)}` : id);
+  }
+
+  function setOptionElementValue(doc, options, id, value) {
+    const target = optionElement(doc, options, id);
+    if (target) {
+      target.value = value;
+    }
+  }
+
+  function optionElementValue(doc, options, id) {
+    return optionElement(doc, options, id)?.value || '';
+  }
+
   function bodyTypeCodeLanguage(bodyType) {
     return bodyType === 'RAW_JSON' ? 'json' : 'text';
   }
@@ -139,63 +154,63 @@
     const showAuthSection = options.showAuthSection || (() => {});
     const fields = authEditorState(auth);
 
-    element(doc, 'authTypeSelect').value = fields.type;
+    setOptionElementValue(doc, options, 'authTypeSelect', fields.type);
     showAuthSection(fields.type);
-    element(doc, 'authBearerTokenInput').value = fields.bearerToken;
-    element(doc, 'authBasicUsernameInput').value = fields.basicUsername;
-    element(doc, 'authBasicPasswordInput').value = fields.basicPassword;
-    element(doc, 'authApiKeyLocationSelect').value = fields.apiKeyLocation;
-    element(doc, 'authApiKeyNameInput').value = fields.apiKeyName;
-    element(doc, 'authApiKeyValueInput').value = fields.apiKeyValue;
-    element(doc, 'authCookieValueInput').value = fields.cookieValue;
-    element(doc, 'authOauthGrantTypeSelect').value = fields.oauthGrantType;
-    element(doc, 'authOauthTokenTypeSelect').value = fields.oauthTokenType;
-    element(doc, 'authOauthAccessTokenInput').value = fields.oauthAccessToken;
-    element(doc, 'authOauthRefreshTokenInput').value = fields.oauthRefreshToken;
-    element(doc, 'authOauthAuthorizationUrlInput').value = fields.oauthAuthorizationUrl;
-    element(doc, 'authOauthRedirectStrategySelect').value = fields.oauthRedirectStrategy;
-    element(doc, 'authOauthDeviceAuthorizationUrlInput').value = fields.oauthDeviceAuthorizationUrl;
-    element(doc, 'authOauthTokenUrlInput').value = fields.oauthTokenUrl;
-    element(doc, 'authOauthClientIdInput').value = fields.oauthClientId;
-    element(doc, 'authOauthClientSecretInput').value = fields.oauthClientSecret;
-    element(doc, 'authOauthScopesInput').value = fields.oauthScopes;
-    element(doc, 'authOauthUserCodeInput').value = fields.oauthUserCode;
-    element(doc, 'authOauthVerificationUriInput').value = fields.oauthVerificationUri;
-    element(doc, 'authClientPfxPathInput').value = fields.clientPfxPath;
-    element(doc, 'authClientCertPathInput').value = fields.clientCertPath;
-    element(doc, 'authClientKeyPathInput').value = fields.clientKeyPath;
-    element(doc, 'authClientCaPathInput').value = fields.clientCaPath;
-    element(doc, 'authClientPassphraseInput').value = fields.clientPassphrase;
+    setOptionElementValue(doc, options, 'authBearerTokenInput', fields.bearerToken);
+    setOptionElementValue(doc, options, 'authBasicUsernameInput', fields.basicUsername);
+    setOptionElementValue(doc, options, 'authBasicPasswordInput', fields.basicPassword);
+    setOptionElementValue(doc, options, 'authApiKeyLocationSelect', fields.apiKeyLocation);
+    setOptionElementValue(doc, options, 'authApiKeyNameInput', fields.apiKeyName);
+    setOptionElementValue(doc, options, 'authApiKeyValueInput', fields.apiKeyValue);
+    setOptionElementValue(doc, options, 'authCookieValueInput', fields.cookieValue);
+    setOptionElementValue(doc, options, 'authOauthGrantTypeSelect', fields.oauthGrantType);
+    setOptionElementValue(doc, options, 'authOauthTokenTypeSelect', fields.oauthTokenType);
+    setOptionElementValue(doc, options, 'authOauthAccessTokenInput', fields.oauthAccessToken);
+    setOptionElementValue(doc, options, 'authOauthRefreshTokenInput', fields.oauthRefreshToken);
+    setOptionElementValue(doc, options, 'authOauthAuthorizationUrlInput', fields.oauthAuthorizationUrl);
+    setOptionElementValue(doc, options, 'authOauthRedirectStrategySelect', fields.oauthRedirectStrategy);
+    setOptionElementValue(doc, options, 'authOauthDeviceAuthorizationUrlInput', fields.oauthDeviceAuthorizationUrl);
+    setOptionElementValue(doc, options, 'authOauthTokenUrlInput', fields.oauthTokenUrl);
+    setOptionElementValue(doc, options, 'authOauthClientIdInput', fields.oauthClientId);
+    setOptionElementValue(doc, options, 'authOauthClientSecretInput', fields.oauthClientSecret);
+    setOptionElementValue(doc, options, 'authOauthScopesInput', fields.oauthScopes);
+    setOptionElementValue(doc, options, 'authOauthUserCodeInput', fields.oauthUserCode);
+    setOptionElementValue(doc, options, 'authOauthVerificationUriInput', fields.oauthVerificationUri);
+    setOptionElementValue(doc, options, 'authClientPfxPathInput', fields.clientPfxPath);
+    setOptionElementValue(doc, options, 'authClientCertPathInput', fields.clientCertPath);
+    setOptionElementValue(doc, options, 'authClientKeyPathInput', fields.clientKeyPath);
+    setOptionElementValue(doc, options, 'authClientCaPathInput', fields.clientCaPath);
+    setOptionElementValue(doc, options, 'authClientPassphraseInput', fields.clientPassphrase);
   }
 
   function collectAuthFromEditor(options = {}) {
     const doc = options.doc || document;
     return authFromEditorState({
-      type: element(doc, 'authTypeSelect').value,
-      bearerToken: element(doc, 'authBearerTokenInput').value,
-      basicUsername: element(doc, 'authBasicUsernameInput').value,
-      basicPassword: element(doc, 'authBasicPasswordInput').value,
-      apiKeyLocation: element(doc, 'authApiKeyLocationSelect').value,
-      apiKeyName: element(doc, 'authApiKeyNameInput').value,
-      apiKeyValue: element(doc, 'authApiKeyValueInput').value,
-      cookieValue: element(doc, 'authCookieValueInput').value,
-      oauthGrantType: element(doc, 'authOauthGrantTypeSelect').value,
-      oauthTokenType: element(doc, 'authOauthTokenTypeSelect').value,
-      oauthAccessToken: element(doc, 'authOauthAccessTokenInput').value,
-      oauthRefreshToken: element(doc, 'authOauthRefreshTokenInput').value,
-      oauthAuthorizationUrl: element(doc, 'authOauthAuthorizationUrlInput').value,
-      oauthRedirectStrategy: element(doc, 'authOauthRedirectStrategySelect').value,
-      oauthDeviceAuthorizationUrl: element(doc, 'authOauthDeviceAuthorizationUrlInput').value,
-      oauthTokenUrl: element(doc, 'authOauthTokenUrlInput').value,
-      oauthClientId: element(doc, 'authOauthClientIdInput').value,
-      oauthClientSecret: element(doc, 'authOauthClientSecretInput').value,
-      oauthScopes: element(doc, 'authOauthScopesInput').value,
-      oauthUserCode: element(doc, 'authOauthUserCodeInput').value,
-      clientPfxPath: element(doc, 'authClientPfxPathInput').value,
-      clientCertPath: element(doc, 'authClientCertPathInput').value,
-      clientKeyPath: element(doc, 'authClientKeyPathInput').value,
-      clientCaPath: element(doc, 'authClientCaPathInput').value,
-      clientPassphrase: element(doc, 'authClientPassphraseInput').value
+      type: optionElementValue(doc, options, 'authTypeSelect'),
+      bearerToken: optionElementValue(doc, options, 'authBearerTokenInput'),
+      basicUsername: optionElementValue(doc, options, 'authBasicUsernameInput'),
+      basicPassword: optionElementValue(doc, options, 'authBasicPasswordInput'),
+      apiKeyLocation: optionElementValue(doc, options, 'authApiKeyLocationSelect'),
+      apiKeyName: optionElementValue(doc, options, 'authApiKeyNameInput'),
+      apiKeyValue: optionElementValue(doc, options, 'authApiKeyValueInput'),
+      cookieValue: optionElementValue(doc, options, 'authCookieValueInput'),
+      oauthGrantType: optionElementValue(doc, options, 'authOauthGrantTypeSelect'),
+      oauthTokenType: optionElementValue(doc, options, 'authOauthTokenTypeSelect'),
+      oauthAccessToken: optionElementValue(doc, options, 'authOauthAccessTokenInput'),
+      oauthRefreshToken: optionElementValue(doc, options, 'authOauthRefreshTokenInput'),
+      oauthAuthorizationUrl: optionElementValue(doc, options, 'authOauthAuthorizationUrlInput'),
+      oauthRedirectStrategy: optionElementValue(doc, options, 'authOauthRedirectStrategySelect'),
+      oauthDeviceAuthorizationUrl: optionElementValue(doc, options, 'authOauthDeviceAuthorizationUrlInput'),
+      oauthTokenUrl: optionElementValue(doc, options, 'authOauthTokenUrlInput'),
+      oauthClientId: optionElementValue(doc, options, 'authOauthClientIdInput'),
+      oauthClientSecret: optionElementValue(doc, options, 'authOauthClientSecretInput'),
+      oauthScopes: optionElementValue(doc, options, 'authOauthScopesInput'),
+      oauthUserCode: optionElementValue(doc, options, 'authOauthUserCodeInput'),
+      clientPfxPath: optionElementValue(doc, options, 'authClientPfxPathInput'),
+      clientCertPath: optionElementValue(doc, options, 'authClientCertPathInput'),
+      clientKeyPath: optionElementValue(doc, options, 'authClientKeyPathInput'),
+      clientCaPath: optionElementValue(doc, options, 'authClientCaPathInput'),
+      clientPassphrase: optionElementValue(doc, options, 'authClientPassphraseInput')
     }, options.existingAuth || {});
   }
 

@@ -880,7 +880,7 @@ h2 {
 
 .performance-main-panel {
   display: grid;
-  grid-template-rows: minmax(180px, var(--performance-editor-height)) 6px minmax(160px, 1fr);
+  grid-template-rows: minmax(220px, var(--performance-request-height)) 6px minmax(96px, var(--performance-editor-height)) 6px minmax(140px, 1fr);
   gap: 6px;
   padding: 0;
   border: 0;
@@ -888,6 +888,7 @@ h2 {
   background: transparent;
 }
 
+.performance-request-section,
 .performance-editor-section {
   display: flex;
   flex-direction: column;
@@ -898,8 +899,7 @@ h2 {
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--surface);
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden;
   overscroll-behavior: contain;
 }
 
@@ -913,6 +913,7 @@ h2 {
   flex-direction: column;
   gap: 6px;
   margin-top: 0;
+  flex: 1;
   min-height: 0;
   min-width: 0;
 }
@@ -923,44 +924,39 @@ h2 {
 }
 
 #performanceMethodSelect {
-  width: 96px;
-  min-height: 32px;
+  width: 118px;
+  min-height: 36px;
   font-weight: 800;
 }
 
 #performanceUrlInput {
   flex: 1;
   min-width: 160px;
-  min-height: 32px;
-  padding: 6px 9px;
+  min-height: 36px;
+  padding: 8px 10px;
   font-family: var(--mono);
 }
 
-#runPerformanceTestButton {
-  min-width: 70px;
-  min-height: 32px;
+#runPerformanceTestButton,
+#cancelPerformanceTestButton {
+  min-width: 78px;
+  min-height: 36px;
 }
 
-.performance-request-tools {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 28px;
-}
-
-.performance-body-field textarea {
-  min-height: 52px;
-  max-height: 96px;
-  resize: vertical;
-}
-
-.performance-body-field .code-editor {
-  min-height: 52px;
+#performanceBodyInput {
+  width: 100%;
+  min-height: 160px;
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: 6px;
+  font-family: var(--mono);
+  line-height: 1.45;
+  resize: none;
 }
 
 .performance-type-tabs {
   flex: 0 0 auto;
-  margin-top: 2px;
+  margin-top: 0;
 }
 
 .performance-type-panel {
@@ -1011,12 +1007,7 @@ h2 {
   width: 78px;
 }
 
-.performance-import-source {
-  min-height: 18px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
+.performance-settings-resize,
 .performance-results-resize {
   margin: 0;
 }

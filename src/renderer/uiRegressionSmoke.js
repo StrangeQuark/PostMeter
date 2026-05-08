@@ -1894,6 +1894,8 @@
     const originalWorkspaceTabs = structuredClone(openWorkspaceTabs);
     const originalRunnerTabs = structuredClone(openRunnerTabs);
     const originalPerformanceTabs = structuredClone(openPerformanceTabs);
+    const originalPerformanceCalibrate = window.postmeter?.performance?.calibrate;
+    const originalPerformanceCancelCalibration = window.postmeter?.performance?.cancelCalibration;
     try {
       assertUiSmoke(!$('environmentTab'), 'Environment request tab panel should be removed from the request editor.');
       assertUiSmoke(!document.querySelector('.tab[data-tab-group="request"][data-tab="environment"]'), 'Environment should not appear in the request tab row.');
@@ -1943,6 +1945,120 @@
           assertUiSmoke(getComputedStyle($(panelId)).display === 'none', `Clicking ${tabId} should keep ${panelId} out of layout.`);
         }
       }
+      if (window.postmeter?.performance) {
+        let pendingCalibrationResolve = null;
+        let startedCalibrationId = '';
+        let cancelledCalibrationId = '';
+        window.postmeter.performance.calibrate = async (calibrationId) => {
+          startedCalibrationId = calibrationId;
+          return await new Promise((resolve) => {
+            pendingCalibrationResolve = resolve;
+          });
+        };
+        window.postmeter.performance.cancelCalibration = async (calibrationId) => {
+          cancelledCalibrationId = calibrationId;
+          pendingCalibrationResolve?.({
+            id: 'smoke-cancelled-calibration',
+            startedAt: '2026-05-06T00:00:00.000Z',
+            completedAt: '2026-05-06T00:00:01.000Z',
+            durationMillis: 10,
+            cancelled: true,
+            endpoint: '127.0.0.1',
+            summary: { peakRequestsPerSecond: 0, peakConcurrency: 0, reliableTargetRequestsPerSecond: 0, sustainedRequestsPerSecond: 0, recommendedMaxRequestsPerSecond: 0, repeatabilityPercent: 0, averageLatencyMillis: 0, p95LatencyMillis: 0, p95StartLagMillis: 0, p95EventLoopDelayMillis: 0, completedRequests: 0, failedRequests: 0, notes: ['cancelled'] },
+            stages: []
+          });
+          return true;
+        };
+        $('calibratePerformanceButton').click();
+        await waitForUiSmoke(() => !$('performanceCalibrationModal').hidden, 'Performance Calibrate should open the calibration modal.', 3000, global);
+        assertUiSmoke($('performanceCalibrationBody').textContent.includes('Running extended local calibration'), 'Performance calibration modal should show a running state.');
+        assertUiSmoke($('performanceCalibrationProgressBar'), 'Performance calibration modal should include a progress bar.');
+        $('closePerformanceCalibrationModalButton').click();
+        await waitForUiSmoke(() => cancelledCalibrationId === startedCalibrationId && $('performanceCalibrationModal').hidden, 'Closing calibration should cancel the active calibration.', 3000, global);
+
+        window.postmeter.performance.calibrate = async () => ({
+          id: 'smoke-complete-calibration',
+          startedAt: '2026-05-06T00:00:00.000Z',
+          completedAt: '2026-05-06T00:00:01.000Z',
+          durationMillis: 1000,
+          cancelled: false,
+          endpoint: '127.0.0.1',
+          summary: {
+            peakRequestsPerSecond: 1234.5,
+            peakConcurrency: 16,
+            sustainedRequestsPerSecond: 1100,
+            reliableTargetRequestsPerSecond: 1000,
+            edgeUpperBoundRequestsPerSecond: 1200,
+            measurementVariationPercent: 1,
+            confirmationTargetsTested: 2,
+            recommendedMaxRequestsPerSecond: 880,
+            saturationConcurrency: 16,
+            stabilityPercent: 92,
+            repeatabilityPercent: 96,
+            confidence: 'high',
+            averageLatencyMillis: 2.5,
+            p95LatencyMillis: 5,
+            p95StartLagMillis: 3,
+            p95EventLoopDelayMillis: 11,
+            completedRequests: 100,
+            failedRequests: 0,
+            notes: ['Loopback calibration estimates this machine and PostMeter runtime overhead only.']
+          },
+          stages: [{
+            name: 'Smoke stage',
+            mode: 'confirmation',
+            concurrency: 16,
+            requestedRequests: 100,
+            targetRequests: 100,
+            targetRequestsPerSecond: 1000,
+            startedRequests: 100,
+            completedRequests: 100,
+            onTimeCompletedRequests: 100,
+            failedRequests: 0,
+            durationMillis: 1000,
+            targetDurationMillis: 1000,
+            requestsPerSecond: 1234.5,
+            completionRatio: 1,
+            achievedTargetRatio: 1,
+            errorRate: 0,
+            averageLatencyMillis: 2.5,
+            p95LatencyMillis: 5,
+            p99LatencyMillis: 7,
+            averageStartLagMillis: 1,
+            p95StartLagMillis: 3,
+            intervalCount: 2,
+            medianIntervalRequestsPerSecond: 1200,
+            minIntervalRequestsPerSecond: 1100,
+            maxIntervalRequestsPerSecond: 1250,
+            stabilityPercent: 92,
+            eventLoopUtilizationPercent: 50,
+            p95EventLoopDelayMillis: 11,
+            maxInFlightRequests: 16,
+            maxInFlightLimit: 16,
+            maxStartBacklog: 1,
+            confirmationTargetRequestsPerSecond: 1000,
+            confirmationPass: 1,
+            confirmationPasses: 1,
+            confirmationCandidateRank: 1,
+            confirmationVariationPercent: 1,
+            accepted: true,
+            confirmed: true,
+            failureReasons: []
+          }]
+        });
+        window.postmeter.performance.cancelCalibration = async () => false;
+        $('calibratePerformanceButton').click();
+        await waitForUiSmoke(() => $('performanceCalibrationBody').textContent.includes('Peak RPS'), 'Completed calibration should render summary results.', 3000, global);
+        assertUiSmoke($('performanceCalibrationBody').textContent.includes('Peak RPS'), 'Calibration results should include peak RPS.');
+        assertUiSmoke($('performanceCalibrationBody').textContent.includes('Max sustained local RPS'), 'Calibration results should include max sustained local RPS.');
+        assertUiSmoke($('performanceCalibrationBody').textContent.includes('Planning cap'), 'Calibration results should include the planning cap.');
+        assertUiSmoke(
+          $('performanceCalibrationBody').querySelectorAll('.performance-calibration-stage').length >= 1,
+          'Calibration results should include per-stage rows.'
+        );
+        $('closePerformanceCalibrationModalButton').click();
+        await nextPaint();
+      }
       $('emptyCreatePerformanceTestButton').click();
       const performanceTest = activePerformanceTest();
       assertUiSmoke(performanceTest, 'Performance empty state should create a performance test.');
@@ -1953,6 +2069,84 @@
       assertUiSmoke($('performanceMethodSelect').closest('.performance-request-line'), 'Performance request method should live in the request-style line.');
       assertUiSmoke($('performanceUrlInput').closest('.performance-request-line'), 'Performance request URL should live in the request-style line.');
       assertUiSmoke($('runPerformanceTestButton').closest('.performance-request-line'), 'Performance Run action should live next to the request URL.');
+      assertUiSmoke($('performanceMethodSelect').classList.contains('method-get'), 'Performance request method dropdown should use the same method color class as requests.');
+      assertUiSmoke($('importPerformanceRequestButton').closest('.performance-actions'), 'Performance import request action should live with the performance pane actions.');
+      assertUiSmoke($('cancelPerformanceTestButton').previousElementSibling === $('runPerformanceTestButton'), 'Performance Cancel action should sit immediately after Run.');
+      assertUiSmoke($('cancelPerformanceTestButton').classList.contains('danger-button'), 'Performance Cancel action should use danger styling.');
+      assertUiSmoke(
+        $('performanceSettingsResize').getAttribute('aria-orientation') === 'horizontal',
+        'Performance request/settings splitter should expose horizontal separator semantics.'
+      );
+      for (const [tabId, label] of [
+        ['performanceRequestParamsTabButton', 'Params'],
+        ['performanceRequestHeadersTabButton', 'Headers'],
+        ['performanceRequestAuthTabButton', 'Auth'],
+        ['performanceRequestCookiesTabButton', 'Cookies'],
+        ['performanceRequestBodyTabButton', 'Body'],
+        ['performanceRequestTestsTabButton', 'Tests'],
+        ['performanceRequestScriptsTabButton', 'Scripts'],
+        ['performanceRequestExamplesTabButton', 'Examples'],
+        ['performanceRequestVariablesTabButton', 'Variables']
+      ]) {
+        assertUiSmoke($(tabId).getAttribute('role') === 'tab', `Performance request ${label} tab should expose role=tab.`);
+      }
+      $('addPerformanceParamButton').click();
+      let performanceRowInputs = $('performanceParamsTable').querySelectorAll('input');
+      assertUiSmoke(performanceRowInputs.length >= 3, 'Performance Params Add should create editable inputs.');
+      performanceRowInputs[1].value = 'probe';
+      dispatchInput(performanceRowInputs[1]);
+      performanceRowInputs[2].value = 'enabled';
+      dispatchInput(performanceRowInputs[2]);
+      $('performanceRequestHeadersTabButton').click();
+      $('addPerformanceHeaderButton').click();
+      performanceRowInputs = $('performanceHeadersTable').querySelectorAll('input');
+      assertUiSmoke(performanceRowInputs.length >= 3, `Performance Headers Add should create editable inputs, got ${performanceRowInputs.length}.`);
+      performanceRowInputs[1].value = 'X-Perf';
+      dispatchInput(performanceRowInputs[1]);
+      performanceRowInputs[2].value = 'true';
+      dispatchInput(performanceRowInputs[2]);
+      $('performanceRequestAuthTabButton').click();
+      $('performanceAuthTypeSelect').value = 'apiKey';
+      dispatchChange($('performanceAuthTypeSelect'));
+      $('performanceAuthApiKeyLocationSelect').value = 'query';
+      dispatchChange($('performanceAuthApiKeyLocationSelect'));
+      $('performanceAuthApiKeyNameInput').value = 'api_key';
+      dispatchInput($('performanceAuthApiKeyNameInput'));
+      $('performanceAuthApiKeyValueInput').value = 'secret';
+      dispatchInput($('performanceAuthApiKeyValueInput'));
+      assertUiSmoke(
+        $('performanceAuthTab').querySelector('[data-auth-section="apiKey"]').classList.contains('active'),
+        'Performance request Auth tab should show the selected auth section.'
+      );
+      $('performanceRequestBodyTabButton').click();
+      $('performanceBodyTypeSelect').value = 'RAW_JSON';
+      dispatchChange($('performanceBodyTypeSelect'));
+      $('performanceBodyInput').value = '{"hello":"performance"}';
+      dispatchInput($('performanceBodyInput'));
+      $('performanceRequestScriptsTabButton').click();
+      $('performancePreRequestScriptInput').value = "pm.environment.set('perfToken', '1');";
+      dispatchInput($('performancePreRequestScriptInput'));
+      $('performanceTestScriptInput').value = "pm.test('perf status', function () { pm.response.to.have.status(200); });";
+      dispatchInput($('performanceTestScriptInput'));
+      $('performanceRequestVariablesTabButton').click();
+      $('addPerformanceRequestVariableButton').click();
+      performanceRowInputs = $('performanceRequestVariablesTable').querySelectorAll('input');
+      assertUiSmoke(performanceRowInputs.length >= 3, `Performance Variables Add should create editable inputs, got ${performanceRowInputs.length}.`);
+      performanceRowInputs[1].value = 'perfLocal';
+      dispatchInput(performanceRowInputs[1]);
+      performanceRowInputs[2].value = 'value';
+      dispatchInput(performanceRowInputs[2]);
+      collectPerformanceTestFromEditor();
+      assertUiSmoke(
+        performanceTest.request.queryParams.some((pair) => pair.key === 'probe' && pair.value === 'enabled'),
+        'Performance request Params tab should update the performance request copy.'
+      );
+      assertUiSmoke(performanceTest.request.headers.some((pair) => pair.key === 'X-Perf' && pair.value === 'true'), 'Performance request Headers tab should update the performance request copy.');
+      assertUiSmoke(performanceTest.request.auth?.type === 'apiKey' && performanceTest.request.auth?.key === 'api_key', 'Performance request Auth tab should update the performance request copy.');
+      assertUiSmoke(performanceTest.request.bodyType === 'RAW_JSON' && performanceTest.request.body.includes('performance'), 'Performance request Body tab should update the performance request copy.');
+      assertUiSmoke(performanceTest.request.scripts.preRequest.includes('perfToken') && performanceTest.request.scripts.tests.includes('perf status'), 'Performance request Scripts tab should update the performance request copy.');
+      assertUiSmoke(performanceTest.request.variables.some((pair) => pair.key === 'perfLocal'), 'Performance request Variables tab should update the performance request copy.');
+      $('performanceRequestParamsTabButton').click();
       for (const [tabId, type, label] of [
         ['performanceLatencyTabButton', 'latency', 'Latency'],
         ['performanceThroughputTabButton', 'throughput', 'RPS / Throughput'],
@@ -2117,25 +2311,30 @@
       assertUiSmoke($('performanceOutputGraphsTab').textContent.includes('No graphs yet.'), 'Performance Graphs placeholder should render.');
       $('performanceOutputResultsTabButton').click();
       const performancePanelRect = $('performanceMainPanel').getBoundingClientRect();
+      const performanceRequestRect = $('performanceRequestSection').getBoundingClientRect();
       const performanceEditorRect = $('performanceEditorSection').getBoundingClientRect();
       const performanceResultsRect = $('performanceResults').getBoundingClientRect();
       const performanceTabsRect = document.querySelector('.performance-type-tabs').getBoundingClientRect();
+      const performanceSettingsSplitterRect = $('performanceSettingsResize').getBoundingClientRect();
       const performanceSplitterRect = $('performanceResultsResize').getBoundingClientRect();
+      const performanceRequestStyle = getComputedStyle($('performanceRequestSection'));
       const performanceEditorStyle = getComputedStyle($('performanceEditorSection'));
       const performanceResultsStyle = getComputedStyle($('performanceResults'));
       assertUiSmoke(
-        performanceEditorStyle.backgroundColor === performanceResultsStyle.backgroundColor
+        performanceRequestStyle.backgroundColor === performanceEditorStyle.backgroundColor
+          && performanceEditorStyle.backgroundColor === performanceResultsStyle.backgroundColor
+          && performanceRequestStyle.borderTopStyle !== 'none'
           && performanceEditorStyle.borderTopStyle !== 'none'
           && performanceResultsStyle.borderTopStyle !== 'none',
-        'Performance editor and results should render as separate boxed sections.'
+        'Performance request builder, settings, and results should render as separate boxed sections.'
       );
       assertUiSmoke(
         $('performanceEditorSection').scrollWidth <= $('performanceEditorSection').clientWidth + 2,
-        'Performance request/settings section should not need a horizontal scrollbar at the default size.'
+        'Performance settings section should not need a horizontal scrollbar at the default size.'
       );
       assertUiSmoke(
         $('performanceEditorSection').scrollHeight <= $('performanceEditorSection').clientHeight + 2,
-        'Performance request/settings section should be compact enough to avoid a default vertical scrollbar.'
+        'Performance settings section should be compact enough to avoid a default vertical scrollbar.'
       );
       assertUiSmoke(
         performancePanelRect.bottom - performanceResultsRect.bottom <= 12,
@@ -2148,6 +2347,11 @@
         'Long Performance output should scroll inside the execution list.'
       );
       assertUiSmoke(
+        performanceRequestRect.bottom <= performanceSettingsSplitterRect.top + 8
+          && performanceSettingsSplitterRect.bottom <= performanceEditorRect.top + 8,
+        'Performance request/settings splitter should sit between the boxed request builder and settings panes.'
+      );
+      assertUiSmoke(
         performanceEditorRect.bottom <= performanceSplitterRect.top + 8
           && performanceSplitterRect.bottom <= performanceResultsRect.top + 8,
         'Performance results splitter should sit between the boxed editor and results panes.'
@@ -2156,7 +2360,26 @@
         performanceTabsRect.bottom <= performanceSplitterRect.top + 8,
         'Performance type tabs should remain visible above long Performance output.'
       );
-      const performanceStartY = Math.round(performanceSplitterRect.top + (performanceSplitterRect.height / 2));
+      const performanceSettingsStartY = Math.round(performanceSettingsSplitterRect.top + (performanceSettingsSplitterRect.height / 2));
+      const performanceRequestStartValue = Math.round($('performanceRequestSection').getBoundingClientRect().height);
+      $('performanceSettingsResize').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, clientY: performanceSettingsStartY }));
+      document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientY: performanceSettingsStartY }));
+      const performanceSettingsSamePositionValue = Number($('performanceSettingsResize').getAttribute('aria-valuenow'));
+      assertUiSmoke(
+        Math.abs(performanceSettingsSamePositionValue - performanceRequestStartValue) <= 1,
+        `Performance request/settings resize should not jump on first mouse move. start=${performanceRequestStartValue} same=${performanceSettingsSamePositionValue}.`
+      );
+      document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientY: performanceSettingsStartY + 24 }));
+      const performanceSettingsMovedValue = Number($('performanceSettingsResize').getAttribute('aria-valuenow'));
+      assertUiSmoke(
+        Math.abs(performanceSettingsMovedValue - (performanceRequestStartValue + 24)) <= 2,
+        `Performance request/settings resize should track pointer delta. start=${performanceRequestStartValue} moved=${performanceSettingsMovedValue}.`
+      );
+      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+      assertUiSmoke(!document.body.classList.contains('is-resizing'), 'Performance request/settings resize did not exit resizing state.');
+      $('performanceSettingsResize').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+      const performanceResultsSplitterRectAfterRequestResize = $('performanceResultsResize').getBoundingClientRect();
+      const performanceStartY = Math.round(performanceResultsSplitterRectAfterRequestResize.top + (performanceResultsSplitterRectAfterRequestResize.height / 2));
       const performanceStartValue = Math.round($('performanceEditorSection').getBoundingClientRect().height);
       $('performanceResultsResize').dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, clientY: performanceStartY }));
       document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientY: performanceStartY }));
@@ -2717,6 +2940,10 @@
       openWorkspaceTabs = originalWorkspaceTabs;
       openRunnerTabs = originalRunnerTabs;
       openPerformanceTabs = originalPerformanceTabs;
+      if (window.postmeter?.performance) {
+        window.postmeter.performance.calibrate = originalPerformanceCalibrate;
+        window.postmeter.performance.cancelCalibration = originalPerformanceCancelCalibration;
+      }
       renderAll();
     }
   }
