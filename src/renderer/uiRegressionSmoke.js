@@ -71,6 +71,21 @@
     assertUiSmoke(generatedHeaderNames.includes('Host'), 'Generated request headers should show Host when unhidden.');
     assertUiSmoke(generatedHeaderNames.includes('PostMeter-Token'), 'Generated request headers should show opt-in PostMeter-Token when unhidden.');
     assertUiSmoke(!activeRequest().headers.some((header) => header.key === 'PostMeter-Token'), 'Generated request headers should not be saved as authored headers.');
+    activateTab('request', 'auth');
+    $('authTypeSelect').value = 'bearer';
+    dispatchChange($('authTypeSelect'));
+    $('authBearerTokenInput').value = 'secret-token';
+    dispatchInput($('authBearerTokenInput'));
+    await nextPaint();
+    const generatedHeadersAfterBearerAuth = Array.from($('headersTable').querySelectorAll('[data-generated-header="true"] input[aria-label^="Auto-generated"]'))
+      .map((input) => input.value);
+    assertUiSmoke(generatedHeadersAfterBearerAuth.includes('Authorization'), 'Generated request headers should update when Auth tab enables Authorization.');
+    $('authTypeSelect').value = 'none';
+    dispatchChange($('authTypeSelect'));
+    await nextPaint();
+    const generatedHeadersAfterNoAuth = Array.from($('headersTable').querySelectorAll('[data-generated-header="true"] input[aria-label^="Auto-generated"]'))
+      .map((input) => input.value);
+    assertUiSmoke(!generatedHeadersAfterNoAuth.includes('Authorization'), 'Generated request headers should update when Auth tab disables Authorization.');
     $('showGeneratedHeadersInput').checked = false;
     dispatchChange($('showGeneratedHeadersInput'));
     assertUiSmoke(!$('headersTable').querySelector('[data-generated-header="true"]'), 'Generated request headers should hide when the toggle is cleared.');
@@ -86,9 +101,13 @@
     requestParamInputs[2].value = 'car';
     dispatchInput(requestParamInputs[2]);
     assertUiSmoke($('urlInput').value.endsWith('/v1/users?taco=car'), 'Editing request params should update the request URL.');
+    assertUiSmoke(highlightedTextboxText($('urlInput')).endsWith('/v1/users?taco=car'), 'Editing request params should refresh the visible request URL text.');
     requestParamInputs[0].checked = false;
     dispatchChange(requestParamInputs[0]);
     assertUiSmoke(!$('urlInput').value.includes('taco=car'), 'Disabling a request param should remove it from the URL.');
+    $('paramsTable').querySelector('.kv-row button').click();
+    assertUiSmoke($('paramsTable').querySelectorAll('.kv-row').length === 0, 'Removing a request param should delete the Params row.');
+    assertUiSmoke(!activeRequest().queryParams.length, 'Removing a request param should delete it from the request model.');
     $('urlInput').value = 'https://api.example.test/v1/users?from=url&multi=one&multi=two';
     dispatchInput($('urlInput'));
     requestParamInputs = $('paramsTable').querySelectorAll('input');
@@ -366,6 +385,11 @@
     if (expectedStatus) {
       assertUiSmoke(token.getAttribute('data-variable-status') === expectedStatus, `${message} Expected ${expectedStatus} token status.`);
     }
+  }
+
+  function highlightedTextboxText(control) {
+    const wrapper = control.closest?.('.variable-highlight-editor');
+    return wrapper?.querySelector?.('.variable-highlight-code')?.textContent || control.value || '';
   }
 
   async function assertModalFocusSmoke() {
@@ -2177,6 +2201,10 @@
       performanceRowInputs[2].value = 'enabled';
       dispatchInput(performanceRowInputs[2]);
       assertUiSmoke($('performanceUrlInput').value.includes('?probe=enabled'), 'Editing performance request params should update the performance request URL.');
+      assertUiSmoke(highlightedTextboxText($('performanceUrlInput')).includes('?probe=enabled'), 'Editing performance request params should refresh the visible performance request URL text.');
+      $('performanceParamsTable').querySelector('.kv-row button').click();
+      assertUiSmoke($('performanceParamsTable').querySelectorAll('.kv-row').length === 0, 'Removing a performance request param should delete the Params row.');
+      assertUiSmoke(!activePerformanceTest().request.queryParams.length, 'Removing a performance request param should delete it from the performance request model.');
       $('performanceUrlInput').value = 'https://performance.example.test/run?from=url';
       dispatchInput($('performanceUrlInput'));
       performanceRowInputs = $('performanceParamsTable').querySelectorAll('input');
@@ -2206,12 +2234,22 @@
       $('performanceRequestAuthTabButton').click();
       $('performanceAuthTypeSelect').value = 'apiKey';
       dispatchChange($('performanceAuthTypeSelect'));
-      $('performanceAuthApiKeyLocationSelect').value = 'query';
+      $('performanceAuthApiKeyLocationSelect').value = 'header';
       dispatchChange($('performanceAuthApiKeyLocationSelect'));
       $('performanceAuthApiKeyNameInput').value = 'api_key';
       dispatchInput($('performanceAuthApiKeyNameInput'));
       $('performanceAuthApiKeyValueInput').value = 'secret';
       dispatchInput($('performanceAuthApiKeyValueInput'));
+      await nextPaint();
+      const performanceGeneratedHeadersAfterHeaderAuth = Array.from($('performanceHeadersTable').querySelectorAll('[data-generated-header="true"] input[aria-label^="Auto-generated"]'))
+        .map((input) => input.value);
+      assertUiSmoke(performanceGeneratedHeadersAfterHeaderAuth.includes('api_key'), `Performance generated request headers should update when Auth tab enables an API key header. Found: ${performanceGeneratedHeadersAfterHeaderAuth.join(', ')}`);
+      $('performanceAuthApiKeyLocationSelect').value = 'query';
+      dispatchChange($('performanceAuthApiKeyLocationSelect'));
+      await nextPaint();
+      const performanceGeneratedHeadersAfterQueryAuth = Array.from($('performanceHeadersTable').querySelectorAll('[data-generated-header="true"] input[aria-label^="Auto-generated"]'))
+        .map((input) => input.value);
+      assertUiSmoke(!performanceGeneratedHeadersAfterQueryAuth.includes('api_key'), `Performance generated request headers should update when Auth tab moves API key auth to query params. Found: ${performanceGeneratedHeadersAfterQueryAuth.join(', ')}`);
       assertUiSmoke(
         $('performanceAuthTab').querySelector('[data-auth-section="apiKey"]').classList.contains('active'),
         'Performance request Auth tab should show the selected auth section.'

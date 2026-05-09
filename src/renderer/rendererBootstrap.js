@@ -28,6 +28,8 @@
     'authClientPassphraseInput'
   ];
   const PERFORMANCE_AUTH_EDITOR_INPUT_IDS = AUTH_EDITOR_INPUT_IDS.map((id) => `performance${id[0].toUpperCase()}${id.slice(1)}`);
+  const AUTH_EDITOR_INPUT_ID_SET = new Set(AUTH_EDITOR_INPUT_IDS);
+  const PERFORMANCE_AUTH_EDITOR_INPUT_ID_SET = new Set(PERFORMANCE_AUTH_EDITOR_INPUT_IDS);
 
   function initializeRenderer(options = {}) {
     const doc = options.doc || document;
@@ -249,11 +251,9 @@
       if (!input) {
         continue;
       }
-      input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', () => {
-        if (id === 'authTypeSelect') {
-          options.onAuthTypeChange?.(input.value);
-        }
-        options.onAuthInput?.();
+      input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', (event) => {
+        event.__postmeterAuthHandled = true;
+        handleAuthEditorInput(id, input, options);
       });
     }
     for (const id of PERFORMANCE_AUTH_EDITOR_INPUT_IDS) {
@@ -261,13 +261,12 @@
       if (!input) {
         continue;
       }
-      input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', () => {
-        if (id === 'performanceAuthTypeSelect') {
-          options.onPerformanceAuthTypeChange?.(input.value);
-        }
-        options.onPerformanceAuthInput?.();
+      input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', (event) => {
+        event.__postmeterAuthHandled = true;
+        handlePerformanceAuthEditorInput(id, input, options);
       });
     }
+    bindDelegatedAuthEditorInputs(doc, options);
 
     for (const button of doc.querySelectorAll('.tab')) {
       button.addEventListener('click', () => options.onActivateTab?.(button.dataset.tabGroup, button.dataset.tab));
@@ -353,6 +352,37 @@
     });
 
     options.onInitResizablePanes?.();
+  }
+
+  function bindDelegatedAuthEditorInputs(doc, options) {
+    const handleDelegatedAuthEvent = (event) => {
+      if (event.__postmeterAuthHandled) {
+        return;
+      }
+      const target = event.target;
+      const id = target?.id || '';
+      if (AUTH_EDITOR_INPUT_ID_SET.has(id)) {
+        handleAuthEditorInput(id, target, options);
+      } else if (PERFORMANCE_AUTH_EDITOR_INPUT_ID_SET.has(id)) {
+        handlePerformanceAuthEditorInput(id, target, options);
+      }
+    };
+    doc.addEventListener('input', handleDelegatedAuthEvent);
+    doc.addEventListener('change', handleDelegatedAuthEvent);
+  }
+
+  function handleAuthEditorInput(id, input, options) {
+    if (id === 'authTypeSelect') {
+      options.onAuthTypeChange?.(input.value);
+    }
+    options.onAuthInput?.();
+  }
+
+  function handlePerformanceAuthEditorInput(id, input, options) {
+    if (id === 'performanceAuthTypeSelect') {
+      options.onPerformanceAuthTypeChange?.(input.value);
+    }
+    options.onPerformanceAuthInput?.();
   }
 
   function bindToolbarMenus(doc = document) {

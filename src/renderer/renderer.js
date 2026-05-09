@@ -1398,6 +1398,7 @@ function markActivePerformanceDirty() {
 function collectRequestAndMarkDirty() {
   collectRequestFromEditor();
   markActiveRequestDirty();
+  refreshActiveRequestGeneratedHeaderPreview();
 }
 
 function collectEnvironmentAndMarkDirty() {
@@ -1414,7 +1415,26 @@ function collectRunnerAndMarkDirty() {
 function collectPerformanceTestAndMarkDirty() {
   collectPerformanceTestFromEditor();
   markActivePerformanceDirty();
+  refreshActivePerformanceGeneratedHeaderPreview();
   refreshVariableHighlights();
+}
+
+function refreshActiveRequestGeneratedHeaderPreview() {
+  const request = activeRequest();
+  if (!request) {
+    return;
+  }
+  renderGeneratedHeaderRows('headersTable', request);
+  renderRequestHeaderControls(request);
+}
+
+function refreshActivePerformanceGeneratedHeaderPreview() {
+  const test = activePerformanceTest();
+  if (!test?.request) {
+    return;
+  }
+  renderGeneratedHeaderRows('performanceHeadersTable', test.request);
+  renderPerformanceRequestHeaderControls(test.request);
 }
 
 function collectActiveEditorState() {
@@ -8264,6 +8284,7 @@ function syncRequestUrlInputFromParams() {
     input.value = nextUrl;
   }
   request.url = nextUrl.trim();
+  refreshVariableHighlights(input);
 }
 
 function syncPerformanceParamsFromUrlInput() {
@@ -8288,6 +8309,7 @@ function syncPerformanceUrlInputFromParams() {
     input.value = nextUrl;
   }
   request.url = nextUrl.trim();
+  refreshVariableHighlights(input);
 }
 
 function renderRequestEditor() {
@@ -11008,7 +11030,8 @@ function collectPerformanceTestFromEditor() {
     : 'GET';
   test.request.url = $('performanceUrlInput')?.value.trim() || '';
   syncRequestBodyFieldsFromEditor('performance', test.request);
-  test.request.auth = collectPerformanceAuthFromEditor();
+  const collectedPerformanceAuth = collectPerformanceAuthFromEditor();
+  test.request.auth = collectedPerformanceAuth;
   test.request.assertions ||= [];
   test.request.scripts = {
     preRequest: $('performancePreRequestScriptInput')?.value || '',

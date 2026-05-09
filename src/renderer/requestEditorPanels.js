@@ -316,6 +316,7 @@
       remove.setAttribute('aria-label', `Remove ${keyPlaceholder.toLowerCase()} ${pair.key || index + 1}`);
       remove.addEventListener('click', () => {
         pairs.splice(index, 1);
+        row.parentNode?.removeChild(row);
         onDirty();
         onRemove(index);
       });

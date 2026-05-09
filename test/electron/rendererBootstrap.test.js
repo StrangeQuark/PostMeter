@@ -138,10 +138,14 @@ test('renderer bootstrap binds auth input and modal draft confirmation events', 
   const calls = {
     authType: [],
     authInput: 0,
+    performanceAuthType: [],
+    performanceAuthInput: 0,
     resolveModal: []
   };
   const elements = new Map([
     ['authTypeSelect', createElement({ tagName: 'SELECT', value: 'oauth2' })],
+    ['performanceAuthTypeSelect', createElement({ tagName: 'SELECT', value: 'apiKey' })],
+    ['performanceAuthApiKeyNameInput', createElement({ value: 'api_key' })],
     ['confirmSaveDraftButton', createElement()],
     ['confirmExportCollectionButton', createElement()],
     ['confirmRunnerImportButton', createElement()],
@@ -169,6 +173,8 @@ test('renderer bootstrap binds auth input and modal draft confirmation events', 
     windowObject: fakeWindow,
     onAuthTypeChange: (value) => calls.authType.push(value),
     onAuthInput: () => { calls.authInput += 1; },
+    onPerformanceAuthTypeChange: (value) => calls.performanceAuthType.push(value),
+    onPerformanceAuthInput: () => { calls.performanceAuthInput += 1; },
     onResolveActiveModal: (value) => calls.resolveModal.push(value),
     getSelectedDraftSaveCollectionId: () => 'collection-1',
     getSelectedExportCollectionId: () => 'collection-2',
@@ -176,12 +182,16 @@ test('renderer bootstrap binds auth input and modal draft confirmation events', 
   });
 
   elements.get('authTypeSelect').dispatch('change');
+  elements.get('performanceAuthTypeSelect').dispatch('change');
+  elements.get('performanceAuthApiKeyNameInput').dispatch('input');
   elements.get('confirmSaveDraftButton').dispatch('click');
   elements.get('confirmExportCollectionButton').dispatch('click');
   elements.get('confirmRunnerImportButton').dispatch('click');
 
   assert.deepEqual(calls.authType, ['oauth2']);
   assert.equal(calls.authInput, 1);
+  assert.deepEqual(calls.performanceAuthType, ['apiKey']);
+  assert.equal(calls.performanceAuthInput, 2);
   assert.deepEqual(calls.resolveModal, ['collection-1', 'collection-2', { type: 'request', collectionId: 'collection-1', requestId: 'request-1' }]);
 });
 
