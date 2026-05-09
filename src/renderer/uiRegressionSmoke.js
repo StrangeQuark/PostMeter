@@ -12,8 +12,10 @@
     assertUiSmoke(workspace.collections.length === 0, 'Regression smoke should start with an empty workspace.');
     assertUiSmoke(!/(sign in|log in|create account|register)/i.test(document.body.textContent), 'Standalone UI should not render app account/login language.');
     assertToolbarMenuSmoke('newMenuButton', 'newMenu', ['Workspace', 'Request', 'Collection', 'Folder', 'Environment', 'Runner', 'Performance Test']);
-    assertToolbarMenuSmoke('importMenuButton', 'importMenu', ['Workspace', 'Collection', 'Performance Test']);
-    assertToolbarMenuSmoke('exportMenuButton', 'exportMenu', ['Workspace', 'Collection', 'Postman', 'OpenAPI', 'curl', 'HAR', 'Performance Test']);
+    assertToolbarMenuSmoke('importMenuButton', 'importMenu', ['Workspace', 'Collection', 'Environment', 'Runner', 'Performance Test']);
+    assertToolbarMenuSmoke('exportMenuButton', 'exportMenu', ['Workspace', 'Collection', 'Environment', 'Runner', 'Performance Test'], {
+      submenuLabels: ['PostMeter', 'Postman', 'OpenAPI', 'curl', 'HAR']
+    });
     assertToolbarMenuKeyboardActivationSmoke();
     await setThemePreference('dark', { save: false, showStatus: false });
     assertUiSmoke(document.documentElement.dataset.theme === 'dark', 'Dark theme was not applied.');
@@ -71,6 +73,23 @@
     assertUiSmoke(generatedHeaderNames.includes('Host'), 'Generated request headers should show Host when unhidden.');
     assertUiSmoke(generatedHeaderNames.includes('PostMeter-Token'), 'Generated request headers should show opt-in PostMeter-Token when unhidden.');
     assertUiSmoke(!activeRequest().headers.some((header) => header.key === 'PostMeter-Token'), 'Generated request headers should not be saved as authored headers.');
+    activateTab('request', 'auth');
+    $('authTypeSelect').value = 'bearer';
+    dispatchChange($('authTypeSelect'));
+    $('authBearerTokenInput').value = '{{baseUrl}}';
+    dispatchInput($('authBearerTokenInput'));
+    await nextPaint();
+    assertVariableHighlight($('authBearerTokenInput'), 'baseUrl', 'Bearer token fields should highlight environment variable tokens.');
+    assertVariableHighlightUsesInputMetrics($('authBearerTokenInput'), 'baseUrl', 'Bearer token variable highlighting should not alter input text metrics.');
+    const generatedHeadersAfterBearerAuth = Array.from($('headersTable').querySelectorAll('[data-generated-header="true"] input[aria-label^="Auto-generated"]'))
+      .map((input) => input.value);
+    assertUiSmoke(generatedHeadersAfterBearerAuth.includes('Authorization'), 'Generated request headers should update when Auth tab enables Authorization.');
+    $('authTypeSelect').value = 'none';
+    dispatchChange($('authTypeSelect'));
+    await nextPaint();
+    const generatedHeadersAfterNoAuth = Array.from($('headersTable').querySelectorAll('[data-generated-header="true"] input[aria-label^="Auto-generated"]'))
+      .map((input) => input.value);
+    assertUiSmoke(!generatedHeadersAfterNoAuth.includes('Authorization'), 'Generated request headers should update when Auth tab disables Authorization.');
     $('showGeneratedHeadersInput').checked = false;
     dispatchChange($('showGeneratedHeadersInput'));
     assertUiSmoke(!$('headersTable').querySelector('[data-generated-header="true"]'), 'Generated request headers should hide when the toggle is cleared.');
@@ -86,9 +105,13 @@
     requestParamInputs[2].value = 'car';
     dispatchInput(requestParamInputs[2]);
     assertUiSmoke($('urlInput').value.endsWith('/v1/users?taco=car'), 'Editing request params should update the request URL.');
+    assertUiSmoke(highlightedTextboxText($('urlInput')).endsWith('/v1/users?taco=car'), 'Editing request params should refresh the visible request URL text.');
     requestParamInputs[0].checked = false;
     dispatchChange(requestParamInputs[0]);
     assertUiSmoke(!$('urlInput').value.includes('taco=car'), 'Disabling a request param should remove it from the URL.');
+    $('paramsTable').querySelector('.kv-row button').click();
+    assertUiSmoke($('paramsTable').querySelectorAll('.kv-row').length === 0, 'Removing a request param should delete the Params row.');
+    assertUiSmoke(!activeRequest().queryParams.length, 'Removing a request param should delete it from the request model.');
     $('urlInput').value = 'https://api.example.test/v1/users?from=url&multi=one&multi=two';
     dispatchInput($('urlInput'));
     requestParamInputs = $('paramsTable').querySelectorAll('input');
@@ -366,6 +389,21 @@
     if (expectedStatus) {
       assertUiSmoke(token.getAttribute('data-variable-status') === expectedStatus, `${message} Expected ${expectedStatus} token status.`);
     }
+  }
+
+  function assertVariableHighlightUsesInputMetrics(control, variableName, message) {
+    const wrapper = control.closest?.('.variable-highlight-editor') || control.closest?.('.code-editor');
+    const token = wrapper?.querySelector?.(`[data-variable-name="${cssAttributeValue(variableName)}"]`);
+    assertUiSmoke(token, message);
+    assertUiSmoke(
+      getComputedStyle(token).fontWeight === getComputedStyle(control).fontWeight,
+      `${message} Token font weight should match the editable text.`
+    );
+  }
+
+  function highlightedTextboxText(control) {
+    const wrapper = control.closest?.('.variable-highlight-editor');
+    return wrapper?.querySelector?.('.variable-highlight-code')?.textContent || control.value || '';
   }
 
   async function assertModalFocusSmoke() {
@@ -1633,28 +1671,46 @@
     }
   }
 
-  function assertToolbarMenuSmoke(buttonId, menuId, expectedLabels) {
+  function assertToolbarMenuSmoke(buttonId, menuId, expectedLabels, options = {}) {
     const button = $(buttonId);
     const menu = $(menuId);
     button.click();
     assertUiSmoke(menu.hidden === false, `${menuId} did not open.`);
     assertUiSmoke(button.getAttribute('aria-expanded') === 'true', `${buttonId} did not update aria-expanded.`);
-    const labels = Array.from(menu.querySelectorAll('button')).map((item) => item.textContent.trim());
+    const topLevelItems = getToolbarMenuTopLevelItems(menu);
+    const labels = topLevelItems.map((item) => item.textContent.trim());
     for (const label of expectedLabels) {
       assertUiSmoke(labels.includes(label), `${menuId} missing ${label}.`);
+    }
+    if (options.submenuLabels) {
+      const submenuLabels = Array.from(menu.querySelectorAll('.toolbar-submenu button')).map((item) => item.textContent.trim());
+      for (const label of options.submenuLabels) {
+        assertUiSmoke(submenuLabels.includes(label), `${menuId} submenu missing ${label}.`);
+      }
     }
     closeToolbarMenus();
     assertUiSmoke(menu.hidden === true, `${menuId} did not close.`);
     button.focus();
     button.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowDown' }));
     assertUiSmoke(menu.hidden === false, `${menuId} did not open from keyboard.`);
-    const items = Array.from(menu.querySelectorAll('button'));
-    const enabledItems = items.filter((item) => !item.disabled);
+    const enabledItems = getToolbarMenuTopLevelItems(menu).filter((item) => !item.disabled);
     assertUiSmoke(document.activeElement === enabledItems[0], `${menuId} should focus the first item when opened from keyboard.`);
     enabledItems[0].dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowDown' }));
     assertUiSmoke(document.activeElement === enabledItems[1], `${menuId} should support arrow-key item navigation.`);
     enabledItems[1].dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'End' }));
     assertUiSmoke(document.activeElement === enabledItems.at(-1), `${menuId} should support End key item navigation.`);
+    if (options.submenuLabels) {
+      const submenuTrigger = enabledItems.find((item) => item.getAttribute('aria-haspopup') === 'menu');
+      assertUiSmoke(submenuTrigger, `${menuId} should expose submenu categories.`);
+      submenuTrigger.focus();
+      submenuTrigger.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowRight' }));
+      const submenu = submenuTrigger.parentElement?.querySelector?.('.toolbar-submenu');
+      const submenuItems = Array.from(submenu?.querySelectorAll('button:not([disabled])') || []);
+      assertUiSmoke(document.activeElement === submenuItems[0], `${menuId} should move into submenu items with ArrowRight.`);
+      submenuItems[0].dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowLeft' }));
+      assertUiSmoke(document.activeElement === submenuTrigger, `${menuId} should return from submenu items with ArrowLeft.`);
+      enabledItems.at(-1).focus();
+    }
     enabledItems.at(-1).dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowUp' }));
     assertUiSmoke(
       document.activeElement === enabledItems.at(-2),
@@ -1663,6 +1719,19 @@
     enabledItems.at(-2).dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape' }));
     assertUiSmoke(menu.hidden === true, `${menuId} should close on Escape.`);
     assertUiSmoke(document.activeElement === button, `${menuId} should restore focus to its trigger on Escape.`);
+  }
+
+  function getToolbarMenuTopLevelItems(menu) {
+    return Array.from(menu.children).flatMap((child) => {
+      if (child.matches?.('button')) {
+        return [child];
+      }
+      if (child.matches?.('.toolbar-submenu-row')) {
+        const parentButton = child.querySelector(':scope > button');
+        return parentButton ? [parentButton] : [];
+      }
+      return [];
+    });
   }
 
   function assertToolbarMenuKeyboardActivationSmoke() {
@@ -2177,6 +2246,10 @@
       performanceRowInputs[2].value = 'enabled';
       dispatchInput(performanceRowInputs[2]);
       assertUiSmoke($('performanceUrlInput').value.includes('?probe=enabled'), 'Editing performance request params should update the performance request URL.');
+      assertUiSmoke(highlightedTextboxText($('performanceUrlInput')).includes('?probe=enabled'), 'Editing performance request params should refresh the visible performance request URL text.');
+      $('performanceParamsTable').querySelector('.kv-row button').click();
+      assertUiSmoke($('performanceParamsTable').querySelectorAll('.kv-row').length === 0, 'Removing a performance request param should delete the Params row.');
+      assertUiSmoke(!activePerformanceTest().request.queryParams.length, 'Removing a performance request param should delete it from the performance request model.');
       $('performanceUrlInput').value = 'https://performance.example.test/run?from=url';
       dispatchInput($('performanceUrlInput'));
       performanceRowInputs = $('performanceParamsTable').querySelectorAll('input');
@@ -2206,12 +2279,22 @@
       $('performanceRequestAuthTabButton').click();
       $('performanceAuthTypeSelect').value = 'apiKey';
       dispatchChange($('performanceAuthTypeSelect'));
-      $('performanceAuthApiKeyLocationSelect').value = 'query';
+      $('performanceAuthApiKeyLocationSelect').value = 'header';
       dispatchChange($('performanceAuthApiKeyLocationSelect'));
       $('performanceAuthApiKeyNameInput').value = 'api_key';
       dispatchInput($('performanceAuthApiKeyNameInput'));
       $('performanceAuthApiKeyValueInput').value = 'secret';
       dispatchInput($('performanceAuthApiKeyValueInput'));
+      await nextPaint();
+      const performanceGeneratedHeadersAfterHeaderAuth = Array.from($('performanceHeadersTable').querySelectorAll('[data-generated-header="true"] input[aria-label^="Auto-generated"]'))
+        .map((input) => input.value);
+      assertUiSmoke(performanceGeneratedHeadersAfterHeaderAuth.includes('api_key'), `Performance generated request headers should update when Auth tab enables an API key header. Found: ${performanceGeneratedHeadersAfterHeaderAuth.join(', ')}`);
+      $('performanceAuthApiKeyLocationSelect').value = 'query';
+      dispatchChange($('performanceAuthApiKeyLocationSelect'));
+      await nextPaint();
+      const performanceGeneratedHeadersAfterQueryAuth = Array.from($('performanceHeadersTable').querySelectorAll('[data-generated-header="true"] input[aria-label^="Auto-generated"]'))
+        .map((input) => input.value);
+      assertUiSmoke(!performanceGeneratedHeadersAfterQueryAuth.includes('api_key'), `Performance generated request headers should update when Auth tab moves API key auth to query params. Found: ${performanceGeneratedHeadersAfterQueryAuth.join(', ')}`);
       assertUiSmoke(
         $('performanceAuthTab').querySelector('[data-auth-section="apiKey"]').classList.contains('active'),
         'Performance request Auth tab should show the selected auth section.'
@@ -2251,10 +2334,13 @@
       );
       $('performanceBodyTypeSelect').value = 'BINARY';
       dispatchChange($('performanceBodyTypeSelect'));
+      $('performanceBinaryBodySourceInput').value = '{{perfHost}}';
+      dispatchInput($('performanceBinaryBodySourceInput'));
+      await nextPaint();
+      assertVariableHighlight($('performanceBinaryBodySourceInput'), 'perfHost', 'Performance binary file source fields should highlight environment variable tokens.');
+      assertVariableHighlightUsesInputMetrics($('performanceBinaryBodySourceInput'), 'perfHost', 'Performance binary file source highlighting should not alter input text metrics.');
       $('performanceBinaryBodySourceInput').value = 'fixtures/performance-upload.dat';
       dispatchInput($('performanceBinaryBodySourceInput'));
-      $('performanceBinaryBodyContentTypeInput').value = 'application/octet-stream';
-      dispatchInput($('performanceBinaryBodyContentTypeInput'));
       collectPerformanceTestFromEditor();
       assertUiSmoke(
         performanceTest.request.bodyType === 'BINARY'
@@ -3231,10 +3317,12 @@
 	    $('binaryBodySourceInput').click();
 	    assertUiSmoke(!$('fileSourceMenu').hidden, 'Clicking a binary file source field should open the local file source menu.');
 	    document.body.click();
+	    $('binaryBodySourceInput').value = '{{baseUrl}}';
+	    dispatchInput($('binaryBodySourceInput'));
+	    assertVariableHighlight($('binaryBodySourceInput'), 'baseUrl', 'Binary file source fields should highlight environment variable tokens.');
+	    assertVariableHighlightUsesInputMetrics($('binaryBodySourceInput'), 'baseUrl', 'Binary file source highlighting should not alter input text metrics.');
 	    $('binaryBodySourceInput').value = 'fixtures/binary.dat';
 	    dispatchInput($('binaryBodySourceInput'));
-    $('binaryBodyContentTypeInput').value = 'application/octet-stream';
-    dispatchInput($('binaryBodyContentTypeInput'));
     collectRequestFromEditor();
     assertUiSmoke(
       draft.bodyType === 'BINARY'

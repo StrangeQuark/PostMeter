@@ -28,6 +28,8 @@
     'authClientPassphraseInput'
   ];
   const PERFORMANCE_AUTH_EDITOR_INPUT_IDS = AUTH_EDITOR_INPUT_IDS.map((id) => `performance${id[0].toUpperCase()}${id.slice(1)}`);
+  const AUTH_EDITOR_INPUT_ID_SET = new Set(AUTH_EDITOR_INPUT_IDS);
+  const PERFORMANCE_AUTH_EDITOR_INPUT_ID_SET = new Set(PERFORMANCE_AUTH_EDITOR_INPUT_IDS);
 
   function initializeRenderer(options = {}) {
     const doc = options.doc || document;
@@ -111,12 +113,17 @@
     bindClick(doc, 'importWorkspaceButton', options.onImportWorkspace);
     bindClick(doc, 'exportWorkspaceButton', options.onExportWorkspace);
     bindClick(doc, 'importCollectionButton', options.onImportCollection);
+    bindClick(doc, 'importEnvironmentButton', options.onImportEnvironment);
+    bindClick(doc, 'importRunnerButton', options.onImportRunner);
     bindClick(doc, 'importPerformanceTestButton', options.onImportPerformanceTest);
     bindClick(doc, 'exportCollectionButton', options.onExportCollection);
     bindClick(doc, 'exportPostmanButton', options.onExportPostman);
     bindClick(doc, 'exportOpenApiButton', options.onExportOpenApi);
     bindClick(doc, 'exportCurlButton', options.onExportCurl);
     bindClick(doc, 'exportHarButton', options.onExportHar);
+    bindClick(doc, 'exportEnvironmentButton', options.onExportEnvironment);
+    bindClick(doc, 'exportPostmanEnvironmentButton', options.onExportPostmanEnvironment);
+    bindClick(doc, 'exportRunnerDefinitionButton', options.onExportRunnerDefinition);
     bindClick(doc, 'exportPerformanceTestMenuButton', options.onExportPerformanceTest);
     bindClick(doc, 'sendButton', options.onSendRequest);
     bindClick(doc, 'addParamButton', options.onAddParam);
@@ -204,7 +211,6 @@
     bindClick(doc, 'addPerformanceFormDataBodyRowButton', options.onAddPerformanceFormDataBodyRow || options.onPerformanceRequestChange);
     bindClick(doc, 'addPerformanceUrlencodedBodyRowButton', options.onAddPerformanceUrlencodedBodyRow || options.onPerformanceRequestChange);
     bindInput(doc, 'performanceBinaryBodySourceInput', options.onPerformanceRequestChange);
-    bindInput(doc, 'performanceBinaryBodyContentTypeInput', options.onPerformanceRequestChange);
     bindInput(doc, 'performancePreRequestScriptInput', options.onPerformanceRequestChange);
     bindInput(doc, 'performanceTestScriptInput', options.onPerformanceRequestChange);
     bindChange(doc, 'performanceRequestCookieJarEnabledInput', options.onPerformanceRequestChange);
@@ -221,7 +227,6 @@
     bindClick(doc, 'addFormDataBodyRowButton', options.onAddFormDataBodyRow || options.onBodyInput);
     bindClick(doc, 'addUrlencodedBodyRowButton', options.onAddUrlencodedBodyRow || options.onBodyInput);
     bindInput(doc, 'binaryBodySourceInput', options.onBodyInput);
-    bindInput(doc, 'binaryBodyContentTypeInput', options.onBodyInput);
     bindInput(doc, 'preRequestScriptInput', options.onPreRequestScriptInput);
     bindInput(doc, 'testScriptInput', options.onTestScriptInput);
     bindChange(doc, 'requestCookieJarEnabledInput', options.onRequestCookieJarChange);
@@ -249,11 +254,9 @@
       if (!input) {
         continue;
       }
-      input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', () => {
-        if (id === 'authTypeSelect') {
-          options.onAuthTypeChange?.(input.value);
-        }
-        options.onAuthInput?.();
+      input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', (event) => {
+        event.__postmeterAuthHandled = true;
+        handleAuthEditorInput(id, input, options);
       });
     }
     for (const id of PERFORMANCE_AUTH_EDITOR_INPUT_IDS) {
@@ -261,13 +264,12 @@
       if (!input) {
         continue;
       }
-      input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', () => {
-        if (id === 'performanceAuthTypeSelect') {
-          options.onPerformanceAuthTypeChange?.(input.value);
-        }
-        options.onPerformanceAuthInput?.();
+      input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', (event) => {
+        event.__postmeterAuthHandled = true;
+        handlePerformanceAuthEditorInput(id, input, options);
       });
     }
+    bindDelegatedAuthEditorInputs(doc, options);
 
     for (const button of doc.querySelectorAll('.tab')) {
       button.addEventListener('click', () => options.onActivateTab?.(button.dataset.tabGroup, button.dataset.tab));
@@ -304,6 +306,13 @@
       const selectedCollectionId = options.getSelectedExportCollectionId?.();
       if (selectedCollectionId) {
         options.onResolveActiveModal?.(selectedCollectionId);
+      }
+    });
+    bindClick(doc, 'cancelExportItemButton', () => options.onResolveActiveModal?.(null));
+    bindClick(doc, 'confirmExportItemButton', () => {
+      const selectedExportItemId = options.getSelectedExportItemId?.();
+      if (selectedExportItemId) {
+        options.onResolveActiveModal?.(selectedExportItemId);
       }
     });
     bindClick(doc, 'cancelRunnerImportButton', () => options.onResolveActiveModal?.(null));
@@ -355,6 +364,37 @@
     options.onInitResizablePanes?.();
   }
 
+  function bindDelegatedAuthEditorInputs(doc, options) {
+    const handleDelegatedAuthEvent = (event) => {
+      if (event.__postmeterAuthHandled) {
+        return;
+      }
+      const target = event.target;
+      const id = target?.id || '';
+      if (AUTH_EDITOR_INPUT_ID_SET.has(id)) {
+        handleAuthEditorInput(id, target, options);
+      } else if (PERFORMANCE_AUTH_EDITOR_INPUT_ID_SET.has(id)) {
+        handlePerformanceAuthEditorInput(id, target, options);
+      }
+    };
+    doc.addEventListener('input', handleDelegatedAuthEvent);
+    doc.addEventListener('change', handleDelegatedAuthEvent);
+  }
+
+  function handleAuthEditorInput(id, input, options) {
+    if (id === 'authTypeSelect') {
+      options.onAuthTypeChange?.(input.value);
+    }
+    options.onAuthInput?.();
+  }
+
+  function handlePerformanceAuthEditorInput(id, input, options) {
+    if (id === 'performanceAuthTypeSelect') {
+      options.onPerformanceAuthTypeChange?.(input.value);
+    }
+    options.onPerformanceAuthInput?.();
+  }
+
   function bindToolbarMenus(doc = document) {
     for (const [buttonId, menuId] of [
       ['newMenuButton', 'newMenu'],
@@ -379,10 +419,48 @@
       });
       menu.addEventListener('click', (event) => {
         event.stopPropagation();
+        if (event.target?.matches?.('.toolbar-submenu-row > button[aria-haspopup="menu"]')) {
+          event.preventDefault();
+          event.target.focus?.();
+          return;
+        }
         closeToolbarMenus(doc);
       });
+      for (const submenuRow of Array.from(menu.querySelectorAll?.('.toolbar-submenu-row') || [])) {
+        submenuRow.addEventListener('mouseenter', () => {
+          const activeElement = doc.activeElement;
+          const activeRow = activeElement?.closest?.('.toolbar-submenu-row');
+          if (activeRow && activeRow !== submenuRow && menu.contains?.(activeRow)) {
+            activeElement?.blur?.();
+          }
+        });
+      }
       menu.addEventListener('keydown', (event) => {
         if (event.__postmeterMenuHandled === true) {
+          return;
+        }
+        if ((event.key === 'Enter' || event.key === ' ') && event.target?.matches?.('.toolbar-submenu-row > button[aria-haspopup="menu"]')) {
+          event.preventDefault();
+          event.__postmeterMenuHandled = true;
+          event.stopPropagation();
+          event.stopImmediatePropagation?.();
+          event.target.focus?.();
+          return;
+        }
+        if (event.key === 'ArrowRight' && event.target?.matches?.('.toolbar-submenu-row > button[aria-haspopup="menu"]')) {
+          event.preventDefault();
+          event.__postmeterMenuHandled = true;
+          event.stopPropagation();
+          event.stopImmediatePropagation?.();
+          event.target.parentElement?.querySelector?.('.toolbar-submenu button:not([disabled])')?.focus?.();
+          return;
+        }
+        if (event.key === 'ArrowLeft' && event.target?.closest?.('.toolbar-submenu')) {
+          event.preventDefault();
+          event.__postmeterMenuHandled = true;
+          event.stopPropagation();
+          event.stopImmediatePropagation?.();
+          event.target.closest('.toolbar-submenu-row')?.querySelector?.(':scope > button[aria-haspopup="menu"]')?.focus?.();
           return;
         }
         if (event.key === 'Escape') {
@@ -409,7 +487,7 @@
           event.target.click();
           return;
         }
-        if (moveMenuItemFocus(event, Array.from(menu.querySelectorAll('button:not([disabled])')))) {
+        if (moveMenuItemFocus(event, getToolbarMenuNavigationButtons(menu, event.target))) {
           event.__postmeterMenuHandled = true;
           event.stopPropagation();
           event.stopImmediatePropagation?.();
@@ -465,6 +543,24 @@
     }
     buttons[nextIndex]?.focus?.();
     return true;
+  }
+
+  function getToolbarMenuNavigationButtons(menu, target) {
+    const submenu = target?.closest?.('.toolbar-submenu');
+    if (submenu) {
+      return Array.from(submenu.querySelectorAll('button:not([disabled])'));
+    }
+    return Array.from(menu.children)
+      .flatMap((child) => {
+        if (child.matches?.('button:not([disabled])')) {
+          return [child];
+        }
+        if (child.matches?.('.toolbar-submenu-row')) {
+          const parentButton = child.querySelector(':scope > button:not([disabled])');
+          return parentButton ? [parentButton] : [];
+        }
+        return [];
+      });
   }
 
   function toggleToolbarMenu(doc, button, menu) {

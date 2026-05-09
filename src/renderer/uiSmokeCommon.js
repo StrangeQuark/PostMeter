@@ -134,7 +134,7 @@
     const contextMenu = getElement(runtimeGlobal, 'contextMenu');
     const labels = Array.from(contextMenu.querySelectorAll('button')).map((button) => button.textContent);
     assertUiSmoke(!contextMenu.hidden, 'Context menu did not open.');
-    for (const label of ['Add Request', 'Add Folder', 'Rename', 'Export', 'Delete']) {
+    for (const label of ['Add Request', 'Add Folder', 'Rename', 'Duplicate', 'Export PostMeter', 'Delete']) {
       assertUiSmoke(labels.includes(label), `Context menu missing ${label}.`);
     }
     if (options.keyboard === true) {

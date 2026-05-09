@@ -260,6 +260,43 @@
       "notes": ""
     },
     {
+      "id": "ipc.channel.environment-export",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `environment:export`: Environment export validates environment payloads and writes native PostMeter or Postman environment JSON through a main-process save picker.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/workspaceIpc.js",
+        "electron/preload.js",
+        "electron/fileDialogs.js",
+        "src/core/environmentFormats.js",
+        "src/core/ipcValidation.js"
+      ],
+      "tests": [
+        "test/electron/workspaceIpc.test.js",
+        "test/electron/environmentFormats.test.js",
+        "test/electron/ipcValidation.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.environment-import",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `environment:import`: Environment import accepts a renderer-selected local path from the shared drag/drop picker or falls back to a JSON picker, then validates native or Postman environment payloads.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/workspaceIpc.js",
+        "electron/preload.js",
+        "electron/fileDialogs.js",
+        "src/core/environmentFormats.js",
+        "src/core/ipcValidation.js"
+      ],
+      "tests": [
+        "test/electron/workspaceIpc.test.js",
+        "test/electron/environmentFormats.test.js"
+      ],
+      "notes": ""
+    },
+    {
       "id": "ipc.channel.menu-action",
       "area": "IPC channel",
       "target": "main-to-renderer channel `menu:action`: Native menu event delivered to the explicit preload subscription.",
@@ -574,6 +611,43 @@
       "notes": ""
     },
     {
+      "id": "ipc.channel.runner-exportdefinition",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `runner:exportDefinition`: Runner definition export validates a saved runner payload before writing native runner JSON through a main-process save picker.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/workspaceIpc.js",
+        "electron/preload.js",
+        "electron/fileDialogs.js",
+        "src/core/runnerFormats.js",
+        "src/core/ipcValidation.js"
+      ],
+      "tests": [
+        "test/electron/workspaceIpc.test.js",
+        "test/electron/runnerFormats.test.js",
+        "test/electron/ipcValidation.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.runner-importdefinition",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `runner:importDefinition`: Runner definition import accepts a renderer-selected local path from the shared drag/drop picker or falls back to a JSON picker, then validates native runner payloads.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/workspaceIpc.js",
+        "electron/preload.js",
+        "electron/fileDialogs.js",
+        "src/core/runnerFormats.js",
+        "src/core/ipcValidation.js"
+      ],
+      "tests": [
+        "test/electron/workspaceIpc.test.js",
+        "test/electron/runnerFormats.test.js"
+      ],
+      "notes": ""
+    },
+    {
       "id": "ipc.channel.runner-progress",
       "area": "IPC channel",
       "target": "main-to-renderer channel `runner:progress`: Collection-run progress events are asserted before delivery to the renderer subscription.",
@@ -769,6 +843,20 @@
       "id": "ipc.channel.workspace-delete",
       "area": "IPC channel",
       "target": "renderer-to-main channel `workspace:delete`: Workspace delete validates non-empty workspace IDs before destructive store operations.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/workspaceIpc.js",
+        "electron/preload.js"
+      ],
+      "tests": [
+        "test/electron/workspaceIpc.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.workspace-duplicate",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `workspace:duplicate`: Workspace duplication validates non-empty workspace IDs before creating a separate workspace file.",
       "status": "implemented",
       "evidenceRefs": [
         "electron/workspaceIpc.js",

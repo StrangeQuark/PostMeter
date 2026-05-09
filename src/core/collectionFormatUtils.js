@@ -1,6 +1,33 @@
+const path = require('node:path');
 const { BODY_TYPES, SUPPORTED_METHODS, walkRequests } = require('./models');
 
 const HTTP_METHODS = [...SUPPORTED_METHODS].map((method) => method.toLowerCase());
+const FILE_EXTENSION_CONTENT_TYPES = new Map(Object.entries({
+  '.avif': 'image/avif',
+  '.bin': 'application/octet-stream',
+  '.bmp': 'image/bmp',
+  '.csv': 'text/csv',
+  '.gif': 'image/gif',
+  '.gz': 'application/gzip',
+  '.htm': 'text/html',
+  '.html': 'text/html',
+  '.jpeg': 'image/jpeg',
+  '.jpg': 'image/jpeg',
+  '.js': 'application/javascript',
+  '.json': 'application/json',
+  '.mjs': 'application/javascript',
+  '.pdf': 'application/pdf',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.tar': 'application/x-tar',
+  '.text': 'text/plain',
+  '.tif': 'image/tiff',
+  '.tiff': 'image/tiff',
+  '.txt': 'text/plain',
+  '.webp': 'image/webp',
+  '.xml': 'application/xml',
+  '.zip': 'application/zip'
+}));
 
 function flattenCollectionRequests(collection) {
   const entries = [];
@@ -62,9 +89,16 @@ function contentTypeForRequest(request) {
     return 'application/x-www-form-urlencoded';
   }
   if (request.bodyType === BODY_TYPES.BINARY) {
-    return 'application/octet-stream';
+    return request.postmanBody?.file?.contentType
+      || request.postmanBody?.binary?.contentType
+      || detectFileContentType(request.postmanBody?.file?.src || request.postmanBody?.binary?.src);
   }
   return 'text/plain; charset=utf-8';
+}
+
+function detectFileContentType(value) {
+  const extension = path.extname(String(value || '').split(/[?#]/, 1)[0]).toLowerCase();
+  return FILE_EXTENSION_CONTENT_TYPES.get(extension) || 'application/octet-stream';
 }
 
 function parseJsonMaybe(value) {

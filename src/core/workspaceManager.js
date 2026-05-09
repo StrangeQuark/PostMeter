@@ -103,6 +103,17 @@ class WorkspaceManager {
     return store.exportWorkspace(loaded.workspace, exportPath);
   }
 
+  async duplicateWorkspace(workspaceId) {
+    const catalog = await this.ensureCatalog(this.currentWorkspaceId);
+    if (!catalog.files.includes(workspaceId)) {
+      throw new Error(`Workspace "${workspaceId}" was not found.`);
+    }
+    const sourceWorkspace = await this.loadWorkspaceById(workspaceId);
+    const sourceName = this.workspaceDisplayNameFromFilename(workspaceId);
+    const duplicateName = await this.nextWorkspaceName(`${sourceName} Copy`);
+    return this.saveNewWorkspaceFile(duplicateName, sourceWorkspace, catalog.files);
+  }
+
   async loadWorkspaceById(workspaceId) {
     const catalog = await this.ensureCatalog(this.currentWorkspaceId);
     if (!catalog.files.includes(workspaceId)) {

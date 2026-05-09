@@ -260,7 +260,7 @@
 
 .binary-body-grid {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(160px, 260px);
+  grid-template-columns: minmax(180px, 1fr);
   gap: 10px;
 }
 
@@ -353,7 +353,7 @@ textarea.code-editor-input:placeholder-shown {
 }
 
 .code-editor-token.tok-variable {
-  font-weight: 800;
+  font-weight: inherit;
 }
 
 .code-editor-token.tok-variable-valid {
@@ -410,13 +410,13 @@ textarea.code-editor-input:placeholder-shown {
   caret-color: var(--text);
 }
 
-.variable-highlight-input:not(:placeholder-shown) {
+.variable-highlight-input.has-variable-highlight-value {
   color: transparent !important;
   -webkit-text-fill-color: transparent;
 }
 
 .variable-highlight-token {
-  font-weight: 800;
+  font-weight: inherit;
 }
 
 .variable-highlight-valid {

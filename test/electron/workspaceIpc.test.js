@@ -1,4 +1,7 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const os = require('node:os');
+const path = require('node:path');
 const test = require('node:test');
 const {
   collectionImportFilters,
@@ -110,9 +113,14 @@ test('workspace IPC registers stable workspace, collection, and example channels
   assert.deepEqual([...handlers.keys()].sort(), [
     'collection:export',
     'collection:import',
+    'environment:export',
+    'environment:import',
     'request:examples:export',
+    'runner:exportDefinition',
+    'runner:importDefinition',
     'workspace:create',
     'workspace:delete',
+    'workspace:duplicate',
     'workspace:export',
     'workspace:import',
     'workspace:load',
@@ -604,6 +612,93 @@ test('workspace IPC suggests collection filenames, filters, and formats for ever
     assert.deepEqual(result, { cancelled: false, path: `/tmp/${defaultPath}` });
   }
   assert.equal(syncHandlers.has('workspace:saveSync'), true);
+});
+
+test('workspace IPC imports and exports environments and runner definitions', async (t) => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-import-export-'));
+  t.after(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+  const environmentImportPath = path.join(tempDir, 'postman_environment.json');
+  const runnerImportPath = path.join(tempDir, 'runner.json');
+  await fs.writeFile(environmentImportPath, JSON.stringify({
+    id: 'postman-env',
+    name: 'Postman Env',
+    values: [{ key: 'baseUrl', value: 'https://example.test', enabled: true }],
+    _postman_variable_scope: 'environment'
+  }));
+  await fs.writeFile(runnerImportPath, JSON.stringify({
+    format: 'postmeter.runner.v1',
+    exportedAt: '2026-05-09T00:00:00.000Z',
+    runner: {
+      id: 'runner-1',
+      name: 'Smoke Runner',
+      environmentId: 'none',
+      stopOnFailure: false,
+      allowEnvironmentMutation: false,
+      requests: []
+    }
+  }));
+
+  const handlers = new Map();
+  const savedPaths = [];
+  registerWorkspaceIpc({
+    dialog: {
+      showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+      showSaveDialog: async (_window, options) => {
+        const filePath = path.join(tempDir, options.defaultPath);
+        savedPaths.push(filePath);
+        return { canceled: false, filePath };
+      }
+    },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => emptyWorkspace(),
+    getWorkspaceStore: () => ({
+      describeCurrent: async (workspace) => ({ workspace, path: '/tmp/Local Workspace.json', activeWorkspaceId: 'Local Workspace.json', workspaces: [] })
+    }),
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      },
+      on() {}
+    },
+    refreshApplicationMenu: () => {},
+    saveWorkspace: async (workspace) => workspace,
+    saveWorkspaceSync: (workspace) => workspace,
+    setWorkspace: () => {}
+  });
+
+  const environmentImport = await handlers.get('environment:import')({}, environmentImportPath);
+  assert.equal(environmentImport.cancelled, false);
+  assert.equal(environmentImport.environment.name, 'Postman Env');
+  assert.deepEqual(environmentImport.environment.variables, [{ enabled: true, key: 'baseUrl', value: 'https://example.test' }]);
+
+  const environmentExport = await handlers.get('environment:export')({}, environmentImport.environment, 'postman');
+  assert.equal(environmentExport.cancelled, false);
+  const exportedEnvironment = JSON.parse(await fs.readFile(environmentExport.path, 'utf8'));
+  assert.equal(exportedEnvironment._postman_variable_scope, 'environment');
+  assert.equal(exportedEnvironment.values[0].key, 'baseUrl');
+
+  const runnerImport = await handlers.get('runner:importDefinition')({}, runnerImportPath);
+  assert.equal(runnerImport.cancelled, false);
+  assert.equal(runnerImport.runner.name, 'Smoke Runner');
+
+  const runnerExport = await handlers.get('runner:exportDefinition')({}, runnerImport.runner, 'postmeter');
+  assert.equal(runnerExport.cancelled, false);
+  const exportedRunner = JSON.parse(await fs.readFile(runnerExport.path, 'utf8'));
+  assert.equal(exportedRunner.format, 'postmeter.runner.v1');
+  assert.equal(exportedRunner.runner.name, 'Smoke Runner');
+  assert.equal(savedPaths.length, 2);
+
+  await assert.rejects(
+    () => handlers.get('environment:export')({}, environmentImport.environment, 'curl'),
+    /Environment export format must be postmeter or postman/
+  );
+  await assert.rejects(
+    () => handlers.get('runner:exportDefinition')({}, runnerImport.runner, 'postman'),
+    /Runner definitions can only be exported as PostMeter JSON/
+  );
 });
 
 function emptyWorkspace() {

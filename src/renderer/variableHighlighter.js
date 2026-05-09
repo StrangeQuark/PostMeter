@@ -123,7 +123,10 @@
     if (!state) {
       return false;
     }
+    const hasValue = String(textbox.value || '').length > 0;
     state.wrapper.hidden = textbox.hidden === true;
+    state.wrapper.classList.toggle('has-variable-highlight-value', hasValue);
+    textbox.classList.toggle('has-variable-highlight-value', hasValue);
     state.code.innerHTML = highlightVariableTokens(textbox.value || '', { target: textbox });
     copyTextboxMetrics(textbox, state.overlay);
     syncScroll(textbox);
@@ -202,6 +205,9 @@
   }
 
   function isHighlightableTextbox(element) {
+    if (element?.getAttribute?.('data-variable-highlight') === 'false') {
+      return false;
+    }
     if (!element || element.classList?.contains('code-editor-input')) {
       return false;
     }
