@@ -206,7 +206,6 @@
     bindClick(doc, 'addPerformanceFormDataBodyRowButton', options.onAddPerformanceFormDataBodyRow || options.onPerformanceRequestChange);
     bindClick(doc, 'addPerformanceUrlencodedBodyRowButton', options.onAddPerformanceUrlencodedBodyRow || options.onPerformanceRequestChange);
     bindInput(doc, 'performanceBinaryBodySourceInput', options.onPerformanceRequestChange);
-    bindInput(doc, 'performanceBinaryBodyContentTypeInput', options.onPerformanceRequestChange);
     bindInput(doc, 'performancePreRequestScriptInput', options.onPerformanceRequestChange);
     bindInput(doc, 'performanceTestScriptInput', options.onPerformanceRequestChange);
     bindChange(doc, 'performanceRequestCookieJarEnabledInput', options.onPerformanceRequestChange);
@@ -223,7 +222,6 @@
     bindClick(doc, 'addFormDataBodyRowButton', options.onAddFormDataBodyRow || options.onBodyInput);
     bindClick(doc, 'addUrlencodedBodyRowButton', options.onAddUrlencodedBodyRow || options.onBodyInput);
     bindInput(doc, 'binaryBodySourceInput', options.onBodyInput);
-    bindInput(doc, 'binaryBodyContentTypeInput', options.onBodyInput);
     bindInput(doc, 'preRequestScriptInput', options.onPreRequestScriptInput);
     bindInput(doc, 'testScriptInput', options.onTestScriptInput);
     bindChange(doc, 'requestCookieJarEnabledInput', options.onRequestCookieJarChange);

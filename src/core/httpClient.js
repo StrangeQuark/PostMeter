@@ -844,12 +844,13 @@ async function materializeBoundRequestBody(request = {}, environment, fileBindin
     if (!source) {
       return { ...request, bodyType: BODY_TYPES.NONE };
     }
+    const explicitContentType = request.postmanBody.file?.contentType || request.postmanBody.binary?.contentType || '';
     const { body, contentType } = await readBoundAttachmentBody({
-      contentType: request.postmanBody.file?.contentType || request.postmanBody.binary?.contentType || '',
+      contentType: explicitContentType,
       mode: postmanBodyMode,
       source
     }, fileBindings);
-    return withRequestBody(request, body, contentType || 'application/octet-stream', BODY_TYPES.BINARY || BODY_TYPES.RAW_TEXT);
+    return withRequestBody(request, body, contentType || detectFileContentType(source), BODY_TYPES.BINARY || BODY_TYPES.RAW_TEXT);
   }
   if (postmanBodyMode === 'formdata' || postmanBodyMode === 'form-data') {
     const parts = postmanFormDataParts(request.postmanBody.formdata || [], environment);

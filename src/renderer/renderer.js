@@ -20,6 +20,32 @@ const RAW_FORMAT_BODY_TYPES = {
   xml: 'RAW_XML'
 };
 const BODY_TYPE_RAW_FORMATS = Object.fromEntries(Object.entries(RAW_FORMAT_BODY_TYPES).map(([format, type]) => [type, format]));
+const FILE_EXTENSION_CONTENT_TYPES = new Map(Object.entries({
+  '.avif': 'image/avif',
+  '.bin': 'application/octet-stream',
+  '.bmp': 'image/bmp',
+  '.csv': 'text/csv',
+  '.gif': 'image/gif',
+  '.gz': 'application/gzip',
+  '.htm': 'text/html',
+  '.html': 'text/html',
+  '.jpeg': 'image/jpeg',
+  '.jpg': 'image/jpeg',
+  '.js': 'application/javascript',
+  '.json': 'application/json',
+  '.mjs': 'application/javascript',
+  '.pdf': 'application/pdf',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.tar': 'application/x-tar',
+  '.text': 'text/plain',
+  '.tif': 'image/tiff',
+  '.tiff': 'image/tiff',
+  '.txt': 'text/plain',
+  '.webp': 'image/webp',
+  '.xml': 'application/xml',
+  '.zip': 'application/zip'
+}));
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 const THEME_OPTIONS = ['system', 'light', 'dark'];
 const EXECUTION_RESULT_PAGE_SIZE = 100;
@@ -4121,6 +4147,7 @@ function renderPerformanceRequestEditor(test = activePerformanceTest()) {
     renderPerformanceAuthEditor({ type: 'none' });
     renderPerformanceVariablePreview();
     updatePerformanceRequestEditorLanguages();
+    refreshVariableHighlights($('performanceRequestSection'));
     return;
   }
 
@@ -4153,6 +4180,7 @@ function renderPerformanceRequestEditor(test = activePerformanceTest()) {
   renderPerformanceAuthEditor(request.auth);
   renderPerformanceVariablePreview();
   updatePerformanceRequestEditorLanguages();
+  refreshVariableHighlights($('performanceRequestSection'));
 }
 
 function setPerformanceRequestSectionDisabled(disabled) {
@@ -7822,7 +7850,6 @@ function renderRequestBodyEditor(prefix, request) {
   renderBodyUrlencodedRows(prefix, request ? urlencodedRowsForRequest(request) : []);
   const binary = binaryBodyForRequest(request);
   setValue(bodyControlId(prefix, 'binaryBodySourceInput'), binary.source);
-  setValue(bodyControlId(prefix, 'binaryBodyContentTypeInput'), binary.contentType);
   const graphql = graphqlBodyForRequestEditor(request);
   setValue(bodyControlId(prefix, 'graphqlQueryInput'), graphql.query);
   setValue(bodyControlId(prefix, 'graphqlVariablesInput'), graphql.variables);
@@ -8018,12 +8045,16 @@ function createBodyUrlencodedRow(prefix, row = {}) {
 }
 
 function addBodyFormDataRow(prefix) {
-  bodyElement(prefix, 'formDataBodyTable')?.append(createBodyFormDataRow(prefix, { enabled: true, key: '', type: 'text', value: '' }));
+  const container = bodyElement(prefix, 'formDataBodyTable');
+  container?.append(createBodyFormDataRow(prefix, { enabled: true, key: '', type: 'text', value: '' }));
+  refreshVariableHighlights(container);
   collectBodyEditorAndMarkDirty(prefix);
 }
 
 function addBodyUrlencodedRow(prefix) {
-  bodyElement(prefix, 'urlencodedBodyTable')?.append(createBodyUrlencodedRow(prefix, { enabled: true, key: '', value: '' }));
+  const container = bodyElement(prefix, 'urlencodedBodyTable');
+  container?.append(createBodyUrlencodedRow(prefix, { enabled: true, key: '', value: '' }));
+  refreshVariableHighlights(container);
   collectBodyEditorAndMarkDirty(prefix);
 }
 
@@ -8078,7 +8109,7 @@ function collectBodyFromEditor(prefix, request = {}) {
   }
   if (mode === 'BINARY') {
     const source = bodyElement(prefix, 'binaryBodySourceInput')?.value.trim() || '';
-    const contentType = bodyElement(prefix, 'binaryBodyContentTypeInput')?.value.trim() || '';
+    const contentType = source ? detectFileContentType(source) : '';
     return {
       body: '',
       bodyType: source ? 'BINARY' : 'NONE',
@@ -8339,6 +8370,7 @@ function renderRequestEditor() {
     $('exportExamplesButton').disabled = true;
     renderAuthEditor({ type: 'none' });
     updateRequestEditorLanguages();
+    refreshVariableHighlights($('requestEditorPanel'));
     return;
   }
   ensureRequestQueryEditorMirror(request);
@@ -8367,6 +8399,7 @@ function renderRequestEditor() {
   renderCookieJarEditor();
   renderAuthEditor(request.auth || { type: 'none' });
   updateRequestEditorLanguages();
+  refreshVariableHighlights($('requestEditorPanel'));
 }
 
 function renderRequestTitle(request) {
@@ -8503,6 +8536,7 @@ function renderGeneratedHeaderRows(containerId, request) {
   for (const header of generatedRequestHeaders(request)) {
     container.append(createGeneratedHeaderRow(header));
   }
+  refreshVariableHighlights(container);
 }
 
 function createGeneratedHeaderRow(header) {
@@ -8546,7 +8580,7 @@ function generatedRequestHeaders(request) {
     addGeneratedHeader(headers, request, 'PostMeter-Token', AUTO_HEADER_PLACEHOLDER);
   }
   if (requestSendsBody(request)) {
-    addGeneratedHeader(headers, request, 'Content-Type', defaultGeneratedContentType(request.bodyType));
+    addGeneratedHeader(headers, request, 'Content-Type', defaultGeneratedContentTypeForRequest(request));
     addGeneratedHeader(headers, request, 'Content-Length', AUTO_HEADER_PLACEHOLDER);
   }
   for (const header of generatedAuthHeaders(request)) {
@@ -8609,6 +8643,13 @@ function requestSendsBody(request) {
   return BODY_METHOD_SET.has(String(request?.method || '').toUpperCase()) && String(request?.bodyType || 'NONE') !== 'NONE';
 }
 
+function defaultGeneratedContentTypeForRequest(request) {
+  if (request?.bodyType === 'BINARY') {
+    return detectFileContentType(binaryBodyForRequest(request).source);
+  }
+  return defaultGeneratedContentType(request?.bodyType);
+}
+
 function defaultGeneratedContentType(bodyType) {
   if (bodyType === 'RAW_JSON') {
     return 'application/json';
@@ -8632,6 +8673,19 @@ function defaultGeneratedContentType(bodyType) {
     return 'multipart/form-data; boundary=<calculated when request is sent>';
   }
   return 'text/plain; charset=utf-8';
+}
+
+function detectFileContentType(value) {
+  const raw = String(value || '').split(/[?#]/, 1)[0];
+  const dotIndex = raw.lastIndexOf('.');
+  if (dotIndex < 0) {
+    return 'application/octet-stream';
+  }
+  const slashIndex = Math.max(raw.lastIndexOf('/'), raw.lastIndexOf('\\'));
+  if (slashIndex > dotIndex) {
+    return 'application/octet-stream';
+  }
+  return FILE_EXTENSION_CONTENT_TYPES.get(raw.slice(dotIndex).toLowerCase()) || 'application/octet-stream';
 }
 
 function ensureRequestAutoHeaders(request) {
@@ -8690,6 +8744,7 @@ function renderEnvironmentEditor() {
     renderEnvironmentPairs(environment.variables || []);
   }
   renderVariablePreview();
+  refreshVariableHighlights($('environmentMainPanel'));
 }
 
 function resetRequestEditorTransientStateOnContextChange() {

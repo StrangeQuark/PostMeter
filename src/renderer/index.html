@@ -392,10 +392,6 @@
                 <span>File Source</span>
                 <input id="binaryBodySourceInput" autocomplete="off" placeholder="Imported file source reference">
               </label>
-              <label class="field">
-                <span>Content Type</span>
-                <input id="binaryBodyContentTypeInput" autocomplete="off" placeholder="application/octet-stream">
-              </label>
             </div>
           </div>
           <div id="bodyGraphqlPanel" class="body-mode-panel">
@@ -1007,10 +1003,6 @@
                     <span>File Source</span>
                     <input id="performanceBinaryBodySourceInput" autocomplete="off" placeholder="Imported file source reference">
                   </label>
-                  <label class="field">
-                    <span>Content Type</span>
-                    <input id="performanceBinaryBodyContentTypeInput" autocomplete="off" placeholder="application/octet-stream">
-                  </label>
                 </div>
               </div>
               <div id="performanceBodyGraphqlPanel" class="body-mode-panel">
@@ -1343,8 +1335,8 @@
       <p id="textInputModalMessage">Enter a value to continue.</p>
       <label class="field">
         <span id="textInputModalLabel">Value</span>
-        <input id="textInputModalSingleLineInput" type="text" spellcheck="false" hidden>
-        <textarea id="textInputModalInput" rows="4" spellcheck="false"></textarea>
+        <input id="textInputModalSingleLineInput" type="text" spellcheck="false" data-variable-highlight="false" hidden>
+        <textarea id="textInputModalInput" rows="4" spellcheck="false" data-variable-highlight="false"></textarea>
       </label>
       <div class="modal-actions">
         <button id="cancelTextInputModalButton" type="button">Cancel</button>

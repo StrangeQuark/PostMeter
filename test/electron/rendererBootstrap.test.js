@@ -342,8 +342,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'performanceGraphqlOperationNameInput',
     'addPerformanceFormDataBodyRowButton',
     'addPerformanceUrlencodedBodyRowButton',
-    'performanceBinaryBodySourceInput',
-    'performanceBinaryBodyContentTypeInput'
+    'performanceBinaryBodySourceInput'
   ];
   const elements = new Map(controlIds.map((id) => [id, createElement({ tagName: id.endsWith('Select') ? 'SELECT' : 'INPUT' })]));
   const performanceEnvironmentControls = [createElement({ tagName: 'SELECT' })];
@@ -450,7 +449,6 @@ test('renderer bootstrap binds performance creation import export run and config
   elements.get('performanceGraphqlVariablesInput').dispatch('input');
   elements.get('performanceGraphqlOperationNameInput').dispatch('input');
   elements.get('performanceBinaryBodySourceInput').dispatch('input');
-  elements.get('performanceBinaryBodyContentTypeInput').dispatch('input');
 
   assert.deepEqual(calls.slice(0, 21), [
     'new',
@@ -478,7 +476,7 @@ test('renderer bootstrap binds performance creation import export run and config
   assert.equal(calls.filter((call) => call === 'config').length, 10);
   assert.ok(calls.includes('add-form-data'));
   assert.ok(calls.includes('add-urlencoded'));
-  assert.equal(calls.filter((call) => call === 'request').length, 8);
+  assert.equal(calls.filter((call) => call === 'request').length, 7);
   assert.equal(calls.filter((call) => call === 'body-type').length, 2);
   assert.ok(calls.includes('performance:spike'));
 });

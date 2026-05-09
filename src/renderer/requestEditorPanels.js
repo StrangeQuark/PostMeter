@@ -42,6 +42,11 @@
     return bodyType === 'RAW_JSON' ? 'json' : 'text';
   }
 
+  function refreshVariableTextboxes(root) {
+    global.PostMeterVariableHighlighter?.enhanceVariableTextboxes?.(root);
+    global.PostMeterVariableHighlighter?.refreshVariableHighlights?.(root);
+  }
+
   function renderExamples(examples, options = {}) {
     const doc = options.doc || document;
     const container = element(doc, options.containerId || 'examplesList');
@@ -147,6 +152,7 @@
       container.append(item);
       global.PostMeterCodeEditor?.enhanceCodeTextareas?.(item);
     });
+    refreshVariableTextboxes(container);
   }
 
   function renderAuthEditor(auth, options = {}) {
@@ -268,6 +274,7 @@
       row.append(enabled, key, value, remove);
       container.append(row);
     });
+    refreshVariableTextboxes(container);
   }
 
   function renderRequestPairs(options = {}) {
@@ -324,6 +331,7 @@
       row.append(enabled, key, value, remove);
       container.append(row);
     });
+    refreshVariableTextboxes(container);
   }
 
   function renderAssertions(options = {}) {
@@ -419,6 +427,7 @@
       row.append(enabled, type, name, path, operator, expected, remove);
       container.append(row);
     });
+    refreshVariableTextboxes(container);
   }
 
   function assertionInput(doc, placeholder, value, onInput, onDirty, ariaLabel = placeholder) {
@@ -602,6 +611,7 @@
       row.append(enabled, name, value, domain, path, expires, secureLabel, httpOnlyLabel, hostOnlyLabel, sameSite, remove);
       container.append(row);
     });
+    refreshVariableTextboxes(container);
   }
 
   function cookieInput(doc, initialValue, placeholder, onInput, type = 'text', ariaLabel = `Cookie ${placeholder}`) {

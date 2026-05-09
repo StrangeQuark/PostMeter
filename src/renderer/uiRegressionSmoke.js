@@ -74,9 +74,11 @@
     activateTab('request', 'auth');
     $('authTypeSelect').value = 'bearer';
     dispatchChange($('authTypeSelect'));
-    $('authBearerTokenInput').value = 'secret-token';
+    $('authBearerTokenInput').value = '{{baseUrl}}';
     dispatchInput($('authBearerTokenInput'));
     await nextPaint();
+    assertVariableHighlight($('authBearerTokenInput'), 'baseUrl', 'Bearer token fields should highlight environment variable tokens.');
+    assertVariableHighlightUsesInputMetrics($('authBearerTokenInput'), 'baseUrl', 'Bearer token variable highlighting should not alter input text metrics.');
     const generatedHeadersAfterBearerAuth = Array.from($('headersTable').querySelectorAll('[data-generated-header="true"] input[aria-label^="Auto-generated"]'))
       .map((input) => input.value);
     assertUiSmoke(generatedHeadersAfterBearerAuth.includes('Authorization'), 'Generated request headers should update when Auth tab enables Authorization.');
@@ -385,6 +387,16 @@
     if (expectedStatus) {
       assertUiSmoke(token.getAttribute('data-variable-status') === expectedStatus, `${message} Expected ${expectedStatus} token status.`);
     }
+  }
+
+  function assertVariableHighlightUsesInputMetrics(control, variableName, message) {
+    const wrapper = control.closest?.('.variable-highlight-editor') || control.closest?.('.code-editor');
+    const token = wrapper?.querySelector?.(`[data-variable-name="${cssAttributeValue(variableName)}"]`);
+    assertUiSmoke(token, message);
+    assertUiSmoke(
+      getComputedStyle(token).fontWeight === getComputedStyle(control).fontWeight,
+      `${message} Token font weight should match the editable text.`
+    );
   }
 
   function highlightedTextboxText(control) {
@@ -2289,10 +2301,13 @@
       );
       $('performanceBodyTypeSelect').value = 'BINARY';
       dispatchChange($('performanceBodyTypeSelect'));
+      $('performanceBinaryBodySourceInput').value = '{{perfHost}}';
+      dispatchInput($('performanceBinaryBodySourceInput'));
+      await nextPaint();
+      assertVariableHighlight($('performanceBinaryBodySourceInput'), 'perfHost', 'Performance binary file source fields should highlight environment variable tokens.');
+      assertVariableHighlightUsesInputMetrics($('performanceBinaryBodySourceInput'), 'perfHost', 'Performance binary file source highlighting should not alter input text metrics.');
       $('performanceBinaryBodySourceInput').value = 'fixtures/performance-upload.dat';
       dispatchInput($('performanceBinaryBodySourceInput'));
-      $('performanceBinaryBodyContentTypeInput').value = 'application/octet-stream';
-      dispatchInput($('performanceBinaryBodyContentTypeInput'));
       collectPerformanceTestFromEditor();
       assertUiSmoke(
         performanceTest.request.bodyType === 'BINARY'
@@ -3269,10 +3284,12 @@
 	    $('binaryBodySourceInput').click();
 	    assertUiSmoke(!$('fileSourceMenu').hidden, 'Clicking a binary file source field should open the local file source menu.');
 	    document.body.click();
+	    $('binaryBodySourceInput').value = '{{baseUrl}}';
+	    dispatchInput($('binaryBodySourceInput'));
+	    assertVariableHighlight($('binaryBodySourceInput'), 'baseUrl', 'Binary file source fields should highlight environment variable tokens.');
+	    assertVariableHighlightUsesInputMetrics($('binaryBodySourceInput'), 'baseUrl', 'Binary file source highlighting should not alter input text metrics.');
 	    $('binaryBodySourceInput').value = 'fixtures/binary.dat';
 	    dispatchInput($('binaryBodySourceInput'));
-    $('binaryBodyContentTypeInput').value = 'application/octet-stream';
-    dispatchInput($('binaryBodyContentTypeInput'));
     collectRequestFromEditor();
     assertUiSmoke(
       draft.bodyType === 'BINARY'

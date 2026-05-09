@@ -404,9 +404,11 @@ test('sends user-bound file and multipart Postman bodies without arbitrary path 
     await fs.rm(dir, { recursive: true, force: true });
   });
   const rawPath = path.join(dir, 'raw-upload.txt');
+  const inferredBinaryPath = path.join(dir, 'raw-upload.json');
   const partPath = path.join(dir, 'part-upload.json');
   const unknownPartPath = path.join(dir, 'part-upload.customext');
   await fs.writeFile(rawPath, 'BOUND_RAW');
+  await fs.writeFile(inferredBinaryPath, 'BOUND_INFERRED_BINARY');
   await fs.writeFile(partPath, 'BOUND_PART');
   await fs.writeFile(unknownPartPath, 'BOUND_UNKNOWN_PART');
   const observed = [];
@@ -434,6 +436,15 @@ test('sends user-bound file and multipart Postman bodies without arbitrary path 
       postmanBody: { mode: 'binary', binary: { src: 'fixtures/raw-upload.txt', contentType: 'application/octet-stream' } }
     }, null, {
       fileBindings: [{ source: 'fixtures/raw-upload.txt', localPath: rawPath }]
+    });
+    await sendRequest({
+      method: 'POST',
+      url: `${server.baseUrl}/binary-inferred`,
+      queryParams: [],
+      headers: [],
+      postmanBody: { mode: 'binary', binary: { src: 'fixtures/raw-upload.json' } }
+    }, null, {
+      fileBindings: [{ source: 'fixtures/raw-upload.json', localPath: inferredBinaryPath }]
     });
     await sendRequest({
       method: 'POST',
@@ -467,14 +478,16 @@ test('sends user-bound file and multipart Postman bodies without arbitrary path 
 
     assert.equal(observed[0].body, 'BOUND_RAW');
     assert.equal(observed[0].contentType, 'application/octet-stream');
-    assert.match(observed[1].contentType, /^multipart\/form-data; boundary=/);
-    assert.match(observed[1].body, /name="note"\r\n\r\nhello/);
-    assert.match(observed[1].body, /filename="part-upload.json"/);
-    assert.match(observed[1].body, /Content-Type: application\/json/);
-    assert.match(observed[1].body, /BOUND_PART/);
-    assert.match(observed[2].body, /filename="part-upload.customext"/);
-    assert.match(observed[2].body, /Content-Type: application\/octet-stream/);
-    assert.match(observed[2].body, /BOUND_UNKNOWN_PART/);
+    assert.equal(observed[1].body, 'BOUND_INFERRED_BINARY');
+    assert.equal(observed[1].contentType, 'application/json');
+    assert.match(observed[2].contentType, /^multipart\/form-data; boundary=/);
+    assert.match(observed[2].body, /name="note"\r\n\r\nhello/);
+    assert.match(observed[2].body, /filename="part-upload.json"/);
+    assert.match(observed[2].body, /Content-Type: application\/json/);
+    assert.match(observed[2].body, /BOUND_PART/);
+    assert.match(observed[3].body, /filename="part-upload.customext"/);
+    assert.match(observed[3].body, /Content-Type: application\/octet-stream/);
+    assert.match(observed[3].body, /BOUND_UNKNOWN_PART/);
     await assert.rejects(
       () => sendRequest({
         method: 'POST',
