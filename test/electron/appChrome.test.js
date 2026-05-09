@@ -34,6 +34,7 @@ test('Electron shell keeps custom File/Edit/View/Help menus without the default 
   const appMenuSource = await fs.readFile(path.join(root, 'electron', 'appMenu.js'), 'utf8');
   const preloadSource = await fs.readFile(path.join(root, 'electron', 'preload.js'), 'utf8');
   const rendererSource = await fs.readFile(path.join(root, 'src', 'renderer', 'renderer.js'), 'utf8');
+  const indexSource = await fs.readFile(path.join(root, 'src', 'renderer', 'index.html'), 'utf8');
 
   assert.match(mainSource, /refreshApplicationMenu/);
   assert.match(appMenuSource, /Menu\.setApplicationMenu\(Menu\.buildFromTemplate\(createApplicationMenuTemplate\(options\)\)\)/);
@@ -68,6 +69,8 @@ test('Electron shell keeps custom File/Edit/View/Help menus without the default 
   assert.match(preloadSource, /onMenuAction/);
   assert.match(preloadSource, /process\.isMainFrame\s*===\s*true/);
   assert.match(preloadSource, /contextBridge\.exposeInMainWorld\('postmeter',\s*postmeterApi\)/);
+  assert.match(preloadSource, /webUtils\.getPathForFile/);
+  assert.match(preloadSource, /files:\s*\{[\s\S]*pathForFile/);
   assert.match(preloadSource, /ipcRenderer\.on\('menu:action'/);
   assert.match(preloadSource, /'export-diagnostics'/);
   assert.match(preloadSource, /'set-prereleases'/);
@@ -77,6 +80,13 @@ test('Electron shell keeps custom File/Edit/View/Help menus without the default 
   assert.match(rendererSource, /handleAppMenuAction/);
   assert.match(rendererSource, /setIncludePrereleases/);
   assert.match(rendererSource, /setSaveOnForceClose/);
+  assert.match(rendererSource, /chooseImportFilePath\('workspace'\)/);
+  assert.match(rendererSource, /chooseImportFilePath\('collection'\)/);
+  assert.match(rendererSource, /chooseImportFilePath\('performance'\)/);
+  assert.match(rendererSource, /upsertLocalFileAttachmentBinding/);
+  assert.match(indexSource, /id="filePickerDropZone"/);
+  assert.match(indexSource, /id="fileSourceMenu"/);
+  assert.match(indexSource, /Choose File\.\.\./);
   assert.match(mainSource, /app\.whenReady\(\)\.then\(startApplication\)\.catch\(\(error\) => failStartup\(error\)\)/);
   assert.match(mainSource, /async function failStartup/);
   assert.match(mainSource, /writeStartupSmokeFailureArtifacts\(mainWindow,\s*process\.env,\s*error\)/);
@@ -242,6 +252,7 @@ test('PostMeter app protocol only serves allowlisted renderer bundle assets', as
   ]);
   assert.equal(appProtocolFilePath(rendererUrl, root), path.join(root, 'src', 'renderer', 'index.html'));
   assert.equal(appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://bundle/src/core/payloadSchemas.js`, root), path.join(root, 'src', 'core', 'payloadSchemas.js'));
+  assert.equal(appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://bundle/src/core/requestQueryModel.js`, root), path.join(root, 'src', 'core', 'requestQueryModel.js'));
   assert.equal(appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://bundle/build/icon.png`, root), path.join(root, 'build', 'icon.png'));
   assert.throws(() => appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://evil/src/renderer/index.html`, root), /Invalid PostMeter app protocol URL/);
   assert.throws(() => appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://bundle/package.json`, root), /not allowlisted/);

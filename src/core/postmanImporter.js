@@ -404,7 +404,7 @@ function importBody(bodyNode, request) {
   }
   if (bodyNode.mode === 'raw') {
     request.body = bodyNode.raw ?? '';
-    request.bodyType = bodyNode.options?.raw?.language === 'json' ? BODY_TYPES.RAW_JSON : BODY_TYPES.RAW_TEXT;
+    request.bodyType = bodyTypeForPostmanRawLanguage(bodyNode.options?.raw?.language);
     request.postmanBody = clonePlainJson(bodyNode);
   }
   const fileReferences = postmanFileReferences(bodyNode);
@@ -1272,10 +1272,43 @@ function exportPostmanBody(request, rawBody) {
     raw: String(request.body || ''),
     options: {
       raw: {
-        language: request.bodyType === BODY_TYPES.RAW_JSON ? 'json' : 'text'
+        language: postmanRawLanguageForBodyType(request.bodyType)
       }
     }
   };
+}
+
+function bodyTypeForPostmanRawLanguage(language) {
+  const normalized = String(language || '').toLowerCase();
+  if (normalized === 'json') {
+    return BODY_TYPES.RAW_JSON;
+  }
+  if (normalized === 'javascript' || normalized === 'js') {
+    return BODY_TYPES.RAW_JAVASCRIPT || BODY_TYPES.RAW_TEXT;
+  }
+  if (normalized === 'html') {
+    return BODY_TYPES.RAW_HTML || BODY_TYPES.RAW_TEXT;
+  }
+  if (normalized === 'xml') {
+    return BODY_TYPES.RAW_XML || BODY_TYPES.RAW_TEXT;
+  }
+  return BODY_TYPES.RAW_TEXT;
+}
+
+function postmanRawLanguageForBodyType(bodyType) {
+  if (bodyType === BODY_TYPES.RAW_JSON) {
+    return 'json';
+  }
+  if (bodyType === BODY_TYPES.RAW_JAVASCRIPT) {
+    return 'javascript';
+  }
+  if (bodyType === BODY_TYPES.RAW_HTML) {
+    return 'html';
+  }
+  if (bodyType === BODY_TYPES.RAW_XML) {
+    return 'xml';
+  }
+  return 'text';
 }
 
 function exportPostmanRequestAuth(request, rawAuth) {

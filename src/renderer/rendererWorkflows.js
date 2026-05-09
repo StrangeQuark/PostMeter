@@ -1038,12 +1038,14 @@
       return true;
     }
 
-    async function importWorkspace() {
+    async function importWorkspace(filePath = undefined) {
       collectActiveEditorState();
       const importWorkspaceBoundary = windowObject.__postmeterImportWorkspace || windowObject.postmeter.workspace.importWorkspace;
       let result = null;
       try {
-        result = await importWorkspaceBoundary();
+        result = filePath == null
+          ? await importWorkspaceBoundary()
+          : await importWorkspaceBoundary(filePath);
       } catch (error) {
         const message = error.message || String(error);
         setStatus(`Workspace import failed: ${message}`);
@@ -1112,12 +1114,14 @@
       }
     }
 
-    async function importCollection() {
+    async function importCollection(filePath = undefined) {
       collectActiveEditorState();
       const importCollectionBoundary = windowObject.__postmeterImportCollection || windowObject.postmeter.collection.importCollection;
       let result = null;
       try {
-        result = await importCollectionBoundary();
+        result = filePath == null
+          ? await importCollectionBoundary()
+          : await importCollectionBoundary(filePath);
       } catch (error) {
         const message = error.message || String(error);
         setStatus(`Collection import failed: ${message}`);

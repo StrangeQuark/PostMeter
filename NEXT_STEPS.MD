@@ -57,7 +57,12 @@ PostMeter must remain a standalone local desktop application. Do not add PostMet
 
 ## Highest Priority Steps
 
-1. Prepare public beta/release candidate documentation.
+1. Implement GraphQL request body editing and execution UI.
+   - Add a Postman-style GraphQL body editor with query, variables, and operation-name fields.
+   - Wire GraphQL request-body execution, import/export round-tripping, environment-variable highlighting/substitution, runner execution, and Performance request copies through the same editor model.
+   - Add focused unit and UI coverage for GraphQL body editing, save/restore, import/export, and execution behavior.
+
+2. Prepare public beta/release candidate documentation.
    - Add or update `docs/SECURITY.md`, privacy notes, threat model summary, install/uninstall docs, unsigned artifact warnings, known limitations, compatibility matrix links, OAuth certification docs, diagnostics docs, and support channels.
    - Create a release checklist with separate beta, release-candidate, and stable sections. Each section must name required commands, native GitHub Actions runner jobs, artifact validations, OAuth certification status, signing/notarization status, docs checks, and known waivers.
    - Add a Mac manual QA checklist for the later maintainer-owned Mac pass. Until then, `macos-latest` GitHub Actions validation is the required pre-production evidence, not a substitute for final manual production signoff.

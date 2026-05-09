@@ -41,6 +41,17 @@
   };
 
   const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
+  const BODY_TYPES = [
+    'NONE',
+    'RAW_JSON',
+    'RAW_TEXT',
+    'RAW_JAVASCRIPT',
+    'RAW_HTML',
+    'RAW_XML',
+    'FORM_DATA',
+    'URLENCODED',
+    'BINARY'
+  ];
 
   function newPerformanceTestObject(name = 'New Performance Test') {
     return normalizePerformanceTest({
@@ -101,8 +112,10 @@
       url: String(request.url || ''),
       headers: Array.isArray(request.headers) ? cloneJson(request.headers) || [] : [],
       queryParams: Array.isArray(request.queryParams) ? cloneJson(request.queryParams) || [] : [],
-      bodyType: ['NONE', 'RAW_JSON', 'RAW_TEXT'].includes(request.bodyType) ? request.bodyType : 'NONE',
+      bodyType: BODY_TYPES.includes(request.bodyType) ? request.bodyType : 'NONE',
       body: String(request.body || ''),
+      postmanBody: request.postmanBody && typeof request.postmanBody === 'object' ? cloneJson(request.postmanBody) || {} : {},
+      postman: request.postman && typeof request.postman === 'object' ? cloneJson(request.postman) || {} : {},
       auth: request.auth && typeof request.auth === 'object' ? cloneJson(request.auth) || { type: 'none' } : { type: 'none' },
       scripts: request.scripts && typeof request.scripts === 'object' ? cloneJson(request.scripts) || { preRequest: '', tests: '' } : { preRequest: '', tests: '' },
       assertions: Array.isArray(request.assertions) ? cloneJson(request.assertions) || [] : [],

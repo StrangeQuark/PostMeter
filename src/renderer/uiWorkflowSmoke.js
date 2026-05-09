@@ -56,8 +56,10 @@
     setPairRow('paramsTable', 'trace', 'ui', global);
     $('addHeaderButton').click();
     setPairRow('headersTable', 'X-PostMeter-UI', 'smoke', global);
-    $('bodyTypeSelect').value = 'RAW_JSON';
+    $('bodyTypeSelect').value = 'RAW';
     dispatchChange($('bodyTypeSelect'));
+    $('bodyRawFormatSelect').value = 'json';
+    dispatchChange($('bodyRawFormatSelect'));
     $('bodyInput').value = '{"workflow":"smoke"}';
     dispatchInput($('bodyInput'));
     activateTab('request', 'examples');

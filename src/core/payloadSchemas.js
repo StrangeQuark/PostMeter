@@ -2,7 +2,17 @@ const PAYLOAD_SCHEMA_VERSION = 1;
 
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 const BODY_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
-const BODY_TYPE_VALUES = ['NONE', 'RAW_JSON', 'RAW_TEXT'];
+const BODY_TYPE_VALUES = [
+  'NONE',
+  'RAW_JSON',
+  'RAW_TEXT',
+  'RAW_JAVASCRIPT',
+  'RAW_HTML',
+  'RAW_XML',
+  'FORM_DATA',
+  'URLENCODED',
+  'BINARY'
+];
 const REQUEST_PROTOCOLS = ['http', 'graphql', 'grpc', 'websocket', 'socketio'];
 const AUTH_TYPE_VALUES = [
   'none',

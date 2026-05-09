@@ -1,4 +1,6 @@
 (function attachCodeEditor(global) {
+  const VariableHighlighter = global.PostMeterVariableHighlighter
+    || (typeof require === 'function' ? require('./variableHighlighter') : null);
   const EDITOR_STATE = new WeakMap();
   const PAIRING_LANGUAGES = new Set(['javascript', 'json']);
   const JS_KEYWORDS = new Set([
@@ -134,7 +136,7 @@
       return false;
     }
     state.wrapper.hidden = textarea.hidden === true;
-    state.code.innerHTML = highlightCode(textarea.value || '', textarea.dataset.codeLanguage || 'text');
+    state.code.innerHTML = highlightCode(textarea.value || '', textarea.dataset.codeLanguage || 'text', { target: textarea });
     copyTextareaMetrics(textarea, state.highlight);
     syncScroll(textarea);
     return true;
@@ -365,25 +367,40 @@
     return { handled: false, selectionEnd, selectionStart, value };
   }
 
-  function highlightCode(value, language = 'text') {
+  function highlightCode(value, language = 'text', options = {}) {
     const text = String(value || '');
     const normalized = normalizeLanguage(language);
-    let html = '';
-    if (normalized === 'javascript') {
-      html = highlightJavaScript(text);
-    } else if (normalized === 'json') {
-      html = highlightJson(text);
-    } else if (normalized === 'headers') {
-      html = highlightHeaders(text);
-    } else if (normalized === 'markup') {
-      html = highlightMarkup(text);
-    } else {
-      html = escapeHtml(text);
-    }
+    const html = VariableHighlighter?.highlightVariableTokens
+      ? VariableHighlighter.highlightVariableTokens(text, {
+        renderText: (segment) => highlightCodeText(segment, normalized),
+        statusClassPrefix: 'tok-variable-',
+        target: options.target || null,
+        tokenClassName: 'code-editor-token tok-variable',
+        variables: options.variables,
+        variableNames: options.variableNames,
+        isKnownVariable: options.isKnownVariable
+      })
+      : highlightCodeText(text, normalized);
     if (!html) {
       return '<br>';
     }
     return text.endsWith('\n') ? `${html}<br>` : html;
+  }
+
+  function highlightCodeText(text, normalized) {
+    if (normalized === 'javascript') {
+      return highlightJavaScript(text);
+    }
+    if (normalized === 'json') {
+      return highlightJson(text);
+    }
+    if (normalized === 'headers') {
+      return highlightHeaders(text);
+    }
+    if (normalized === 'markup') {
+      return highlightMarkup(text);
+    }
+    return escapeHtml(text);
   }
 
   function highlightJson(text) {

@@ -65,6 +65,33 @@ test('normalizes scheme-less request URLs before sending', async () => {
   }
 });
 
+test('does not append structured query params when they already mirror the URL', async () => {
+  const server = await createServer(async (request, response) => {
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({ url: request.url }));
+  });
+
+  try {
+    const result = await sendRequest({
+      method: 'GET',
+      url: `${server.baseUrl}/mirror?q=alpha&tag=one&tag=two`,
+      queryParams: [
+        { enabled: true, key: 'q', value: 'alpha' },
+        { enabled: true, key: 'tag', value: 'one' },
+        { enabled: true, key: 'tag', value: 'two' }
+      ],
+      headers: [],
+      bodyType: 'NONE',
+      body: ''
+    }, null);
+
+    assert.equal(result.statusCode, 200);
+    assert.equal(JSON.parse(result.body).url, '/mirror?q=alpha&tag=one&tag=two');
+  } finally {
+    await server.close();
+  }
+});
+
 test('sends requests with environment-resolved URL, query params, headers, and body', async () => {
   const server = await createServer(async (request, response) => {
     const chunks = [];
@@ -276,9 +303,11 @@ test('sends user-bound file and multipart Postman bodies without arbitrary path 
     await fs.rm(dir, { recursive: true, force: true });
   });
   const rawPath = path.join(dir, 'raw-upload.txt');
-  const partPath = path.join(dir, 'part-upload.txt');
+  const partPath = path.join(dir, 'part-upload.json');
+  const unknownPartPath = path.join(dir, 'part-upload.customext');
   await fs.writeFile(rawPath, 'BOUND_RAW');
   await fs.writeFile(partPath, 'BOUND_PART');
+  await fs.writeFile(unknownPartPath, 'BOUND_UNKNOWN_PART');
   const observed = [];
   const server = await createServer(async (request, response) => {
     const chunks = [];
@@ -314,19 +343,37 @@ test('sends user-bound file and multipart Postman bodies without arbitrary path 
         mode: 'formdata',
         formdata: [
           { key: 'note', value: 'hello', type: 'text' },
-          { key: 'payload', src: 'fixtures/part-upload.txt', type: 'file', contentType: 'text/plain' }
+          { key: 'payload', src: 'fixtures/part-upload.json', type: 'file' }
         ]
       }
     }, null, {
-      fileBindings: [{ source: 'fixtures/part-upload.txt', localPath: partPath, fileName: 'part-upload.txt' }]
+      fileBindings: [{ source: 'fixtures/part-upload.json', localPath: partPath, fileName: 'part-upload.json' }]
+    });
+    await sendRequest({
+      method: 'POST',
+      url: `${server.baseUrl}/form-unknown`,
+      queryParams: [],
+      headers: [],
+      postmanBody: {
+        mode: 'formdata',
+        formdata: [
+          { key: 'payload', src: 'fixtures/part-upload.customext', type: 'file' }
+        ]
+      }
+    }, null, {
+      fileBindings: [{ source: 'fixtures/part-upload.customext', localPath: unknownPartPath, fileName: 'part-upload.customext' }]
     });
 
     assert.equal(observed[0].body, 'BOUND_RAW');
     assert.equal(observed[0].contentType, 'application/octet-stream');
     assert.match(observed[1].contentType, /^multipart\/form-data; boundary=/);
     assert.match(observed[1].body, /name="note"\r\n\r\nhello/);
-    assert.match(observed[1].body, /filename="part-upload.txt"/);
+    assert.match(observed[1].body, /filename="part-upload.json"/);
+    assert.match(observed[1].body, /Content-Type: application\/json/);
     assert.match(observed[1].body, /BOUND_PART/);
+    assert.match(observed[2].body, /filename="part-upload.customext"/);
+    assert.match(observed[2].body, /Content-Type: application\/octet-stream/);
+    assert.match(observed[2].body, /BOUND_UNKNOWN_PART/);
     await assert.rejects(
       () => sendRequest({
         method: 'POST',
@@ -337,6 +384,106 @@ test('sends user-bound file and multipart Postman bodies without arbitrary path 
       }, null, { fileBindings: [] }),
       /File attachment binding is required/
     );
+  } finally {
+    await server.close();
+  }
+});
+
+test('materializes Postman-style urlencoded and text-only form-data bodies with environment variables', async () => {
+  const observed = [];
+  const server = await createServer(async (request, response) => {
+    const chunks = [];
+    for await (const chunk of request) {
+      chunks.push(chunk);
+    }
+    observed.push({
+      body: Buffer.concat(chunks).toString('utf8'),
+      contentType: request.headers['content-type'] || ''
+    });
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({ ok: true }));
+  });
+
+  try {
+    const environment = {
+      variables: [
+        { enabled: true, key: 'tokenKey', value: 'token' },
+        { enabled: true, key: 'tokenValue', value: 'alpha beta' },
+        { enabled: true, key: 'formValue', value: 'hello form' }
+      ]
+    };
+    await sendRequest({
+      method: 'POST',
+      url: `${server.baseUrl}/encoded`,
+      queryParams: [],
+      headers: [],
+      postmanBody: {
+        mode: 'urlencoded',
+        urlencoded: [
+          { key: '{{tokenKey}}', value: '{{tokenValue}}' },
+          { key: 'disabled', value: 'nope', disabled: true }
+        ]
+      }
+    }, environment);
+    await sendRequest({
+      method: 'POST',
+      url: `${server.baseUrl}/form-text`,
+      queryParams: [],
+      headers: [],
+      postmanBody: {
+        mode: 'formdata',
+        formdata: [
+          { key: 'message', value: '{{formValue}}', type: 'text' }
+        ]
+      }
+    }, environment);
+
+    assert.equal(observed[0].contentType, 'application/x-www-form-urlencoded');
+    assert.equal(observed[0].body, 'token=alpha+beta');
+    assert.match(observed[1].contentType, /^multipart\/form-data; boundary=/);
+    assert.match(observed[1].body, /name="message"\r\n\r\nhello form/);
+  } finally {
+    await server.close();
+  }
+});
+
+test('uses raw body format content types for Postman raw body modes', async () => {
+  const observed = [];
+  const server = await createServer(async (request, response) => {
+    for await (const _chunk of request) {
+      // Drain the request body before responding.
+    }
+    observed.push(request.headers['content-type'] || '');
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({ ok: true }));
+  });
+
+  try {
+    await sendRequest({
+      method: 'POST',
+      url: `${server.baseUrl}/html`,
+      queryParams: [],
+      headers: [],
+      postmanBody: {
+        mode: 'raw',
+        raw: '<p>{{name}}</p>',
+        options: { raw: { language: 'html' } }
+      }
+    }, { variables: [{ enabled: true, key: 'name', value: 'PostMeter' }] });
+    await sendRequest({
+      method: 'POST',
+      url: `${server.baseUrl}/xml`,
+      queryParams: [],
+      headers: [],
+      postmanBody: {
+        mode: 'raw',
+        raw: '<root />',
+        options: { raw: { language: 'xml' } }
+      }
+    });
+
+    assert.equal(observed[0], 'text/html; charset=utf-8');
+    assert.equal(observed[1], 'application/xml');
   } finally {
     await server.close();
   }

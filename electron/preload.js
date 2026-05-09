@@ -1,4 +1,7 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const electron = require('electron');
+
+const { contextBridge, ipcRenderer } = electron;
+const webUtils = electron.webUtils || null;
 
 const postmeterApi = {
   app: {
@@ -66,11 +69,11 @@ const postmeterApi = {
     rename: (workspaceId, name) => ipcRenderer.invoke('workspace:rename', workspaceId, name),
     switch: (workspaceId) => ipcRenderer.invoke('workspace:switch', workspaceId),
     delete: (workspaceId) => ipcRenderer.invoke('workspace:delete', workspaceId),
-    importWorkspace: () => ipcRenderer.invoke('workspace:import'),
+    importWorkspace: (filePath) => ipcRenderer.invoke('workspace:import', optionalFilePath(filePath)),
     exportWorkspace: (workspace, workspaceId) => ipcRenderer.invoke('workspace:export', workspace, workspaceId)
   },
   collection: {
-    importCollection: () => ipcRenderer.invoke('collection:import'),
+    importCollection: (filePath) => ipcRenderer.invoke('collection:import', optionalFilePath(filePath)),
     exportCollection: (collection, format) => ipcRenderer.invoke('collection:export', collection, format)
   },
   request: {
@@ -122,7 +125,7 @@ const postmeterApi = {
     cancel: (id) => ipcRenderer.invoke('performance:cancel', id),
     calibrate: (id) => ipcRenderer.invoke('performance:calibrate', id),
     cancelCalibration: (id) => ipcRenderer.invoke('performance:calibrate:cancel', id),
-    importTest: () => ipcRenderer.invoke('performance:import'),
+    importTest: (filePath) => ipcRenderer.invoke('performance:import', optionalFilePath(filePath)),
     exportTest: (performanceTest, format) => ipcRenderer.invoke('performance:export', performanceTest, format),
     exportResult: (result, format) => ipcRenderer.invoke('performance:exportResult', result, format),
     onProgress: (callback) => {
@@ -130,6 +133,9 @@ const postmeterApi = {
       ipcRenderer.on('performance:progress', listener);
       return () => ipcRenderer.removeListener('performance:progress', listener);
     }
+  },
+  files: {
+    pathForFile: (file) => localPathForFile(file)
   }
 };
 
@@ -161,4 +167,25 @@ function safeVaultPromptDecision(decision = {}) {
 
 function stringField(value, maxLength) {
   return String(value == null ? '' : value).slice(0, maxLength);
+}
+
+function optionalFilePath(value) {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function localPathForFile(file) {
+  if (!file) {
+    return '';
+  }
+  try {
+    const filePath = typeof webUtils?.getPathForFile === 'function'
+      ? webUtils.getPathForFile(file)
+      : '';
+    if (typeof filePath === 'string' && filePath) {
+      return filePath;
+    }
+  } catch {
+    return '';
+  }
+  return typeof file.path === 'string' ? file.path : '';
 }

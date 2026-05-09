@@ -1,7 +1,34 @@
-const BODY_TYPES = ['NONE', 'RAW_JSON', 'RAW_TEXT'];
+const BODY_TYPES = [
+  'NONE',
+  'RAW_JSON',
+  'RAW_TEXT',
+  'RAW_JAVASCRIPT',
+  'RAW_HTML',
+  'RAW_XML',
+  'FORM_DATA',
+  'URLENCODED',
+  'BINARY'
+];
+const EXAMPLE_BODY_TYPES = ['NONE', 'RAW_JSON', 'RAW_TEXT'];
+const BODY_MODES = ['NONE', 'FORM_DATA', 'URLENCODED', 'RAW', 'BINARY'];
+const RAW_BODY_FORMATS = ['text', 'javascript', 'json', 'html', 'xml'];
+const RAW_FORMAT_BODY_TYPES = {
+  text: 'RAW_TEXT',
+  javascript: 'RAW_JAVASCRIPT',
+  json: 'RAW_JSON',
+  html: 'RAW_HTML',
+  xml: 'RAW_XML'
+};
+const BODY_TYPE_RAW_FORMATS = Object.fromEntries(Object.entries(RAW_FORMAT_BODY_TYPES).map(([format, type]) => [type, format]));
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 const THEME_OPTIONS = ['system', 'light', 'dark'];
 const EXECUTION_RESULT_PAGE_SIZE = 100;
+const {
+  enabledQueryParams: enabledEditorQueryParams,
+  queryParamsFromUrl: queryParamsFromEditorUrl,
+  splitUrlQuery: splitEditorUrlQuery,
+  urlWithQueryParams: editorUrlWithQueryParams
+} = PostMeterRequestQueryModel;
 const RENDERER_STATE_DEFAULTS = PostMeterRendererState.createRendererState();
 const TAB_PANEL_IDS = {
   request: ['paramsTab', 'headersTab', 'authTab', 'cookiesTab', 'bodyTab', 'testsTab', 'scriptsTab', 'examplesTab', 'collectionVariablesTab'],
@@ -61,6 +88,8 @@ let selectedRunnerImportTarget = [];
 let expandedRunnerImportCollectionIds = [];
 let lastRunnerImportSelectionKey = '';
 let activeVaultPromptPayload = null;
+let activeFileSourceTarget = null;
+let activeFilePickerOptions = null;
 let sessionSaveTimer = null;
 let sessionPersistenceEnabled = false;
 let lastRenderedRequestEditorContextKey = '';
@@ -121,6 +150,7 @@ const {
 const { createVaultPromptQueue } = PostMeterVaultPromptQueue;
 const { createVariableAutocomplete } = PostMeterVariableAutocomplete;
 const CodeEditor = window.PostMeterCodeEditor || {};
+const VariableHighlighter = window.PostMeterVariableHighlighter || {};
 const {
   activeEnvironmentTabKey: buildActiveEnvironmentTabKey,
   activePerformanceTabKey: buildActivePerformanceTabKey,
@@ -314,6 +344,10 @@ initializeRenderer({
     markUiWorkflowStartupStep('ready-start');
     bindUi();
     CodeEditor.enhanceCodeTextareas?.(document);
+    registerCleanup(VariableHighlighter.install?.(document, {
+      getVariables: variableHighlightVariablesForTarget,
+      windowObject: window
+    })?.destroy);
     updateRequestEditorLanguages();
     registerCleanup(bindForcedColorsPreference());
     registerCleanup(() => {
@@ -461,6 +495,7 @@ function bindUi() {
       activeEnvironmentId = environmentId;
       renderEnvironments();
       renderEnvironmentEditor();
+      refreshVariableHighlights();
       scheduleSessionSave();
     },
     onRunnerEnvironmentSelectChange: (environmentId) => {
@@ -471,6 +506,7 @@ function bindUi() {
       runner.environmentId = environmentId;
       markActiveRunnerDirty();
       renderRunnerEditor();
+      refreshVariableHighlights();
       scheduleSessionSave();
     },
     onRunnerConfigChange: collectRunnerAndMarkDirty,
@@ -481,6 +517,7 @@ function bindUi() {
       collectPerformanceTestAndMarkDirty();
     },
     onPerformanceUrlInput: () => {
+      syncPerformanceParamsFromUrlInput();
       collectPerformanceTestAndMarkDirty();
       renderPerformanceCookieJarEditor();
     },
@@ -488,6 +525,8 @@ function bindUi() {
       updatePerformanceRequestBodyEditorLanguage();
       collectPerformanceTestAndMarkDirty();
     },
+    onAddPerformanceFormDataBodyRow: () => addBodyFormDataRow('performance'),
+    onAddPerformanceUrlencodedBodyRow: () => addBodyUrlencodedRow('performance'),
     onPerformanceAuthTypeChange: showPerformanceAuthSection,
     onPerformanceAuthInput: collectPerformanceTestAndMarkDirty,
     onPerformanceFilterCookiesChange: renderPerformanceCookieJarEditor,
@@ -496,6 +535,7 @@ function bindUi() {
       collectRequestAndMarkDirty();
     },
     onUrlInput: () => {
+      syncRequestParamsFromUrlInput();
       collectRequestAndMarkDirty();
       renderCookieJarEditor();
     },
@@ -503,6 +543,8 @@ function bindUi() {
       updateRequestBodyEditorLanguage();
       collectRequestAndMarkDirty();
     },
+    onAddFormDataBodyRow: () => addBodyFormDataRow(''),
+    onAddUrlencodedBodyRow: () => addBodyUrlencodedRow(''),
     onBodyInput: collectRequestAndMarkDirty,
     onPreRequestScriptInput: collectRequestAndMarkDirty,
     onTestScriptInput: collectRequestAndMarkDirty,
@@ -530,6 +572,7 @@ function bindUi() {
   bindRunnerTitleEditor();
   bindPerformanceTitleEditor();
   bindHistoryContextMenu();
+  bindLocalFilePickerUi();
 }
 
 function bindHistoryContextMenu() {
@@ -1358,11 +1401,13 @@ function collectEnvironmentAndMarkDirty() {
 function collectRunnerAndMarkDirty() {
   collectRunnerFromEditor();
   markActiveRunnerDirty();
+  refreshVariableHighlights();
 }
 
 function collectPerformanceTestAndMarkDirty() {
   collectPerformanceTestFromEditor();
   markActivePerformanceDirty();
+  refreshVariableHighlights();
 }
 
 function collectActiveEditorState() {
@@ -1844,6 +1889,338 @@ function cancelActiveModal() {
   resolveActiveModal(state.activeModalCancelValue);
 }
 
+function canResolveLocalFilePaths() {
+  return typeof window.postmeter?.files?.pathForFile === 'function';
+}
+
+function bindLocalFilePickerUi() {
+  const fileInput = $('filePickerInput');
+  const browseButton = $('filePickerBrowseButton');
+  const cancelButton = $('filePickerCancelButton');
+  const closeButton = $('filePickerCloseButton');
+  const dropZone = $('filePickerDropZone');
+  const sourceChooseButton = $('fileSourceChooseButton');
+
+  browseButton?.addEventListener('click', (event) => {
+    event.preventDefault();
+    fileInput?.click?.();
+  });
+  cancelButton?.addEventListener('click', () => resolveActiveModal(null));
+  closeButton?.addEventListener('click', () => resolveActiveModal(null));
+  fileInput?.addEventListener('change', () => {
+    void selectLocalFileFromPicker(fileInput.files?.[0] || null);
+  });
+  dropZone?.addEventListener('click', () => fileInput?.click?.());
+  dropZone?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      fileInput?.click?.();
+    }
+  });
+  for (const eventName of ['dragenter', 'dragover']) {
+    dropZone?.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      dropZone.classList.add('is-dragover');
+    });
+  }
+  for (const eventName of ['dragleave', 'dragend']) {
+    dropZone?.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      if (!dropZone.contains(event.relatedTarget)) {
+        dropZone.classList.remove('is-dragover');
+      }
+    });
+  }
+  dropZone?.addEventListener('drop', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dropZone.classList.remove('is-dragover');
+    void selectLocalFileFromPicker(event.dataTransfer?.files?.[0] || null);
+  });
+  sourceChooseButton?.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    void chooseFileForActiveSourceInput();
+  });
+
+  configureLocalFileSourceInput($('binaryBodySourceInput'), '', 'binary');
+  configureLocalFileSourceInput($('performanceBinaryBodySourceInput'), 'performance', 'binary');
+  document.addEventListener('click', closeFileSourceMenu);
+  window.addEventListener('blur', closeFileSourceMenu);
+  window.addEventListener('resize', closeFileSourceMenu);
+}
+
+function configureFilePickerModal(options = {}) {
+  $('filePickerTitle').textContent = options.title || 'Choose file';
+  $('filePickerMessage').textContent = options.message || 'Drop a file here or choose a file from this computer.';
+  const fileInput = $('filePickerInput');
+  fileInput.value = '';
+  fileInput.accept = options.accept || '';
+  const error = $('filePickerError');
+  error.hidden = true;
+  error.textContent = '';
+  const dropZone = $('filePickerDropZone');
+  dropZone.classList.remove('is-dragover');
+  const title = dropZone.querySelector('strong');
+  const detail = dropZone.querySelector('span');
+  if (title) {
+    title.textContent = options.dropTitle || 'Drop file here';
+  }
+  if (detail) {
+    detail.textContent = options.dropDetail || 'or choose a file from this computer.';
+  }
+}
+
+async function showLocalFilePicker(options = {}) {
+  if (!canResolveLocalFilePaths()) {
+    return null;
+  }
+  activeFilePickerOptions = options;
+  configureFilePickerModal(options);
+  const selection = await showModal('filePickerModal', null);
+  resetFilePickerModal();
+  activeFilePickerOptions = null;
+  return selection;
+}
+
+function resetFilePickerModal() {
+  const fileInput = $('filePickerInput');
+  if (fileInput) {
+    fileInput.value = '';
+    fileInput.accept = '';
+  }
+  $('filePickerDropZone')?.classList.remove('is-dragover');
+  const error = $('filePickerError');
+  if (error) {
+    error.hidden = true;
+    error.textContent = '';
+  }
+}
+
+async function selectLocalFileFromPicker(file) {
+  if (!file) {
+    return;
+  }
+  const filePath = localPathForFile(file);
+  if (!filePath) {
+    renderFilePickerError('PostMeter could not read a local path for that file. Use the native file picker fallback from the import action.');
+    return;
+  }
+  resolveActiveModal({
+    name: file.name || fileNameFromLocalPath(filePath),
+    path: filePath,
+    picker: activeFilePickerOptions?.kind || 'file'
+  });
+}
+
+function localPathForFile(file) {
+  try {
+    const resolved = window.postmeter?.files?.pathForFile?.(file);
+    if (typeof resolved === 'string' && resolved.trim()) {
+      return resolved.trim();
+    }
+  } catch {
+    return '';
+  }
+  return typeof file?.path === 'string' ? file.path.trim() : '';
+}
+
+function renderFilePickerError(message) {
+  const error = $('filePickerError');
+  if (!error) {
+    return;
+  }
+  error.textContent = String(message || 'Choose a file to continue.');
+  error.hidden = false;
+}
+
+function configureLocalFileSourceInput(input, prefix, mode) {
+  if (!input) {
+    return;
+  }
+  updateLocalFileSourceInputState(input, { enabled: true, prefix, mode });
+  if (input.dataset.filePickerBound === 'true') {
+    return;
+  }
+  input.dataset.filePickerBound = 'true';
+  input.addEventListener('click', (event) => {
+    if (input.dataset.fileSourceEnabled !== 'true') {
+      return;
+    }
+    event.stopPropagation();
+    showFileSourceMenu(input);
+  });
+  input.addEventListener('keydown', (event) => {
+    if (input.dataset.fileSourceEnabled !== 'true') {
+      return;
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      showFileSourceMenu(input, { focus: true });
+    }
+  });
+}
+
+function updateLocalFileSourceInputState(input, options = {}) {
+  if (!input) {
+    return;
+  }
+  const enabled = options.enabled === true;
+  input.dataset.fileSourceEnabled = enabled ? 'true' : 'false';
+  input.dataset.fileSourcePrefix = options.prefix || '';
+  input.dataset.fileSourceMode = options.mode || 'file';
+  if (enabled) {
+    input.setAttribute('aria-haspopup', 'menu');
+    input.setAttribute('aria-controls', 'fileSourceMenu');
+  } else {
+    input.removeAttribute('aria-haspopup');
+    input.removeAttribute('aria-controls');
+  }
+}
+
+function showFileSourceMenu(input, options = {}) {
+  const menu = $('fileSourceMenu');
+  if (!menu || !input) {
+    return;
+  }
+  closeContextMenu();
+  closeToolbarMenus();
+  activeFileSourceTarget = {
+    input,
+    mode: input.dataset.fileSourceMode || 'file',
+    prefix: input.dataset.fileSourcePrefix || ''
+  };
+  menu.hidden = false;
+  const rect = input.getBoundingClientRect();
+  const left = Math.max(8, Math.min(rect.left, window.innerWidth - menu.offsetWidth - 8));
+  const top = Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - menu.offsetHeight - 8));
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+  if (options.focus === true) {
+    menu.querySelector('button')?.focus?.();
+  }
+}
+
+function closeFileSourceMenu() {
+  const menu = $('fileSourceMenu');
+  if (!menu) {
+    return;
+  }
+  menu.hidden = true;
+  activeFileSourceTarget = null;
+}
+
+async function chooseFileForActiveSourceInput() {
+  const target = activeFileSourceTarget;
+  closeFileSourceMenu();
+  if (!target?.input) {
+    return null;
+  }
+  const selected = await showLocalFilePicker({
+    kind: 'body-file-source',
+    title: 'Choose request file',
+    message: 'Drop a file here or choose one to use as the request body file source.',
+    dropTitle: 'Drop request file here',
+    dropDetail: 'The selected path will be bound to this request file source.'
+  });
+  if (!selected?.path) {
+    return null;
+  }
+  await applySelectedFileSourceToInput(target.input, target.prefix, target.mode, selected);
+  return selected;
+}
+
+async function applySelectedFileSourceToInput(input, prefix, mode, selected) {
+  const localPath = String(selected?.path || '').trim();
+  if (!input || !localPath) {
+    return false;
+  }
+  const key = mode === 'formdata' ? fileSourceKeyForInput(input) : '';
+  const bound = await upsertLocalFileAttachmentBinding(localPath, {
+    fileName: selected.name || fileNameFromLocalPath(localPath),
+    key,
+    localPath,
+    mode
+  });
+  if (!bound) {
+    return false;
+  }
+  input.value = localPath;
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  collectBodyEditorAndMarkDirty(prefix);
+  setStatus(`File source selected: ${fileNameFromLocalPath(localPath)}.`);
+  return true;
+}
+
+async function upsertLocalFileAttachmentBinding(source, options = {}) {
+  const normalizedSource = String(source || '').trim();
+  const localPath = String(options.localPath || source || '').trim();
+  if (!normalizedSource || !localPath) {
+    return false;
+  }
+  ensureSettings();
+  const previousSettings = cloneWorkspaceSettings();
+  workspace.settings.sandbox.fileBindings = normalizeSandboxFileBindings([
+    ...workspace.settings.sandbox.fileBindings.filter((item) => item.source !== normalizedSource),
+    {
+      contentType: options.contentType || '',
+      fileName: options.fileName || fileNameFromLocalPath(localPath),
+      key: options.key || '',
+      localPath,
+      mode: options.mode || 'file',
+      reviewedAt: new Date().toISOString(),
+      source: normalizedSource
+    }
+  ]);
+  return saveWorkspaceSettingsWithRollback(
+    previousSettings,
+    '',
+    'File binding save failed',
+    'File Binding Save Failed'
+  );
+}
+
+function fileSourceKeyForInput(input) {
+  return input?.closest?.('[data-body-form-data-row]')?.querySelector('[data-body-form-data-field="key"]')?.value || '';
+}
+
+function fileNameFromLocalPath(filePath) {
+  const text = String(filePath || '');
+  return text.split(/[\\/]/).filter(Boolean).pop() || text || 'file';
+}
+
+async function chooseImportFilePath(kind) {
+  if (!canResolveLocalFilePaths()) {
+    return undefined;
+  }
+  const configs = {
+    workspace: {
+      accept: '.json,application/json',
+      message: 'Drop a PostMeter workspace file here or choose one from this computer.',
+      title: 'Import PostMeter Workspace'
+    },
+    collection: {
+      accept: '.json,.yaml,.yml,.har,.sh,application/json,application/yaml,text/yaml',
+      message: 'Drop a collection file here or choose one from this computer.',
+      title: 'Import Collection'
+    },
+    performance: {
+      accept: '.json,application/json',
+      message: 'Drop a performance test file here or choose one from this computer.',
+      title: 'Import Performance Test'
+    }
+  };
+  const config = configs[kind] || configs.workspace;
+  const selected = await showLocalFilePicker({
+    ...config,
+    dropTitle: 'Drop file here',
+    dropDetail: 'or choose a file from this computer.',
+    kind
+  });
+  return selected?.path ? selected.path : null;
+}
+
 function focusInitialModalElement(modalId) {
   const preferredFocusIds = {
     unsavedRequestModal: 'cancelCloseRequestButton',
@@ -1854,6 +2231,7 @@ function focusInitialModalElement(modalId) {
     confirmActionModal: 'cancelConfirmActionButton',
     notificationModal: 'closeNotificationModalButton',
     performanceCalibrationModal: 'closePerformanceCalibrationModalButton',
+    filePickerModal: 'filePickerBrowseButton',
     vaultPromptModal: 'denyVaultPromptButton'
   };
   const preferred = preferredFocusIds[modalId] ? $(preferredFocusIds[modalId]) : null;
@@ -2215,7 +2593,51 @@ function renderAll() {
   renderRequestEditor();
   renderCollectionVariablesEditor();
   renderEnvironmentEditor();
+  refreshVariableHighlights();
   scheduleSessionSave();
+}
+
+function refreshVariableHighlights(root = document) {
+  VariableHighlighter.enhanceVariableTextboxes?.(root);
+  VariableHighlighter.refreshVariableHighlights?.(root);
+  CodeEditor.refreshCodeEditors?.(root);
+}
+
+function variableHighlightVariablesForTarget(target) {
+  const environment = variableHighlightEnvironmentForTarget(target);
+  return environment?.variables || [];
+}
+
+function variableHighlightEnvironmentForTarget(target) {
+  if (activeRunnerRequestRunnerId) {
+    const runner = (workspace?.runners || []).find((item) => item.id === activeRunnerRequestRunnerId);
+    const runnerEnvironment = environmentById(runner?.environmentId);
+    if (runnerEnvironment) {
+      return runnerEnvironment;
+    }
+  }
+  if (target?.closest?.('#runnerMainPanel')) {
+    const runnerEnvironment = environmentById(activeRunner()?.environmentId);
+    if (runnerEnvironment) {
+      return runnerEnvironment;
+    }
+  }
+  if (target?.closest?.('#performanceMainPanel')) {
+    const test = activePerformanceTest();
+    const type = activePerformanceType() || test?.type || 'latency';
+    const performanceEnvironment = environmentById(performanceTypeSettings(test, type).environmentId);
+    if (performanceEnvironment) {
+      return performanceEnvironment;
+    }
+  }
+  return activeEnvironment();
+}
+
+function environmentById(environmentId) {
+  if (!environmentId || environmentId === 'none') {
+    return null;
+  }
+  return (workspace?.environments || []).find((environment) => environment.id === environmentId) || null;
 }
 
 function selectSidebarPanel(panel) {
@@ -2595,6 +3017,12 @@ function sandboxFileReferencesForWorkspace() {
   for (const collection of workspace.collections || []) {
     collectSandboxFileReferencesFromNode(collection, references);
   }
+  for (const runner of workspace.runners || []) {
+    collectSandboxFileReferencesFromNode(runner, references);
+  }
+  for (const test of workspace.performanceTests || []) {
+    collectSandboxFileReferencesFromNode(test?.request, references);
+  }
   const seen = new Set();
   return references.filter((reference) => {
     const source = String(reference.source || reference.src || '').trim();
@@ -2621,6 +3049,9 @@ function collectSandboxFileReferencesFromNode(node, references) {
       mode: normalizeSandboxFileMode(reference.mode),
       source: String(reference.source || reference.src || '')
     });
+  }
+  for (const reference of fileReferencesFromPostmanBody(node.postmanBody)) {
+    references.push(reference);
   }
   for (const request of node.requests || []) {
     collectSandboxFileReferencesFromNode(request, references);
@@ -3641,8 +4072,7 @@ function renderPerformanceRequestEditor(test = activePerformanceTest()) {
     setValue('performanceMethodSelect', 'GET');
     updatePerformanceMethodSelectClass();
     setValue('performanceUrlInput', '');
-    setValue('performanceBodyTypeSelect', 'NONE');
-    setValue('performanceBodyInput', '');
+    renderRequestBodyEditor('performance', null);
     setValue('performancePreRequestScriptInput', '');
     setValue('performanceTestScriptInput', '');
     setChecked('performanceRequestCookieJarEnabledInput', false);
@@ -3666,6 +4096,7 @@ function renderPerformanceRequestEditor(test = activePerformanceTest()) {
     return;
   }
 
+  ensureRequestQueryEditorMirror(request);
   request.queryParams ||= [];
   request.headers ||= [];
   request.assertions ||= [];
@@ -3678,8 +4109,7 @@ function renderPerformanceRequestEditor(test = activePerformanceTest()) {
   setValue('performanceMethodSelect', METHODS.includes(request.method) ? request.method : 'GET');
   updatePerformanceMethodSelectClass();
   setValue('performanceUrlInput', request.url || '');
-  setValue('performanceBodyTypeSelect', BODY_TYPES.includes(request.bodyType) ? request.bodyType : 'NONE');
-  setValue('performanceBodyInput', request.body || '');
+  renderRequestBodyEditor('performance', request);
   setValue('performancePreRequestScriptInput', request.scripts.preRequest || '');
   setValue('performanceTestScriptInput', request.scripts.tests || '');
   setChecked('performanceRequestCookieJarEnabledInput', request.cookieJar.enabled === true);
@@ -3719,6 +4149,9 @@ function renderPerformancePairs(containerId, pairs) {
     containerId,
     pairs,
     onDirty: () => {
+      if (containerId === 'performanceParamsTable') {
+        syncPerformanceUrlInputFromParams();
+      }
       collectPerformanceTestFromEditor();
       markActivePerformanceDirty();
     },
@@ -3769,7 +4202,7 @@ function renderPerformanceExamples(examples) {
     doc: document,
     containerId: 'performanceExamplesList',
     exportButtonId: 'exportPerformanceExamplesButton',
-    bodyTypes: BODY_TYPES,
+    bodyTypes: EXAMPLE_BODY_TYPES,
     onDirty: markActivePerformanceDirty,
     onDuplicate: duplicatePerformanceExample,
     onDelete: deletePerformanceExample
@@ -4708,7 +5141,14 @@ async function importPerformanceTest() {
     return setStatus('Performance import is unavailable in this runtime.');
   }
   try {
-    const result = await performanceApi.importTest();
+    const filePath = typeof window.__postmeterImportPerformanceTest === 'function'
+      ? undefined
+      : await chooseImportFilePath('performance');
+    if (filePath === null) {
+      return null;
+    }
+    const importBoundary = window.__postmeterImportPerformanceTest || performanceApi.importTest;
+    const result = filePath == null ? await importBoundary() : await importBoundary(filePath);
     if (result?.cancelled) {
       return null;
     }
@@ -7195,6 +7635,464 @@ function updateMethodSelectClassFor(selectId) {
   }
 }
 
+function bodyControlId(prefix, id) {
+  return prefix ? `${prefix}${id.charAt(0).toUpperCase()}${id.slice(1)}` : id;
+}
+
+function bodyElement(prefix, id) {
+  return $(bodyControlId(prefix, id));
+}
+
+function bodyModeForRequest(request) {
+  const mode = String(request?.postmanBody?.mode || '').toLowerCase();
+  if (mode === 'formdata' || mode === 'form-data') {
+    return 'FORM_DATA';
+  }
+  if (mode === 'urlencoded') {
+    return 'URLENCODED';
+  }
+  if (mode === 'binary' || mode === 'file') {
+    return 'BINARY';
+  }
+  if (mode === 'raw') {
+    return 'RAW';
+  }
+  if (request?.bodyType === 'FORM_DATA') {
+    return 'FORM_DATA';
+  }
+  if (request?.bodyType === 'URLENCODED') {
+    return 'URLENCODED';
+  }
+  if (request?.bodyType === 'BINARY') {
+    return 'BINARY';
+  }
+  if (BODY_TYPE_RAW_FORMATS[request?.bodyType] || request?.body) {
+    return 'RAW';
+  }
+  return 'NONE';
+}
+
+function rawFormatForRequest(request) {
+  const language = request?.postmanBody?.mode === 'raw'
+    ? request.postmanBody?.options?.raw?.language
+    : '';
+  return normalizeRawBodyFormat(language || BODY_TYPE_RAW_FORMATS[request?.bodyType] || 'text');
+}
+
+function normalizeRawBodyFormat(value) {
+  const format = String(value || 'text').toLowerCase();
+  if (format === 'js') {
+    return 'javascript';
+  }
+  return RAW_BODY_FORMATS.includes(format) ? format : 'text';
+}
+
+function rawBodyEditorLanguage(format) {
+  const normalized = normalizeRawBodyFormat(format);
+  if (normalized === 'json' || normalized === 'javascript') {
+    return normalized;
+  }
+  if (normalized === 'html' || normalized === 'xml') {
+    return 'markup';
+  }
+  return 'text';
+}
+
+function rawBodyTextForRequest(request) {
+  if (String(request?.postmanBody?.mode || '').toLowerCase() === 'raw') {
+    return String(request.postmanBody.raw ?? '');
+  }
+  return String(request?.body || '');
+}
+
+function renderRequestBodyEditor(prefix, request) {
+  const mode = request ? bodyModeForRequest(request) : 'NONE';
+  const modeSelect = bodyElement(prefix, 'bodyTypeSelect');
+  const rawSelect = bodyElement(prefix, 'bodyRawFormatSelect');
+  if (modeSelect) {
+    modeSelect.value = BODY_MODES.includes(mode) ? mode : 'NONE';
+  }
+  if (rawSelect) {
+    rawSelect.value = rawFormatForRequest(request);
+  }
+  const rawInput = bodyElement(prefix, 'bodyInput');
+  if (rawInput) {
+    rawInput.value = request ? rawBodyTextForRequest(request) : '';
+  }
+  renderBodyFormDataRows(prefix, request ? formDataRowsForRequest(request) : []);
+  renderBodyUrlencodedRows(prefix, request ? urlencodedRowsForRequest(request) : []);
+  const binary = binaryBodyForRequest(request);
+  setValue(bodyControlId(prefix, 'binaryBodySourceInput'), binary.source);
+  setValue(bodyControlId(prefix, 'binaryBodyContentTypeInput'), binary.contentType);
+  updateBodyModePanels(prefix);
+  updateBodyEditorLanguage(prefix);
+}
+
+function updateBodyModePanels(prefix) {
+  const mode = bodyElement(prefix, 'bodyTypeSelect')?.value || 'NONE';
+  const panels = {
+    NONE: 'bodyNonePanel',
+    RAW: 'bodyRawPanel',
+    FORM_DATA: 'bodyFormDataPanel',
+    URLENCODED: 'bodyUrlencodedPanel',
+    BINARY: 'bodyBinaryPanel'
+  };
+  for (const [candidate, panelId] of Object.entries(panels)) {
+    bodyElement(prefix, panelId)?.classList.toggle('active', mode === candidate);
+  }
+  const rawField = bodyElement(prefix, 'bodyRawFormatField');
+  if (rawField) {
+    rawField.hidden = mode !== 'RAW';
+  }
+}
+
+function updateBodyEditorLanguage(prefix) {
+  updateBodyModePanels(prefix);
+  const format = bodyElement(prefix, 'bodyRawFormatSelect')?.value || 'text';
+  CodeEditor.setLanguage?.(bodyElement(prefix, 'bodyInput'), rawBodyEditorLanguage(format));
+}
+
+function formDataRowsForRequest(request) {
+  const body = request?.postmanBody || {};
+  if (!['formdata', 'form-data'].includes(String(body.mode || '').toLowerCase())) {
+    return [];
+  }
+  const rows = [];
+  for (const part of Array.isArray(body.formdata) ? body.formdata : []) {
+    if (!part || typeof part !== 'object') {
+      continue;
+    }
+    const type = part.src != null || String(part.type || '').toLowerCase() === 'file' ? 'file' : 'text';
+    const sources = type === 'file' && Array.isArray(part.src) ? part.src : [part.src];
+    if (type === 'file') {
+      for (const source of sources) {
+        rows.push({
+          enabled: part.disabled !== true && part.enabled !== false,
+          key: part.key == null ? '' : String(part.key),
+          type,
+          value: source == null ? '' : String(source)
+        });
+      }
+      continue;
+    }
+    rows.push({
+      enabled: part.disabled !== true && part.enabled !== false,
+      key: part.key == null ? '' : String(part.key),
+      type,
+      value: part.value == null ? '' : String(part.value)
+    });
+  }
+  return rows;
+}
+
+function urlencodedRowsForRequest(request) {
+  const body = request?.postmanBody || {};
+  if (String(body.mode || '').toLowerCase() !== 'urlencoded') {
+    return [];
+  }
+  return (Array.isArray(body.urlencoded) ? body.urlencoded : [])
+    .filter((part) => part && typeof part === 'object')
+    .map((part) => ({
+      enabled: part.disabled !== true && part.enabled !== false,
+      key: part.key == null ? '' : String(part.key),
+      value: part.value == null ? '' : String(part.value)
+    }));
+}
+
+function binaryBodyForRequest(request) {
+  const body = request?.postmanBody || {};
+  const mode = String(body.mode || '').toLowerCase();
+  const binary = mode === 'file' ? body.file : body.binary;
+  return {
+    source: binary?.src == null ? '' : String(binary.src),
+    contentType: binary?.contentType == null ? '' : String(binary.contentType)
+  };
+}
+
+function renderBodyFormDataRows(prefix, rows) {
+  const container = bodyElement(prefix, 'formDataBodyTable');
+  if (!container) {
+    return;
+  }
+  container.textContent = '';
+  for (const row of rows) {
+    container.append(createBodyFormDataRow(prefix, row));
+  }
+  refreshVariableHighlights(container);
+}
+
+function createBodyFormDataRow(prefix, row = {}) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'body-form-data-row';
+  wrapper.dataset.bodyFormDataRow = 'true';
+  const enabled = document.createElement('input');
+  enabled.type = 'checkbox';
+  enabled.checked = row.enabled !== false;
+  enabled.setAttribute('aria-label', 'Form-data field enabled');
+  const type = document.createElement('select');
+  type.dataset.bodyFormDataField = 'type';
+  type.append(new Option('Text', 'text'), new Option('File', 'file'));
+  type.value = row.type === 'file' ? 'file' : 'text';
+  const key = document.createElement('input');
+  key.dataset.bodyFormDataField = 'key';
+  key.placeholder = 'Key';
+  key.value = row.key || '';
+  const value = document.createElement('input');
+  value.dataset.bodyFormDataField = 'value';
+  value.value = row.value || '';
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.textContent = 'Remove';
+  remove.addEventListener('click', () => {
+    wrapper.remove();
+    collectBodyEditorAndMarkDirty(prefix);
+  });
+  const syncType = () => {
+    const isFile = type.value === 'file';
+    value.placeholder = isFile ? 'File source' : 'Value';
+    updateLocalFileSourceInputState(value, { enabled: isFile, prefix, mode: 'formdata' });
+    if (!isFile) {
+      closeFileSourceMenu();
+    }
+  };
+  configureLocalFileSourceInput(value, prefix, 'formdata');
+  for (const control of [enabled, type, key, value]) {
+    const eventType = control.tagName === 'SELECT' || control.type === 'checkbox' ? 'change' : 'input';
+    control.addEventListener(eventType, () => {
+      syncType();
+      collectBodyEditorAndMarkDirty(prefix);
+    });
+  }
+  syncType();
+  wrapper.append(enabled, type, key, value, remove);
+  return wrapper;
+}
+
+function renderBodyUrlencodedRows(prefix, rows) {
+  const container = bodyElement(prefix, 'urlencodedBodyTable');
+  if (!container) {
+    return;
+  }
+  container.textContent = '';
+  for (const row of rows) {
+    container.append(createBodyUrlencodedRow(prefix, row));
+  }
+  refreshVariableHighlights(container);
+}
+
+function createBodyUrlencodedRow(prefix, row = {}) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'body-urlencoded-row';
+  wrapper.dataset.bodyUrlencodedRow = 'true';
+  const enabled = document.createElement('input');
+  enabled.type = 'checkbox';
+  enabled.checked = row.enabled !== false;
+  enabled.setAttribute('aria-label', 'URL-encoded field enabled');
+  const key = document.createElement('input');
+  key.dataset.bodyUrlencodedField = 'key';
+  key.placeholder = 'Key';
+  key.value = row.key || '';
+  const value = document.createElement('input');
+  value.dataset.bodyUrlencodedField = 'value';
+  value.placeholder = 'Value';
+  value.value = row.value || '';
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.textContent = 'Remove';
+  remove.addEventListener('click', () => {
+    wrapper.remove();
+    collectBodyEditorAndMarkDirty(prefix);
+  });
+  for (const control of [enabled, key, value]) {
+    const eventType = control.type === 'checkbox' ? 'change' : 'input';
+    control.addEventListener(eventType, () => collectBodyEditorAndMarkDirty(prefix));
+  }
+  wrapper.append(enabled, key, value, remove);
+  return wrapper;
+}
+
+function addBodyFormDataRow(prefix) {
+  bodyElement(prefix, 'formDataBodyTable')?.append(createBodyFormDataRow(prefix, { enabled: true, key: '', type: 'text', value: '' }));
+  collectBodyEditorAndMarkDirty(prefix);
+}
+
+function addBodyUrlencodedRow(prefix) {
+  bodyElement(prefix, 'urlencodedBodyTable')?.append(createBodyUrlencodedRow(prefix, { enabled: true, key: '', value: '' }));
+  collectBodyEditorAndMarkDirty(prefix);
+}
+
+function collectBodyEditorAndMarkDirty(prefix) {
+  if (prefix === 'performance') {
+    collectPerformanceTestAndMarkDirty();
+  } else {
+    collectRequestAndMarkDirty();
+  }
+}
+
+function collectBodyFromEditor(prefix, request = {}) {
+  const mode = bodyElement(prefix, 'bodyTypeSelect')?.value || 'NONE';
+  if (mode === 'RAW') {
+    const format = normalizeRawBodyFormat(bodyElement(prefix, 'bodyRawFormatSelect')?.value || 'text');
+    const body = bodyElement(prefix, 'bodyInput')?.value || '';
+    return {
+      body,
+      bodyType: RAW_FORMAT_BODY_TYPES[format] || 'RAW_TEXT',
+      postmanBody: {
+        mode: 'raw',
+        raw: body,
+        options: {
+          raw: {
+            language: format
+          }
+        }
+      }
+    };
+  }
+  if (mode === 'FORM_DATA') {
+    const formdata = collectBodyFormDataRows(prefix);
+    return {
+      body: '',
+      bodyType: 'FORM_DATA',
+      postmanBody: {
+        mode: 'formdata',
+        formdata
+      }
+    };
+  }
+  if (mode === 'URLENCODED') {
+    const urlencoded = collectBodyUrlencodedRows(prefix);
+    return {
+      body: '',
+      bodyType: 'URLENCODED',
+      postmanBody: {
+        mode: 'urlencoded',
+        urlencoded
+      }
+    };
+  }
+  if (mode === 'BINARY') {
+    const source = bodyElement(prefix, 'binaryBodySourceInput')?.value.trim() || '';
+    const contentType = bodyElement(prefix, 'binaryBodyContentTypeInput')?.value.trim() || '';
+    return {
+      body: '',
+      bodyType: source ? 'BINARY' : 'NONE',
+      postmanBody: {
+        mode: 'binary',
+        binary: {
+          src: source,
+          contentType
+        }
+      }
+    };
+  }
+  return {
+    body: '',
+    bodyType: 'NONE',
+    postmanBody: {}
+  };
+}
+
+function collectBodyFormDataRows(prefix) {
+  return Array.from(bodyElement(prefix, 'formDataBodyTable')?.querySelectorAll('[data-body-form-data-row]') || [])
+    .map((row) => {
+      const type = row.querySelector('[data-body-form-data-field="type"]')?.value === 'file' ? 'file' : 'text';
+      const key = row.querySelector('[data-body-form-data-field="key"]')?.value || '';
+      const value = row.querySelector('[data-body-form-data-field="value"]')?.value || '';
+      const base = {
+        disabled: row.querySelector('input[type="checkbox"]')?.checked === false,
+        key,
+        type
+      };
+      return type === 'file'
+        ? { ...base, src: value }
+        : { ...base, value };
+    })
+    .filter((row) => row.key || row.value || row.src);
+}
+
+function collectBodyUrlencodedRows(prefix) {
+  return Array.from(bodyElement(prefix, 'urlencodedBodyTable')?.querySelectorAll('[data-body-urlencoded-row]') || [])
+    .map((row) => ({
+      disabled: row.querySelector('input[type="checkbox"]')?.checked === false,
+      key: row.querySelector('[data-body-urlencoded-field="key"]')?.value || '',
+      value: row.querySelector('[data-body-urlencoded-field="value"]')?.value || ''
+    }))
+    .filter((row) => row.key || row.value);
+}
+
+function syncRequestBodyFieldsFromEditor(prefix, request) {
+  if (!request) {
+    return;
+  }
+  const body = collectBodyFromEditor(prefix, request);
+  request.bodyType = BODY_TYPES.includes(body.bodyType) ? body.bodyType : 'NONE';
+  request.body = body.body;
+  request.postmanBody = body.postmanBody;
+  syncPostmanFileReferences(request);
+}
+
+function syncPostmanFileReferences(request) {
+  if (!request) {
+    return;
+  }
+  const references = fileReferencesFromPostmanBody(request.postmanBody);
+  if (references.length) {
+    request.postman = {
+      ...(request.postman || {}),
+      fileReferences: references
+    };
+    return;
+  }
+  if (request.postman?.fileReferences) {
+    request.postman = { ...(request.postman || {}) };
+    delete request.postman.fileReferences;
+    if (!Object.keys(request.postman).length) {
+      delete request.postman;
+    }
+  }
+}
+
+function fileReferencesFromPostmanBody(postmanBody) {
+  const mode = String(postmanBody?.mode || '').toLowerCase();
+  if (mode === 'binary' || mode === 'file') {
+    const body = mode === 'file' ? postmanBody.file : postmanBody.binary;
+    const source = String(body?.src || '').trim();
+    return source ? [{
+      contentType: body?.contentType == null ? '' : String(body.contentType),
+      key: '',
+      mode: 'binary',
+      source
+    }] : [];
+  }
+  if (mode !== 'formdata' && mode !== 'form-data') {
+    return [];
+  }
+  const references = [];
+  for (const part of Array.isArray(postmanBody.formdata) ? postmanBody.formdata : []) {
+    if (!part || typeof part !== 'object' || part.disabled === true || part.enabled === false) {
+      continue;
+    }
+    const isFile = part.src != null || String(part.type || '').toLowerCase() === 'file';
+    if (!isFile) {
+      continue;
+    }
+    const sources = Array.isArray(part.src) ? part.src : [part.src];
+    for (const source of sources) {
+      const normalized = String(source || '').trim();
+      if (!normalized) {
+        continue;
+      }
+      references.push({
+        contentType: '',
+        key: part.key == null ? '' : String(part.key),
+        mode: 'formdata',
+        source: normalized
+      });
+    }
+  }
+  return references;
+}
+
 function updateRequestEditorLanguages() {
   updateRequestBodyEditorLanguage();
   CodeEditor.setLanguage?.($('preRequestScriptInput'), 'javascript');
@@ -7208,13 +8106,74 @@ function updatePerformanceRequestEditorLanguages() {
 }
 
 function updateRequestBodyEditorLanguage() {
-  const bodyType = $('bodyTypeSelect')?.value || 'NONE';
-  CodeEditor.setLanguage?.($('bodyInput'), bodyType === 'RAW_JSON' ? 'json' : 'text');
+  updateBodyEditorLanguage('');
 }
 
 function updatePerformanceRequestBodyEditorLanguage() {
-  const bodyType = $('performanceBodyTypeSelect')?.value || 'NONE';
-  CodeEditor.setLanguage?.($('performanceBodyInput'), bodyType === 'RAW_JSON' ? 'json' : 'text');
+  updateBodyEditorLanguage('performance');
+}
+
+function ensureRequestQueryEditorMirror(request) {
+  if (!request) {
+    return;
+  }
+  request.queryParams = Array.isArray(request.queryParams) ? request.queryParams : [];
+  const urlQuery = splitEditorUrlQuery(request.url || '').query;
+  if (enabledEditorQueryParams(request.queryParams).length > 0 && !urlQuery) {
+    request.url = editorUrlWithQueryParams(request.url || '', request.queryParams);
+    return;
+  }
+  if (!request.queryParams.length && urlQuery) {
+    request.queryParams = queryParamsFromEditorUrl(request.url || '');
+  }
+}
+
+function syncRequestParamsFromUrlInput() {
+  const request = activeRequest();
+  const input = $('urlInput');
+  if (!request || !input) {
+    return;
+  }
+  request.queryParams = queryParamsFromEditorUrl(input.value);
+  renderPairs('paramsTable', request.queryParams, 'queryParams');
+}
+
+function syncRequestUrlInputFromParams() {
+  const request = activeRequest();
+  const input = $('urlInput');
+  if (!request || !input) {
+    return;
+  }
+  request.queryParams = collectKeyValueRowsFromTable('paramsTable', request.queryParams || []);
+  const nextUrl = editorUrlWithQueryParams(input.value, request.queryParams);
+  if (input.value !== nextUrl) {
+    input.value = nextUrl;
+  }
+  request.url = nextUrl.trim();
+}
+
+function syncPerformanceParamsFromUrlInput() {
+  const request = activePerformanceTest()?.request;
+  const input = $('performanceUrlInput');
+  if (!request || !input) {
+    return;
+  }
+  request.queryParams = queryParamsFromEditorUrl(input.value);
+  renderPerformancePairs('performanceParamsTable', request.queryParams);
+}
+
+function syncPerformanceUrlInputFromParams() {
+  const request = activePerformanceTest()?.request;
+  const input = $('performanceUrlInput');
+  if (!request || !input) {
+    return;
+  }
+  request.queryParams = collectKeyValueRowsFromTable('performanceParamsTable', request.queryParams || []);
+  const nextUrl = editorUrlWithQueryParams(input.value, request.queryParams);
+  if (input.value !== nextUrl) {
+    input.value = nextUrl;
+  }
+  request.url = nextUrl.trim();
 }
 
 function renderRequestEditor() {
@@ -7226,8 +8185,7 @@ function renderRequestEditor() {
     $('methodSelect').value = 'GET';
     updateMethodSelectClass();
     $('urlInput').value = '';
-    $('bodyTypeSelect').value = 'NONE';
-    $('bodyInput').value = '';
+    renderRequestBodyEditor('', null);
     $('preRequestScriptInput').value = '';
     $('testScriptInput').value = '';
     $('paramsTable').textContent = '';
@@ -7246,6 +8204,7 @@ function renderRequestEditor() {
     updateRequestEditorLanguages();
     return;
   }
+  ensureRequestQueryEditorMirror(request);
   $('saveRequestButton').disabled = false;
   $('addRequestVariableButton').disabled = false;
   $('addExampleButton').disabled = false;
@@ -7255,8 +8214,7 @@ function renderRequestEditor() {
   $('methodSelect').value = request.method;
   updateMethodSelectClass();
   $('urlInput').value = request.url;
-  $('bodyTypeSelect').value = request.bodyType || 'NONE';
-  $('bodyInput').value = request.body || '';
+  renderRequestBodyEditor('', request);
   request.scripts ||= { preRequest: '', tests: '' };
   $('preRequestScriptInput').value = request.scripts.preRequest || '';
   $('testScriptInput').value = request.scripts.tests || '';
@@ -7292,7 +8250,7 @@ function renderRequestTitle(request) {
 function renderExamples(examples) {
   renderRequestExamples(examples, {
     doc: document,
-    bodyTypes: BODY_TYPES,
+    bodyTypes: EXAMPLE_BODY_TYPES,
     onDirty: markActiveRequestDirty,
     onDuplicate: duplicateExample,
     onDelete: deleteExample
@@ -7319,6 +8277,9 @@ function renderPairs(containerId, pairs, fieldName) {
     containerId,
     pairs,
     onDirty: () => {
+      if (fieldName === 'queryParams') {
+        syncRequestUrlInputFromParams();
+      }
       collectRequestFromEditor();
       markActiveRequestDirty();
     },
@@ -7482,6 +8443,7 @@ function renderEnvironmentPairs(pairs) {
       pair.enabled = enabled.checked;
       markActiveEnvironmentDirty();
       renderVariablePreview();
+      refreshVariableHighlights();
     });
     const key = document.createElement('input');
     key.placeholder = 'Variable';
@@ -7491,6 +8453,7 @@ function renderEnvironmentPairs(pairs) {
       pair.key = key.value;
       markActiveEnvironmentDirty();
       renderVariablePreview();
+      refreshVariableHighlights();
     });
     const value = document.createElement('input');
     value.placeholder = 'Value';
@@ -7509,6 +8472,7 @@ function renderEnvironmentPairs(pairs) {
       pairs.splice(index, 1);
       markActiveEnvironmentDirty();
       renderEnvironmentEditor();
+      refreshVariableHighlights();
     });
     row.append(enabled, key, value, remove);
     container.append(row);
@@ -8696,7 +9660,16 @@ async function persistWorkspace(showStatus = true, options = {}) {
 }
 
 async function importWorkspace() {
-  return rendererWorkflows.importWorkspace();
+  if (typeof window.__postmeterImportWorkspace === 'function') {
+    return rendererWorkflows.importWorkspace();
+  }
+  const filePath = await chooseImportFilePath('workspace');
+  if (filePath === null) {
+    return null;
+  }
+  return filePath == null
+    ? rendererWorkflows.importWorkspace()
+    : rendererWorkflows.importWorkspace(filePath);
 }
 
 async function exportWorkspace() {
@@ -8944,7 +9917,16 @@ async function checkForUpdates() {
 }
 
 async function importCollection() {
-  return rendererWorkflows.importCollection();
+  if (typeof window.__postmeterImportCollection === 'function') {
+    return rendererWorkflows.importCollection();
+  }
+  const filePath = await chooseImportFilePath('collection');
+  if (filePath === null) {
+    return null;
+  }
+  return filePath == null
+    ? rendererWorkflows.importCollection()
+    : rendererWorkflows.importCollection(filePath);
 }
 
 function promoteCookieHeadersToJar(collection) {
@@ -9575,8 +10557,7 @@ function collectRequestFromEditor() {
   collectRequestNameFromTitle({ render: false });
   request.method = METHODS.includes($('methodSelect').value) ? $('methodSelect').value : 'GET';
   request.url = $('urlInput').value.trim();
-  request.bodyType = BODY_TYPES.includes($('bodyTypeSelect').value) ? $('bodyTypeSelect').value : 'NONE';
-  request.body = $('bodyInput').value;
+  syncRequestBodyFieldsFromEditor('', request);
   request.auth = collectAuthFromEditor();
   request.assertions ||= [];
   request.scripts = {
@@ -9678,10 +10659,7 @@ function collectPerformanceTestFromEditor() {
     ? String($('performanceMethodSelect').value).toUpperCase()
     : 'GET';
   test.request.url = $('performanceUrlInput')?.value.trim() || '';
-  test.request.bodyType = BODY_TYPES.includes($('performanceBodyTypeSelect')?.value)
-    ? $('performanceBodyTypeSelect').value
-    : 'NONE';
-  test.request.body = $('performanceBodyInput')?.value || '';
+  syncRequestBodyFieldsFromEditor('performance', test.request);
   test.request.auth = collectPerformanceAuthFromEditor();
   test.request.assertions ||= [];
   test.request.scripts = {

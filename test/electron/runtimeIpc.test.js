@@ -40,6 +40,56 @@ test('runtime IPC registers stable runner channels', async () => {
   assert.equal(await handlers.get('performance:calibrate:cancel')(null, 'calibration-id'), false);
 });
 
+test('runtime IPC imports renderer-selected performance test files without reopening native dialogs', async () => {
+  const handlers = new Map();
+  let openDialogCalls = 0;
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-performance-import-'));
+  try {
+    const filePath = path.join(tempDir, 'latency-test.postmeter-performance.json');
+    const performanceTest = defaultPerformanceTest({
+      id: 'performance-1',
+      name: 'Imported Latency',
+      type: 'latency',
+      request: { id: 'request-1', name: 'Target', method: 'GET', url: 'https://example.test' }
+    });
+    await fs.writeFile(filePath, JSON.stringify({
+      format: 'postmeter.performance.v1',
+      performanceTest
+    }), 'utf8');
+
+    registerRuntimeIpc({
+      dialog: {
+        showOpenDialog: async () => {
+          openDialogCalls += 1;
+          return { canceled: true, filePaths: [] };
+        },
+        showSaveDialog: async () => ({ canceled: true })
+      },
+      fileOperationResult: (result) => result,
+      getMainWindow: () => null,
+      getWorkspace: () => ({ cookies: [] }),
+      ipcMain: {
+        handle(channel, handler) {
+          handlers.set(channel, handler);
+        }
+      },
+      saveWorkspace: async (workspace) => workspace,
+      setWorkspace: () => {}
+    });
+
+    const result = await handlers.get('performance:import')({}, filePath);
+    assert.equal(openDialogCalls, 0);
+    assert.equal(result.cancelled, false);
+    assert.equal(result.performanceTest.name, 'Imported Latency');
+    await assert.rejects(
+      () => handlers.get('performance:import')({}, 'bad\0path.json'),
+      /performance import path must not contain null bytes/
+    );
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test('runtime IPC runs and cancels performance calibration', async () => {
   const handlers = new Map();
   const events = [];

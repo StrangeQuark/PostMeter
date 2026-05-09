@@ -178,6 +178,7 @@ Status:
 - Performance request import is a deep-copy operation from Collections. Performance edits do not mutate collection requests.
 - Manual request entry creates the same local request-copy shape without source collection metadata.
 - Environment behavior is copy-vs-mutate: saved environments remain unchanged unless the Performance test explicitly allows environment mutation.
+- Request, runner-owned request, and Performance request editors support Postman-style body modes for none, raw text/JavaScript/JSON/HTML/XML, form-data text/file references with automatic file part content-type detection, x-www-form-urlencoded rows, and binary file references. GraphQL body editing remains tracked as follow-up work.
 
 Known gaps:
 

@@ -170,8 +170,15 @@ test('Performance request import deep-copies collection requests and preserves s
     url: 'https://example.test/source',
     headers: [{ enabled: true, key: 'X-Source', value: 'one' }],
     auth: { type: 'bearer', bearer: { token: 'token-1' } },
-    bodyType: 'RAW_JSON',
-    body: '{"ok":true}',
+    bodyType: 'FORM_DATA',
+    body: '',
+    postmanBody: {
+      mode: 'formdata',
+      formdata: [{ key: 'payload', value: '{{value}}', type: 'text' }]
+    },
+    postman: {
+      fileReferences: [{ mode: 'formdata', key: 'upload', source: 'fixtures/upload.txt' }]
+    },
     scripts: { preRequest: 'pm.environment.set("a", "b");', tests: 'pm.test("ok", () => {});' },
     variables: [{ enabled: true, key: 'local', value: 'value' }],
     examples: [{ id: 'example-1', name: 'Example', statusCode: 200, headers: [], body: '{}', bodyType: 'RAW_JSON' }],
@@ -192,7 +199,8 @@ test('Performance request import deep-copies collection requests and preserves s
 
   performanceTest.request.headers[0].value = 'changed';
   performanceTest.request.auth.bearer.token = 'changed';
-  performanceTest.request.body = '{"changed":true}';
+  performanceTest.request.postmanBody.formdata[0].value = 'changed';
+  performanceTest.request.postman.fileReferences[0].source = 'changed.txt';
   performanceTest.request.scripts.tests = 'pm.test("changed", () => {});';
   performanceTest.request.variables[0].value = 'changed';
   performanceTest.request.examples[0].body = '{"changed":true}';
@@ -212,14 +220,20 @@ test('Performance manual request entry creates a saved test without collection s
       method: 'PATCH',
       url: 'https://example.test/manual',
       headers: [{ enabled: true, key: 'Content-Type', value: 'application/json' }],
-      bodyType: 'RAW_JSON',
-      body: '{"manual":true}'
+      bodyType: 'URLENCODED',
+      body: '',
+      postmanBody: {
+        mode: 'urlencoded',
+        urlencoded: [{ key: 'manual', value: 'true' }]
+      }
     }
   });
 
   assert.equal(performanceTest.source.sourceType, 'manual');
   assert.equal(performanceTest.request.method, 'PATCH');
   assert.equal(performanceTest.request.url, 'https://example.test/manual');
+  assert.equal(performanceTest.request.bodyType, 'URLENCODED');
+  assert.equal(performanceTest.request.postmanBody.mode, 'urlencoded');
   assert.doesNotThrow(() => assertPerformanceTestPayload(performanceTest));
 });
 
