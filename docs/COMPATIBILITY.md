@@ -12,14 +12,16 @@ Unless a section says otherwise, non-Postman formats are compatibility bridges f
 
 Supported:
 
-- Workspace import/export, including filesystem-discovered managed workspaces, exporting the current workspace or another managed workspace from the Workspaces list, and non-destructive native workspace import in the desktop UI.
+- Workspace import/export, including filesystem-discovered managed workspaces, exporting the current workspace or another managed workspace from the Workspaces list, managed workspace duplication, and non-destructive native workspace import in the desktop UI.
 - Collection import/export, including desktop collection-picker export that still opens with an explicit empty-state warning when no collections exist, and native collection export defaults of `<collection-name>.json`.
+- Environment import/export, including native PostMeter environment JSON and Postman environment JSON import/export.
+- Runner definition import/export for workspace-owned desktop runners.
+- Native Performance-test import/export preserving each saved test's request copy, source metadata, selected environment ID, environment mutation policy, execution policy, safety limits, result-retention metadata, and export metadata.
 - Collections, folders, requests, assertions, scripts, auth metadata, environments, globals, history, cookies, request examples, variables, certificates, package-cache metadata, vault grant metadata, mock scripts, visualizer binding metadata, GraphQL/gRPC/protocol metadata, file-binding metadata, and light/dark/system theme preference.
 
 Planned:
 
-- Local first-class saved performance tests under `workspace.performanceTests`, independent from Collections and Runners.
-- Native Performance-test import/export preserving each saved test's request copy, source metadata, selected environment ID, environment mutation policy, execution policy, safety limits, result-retention metadata, and export metadata.
+- GraphQL body authoring parity remains tracked separately in `NEXT_STEPS.MD`.
 
 Known gaps:
 

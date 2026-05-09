@@ -12,8 +12,10 @@
     assertUiSmoke(workspace.collections.length === 0, 'Regression smoke should start with an empty workspace.');
     assertUiSmoke(!/(sign in|log in|create account|register)/i.test(document.body.textContent), 'Standalone UI should not render app account/login language.');
     assertToolbarMenuSmoke('newMenuButton', 'newMenu', ['Workspace', 'Request', 'Collection', 'Folder', 'Environment', 'Runner', 'Performance Test']);
-    assertToolbarMenuSmoke('importMenuButton', 'importMenu', ['Workspace', 'Collection', 'Performance Test']);
-    assertToolbarMenuSmoke('exportMenuButton', 'exportMenu', ['Workspace', 'Collection', 'Postman', 'OpenAPI', 'curl', 'HAR', 'Performance Test']);
+    assertToolbarMenuSmoke('importMenuButton', 'importMenu', ['Workspace', 'Collection', 'Environment', 'Runner', 'Performance Test']);
+    assertToolbarMenuSmoke('exportMenuButton', 'exportMenu', ['Workspace', 'Collection', 'Environment', 'Runner', 'Performance Test'], {
+      submenuLabels: ['PostMeter', 'Postman', 'OpenAPI', 'curl', 'HAR']
+    });
     assertToolbarMenuKeyboardActivationSmoke();
     await setThemePreference('dark', { save: false, showStatus: false });
     assertUiSmoke(document.documentElement.dataset.theme === 'dark', 'Dark theme was not applied.');
@@ -1669,28 +1671,46 @@
     }
   }
 
-  function assertToolbarMenuSmoke(buttonId, menuId, expectedLabels) {
+  function assertToolbarMenuSmoke(buttonId, menuId, expectedLabels, options = {}) {
     const button = $(buttonId);
     const menu = $(menuId);
     button.click();
     assertUiSmoke(menu.hidden === false, `${menuId} did not open.`);
     assertUiSmoke(button.getAttribute('aria-expanded') === 'true', `${buttonId} did not update aria-expanded.`);
-    const labels = Array.from(menu.querySelectorAll('button')).map((item) => item.textContent.trim());
+    const topLevelItems = getToolbarMenuTopLevelItems(menu);
+    const labels = topLevelItems.map((item) => item.textContent.trim());
     for (const label of expectedLabels) {
       assertUiSmoke(labels.includes(label), `${menuId} missing ${label}.`);
+    }
+    if (options.submenuLabels) {
+      const submenuLabels = Array.from(menu.querySelectorAll('.toolbar-submenu button')).map((item) => item.textContent.trim());
+      for (const label of options.submenuLabels) {
+        assertUiSmoke(submenuLabels.includes(label), `${menuId} submenu missing ${label}.`);
+      }
     }
     closeToolbarMenus();
     assertUiSmoke(menu.hidden === true, `${menuId} did not close.`);
     button.focus();
     button.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowDown' }));
     assertUiSmoke(menu.hidden === false, `${menuId} did not open from keyboard.`);
-    const items = Array.from(menu.querySelectorAll('button'));
-    const enabledItems = items.filter((item) => !item.disabled);
+    const enabledItems = getToolbarMenuTopLevelItems(menu).filter((item) => !item.disabled);
     assertUiSmoke(document.activeElement === enabledItems[0], `${menuId} should focus the first item when opened from keyboard.`);
     enabledItems[0].dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowDown' }));
     assertUiSmoke(document.activeElement === enabledItems[1], `${menuId} should support arrow-key item navigation.`);
     enabledItems[1].dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'End' }));
     assertUiSmoke(document.activeElement === enabledItems.at(-1), `${menuId} should support End key item navigation.`);
+    if (options.submenuLabels) {
+      const submenuTrigger = enabledItems.find((item) => item.getAttribute('aria-haspopup') === 'menu');
+      assertUiSmoke(submenuTrigger, `${menuId} should expose submenu categories.`);
+      submenuTrigger.focus();
+      submenuTrigger.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowRight' }));
+      const submenu = submenuTrigger.parentElement?.querySelector?.('.toolbar-submenu');
+      const submenuItems = Array.from(submenu?.querySelectorAll('button:not([disabled])') || []);
+      assertUiSmoke(document.activeElement === submenuItems[0], `${menuId} should move into submenu items with ArrowRight.`);
+      submenuItems[0].dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowLeft' }));
+      assertUiSmoke(document.activeElement === submenuTrigger, `${menuId} should return from submenu items with ArrowLeft.`);
+      enabledItems.at(-1).focus();
+    }
     enabledItems.at(-1).dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowUp' }));
     assertUiSmoke(
       document.activeElement === enabledItems.at(-2),
@@ -1699,6 +1719,19 @@
     enabledItems.at(-2).dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape' }));
     assertUiSmoke(menu.hidden === true, `${menuId} should close on Escape.`);
     assertUiSmoke(document.activeElement === button, `${menuId} should restore focus to its trigger on Escape.`);
+  }
+
+  function getToolbarMenuTopLevelItems(menu) {
+    return Array.from(menu.children).flatMap((child) => {
+      if (child.matches?.('button')) {
+        return [child];
+      }
+      if (child.matches?.('.toolbar-submenu-row')) {
+        const parentButton = child.querySelector(':scope > button');
+        return parentButton ? [parentButton] : [];
+      }
+      return [];
+    });
   }
 
   function assertToolbarMenuKeyboardActivationSmoke() {

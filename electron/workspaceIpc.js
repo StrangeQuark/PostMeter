@@ -1,5 +1,14 @@
+const fs = require('node:fs/promises');
 const path = require('node:path');
 const { fieldLimit } = require('../src/core/payloadSchemas');
+const {
+  exportEnvironmentToJson,
+  importEnvironmentFromText
+} = require('../src/core/environmentFormats');
+const {
+  exportRunnerToJson,
+  importRunnerFromText
+} = require('../src/core/runnerFormats');
 const { writeTextFileAtomic } = require('../src/core/workspacePersistence');
 const {
   collectionExportExtension,
@@ -14,7 +23,9 @@ const {
 const {
   assertCollectionExportFormat,
   assertCollectionPayload,
+  assertEnvironmentPayload,
   assertRequestPayload,
+  assertRunnerPayload,
   assertWorkspaceEnvironmentSavePayload,
   assertWorkspaceEnvironmentSaveResultPayload,
   assertWorkspaceLoadResultPayload,
@@ -228,6 +239,17 @@ function registerWorkspaceIpc(options = {}) {
     return result;
   });
 
+  ipcMain.handle('workspace:duplicate', async (_event, workspaceId) => {
+    if (typeof workspaceId !== 'string' || !workspaceId.trim()) {
+      throw new Error('workspaceId must be a non-empty string.');
+    }
+    const workspaceStore = getWorkspaceStore();
+    const duplicatedWorkspaceId = await workspaceStore.duplicateWorkspace(workspaceId);
+    const loaded = await workspaceStore.describeCurrent(getWorkspace(), { duplicatedWorkspaceId });
+    assertWorkspaceLoadResultPayload(loaded);
+    return loaded;
+  });
+
   ipcMain.handle('workspace:import', async (_event, providedFilePath = null) => {
     try {
       const filePath = providedFilePath == null
@@ -337,6 +359,79 @@ function registerWorkspaceIpc(options = {}) {
     return fileOperationResult({ cancelled: false, path: exportedPath });
   });
 
+  ipcMain.handle('environment:import', async (_event, providedFilePath = null) => {
+    const filePath = providedFilePath == null
+      ? selectedOpenFilePath(await dialog.showOpenDialog(getMainWindow(), {
+        title: 'Import Environment',
+        properties: ['openFile'],
+        filters: jsonFilters()
+      }))
+      : validateDialogFilePath(providedFilePath, 'environment import path');
+    if (!filePath) {
+      return fileOperationResult({ cancelled: true });
+    }
+    const environment = importEnvironmentFromText(await fs.readFile(filePath, 'utf8'));
+    assertEnvironmentPayload(environment);
+    return fileOperationResult({ cancelled: false, environment });
+  });
+
+  ipcMain.handle('environment:export', async (_event, environment, format = 'postmeter') => {
+    assertEnvironmentPayload(environment);
+    assertEnvironmentExportFormat(format);
+    const extension = environmentExportExtension(format);
+    const result = await dialog.showSaveDialog(getMainWindow(), {
+      title: 'Export Environment',
+      defaultPath: `${safeFilename(environment?.name || 'environment')}.${extension}`,
+      filters: [
+        { name: `${format === 'postman' ? 'Postman' : 'PostMeter'} Environment`, extensions: ['json'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    });
+    const filePath = selectedSaveFilePath(result);
+    if (!filePath) {
+      return fileOperationResult({ cancelled: true });
+    }
+    await writeTextFileAtomic(filePath, exportEnvironmentToJson(environment, format), { prefix: 'postmeter-environment-export' });
+    return fileOperationResult({ cancelled: false, path: filePath });
+  });
+
+  ipcMain.handle('runner:importDefinition', async (_event, providedFilePath = null) => {
+    const filePath = providedFilePath == null
+      ? selectedOpenFilePath(await dialog.showOpenDialog(getMainWindow(), {
+        title: 'Import Runner',
+        properties: ['openFile'],
+        filters: jsonFilters()
+      }))
+      : validateDialogFilePath(providedFilePath, 'runner import path');
+    if (!filePath) {
+      return fileOperationResult({ cancelled: true });
+    }
+    const runner = importRunnerFromText(await fs.readFile(filePath, 'utf8'));
+    assertRunnerPayload(runner);
+    return fileOperationResult({ cancelled: false, runner });
+  });
+
+  ipcMain.handle('runner:exportDefinition', async (_event, runner, format = 'postmeter') => {
+    assertRunnerPayload(runner);
+    if (format !== 'postmeter') {
+      throw new Error('Runner definitions can only be exported as PostMeter JSON.');
+    }
+    const result = await dialog.showSaveDialog(getMainWindow(), {
+      title: 'Export Runner',
+      defaultPath: `${safeFilename(runner?.name || 'runner')}.postmeter-runner.json`,
+      filters: [
+        { name: 'PostMeter Runner', extensions: ['json'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    });
+    const filePath = selectedSaveFilePath(result);
+    if (!filePath) {
+      return fileOperationResult({ cancelled: true });
+    }
+    await writeTextFileAtomic(filePath, exportRunnerToJson(runner), { prefix: 'postmeter-runner-definition-export' });
+    return fileOperationResult({ cancelled: false, path: filePath });
+  });
+
   ipcMain.handle('request:examples:export', async (_event, request) => {
     assertRequestPayload(request);
     const result = await dialog.showSaveDialog(getMainWindow(), {
@@ -373,6 +468,16 @@ function countFolders(collection = {}) {
     count += countFolders(folder);
   }
   return count;
+}
+
+function assertEnvironmentExportFormat(format) {
+  if (!['postmeter', 'postman'].includes(String(format || ''))) {
+    throw new Error('Environment export format must be postmeter or postman.');
+  }
+}
+
+function environmentExportExtension(format) {
+  return format === 'postman' ? 'postman_environment.json' : 'postmeter-environment.json';
 }
 
 async function rollbackWorkspaceRename(workspaceStore, renamedWorkspaceId, originalWorkspaceId) {

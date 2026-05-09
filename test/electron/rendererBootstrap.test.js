@@ -100,6 +100,9 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(indexSource, /id="bodyInput"[^>]+aria-label="Request body"/);
   assert.match(indexSource, /id="graphqlQueryInput"[^>]+aria-label="GraphQL query"/);
   assert.match(indexSource, /id="performanceGraphqlQueryInput"[^>]+aria-label="Performance GraphQL query"/);
+  assert.match(indexSource, /id="exportItemModal"/);
+  assert.match(indexSource, /id="exportItemList"[^>]+role="radiogroup"/);
+  assert.match(indexSource, /id="confirmExportItemButton"[^>]+disabled/);
   assert.match(indexSource, /role="tablist"[^>]+aria-orientation="vertical"/);
   assert.match(layoutSource, /aria-valuemin/);
   assert.match(layoutSource, /aria-valuemax/);
@@ -109,6 +112,10 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(bootstrapSource, /aria-orientation/);
   assert.match(bootstrapSource, /ArrowDown/);
   assert.match(bootstrapSource, /ArrowUp/);
+  assert.match(bootstrapSource, /querySelectorAll\?\.\('\.toolbar-submenu-row'\)/);
+  assert.match(bootstrapSource, /addEventListener\('mouseenter'/);
+  assert.match(bootstrapSource, /activeRow !== submenuRow/);
+  assert.match(bootstrapSource, /getSelectedExportItemId/);
   assert.match(rendererSource, /Request save failed:/);
   assert.match(rendererSource, /Request Save Failed/);
   assert.match(rendererSource, /Environment save failed:/);
@@ -129,6 +136,8 @@ test('renderer accessibility source keeps splitters body editor and pane save re
     assert.match(indexSource, new RegExp(`id="${id}"[^>]+aria-describedby="diagnosticsSensitiveWarning"`));
   }
   assert.match(chromeSource, /\.workspace-diagnostics-panel/);
+  assert.match(chromeSource, /\.toolbar-menu:has\(\.toolbar-submenu-row:hover\) \.toolbar-submenu-row:not\(:hover\) \.toolbar-submenu/);
+  assert.match(chromeSource, /\.toolbar-submenu::before/);
   assert.match(rendererSource, /pendingDiagnosticsSettingsSave/);
   assert.match(rendererSource, /Switch to this workspace before exporting local diagnostics/);
   assert.match(rendererSource, /Saving diagnostics privacy settings before export/);
@@ -148,6 +157,7 @@ test('renderer bootstrap binds auth input and modal draft confirmation events', 
     ['performanceAuthApiKeyNameInput', createElement({ value: 'api_key' })],
     ['confirmSaveDraftButton', createElement()],
     ['confirmExportCollectionButton', createElement()],
+    ['confirmExportItemButton', createElement()],
     ['confirmRunnerImportButton', createElement()],
     ['contextMenu', createElement()],
     ['modalBackdrop', createElement()]
@@ -178,6 +188,7 @@ test('renderer bootstrap binds auth input and modal draft confirmation events', 
     onResolveActiveModal: (value) => calls.resolveModal.push(value),
     getSelectedDraftSaveCollectionId: () => 'collection-1',
     getSelectedExportCollectionId: () => 'collection-2',
+    getSelectedExportItemId: () => 'runner-1',
     getSelectedRunnerImportTarget: () => ({ type: 'request', collectionId: 'collection-1', requestId: 'request-1' })
   });
 
@@ -186,13 +197,14 @@ test('renderer bootstrap binds auth input and modal draft confirmation events', 
   elements.get('performanceAuthApiKeyNameInput').dispatch('input');
   elements.get('confirmSaveDraftButton').dispatch('click');
   elements.get('confirmExportCollectionButton').dispatch('click');
+  elements.get('confirmExportItemButton').dispatch('click');
   elements.get('confirmRunnerImportButton').dispatch('click');
 
   assert.deepEqual(calls.authType, ['oauth2']);
   assert.equal(calls.authInput, 1);
   assert.deepEqual(calls.performanceAuthType, ['apiKey']);
   assert.equal(calls.performanceAuthInput, 2);
-  assert.deepEqual(calls.resolveModal, ['collection-1', 'collection-2', { type: 'request', collectionId: 'collection-1', requestId: 'request-1' }]);
+  assert.deepEqual(calls.resolveModal, ['collection-1', 'collection-2', 'runner-1', { type: 'request', collectionId: 'collection-1', requestId: 'request-1' }]);
 });
 
 test('renderer bootstrap resolves text, confirmation, and notification modals', () => {
@@ -203,6 +215,7 @@ test('renderer bootstrap resolves text, confirmation, and notification modals', 
     ['textInputModalSingleLineInput', createElement({ tagName: 'INPUT', value: 'single-line-value' })],
     ['confirmTextInputModalButton', createElement()],
     ['cancelTextInputModalButton', createElement()],
+    ['cancelExportItemButton', createElement()],
     ['confirmActionButton', createElement()],
     ['cancelConfirmActionButton', createElement()],
     ['closeNotificationModalButton', createElement()],
@@ -228,12 +241,13 @@ test('renderer bootstrap resolves text, confirmation, and notification modals', 
 
   elements.get('confirmTextInputModalButton').dispatch('click');
   elements.get('cancelTextInputModalButton').dispatch('click');
+  elements.get('cancelExportItemButton').dispatch('click');
   elements.get('confirmActionButton').dispatch('click');
   elements.get('cancelConfirmActionButton').dispatch('click');
   elements.get('closeNotificationModalButton').dispatch('click');
   elements.get('cancelRunnerImportButton').dispatch('click');
 
-  assert.deepEqual(resolved, ['single-line-value', null, true, false, true, null]);
+  assert.deepEqual(resolved, ['single-line-value', null, null, true, false, true, null]);
 });
 
 test('renderer bootstrap binds every collection export menu button', () => {
@@ -599,6 +613,40 @@ test('renderer bootstrap binds pane save buttons', () => {
   assert.deepEqual(calls, ['request', 'environment']);
 });
 
+test('renderer bootstrap binds environment and runner import/export menu actions', () => {
+  const controls = [
+    ['importEnvironmentButton', 'import-environment', 'onImportEnvironment'],
+    ['importRunnerButton', 'import-runner', 'onImportRunner'],
+    ['exportEnvironmentButton', 'export-environment', 'onExportEnvironment'],
+    ['exportPostmanEnvironmentButton', 'export-postman-environment', 'onExportPostmanEnvironment'],
+    ['exportRunnerDefinitionButton', 'export-runner', 'onExportRunnerDefinition']
+  ];
+  const elements = new Map(controls.map(([id]) => [id, createElement()]));
+  const calls = [];
+  const options = {
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} }
+  };
+  for (const [, label, optionName] of controls) {
+    options[optionName] = () => calls.push(label);
+  }
+
+  bindUi(options);
+  for (const [id] of controls) {
+    elements.get(id).dispatch('click');
+  }
+
+  assert.deepEqual(calls, controls.map(([, label]) => label));
+});
+
 test('renderer bootstrap creates runners from the toolbar New menu and runner empty pane only', () => {
   const elements = new Map([
     ['newRunnerMenuButton', createElement()],
@@ -824,6 +872,11 @@ test('renderer supplies explicit collection export format handlers', () => {
       `${optionName} should pass the ${format} export format`
     );
   }
+  assert.match(rendererSource, /onExportWorkspace: \(\) => \{ void exportWorkspaceFromPicker\(\); \}/);
+  assert.match(rendererSource, /onExportEnvironment: \(\) => \{ void exportEnvironmentFromPicker\('postmeter'\); \}/);
+  assert.match(rendererSource, /onExportPostmanEnvironment: \(\) => \{ void exportEnvironmentFromPicker\('postman'\); \}/);
+  assert.match(rendererSource, /onExportRunnerDefinition: \(\) => \{ void exportRunnerDefinitionFromPicker\(\); \}/);
+  assert.match(rendererSource, /onExportPerformanceTest: \(\) => \{ void exportPerformanceTestFromPicker\(\); \}/);
 });
 
 test('renderer exposes first-class runner UI and sends runner payloads through runtime IPC', () => {

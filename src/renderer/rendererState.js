@@ -38,6 +38,7 @@
       activeModalResolver: null,
       selectedDraftSaveCollectionId: '',
       selectedExportCollectionId: '',
+      selectedExportItemId: '',
       maxOpenRequestTabs: MAX_OPEN_TABS
     };
   }

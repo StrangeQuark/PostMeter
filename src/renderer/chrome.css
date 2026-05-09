@@ -100,6 +100,42 @@
   background: var(--surface-muted);
 }
 
+.toolbar-submenu-row {
+  position: relative;
+}
+
+.toolbar-submenu {
+  position: absolute;
+  top: -6px;
+  left: calc(100% + 6px);
+  z-index: 901;
+  display: none;
+  min-width: 170px;
+  padding: 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.toolbar-submenu::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -8px;
+  width: 8px;
+}
+
+.toolbar-submenu-row:hover .toolbar-submenu,
+.toolbar-submenu-row:focus-within .toolbar-submenu {
+  display: grid;
+}
+
+.toolbar-menu:has(.toolbar-submenu-row:hover) .toolbar-submenu-row:not(:hover) .toolbar-submenu {
+  display: none;
+}
+
 .workspace-group {
   margin-left: 4px;
 }

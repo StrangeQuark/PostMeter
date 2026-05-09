@@ -69,12 +69,17 @@ const postmeterApi = {
     rename: (workspaceId, name) => ipcRenderer.invoke('workspace:rename', workspaceId, name),
     switch: (workspaceId) => ipcRenderer.invoke('workspace:switch', workspaceId),
     delete: (workspaceId) => ipcRenderer.invoke('workspace:delete', workspaceId),
+    duplicate: (workspaceId) => ipcRenderer.invoke('workspace:duplicate', workspaceId),
     importWorkspace: (filePath) => ipcRenderer.invoke('workspace:import', optionalFilePath(filePath)),
     exportWorkspace: (workspace, workspaceId) => ipcRenderer.invoke('workspace:export', workspace, workspaceId)
   },
   collection: {
     importCollection: (filePath) => ipcRenderer.invoke('collection:import', optionalFilePath(filePath)),
     exportCollection: (collection, format) => ipcRenderer.invoke('collection:export', collection, format)
+  },
+  environment: {
+    importEnvironment: (filePath) => ipcRenderer.invoke('environment:import', optionalFilePath(filePath)),
+    exportEnvironment: (environment, format) => ipcRenderer.invoke('environment:export', environment, format)
   },
   request: {
     validate: (request, environment) => ipcRenderer.invoke('request:validate', request, environment),
@@ -114,6 +119,8 @@ const postmeterApi = {
     start: (id, collection, environment, config) => ipcRenderer.invoke('runner:start', id, collection, environment, config),
     cancel: (id) => ipcRenderer.invoke('runner:cancel', id),
     export: (result, format) => ipcRenderer.invoke('runner:export', result, format),
+    importDefinition: (filePath) => ipcRenderer.invoke('runner:importDefinition', optionalFilePath(filePath)),
+    exportDefinition: (runner, format) => ipcRenderer.invoke('runner:exportDefinition', runner, format),
     onProgress: (callback) => {
       const listener = (_event, payload) => callback(payload);
       ipcRenderer.on('runner:progress', listener);

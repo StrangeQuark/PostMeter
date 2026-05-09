@@ -31,6 +31,8 @@
       <div id="importMenu" class="toolbar-menu" role="menu" aria-labelledby="importMenuButton" hidden>
         <button id="importWorkspaceButton" role="menuitem">Workspace</button>
         <button id="importCollectionButton" role="menuitem">Collection</button>
+        <button id="importEnvironmentButton" role="menuitem">Environment</button>
+        <button id="importRunnerButton" role="menuitem">Runner</button>
         <button id="importPerformanceTestButton" role="menuitem">Performance Test</button>
       </div>
     </div>
@@ -38,11 +40,24 @@
       <button id="exportMenuButton" class="menu-trigger" aria-haspopup="menu" aria-expanded="false">Export</button>
       <div id="exportMenu" class="toolbar-menu" role="menu" aria-labelledby="exportMenuButton" hidden>
         <button id="exportWorkspaceButton" role="menuitem">Workspace</button>
-        <button id="exportCollectionButton" role="menuitem">Collection</button>
-        <button id="exportPostmanButton" role="menuitem">Postman</button>
-        <button id="exportOpenApiButton" role="menuitem">OpenAPI</button>
-        <button id="exportCurlButton" role="menuitem">curl</button>
-        <button id="exportHarButton" role="menuitem">HAR</button>
+        <div class="toolbar-submenu-row" role="none">
+          <button id="exportCollectionParentButton" role="menuitem" aria-haspopup="menu">Collection</button>
+          <div class="toolbar-submenu" role="menu" aria-label="Collection export types">
+            <button id="exportCollectionButton" role="menuitem">PostMeter</button>
+            <button id="exportPostmanButton" role="menuitem">Postman</button>
+            <button id="exportOpenApiButton" role="menuitem">OpenAPI</button>
+            <button id="exportCurlButton" role="menuitem">curl</button>
+            <button id="exportHarButton" role="menuitem">HAR</button>
+          </div>
+        </div>
+        <div class="toolbar-submenu-row" role="none">
+          <button id="exportEnvironmentParentButton" role="menuitem" aria-haspopup="menu">Environment</button>
+          <div class="toolbar-submenu" role="menu" aria-label="Environment export types">
+            <button id="exportEnvironmentButton" role="menuitem">PostMeter</button>
+            <button id="exportPostmanEnvironmentButton" role="menuitem">Postman</button>
+          </div>
+        </div>
+        <button id="exportRunnerDefinitionButton" role="menuitem">Runner</button>
         <button id="exportPerformanceTestMenuButton" role="menuitem">Performance Test</button>
       </div>
     </div>
@@ -1317,6 +1332,16 @@
       <div class="modal-actions">
         <button id="cancelExportCollectionButton">Cancel</button>
         <button id="confirmExportCollectionButton" class="primary" disabled>Export</button>
+      </div>
+    </section>
+
+    <section id="exportItemModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="exportItemTitle" aria-describedby="exportItemMessage" hidden>
+      <h2 id="exportItemTitle">Export item</h2>
+      <p id="exportItemMessage">Choose an item to export.</p>
+      <div id="exportItemList" class="collection-pick-list" role="radiogroup" aria-label="Items"></div>
+      <div class="modal-actions">
+        <button id="cancelExportItemButton" type="button">Cancel</button>
+        <button id="confirmExportItemButton" type="button" class="primary" disabled>Export</button>
       </div>
     </section>
 
