@@ -253,6 +253,48 @@
   font-size: 12px;
 }
 
+.file-picker-modal {
+  width: min(560px, 100%);
+}
+
+.file-picker-dropzone {
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  min-height: 150px;
+  padding: 18px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  text-align: center;
+  cursor: pointer;
+}
+
+.file-picker-dropzone:hover,
+.file-picker-dropzone:focus-visible,
+.file-picker-dropzone.is-dragover {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 9%, var(--surface-muted));
+  color: var(--text);
+}
+
+.file-picker-dropzone strong {
+  color: var(--text);
+  font-size: 15px;
+}
+
+.file-picker-dropzone span {
+  font-size: 12px;
+}
+
+.file-picker-error {
+  margin: 10px 0 0;
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 @keyframes performance-calibration-spin {
   to {
     transform: rotate(360deg);
@@ -291,6 +333,10 @@
 
 .context-menu button.danger {
   color: var(--danger);
+}
+
+.file-source-menu {
+  min-width: 160px;
 }
 
 .variable-autocomplete {

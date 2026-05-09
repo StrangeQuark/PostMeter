@@ -46,7 +46,25 @@ function contentTypeForRequest(request) {
   if (explicit?.value) {
     return explicit.value;
   }
-  return request.bodyType === BODY_TYPES.RAW_JSON ? 'application/json' : 'text/plain; charset=utf-8';
+  if (request.bodyType === BODY_TYPES.RAW_JSON) {
+    return 'application/json';
+  }
+  if (request.bodyType === BODY_TYPES.RAW_JAVASCRIPT) {
+    return 'application/javascript';
+  }
+  if (request.bodyType === BODY_TYPES.RAW_HTML) {
+    return 'text/html; charset=utf-8';
+  }
+  if (request.bodyType === BODY_TYPES.RAW_XML) {
+    return 'application/xml';
+  }
+  if (request.bodyType === BODY_TYPES.URLENCODED) {
+    return 'application/x-www-form-urlencoded';
+  }
+  if (request.bodyType === BODY_TYPES.BINARY) {
+    return 'application/octet-stream';
+  }
+  return 'text/plain; charset=utf-8';
 }
 
 function parseJsonMaybe(value) {

@@ -14,7 +14,8 @@ const {
   performanceImportFilters,
   safeFilename,
   selectedOpenFilePath,
-  selectedSaveFilePath
+  selectedSaveFilePath,
+  validateDialogFilePath
 } = require('./fileDialogs');
 const {
   applyCollectionRunMutationsToWorkspace,
@@ -370,13 +371,14 @@ function registerRuntimeIpc(options = {}) {
     return true;
   });
 
-  ipcMain.handle('performance:import', async () => {
-    const result = await dialog.showOpenDialog(getMainWindow(), {
-      title: 'Import Performance Test',
-      properties: ['openFile'],
-      filters: performanceImportFilters()
-    });
-    const filePath = selectedOpenFilePath(result);
+  ipcMain.handle('performance:import', async (_event, providedFilePath = null) => {
+    const filePath = providedFilePath == null
+      ? selectedOpenFilePath(await dialog.showOpenDialog(getMainWindow(), {
+        title: 'Import Performance Test',
+        properties: ['openFile'],
+        filters: performanceImportFilters()
+      }))
+      : validateDialogFilePath(providedFilePath, 'performance import path');
     if (!filePath) {
       return fileOperationResult({ cancelled: true });
     }

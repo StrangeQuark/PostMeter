@@ -8,7 +8,8 @@ const {
   jsonFilters,
   safeFilename,
   selectedOpenFilePath,
-  selectedSaveFilePath
+  selectedSaveFilePath,
+  validateDialogFilePath
 } = require('./fileDialogs');
 const {
   assertCollectionExportFormat,
@@ -227,14 +228,15 @@ function registerWorkspaceIpc(options = {}) {
     return result;
   });
 
-  ipcMain.handle('workspace:import', async () => {
+  ipcMain.handle('workspace:import', async (_event, providedFilePath = null) => {
     try {
-      const result = await dialog.showOpenDialog(getMainWindow(), {
-        title: 'Import PostMeter Workspace',
-        properties: ['openFile'],
-        filters: jsonFilters()
-      });
-      const filePath = selectedOpenFilePath(result);
+      const filePath = providedFilePath == null
+        ? selectedOpenFilePath(await dialog.showOpenDialog(getMainWindow(), {
+          title: 'Import PostMeter Workspace',
+          properties: ['openFile'],
+          filters: jsonFilters()
+        }))
+        : validateDialogFilePath(providedFilePath, 'workspace import path');
       if (!filePath) {
         return fileOperationResult({ cancelled: true });
       }
@@ -283,14 +285,15 @@ function registerWorkspaceIpc(options = {}) {
     return fileOperationResult({ cancelled: false, path: exportedPath });
   });
 
-  ipcMain.handle('collection:import', async () => {
+  ipcMain.handle('collection:import', async (_event, providedFilePath = null) => {
     try {
-      const result = await dialog.showOpenDialog(getMainWindow(), {
-        title: 'Import Collection',
-        properties: ['openFile'],
-        filters: collectionImportFilters()
-      });
-      const filePath = selectedOpenFilePath(result);
+      const filePath = providedFilePath == null
+        ? selectedOpenFilePath(await dialog.showOpenDialog(getMainWindow(), {
+          title: 'Import Collection',
+          properties: ['openFile'],
+          filters: collectionImportFilters()
+        }))
+        : validateDialogFilePath(providedFilePath, 'collection import path');
       if (!filePath) {
         return fileOperationResult({ cancelled: true });
       }

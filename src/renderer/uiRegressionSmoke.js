@@ -51,8 +51,32 @@
     await assertTreeContextMenuModalFocusSmoke();
     newRequest();
     assertMethodColorSmoke();
+    $('urlInput').value = '{{baseUrl}}/v1/users';
+    dispatchInput($('urlInput'));
+    await nextPaint();
+    assertVariableHighlight($('urlInput'), 'baseUrl', 'Request URL input should highlight environment variable tokens.');
     $('urlInput').value = 'https://api.example.test/v1/users';
     dispatchInput($('urlInput'));
+    activateTab('request', 'params');
+    $('addParamButton').click();
+    let requestParamInputs = $('paramsTable').querySelectorAll('input');
+    requestParamInputs[1].value = 'taco';
+    dispatchInput(requestParamInputs[1]);
+    requestParamInputs[2].value = '{{baseUrl}}';
+    dispatchInput(requestParamInputs[2]);
+    await nextPaint();
+    assertVariableHighlight(requestParamInputs[2], 'baseUrl', 'Request Params values should highlight environment variable tokens.');
+    requestParamInputs[2].value = 'car';
+    dispatchInput(requestParamInputs[2]);
+    assertUiSmoke($('urlInput').value.endsWith('/v1/users?taco=car'), 'Editing request params should update the request URL.');
+    requestParamInputs[0].checked = false;
+    dispatchChange(requestParamInputs[0]);
+    assertUiSmoke(!$('urlInput').value.includes('taco=car'), 'Disabling a request param should remove it from the URL.');
+    $('urlInput').value = 'https://api.example.test/v1/users?from=url&multi=one&multi=two';
+    dispatchInput($('urlInput'));
+    requestParamInputs = $('paramsTable').querySelectorAll('input');
+    assertUiSmoke(requestParamInputs[1].value === 'from' && requestParamInputs[2].value === 'url', 'Editing the request URL should update the Params table.');
+    assertUiSmoke(requestParamInputs[4].value === 'multi' && requestParamInputs[5].value === 'one', 'URL query parsing should keep repeated request params.');
     activateTab('request', 'cookies');
     assertUiSmoke($('requestCookieJarEnabledInput'), 'Cookie jar request toggle is missing.');
     $('addCookieButton').click();
@@ -261,10 +285,31 @@
     scriptInput.setSelectionRange(0, 0);
     scriptInput.dispatchEvent(new KeyboardEvent('keydown', { key: '{', bubbles: true, cancelable: true }));
     assertUiSmoke(scriptInput.value === '{}', 'Script editor should create closing braces for JavaScript input.');
-    bodyInput.value = '';
-    scriptInput.value = '';
-    dispatchInput(bodyInput);
-    dispatchInput(scriptInput);
+    const originalActiveEnvironmentId = activeEnvironmentId;
+    const highlightEnvironment = {
+      id: 'ui-regression-variable-highlight-env',
+      name: 'UI Regression Variable Highlight Env',
+      variables: [{ enabled: true, key: 'baseUrl', value: 'https://api.example.test' }]
+    };
+    workspace.environments.push(highlightEnvironment);
+    activeEnvironmentId = highlightEnvironment.id;
+    renderEnvironmentSelect();
+    refreshVariableHighlights();
+    try {
+      bodyInput.value = '{"valid":"{{baseUrl}}","invalid":"{{missingToken}}"}';
+      dispatchInput(bodyInput);
+      assertVariableHighlight(bodyInput, 'baseUrl', 'Code editor textareas should mark known environment variables as valid.', 'valid');
+      assertVariableHighlight(bodyInput, 'missingToken', 'Code editor textareas should mark unknown environment variables as invalid.', 'invalid');
+    } finally {
+      workspace.environments = workspace.environments.filter((environment) => environment.id !== highlightEnvironment.id);
+      activeEnvironmentId = originalActiveEnvironmentId;
+      renderEnvironmentSelect();
+      refreshVariableHighlights();
+      bodyInput.value = '';
+      scriptInput.value = '';
+      dispatchInput(bodyInput);
+      dispatchInput(scriptInput);
+    }
 
     activateTab('results', 'response');
     const responsePanel = document.querySelector('.response-editor-panel');
@@ -295,6 +340,15 @@
     assertUiSmoke(Math.abs(cookiesEditor.getBoundingClientRect().height - cookiesPanelRect.height) <= 2, 'Response cookies editor should fill its result tab height.');
     assertUiSmoke(Math.abs(cookiesRect.height - cookiesEditor.getBoundingClientRect().height) <= 2, 'Response cookies textarea should match the visible editor height.');
     activateTab('results', 'response');
+  }
+
+  function assertVariableHighlight(control, variableName, message, expectedStatus = '') {
+    const wrapper = control.closest?.('.variable-highlight-editor') || control.closest?.('.code-editor');
+    const token = wrapper?.querySelector?.(`[data-variable-name="${cssAttributeValue(variableName)}"]`);
+    assertUiSmoke(token, message);
+    if (expectedStatus) {
+      assertUiSmoke(token.getAttribute('data-variable-status') === expectedStatus, `${message} Expected ${expectedStatus} token status.`);
+    }
   }
 
   async function assertModalFocusSmoke() {
@@ -2077,6 +2131,10 @@
         $('performanceSettingsResize').getAttribute('aria-orientation') === 'horizontal',
         'Performance request/settings splitter should expose horizontal separator semantics.'
       );
+      $('performanceUrlInput').value = '{{perfHost}}/run';
+      dispatchInput($('performanceUrlInput'));
+      await nextPaint();
+      assertVariableHighlight($('performanceUrlInput'), 'perfHost', 'Performance URL input should highlight environment variable tokens.');
       for (const [tabId, label] of [
         ['performanceRequestParamsTabButton', 'Params'],
         ['performanceRequestHeadersTabButton', 'Headers'],
@@ -2093,6 +2151,19 @@
       $('addPerformanceParamButton').click();
       let performanceRowInputs = $('performanceParamsTable').querySelectorAll('input');
       assertUiSmoke(performanceRowInputs.length >= 3, 'Performance Params Add should create editable inputs.');
+      performanceRowInputs[1].value = 'probe';
+      dispatchInput(performanceRowInputs[1]);
+      performanceRowInputs[2].value = '{{perfToken}}';
+      dispatchInput(performanceRowInputs[2]);
+      await nextPaint();
+      assertVariableHighlight(performanceRowInputs[2], 'perfToken', 'Performance Params values should highlight environment variable tokens.');
+      performanceRowInputs[2].value = 'enabled';
+      dispatchInput(performanceRowInputs[2]);
+      assertUiSmoke($('performanceUrlInput').value.includes('?probe=enabled'), 'Editing performance request params should update the performance request URL.');
+      $('performanceUrlInput').value = 'https://performance.example.test/run?from=url';
+      dispatchInput($('performanceUrlInput'));
+      performanceRowInputs = $('performanceParamsTable').querySelectorAll('input');
+      assertUiSmoke(performanceRowInputs[1].value === 'from' && performanceRowInputs[2].value === 'url', 'Editing the performance request URL should update the performance Params table.');
       performanceRowInputs[1].value = 'probe';
       dispatchInput(performanceRowInputs[1]);
       performanceRowInputs[2].value = 'enabled';
@@ -2119,8 +2190,55 @@
         'Performance request Auth tab should show the selected auth section.'
       );
       $('performanceRequestBodyTabButton').click();
-      $('performanceBodyTypeSelect').value = 'RAW_JSON';
+      $('performanceBodyTypeSelect').value = 'FORM_DATA';
       dispatchChange($('performanceBodyTypeSelect'));
+      $('addPerformanceFormDataBodyRowButton').click();
+      let performanceBodyRow = $('performanceFormDataBodyTable').querySelector('[data-body-form-data-row]');
+      let performanceBodyControls = performanceBodyRow.querySelectorAll('select, input');
+      performanceBodyControls[1].value = 'file';
+      dispatchChange(performanceBodyControls[1]);
+      performanceBodyControls[2].value = 'artifact';
+      dispatchInput(performanceBodyControls[2]);
+      performanceBodyControls[3].value = 'fixtures/performance.bin';
+      dispatchInput(performanceBodyControls[3]);
+      collectPerformanceTestFromEditor();
+      assertUiSmoke(
+        performanceTest.request.bodyType === 'FORM_DATA'
+          && performanceTest.request.postmanBody?.formdata?.some((part) => part.key === 'artifact' && part.src === 'fixtures/performance.bin')
+          && performanceTest.request.postman?.fileReferences?.some((reference) => reference.source === 'fixtures/performance.bin'),
+        'Performance request Body tab should collect form-data file rows into the performance request copy.'
+      );
+      $('performanceBodyTypeSelect').value = 'URLENCODED';
+      dispatchChange($('performanceBodyTypeSelect'));
+      $('addPerformanceUrlencodedBodyRowButton').click();
+      const performanceUrlencodedControls = $('performanceUrlencodedBodyTable').querySelector('[data-body-urlencoded-row]').querySelectorAll('input');
+      performanceUrlencodedControls[1].value = 'perf';
+      dispatchInput(performanceUrlencodedControls[1]);
+      performanceUrlencodedControls[2].value = 'encoded';
+      dispatchInput(performanceUrlencodedControls[2]);
+      collectPerformanceTestFromEditor();
+      assertUiSmoke(
+        performanceTest.request.bodyType === 'URLENCODED'
+          && performanceTest.request.postmanBody?.urlencoded?.some((part) => part.key === 'perf' && part.value === 'encoded'),
+        'Performance request Body tab should collect x-www-form-urlencoded rows into the performance request copy.'
+      );
+      $('performanceBodyTypeSelect').value = 'BINARY';
+      dispatchChange($('performanceBodyTypeSelect'));
+      $('performanceBinaryBodySourceInput').value = 'fixtures/performance-upload.dat';
+      dispatchInput($('performanceBinaryBodySourceInput'));
+      $('performanceBinaryBodyContentTypeInput').value = 'application/octet-stream';
+      dispatchInput($('performanceBinaryBodyContentTypeInput'));
+      collectPerformanceTestFromEditor();
+      assertUiSmoke(
+        performanceTest.request.bodyType === 'BINARY'
+          && performanceTest.request.postmanBody?.binary?.src === 'fixtures/performance-upload.dat'
+          && performanceTest.request.postman?.fileReferences?.some((reference) => reference.source === 'fixtures/performance-upload.dat'),
+        'Performance request Body tab should collect binary body source references into the performance request copy.'
+      );
+      $('performanceBodyTypeSelect').value = 'RAW';
+      dispatchChange($('performanceBodyTypeSelect'));
+      $('performanceBodyRawFormatSelect').value = 'json';
+      dispatchChange($('performanceBodyRawFormatSelect'));
       $('performanceBodyInput').value = '{"hello":"performance"}';
       dispatchInput($('performanceBodyInput'));
       $('performanceRequestScriptsTabButton').click();
@@ -2607,10 +2725,42 @@
       assertUiSmoke(!$('requestEditorPanel').hidden, 'Runner request edit should show the standard request editor.');
       $('urlInput').value = 'https://runner-local.example.test';
       dispatchInput($('urlInput'));
+      activateTab('request', 'params');
+      $('addParamButton').click();
+      const runnerParamInputs = $('paramsTable').querySelectorAll('input');
+      runnerParamInputs[1].value = 'runner';
+      dispatchInput(runnerParamInputs[1]);
+      runnerParamInputs[2].value = '{{runnerToken}}';
+      dispatchInput(runnerParamInputs[2]);
+      await nextPaint();
+      assertVariableHighlight(runnerParamInputs[2], 'runnerToken', 'Runner-owned request Params values should highlight environment variable tokens.');
+      runnerParamInputs[2].value = 'local';
+      dispatchInput(runnerParamInputs[2]);
+      assertUiSmoke($('urlInput').value === 'https://runner-local.example.test?runner=local', 'Runner request params should update the runner request URL.');
+      $('urlInput').value = 'https://runner-local.example.test?from=url';
+      dispatchInput($('urlInput'));
+      const runnerUrlParamInputs = $('paramsTable').querySelectorAll('input');
+      assertUiSmoke(runnerUrlParamInputs[1].value === 'from' && runnerUrlParamInputs[2].value === 'url', 'Runner request URL changes should update the Params table.');
+      activateTab('request', 'body');
+      $('bodyTypeSelect').value = 'FORM_DATA';
+      dispatchChange($('bodyTypeSelect'));
+      $('addFormDataBodyRowButton').click();
+      const runnerBodyRow = $('formDataBodyTable').querySelector('[data-body-form-data-row]');
+      const runnerBodyControls = runnerBodyRow.querySelectorAll('select, input');
+      runnerBodyControls[1].value = 'text';
+      dispatchChange(runnerBodyControls[1]);
+      runnerBodyControls[2].value = 'runnerBody';
+      dispatchInput(runnerBodyControls[2]);
+      runnerBodyControls[3].value = 'value';
+      dispatchInput(runnerBodyControls[3]);
       collectRequestFromEditor();
       assertUiSmoke(
-        runner.requests.find((request) => request.id === runnerLocalRequest.id)?.url === 'https://runner-local.example.test',
+        runner.requests.find((request) => request.id === runnerLocalRequest.id)?.url === 'https://runner-local.example.test?from=url',
         'Runner request editor changes should update the runner-local request.'
+      );
+      assertUiSmoke(
+        runner.requests.find((request) => request.id === runnerLocalRequest.id)?.postmanBody?.formdata?.some((part) => part.key === 'runnerBody' && part.value === 'value'),
+        'Runner-owned request editor should collect Postman-style form-data body rows.'
       );
       const runnerTab = openRunnerTabs.find((tab) => tab.runnerId === runner.id);
       assertUiSmoke(runnerTab, 'Runner tab should remain open while editing a runner request.');
@@ -2981,7 +3131,71 @@
     $('requestNameTitle').click();
     assertUiSmoke($('requestNameTitle').getAttribute('contenteditable') === 'plaintext-only', 'Clicking the request title should make it editable inline.');
     editRequestTitle('Draft Request');
+    activateTab('request', 'body');
+    $('bodyTypeSelect').value = 'FORM_DATA';
+    dispatchChange($('bodyTypeSelect'));
+    $('addFormDataBodyRowButton').click();
+    let formDataRow = $('formDataBodyTable').querySelector('[data-body-form-data-row]');
+    let formDataControls = formDataRow.querySelectorAll('select, input');
+    formDataControls[1].value = 'text';
+    dispatchChange(formDataControls[1]);
+    formDataControls[2].value = 'message';
+    dispatchInput(formDataControls[2]);
+    formDataControls[3].value = '{{localToken}}';
+    dispatchInput(formDataControls[3]);
+    $('addFormDataBodyRowButton').click();
+    formDataRow = $('formDataBodyTable').querySelectorAll('[data-body-form-data-row]')[1];
+    formDataControls = formDataRow.querySelectorAll('select, input');
+	    formDataControls[1].value = 'file';
+	    dispatchChange(formDataControls[1]);
+	    formDataControls[2].value = 'upload';
+	    dispatchInput(formDataControls[2]);
+	    formDataControls[3].click();
+	    assertUiSmoke(!$('fileSourceMenu').hidden, 'Clicking a form-data file source field should open the local file source menu.');
+	    assertUiSmoke($('fileSourceChooseButton')?.textContent.includes('Choose File'), 'The file source menu should offer the shared local file picker.');
+	    document.body.click();
+	    formDataControls[3].value = 'fixtures/upload.txt';
+	    dispatchInput(formDataControls[3]);
     collectRequestFromEditor();
+    assertUiSmoke(draft.bodyType === 'FORM_DATA', 'Request Body dropdown should collect form-data mode.');
+    assertUiSmoke(
+      draft.postmanBody?.formdata?.some((part) => part.key === 'message' && part.value === '{{localToken}}')
+        && draft.postmanBody?.formdata?.some((part) => part.key === 'upload' && part.src === 'fixtures/upload.txt'),
+      'Request form-data body should preserve text fields and file source references.'
+    );
+    assertUiSmoke(
+      draft.postman?.fileReferences?.some((reference) => reference.source === 'fixtures/upload.txt' && reference.mode === 'formdata'),
+      'Request form-data file rows should register sandbox file references.'
+    );
+    $('bodyTypeSelect').value = 'URLENCODED';
+    dispatchChange($('bodyTypeSelect'));
+    $('addUrlencodedBodyRowButton').click();
+    const urlencodedControls = $('urlencodedBodyTable').querySelector('[data-body-urlencoded-row]').querySelectorAll('input');
+    urlencodedControls[1].value = 'search';
+    dispatchInput(urlencodedControls[1]);
+    urlencodedControls[2].value = 'postmeter';
+    dispatchInput(urlencodedControls[2]);
+    collectRequestFromEditor();
+    assertUiSmoke(
+      draft.bodyType === 'URLENCODED' && draft.postmanBody?.urlencoded?.some((part) => part.key === 'search' && part.value === 'postmeter'),
+      'Request Body dropdown should collect x-www-form-urlencoded rows.'
+    );
+	    $('bodyTypeSelect').value = 'BINARY';
+	    dispatchChange($('bodyTypeSelect'));
+	    $('binaryBodySourceInput').click();
+	    assertUiSmoke(!$('fileSourceMenu').hidden, 'Clicking a binary file source field should open the local file source menu.');
+	    document.body.click();
+	    $('binaryBodySourceInput').value = 'fixtures/binary.dat';
+	    dispatchInput($('binaryBodySourceInput'));
+    $('binaryBodyContentTypeInput').value = 'application/octet-stream';
+    dispatchInput($('binaryBodyContentTypeInput'));
+    collectRequestFromEditor();
+    assertUiSmoke(
+      draft.bodyType === 'BINARY'
+        && draft.postmanBody?.binary?.src === 'fixtures/binary.dat'
+        && draft.postman?.fileReferences?.some((reference) => reference.source === 'fixtures/binary.dat' && reference.mode === 'binary'),
+      'Request Body dropdown should collect binary file source references.'
+    );
     assertUiSmoke(draft.name === 'Draft Request', 'Draft request should be editable before being saved anywhere.');
 
     const collection = newCollection();

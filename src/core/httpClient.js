@@ -2,6 +2,7 @@ const fs = require('node:fs/promises');
 const crypto = require('node:crypto');
 const http = require('node:http');
 const https = require('node:https');
+const path = require('node:path');
 const tls = require('node:tls');
 const { performance } = require('node:perf_hooks');
 const { BODY_METHODS, BODY_TYPES, SUPPORTED_METHODS } = require('./models');
@@ -21,6 +22,7 @@ const {
   resolveFileAttachmentBinding
 } = require('./fileAttachmentBindings');
 const { extractPfxToPem, readRegularFileBounded } = require('./pfxCertificate');
+const { enabledQueryParams, urlQueryMatchesPairs } = require('./requestQueryModel');
 
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 const MANAGED_HEADERS = new Set(['content-length']);
@@ -28,6 +30,32 @@ const REQUEST_TIMEOUT_MILLIS = 3 * 60 * 1000;
 const MAX_REDIRECTS = 10;
 const REDIRECT_STATUS_CODES = new Set([301, 302, 303, 307, 308]);
 const DEFAULT_SCHEMELESS_REQUEST_PROTOCOL = 'http:';
+const FILE_EXTENSION_CONTENT_TYPES = new Map(Object.entries({
+  '.avif': 'image/avif',
+  '.bin': 'application/octet-stream',
+  '.bmp': 'image/bmp',
+  '.csv': 'text/csv',
+  '.gif': 'image/gif',
+  '.gz': 'application/gzip',
+  '.htm': 'text/html',
+  '.html': 'text/html',
+  '.jpeg': 'image/jpeg',
+  '.jpg': 'image/jpeg',
+  '.js': 'application/javascript',
+  '.json': 'application/json',
+  '.mjs': 'application/javascript',
+  '.pdf': 'application/pdf',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.tar': 'application/x-tar',
+  '.text': 'text/plain',
+  '.tif': 'image/tiff',
+  '.tiff': 'image/tiff',
+  '.txt': 'text/plain',
+  '.webp': 'image/webp',
+  '.xml': 'application/xml',
+  '.zip': 'application/zip'
+}));
 
 function validateRequest(request, environment) {
   const errors = [];
@@ -107,7 +135,7 @@ async function sendRequest(request, environment, options = {}) {
 
   if (shouldSendBody) {
     if (!hasContentType) {
-      headers['Content-Type'] = bodyType === BODY_TYPES.RAW_JSON ? 'application/json' : 'text/plain; charset=utf-8';
+      headers['Content-Type'] = defaultContentTypeForBodyType(bodyType);
     }
     body = Buffer.isBuffer(requestForSend.body)
       ? requestForSend.body
@@ -702,7 +730,7 @@ async function prepareRequestForSend(request, environment, options = {}) {
     now: options.now
   });
   const requestWithAuth = refreshed.refreshed ? { ...request, auth: refreshed.auth } : request;
-  const requestWithBody = await materializeBoundRequestBody(requestWithAuth, options.fileBindings || []);
+  const requestWithBody = await materializeBoundRequestBody(requestWithAuth, environment, options.fileBindings || []);
   if (!refreshed.refreshed) {
     return { request: requestWithBody, updatedAuth: null };
   }
@@ -712,7 +740,7 @@ async function prepareRequestForSend(request, environment, options = {}) {
   };
 }
 
-async function materializeBoundRequestBody(request = {}, fileBindings = []) {
+async function materializeBoundRequestBody(request = {}, environment, fileBindings = []) {
   if (request.multipart?.parts?.length) {
     const { body, contentType } = await buildMultipartRequestBody(request.multipart.parts, fileBindings);
     return withRequestBody(request, body, contentType);
@@ -722,36 +750,96 @@ async function materializeBoundRequestBody(request = {}, fileBindings = []) {
     return withRequestBody(request, body, contentType || 'application/octet-stream');
   }
   const postmanBodyMode = String(request.postmanBody?.mode || '').toLowerCase();
+  if (postmanBodyMode === 'raw') {
+    const raw = String(request.postmanBody.raw ?? request.body ?? '');
+    const bodyType = rawBodyTypeForLanguage(request.postmanBody.options?.raw?.language, request.bodyType);
+    return withRequestBody(request, raw, defaultContentTypeForBodyType(bodyType), bodyType);
+  }
+  if (postmanBodyMode === 'urlencoded') {
+    const body = buildUrlencodedRequestBody(request.postmanBody.urlencoded || [], environment);
+    return withRequestBody(request, body, 'application/x-www-form-urlencoded', BODY_TYPES.URLENCODED || 'URLENCODED');
+  }
   if (postmanBodyMode === 'file' || postmanBodyMode === 'binary') {
     const source = request.postmanBody.file?.src || request.postmanBody.binary?.src || '';
     if (!source) {
-      return request;
+      return { ...request, bodyType: BODY_TYPES.NONE };
     }
     const { body, contentType } = await readBoundAttachmentBody({
       contentType: request.postmanBody.file?.contentType || request.postmanBody.binary?.contentType || '',
       mode: postmanBodyMode,
       source
     }, fileBindings);
-    return withRequestBody(request, body, contentType || 'application/octet-stream');
+    return withRequestBody(request, body, contentType || 'application/octet-stream', BODY_TYPES.BINARY || BODY_TYPES.RAW_TEXT);
   }
   if (postmanBodyMode === 'formdata' || postmanBodyMode === 'form-data') {
-    const parts = postmanFormDataParts(request.postmanBody.formdata || []);
-    if (!parts.some((part) => part.type === 'file')) {
-      return request;
-    }
+    const parts = postmanFormDataParts(request.postmanBody.formdata || [], environment);
     const { body, contentType } = await buildMultipartRequestBody(parts, fileBindings);
-    return withRequestBody(request, body, contentType);
+    return withRequestBody(request, body, contentType, BODY_TYPES.FORM_DATA || BODY_TYPES.RAW_TEXT);
   }
   return request;
 }
 
-function postmanFormDataParts(formdata = []) {
+function defaultContentTypeForBodyType(bodyType) {
+  if (bodyType === BODY_TYPES.RAW_JSON) {
+    return 'application/json';
+  }
+  if (bodyType === BODY_TYPES.RAW_JAVASCRIPT) {
+    return 'application/javascript';
+  }
+  if (bodyType === BODY_TYPES.RAW_HTML) {
+    return 'text/html; charset=utf-8';
+  }
+  if (bodyType === BODY_TYPES.RAW_XML) {
+    return 'application/xml';
+  }
+  if (bodyType === BODY_TYPES.URLENCODED) {
+    return 'application/x-www-form-urlencoded';
+  }
+  if (bodyType === BODY_TYPES.BINARY) {
+    return 'application/octet-stream';
+  }
+  return 'text/plain; charset=utf-8';
+}
+
+function rawBodyTypeForLanguage(language, fallback = BODY_TYPES.RAW_TEXT) {
+  const value = String(language || '').toLowerCase();
+  if (value === 'json') {
+    return BODY_TYPES.RAW_JSON;
+  }
+  if (value === 'javascript' || value === 'js') {
+    return BODY_TYPES.RAW_JAVASCRIPT || BODY_TYPES.RAW_TEXT;
+  }
+  if (value === 'html') {
+    return BODY_TYPES.RAW_HTML || BODY_TYPES.RAW_TEXT;
+  }
+  if (value === 'xml') {
+    return BODY_TYPES.RAW_XML || BODY_TYPES.RAW_TEXT;
+  }
+  return fallback && fallback !== BODY_TYPES.NONE ? fallback : BODY_TYPES.RAW_TEXT;
+}
+
+function buildUrlencodedRequestBody(urlencoded = [], environment) {
+  const params = new URLSearchParams();
+  for (const part of Array.isArray(urlencoded) ? urlencoded : []) {
+    if (!part || typeof part !== 'object' || part.disabled === true || part.enabled === false) {
+      continue;
+    }
+    const key = resolveEnvironmentValue(part.key == null ? '' : String(part.key), environment);
+    if (!key) {
+      continue;
+    }
+    params.append(key, resolveEnvironmentValue(part.value == null ? '' : String(part.value), environment));
+  }
+  return params.toString();
+}
+
+function postmanFormDataParts(formdata = [], environment) {
   const parts = [];
   for (const part of Array.isArray(formdata) ? formdata : []) {
     if (!part || typeof part !== 'object' || part.disabled === true || part.enabled === false) {
       continue;
     }
-    const key = part.key == null ? '' : String(part.key);
+    const key = resolveEnvironmentValue(part.key == null ? '' : String(part.key), environment);
     if (!key) {
       continue;
     }
@@ -760,14 +848,13 @@ function postmanFormDataParts(formdata = []) {
       parts.push({
         key,
         type: 'text',
-        value: part.value == null ? '' : String(part.value)
+        value: resolveEnvironmentValue(part.value == null ? '' : String(part.value), environment)
       });
       continue;
     }
     const sources = Array.isArray(part.src) ? part.src : [part.src];
     for (const source of sources.filter((item) => item != null && item !== '')) {
       parts.push({
-        contentType: part.contentType == null ? '' : String(part.contentType),
         fileName: part.fileName == null ? '' : String(part.fileName),
         key,
         mode: 'formdata',
@@ -808,7 +895,7 @@ async function buildMultipartRequestBody(parts = [], fileBindings = []) {
       const binding = resolveFileAttachmentBinding(part, fileBindings);
       const fileBody = await readBoundFile(binding.localPath, part.source || binding.source);
       const fileName = multipartFileName(part.fileName || binding.fileName || binding.localPath || binding.source);
-      const contentType = part.contentType || binding.contentType || 'application/octet-stream';
+      const contentType = multipartFileContentType(part, binding, fileName);
       push(`--${boundary}\r\nContent-Disposition: form-data; name="${escapeMultipartValue(part.key)}"; filename="${escapeMultipartValue(fileName)}"\r\nContent-Type: ${contentType}\r\n\r\n`);
       push(fileBody);
       push('\r\n');
@@ -821,6 +908,21 @@ async function buildMultipartRequestBody(parts = [], fileBindings = []) {
     body: Buffer.concat(chunks),
     contentType: `multipart/form-data; boundary=${boundary}`
   };
+}
+
+function multipartFileContentType(part = {}, binding = {}, fileName = '') {
+  if (part.mode !== 'formdata' && part.contentType) {
+    return String(part.contentType);
+  }
+  if (part.mode !== 'formdata' && binding.contentType) {
+    return String(binding.contentType);
+  }
+  return detectFileContentType(part.fileName || fileName || binding.fileName || part.source || binding.source || binding.localPath);
+}
+
+function detectFileContentType(value) {
+  const extension = path.extname(String(value || '').split(/[?#]/, 1)[0]).toLowerCase();
+  return FILE_EXTENSION_CONTENT_TYPES.get(extension) || 'application/octet-stream';
 }
 
 async function readBoundFile(filePath, source) {
@@ -841,11 +943,11 @@ async function readBoundFile(filePath, source) {
   return body;
 }
 
-function withRequestBody(request, body, contentType) {
+function withRequestBody(request, body, contentType, bodyType = BODY_TYPES.RAW_TEXT) {
   return {
     ...request,
     body,
-    bodyType: BODY_TYPES.RAW_TEXT,
+    bodyType,
     headers: headerWithDefault(request.headers || [], 'Content-Type', contentType)
   };
 }
@@ -885,13 +987,22 @@ function buildUrl(request, environment) {
     throw new Error('URL must include a host.');
   }
 
-  for (const pair of request.queryParams || []) {
+  const resolvedQueryParams = enabledQueryParams(request.queryParams || []).map((pair) => ({
+    ...pair,
+    key: resolveEnvironmentValue(pair.key, environment),
+    value: resolveEnvironmentValue(pair.value ?? '', environment)
+  }));
+  if (resolvedQueryParams.length && urlQueryMatchesPairs(resolvedUrl, resolvedQueryParams)) {
+    return url;
+  }
+
+  for (const pair of resolvedQueryParams) {
     if (pair.enabled === false || !hasKey(pair)) {
       continue;
     }
     url.searchParams.append(
-      resolveEnvironmentValue(pair.key.trim(), environment),
-      resolveEnvironmentValue(pair.value ?? '', environment)
+      pair.key.trim(),
+      pair.value ?? ''
     );
   }
   return url;

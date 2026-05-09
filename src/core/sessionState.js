@@ -1,5 +1,15 @@
 const HTTP_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']);
-const BODY_TYPES = new Set(['NONE', 'RAW_JSON', 'RAW_TEXT']);
+const BODY_TYPES = new Set([
+  'NONE',
+  'RAW_JSON',
+  'RAW_TEXT',
+  'RAW_JAVASCRIPT',
+  'RAW_HTML',
+  'RAW_XML',
+  'FORM_DATA',
+  'URLENCODED',
+  'BINARY'
+]);
 const SIDEBAR_PANELS = new Set(['collections', 'environments', 'workspaces', 'runners', 'performance', 'history']);
 const MAIN_PANELS = new Set(['request', 'environment', 'workspace', 'runner', 'performance']);
 const REQUEST_EDITOR_TABS = new Set(['params', 'headers', 'auth', 'cookies', 'body', 'tests', 'scripts', 'examples', 'collectionVariables']);
@@ -200,7 +210,7 @@ function normalizeSessionRequest(value) {
   if (!id) {
     return null;
   }
-  return {
+  const request = {
     id,
     name: normalizeNonEmptyString(value.name, 'Untitled Request'),
     method: normalizeEnum(String(value.method || '').toUpperCase(), HTTP_METHODS, 'GET'),
@@ -222,6 +232,15 @@ function normalizeSessionRequest(value) {
       storeResponses: value?.cookieJar?.storeResponses !== false
     }
   };
+  const postmanBody = clonePlainObject(value.postmanBody, {});
+  if (Object.keys(postmanBody).length) {
+    request.postmanBody = postmanBody;
+  }
+  const postman = clonePlainObject(value.postman, {});
+  if (Object.keys(postman).length) {
+    request.postman = postman;
+  }
+  return request;
 }
 
 function normalizeSessionEnvironment(value) {

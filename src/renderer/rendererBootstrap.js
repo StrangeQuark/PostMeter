@@ -192,7 +192,12 @@
     bindChange(doc, 'performanceMethodSelect', options.onPerformanceMethodChange || options.onPerformanceRequestChange);
     bindInput(doc, 'performanceUrlInput', options.onPerformanceUrlInput || options.onPerformanceRequestChange);
     bindChange(doc, 'performanceBodyTypeSelect', options.onPerformanceBodyTypeChange || options.onPerformanceRequestChange);
+    bindChange(doc, 'performanceBodyRawFormatSelect', options.onPerformanceBodyTypeChange || options.onPerformanceRequestChange);
     bindInput(doc, 'performanceBodyInput', options.onPerformanceRequestChange);
+    bindClick(doc, 'addPerformanceFormDataBodyRowButton', options.onAddPerformanceFormDataBodyRow || options.onPerformanceRequestChange);
+    bindClick(doc, 'addPerformanceUrlencodedBodyRowButton', options.onAddPerformanceUrlencodedBodyRow || options.onPerformanceRequestChange);
+    bindInput(doc, 'performanceBinaryBodySourceInput', options.onPerformanceRequestChange);
+    bindInput(doc, 'performanceBinaryBodyContentTypeInput', options.onPerformanceRequestChange);
     bindInput(doc, 'performancePreRequestScriptInput', options.onPerformanceRequestChange);
     bindInput(doc, 'performanceTestScriptInput', options.onPerformanceRequestChange);
     bindChange(doc, 'performanceRequestCookieJarEnabledInput', options.onPerformanceRequestChange);
@@ -201,7 +206,12 @@
     bindChange(doc, 'methodSelect', options.onMethodChange);
     bindInput(doc, 'urlInput', options.onUrlInput);
     bindChange(doc, 'bodyTypeSelect', options.onBodyTypeChange);
+    bindChange(doc, 'bodyRawFormatSelect', options.onBodyTypeChange);
     bindInput(doc, 'bodyInput', options.onBodyInput);
+    bindClick(doc, 'addFormDataBodyRowButton', options.onAddFormDataBodyRow || options.onBodyInput);
+    bindClick(doc, 'addUrlencodedBodyRowButton', options.onAddUrlencodedBodyRow || options.onBodyInput);
+    bindInput(doc, 'binaryBodySourceInput', options.onBodyInput);
+    bindInput(doc, 'binaryBodyContentTypeInput', options.onBodyInput);
     bindInput(doc, 'preRequestScriptInput', options.onPreRequestScriptInput);
     bindInput(doc, 'testScriptInput', options.onTestScriptInput);
     bindChange(doc, 'requestCookieJarEnabledInput', options.onRequestCookieJarChange);

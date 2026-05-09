@@ -230,7 +230,7 @@
     {
       "id": "ipc.channel.collection-import",
       "area": "IPC channel",
-      "target": "renderer-to-main channel `collection:import`: Collection import opens a main-process picker constrained to supported collection formats.",
+      "target": "renderer-to-main channel `collection:import`: Collection import accepts a renderer-selected local path from the shared drag/drop picker or falls back to a main-process picker constrained to supported collection formats.",
       "status": "implemented",
       "evidenceRefs": [
         "electron/workspaceIpc.js",
@@ -443,7 +443,7 @@
     {
       "id": "ipc.channel.performance-import",
       "area": "IPC channel",
-      "target": "renderer-to-main channel `performance:import`: Performance-test import opens a main-process picker constrained to native performance-test JSON files.",
+      "target": "renderer-to-main channel `performance:import`: Performance-test import accepts a renderer-selected local path from the shared drag/drop picker or falls back to a main-process picker constrained to native performance-test JSON files.",
       "status": "implemented",
       "evidenceRefs": [
         "electron/runtimeIpc.js",
@@ -799,7 +799,7 @@
     {
       "id": "ipc.channel.workspace-import",
       "area": "IPC channel",
-      "target": "renderer-to-main channel `workspace:import`: Workspace import opens a main-process JSON file picker and returns a validated file-operation result.",
+      "target": "renderer-to-main channel `workspace:import`: Workspace import accepts a renderer-selected local path from the shared drag/drop picker or falls back to a main-process JSON picker, then returns a validated file-operation result.",
       "status": "implemented",
       "evidenceRefs": [
         "electron/workspaceIpc.js",

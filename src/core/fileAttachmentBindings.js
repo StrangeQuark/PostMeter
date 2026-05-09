@@ -97,6 +97,12 @@ function fileBindingStatusRows(workspace = {}) {
   for (const collection of workspace.collections || []) {
     references.push(...collectImportedFileReferencesFromCollection(collection));
   }
+  for (const runner of workspace.runners || []) {
+    collectImportedFileReferencesFromNode(runner, references);
+  }
+  for (const test of workspace.performanceTests || []) {
+    collectImportedFileReferencesFromNode(test?.request, references);
+  }
   const normalizedReferences = normalizeImportedFileReferences(references);
   const bindings = normalizeSandboxFileBindings(workspace.settings?.sandbox?.fileBindings || []);
   const bindingBySource = new Map(bindings.filter((item) => item.enabled !== false).map((item) => [item.source, item]));
@@ -146,12 +152,53 @@ function collectImportedFileReferencesFromNode(node, references) {
   if (Array.isArray(node.postman?.fileReferences)) {
     references.push(...node.postman.fileReferences);
   }
+  references.push(...fileReferencesFromPostmanBody(node.postmanBody));
   for (const request of node.requests || []) {
     collectImportedFileReferencesFromNode(request, references);
   }
   for (const folder of node.folders || []) {
     collectImportedFileReferencesFromNode(folder, references);
   }
+}
+
+function fileReferencesFromPostmanBody(postmanBody) {
+  const mode = String(postmanBody?.mode || '').toLowerCase();
+  if (mode === 'binary' || mode === 'file') {
+    const body = mode === 'file' ? postmanBody.file : postmanBody.binary;
+    const source = normalizeSource(body?.src);
+    return source ? [{
+      contentType: body?.contentType == null ? '' : String(body.contentType).slice(0, LIMITS.value),
+      key: '',
+      mode: 'binary',
+      source
+    }] : [];
+  }
+  if (mode !== 'formdata' && mode !== 'form-data') {
+    return [];
+  }
+  const references = [];
+  for (const part of Array.isArray(postmanBody.formdata) ? postmanBody.formdata : []) {
+    if (!part || typeof part !== 'object' || part.disabled === true || part.enabled === false) {
+      continue;
+    }
+    if (part.src == null && String(part.type || '').toLowerCase() !== 'file') {
+      continue;
+    }
+    const sources = Array.isArray(part.src) ? part.src : [part.src];
+    for (const source of sources) {
+      const normalized = normalizeSource(source);
+      if (!normalized) {
+        continue;
+      }
+      references.push({
+        contentType: '',
+        key: part.key == null ? '' : String(part.key).slice(0, LIMITS.key),
+        mode: 'formdata',
+        source: normalized
+      });
+    }
+  }
+  return references;
 }
 
 module.exports = {

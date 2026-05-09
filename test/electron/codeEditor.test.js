@@ -1,5 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
+const VariableHighlighter = require('../../src/renderer/variableHighlighter');
 const {
   editTextForKey,
   highlightCode,
@@ -106,8 +107,13 @@ test('code editor keeps pairing limited to code-like languages', () => {
 });
 
 test('code editor highlights JavaScript, JSON, and header text', () => {
+  VariableHighlighter.setVariableSource(() => [{ enabled: true, key: 'baseUrl', value: 'https://api.example.test' }]);
   assert.match(highlightCode('pm.test("ok", function () {})', 'javascript'), /tok-builtin/);
   assert.match(highlightCode('pm.test("ok", function () {})', 'javascript'), /tok-keyword/);
   assert.match(highlightCode('{ "probe": true }', 'json'), /tok-key/);
   assert.match(highlightCode('content-type: application\\/json', 'headers'), /tok-key/);
+  assert.match(highlightCode('https://{{baseUrl}}/users/{{missing}}', 'text'), /tok-variable-valid/);
+  assert.match(highlightCode('https://{{baseUrl}}/users/{{missing}}', 'text'), /tok-variable-invalid/);
+  assert.match(highlightCode('pm.sendRequest("{{baseUrl}}")', 'javascript'), /data-variable-name="baseUrl" data-variable-status="valid"/);
+  VariableHighlighter.setVariableSource(() => []);
 });

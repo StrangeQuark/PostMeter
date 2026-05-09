@@ -255,6 +255,7 @@ Renderer responsibilities:
 - Collect editor state before save/send.
 - Route explicit request/environment/runner-request saves through targeted preload APIs so normal pane saves persist only the selected item while still carrying current workspace settings and request-owned shared state. Workspace settings save through a dedicated settings-only preload API so workspace settings, theme/update toggles, and drag/drop structural saves do not flush unrelated dirty request, environment, or runner drafts.
 - Render toolbar and tree context menus, tab context menus, history clear confirmation, runner import selection, and dirty-save/discard prompts without raw native `prompt`, `confirm`, or `alert` dialogs.
+- Reuse one local file picker modal for renderer-selected imports and request body file sources. The modal supports drag/drop and a choose-file button; import IPC falls back to native main-process dialogs when renderer local-path resolution is unavailable.
 - Call only preload-exposed APIs.
 
 Preload API:
@@ -269,9 +270,9 @@ window.postmeter.workspace.save(workspace)
 window.postmeter.workspace.saveRequest(payload)
 window.postmeter.workspace.saveEnvironment(payload)
 window.postmeter.workspace.saveSettings(settings)
-window.postmeter.workspace.importWorkspace()
+window.postmeter.workspace.importWorkspace(filePath?)
 window.postmeter.workspace.exportWorkspace(workspace, workspaceId)
-window.postmeter.collection.importCollection()
+window.postmeter.collection.importCollection(filePath?)
 window.postmeter.collection.exportCollection(collection, format)
 window.postmeter.diagnostics.export()
 window.postmeter.request.validate(request, environment)
@@ -286,6 +287,8 @@ window.postmeter.runner.start(id, collection, environment, config)
 window.postmeter.runner.cancel(id)
 window.postmeter.runner.export(result, format)
 window.postmeter.runner.onProgress(callback)
+window.postmeter.performance.importTest(filePath?)
+window.postmeter.files.pathForFile(file)
 ```
 
 Security settings:
@@ -732,9 +735,15 @@ HTTP behavior:
 Body behavior:
 
 - `NONE` sends no body.
-- `RAW_JSON` sends body for `POST`, `PUT`, `PATCH`, and `DELETE`; default content type is `application/json`.
-- `RAW_TEXT` sends body for `POST`, `PUT`, `PATCH`, and `DELETE`; default content type is `text/plain; charset=utf-8`.
-- Body content supports environment substitution.
+- The request editor uses one Body Type dropdown for `None`, `Form data`, `x-www-form-urlencoded`, `Raw`, and `Binary`.
+- Raw bodies support `Text`, `JavaScript`, `JSON`, `HTML`, and `XML` format selection. Defaults are `text/plain; charset=utf-8`, `application/javascript`, `application/json`, `text/html; charset=utf-8`, and `application/xml`.
+- Form-data bodies support text fields and user-bound file source references. File part content types are inferred from the file name or source extension and fall back to `application/octet-stream`; runtime file reads stay limited to approved workspace file bindings.
+- File source fields open a small source menu that launches the shared drag/drop local file picker. Selecting a local file writes the source reference and saves only the reviewed file binding metadata, leaving the request, runner-owned request, or Performance request dirty until the user saves that item.
+- `x-www-form-urlencoded` bodies are encoded with enabled key/value rows only.
+- Binary bodies use a user-bound file source reference plus optional content type.
+- Request, runner-owned request, and Performance request body editors share the same body modes and preserve Postman compatibility metadata through save/import/export paths.
+- Body content supports environment substitution for raw text, form-data text fields, and urlencoded fields.
+- GraphQL body editing is intentionally deferred and tracked in `NEXT_STEPS.MD`.
 
 ## Assertions And Runner
 

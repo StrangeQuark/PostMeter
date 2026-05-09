@@ -790,6 +790,45 @@ test('renderer workflows update the workspace catalog without replacing the curr
   assert.equal(state.workspace, currentWorkspace);
 });
 
+test('renderer workflows pass renderer-selected import file paths to preload boundaries', async () => {
+  const state = createRendererState();
+  state.workspace = { collections: [], environments: [], settings: {} };
+  const importCalls = [];
+  const workflows = createRendererWorkflows({
+    state,
+    doc: createDocument(),
+    renderAll: () => {},
+    runFormatting: createRunFormatting(),
+    selectInitialWorkspaceItem: () => {},
+    uniqueName: (value) => value,
+    windowObject: {
+      postmeter: {
+        workspace: {
+          importWorkspace: async (filePath) => {
+            importCalls.push(['workspace', filePath]);
+            return { cancelled: true };
+          },
+          save: async (workspace) => workspace
+        },
+        collection: {
+          importCollection: async (filePath) => {
+            importCalls.push(['collection', filePath]);
+            return { cancelled: true };
+          }
+        }
+      }
+    }
+  });
+
+  await workflows.importWorkspace('/tmp/dragged-workspace.json');
+  await workflows.importCollection('/tmp/dragged-collection.json');
+
+  assert.deepEqual(importCalls, [
+    ['workspace', '/tmp/dragged-workspace.json'],
+    ['collection', '/tmp/dragged-collection.json']
+  ]);
+});
+
 test('renderer workflows collect the active environment editor before importing a workspace catalog update', async () => {
   const state = createRendererState();
   state.workspace = { collections: [], environments: [{ id: 'environment-1', name: 'Current Environment', variables: [] }], settings: {} };

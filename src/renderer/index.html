@@ -339,15 +339,56 @@
         </div>
 
         <div id="bodyTab" class="tab-panel" role="tabpanel" aria-labelledby="requestBodyTabButton">
-          <label class="field">
-            <span>Body Type</span>
-            <select id="bodyTypeSelect">
-              <option value="NONE">None</option>
-              <option value="RAW_JSON">Raw JSON</option>
-              <option value="RAW_TEXT">Raw Text</option>
-            </select>
-          </label>
-          <textarea id="bodyInput" spellcheck="false" placeholder="Request body" aria-label="Request body" data-code-editor data-code-language="text"></textarea>
+          <div class="body-editor-controls">
+            <label class="field compact">
+              <span>Body Type</span>
+              <select id="bodyTypeSelect">
+                <option value="NONE">None</option>
+                <option value="FORM_DATA">Form data</option>
+                <option value="URLENCODED">x-www-form-urlencoded</option>
+                <option value="RAW">Raw</option>
+                <option value="BINARY">Binary</option>
+              </select>
+            </label>
+            <label id="bodyRawFormatField" class="field compact">
+              <span>Raw Format</span>
+              <select id="bodyRawFormatSelect">
+                <option value="text">Text</option>
+                <option value="javascript">JavaScript</option>
+                <option value="json">JSON</option>
+                <option value="html">HTML</option>
+                <option value="xml">XML</option>
+              </select>
+            </label>
+          </div>
+          <div id="bodyNonePanel" class="body-mode-panel empty-state">No request body</div>
+          <div id="bodyRawPanel" class="body-mode-panel">
+            <textarea id="bodyInput" spellcheck="false" placeholder="Request body" aria-label="Request body" data-code-editor data-code-language="text"></textarea>
+          </div>
+          <div id="bodyFormDataPanel" class="body-mode-panel">
+            <div class="table-actions">
+              <button id="addFormDataBodyRowButton" type="button">Add Form Field</button>
+            </div>
+            <div id="formDataBodyTable" class="body-pairs-table"></div>
+          </div>
+          <div id="bodyUrlencodedPanel" class="body-mode-panel">
+            <div class="table-actions">
+              <button id="addUrlencodedBodyRowButton" type="button">Add Encoded Field</button>
+            </div>
+            <div id="urlencodedBodyTable" class="body-pairs-table"></div>
+          </div>
+          <div id="bodyBinaryPanel" class="body-mode-panel">
+            <div class="binary-body-grid">
+              <label class="field">
+                <span>File Source</span>
+                <input id="binaryBodySourceInput" autocomplete="off" placeholder="Imported file source reference">
+              </label>
+              <label class="field">
+                <span>Content Type</span>
+                <input id="binaryBodyContentTypeInput" autocomplete="off" placeholder="application/octet-stream">
+              </label>
+            </div>
+          </div>
         </div>
 
         <div id="testsTab" class="tab-panel" role="tabpanel" aria-labelledby="requestTestsTabButton">
@@ -888,15 +929,56 @@
             </div>
 
             <div id="performanceBodyTab" class="tab-panel" role="tabpanel" aria-labelledby="performanceRequestBodyTabButton">
-              <label class="field">
-                <span>Body Type</span>
-                <select id="performanceBodyTypeSelect">
-                  <option value="NONE">None</option>
-                  <option value="RAW_JSON">Raw JSON</option>
-                  <option value="RAW_TEXT">Raw Text</option>
-                </select>
-              </label>
-              <textarea id="performanceBodyInput" spellcheck="false" placeholder="Request body" aria-label="Performance request body" data-code-editor data-code-language="text"></textarea>
+              <div class="body-editor-controls">
+                <label class="field compact">
+                  <span>Body Type</span>
+                  <select id="performanceBodyTypeSelect">
+                    <option value="NONE">None</option>
+                    <option value="FORM_DATA">Form data</option>
+                    <option value="URLENCODED">x-www-form-urlencoded</option>
+                    <option value="RAW">Raw</option>
+                    <option value="BINARY">Binary</option>
+                  </select>
+                </label>
+                <label id="performanceBodyRawFormatField" class="field compact">
+                  <span>Raw Format</span>
+                  <select id="performanceBodyRawFormatSelect">
+                    <option value="text">Text</option>
+                    <option value="javascript">JavaScript</option>
+                    <option value="json">JSON</option>
+                    <option value="html">HTML</option>
+                    <option value="xml">XML</option>
+                  </select>
+                </label>
+              </div>
+              <div id="performanceBodyNonePanel" class="body-mode-panel empty-state">No request body</div>
+              <div id="performanceBodyRawPanel" class="body-mode-panel">
+                <textarea id="performanceBodyInput" spellcheck="false" placeholder="Request body" aria-label="Performance request body" data-code-editor data-code-language="text"></textarea>
+              </div>
+              <div id="performanceBodyFormDataPanel" class="body-mode-panel">
+                <div class="table-actions">
+                  <button id="addPerformanceFormDataBodyRowButton" type="button">Add Form Field</button>
+                </div>
+                <div id="performanceFormDataBodyTable" class="body-pairs-table"></div>
+              </div>
+              <div id="performanceBodyUrlencodedPanel" class="body-mode-panel">
+                <div class="table-actions">
+                  <button id="addPerformanceUrlencodedBodyRowButton" type="button">Add Encoded Field</button>
+                </div>
+                <div id="performanceUrlencodedBodyTable" class="body-pairs-table"></div>
+              </div>
+              <div id="performanceBodyBinaryPanel" class="body-mode-panel">
+                <div class="binary-body-grid">
+                  <label class="field">
+                    <span>File Source</span>
+                    <input id="performanceBinaryBodySourceInput" autocomplete="off" placeholder="Imported file source reference">
+                  </label>
+                  <label class="field">
+                    <span>Content Type</span>
+                    <input id="performanceBinaryBodyContentTypeInput" autocomplete="off" placeholder="application/octet-stream">
+                  </label>
+                </div>
+              </div>
             </div>
 
             <div id="performanceTestsTab" class="tab-panel" role="tabpanel" aria-labelledby="performanceRequestTestsTabButton">
@@ -1251,6 +1333,24 @@
       </div>
     </section>
 
+    <section id="filePickerModal" class="modal file-picker-modal" role="dialog" aria-modal="true" aria-labelledby="filePickerTitle" aria-describedby="filePickerMessage" hidden>
+      <div class="modal-title-row">
+        <h2 id="filePickerTitle">Choose file</h2>
+        <button id="filePickerCloseButton" type="button" class="modal-close-button" aria-label="Close file picker">X</button>
+      </div>
+      <p id="filePickerMessage">Drop a file here or choose a file from this computer.</p>
+      <div id="filePickerDropZone" class="file-picker-dropzone" role="button" tabindex="0">
+        <strong>Drop file here</strong>
+        <span>or choose a file from this computer.</span>
+      </div>
+      <p id="filePickerError" class="file-picker-error" role="alert" hidden></p>
+      <input id="filePickerInput" type="file" hidden>
+      <div class="modal-actions">
+        <button id="filePickerCancelButton" type="button">Cancel</button>
+        <button id="filePickerBrowseButton" type="button" class="primary">Choose File</button>
+      </div>
+    </section>
+
     <section id="vaultPromptModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="vaultPromptTitle" aria-describedby="vaultPromptMessage vaultPromptWarning" hidden>
       <h2 id="vaultPromptTitle">Allow script vault access?</h2>
       <p id="vaultPromptMessage">A request script is asking for a vault secret.</p>
@@ -1288,11 +1388,15 @@
   </div>
 
   <div id="contextMenu" class="context-menu" role="menu" aria-label="Item actions" hidden></div>
+  <div id="fileSourceMenu" class="context-menu file-source-menu" role="menu" aria-label="File source actions" hidden>
+    <button id="fileSourceChooseButton" type="button" role="menuitem">Choose File...</button>
+  </div>
 
   <script src="responseFormatting.js"></script>
   <script src="contextMenu.js"></script>
   <script src="layoutControls.js"></script>
   <script src="../core/payloadSchemas.js"></script>
+  <script src="../core/requestQueryModel.js"></script>
   <script src="../core/authModel.js"></script>
   <script src="../core/cookieModel.js"></script>
   <script src="collectionModel.js"></script>
@@ -1300,6 +1404,7 @@
   <script src="cookieModel.js"></script>
   <script src="exampleModel.js"></script>
   <script src="performanceTestModel.js"></script>
+  <script src="variableHighlighter.js"></script>
   <script src="codeEditor.js"></script>
   <script src="requestEditorPanels.js"></script>
   <script src="variableAutocomplete.js"></script>

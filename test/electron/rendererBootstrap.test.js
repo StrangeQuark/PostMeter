@@ -285,7 +285,12 @@ test('renderer bootstrap binds performance creation import export run and config
     'performanceMethodSelect',
     'performanceUrlInput',
     'performanceBodyTypeSelect',
-    'performanceBodyInput'
+    'performanceBodyRawFormatSelect',
+    'performanceBodyInput',
+    'addPerformanceFormDataBodyRowButton',
+    'addPerformanceUrlencodedBodyRowButton',
+    'performanceBinaryBodySourceInput',
+    'performanceBinaryBodyContentTypeInput'
   ];
   const elements = new Map(controlIds.map((id) => [id, createElement({ tagName: id.endsWith('Select') ? 'SELECT' : 'INPUT' })]));
   const performanceEnvironmentControls = [createElement({ tagName: 'SELECT' })];
@@ -344,6 +349,8 @@ test('renderer bootstrap binds performance creation import export run and config
     onPerformanceConfigChange: () => calls.push('config'),
     onPerformanceRequestChange: () => calls.push('request'),
     onPerformanceBodyTypeChange: () => calls.push('body-type'),
+    onAddPerformanceFormDataBodyRow: () => calls.push('add-form-data'),
+    onAddPerformanceUrlencodedBodyRow: () => calls.push('add-urlencoded'),
     onActivateTab: (group, tab) => calls.push(`${group}:${tab}`)
   });
 
@@ -368,7 +375,9 @@ test('renderer bootstrap binds performance creation import export run and config
     'addPerformanceCookieButton',
     'clearExpiredPerformanceCookiesButton',
     'calibratePerformanceButton',
-    'closePerformanceCalibrationModalButton'
+    'closePerformanceCalibrationModalButton',
+    'addPerformanceFormDataBodyRowButton',
+    'addPerformanceUrlencodedBodyRowButton'
   ]) {
     elements.get(id).dispatch('click');
   }
@@ -382,7 +391,10 @@ test('renderer bootstrap binds performance creation import export run and config
   elements.get('performanceMethodSelect').dispatch('change');
   elements.get('performanceUrlInput').dispatch('input');
   elements.get('performanceBodyTypeSelect').dispatch('change');
+  elements.get('performanceBodyRawFormatSelect').dispatch('change');
   elements.get('performanceBodyInput').dispatch('input');
+  elements.get('performanceBinaryBodySourceInput').dispatch('input');
+  elements.get('performanceBinaryBodyContentTypeInput').dispatch('input');
 
   assert.deepEqual(calls.slice(0, 21), [
     'new',
@@ -408,8 +420,10 @@ test('renderer bootstrap binds performance creation import export run and config
     'close-calibration'
   ]);
   assert.equal(calls.filter((call) => call === 'config').length, 10);
-  assert.equal(calls.filter((call) => call === 'request').length, 3);
-  assert.equal(calls.filter((call) => call === 'body-type').length, 1);
+  assert.ok(calls.includes('add-form-data'));
+  assert.ok(calls.includes('add-urlencoded'));
+  assert.equal(calls.filter((call) => call === 'request').length, 5);
+  assert.equal(calls.filter((call) => call === 'body-type').length, 2);
   assert.ok(calls.includes('performance:spike'));
 });
 

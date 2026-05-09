@@ -132,6 +132,74 @@ test('workspace IPC registers stable workspace, collection, and example channels
   assert.deepEqual(await handlers.get('collection:import')(), { cancelled: true });
 });
 
+test('workspace IPC imports renderer-selected files without reopening native dialogs', async () => {
+  const handlers = new Map();
+  const importedPaths = [];
+  let openDialogCalls = 0;
+  const workspace = { schemaVersion: 11, collections: [], environments: [], history: [], cookies: [], settings: { updates: { includePrereleases: false } } };
+  registerWorkspaceIpc({
+    dialog: {
+      showOpenDialog: async () => {
+        openDialogCalls += 1;
+        return { canceled: true, filePaths: [] };
+      },
+      showSaveDialog: async () => ({ canceled: true })
+    },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => workspace,
+    getWorkspaceStore: () => ({
+      importWorkspace: async (filePath) => {
+        importedPaths.push(['workspace', filePath]);
+        return 'Imported Workspace.json';
+      },
+      describeCurrent: async (currentWorkspace, extras = {}) => ({
+        workspace: currentWorkspace,
+        path: '/tmp/Local Workspace.json',
+        activeWorkspaceId: 'Local Workspace.json',
+        workspaces: [{ id: 'Local Workspace.json', name: 'Local Workspace', path: '/tmp/Local Workspace.json', current: true, deletable: false }],
+        ...extras
+      }),
+      importCollection: async (filePath) => {
+        importedPaths.push(['collection', filePath]);
+        return { id: 'collection-1', name: 'Collection', requests: [], folders: [] };
+      }
+    }),
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      },
+      on() {}
+    },
+    recordDiagnosticEvent: async () => {},
+    refreshApplicationMenu: () => {},
+    saveWorkspace: async (nextWorkspace) => nextWorkspace,
+    saveWorkspaceSync: (nextWorkspace) => nextWorkspace,
+    setWorkspace: () => {}
+  });
+
+  const workspaceResult = await handlers.get('workspace:import')({}, '/tmp/imported-workspace.json');
+  const collectionResult = await handlers.get('collection:import')({}, '/tmp/imported-collection.json');
+
+  assert.equal(openDialogCalls, 0);
+  assert.deepEqual(importedPaths, [
+    ['workspace', '/tmp/imported-workspace.json'],
+    ['collection', '/tmp/imported-collection.json']
+  ]);
+  assert.equal(workspaceResult.cancelled, false);
+  assert.equal(workspaceResult.createdWorkspaceId, 'Imported Workspace.json');
+  assert.equal(collectionResult.cancelled, false);
+  assert.equal(collectionResult.collection.id, 'collection-1');
+  await assert.rejects(
+    () => handlers.get('workspace:import')({}, 'bad\0path.json'),
+    /workspace import path must not contain null bytes/
+  );
+  await assert.rejects(
+    () => handlers.get('collection:import')({}, 'bad\0path.json'),
+    /collection import path must not contain null bytes/
+  );
+});
+
 test('workspace IPC emits structured diagnostic events for import outcomes', async () => {
   const handlers = new Map();
   const events = [];
