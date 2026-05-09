@@ -60,6 +60,7 @@ function requestModel({
   variables,
   examples,
   cookieJar,
+  autoHeaders,
   protocol,
   protocolProfile,
   postmanBody,
@@ -88,6 +89,7 @@ function requestModel({
     variables: normalizePairs(variables),
     examples: normalizeExamples(examples),
     cookieJar: normalizeRequestCookieJar(cookieJar),
+    autoHeaders: normalizeRequestAutoHeaders(autoHeaders),
     methodPath: methodPath == null ? '' : String(methodPath).slice(0, 512),
     metadata: normalizePairs(metadata),
     messages: normalizeMessages(messages),
@@ -99,6 +101,13 @@ function requestModel({
   };
   addOptionalJsonObject(request, 'postman', postman, POSTMAN_METADATA_MAX_BYTES);
   return request;
+}
+
+function normalizeRequestAutoHeaders(autoHeaders = {}) {
+  return {
+    sendPostMeterToken: autoHeaders?.sendPostMeterToken === true,
+    showGeneratedHeaders: autoHeaders?.showGeneratedHeaders === true
+  };
 }
 
 function runnerModel({

@@ -34,6 +34,7 @@ Supported on import:
 - Collection variables, including raw Postman variable metadata for round-trip export.
 - Nested folders and requests, including mixed request/folder item order from the Postman export.
 - Request method, URL, query params, headers, disabled params/headers, raw JSON/text body.
+- The Headers editor separates authored headers from runtime-generated headers; users can show/hide generated rows and opt in to a per-send `PostMeter-Token`.
 - Bearer, Basic, API key, and OAuth 2.0 auth import where Postman fields map cleanly to PostMeter auth helpers.
 - Outbound OAuth 2.0 runtime support includes authorization-code PKCE, device code, refresh-token renewal, client credentials where applicable, loopback/custom-scheme callbacks, token-endpoint redirect refusal, provider-error redaction, and a local certification corpus for Google/Microsoft/GitHub provider behavior.
 - Common `prerequest` and `test` event scripts from collection, folder, and request scopes, while preserving original event location, script type, and script text for Postman export.
@@ -178,7 +179,7 @@ Status:
 - Performance request import is a deep-copy operation from Collections. Performance edits do not mutate collection requests.
 - Manual request entry creates the same local request-copy shape without source collection metadata.
 - Environment behavior is copy-vs-mutate: saved environments remain unchanged unless the Performance test explicitly allows environment mutation.
-- Request, runner-owned request, and Performance request editors support Postman-style body modes for none, raw text/JavaScript/JSON/HTML/XML, form-data text/file references with automatic file part content-type detection, x-www-form-urlencoded rows, and binary file references. GraphQL body editing remains tracked as follow-up work.
+- Request, runner-owned request, and Performance request editors support Postman-style body modes for none, raw text/JavaScript/JSON/HTML/XML, form-data text/file references with automatic file part content-type detection, x-www-form-urlencoded rows, binary file references, and GraphQL query/variables/operation-name bodies.
 
 Known gaps:
 

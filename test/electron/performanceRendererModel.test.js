@@ -37,7 +37,12 @@ test('renderer performance normalization migrates old placeholder options withou
     type: 'load',
     importedSource: { collectionId: 'collection-1', requestId: 'request-1' },
     options: { virtualUsers: 7, durationSeconds: 11, rampUpSeconds: 3 },
-    request: { method: 'POST', url: 'example.test', body: 'hello' }
+    request: {
+      method: 'POST',
+      url: 'example.test',
+      body: 'hello',
+      autoHeaders: { sendPostMeterToken: true, showGeneratedHeaders: true }
+    }
   });
 
   assert.equal(normalized.type, 'latency');
@@ -47,6 +52,7 @@ test('renderer performance normalization migrates old placeholder options withou
   assert.equal(normalized.config.startConcurrency, 1);
   assert.equal(normalized.request.method, 'POST');
   assert.equal(normalized.request.bodyType, 'NONE');
+  assert.deepEqual(normalized.request.autoHeaders, { sendPostMeterToken: true, showGeneratedHeaders: true });
   assert.equal('options' in normalized, false);
   assert.equal('importedSource' in normalized, false);
 });

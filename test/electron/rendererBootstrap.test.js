@@ -98,6 +98,8 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   const rendererSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'renderer.js'), 'utf8');
 
   assert.match(indexSource, /id="bodyInput"[^>]+aria-label="Request body"/);
+  assert.match(indexSource, /id="graphqlQueryInput"[^>]+aria-label="GraphQL query"/);
+  assert.match(indexSource, /id="performanceGraphqlQueryInput"[^>]+aria-label="Performance GraphQL query"/);
   assert.match(indexSource, /role="tablist"[^>]+aria-orientation="vertical"/);
   assert.match(layoutSource, /aria-valuemin/);
   assert.match(layoutSource, /aria-valuemax/);
@@ -258,6 +260,44 @@ test('renderer bootstrap binds every collection export menu button', () => {
   assert.deepEqual(calls, controls.map(([, label]) => label));
 });
 
+test('renderer bootstrap binds generated header visibility and token controls', () => {
+  const calls = [];
+  const elements = new Map([
+    ['sendPostMeterTokenInput', createElement()],
+    ['showGeneratedHeadersInput', createElement()],
+    ['performanceSendPostMeterTokenInput', createElement()],
+    ['performanceShowGeneratedHeadersInput', createElement()]
+  ]);
+
+  bindUi({
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} },
+    onPostMeterTokenHeaderChange: () => calls.push('request-token'),
+    onShowGeneratedHeadersChange: () => calls.push('request-generated'),
+    onPerformancePostMeterTokenHeaderChange: () => calls.push('performance-token'),
+    onPerformanceShowGeneratedHeadersChange: () => calls.push('performance-generated')
+  });
+
+  for (const element of elements.values()) {
+    element.dispatch('change');
+  }
+
+  assert.deepEqual(calls, [
+    'request-token',
+    'request-generated',
+    'performance-token',
+    'performance-generated'
+  ]);
+});
+
 test('renderer bootstrap binds performance creation import export run and config controls', () => {
   const calls = [];
   const controlIds = [
@@ -287,6 +327,9 @@ test('renderer bootstrap binds performance creation import export run and config
     'performanceBodyTypeSelect',
     'performanceBodyRawFormatSelect',
     'performanceBodyInput',
+    'performanceGraphqlQueryInput',
+    'performanceGraphqlVariablesInput',
+    'performanceGraphqlOperationNameInput',
     'addPerformanceFormDataBodyRowButton',
     'addPerformanceUrlencodedBodyRowButton',
     'performanceBinaryBodySourceInput',
@@ -393,6 +436,9 @@ test('renderer bootstrap binds performance creation import export run and config
   elements.get('performanceBodyTypeSelect').dispatch('change');
   elements.get('performanceBodyRawFormatSelect').dispatch('change');
   elements.get('performanceBodyInput').dispatch('input');
+  elements.get('performanceGraphqlQueryInput').dispatch('input');
+  elements.get('performanceGraphqlVariablesInput').dispatch('input');
+  elements.get('performanceGraphqlOperationNameInput').dispatch('input');
   elements.get('performanceBinaryBodySourceInput').dispatch('input');
   elements.get('performanceBinaryBodyContentTypeInput').dispatch('input');
 
@@ -422,7 +468,7 @@ test('renderer bootstrap binds performance creation import export run and config
   assert.equal(calls.filter((call) => call === 'config').length, 10);
   assert.ok(calls.includes('add-form-data'));
   assert.ok(calls.includes('add-urlencoded'));
-  assert.equal(calls.filter((call) => call === 'request').length, 5);
+  assert.equal(calls.filter((call) => call === 'request').length, 8);
   assert.equal(calls.filter((call) => call === 'body-type').length, 2);
   assert.ok(calls.includes('performance:spike'));
 });

@@ -143,6 +143,10 @@ const FIELD_SCHEMAS = {
     key: { type: 'string', limit: 'key', optional: true },
     value: { type: 'string', limit: 'value', optional: true }
   },
+  requestAutoHeaders: {
+    sendPostMeterToken: { type: 'boolean', optional: true },
+    showGeneratedHeaders: { type: 'boolean', optional: true }
+  },
   assertion: {
     enabled: { type: 'boolean', optional: true },
     type: { type: 'string', limit: 'short', enum: 'assertionTypes', optional: true },
@@ -497,7 +501,7 @@ const payloadSchemas = {
     request: {
       required: ['method', 'url'],
       arrays: ['queryParams', 'headers', 'assertions', 'variables', 'examples', 'metadata', 'messages'],
-      nested: ['auth', 'scripts', 'cookieJar']
+      nested: ['auth', 'scripts', 'cookieJar', 'autoHeaders']
     },
   workspace: {
       arrays: ['collections', 'environments', 'globals', 'cookies', 'runners', 'performanceTests', 'history'],

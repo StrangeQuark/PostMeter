@@ -627,6 +627,51 @@ test('preserves GraphQL and gRPC protocol hooks and request metadata from Postma
   assert.match(grpc.scripts.afterResponse, /grpc after response event/);
 });
 
+test('exports UI-authored GraphQL request bodies as Postman GraphQL body mode', () => {
+  const collection = {
+    id: 'collection-graphql-ui',
+    name: 'GraphQL UI Collection',
+    requests: [{
+      id: 'request-graphql-ui',
+      name: 'GraphQL UI Request',
+      method: 'POST',
+      url: 'https://api.example.test/graphql',
+      headers: [],
+      queryParams: [],
+      bodyType: 'RAW_JSON',
+      body: JSON.stringify({
+        query: 'query GetUser($id: ID!) { user(id: $id) { id } }',
+        variables: '{"id":"{{userId}}"}',
+        operationName: 'GetUser'
+      }),
+      protocol: 'graphql',
+      graphql: {
+        query: 'query GetUser($id: ID!) { user(id: $id) { id } }',
+        variables: '{"id":"{{userId}}"}',
+        operationName: 'GetUser'
+      },
+      postmanBody: {
+        mode: 'graphql',
+        graphql: {
+          query: 'query GetUser($id: ID!) { user(id: $id) { id } }',
+          variables: '{"id":"{{userId}}"}',
+          operationName: 'GetUser'
+        }
+      }
+    }],
+    folders: [],
+    variables: []
+  };
+
+  const exported = exportPostmanCollection(collection);
+  const request = exported.item[0].request;
+
+  assert.equal(request.body.mode, 'graphql');
+  assert.equal(request.body.graphql.operationName, 'GetUser');
+  assert.equal(request.body.graphql.variables, '{"id":"{{userId}}"}');
+  assert.equal(request.graphql.operationName, 'GetUser');
+});
+
 test('annotates package references found in protocol-specific Postman hook scripts', () => {
   const collection = importPostmanCollection({
     info: {

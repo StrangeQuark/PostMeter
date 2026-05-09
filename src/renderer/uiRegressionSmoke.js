@@ -57,6 +57,23 @@
     assertVariableHighlight($('urlInput'), 'baseUrl', 'Request URL input should highlight environment variable tokens.');
     $('urlInput').value = 'https://api.example.test/v1/users';
     dispatchInput($('urlInput'));
+    activateTab('request', 'headers');
+    $('sendPostMeterTokenInput').checked = true;
+    dispatchChange($('sendPostMeterTokenInput'));
+    assertUiSmoke(activeRequest().autoHeaders.sendPostMeterToken === true, 'PostMeter token checkbox should persist on the active request.');
+    $('showGeneratedHeadersInput').checked = true;
+    dispatchChange($('showGeneratedHeadersInput'));
+    await nextPaint();
+    const generatedHeaderNames = Array.from($('headersTable').querySelectorAll('[data-generated-header="true"] input[aria-label^="Auto-generated"]'))
+      .map((input) => input.value);
+    assertUiSmoke(generatedHeaderNames.includes('Accept'), 'Generated request headers should show Accept when unhidden.');
+    assertUiSmoke(generatedHeaderNames.includes('User-Agent'), 'Generated request headers should show User-Agent when unhidden.');
+    assertUiSmoke(generatedHeaderNames.includes('Host'), 'Generated request headers should show Host when unhidden.');
+    assertUiSmoke(generatedHeaderNames.includes('PostMeter-Token'), 'Generated request headers should show opt-in PostMeter-Token when unhidden.');
+    assertUiSmoke(!activeRequest().headers.some((header) => header.key === 'PostMeter-Token'), 'Generated request headers should not be saved as authored headers.');
+    $('showGeneratedHeadersInput').checked = false;
+    dispatchChange($('showGeneratedHeadersInput'));
+    assertUiSmoke(!$('headersTable').querySelector('[data-generated-header="true"]'), 'Generated request headers should hide when the toggle is cleared.');
     activateTab('request', 'params');
     $('addParamButton').click();
     let requestParamInputs = $('paramsTable').querySelectorAll('input');
@@ -2176,6 +2193,16 @@
       dispatchInput(performanceRowInputs[1]);
       performanceRowInputs[2].value = 'true';
       dispatchInput(performanceRowInputs[2]);
+      $('performanceSendPostMeterTokenInput').checked = true;
+      dispatchChange($('performanceSendPostMeterTokenInput'));
+      $('performanceShowGeneratedHeadersInput').checked = true;
+      dispatchChange($('performanceShowGeneratedHeadersInput'));
+      await nextPaint();
+      const performanceGeneratedHeaderNames = Array.from($('performanceHeadersTable').querySelectorAll('[data-generated-header="true"] input[aria-label^="Auto-generated"]'))
+        .map((input) => input.value);
+      assertUiSmoke(activePerformanceTest().request.autoHeaders.showGeneratedHeaders === true, 'Performance generated request header toggle should persist on the performance request copy.');
+      assertUiSmoke(performanceGeneratedHeaderNames.includes('Accept'), `Performance generated request headers should show Accept when unhidden. Found: ${performanceGeneratedHeaderNames.join(', ')}`);
+      assertUiSmoke(performanceGeneratedHeaderNames.includes('PostMeter-Token'), `Performance generated request headers should show opt-in PostMeter-Token when unhidden. Found: ${performanceGeneratedHeaderNames.join(', ')}`);
       $('performanceRequestAuthTabButton').click();
       $('performanceAuthTypeSelect').value = 'apiKey';
       dispatchChange($('performanceAuthTypeSelect'));
@@ -2235,6 +2262,24 @@
           && performanceTest.request.postman?.fileReferences?.some((reference) => reference.source === 'fixtures/performance-upload.dat'),
         'Performance request Body tab should collect binary body source references into the performance request copy.'
       );
+      $('performanceBodyTypeSelect').value = 'GRAPHQL';
+      dispatchChange($('performanceBodyTypeSelect'));
+      $('performanceGraphqlQueryInput').value = 'query Perf($id: ID!) { user(id: $id) { name } }';
+      dispatchInput($('performanceGraphqlQueryInput'));
+      $('performanceGraphqlVariablesInput').value = '{"id":"{{perfHost}}"}';
+      dispatchInput($('performanceGraphqlVariablesInput'));
+      $('performanceGraphqlOperationNameInput').value = 'Perf';
+      dispatchInput($('performanceGraphqlOperationNameInput'));
+      await nextPaint();
+      assertVariableHighlight($('performanceGraphqlVariablesInput'), 'perfHost', 'Performance GraphQL variables should highlight environment variable tokens.');
+      collectPerformanceTestFromEditor();
+      assertUiSmoke(
+        performanceTest.request.protocol === 'graphql'
+          && performanceTest.request.bodyType === 'RAW_JSON'
+          && performanceTest.request.postmanBody?.mode === 'graphql'
+          && performanceTest.request.graphql?.operationName === 'Perf',
+        'Performance request Body tab should collect GraphQL query, variables, and operation name into the performance request copy.'
+      );
       $('performanceBodyTypeSelect').value = 'RAW';
       dispatchChange($('performanceBodyTypeSelect'));
       $('performanceBodyRawFormatSelect').value = 'json';
@@ -2260,6 +2305,7 @@
         'Performance request Params tab should update the performance request copy.'
       );
       assertUiSmoke(performanceTest.request.headers.some((pair) => pair.key === 'X-Perf' && pair.value === 'true'), 'Performance request Headers tab should update the performance request copy.');
+      assertUiSmoke(!performanceTest.request.headers.some((pair) => pair.key === 'PostMeter-Token'), 'Performance generated request headers should not be saved as authored headers.');
       assertUiSmoke(performanceTest.request.auth?.type === 'apiKey' && performanceTest.request.auth?.key === 'api_key', 'Performance request Auth tab should update the performance request copy.');
       assertUiSmoke(performanceTest.request.bodyType === 'RAW_JSON' && performanceTest.request.body.includes('performance'), 'Performance request Body tab should update the performance request copy.');
       assertUiSmoke(performanceTest.request.scripts.preRequest.includes('perfToken') && performanceTest.request.scripts.tests.includes('perf status'), 'Performance request Scripts tab should update the performance request copy.');
@@ -3196,6 +3242,25 @@
         && draft.postman?.fileReferences?.some((reference) => reference.source === 'fixtures/binary.dat' && reference.mode === 'binary'),
       'Request Body dropdown should collect binary file source references.'
     );
+    $('bodyTypeSelect').value = 'GRAPHQL';
+    dispatchChange($('bodyTypeSelect'));
+    $('graphqlQueryInput').value = 'query User($id: ID!) { user(id: $id) { name } }';
+    dispatchInput($('graphqlQueryInput'));
+    $('graphqlVariablesInput').value = '{"id":"{{localToken}}"}';
+    dispatchInput($('graphqlVariablesInput'));
+    $('graphqlOperationNameInput').value = 'User';
+    dispatchInput($('graphqlOperationNameInput'));
+    collectRequestFromEditor();
+    assertUiSmoke(
+      draft.protocol === 'graphql'
+        && draft.bodyType === 'RAW_JSON'
+        && draft.postmanBody?.mode === 'graphql'
+        && draft.graphql?.query?.includes('query User')
+        && draft.graphql?.operationName === 'User',
+      'Request Body dropdown should collect GraphQL query, variables, and operation name.'
+    );
+    const postmanGraphqlBody = JSON.parse(draft.body);
+    assertUiSmoke(postmanGraphqlBody.variables === '{"id":"{{localToken}}"}', 'Request GraphQL body JSON should preserve variables text for Postman round-tripping.');
     assertUiSmoke(draft.name === 'Draft Request', 'Draft request should be editable before being saved anywhere.');
 
     const collection = newCollection();

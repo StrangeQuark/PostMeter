@@ -311,7 +311,7 @@ Known security tradeoffs:
 Current schema version:
 
 ```text
-12
+13
 ```
 
 Root workspace fields:
@@ -371,12 +371,18 @@ Request fields:
 - `variables`
 - `examples`
 - `cookieJar`
+- `autoHeaders`
 - Optional protocol and import/export fields for Postman parity: `protocol`, `methodPath`, `metadata`, `messages`, `postmanBody`, `protocolProfile`, `graphql`, `grpc`, `websocket`, and bounded `postman` compatibility metadata
 
 Request cookie jar fields:
 
 - `enabled`
 - `storeResponses`
+
+Request auto-header fields:
+
+- `sendPostMeterToken`
+- `showGeneratedHeaders`
 
 Auth fields vary by `auth.type`:
 
@@ -504,7 +510,7 @@ Behavior:
 - Uses `workspace.json` as the preferred startup path and scans the containing directory for native managed workspace JSON files. There is no persistent managed-workspace index or active-workspace pointer to go stale; the legacy manifest file is removed when found.
 - Creates a default managed workspace such as `Local Workspace.json` when no workspace files exist, allocating a suffixed name if that filename already exists as an unreadable or non-native file.
 - Allocates default, new, imported, and renamed managed workspace filenames around any existing filesystem entry, including unreadable or non-native JSON files, then publishes with no-overwrite semantics and retries suffixed names if a destination appears before publication.
-- Loads current schema `12` workspaces and migrates supported historical schema versions `1` through `11` to schema `12`.
+- Loads current schema `13` workspaces and migrates supported historical schema versions `1` through `12` to schema `13`.
 - Creates timestamped, collision-resistant `pre-migration.backup` sibling files through the atomic, no-overwrite write path before saving migrated workspaces.
 - Rejects future schema versions.
 - Quarantines unreadable workspace JSON by moving it through a no-overwrite file move to a timestamped, collision-resistant `corrupt` sibling file and best-effort fsyncing the directory, then creates a fresh default workspace through no-overwrite publication and raises a recovery error for the UI. If a replacement workspace file appears before recovery publication, PostMeter preserves that replacement instead of overwriting it.
@@ -727,23 +733,25 @@ HTTP behavior:
 - Uses Node `https` request transport for HTTPS client-certificate requests so PEM certificate options can be applied. PFX/P12 bundles are parsed parent-side into in-memory PEM buffers first to avoid platform-specific Node/OpenSSL PFX parsing behavior and to avoid decrypted PEM temp files.
 - Timeout: 180 seconds via `AbortSignal.timeout`, matching the audited Postman Runtime default global timeout budget used for default script/request execution.
 - Redirects: normal fetch requests follow runtime redirect behavior; client-certificate requests follow up to 10 redirects only when the redirect target remains on the original HTTPS origin.
-- Response body decoding: UTF-8 text.
+- Response body decoding: UTF-8 text after transport decompression for supported compressed responses.
 - Ignores user-provided `Content-Length`; the runtime manages it.
-- Applies request auth after user headers and query parameters are collected.
+- Adds runtime-generated request headers after user headers and query parameters are collected, then applies auth and cookies. Generated headers include default `Accept`, `Accept-Encoding`, and `User-Agent`, managed `Content-Length` when a body is sent, transport-managed values such as `Host`, and auth/cookie helper headers where applicable. Explicit user headers override default generated headers except for managed `Content-Length`.
+- `PostMeter-Token` is opt-in per request. When enabled, PostMeter sends a per-send random token unless the user explicitly supplies a `PostMeter-Token` header.
+- The Headers editor can show or hide read-only auto-generated header rows. Those rows are display-only and are not saved into the request header list.
 - Captures response status, headers, body, final URL, response size, and rounded duration.
 
 Body behavior:
 
 - `NONE` sends no body.
-- The request editor uses one Body Type dropdown for `None`, `Form data`, `x-www-form-urlencoded`, `Raw`, and `Binary`.
+- The request editor uses one Body Type dropdown for `None`, `Form data`, `x-www-form-urlencoded`, `Raw`, `Binary`, and `GraphQL`.
 - Raw bodies support `Text`, `JavaScript`, `JSON`, `HTML`, and `XML` format selection. Defaults are `text/plain; charset=utf-8`, `application/javascript`, `application/json`, `text/html; charset=utf-8`, and `application/xml`.
 - Form-data bodies support text fields and user-bound file source references. File part content types are inferred from the file name or source extension and fall back to `application/octet-stream`; runtime file reads stay limited to approved workspace file bindings.
 - File source fields open a small source menu that launches the shared drag/drop local file picker. Selecting a local file writes the source reference and saves only the reviewed file binding metadata, leaving the request, runner-owned request, or Performance request dirty until the user saves that item.
 - `x-www-form-urlencoded` bodies are encoded with enabled key/value rows only.
 - Binary bodies use a user-bound file source reference plus optional content type.
+- GraphQL bodies expose query, variables, and operation-name fields. They persist as Postman-compatible `postmanBody.mode = "graphql"` metadata, execute as `application/json`, support environment substitution in query/variables/operation name, and are available in collection requests, runner-owned requests, and Performance request copies.
 - Request, runner-owned request, and Performance request body editors share the same body modes and preserve Postman compatibility metadata through save/import/export paths.
-- Body content supports environment substitution for raw text, form-data text fields, and urlencoded fields.
-- GraphQL body editing is intentionally deferred and tracked in `NEXT_STEPS.MD`.
+- Body content supports environment substitution for raw text, form-data text fields, urlencoded fields, and GraphQL payload fields.
 
 ## Assertions And Runner
 
@@ -1031,7 +1039,7 @@ Node tests cover:
 - Assertion evaluation, collection-run sequencing, request-local variables, cookie jar propagation, JSON/XML/HTML/regex extracted-variable propagation, script-mutation propagation, stop-on-failure, isolated request script execution, Node permission worker flags, minimal worker environments, bounded worker heap settings, bounded script console capture, explicit unsupported script API errors, and collection-run CSV export.
 - CLI collection execution with passing/failing exit codes and JSON/CSV report output.
 - Release manifest generation, release artifact validation, release workflow metadata, CI workflow validation, and GitHub release update checks.
-- Workspace default creation, schema `2` through `12` migration, corrupt-file recovery, settings normalization, legacy load-test policy removal, native import, Postman folder/script import, and native/Postman/OpenAPI YAML format detection.
+- Workspace default creation, schema `2` through `13` migration, corrupt-file recovery, settings normalization, legacy load-test policy removal, native import, Postman folder/script import, and native/Postman/OpenAPI YAML format detection.
 - Electron UI workflow smoke coverage for create/edit/save/reload/send, context menus, pane resizing, collection variables, request variables, editable examples, cookie jar capture, environment variables, Help-menu prerelease setting persistence, assertions, collection runner, runtime variable output, first-class runner tabs, runner import/edit/reorder/delete controls, runner export-control state, and the Performance sidebar/pane/tab placement.
 - Electron UI regression smoke coverage for toolbar dropdowns, Help-menu update state, import/export menu options/cancellation, invalid-request error rendering, XML/HTML response formatting, mocked OAuth flow completion/failure, cookie/example/request-variable editor creation, active-host cookie filtering, assertion-template rendering, runner pre-run export state, runner empty-pane/sidebar behavior, tab context and tab-cap behavior, history clearing, sidebar drag/drop structural saves, insertion-bar feedback, and no app-account/login language.
 - Electron UI OAuth smoke coverage for mocked loopback PKCE success, custom-scheme callback success, wrong-state callback rejection without token persistence, token exchange failure, PKCE cancellation, device-code success, access denial, timeout, and cancellation.

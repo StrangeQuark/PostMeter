@@ -140,10 +140,12 @@ function assertRequestPayload(value, field = 'request') {
   assertSchemaNested('request', value, field, {
     auth: assertAuthPayload,
     scripts: assertScripts,
-    cookieJar: assertRequestCookieJar
+    cookieJar: assertRequestCookieJar,
+    autoHeaders: assertRequestAutoHeaders
   }, {
     auth: { type: 'none' },
     cookieJar: {},
+    autoHeaders: {},
     scripts: undefined
   });
   if (value.loadTestPolicy != null) {
@@ -182,6 +184,7 @@ function assertRunnerRequestPayload(value, field = 'request') {
     'protocolProfile',
     'queryParams',
     'assertions',
+    'autoHeaders',
     'scripts',
     'source',
     'url',
@@ -191,6 +194,11 @@ function assertRunnerRequestPayload(value, field = 'request') {
   if (value.source != null) {
     assertRunnerRequestSourcePayload(value.source, `${field}.source`);
   }
+}
+
+function assertRequestAutoHeaders(value, field = 'autoHeaders') {
+  assertSchemaFields('requestAutoHeaders', value || {}, field);
+  assertNoUnexpectedFields('requestAutoHeaders', value || {}, field);
 }
 
 function assertRunnerRequestSourcePayload(value, field = 'source') {

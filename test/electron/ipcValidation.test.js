@@ -50,6 +50,7 @@ test('accepts structurally valid IPC payloads', () => {
     variables: [{ enabled: true, key: 'local', value: 'value' }],
     examples: [{ name: 'Example', statusCode: 200, headers: [{ enabled: true, key: 'Content-Type', value: 'application/json' }], bodyType: 'RAW_JSON', body: '{}' }],
     cookieJar: { enabled: true, storeResponses: true },
+    autoHeaders: { sendPostMeterToken: true, showGeneratedHeaders: true },
     auth: { type: 'bearer', token: 'secret' }
   }));
   assert.doesNotThrow(() => assertCollectionPayload({
@@ -461,6 +462,7 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', scripts: { tests: 42 } }), /request.scripts.tests must be a string/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', examples: [{ statusCode: 200, bodyType: 'bad' }] }), /request.examples\[0\].bodyType must be one of/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', cookieJar: { enabled: 'yes' } }), /request.cookieJar.enabled must be a boolean/);
+  assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', autoHeaders: { sendPostMeterToken: 'yes' } }), /request.autoHeaders.sendPostMeterToken must be a boolean/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', loadTestPolicy: { hostPolicies: [{ host: 42 }] } }), /request.loadTestPolicy is no longer supported/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', auth: { type: 'oauth2', grantType: 'password' } }), /request.auth.grantType must be one of/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', auth: { type: 'apiKey', location: 'body' } }), /request.auth.location must be one of/);

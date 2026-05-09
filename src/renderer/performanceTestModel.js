@@ -115,6 +115,7 @@
       bodyType: BODY_TYPES.includes(request.bodyType) ? request.bodyType : 'NONE',
       body: String(request.body || ''),
       postmanBody: request.postmanBody && typeof request.postmanBody === 'object' ? cloneJson(request.postmanBody) || {} : {},
+      graphql: request.graphql && typeof request.graphql === 'object' ? cloneJson(request.graphql) || {} : {},
       postman: request.postman && typeof request.postman === 'object' ? cloneJson(request.postman) || {} : {},
       auth: request.auth && typeof request.auth === 'object' ? cloneJson(request.auth) || { type: 'none' } : { type: 'none' },
       scripts: request.scripts && typeof request.scripts === 'object' ? cloneJson(request.scripts) || { preRequest: '', tests: '' } : { preRequest: '', tests: '' },
@@ -123,7 +124,15 @@
       examples: Array.isArray(request.examples) ? cloneJson(request.examples) || [] : [],
       cookieJar: request.cookieJar && typeof request.cookieJar === 'object'
         ? cloneJson(request.cookieJar) || { enabled: false, storeResponses: true }
-        : { enabled: false, storeResponses: true }
+        : { enabled: false, storeResponses: true },
+      autoHeaders: normalizeRequestAutoHeaders(request.autoHeaders)
+    };
+  }
+
+  function normalizeRequestAutoHeaders(autoHeaders = {}) {
+    return {
+      sendPostMeterToken: autoHeaders?.sendPostMeterToken === true,
+      showGeneratedHeaders: autoHeaders?.showGeneratedHeaders === true
     };
   }
 
