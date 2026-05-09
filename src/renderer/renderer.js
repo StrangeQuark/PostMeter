@@ -10,7 +10,7 @@ const BODY_TYPES = [
   'BINARY'
 ];
 const EXAMPLE_BODY_TYPES = ['NONE', 'RAW_JSON', 'RAW_TEXT'];
-const BODY_MODES = ['NONE', 'FORM_DATA', 'URLENCODED', 'RAW', 'BINARY'];
+const BODY_MODES = ['NONE', 'FORM_DATA', 'URLENCODED', 'RAW', 'BINARY', 'GRAPHQL'];
 const RAW_BODY_FORMATS = ['text', 'javascript', 'json', 'html', 'xml'];
 const RAW_FORMAT_BODY_TYPES = {
   text: 'RAW_TEXT',
@@ -23,6 +23,9 @@ const BODY_TYPE_RAW_FORMATS = Object.fromEntries(Object.entries(RAW_FORMAT_BODY_
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 const THEME_OPTIONS = ['system', 'light', 'dark'];
 const EXECUTION_RESULT_PAGE_SIZE = 100;
+const POSTMETER_USER_AGENT = 'PostMeter/0.2.0';
+const BODY_METHOD_SET = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+const AUTO_HEADER_PLACEHOLDER = '<calculated when request is sent>';
 const {
   enabledQueryParams: enabledEditorQueryParams,
   queryParamsFromUrl: queryParamsFromEditorUrl,
@@ -442,6 +445,8 @@ function bindUi() {
     onSendRequest: sendActiveRequest,
     onAddParam: () => addPair('queryParams'),
     onAddHeader: () => addPair('headers'),
+    onPostMeterTokenHeaderChange: () => setActiveRequestAutoHeaderOption('sendPostMeterToken', $('sendPostMeterTokenInput')?.checked === true),
+    onShowGeneratedHeadersChange: () => setActiveRequestAutoHeaderOption('showGeneratedHeaders', $('showGeneratedHeadersInput')?.checked === true),
     onAddAssertion: () => addAssertion(),
     onAddAssertionTemplate: addAssertionTemplate,
     onAddExample: addExample,
@@ -479,6 +484,8 @@ function bindUi() {
     onImportPerformanceRequest: () => { void promptAndImportPerformanceRequest(); },
     onAddPerformanceParam: () => addPerformancePair('queryParams'),
     onAddPerformanceHeader: () => addPerformancePair('headers'),
+    onPerformancePostMeterTokenHeaderChange: () => setActivePerformanceRequestAutoHeaderOption('sendPostMeterToken', $('performanceSendPostMeterTokenInput')?.checked === true),
+    onPerformanceShowGeneratedHeadersChange: () => setActivePerformanceRequestAutoHeaderOption('showGeneratedHeaders', $('performanceShowGeneratedHeadersInput')?.checked === true),
     onAddPerformanceAssertion: () => addPerformanceAssertion(),
     onAddPerformanceAssertionTemplate: addPerformanceAssertionTemplate,
     onAddPerformanceExample: addPerformanceExample,
@@ -4075,6 +4082,7 @@ function renderPerformanceRequestEditor(test = activePerformanceTest()) {
     renderRequestBodyEditor('performance', null);
     setValue('performancePreRequestScriptInput', '');
     setValue('performanceTestScriptInput', '');
+    renderPerformanceRequestHeaderControls(null);
     setChecked('performanceRequestCookieJarEnabledInput', false);
     setChecked('performanceRequestCookieJarStoreInput', true);
     for (const id of [
@@ -4105,6 +4113,7 @@ function renderPerformanceRequestEditor(test = activePerformanceTest()) {
   request.scripts ||= { preRequest: '', tests: '' };
   request.cookieJar ||= { enabled: false, storeResponses: true };
   request.auth ||= { type: 'none' };
+  ensureRequestAutoHeaders(request);
 
   setValue('performanceMethodSelect', METHODS.includes(request.method) ? request.method : 'GET');
   updatePerformanceMethodSelectClass();
@@ -4116,7 +4125,7 @@ function renderPerformanceRequestEditor(test = activePerformanceTest()) {
   setChecked('performanceRequestCookieJarStoreInput', request.cookieJar.storeResponses !== false);
 
   renderPerformancePairs('performanceParamsTable', request.queryParams);
-  renderPerformancePairs('performanceHeadersTable', request.headers);
+  renderPerformanceHeaderPairs('performanceHeadersTable', request);
   renderPerformanceAssertions(request.assertions);
   renderPerformanceRequestVariablePairs(request.variables);
   renderPerformanceExamples(request.examples);
@@ -4159,6 +4168,25 @@ function renderPerformancePairs(containerId, pairs) {
       renderPerformanceRequestEditor();
     }
   });
+}
+
+function renderPerformanceHeaderPairs(containerId, request) {
+  renderEditorRequestPairs({
+    doc: document,
+    containerId,
+    pairs: request?.headers || [],
+    onDirty: () => {
+      collectPerformanceTestFromEditor();
+      markActivePerformanceDirty();
+      renderGeneratedHeaderRows(containerId, request);
+      renderPerformanceRequestHeaderControls(request);
+    },
+    onRemove: () => {
+      renderPerformanceRequestEditor();
+    }
+  });
+  renderGeneratedHeaderRows(containerId, request);
+  renderPerformanceRequestHeaderControls(request);
 }
 
 function renderPerformanceAssertions(assertions) {
@@ -7645,6 +7673,9 @@ function bodyElement(prefix, id) {
 
 function bodyModeForRequest(request) {
   const mode = String(request?.postmanBody?.mode || '').toLowerCase();
+  if (mode === 'graphql' || request?.protocol === 'graphql' || hasGraphqlBody(request)) {
+    return 'GRAPHQL';
+  }
   if (mode === 'formdata' || mode === 'form-data') {
     return 'FORM_DATA';
   }
@@ -7705,6 +7736,54 @@ function rawBodyTextForRequest(request) {
   return String(request?.body || '');
 }
 
+function hasGraphqlBody(request) {
+  if (!request) {
+    return false;
+  }
+  const graphql = request.postmanBody?.graphql || request.graphql;
+  return graphql && typeof graphql === 'object' && Object.keys(graphql).length > 0;
+}
+
+function graphqlBodyForRequestEditor(request) {
+  const source = request?.postmanBody?.graphql && typeof request.postmanBody.graphql === 'object' && Object.keys(request.postmanBody.graphql).length
+    ? request.postmanBody.graphql
+    : request?.graphql && typeof request.graphql === 'object' && Object.keys(request.graphql).length
+      ? request.graphql
+      : parseJsonObjectForBodyEditor(request?.body);
+  return {
+    operationName: source?.operationName == null ? '' : String(source.operationName),
+    query: source?.query == null ? '' : String(source.query),
+    variables: graphqlVariablesTextForBodyEditor(source?.variables)
+  };
+}
+
+function graphqlVariablesTextForBodyEditor(value) {
+  if (value == null || value === '') {
+    return '';
+  }
+  if (typeof value === 'string') {
+    return value;
+  }
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function parseJsonObjectForBodyEditor(value) {
+  const text = String(value == null ? '' : value).trim();
+  if (!text || !/^[{[]/.test(text)) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 function renderRequestBodyEditor(prefix, request) {
   const mode = request ? bodyModeForRequest(request) : 'NONE';
   const modeSelect = bodyElement(prefix, 'bodyTypeSelect');
@@ -7724,6 +7803,10 @@ function renderRequestBodyEditor(prefix, request) {
   const binary = binaryBodyForRequest(request);
   setValue(bodyControlId(prefix, 'binaryBodySourceInput'), binary.source);
   setValue(bodyControlId(prefix, 'binaryBodyContentTypeInput'), binary.contentType);
+  const graphql = graphqlBodyForRequestEditor(request);
+  setValue(bodyControlId(prefix, 'graphqlQueryInput'), graphql.query);
+  setValue(bodyControlId(prefix, 'graphqlVariablesInput'), graphql.variables);
+  setValue(bodyControlId(prefix, 'graphqlOperationNameInput'), graphql.operationName);
   updateBodyModePanels(prefix);
   updateBodyEditorLanguage(prefix);
 }
@@ -7735,7 +7818,8 @@ function updateBodyModePanels(prefix) {
     RAW: 'bodyRawPanel',
     FORM_DATA: 'bodyFormDataPanel',
     URLENCODED: 'bodyUrlencodedPanel',
-    BINARY: 'bodyBinaryPanel'
+    BINARY: 'bodyBinaryPanel',
+    GRAPHQL: 'bodyGraphqlPanel'
   };
   for (const [candidate, panelId] of Object.entries(panels)) {
     bodyElement(prefix, panelId)?.classList.toggle('active', mode === candidate);
@@ -7750,6 +7834,8 @@ function updateBodyEditorLanguage(prefix) {
   updateBodyModePanels(prefix);
   const format = bodyElement(prefix, 'bodyRawFormatSelect')?.value || 'text';
   CodeEditor.setLanguage?.(bodyElement(prefix, 'bodyInput'), rawBodyEditorLanguage(format));
+  CodeEditor.setLanguage?.(bodyElement(prefix, 'graphqlQueryInput'), 'text');
+  CodeEditor.setLanguage?.(bodyElement(prefix, 'graphqlVariablesInput'), 'json');
 }
 
 function formDataRowsForRequest(request) {
@@ -7985,6 +8071,23 @@ function collectBodyFromEditor(prefix, request = {}) {
       }
     };
   }
+  if (mode === 'GRAPHQL') {
+    const graphql = {
+      query: bodyElement(prefix, 'graphqlQueryInput')?.value || '',
+      variables: bodyElement(prefix, 'graphqlVariablesInput')?.value || '',
+      operationName: bodyElement(prefix, 'graphqlOperationNameInput')?.value.trim() || ''
+    };
+    return {
+      body: JSON.stringify(graphql),
+      bodyType: 'RAW_JSON',
+      graphql,
+      postmanBody: {
+        mode: 'graphql',
+        graphql
+      },
+      protocol: 'graphql'
+    };
+  }
   return {
     body: '',
     bodyType: 'NONE',
@@ -8028,6 +8131,17 @@ function syncRequestBodyFieldsFromEditor(prefix, request) {
   request.bodyType = BODY_TYPES.includes(body.bodyType) ? body.bodyType : 'NONE';
   request.body = body.body;
   request.postmanBody = body.postmanBody;
+  if (body.protocol === 'graphql') {
+    request.protocol = 'graphql';
+    request.graphql = cloneJson(body.graphql) || {
+      query: '',
+      variables: '',
+      operationName: ''
+    };
+  } else if (request.protocol === 'graphql') {
+    request.protocol = 'http';
+    delete request.graphql;
+  }
   syncPostmanFileReferences(request);
 }
 
@@ -8194,6 +8308,7 @@ function renderRequestEditor() {
     $('examplesList').textContent = '';
     $('requestVariablesTable').textContent = '';
     $('cookiesTable').textContent = '';
+    renderRequestHeaderControls(null);
     $('requestCookieJarEnabledInput').checked = false;
     $('requestCookieJarStoreInput').checked = true;
     $('addRequestVariableButton').disabled = true;
@@ -8219,10 +8334,11 @@ function renderRequestEditor() {
   $('preRequestScriptInput').value = request.scripts.preRequest || '';
   $('testScriptInput').value = request.scripts.tests || '';
   request.cookieJar ||= { enabled: false, storeResponses: true };
+  ensureRequestAutoHeaders(request);
   $('requestCookieJarEnabledInput').checked = request.cookieJar.enabled === true;
   $('requestCookieJarStoreInput').checked = request.cookieJar.storeResponses !== false;
   renderPairs('paramsTable', request.queryParams || [], 'queryParams');
-  renderPairs('headersTable', request.headers || [], 'headers');
+  renderHeaderPairs('headersTable', request);
   renderAssertions(request.assertions || []);
   renderRequestVariablePairs(request.variables || []);
   renderExamples(request.examples || []);
@@ -8287,6 +8403,221 @@ function renderPairs(containerId, pairs, fieldName) {
       renderRequestEditor();
     }
   });
+}
+
+function renderHeaderPairs(containerId, request) {
+  renderEditorRequestPairs({
+    doc: document,
+    containerId,
+    pairs: request?.headers || [],
+    onDirty: () => {
+      collectRequestFromEditor();
+      markActiveRequestDirty();
+      renderGeneratedHeaderRows(containerId, request);
+      renderRequestHeaderControls(request);
+    },
+    onRemove: () => {
+      renderRequestEditor();
+    }
+  });
+  renderGeneratedHeaderRows(containerId, request);
+  renderRequestHeaderControls(request);
+}
+
+function renderRequestHeaderControls(request) {
+  renderAutoHeaderControls({
+    request,
+    tokenInputId: 'sendPostMeterTokenInput',
+    showInputId: 'showGeneratedHeadersInput',
+    labelId: 'showGeneratedHeadersLabel'
+  });
+}
+
+function renderPerformanceRequestHeaderControls(request) {
+  renderAutoHeaderControls({
+    request,
+    tokenInputId: 'performanceSendPostMeterTokenInput',
+    showInputId: 'performanceShowGeneratedHeadersInput',
+    labelId: 'performanceShowGeneratedHeadersLabel'
+  });
+}
+
+function renderAutoHeaderControls({ request, tokenInputId, showInputId, labelId }) {
+  const autoHeaders = request ? ensureRequestAutoHeaders(request) : { sendPostMeterToken: false, showGeneratedHeaders: false };
+  const generatedCount = request ? generatedRequestHeaders(request).length : 0;
+  const tokenInput = $(tokenInputId);
+  if (tokenInput) {
+    tokenInput.checked = autoHeaders.sendPostMeterToken === true;
+    tokenInput.disabled = !request;
+  }
+  const showInput = $(showInputId);
+  if (showInput) {
+    showInput.checked = autoHeaders.showGeneratedHeaders === true;
+    showInput.disabled = !request || generatedCount === 0;
+  }
+  const label = $(labelId);
+  if (label) {
+    label.textContent = autoHeaders.showGeneratedHeaders
+      ? `Hide auto-generated headers (${generatedCount})`
+      : `Show auto-generated headers (${generatedCount})`;
+  }
+}
+
+function renderGeneratedHeaderRows(containerId, request) {
+  const container = $(containerId);
+  if (!container) {
+    return;
+  }
+  for (const row of container.querySelectorAll('[data-generated-header="true"]')) {
+    row.remove();
+  }
+  if (!request) {
+    return;
+  }
+  const autoHeaders = ensureRequestAutoHeaders(request);
+  if (!autoHeaders.showGeneratedHeaders) {
+    return;
+  }
+  for (const header of generatedRequestHeaders(request)) {
+    container.append(createGeneratedHeaderRow(header));
+  }
+}
+
+function createGeneratedHeaderRow(header) {
+  const row = document.createElement('div');
+  row.className = 'kv-row generated-header-row';
+  row.dataset.generatedHeader = 'true';
+  row.title = 'Auto-generated when the request is sent';
+
+  const enabled = document.createElement('input');
+  enabled.type = 'checkbox';
+  enabled.checked = true;
+  enabled.disabled = true;
+
+  const key = document.createElement('input');
+  key.value = header.key;
+  key.readOnly = true;
+  key.setAttribute('aria-label', `Auto-generated ${header.key} header`);
+
+  const value = document.createElement('input');
+  value.value = header.value;
+  value.readOnly = true;
+  value.setAttribute('aria-label', `Auto-generated ${header.key} header value`);
+
+  const badge = document.createElement('button');
+  badge.type = 'button';
+  badge.textContent = 'Auto';
+  badge.disabled = true;
+
+  row.append(enabled, key, value, badge);
+  return row;
+}
+
+function generatedRequestHeaders(request) {
+  const headers = [];
+  addGeneratedHeader(headers, request, 'Accept', '*/*');
+  addGeneratedHeader(headers, request, 'User-Agent', POSTMETER_USER_AGENT);
+  addGeneratedHeader(headers, request, 'Host', generatedHostHeaderValue(request));
+  addGeneratedHeader(headers, request, 'Accept-Encoding', 'gzip, deflate, br');
+  addGeneratedHeader(headers, request, 'Connection', 'keep-alive');
+  if (ensureRequestAutoHeaders(request).sendPostMeterToken) {
+    addGeneratedHeader(headers, request, 'PostMeter-Token', AUTO_HEADER_PLACEHOLDER);
+  }
+  if (requestSendsBody(request)) {
+    addGeneratedHeader(headers, request, 'Content-Type', defaultGeneratedContentType(request.bodyType));
+    addGeneratedHeader(headers, request, 'Content-Length', AUTO_HEADER_PLACEHOLDER);
+  }
+  for (const header of generatedAuthHeaders(request)) {
+    addGeneratedHeader(headers, request, header.key, header.value);
+  }
+  return headers;
+}
+
+function addGeneratedHeader(headers, request, key, value) {
+  if (!key || enabledHeaderValue(request, key) != null) {
+    return;
+  }
+  headers.push({ key, value });
+}
+
+function generatedAuthHeaders(request) {
+  const auth = request?.auth || {};
+  const type = auth.type || 'none';
+  if (['bearer', 'basic', 'oauth2', 'digest', 'hawk', 'aws', 'oauth1', 'ntlm', 'akamaiEdgeGrid', 'jwtBearer', 'asap'].includes(type)) {
+    return [{ key: 'Authorization', value: AUTO_HEADER_PLACEHOLDER }];
+  }
+  if (type === 'apiKey' && (auth.location || 'header') !== 'query' && String(auth.key || '').trim()) {
+    return [{ key: String(auth.key).trim(), value: AUTO_HEADER_PLACEHOLDER }];
+  }
+  if (type === 'cookie') {
+    return [{ key: 'Cookie', value: AUTO_HEADER_PLACEHOLDER }];
+  }
+  return [];
+}
+
+function enabledHeaderValue(request, key) {
+  const target = String(key || '').toLowerCase();
+  const pair = (request?.headers || []).find((header) => header?.enabled !== false && String(header.key || '').trim().toLowerCase() === target);
+  return pair ? String(pair.value ?? '') : null;
+}
+
+function generatedHostHeaderValue(request) {
+  const url = parsedRequestUrlForHeader(request?.url);
+  return url ? url.host : AUTO_HEADER_PLACEHOLDER;
+}
+
+function parsedRequestUrlForHeader(value) {
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return null;
+  }
+  const urlText = raw.startsWith('//')
+    ? `http:${raw}`
+    : /^[A-Za-z][A-Za-z\d+.-]*:/.test(raw)
+      ? raw
+      : `http://${raw}`;
+  try {
+    return new URL(urlText);
+  } catch {
+    return null;
+  }
+}
+
+function requestSendsBody(request) {
+  return BODY_METHOD_SET.has(String(request?.method || '').toUpperCase()) && String(request?.bodyType || 'NONE') !== 'NONE';
+}
+
+function defaultGeneratedContentType(bodyType) {
+  if (bodyType === 'RAW_JSON') {
+    return 'application/json';
+  }
+  if (bodyType === 'RAW_JAVASCRIPT') {
+    return 'application/javascript';
+  }
+  if (bodyType === 'RAW_HTML') {
+    return 'text/html; charset=utf-8';
+  }
+  if (bodyType === 'RAW_XML') {
+    return 'application/xml';
+  }
+  if (bodyType === 'URLENCODED') {
+    return 'application/x-www-form-urlencoded';
+  }
+  if (bodyType === 'BINARY') {
+    return 'application/octet-stream';
+  }
+  if (bodyType === 'FORM_DATA') {
+    return 'multipart/form-data; boundary=<calculated when request is sent>';
+  }
+  return 'text/plain; charset=utf-8';
+}
+
+function ensureRequestAutoHeaders(request) {
+  request.autoHeaders = {
+    sendPostMeterToken: request?.autoHeaders?.sendPostMeterToken === true,
+    showGeneratedHeaders: request?.autoHeaders?.showGeneratedHeaders === true
+  };
+  return request.autoHeaders;
 }
 
 function renderAssertions(assertions) {
@@ -10069,7 +10400,8 @@ function newRequestObject(name) {
     scripts: { preRequest: '', tests: '' },
     variables: [],
     examples: [],
-    cookieJar: { enabled: false, storeResponses: true }
+    cookieJar: { enabled: false, storeResponses: true },
+    autoHeaders: { sendPostMeterToken: false, showGeneratedHeaders: false }
   };
 }
 
@@ -10568,6 +10900,22 @@ function collectRequestFromEditor() {
     enabled: $('requestCookieJarEnabledInput').checked,
     storeResponses: $('requestCookieJarStoreInput').checked
   };
+  request.autoHeaders = {
+    sendPostMeterToken: $('sendPostMeterTokenInput')?.checked === true,
+    showGeneratedHeaders: $('showGeneratedHeadersInput')?.checked === true
+  };
+}
+
+function setActiveRequestAutoHeaderOption(option, value) {
+  const request = activeRequest();
+  if (!request) {
+    return;
+  }
+  collectRequestFromEditor();
+  const autoHeaders = ensureRequestAutoHeaders(request);
+  autoHeaders[option] = value === true;
+  markActiveRequestDirty();
+  renderRequestEditor();
 }
 
 function collectRequestNameFromTitle(options = {}) {
@@ -10670,6 +11018,10 @@ function collectPerformanceTestFromEditor() {
     enabled: $('performanceRequestCookieJarEnabledInput')?.checked === true,
     storeResponses: $('performanceRequestCookieJarStoreInput')?.checked !== false
   };
+  test.request.autoHeaders = {
+    sendPostMeterToken: $('performanceSendPostMeterTokenInput')?.checked === true,
+    showGeneratedHeaders: $('performanceShowGeneratedHeadersInput')?.checked === true
+  };
   test.request.queryParams = collectKeyValueRowsFromTable('performanceParamsTable', test.request.queryParams);
   test.request.headers = collectKeyValueRowsFromTable('performanceHeadersTable', test.request.headers);
   test.request.variables = collectKeyValueRowsFromTable('performanceRequestVariablesTable', test.request.variables);
@@ -10682,12 +11034,24 @@ function collectPerformanceTestFromEditor() {
   renderPerformanceTests();
 }
 
+function setActivePerformanceRequestAutoHeaderOption(option, value) {
+  const test = activePerformanceTest();
+  if (!test?.request) {
+    return;
+  }
+  collectPerformanceTestFromEditor();
+  const autoHeaders = ensureRequestAutoHeaders(test.request);
+  autoHeaders[option] = value === true;
+  markActivePerformanceDirty();
+  renderPerformanceRequestEditor(test);
+}
+
 function collectKeyValueRowsFromTable(containerId, fallback = []) {
   const container = $(containerId);
   if (!container) {
     return Array.isArray(fallback) ? fallback : [];
   }
-  const rows = Array.from(container.querySelectorAll('.kv-row'));
+  const rows = Array.from(container.querySelectorAll('.kv-row')).filter((row) => row.dataset.generatedHeader !== 'true');
   if (!rows.length) {
     return [];
   }

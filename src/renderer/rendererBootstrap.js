@@ -121,6 +121,8 @@
     bindClick(doc, 'sendButton', options.onSendRequest);
     bindClick(doc, 'addParamButton', options.onAddParam);
     bindClick(doc, 'addHeaderButton', options.onAddHeader);
+    bindChange(doc, 'sendPostMeterTokenInput', options.onPostMeterTokenHeaderChange);
+    bindChange(doc, 'showGeneratedHeadersInput', options.onShowGeneratedHeadersChange);
     bindClick(doc, 'addAssertionButton', options.onAddAssertion);
     bindClick(doc, 'addAssertionTemplateButton', options.onAddAssertionTemplate);
     bindClick(doc, 'addExampleButton', options.onAddExample);
@@ -161,6 +163,8 @@
     bindClick(doc, 'importPerformanceRequestButton', options.onImportPerformanceRequest);
     bindClick(doc, 'addPerformanceParamButton', options.onAddPerformanceParam);
     bindClick(doc, 'addPerformanceHeaderButton', options.onAddPerformanceHeader);
+    bindChange(doc, 'performanceSendPostMeterTokenInput', options.onPerformancePostMeterTokenHeaderChange);
+    bindChange(doc, 'performanceShowGeneratedHeadersInput', options.onPerformanceShowGeneratedHeadersChange);
     bindClick(doc, 'addPerformanceAssertionButton', options.onAddPerformanceAssertion);
     bindClick(doc, 'addPerformanceAssertionTemplateButton', options.onAddPerformanceAssertionTemplate);
     bindClick(doc, 'addPerformanceExampleButton', options.onAddPerformanceExample);
@@ -194,6 +198,9 @@
     bindChange(doc, 'performanceBodyTypeSelect', options.onPerformanceBodyTypeChange || options.onPerformanceRequestChange);
     bindChange(doc, 'performanceBodyRawFormatSelect', options.onPerformanceBodyTypeChange || options.onPerformanceRequestChange);
     bindInput(doc, 'performanceBodyInput', options.onPerformanceRequestChange);
+    bindInput(doc, 'performanceGraphqlQueryInput', options.onPerformanceRequestChange);
+    bindInput(doc, 'performanceGraphqlVariablesInput', options.onPerformanceRequestChange);
+    bindInput(doc, 'performanceGraphqlOperationNameInput', options.onPerformanceRequestChange);
     bindClick(doc, 'addPerformanceFormDataBodyRowButton', options.onAddPerformanceFormDataBodyRow || options.onPerformanceRequestChange);
     bindClick(doc, 'addPerformanceUrlencodedBodyRowButton', options.onAddPerformanceUrlencodedBodyRow || options.onPerformanceRequestChange);
     bindInput(doc, 'performanceBinaryBodySourceInput', options.onPerformanceRequestChange);
@@ -208,6 +215,9 @@
     bindChange(doc, 'bodyTypeSelect', options.onBodyTypeChange);
     bindChange(doc, 'bodyRawFormatSelect', options.onBodyTypeChange);
     bindInput(doc, 'bodyInput', options.onBodyInput);
+    bindInput(doc, 'graphqlQueryInput', options.onBodyInput);
+    bindInput(doc, 'graphqlVariablesInput', options.onBodyInput);
+    bindInput(doc, 'graphqlOperationNameInput', options.onBodyInput);
     bindClick(doc, 'addFormDataBodyRowButton', options.onAddFormDataBodyRow || options.onBodyInput);
     bindClick(doc, 'addUrlencodedBodyRowButton', options.onAddUrlencodedBodyRow || options.onBodyInput);
     bindInput(doc, 'binaryBodySourceInput', options.onBodyInput);

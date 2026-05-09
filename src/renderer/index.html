@@ -170,6 +170,14 @@
         <div id="headersTab" class="tab-panel" role="tabpanel" aria-labelledby="requestHeadersTabButton">
           <div class="table-actions">
             <button id="addHeaderButton">Add Header</button>
+            <label class="inline-toggle headers-auto-toggle">
+              <input id="sendPostMeterTokenInput" type="checkbox">
+              <span>PostMeter token</span>
+            </label>
+            <label class="inline-toggle headers-auto-toggle">
+              <input id="showGeneratedHeadersInput" type="checkbox">
+              <span id="showGeneratedHeadersLabel">Show auto-generated headers</span>
+            </label>
           </div>
           <div id="headersTable" class="kv-table"></div>
         </div>
@@ -348,6 +356,7 @@
                 <option value="URLENCODED">x-www-form-urlencoded</option>
                 <option value="RAW">Raw</option>
                 <option value="BINARY">Binary</option>
+                <option value="GRAPHQL">GraphQL</option>
               </select>
             </label>
             <label id="bodyRawFormatField" class="field compact">
@@ -386,6 +395,22 @@
               <label class="field">
                 <span>Content Type</span>
                 <input id="binaryBodyContentTypeInput" autocomplete="off" placeholder="application/octet-stream">
+              </label>
+            </div>
+          </div>
+          <div id="bodyGraphqlPanel" class="body-mode-panel">
+            <div class="graphql-body-grid">
+              <label class="field graphql-query-field">
+                <span>Query</span>
+                <textarea id="graphqlQueryInput" spellcheck="false" placeholder="query GetUser { user { id name } }" aria-label="GraphQL query" data-code-editor data-code-language="text"></textarea>
+              </label>
+              <label class="field graphql-variables-field">
+                <span>Variables</span>
+                <textarea id="graphqlVariablesInput" spellcheck="false" placeholder="{&#10;  &quot;id&quot;: &quot;{{userId}}&quot;&#10;}" aria-label="GraphQL variables" data-code-editor data-code-language="json"></textarea>
+              </label>
+              <label class="field graphql-operation-field">
+                <span>Operation Name</span>
+                <input id="graphqlOperationNameInput" autocomplete="off" placeholder="GetUser">
               </label>
             </div>
           </div>
@@ -747,6 +772,14 @@
             <div id="performanceHeadersTab" class="tab-panel" role="tabpanel" aria-labelledby="performanceRequestHeadersTabButton">
               <div class="table-actions">
                 <button id="addPerformanceHeaderButton" type="button">Add Header</button>
+                <label class="inline-toggle headers-auto-toggle">
+                  <input id="performanceSendPostMeterTokenInput" type="checkbox">
+                  <span>PostMeter token</span>
+                </label>
+                <label class="inline-toggle headers-auto-toggle">
+                  <input id="performanceShowGeneratedHeadersInput" type="checkbox">
+                  <span id="performanceShowGeneratedHeadersLabel">Show auto-generated headers</span>
+                </label>
               </div>
               <div id="performanceHeadersTable" class="kv-table"></div>
             </div>
@@ -938,6 +971,7 @@
                     <option value="URLENCODED">x-www-form-urlencoded</option>
                     <option value="RAW">Raw</option>
                     <option value="BINARY">Binary</option>
+                    <option value="GRAPHQL">GraphQL</option>
                   </select>
                 </label>
                 <label id="performanceBodyRawFormatField" class="field compact">
@@ -976,6 +1010,22 @@
                   <label class="field">
                     <span>Content Type</span>
                     <input id="performanceBinaryBodyContentTypeInput" autocomplete="off" placeholder="application/octet-stream">
+                  </label>
+                </div>
+              </div>
+              <div id="performanceBodyGraphqlPanel" class="body-mode-panel">
+                <div class="graphql-body-grid">
+                  <label class="field graphql-query-field">
+                    <span>Query</span>
+                    <textarea id="performanceGraphqlQueryInput" spellcheck="false" placeholder="query GetUser { user { id name } }" aria-label="Performance GraphQL query" data-code-editor data-code-language="text"></textarea>
+                  </label>
+                  <label class="field graphql-variables-field">
+                    <span>Variables</span>
+                    <textarea id="performanceGraphqlVariablesInput" spellcheck="false" placeholder="{&#10;  &quot;id&quot;: &quot;{{userId}}&quot;&#10;}" aria-label="Performance GraphQL variables" data-code-editor data-code-language="json"></textarea>
+                  </label>
+                  <label class="field graphql-operation-field">
+                    <span>Operation Name</span>
+                    <input id="performanceGraphqlOperationNameInput" autocomplete="off" placeholder="GetUser">
                   </label>
                 </div>
               </div>

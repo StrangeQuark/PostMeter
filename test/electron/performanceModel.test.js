@@ -237,6 +237,45 @@ test('Performance manual request entry creates a saved test without collection s
   assert.doesNotThrow(() => assertPerformanceTestPayload(performanceTest));
 });
 
+test('Performance request copies preserve GraphQL body metadata for native round-tripping', () => {
+  const performanceTest = defaultPerformanceTest({
+    type: 'latency',
+    request: {
+      name: 'GraphQL Performance Request',
+      protocol: 'graphql',
+      method: 'POST',
+      url: 'https://api.example.test/graphql',
+      bodyType: 'RAW_JSON',
+      body: JSON.stringify({
+        query: 'query GetUser($id: ID!) { user(id: $id) { id } }',
+        variables: '{"id":"{{userId}}"}',
+        operationName: 'GetUser'
+      }),
+      graphql: {
+        query: 'query GetUser($id: ID!) { user(id: $id) { id } }',
+        variables: '{"id":"{{userId}}"}',
+        operationName: 'GetUser'
+      },
+      postmanBody: {
+        mode: 'graphql',
+        graphql: {
+          query: 'query GetUser($id: ID!) { user(id: $id) { id } }',
+          variables: '{"id":"{{userId}}"}',
+          operationName: 'GetUser'
+        }
+      }
+    }
+  });
+  const exported = exportPerformanceTestDocument(performanceTest);
+  const imported = importPerformanceTestFromText(JSON.stringify(exported));
+
+  assert.equal(imported.request.protocol, 'graphql');
+  assert.equal(imported.request.bodyType, 'RAW_JSON');
+  assert.equal(imported.request.postmanBody.mode, 'graphql');
+  assert.equal(imported.request.graphql.operationName, 'GetUser');
+  assert.equal(imported.request.graphql.variables, '{"id":"{{userId}}"}');
+});
+
 test('Performance import/export round-trips valid tests and rejects malformed or unsafe payloads', () => {
   const performanceTest = defaultPerformanceTest({
     type: 'throughput',

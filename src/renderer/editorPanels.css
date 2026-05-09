@@ -102,6 +102,10 @@
   margin-bottom: 8px;
 }
 
+.headers-auto-toggle {
+  min-height: 30px;
+}
+
 .kv-table {
   display: grid;
   gap: 6px;
@@ -146,6 +150,18 @@
 .kv-row button {
   min-height: 30px;
   padding: 4px 8px;
+}
+
+.generated-header-row {
+  opacity: 0.78;
+}
+
+.generated-header-row input {
+  color: var(--muted);
+}
+
+.generated-header-row input[readonly] {
+  cursor: default;
 }
 
 .assertion-row button {
@@ -246,6 +262,21 @@
   display: grid;
   grid-template-columns: minmax(180px, 1fr) minmax(160px, 260px);
   gap: 10px;
+}
+
+.graphql-body-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(220px, 0.7fr);
+  gap: 10px;
+}
+
+.graphql-body-grid .graphql-operation-field {
+  grid-column: 1 / -1;
+  max-width: 360px;
+}
+
+.graphql-body-grid textarea {
+  min-height: 180px;
 }
 
 .code-editor {

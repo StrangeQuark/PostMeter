@@ -7,6 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const { promisify } = require('node:util');
+const zlib = require('node:zlib');
 const { buildUrl, loadClientCertificateOptions, sendRequest, validateRequest } = require('../../src/core/httpClient');
 
 const execFileAsync = promisify(execFile);
@@ -134,6 +135,106 @@ test('sends requests with environment-resolved URL, query params, headers, and b
     assert.match(result.finalUrl, /\/echo\?q=alpha$/);
     assert.ok(result.durationMillis >= 0);
     assert.ok(result.responseBytes > 0);
+  } finally {
+    await server.close();
+  }
+});
+
+test('adds generated request headers at send time without requiring saved header rows', async () => {
+  const server = await createServer(async (request, response) => {
+    const chunks = [];
+    for await (const chunk of request) {
+      chunks.push(chunk);
+    }
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({
+      accept: request.headers.accept || '',
+      userAgent: request.headers['user-agent'] || '',
+      acceptEncoding: request.headers['accept-encoding'] || '',
+      contentLength: request.headers['content-length'] || '',
+      postMeterToken: request.headers['postmeter-token'] || '',
+      body: Buffer.concat(chunks).toString('utf8')
+    }));
+  });
+
+  try {
+    const result = await sendRequest({
+      method: 'POST',
+      url: `${server.baseUrl}/generated`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'RAW_TEXT',
+      body: 'hello',
+      autoHeaders: { sendPostMeterToken: true }
+    }, null);
+
+    const body = JSON.parse(result.body);
+    assert.equal(body.accept, '*/*');
+    assert.equal(body.userAgent, 'PostMeter/0.2.0');
+    assert.equal(body.acceptEncoding, 'gzip, deflate, br');
+    assert.equal(body.contentLength, '5');
+    assert.match(body.postMeterToken, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+    assert.equal(body.body, 'hello');
+  } finally {
+    await server.close();
+  }
+});
+
+test('does not send PostMeter token by default and preserves explicit generated header overrides', async () => {
+  const server = await createServer(async (request, response) => {
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({
+      accept: request.headers.accept || '',
+      userAgent: request.headers['user-agent'] || '',
+      acceptEncoding: request.headers['accept-encoding'] || '',
+      postMeterToken: request.headers['postmeter-token'] || ''
+    }));
+  });
+
+  try {
+    const result = await sendRequest({
+      method: 'GET',
+      url: `${server.baseUrl}/explicit`,
+      queryParams: [],
+      headers: [
+        { enabled: true, key: 'Accept', value: 'application/json' },
+        { enabled: true, key: 'User-Agent', value: 'CustomAgent/1.0' },
+        { enabled: true, key: 'Accept-Encoding', value: 'identity' }
+      ],
+      bodyType: 'NONE',
+      body: ''
+    }, null);
+
+    const body = JSON.parse(result.body);
+    assert.equal(body.accept, 'application/json');
+    assert.equal(body.userAgent, 'CustomAgent/1.0');
+    assert.equal(body.acceptEncoding, 'identity');
+    assert.equal(body.postMeterToken, '');
+  } finally {
+    await server.close();
+  }
+});
+
+test('decompresses generated Accept-Encoding responses when using the Node transport', async () => {
+  const server = await createServer(async (request, response) => {
+    assert.equal(request.headers['accept-encoding'], 'gzip, deflate, br');
+    response.setHeader('Content-Type', 'application/json');
+    response.setHeader('Content-Encoding', 'gzip');
+    response.end(zlib.gzipSync(JSON.stringify({ compressed: true })));
+  });
+
+  try {
+    const result = await sendRequest({
+      method: 'GET',
+      url: `${server.baseUrl}/compressed`,
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      body: ''
+    }, null, { forceNode: true });
+
+    assert.equal(result.statusCode, 200);
+    assert.deepEqual(JSON.parse(result.body), { compressed: true });
   } finally {
     await server.close();
   }
@@ -442,6 +543,64 @@ test('materializes Postman-style urlencoded and text-only form-data bodies with 
     assert.equal(observed[0].body, 'token=alpha+beta');
     assert.match(observed[1].contentType, /^multipart\/form-data; boundary=/);
     assert.match(observed[1].body, /name="message"\r\n\r\nhello form/);
+  } finally {
+    await server.close();
+  }
+});
+
+test('materializes Postman-style GraphQL bodies with environment variable substitution', async () => {
+  let observed = null;
+  const server = await createServer(async (request, response) => {
+    const chunks = [];
+    for await (const chunk of request) {
+      chunks.push(chunk);
+    }
+    observed = {
+      body: Buffer.concat(chunks).toString('utf8'),
+      contentType: request.headers['content-type'] || '',
+      method: request.method,
+      url: request.url
+    };
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({ data: { user: { id: 'user-42' } } }));
+  });
+
+  try {
+    const result = await sendRequest({
+      method: 'POST',
+      url: `${server.baseUrl}/graphql`,
+      queryParams: [],
+      headers: [],
+      postmanBody: {
+        mode: 'graphql',
+        graphql: {
+          query: 'query {{operationName}}($id: ID!) { user(id: $id) { id } }',
+          variables: '{"id":"{{userId}}","nested":{"token":"{{token}}"},"empty":""}',
+          operationName: '{{operationName}}'
+        }
+      },
+      protocol: 'graphql'
+    }, {
+      variables: [
+        { enabled: true, key: 'operationName', value: 'GetUser' },
+        { enabled: true, key: 'userId', value: 'user-42' },
+        { enabled: true, key: 'token', value: 'secret-token' }
+      ]
+    });
+
+    assert.equal(result.statusCode, 200);
+    assert.equal(observed.method, 'POST');
+    assert.equal(observed.url, '/graphql');
+    assert.equal(observed.contentType, 'application/json');
+    assert.deepEqual(JSON.parse(observed.body), {
+      query: 'query GetUser($id: ID!) { user(id: $id) { id } }',
+      variables: {
+        id: 'user-42',
+        nested: { token: 'secret-token' },
+        empty: ''
+      },
+      operationName: 'GetUser'
+    });
   } finally {
     await server.close();
   }

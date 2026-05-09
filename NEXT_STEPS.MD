@@ -54,15 +54,14 @@ PostMeter must remain a standalone local desktop application. Do not add PostMet
   - Users can create Performance tests from `New` or the empty Performance pane, import/export native Performance test files, import deep-copied collection requests, manually enter request details, choose an environment, configure safety limits, run/cancel tests, and review bounded result summaries.
   - The seven V1 local types are `Latency`, `RPS / throughput`, `Concurrency`, `Stress`, `Spike`, `Soak`, and `Ramp`.
   - Tests cover model normalization, import/export validation, request-copy isolation, environment copy-vs-mutate behavior, safety-cap rejection, cancellation, IPC progress/mutation behavior, renderer wiring, sidebar ordering, and tab-limit behavior.
+- Implemented GraphQL body editing and execution.
+  - Request, runner-owned request, and Performance request editors now expose a GraphQL body mode with query, variables, and operation-name fields.
+  - GraphQL bodies persist/export as Postman-compatible `postmanBody.mode = "graphql"` metadata, execute as `application/json`, and support environment substitution in query, variables, and operation name.
+  - Focused HTTP, import/export, Performance, bootstrap, and UI smoke coverage now exercises GraphQL editing, execution materialization, and round-tripping.
 
 ## Highest Priority Steps
 
-1. Implement GraphQL request body editing and execution UI.
-   - Add a Postman-style GraphQL body editor with query, variables, and operation-name fields.
-   - Wire GraphQL request-body execution, import/export round-tripping, environment-variable highlighting/substitution, runner execution, and Performance request copies through the same editor model.
-   - Add focused unit and UI coverage for GraphQL body editing, save/restore, import/export, and execution behavior.
-
-2. Prepare public beta/release candidate documentation.
+1. Prepare public beta/release candidate documentation.
    - Add or update `docs/SECURITY.md`, privacy notes, threat model summary, install/uninstall docs, unsigned artifact warnings, known limitations, compatibility matrix links, OAuth certification docs, diagnostics docs, and support channels.
    - Create a release checklist with separate beta, release-candidate, and stable sections. Each section must name required commands, native GitHub Actions runner jobs, artifact validations, OAuth certification status, signing/notarization status, docs checks, and known waivers.
    - Add a Mac manual QA checklist for the later maintainer-owned Mac pass. Until then, `macos-latest` GitHub Actions validation is the required pre-production evidence, not a substitute for final manual production signoff.
