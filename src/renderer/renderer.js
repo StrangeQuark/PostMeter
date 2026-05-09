@@ -3992,8 +3992,10 @@ function environmentNode(environment) {
   attachTreeContextMenu(button, [
     ['Rename', () => renameEnvironment(environment)],
     ['Duplicate', () => duplicateEnvironment(environment)],
-    ['Export PostMeter', () => { void exportEnvironment(environment, 'postmeter'); }],
-    ['Export Postman', () => { void exportEnvironment(environment, 'postman'); }],
+    ['Export', [
+      ['PostMeter', () => { void exportEnvironment(environment, 'postmeter'); }],
+      ['Postman', () => { void exportEnvironment(environment, 'postman'); }]
+    ]],
     ['Delete', () => deleteEnvironment(environment), 'danger']
   ]);
   return wrapper;
@@ -4038,7 +4040,7 @@ function runnerNode(runner) {
   attachTreeContextMenu(button, [
     ['Rename', () => renameRunner(runner)],
     ['Duplicate', () => duplicateRunner(runner)],
-    ['Export PostMeter', () => { void exportRunnerDefinition(runner); }],
+    ['Export', () => { void exportRunnerDefinition(runner); }],
     ['Delete', () => { void deleteRunner(runner); }, 'danger']
   ]);
   return wrapper;
@@ -4084,7 +4086,7 @@ function performanceTestNode(test) {
   attachTreeContextMenu(button, [
     ['Rename', () => renamePerformanceTest(test)],
     ['Duplicate', () => duplicatePerformanceTest(test)],
-    ['Export PostMeter', () => { void exportActivePerformanceTest(test); }],
+    ['Export', () => { void exportActivePerformanceTest(test); }],
     ['Delete', () => { void deletePerformanceTest(test); }, 'danger']
   ]);
   return wrapper;
@@ -4108,7 +4110,7 @@ function workspaceNode(workspaceItem) {
     ['View Details', () => { selectWorkspaceItem(workspaceItem.id); }],
     ['Rename', () => { renameWorkspace(workspaceItem.id); }],
     ['Duplicate', () => { void duplicateWorkspace(workspaceItem.id); }],
-    ['Export PostMeter', () => { void exportWorkspace(workspaceItem.id); }]
+    ['Export', () => { void exportWorkspace(workspaceItem.id); }]
   ];
   if (workspaceItem.current !== true) {
     menuItems.splice(1, 0, ['Switch to This Workspace', () => { void switchWorkspace(workspaceItem.id, { focus: 'workspace' }); }]);
@@ -6754,11 +6756,13 @@ function collectionNode(collection) {
     ['Add Folder', () => newFolder(collection.id, null)],
     ['Rename', () => renameCollection(collection)],
     ['Duplicate', () => { void duplicateCollection(collection); }],
-    ['Export PostMeter', () => exportCollection(collection, 'postmeter')],
-    ['Export Postman', () => exportCollection(collection, 'postman')],
-    ['Export OpenAPI', () => exportCollection(collection, 'openapi')],
-    ['Export curl', () => exportCollection(collection, 'curl')],
-    ['Export HAR', () => exportCollection(collection, 'har')],
+    ['Export', [
+      ['PostMeter', () => exportCollection(collection, 'postmeter')],
+      ['Postman', () => exportCollection(collection, 'postman')],
+      ['OpenAPI', () => exportCollection(collection, 'openapi')],
+      ['curl', () => exportCollection(collection, 'curl')],
+      ['HAR', () => exportCollection(collection, 'har')]
+    ]],
     ['Delete', () => deleteCollection(collection), 'danger']
   ]);
   appendSidebarTreeRows(wrapper, sidebarTreeChildRows(collection, collection, null), { className: 'tree-folder' });

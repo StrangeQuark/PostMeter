@@ -331,8 +331,48 @@
   background: var(--surface-muted);
 }
 
+.context-menu button:focus-visible {
+  background: var(--surface-muted);
+}
+
 .context-menu button.danger {
   color: var(--danger);
+}
+
+.context-submenu-row {
+  position: relative;
+}
+
+.context-submenu {
+  position: absolute;
+  top: -6px;
+  left: calc(100% + 6px);
+  z-index: 1001;
+  display: none;
+  min-width: 170px;
+  padding: 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.context-submenu::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -8px;
+  width: 8px;
+}
+
+.context-submenu-row:hover .context-submenu,
+.context-submenu-row:focus-within .context-submenu {
+  display: grid;
+}
+
+.context-menu:has(.context-submenu-row:hover) .context-submenu-row:not(:hover) .context-submenu {
+  display: none;
 }
 
 .file-source-menu {
