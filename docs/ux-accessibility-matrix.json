@@ -139,7 +139,7 @@
     {
       "id": "workflow.diagnostics-export",
       "area": "Diagnostics export",
-      "target": "Workspace diagnostics controls and Help menu export produce a user-selected local diagnostic bundle with visible review-before-sharing messaging and off-by-default request/response logging categories.",
+      "target": "Workspace-local diagnostics controls and Help menu export produce a user-selected local diagnostic bundle with visible review-before-sharing messaging and off-by-default request/response logging categories.",
       "status": "implemented",
       "evidenceRefs": [
         "src/renderer/index.html",
@@ -308,15 +308,17 @@
     {
       "id": "workflow.settings-theme",
       "area": "Settings/theme",
-      "target": "Workspace-scoped sandbox capability toggles, update settings, and system/light/dark theme preference save and reload without leaking into request payloads.",
+      "target": "App-wide theme/update/tab/modal preferences and workspace-local sandbox/diagnostics settings save and reload from settings.json without leaking into request payloads or portable workspace exports.",
       "status": "implemented",
       "evidenceRefs": [
+        "src/core/appSettingsStore.js",
         "src/renderer/index.html",
         "src/renderer/theme.css",
         "src/renderer/renderer.js",
         "src/renderer/uiWorkflowSmoke.js"
       ],
       "tests": [
+        "test/electron/appSettingsStore.test.js",
         "npm run test:ui",
         "npm run test:ui:regression"
       ],

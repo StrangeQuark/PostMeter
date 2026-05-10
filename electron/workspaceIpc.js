@@ -56,8 +56,10 @@ function registerWorkspaceIpc(options = {}) {
     fileOperationResult,
     getMainWindow = () => undefined,
     getWorkspace,
+    getWorkspaceId = () => '',
     getWorkspaceStore,
     hasPendingWorkspaceOperations = () => false,
+    hydrateWorkspace = (workspace) => workspace,
     ipcMain,
     mutateWorkspace = async (mutator) => {
       const nextWorkspace = await mutator(getWorkspace());
@@ -71,18 +73,31 @@ function registerWorkspaceIpc(options = {}) {
     queueWorkspaceOperation = async (operation) => operation(),
     recordDiagnosticEvent = async () => {},
     refreshApplicationMenu,
+    renameLocalSettings = async () => {},
     renameVaultStore = async () => {},
+    deleteLocalSettings = async () => {},
+    saveLocalSettings = async (settings) => settings,
     saveWorkspace,
     saveWorkspaceSync,
     setWorkspace,
     deleteVaultStore = async () => {}
   } = options;
 
+  function hydrateLoadResult(result) {
+    if (!result?.workspace) {
+      return result;
+    }
+    return {
+      ...result,
+      workspace: hydrateWorkspace(result.workspace, result.activeWorkspaceId || getWorkspaceId())
+    };
+  }
+
   ipcMain.handle('workspace:load', async () => {
     let workspace = getWorkspace();
     if (!workspace) {
       const loaded = await getWorkspaceStore().load();
-      workspace = loaded.workspace;
+      workspace = hydrateWorkspace(loaded.workspace, loaded.activeWorkspaceId || getWorkspaceId());
       setWorkspace(workspace);
     }
     const result = await getWorkspaceStore().describeCurrent(workspace);
@@ -130,7 +145,17 @@ function registerWorkspaceIpc(options = {}) {
 
   ipcMain.handle('workspace:saveSettings', async (_event, settings) => {
     assertWorkspaceSettingsSavePayload(settings);
-    const workspace = await mutateWorkspace(async (currentWorkspace) => applyWorkspaceSettingsSaveToWorkspace(currentWorkspace, settings));
+    const workspace = await queueWorkspaceOperation(async () => {
+      const currentWorkspace = getWorkspace();
+      const workspaceWithSettings = applyWorkspaceSettingsSaveToWorkspace(currentWorkspace, settings);
+      const nextSettings = await saveLocalSettings(workspaceWithSettings.settings, getWorkspaceId());
+      const nextWorkspace = {
+        ...currentWorkspace,
+        settings: nextSettings
+      };
+      setWorkspace(nextWorkspace);
+      return nextWorkspace;
+    });
     refreshApplicationMenu();
     const result = { settings: workspace.settings || {} };
     assertWorkspaceSettingsSaveResultPayload(result);
@@ -177,10 +202,23 @@ function registerWorkspaceIpc(options = {}) {
     }
     const result = await queueWorkspaceOperation(async () => {
       let renamed = null;
+      let localSettingsRenamed = false;
       try {
         renamed = await workspaceStore.renameWorkspace(workspaceId, trimmedName);
+        if (renamed?.renamedWorkspaceId && renamed.renamedWorkspaceId !== workspaceId) {
+          await renameLocalSettings(workspaceId, renamed.renamedWorkspaceId);
+          localSettingsRenamed = true;
+        }
         await renameVaultStore(workspaceId, renamed.renamedWorkspaceId || '');
+        renamed = hydrateLoadResult(renamed);
       } catch (error) {
+        if (localSettingsRenamed && renamed?.renamedWorkspaceId && renamed.renamedWorkspaceId !== workspaceId) {
+          try {
+            await renameLocalSettings(renamed.renamedWorkspaceId, workspaceId);
+          } catch (rollbackError) {
+            attachRollbackFailure(error, rollbackError);
+          }
+        }
         if (renamed?.renamedWorkspaceId && renamed.renamedWorkspaceId !== workspaceId) {
           try {
             await rollbackWorkspaceRename(workspaceStore, renamed.renamedWorkspaceId, workspaceId);
@@ -203,7 +241,7 @@ function registerWorkspaceIpc(options = {}) {
       throw new Error('workspaceId must be a non-empty string.');
     }
     const result = await queueWorkspaceOperation(async () => {
-      const switched = await getWorkspaceStore().switchWorkspace(workspaceId);
+      const switched = hydrateLoadResult(await getWorkspaceStore().switchWorkspace(workspaceId));
       setWorkspace(switched.workspace);
       return switched;
     });
@@ -224,8 +262,17 @@ function registerWorkspaceIpc(options = {}) {
         : null;
       let deleted = null;
       try {
-        deleted = await workspaceStore.deleteWorkspace(workspaceId);
+        deleted = hydrateLoadResult(await workspaceStore.deleteWorkspace(workspaceId));
         await deleteVaultStore(deleted.deletedWorkspaceId || workspaceId);
+        await deleteLocalSettings(deleted.deletedWorkspaceId || workspaceId).catch(async (error) => {
+          await recordDiagnosticEvent({
+            type: 'workspace.local-settings-delete.failed',
+            level: 'warn',
+            outcome: 'failed',
+            failureCode: 'local_settings_delete_failed',
+            fields: { error: error?.message || String(error) }
+          });
+        });
       } catch (error) {
         if (deletedWorkspaceSnapshot && deleted?.deletedWorkspaceId && typeof workspaceStore.restoreWorkspaceFile === 'function') {
           try {

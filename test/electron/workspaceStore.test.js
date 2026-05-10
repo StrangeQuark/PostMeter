@@ -61,8 +61,10 @@ test('creates a default current-schema workspace when no file exists', async () 
   assert.deepEqual(workspace.environments, []);
   assert.deepEqual(workspace.cookies, []);
   assert.deepEqual(workspace.runners, []);
-  assert.equal(JSON.parse(await fs.readFile(workspacePath, 'utf8')).schemaVersion, CURRENT_SCHEMA_VERSION);
-  assert.equal(Object.hasOwn(JSON.parse(await fs.readFile(workspacePath, 'utf8')), 'name'), false);
+  const persisted = JSON.parse(await fs.readFile(workspacePath, 'utf8'));
+  assert.equal(persisted.schemaVersion, CURRENT_SCHEMA_VERSION);
+  assert.equal(Object.hasOwn(persisted, 'name'), false);
+  assert.equal(Object.hasOwn(persisted, 'settings'), false);
 });
 
 test('default workspace creation does not overwrite a file that appears before publish', async () => {
@@ -149,6 +151,8 @@ test('migrates every historical schema while preserving imported durability meta
     assert.equal(workspace.schemaVersion, CURRENT_SCHEMA_VERSION, `schema ${schemaVersion} should migrate`);
     assert.equal(backups.length, 1, `schema ${schemaVersion} should create one pre-migration backup`);
     assertLegacyMetadataPreserved(workspace, schemaVersion);
+    assertLegacyLocalSettingsPreserved(workspace);
+    assert.equal(Object.hasOwn(JSON.parse(await fs.readFile(workspacePath, 'utf8')), 'settings'), false);
   }
 });
 
@@ -532,7 +536,7 @@ test('preserves an intentionally empty collection list on save and reload', asyn
   const workspacePath = path.join(temp, 'workspace.json');
   const store = new WorkspaceStore(workspacePath);
 
-  await store.save({
+  const saved = await store.save({
     schemaVersion: 11,
     settings: { appearance: { theme: 'dark' }, updates: { includePrereleases: true }, loadTestPolicy: { concurrency: 42 } },
     collections: [],
@@ -541,10 +545,15 @@ test('preserves an intentionally empty collection list on save and reload', asyn
     history: []
   });
 
+  assert.equal(saved.settings.updates.includePrereleases, true);
+  assert.equal(saved.settings.appearance.theme, 'dark');
+  assert.equal(saved.settings.loadTestPolicy, undefined);
+  assert.equal(Object.hasOwn(JSON.parse(await fs.readFile(workspacePath, 'utf8')), 'settings'), false);
+
   const { workspace } = await store.load();
   assert.equal(workspace.schemaVersion, CURRENT_SCHEMA_VERSION);
-  assert.equal(workspace.settings.updates.includePrereleases, true);
-  assert.equal(workspace.settings.appearance.theme, 'dark');
+  assert.equal(workspace.settings.updates.includePrereleases, false);
+  assert.equal(workspace.settings.appearance.theme, 'system');
   assert.equal(workspace.settings.loadTestPolicy, undefined);
   assert.deepEqual(workspace.collections, []);
   assert.deepEqual(workspace.cookies, []);
@@ -714,6 +723,9 @@ function assertLegacyMetadataPreserved(workspace, schemaVersion) {
   assert.equal(request.examples[0].postman.ids.original, 'postman-request-1-example');
   assert.equal(workspace.globals[0].key, 'globalToken');
   assert.equal(workspace.cookies[0].httpOnly, true);
+}
+
+function assertLegacyLocalSettingsPreserved(workspace) {
   assert.equal(workspace.settings.appearance.theme, 'dark');
   assert.equal(workspace.settings.updates.includePrereleases, true);
   assert.equal(workspace.settings.sandbox.fileBindings[0].source, 'fixtures/upload.bin');
@@ -835,11 +847,18 @@ test('round-trips native PostMeter workspaces and collection exports with metada
   const collectionExportPath = path.join(temp, 'collection-export.json');
   const store = new WorkspaceStore(workspacePath);
 
-  await store.save(legacyWorkspaceFixture(CURRENT_SCHEMA_VERSION));
+  const savedWorkspace = await store.save(legacyWorkspaceFixture(CURRENT_SCHEMA_VERSION));
+  assertLegacyLocalSettingsPreserved(savedWorkspace);
   const { workspace } = await store.load();
-  await store.exportWorkspace(workspace, workspaceExportPath);
+  assertLegacyMetadataPreserved(workspace, CURRENT_SCHEMA_VERSION);
+  assert.equal(workspace.settings.appearance.theme, 'system');
+  await store.exportWorkspace(savedWorkspace, workspaceExportPath);
+  const exportedWorkspace = JSON.parse(await fs.readFile(workspaceExportPath, 'utf8'));
+  assert.equal(Object.hasOwn(exportedWorkspace, 'settings'), false);
   const importedWorkspace = await store.importWorkspace(workspaceExportPath);
   assertLegacyMetadataPreserved(importedWorkspace, CURRENT_SCHEMA_VERSION);
+  assert.equal(importedWorkspace.settings.appearance.theme, 'system');
+  assert.equal(importedWorkspace.settings.updates.includePrereleases, false);
   assert.deepEqual(importedWorkspace.settings.diagnostics.requestResponseLogging, {
     urls: false,
     headers: false,
@@ -875,7 +894,7 @@ test('round-trips native PostMeter workspaces and collection exports with metada
   assert.equal(request.postman.fileReferences[0].source, 'fixtures/upload.bin');
 });
 
-test('workspace import resets diagnostics request response logging opt-ins', async () => {
+test('workspace import ignores local settings from native files', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-import-diagnostics-reset-'));
   const workspacePath = path.join(temp, 'workspace.json');
   const importPath = path.join(temp, 'imported-workspace.json');
@@ -883,6 +902,7 @@ test('workspace import resets diagnostics request response logging opt-ins', asy
   await fs.writeFile(importPath, JSON.stringify({
     schemaVersion: CURRENT_SCHEMA_VERSION,
     settings: {
+      appearance: { theme: 'dark' },
       diagnostics: {
         logging: { enabled: true, level: 'debug' },
         requestResponseLogging: {
@@ -904,6 +924,7 @@ test('workspace import resets diagnostics request response logging opt-ins', asy
 
   const imported = await store.importWorkspace(importPath);
 
+  assert.equal(imported.settings.appearance.theme, 'system');
   assert.deepEqual(imported.settings.diagnostics, {
     logging: {
       enabled: true,
@@ -1087,7 +1108,9 @@ test('excludes local vault plaintext and ciphertext from workspace save and expo
   const rawText = await fs.readFile(workspacePath, 'utf8');
   assert.equal(rawText.includes('vault-plaintext-secret'), false);
   assert.equal(rawText.includes('vault-ciphertext-secret'), false);
-  assert.equal(Object.hasOwn(JSON.parse(rawText), 'vault'), false);
+  const rawWorkspace = JSON.parse(rawText);
+  assert.equal(Object.hasOwn(rawWorkspace, 'vault'), false);
+  assert.equal(Object.hasOwn(rawWorkspace, 'settings'), false);
   assert.deepEqual(saved.settings.sandbox.trustedCapabilities.vaultGrants, {
     workspace: false,
     collections: ['collection-1'],
@@ -1100,5 +1123,7 @@ test('excludes local vault plaintext and ciphertext from workspace save and expo
   const exportedText = await fs.readFile(exportPath, 'utf8');
   assert.equal(exportedText.includes('vault-plaintext-secret'), false);
   assert.equal(exportedText.includes('vault-ciphertext-secret'), false);
-  assert.equal(Object.hasOwn(JSON.parse(exportedText), 'vault'), false);
+  const exportedWorkspace = JSON.parse(exportedText);
+  assert.equal(Object.hasOwn(exportedWorkspace, 'vault'), false);
+  assert.equal(Object.hasOwn(exportedWorkspace, 'settings'), false);
 });

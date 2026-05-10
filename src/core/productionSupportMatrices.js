@@ -26,7 +26,7 @@ const ELECTRON_IPC_CHANNELS = Object.freeze([
   ipcChannel('workspace:save', 'renderer-to-main', 'Whole-workspace save validates the workspace payload before persistence.', ['electron/workspaceIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/workspaceIpc.test.js', 'test/electron/ipcValidation.test.js']),
   ipcChannel('workspace:saveRequest', 'renderer-to-main', 'Targeted request save validates request, variables, and cookie payload shape.', ['electron/workspaceIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/workspaceIpc.test.js', 'test/electron/ipcValidation.test.js']),
   ipcChannel('workspace:saveEnvironment', 'renderer-to-main', 'Targeted environment save validates environment payload shape.', ['electron/workspaceIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/workspaceIpc.test.js', 'test/electron/ipcValidation.test.js']),
-  ipcChannel('workspace:saveSettings', 'renderer-to-main', 'Workspace settings save validates settings-only payloads.', ['electron/workspaceIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/workspaceIpc.test.js', 'test/electron/ipcValidation.test.js']),
+  ipcChannel('workspace:saveSettings', 'renderer-to-main', 'Local settings save validates settings-only payloads and persists app/workspace-local preferences outside portable workspace JSON.', ['electron/workspaceIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js', 'src/core/appSettingsStore.js'], ['test/electron/workspaceIpc.test.js', 'test/electron/ipcValidation.test.js', 'test/electron/appSettingsStore.test.js']),
   ipcChannel('workspace:saveSync', 'renderer-to-main-sync', 'Synchronous shutdown workspace save validates the workspace payload and skips stale full-workspace writes while queued workspace mutations are pending.', ['electron/workspaceIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/workspaceIpc.test.js', 'test/electron/ipcValidation.test.js']),
   ipcChannel('workspace:create', 'renderer-to-main', 'Workspace creation remains main-process owned.', ['electron/workspaceIpc.js', 'electron/preload.js'], ['test/electron/workspaceIpc.test.js']),
   ipcChannel('workspace:rename', 'renderer-to-main', 'Workspace rename validates workspace ID and bounded name input.', ['electron/workspaceIpc.js', 'electron/preload.js'], ['test/electron/workspaceIpc.test.js']),
@@ -252,17 +252,17 @@ function buildDiagnosticsPrivacyMatrix() {
       evidenceRefs: ['src/core/diagnostics.js', 'electron/ipcSecurity.js', 'electron/diagnosticsIpc.js', 'electron/mainWindow.js', 'scripts/smokeProcess.js', 'scripts/validateSandboxRuntime.js', 'scripts/validatePackagedAppSmoke.js'],
       tests: ['test/electron/diagnostics.test.js', 'test/electron/diagnosticsEscapedRedaction.test.js', 'test/electron/diagnosticsIpc.test.js', 'test/electron/auth.test.js', 'test/electron/appChrome.test.js', 'test/electron/mainWindowSmoke.test.js', 'test/electron/smokeProcess.test.js', 'test/electron/packagedAppSmoke.test.js']
     }),
-    row('privacy.settings-validation', 'Settings', 'Diagnostics settings are normalized and IPC-validated as a workspace-scoped allowlist; request/response categories remain false unless the user explicitly enables each category.', 'implemented', {
-      evidenceRefs: ['src/core/diagnosticsSettings.js', 'src/core/ipcValidation.js', 'src/core/payloadSchemas.js', 'src/renderer/renderer.js'],
-      tests: ['test/electron/diagnostics.test.js', 'test/electron/ipcValidation.test.js', 'test/electron/workspaceIpc.test.js']
+    row('privacy.settings-validation', 'Settings', 'Diagnostics settings are normalized and IPC-validated as a workspace-local allowlist persisted in settings.json; request/response categories remain false unless the user explicitly enables each category.', 'implemented', {
+      evidenceRefs: ['src/core/appSettingsStore.js', 'src/core/diagnosticsSettings.js', 'src/core/ipcValidation.js', 'src/core/payloadSchemas.js', 'src/renderer/renderer.js'],
+      tests: ['test/electron/appSettingsStore.test.js', 'test/electron/diagnostics.test.js', 'test/electron/ipcValidation.test.js', 'test/electron/workspaceIpc.test.js']
     }),
     row('privacy.performance-results', 'Performance results', 'Local Performance tests keep configurations, progress, result samples, exports, diagnostics, and failure artifacts bounded and default-deny for request/response data; no Performance diagnostic path introduces telemetry, cloud upload, account-gated execution, or distributed result collection.', 'implemented', {
       evidenceRefs: ['docs/TECH_SPECS.md', 'docs/RELEASE_READINESS.md', 'src/core/performanceRunner.js', 'electron/runtimeIpc.js'],
       tests: ['test/electron/performanceFeatureCoverage.test.js', 'test/electron/performanceRunner.test.js', 'test/electron/runtimeIpc.test.js', 'test/electron/diagnostics.test.js', 'test/electron/diagnosticsIpc.test.js']
     }),
-    row('privacy.import-reset', 'Workspace import', 'Imported native workspaces cannot silently enable request/response diagnostic logging; import resets diagnostics settings to the product defaults.', 'implemented', {
-      evidenceRefs: ['src/core/workspaceStore.js', 'src/core/diagnosticsSettings.js'],
-      tests: ['test/electron/workspaceStore.test.js', 'test/electron/diagnostics.test.js']
+    row('privacy.import-reset', 'Workspace import/export', 'Imported and exported native workspaces cannot silently enable request/response diagnostic logging because local diagnostics settings live in settings.json and are omitted from portable workspace JSON.', 'implemented', {
+      evidenceRefs: ['src/core/appSettingsStore.js', 'src/core/workspaceStore.js', 'src/core/workspacePersistence.js', 'src/core/diagnosticsSettings.js'],
+      tests: ['test/electron/appSettingsStore.test.js', 'test/electron/workspaceStore.test.js', 'test/electron/diagnostics.test.js']
     }),
     row('logging.local-structured-rotation', 'Local logging', 'Structured JSONL diagnostics are local-only, level-gated, record-size capped with truncation at the configured record cap, file-size capped, and rotated with a bounded file count under the app user-data diagnostics directory.', 'implemented', {
       evidenceRefs: ['src/core/diagnostics.js', 'electron/main.js'],
@@ -280,11 +280,11 @@ function buildDiagnosticsPrivacyMatrix() {
       evidenceRefs: ['src/core/diagnostics.js', 'electron/diagnosticsIpc.js', 'README.md', 'docs/RELEASE_READINESS.md'],
       tests: ['test/electron/diagnostics.test.js', 'test/electron/diagnosticsIpc.test.js']
     }),
-    row('ui.workspace-controls', 'Renderer UI', 'Workspace diagnostics controls surface the off-by-default request/response logging categories, warn about PII/customer data, save with rollback on persistence failure, and expose local export from the Workspace panel and Help menu.', 'implemented', {
+    row('ui.workspace-controls', 'Renderer UI', 'Workspace-local diagnostics controls surface the off-by-default request/response logging categories, warn about PII/customer data, save local settings with rollback on persistence failure, and expose local export from Settings and Help.', 'implemented', {
       evidenceRefs: ['src/renderer/index.html', 'src/renderer/renderer.js', 'src/renderer/rendererBootstrap.js', 'src/renderer/uiRegressionSmoke.js', 'electron/appMenu.js'],
       tests: ['test/electron/rendererBootstrap.test.js', 'test/electron/mainWindowSmoke.test.js', 'npm run test:ui:regression']
     }),
-    row('ipc.diagnostics-export', 'IPC', 'Diagnostic export is main-process owned, waits for queued workspace privacy-setting saves before export, uses a JSON save dialog, redacts export failure messages before they reach the renderer, returns the same bounded file-operation shape as other exports, and never exposes arbitrary file reads or upload behavior to the renderer.', 'implemented', {
+    row('ipc.diagnostics-export', 'IPC', 'Diagnostic export is main-process owned, waits for queued local privacy-setting saves before export, uses a JSON save dialog, redacts export failure messages before they reach the renderer, returns the same bounded file-operation shape as other exports, and never exposes arbitrary file reads or upload behavior to the renderer.', 'implemented', {
       evidenceRefs: ['electron/diagnosticsIpc.js', 'electron/preload.js', 'electron/mainWindow.js', 'electron/ipcSecurity.js', 'src/core/diagnostics.js'],
       tests: ['test/electron/diagnosticsIpc.test.js', 'test/electron/appChrome.test.js', 'test/electron/mainWindowSmoke.test.js']
     }),
@@ -542,15 +542,15 @@ function buildUxAccessibilityMatrix() {
       evidenceRefs: ['src/core/localMockServer.js', 'docs/COMPATIBILITY.md', 'docs/SANDBOX_CONTRACT.md'],
       tests: ['test/electron/postmanScriptImportCoverage.test.js', 'test/electron/postmanSandboxCorpus.test.js', 'test/electron/localMockServer.test.js']
     }),
-    row('workflow.settings-theme', 'Settings/theme', 'Workspace-scoped sandbox capability toggles, update settings, and system/light/dark theme preference save and reload without leaking into request payloads.', 'implemented', {
-      evidenceRefs: ['src/renderer/index.html', 'src/renderer/theme.css', 'src/renderer/renderer.js', 'src/renderer/uiWorkflowSmoke.js'],
-      tests: ['npm run test:ui', 'npm run test:ui:regression']
+    row('workflow.settings-theme', 'Settings/theme', 'App-wide theme/update/tab/modal preferences and workspace-local sandbox/diagnostics settings save and reload from settings.json without leaking into request payloads or portable workspace exports.', 'implemented', {
+      evidenceRefs: ['src/core/appSettingsStore.js', 'src/renderer/index.html', 'src/renderer/theme.css', 'src/renderer/renderer.js', 'src/renderer/uiWorkflowSmoke.js'],
+      tests: ['test/electron/appSettingsStore.test.js', 'npm run test:ui', 'npm run test:ui:regression']
     }),
     row('workflow.update-check', 'Update check', 'Update-check success, no-update, and failure states use validated main-process update metadata and user-visible non-secret notifications.', 'implemented', {
       evidenceRefs: ['src/core/updateChecker.js', 'electron/appIpc.js', 'src/renderer/rendererWorkflows.js'],
       tests: ['npm run test:ui:regression', 'test/electron/appIpc.test.js']
     }),
-    row('workflow.diagnostics-export', 'Diagnostics export', 'Workspace diagnostics controls and Help menu export produce a user-selected local diagnostic bundle with visible review-before-sharing messaging and off-by-default request/response logging categories.', 'implemented', {
+    row('workflow.diagnostics-export', 'Diagnostics export', 'Workspace-local diagnostics controls and Help menu export produce a user-selected local diagnostic bundle with visible review-before-sharing messaging and off-by-default request/response logging categories.', 'implemented', {
       evidenceRefs: ['src/renderer/index.html', 'src/renderer/renderer.js', 'src/renderer/rendererBootstrap.js', 'electron/appMenu.js', 'electron/diagnosticsIpc.js', 'docs/TROUBLESHOOTING.md'],
       tests: ['npm run diagnostics:privacy:validate', 'test/electron/diagnosticsIpc.test.js', 'test/electron/rendererBootstrap.test.js', 'npm run test:ui:regression'],
       notes: 'The diagnostics/privacy matrix owns the strict redaction and no-telemetry proof; this UX row owns the visible controls and export path.'

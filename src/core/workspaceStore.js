@@ -1,6 +1,5 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { defaultDiagnosticsSettings } = require('./diagnosticsSettings');
 const { defaultWorkspace } = require('./models');
 const { exportCollectionByFormat, importCollectionFromContent } = require('./collectionImportRegistry');
 const { migrate } = require('./workspaceMigrations');
@@ -12,6 +11,7 @@ const {
   normalizeWorkspace,
   pathExists,
   siblingPath,
+  workspaceForPersistence,
   writeJsonFile,
   writeJsonFileAtomic,
   writeJsonFileAtomicSync,
@@ -89,13 +89,13 @@ class WorkspaceStore {
 
   async save(workspace, options = {}) {
     const normalized = normalizeWorkspace(workspace);
-    await writeJsonFileAtomic(this.workspacePath, normalized, options);
+    await writeJsonFileAtomic(this.workspacePath, workspaceForPersistence(normalized), options);
     return normalized;
   }
 
   saveSync(workspace, options = {}) {
     const normalized = normalizeWorkspace(workspace);
-    writeJsonFileAtomicSync(this.workspacePath, normalized, options);
+    writeJsonFileAtomicSync(this.workspacePath, workspaceForPersistence(normalized), options);
     return normalized;
   }
 
@@ -112,14 +112,12 @@ class WorkspaceStore {
       throw new Error('Selected file is not a native PostMeter workspace.');
     }
     migrate(parsed);
-    const imported = normalizeWorkspace(parsed);
-    imported.settings.diagnostics = defaultDiagnosticsSettings();
-    return imported;
+    return normalizeWorkspace({ ...parsed, settings: undefined });
   }
 
   async exportWorkspace(workspace, exportPath) {
     const normalized = normalizeWorkspace(workspace);
-    await writeJsonFile(exportPath, normalized);
+    await writeJsonFile(exportPath, workspaceForPersistence(normalized));
     return exportPath;
   }
 
