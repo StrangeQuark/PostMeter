@@ -42,6 +42,10 @@ const ELECTRON_IPC_CHANNELS = Object.freeze([
   ipcChannel('request:validate', 'renderer-to-main', 'Single request validation validates request and environment payloads.', ['electron/requestIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/requestIpc.test.js', 'test/electron/ipcValidation.test.js']),
   ipcChannel('request:send', 'renderer-to-main', 'Single request send validates request/environment payloads and validates response payloads before returning.', ['electron/requestIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/requestIpc.test.js', 'test/electron/ipcValidation.test.js']),
   ipcChannel('diagnostics:export', 'renderer-to-main', 'Diagnostic export opens a main-process save dialog and writes a sanitized local bundle only to the selected path.', ['electron/diagnosticsIpc.js', 'electron/preload.js', 'src/core/diagnostics.js'], ['test/electron/diagnosticsIpc.test.js', 'test/electron/diagnostics.test.js']),
+  ipcChannel('file-export:choosePath', 'renderer-to-main', 'Picker-first export opens a save dialog from lightweight metadata before expensive export preparation.', ['electron/exportIpc.js', 'electron/preload.js', 'electron/fileDialogs.js'], ['test/electron/exportIpc.test.js']),
+  ipcChannel('file-export:prepare', 'renderer-to-main', 'Picker-first export preparation validates and serializes export payloads in a worker while the save dialog is open.', ['electron/exportIpc.js', 'electron/exportPreparationWorker.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/exportIpc.test.js']),
+  ipcChannel('file-export:writePrepared', 'renderer-to-main', 'Picker-first export writes a prepared export only to the user-selected validated save path.', ['electron/exportIpc.js', 'electron/preload.js', 'electron/fileDialogs.js', 'src/core/workspacePersistence.js'], ['test/electron/exportIpc.test.js']),
+  ipcChannel('file-export:cancelPrepared', 'renderer-to-main', 'Picker-first export cancellation terminates active export preparation and clears prepared content if the user cancels the picker.', ['electron/exportIpc.js', 'electron/preload.js'], ['test/electron/exportIpc.test.js']),
   ipcChannel('oauth:pkce:start', 'renderer-to-main', 'OAuth PKCE start validates ID, auth, environment, and strategy before flow orchestration.', ['electron/oauthIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/oauthIpc.test.js', 'test/electron/auth.test.js']),
   ipcChannel('oauth:device:start', 'renderer-to-main', 'OAuth device start validates ID, auth, and environment before flow orchestration.', ['electron/oauthIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/oauthIpc.test.js', 'test/electron/auth.test.js']),
   ipcChannel('oauth:device:cancel', 'renderer-to-main', 'OAuth device cancellation validates the flow ID before aborting.', ['electron/oauthIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/oauthIpc.test.js']),
@@ -106,8 +110,6 @@ const REQUIRED_ELECTRON_SECURITY_ROWS = Object.freeze([
 const REQUIRED_NON_POSTMAN_COMPATIBILITY_ROWS = Object.freeze([
   'curl.cross-shell-quoting',
   'curl.import-export',
-  'har.import-export',
-  'har.privacy-export-boundary',
   'native-postmeter.performance-tests',
   'native-postmeter.roundtrip',
   'openapi.import-export',
@@ -463,10 +465,6 @@ function buildNonPostmanCompatibilityMatrix() {
       evidenceRefs: ['src/core/openApiFormats.js', 'docs/COMPATIBILITY.md'],
       tests: ['test/electron/collectionFormats.test.js']
     }),
-    row('har.import-export', 'HAR', 'HAR 1.2 import/export covers request entries, response examples, headers, cookies, redirects, timings, compression, body encoding metadata, and sensitive header/cookie redaction on export.', 'implemented', {
-      evidenceRefs: ['src/core/harFormats.js', 'docs/COMPATIBILITY.md'],
-      tests: ['test/electron/collectionFormats.test.js']
-    }),
     row('curl.import-export', 'curl', 'curl import/export covers common method, URL, generated names, header, auth, repeated data, query-data, cookie, redirect, compression, file/binary, and quoting variants; proxy, retry, and client TLS flags are preserved as import metadata instead of being claimed as curl-equivalent transport execution.', 'implemented', {
       evidenceRefs: ['src/core/curlFormats.js', 'docs/COMPATIBILITY.md'],
       tests: ['test/electron/collectionFormats.test.js']
@@ -485,10 +483,6 @@ function buildNonPostmanCompatibilityMatrix() {
     }),
     row('openapi.invalid-common-specs', 'OpenAPI', 'Invalid-but-common OpenAPI and structured collection variants fail with clear parser or fallback errors instead of crashing or producing misleading collections.', 'implemented', {
       evidenceRefs: ['src/core/openApiFormats.js', 'test/electron/collectionFormats.test.js'],
-      tests: ['test/electron/collectionFormats.test.js']
-    }),
-    row('har.privacy-export-boundary', 'HAR', 'HAR export redacts privacy-sensitive authorization/cookie headers and cookie values while documenting that arbitrary payload bodies cannot be reliably secret-scanned.', 'implemented', {
-      evidenceRefs: ['src/core/harFormats.js', 'docs/COMPATIBILITY.md'],
       tests: ['test/electron/collectionFormats.test.js']
     }),
     row('curl.cross-shell-quoting', 'curl', 'curl import/export covers common Linux/macOS/Windows quoting forms, including cmd.exe caret line continuations, and repeated headers without claiming every shell dialect.', 'implemented', {

@@ -82,7 +82,7 @@ Core modules must not depend on Electron or renderer globals.
 - `payloadSchemas.js` owns shared field schemas, enum sets, and basic string-length limits consumed by IPC validation and shared normalization helpers.
 - `collectionFormats.js` is the stable public import/export boundary for collection format handling.
 - `environmentFormats.js` and `runnerFormats.js` are the stable native import/export boundaries for environment and runner-definition JSON handling. Environment export also supports Postman environment JSON for interoperability.
-- `openApiFormats.js`, `harFormats.js`, and `curlFormats.js` each own one import/export family instead of sharing a single god module.
+- `openApiFormats.js` and `curlFormats.js` each own one import/export family instead of sharing a single god module.
 - `collectionFormatUtils.js` owns the small set of cross-format helpers such as URL parsing, JSON/XML escaping, shell splitting/quoting, and request flattening.
 - `collectionImportRegistry.js` owns collection import detection/dispatch and format-specific export dispatch without changing the `WorkspaceStore` API.
 - `scriptRuntime.js`, `sandboxPackageCache.js`, `postmanBuiltinPackages.js`, `postmanSandboxBootcodeBundle.js`, `visualizerHandlebarsBundle.js`, `scriptSandbox.js`, `scriptWorker.js`, and `osSandbox.js` implement the constrained Postman-style script environment, reviewed package-cache policy, version-pinned Postman package bundle, isolated Handlebars visualizer runtime, worker transport, broker boundary, and OS sandbox launcher layer.

@@ -33,34 +33,6 @@
       "notes": ""
     },
     {
-      "id": "har.import-export",
-      "area": "HAR",
-      "target": "HAR 1.2 import/export covers request entries, response examples, headers, cookies, redirects, timings, compression, body encoding metadata, and sensitive header/cookie redaction on export.",
-      "status": "implemented",
-      "evidenceRefs": [
-        "src/core/harFormats.js",
-        "docs/COMPATIBILITY.md"
-      ],
-      "tests": [
-        "test/electron/collectionFormats.test.js"
-      ],
-      "notes": ""
-    },
-    {
-      "id": "har.privacy-export-boundary",
-      "area": "HAR",
-      "target": "HAR export redacts privacy-sensitive authorization/cookie headers and cookie values while documenting that arbitrary payload bodies cannot be reliably secret-scanned.",
-      "status": "implemented",
-      "evidenceRefs": [
-        "src/core/harFormats.js",
-        "docs/COMPATIBILITY.md"
-      ],
-      "tests": [
-        "test/electron/collectionFormats.test.js"
-      ],
-      "notes": ""
-    },
-    {
       "id": "native-postmeter.performance-tests",
       "area": "Native PostMeter",
       "target": "Native workspace and Performance-test import/export preserve local workspace-owned performanceTests, including request copies, source metadata, environment mutation policy, execution config, safety limits, result metadata, and schema validation without merging request copies back into Collections or claiming JMeter/distributed load compatibility.",

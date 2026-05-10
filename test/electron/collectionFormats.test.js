@@ -283,87 +283,6 @@ test('imports OpenAPI local references and Swagger 2 request body variants', asy
   assert.equal(swaggerForm.requests[0].variables.find((variable) => variable.key === 'openapi.formData.file.file').value, 'true');
 });
 
-test('imports and exports HAR collections', async () => {
-  const { store, dir } = await tempStore();
-  const importPath = path.join(dir, 'collection.har');
-  await fs.writeFile(importPath, JSON.stringify({
-    log: {
-      version: '1.2',
-      creator: { name: 'fixture', version: '1' },
-      entries: [{
-        request: {
-          method: 'POST',
-          url: 'https://api.example.test/widgets?trace=1',
-          headers: [
-            { name: 'Accept', value: 'application/json' },
-            { name: 'Authorization', value: 'Bearer secret' },
-            { name: 'Authorization ', value: 'Bearer whitespace-secret' },
-            { name: 'Proxy-Authorization', value: 'Basic proxy-secret' },
-            { name: 'Cookie', value: 'explicit=one' },
-            { name: 'Set-Cookie', value: 'request-side=secret' }
-          ],
-          cookies: [
-            { name: 'session', value: 'abc', path: '/', domain: 'api.example.test', httpOnly: true, sameSite: 'Strict' },
-            { name: 'theme', value: 'dark', path: '/widgets', vendorMetadata: { unsupported: true } },
-            { name: 'empty', value: '', path: '/' }
-          ],
-          queryString: [{ name: 'trace', value: '1' }],
-          postData: { mimeType: 'application/json', text: '{"name":"hammer"}', encoding: 'utf8' }
-        },
-        response: {
-          status: 201,
-          headers: [{ name: 'Content-Type', value: 'application/json' }],
-          cookies: [
-            { name: 'seen', value: 'yes', path: '/', domain: 'api.example.test', expires: 'Wed, 21 Oct 2099 07:28:00 GMT', httpOnly: true, secure: true, sameSite: 'None' },
-            { name: 'prefs', value: 'light', path: '/widgets', secure: true, priority: 'High', partitioned: true, vendorMetadata: { unsupported: true } }
-          ],
-          redirectURL: 'https://api.example.test/widgets/w1',
-          content: { mimeType: 'application/json', text: '{"id":"w1"}', encoding: 'base64', compression: 12 }
-        },
-        time: 123
-      }]
-    }
-  }));
-
-  const collection = await store.importCollection(importPath);
-  assert.equal(collection.requests[0].method, 'POST');
-  assert.equal(collection.requests[0].queryParams[0].key, 'trace');
-  assert.equal(collection.requests[0].bodyType, 'RAW_JSON');
-  assert.equal(collection.requests[0].headers.find((header) => header.key === 'Cookie').value, 'explicit=one; session=abc; theme=dark; empty=');
-  assert.equal(collection.requests[0].examples[0].statusCode, 201);
-  assert.equal(collection.requests[0].examples[0].headers.filter((header) => header.key === 'Set-Cookie').length, 2);
-  assert.equal(
-    collection.requests[0].examples[0].headers.find((header) => header.key === 'Set-Cookie').value,
-    'seen=yes; Path=/; Domain=api.example.test; Expires=Wed, 21 Oct 2099 07:28:00 GMT; HttpOnly; Secure; SameSite=None'
-  );
-  assert.equal(
-    collection.requests[0].examples[0].headers.filter((header) => header.key === 'Set-Cookie')[1].value,
-    'prefs=light; Path=/widgets; Secure; Priority=High; Partitioned'
-  );
-  assert.equal(
-    collection.requests[0].examples[0].headers.some((header) => /vendorMetadata|unsupported/.test(header.value)),
-    false
-  );
-  assert.equal(collection.requests[0].variables.find((variable) => variable.key === 'har.responseTimeMillis').value, '123');
-  assert.equal(collection.requests[0].variables.find((variable) => variable.key === 'har.requestBodyEncoding').value, 'utf8');
-  assert.equal(collection.requests[0].variables.find((variable) => variable.key === 'har.redirectUrl').value, 'https://api.example.test/widgets/w1');
-  assert.equal(collection.requests[0].variables.find((variable) => variable.key === 'har.responseBodyEncoding').value, 'base64');
-  assert.equal(collection.requests[0].variables.find((variable) => variable.key === 'har.responseCompressionBytes').value, '12');
-
-  const exportPath = path.join(dir, 'export.har');
-  await store.exportCollection(collection, exportPath, { format: 'har' });
-  const exported = JSON.parse(await fs.readFile(exportPath, 'utf8'));
-  assert.equal(exported.log.version, '1.2');
-  assert.equal(exported.log.entries[0].request.method, 'POST');
-  assert.equal(exported.log.entries[0].request.headers.find((header) => header.name === 'Cookie').value, '<redacted>');
-  assert.equal(exported.log.entries[0].request.headers.find((header) => header.name === 'Authorization').value, '<redacted>');
-  assert.equal(exported.log.entries[0].request.headers.find((header) => header.name === 'Authorization ').value, '<redacted>');
-  assert.equal(exported.log.entries[0].request.headers.find((header) => header.name === 'Proxy-Authorization').value, '<redacted>');
-  assert.equal(exported.log.entries[0].request.headers.find((header) => header.name === 'Set-Cookie').value, '<redacted>');
-  assert.deepEqual(exported.log.entries[0].request.cookies.map((cookie) => cookie.name), ['explicit', 'session', 'theme', 'empty']);
-  assert.deepEqual(exported.log.entries[0].request.cookies.map((cookie) => cookie.value), ['<redacted>', '<redacted>', '<redacted>', '<redacted>']);
-});
-
 test('imports and exports curl collections', async () => {
   const { store, dir } = await tempStore();
   const importPath = path.join(dir, 'request.sh');
@@ -546,11 +465,9 @@ test('non-Postman importers reject malformed common inputs with clear errors', a
   const cases = [
     ['malformed-openapi.json', '{"openapi":"3.1.0",', /Failed to parse JSON collection file:/],
     ['malformed-openapi.yaml', 'openapi: 3.1.0\ninfo:\n  title: [unterminated', /Failed to parse OpenAPI YAML file:/],
-    ['malformed.har', '{"log":', /Failed to parse JSON collection file:/],
     ['empty-openapi.json', JSON.stringify({ openapi: '3.1.0', info: { title: 'Empty', version: '1' }, paths: {} }), /OpenAPI document does not contain importable requests/],
-    ['empty.har', JSON.stringify({ log: { version: '1.2', entries: [] } }), /HAR document does not contain importable requests/],
     ['missing-url.sh', "curl -H 'X-Test: yes'", /curl command does not include a URL/],
-    ['ambiguous.txt', 'this is not an API collection', /File is not a supported PostMeter, Postman, OpenAPI, HAR, or curl collection/]
+    ['ambiguous.txt', 'this is not an API collection', /File is not a supported PostMeter, Postman, OpenAPI, or curl collection/]
   ];
 
   for (const [name, content, message] of cases) {

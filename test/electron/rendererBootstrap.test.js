@@ -7,7 +7,7 @@ const {
   closeToolbarMenus,
   initializeRenderer
 } = require('../../src/renderer/rendererBootstrap');
-const { showContextMenu } = require('../../src/renderer/contextMenu');
+const { setContextMenuPeerCloser, showContextMenu } = require('../../src/renderer/contextMenu');
 
 test('renderer bootstrap initializes theme and runs registered cleanup callbacks on unload', async () => {
   const documentListeners = new Map();
@@ -103,6 +103,9 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(indexSource, /id="exportItemModal"/);
   assert.match(indexSource, /id="exportItemList"[^>]+role="radiogroup"/);
   assert.match(indexSource, /id="confirmExportItemButton"[^>]+disabled/);
+  assert.match(indexSource, /id="folderDestinationModal"/);
+  assert.match(indexSource, /id="folderDestinationList"[^>]+role="radiogroup"/);
+  assert.match(indexSource, /id="confirmFolderDestinationButton"[^>]+disabled/);
   assert.match(indexSource, /role="tablist"[^>]+aria-orientation="vertical"/);
   assert.match(layoutSource, /aria-valuemin/);
   assert.match(layoutSource, /aria-valuemax/);
@@ -116,6 +119,10 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(bootstrapSource, /addEventListener\('mouseenter'/);
   assert.match(bootstrapSource, /activeRow !== submenuRow/);
   assert.match(bootstrapSource, /getSelectedExportItemId/);
+  assert.match(bootstrapSource, /getSelectedFolderDestination/);
+  assert.match(rendererSource, /async function newFolderFromToolbar/);
+  assert.match(rendererSource, /function renderFolderDestinationList/);
+  assert.match(rendererSource, /setContextMenuPeerCloser/);
   assert.match(rendererSource, /Request save failed:/);
   assert.match(rendererSource, /Request Save Failed/);
   assert.match(rendererSource, /Environment save failed:/);
@@ -138,9 +145,16 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(chromeSource, /\.workspace-diagnostics-panel/);
   assert.match(chromeSource, /\.toolbar-menu:has\(\.toolbar-submenu-row:hover\) \.toolbar-submenu-row:not\(:hover\) \.toolbar-submenu/);
   assert.match(chromeSource, /\.toolbar-submenu::before/);
+  assert.match(chromeSource, /\.request-tab-method\.method-post/);
+  assert.match(chromeSource, /\.request-tab-method\.entity-runner/);
+  assert.match(chromeSource, /\.tree-badge\.entity-performance/);
   assert.match(rendererSource, /pendingDiagnosticsSettingsSave/);
   assert.match(rendererSource, /Switch to this workspace before exporting local diagnostics/);
   assert.match(rendererSource, /Saving diagnostics privacy settings before export/);
+  assert.match(rendererSource, /function requestTabMethodText\(request, tab = {}\)/);
+  assert.match(rendererSource, /`RUN - \$\{method\}`/);
+  assert.match(rendererSource, /methodClassName: \(\) => tagClassName\('ENV'\)/);
+  assert.match(rendererSource, /badge\.className = \['tree-badge', tagClassName\(kind\)\]/);
 });
 
 test('renderer bootstrap binds auth input and modal draft confirmation events', () => {
@@ -158,6 +172,7 @@ test('renderer bootstrap binds auth input and modal draft confirmation events', 
     ['confirmSaveDraftButton', createElement()],
     ['confirmExportCollectionButton', createElement()],
     ['confirmExportItemButton', createElement()],
+    ['confirmFolderDestinationButton', createElement()],
     ['confirmRunnerImportButton', createElement()],
     ['contextMenu', createElement()],
     ['modalBackdrop', createElement()]
@@ -189,6 +204,7 @@ test('renderer bootstrap binds auth input and modal draft confirmation events', 
     getSelectedDraftSaveCollectionId: () => 'collection-1',
     getSelectedExportCollectionId: () => 'collection-2',
     getSelectedExportItemId: () => 'runner-1',
+    getSelectedFolderDestination: () => '{"collectionId":"collection-2","folderId":"folder-1"}',
     getSelectedRunnerImportTarget: () => ({ type: 'request', collectionId: 'collection-1', requestId: 'request-1' })
   });
 
@@ -198,13 +214,20 @@ test('renderer bootstrap binds auth input and modal draft confirmation events', 
   elements.get('confirmSaveDraftButton').dispatch('click');
   elements.get('confirmExportCollectionButton').dispatch('click');
   elements.get('confirmExportItemButton').dispatch('click');
+  elements.get('confirmFolderDestinationButton').dispatch('click');
   elements.get('confirmRunnerImportButton').dispatch('click');
 
   assert.deepEqual(calls.authType, ['oauth2']);
   assert.equal(calls.authInput, 1);
   assert.deepEqual(calls.performanceAuthType, ['apiKey']);
   assert.equal(calls.performanceAuthInput, 2);
-  assert.deepEqual(calls.resolveModal, ['collection-1', 'collection-2', 'runner-1', { type: 'request', collectionId: 'collection-1', requestId: 'request-1' }]);
+  assert.deepEqual(calls.resolveModal, [
+    'collection-1',
+    'collection-2',
+    'runner-1',
+    '{"collectionId":"collection-2","folderId":"folder-1"}',
+    { type: 'request', collectionId: 'collection-1', requestId: 'request-1' }
+  ]);
 });
 
 test('renderer bootstrap resolves text, confirmation, and notification modals', () => {
@@ -216,6 +239,7 @@ test('renderer bootstrap resolves text, confirmation, and notification modals', 
     ['confirmTextInputModalButton', createElement()],
     ['cancelTextInputModalButton', createElement()],
     ['cancelExportItemButton', createElement()],
+    ['cancelFolderDestinationButton', createElement()],
     ['confirmActionButton', createElement()],
     ['cancelConfirmActionButton', createElement()],
     ['closeNotificationModalButton', createElement()],
@@ -242,12 +266,13 @@ test('renderer bootstrap resolves text, confirmation, and notification modals', 
   elements.get('confirmTextInputModalButton').dispatch('click');
   elements.get('cancelTextInputModalButton').dispatch('click');
   elements.get('cancelExportItemButton').dispatch('click');
+  elements.get('cancelFolderDestinationButton').dispatch('click');
   elements.get('confirmActionButton').dispatch('click');
   elements.get('cancelConfirmActionButton').dispatch('click');
   elements.get('closeNotificationModalButton').dispatch('click');
   elements.get('cancelRunnerImportButton').dispatch('click');
 
-  assert.deepEqual(resolved, ['single-line-value', null, null, true, false, true, null]);
+  assert.deepEqual(resolved, ['single-line-value', null, null, null, true, false, true, null]);
 });
 
 test('renderer bootstrap binds every collection export menu button', () => {
@@ -256,8 +281,7 @@ test('renderer bootstrap binds every collection export menu button', () => {
     ['exportCollectionButton', 'postmeter', 'onExportCollection'],
     ['exportPostmanButton', 'postman', 'onExportPostman'],
     ['exportOpenApiButton', 'openapi', 'onExportOpenApi'],
-    ['exportCurlButton', 'curl', 'onExportCurl'],
-    ['exportHarButton', 'har', 'onExportHar']
+    ['exportCurlButton', 'curl', 'onExportCurl']
   ];
   const elements = new Map(controls.map(([id]) => [id, createElement()]));
   const options = {
@@ -498,6 +522,7 @@ test('renderer bootstrap binds performance creation import export run and config
 test('renderer bootstrap closes open toolbar menus on Tab without native dialogs', () => {
   const button = createElement();
   const menu = createElement();
+  const calls = [];
   const elements = new Map([
     ['importMenuButton', button],
     ['importMenu', menu]
@@ -520,12 +545,15 @@ test('renderer bootstrap closes open toolbar menus on Tab without native dialogs
 
   bindUi({
     doc: fakeDocument,
-    windowObject: { addEventListener() {} }
+    windowObject: { addEventListener() {} },
+    onCloseContextMenu: () => calls.push('context'),
+    onCloseFileSourceMenu: () => calls.push('file-source')
   });
 
   button.dispatch('click');
   assert.equal(menu.hidden, false);
   assert.equal(button.attributes['aria-expanded'], 'true');
+  assert.deepEqual(calls, ['context', 'file-source']);
 
   menu.dispatch('keydown', { key: 'Tab' });
 
@@ -580,6 +608,52 @@ test('tree context menus close on Tab and reset trigger expanded state', () => {
     assert.equal(menu.hidden, true);
     assert.equal(trigger.attributes['aria-expanded'], 'false');
   } finally {
+    global.document = previousDocument;
+    global.window = previousWindow;
+  }
+});
+
+test('tree context menus close toolbar peers before opening', () => {
+  const previousDocument = global.document;
+  const previousWindow = global.window;
+  let peerCloseCount = 0;
+  const menu = {
+    children: [],
+    hidden: true,
+    offsetHeight: 80,
+    offsetWidth: 120,
+    style: {},
+    textContent: '',
+    append(child) {
+      this.children.push(child);
+    },
+    querySelector() {
+      return null;
+    },
+    querySelectorAll() {
+      return [];
+    }
+  };
+
+  global.document = {
+    createElement() {
+      return createElement();
+    },
+    getElementById(id) {
+      return id === 'contextMenu' ? menu : null;
+    }
+  };
+  global.window = { innerHeight: 768, innerWidth: 1024 };
+  setContextMenuPeerCloser(() => {
+    peerCloseCount += 1;
+  });
+
+  try {
+    showContextMenu(32, 32, [['Rename', () => {}]]);
+    assert.equal(peerCloseCount, 1);
+    assert.equal(menu.hidden, false);
+  } finally {
+    setContextMenuPeerCloser(null);
     global.document = previousDocument;
     global.window = previousWindow;
   }
@@ -863,8 +937,7 @@ test('renderer supplies explicit collection export format handlers', () => {
     ['onExportCollection', 'postmeter'],
     ['onExportPostman', 'postman'],
     ['onExportOpenApi', 'openapi'],
-    ['onExportCurl', 'curl'],
-    ['onExportHar', 'har']
+    ['onExportCurl', 'curl']
   ]) {
     assert.match(
       rendererSource,

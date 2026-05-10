@@ -10,7 +10,7 @@ No blocking engineering questions are required for the next local production-har
 - OAuth is only outbound request authentication for target APIs.
 - When choosing between partial and production-ready implementations, build the production-ready path.
 - Tier-one release validation targets Linux, Windows, and macOS together.
-- Compatibility import/export includes OpenAPI, curl, HAR, and Postman collections.
+- Compatibility import/export includes OpenAPI, curl, and Postman collections.
 - Production release artifacts stay unsigned until maintainer certificates are available.
 - Production release hosting uses GitHub Releases.
 - The canonical public release/update repository is `StrangeQuark/PostMeter`.

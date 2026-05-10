@@ -1,5 +1,10 @@
 let activeContextMenuTrigger = null;
 let keyboardContextMenuActivation = false;
+let contextMenuPeerCloser = null;
+
+function setContextMenuPeerCloser(closer) {
+  contextMenuPeerCloser = typeof closer === 'function' ? closer : null;
+}
 
 function attachTreeContextMenu(button, items) {
   button.setAttribute('aria-haspopup', 'menu');
@@ -20,21 +25,13 @@ function attachTreeContextMenu(button, items) {
 
 function showContextMenu(x, y, items, options = {}) {
   const menu = document.getElementById('contextMenu');
+  contextMenuPeerCloser?.();
   closeContextMenu();
   activeContextMenuTrigger = options.trigger || null;
   activeContextMenuTrigger?.setAttribute?.('aria-expanded', 'true');
   menu.textContent = '';
-  for (const [label, handler, variant] of items) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.setAttribute('role', 'menuitem');
-    button.className = variant === 'danger' ? 'danger' : '';
-    button.textContent = label;
-    button.addEventListener('click', () => {
-      closeContextMenu({ restoreFocus: keyboardContextMenuActivation === true });
-      handler();
-    });
-    menu.append(button);
+  for (const item of items) {
+    appendContextMenuItem(menu, item);
   }
   menu.onkeydown = handleContextMenuKeydown;
   menu.hidden = false;
@@ -49,9 +46,54 @@ function showContextMenu(x, y, items, options = {}) {
   }
 }
 
+function appendContextMenuItem(parent, item) {
+  const [label, handler, variant] = item;
+  if (Array.isArray(handler)) {
+    const row = document.createElement('div');
+    row.className = 'context-submenu-row';
+    row.setAttribute('role', 'none');
+
+    const button = contextMenuButton(label, variant);
+    button.setAttribute('aria-haspopup', 'menu');
+    button.setAttribute('aria-expanded', 'false');
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      button.setAttribute('aria-expanded', 'true');
+      button.focus?.();
+    });
+
+    const submenu = document.createElement('div');
+    submenu.className = 'context-submenu';
+    submenu.setAttribute('role', 'menu');
+    submenu.setAttribute('aria-label', `${label} options`);
+    for (const child of handler) {
+      appendContextMenuItem(submenu, child);
+    }
+    row.append(button, submenu);
+    parent.append(row);
+    return;
+  }
+
+  const button = contextMenuButton(label, variant);
+  button.addEventListener('click', () => {
+    closeContextMenu({ restoreFocus: keyboardContextMenuActivation === true });
+    handler();
+  });
+  parent.append(button);
+}
+
+function contextMenuButton(label, variant) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.setAttribute('role', 'menuitem');
+  button.className = variant === 'danger' ? 'danger' : '';
+  button.textContent = label;
+  return button;
+}
+
 function handleContextMenuKeydown(event) {
   const menu = document.getElementById('contextMenu');
-  const buttons = Array.from(menu?.querySelectorAll('button:not([disabled])') || []);
   if (event.key === 'Escape') {
     event.preventDefault();
     closeContextMenu({ restoreFocus: true });
@@ -61,7 +103,24 @@ function handleContextMenuKeydown(event) {
     closeContextMenu();
     return;
   }
-  if ((event.key === 'Enter' || event.key === ' ') && event.target?.matches?.('button')) {
+  if (event.key === 'ArrowRight' && isContextSubmenuTrigger(event.target)) {
+    event.preventDefault();
+    event.target.setAttribute('aria-expanded', 'true');
+    event.target.parentElement?.querySelector?.('.context-submenu button:not([disabled])')?.focus?.();
+    return;
+  }
+  if (event.key === 'ArrowLeft' && event.target?.closest?.('.context-submenu')) {
+    event.preventDefault();
+    event.target.closest('.context-submenu-row')?.querySelector?.(':scope > button[aria-haspopup="menu"]')?.focus?.();
+    return;
+  }
+  if ((event.key === 'Enter' || event.key === ' ') && isContextSubmenuTrigger(event.target)) {
+    event.preventDefault();
+    event.target.setAttribute('aria-expanded', 'true');
+    event.target.parentElement?.querySelector?.('.context-submenu button:not([disabled])')?.focus?.();
+    return;
+  }
+  if ((event.key === 'Enter' || event.key === ' ') && isEnabledMenuButton(event.target)) {
     event.preventDefault();
     keyboardContextMenuActivation = true;
     try {
@@ -71,6 +130,7 @@ function handleContextMenuKeydown(event) {
     }
     return;
   }
+  const buttons = contextMenuNavigationButtons(menu, event.target);
   moveMenuItemFocus(event, buttons);
 }
 
@@ -94,6 +154,33 @@ function moveMenuItemFocus(event, buttons) {
   return true;
 }
 
+function contextMenuNavigationButtons(menu, target) {
+  const submenu = target?.closest?.('.context-submenu');
+  return directContextMenuButtons(submenu || menu);
+}
+
+function directContextMenuButtons(scope) {
+  const children = Array.from(scope?.children || []);
+  return children.flatMap((child) => {
+    if (isEnabledMenuButton(child)) {
+      return [child];
+    }
+    if (child.matches?.('.context-submenu-row')) {
+      const button = child.querySelector?.(':scope > button:not([disabled])');
+      return button ? [button] : [];
+    }
+    return [];
+  });
+}
+
+function isContextSubmenuTrigger(target) {
+  return target?.matches?.('.context-submenu-row > button[aria-haspopup="menu"]') === true;
+}
+
+function isEnabledMenuButton(target) {
+  return target?.tagName === 'BUTTON' && target.disabled !== true;
+}
+
 function closeContextMenu(options = {}) {
   const menu = document.getElementById('contextMenu');
   if (!menu || menu.hidden) {
@@ -114,6 +201,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     attachTreeContextMenu,
     closeContextMenu,
+    setContextMenuPeerCloser,
     showContextMenu
   };
 }

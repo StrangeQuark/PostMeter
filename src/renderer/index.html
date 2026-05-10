@@ -47,7 +47,6 @@
             <button id="exportPostmanButton" role="menuitem">Postman</button>
             <button id="exportOpenApiButton" role="menuitem">OpenAPI</button>
             <button id="exportCurlButton" role="menuitem">curl</button>
-            <button id="exportHarButton" role="menuitem">HAR</button>
           </div>
         </div>
         <div class="toolbar-submenu-row" role="none">
@@ -1342,6 +1341,16 @@
       <div class="modal-actions">
         <button id="cancelExportItemButton" type="button">Cancel</button>
         <button id="confirmExportItemButton" type="button" class="primary" disabled>Export</button>
+      </div>
+    </section>
+
+    <section id="folderDestinationModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="folderDestinationTitle" aria-describedby="folderDestinationMessage" hidden>
+      <h2 id="folderDestinationTitle">Create folder</h2>
+      <p id="folderDestinationMessage">Choose a collection or folder for the new folder.</p>
+      <div id="folderDestinationList" class="collection-pick-list" role="radiogroup" aria-label="Folder destinations"></div>
+      <div class="modal-actions">
+        <button id="cancelFolderDestinationButton" type="button">Cancel</button>
+        <button id="confirmFolderDestinationButton" type="button" class="primary" disabled>Create Folder</button>
       </div>
     </section>
 

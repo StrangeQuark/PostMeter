@@ -114,6 +114,7 @@ let activeModalResolver = RENDERER_STATE_DEFAULTS.activeModalResolver;
 let selectedDraftSaveCollectionId = RENDERER_STATE_DEFAULTS.selectedDraftSaveCollectionId;
 let selectedExportCollectionId = RENDERER_STATE_DEFAULTS.selectedExportCollectionId;
 let selectedExportItemId = RENDERER_STATE_DEFAULTS.selectedExportItemId;
+let selectedFolderDestinationValue = '';
 let selectedRunnerImportTarget = [];
 let expandedRunnerImportCollectionIds = [];
 let lastRunnerImportSelectionKey = '';
@@ -453,7 +454,7 @@ function bindUi() {
     doc: document,
     windowObject: window,
     onNewCollection: newCollection,
-    onNewFolder: () => newFolder(),
+    onNewFolder: () => { void newFolderFromToolbar(); },
     onNewRequest: newRequest,
     onNewRunner: () => newRunner(),
     onNewPerformanceTest: () => newPerformanceTest(),
@@ -471,7 +472,6 @@ function bindUi() {
     onExportPostman: () => exportCollection(null, 'postman'),
     onExportOpenApi: () => exportCollection(null, 'openapi'),
     onExportCurl: () => exportCollection(null, 'curl'),
-    onExportHar: () => exportCollection(null, 'har'),
     onExportEnvironment: () => { void exportEnvironmentFromPicker('postmeter'); },
     onExportPostmanEnvironment: () => { void exportEnvironmentFromPicker('postman'); },
     onExportRunnerDefinition: () => { void exportRunnerDefinitionFromPicker(); },
@@ -604,8 +604,10 @@ function bindUi() {
     getSelectedDraftSaveCollectionId: () => selectedDraftSaveCollectionId,
     getSelectedExportCollectionId: () => selectedExportCollectionId,
     getSelectedExportItemId: () => selectedExportItemId,
+    getSelectedFolderDestination: () => selectedFolderDestinationValue,
     getSelectedRunnerImportTarget: () => selectedRunnerImportTarget,
     onCloseContextMenu: closeContextMenu,
+    onCloseFileSourceMenu: closeFileSourceMenu,
     onInitResizablePanes: initResizablePanes
   });
   bindRequestTitleEditor();
@@ -613,6 +615,12 @@ function bindUi() {
   bindEnvironmentTitleEditor();
   bindRunnerTitleEditor();
   bindPerformanceTitleEditor();
+  if (typeof setContextMenuPeerCloser === 'function') {
+    setContextMenuPeerCloser(() => {
+      closeToolbarMenus();
+      closeFileSourceMenu();
+    });
+  }
   bindHistoryContextMenu();
   bindLocalFilePickerUi();
 }
@@ -1231,8 +1239,8 @@ function renderRequestTabs() {
         idPrefix: 'open-request-tab',
         controlsId: 'requestEditorPanel',
         buttonClassName: 'request-tab-button',
-        methodText: (request) => request.method || 'GET',
-        methodClassName: (request) => methodClassName(request.method || 'GET'),
+        methodText: requestTabMethodText,
+        methodClassName: requestTabMethodClassName,
         title: (request) => request.name || 'Untitled Request',
         closeTitle: () => 'Close request',
         closeAriaLabel: (request) => `Close ${request.name || 'Untitled Request'}`,
@@ -1249,6 +1257,7 @@ function renderRequestTabs() {
         controlsId: 'environmentMainPanel',
         buttonClassName: 'request-tab-button environment-tab-button',
         methodText: () => 'ENV',
+        methodClassName: () => tagClassName('ENV'),
         title: (environment) => environment.name || 'Untitled Environment',
         closeTitle: () => 'Close environment',
         closeAriaLabel: (environment) => `Close ${environment.name || 'Untitled Environment'}`,
@@ -1265,6 +1274,7 @@ function renderRequestTabs() {
         controlsId: 'runnerMainPanel',
         buttonClassName: 'request-tab-button runner-tab-button',
         methodText: () => 'RUN',
+        methodClassName: () => tagClassName('RUN'),
         title: (runner) => runner.name || 'Untitled Runner',
         closeTitle: () => 'Close runner',
         closeAriaLabel: (runner) => `Close ${runner.name || 'Untitled Runner'}`,
@@ -1281,6 +1291,7 @@ function renderRequestTabs() {
         controlsId: 'performanceMainPanel',
         buttonClassName: 'request-tab-button performance-tab-button',
         methodText: () => 'PERF',
+        methodClassName: () => tagClassName('PERF'),
         title: (test) => test.name || 'Untitled Performance Test',
         closeTitle: () => 'Close performance test',
         closeAriaLabel: (test) => `Close ${test.name || 'Untitled Performance Test'}`,
@@ -1297,6 +1308,7 @@ function renderRequestTabs() {
         controlsId: 'workspaceMainPanel',
         buttonClassName: 'request-tab-button workspace-tab-button',
         methodText: () => 'WRK',
+        methodClassName: () => tagClassName('WRK'),
         title: (workspaceItem) => workspaceItem.name,
         closeTitle: () => 'Close workspace',
         closeAriaLabel: (workspaceItem) => `Close ${workspaceItem.name}`,
@@ -1307,6 +1319,25 @@ function renderRequestTabs() {
     ]
   });
   scheduleSessionSave();
+}
+
+function requestTabMethodText(request, tab = {}) {
+  const method = requestMethodText(request);
+  return isRunnerRequestTab(tab) ? `RUN - ${method}` : method;
+}
+
+function requestTabMethodClassName(request, tab = {}) {
+  return isRunnerRequestTab(tab)
+    ? tagClassName('RUN')
+    : methodClassName(requestMethodText(request));
+}
+
+function requestMethodText(request) {
+  return String(request?.method || 'GET').trim().toUpperCase() || 'GET';
+}
+
+function isRunnerRequestTab(tab = {}) {
+  return tab.runnerRequest === true || Boolean(tab.runnerId);
 }
 
 function ensureOpenEnvironmentTabForActive(options = {}) {
@@ -1894,6 +1925,131 @@ function promptItemExport(kind, items, preferredItem) {
   return showModal('exportItemModal', null);
 }
 
+async function newFolderFromToolbar() {
+  const destination = await promptForFolderDestination();
+  if (!destination) {
+    return null;
+  }
+  return newFolder(destination.collectionId, destination.folderId || null);
+}
+
+async function promptForFolderDestination() {
+  const collections = Array.isArray(workspace.collections) ? workspace.collections : [];
+  if (!collections.length) {
+    setStatus('Create a collection before creating a folder.');
+    renderToolbarState();
+    return null;
+  }
+  const preferred = preferredFolderDestination(collections);
+  selectedFolderDestinationValue = '';
+  renderFolderDestinationList(collections, preferred);
+  const selection = await showModal('folderDestinationModal', null);
+  return parseFolderDestinationValue(selection);
+}
+
+function preferredFolderDestination(collections) {
+  const collection = collections.find((item) => item.id === activeCollectionId) || collections[0] || null;
+  if (!collection) {
+    return null;
+  }
+  if (activeFolderId && findFolder(collection, activeFolderId)) {
+    return { collectionId: collection.id, folderId: activeFolderId };
+  }
+  return { collectionId: collection.id, folderId: null };
+}
+
+function renderFolderDestinationList(collections = workspace.collections, preferredDestination = null) {
+  const list = $('folderDestinationList');
+  list.textContent = '';
+  $('confirmFolderDestinationButton').disabled = true;
+  const availableCollections = Array.isArray(collections) ? collections : [];
+  if (!availableCollections.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.textContent = 'There are no collections present for a folder.';
+    list.append(empty);
+    return;
+  }
+  const preferredValue = folderDestinationValue(preferredDestination || { collectionId: availableCollections[0]?.id || '', folderId: null });
+  for (const collection of availableCollections) {
+    appendFolderDestinationOption(list, {
+      collectionId: collection.id,
+      folderId: null,
+      label: collection.name || 'Untitled Collection',
+      detail: 'Collection root',
+      depth: 0,
+      preferredValue
+    });
+    appendFolderDestinationFolderOptions(list, collection, collection.folders || [], 1, [collection.name || 'Untitled Collection'], preferredValue);
+  }
+}
+
+function appendFolderDestinationFolderOptions(list, collection, folders, depth, pathParts, preferredValue) {
+  for (const folder of folders || []) {
+    const name = folder.name || 'Untitled Folder';
+    const nextPathParts = [...pathParts, name];
+    appendFolderDestinationOption(list, {
+      collectionId: collection.id,
+      folderId: folder.id,
+      label: name,
+      detail: nextPathParts.join(' / '),
+      depth,
+      preferredValue
+    });
+    appendFolderDestinationFolderOptions(list, collection, folder.folders || [], depth + 1, nextPathParts, preferredValue);
+  }
+}
+
+function appendFolderDestinationOption(list, options = {}) {
+  const label = document.createElement('label');
+  label.className = 'collection-pick-option folder-destination-option';
+  label.style.paddingLeft = `${Math.min(Number(options.depth) || 0, 8) * 16 + 12}px`;
+  const input = document.createElement('input');
+  input.type = 'radio';
+  input.name = 'folderDestination';
+  input.value = folderDestinationValue(options);
+  input.addEventListener('change', () => {
+    selectedFolderDestinationValue = input.value;
+    $('confirmFolderDestinationButton').disabled = false;
+  });
+  if (input.value === options.preferredValue) {
+    input.checked = true;
+    selectedFolderDestinationValue = input.value;
+    $('confirmFolderDestinationButton').disabled = false;
+  }
+  const text = document.createElement('span');
+  text.textContent = options.label || 'Untitled Destination';
+  const detail = document.createElement('small');
+  detail.textContent = options.detail || '';
+  label.append(input, text, detail);
+  list.append(label);
+}
+
+function folderDestinationValue(destination = {}) {
+  return JSON.stringify({
+    collectionId: destination.collectionId || '',
+    folderId: destination.folderId || null
+  });
+}
+
+function parseFolderDestinationValue(value) {
+  if (!value) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(value);
+    if (!parsed?.collectionId) {
+      return null;
+    }
+    return {
+      collectionId: parsed.collectionId,
+      folderId: parsed.folderId || null
+    };
+  } catch {
+    return null;
+  }
+}
+
 function renderSaveDraftCollectionList() {
   const list = $('saveDraftCollectionList');
   list.textContent = '';
@@ -2015,6 +2171,7 @@ function showModal(modalId, cancelValue) {
   const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   closeContextMenu();
   closeToolbarMenus();
+  closeFileSourceMenu();
   lastModalFocusTarget = modalRestoreFocusTarget(previousFocus);
   $('modalBackdrop').hidden = false;
   for (const modal of $('modalBackdrop').querySelectorAll('.modal')) {
@@ -2360,7 +2517,7 @@ async function chooseImportFilePath(kind) {
       title: 'Import PostMeter Workspace'
     },
     collection: {
-      accept: '.json,.yaml,.yml,.har,.sh,application/json,application/yaml,text/yaml',
+      accept: '.json,.yaml,.yml,.sh,application/json,application/yaml,text/yaml',
       message: 'Drop a collection file here or choose one from this computer.',
       title: 'Import Collection'
     },
@@ -2396,6 +2553,7 @@ function focusInitialModalElement(modalId) {
     saveDraftRequestModal: 'cancelSaveDraftButton',
     exportCollectionModal: 'cancelExportCollectionButton',
     exportItemModal: 'cancelExportItemButton',
+    folderDestinationModal: 'cancelFolderDestinationButton',
     runnerImportModal: 'cancelRunnerImportButton',
     textInputModal: $('textInputModal')?.dataset?.valueControl || 'textInputModalInput',
     confirmActionModal: 'cancelConfirmActionButton',
@@ -2927,9 +3085,9 @@ function renderMainPanels() {
 }
 
 function renderToolbarState() {
-  const hasActiveCollection = Boolean(activeCollection());
-  $('newFolderButton').disabled = !hasActiveCollection;
-  $('newFolderButton').setAttribute('aria-disabled', hasActiveCollection ? 'false' : 'true');
+  const hasCollections = Array.isArray(workspace.collections) && workspace.collections.length > 0;
+  $('newFolderButton').disabled = !hasCollections;
+  $('newFolderButton').setAttribute('aria-disabled', hasCollections ? 'false' : 'true');
 }
 
 function renderSettings() {
@@ -3992,8 +4150,10 @@ function environmentNode(environment) {
   attachTreeContextMenu(button, [
     ['Rename', () => renameEnvironment(environment)],
     ['Duplicate', () => duplicateEnvironment(environment)],
-    ['Export PostMeter', () => { void exportEnvironment(environment, 'postmeter'); }],
-    ['Export Postman', () => { void exportEnvironment(environment, 'postman'); }],
+    ['Export', [
+      ['PostMeter', () => { void exportEnvironment(environment, 'postmeter'); }],
+      ['Postman', () => { void exportEnvironment(environment, 'postman'); }]
+    ]],
     ['Delete', () => deleteEnvironment(environment), 'danger']
   ]);
   return wrapper;
@@ -4038,7 +4198,7 @@ function runnerNode(runner) {
   attachTreeContextMenu(button, [
     ['Rename', () => renameRunner(runner)],
     ['Duplicate', () => duplicateRunner(runner)],
-    ['Export PostMeter', () => { void exportRunnerDefinition(runner); }],
+    ['Export', () => { void exportRunnerDefinition(runner); }],
     ['Delete', () => { void deleteRunner(runner); }, 'danger']
   ]);
   return wrapper;
@@ -4084,7 +4244,7 @@ function performanceTestNode(test) {
   attachTreeContextMenu(button, [
     ['Rename', () => renamePerformanceTest(test)],
     ['Duplicate', () => duplicatePerformanceTest(test)],
-    ['Export PostMeter', () => { void exportActivePerformanceTest(test); }],
+    ['Export', () => { void exportActivePerformanceTest(test); }],
     ['Delete', () => { void deletePerformanceTest(test); }, 'danger']
   ]);
   return wrapper;
@@ -4108,7 +4268,7 @@ function workspaceNode(workspaceItem) {
     ['View Details', () => { selectWorkspaceItem(workspaceItem.id); }],
     ['Rename', () => { renameWorkspace(workspaceItem.id); }],
     ['Duplicate', () => { void duplicateWorkspace(workspaceItem.id); }],
-    ['Export PostMeter', () => { void exportWorkspace(workspaceItem.id); }]
+    ['Export', () => { void exportWorkspace(workspaceItem.id); }]
   ];
   if (workspaceItem.current !== true) {
     menuItems.splice(1, 0, ['Switch to This Workspace', () => { void switchWorkspace(workspaceItem.id, { focus: 'workspace' }); }]);
@@ -5318,25 +5478,43 @@ async function exportActivePerformanceTest(test = activePerformanceTest()) {
   if (!test) {
     return setStatus('Select a performance test before exporting.');
   }
-  if (test.id === activePerformanceTestId) {
-    collectPerformanceTestFromEditor();
-  }
   const performanceApi = window.postmeter?.performance;
   if (!performanceApi?.exportTest) {
     return setStatus('Performance export is unavailable in this runtime.');
   }
-  try {
-    const result = await performanceApi.exportTest(normalizePerformanceTest(cloneJson(test), workspace), 'postmeter');
-    if (result?.path) {
-      setStatus(`Performance test exported to ${result.path}.`);
+  if (!window.postmeter?.fileExport) {
+    if (test.id === activePerformanceTestId) {
+      collectPerformanceTestFromEditor();
     }
-    return result;
-  } catch (error) {
-    const message = error.message || String(error);
-    setStatus(`Performance test export failed: ${message}`);
-    notifyUser('Performance Test Export Failed', message);
-    return null;
+    try {
+      const result = await performanceApi.exportTest(normalizePerformanceTest(cloneJson(test), workspace), 'postmeter');
+      if (result?.path) {
+        setStatus(`Performance test exported to ${result.path}.`);
+      }
+      return result;
+    } catch (error) {
+      const message = error.message || String(error);
+      setStatus(`Performance test export failed: ${message}`);
+      notifyUser('Performance Test Export Failed', message);
+      return null;
+    }
   }
+  return runPickerFirstExport({
+    kind: 'performance',
+    format: 'postmeter',
+    name: performanceTestDisplayName(test),
+    payloadFactory: () => {
+      if (test.id === activePerformanceTestId) {
+        collectPerformanceTestFromEditor();
+      }
+      return normalizePerformanceTest(cloneJson(test), workspace);
+    },
+    legacyExport: () => performanceApi.exportTest(normalizePerformanceTest(cloneJson(test), workspace), 'postmeter'),
+    successStatus: (filePath) => `Performance test exported to ${filePath}.`,
+    failureStatusPrefix: 'Performance test export failed',
+    failureTitle: 'Performance Test Export Failed',
+    unavailableStatus: 'Performance export is unavailable in this runtime.'
+  });
 }
 
 async function exportPerformanceTestFromPicker() {
@@ -5366,22 +5544,25 @@ async function importPerformanceTest() {
       return null;
     }
     if (!result?.performanceTest) {
-      setStatus('No performance test was imported.');
+      return setStatus('No performance test was imported.');
+    }
+    if (!canOpenAdditionalPerformanceTab()) {
       return null;
     }
-    ensureWorkspacePerformanceTests();
     collectActiveEditorState();
+    const tests = ensureWorkspacePerformanceTests();
     const imported = normalizePerformanceTest(cloneJson(result.performanceTest), workspace);
-    if (workspace.performanceTests.some((test) => test.id === imported.id)) {
+    if (tests.some((candidate) => candidate.id === imported.id)) {
       imported.id = crypto.randomUUID();
     }
-    imported.name = uniqueName(imported.name || 'Imported Performance Test', workspace.performanceTests.map((test) => test.name));
-    workspace.performanceTests.push(imported);
+    imported.name = uniqueName(imported.name || 'Imported Performance Test', tests.map((candidate) => candidate.name));
+    tests.push(imported);
     activeRunnerRequestRunnerId = null;
     activePerformanceTestId = imported.id;
     activeSidebarPanel = 'performance';
     activeMainPanel = 'performance';
     ensureOpenPerformanceTabForActive({ dirty: true, createdUnsaved: true });
+    activePerformanceOutputTabId = 'performanceOutputResultsTab';
     renderAll();
     await savePerformanceTestFromPane();
     setStatus(`Imported performance test: ${performanceTestDisplayName(imported)}.`);
@@ -6754,11 +6935,12 @@ function collectionNode(collection) {
     ['Add Folder', () => newFolder(collection.id, null)],
     ['Rename', () => renameCollection(collection)],
     ['Duplicate', () => { void duplicateCollection(collection); }],
-    ['Export PostMeter', () => exportCollection(collection, 'postmeter')],
-    ['Export Postman', () => exportCollection(collection, 'postman')],
-    ['Export OpenAPI', () => exportCollection(collection, 'openapi')],
-    ['Export curl', () => exportCollection(collection, 'curl')],
-    ['Export HAR', () => exportCollection(collection, 'har')],
+    ['Export', [
+      ['PostMeter', () => exportCollection(collection, 'postmeter')],
+      ['Postman', () => exportCollection(collection, 'postman')],
+      ['OpenAPI', () => exportCollection(collection, 'openapi')],
+      ['curl', () => exportCollection(collection, 'curl')]
+    ]],
     ['Delete', () => deleteCollection(collection), 'danger']
   ]);
   appendSidebarTreeRows(wrapper, sidebarTreeChildRows(collection, collection, null), { className: 'tree-folder' });
@@ -6848,7 +7030,7 @@ function treeButton(text, active, kind, options = {}) {
     button.dataset.treeId = String(options.treeId);
   }
   const badge = document.createElement('span');
-  badge.className = `tree-badge ${methodClassName(kind)}`;
+  badge.className = ['tree-badge', tagClassName(kind)].filter(Boolean).join(' ');
   badge.textContent = kind;
   const label = document.createElement('span');
   label.className = 'tree-label';
@@ -7872,6 +8054,25 @@ function methodClassName(method) {
   return METHODS.map((item) => item.toLowerCase()).includes(normalizedMethod)
     ? `method-${normalizedMethod}`
     : '';
+}
+
+function tagClassName(kind) {
+  const methodClass = methodClassName(kind);
+  if (methodClass) {
+    return methodClass;
+  }
+  const normalizedKind = String(kind || '').trim().toLowerCase();
+  const entityClassByKind = {
+    env: 'entity-environment',
+    environment: 'entity-environment',
+    wrk: 'entity-workspace',
+    workspace: 'entity-workspace',
+    run: 'entity-runner',
+    runner: 'entity-runner',
+    perf: 'entity-performance',
+    performance: 'entity-performance'
+  };
+  return entityClassByKind[normalizedKind] || '';
 }
 
 function updateMethodSelectClass() {
@@ -10261,6 +10462,73 @@ async function importWorkspace() {
     : rendererWorkflows.importWorkspace(filePath);
 }
 
+async function runPickerFirstExport({
+  kind,
+  format = 'postmeter',
+  name,
+  payloadFactory,
+  legacyExport,
+  successStatus,
+  failureStatusPrefix,
+  failureTitle,
+  unavailableStatus
+}) {
+  const exportApi = window.postmeter?.fileExport;
+  if (!exportApi?.choosePath || !exportApi?.prepare || !exportApi?.writePrepared || !exportApi?.cancelPrepared) {
+    if (typeof legacyExport === 'function') {
+      return await legacyExport();
+    }
+    return setStatus(unavailableStatus || 'Export is unavailable in this runtime.');
+  }
+  const exportId = crypto.randomUUID();
+  let cancelled = false;
+  let prepareError = null;
+  const pathPromise = exportApi.choosePath({ kind, format, name });
+  const preparePromise = new Promise((resolve) => setTimeout(resolve, 0))
+    .then(() => {
+      if (cancelled) {
+        return null;
+      }
+      return payloadFactory();
+    })
+    .then((payload) => {
+      if (cancelled || payload == null) {
+        return null;
+      }
+      return exportApi.prepare({ exportId, kind, format, payload });
+    })
+    .catch((error) => {
+      prepareError = error;
+      return null;
+    });
+  try {
+    const pathResult = await pathPromise;
+    if (pathResult?.cancelled || !pathResult?.path) {
+      cancelled = true;
+      await exportApi.cancelPrepared(exportId).catch(() => false);
+      await preparePromise;
+      return { cancelled: true };
+    }
+    await preparePromise;
+    if (prepareError) {
+      throw prepareError;
+    }
+    const result = await exportApi.writePrepared(exportId, pathResult.path);
+    if (result?.path && successStatus) {
+      setStatus(successStatus(result.path));
+    }
+    return result;
+  } catch (error) {
+    if (!cancelled) {
+      await exportApi.cancelPrepared(exportId).catch(() => false);
+      const message = error.message || String(error);
+      setStatus(`${failureStatusPrefix || 'Export failed'}: ${message}`);
+      notifyUser(failureTitle || 'Export Failed', message);
+    }
+    return null;
+  }
+}
+
 async function exportWorkspace(workspaceIdOrItem = null) {
   const requestedWorkspaceId = typeof workspaceIdOrItem === 'string'
     ? workspaceIdOrItem
@@ -10289,7 +10557,23 @@ async function exportWorkspace(workspaceIdOrItem = null) {
       return null;
     }
   }
-  return rendererWorkflows.exportWorkspace();
+  if (typeof window.__postmeterExportWorkspace === 'function') {
+    return rendererWorkflows.exportWorkspace();
+  }
+  return runPickerFirstExport({
+    kind: 'workspace',
+    format: 'postmeter',
+    name: workspaceDisplayName(workspaceItem),
+    payloadFactory: () => {
+      collectActiveEditorState();
+      return cloneJson(workspace);
+    },
+    legacyExport: () => rendererWorkflows.exportWorkspace(),
+    successStatus: (filePath) => `Workspace exported to ${filePath}.`,
+    failureStatusPrefix: 'Workspace export failed',
+    failureTitle: 'Workspace Export Failed',
+    unavailableStatus: 'Workspace export is unavailable in this runtime.'
+  });
 }
 
 async function exportWorkspaceFromPicker() {
@@ -10571,7 +10855,36 @@ function collectSettingsFromEditor() {
 }
 
 async function exportCollection(collection = activeCollection(), format = 'postmeter') {
-  return rendererWorkflows.exportCollection(collection, format);
+  let selectedCollection = collection;
+  if (!selectedCollection) {
+    const collections = Array.isArray(workspace?.collections) ? workspace.collections : [];
+    if (!collections.length) {
+      return setStatus('Create a collection before exporting.');
+    }
+    selectedCollection = await promptForCollectionExport(collections, activeCollection() || collections[0] || null);
+  }
+  if (!selectedCollection) {
+    return null;
+  }
+  if (typeof window.__postmeterExportCollection === 'function') {
+    return rendererWorkflows.exportCollection(selectedCollection, format);
+  }
+  return runPickerFirstExport({
+    kind: 'collection',
+    format,
+    name: selectedCollection.name || 'collection',
+    payloadFactory: () => {
+      if (selectedCollection.id === activeCollectionId) {
+        collectActiveEditorState();
+      }
+      return cloneJson(selectedCollection);
+    },
+    legacyExport: () => rendererWorkflows.exportCollection(selectedCollection, format),
+    successStatus: (filePath) => `Collection exported to ${filePath}.`,
+    failureStatusPrefix: 'Collection export failed',
+    failureTitle: 'Collection Export Failed',
+    unavailableStatus: 'Collection export is unavailable in this runtime.'
+  });
 }
 
 async function importEnvironment() {
@@ -10627,26 +10940,44 @@ async function exportEnvironment(environment = activeEnvironment(), format = 'po
   if (!selectedEnvironment) {
     return setStatus('Select an environment before exporting.');
   }
-  if (selectedEnvironment.id === activeEnvironmentId) {
-    collectEnvironmentFromEditor();
-  }
   const environmentApi = window.postmeter?.environment;
   const exportBoundary = window.__postmeterExportEnvironment || environmentApi?.exportEnvironment;
   if (!exportBoundary) {
     return setStatus('Environment export is unavailable in this runtime.');
   }
-  try {
-    const result = await exportBoundary(normalizeImportedEnvironment(cloneJson(selectedEnvironment)), format);
-    if (result?.path) {
-      setStatus(`Environment exported to ${result.path}.`);
+  if (typeof window.__postmeterExportEnvironment === 'function' || !window.postmeter?.fileExport) {
+    if (selectedEnvironment.id === activeEnvironmentId) {
+      collectEnvironmentFromEditor();
     }
-    return result;
-  } catch (error) {
-    const message = error.message || String(error);
-    setStatus(`Environment export failed: ${message}`);
-    notifyUser('Environment Export Failed', message);
-    return null;
+    try {
+      const result = await exportBoundary(normalizeImportedEnvironment(cloneJson(selectedEnvironment)), format);
+      if (result?.path) {
+        setStatus(`Environment exported to ${result.path}.`);
+      }
+      return result;
+    } catch (error) {
+      const message = error.message || String(error);
+      setStatus(`Environment export failed: ${message}`);
+      notifyUser('Environment Export Failed', message);
+      return null;
+    }
   }
+  return runPickerFirstExport({
+    kind: 'environment',
+    format,
+    name: selectedEnvironment.name || 'environment',
+    payloadFactory: () => {
+      if (selectedEnvironment.id === activeEnvironmentId) {
+        collectEnvironmentFromEditor();
+      }
+      return normalizeImportedEnvironment(cloneJson(selectedEnvironment));
+    },
+    legacyExport: () => exportBoundary(normalizeImportedEnvironment(cloneJson(selectedEnvironment)), format),
+    successStatus: (filePath) => `Environment exported to ${filePath}.`,
+    failureStatusPrefix: 'Environment export failed',
+    failureTitle: 'Environment Export Failed',
+    unavailableStatus: 'Environment export is unavailable in this runtime.'
+  });
 }
 
 async function exportEnvironmentFromPicker(format = 'postmeter') {
@@ -10711,26 +11042,44 @@ async function exportRunnerDefinition(runner = activeRunner()) {
   if (!selectedRunner) {
     return setStatus('Select a runner before exporting.');
   }
-  if (selectedRunner.id === activeRunnerConfigId) {
-    collectRunnerFromEditor();
-  }
   const runnerApi = window.postmeter?.runner;
   const exportBoundary = window.__postmeterExportRunner || runnerApi?.exportDefinition;
   if (!exportBoundary) {
     return setStatus('Runner export is unavailable in this runtime.');
   }
-  try {
-    const result = await exportBoundary(normalizeRunner(cloneJson(selectedRunner)), 'postmeter');
-    if (result?.path) {
-      setStatus(`Runner exported to ${result.path}.`);
+  if (typeof window.__postmeterExportRunner === 'function' || !window.postmeter?.fileExport) {
+    if (selectedRunner.id === activeRunnerConfigId) {
+      collectRunnerFromEditor();
     }
-    return result;
-  } catch (error) {
-    const message = error.message || String(error);
-    setStatus(`Runner export failed: ${message}`);
-    notifyUser('Runner Export Failed', message);
-    return null;
+    try {
+      const result = await exportBoundary(normalizeRunner(cloneJson(selectedRunner)), 'postmeter');
+      if (result?.path) {
+        setStatus(`Runner exported to ${result.path}.`);
+      }
+      return result;
+    } catch (error) {
+      const message = error.message || String(error);
+      setStatus(`Runner export failed: ${message}`);
+      notifyUser('Runner Export Failed', message);
+      return null;
+    }
   }
+  return runPickerFirstExport({
+    kind: 'runner',
+    format: 'postmeter',
+    name: runnerDisplayName(selectedRunner),
+    payloadFactory: () => {
+      if (selectedRunner.id === activeRunnerConfigId) {
+        collectRunnerFromEditor();
+      }
+      return normalizeRunner(cloneJson(selectedRunner));
+    },
+    legacyExport: () => exportBoundary(normalizeRunner(cloneJson(selectedRunner)), 'postmeter'),
+    successStatus: (filePath) => `Runner exported to ${filePath}.`,
+    failureStatusPrefix: 'Runner export failed',
+    failureTitle: 'Runner Export Failed',
+    unavailableStatus: 'Runner export is unavailable in this runtime.'
+  });
 }
 
 async function exportRunnerDefinitionFromPicker() {

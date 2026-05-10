@@ -132,10 +132,15 @@
       clientY: 80
     }));
     const contextMenu = getElement(runtimeGlobal, 'contextMenu');
-    const labels = Array.from(contextMenu.querySelectorAll('button')).map((button) => button.textContent);
+    const topLevelButtons = getContextMenuTopLevelButtons(contextMenu);
+    const labels = topLevelButtons.map((button) => button.textContent);
+    const submenuLabels = Array.from(contextMenu.querySelectorAll('.context-submenu button')).map((button) => button.textContent);
     assertUiSmoke(!contextMenu.hidden, 'Context menu did not open.');
-    for (const label of ['Add Request', 'Add Folder', 'Rename', 'Duplicate', 'Export PostMeter', 'Delete']) {
+    for (const label of ['Add Request', 'Add Folder', 'Rename', 'Duplicate', 'Export', 'Delete']) {
       assertUiSmoke(labels.includes(label), `Context menu missing ${label}.`);
+    }
+    for (const label of ['PostMeter', 'Postman', 'OpenAPI', 'curl']) {
+      assertUiSmoke(submenuLabels.includes(label), `Context menu export submenu missing ${label}.`);
     }
     if (options.keyboard === true) {
       runtimeGlobal.closeContextMenu();
@@ -147,12 +152,21 @@
         shiftKey: true
       }));
       assertUiSmoke(!contextMenu.hidden, 'Keyboard context menu did not open.');
-      const buttons = Array.from(contextMenu.querySelectorAll('button'));
+      const buttons = getContextMenuTopLevelButtons(contextMenu);
       assertUiSmoke(runtimeGlobal.document.activeElement === buttons[0], 'Keyboard context menu should focus the first action.');
       buttons[0].dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowDown' }));
       assertUiSmoke(runtimeGlobal.document.activeElement === buttons[1], 'Keyboard context menu should support arrow navigation.');
       buttons[1].dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'End' }));
       assertUiSmoke(runtimeGlobal.document.activeElement === buttons.at(-1), 'Keyboard context menu should support End navigation.');
+      const exportButton = buttons.find((button) => button.textContent === 'Export');
+      assertUiSmoke(exportButton, 'Keyboard context menu should expose the export submenu trigger.');
+      exportButton.focus();
+      exportButton.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowRight' }));
+      const exportSubmenuButton = exportButton.parentElement?.querySelector?.('.context-submenu button:not([disabled])');
+      assertUiSmoke(runtimeGlobal.document.activeElement === exportSubmenuButton, 'Keyboard context menu should move into export submenu items with ArrowRight.');
+      exportSubmenuButton.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowLeft' }));
+      assertUiSmoke(runtimeGlobal.document.activeElement === exportButton, 'Keyboard context menu should return from export submenu items with ArrowLeft.');
+      buttons.at(-1).focus();
       buttons.at(-1).dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowUp' }));
       assertUiSmoke(runtimeGlobal.document.activeElement === buttons.at(-2), 'Keyboard context menu should navigate relative to the focused menu item.');
       buttons.at(-2).dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape' }));
@@ -162,6 +176,19 @@
     if (!options.keepOpen) {
       runtimeGlobal.closeContextMenu();
     }
+  }
+
+  function getContextMenuTopLevelButtons(contextMenu) {
+    return Array.from(contextMenu.children).flatMap((child) => {
+      if (child.matches?.('button')) {
+        return [child];
+      }
+      if (child.matches?.('.context-submenu-row')) {
+        const parentButton = child.querySelector(':scope > button');
+        return parentButton ? [parentButton] : [];
+      }
+      return [];
+    });
   }
 
   function getElement(runtimeGlobal, id) {

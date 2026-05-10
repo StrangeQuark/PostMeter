@@ -98,21 +98,6 @@ Known gaps:
 - Shell expansion and complex quoting edge cases are not fully modeled.
 - Multipart, proxy, retry, redirect, compression, file-upload, and TLS flags are preserved as request data/metadata, not executed with full curl-equivalent transport semantics.
 
-## HAR
-
-Supported:
-
-- HAR 1.2 request entry import.
-- HAR request headers, query params, request cookies, post data, and request body encoding metadata import where present.
-- HAR response status/headers/body/cookies import as request examples. Response cookies become `Set-Cookie` example headers with common path/domain/expires/max-age/httpOnly/secure/SameSite/Priority/Partitioned attributes when present.
-- HAR timing, redirect URL, response body encoding, and compression metadata import as request-local variables.
-- Collection export as a HAR 1.2 log containing request entries, with request cookies derived from `Cookie` headers.
-- HAR export redacts privacy-sensitive `Authorization`, `Proxy-Authorization`, `Cookie`, and `Set-Cookie` header/cookie values by default; bodies are exported as authored because PostMeter cannot reliably identify arbitrary secret fields in payloads.
-
-Known gaps:
-
-- Full browser cache entries, browser page metadata, security details, and nonstandard HAR cookie fields are not fully modeled. HAR cookie import/export remains a practical bridge: request cookies are represented as `Cookie` headers, response cookies become example `Set-Cookie` headers for common attributes, and sensitive cookie values are redacted on export.
-
 ## XML And HTML
 
 Supported:

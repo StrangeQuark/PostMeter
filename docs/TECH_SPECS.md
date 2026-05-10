@@ -20,7 +20,7 @@ The migration deliberately does not bridge Electron to the Java services. Core b
 - Import/export native PostMeter environments, export Postman-compatible environment JSON, and import Postman environment JSON.
 - Import/export native PostMeter runner definitions.
 - Import/export Postman Collection v2.1 JSON while preserving folder/request hierarchy order, variables and raw variable metadata, auth inheritance, HTTP/GraphQL/gRPC/local mock scripts, editable examples, cookies and richer cookie metadata including newer priority/partitioning hints where present, supported GraphQL/gRPC protocol metadata, local mock/vault/visualizer/package binding metadata, file/binary body references, request/example/certificate IDs, and supported collection certificate metadata.
-- Import/export OpenAPI, curl, and HAR collection formats for compatibility workflows, including OpenAPI JSON/YAML input, local `$ref` resolution for common objects, server variables, path/query/header/cookie parameters, Swagger 2.0 body/form-data import, binary body hints, OpenAPI security scheme import/export, OpenAPI response examples and disabled generated response assertions, HAR cookies/response examples/timing/redirect/compression metadata with sensitive header/cookie redaction on export, common curl auth/data/redirect/compression/cookie/file flags, and preserved curl proxy/retry/client-TLS import metadata.
+- Import/export OpenAPI and curl collection formats for compatibility workflows, including OpenAPI JSON/YAML input, local `$ref` resolution for common objects, server variables, path/query/header/cookie parameters, Swagger 2.0 body/form-data import, binary body hints, OpenAPI security scheme import/export, OpenAPI response examples and disabled generated response assertions, common curl auth/data/redirect/compression/cookie/file flags, and preserved curl proxy/retry/client-TLS import metadata.
 - Define request assertions for status, headers, JSON paths, XML XPath, HTML CSS selectors, response time, response size, body text, JSON/XML/HTML variable extraction, and regex variable extraction.
 - Run workspace-owned desktop runners locally, including stop-on-failure, extracted-variable/script-mutation propagation, runtime variable display, progress events, and JSON/CSV result export.
 - Manage runners from the dedicated left-sidebar Runners section, with runner-local request copies, runner request editing, runner request import from collections, row reorder/delete controls, runner import/export, duplication, and a split execution-results view.
@@ -559,11 +559,6 @@ curl import/export:
 - Imports common `curl` command forms including URL, generated request name, method, headers, auth flags, repeated data flags, `-G` query-data mode, cookies, multipart-ish form flags, binary/file upload intent, redirects, compression, proxy/retry metadata, and TLS flag metadata.
 - Exports collection requests as readable curl commands, including PostMeter basic auth and preserved redirect/compressed/insecure/binary metadata when present.
 
-HAR import/export:
-
-- Imports HAR 1.2 request entries into a PostMeter collection.
-- Preserves HAR request cookies, request body encoding metadata, response status/headers/body/cookies as request examples, common response-cookie attributes as `Set-Cookie` example headers, and timing/redirect/body-encoding/compression metadata as request-local variables when present.
-- Exports collection requests as a HAR 1.2 log with request entries, derives request cookies from all enabled `Cookie` headers, and redacts privacy-sensitive authorization/cookie headers and cookie values.
 - Non-Postman import/export support is a practical compatibility bridge and does not claim source-format-perfect round trips or full external engine parity unless explicitly stated.
 
 See `docs/COMPATIBILITY.md` for the current import/export, scripting, and Performance compatibility matrix.
@@ -900,7 +895,7 @@ npm run cli -- run --file <workspace-or-collection> [--collection <id-or-name>] 
 Behavior:
 
 - Accepts native PostMeter workspace/collection files.
-- Uses the collection import pipeline for Postman, OpenAPI, curl, and HAR inputs.
+- Uses the collection import pipeline for Postman, OpenAPI, and curl inputs.
 - Selects the first collection by default, or a collection by ID/name.
 - Selects no environment by default, or an environment by ID/name for native workspace inputs.
 - Accepts repeated `--var key=value` environment overrides and `--collection-var key=value` collection overrides for CI injection.
@@ -1036,7 +1031,7 @@ Node tests cover:
 - HTTP validation, request execution against a local server, client-certificate path material loading for PEM/PFX/P12/CA inputs, end-to-end local HTTP mTLS handshakes with PEM and PFX/P12 client certificates, and end-to-end local gRPC mTLS handshakes with plain PEM, encrypted PEM, and PFX/P12 client certificates across unary, client-streaming, server-streaming, and bidirectional calls.
 - IPC request, response, auth, cookie, request example, workspace, file-operation result, update-check option, external URL open, and collection-run result payload validation.
 - Legacy load-test payload rejection and migration cleanup for removed request/workspace compatibility fields.
-- Collection format import/export for Postman, OpenAPI, curl, and HAR, including Postman Collection v2.1 script/ID/order/metadata round-tripping, OpenAPI YAML/security import-export, OpenAPI local `$ref` resolution, OpenAPI server/path/cookie/binary metadata, Swagger 2.0 body/form-data import, OpenAPI response examples/generated disabled assertions, HAR cookie/example/timing/redirect/compression preservation with common response-cookie attributes and sensitive export redaction, common curl auth/data/redirect/compression/file compatibility flags, and preserved curl proxy/retry/client-TLS import metadata.
+- Collection format import/export for Postman, OpenAPI, and curl, including Postman Collection v2.1 script/ID/order/metadata round-tripping, OpenAPI YAML/security import-export, OpenAPI local `$ref` resolution, OpenAPI server/path/cookie/binary metadata, Swagger 2.0 body/form-data import, OpenAPI response examples/generated disabled assertions, common curl auth/data/redirect/compression/file compatibility flags, and preserved curl proxy/retry/client-TLS import metadata.
 - Postman import for common inherited and request-level auth helpers, HTTP/GraphQL/gRPC scripts, protocol hook metadata, examples, cookies, prefix-constrained cookie metadata, real-world `request.cookie` source-format fixture coverage, variables and raw variable metadata, request/example/certificate IDs, file/binary body references, binding metadata, and collection certificates.
 - Postman sandbox parity matrix validation, the HTTP-core, broad, dynamic-host-globals, runtime-limits, HttpOnly-cookies, sendRequest-advanced, and file-binding Newman-compatible differential fixtures, and the protocol hook fixture, including request mutation, environment mutation, collection-variable behavior asserted inside the script, package/assertion/timer/dynamic-variable/cookie coverage, `pm.info`, `pm.message`, `pm.sendRequest` callback/object-body/advanced-auth/file-binding behavior, GraphQL hooks, and gRPC streaming message hooks.
 - Assertion evaluation, collection-run sequencing, request-local variables, cookie jar propagation, JSON/XML/HTML/regex extracted-variable propagation, script-mutation propagation, stop-on-failure, isolated request script execution, Node permission worker flags, minimal worker environments, bounded worker heap settings, bounded script console capture, explicit unsupported script API errors, and collection-run CSV export.
