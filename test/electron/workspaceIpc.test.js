@@ -11,6 +11,7 @@ const {
 } = require('../../electron/fileDialogs');
 const { registerWorkspaceIpc } = require('../../electron/workspaceIpc');
 const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../src/core/diagnostics');
+const { normalizeSettings } = require('../../src/core/models');
 
 test('file dialog helpers validate selected paths before IPC file operations', () => {
   assert.deepEqual(collectionImportFilters(), [
@@ -37,6 +38,8 @@ test('workspace IPC registers stable workspace, collection, and example channels
   let describeCurrentCalls = 0;
   let renamedVaultStore = null;
   let deletedVaultStore = null;
+  let renamedLocalSettings = null;
+  let deletedLocalSettings = null;
   const workspaceStore = {
     describeCurrent: async (workspace, extras = {}) => {
       describeCurrentCalls += 1;
@@ -103,12 +106,18 @@ test('workspace IPC registers stable workspace, collection, and example channels
       }
     },
     refreshApplicationMenu: () => {},
+    renameLocalSettings: async (previousId, nextId) => {
+      renamedLocalSettings = { previousId, nextId };
+    },
     renameVaultStore: async (previousId, nextId) => {
       renamedVaultStore = { previousId, nextId };
     },
     saveWorkspace: async (workspace) => workspace,
     saveWorkspaceSync: (workspace) => workspace,
     setWorkspace: () => {},
+    deleteLocalSettings: async (workspaceId) => {
+      deletedLocalSettings = workspaceId;
+    },
     deleteVaultStore: async (workspaceId) => {
       deletedVaultStore = workspaceId;
     }
@@ -140,9 +149,11 @@ test('workspace IPC registers stable workspace, collection, and example channels
   ]);
   assert.deepEqual([...syncHandlers.keys()].sort(), ['workspace:saveSync']);
   await handlers.get('workspace:rename')({}, 'Local Workspace.json', 'Renamed Workspace');
+  assert.deepEqual(renamedLocalSettings, { previousId: 'Local Workspace.json', nextId: 'Renamed Workspace.json' });
   assert.deepEqual(renamedVaultStore, { previousId: 'Local Workspace.json', nextId: 'Renamed Workspace.json' });
   await handlers.get('workspace:delete')({}, 'Renamed Workspace.json');
   assert.equal(deletedVaultStore, 'Renamed Workspace.json');
+  assert.equal(deletedLocalSettings, 'Renamed Workspace.json');
   assert.deepEqual(await handlers.get('workspace:import')(), { cancelled: true });
   assert.deepEqual(await handlers.get('collection:import')(), { cancelled: true });
 });
@@ -489,6 +500,7 @@ test('workspace IPC load falls back to the workspace store when no cached worksp
 test('workspace IPC rolls back a workspace rename when vault metadata rename fails', async () => {
   const handlers = new Map();
   const renameCalls = [];
+  const localSettingsRenameCalls = [];
   let workspaceSetCalls = 0;
   const workspace = emptyWorkspace();
   const workspaceStore = {
@@ -532,6 +544,9 @@ test('workspace IPC rolls back a workspace rename when vault metadata rename fai
     },
     mutateWorkspace: async (mutator) => mutator(workspace),
     refreshApplicationMenu: () => {},
+    renameLocalSettings: async (previousId, nextId) => {
+      localSettingsRenameCalls.push({ previousId, nextId });
+    },
     renameVaultStore: async () => {
       throw new Error('vault rename denied');
     },
@@ -544,6 +559,10 @@ test('workspace IPC rolls back a workspace rename when vault metadata rename fai
   assert.deepEqual(renameCalls, [
     { workspaceId: 'Local Workspace.json', nextName: 'Renamed Workspace' },
     { workspaceId: 'Renamed Workspace.json', nextName: 'Local Workspace' }
+  ]);
+  assert.deepEqual(localSettingsRenameCalls, [
+    { previousId: 'Local Workspace.json', nextId: 'Renamed Workspace.json' },
+    { previousId: 'Renamed Workspace.json', nextId: 'Local Workspace.json' }
   ]);
   assert.equal(workspaceSetCalls, 0);
 });
@@ -961,8 +980,9 @@ test('workspace IPC saves only the selected request payload through targeted req
     cookies: [],
     settings: { updates: { includePrereleases: false } }
   };
-  let savedWorkspace = null;
+  let savedSettings = null;
   let appliedWorkspace = null;
+  let saveCalls = 0;
   let refreshCalls = 0;
 
   registerWorkspaceIpc({
@@ -1205,8 +1225,9 @@ test('workspace IPC saves only workspace settings through targeted settings save
     cookies: [],
     settings: { updates: { includePrereleases: false } }
   };
-  let savedWorkspace = null;
+  let savedSettings = null;
   let appliedWorkspace = null;
+  let saveCalls = 0;
   let refreshCalls = 0;
 
   registerWorkspaceIpc({
@@ -1229,8 +1250,12 @@ test('workspace IPC saves only workspace settings through targeted settings save
       }
     },
     refreshApplicationMenu: () => { refreshCalls += 1; },
+    saveLocalSettings: async (settings) => {
+      savedSettings = normalizeSettings(settings);
+      return savedSettings;
+    },
     saveWorkspace: async (workspace) => {
-      savedWorkspace = workspace;
+      saveCalls += 1;
       return workspace;
     },
     saveWorkspaceSync: (workspace) => workspace,
@@ -1248,13 +1273,14 @@ test('workspace IPC saves only workspace settings through targeted settings save
     updates: { includePrereleases: true }
   });
 
-  assert.equal(savedWorkspace.settings.appearance.theme, 'dark');
-  assert.equal(savedWorkspace.settings.diagnostics.logging.level, 'warn');
-  assert.equal(savedWorkspace.settings.diagnostics.requestResponseLogging.urls, true);
-  assert.equal(savedWorkspace.settings.diagnostics.requestResponseLogging.bodies, false);
-  assert.equal(savedWorkspace.settings.updates.includePrereleases, true);
-  assert.equal(savedWorkspace.collections[0].id, 'collection-1');
+  assert.equal(savedSettings.appearance.theme, 'dark');
+  assert.equal(savedSettings.diagnostics.logging.level, 'warn');
+  assert.equal(savedSettings.diagnostics.requestResponseLogging.urls, true);
+  assert.equal(savedSettings.diagnostics.requestResponseLogging.bodies, false);
+  assert.equal(savedSettings.updates.includePrereleases, true);
+  assert.equal(appliedWorkspace.collections[0].id, 'collection-1');
   assert.equal(appliedWorkspace.environments[0].id, 'environment-1');
+  assert.equal(saveCalls, 0);
   assert.equal(refreshCalls, 1);
   assert.deepEqual(result, {
     settings: appliedWorkspace.settings
@@ -1265,7 +1291,7 @@ test('workspace IPC saves only workspace settings through targeted settings save
 test('workspace IPC partial settings saves preserve diagnostics privacy choices', async () => {
   const handlers = new Map();
   let savedWorkspace = null;
-  const currentWorkspace = {
+  let currentWorkspace = {
     schemaVersion: 11,
     collections: [{
       id: 'collection-1',
@@ -1317,28 +1343,32 @@ test('workspace IPC partial settings saves preserve diagnostics privacy choices'
       on() {}
     },
     refreshApplicationMenu: () => {},
+    saveLocalSettings: async (settings) => normalizeSettings(settings),
     saveWorkspace: async (workspace) => {
       savedWorkspace = workspace;
+      currentWorkspace = workspace;
       return workspace;
     },
     saveWorkspaceSync: (workspace) => workspace,
-    setWorkspace: () => {}
+    setWorkspace: (workspace) => {
+      currentWorkspace = workspace;
+    }
   });
 
   const result = await handlers.get('workspace:saveSettings')(null, {
     appearance: { theme: 'light' }
   });
 
-  assert.equal(savedWorkspace.settings.appearance.theme, 'light');
-  assert.equal(savedWorkspace.settings.diagnostics.logging.enabled, false);
-  assert.equal(savedWorkspace.settings.diagnostics.logging.level, 'error');
-  assert.equal(savedWorkspace.settings.diagnostics.requestResponseLogging.urls, true);
-  assert.equal(savedWorkspace.settings.sandbox.trustedCapabilities.sendRequest, false);
-  assert.equal(savedWorkspace.settings.sandbox.trustedCapabilities.cookies, false);
-  assert.equal(savedWorkspace.settings.sandbox.trustedCapabilities.vault, true);
-  assert.equal(savedWorkspace.settings.sandbox.fileBindings.length, 1);
-  assert.equal(savedWorkspace.settings.updates.includePrereleases, true);
-  assert.deepEqual(result, { settings: savedWorkspace.settings });
+  assert.equal(currentWorkspace.settings.appearance.theme, 'light');
+  assert.equal(currentWorkspace.settings.diagnostics.logging.enabled, false);
+  assert.equal(currentWorkspace.settings.diagnostics.logging.level, 'error');
+  assert.equal(currentWorkspace.settings.diagnostics.requestResponseLogging.urls, true);
+  assert.equal(currentWorkspace.settings.sandbox.trustedCapabilities.sendRequest, false);
+  assert.equal(currentWorkspace.settings.sandbox.trustedCapabilities.cookies, false);
+  assert.equal(currentWorkspace.settings.sandbox.trustedCapabilities.vault, true);
+  assert.equal(currentWorkspace.settings.sandbox.fileBindings.length, 1);
+  assert.equal(currentWorkspace.settings.updates.includePrereleases, true);
+  assert.deepEqual(result, { settings: currentWorkspace.settings });
 
   await handlers.get('workspace:saveEnvironment')(null, {
     environmentId: 'environment-1',
@@ -1387,6 +1417,10 @@ test('workspace IPC rejects malformed sandbox settings before persistence', asyn
       on() {}
     },
     refreshApplicationMenu: () => {},
+    saveLocalSettings: async (settings) => {
+      saveCalls += 1;
+      return settings;
+    },
     saveWorkspace: async (workspace) => {
       saveCalls += 1;
       return workspace;

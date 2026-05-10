@@ -44,13 +44,13 @@ PostMeter must remain a standalone local desktop application. Do not add PostMet
   - Tests cover runner model normalization, migration, IPC validation/runtime mutation policy, session persistence, tab cap enforcement, dirty runner tab save/discard failure paths, and first-class renderer wiring.
 - Refined desktop tab and sidebar interactions.
   - Request, environment, and workspace names are inline-editable; request/environment title edits save on Enter and stay dirty on blur, while workspace title edits save automatically.
-  - Pane-local save actions replaced the old top-toolbar Save button for requests and environments, and workspace settings continue through targeted settings saves.
+  - Pane-local save actions replaced the old top-toolbar Save button for requests and environments, and app/workspace-local preferences continue through targeted settings saves.
   - Open tabs shrink before scrolling, expose hover/active close buttons, support tab right-click close/force-close actions, and enforce the 128-tab cap across requests, environments, workspaces, runners, and performance tests.
   - Sidebar collections, folders, requests, environments, workspaces, runners, and performance tests are draggable; structural drag/drop saves only the membership/order change and leaves dirty editor drafts dirty.
   - Drag placement feedback is a single highlighted insertion bar per gap.
   - The History sidebar tab has a `Clear History` context action with an irreversible-action confirmation.
 - Implemented the local Performance section.
-  - `Performance` now lives between `Runners` and `History`, persists workspace-owned `workspace.performanceTests` under schema 13, and uses dirty-aware tabs, session restore, close/force-close behavior, and the 128-tab cap.
+  - `Performance` now lives between `Runners` and `History`, persists workspace-owned `workspace.performanceTests` under the current schema, and uses dirty-aware tabs, session restore, close/force-close behavior, and the 128-tab cap.
   - Users can create Performance tests from `New` or the empty Performance pane, import/export native Performance test files, import deep-copied collection requests, manually enter request details, choose an environment, configure safety limits, run/cancel tests, and review bounded result summaries.
   - The seven V1 local types are `Latency`, `RPS / throughput`, `Concurrency`, `Stress`, `Spike`, `Soak`, and `Ramp`.
   - Tests cover model normalization, import/export validation, request-copy isolation, environment copy-vs-mutate behavior, safety-cap rejection, cancellation, IPC progress/mutation behavior, renderer wiring, sidebar ordering, and tab-limit behavior.
@@ -67,7 +67,7 @@ PostMeter must remain a standalone local desktop application. Do not add PostMet
 ## Highest Priority Steps
 
 1. Expand Settings into the full Preferences system.
-   - Decide which values should remain workspace-scoped and which should move into a durable app-wide preferences model.
+   - Continue refining the split between app-wide settings in `settings.json`, workspace-local non-portable settings in `settings.json`, and portable workspace JSON.
    - Continue centralizing desktop behavior, editor, import/export, Performance, and privacy/diagnostics preferences here instead of adding one-off controls throughout the app.
 2. Prepare public beta/release candidate documentation.
    - Add or update `docs/SECURITY.md`, privacy notes, threat model summary, install/uninstall docs, unsigned artifact warnings, known limitations, compatibility matrix links, OAuth certification docs, diagnostics docs, and support channels.

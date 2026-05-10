@@ -4684,7 +4684,6 @@ function renderWorkspacePanel() {
     ['Current Workspace', workspaceItem.current === true ? 'Yes' : 'No'],
     ['Saved Workspaces', String(workspaceListItems().length || 0)],
     ['Schema Version', String(summary.schemaVersion || '-')],
-    ['Theme', titleCaseTheme(summary.theme)],
     ['Collections', String(summary.collections)],
     ['Folders', String(summary.folders)],
     ['Requests', String(summary.requests)],
@@ -7216,7 +7215,6 @@ async function saveRunnerFromPane() {
 function liveWorkspaceSummary() {
   return {
     schemaVersion: workspace?.schemaVersion || 0,
-    theme: workspace?.settings?.appearance?.theme || 'system',
     collections: workspace?.collections?.length || 0,
     folders: countWorkspaceFolders(),
     requests: countWorkspaceRequests(),
@@ -7233,7 +7231,6 @@ function workspaceSummaryForItem(workspaceItem) {
   }
   return {
     schemaVersion: Number.isFinite(Number(workspaceItem?.schemaVersion)) ? Number(workspaceItem.schemaVersion) : 0,
-    theme: workspaceItem?.theme || 'system',
     collections: Number.isFinite(Number(workspaceItem?.collectionCount)) ? Number(workspaceItem.collectionCount) : 0,
     folders: Number.isFinite(Number(workspaceItem?.folderCount)) ? Number(workspaceItem.folderCount) : 0,
     requests: Number.isFinite(Number(workspaceItem?.requestCount)) ? Number(workspaceItem.requestCount) : 0,

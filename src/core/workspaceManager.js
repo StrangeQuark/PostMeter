@@ -448,7 +448,6 @@ class WorkspaceManager {
       current: options.current === true,
       deletable: options.deletable === true,
       schemaVersion: summary.schemaVersion,
-      theme: summary.theme,
       collectionCount: summary.collectionCount,
       folderCount: summary.folderCount,
       requestCount: summary.requestCount,
@@ -533,9 +532,6 @@ function workspaceSummary(workspace) {
   }
   return {
     schemaVersion: Number(workspace?.schemaVersion) || 0,
-    theme: typeof workspace?.settings?.appearance?.theme === 'string' && workspace.settings.appearance.theme.trim()
-      ? workspace.settings.appearance.theme.trim()
-      : 'system',
     collectionCount: Array.isArray(workspace?.collections) ? workspace.collections.length : 0,
     folderCount: countWorkspaceFolders(workspace),
     requestCount,

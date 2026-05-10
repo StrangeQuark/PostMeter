@@ -1110,16 +1110,18 @@
     {
       "id": "ipc.channel.workspace-savesettings",
       "area": "IPC channel",
-      "target": "renderer-to-main channel `workspace:saveSettings`: Workspace settings save validates settings-only payloads.",
+      "target": "renderer-to-main channel `workspace:saveSettings`: Local settings save validates settings-only payloads and persists app/workspace-local preferences outside portable workspace JSON.",
       "status": "implemented",
       "evidenceRefs": [
         "electron/workspaceIpc.js",
         "electron/preload.js",
-        "src/core/ipcValidation.js"
+        "src/core/ipcValidation.js",
+        "src/core/appSettingsStore.js"
       ],
       "tests": [
         "test/electron/workspaceIpc.test.js",
-        "test/electron/ipcValidation.test.js"
+        "test/electron/ipcValidation.test.js",
+        "test/electron/appSettingsStore.test.js"
       ],
       "notes": ""
     },

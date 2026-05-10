@@ -40,7 +40,7 @@
     {
       "id": "ipc.diagnostics-export",
       "area": "IPC",
-      "target": "Diagnostic export is main-process owned, waits for queued workspace privacy-setting saves before export, uses a JSON save dialog, redacts export failure messages before they reach the renderer, returns the same bounded file-operation shape as other exports, and never exposes arbitrary file reads or upload behavior to the renderer.",
+      "target": "Diagnostic export is main-process owned, waits for queued local privacy-setting saves before export, uses a JSON save dialog, redacts export failure messages before they reach the renderer, returns the same bounded file-operation shape as other exports, and never exposes arbitrary file reads or upload behavior to the renderer.",
       "status": "implemented",
       "evidenceRefs": [
         "electron/diagnosticsIpc.js",
@@ -122,14 +122,17 @@
     },
     {
       "id": "privacy.import-reset",
-      "area": "Workspace import",
-      "target": "Imported native workspaces cannot silently enable request/response diagnostic logging; import resets diagnostics settings to the product defaults.",
+      "area": "Workspace import/export",
+      "target": "Imported and exported native workspaces cannot silently enable request/response diagnostic logging because local diagnostics settings live in settings.json and are omitted from portable workspace JSON.",
       "status": "implemented",
       "evidenceRefs": [
+        "src/core/appSettingsStore.js",
         "src/core/workspaceStore.js",
+        "src/core/workspacePersistence.js",
         "src/core/diagnosticsSettings.js"
       ],
       "tests": [
+        "test/electron/appSettingsStore.test.js",
         "test/electron/workspaceStore.test.js",
         "test/electron/diagnostics.test.js"
       ],
@@ -184,15 +187,17 @@
     {
       "id": "privacy.settings-validation",
       "area": "Settings",
-      "target": "Diagnostics settings are normalized and IPC-validated as a workspace-scoped allowlist; request/response categories remain false unless the user explicitly enables each category.",
+      "target": "Diagnostics settings are normalized and IPC-validated as a workspace-local allowlist persisted in settings.json; request/response categories remain false unless the user explicitly enables each category.",
       "status": "implemented",
       "evidenceRefs": [
+        "src/core/appSettingsStore.js",
         "src/core/diagnosticsSettings.js",
         "src/core/ipcValidation.js",
         "src/core/payloadSchemas.js",
         "src/renderer/renderer.js"
       ],
       "tests": [
+        "test/electron/appSettingsStore.test.js",
         "test/electron/diagnostics.test.js",
         "test/electron/ipcValidation.test.js",
         "test/electron/workspaceIpc.test.js"
@@ -221,7 +226,7 @@
     {
       "id": "ui.workspace-controls",
       "area": "Renderer UI",
-      "target": "Workspace diagnostics controls surface the off-by-default request/response logging categories, warn about PII/customer data, save with rollback on persistence failure, and expose local export from the Workspace panel and Help menu.",
+      "target": "Workspace-local diagnostics controls surface the off-by-default request/response logging categories, warn about PII/customer data, save local settings with rollback on persistence failure, and expose local export from Settings and Help.",
       "status": "implemented",
       "evidenceRefs": [
         "src/renderer/index.html",

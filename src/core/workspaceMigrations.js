@@ -100,6 +100,10 @@ function migrate(workspace) {
     workspace.schemaVersion = 13;
     migrated = true;
   }
+  if (schemaVersion < 14) {
+    workspace.schemaVersion = 14;
+    migrated = true;
+  }
   removeWorkspaceLoadTestPolicyFields(workspace);
   return migrated;
 }

@@ -11,7 +11,7 @@ const { normalizeCookies: normalizeCookieCollection } = require('./cookieModel')
 const { normalizeSandboxFileBindings } = require('./fileAttachmentBindings');
 const { normalizeDiagnosticsSettings } = require('./diagnosticsSettings');
 
-const CURRENT_SCHEMA_VERSION = 13;
+const CURRENT_SCHEMA_VERSION = 14;
 const MIN_SUPPORTED_SCHEMA_VERSION = 1;
 const SUPPORTED_METHODS = new Set(HTTP_METHODS);
 const BODY_METHODS = new Set(BODY_METHOD_VALUES);

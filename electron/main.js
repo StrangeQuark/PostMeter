@@ -4,6 +4,7 @@ const path = require('node:path');
 const { app, BrowserWindow, clipboard, dialog, ipcMain, protocol, safeStorage, shell } = require('electron');
 const { WorkspaceRecoveryError } = require('../src/core/workspaceStore');
 const { WorkspaceManager } = require('../src/core/workspaceManager');
+const { AppSettingsStore } = require('../src/core/appSettingsStore');
 const { EncryptedVaultStore } = require('../src/core/vaultStore');
 const {
   LocalDiagnosticsLogger,
@@ -44,6 +45,7 @@ let mainWindow;
 let sessionStore;
 let sessionState;
 let workspaceStore;
+let appSettingsStore;
 let workspace;
 const vaultStores = new Map();
 const trustedIpcMain = createTrustedIpcMain(ipcMain);
@@ -136,14 +138,16 @@ async function startApplication() {
     oauthFlows.registerProtocol();
     sessionStore = new SessionStore(defaultSessionPath(app.getPath('userData')));
     sessionState = await sessionStore.load();
+    appSettingsStore = new AppSettingsStore();
+    await appSettingsStore.load();
     workspaceStore = new WorkspaceManager();
     try {
       const loaded = await workspaceStore.load({ preferredWorkspaceId: sessionState.activeWorkspaceId });
-      workspace = loaded.workspace;
+      workspace = hydrateWorkspaceSettings(loaded.workspace, loaded.activeWorkspaceId);
       sessionState = await sessionStore.patch({ activeWorkspaceId: loaded.activeWorkspaceId });
     } catch (error) {
       if (error instanceof WorkspaceRecoveryError) {
-        workspace = error.recoveredWorkspace;
+        workspace = hydrateWorkspaceSettings(error.recoveredWorkspace, error.activeWorkspaceId || workspaceStore.getWorkspaceId());
         sessionState = await sessionStore.patch({ activeWorkspaceId: error.activeWorkspaceId || workspaceStore.getWorkspaceId() });
         await recordDiagnosticEvent(workspaceRecoveryDiagnosticEvent(error));
         dialog.showErrorBox('Workspace Recovered', error.message);
@@ -200,11 +204,58 @@ app.on('activate', () => {
 });
 
 async function saveWorkspace(nextWorkspace) {
-  return workspaceStore.save(nextWorkspace);
+  await saveLocalSettings(nextWorkspace?.settings, workspaceStore?.getWorkspaceId?.() || '');
+  const savedWorkspace = await workspaceStore.save(nextWorkspace);
+  return hydrateWorkspaceSettings(savedWorkspace);
 }
 
 function saveWorkspaceSync(nextWorkspace) {
-  return workspaceStore.saveSync(nextWorkspace);
+  saveLocalSettingsSync(nextWorkspace?.settings, workspaceStore?.getWorkspaceId?.() || '');
+  const savedWorkspace = workspaceStore.saveSync(nextWorkspace);
+  return hydrateWorkspaceSettings(savedWorkspace);
+}
+
+function hydrateWorkspaceSettings(nextWorkspace, workspaceId = workspaceStore?.getWorkspaceId?.() || '') {
+  if (!nextWorkspace || typeof nextWorkspace !== 'object') {
+    return nextWorkspace;
+  }
+  if (!appSettingsStore) {
+    return nextWorkspace;
+  }
+  return {
+    ...nextWorkspace,
+    settings: appSettingsStore.settingsForWorkspace(workspaceId, nextWorkspace.settings)
+  };
+}
+
+async function saveLocalSettings(settings, workspaceId = workspaceStore?.getWorkspaceId?.() || '') {
+  if (!appSettingsStore || !settings || typeof settings !== 'object') {
+    return workspace?.settings || {};
+  }
+  await appSettingsStore.mergeWorkspaceSettings(workspaceId, settings);
+  return appSettingsStore.settingsForWorkspace(workspaceId, settings);
+}
+
+function saveLocalSettingsSync(settings, workspaceId = workspaceStore?.getWorkspaceId?.() || '') {
+  if (!appSettingsStore || !settings || typeof settings !== 'object') {
+    return workspace?.settings || {};
+  }
+  appSettingsStore.mergeWorkspaceSettingsSync(workspaceId, settings);
+  return appSettingsStore.settingsForWorkspace(workspaceId, settings);
+}
+
+async function renameLocalSettings(previousWorkspaceId, nextWorkspaceId) {
+  if (!appSettingsStore) {
+    return null;
+  }
+  return appSettingsStore.renameWorkspaceSettings(previousWorkspaceId, nextWorkspaceId);
+}
+
+async function deleteLocalSettings(workspaceId) {
+  if (!appSettingsStore) {
+    return null;
+  }
+  return appSettingsStore.deleteWorkspaceSettings(workspaceId);
 }
 
 function cloneWorkspace(value) {
@@ -479,11 +530,15 @@ registerWorkspaceIpc({
   getWorkspaceId: () => workspaceStore?.getWorkspaceId?.() || '',
   getWorkspaceStore: () => workspaceStore,
   hasPendingWorkspaceOperations,
+  hydrateWorkspace: hydrateWorkspaceSettings,
   ipcMain: trustedIpcMain,
   queueWorkspaceOperation: enqueueWorkspaceOperation,
   recordDiagnosticEvent,
   refreshApplicationMenu,
   renameVaultStore,
+  renameLocalSettings,
+  deleteLocalSettings,
+  saveLocalSettings,
   saveWorkspace,
   saveWorkspaceSync,
   setWorkspace: (nextWorkspace) => {

@@ -22,7 +22,6 @@ test('workspace manager creates and describes a default managed workspace', asyn
   assert.equal(loaded.workspaces[0].current, true);
   assert.equal(loaded.workspaces[0].deletable, false);
   assert.equal(loaded.workspaces[0].name, 'Local Workspace');
-  assert.equal(loaded.workspaces[0].theme, 'system');
   assert.equal(loaded.workspaces[0].collectionCount, 0);
   assert.equal(loaded.workspaces[0].requestCount, 0);
   assert.equal(loaded.workspaces[0].runnerCount, 0);
