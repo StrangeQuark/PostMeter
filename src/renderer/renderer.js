@@ -114,6 +114,7 @@ let activeModalResolver = RENDERER_STATE_DEFAULTS.activeModalResolver;
 let selectedDraftSaveCollectionId = RENDERER_STATE_DEFAULTS.selectedDraftSaveCollectionId;
 let selectedExportCollectionId = RENDERER_STATE_DEFAULTS.selectedExportCollectionId;
 let selectedExportItemId = RENDERER_STATE_DEFAULTS.selectedExportItemId;
+let selectedFolderDestinationValue = '';
 let selectedRunnerImportTarget = [];
 let expandedRunnerImportCollectionIds = [];
 let lastRunnerImportSelectionKey = '';
@@ -453,7 +454,7 @@ function bindUi() {
     doc: document,
     windowObject: window,
     onNewCollection: newCollection,
-    onNewFolder: () => newFolder(),
+    onNewFolder: () => { void newFolderFromToolbar(); },
     onNewRequest: newRequest,
     onNewRunner: () => newRunner(),
     onNewPerformanceTest: () => newPerformanceTest(),
@@ -604,8 +605,10 @@ function bindUi() {
     getSelectedDraftSaveCollectionId: () => selectedDraftSaveCollectionId,
     getSelectedExportCollectionId: () => selectedExportCollectionId,
     getSelectedExportItemId: () => selectedExportItemId,
+    getSelectedFolderDestination: () => selectedFolderDestinationValue,
     getSelectedRunnerImportTarget: () => selectedRunnerImportTarget,
     onCloseContextMenu: closeContextMenu,
+    onCloseFileSourceMenu: closeFileSourceMenu,
     onInitResizablePanes: initResizablePanes
   });
   bindRequestTitleEditor();
@@ -613,6 +616,12 @@ function bindUi() {
   bindEnvironmentTitleEditor();
   bindRunnerTitleEditor();
   bindPerformanceTitleEditor();
+  if (typeof setContextMenuPeerCloser === 'function') {
+    setContextMenuPeerCloser(() => {
+      closeToolbarMenus();
+      closeFileSourceMenu();
+    });
+  }
   bindHistoryContextMenu();
   bindLocalFilePickerUi();
 }
@@ -1231,8 +1240,8 @@ function renderRequestTabs() {
         idPrefix: 'open-request-tab',
         controlsId: 'requestEditorPanel',
         buttonClassName: 'request-tab-button',
-        methodText: (request) => request.method || 'GET',
-        methodClassName: (request) => methodClassName(request.method || 'GET'),
+        methodText: requestTabMethodText,
+        methodClassName: requestTabMethodClassName,
         title: (request) => request.name || 'Untitled Request',
         closeTitle: () => 'Close request',
         closeAriaLabel: (request) => `Close ${request.name || 'Untitled Request'}`,
@@ -1249,6 +1258,7 @@ function renderRequestTabs() {
         controlsId: 'environmentMainPanel',
         buttonClassName: 'request-tab-button environment-tab-button',
         methodText: () => 'ENV',
+        methodClassName: () => tagClassName('ENV'),
         title: (environment) => environment.name || 'Untitled Environment',
         closeTitle: () => 'Close environment',
         closeAriaLabel: (environment) => `Close ${environment.name || 'Untitled Environment'}`,
@@ -1265,6 +1275,7 @@ function renderRequestTabs() {
         controlsId: 'runnerMainPanel',
         buttonClassName: 'request-tab-button runner-tab-button',
         methodText: () => 'RUN',
+        methodClassName: () => tagClassName('RUN'),
         title: (runner) => runner.name || 'Untitled Runner',
         closeTitle: () => 'Close runner',
         closeAriaLabel: (runner) => `Close ${runner.name || 'Untitled Runner'}`,
@@ -1281,6 +1292,7 @@ function renderRequestTabs() {
         controlsId: 'performanceMainPanel',
         buttonClassName: 'request-tab-button performance-tab-button',
         methodText: () => 'PERF',
+        methodClassName: () => tagClassName('PERF'),
         title: (test) => test.name || 'Untitled Performance Test',
         closeTitle: () => 'Close performance test',
         closeAriaLabel: (test) => `Close ${test.name || 'Untitled Performance Test'}`,
@@ -1297,6 +1309,7 @@ function renderRequestTabs() {
         controlsId: 'workspaceMainPanel',
         buttonClassName: 'request-tab-button workspace-tab-button',
         methodText: () => 'WRK',
+        methodClassName: () => tagClassName('WRK'),
         title: (workspaceItem) => workspaceItem.name,
         closeTitle: () => 'Close workspace',
         closeAriaLabel: (workspaceItem) => `Close ${workspaceItem.name}`,
@@ -1307,6 +1320,25 @@ function renderRequestTabs() {
     ]
   });
   scheduleSessionSave();
+}
+
+function requestTabMethodText(request, tab = {}) {
+  const method = requestMethodText(request);
+  return isRunnerRequestTab(tab) ? `RUN - ${method}` : method;
+}
+
+function requestTabMethodClassName(request, tab = {}) {
+  return isRunnerRequestTab(tab)
+    ? tagClassName('RUN')
+    : methodClassName(requestMethodText(request));
+}
+
+function requestMethodText(request) {
+  return String(request?.method || 'GET').trim().toUpperCase() || 'GET';
+}
+
+function isRunnerRequestTab(tab = {}) {
+  return tab.runnerRequest === true || Boolean(tab.runnerId);
 }
 
 function ensureOpenEnvironmentTabForActive(options = {}) {
@@ -1894,6 +1926,131 @@ function promptItemExport(kind, items, preferredItem) {
   return showModal('exportItemModal', null);
 }
 
+async function newFolderFromToolbar() {
+  const destination = await promptForFolderDestination();
+  if (!destination) {
+    return null;
+  }
+  return newFolder(destination.collectionId, destination.folderId || null);
+}
+
+async function promptForFolderDestination() {
+  const collections = Array.isArray(workspace.collections) ? workspace.collections : [];
+  if (!collections.length) {
+    setStatus('Create a collection before creating a folder.');
+    renderToolbarState();
+    return null;
+  }
+  const preferred = preferredFolderDestination(collections);
+  selectedFolderDestinationValue = '';
+  renderFolderDestinationList(collections, preferred);
+  const selection = await showModal('folderDestinationModal', null);
+  return parseFolderDestinationValue(selection);
+}
+
+function preferredFolderDestination(collections) {
+  const collection = collections.find((item) => item.id === activeCollectionId) || collections[0] || null;
+  if (!collection) {
+    return null;
+  }
+  if (activeFolderId && findFolder(collection, activeFolderId)) {
+    return { collectionId: collection.id, folderId: activeFolderId };
+  }
+  return { collectionId: collection.id, folderId: null };
+}
+
+function renderFolderDestinationList(collections = workspace.collections, preferredDestination = null) {
+  const list = $('folderDestinationList');
+  list.textContent = '';
+  $('confirmFolderDestinationButton').disabled = true;
+  const availableCollections = Array.isArray(collections) ? collections : [];
+  if (!availableCollections.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.textContent = 'There are no collections present for a folder.';
+    list.append(empty);
+    return;
+  }
+  const preferredValue = folderDestinationValue(preferredDestination || { collectionId: availableCollections[0]?.id || '', folderId: null });
+  for (const collection of availableCollections) {
+    appendFolderDestinationOption(list, {
+      collectionId: collection.id,
+      folderId: null,
+      label: collection.name || 'Untitled Collection',
+      detail: 'Collection root',
+      depth: 0,
+      preferredValue
+    });
+    appendFolderDestinationFolderOptions(list, collection, collection.folders || [], 1, [collection.name || 'Untitled Collection'], preferredValue);
+  }
+}
+
+function appendFolderDestinationFolderOptions(list, collection, folders, depth, pathParts, preferredValue) {
+  for (const folder of folders || []) {
+    const name = folder.name || 'Untitled Folder';
+    const nextPathParts = [...pathParts, name];
+    appendFolderDestinationOption(list, {
+      collectionId: collection.id,
+      folderId: folder.id,
+      label: name,
+      detail: nextPathParts.join(' / '),
+      depth,
+      preferredValue
+    });
+    appendFolderDestinationFolderOptions(list, collection, folder.folders || [], depth + 1, nextPathParts, preferredValue);
+  }
+}
+
+function appendFolderDestinationOption(list, options = {}) {
+  const label = document.createElement('label');
+  label.className = 'collection-pick-option folder-destination-option';
+  label.style.paddingLeft = `${Math.min(Number(options.depth) || 0, 8) * 16 + 12}px`;
+  const input = document.createElement('input');
+  input.type = 'radio';
+  input.name = 'folderDestination';
+  input.value = folderDestinationValue(options);
+  input.addEventListener('change', () => {
+    selectedFolderDestinationValue = input.value;
+    $('confirmFolderDestinationButton').disabled = false;
+  });
+  if (input.value === options.preferredValue) {
+    input.checked = true;
+    selectedFolderDestinationValue = input.value;
+    $('confirmFolderDestinationButton').disabled = false;
+  }
+  const text = document.createElement('span');
+  text.textContent = options.label || 'Untitled Destination';
+  const detail = document.createElement('small');
+  detail.textContent = options.detail || '';
+  label.append(input, text, detail);
+  list.append(label);
+}
+
+function folderDestinationValue(destination = {}) {
+  return JSON.stringify({
+    collectionId: destination.collectionId || '',
+    folderId: destination.folderId || null
+  });
+}
+
+function parseFolderDestinationValue(value) {
+  if (!value) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(value);
+    if (!parsed?.collectionId) {
+      return null;
+    }
+    return {
+      collectionId: parsed.collectionId,
+      folderId: parsed.folderId || null
+    };
+  } catch {
+    return null;
+  }
+}
+
 function renderSaveDraftCollectionList() {
   const list = $('saveDraftCollectionList');
   list.textContent = '';
@@ -2015,6 +2172,7 @@ function showModal(modalId, cancelValue) {
   const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   closeContextMenu();
   closeToolbarMenus();
+  closeFileSourceMenu();
   lastModalFocusTarget = modalRestoreFocusTarget(previousFocus);
   $('modalBackdrop').hidden = false;
   for (const modal of $('modalBackdrop').querySelectorAll('.modal')) {
@@ -2396,6 +2554,7 @@ function focusInitialModalElement(modalId) {
     saveDraftRequestModal: 'cancelSaveDraftButton',
     exportCollectionModal: 'cancelExportCollectionButton',
     exportItemModal: 'cancelExportItemButton',
+    folderDestinationModal: 'cancelFolderDestinationButton',
     runnerImportModal: 'cancelRunnerImportButton',
     textInputModal: $('textInputModal')?.dataset?.valueControl || 'textInputModalInput',
     confirmActionModal: 'cancelConfirmActionButton',
@@ -2927,9 +3086,9 @@ function renderMainPanels() {
 }
 
 function renderToolbarState() {
-  const hasActiveCollection = Boolean(activeCollection());
-  $('newFolderButton').disabled = !hasActiveCollection;
-  $('newFolderButton').setAttribute('aria-disabled', hasActiveCollection ? 'false' : 'true');
+  const hasCollections = Array.isArray(workspace.collections) && workspace.collections.length > 0;
+  $('newFolderButton').disabled = !hasCollections;
+  $('newFolderButton').setAttribute('aria-disabled', hasCollections ? 'false' : 'true');
 }
 
 function renderSettings() {
@@ -6873,7 +7032,7 @@ function treeButton(text, active, kind, options = {}) {
     button.dataset.treeId = String(options.treeId);
   }
   const badge = document.createElement('span');
-  badge.className = `tree-badge ${methodClassName(kind)}`;
+  badge.className = ['tree-badge', tagClassName(kind)].filter(Boolean).join(' ');
   badge.textContent = kind;
   const label = document.createElement('span');
   label.className = 'tree-label';
@@ -7897,6 +8056,25 @@ function methodClassName(method) {
   return METHODS.map((item) => item.toLowerCase()).includes(normalizedMethod)
     ? `method-${normalizedMethod}`
     : '';
+}
+
+function tagClassName(kind) {
+  const methodClass = methodClassName(kind);
+  if (methodClass) {
+    return methodClass;
+  }
+  const normalizedKind = String(kind || '').trim().toLowerCase();
+  const entityClassByKind = {
+    env: 'entity-environment',
+    environment: 'entity-environment',
+    wrk: 'entity-workspace',
+    workspace: 'entity-workspace',
+    run: 'entity-runner',
+    runner: 'entity-runner',
+    perf: 'entity-performance',
+    performance: 'entity-performance'
+  };
+  return entityClassByKind[normalizedKind] || '';
 }
 
 function updateMethodSelectClass() {

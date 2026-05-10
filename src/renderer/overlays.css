@@ -102,6 +102,12 @@
   flex: 0 0 auto;
 }
 
+.folder-destination-option small {
+  color: var(--text-muted);
+  font-size: 11px;
+  margin-left: auto;
+}
+
 .runner-import-modal {
   width: min(680px, 100%);
 }

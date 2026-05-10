@@ -98,7 +98,7 @@
     const doc = options.doc || document;
     const windowObject = options.windowObject || window;
 
-    bindToolbarMenus(doc);
+    bindToolbarMenus(doc, options);
     bindClick(doc, 'newCollectionButton', options.onNewCollection);
     bindClick(doc, 'newFolderButton', options.onNewFolder);
     bindClick(doc, 'newRequestButton', options.onNewRequest);
@@ -315,6 +315,13 @@
         options.onResolveActiveModal?.(selectedExportItemId);
       }
     });
+    bindClick(doc, 'cancelFolderDestinationButton', () => options.onResolveActiveModal?.(null));
+    bindClick(doc, 'confirmFolderDestinationButton', () => {
+      const selectedFolderDestination = options.getSelectedFolderDestination?.();
+      if (selectedFolderDestination) {
+        options.onResolveActiveModal?.(selectedFolderDestination);
+      }
+    });
     bindClick(doc, 'cancelRunnerImportButton', () => options.onResolveActiveModal?.(null));
     bindClick(doc, 'confirmRunnerImportButton', () => {
       const selectedImportTarget = options.getSelectedRunnerImportTarget?.();
@@ -395,7 +402,7 @@
     options.onPerformanceAuthInput?.();
   }
 
-  function bindToolbarMenus(doc = document) {
+  function bindToolbarMenus(doc = document, options = {}) {
     for (const [buttonId, menuId] of [
       ['newMenuButton', 'newMenu'],
       ['importMenuButton', 'importMenu'],
@@ -408,12 +415,12 @@
       }
       button.addEventListener('click', (event) => {
         event.stopPropagation();
-        toggleToolbarMenu(doc, button, menu);
+        toggleToolbarMenu(doc, button, menu, options);
       });
       button.addEventListener('keydown', (event) => {
         if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
-          openToolbarMenu(doc, button, menu);
+          openToolbarMenu(doc, button, menu, options);
           menu.querySelector?.('button')?.focus?.();
         }
       });
@@ -563,18 +570,29 @@
       });
   }
 
-  function toggleToolbarMenu(doc, button, menu) {
+  function toggleToolbarMenu(doc, button, menu, options = {}) {
     if (menu.hidden) {
-      openToolbarMenu(doc, button, menu);
+      openToolbarMenu(doc, button, menu, options);
     } else {
       closeToolbarMenus(doc);
     }
   }
 
-  function openToolbarMenu(doc, button, menu) {
+  function openToolbarMenu(doc, button, menu, options = {}) {
+    if (isModalBackdropOpen(doc)) {
+      closeToolbarMenus(doc);
+      return;
+    }
+    options.onCloseContextMenu?.();
+    options.onCloseFileSourceMenu?.();
     closeToolbarMenus(doc);
     menu.hidden = false;
     button.setAttribute('aria-expanded', 'true');
+  }
+
+  function isModalBackdropOpen(doc) {
+    const backdrop = getElement(doc, 'modalBackdrop');
+    return Boolean(backdrop && backdrop.hidden === false);
   }
 
   function closeToolbarMenus(doc = document) {

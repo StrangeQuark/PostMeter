@@ -93,6 +93,41 @@ test('opened request tab arrow navigation focuses the tab after selection rerend
   assert.equal(doc.activeElement.getAttribute('aria-selected'), 'true');
 });
 
+test('opened request tabs apply group-provided label and color classes', () => {
+  const doc = createFakeDocument(['requestTabBar']);
+
+  renderRequestTabs({
+    doc,
+    groups: [{
+      tabs: [
+        { key: 'request:collection-1:first', dirty: false },
+        { key: 'runner-request:runner-1:first', dirty: false, runnerRequest: true, runnerId: 'runner-1' }
+      ],
+      resolve: (tab) => ({
+        id: tab.key,
+        name: tab.runnerRequest ? 'Runner Request' : 'Collection Request',
+        method: tab.runnerRequest ? 'PATCH' : 'POST'
+      }),
+      isActive: () => false,
+      buttonClassName: 'request-tab-button',
+      methodText: (request, tab) => (tab.runnerRequest ? `RUN - ${request.method}` : request.method),
+      methodClassName: (request, tab) => (tab.runnerRequest ? 'entity-runner' : `method-${request.method.toLowerCase()}`),
+      title: (request) => request.name,
+      closeTitle: () => 'Close request',
+      closeAriaLabel: (request) => `Close ${request.name}`,
+      onSelect: () => {},
+      onClose: () => {}
+    }]
+  });
+
+  const methodLabels = doc.getElementById('requestTabBar').querySelectorAll('.request-tab-method');
+
+  assert.equal(methodLabels[0].textContent, 'POST');
+  assert.equal(methodLabels[0].className.includes('method-post'), true);
+  assert.equal(methodLabels[1].textContent, 'RUN - PATCH');
+  assert.equal(methodLabels[1].className.includes('entity-runner'), true);
+});
+
 function createFakeDocument(ids = []) {
   const elements = new Map();
   const doc = {

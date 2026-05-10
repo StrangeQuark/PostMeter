@@ -1,5 +1,10 @@
 let activeContextMenuTrigger = null;
 let keyboardContextMenuActivation = false;
+let contextMenuPeerCloser = null;
+
+function setContextMenuPeerCloser(closer) {
+  contextMenuPeerCloser = typeof closer === 'function' ? closer : null;
+}
 
 function attachTreeContextMenu(button, items) {
   button.setAttribute('aria-haspopup', 'menu');
@@ -20,6 +25,7 @@ function attachTreeContextMenu(button, items) {
 
 function showContextMenu(x, y, items, options = {}) {
   const menu = document.getElementById('contextMenu');
+  contextMenuPeerCloser?.();
   closeContextMenu();
   activeContextMenuTrigger = options.trigger || null;
   activeContextMenuTrigger?.setAttribute?.('aria-expanded', 'true');
@@ -195,6 +201,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     attachTreeContextMenu,
     closeContextMenu,
+    setContextMenuPeerCloser,
     showContextMenu
   };
 }

@@ -1345,6 +1345,16 @@
       </div>
     </section>
 
+    <section id="folderDestinationModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="folderDestinationTitle" aria-describedby="folderDestinationMessage" hidden>
+      <h2 id="folderDestinationTitle">Create folder</h2>
+      <p id="folderDestinationMessage">Choose a collection or folder for the new folder.</p>
+      <div id="folderDestinationList" class="collection-pick-list" role="radiogroup" aria-label="Folder destinations"></div>
+      <div class="modal-actions">
+        <button id="cancelFolderDestinationButton" type="button">Cancel</button>
+        <button id="confirmFolderDestinationButton" type="button" class="primary" disabled>Create Folder</button>
+      </div>
+    </section>
+
     <section id="runnerImportModal" class="modal runner-import-modal" role="dialog" aria-modal="true" aria-labelledby="runnerImportTitle" aria-describedby="runnerImportMessage" hidden>
       <h2 id="runnerImportTitle">Import requests</h2>
       <p id="runnerImportMessage">Choose a collection to expand, then select one or more requests to add to this runner.</p>

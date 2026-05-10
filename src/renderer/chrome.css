@@ -518,6 +518,22 @@ h2 {
   color: var(--method-options);
 }
 
+.entity-environment {
+  color: var(--entity-environment);
+}
+
+.entity-workspace {
+  color: var(--entity-workspace);
+}
+
+.entity-runner {
+  color: var(--entity-runner);
+}
+
+.entity-performance {
+  color: var(--entity-performance);
+}
+
 .tree-badge.method-get {
   background: var(--method-get-bg);
   color: var(--method-get);
@@ -551,6 +567,26 @@ h2 {
 .tree-badge.method-options {
   background: var(--method-options-bg);
   color: var(--method-options);
+}
+
+.tree-badge.entity-environment {
+  background: var(--entity-environment-bg);
+  color: var(--entity-environment);
+}
+
+.tree-badge.entity-workspace {
+  background: var(--entity-workspace-bg);
+  color: var(--entity-workspace);
+}
+
+.tree-badge.entity-runner {
+  background: var(--entity-runner-bg);
+  color: var(--entity-runner);
+}
+
+.tree-badge.entity-performance {
+  background: var(--entity-performance-bg);
+  color: var(--entity-performance);
 }
 
 .tree-label {
@@ -1526,6 +1562,50 @@ h2 {
   color: var(--green);
   font-size: 10px;
   font-weight: 800;
+}
+
+.request-tab-method.method-get {
+  color: var(--method-get);
+}
+
+.request-tab-method.method-post {
+  color: var(--method-post);
+}
+
+.request-tab-method.method-put {
+  color: var(--method-put);
+}
+
+.request-tab-method.method-patch {
+  color: var(--method-patch);
+}
+
+.request-tab-method.method-delete {
+  color: var(--method-delete);
+}
+
+.request-tab-method.method-head {
+  color: var(--method-head);
+}
+
+.request-tab-method.method-options {
+  color: var(--method-options);
+}
+
+.request-tab-method.entity-environment {
+  color: var(--entity-environment);
+}
+
+.request-tab-method.entity-workspace {
+  color: var(--entity-workspace);
+}
+
+.request-tab-method.entity-runner {
+  color: var(--entity-runner);
+}
+
+.request-tab-method.entity-performance {
+  color: var(--entity-performance);
 }
 
 .request-tab-title {
