@@ -290,6 +290,7 @@ test('Electron security matrix enumerates every IPC channel exposed by source', 
   const root = path.join(__dirname, '..', '..');
   const mainFiles = [
     'electron/appIpc.js',
+    'electron/exportIpc.js',
     'electron/main.js',
     'electron/oauthIpc.js',
     'electron/requestIpc.js',

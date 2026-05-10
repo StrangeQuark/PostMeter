@@ -115,6 +115,12 @@ const postmeterApi = {
   diagnostics: {
     export: () => ipcRenderer.invoke('diagnostics:export')
   },
+  fileExport: {
+    choosePath: (options) => ipcRenderer.invoke('file-export:choosePath', options),
+    prepare: (request) => ipcRenderer.invoke('file-export:prepare', request),
+    writePrepared: (exportId, filePath) => ipcRenderer.invoke('file-export:writePrepared', exportId, filePath),
+    cancelPrepared: (exportId) => ipcRenderer.invoke('file-export:cancelPrepared', exportId)
+  },
   runner: {
     start: (id, collection, environment, config) => ipcRenderer.invoke('runner:start', id, collection, environment, config),
     cancel: (id) => ipcRenderer.invoke('runner:cancel', id),

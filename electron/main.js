@@ -25,6 +25,7 @@ const { SessionStore, defaultSessionPath } = require('./sessionStore');
 const { registerRuntimeIpc } = require('./runtimeIpc');
 const { registerSandboxPackageIpc } = require('./sandboxPackageIpc');
 const { registerDiagnosticsIpc } = require('./diagnosticsIpc');
+const { registerExportIpc } = require('./exportIpc');
 const { registerWorkspaceIpc } = require('./workspaceIpc');
 const { registerRequestIpc } = require('./requestIpc');
 const { registerOAuthIpc } = require('./oauthIpc');
@@ -461,6 +462,13 @@ registerRuntimeIpc({
   setWorkspace: (nextWorkspace) => {
     workspace = nextWorkspace;
   }
+});
+
+registerExportIpc({
+  dialog,
+  fileOperationResult,
+  getMainWindow: () => mainWindow,
+  ipcMain: trustedIpcMain
 });
 
 registerWorkspaceIpc({
