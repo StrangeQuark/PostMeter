@@ -1,6 +1,5 @@
 const { exportPostmanCollection, importPostmanCollection } = require('./postmanImporter');
 const { exportCurlCollection, importCurlCommand } = require('./curlFormats');
-const { exportHarCollection, importHarDocument, looksLikeHarDocument } = require('./harFormats');
 const { exportOpenApiCollection, importOpenApiDocument, looksLikeOpenApiDocument } = require('./openApiFormats');
 const { migrate } = require('./workspaceMigrations');
 const { regenerateCollectionIds } = require('./importedCollectionIds');
@@ -35,15 +34,6 @@ const importHandlers = [
     }
   },
   {
-    name: 'har',
-    canImport({ parsed }) {
-      return looksLikeHarDocument(parsed);
-    },
-    import({ parsed }) {
-      return importHarDocument(parsed);
-    }
-  },
-  {
     name: 'curl',
     canImport({ content }) {
       return content.trim().startsWith('curl');
@@ -70,9 +60,6 @@ const exportHandlers = {
   openapi(collection) {
     return JSON.stringify(exportOpenApiCollection(collection), null, 2);
   },
-  har(collection) {
-    return JSON.stringify(exportHarCollection(collection), null, 2);
-  },
   curl(collection) {
     return exportCurlCollection(collection);
   }
@@ -92,12 +79,12 @@ function importCollectionFromContent(content) {
       if (handler.name !== 'postman') {
         throw error;
       }
-      const unsupported = new Error('File is not a supported PostMeter, Postman, OpenAPI, HAR, or curl collection.');
+      const unsupported = new Error('File is not a supported PostMeter, Postman, OpenAPI, or curl collection.');
       unsupported.cause = error;
       throw unsupported;
     }
   }
-  const error = new Error('File is not a supported PostMeter, Postman, OpenAPI, HAR, or curl collection.');
+  const error = new Error('File is not a supported PostMeter, Postman, OpenAPI, or curl collection.');
   error.cause = new Error('No compatible collection import handler matched the file contents.');
   throw error;
 }

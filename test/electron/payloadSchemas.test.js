@@ -18,7 +18,7 @@ const {
 
 test('defines shared payload schema metadata for IPC and contributors', () => {
   assert.equal(PAYLOAD_SCHEMA_VERSION, 1);
-  assert.deepEqual(COLLECTION_EXPORT_FORMATS, ['postmeter', 'postman', 'openapi', 'curl', 'har']);
+  assert.deepEqual(COLLECTION_EXPORT_FORMATS, ['postmeter', 'postman', 'openapi', 'curl']);
   assert.ok(HTTP_METHODS.includes('PATCH'));
   assert.ok(BODY_TYPE_VALUES.includes('RAW_JSON'));
   assert.ok(AUTH_TYPE_VALUES.includes('oauth2'));
@@ -64,7 +64,7 @@ test('defines shared payload schema metadata for IPC and contributors', () => {
 });
 
 test('validates enum values through shared schema helper', () => {
-  assert.equal(oneOf('har', COLLECTION_EXPORT_FORMATS, 'format'), 'har');
+  assert.throws(() => oneOf('archive', COLLECTION_EXPORT_FORMATS, 'format'), /format must be one of/);
   assert.deepEqual(schemaEnum('collectionExportFormats'), COLLECTION_EXPORT_FORMATS);
   assert.equal(fieldLimit('name'), 256);
   assert.equal(hasSchemaEnumValue('httpMethods', 'PATCH'), true);

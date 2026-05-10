@@ -139,7 +139,7 @@
     for (const label of ['Add Request', 'Add Folder', 'Rename', 'Duplicate', 'Export', 'Delete']) {
       assertUiSmoke(labels.includes(label), `Context menu missing ${label}.`);
     }
-    for (const label of ['PostMeter', 'Postman', 'OpenAPI', 'curl', 'HAR']) {
+    for (const label of ['PostMeter', 'Postman', 'OpenAPI', 'curl']) {
       assertUiSmoke(submenuLabels.includes(label), `Context menu export submenu missing ${label}.`);
     }
     if (options.keyboard === true) {

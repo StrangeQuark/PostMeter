@@ -110,8 +110,6 @@ const REQUIRED_ELECTRON_SECURITY_ROWS = Object.freeze([
 const REQUIRED_NON_POSTMAN_COMPATIBILITY_ROWS = Object.freeze([
   'curl.cross-shell-quoting',
   'curl.import-export',
-  'har.import-export',
-  'har.privacy-export-boundary',
   'native-postmeter.performance-tests',
   'native-postmeter.roundtrip',
   'openapi.import-export',
@@ -467,10 +465,6 @@ function buildNonPostmanCompatibilityMatrix() {
       evidenceRefs: ['src/core/openApiFormats.js', 'docs/COMPATIBILITY.md'],
       tests: ['test/electron/collectionFormats.test.js']
     }),
-    row('har.import-export', 'HAR', 'HAR 1.2 import/export covers request entries, response examples, headers, cookies, redirects, timings, compression, body encoding metadata, and sensitive header/cookie redaction on export.', 'implemented', {
-      evidenceRefs: ['src/core/harFormats.js', 'docs/COMPATIBILITY.md'],
-      tests: ['test/electron/collectionFormats.test.js']
-    }),
     row('curl.import-export', 'curl', 'curl import/export covers common method, URL, generated names, header, auth, repeated data, query-data, cookie, redirect, compression, file/binary, and quoting variants; proxy, retry, and client TLS flags are preserved as import metadata instead of being claimed as curl-equivalent transport execution.', 'implemented', {
       evidenceRefs: ['src/core/curlFormats.js', 'docs/COMPATIBILITY.md'],
       tests: ['test/electron/collectionFormats.test.js']
@@ -489,10 +483,6 @@ function buildNonPostmanCompatibilityMatrix() {
     }),
     row('openapi.invalid-common-specs', 'OpenAPI', 'Invalid-but-common OpenAPI and structured collection variants fail with clear parser or fallback errors instead of crashing or producing misleading collections.', 'implemented', {
       evidenceRefs: ['src/core/openApiFormats.js', 'test/electron/collectionFormats.test.js'],
-      tests: ['test/electron/collectionFormats.test.js']
-    }),
-    row('har.privacy-export-boundary', 'HAR', 'HAR export redacts privacy-sensitive authorization/cookie headers and cookie values while documenting that arbitrary payload bodies cannot be reliably secret-scanned.', 'implemented', {
-      evidenceRefs: ['src/core/harFormats.js', 'docs/COMPATIBILITY.md'],
       tests: ['test/electron/collectionFormats.test.js']
     }),
     row('curl.cross-shell-quoting', 'curl', 'curl import/export covers common Linux/macOS/Windows quoting forms, including cmd.exe caret line continuations, and repeated headers without claiming every shell dialect.', 'implemented', {

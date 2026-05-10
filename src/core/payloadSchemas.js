@@ -48,7 +48,7 @@ const OAUTH_PROGRESS_STATUSES = [
   'cancelled',
   'failed'
 ];
-const COLLECTION_EXPORT_FORMATS = ['postmeter', 'postman', 'openapi', 'curl', 'har'];
+const COLLECTION_EXPORT_FORMATS = ['postmeter', 'postman', 'openapi', 'curl'];
 const PERFORMANCE_TEST_TYPES = ['latency', 'throughput', 'concurrency', 'stress', 'spike', 'soak', 'ramp'];
 const PERFORMANCE_EXPORT_FORMATS = ['postmeter', 'json', 'csv'];
 const THEME_VALUES = ['system', 'light', 'dark'];

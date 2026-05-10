@@ -189,8 +189,8 @@ function assertExportKind(value) {
 }
 
 function assertCollectionExportFormat(format) {
-  if (!['postmeter', 'postman', 'openapi', 'curl', 'har'].includes(String(format || ''))) {
-    throw new Error('Collection export format must be postmeter, postman, openapi, curl, or har.');
+  if (!['postmeter', 'postman', 'openapi', 'curl'].includes(String(format || ''))) {
+    throw new Error('Collection export format must be postmeter, postman, openapi, or curl.');
   }
 }
 

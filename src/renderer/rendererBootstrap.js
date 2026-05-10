@@ -120,7 +120,6 @@
     bindClick(doc, 'exportPostmanButton', options.onExportPostman);
     bindClick(doc, 'exportOpenApiButton', options.onExportOpenApi);
     bindClick(doc, 'exportCurlButton', options.onExportCurl);
-    bindClick(doc, 'exportHarButton', options.onExportHar);
     bindClick(doc, 'exportEnvironmentButton', options.onExportEnvironment);
     bindClick(doc, 'exportPostmanEnvironmentButton', options.onExportPostmanEnvironment);
     bindClick(doc, 'exportRunnerDefinitionButton', options.onExportRunnerDefinition);

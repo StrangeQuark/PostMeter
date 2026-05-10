@@ -14,7 +14,7 @@
     assertToolbarMenuSmoke('newMenuButton', 'newMenu', ['Workspace', 'Request', 'Collection', 'Folder', 'Environment', 'Runner', 'Performance Test']);
     assertToolbarMenuSmoke('importMenuButton', 'importMenu', ['Workspace', 'Collection', 'Environment', 'Runner', 'Performance Test']);
     assertToolbarMenuSmoke('exportMenuButton', 'exportMenu', ['Workspace', 'Collection', 'Environment', 'Runner', 'Performance Test'], {
-      submenuLabels: ['PostMeter', 'Postman', 'OpenAPI', 'curl', 'HAR']
+      submenuLabels: ['PostMeter', 'Postman', 'OpenAPI', 'curl']
     });
     assertToolbarMenuKeyboardActivationSmoke();
     await setThemePreference('dark', { save: false, showStatus: false });

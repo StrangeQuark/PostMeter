@@ -472,7 +472,6 @@ function bindUi() {
     onExportPostman: () => exportCollection(null, 'postman'),
     onExportOpenApi: () => exportCollection(null, 'openapi'),
     onExportCurl: () => exportCollection(null, 'curl'),
-    onExportHar: () => exportCollection(null, 'har'),
     onExportEnvironment: () => { void exportEnvironmentFromPicker('postmeter'); },
     onExportPostmanEnvironment: () => { void exportEnvironmentFromPicker('postman'); },
     onExportRunnerDefinition: () => { void exportRunnerDefinitionFromPicker(); },
@@ -2518,7 +2517,7 @@ async function chooseImportFilePath(kind) {
       title: 'Import PostMeter Workspace'
     },
     collection: {
-      accept: '.json,.yaml,.yml,.har,.sh,application/json,application/yaml,text/yaml',
+      accept: '.json,.yaml,.yml,.sh,application/json,application/yaml,text/yaml',
       message: 'Drop a collection file here or choose one from this computer.',
       title: 'Import Collection'
     },
@@ -6940,8 +6939,7 @@ function collectionNode(collection) {
       ['PostMeter', () => exportCollection(collection, 'postmeter')],
       ['Postman', () => exportCollection(collection, 'postman')],
       ['OpenAPI', () => exportCollection(collection, 'openapi')],
-      ['curl', () => exportCollection(collection, 'curl')],
-      ['HAR', () => exportCollection(collection, 'har')]
+      ['curl', () => exportCollection(collection, 'curl')]
     ]],
     ['Delete', () => deleteCollection(collection), 'danger']
   ]);

@@ -153,20 +153,19 @@ function buildProductionReadinessMatrix() {
       ],
       notes: 'The lower-level workspace-durability matrix has 9 implemented rows covering atomic workspace/session/backup/export writes, corrupt quarantine and no-overwrite recovery, filesystem-discovered managed workspaces, schema migrations, side-effect merge semantics, encrypted vault storage outside workspace JSON, large-workspace budgets, and import/export cancellation or parse-failure behavior. Diagnostics/privacy redaction remains tracked separately by the diagnostics.privacy readiness row.'
     }),
-    row('compatibility.non-postman', 'compatibility', 'OpenAPI, HAR, curl, and native PostMeter import/export compatibility are matrixed and validated.', 'validated', {
+    row('compatibility.non-postman', 'compatibility', 'OpenAPI, curl, and native PostMeter import/export compatibility are matrixed and validated.', 'validated', {
       releaseBlocking: true,
       commands: ['npm run compatibility:non-postman:validate', 'npm test'],
       evidenceRefs: [
         'docs/non-postman-compatibility-matrix.json',
         'docs/COMPATIBILITY.md',
         'src/core/openApiFormats.js',
-        'src/core/harFormats.js',
         'src/core/curlFormats.js',
         'test/electron/collectionFormats.test.js',
         'test/electron/workspaceStore.test.js',
         'test/electron/postmanImporter.test.js'
       ],
-      notes: 'The source-owned non-Postman matrix has 8 implemented rows covering OpenAPI, HAR, curl, native PostMeter round trips, invalid input behavior, cross-shell quoting, privacy boundaries, and explicit preserve-only claim boundaries. Focused format tests exercise OpenAPI local references, server variables, path/query/header/cookie params, cookie API-key security, Swagger 2.0 body/form-data import, binary body hints, response examples and disabled assertions; HAR cookies, redirect, body-encoding/compression metadata, timing, and sensitive header/cookie export redaction; curl auth, redirects, compression, repeated/query data, binary/file intent, generated names, and Windows-style line-continuation quoting; plus native workspace/Postman durability coverage for complex workspace features.'
+      notes: 'The source-owned non-Postman matrix has 7 implemented rows covering OpenAPI, curl, native PostMeter round trips, invalid input behavior, cross-shell quoting, and explicit preserve-only claim boundaries. Focused format tests exercise OpenAPI local references, server variables, path/query/header/cookie params, cookie API-key security, Swagger 2.0 body/form-data import, binary body hints, response examples and disabled assertions; curl auth, redirects, compression, repeated/query data, binary/file intent, generated names, and Windows-style line-continuation quoting; plus native workspace/Postman durability coverage for complex workspace features.'
     }),
     row('dependencies.audit', 'security', 'Release dependency audit must pass with no high-severity vulnerabilities.', 'validated', {
       releaseBlocking: true,

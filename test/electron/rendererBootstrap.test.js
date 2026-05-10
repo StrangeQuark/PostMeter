@@ -281,8 +281,7 @@ test('renderer bootstrap binds every collection export menu button', () => {
     ['exportCollectionButton', 'postmeter', 'onExportCollection'],
     ['exportPostmanButton', 'postman', 'onExportPostman'],
     ['exportOpenApiButton', 'openapi', 'onExportOpenApi'],
-    ['exportCurlButton', 'curl', 'onExportCurl'],
-    ['exportHarButton', 'har', 'onExportHar']
+    ['exportCurlButton', 'curl', 'onExportCurl']
   ];
   const elements = new Map(controls.map(([id]) => [id, createElement()]));
   const options = {
@@ -938,8 +937,7 @@ test('renderer supplies explicit collection export format handlers', () => {
     ['onExportCollection', 'postmeter'],
     ['onExportPostman', 'postman'],
     ['onExportOpenApi', 'openapi'],
-    ['onExportCurl', 'curl'],
-    ['onExportHar', 'har']
+    ['onExportCurl', 'curl']
   ]) {
     assert.match(
       rendererSource,

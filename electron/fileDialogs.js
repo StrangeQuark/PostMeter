@@ -7,7 +7,7 @@ function jsonFilters() {
 
 function collectionImportFilters() {
   return [
-    { name: 'API Collections', extensions: ['json', 'yaml', 'yml', 'har', 'sh'] },
+    { name: 'API Collections', extensions: ['json', 'yaml', 'yml', 'sh'] },
     { name: 'All Files', extensions: ['*'] }
   ];
 }
@@ -17,8 +17,7 @@ function collectionExportExtension(format) {
     postmeter: 'json',
     postman: 'postman_collection.json',
     openapi: 'openapi.json',
-    curl: 'sh',
-    har: 'har'
+    curl: 'sh'
   }[format] || 'json';
 }
 

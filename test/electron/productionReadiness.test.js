@@ -273,8 +273,6 @@ test('non-Postman compatibility matrix keeps every Step 9 required row enumerate
   assert.deepEqual([...ids].sort(), [
     'curl.cross-shell-quoting',
     'curl.import-export',
-    'har.import-export',
-    'har.privacy-export-boundary',
     'native-postmeter.performance-tests',
     'native-postmeter.roundtrip',
     'openapi.import-export',

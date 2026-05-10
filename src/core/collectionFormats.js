@@ -4,11 +4,6 @@ const {
   splitCommandLine
 } = require('./curlFormats');
 const {
-  exportHarCollection,
-  importHarDocument,
-  looksLikeHarDocument
-} = require('./harFormats');
-const {
   exportOpenApiCollection,
   importOpenApiDocument,
   looksLikeOpenApiDocument
@@ -21,14 +16,11 @@ const {
 
 module.exports = {
   exportCurlCollection,
-  exportHarCollection,
   exportOpenApiCollection,
   exportPostmanCollection,
   importCurlCommand,
-  importHarDocument,
   importOpenApiDocument,
   importPostmanCollection,
-  looksLikeHarDocument,
   looksLikeOpenApiDocument,
   looksLikePostmanCollection,
   splitCommandLine
