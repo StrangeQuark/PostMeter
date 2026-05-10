@@ -98,7 +98,8 @@ test('accepts structurally valid IPC payloads', () => {
           }
         }
       },
-      updates: { includePrereleases: true }
+      updates: { includePrereleases: true },
+      modals: { closeOnBackdropClick: true }
     },
     collections: [],
     runners: [{
@@ -389,6 +390,7 @@ test('accepts structurally valid IPC payloads', () => {
       trustedCapabilities: { sendRequest: true, cookies: true, vault: true, vaultGrants: { workspace: true } }
     },
     tabs: { saveOnForceClose: true },
+    modals: { closeOnBackdropClick: true },
     updates: { includePrereleases: true }
   }));
   assert.doesNotThrow(() => assertWorkspaceSettingsSaveResultPayload({
@@ -523,6 +525,7 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertWorkspaceEnvironmentSavePayload({ environment: { id: 'e1', name: 'Env', variables: [] } }), /payload.environmentId must be a string/);
   assert.throws(() => assertWorkspaceSettingsSavePayload({ appearance: { theme: 'sepia' } }), /settings.appearance.theme must be one of/);
   assert.throws(() => assertWorkspaceSettingsSavePayload({ tabs: { saveOnForceClose: 'yes' } }), /settings.tabs.saveOnForceClose must be a boolean/);
+  assert.throws(() => assertWorkspaceSettingsSavePayload({ modals: { closeOnBackdropClick: 'yes' } }), /settings.modals.closeOnBackdropClick must be a boolean/);
   assert.throws(() => assertWorkspaceSettingsSavePayload({ diagnostics: { requestResponseLogging: { headers: 'yes' } } }), /settings.diagnostics.requestResponseLogging.headers must be a boolean/);
   assert.throws(() => assertWorkspaceSettingsSavePayload({ diagnostics: { logging: { enabled: 'yes' } } }), /settings.diagnostics.logging.enabled must be a boolean/);
   assert.throws(() => assertWorkspaceSettingsSavePayload({ diagnostics: { uploadUrl: 'https:\/\/example.test' } }), /settings.diagnostics.uploadUrl is not allowed/);

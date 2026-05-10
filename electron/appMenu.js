@@ -7,8 +7,6 @@ function installApplicationMenu(options = {}) {
 function createApplicationMenuTemplate(options = {}) {
   const {
     appName = 'PostMeter',
-    includePrereleases = false,
-    saveOnForceClose = false,
     platform = process.platform,
     sendMenuAction = () => {},
     openExternal = () => {}
@@ -39,13 +37,9 @@ function createApplicationMenuTemplate(options = {}) {
           click: () => sendMenuAction('save-workspace')
         },
         {
-          label: 'Save on Force Close',
-          type: 'checkbox',
-          checked: saveOnForceClose === true,
-          click: (menuItem) => sendMenuAction({
-            type: 'set-save-on-force-close',
-            saveOnForceClose: menuItem.checked === true
-          })
+          label: 'Settings...',
+          accelerator: 'CmdOrCtrl+,',
+          click: () => sendMenuAction('settings')
         },
         { type: 'separator' },
         {
@@ -88,15 +82,6 @@ function createApplicationMenuTemplate(options = {}) {
           click: () => sendMenuAction('export-diagnostics')
         },
         { type: 'separator' },
-        {
-          label: 'Prereleases',
-          type: 'checkbox',
-          checked: includePrereleases === true,
-          click: (menuItem) => sendMenuAction({
-            type: 'set-prereleases',
-            includePrereleases: menuItem.checked === true
-          })
-        },
         {
           label: 'Check for Updates',
           click: () => sendMenuAction('check-updates')

@@ -11,6 +11,8 @@
   async function runUiRegressionSmoke() {
     assertUiSmoke(workspace.collections.length === 0, 'Regression smoke should start with an empty workspace.');
     assertUiSmoke(!/(sign in|log in|create account|register)/i.test(document.body.textContent), 'Standalone UI should not render app account/login language.');
+    assertToolbarMenuSmoke('fileMenuButton', 'fileMenu', ['Settings']);
+    await assertSettingsMenuClickSmoke();
     assertToolbarMenuSmoke('newMenuButton', 'newMenu', ['Workspace', 'Request', 'Collection', 'Folder', 'Environment', 'Runner', 'Performance Test']);
     assertToolbarMenuSmoke('importMenuButton', 'importMenu', ['Workspace', 'Collection', 'Environment', 'Runner', 'Performance Test']);
     assertToolbarMenuSmoke('exportMenuButton', 'exportMenu', ['Workspace', 'Collection', 'Environment', 'Runner', 'Performance Test'], {
@@ -36,7 +38,8 @@
     setStatus('Regression status tracked.');
     assertStatusIncludes('Regression status tracked', 'setStatus should update the internal app status.');
     assertUiSmoke(!$('checkUpdatesButton'), 'Updates toolbar button should be handled by the Help menu.');
-    assertUiSmoke(!$('includePrereleasesInput'), 'Prereleases setting should be handled by the Help menu.');
+    assertUiSmoke($('includePrereleasesInput'), 'Prereleases setting should be available in Settings.');
+    assertUiSmoke($('closeModalsOnBackdropClickInput'), 'Modal backdrop-close setting should be available in Settings.');
     await assertUpdateCheckSmoke();
     assertOauthProgressSmoke();
     await assertWorkspaceManagementSmoke();
@@ -253,6 +256,20 @@
     assertUiSmoke(document.documentElement.scrollWidth <= window.innerWidth + 2, 'Constrained viewport should not produce page-level horizontal overflow.');
   }
 
+  async function assertSettingsMenuClickSmoke() {
+    $('fileMenuButton').click();
+    await nextPaint();
+    assertUiSmoke(!$('fileMenu').hidden, 'File toolbar menu should open before selecting Settings.');
+    $('openSettingsButton').click();
+    await nextPaint();
+    assertUiSmoke($('fileMenu').hidden, 'Opening Settings should close the File toolbar menu.');
+    assertUiSmoke(!$('modalBackdrop').hidden, 'Opening Settings from the File menu should show the modal backdrop.');
+    assertUiSmoke(!$('settingsModal').hidden, 'Opening Settings from the File menu should show the Settings modal.');
+    $('closeSettingsModalFooterButton').click();
+    await nextPaint();
+    assertUiSmoke($('modalBackdrop').hidden, 'Closing Settings should hide the modal backdrop.');
+  }
+
   async function assertForcedColorsStylesheetSmoke() {
     const hasForcedColorsRule = Array.from(document.styleSheets).some((sheet) => {
       try {
@@ -263,27 +280,36 @@
     });
     assertUiSmoke(hasForcedColorsRule, 'Theme styles should include a forced-colors high-contrast rule.');
     assertUiSmoke(window.matchMedia?.('(forced-colors: active)')?.matches === true, 'Regression smoke should execute with forced-colors active.');
-    const focusTarget = $('themeLightButton');
-    focusTarget.focus({ preventScroll: true });
+    const settingsPromise = $('settingsModal').hidden ? openSettingsModal('appearance') : null;
     await nextPaint();
-    assertUiSmoke(document.activeElement === focusTarget, 'Forced-colors focus probe should move focus to the theme control.');
-    const focusStyle = getComputedStyle(focusTarget);
-    const computedOutlineVisible = focusStyle.outlineStyle !== 'none' && Number.parseFloat(focusStyle.outlineWidth) > 0;
-    const hasDatasetFallbackRule = document.documentElement.dataset.forcedColors === 'active'
-      && Array.from(document.styleSheets).some((sheet) => {
-        try {
-          return Array.from(sheet.cssRules || []).some((rule) => (
-            String(rule.selectorText || '').includes('data-forced-colors="active"')
-              && String(rule.cssText || '').includes('outline')
-          ));
-        } catch {
-          return false;
-        }
-      });
-    assertUiSmoke(
-      computedOutlineVisible || hasDatasetFallbackRule,
-      `Forced-colors focus state should expose a visible outline. Computed ${focusStyle.outlineStyle}/${focusStyle.outlineWidth}.`
-    );
+    try {
+      const focusTarget = $('themeLightButton');
+      focusTarget.focus({ preventScroll: true });
+      await nextPaint();
+      assertUiSmoke(document.activeElement === focusTarget, 'Forced-colors focus probe should move focus to the Settings theme control.');
+      const focusStyle = getComputedStyle(focusTarget);
+      const computedOutlineVisible = focusStyle.outlineStyle !== 'none' && Number.parseFloat(focusStyle.outlineWidth) > 0;
+      const hasDatasetFallbackRule = document.documentElement.dataset.forcedColors === 'active'
+        && Array.from(document.styleSheets).some((sheet) => {
+          try {
+            return Array.from(sheet.cssRules || []).some((rule) => (
+              String(rule.selectorText || '').includes('data-forced-colors="active"')
+                && String(rule.cssText || '').includes('outline')
+            ));
+          } catch {
+            return false;
+          }
+        });
+      assertUiSmoke(
+        computedOutlineVisible || hasDatasetFallbackRule,
+        `Forced-colors focus state should expose a visible outline. Computed ${focusStyle.outlineStyle}/${focusStyle.outlineWidth}.`
+      );
+    } finally {
+      if (settingsPromise) {
+        $('closeSettingsModalFooterButton').click();
+        await settingsPromise;
+      }
+    }
   }
 
   function assertAccessibilitySemanticsSmoke() {
@@ -507,7 +533,7 @@
       workspace.settings.appearance.theme = 'system';
       workspace.settings.updates.includePrereleases = false;
       applyThemePreference('system');
-      renderThemeControl();
+      renderSettingsControls();
       window.__postmeterSaveWorkspaceSettings = async () => {
         throw new Error('mock settings save failure');
       };
@@ -527,6 +553,11 @@
       assertUiSmoke(workspace.settings.tabs.saveOnForceClose === false, 'Failed force-close setting save should roll back the in-memory setting.');
       assertStatusIncludes('Force close setting save failed', 'Failed force-close setting save should surface a user-visible status.');
 
+      workspace.settings.modals.closeOnBackdropClick = false;
+      await setCloseModalsOnBackdropClick(true, { save: true });
+      assertUiSmoke(workspace.settings.modals.closeOnBackdropClick === false, 'Failed modal setting save should roll back the in-memory setting.');
+      assertStatusIncludes('Modal setting save failed', 'Failed modal setting save should surface a user-visible status.');
+
       workspace.settings.diagnostics = normalizeDiagnosticsSettings({
         logging: { enabled: true, level: 'info' },
         requestResponseLogging: { urls: false }
@@ -540,7 +571,7 @@
       window.__postmeterSaveWorkspaceSettings = originalSaveSettings;
       workspace.settings = originalSettings;
       applyThemePreference(workspace.settings?.appearance?.theme || 'system');
-      renderThemeControl();
+      renderSettingsControls();
     }
   }
 
@@ -1696,9 +1727,15 @@
     const enabledItems = getToolbarMenuTopLevelItems(menu).filter((item) => !item.disabled);
     assertUiSmoke(document.activeElement === enabledItems[0], `${menuId} should focus the first item when opened from keyboard.`);
     enabledItems[0].dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowDown' }));
-    assertUiSmoke(document.activeElement === enabledItems[1], `${menuId} should support arrow-key item navigation.`);
-    enabledItems[1].dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'End' }));
-    assertUiSmoke(document.activeElement === enabledItems.at(-1), `${menuId} should support End key item navigation.`);
+    if (enabledItems.length > 1) {
+      assertUiSmoke(document.activeElement === enabledItems[1], `${menuId} should support arrow-key item navigation.`);
+      enabledItems[1].dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'End' }));
+      assertUiSmoke(document.activeElement === enabledItems.at(-1), `${menuId} should support End key item navigation.`);
+    } else {
+      assertUiSmoke(document.activeElement === enabledItems[0], `${menuId} should keep focus on its only enabled item.`);
+      enabledItems[0].dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'End' }));
+      assertUiSmoke(document.activeElement === enabledItems[0], `${menuId} should keep End navigation bounded to its only item.`);
+    }
     if (options.submenuLabels) {
       const submenuTrigger = enabledItems.find((item) => item.getAttribute('aria-haspopup') === 'menu');
       assertUiSmoke(submenuTrigger, `${menuId} should expose submenu categories.`);
@@ -1712,11 +1749,16 @@
       enabledItems.at(-1).focus();
     }
     enabledItems.at(-1).dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'ArrowUp' }));
-    assertUiSmoke(
-      document.activeElement === enabledItems.at(-2),
-      `${menuId} should navigate relative to the focused enabled menu item.`
-    );
-    enabledItems.at(-2).dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape' }));
+    if (enabledItems.length > 1) {
+      assertUiSmoke(
+        document.activeElement === enabledItems.at(-2),
+        `${menuId} should navigate relative to the focused enabled menu item.`
+      );
+      enabledItems.at(-2).dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape' }));
+    } else {
+      assertUiSmoke(document.activeElement === enabledItems[0], `${menuId} should keep reverse navigation bounded to its only item.`);
+      enabledItems[0].dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape' }));
+    }
     assertUiSmoke(menu.hidden === true, `${menuId} should close on Escape.`);
     assertUiSmoke(document.activeElement === button, `${menuId} should restore focus to its trigger on Escape.`);
   }
@@ -2784,11 +2826,14 @@
       assertUiSmoke($('requestEditorPanel').hidden, 'Request editor should be hidden while viewing workspace details.');
       assertUiSmoke(document.querySelector('.results').hidden, 'Response panel should be hidden while viewing workspace details.');
       assertUiSmoke($('workspaceSummary').textContent.includes('Workspace File'), 'Workspace main panel did not render workspace details.');
-      assertUiSmoke(getComputedStyle($('workspaceMainPanel')).overflowY === 'auto', 'Workspace details panel should scroll vertically when diagnostics settings exceed the viewport.');
-      const workspaceMainPanel = $('workspaceMainPanel');
-      workspaceMainPanel.scrollTop = 0;
-      workspaceMainPanel.scrollTop = workspaceMainPanel.scrollHeight;
-      assertUiSmoke(workspaceMainPanel.scrollHeight <= workspaceMainPanel.clientHeight || workspaceMainPanel.scrollTop > 0, 'Workspace details panel should allow reaching diagnostics controls below the fold.');
+      const settingsPromise = openSettingsModal('diagnostics');
+      await nextPaint();
+      assertUiSmoke(!$('settingsModal').hidden, 'Settings menu should open the settings modal.');
+      assertUiSmoke($('settingsDiagnosticsButton').getAttribute('aria-selected') === 'true', 'Settings modal should activate the requested category.');
+      assertUiSmoke(!$('settingsDiagnosticsSection').hidden, 'Diagnostics settings should live inside the Settings modal.');
+      assertUiSmoke($('workspaceMainPanel').textContent.includes('Workspace File'), 'Workspace details should keep workspace summary content after settings move.');
+      $('closeSettingsModalFooterButton').click();
+      await settingsPromise;
       assertUiSmoke($('switchWorkspacePanelButton').disabled, 'Current workspace details should disable the switch button.');
       assertUiSmoke($('requestTabBar').textContent.includes(workspaceDisplayName()), 'Selecting Workspaces should open a workspace tab.');
       const workspaceOpenTabCount = openWorkspaceTabs.length;

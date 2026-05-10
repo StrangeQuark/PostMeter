@@ -388,6 +388,10 @@ function assertSettingsPayload(value, field) {
     assertSchemaFields('tabSettings', value.tabs, `${field}.tabs`);
     assertNoUnexpectedFields('tabSettings', value.tabs, `${field}.tabs`);
   }
+  if (value.modals != null) {
+    assertSchemaFields('modalSettings', value.modals, `${field}.modals`);
+    assertNoUnexpectedFields('modalSettings', value.modals, `${field}.modals`);
+  }
   if (value.diagnostics != null) {
     object(value.diagnostics, `${field}.diagnostics`);
     assertAllowedObjectFields(value.diagnostics, `${field}.diagnostics`, [

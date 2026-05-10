@@ -315,6 +315,9 @@ function normalizeSettings(settings) {
     tabs: {
       saveOnForceClose: settings?.tabs?.saveOnForceClose === true
     },
+    modals: {
+      closeOnBackdropClick: settings?.modals?.closeOnBackdropClick === true
+    },
     updates: {
       includePrereleases: settings?.updates?.includePrereleases === true
     }

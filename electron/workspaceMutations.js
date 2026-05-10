@@ -416,6 +416,7 @@ function mergeWorkspaceSettingsForSave(currentSettings, nextSettings) {
       trustedCapabilities: mergeObject(current.sandbox?.trustedCapabilities, next.sandbox?.trustedCapabilities)
     },
     tabs: mergeObject(current.tabs, next.tabs),
+    modals: mergeObject(current.modals, next.modals),
     updates: mergeObject(current.updates, next.updates)
   };
 }

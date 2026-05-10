@@ -14,6 +14,7 @@ const postmeterApi = {
         'new-collection',
         'new-folder',
         'save-workspace',
+        'settings',
         'import-workspace',
         'import-collection',
         'export-workspace',

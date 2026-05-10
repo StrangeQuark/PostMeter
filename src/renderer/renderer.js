@@ -126,6 +126,7 @@ let activeRequestExportContent = '';
 let activeVaultPromptPayload = null;
 let activeFileSourceTarget = null;
 let activeFilePickerOptions = null;
+let activeSettingsSection = 'appearance';
 let sessionSaveTimer = null;
 let sessionPersistenceEnabled = false;
 let lastRenderedRequestEditorContextKey = '';
@@ -483,7 +484,12 @@ function bindUi() {
     onExportEnvironment: () => { void exportEnvironmentFromPicker('postmeter'); },
     onExportPostmanEnvironment: () => { void exportEnvironmentFromPicker('postman'); },
     onExportRunnerDefinition: () => { void exportRunnerDefinitionFromPicker(); },
+    onOpenSettings: () => { openSettingsModalSafely(); },
+    onSelectSettingsSection: selectSettingsSection,
     onSelectTheme: (themeOption) => setThemePreference(themeOption, { save: true }),
+    onSaveOnForceCloseChange: () => setSaveOnForceClose($('saveOnForceCloseInput')?.checked === true, { save: true }),
+    onCloseModalsOnBackdropClickChange: () => setCloseModalsOnBackdropClick($('closeModalsOnBackdropClickInput')?.checked === true, { save: true }),
+    onIncludePrereleasesChange: () => setIncludePrereleases($('includePrereleasesInput')?.checked === true, { save: true }),
     onSendRequest: sendActiveRequest,
     onAddParam: () => addPair('queryParams'),
     onAddHeader: () => addPair('headers'),
@@ -606,6 +612,7 @@ function bindUi() {
     onActivateTab: activateTab,
     onSelectSidebarPanel: selectSidebarPanel,
     onCancelActiveModal: cancelActiveModal,
+    closeModalsOnBackdropClick: () => modalsCloseOnBackdropClick(),
     onResolveActiveModal: resolveActiveModal,
     onResolveVaultPrompt: resolveVaultPrompt,
     onTrapActiveModalFocus: trapActiveModalFocus,
@@ -1195,6 +1202,9 @@ async function handleAppMenuAction(action) {
         break;
       case 'save-workspace':
         await saveWorkspace(true, { promptForDraft: true });
+        break;
+      case 'settings':
+        await openSettingsModal();
         break;
       case 'import-workspace':
         await importWorkspace();
@@ -3336,7 +3346,86 @@ function renderToolbarState() {
 function renderSettings() {
   ensureSettings();
   applyThemePreference(workspace.settings.appearance.theme);
+  renderSettingsControls();
+}
+
+function openSettingsModalSafely(section = activeSettingsSection) {
+  void openSettingsModal(section).catch((error) => {
+    const message = error.message || String(error);
+    console.error('Settings modal failed to open:', error);
+    setStatus(`Settings failed to open: ${message}`);
+    notifyUser('Settings Failed To Open', message);
+  });
+}
+
+async function openSettingsModal(section = activeSettingsSection) {
+  const modalPromise = showModal('settingsModal', true);
+  try {
+    renderSettingsControls();
+    selectSettingsSection(section || 'appearance');
+  } catch (error) {
+    const message = error.message || String(error);
+    console.error('Settings controls failed to render:', error);
+    setStatus(`Settings failed to render: ${message}`);
+  }
+  return modalPromise;
+}
+
+function selectSettingsSection(section) {
+  const normalizedSection = [
+    'appearance',
+    'tabs',
+    'modals',
+    'updates',
+    'scripts',
+    'vault',
+    'packages',
+    'files',
+    'diagnostics'
+  ].includes(String(section || '')) ? String(section) : 'appearance';
+  activeSettingsSection = normalizedSection;
+  for (const button of document.querySelectorAll('[data-settings-section]')) {
+    const isActive = button.dataset.settingsSection === normalizedSection;
+    button.classList.toggle('active', isActive);
+    button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    button.tabIndex = isActive ? 0 : -1;
+  }
+  for (const panel of document.querySelectorAll('.settings-section')) {
+    const panelSection = panel.id
+      .replace(/^settings/, '')
+      .replace(/Section$/, '')
+      .replace(/^[A-Z]/, (value) => value.toLowerCase());
+    const isActive = panelSection === normalizedSection;
+    panel.classList.toggle('active', isActive);
+    panel.hidden = !isActive;
+  }
+}
+
+function renderSettingsControls() {
+  ensureSettings();
   renderThemeControl();
+  if ($('saveOnForceCloseInput')) {
+    $('saveOnForceCloseInput').checked = workspace.settings.tabs.saveOnForceClose === true;
+  }
+  if ($('closeModalsOnBackdropClickInput')) {
+    $('closeModalsOnBackdropClickInput').checked = workspace.settings.modals.closeOnBackdropClick === true;
+  }
+  if ($('includePrereleasesInput')) {
+    $('includePrereleasesInput').checked = workspace.settings.updates.includePrereleases === true;
+  }
+  if ($('trustedScriptSendRequestInput')) {
+    $('trustedScriptSendRequestInput').checked = workspace.settings?.sandbox?.trustedCapabilities?.sendRequest === true;
+  }
+  if ($('trustedScriptCookiesInput')) {
+    $('trustedScriptCookiesInput').checked = workspace.settings?.sandbox?.trustedCapabilities?.cookies === true;
+  }
+  if ($('trustedScriptVaultInput')) {
+    $('trustedScriptVaultInput').checked = workspace.settings?.sandbox?.trustedCapabilities?.vault === true;
+  }
+  renderDiagnosticsPrivacyPanel();
+  renderSandboxPackageCachePanel();
+  renderSandboxFileBindingsPanel();
+  renderVaultMetadataPanel();
 }
 
 function ensureSettings() {
@@ -3346,6 +3435,8 @@ function ensureSettings() {
   workspace.settings.appearance ||= { theme: 'system' };
   workspace.settings.tabs ||= { saveOnForceClose: false };
   workspace.settings.tabs.saveOnForceClose = workspace.settings.tabs.saveOnForceClose === true;
+  workspace.settings.modals ||= { closeOnBackdropClick: false };
+  workspace.settings.modals.closeOnBackdropClick = workspace.settings.modals.closeOnBackdropClick === true;
   workspace.settings.diagnostics = normalizeDiagnosticsSettings(workspace.settings.diagnostics);
   workspace.settings.sandbox ||= { trustedCapabilities: { sendRequest: true, cookies: true, vault: false } };
   workspace.settings.sandbox.fileBindings = normalizeSandboxFileBindings(workspace.settings.sandbox.fileBindings);
@@ -3715,7 +3806,7 @@ async function setThemePreference(theme, options = {}) {
   const normalizedTheme = normalizeThemeOption(theme);
   workspace.settings.appearance.theme = normalizedTheme;
   applyThemePreference(normalizedTheme);
-  renderThemeControl();
+  renderSettingsControls();
   if (options.save === true) {
     return saveWorkspaceSettingsWithRollback(
       previousSettings,
@@ -3724,7 +3815,7 @@ async function setThemePreference(theme, options = {}) {
       'Theme Save Failed',
       () => {
         applyThemePreference(previousTheme);
-        renderThemeControl();
+        renderSettingsControls();
       }
     );
   }
@@ -3738,6 +3829,7 @@ async function setIncludePrereleases(includePrereleases, options = {}) {
   ensureSettings();
   const previousSettings = cloneWorkspaceSettings();
   workspace.settings.updates.includePrereleases = includePrereleases === true;
+  renderSettingsControls();
   if (options.save === true) {
     return saveWorkspaceSettingsWithRollback(
       previousSettings,
@@ -3758,6 +3850,7 @@ async function setSaveOnForceClose(saveOnForceClose, options = {}) {
   ensureSettings();
   const previousSettings = cloneWorkspaceSettings();
   workspace.settings.tabs.saveOnForceClose = saveOnForceClose === true;
+  renderSettingsControls();
   if (options.save === true) {
     return saveWorkspaceSettingsWithRollback(
       previousSettings,
@@ -3774,9 +3867,35 @@ async function setSaveOnForceClose(saveOnForceClose, options = {}) {
   return true;
 }
 
+async function setCloseModalsOnBackdropClick(closeOnBackdropClick, options = {}) {
+  ensureSettings();
+  const previousSettings = cloneWorkspaceSettings();
+  workspace.settings.modals.closeOnBackdropClick = closeOnBackdropClick === true;
+  renderSettingsControls();
+  if (options.save === true) {
+    return saveWorkspaceSettingsWithRollback(
+      previousSettings,
+      options.showStatus === false
+        ? ''
+        : `Modal backdrop close ${workspace.settings.modals.closeOnBackdropClick ? 'enabled' : 'disabled'}.`,
+      'Modal setting save failed',
+      'Modal Settings Save Failed'
+    );
+  }
+  if (options.showStatus !== false) {
+    setStatus(`Modal backdrop close ${workspace.settings.modals.closeOnBackdropClick ? 'enabled' : 'disabled'}.`);
+  }
+  return true;
+}
+
 function forceCloseSavesChanges() {
   ensureSettings();
   return workspace.settings.tabs.saveOnForceClose === true;
+}
+
+function modalsCloseOnBackdropClick() {
+  ensureSettings();
+  return workspace.settings.modals.closeOnBackdropClick === true;
 }
 
 function cloneWorkspaceSettings() {
@@ -3790,6 +3909,7 @@ async function saveWorkspaceSettingsWithRollback(previousSettings, successStatus
   try {
     await saveWorkspace(false, { scope: 'settings', collectEditors: false });
     renderWorkspacePanel();
+    renderSettingsControls();
     if (successStatus) {
       setStatus(successStatus);
     }
@@ -3798,6 +3918,7 @@ async function saveWorkspaceSettingsWithRollback(previousSettings, successStatus
     const message = error.message || String(error);
     workspace.settings = previousSettings;
     renderWorkspacePanel();
+    renderSettingsControls();
     if (typeof onRollback === 'function') {
       onRollback(error);
     }

@@ -58,13 +58,17 @@ PostMeter must remain a standalone local desktop application. Do not add PostMet
   - Request, runner-owned request, and Performance request editors now expose a GraphQL body mode with query, variables, and operation-name fields.
   - GraphQL bodies persist/export as Postman-compatible `postmanBody.mode = "graphql"` metadata, execute as `application/json`, and support environment substitution in query, variables, and operation name.
   - Focused HTTP, import/export, Performance, bootstrap, and UI smoke coverage now exercises GraphQL editing, execution materialization, and round-tripping.
+- Added the first Settings surface.
+  - The main toolbar now exposes `File` > `Settings`, and the native app File menu includes `Settings...`.
+  - The old top-toolbar theme segmented control moved into Settings > Appearance.
+  - Tab force-close behavior, prerelease update checks, script sandbox capabilities, vault/package/file binding controls, and diagnostics/privacy controls now live in categorized Settings panes instead of crowding workspace details.
+  - Settings > Modals now controls whether clicking outside a modal closes it. The default remains disabled, so users must use explicit modal actions such as `Close`, `Cancel`, or confirmation buttons unless they opt in.
 
 ## Highest Priority Steps
 
-1. Implement the Preferences / Settings page.
-   - Add a durable user preferences model and a dedicated UI surface for app-wide behavior toggles.
-   - Include a `Close modals when clicking outside` toggle wired to the existing modal backdrop dismissal policy. The current default remains disabled, so users must use explicit modal actions such as `Close`, `Cancel`, or confirmation buttons.
-   - Centralize future desktop behavior, editor, import/export, Performance, and privacy/diagnostics preferences here instead of adding one-off controls throughout the app.
+1. Expand Settings into the full Preferences system.
+   - Decide which values should remain workspace-scoped and which should move into a durable app-wide preferences model.
+   - Continue centralizing desktop behavior, editor, import/export, Performance, and privacy/diagnostics preferences here instead of adding one-off controls throughout the app.
 2. Prepare public beta/release candidate documentation.
    - Add or update `docs/SECURITY.md`, privacy notes, threat model summary, install/uninstall docs, unsigned artifact warnings, known limitations, compatibility matrix links, OAuth certification docs, diagnostics docs, and support channels.
    - Create a release checklist with separate beta, release-candidate, and stable sections. Each section must name required commands, native GitHub Actions runner jobs, artifact validations, OAuth certification status, signing/notarization status, docs checks, and known waivers.

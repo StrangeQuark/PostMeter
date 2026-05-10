@@ -138,6 +138,9 @@ const FIELD_SCHEMAS = {
   tabSettings: {
     saveOnForceClose: { type: 'boolean', optional: true }
   },
+  modalSettings: {
+    closeOnBackdropClick: { type: 'boolean', optional: true }
+  },
   keyValue: {
     enabled: { type: 'boolean', optional: true },
     key: { type: 'string', limit: 'key', optional: true },

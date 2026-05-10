@@ -109,6 +109,15 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(indexSource, /id="folderDestinationModal"/);
   assert.match(indexSource, /id="folderDestinationList"[^>]+role="radiogroup"/);
   assert.match(indexSource, /id="confirmFolderDestinationButton"[^>]+disabled/);
+  assert.match(indexSource, /id="fileMenuButton"/);
+  assert.match(indexSource, /id="settingsModal"[^>]+settings-modal/);
+  assert.match(indexSource, /id="settingsAppearanceButton"[^>]+data-settings-section="appearance"/);
+  assert.match(indexSource, /id="settingsModalsButton"[^>]+data-settings-section="modals"/);
+  assert.match(indexSource, /id="themeDarkButton"[^>]+data-theme-option="dark"/);
+  assert.match(indexSource, /id="saveOnForceCloseInput"/);
+  assert.match(indexSource, /id="closeModalsOnBackdropClickInput"/);
+  assert.match(indexSource, /id="includePrereleasesInput"/);
+  assert.doesNotMatch(indexSource, /class="toolbar-group theme-control"/);
   assert.match(indexSource, /role="tablist"[^>]+aria-orientation="vertical"/);
   assert.match(layoutSource, /aria-valuemin/);
   assert.match(layoutSource, /aria-valuemax/);
@@ -123,7 +132,13 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(bootstrapSource, /activeRow !== submenuRow/);
   assert.match(bootstrapSource, /getSelectedExportItemId/);
   assert.match(bootstrapSource, /getSelectedFolderDestination/);
+  assert.match(bootstrapSource, /'fileMenuButton', 'fileMenu'/);
+  assert.match(bootstrapSource, /bindClick\(doc, 'openSettingsButton', options\.onOpenSettings\)/);
+  assert.match(bootstrapSource, /data-settings-section/);
   assert.match(rendererSource, /async function newFolderFromToolbar/);
+  assert.match(rendererSource, /async function openSettingsModal/);
+  assert.match(rendererSource, /function selectSettingsSection/);
+  assert.match(rendererSource, /function renderSettingsControls/);
   assert.match(rendererSource, /function renderFolderDestinationList/);
   assert.match(rendererSource, /function collectRequestExportEntries/);
   assert.match(rendererSource, /function renderRequestExportPickerList/);
@@ -136,7 +151,7 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(rendererSource, /Environment Save Failed/);
   assert.match(rendererSource, /const previousSettings = structuredClone\(workspace\.settings\)/);
   assert.match(rendererSource, /workspace\.settings = previousSettings/);
-  assert.match(indexSource, /<fieldset class="workspace-diagnostics-panel" aria-describedby="diagnosticsPrivacySummary diagnosticsSensitiveWarning">/);
+  assert.match(indexSource, /<fieldset class="settings-card workspace-diagnostics-panel" aria-describedby="diagnosticsPrivacySummary diagnosticsSensitiveWarning">/);
   for (const id of [
     'diagnosticLogUrlsInput',
     'diagnosticLogHeadersInput',
@@ -280,6 +295,76 @@ test('renderer bootstrap resolves text, confirmation, and notification modals', 
   elements.get('cancelRunnerImportButton').dispatch('click');
 
   assert.deepEqual(resolved, ['single-line-value', null, null, null, true, false, true, null]);
+});
+
+test('renderer bootstrap binds settings menu, category, theme, and setting controls', () => {
+  const calls = [];
+  const settingsAppearanceButton = createElement();
+  settingsAppearanceButton.dataset.settingsSection = 'appearance';
+  const settingsTabsButton = createElement();
+  settingsTabsButton.dataset.settingsSection = 'tabs';
+  const settingsModalsButton = createElement();
+  settingsModalsButton.dataset.settingsSection = 'modals';
+  const themeDarkButton = createElement();
+  themeDarkButton.dataset.themeOption = 'dark';
+  const elements = new Map([
+    ['openSettingsButton', createElement()],
+    ['closeSettingsModalButton', createElement()],
+    ['closeSettingsModalFooterButton', createElement()],
+    ['saveOnForceCloseInput', createElement({ tagName: 'INPUT' })],
+    ['closeModalsOnBackdropClickInput', createElement({ tagName: 'INPUT' })],
+    ['includePrereleasesInput', createElement({ tagName: 'INPUT' })],
+    ['contextMenu', createElement()],
+    ['modalBackdrop', createElement()]
+  ]);
+
+  bindUi({
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll(selector) {
+        if (selector === '[data-settings-section]') {
+          return [settingsAppearanceButton, settingsTabsButton, settingsModalsButton];
+        }
+        if (selector === '[data-theme-option]') {
+          return [themeDarkButton];
+        }
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} },
+    onOpenSettings: () => calls.push('open-settings'),
+    onSelectSettingsSection: (section) => calls.push(`section:${section}`),
+    onSelectTheme: (theme) => calls.push(`theme:${theme}`),
+    onSaveOnForceCloseChange: () => calls.push('save-on-force-close'),
+    onCloseModalsOnBackdropClickChange: () => calls.push('close-modals-on-backdrop'),
+    onIncludePrereleasesChange: () => calls.push('include-prereleases'),
+    onResolveActiveModal: (value) => calls.push(`resolve:${value}`)
+  });
+
+  elements.get('openSettingsButton').dispatch('click');
+  settingsTabsButton.dispatch('click');
+  themeDarkButton.dispatch('click');
+  elements.get('saveOnForceCloseInput').dispatch('change');
+  settingsModalsButton.dispatch('click');
+  elements.get('closeModalsOnBackdropClickInput').dispatch('change');
+  elements.get('includePrereleasesInput').dispatch('change');
+  elements.get('closeSettingsModalButton').dispatch('click');
+  elements.get('closeSettingsModalFooterButton').dispatch('click');
+
+  assert.deepEqual(calls, [
+    'open-settings',
+    'section:tabs',
+    'theme:dark',
+    'save-on-force-close',
+    'section:modals',
+    'close-modals-on-backdrop',
+    'include-prereleases',
+    'resolve:true',
+    'resolve:true'
+  ]);
 });
 
 test('renderer bootstrap keeps active modals open when the backdrop is clicked by default', () => {
