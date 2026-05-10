@@ -1,6 +1,11 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { registerAppIpc, releaseChannelForVersion, safeExternalUrl } = require('../../electron/appIpc');
+const {
+  assertClipboardTextPayload,
+  registerAppIpc,
+  releaseChannelForVersion,
+  safeExternalUrl
+} = require('../../electron/appIpc');
 const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../src/core/diagnostics');
 
 test('app IPC registers stable app channels', () => {
@@ -18,12 +23,41 @@ test('app IPC registers stable app channels', () => {
   assert.deepEqual([...handlers.keys()].sort(), [
     'app:check-updates',
     'app:open-external',
-    'app:versions'
+    'app:versions',
+    'clipboard:writeText'
   ]);
   const versions = handlers.get('app:versions')();
   assert.equal(versions.app, '0.0.0-test');
   assert.equal(versions.releaseChannel, 'stable');
   assert.equal(versions.platform, process.platform);
+});
+
+test('app IPC writes clipboard text through the main process', async () => {
+  const handlers = new Map();
+  let copiedText = '';
+  registerAppIpc({
+    app: { getVersion: () => '0.0.0-test' },
+    clipboard: {
+      writeText(text) {
+        copiedText = text;
+      }
+    },
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    },
+    shell: { openExternal: async () => true }
+  });
+
+  assert.equal(await handlers.get('clipboard:writeText')(null, 'copy me'), true);
+  assert.equal(copiedText, 'copy me');
+});
+
+test('app IPC validates clipboard text payloads', () => {
+  assert.doesNotThrow(() => assertClipboardTextPayload('copy me'));
+  assert.throws(() => assertClipboardTextPayload(123), /clipboard text must be a string/);
+  assert.throws(() => assertClipboardTextPayload('x'.repeat(10 * 1024 * 1024 + 1)), /cannot exceed 10 MB/);
 });
 
 test('app version metadata derives release channels', () => {

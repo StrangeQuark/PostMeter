@@ -99,6 +99,7 @@
     const windowObject = options.windowObject || window;
 
     bindToolbarMenus(doc, options);
+    bindClick(doc, 'openSettingsButton', options.onOpenSettings);
     bindClick(doc, 'newCollectionButton', options.onNewCollection);
     bindClick(doc, 'newFolderButton', options.onNewFolder);
     bindClick(doc, 'newRequestButton', options.onNewRequest);
@@ -112,6 +113,9 @@
     bindClick(doc, 'newEnvironmentMenuButton', options.onNewEnvironment);
     bindClick(doc, 'importWorkspaceButton', options.onImportWorkspace);
     bindClick(doc, 'exportWorkspaceButton', options.onExportWorkspace);
+    bindClick(doc, 'importRequestButton', options.onImportRequest);
+    bindClick(doc, 'exportRequestButton', options.onExportRequest);
+    bindClick(doc, 'exportRequestCurlButton', options.onExportRequestCurl);
     bindClick(doc, 'importCollectionButton', options.onImportCollection);
     bindClick(doc, 'importEnvironmentButton', options.onImportEnvironment);
     bindClick(doc, 'importRunnerButton', options.onImportRunner);
@@ -187,6 +191,13 @@
       button.addEventListener('click', () => options.onSelectTheme?.(button.dataset.themeOption));
     }
 
+    for (const button of doc.querySelectorAll('[data-settings-section]')) {
+      button.addEventListener('click', () => options.onSelectSettingsSection?.(button.dataset.settingsSection));
+      button.addEventListener('keydown', (event) => {
+        moveRovingTabFocus(event, Array.from(doc.querySelectorAll('[data-settings-section]')));
+      });
+    }
+
     bindChange(doc, 'environmentSelect', () => {
       options.onEnvironmentSelectChange?.(getElement(doc, 'environmentSelect')?.value || 'none');
     });
@@ -234,6 +245,9 @@
     bindChange(doc, 'trustedScriptSendRequestInput', options.onTrustedScriptCapabilityChange);
     bindChange(doc, 'trustedScriptCookiesInput', options.onTrustedScriptCapabilityChange);
     bindChange(doc, 'trustedScriptVaultInput', options.onTrustedScriptCapabilityChange);
+    bindChange(doc, 'saveOnForceCloseInput', options.onSaveOnForceCloseChange);
+    bindChange(doc, 'closeModalsOnBackdropClickInput', options.onCloseModalsOnBackdropClickChange);
+    bindChange(doc, 'includePrereleasesInput', options.onIncludePrereleasesChange);
     for (const id of [
       'diagnosticLoggingEnabledInput',
       'diagnosticLogLevelSelect',
@@ -286,7 +300,7 @@
 
     bindEvent(doc, 'contextMenu', 'click', (event) => event.stopPropagation());
     bindEvent(doc, 'modalBackdrop', 'click', (event) => {
-      if (event.target === getElement(doc, 'modalBackdrop')) {
+      if (event.target === getElement(doc, 'modalBackdrop') && shouldCloseModalsOnBackdropClick(options)) {
         options.onCancelActiveModal?.();
       }
     });
@@ -337,6 +351,8 @@
     bindClick(doc, 'cancelConfirmActionButton', () => options.onResolveActiveModal?.(false));
     bindClick(doc, 'confirmActionButton', () => options.onResolveActiveModal?.(true));
     bindClick(doc, 'closeNotificationModalButton', () => options.onResolveActiveModal?.(true));
+    bindClick(doc, 'closeSettingsModalButton', () => options.onResolveActiveModal?.(true));
+    bindClick(doc, 'closeSettingsModalFooterButton', () => options.onResolveActiveModal?.(true));
     bindClick(doc, 'closePerformanceCalibrationModalButton', options.onClosePerformanceCalibration);
     bindClick(doc, 'denyVaultPromptButton', () => options.onResolveVaultPrompt?.({ granted: false, scope: 'request' }));
     bindClick(doc, 'allowVaultPromptRequestButton', () => options.onResolveVaultPrompt?.({ granted: true, scope: 'request' }));
@@ -403,6 +419,7 @@
 
   function bindToolbarMenus(doc = document, options = {}) {
     for (const [buttonId, menuId] of [
+      ['fileMenuButton', 'fileMenu'],
       ['newMenuButton', 'newMenu'],
       ['importMenuButton', 'importMenu'],
       ['exportMenuButton', 'exportMenu']
@@ -592,6 +609,18 @@
   function isModalBackdropOpen(doc) {
     const backdrop = getElement(doc, 'modalBackdrop');
     return Boolean(backdrop && backdrop.hidden === false);
+  }
+
+  function shouldCloseModalsOnBackdropClick(options = {}) {
+    const preference = options.closeModalsOnBackdropClick;
+    if (typeof preference === 'function') {
+      try {
+        return preference() === true;
+      } catch {
+        return false;
+      }
+    }
+    return preference === true;
   }
 
   function closeToolbarMenus(doc = document) {

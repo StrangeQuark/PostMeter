@@ -300,8 +300,45 @@ test('imports and exports curl collections', async () => {
   const exportPath = path.join(dir, 'export.sh');
   await store.exportCollection(collection, exportPath, { format: 'curl' });
   const exported = await fs.readFile(exportPath, 'utf8');
-  assert.match(exported, /^curl /);
+  assert.match(exported, /^# Collection: Imported curl Collection/m);
+  assert.match(exported, /# Request: PATCH \/widgets\/1/);
+  assert.match(exported, /curl /);
   assert.match(exported, /--data-raw/);
+});
+
+test('curl collection exports include request comments and unsupported behavior warnings', async () => {
+  const { store, dir } = await tempStore();
+  const collection = {
+    id: 'collection-1',
+    name: 'Scripted Collection',
+    folders: [],
+    requests: [{
+      id: 'request-1',
+      name: 'Scripted Request',
+      method: 'POST',
+      url: 'https://api.example.test/widgets',
+      queryParams: [],
+      headers: [],
+      bodyType: 'RAW_JSON',
+      body: '{"ok":true}',
+      auth: { type: 'none' },
+      scripts: {
+        preRequest: 'pm.environment.set("token", "abc");',
+        tests: 'pm.test("ok", function () {});'
+      },
+      assertions: [{ enabled: true, type: 'statusCode', expected: '200' }]
+    }]
+  };
+  const exportPath = path.join(dir, 'scripted-export.sh');
+  await store.exportCollection(collection, exportPath, { format: 'curl' });
+  const exported = await fs.readFile(exportPath, 'utf8');
+
+  assert.match(exported, /^# Collection: Scripted Collection/m);
+  assert.match(exported, /# Request: Scripted Request/);
+  assert.match(exported, /# WARNING: Pre-request scripts are not included in curl exports\./);
+  assert.match(exported, /# WARNING: Post-request scripts are not included in curl exports\./);
+  assert.match(exported, /# WARNING: Assertions are not included in curl exports\./);
+  assert.match(exported, /curl 'https:\/\/api\.example\.test\/widgets'/);
 });
 
 test('preserves PostMeter device-code OAuth metadata across OpenAPI export and import', async () => {

@@ -9,12 +9,19 @@ const {
   exportRunnerToJson,
   importRunnerFromText
 } = require('../src/core/runnerFormats');
+const {
+  exportRequestByFormat,
+  importRequestFromText
+} = require('../src/core/requestFormats');
 const { writeTextFileAtomic } = require('../src/core/workspacePersistence');
 const {
   collectionExportExtension,
   collectionExportFilters,
   collectionImportFilters,
   jsonFilters,
+  requestExportExtension,
+  requestExportFilters,
+  requestImportFilters,
   safeFilename,
   selectedOpenFilePath,
   selectedSaveFilePath,
@@ -452,6 +459,69 @@ function registerWorkspaceIpc(options = {}) {
     await writeTextFileAtomic(filePath, JSON.stringify(payload, null, 2), { prefix: 'postmeter-examples-export' });
     return fileOperationResult({ cancelled: false, path: filePath });
   });
+
+  ipcMain.handle('request:import', async (_event, source = {}) => {
+    const normalizedSource = normalizeRequestImportSource(source);
+    let content = normalizedSource.text;
+    if (!content) {
+      const filePath = normalizedSource.filePath || selectedOpenFilePath(await dialog.showOpenDialog(getMainWindow(), {
+        title: 'Import Request',
+        properties: ['openFile'],
+        filters: requestImportFilters()
+      }));
+      if (!filePath) {
+        return fileOperationResult({ cancelled: true });
+      }
+      content = await fs.readFile(validateDialogFilePath(filePath, 'request import path'), 'utf8');
+    }
+    const request = importRequestFromText(content);
+    assertRequestPayload(request);
+    return fileOperationResult({ cancelled: false, request });
+  });
+
+  ipcMain.handle('request:export', async (_event, request, format = 'postmeter') => {
+    assertRequestPayload(request);
+    assertRequestExportFormat(format);
+    const result = await dialog.showSaveDialog(getMainWindow(), {
+      title: 'Export Request',
+      defaultPath: `${safeFilename(request?.name || 'request')}.${requestExportExtension(format)}`,
+      filters: requestExportFilters(format)
+    });
+    const filePath = selectedSaveFilePath(result);
+    if (!filePath) {
+      return fileOperationResult({ cancelled: true });
+    }
+    await writeTextFileAtomic(filePath, exportRequestByFormat(request, format), { prefix: 'postmeter-request-export' });
+    return fileOperationResult({ cancelled: false, path: filePath });
+  });
+
+  ipcMain.handle('request:exportText', async (_event, request, format = 'postmeter') => {
+    assertRequestPayload(request);
+    assertRequestExportFormat(format);
+    return {
+      format: String(format || 'postmeter'),
+      content: exportRequestByFormat(request, format)
+    };
+  });
+}
+
+function normalizeRequestImportSource(source = {}) {
+  if (typeof source === 'string') {
+    return { filePath: validateDialogFilePath(source, 'request import path'), text: '' };
+  }
+  const value = source && typeof source === 'object' ? source : {};
+  return {
+    filePath: typeof value.filePath === 'string' && value.filePath.trim()
+      ? validateDialogFilePath(value.filePath, 'request import path')
+      : '',
+    text: typeof value.text === 'string' ? value.text : ''
+  };
+}
+
+function assertRequestExportFormat(format) {
+  if (!['postmeter', 'curl'].includes(String(format || ''))) {
+    throw new Error('Request export format must be postmeter or curl.');
+  }
 }
 
 function countRequests(collection = {}) {

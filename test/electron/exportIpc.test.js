@@ -153,7 +153,7 @@ test('picker-first export rejects invalid export kinds and worker payloads', asy
 
   await assert.rejects(
     () => handlers.get('file-export:choosePath')({}, { kind: 'unknown' }),
-    /Export kind must be workspace, collection, environment, runner, or performance/
+    /Export kind must be workspace, collection, request, environment, runner, or performance/
   );
   await assert.rejects(
     () => handlers.get('file-export:prepare')({}, {
@@ -164,4 +164,53 @@ test('picker-first export rejects invalid export kinds and worker payloads', asy
     }),
     /Environment export format must be postmeter or postman/
   );
+});
+
+test('picker-first export supports single request curl files', async (t) => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-request-export-'));
+  t.after(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+  const handlers = new Map();
+  registerExportIpc({
+    dialog: {
+      showSaveDialog: async (_window, options) => ({ canceled: false, filePath: path.join(tempDir, options.defaultPath) })
+    },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    }
+  });
+
+  const request = {
+    id: 'request-1',
+    name: 'Get Widget',
+    method: 'GET',
+    url: 'https://api.example.test/widgets/1',
+    queryParams: [{ enabled: true, key: 'trace', value: 'yes' }],
+    headers: [],
+    bodyType: 'NONE',
+    scripts: { preRequest: '', tests: '' }
+  };
+  const pathResult = await handlers.get('file-export:choosePath')({}, {
+    kind: 'request',
+    format: 'curl',
+    name: request.name
+  });
+  assert.equal(path.basename(pathResult.path), 'Get-Widget.sh');
+
+  await handlers.get('file-export:prepare')({}, {
+    exportId: 'export-request-1',
+    kind: 'request',
+    format: 'curl',
+    payload: request
+  });
+  const writeResult = await handlers.get('file-export:writePrepared')({}, 'export-request-1', pathResult.path);
+  const exported = await fs.readFile(writeResult.path, 'utf8');
+
+  assert.match(exported, /^# Request: Get Widget/m);
+  assert.match(exported, /curl 'https:\/\/api\.example\.test\/widgets\/1\?trace=yes'/);
 });

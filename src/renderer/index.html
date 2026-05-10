@@ -14,6 +14,12 @@
     <div class="brand-wrap">
       <div class="brand">PostMeter</div>
     </div>
+    <div class="toolbar-group menu-group" aria-label="File">
+      <button id="fileMenuButton" class="menu-trigger" aria-haspopup="menu" aria-expanded="false">File</button>
+      <div id="fileMenu" class="toolbar-menu" role="menu" aria-labelledby="fileMenuButton" hidden>
+        <button id="openSettingsButton" role="menuitem">Settings</button>
+      </div>
+    </div>
     <div class="toolbar-group menu-group" aria-label="Create">
       <button id="newMenuButton" class="primary menu-trigger" aria-haspopup="menu" aria-expanded="false">New</button>
       <div id="newMenu" class="toolbar-menu" role="menu" aria-labelledby="newMenuButton" hidden>
@@ -30,6 +36,7 @@
       <button id="importMenuButton" class="menu-trigger" aria-haspopup="menu" aria-expanded="false">Import</button>
       <div id="importMenu" class="toolbar-menu" role="menu" aria-labelledby="importMenuButton" hidden>
         <button id="importWorkspaceButton" role="menuitem">Workspace</button>
+        <button id="importRequestButton" role="menuitem">Request</button>
         <button id="importCollectionButton" role="menuitem">Collection</button>
         <button id="importEnvironmentButton" role="menuitem">Environment</button>
         <button id="importRunnerButton" role="menuitem">Runner</button>
@@ -40,6 +47,13 @@
       <button id="exportMenuButton" class="menu-trigger" aria-haspopup="menu" aria-expanded="false">Export</button>
       <div id="exportMenu" class="toolbar-menu" role="menu" aria-labelledby="exportMenuButton" hidden>
         <button id="exportWorkspaceButton" role="menuitem">Workspace</button>
+        <div class="toolbar-submenu-row" role="none">
+          <button id="exportRequestParentButton" role="menuitem" aria-haspopup="menu">Request</button>
+          <div class="toolbar-submenu" role="menu" aria-label="Request export types">
+            <button id="exportRequestButton" role="menuitem">PostMeter</button>
+            <button id="exportRequestCurlButton" role="menuitem">curl</button>
+          </div>
+        </div>
         <div class="toolbar-submenu-row" role="none">
           <button id="exportCollectionParentButton" role="menuitem" aria-haspopup="menu">Collection</button>
           <div class="toolbar-submenu" role="menu" aria-label="Collection export types">
@@ -59,11 +73,6 @@
         <button id="exportRunnerDefinitionButton" role="menuitem">Runner</button>
         <button id="exportPerformanceTestMenuButton" role="menuitem">Performance Test</button>
       </div>
-    </div>
-    <div class="toolbar-group theme-control" role="group" aria-label="Theme">
-      <button id="themeSystemButton" type="button" data-theme-option="system" aria-pressed="true">System</button>
-      <button id="themeLightButton" type="button" data-theme-option="light" aria-pressed="false">Light</button>
-      <button id="themeDarkButton" type="button" data-theme-option="dark" aria-pressed="false">Dark</button>
     </div>
     <label class="field inline environment-control">
       <span>Environment</span>
@@ -542,105 +551,6 @@
           </div>
         </div>
         <div id="workspaceSummary" class="workspace-summary workspace-main-summary"></div>
-        <div class="workspace-sandbox-settings">
-          <div class="workspace-sandbox-note">
-            Enabled for Postman import compatibility. Scripts can read sandbox-visible variables, tokens, and cookies, then send them to broker-approved HTTP(S) endpoints.
-          </div>
-          <label class="checkbox-line">
-            <input id="trustedScriptSendRequestInput" type="checkbox">
-            <span>Script network requests</span>
-          </label>
-          <label class="checkbox-line">
-            <input id="trustedScriptCookiesInput" type="checkbox">
-            <span>Script cookie access</span>
-          </label>
-          <label class="checkbox-line">
-            <input id="trustedScriptVaultInput" type="checkbox">
-            <span>Script vault access</span>
-          </label>
-          <div class="workspace-vault-panel">
-            <div class="workspace-sandbox-note" id="sandboxVaultSummary" role="status" aria-live="polite">Vault metadata has not been loaded.</div>
-            <div id="sandboxVaultList" class="workspace-package-list"></div>
-            <div id="sandboxVaultAuditList" class="workspace-package-list"></div>
-            <div class="workspace-actions">
-              <button id="bindVaultSecretButton" type="button">Bind Vault Secret</button>
-              <button id="refreshVaultMetadataButton" type="button">Refresh Vault Metadata</button>
-              <button id="resetVaultButton" type="button">Reset Vault</button>
-            </div>
-          </div>
-          <div class="workspace-package-cache">
-            <div class="workspace-sandbox-note" id="sandboxPackageCacheSummary" role="status" aria-live="polite">Reviewed package cache is empty.</div>
-            <div id="sandboxPackageMissingList" class="workspace-package-list"></div>
-            <div id="sandboxPackageCacheList" class="workspace-package-list"></div>
-            <div class="workspace-actions">
-              <button id="addSandboxPackageButton" type="button">Add Reviewed Package</button>
-              <button id="fetchSandboxPackageButton" type="button">Fetch Package for Review</button>
-              <button id="refreshSandboxPackagesButton" type="button">Refresh Package Status</button>
-            </div>
-          </div>
-          <div class="workspace-file-bindings">
-            <div class="workspace-sandbox-note" id="sandboxFileBindingSummary" role="status" aria-live="polite">No imported file attachments need binding.</div>
-            <div id="sandboxFileBindingMissingList" class="workspace-package-list"></div>
-            <div id="sandboxFileBindingList" class="workspace-package-list"></div>
-            <div class="workspace-actions">
-              <button id="bindSandboxFileButton" type="button">Bind Imported File</button>
-              <button id="refreshSandboxFilesButton" type="button">Refresh File Bindings</button>
-            </div>
-          </div>
-          <fieldset class="workspace-diagnostics-panel" aria-describedby="diagnosticsPrivacySummary diagnosticsSensitiveWarning">
-            <legend>Diagnostics &amp; Privacy</legend>
-            <div class="workspace-sandbox-note" id="diagnosticsPrivacySummary" role="status" aria-live="polite">
-              Local diagnostics are user-exported only. Request and response details are not logged unless enabled below.
-            </div>
-            <label class="checkbox-line">
-              <input id="diagnosticLoggingEnabledInput" type="checkbox">
-              <span>Structured local logs</span>
-            </label>
-            <label class="field inline">
-              <span>Log Level</span>
-              <select id="diagnosticLogLevelSelect">
-                <option value="debug">Debug</option>
-                <option value="info">Info</option>
-                <option value="warn">Warn</option>
-                <option value="error">Error</option>
-              </select>
-            </label>
-            <div class="workspace-sandbox-note" id="diagnosticsSensitiveWarning">
-              These request/response log categories may expose PII or customer data. Keep them off unless a local troubleshooting session requires them.
-            </div>
-            <label class="checkbox-line">
-              <input id="diagnosticLogUrlsInput" type="checkbox" aria-describedby="diagnosticsSensitiveWarning">
-              <span>Request and response URLs, paths, and query params</span>
-            </label>
-            <label class="checkbox-line">
-              <input id="diagnosticLogHeadersInput" type="checkbox" aria-describedby="diagnosticsSensitiveWarning">
-              <span>Request and response headers</span>
-            </label>
-            <label class="checkbox-line">
-              <input id="diagnosticLogCookiesInput" type="checkbox" aria-describedby="diagnosticsSensitiveWarning">
-              <span>Cookies and Set-Cookie values</span>
-            </label>
-            <label class="checkbox-line">
-              <input id="diagnosticLogBodiesInput" type="checkbox" aria-describedby="diagnosticsSensitiveWarning">
-              <span>Request and response bodies, form-data, GraphQL variables, and payloads</span>
-            </label>
-            <label class="checkbox-line">
-              <input id="diagnosticLogProtocolMessagesInput" type="checkbox" aria-describedby="diagnosticsSensitiveWarning">
-              <span>gRPC and protocol messages</span>
-            </label>
-            <label class="checkbox-line">
-              <input id="diagnosticLogScriptConsoleInput" type="checkbox" aria-describedby="diagnosticsSensitiveWarning">
-              <span>Script console output</span>
-            </label>
-            <label class="checkbox-line">
-              <input id="diagnosticLogPayloadIdentifiersInput" type="checkbox" aria-describedby="diagnosticsSensitiveWarning">
-              <span>Payload-derived identifiers</span>
-            </label>
-            <div class="workspace-actions">
-              <button id="exportDiagnosticsButton" type="button" aria-describedby="diagnosticsSensitiveWarning">Export Local Diagnostics</button>
-            </div>
-          </fieldset>
-        </div>
       </section>
 
       <section id="workspaceEmptyPanel" class="panel request-empty-panel workspace-empty-panel" hidden>
@@ -1304,6 +1214,193 @@
   </main>
 
   <div id="modalBackdrop" class="modal-backdrop" hidden>
+    <section id="settingsModal" class="modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle" hidden>
+      <div class="modal-title-row">
+        <h2 id="settingsModalTitle">Settings</h2>
+        <button id="closeSettingsModalButton" type="button" class="modal-close-button" aria-label="Close settings">X</button>
+      </div>
+      <div class="settings-layout">
+        <nav class="settings-sidebar" role="tablist" aria-label="Settings categories" aria-orientation="vertical">
+          <button id="settingsAppearanceButton" class="settings-nav-button active" type="button" role="tab" data-settings-section="appearance" aria-selected="true" aria-controls="settingsAppearanceSection">Appearance</button>
+          <button id="settingsTabsButton" class="settings-nav-button" type="button" role="tab" data-settings-section="tabs" aria-selected="false" aria-controls="settingsTabsSection">Tabs</button>
+          <button id="settingsModalsButton" class="settings-nav-button" type="button" role="tab" data-settings-section="modals" aria-selected="false" aria-controls="settingsModalsSection">Modals</button>
+          <button id="settingsUpdatesButton" class="settings-nav-button" type="button" role="tab" data-settings-section="updates" aria-selected="false" aria-controls="settingsUpdatesSection">Updates</button>
+          <button id="settingsScriptsButton" class="settings-nav-button" type="button" role="tab" data-settings-section="scripts" aria-selected="false" aria-controls="settingsScriptsSection">Scripts</button>
+          <button id="settingsVaultButton" class="settings-nav-button" type="button" role="tab" data-settings-section="vault" aria-selected="false" aria-controls="settingsVaultSection">Vault</button>
+          <button id="settingsPackagesButton" class="settings-nav-button" type="button" role="tab" data-settings-section="packages" aria-selected="false" aria-controls="settingsPackagesSection">Packages</button>
+          <button id="settingsFilesButton" class="settings-nav-button" type="button" role="tab" data-settings-section="files" aria-selected="false" aria-controls="settingsFilesSection">Files</button>
+          <button id="settingsDiagnosticsButton" class="settings-nav-button" type="button" role="tab" data-settings-section="diagnostics" aria-selected="false" aria-controls="settingsDiagnosticsSection">Diagnostics</button>
+        </nav>
+        <div class="settings-content">
+          <section id="settingsAppearanceSection" class="settings-section active" role="tabpanel" aria-labelledby="settingsAppearanceButton">
+            <h3>Appearance</h3>
+            <div class="settings-card">
+              <div class="settings-card-title">Theme</div>
+              <div class="settings-theme-options" role="group" aria-label="Theme">
+                <button id="themeSystemButton" type="button" data-theme-option="system" aria-pressed="true">System</button>
+                <button id="themeLightButton" type="button" data-theme-option="light" aria-pressed="false">Light</button>
+                <button id="themeDarkButton" type="button" data-theme-option="dark" aria-pressed="false">Dark</button>
+              </div>
+            </div>
+          </section>
+
+          <section id="settingsTabsSection" class="settings-section" role="tabpanel" aria-labelledby="settingsTabsButton" hidden>
+            <h3>Tabs</h3>
+            <div class="settings-card">
+              <label class="checkbox-line">
+                <input id="saveOnForceCloseInput" type="checkbox">
+                <span>Save on force close</span>
+              </label>
+              <p class="settings-help">When enabled, force close tab actions save dirty tabs instead of discarding their changes.</p>
+            </div>
+          </section>
+
+          <section id="settingsModalsSection" class="settings-section" role="tabpanel" aria-labelledby="settingsModalsButton" hidden>
+            <h3>Modals</h3>
+            <div class="settings-card">
+              <label class="checkbox-line">
+                <input id="closeModalsOnBackdropClickInput" type="checkbox">
+                <span>Close modals when clicking outside</span>
+              </label>
+              <p class="settings-help">When disabled, modals stay open until an explicit close, cancel, or confirmation action is selected.</p>
+            </div>
+          </section>
+
+          <section id="settingsUpdatesSection" class="settings-section" role="tabpanel" aria-labelledby="settingsUpdatesButton" hidden>
+            <h3>Updates</h3>
+            <div class="settings-card">
+              <label class="checkbox-line">
+                <input id="includePrereleasesInput" type="checkbox">
+                <span>Include prereleases when checking for updates</span>
+              </label>
+            </div>
+          </section>
+
+          <section id="settingsScriptsSection" class="settings-section" role="tabpanel" aria-labelledby="settingsScriptsButton" hidden>
+            <h3>Scripts</h3>
+            <div class="settings-card workspace-sandbox-settings">
+              <div class="workspace-sandbox-note">
+                Enabled for Postman import compatibility. Scripts can read sandbox-visible variables, tokens, and cookies, then send them to broker-approved HTTP(S) endpoints.
+              </div>
+              <label class="checkbox-line">
+                <input id="trustedScriptSendRequestInput" type="checkbox">
+                <span>Script network requests</span>
+              </label>
+              <label class="checkbox-line">
+                <input id="trustedScriptCookiesInput" type="checkbox">
+                <span>Script cookie access</span>
+              </label>
+              <label class="checkbox-line">
+                <input id="trustedScriptVaultInput" type="checkbox">
+                <span>Script vault access</span>
+              </label>
+            </div>
+          </section>
+
+          <section id="settingsVaultSection" class="settings-section" role="tabpanel" aria-labelledby="settingsVaultButton" hidden>
+            <h3>Vault</h3>
+            <div class="settings-card workspace-vault-panel">
+              <div class="workspace-sandbox-note" id="sandboxVaultSummary" role="status" aria-live="polite">Vault metadata has not been loaded.</div>
+              <div id="sandboxVaultList" class="workspace-package-list"></div>
+              <div id="sandboxVaultAuditList" class="workspace-package-list"></div>
+              <div class="workspace-actions">
+                <button id="bindVaultSecretButton" type="button">Bind Vault Secret</button>
+                <button id="refreshVaultMetadataButton" type="button">Refresh Vault Metadata</button>
+                <button id="resetVaultButton" type="button">Reset Vault</button>
+              </div>
+            </div>
+          </section>
+
+          <section id="settingsPackagesSection" class="settings-section" role="tabpanel" aria-labelledby="settingsPackagesButton" hidden>
+            <h3>Packages</h3>
+            <div class="settings-card workspace-package-cache">
+              <div class="workspace-sandbox-note" id="sandboxPackageCacheSummary" role="status" aria-live="polite">Reviewed package cache is empty.</div>
+              <div id="sandboxPackageMissingList" class="workspace-package-list"></div>
+              <div id="sandboxPackageCacheList" class="workspace-package-list"></div>
+              <div class="workspace-actions">
+                <button id="addSandboxPackageButton" type="button">Add Reviewed Package</button>
+                <button id="fetchSandboxPackageButton" type="button">Fetch Package for Review</button>
+                <button id="refreshSandboxPackagesButton" type="button">Refresh Package Status</button>
+              </div>
+            </div>
+          </section>
+
+          <section id="settingsFilesSection" class="settings-section" role="tabpanel" aria-labelledby="settingsFilesButton" hidden>
+            <h3>Files</h3>
+            <div class="settings-card workspace-file-bindings">
+              <div class="workspace-sandbox-note" id="sandboxFileBindingSummary" role="status" aria-live="polite">No imported file attachments need binding.</div>
+              <div id="sandboxFileBindingMissingList" class="workspace-package-list"></div>
+              <div id="sandboxFileBindingList" class="workspace-package-list"></div>
+              <div class="workspace-actions">
+                <button id="bindSandboxFileButton" type="button">Bind Imported File</button>
+                <button id="refreshSandboxFilesButton" type="button">Refresh File Bindings</button>
+              </div>
+            </div>
+          </section>
+
+          <section id="settingsDiagnosticsSection" class="settings-section" role="tabpanel" aria-labelledby="settingsDiagnosticsButton" hidden>
+            <h3>Diagnostics</h3>
+            <fieldset class="settings-card workspace-diagnostics-panel" aria-describedby="diagnosticsPrivacySummary diagnosticsSensitiveWarning">
+              <legend>Diagnostics &amp; Privacy</legend>
+              <div class="workspace-sandbox-note" id="diagnosticsPrivacySummary" role="status" aria-live="polite">
+                Local diagnostics are user-exported only. Request and response details are not logged unless enabled below.
+              </div>
+              <label class="checkbox-line">
+                <input id="diagnosticLoggingEnabledInput" type="checkbox">
+                <span>Structured local logs</span>
+              </label>
+              <label class="field inline">
+                <span>Log Level</span>
+                <select id="diagnosticLogLevelSelect">
+                  <option value="debug">Debug</option>
+                  <option value="info">Info</option>
+                  <option value="warn">Warn</option>
+                  <option value="error">Error</option>
+                </select>
+              </label>
+              <div class="workspace-sandbox-note" id="diagnosticsSensitiveWarning">
+                These request/response log categories may expose PII or customer data. Keep them off unless a local troubleshooting session requires them.
+              </div>
+              <label class="checkbox-line">
+                <input id="diagnosticLogUrlsInput" type="checkbox" aria-describedby="diagnosticsSensitiveWarning">
+                <span>Request and response URLs, paths, and query params</span>
+              </label>
+              <label class="checkbox-line">
+                <input id="diagnosticLogHeadersInput" type="checkbox" aria-describedby="diagnosticsSensitiveWarning">
+                <span>Request and response headers</span>
+              </label>
+              <label class="checkbox-line">
+                <input id="diagnosticLogCookiesInput" type="checkbox" aria-describedby="diagnosticsSensitiveWarning">
+                <span>Cookies and Set-Cookie values</span>
+              </label>
+              <label class="checkbox-line">
+                <input id="diagnosticLogBodiesInput" type="checkbox" aria-describedby="diagnosticsSensitiveWarning">
+                <span>Request and response bodies, form-data, GraphQL variables, and payloads</span>
+              </label>
+              <label class="checkbox-line">
+                <input id="diagnosticLogProtocolMessagesInput" type="checkbox" aria-describedby="diagnosticsSensitiveWarning">
+                <span>gRPC and protocol messages</span>
+              </label>
+              <label class="checkbox-line">
+                <input id="diagnosticLogScriptConsoleInput" type="checkbox" aria-describedby="diagnosticsSensitiveWarning">
+                <span>Script console output</span>
+              </label>
+              <label class="checkbox-line">
+                <input id="diagnosticLogPayloadIdentifiersInput" type="checkbox" aria-describedby="diagnosticsSensitiveWarning">
+                <span>Payload-derived identifiers</span>
+              </label>
+              <div class="workspace-actions">
+                <button id="exportDiagnosticsButton" type="button" aria-describedby="diagnosticsSensitiveWarning">Export Local Diagnostics</button>
+              </div>
+            </fieldset>
+          </section>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button id="closeSettingsModalFooterButton" type="button" class="primary">Close</button>
+      </div>
+    </section>
+
     <section id="unsavedRequestModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="unsavedRequestTitle" aria-describedby="unsavedRequestMessage" hidden>
       <h2 id="unsavedRequestTitle">Close unsaved request?</h2>
       <p id="unsavedRequestMessage">This request has unsaved changes. Save it before closing?</p>
@@ -1344,6 +1441,16 @@
       </div>
     </section>
 
+    <section id="requestExportPickerModal" class="modal runner-import-modal" role="dialog" aria-modal="true" aria-labelledby="requestExportPickerTitle" aria-describedby="requestExportPickerMessage" hidden>
+      <h2 id="requestExportPickerTitle">Export request</h2>
+      <p id="requestExportPickerMessage">Choose a collection to expand, then select a request to export.</p>
+      <div id="requestExportPickerList" class="collection-pick-list runner-import-list" role="group" aria-label="Collections and requests"></div>
+      <div class="modal-actions">
+        <button id="cancelRequestExportPickerButton" type="button">Cancel</button>
+        <button id="confirmRequestExportPickerButton" type="button" class="primary" disabled>Export</button>
+      </div>
+    </section>
+
     <section id="folderDestinationModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="folderDestinationTitle" aria-describedby="folderDestinationMessage" hidden>
       <h2 id="folderDestinationTitle">Create folder</h2>
       <p id="folderDestinationMessage">Choose a collection or folder for the new folder.</p>
@@ -1361,6 +1468,48 @@
       <div class="modal-actions">
         <button id="cancelRunnerImportButton" type="button">Cancel</button>
         <button id="confirmRunnerImportButton" type="button" class="primary" disabled>Add</button>
+      </div>
+    </section>
+
+    <section id="requestImportModal" class="modal request-import-modal" role="dialog" aria-modal="true" aria-labelledby="requestImportTitle" aria-describedby="requestImportMessage" hidden>
+      <div class="modal-title-row">
+        <h2 id="requestImportTitle">Import request</h2>
+        <button id="requestImportCloseButton" type="button" class="modal-close-button" aria-label="Close request import">X</button>
+      </div>
+      <p id="requestImportMessage">Paste a curl command or PostMeter request JSON, or choose a request file.</p>
+      <label class="field">
+        <span>Request text</span>
+        <textarea id="requestImportTextInput" rows="7" spellcheck="false" data-variable-highlight="false" placeholder="curl https://api.example.test/widgets"></textarea>
+      </label>
+      <div id="requestImportDropZone" class="file-picker-dropzone" role="button" tabindex="0">
+        <strong>Drop request file here</strong>
+        <span>or choose a file from this computer.</span>
+      </div>
+      <p id="requestImportFileSelection" class="file-picker-selection" hidden></p>
+      <p id="requestImportError" class="file-picker-error" role="alert" hidden></p>
+      <input id="requestImportFileInput" type="file" accept=".json,.sh,.txt,application/json,text/plain" hidden>
+      <div class="modal-actions">
+        <button id="cancelRequestImportButton" type="button">Cancel</button>
+        <button id="requestImportBrowseButton" type="button">Choose File</button>
+        <button id="confirmRequestImportButton" type="button" class="primary" disabled>Import</button>
+      </div>
+    </section>
+
+    <section id="requestExportModal" class="modal request-export-modal" role="dialog" aria-modal="true" aria-labelledby="requestExportTitle" aria-describedby="requestExportMessage" hidden>
+      <div class="modal-title-row">
+        <h2 id="requestExportTitle">Export request</h2>
+        <button id="requestExportCloseButton" type="button" class="modal-close-button" aria-label="Close request export">X</button>
+      </div>
+      <p id="requestExportMessage">Copy the generated request text or export it to a file.</p>
+      <label class="field">
+        <span id="requestExportTextLabel">Request export</span>
+        <textarea id="requestExportTextOutput" class="request-export-text" rows="14" spellcheck="false" data-variable-highlight="false" readonly></textarea>
+      </label>
+      <p id="requestExportCopyStatus" class="request-export-status" role="status" hidden></p>
+      <div class="modal-actions">
+        <button id="cancelRequestExportButton" type="button">Close</button>
+        <button id="copyRequestExportButton" type="button">Copy All</button>
+        <button id="fileRequestExportButton" type="button" class="primary">Export File</button>
       </div>
     </section>
 

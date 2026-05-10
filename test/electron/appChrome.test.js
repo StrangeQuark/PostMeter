@@ -44,7 +44,7 @@ test('Electron shell keeps custom File/Edit/View/Help menus without the default 
     'New Collection',
     'New Folder',
     'Save Workspace',
-    'Save on Force Close',
+    'Settings...',
     'Import Workspace...',
     'Import Collection...',
     'Export Workspace...',
@@ -55,10 +55,11 @@ test('Electron shell keeps custom File/Edit/View/Help menus without the default 
   assert.match(appMenuSource, /role:\s*'editMenu'/);
   assert.match(appMenuSource, /role:\s*'viewMenu'/);
   assert.match(appMenuSource, /label:\s*'Help'/);
+  assert.match(appMenuSource, /label:\s*'Settings\.\.\.'[\s\S]*sendMenuAction\('settings'\)/);
   assert.match(appMenuSource, /label:\s*'PostMeter Documentation'/);
   assert.match(appMenuSource, /label:\s*'Report Issue'/);
   assert.match(appMenuSource, /label:\s*'Export Local Diagnostics\.\.\.'[\s\S]*sendMenuAction\('export-diagnostics'\)/);
-  assert.match(appMenuSource, /label:\s*'Prereleases'[\s\S]*type:\s*'checkbox'[\s\S]*label:\s*'Check for Updates'/);
+  assert.doesNotMatch(appMenuSource, /label:\s*'Prereleases'/);
   assert.match(appMenuSource, /label:\s*'Check for Updates'/);
   assert.doesNotMatch(`${mainSource}\n${appMenuSource}`, /role:\s*['"]windowMenu['"]/);
   assert.doesNotMatch(`${mainSource}\n${appMenuSource}`, /label:\s*['"]Window['"]/);
@@ -67,7 +68,9 @@ test('Electron shell keeps custom File/Edit/View/Help menus without the default 
   assert.doesNotMatch(`${mainSource}\n${appMenuSource}`, /\.setMenuBarVisibility\(false\)/);
 
   assert.match(preloadSource, /onMenuAction/);
+  assert.match(preloadSource, /'settings'/);
   assert.match(preloadSource, /process\.isMainFrame\s*===\s*true/);
+  assert.match(rendererSource, /case 'settings':[\s\S]*openSettingsModal\(\)/);
   assert.match(preloadSource, /contextBridge\.exposeInMainWorld\('postmeter',\s*postmeterApi\)/);
   assert.match(preloadSource, /webUtils\.getPathForFile/);
   assert.match(preloadSource, /files:\s*\{[\s\S]*pathForFile/);
@@ -78,6 +81,7 @@ test('Electron shell keeps custom File/Edit/View/Help menus without the default 
   assert.match(preloadSource, /'set-save-on-force-close'/);
   assert.match(preloadSource, /saveOnForceClose/);
   assert.match(rendererSource, /handleAppMenuAction/);
+  assert.match(rendererSource, /case 'settings':[\s\S]*openSettingsModal/);
   assert.match(rendererSource, /setIncludePrereleases/);
   assert.match(rendererSource, /setSaveOnForceClose/);
   assert.match(rendererSource, /chooseImportFilePath\('workspace'\)/);

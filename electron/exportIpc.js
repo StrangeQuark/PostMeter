@@ -8,12 +8,14 @@ const {
   jsonFilters,
   performanceExportExtension,
   performanceExportFilters,
+  requestExportExtension,
+  requestExportFilters,
   safeFilename,
   selectedSaveFilePath,
   validateDialogFilePath
 } = require('./fileDialogs');
 
-const EXPORT_KINDS = new Set(['workspace', 'collection', 'environment', 'runner', 'performance']);
+const EXPORT_KINDS = new Set(['workspace', 'collection', 'request', 'environment', 'runner', 'performance']);
 
 function registerExportIpc(options = {}) {
   const {
@@ -141,6 +143,15 @@ function exportDialogOptions(options = {}) {
         filters: collectionExportFilters(format)
       };
     }
+    case 'request': {
+      assertRequestExportFormat(format);
+      const extension = requestExportExtension(format);
+      return {
+        title: 'Export Request',
+        defaultPath: `${name}.${extension}`,
+        filters: requestExportFilters(format)
+      };
+    }
     case 'environment':
       assertEnvironmentExportFormat(format);
       return {
@@ -183,7 +194,7 @@ function assertExportId(value) {
 function assertExportKind(value) {
   const kind = String(value || '');
   if (!EXPORT_KINDS.has(kind)) {
-    throw new Error('Export kind must be workspace, collection, environment, runner, or performance.');
+    throw new Error('Export kind must be workspace, collection, request, environment, runner, or performance.');
   }
   return kind;
 }
@@ -197,6 +208,12 @@ function assertCollectionExportFormat(format) {
 function assertPerformanceExportFormat(format) {
   if (!['postmeter', 'json', 'csv'].includes(String(format || ''))) {
     throw new Error('Performance export format must be postmeter, json, or csv.');
+  }
+}
+
+function assertRequestExportFormat(format) {
+  if (!['postmeter', 'curl'].includes(String(format || ''))) {
+    throw new Error('Request export format must be postmeter or curl.');
   }
 }
 
@@ -214,6 +231,7 @@ function defaultExportName(kind) {
   return {
     workspace: 'postmeter-workspace',
     collection: 'collection',
+    request: 'request',
     environment: 'environment',
     runner: 'runner',
     performance: 'performance-test'

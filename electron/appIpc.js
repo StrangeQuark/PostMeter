@@ -8,6 +8,7 @@ function registerAppIpc(options = {}) {
   const {
     app,
     checkForUpdates: checkForUpdatesImpl = checkForUpdates,
+    clipboard,
     ipcMain,
     recordDiagnosticEvent = async () => {},
     shell
@@ -64,6 +65,24 @@ function registerAppIpc(options = {}) {
     await shell.openExternal(parsed.toString());
     return true;
   });
+
+  ipcMain.handle('clipboard:writeText', async (_event, text) => {
+    assertClipboardTextPayload(text);
+    if (!clipboard || typeof clipboard.writeText !== 'function') {
+      throw new Error('Clipboard API is unavailable.');
+    }
+    clipboard.writeText(text);
+    return true;
+  });
+}
+
+function assertClipboardTextPayload(value) {
+  if (typeof value !== 'string') {
+    throw new Error('Invalid IPC payload: clipboard text must be a string.');
+  }
+  if (value.length > 10 * 1024 * 1024) {
+    throw new Error('Invalid IPC payload: clipboard text cannot exceed 10 MB.');
+  }
 }
 
 function safeExternalUrl(value) {
@@ -100,6 +119,7 @@ function releaseChannelForVersion(version) {
 }
 
 module.exports = {
+  assertClipboardTextPayload,
   registerAppIpc,
   releaseChannelForVersion,
   safeExternalUrl

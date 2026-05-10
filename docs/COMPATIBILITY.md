@@ -14,6 +14,7 @@ Supported:
 
 - Workspace import/export, including filesystem-discovered managed workspaces, exporting the current workspace or another managed workspace from the Workspaces list, managed workspace duplication, and non-destructive native workspace import in the desktop UI.
 - Collection import/export, including desktop collection-picker export that still opens with an explicit empty-state warning when no collections exist, and native collection export defaults of `<collection-name>.json`.
+- Standalone request import/export, including native PostMeter request JSON, direct-paste request import, drag/drop or file-picker request import, standalone curl command import, and copyable PostMeter/curl request export previews before optional file export.
 - Environment import/export, including native PostMeter environment JSON and Postman environment JSON import/export.
 - Runner definition import/export for workspace-owned desktop runners.
 - Native Performance-test import/export preserving each saved test's request copy, source metadata, selected environment ID, environment mutation policy, execution policy, safety limits, result-retention metadata, and export metadata.
@@ -91,7 +92,8 @@ Supported:
 
 - Common curl command import for URL, method, headers, data flags, cookies, multipart-ish form flags, and proxy/retry/TLS metadata.
 - Basic-auth flags, user-agent/referer headers, repeated headers, redirect/compressed/insecure flags, `--url-query`, `-G` query-data mode, repeated data flags, and binary/file upload intent are imported where representable.
-- Collection export to readable curl commands, including PostMeter basic auth and preserved redirect/compressed/insecure/binary metadata when present.
+- Standalone request export and collection export to readable curl commands, including copyable request previews, PostMeter basic auth, and preserved redirect/compressed/insecure/binary metadata when present.
+- Generated collection curl scripts include the PostMeter collection name, per-request comments, and warning comments when scripts/assertions or other PostMeter-only request behavior cannot be represented in curl.
 
 Known gaps:
 

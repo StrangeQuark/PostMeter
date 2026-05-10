@@ -145,23 +145,6 @@
   margin-left: auto;
 }
 
-.theme-control {
-  gap: 2px;
-}
-
-.theme-control button {
-  min-width: 58px;
-  padding: 5px 8px;
-  color: var(--muted);
-}
-
-.theme-control button[aria-pressed="true"] {
-  border-color: var(--line);
-  background: var(--surface);
-  color: var(--primary);
-  box-shadow: inset 0 -2px 0 var(--primary);
-}
-
 .environment-control select {
   min-width: 138px;
 }

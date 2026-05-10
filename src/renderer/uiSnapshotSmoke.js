@@ -188,7 +188,15 @@
       refreshSandboxPackageStatus();
       refreshSandboxFileBindings();
       renderWorkspacePanel();
+      renderSettingsControls();
+      selectSettingsSection('scripts');
+      $('modalBackdrop').hidden = false;
+      for (const modal of $('modalBackdrop').querySelectorAll('.modal')) {
+        modal.hidden = modal.id !== 'settingsModal';
+      }
     }, global);
+    $('modalBackdrop').hidden = true;
+    $('settingsModal').hidden = true;
 
     await captureUiSnapshotState('long-labels', () => {
       selectSidebarPanel('collections');

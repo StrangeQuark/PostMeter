@@ -1,5 +1,5 @@
 const { exportPostmanCollection, importPostmanCollection } = require('./postmanImporter');
-const { exportCurlCollection, importCurlCommand } = require('./curlFormats');
+const { exportCurlCollection, importCurlCommand, looksLikeCurlContent } = require('./curlFormats');
 const { exportOpenApiCollection, importOpenApiDocument, looksLikeOpenApiDocument } = require('./openApiFormats');
 const { migrate } = require('./workspaceMigrations');
 const { regenerateCollectionIds } = require('./importedCollectionIds');
@@ -36,7 +36,7 @@ const importHandlers = [
   {
     name: 'curl',
     canImport({ content }) {
-      return content.trim().startsWith('curl');
+      return looksLikeCurlContent(content);
     },
     import({ content }) {
       return importCurlCommand(content);

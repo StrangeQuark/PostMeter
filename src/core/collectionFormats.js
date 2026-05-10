@@ -1,5 +1,7 @@
 const {
+  curlExportExclusions,
   exportCurlCollection,
+  exportCurlRequest,
   importCurlCommand,
   splitCommandLine
 } = require('./curlFormats');
@@ -15,7 +17,9 @@ const {
 } = require('./postmanImporter');
 
 module.exports = {
+  curlExportExclusions,
   exportCurlCollection,
+  exportCurlRequest,
   exportOpenApiCollection,
   exportPostmanCollection,
   importCurlCommand,

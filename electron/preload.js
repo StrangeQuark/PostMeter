@@ -14,6 +14,7 @@ const postmeterApi = {
         'new-collection',
         'new-folder',
         'save-workspace',
+        'settings',
         'import-workspace',
         'import-collection',
         'export-workspace',
@@ -84,6 +85,9 @@ const postmeterApi = {
   request: {
     validate: (request, environment) => ipcRenderer.invoke('request:validate', request, environment),
     send: (request, environment) => ipcRenderer.invoke('request:send', request, environment),
+    importRequest: (source) => ipcRenderer.invoke('request:import', safeRequestImportSource(source)),
+    exportRequest: (request, format) => ipcRenderer.invoke('request:export', request, format),
+    exportRequestText: (request, format) => ipcRenderer.invoke('request:exportText', request, format),
     exportExamples: (request) => ipcRenderer.invoke('request:examples:export', request)
   },
   oauth: {
@@ -114,6 +118,9 @@ const postmeterApi = {
   },
   diagnostics: {
     export: () => ipcRenderer.invoke('diagnostics:export')
+  },
+  clipboard: {
+    writeText: (text) => ipcRenderer.invoke('clipboard:writeText', String(text || ''))
   },
   fileExport: {
     choosePath: (options) => ipcRenderer.invoke('file-export:choosePath', options),
@@ -184,6 +191,19 @@ function stringField(value, maxLength) {
 
 function optionalFilePath(value) {
   return typeof value === 'string' ? value : undefined;
+}
+
+function safeRequestImportSource(source) {
+  if (typeof source === 'string') {
+    return { filePath: source };
+  }
+  if (!source || typeof source !== 'object') {
+    return {};
+  }
+  return {
+    filePath: typeof source.filePath === 'string' ? source.filePath : undefined,
+    text: typeof source.text === 'string' ? source.text : undefined
+  };
 }
 
 function localPathForFile(file) {

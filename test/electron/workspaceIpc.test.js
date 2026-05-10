@@ -17,6 +17,10 @@ test('file dialog helpers validate selected paths before IPC file operations', (
     { name: 'API Collections', extensions: ['json', 'yaml', 'yml', 'sh'] },
     { name: 'All Files', extensions: ['*'] }
   ]);
+  assert.deepEqual(require('../../electron/fileDialogs').requestImportFilters(), [
+    { name: 'Requests', extensions: ['json', 'sh', 'txt'] },
+    { name: 'All Files', extensions: ['*'] }
+  ]);
   assert.equal(selectedOpenFilePath({ canceled: true, filePaths: ['/tmp/workspace.json'] }), '');
   assert.equal(selectedOpenFilePath({ canceled: false, filePaths: [] }), '');
   assert.equal(selectedOpenFilePath({ canceled: false, filePaths: ['/tmp/workspace.json'] }), '/tmp/workspace.json');
@@ -116,6 +120,9 @@ test('workspace IPC registers stable workspace, collection, and example channels
     'environment:export',
     'environment:import',
     'request:examples:export',
+    'request:export',
+    'request:exportText',
+    'request:import',
     'runner:exportDefinition',
     'runner:importDefinition',
     'workspace:create',
@@ -205,6 +212,104 @@ test('workspace IPC imports renderer-selected files without reopening native dia
   await assert.rejects(
     () => handlers.get('collection:import')({}, 'bad\0path.json'),
     /collection import path must not contain null bytes/
+  );
+});
+
+test('workspace IPC imports and exports standalone requests', async (t) => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-request-import-export-'));
+  t.after(async () => {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+  const requestImportPath = path.join(tempDir, 'request.postmeter-request.json');
+  await fs.writeFile(requestImportPath, JSON.stringify({
+    format: 'postmeter.request',
+    version: 1,
+    request: {
+      id: 'request-1',
+      name: 'Imported Request',
+      method: 'POST',
+      url: 'https://api.example.test/widgets',
+      queryParams: [{ enabled: true, key: 'trace', value: 'yes' }],
+      headers: [{ enabled: true, key: 'Content-Type', value: 'application/json' }],
+      bodyType: 'RAW_JSON',
+      body: '{"ok":true}'
+    }
+  }));
+
+  const handlers = new Map();
+  let saveDialogOptions = null;
+  registerWorkspaceIpc({
+    dialog: {
+      showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+      showSaveDialog: async (_window, options) => {
+        saveDialogOptions = options;
+        return { canceled: false, filePath: path.join(tempDir, options.defaultPath) };
+      }
+    },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => ({ schemaVersion: 11, collections: [], environments: [], history: [], cookies: [], settings: { updates: { includePrereleases: false } } }),
+    getWorkspaceStore: () => ({
+      describeCurrent: async (workspace) => ({ workspace, path: '/tmp/Local Workspace.json', activeWorkspaceId: 'Local Workspace.json', workspaces: [] })
+    }),
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      },
+      on() {}
+    },
+    refreshApplicationMenu: () => {},
+    saveWorkspace: async (workspace) => workspace,
+    saveWorkspaceSync: (workspace) => workspace,
+    setWorkspace: () => {}
+  });
+
+  const pastedCurl = await handlers.get('request:import')({}, {
+    text: "curl -H 'X-Test: yes' 'https://api.example.test/health?ready=1'"
+  });
+  assert.equal(pastedCurl.cancelled, false);
+  assert.equal(pastedCurl.request.name, 'GET /health');
+  assert.equal(pastedCurl.request.queryParams[0].key, 'ready');
+  assert.equal(pastedCurl.request.headers[0].key, 'X-Test');
+
+  const fileImport = await handlers.get('request:import')({}, { filePath: requestImportPath });
+  assert.equal(fileImport.cancelled, false);
+  assert.equal(fileImport.request.name, 'Imported Request');
+  assert.notEqual(fileImport.request.id, 'request-1');
+
+  const textExport = await handlers.get('request:exportText')({}, fileImport.request, 'postmeter');
+  assert.equal(textExport.format, 'postmeter');
+  assert.match(textExport.content, /"format": "postmeter.request"/);
+  assert.match(textExport.content, /"name": "Imported Request"/);
+
+  const curlTextExport = await handlers.get('request:exportText')({}, fileImport.request, 'curl');
+  assert.equal(curlTextExport.format, 'curl');
+  assert.match(curlTextExport.content, /^# Request: Imported Request/m);
+  assert.match(curlTextExport.content, /curl 'https:\/\/api\.example\.test\/widgets\?trace=yes'/);
+
+  const exportResult = await handlers.get('request:export')({}, fileImport.request, 'curl');
+  assert.equal(exportResult.cancelled, false);
+  assert.equal(saveDialogOptions.title, 'Export Request');
+  assert.equal(saveDialogOptions.defaultPath, 'Imported-Request.sh');
+  assert.deepEqual(saveDialogOptions.filters, [
+    { name: 'curl Request', extensions: ['sh'] },
+    { name: 'All Files', extensions: ['*'] }
+  ]);
+  const exported = await fs.readFile(exportResult.path, 'utf8');
+  assert.match(exported, /^# Request: Imported Request/m);
+  assert.match(exported, /curl 'https:\/\/api\.example\.test\/widgets\?trace=yes'/);
+
+  await assert.rejects(
+    () => handlers.get('request:import')({}, { filePath: 'bad\0path.json' }),
+    /request import path must not contain null bytes/
+  );
+  await assert.rejects(
+    () => handlers.get('request:export')({}, fileImport.request, 'openapi'),
+    /Request export format must be postmeter or curl/
+  );
+  await assert.rejects(
+    () => handlers.get('request:exportText')({}, fileImport.request, 'openapi'),
+    /Request export format must be postmeter or curl/
   );
 });
 

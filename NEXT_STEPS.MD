@@ -58,10 +58,18 @@ PostMeter must remain a standalone local desktop application. Do not add PostMet
   - Request, runner-owned request, and Performance request editors now expose a GraphQL body mode with query, variables, and operation-name fields.
   - GraphQL bodies persist/export as Postman-compatible `postmanBody.mode = "graphql"` metadata, execute as `application/json`, and support environment substitution in query, variables, and operation name.
   - Focused HTTP, import/export, Performance, bootstrap, and UI smoke coverage now exercises GraphQL editing, execution materialization, and round-tripping.
+- Added the first Settings surface.
+  - The main toolbar now exposes `File` > `Settings`, and the native app File menu includes `Settings...`.
+  - The old top-toolbar theme segmented control moved into Settings > Appearance.
+  - Tab force-close behavior, prerelease update checks, script sandbox capabilities, vault/package/file binding controls, and diagnostics/privacy controls now live in categorized Settings panes instead of crowding workspace details.
+  - Settings > Modals now controls whether clicking outside a modal closes it. The default remains disabled, so users must use explicit modal actions such as `Close`, `Cancel`, or confirmation buttons unless they opt in.
 
 ## Highest Priority Steps
 
-1. Prepare public beta/release candidate documentation.
+1. Expand Settings into the full Preferences system.
+   - Decide which values should remain workspace-scoped and which should move into a durable app-wide preferences model.
+   - Continue centralizing desktop behavior, editor, import/export, Performance, and privacy/diagnostics preferences here instead of adding one-off controls throughout the app.
+2. Prepare public beta/release candidate documentation.
    - Add or update `docs/SECURITY.md`, privacy notes, threat model summary, install/uninstall docs, unsigned artifact warnings, known limitations, compatibility matrix links, OAuth certification docs, diagnostics docs, and support channels.
    - Create a release checklist with separate beta, release-candidate, and stable sections. Each section must name required commands, native GitHub Actions runner jobs, artifact validations, OAuth certification status, signing/notarization status, docs checks, and known waivers.
    - Add a Mac manual QA checklist for the later maintainer-owned Mac pass. Until then, `macos-latest` GitHub Actions validation is the required pre-production evidence, not a substitute for final manual production signoff.
@@ -69,6 +77,12 @@ PostMeter must remain a standalone local desktop application. Do not add PostMet
    - Make release notes templates call out security-sensitive changes, sandbox changes, compatibility changes, migration notes, signing/notarization status, native-runner validation results, and known issues.
    - Document the unsigned-release path and the signed/notarized-release path separately. Signing and notarization stay blocked until maintainer-controlled certificates are available.
    - Ensure public docs do not overclaim: Postman script parity is claim-gated for the tracked target, platform OS sandbox coverage is tracked separately, local Performance remains desktop-bounded, and JMeter import/export/execution is not supported.
+3. Add native Windows curl export support.
+   - Keep the current shell-oriented curl export for Linux/macOS, but add Windows-native curl serialization for collection exports.
+   - Generate `.bat` output on Windows with `cmd.exe`-safe quoting, escaped special characters, line continuations, and explicit `curl.exe` usage where needed to avoid PowerShell aliases.
+   - Consider a PowerShell-friendly copy/export mode so Windows users can paste generated commands directly into `cmd.exe` or PowerShell without Git Bash/WSL.
+   - Add cross-platform tests covering Linux/macOS shell output and Windows batch output for URLs, headers, auth, bodies, environment placeholders, file paths, and special characters.
+   - Update export docs/tooltips to describe platform-specific curl output and avoid implying Bash-style scripts are native Windows scripts.
 
 ## Blocked External Validation
 

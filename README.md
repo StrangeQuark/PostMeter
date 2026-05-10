@@ -6,7 +6,7 @@ PostMeter is a local-first desktop API client for building, sending, and testing
 
 - Send HTTP requests with params, headers, auth, cookies, and body editors.
 - Organize collections, folders, examples, environments, variables, and workspaces.
-- Import and export workspaces, collections, environments, runners, and performance tests.
+- Import and export requests, workspaces, collections, environments, runners, and performance tests.
 - Run pre-request scripts, test scripts, assertions, and workspace-owned runners.
 - Use first-class desktop runners or the CI-friendly CLI runner.
 - Work with OAuth 2.0, HTTPS client certificates, cookies, and GitHub Releases update checks.
@@ -69,7 +69,7 @@ You can override the startup workspace path:
 POSTMETER_DATA_PATH=/tmp/postmeter-workspace.json npm start
 ```
 
-Workspace, collection, environment, runner, and performance exports can include auth fields, variables, cookies, file references, scripts, and certificate passphrases. Review exports before sharing them.
+Request, workspace, collection, environment, runner, and performance exports can include auth fields, variables, cookies, file references, scripts, and certificate passphrases. Review exports before sharing them.
 
 Diagnostics are local and user-initiated. See [Troubleshooting](docs/TROUBLESHOOTING.md) and [Release Readiness](docs/RELEASE_READINESS.md) for the detailed privacy and validation model.
 

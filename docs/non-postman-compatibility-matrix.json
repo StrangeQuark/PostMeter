@@ -21,14 +21,16 @@
     {
       "id": "curl.import-export",
       "area": "curl",
-      "target": "curl import/export covers common method, URL, generated names, header, auth, repeated data, query-data, cookie, redirect, compression, file/binary, and quoting variants; proxy, retry, and client TLS flags are preserved as import metadata instead of being claimed as curl-equivalent transport execution.",
+      "target": "curl import/export covers common method, URL, generated names, header, auth, repeated data, query-data, cookie, redirect, compression, file/binary, and quoting variants for collections and standalone requests; generated collection shell scripts include collection/request comments and warnings for PostMeter-only request behavior that curl cannot represent.",
       "status": "implemented",
       "evidenceRefs": [
         "src/core/curlFormats.js",
+        "src/core/requestFormats.js",
         "docs/COMPATIBILITY.md"
       ],
       "tests": [
-        "test/electron/collectionFormats.test.js"
+        "test/electron/collectionFormats.test.js",
+        "test/electron/requestFormats.test.js"
       ],
       "notes": ""
     },
