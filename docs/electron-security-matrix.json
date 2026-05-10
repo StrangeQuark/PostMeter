@@ -211,6 +211,22 @@
       "notes": ""
     },
     {
+      "id": "ipc.channel.clipboard-writetext",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `clipboard:writeText`: Explicit user copy actions send bounded text to the main-process clipboard API through the trusted renderer IPC wrapper.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/appIpc.js",
+        "electron/preload.js",
+        "src/renderer/renderer.js"
+      ],
+      "tests": [
+        "test/electron/appIpc.test.js",
+        "test/electron/rendererBootstrap.test.js"
+      ],
+      "notes": ""
+    },
+    {
       "id": "ipc.channel.collection-export",
       "area": "IPC channel",
       "target": "renderer-to-main channel `collection:export`: Collection export validates collection payload and export format before a main-process save picker.",
@@ -293,6 +309,67 @@
       "tests": [
         "test/electron/workspaceIpc.test.js",
         "test/electron/environmentFormats.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.file-export-cancelprepared",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `file-export:cancelPrepared`: Picker-first export cancellation terminates active export preparation and clears prepared content if the user cancels the picker.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/exportIpc.js",
+        "electron/preload.js"
+      ],
+      "tests": [
+        "test/electron/exportIpc.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.file-export-choosepath",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `file-export:choosePath`: Picker-first export opens a save dialog from lightweight metadata before expensive export preparation.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/exportIpc.js",
+        "electron/preload.js",
+        "electron/fileDialogs.js"
+      ],
+      "tests": [
+        "test/electron/exportIpc.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.file-export-prepare",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `file-export:prepare`: Picker-first export preparation validates and serializes export payloads in a worker while the save dialog is open.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/exportIpc.js",
+        "electron/exportPreparationWorker.js",
+        "electron/preload.js",
+        "src/core/ipcValidation.js"
+      ],
+      "tests": [
+        "test/electron/exportIpc.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.file-export-writeprepared",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `file-export:writePrepared`: Picker-first export writes a prepared export only to the user-selected validated save path.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/exportIpc.js",
+        "electron/preload.js",
+        "electron/fileDialogs.js",
+        "src/core/workspacePersistence.js"
+      ],
+      "tests": [
+        "test/electron/exportIpc.test.js"
       ],
       "notes": ""
     },
@@ -542,6 +619,59 @@
       "tests": [
         "test/electron/workspaceIpc.test.js",
         "test/electron/ipcValidation.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.request-export",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `request:export`: Standalone request export validates request payloads and writes native PostMeter request JSON or curl through a main-process save picker.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/workspaceIpc.js",
+        "electron/preload.js",
+        "electron/fileDialogs.js",
+        "src/core/requestFormats.js",
+        "src/core/ipcValidation.js"
+      ],
+      "tests": [
+        "test/electron/workspaceIpc.test.js",
+        "test/electron/requestFormats.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.request-exporttext",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `request:exportText`: Standalone request export preview validates request payloads and returns native PostMeter request JSON or curl text for copyable renderer display.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/workspaceIpc.js",
+        "electron/preload.js",
+        "src/core/requestFormats.js",
+        "src/core/ipcValidation.js"
+      ],
+      "tests": [
+        "test/electron/workspaceIpc.test.js",
+        "test/electron/requestFormats.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.request-import",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `request:import`: Standalone request import accepts direct pasted text or a renderer-selected file path, then validates curl or native PostMeter request JSON before returning an unsaved request payload.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/workspaceIpc.js",
+        "electron/preload.js",
+        "electron/fileDialogs.js",
+        "src/core/requestFormats.js",
+        "src/core/ipcValidation.js"
+      ],
+      "tests": [
+        "test/electron/workspaceIpc.test.js",
+        "test/electron/requestFormats.test.js"
       ],
       "notes": ""
     },

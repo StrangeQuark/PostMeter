@@ -30,6 +30,7 @@
       <button id="importMenuButton" class="menu-trigger" aria-haspopup="menu" aria-expanded="false">Import</button>
       <div id="importMenu" class="toolbar-menu" role="menu" aria-labelledby="importMenuButton" hidden>
         <button id="importWorkspaceButton" role="menuitem">Workspace</button>
+        <button id="importRequestButton" role="menuitem">Request</button>
         <button id="importCollectionButton" role="menuitem">Collection</button>
         <button id="importEnvironmentButton" role="menuitem">Environment</button>
         <button id="importRunnerButton" role="menuitem">Runner</button>
@@ -40,6 +41,13 @@
       <button id="exportMenuButton" class="menu-trigger" aria-haspopup="menu" aria-expanded="false">Export</button>
       <div id="exportMenu" class="toolbar-menu" role="menu" aria-labelledby="exportMenuButton" hidden>
         <button id="exportWorkspaceButton" role="menuitem">Workspace</button>
+        <div class="toolbar-submenu-row" role="none">
+          <button id="exportRequestParentButton" role="menuitem" aria-haspopup="menu">Request</button>
+          <div class="toolbar-submenu" role="menu" aria-label="Request export types">
+            <button id="exportRequestButton" role="menuitem">PostMeter</button>
+            <button id="exportRequestCurlButton" role="menuitem">curl</button>
+          </div>
+        </div>
         <div class="toolbar-submenu-row" role="none">
           <button id="exportCollectionParentButton" role="menuitem" aria-haspopup="menu">Collection</button>
           <div class="toolbar-submenu" role="menu" aria-label="Collection export types">
@@ -1344,6 +1352,16 @@
       </div>
     </section>
 
+    <section id="requestExportPickerModal" class="modal runner-import-modal" role="dialog" aria-modal="true" aria-labelledby="requestExportPickerTitle" aria-describedby="requestExportPickerMessage" hidden>
+      <h2 id="requestExportPickerTitle">Export request</h2>
+      <p id="requestExportPickerMessage">Choose a collection to expand, then select a request to export.</p>
+      <div id="requestExportPickerList" class="collection-pick-list runner-import-list" role="group" aria-label="Collections and requests"></div>
+      <div class="modal-actions">
+        <button id="cancelRequestExportPickerButton" type="button">Cancel</button>
+        <button id="confirmRequestExportPickerButton" type="button" class="primary" disabled>Export</button>
+      </div>
+    </section>
+
     <section id="folderDestinationModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="folderDestinationTitle" aria-describedby="folderDestinationMessage" hidden>
       <h2 id="folderDestinationTitle">Create folder</h2>
       <p id="folderDestinationMessage">Choose a collection or folder for the new folder.</p>
@@ -1361,6 +1379,48 @@
       <div class="modal-actions">
         <button id="cancelRunnerImportButton" type="button">Cancel</button>
         <button id="confirmRunnerImportButton" type="button" class="primary" disabled>Add</button>
+      </div>
+    </section>
+
+    <section id="requestImportModal" class="modal request-import-modal" role="dialog" aria-modal="true" aria-labelledby="requestImportTitle" aria-describedby="requestImportMessage" hidden>
+      <div class="modal-title-row">
+        <h2 id="requestImportTitle">Import request</h2>
+        <button id="requestImportCloseButton" type="button" class="modal-close-button" aria-label="Close request import">X</button>
+      </div>
+      <p id="requestImportMessage">Paste a curl command or PostMeter request JSON, or choose a request file.</p>
+      <label class="field">
+        <span>Request text</span>
+        <textarea id="requestImportTextInput" rows="7" spellcheck="false" data-variable-highlight="false" placeholder="curl https://api.example.test/widgets"></textarea>
+      </label>
+      <div id="requestImportDropZone" class="file-picker-dropzone" role="button" tabindex="0">
+        <strong>Drop request file here</strong>
+        <span>or choose a file from this computer.</span>
+      </div>
+      <p id="requestImportFileSelection" class="file-picker-selection" hidden></p>
+      <p id="requestImportError" class="file-picker-error" role="alert" hidden></p>
+      <input id="requestImportFileInput" type="file" accept=".json,.sh,.txt,application/json,text/plain" hidden>
+      <div class="modal-actions">
+        <button id="cancelRequestImportButton" type="button">Cancel</button>
+        <button id="requestImportBrowseButton" type="button">Choose File</button>
+        <button id="confirmRequestImportButton" type="button" class="primary" disabled>Import</button>
+      </div>
+    </section>
+
+    <section id="requestExportModal" class="modal request-export-modal" role="dialog" aria-modal="true" aria-labelledby="requestExportTitle" aria-describedby="requestExportMessage" hidden>
+      <div class="modal-title-row">
+        <h2 id="requestExportTitle">Export request</h2>
+        <button id="requestExportCloseButton" type="button" class="modal-close-button" aria-label="Close request export">X</button>
+      </div>
+      <p id="requestExportMessage">Copy the generated request text or export it to a file.</p>
+      <label class="field">
+        <span id="requestExportTextLabel">Request export</span>
+        <textarea id="requestExportTextOutput" class="request-export-text" rows="14" spellcheck="false" data-variable-highlight="false" readonly></textarea>
+      </label>
+      <p id="requestExportCopyStatus" class="request-export-status" role="status" hidden></p>
+      <div class="modal-actions">
+        <button id="cancelRequestExportButton" type="button">Close</button>
+        <button id="copyRequestExportButton" type="button">Copy All</button>
+        <button id="fileRequestExportButton" type="button" class="primary">Export File</button>
       </div>
     </section>
 

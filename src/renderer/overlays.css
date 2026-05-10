@@ -102,6 +102,13 @@
   flex: 0 0 auto;
 }
 
+.collection-pick-option small {
+  color: var(--text-muted);
+  font-size: 11px;
+  margin-left: auto;
+  text-align: right;
+}
+
 .folder-destination-option small {
   color: var(--text-muted);
   font-size: 11px;
@@ -263,6 +270,29 @@
   width: min(560px, 100%);
 }
 
+.request-import-modal {
+  width: min(720px, 100%);
+}
+
+.request-export-modal {
+  width: min(820px, 100%);
+}
+
+.request-export-text {
+  min-height: 280px;
+  resize: vertical;
+  font-family: var(--mono-font);
+  line-height: 1.45;
+  white-space: pre;
+}
+
+.request-export-status {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .file-picker-dropzone {
   display: grid;
   place-items: center;
@@ -297,6 +327,13 @@
 .file-picker-error {
   margin: 10px 0 0;
   color: var(--danger);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.file-picker-selection {
+  margin: 8px 0 0;
+  color: var(--muted);
   font-size: 12px;
   font-weight: 700;
 }

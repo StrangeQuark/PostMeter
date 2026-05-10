@@ -112,6 +112,9 @@
     bindClick(doc, 'newEnvironmentMenuButton', options.onNewEnvironment);
     bindClick(doc, 'importWorkspaceButton', options.onImportWorkspace);
     bindClick(doc, 'exportWorkspaceButton', options.onExportWorkspace);
+    bindClick(doc, 'importRequestButton', options.onImportRequest);
+    bindClick(doc, 'exportRequestButton', options.onExportRequest);
+    bindClick(doc, 'exportRequestCurlButton', options.onExportRequestCurl);
     bindClick(doc, 'importCollectionButton', options.onImportCollection);
     bindClick(doc, 'importEnvironmentButton', options.onImportEnvironment);
     bindClick(doc, 'importRunnerButton', options.onImportRunner);
@@ -286,7 +289,7 @@
 
     bindEvent(doc, 'contextMenu', 'click', (event) => event.stopPropagation());
     bindEvent(doc, 'modalBackdrop', 'click', (event) => {
-      if (event.target === getElement(doc, 'modalBackdrop')) {
+      if (event.target === getElement(doc, 'modalBackdrop') && shouldCloseModalsOnBackdropClick(options)) {
         options.onCancelActiveModal?.();
       }
     });
@@ -592,6 +595,18 @@
   function isModalBackdropOpen(doc) {
     const backdrop = getElement(doc, 'modalBackdrop');
     return Boolean(backdrop && backdrop.hidden === false);
+  }
+
+  function shouldCloseModalsOnBackdropClick(options = {}) {
+    const preference = options.closeModalsOnBackdropClick;
+    if (typeof preference === 'function') {
+      try {
+        return preference() === true;
+      } catch {
+        return false;
+      }
+    }
+    return preference === true;
   }
 
   function closeToolbarMenus(doc = document) {

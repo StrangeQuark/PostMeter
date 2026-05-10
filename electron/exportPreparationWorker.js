@@ -1,8 +1,9 @@
 const { parentPort, workerData } = require('node:worker_threads');
 const { exportCollectionByFormat } = require('../src/core/collectionImportRegistry');
 const { exportEnvironmentToJson } = require('../src/core/environmentFormats');
-const { performanceTestModel, runnerModel, workspaceModel } = require('../src/core/models');
+const { performanceTestModel, requestModel, runnerModel, workspaceModel } = require('../src/core/models');
 const { exportPerformanceTestToJson } = require('../src/core/performanceFormats');
+const { exportRequestByFormat } = require('../src/core/requestFormats');
 const { exportRunnerToJson } = require('../src/core/runnerFormats');
 const {
   assertCollectionExportFormat,
@@ -10,6 +11,7 @@ const {
   assertEnvironmentPayload,
   assertPerformanceExportFormat,
   assertPerformanceTestPayload,
+  assertRequestPayload,
   assertRunnerPayload,
   assertWorkspacePayload
 } = require('../src/core/ipcValidation');
@@ -32,6 +34,8 @@ function prepareExport({ kind, format = 'postmeter', payload }) {
       return prepareWorkspaceExport(payload);
     case 'collection':
       return prepareCollectionExport(payload, format);
+    case 'request':
+      return prepareRequestExport(payload, format);
     case 'environment':
       return prepareEnvironmentExport(payload, format);
     case 'runner':
@@ -66,6 +70,15 @@ function prepareCollectionExport(collection, format) {
   return {
     content: exportCollectionByFormat(workspace.collections[0], format, workspace),
     prefix: 'postmeter-collection-export'
+  };
+}
+
+function prepareRequestExport(request, format) {
+  assertRequestPayload(request);
+  assertRequestExportFormat(format);
+  return {
+    content: exportRequestByFormat(requestModel(request), format),
+    prefix: 'postmeter-request-export'
   };
 }
 
@@ -104,5 +117,11 @@ function preparePerformanceExport(performanceTest, format) {
 function assertEnvironmentExportFormat(format) {
   if (!['postmeter', 'postman'].includes(String(format || ''))) {
     throw new Error('Environment export format must be postmeter or postman.');
+  }
+}
+
+function assertRequestExportFormat(format) {
+  if (!['postmeter', 'curl'].includes(String(format || ''))) {
+    throw new Error('Request export format must be postmeter or curl.');
   }
 }

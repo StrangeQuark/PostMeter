@@ -29,6 +29,26 @@ function collectionExportFilters(format) {
   ];
 }
 
+function requestImportFilters() {
+  return [
+    { name: 'Requests', extensions: ['json', 'sh', 'txt'] },
+    { name: 'All Files', extensions: ['*'] }
+  ];
+}
+
+function requestExportExtension(format) {
+  return format === 'curl' ? 'sh' : 'postmeter-request.json';
+}
+
+function requestExportFilters(format) {
+  const normalized = String(format || 'postmeter');
+  const extension = requestExportExtension(normalized).split('.').at(-1);
+  return [
+    { name: `${normalized === 'curl' ? 'curl' : 'PostMeter'} Request`, extensions: [extension] },
+    { name: 'All Files', extensions: ['*'] }
+  ];
+}
+
 function performanceImportFilters() {
   return [
     { name: 'PostMeter Performance Tests', extensions: ['json'] },
@@ -88,6 +108,9 @@ module.exports = {
   performanceExportExtension,
   performanceExportFilters,
   performanceImportFilters,
+  requestExportExtension,
+  requestExportFilters,
+  requestImportFilters,
   safeFilename,
   selectedOpenFilePath,
   selectedSaveFilePath,

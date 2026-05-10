@@ -103,6 +103,9 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(indexSource, /id="exportItemModal"/);
   assert.match(indexSource, /id="exportItemList"[^>]+role="radiogroup"/);
   assert.match(indexSource, /id="confirmExportItemButton"[^>]+disabled/);
+  assert.match(indexSource, /id="requestExportPickerModal"[^>]+runner-import-modal/);
+  assert.match(indexSource, /id="requestExportPickerList"[^>]+runner-import-list/);
+  assert.match(indexSource, /id="confirmRequestExportPickerButton"[^>]+disabled/);
   assert.match(indexSource, /id="folderDestinationModal"/);
   assert.match(indexSource, /id="folderDestinationList"[^>]+role="radiogroup"/);
   assert.match(indexSource, /id="confirmFolderDestinationButton"[^>]+disabled/);
@@ -122,6 +125,10 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(bootstrapSource, /getSelectedFolderDestination/);
   assert.match(rendererSource, /async function newFolderFromToolbar/);
   assert.match(rendererSource, /function renderFolderDestinationList/);
+  assert.match(rendererSource, /function collectRequestExportEntries/);
+  assert.match(rendererSource, /function renderRequestExportPickerList/);
+  assert.match(rendererSource, /showModal\('requestExportPickerModal'/);
+  assert.match(rendererSource, /postmeter\?\.clipboard\?\.writeText/);
   assert.match(rendererSource, /setContextMenuPeerCloser/);
   assert.match(rendererSource, /Request save failed:/);
   assert.match(rendererSource, /Request Save Failed/);
@@ -275,9 +282,68 @@ test('renderer bootstrap resolves text, confirmation, and notification modals', 
   assert.deepEqual(resolved, ['single-line-value', null, null, null, true, false, true, null]);
 });
 
-test('renderer bootstrap binds every collection export menu button', () => {
+test('renderer bootstrap keeps active modals open when the backdrop is clicked by default', () => {
+  let cancelCount = 0;
+  const elements = new Map([
+    ['contextMenu', createElement()],
+    ['modalBackdrop', createElement()]
+  ]);
+
+  bindUi({
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} },
+    onCancelActiveModal: () => {
+      cancelCount += 1;
+    }
+  });
+
+  elements.get('modalBackdrop').dispatch('click');
+
+  assert.equal(cancelCount, 0);
+});
+
+test('renderer bootstrap supports opt-in modal backdrop dismissal for future preferences', () => {
+  let cancelCount = 0;
+  const elements = new Map([
+    ['contextMenu', createElement()],
+    ['modalBackdrop', createElement()]
+  ]);
+
+  bindUi({
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} },
+    closeModalsOnBackdropClick: () => true,
+    onCancelActiveModal: () => {
+      cancelCount += 1;
+    }
+  });
+
+  elements.get('modalBackdrop').dispatch('click');
+
+  assert.equal(cancelCount, 1);
+});
+
+test('renderer bootstrap binds every collection and request export menu button', () => {
   const calls = [];
   const controls = [
+    ['exportRequestButton', 'request-postmeter', 'onExportRequest'],
+    ['exportRequestCurlButton', 'request-curl', 'onExportRequestCurl'],
     ['exportCollectionButton', 'postmeter', 'onExportCollection'],
     ['exportPostmanButton', 'postman', 'onExportPostman'],
     ['exportOpenApiButton', 'openapi', 'onExportOpenApi'],
@@ -687,8 +753,9 @@ test('renderer bootstrap binds pane save buttons', () => {
   assert.deepEqual(calls, ['request', 'environment']);
 });
 
-test('renderer bootstrap binds environment and runner import/export menu actions', () => {
+test('renderer bootstrap binds request environment and runner import/export menu actions', () => {
   const controls = [
+    ['importRequestButton', 'import-request', 'onImportRequest'],
     ['importEnvironmentButton', 'import-environment', 'onImportEnvironment'],
     ['importRunnerButton', 'import-runner', 'onImportRunner'],
     ['exportEnvironmentButton', 'export-environment', 'onExportEnvironment'],

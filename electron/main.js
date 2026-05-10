@@ -1,7 +1,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { app, BrowserWindow, dialog, ipcMain, protocol, safeStorage, shell } = require('electron');
+const { app, BrowserWindow, clipboard, dialog, ipcMain, protocol, safeStorage, shell } = require('electron');
 const { WorkspaceRecoveryError } = require('../src/core/workspaceStore');
 const { WorkspaceManager } = require('../src/core/workspaceManager');
 const { EncryptedVaultStore } = require('../src/core/vaultStore');
@@ -417,7 +417,7 @@ trustedIpcMain.handle('vault:unset-secret', async (_event, key) => {
 });
 
 registerVaultPromptIpc({ ipcMain: trustedIpcMain });
-registerAppIpc({ app, ipcMain: trustedIpcMain, recordDiagnosticEvent, shell });
+registerAppIpc({ app, clipboard, ipcMain: trustedIpcMain, recordDiagnosticEvent, shell });
 
 registerOAuthIpc({ ipcMain: trustedIpcMain, oauthFlows, recordDiagnosticEvent });
 

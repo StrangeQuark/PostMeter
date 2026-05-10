@@ -11,7 +11,7 @@ const {
 } = require('./collectionFormatUtils');
 
 function importCurlCommand(text) {
-  const tokens = splitCommandLine(normalizeCurlCommandText(text)).filter((token) => token !== '^');
+  const tokens = splitCommandLine(normalizeCurlCommandText(extractCurlCommandText(text))).filter((token) => token !== '^');
   if (tokens[0] !== 'curl') {
     throw new Error('File is not a supported curl command.');
   }
@@ -147,6 +147,19 @@ function importCurlCommand(text) {
   return collectionModel({ name: 'Imported curl Collection', requests: [request], folders: [] });
 }
 
+function looksLikeCurlContent(text) {
+  return /^curl(?:\s|$)/i.test(extractCurlCommandText(text));
+}
+
+function extractCurlCommandText(text) {
+  return String(text || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('#'))
+    .join('\n')
+    .trim();
+}
+
 function normalizeCurlCommandText(text) {
   return String(text || '').replace(/\^\s*\r?\n/g, ' ');
 }
@@ -260,9 +273,61 @@ function curlRequestName(request) {
 }
 
 function exportCurlCollection(collection) {
-  return flattenCollectionRequests(collection)
-    .map(({ request }) => requestToCurl(request))
-    .join('\n\n');
+  const lines = [`# Collection: ${sanitizeShellComment(collection?.name || 'Untitled Collection')}`];
+  for (const { request } of flattenCollectionRequests(collection)) {
+    lines.push('', exportCurlRequest(request));
+  }
+  return lines.join('\n');
+}
+
+function exportCurlRequest(request, options = {}) {
+  const lines = [];
+  if (options.includeRequestComment !== false) {
+    lines.push(`# Request: ${sanitizeShellComment(request?.name || 'Untitled Request')}`);
+  }
+  for (const exclusion of curlExportExclusions(request)) {
+    lines.push(`# WARNING: ${sanitizeShellComment(exclusion)}`);
+  }
+  lines.push(requestToCurl(requestModel(request || {})));
+  return lines.join('\n');
+}
+
+function curlExportExclusions(request = {}) {
+  const exclusions = [];
+  const scripts = request.scripts || {};
+  if (String(scripts.preRequest || '').trim()) {
+    exclusions.push('Pre-request scripts are not included in curl exports.');
+  }
+  if (String(scripts.tests || '').trim()) {
+    exclusions.push('Post-request scripts are not included in curl exports.');
+  }
+  if (Array.isArray(request.assertions) && request.assertions.some((assertion) => assertion?.enabled !== false)) {
+    exclusions.push('Assertions are not included in curl exports.');
+  }
+  const auth = normalizeAuth(request.auth || {});
+  if (auth.type && !['none', 'basic'].includes(auth.type)) {
+    exclusions.push(`${auth.type} auth settings are not fully translated to curl.`);
+  }
+  if (request.cookieJar?.enabled) {
+    exclusions.push('Cookie jar behavior is not included in curl exports.');
+  }
+  if ((request.variables || []).some((variable) => variable?.enabled !== false && variable?.key && !String(variable.key).startsWith('curl.'))) {
+    exclusions.push('Request variables are exported as literal values and are not resolved by curl.');
+  }
+  if ((request.examples || []).length) {
+    exclusions.push('Saved examples are not included in curl exports.');
+  }
+  const bodyMode = String(request.postmanBody?.mode || '').toLowerCase();
+  if (bodyMode === 'formdata' || request.bodyType === BODY_TYPES.FORM_DATA) {
+    exclusions.push('Form-data body metadata and file bindings may not be represented exactly in curl exports.');
+  } else if (bodyMode === 'urlencoded' || request.bodyType === BODY_TYPES.URLENCODED) {
+    exclusions.push('URL-encoded body field metadata may not be represented exactly in curl exports.');
+  } else if (bodyMode === 'file' || bodyMode === 'binary' || request.bodyType === BODY_TYPES.BINARY) {
+    exclusions.push('Binary body file bindings may not be represented exactly in curl exports.');
+  } else if (bodyMode === 'graphql') {
+    exclusions.push('GraphQL request metadata is not included in curl exports.');
+  }
+  return exclusions;
 }
 
 function addCurlHeader(request, value) {
@@ -308,8 +373,18 @@ function requestVariableValue(request, key) {
   return (request.variables || []).find((variable) => variable.enabled !== false && variable.key === key)?.value ?? '';
 }
 
+function sanitizeShellComment(value) {
+  return String(value || '')
+    .replace(/\r?\n/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 module.exports = {
   exportCurlCollection,
+  exportCurlRequest,
+  curlExportExclusions,
   importCurlCommand,
+  looksLikeCurlContent,
   splitCommandLine
 };

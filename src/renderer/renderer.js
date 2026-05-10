@@ -118,6 +118,11 @@ let selectedFolderDestinationValue = '';
 let selectedRunnerImportTarget = [];
 let expandedRunnerImportCollectionIds = [];
 let lastRunnerImportSelectionKey = '';
+let selectedRequestExportTarget = null;
+let expandedRequestExportCollectionIds = [];
+let selectedRequestImportFilePath = '';
+let selectedRequestImportFileName = '';
+let activeRequestExportContent = '';
 let activeVaultPromptPayload = null;
 let activeFileSourceTarget = null;
 let activeFilePickerOptions = null;
@@ -464,6 +469,9 @@ function bindUi() {
     onSaveEnvironment: () => { void saveEnvironmentFromPane(); },
     onImportWorkspace: importWorkspace,
     onExportWorkspace: () => { void exportWorkspaceFromPicker(); },
+    onImportRequest: () => { void importRequest(); },
+    onExportRequest: () => { void exportRequestFromPicker('postmeter'); },
+    onExportRequestCurl: () => { void exportRequestFromPicker('curl'); },
     onImportCollection: importCollection,
     onImportEnvironment: () => { void importEnvironment(); },
     onImportRunner: () => { void importRunner(); },
@@ -1896,6 +1904,12 @@ const EXPORT_ITEM_PICKER_COPY = {
     empty: 'There are no runners present to export.',
     ariaLabel: 'Runners'
   },
+  request: {
+    title: 'Export request',
+    message: 'Choose a collection request to export.',
+    empty: 'There are no collection requests present to export.',
+    ariaLabel: 'Requests'
+  },
   performance: {
     title: 'Export performance test',
     message: 'Choose a performance test to export.',
@@ -2147,6 +2161,11 @@ function renderExportItemList(kind, items = [], preferredItem = null) {
     const text = document.createElement('span');
     text.textContent = exportItemDisplayName(kind, item);
     label.append(input, text);
+    if (item?.detail) {
+      const detail = document.createElement('small');
+      detail.textContent = item.detail;
+      label.append(detail);
+    }
     list.append(label);
   }
 }
@@ -2157,6 +2176,10 @@ function exportItemDisplayName(kind, item) {
   }
   if (kind === 'runner') {
     return runnerDisplayName(item);
+  }
+  if (kind === 'request') {
+    const request = item?.request || item || {};
+    return `${String(request.method || 'GET').toUpperCase()} ${requestDisplayName(request)}`;
   }
   if (kind === 'performance') {
     return performanceTestDisplayName(item);
@@ -2262,6 +2285,9 @@ function bindLocalFilePickerUi() {
 
   configureLocalFileSourceInput($('binaryBodySourceInput'), '', 'binary');
   configureLocalFileSourceInput($('performanceBinaryBodySourceInput'), 'performance', 'binary');
+  bindRequestImportModalUi();
+  bindRequestExportPickerModalUi();
+  bindRequestExportModalUi();
   document.addEventListener('click', closeFileSourceMenu);
   window.addEventListener('blur', closeFileSourceMenu);
   window.addEventListener('resize', closeFileSourceMenu);
@@ -2349,6 +2375,220 @@ function renderFilePickerError(message) {
   }
   error.textContent = String(message || 'Choose a file to continue.');
   error.hidden = false;
+}
+
+function bindRequestImportModalUi() {
+  const textInput = $('requestImportTextInput');
+  const fileInput = $('requestImportFileInput');
+  const dropZone = $('requestImportDropZone');
+  const browseButton = $('requestImportBrowseButton');
+  const cancelButton = $('cancelRequestImportButton');
+  const closeButton = $('requestImportCloseButton');
+  const confirmButton = $('confirmRequestImportButton');
+  browseButton?.addEventListener('click', (event) => {
+    event.preventDefault();
+    fileInput?.click?.();
+  });
+  cancelButton?.addEventListener('click', () => resolveActiveModal(null));
+  closeButton?.addEventListener('click', () => resolveActiveModal(null));
+  confirmButton?.addEventListener('click', () => {
+    const text = String(textInput?.value || '').trim();
+    const filePath = selectedRequestImportFilePath;
+    if (!text && !filePath) {
+      renderRequestImportError('Paste request text or choose a request file.');
+      return;
+    }
+    resolveActiveModal({ text, filePath });
+  });
+  textInput?.addEventListener('input', updateRequestImportConfirmState);
+  fileInput?.addEventListener('change', () => {
+    void selectRequestImportFile(fileInput.files?.[0] || null);
+  });
+  dropZone?.addEventListener('click', () => fileInput?.click?.());
+  dropZone?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      fileInput?.click?.();
+    }
+  });
+  for (const eventName of ['dragenter', 'dragover']) {
+    dropZone?.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      dropZone.classList.add('is-dragover');
+    });
+  }
+  for (const eventName of ['dragleave', 'dragend']) {
+    dropZone?.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      if (!dropZone.contains(event.relatedTarget)) {
+        dropZone.classList.remove('is-dragover');
+      }
+    });
+  }
+  dropZone?.addEventListener('drop', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dropZone.classList.remove('is-dragover');
+    void selectRequestImportFile(event.dataTransfer?.files?.[0] || null);
+  });
+}
+
+function bindRequestExportPickerModalUi() {
+  $('cancelRequestExportPickerButton')?.addEventListener('click', () => resolveActiveModal(null));
+  $('confirmRequestExportPickerButton')?.addEventListener('click', () => {
+    if (selectedRequestExportTarget?.collectionId && selectedRequestExportTarget?.requestId) {
+      resolveActiveModal(selectedRequestExportTarget);
+    }
+  });
+}
+
+function bindRequestExportModalUi() {
+  const cancelButton = $('cancelRequestExportButton');
+  const closeButton = $('requestExportCloseButton');
+  const copyButton = $('copyRequestExportButton');
+  const fileButton = $('fileRequestExportButton');
+  cancelButton?.addEventListener('click', () => resolveActiveModal(null));
+  closeButton?.addEventListener('click', () => resolveActiveModal(null));
+  copyButton?.addEventListener('click', (event) => {
+    event.preventDefault();
+    void copyRequestExportText();
+  });
+  fileButton?.addEventListener('click', () => resolveActiveModal('file'));
+}
+
+function configureRequestExportModal(request = {}, format = 'postmeter', content = '') {
+  activeRequestExportContent = String(content || '');
+  const normalizedFormat = String(format || 'postmeter').toLowerCase();
+  const formatLabel = normalizedFormat === 'curl' ? 'curl' : 'PostMeter';
+  const requestName = requestDisplayName(request);
+  $('requestExportTitle').textContent = `Export ${formatLabel} request`;
+  $('requestExportMessage').textContent = `${formatLabel} export for "${requestName}". Copy it directly or export it to a file.`;
+  $('requestExportTextLabel').textContent = `${formatLabel} request text`;
+  const textOutput = $('requestExportTextOutput');
+  if (textOutput) {
+    textOutput.value = activeRequestExportContent;
+  }
+  const copyStatus = $('requestExportCopyStatus');
+  if (copyStatus) {
+    copyStatus.hidden = true;
+    copyStatus.textContent = '';
+  }
+}
+
+function resetRequestExportModal() {
+  activeRequestExportContent = '';
+  const textOutput = $('requestExportTextOutput');
+  if (textOutput) {
+    textOutput.value = '';
+  }
+  const copyStatus = $('requestExportCopyStatus');
+  if (copyStatus) {
+    copyStatus.hidden = true;
+    copyStatus.textContent = '';
+  }
+}
+
+async function copyRequestExportText() {
+  const textOutput = $('requestExportTextOutput');
+  const content = String(textOutput?.value || activeRequestExportContent || '');
+  if (!content) {
+    renderRequestExportStatus('Nothing to copy.');
+    return;
+  }
+  try {
+    const electronClipboard = window.__postmeterWriteClipboard || window.postmeter?.clipboard?.writeText;
+    if (typeof electronClipboard === 'function') {
+      await electronClipboard(content);
+    } else if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(content);
+    } else {
+      textOutput?.focus?.();
+      textOutput?.select?.();
+      document.execCommand('copy');
+    }
+    renderRequestExportStatus('Copied request export to clipboard.');
+    setStatus('Copied request export to clipboard.');
+  } catch (error) {
+    const message = error?.message || String(error);
+    renderRequestExportStatus(`Copy failed: ${message}`);
+  }
+}
+
+function renderRequestExportStatus(message) {
+  const copyStatus = $('requestExportCopyStatus');
+  if (!copyStatus) {
+    return;
+  }
+  copyStatus.textContent = String(message || '');
+  copyStatus.hidden = !copyStatus.textContent;
+}
+
+function resetRequestImportModal() {
+  selectedRequestImportFilePath = '';
+  selectedRequestImportFileName = '';
+  const textInput = $('requestImportTextInput');
+  if (textInput) {
+    textInput.value = '';
+  }
+  const fileInput = $('requestImportFileInput');
+  if (fileInput) {
+    fileInput.value = '';
+  }
+  $('requestImportDropZone')?.classList.remove('is-dragover');
+  const selection = $('requestImportFileSelection');
+  if (selection) {
+    selection.hidden = true;
+    selection.textContent = '';
+  }
+  const error = $('requestImportError');
+  if (error) {
+    error.hidden = true;
+    error.textContent = '';
+  }
+  updateRequestImportConfirmState();
+}
+
+async function selectRequestImportFile(file) {
+  if (!file) {
+    return;
+  }
+  const filePath = localPathForFile(file);
+  if (!filePath) {
+    renderRequestImportError('PostMeter could not read a local path for that file.');
+    return;
+  }
+  selectedRequestImportFilePath = filePath;
+  selectedRequestImportFileName = file.name || fileNameFromLocalPath(filePath);
+  const selection = $('requestImportFileSelection');
+  if (selection) {
+    selection.textContent = `Selected file: ${selectedRequestImportFileName}`;
+    selection.hidden = false;
+  }
+  const error = $('requestImportError');
+  if (error) {
+    error.hidden = true;
+    error.textContent = '';
+  }
+  updateRequestImportConfirmState();
+}
+
+function renderRequestImportError(message) {
+  const error = $('requestImportError');
+  if (!error) {
+    return;
+  }
+  error.textContent = String(message || 'Choose a request file or paste request text.');
+  error.hidden = false;
+}
+
+function updateRequestImportConfirmState() {
+  const text = String($('requestImportTextInput')?.value || '').trim();
+  const hasSource = Boolean(text || selectedRequestImportFilePath);
+  const confirm = $('confirmRequestImportButton');
+  if (confirm) {
+    confirm.disabled = !hasSource;
+  }
 }
 
 function configureLocalFileSourceInput(input, prefix, mode) {
@@ -2553,8 +2793,11 @@ function focusInitialModalElement(modalId) {
     saveDraftRequestModal: 'cancelSaveDraftButton',
     exportCollectionModal: 'cancelExportCollectionButton',
     exportItemModal: 'cancelExportItemButton',
+    requestExportPickerModal: 'cancelRequestExportPickerButton',
     folderDestinationModal: 'cancelFolderDestinationButton',
     runnerImportModal: 'cancelRunnerImportButton',
+    requestImportModal: 'requestImportTextInput',
+    requestExportModal: 'copyRequestExportButton',
     textInputModal: $('textInputModal')?.dataset?.valueControl || 'textInputModalInput',
     confirmActionModal: 'cancelConfirmActionButton',
     notificationModal: 'closeNotificationModalButton',
@@ -7013,6 +7256,10 @@ function requestNode(collection, folder, request) {
   attachTreeContextMenu(button, [
     ['Rename', () => renameRequest(collection, folder, request)],
     ['Duplicate', () => duplicateRequest(collection, folder, request)],
+    ['Export', [
+      ['PostMeter', () => { void exportRequest(request, 'postmeter'); }],
+      ['curl', () => { void exportRequest(request, 'curl'); }]
+    ]],
     ['Delete', () => deleteRequest(collection, folder, request), 'danger']
   ]);
   return wrapper;
@@ -10819,6 +11066,97 @@ async function importCollection() {
     : rendererWorkflows.importCollection(filePath);
 }
 
+async function importRequest() {
+  const requestApi = window.postmeter?.request;
+  const importBoundary = window.__postmeterImportRequest || requestApi?.importRequest;
+  if (!importBoundary) {
+    return setStatus('Request import is unavailable in this runtime.');
+  }
+  resetRequestImportModal();
+  const source = typeof window.__postmeterImportRequest === 'function'
+    ? undefined
+    : await showModal('requestImportModal', null);
+  resetRequestImportModal();
+  if (source === null) {
+    return null;
+  }
+  try {
+    const result = source == null ? await importBoundary() : await importBoundary(source);
+    if (result?.cancelled) {
+      return null;
+    }
+    if (!result?.request) {
+      return setStatus('No request was imported.');
+    }
+    return openImportedRequest(result.request);
+  } catch (error) {
+    const message = error.message || String(error);
+    setStatus(`Request import failed: ${message}`);
+    notifyUser('Request Import Failed', message);
+    return null;
+  }
+}
+
+function openImportedRequest(importedRequest) {
+  if (!canOpenAdditionalRequestTab()) {
+    return null;
+  }
+  collectActiveEditorState();
+  const request = importedRequest && typeof importedRequest === 'object'
+    ? cloneJson(importedRequest)
+    : newRequestObject('Imported Request');
+  if (!request.id || draftRequests.has(request.id) || workspaceHasRequestId(request.id)) {
+    request.id = crypto.randomUUID();
+  }
+  request.name = uniqueName(request.name || 'Imported Request', [
+    ...Array.from(draftRequests.values()).map((item) => item.name),
+    ...allWorkspaceRequestNames()
+  ]);
+  request.queryParams ||= [];
+  request.headers ||= [];
+  request.assertions ||= [];
+  request.scripts ||= { preRequest: '', tests: '' };
+  request.variables ||= [];
+  request.examples ||= [];
+  request.cookieJar ||= { enabled: false, storeResponses: true };
+  request.autoHeaders ||= { sendPostMeterToken: false, showGeneratedHeaders: false };
+  draftRequests.set(request.id, request);
+  activeCollectionId = null;
+  activeFolderId = null;
+  activeRequestId = request.id;
+  activeRunnerRequestRunnerId = null;
+  activeMainPanel = 'request';
+  ensureOpenRequestTabForActive({ dirty: true });
+  renderAll();
+  setStatus(`Imported request: ${request.name}.`);
+  return request;
+}
+
+function workspaceHasRequestId(requestId) {
+  for (const collection of workspace.collections || []) {
+    let found = false;
+    walkCollectionRequests(collection, (request) => {
+      if (request.id === requestId) {
+        found = true;
+      }
+    });
+    if (found) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function allWorkspaceRequestNames() {
+  const names = [];
+  for (const collection of workspace.collections || []) {
+    walkCollectionRequests(collection, (request) => {
+      names.push(request.name);
+    });
+  }
+  return names;
+}
+
 function promoteCookieHeadersToJar(collection) {
   rendererWorkflows.promoteCookieHeadersToJar(collection);
 }
@@ -10885,6 +11223,350 @@ async function exportCollection(collection = activeCollection(), format = 'postm
     failureTitle: 'Collection Export Failed',
     unavailableStatus: 'Collection export is unavailable in this runtime.'
   });
+}
+
+async function exportRequestFromPicker(format = 'postmeter') {
+  collectActiveEditorState();
+  const requestEntries = collectRequestExportEntries();
+  if (!requestEntries.length) {
+    setStatus('Create a collection request before exporting.');
+  }
+  const preferredEntry = requestEntries.find((entry) => entry.request === activeRequest())
+    || requestEntries.find((entry) => entry.request?.id === activeRequestId)
+    || requestEntries[0]
+    || null;
+  const selectedEntry = await promptForRequestExport(preferredEntry);
+  if (!selectedEntry?.request) {
+    return null;
+  }
+  return exportRequest(selectedEntry.request, format);
+}
+
+async function promptForRequestExport(preferredEntry = null) {
+  selectedRequestExportTarget = preferredEntry?.collectionId && preferredEntry?.request?.id
+    ? {
+        collectionId: preferredEntry.collectionId,
+        requestId: preferredEntry.request.id
+      }
+    : null;
+  expandedRequestExportCollectionIds = selectedRequestExportTarget?.collectionId
+    ? [selectedRequestExportTarget.collectionId]
+    : [];
+  const collections = workspace.collections || [];
+  $('requestExportPickerMessage').textContent = collections.length
+    ? 'Choose a collection to expand, then select a request to export.'
+    : 'There are no collection requests present to export.';
+  renderRequestExportPickerList(collections);
+  const target = await showModal('requestExportPickerModal', null);
+  if (!target?.collectionId || !target?.requestId) {
+    resetRequestExportPickerModal();
+    return null;
+  }
+  const entry = requestExportEntryForTarget(target);
+  resetRequestExportPickerModal();
+  return entry;
+}
+
+function resetRequestExportPickerModal() {
+  selectedRequestExportTarget = null;
+  expandedRequestExportCollectionIds = [];
+  const list = $('requestExportPickerList');
+  if (list) {
+    list.textContent = '';
+  }
+  const confirm = $('confirmRequestExportPickerButton');
+  if (confirm) {
+    confirm.disabled = true;
+  }
+}
+
+function renderRequestExportPickerList(collections = workspace.collections || []) {
+  const list = $('requestExportPickerList');
+  list.textContent = '';
+  $('confirmRequestExportPickerButton').disabled = !selectedRequestExportTarget;
+  const availableCollections = Array.isArray(collections) ? collections : [];
+  if (!availableCollections.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.textContent = 'There are no collection requests present to export.';
+    list.append(empty);
+    return;
+  }
+  for (const collection of availableCollections) {
+    const entries = collectionRequestEntries(collection);
+    const expanded = expandedRequestExportCollectionIds.includes(collection.id);
+    list.append(requestExportPickerCollectionOption({
+      collectionId: collection.id,
+      label: collection.name || 'Untitled Collection',
+      meta: `${entries.length} request${entries.length === 1 ? '' : 's'}`,
+      expanded
+    }));
+    if (!expanded) {
+      continue;
+    }
+    for (const entry of entries) {
+      const folderPath = entry.folderPath?.length ? `${entry.folderPath.join(' / ')} / ` : '';
+      list.append(requestExportPickerRequestOption({
+        collectionId: collection.id,
+        requestId: entry.request.id,
+        label: `${folderPath}${entry.request.name || 'Untitled Request'}`,
+        meta: `${entry.request.method || 'GET'} ${entry.request.url || ''}`.trim(),
+        checked: requestExportTargetSelected({
+          collectionId: collection.id,
+          requestId: entry.request.id
+        })
+      }));
+    }
+  }
+}
+
+function requestExportPickerCollectionOption(option) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'collection-pick-option runner-import-option collection';
+  button.dataset.requestExportType = 'collection';
+  button.dataset.collectionId = option.collectionId || '';
+  button.setAttribute('aria-expanded', option.expanded === true ? 'true' : 'false');
+  button.addEventListener('click', (event) => {
+    event.preventDefault();
+    toggleRequestExportCollectionExpansion(option.collectionId);
+  });
+  const text = document.createElement('span');
+  text.textContent = option.label;
+  if (option.meta) {
+    const meta = document.createElement('span');
+    meta.className = 'runner-import-meta';
+    meta.textContent = option.meta;
+    text.append(meta);
+  }
+  button.append(text);
+  return button;
+}
+
+function requestExportPickerRequestOption(option) {
+  const label = document.createElement('label');
+  label.className = 'collection-pick-option runner-import-option request';
+  const input = document.createElement('input');
+  input.type = 'radio';
+  input.name = 'requestExportTarget';
+  input.dataset.requestExportType = 'request';
+  input.dataset.collectionId = option.collectionId || '';
+  input.dataset.requestId = option.requestId || '';
+  input.checked = option.checked === true;
+  input.addEventListener('click', (event) => {
+    event.preventDefault();
+    setRequestExportTarget(requestExportTargetFromInput(input));
+  });
+  input.addEventListener('change', () => {
+    setRequestExportTarget(requestExportTargetFromInput(input));
+  });
+  label.addEventListener('click', (event) => {
+    if (event.target === input) {
+      return;
+    }
+    event.preventDefault();
+    setRequestExportTarget({
+      collectionId: option.collectionId,
+      requestId: option.requestId
+    });
+  });
+  const text = document.createElement('span');
+  text.textContent = option.label;
+  if (option.meta) {
+    const meta = document.createElement('span');
+    meta.className = 'runner-import-meta';
+    meta.textContent = option.meta;
+    text.append(meta);
+  }
+  label.append(input, text);
+  return label;
+}
+
+function requestExportTargetFromInput(input) {
+  return {
+    collectionId: input.dataset.collectionId || '',
+    requestId: input.dataset.requestId || ''
+  };
+}
+
+function requestExportTargetSelected(target = {}) {
+  return selectedRequestExportTarget?.collectionId === target.collectionId
+    && selectedRequestExportTarget?.requestId === target.requestId;
+}
+
+function setRequestExportTarget(target = {}) {
+  if (!target.collectionId || !target.requestId) {
+    return;
+  }
+  selectedRequestExportTarget = {
+    collectionId: target.collectionId,
+    requestId: target.requestId
+  };
+  $('confirmRequestExportPickerButton').disabled = false;
+  renderRequestExportPickerList();
+}
+
+function toggleRequestExportCollectionExpansion(collectionId) {
+  if (!collectionId) {
+    return;
+  }
+  expandedRequestExportCollectionIds = expandedRequestExportCollectionIds.includes(collectionId)
+    ? expandedRequestExportCollectionIds.filter((id) => id !== collectionId)
+    : [...expandedRequestExportCollectionIds, collectionId];
+  renderRequestExportPickerList();
+}
+
+function requestExportEntryForTarget(target = {}) {
+  const collection = (workspace.collections || []).find((item) => item.id === target.collectionId);
+  if (!collection) {
+    return null;
+  }
+  return collectionRequestEntries(collection)
+    .find((entry) => entry.request?.id === target.requestId) || null;
+}
+
+function collectRequestExportEntries(collections = workspace?.collections || []) {
+  const entries = [];
+  for (const collection of collections || []) {
+    appendRequestExportEntries(entries, collection, collection, [collection.name || 'Untitled Collection']);
+  }
+  return entries;
+}
+
+function appendRequestExportEntries(entries, collection, scope, pathParts) {
+  for (const request of scope?.requests || []) {
+    entries.push({
+      id: `${collection?.id || 'collection'}:${scope?.id || 'root'}:${request?.id || entries.length}:${entries.length}`,
+      collectionId: collection?.id || '',
+      request,
+      detail: pathParts.filter(Boolean).join(' / ')
+    });
+  }
+  for (const folder of scope?.folders || []) {
+    appendRequestExportEntries(entries, collection, folder, [
+      ...pathParts,
+      folder.name || 'Untitled Folder'
+    ]);
+  }
+}
+
+async function exportRequest(request = activeRequest(), format = 'postmeter') {
+  const selectedRequest = request || activeRequest();
+  if (!selectedRequest) {
+    return setStatus('Select a request before exporting.');
+  }
+  if (selectedRequest === activeRequest()) {
+    collectActiveEditorState();
+  }
+  if (String(format || 'postmeter') === 'curl') {
+    const exclusions = requestCurlExportExclusions(selectedRequest);
+    if (exclusions.length) {
+      const message = [
+        'This curl export may not behave exactly like the PostMeter request because curl cannot represent:',
+        '',
+        ...exclusions.map((item) => `- ${item}`),
+        '',
+        'Continue exporting?'
+      ].join('\n');
+      if (!(await confirmActionModal({
+        title: 'Export curl request?',
+        message,
+        confirmLabel: 'Export curl'
+      }))) {
+        return null;
+      }
+    }
+  }
+  const requestApi = window.postmeter?.request;
+  const exportBoundary = window.__postmeterExportRequest || requestApi?.exportRequest;
+  const exportTextBoundary = window.__postmeterExportRequestText || requestApi?.exportRequestText;
+  if (!exportBoundary && !exportTextBoundary && !window.postmeter?.fileExport) {
+    return setStatus('Request export is unavailable in this runtime.');
+  }
+  if (!exportTextBoundary) {
+    return exportRequestFile(selectedRequest, format, exportBoundary);
+  }
+  try {
+    const preview = await exportTextBoundary(cloneJson(selectedRequest), format);
+    const content = String(preview?.content || '');
+    configureRequestExportModal(selectedRequest, format, content);
+    const action = await showModal('requestExportModal', null);
+    resetRequestExportModal();
+    if (action !== 'file') {
+      return { cancelled: true };
+    }
+  } catch (error) {
+    resetRequestExportModal();
+    const message = error.message || String(error);
+    setStatus(`Request export failed: ${message}`);
+    notifyUser('Request Export Failed', message);
+    return null;
+  }
+  return exportRequestFile(selectedRequest, format, exportBoundary);
+}
+
+async function exportRequestFile(selectedRequest, format, exportBoundary) {
+  if (typeof window.__postmeterExportRequest === 'function' || !window.postmeter?.fileExport) {
+    try {
+      const result = await exportBoundary(cloneJson(selectedRequest), format);
+      if (result?.path) {
+        setStatus(`Request exported to ${result.path}.`);
+      }
+      return result;
+    } catch (error) {
+      const message = error.message || String(error);
+      setStatus(`Request export failed: ${message}`);
+      notifyUser('Request Export Failed', message);
+      return null;
+    }
+  }
+  return runPickerFirstExport({
+    kind: 'request',
+    format,
+    name: requestDisplayName(selectedRequest),
+    payloadFactory: () => {
+      if (selectedRequest === activeRequest()) {
+        collectActiveEditorState();
+      }
+      return cloneJson(selectedRequest);
+    },
+    legacyExport: () => exportBoundary?.(cloneJson(selectedRequest), format),
+    successStatus: (filePath) => `Request exported to ${filePath}.`,
+    failureStatusPrefix: 'Request export failed',
+    failureTitle: 'Request Export Failed',
+    unavailableStatus: 'Request export is unavailable in this runtime.'
+  });
+}
+
+function requestCurlExportExclusions(request = {}) {
+  const exclusions = [];
+  if (String(request.scripts?.preRequest || '').trim()) {
+    exclusions.push('pre-request scripts');
+  }
+  if (String(request.scripts?.tests || '').trim()) {
+    exclusions.push('post-request scripts');
+  }
+  if ((request.assertions || []).some((assertion) => assertion?.enabled !== false)) {
+    exclusions.push('assertions');
+  }
+  const authType = String(request.auth?.type || 'none');
+  if (authType && !['none', 'basic'].includes(authType)) {
+    exclusions.push(`${authType} auth helper settings`);
+  }
+  if (request.cookieJar?.enabled) {
+    exclusions.push('cookie jar behavior');
+  }
+  if ((request.variables || []).some((variable) => variable?.enabled !== false && variable?.key && !String(variable.key).startsWith('curl.'))) {
+    exclusions.push('request variables');
+  }
+  if ((request.examples || []).length) {
+    exclusions.push('saved examples');
+  }
+  const bodyMode = String(request.postmanBody?.mode || '').toLowerCase();
+  if (['formdata', 'urlencoded', 'file', 'binary', 'graphql'].includes(bodyMode) || ['FORM_DATA', 'URLENCODED', 'BINARY'].includes(request.bodyType)) {
+    exclusions.push('structured body metadata and file bindings');
+  }
+  return exclusions;
 }
 
 async function importEnvironment() {
