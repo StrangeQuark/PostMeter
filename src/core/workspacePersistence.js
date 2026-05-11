@@ -69,10 +69,17 @@ function normalizeWorkspace(workspace) {
   return normalized;
 }
 
-function workspaceForPersistence(workspace) {
+function workspaceForPersistence(workspace, options = {}) {
   const normalized = normalizeWorkspace(workspace);
   const { settings: _settings, ...persistedWorkspace } = normalized;
+  if (options.includeLocalSettings === false) {
+    delete persistedWorkspace.localsettings;
+  }
   return persistedWorkspace;
+}
+
+function workspaceForExport(workspace) {
+  return workspaceForPersistence(workspace, { includeLocalSettings: false });
 }
 
 function looksLikeNativeWorkspace(value) {
@@ -328,6 +335,7 @@ module.exports = {
   siblingPath,
   temporaryJsonPath,
   workspaceForPersistence,
+  workspaceForExport,
   writeJsonFile,
   writeJsonFileAtomic,
   writeJsonFileAtomicSync,

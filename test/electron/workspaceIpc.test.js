@@ -11,7 +11,7 @@ const {
 } = require('../../electron/fileDialogs');
 const { registerWorkspaceIpc } = require('../../electron/workspaceIpc');
 const { defaultDiagnosticsSettings, sanitizeDiagnosticEvent } = require('../../src/core/diagnostics');
-const { normalizeSettings } = require('../../src/core/models');
+const { normalizeSettings, normalizeWorkspaceLocalSettings } = require('../../src/core/models');
 
 test('file dialog helpers validate selected paths before IPC file operations', () => {
   assert.deepEqual(collectionImportFilters(), [
@@ -981,6 +981,7 @@ test('workspace IPC saves only the selected request payload through targeted req
     settings: { updates: { includePrereleases: false } }
   };
   let savedSettings = null;
+  let savedLocalSettings = null;
   let appliedWorkspace = null;
   let saveCalls = 0;
   let refreshCalls = 0;
@@ -1256,7 +1257,13 @@ test('workspace IPC saves only workspace settings through targeted settings save
     },
     saveWorkspace: async (workspace) => {
       saveCalls += 1;
-      return workspace;
+      savedSettings = normalizeSettings(workspace.settings);
+      savedLocalSettings = normalizeWorkspaceLocalSettings(workspace.settings);
+      return {
+        ...workspace,
+        settings: savedSettings,
+        localsettings: savedLocalSettings
+      };
     },
     saveWorkspaceSync: (workspace) => workspace,
     setWorkspace: (workspace) => {
@@ -1280,7 +1287,9 @@ test('workspace IPC saves only workspace settings through targeted settings save
   assert.equal(savedSettings.updates.includePrereleases, true);
   assert.equal(appliedWorkspace.collections[0].id, 'collection-1');
   assert.equal(appliedWorkspace.environments[0].id, 'environment-1');
-  assert.equal(saveCalls, 0);
+  assert.deepEqual(appliedWorkspace.localsettings, savedLocalSettings);
+  assert.equal(appliedWorkspace.localsettings.diagnostics.requestResponseLogging.urls, true);
+  assert.equal(saveCalls, 1);
   assert.equal(refreshCalls, 1);
   assert.deepEqual(result, {
     settings: appliedWorkspace.settings

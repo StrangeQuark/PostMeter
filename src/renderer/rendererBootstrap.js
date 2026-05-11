@@ -99,7 +99,6 @@
     const windowObject = options.windowObject || window;
 
     bindToolbarMenus(doc, options);
-    bindClick(doc, 'openSettingsButton', options.onOpenSettings);
     bindClick(doc, 'newCollectionButton', options.onNewCollection);
     bindClick(doc, 'newFolderButton', options.onNewFolder);
     bindClick(doc, 'newRequestButton', options.onNewRequest);
@@ -419,7 +418,6 @@
 
   function bindToolbarMenus(doc = document, options = {}) {
     for (const [buttonId, menuId] of [
-      ['fileMenuButton', 'fileMenu'],
       ['newMenuButton', 'newMenu'],
       ['importMenuButton', 'importMenu'],
       ['exportMenuButton', 'exportMenu']

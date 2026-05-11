@@ -11,7 +11,7 @@
   async function runUiRegressionSmoke() {
     assertUiSmoke(workspace.collections.length === 0, 'Regression smoke should start with an empty workspace.');
     assertUiSmoke(!/(sign in|log in|create account|register)/i.test(document.body.textContent), 'Standalone UI should not render app account/login language.');
-    assertToolbarMenuSmoke('fileMenuButton', 'fileMenu', ['Settings']);
+    assertUiSmoke(!$('fileMenuButton'), 'Renderer toolbar should not duplicate the native File menu.');
     await assertSettingsMenuClickSmoke();
     assertToolbarMenuSmoke('newMenuButton', 'newMenu', ['Workspace', 'Request', 'Collection', 'Folder', 'Environment', 'Runner', 'Performance Test']);
     assertToolbarMenuSmoke('importMenuButton', 'importMenu', ['Workspace', 'Collection', 'Environment', 'Runner', 'Performance Test']);
@@ -257,15 +257,12 @@
   }
 
   async function assertSettingsMenuClickSmoke() {
-    $('fileMenuButton').click();
+    const modalPromise = openSettingsModal();
     await nextPaint();
-    assertUiSmoke(!$('fileMenu').hidden, 'File toolbar menu should open before selecting Settings.');
-    $('openSettingsButton').click();
-    await nextPaint();
-    assertUiSmoke($('fileMenu').hidden, 'Opening Settings should close the File toolbar menu.');
-    assertUiSmoke(!$('modalBackdrop').hidden, 'Opening Settings from the File menu should show the modal backdrop.');
-    assertUiSmoke(!$('settingsModal').hidden, 'Opening Settings from the File menu should show the Settings modal.');
+    assertUiSmoke(!$('modalBackdrop').hidden, 'Opening Settings should show the modal backdrop.');
+    assertUiSmoke(!$('settingsModal').hidden, 'Opening Settings should show the Settings modal.');
     $('closeSettingsModalFooterButton').click();
+    await modalPromise;
     await nextPaint();
     assertUiSmoke($('modalBackdrop').hidden, 'Closing Settings should hide the modal backdrop.');
   }

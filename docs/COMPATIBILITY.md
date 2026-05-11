@@ -18,7 +18,7 @@ Supported:
 - Environment import/export, including native PostMeter environment JSON and Postman environment JSON import/export.
 - Runner definition import/export for workspace-owned desktop runners.
 - Native Performance-test import/export preserving each saved test's request copy, source metadata, selected environment ID, environment mutation policy, execution policy, safety limits, result-retention metadata, and export metadata.
-- Collections, folders, requests, assertions, scripts, auth metadata, environments, globals, history, cookies, request examples, variables, certificates, mock scripts, visualizer binding metadata, GraphQL/gRPC/protocol metadata, and file-binding metadata. Local app preferences and workspace-local sandbox/package/vault/diagnostics settings are kept in `settings.json` and are not included in native workspace exports.
+- Collections, folders, requests, assertions, scripts, auth metadata, environments, globals, history, cookies, request examples, variables, certificates, mock scripts, visualizer binding metadata, GraphQL/gRPC/protocol metadata, and file-binding metadata. Local app preferences are kept in `settings.json`; workspace-local sandbox/package/vault/diagnostics settings are kept in managed workspace `localsettings` and are not included in native workspace exports.
 
 Planned:
 

@@ -308,7 +308,7 @@
     {
       "id": "workflow.settings-theme",
       "area": "Settings/theme",
-      "target": "App-wide theme/update/tab/modal preferences and workspace-local sandbox/diagnostics settings save and reload from settings.json without leaking into request payloads or portable workspace exports.",
+      "target": "App-wide theme/update/tab/modal preferences save and reload from settings.json, while workspace-local sandbox/diagnostics settings save and reload from managed workspace localsettings without leaking into request payloads or portable workspace exports.",
       "status": "implemented",
       "evidenceRefs": [
         "src/core/appSettingsStore.js",

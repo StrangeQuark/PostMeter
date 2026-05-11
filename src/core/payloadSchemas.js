@@ -508,7 +508,7 @@ const payloadSchemas = {
     },
   workspace: {
       arrays: ['collections', 'environments', 'globals', 'cookies', 'runners', 'performanceTests', 'history'],
-      nested: ['settings']
+      nested: ['settings', 'localsettings']
     },
     response: {
       required: ['statusCode', 'headers', 'body', 'durationMillis', 'responseBytes', 'finalUrl']

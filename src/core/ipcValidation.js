@@ -31,8 +31,9 @@ function assertWorkspacePayload(value, field = 'workspace') {
   optionalNumber(value.schemaVersion, `${field}.schemaVersion`);
   optionalString(value.name, `${field}.name`, LIMITS.name);
   assertSchemaNested('workspace', value, field, {
-    settings: assertSettingsPayload
-  }, { settings: {} });
+    settings: assertSettingsPayload,
+    localsettings: assertSettingsPayload
+  }, { settings: {}, localsettings: {} });
   assertSchemaArrays('workspace', value, field, {
     collections: assertCollectionArray,
     environments: assertEnvironmentArray,

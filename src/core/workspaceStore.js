@@ -11,6 +11,7 @@ const {
   normalizeWorkspace,
   pathExists,
   siblingPath,
+  workspaceForExport,
   workspaceForPersistence,
   writeJsonFile,
   writeJsonFileAtomic,
@@ -112,12 +113,12 @@ class WorkspaceStore {
       throw new Error('Selected file is not a native PostMeter workspace.');
     }
     migrate(parsed);
-    return normalizeWorkspace({ ...parsed, settings: undefined });
+    return normalizeWorkspace({ ...parsed, settings: undefined, localsettings: undefined, localSettings: undefined });
   }
 
   async exportWorkspace(workspace, exportPath) {
     const normalized = normalizeWorkspace(workspace);
-    await writeJsonFile(exportPath, workspaceForPersistence(normalized));
+    await writeJsonFile(exportPath, workspaceForExport(normalized));
     return exportPath;
   }
 
