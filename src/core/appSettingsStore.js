@@ -1,7 +1,11 @@
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { normalizeSettings } = require('./models');
+const {
+  mergeSettingsWithWorkspaceLocalSettings,
+  normalizeSettings,
+  normalizeWorkspaceLocalSettings
+} = require('./models');
 const {
   fsyncDirectory,
   moveFileNoOverwrite,
@@ -30,8 +34,7 @@ function defaultAppSettings() {
   return normalizeAppSettings({
     format: APP_SETTINGS_FORMAT,
     version: APP_SETTINGS_VERSION,
-    app: {},
-    workspaces: {}
+    app: {}
   });
 }
 
@@ -45,26 +48,11 @@ function normalizeAppSettings(value = {}) {
   const appSource = source.format === APP_SETTINGS_FORMAT || source.app || source.workspaces
     ? source.app || {}
     : source;
-  const workspaceSource = source.workspaces && typeof source.workspaces === 'object' && !Array.isArray(source.workspaces)
-    ? source.workspaces
-    : {};
-
-  const normalized = {
+  return {
     format: APP_SETTINGS_FORMAT,
     version: APP_SETTINGS_VERSION,
-    app: appScopedSettings(appSource),
-    workspaces: {}
+    app: appScopedSettings(appSource)
   };
-
-  for (const [workspaceId, settings] of Object.entries(workspaceSource)) {
-    const normalizedWorkspaceId = normalizeWorkspaceSettingsKey(workspaceId);
-    if (!normalizedWorkspaceId) {
-      continue;
-    }
-    normalized.workspaces[normalizedWorkspaceId] = workspaceScopedSettings(settings);
-  }
-
-  return normalized;
 }
 
 function appScopedSettings(settings = {}) {
@@ -73,30 +61,51 @@ function appScopedSettings(settings = {}) {
     appearance: normalized.appearance,
     tabs: normalized.tabs,
     modals: normalized.modals,
-    updates: normalized.updates
+    updates: normalized.updates,
+    diagnostics: {
+      logging: normalized.diagnostics.logging
+    },
+    sandbox: {
+      trustedCapabilities: {
+        sendRequest: normalized.sandbox.trustedCapabilities.sendRequest,
+        cookies: normalized.sandbox.trustedCapabilities.cookies,
+        vault: normalized.sandbox.trustedCapabilities.vault
+      }
+    }
   };
 }
 
 function workspaceScopedSettings(settings = {}) {
-  const normalized = normalizeSettings(settings);
-  return {
-    diagnostics: normalized.diagnostics,
-    sandbox: normalized.sandbox
-  };
+  return normalizeWorkspaceLocalSettings(settings);
+}
+
+function legacyWorkspaceSettingsMap(value = {}) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const workspaceSource = source.workspaces && typeof source.workspaces === 'object' && !Array.isArray(source.workspaces)
+    ? source.workspaces
+    : {};
+  const output = {};
+  for (const [workspaceId, settings] of Object.entries(workspaceSource)) {
+    const normalizedWorkspaceId = normalizeWorkspaceSettingsKey(workspaceId);
+    if (normalizedWorkspaceId) {
+      output[normalizedWorkspaceId] = workspaceScopedSettings(settings);
+    }
+  }
+  return output;
 }
 
 function effectiveSettingsForWorkspace(appSettings, workspaceId, fallbackSettings = {}) {
   const normalizedAppSettings = normalizeAppSettings(appSettings || defaultAppSettings());
-  const workspaceSettings = normalizedAppSettings.workspaces[normalizeWorkspaceSettingsKey(workspaceId)] || {};
-  const fallback = normalizeSettings(fallbackSettings || {});
-  return normalizeSettings({
+  const fallback = normalizeWorkspaceLocalSettings(fallbackSettings || {});
+  const appSettingsOnly = normalizeSettings({
     appearance: normalizedAppSettings.app.appearance,
     tabs: normalizedAppSettings.app.tabs,
     modals: normalizedAppSettings.app.modals,
     updates: normalizedAppSettings.app.updates,
-    diagnostics: workspaceSettings.diagnostics || fallback.diagnostics,
-    sandbox: workspaceSettings.sandbox || fallback.sandbox
+    diagnostics: normalizedAppSettings.app.diagnostics,
+    sandbox: normalizedAppSettings.app.sandbox
   });
+  return mergeSettingsWithWorkspaceLocalSettings(appSettingsOnly, fallback);
 }
 
 function mergeEffectiveSettings(appSettings, workspaceId, effectiveSettings = {}) {
@@ -104,11 +113,7 @@ function mergeEffectiveSettings(appSettings, workspaceId, effectiveSettings = {}
   const normalizedEffectiveSettings = normalizeSettings(effectiveSettings || {});
   const next = {
     ...normalizedAppSettings,
-    app: appScopedSettings(normalizedEffectiveSettings),
-    workspaces: {
-      ...normalizedAppSettings.workspaces,
-      [normalizeWorkspaceSettingsKey(workspaceId)]: workspaceScopedSettings(normalizedEffectiveSettings)
-    }
+    app: appScopedSettings(normalizedEffectiveSettings)
   };
   return normalizeAppSettings(next);
 }
@@ -122,6 +127,7 @@ class AppSettingsStore {
   constructor(settingsPath = defaultSettingsPath()) {
     this.settingsPath = path.resolve(settingsPath);
     this.settings = null;
+    this.legacyWorkspaceSettings = {};
   }
 
   getSettingsPath() {
@@ -136,7 +142,9 @@ class AppSettingsStore {
     }
 
     try {
-      this.settings = normalizeAppSettings(JSON.parse(await fs.readFile(this.settingsPath, 'utf8')));
+      const parsed = JSON.parse(await fs.readFile(this.settingsPath, 'utf8'));
+      this.legacyWorkspaceSettings = legacyWorkspaceSettingsMap(parsed);
+      this.settings = normalizeAppSettings(parsed);
       return this.settings;
     } catch (error) {
       if (error?.message?.includes('newer than this app supports')) {
@@ -185,36 +193,32 @@ class AppSettingsStore {
     const previousKey = normalizeWorkspaceSettingsKey(previousWorkspaceId);
     const nextKey = normalizeWorkspaceSettingsKey(nextWorkspaceId);
     const base = this.settings || await this.load();
-    if (previousKey === nextKey || !base.workspaces[previousKey]) {
+    if (previousKey === nextKey || !this.legacyWorkspaceSettings[previousKey]) {
       return base;
     }
-    const next = {
-      ...base,
-      workspaces: {
-        ...base.workspaces,
-        [nextKey]: base.workspaces[previousKey]
-      }
-    };
-    delete next.workspaces[previousKey];
-    return this.save(next);
+    this.legacyWorkspaceSettings[nextKey] = this.legacyWorkspaceSettings[previousKey];
+    delete this.legacyWorkspaceSettings[previousKey];
+    return base;
   }
 
   async deleteWorkspaceSettings(workspaceId) {
     const workspaceKey = normalizeWorkspaceSettingsKey(workspaceId);
     const base = this.settings || await this.load();
-    if (!base.workspaces[workspaceKey]) {
-      return base;
-    }
-    const next = {
-      ...base,
-      workspaces: { ...base.workspaces }
-    };
-    delete next.workspaces[workspaceKey];
-    return this.save(next);
+    delete this.legacyWorkspaceSettings[workspaceKey];
+    return base;
   }
 
   settingsForWorkspace(workspaceId, fallbackSettings = {}) {
-    return effectiveSettingsForWorkspace(this.settings || defaultAppSettings(), workspaceId, fallbackSettings);
+    const workspaceKey = normalizeWorkspaceSettingsKey(workspaceId);
+    const fallbackLocalSettings = normalizeWorkspaceLocalSettings(fallbackSettings || {});
+    const legacyLocalSettings = this.legacyWorkspaceSettings[workspaceKey];
+    return effectiveSettingsForWorkspace(
+      this.settings || defaultAppSettings(),
+      workspaceId,
+      workspaceLocalSettingsHasValues(fallbackLocalSettings)
+        ? fallbackLocalSettings
+        : legacyLocalSettings || fallbackLocalSettings
+    );
   }
 
   async quarantineCorruptSettings() {
@@ -234,6 +238,22 @@ class AppSettingsStore {
   }
 }
 
+function workspaceLocalSettingsHasValues(settings = {}) {
+  const local = normalizeWorkspaceLocalSettings(settings);
+  const requestResponseLogging = local.diagnostics?.requestResponseLogging || {};
+  if (Object.values(requestResponseLogging).some((value) => value === true)) {
+    return true;
+  }
+  if ((local.sandbox?.fileBindings || []).length || (local.sandbox?.packageCache || []).length) {
+    return true;
+  }
+  const vaultGrants = local.sandbox?.trustedCapabilities?.vaultGrants || {};
+  return vaultGrants.workspace === true
+    || (vaultGrants.collections || []).length > 0
+    || (vaultGrants.requests || []).length > 0
+    || (vaultGrants.deniedRequests || []).length > 0;
+}
+
 module.exports = {
   APP_SETTINGS_FORMAT,
   APP_SETTINGS_VERSION,
@@ -242,7 +262,9 @@ module.exports = {
   defaultAppSettings,
   defaultSettingsPath,
   effectiveSettingsForWorkspace,
+  legacyWorkspaceSettingsMap,
   mergeEffectiveSettings,
   normalizeAppSettings,
+  workspaceLocalSettingsHasValues,
   workspaceScopedSettings
 };

@@ -26,7 +26,7 @@ const ELECTRON_IPC_CHANNELS = Object.freeze([
   ipcChannel('workspace:save', 'renderer-to-main', 'Whole-workspace save validates the workspace payload before persistence.', ['electron/workspaceIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/workspaceIpc.test.js', 'test/electron/ipcValidation.test.js']),
   ipcChannel('workspace:saveRequest', 'renderer-to-main', 'Targeted request save validates request, variables, and cookie payload shape.', ['electron/workspaceIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/workspaceIpc.test.js', 'test/electron/ipcValidation.test.js']),
   ipcChannel('workspace:saveEnvironment', 'renderer-to-main', 'Targeted environment save validates environment payload shape.', ['electron/workspaceIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/workspaceIpc.test.js', 'test/electron/ipcValidation.test.js']),
-  ipcChannel('workspace:saveSettings', 'renderer-to-main', 'Local settings save validates settings-only payloads and persists app/workspace-local preferences outside portable workspace JSON.', ['electron/workspaceIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js', 'src/core/appSettingsStore.js'], ['test/electron/workspaceIpc.test.js', 'test/electron/ipcValidation.test.js', 'test/electron/appSettingsStore.test.js']),
+  ipcChannel('workspace:saveSettings', 'renderer-to-main', 'Local settings save validates settings-only payloads, persists app-wide preferences in settings.json, and persists workspace-local preferences in managed workspace localsettings outside portable workspace exports.', ['electron/workspaceIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js', 'src/core/appSettingsStore.js'], ['test/electron/workspaceIpc.test.js', 'test/electron/ipcValidation.test.js', 'test/electron/appSettingsStore.test.js']),
   ipcChannel('workspace:saveSync', 'renderer-to-main-sync', 'Synchronous shutdown workspace save validates the workspace payload and skips stale full-workspace writes while queued workspace mutations are pending.', ['electron/workspaceIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/workspaceIpc.test.js', 'test/electron/ipcValidation.test.js']),
   ipcChannel('workspace:create', 'renderer-to-main', 'Workspace creation remains main-process owned.', ['electron/workspaceIpc.js', 'electron/preload.js'], ['test/electron/workspaceIpc.test.js']),
   ipcChannel('workspace:rename', 'renderer-to-main', 'Workspace rename validates workspace ID and bounded name input.', ['electron/workspaceIpc.js', 'electron/preload.js'], ['test/electron/workspaceIpc.test.js']),
@@ -252,7 +252,7 @@ function buildDiagnosticsPrivacyMatrix() {
       evidenceRefs: ['src/core/diagnostics.js', 'electron/ipcSecurity.js', 'electron/diagnosticsIpc.js', 'electron/mainWindow.js', 'scripts/smokeProcess.js', 'scripts/validateSandboxRuntime.js', 'scripts/validatePackagedAppSmoke.js'],
       tests: ['test/electron/diagnostics.test.js', 'test/electron/diagnosticsEscapedRedaction.test.js', 'test/electron/diagnosticsIpc.test.js', 'test/electron/auth.test.js', 'test/electron/appChrome.test.js', 'test/electron/mainWindowSmoke.test.js', 'test/electron/smokeProcess.test.js', 'test/electron/packagedAppSmoke.test.js']
     }),
-    row('privacy.settings-validation', 'Settings', 'Diagnostics settings are normalized and IPC-validated as a workspace-local allowlist persisted in settings.json; request/response categories remain false unless the user explicitly enables each category.', 'implemented', {
+    row('privacy.settings-validation', 'Settings', 'Diagnostics settings are normalized and IPC-validated as a workspace-local allowlist persisted in managed workspace localsettings; request/response categories remain false unless the user explicitly enables each category.', 'implemented', {
       evidenceRefs: ['src/core/appSettingsStore.js', 'src/core/diagnosticsSettings.js', 'src/core/ipcValidation.js', 'src/core/payloadSchemas.js', 'src/renderer/renderer.js'],
       tests: ['test/electron/appSettingsStore.test.js', 'test/electron/diagnostics.test.js', 'test/electron/ipcValidation.test.js', 'test/electron/workspaceIpc.test.js']
     }),
@@ -260,7 +260,7 @@ function buildDiagnosticsPrivacyMatrix() {
       evidenceRefs: ['docs/TECH_SPECS.md', 'docs/RELEASE_READINESS.md', 'src/core/performanceRunner.js', 'electron/runtimeIpc.js'],
       tests: ['test/electron/performanceFeatureCoverage.test.js', 'test/electron/performanceRunner.test.js', 'test/electron/runtimeIpc.test.js', 'test/electron/diagnostics.test.js', 'test/electron/diagnosticsIpc.test.js']
     }),
-    row('privacy.import-reset', 'Workspace import/export', 'Imported and exported native workspaces cannot silently enable request/response diagnostic logging because local diagnostics settings live in settings.json and are omitted from portable workspace JSON.', 'implemented', {
+    row('privacy.import-reset', 'Workspace import/export', 'Imported and exported native workspaces cannot silently enable request/response diagnostic logging because local diagnostics settings live in managed workspace localsettings and are omitted from portable workspace JSON.', 'implemented', {
       evidenceRefs: ['src/core/appSettingsStore.js', 'src/core/workspaceStore.js', 'src/core/workspacePersistence.js', 'src/core/diagnosticsSettings.js'],
       tests: ['test/electron/appSettingsStore.test.js', 'test/electron/workspaceStore.test.js', 'test/electron/diagnostics.test.js']
     }),
@@ -542,7 +542,7 @@ function buildUxAccessibilityMatrix() {
       evidenceRefs: ['src/core/localMockServer.js', 'docs/COMPATIBILITY.md', 'docs/SANDBOX_CONTRACT.md'],
       tests: ['test/electron/postmanScriptImportCoverage.test.js', 'test/electron/postmanSandboxCorpus.test.js', 'test/electron/localMockServer.test.js']
     }),
-    row('workflow.settings-theme', 'Settings/theme', 'App-wide theme/update/tab/modal preferences and workspace-local sandbox/diagnostics settings save and reload from settings.json without leaking into request payloads or portable workspace exports.', 'implemented', {
+    row('workflow.settings-theme', 'Settings/theme', 'App-wide theme/update/tab/modal preferences save and reload from settings.json, while workspace-local sandbox/diagnostics settings save and reload from managed workspace localsettings without leaking into request payloads or portable workspace exports.', 'implemented', {
       evidenceRefs: ['src/core/appSettingsStore.js', 'src/renderer/index.html', 'src/renderer/theme.css', 'src/renderer/renderer.js', 'src/renderer/uiWorkflowSmoke.js'],
       tests: ['test/electron/appSettingsStore.test.js', 'npm run test:ui', 'npm run test:ui:regression']
     }),

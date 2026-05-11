@@ -123,7 +123,7 @@
     {
       "id": "privacy.import-reset",
       "area": "Workspace import/export",
-      "target": "Imported and exported native workspaces cannot silently enable request/response diagnostic logging because local diagnostics settings live in settings.json and are omitted from portable workspace JSON.",
+      "target": "Imported and exported native workspaces cannot silently enable request/response diagnostic logging because local diagnostics settings live in managed workspace localsettings and are omitted from portable workspace JSON.",
       "status": "implemented",
       "evidenceRefs": [
         "src/core/appSettingsStore.js",
@@ -187,7 +187,7 @@
     {
       "id": "privacy.settings-validation",
       "area": "Settings",
-      "target": "Diagnostics settings are normalized and IPC-validated as a workspace-local allowlist persisted in settings.json; request/response categories remain false unless the user explicitly enables each category.",
+      "target": "Diagnostics settings are normalized and IPC-validated as a workspace-local allowlist persisted in managed workspace localsettings; request/response categories remain false unless the user explicitly enables each category.",
       "status": "implemented",
       "evidenceRefs": [
         "src/core/appSettingsStore.js",

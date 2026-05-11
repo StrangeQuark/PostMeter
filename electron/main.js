@@ -5,6 +5,7 @@ const { app, BrowserWindow, clipboard, dialog, ipcMain, protocol, safeStorage, s
 const { WorkspaceRecoveryError } = require('../src/core/workspaceStore');
 const { WorkspaceManager } = require('../src/core/workspaceManager');
 const { AppSettingsStore } = require('../src/core/appSettingsStore');
+const { normalizeWorkspaceLocalSettings } = require('../src/core/models');
 const { EncryptedVaultStore } = require('../src/core/vaultStore');
 const {
   LocalDiagnosticsLogger,
@@ -204,14 +205,24 @@ app.on('activate', () => {
 });
 
 async function saveWorkspace(nextWorkspace) {
-  await saveLocalSettings(nextWorkspace?.settings, workspaceStore?.getWorkspaceId?.() || '');
-  const savedWorkspace = await workspaceStore.save(nextWorkspace);
+  const workspaceId = workspaceStore?.getWorkspaceId?.() || '';
+  const nextSettings = await saveLocalSettings(nextWorkspace?.settings, workspaceId, nextWorkspace?.localsettings);
+  const savedWorkspace = await workspaceStore.save({
+    ...nextWorkspace,
+    settings: nextSettings,
+    localsettings: normalizeWorkspaceLocalSettings(nextSettings)
+  });
   return hydrateWorkspaceSettings(savedWorkspace);
 }
 
 function saveWorkspaceSync(nextWorkspace) {
-  saveLocalSettingsSync(nextWorkspace?.settings, workspaceStore?.getWorkspaceId?.() || '');
-  const savedWorkspace = workspaceStore.saveSync(nextWorkspace);
+  const workspaceId = workspaceStore?.getWorkspaceId?.() || '';
+  const nextSettings = saveLocalSettingsSync(nextWorkspace?.settings, workspaceId, nextWorkspace?.localsettings);
+  const savedWorkspace = workspaceStore.saveSync({
+    ...nextWorkspace,
+    settings: nextSettings,
+    localsettings: normalizeWorkspaceLocalSettings(nextSettings)
+  });
   return hydrateWorkspaceSettings(savedWorkspace);
 }
 
@@ -222,26 +233,37 @@ function hydrateWorkspaceSettings(nextWorkspace, workspaceId = workspaceStore?.g
   if (!appSettingsStore) {
     return nextWorkspace;
   }
+  const localsettings = normalizeWorkspaceLocalSettings(nextWorkspace.localsettings || nextWorkspace.settings || {});
+  const settings = appSettingsStore.settingsForWorkspace(workspaceId, localsettings);
   return {
     ...nextWorkspace,
-    settings: appSettingsStore.settingsForWorkspace(workspaceId, nextWorkspace.settings)
+    localsettings: normalizeWorkspaceLocalSettings(settings),
+    settings
   };
 }
 
-async function saveLocalSettings(settings, workspaceId = workspaceStore?.getWorkspaceId?.() || '') {
-  if (!appSettingsStore || !settings || typeof settings !== 'object') {
+async function saveLocalSettings(settings, workspaceId = workspaceStore?.getWorkspaceId?.() || '', fallbackLocalSettings = {}) {
+  if (!appSettingsStore) {
     return workspace?.settings || {};
   }
-  await appSettingsStore.mergeWorkspaceSettings(workspaceId, settings);
-  return appSettingsStore.settingsForWorkspace(workspaceId, settings);
+  const settingsToSave = settings && typeof settings === 'object' ? settings : null;
+  const localSettings = normalizeWorkspaceLocalSettings(settingsToSave || fallbackLocalSettings);
+  if (settingsToSave) {
+    await appSettingsStore.mergeWorkspaceSettings(workspaceId, settingsToSave);
+  }
+  return appSettingsStore.settingsForWorkspace(workspaceId, localSettings);
 }
 
-function saveLocalSettingsSync(settings, workspaceId = workspaceStore?.getWorkspaceId?.() || '') {
-  if (!appSettingsStore || !settings || typeof settings !== 'object') {
+function saveLocalSettingsSync(settings, workspaceId = workspaceStore?.getWorkspaceId?.() || '', fallbackLocalSettings = {}) {
+  if (!appSettingsStore) {
     return workspace?.settings || {};
   }
-  appSettingsStore.mergeWorkspaceSettingsSync(workspaceId, settings);
-  return appSettingsStore.settingsForWorkspace(workspaceId, settings);
+  const settingsToSave = settings && typeof settings === 'object' ? settings : null;
+  const localSettings = normalizeWorkspaceLocalSettings(settingsToSave || fallbackLocalSettings);
+  if (settingsToSave) {
+    appSettingsStore.mergeWorkspaceSettingsSync(workspaceId, settingsToSave);
+  }
+  return appSettingsStore.settingsForWorkspace(workspaceId, localSettings);
 }
 
 async function renameLocalSettings(previousWorkspaceId, nextWorkspaceId) {

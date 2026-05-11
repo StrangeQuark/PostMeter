@@ -11,7 +11,7 @@ const { normalizeCookies: normalizeCookieCollection } = require('./cookieModel')
 const { normalizeSandboxFileBindings } = require('./fileAttachmentBindings');
 const { normalizeDiagnosticsSettings } = require('./diagnosticsSettings');
 
-const CURRENT_SCHEMA_VERSION = 14;
+const CURRENT_SCHEMA_VERSION = 15;
 const MIN_SUPPORTED_SCHEMA_VERSION = 1;
 const SUPPORTED_METHODS = new Set(HTTP_METHODS);
 const BODY_METHODS = new Set(BODY_METHOD_VALUES);
@@ -282,10 +282,24 @@ function historyEntry({ timestamp, method, url, statusCode, durationMillis } = {
   };
 }
 
-function workspaceModel({ schemaVersion, collections, environments, globals, history, settings, cookies, runners, performanceTests } = {}) {
+function workspaceModel({
+  schemaVersion,
+  collections,
+  environments,
+  globals,
+  history,
+  settings,
+  localsettings,
+  localSettings,
+  cookies,
+  runners,
+  performanceTests
+} = {}) {
+  const normalizedLocalSettings = normalizeWorkspaceLocalSettings(localsettings || localSettings || settings);
   return {
     schemaVersion: schemaVersion || CURRENT_SCHEMA_VERSION,
-    settings: normalizeSettings(settings),
+    settings: mergeSettingsWithWorkspaceLocalSettings(settings, normalizedLocalSettings),
+    localsettings: normalizedLocalSettings,
     collections: Array.isArray(collections) ? collections.map(collectionModel) : [],
     environments: Array.isArray(environments) ? environments.map(environmentModel) : [],
     globals: normalizePairs(globals),
@@ -322,6 +336,43 @@ function normalizeSettings(settings) {
       includePrereleases: settings?.updates?.includePrereleases === true
     }
   };
+}
+
+function normalizeWorkspaceLocalSettings(settings) {
+  const normalized = normalizeSettings(settings || {});
+  return {
+    diagnostics: {
+      requestResponseLogging: normalized.diagnostics.requestResponseLogging
+    },
+    sandbox: {
+      fileBindings: normalized.sandbox.fileBindings,
+      packageCache: normalized.sandbox.packageCache,
+      trustedCapabilities: {
+        vaultGrants: normalized.sandbox.trustedCapabilities.vaultGrants
+      }
+    }
+  };
+}
+
+function mergeSettingsWithWorkspaceLocalSettings(settings, localsettings) {
+  const normalizedSettings = normalizeSettings(settings || {});
+  const normalizedLocalSettings = normalizeWorkspaceLocalSettings(localsettings || {});
+  return normalizeSettings({
+    ...normalizedSettings,
+    diagnostics: {
+      ...normalizedSettings.diagnostics,
+      requestResponseLogging: normalizedLocalSettings.diagnostics.requestResponseLogging
+    },
+    sandbox: {
+      ...normalizedSettings.sandbox,
+      fileBindings: normalizedLocalSettings.sandbox.fileBindings,
+      packageCache: normalizedLocalSettings.sandbox.packageCache,
+      trustedCapabilities: {
+        ...normalizedSettings.sandbox.trustedCapabilities,
+        vaultGrants: normalizedLocalSettings.sandbox.trustedCapabilities.vaultGrants
+      }
+    }
+  });
 }
 
 function normalizeSandboxPackageCache(value) {
@@ -761,6 +812,7 @@ function defaultWorkspace() {
   return workspaceModel({
     schemaVersion: CURRENT_SCHEMA_VERSION,
     settings: normalizeSettings(),
+    localsettings: normalizeWorkspaceLocalSettings(),
     collections: [],
     environments: [],
     globals: [],
@@ -871,6 +923,8 @@ module.exports = {
   normalizeRequestCookieJar,
   normalizeRunnerRequestSource,
   normalizeSettings,
+  normalizeWorkspaceLocalSettings,
+  mergeSettingsWithWorkspaceLocalSettings,
   performanceTestModel,
   requestModel,
   runnerModel,

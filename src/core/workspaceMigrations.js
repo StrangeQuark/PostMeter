@@ -1,6 +1,7 @@
 const {
   CURRENT_SCHEMA_VERSION,
-  MIN_SUPPORTED_SCHEMA_VERSION
+  MIN_SUPPORTED_SCHEMA_VERSION,
+  normalizeWorkspaceLocalSettings
 } = require('./models');
 
 function migrate(workspace) {
@@ -102,6 +103,12 @@ function migrate(workspace) {
   }
   if (schemaVersion < 14) {
     workspace.schemaVersion = 14;
+    migrated = true;
+  }
+  if (schemaVersion < 15) {
+    workspace.localsettings = normalizeWorkspaceLocalSettings(workspace.localsettings || workspace.settings || {});
+    delete workspace.settings;
+    workspace.schemaVersion = 15;
     migrated = true;
   }
   removeWorkspaceLoadTestPolicyFields(workspace);

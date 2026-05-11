@@ -148,11 +148,7 @@ function registerWorkspaceIpc(options = {}) {
     const workspace = await queueWorkspaceOperation(async () => {
       const currentWorkspace = getWorkspace();
       const workspaceWithSettings = applyWorkspaceSettingsSaveToWorkspace(currentWorkspace, settings);
-      const nextSettings = await saveLocalSettings(workspaceWithSettings.settings, getWorkspaceId());
-      const nextWorkspace = {
-        ...currentWorkspace,
-        settings: nextSettings
-      };
+      const nextWorkspace = await saveWorkspace(workspaceWithSettings);
       setWorkspace(nextWorkspace);
       return nextWorkspace;
     });

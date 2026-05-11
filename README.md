@@ -63,11 +63,13 @@ PostMeter stores managed workspaces as local JSON files under:
 ~/.postmeter/
 ```
 
-Local app preferences and workspace-local privacy/sandbox choices are stored separately in:
+App-wide preferences are stored separately in:
 
 ```text
 ~/.postmeter/settings.json
 ```
+
+Workspace-local privacy and sandbox choices are stored in each managed workspace's non-portable `localsettings` section.
 
 You can override the startup workspace path:
 
@@ -75,7 +77,7 @@ You can override the startup workspace path:
 POSTMETER_DATA_PATH=/tmp/postmeter-workspace.json npm start
 ```
 
-Workspace exports do not include `settings.json`, so sharing a workspace does not overwrite another user's theme, modal behavior, diagnostics opt-ins, or local sandbox grants.
+Workspace exports do not include `settings.json` or workspace `localsettings`, so sharing a workspace does not overwrite another user's theme, modal behavior, diagnostics opt-ins, file bindings, package reviews, or local vault grants.
 
 Request, workspace, collection, environment, runner, and performance exports can include auth fields, variables, cookies, file references, scripts, and certificate passphrases. Review exports before sharing them.
 

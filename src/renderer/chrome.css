@@ -31,16 +31,15 @@
   align-items: center;
   gap: 0;
   min-width: 0;
-  padding: 2px;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--surface-muted);
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .toolbar-group button {
-  min-height: 30px;
-  border-color: transparent;
-  background: transparent;
+  min-height: 34px;
+  border-color: var(--line);
+  background: var(--surface-muted);
 }
 
 .toolbar-group button + button {
@@ -50,6 +49,10 @@
 .toolbar-group button.primary {
   border-color: var(--primary);
   background: var(--primary);
+}
+
+.toolbar-group > .menu-trigger {
+  min-width: 0;
 }
 
 .menu-group {
