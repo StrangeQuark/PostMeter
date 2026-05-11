@@ -1,6 +1,6 @@
 const { evaluateAssertions } = require('./assertions');
 const { sendRequest } = require('./httpClient');
-const { runnerModel, walkRequests } = require('./models');
+const { normalizeRunnerRequestIterations, runnerModel, walkRequests } = require('./models');
 const {
   createScriptedRequestState,
   emptyScriptResult,
@@ -17,6 +17,7 @@ const {
 
 const MAX_PM_EXECUTION_RUN_REQUEST_DEPTH = 5;
 const MAX_PM_EXECUTION_RUN_REQUESTS_PER_COLLECTION = 50;
+const MAX_RUNNER_TOTAL_ITERATIONS = 1000;
 const MAX_RUN_RESULT_RESPONSE_BODY_CHARS = 32768;
 const RUN_RESULT_RESPONSE_BODY_TRUNCATION_NOTICE = '\n\n[Response body truncated for runner results.]';
 
@@ -219,6 +220,7 @@ async function runCollection(collection, environment, options = {}) {
         requestId: entry.request.id,
         requestName: entry.request.name,
         folderName: entry.folderName,
+        ...runnerIterationResultFields(entry),
         startedAt,
         statusCode: response.statusCode,
         durationMillis: response.durationMillis,
@@ -245,6 +247,7 @@ async function runCollection(collection, environment, options = {}) {
         requestId: entry.request.id,
         requestName: entry.request.name,
         folderName: entry.folderName,
+        ...runnerIterationResultFields(entry),
         startedAt,
         statusCode: 0,
         durationMillis: 0,
@@ -285,13 +288,14 @@ async function runCollection(collection, environment, options = {}) {
 
 async function runRunner(runner, environment, options = {}) {
   const normalizedRunner = runnerModel(runner);
+  const requests = expandRunnerRequests(normalizedRunner.requests, options.maxRunnerExecutions);
   const runnerCollection = {
     id: normalizedRunner.id,
     name: normalizedRunner.name,
     description: '',
     variables: [],
     certificates: [],
-    requests: normalizedRunner.requests,
+    requests,
     folders: []
   };
   const result = await runCollection(runnerCollection, environment, {
@@ -308,6 +312,25 @@ async function runRunner(runner, environment, options = {}) {
     result.mutatedEnvironment = result.environment;
   }
   return result;
+}
+
+function expandRunnerRequests(requests, maxTotal = MAX_RUNNER_TOTAL_ITERATIONS) {
+  const limit = Math.max(1, Math.min(MAX_RUNNER_TOTAL_ITERATIONS, Number(maxTotal) || MAX_RUNNER_TOTAL_ITERATIONS));
+  const expanded = [];
+  for (const request of Array.isArray(requests) ? requests : []) {
+    const iterations = normalizeRunnerRequestIterations(request?.iterations);
+    if (expanded.length + iterations > limit) {
+      throw new Error(`Runner cannot execute more than ${limit} request iterations in one run.`);
+    }
+    for (let index = 0; index < iterations; index += 1) {
+      expanded.push({
+        ...request,
+        runnerIteration: index + 1,
+        runnerIterations: iterations
+      });
+    }
+  }
+  return expanded;
 }
 
 function requestWithRefreshedAuth(request, refreshedAuthByRequestId) {
@@ -593,6 +616,7 @@ function skippedResult(entry, startedAt, scriptedRequest) {
     requestId: entry.request.id,
     requestName: entry.request.name,
     folderName: entry.folderName,
+    ...runnerIterationResultFields(entry),
     startedAt,
     statusCode: 0,
     durationMillis: 0,
@@ -614,6 +638,7 @@ function scriptFailureResult(entry, startedAt, preRequestScriptResult, localVari
     requestId: entry.request.id,
     requestName: entry.request.name,
     folderName: entry.folderName,
+    ...runnerIterationResultFields(entry),
     startedAt,
     statusCode: 0,
     durationMillis: 0,
@@ -627,6 +652,15 @@ function scriptFailureResult(entry, startedAt, preRequestScriptResult, localVari
     localVariables,
     error
   };
+}
+
+function runnerIterationResultFields(entry) {
+  const runnerIteration = Number(entry?.request?.runnerIteration);
+  const runnerIterations = Number(entry?.request?.runnerIterations);
+  if (!Number.isInteger(runnerIteration) || !Number.isInteger(runnerIterations) || runnerIteration < 1 || runnerIterations < 1) {
+    return {};
+  }
+  return { runnerIteration, runnerIterations };
 }
 
 function boundedRunResultResponseBody(body) {
@@ -758,7 +792,9 @@ function csvValue(value) {
 }
 
 module.exports = {
+  MAX_RUNNER_TOTAL_ITERATIONS,
   collectionRunResultToCsv,
+  expandRunnerRequests,
   runCollection,
   runRunner
 };

@@ -113,6 +113,7 @@ test('accepts structurally valid IPC payloads', () => {
         name: 'Runner Request',
         method: 'GET',
         url: 'https://example.test/runner',
+        iterations: 3,
         queryParams: [],
         headers: [],
         bodyType: 'NONE',
@@ -495,6 +496,8 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertRunnerConfigPayload({ stopOnFailure: 'yes' }), /config.stopOnFailure must be a boolean/);
   assert.throws(() => assertRunnerPayload({ id: 'runner', environmentId: 'none', allowEnvironmentMutation: 'yes', requests: [] }), /runner.allowEnvironmentMutation must be a boolean/);
   assert.throws(() => assertRunnerPayload({ id: 'runner', requests: [{ method: 'TRACE', url: 'https:\/\/example.test' }] }), /runner.requests\[0\].method is not supported/);
+  assert.throws(() => assertRunnerPayload({ id: 'runner', requests: [{ method: 'GET', url: 'https:\/\/example.test', iterations: 0 }] }), /runner.requests\[0\].iterations must be an integer greater than or equal to 1/);
+  assert.throws(() => assertRunnerPayload({ id: 'runner', requests: [{ method: 'GET', url: 'https:\/\/example.test', iterations: 1001 }] }), /runner.requests\[0\].iterations cannot exceed 1000/);
   assert.throws(() => assertRunnerPayload({ id: 'runner', requests: [{ method: 'GET', url: 'https:\/\/example.test', source: { folderPath: [42] } }] }), /runner.requests\[0\].source.folderPath\[0\] must be a string/);
   assert.throws(() => assertRunnerProgressPayload({ passed: 'yes' }), /progress.passed must be a boolean/);
   assert.throws(() => assertRunnerProgressPayload({ completedRequests: 1, clientSecret: 'raw-secret' }), /progress.clientSecret is not allowed in public IPC payloads/);

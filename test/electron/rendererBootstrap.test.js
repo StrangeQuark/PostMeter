@@ -1122,7 +1122,8 @@ test('renderer exposes first-class runner UI and sends runner payloads through r
   assert.match(bootstrapSource, /bindClick\(doc, 'confirmRunnerImportButton'/);
   assert.doesNotMatch(bootstrapSource, /newRunnerButton/);
   assert.doesNotMatch(indexHtml, /id="resultsRunnerTabButton"/);
-  assert.match(rendererSource, /window\.postmeter\.runner\.start\(runnerId, cloneJson\(runner\), cloneJson\(runnerEnvironment\)/);
+  assert.match(rendererSource, /const startRunner = window\.__postmeterStartRunner \|\| window\.postmeter\.runner\.start/);
+  assert.match(rendererSource, /startRunner\(runnerId, cloneJson\(runner\), cloneJson\(runnerEnvironment\)/);
   assert.match(rendererSource, /result\?\.environmentMutationAllowed === true/);
   assert.doesNotMatch(rendererSource, /const runnerCollection = \{/);
 });

@@ -2887,7 +2887,32 @@
       activateContextMenuItem('New Request');
       assertUiSmoke(runner.requests.length === 1, 'Runner local request was not added.');
       const runnerLocalRequest = runner.requests[0];
-      const runnerLocalRow = $('runnerRequestList').querySelector('.runner-request-row');
+      let runnerLocalRow = $('runnerRequestList').querySelector('.runner-request-row');
+      let runnerIterationInput = runnerLocalRow?.querySelector('.runner-row-iterations input');
+      assertUiSmoke(runnerIterationInput, 'Runner request rows should expose an Iterations input.');
+      assertUiSmoke(runnerIterationInput.value === '1', 'Runner request iterations should default to 1.');
+      runnerIterationInput.value = '5';
+      dispatchInput(runnerIterationInput);
+      dispatchChange(runnerIterationInput);
+      assertUiSmoke(runner.requests[0].iterations === 5, 'Runner request iterations should update the runner-owned request.');
+      $('addRunnerRequestButton').click();
+      activateContextMenuItem('New Request');
+      assertUiSmoke(runner.requests.length === 2, 'Runner should support adding another local request after changing iterations.');
+      let runnerRows = Array.from($('runnerRequestList').querySelectorAll('.runner-request-row'));
+      runnerLocalRow = runnerRows[0];
+      runnerIterationInput = runnerLocalRow?.querySelector('.runner-row-iterations input');
+      assertUiSmoke(runnerIterationInput, 'Runner first row should keep an Iterations input after adding a second request.');
+      runnerIterationInput.value = '2';
+      dispatchInput(runnerIterationInput);
+      dispatchChange(runnerIterationInput);
+      collectRunnerFromEditor();
+      assertUiSmoke(runner.requests[0].iterations === 2, 'Runner should collect changed iterations from the visible row after adding another request.');
+      assertUiSmoke(runner.requests[1].iterations === 1, 'New runner requests should keep their own default iteration count.');
+      renderRunnerEditor();
+      runnerRows = Array.from($('runnerRequestList').querySelectorAll('.runner-request-row'));
+      runnerLocalRow = runnerRows[0];
+      assertUiSmoke(runnerLocalRow?.querySelector('.runner-row-iterations input')?.value === '2', 'Runner iteration edits should survive runner pane re-renders.');
+      assertUiSmoke(runnerRows[1]?.querySelector('.runner-row-iterations input')?.value === '1', 'Runner iteration re-render should not copy the first row value to new rows.');
       const runnerLocalEditButton = Array.from(runnerLocalRow?.querySelectorAll('button') || [])
         .find((button) => button.textContent.trim() === 'Edit');
       assertUiSmoke(runnerLocalEditButton, 'Runner request rows should expose an Edit button.');
@@ -2939,6 +2964,77 @@
       const runnerTab = openRunnerTabs.find((tab) => tab.runnerId === runner.id);
       assertUiSmoke(runnerTab, 'Runner tab should remain open while editing a runner request.');
       selectRunnerTab(runnerTab);
+      const dirtyRunnerRow = $('runnerRequestList').querySelector('.runner-request-row');
+      assertUiSmoke(
+        dirtyRunnerRow?.querySelector('.runner-row-dirty-indicator:not([hidden])'),
+        'Runner request rows should show an unsaved indicator when the runner-owned request tab is dirty.'
+      );
+      const originalRunnerStart = window.__postmeterStartRunner;
+      const originalSaveWorkspaceForRunnerRun = window.__postmeterSaveWorkspace;
+      let runnerRunPayload = null;
+      let runnerRunSaveCalls = 0;
+      try {
+        window.__postmeterSaveWorkspace = async (nextWorkspace) => {
+          runnerRunSaveCalls += 1;
+          return nextWorkspace;
+        };
+        window.__postmeterStartRunner = async (_runnerId, runnerPayload) => {
+          runnerRunPayload = structuredClone(runnerPayload);
+          return {
+            collectionName: runnerPayload.name,
+            totalRequests: 1,
+            passedRequests: 1,
+            failedRequests: 0,
+            passed: true,
+            cancelled: false,
+            cookies: [],
+            results: [
+              {
+                requestId: runnerPayload.requests?.[0]?.id,
+                requestName: runnerPayload.requests?.[0]?.name,
+                statusCode: 200,
+                durationMillis: 1,
+                responseBody: '',
+                passed: true,
+                assertionResults: [],
+                preRequestScriptResult: { passed: true, tests: [] },
+                testScriptResult: { passed: true, tests: [] },
+                extractedVariables: [],
+                localVariables: []
+              }
+            ]
+          };
+        };
+        $('runCollectionButton').click();
+        await waitForUiSmoke(() => runnerRunPayload, 'Running a runner should execute the current runner payload.', 3000, global);
+        assertUiSmoke(runnerRunSaveCalls === 0, 'Running a runner should not force-save dirty runner-owned requests.');
+        assertUiSmoke(
+          runnerRunPayload.requests?.[0]?.url === 'https://runner-local.example.test?from=url',
+          'Running a runner should execute the dirty unsaved runner-owned request URL.'
+        );
+        assertUiSmoke(
+          runnerRunPayload.requests?.[0]?.postmanBody?.formdata?.some((part) => part.key === 'runnerBody' && part.value === 'value'),
+          'Running a runner should execute dirty unsaved runner-owned request body edits.'
+        );
+        $('saveRunnerButton').click();
+        await waitForUiSmoke(() => runnerRunSaveCalls === 1
+          && !openRequestTabs.find((tab) => tab.runnerId === runner.id && tab.requestId === runnerLocalRequest.id)?.dirty,
+        'Saving a runner should persist through the workspace save boundary and clear runner-owned request dirty state.',
+        3000,
+        global);
+        const cleanRunnerRow = $('runnerRequestList').querySelector('.runner-request-row');
+        assertUiSmoke(
+          !cleanRunnerRow?.querySelector('.runner-row-dirty-indicator:not([hidden])'),
+          'Saving a runner should re-render runner request rows without stale unsaved indicators.'
+        );
+        assertUiSmoke(
+          !openRequestTabs.find((tab) => tab.runnerId === runner.id && tab.requestId === runnerLocalRequest.id)?.dirty,
+          'Saving a runner should clear the dirty state for runner-owned request tabs.'
+        );
+      } finally {
+        window.__postmeterStartRunner = originalRunnerStart;
+        window.__postmeterSaveWorkspace = originalSaveWorkspaceForRunnerRun;
+      }
       const sourceCollection = {
         id: crypto.randomUUID(),
         name: 'Runner Source Collection',

@@ -36,6 +36,7 @@ const DEFAULT_PERFORMANCE_SAFETY_LIMITS = Object.freeze({
 const MAX_PERFORMANCE_TOTAL_REQUESTS = 1000;
 const MAX_PERFORMANCE_CONCURRENCY = 25;
 const MAX_PERFORMANCE_DURATION_SECONDS = 60 * 60;
+const MAX_RUNNER_REQUEST_ITERATIONS = 1000;
 
 function newId() {
   return crypto.randomUUID();
@@ -130,6 +131,7 @@ function runnerModel({
 
 function runnerRequestModel(request = {}) {
   const normalized = requestModel(request);
+  normalized.iterations = normalizeRunnerRequestIterations(request.iterations);
   const source = normalizeRunnerRequestSource(request.source);
   if (Object.keys(source).length) {
     normalized.source = source;
@@ -652,6 +654,10 @@ function normalizeRunnerRequestSource(source) {
   return normalized;
 }
 
+function normalizeRunnerRequestIterations(value) {
+  return boundedInteger(value, 1, 1, MAX_RUNNER_REQUEST_ITERATIONS);
+}
+
 function normalizePerformanceType(value) {
   return normalizeSchemaEnumValue('performanceTestTypes', value, DEFAULT_PERFORMANCE_TEST_TYPE, { trim: true });
 }
@@ -903,6 +909,7 @@ module.exports = {
   CURRENT_SCHEMA_VERSION,
   DEFAULT_PERFORMANCE_SAFETY_LIMITS,
   MIN_SUPPORTED_SCHEMA_VERSION,
+  MAX_RUNNER_REQUEST_ITERATIONS,
   PERFORMANCE_TEST_TYPES,
   SUPPORTED_METHODS,
   cloneRequestForPerformanceTest,
@@ -921,6 +928,7 @@ module.exports = {
   normalizePerformanceSource,
   normalizePerformanceTypeSettings,
   normalizeRequestCookieJar,
+  normalizeRunnerRequestIterations,
   normalizeRunnerRequestSource,
   normalizeSettings,
   normalizeWorkspaceLocalSettings,

@@ -174,6 +174,7 @@ function assertRunnerRequestPayload(value, field = 'request') {
     'grpc',
     'headers',
     'id',
+    'iterations',
     'method',
     'methodPath',
     'messages',
@@ -192,6 +193,10 @@ function assertRunnerRequestPayload(value, field = 'request') {
     'variables',
     'websocket'
   ]);
+  assertOptionalInteger(value.iterations, `${field}.iterations`, 1);
+  if (value.iterations != null && Number(value.iterations) > LIMITS.runnerIterations) {
+    fail(`${field}.iterations cannot exceed ${LIMITS.runnerIterations}.`);
+  }
   if (value.source != null) {
     assertRunnerRequestSourcePayload(value.source, `${field}.source`);
   }

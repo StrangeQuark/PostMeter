@@ -422,6 +422,86 @@ test('workspace-owned runner exposes mutated environment when persistence is all
   assert.equal(result.mutatedEnvironment.variables.find((item) => item.key === 'persistMe').value, 'yes');
 });
 
+test('workspace-owned runner repeats a row by its configured iterations', async () => {
+  const runner = {
+    id: 'runner-iterations',
+    name: 'Iterating Runner',
+    environmentId: 'none',
+    stopOnFailure: false,
+    requests: [
+      { ...requestModel({ id: 'repeat', name: 'Repeat', url: 'https://api.example.test/repeat' }), iterations: 3 },
+      requestModel({ id: 'next', name: 'Next', url: 'https://api.example.test/next' })
+    ]
+  };
+  const sent = [];
+
+  const result = await runRunner(runner, { id: 'env', name: 'Env', variables: [] }, {
+    sendRequest: async (request) => {
+      sent.push({
+        id: request.id,
+        runnerIteration: request.runnerIteration,
+        runnerIterations: request.runnerIterations
+      });
+      return response(200, '{}');
+    }
+  });
+
+  assert.equal(result.totalRequests, 4);
+  assert.deepEqual(sent.map((item) => item.id), ['repeat', 'repeat', 'repeat', 'next']);
+  assert.deepEqual(sent.map((item) => item.runnerIteration), [1, 2, 3, 1]);
+  assert.deepEqual(result.results.map((item) => item.runnerIteration), [1, 2, 3, 1]);
+  assert.deepEqual(result.results.map((item) => item.runnerIterations), [3, 3, 3, 1]);
+});
+
+test('workspace-owned runner stop-on-failure stops inside repeated rows', async () => {
+  const runner = {
+    id: 'runner-repeat-failure',
+    name: 'Repeat Failure Runner',
+    environmentId: 'none',
+    stopOnFailure: true,
+    requests: [
+      { ...requestModel({ id: 'repeat', name: 'Repeat', url: 'https://api.example.test/repeat' }), iterations: 3 },
+      requestModel({ id: 'next', name: 'Next', url: 'https://api.example.test/next' })
+    ]
+  };
+  const sent = [];
+
+  const result = await runRunner(runner, { id: 'env', name: 'Env', variables: [] }, {
+    sendRequest: async (request) => {
+      sent.push(request.id);
+      if (sent.length === 2) {
+        throw new Error('repeat failed');
+      }
+      return response(200, '{}');
+    }
+  });
+
+  assert.equal(result.totalRequests, 2);
+  assert.equal(result.failedRequests, 1);
+  assert.deepEqual(sent, ['repeat', 'repeat']);
+  assert.equal(result.results[1].runnerIteration, 2);
+  assert.equal(result.results[1].runnerIterations, 3);
+  assert.match(result.results[1].error, /repeat failed/);
+});
+
+test('workspace-owned runner rejects expanded executions over the result limit', async () => {
+  const runner = {
+    id: 'runner-too-many',
+    name: 'Too Many Runner',
+    requests: [
+      { ...requestModel({ id: 'repeat', name: 'Repeat', url: 'https://api.example.test/repeat' }), iterations: 3 }
+    ]
+  };
+
+  await assert.rejects(
+    () => runRunner(runner, { id: 'env', name: 'Env', variables: [] }, {
+      maxRunnerExecutions: 2,
+      sendRequest: async () => response(200, '{}')
+    }),
+    /Runner cannot execute more than 2 request iterations/
+  );
+});
+
 test('workspace-owned runner honors runtime environment mutation override', async () => {
   const runner = {
     id: 'runner-override',

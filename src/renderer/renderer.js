@@ -49,6 +49,7 @@ const FILE_EXTENSION_CONTENT_TYPES = new Map(Object.entries({
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 const THEME_OPTIONS = ['system', 'light', 'dark'];
 const EXECUTION_RESULT_PAGE_SIZE = 100;
+const MAX_RUNNER_REQUEST_ITERATIONS = 1000;
 const POSTMETER_USER_AGENT = 'PostMeter/0.2.0';
 const BODY_METHOD_SET = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const AUTO_HEADER_PLACEHOLDER = '<calculated when request is sent>';
@@ -1550,7 +1551,12 @@ function collectActiveEditorState() {
 function clearSavedRequestDirtyState() {
   clearRendererSavedRequestDirtyState(state, {
     requestForTab: requestTabState.requestForTab,
-    onAfterClear: () => {}
+    onAfterClear: () => {
+      renderRequestTabs();
+      if (activeMainPanel === 'runner') {
+        renderRunnerRequestList(activeRunner());
+      }
+    }
   });
   clearRendererSavedEnvironmentDirtyState(state, {
     environmentForTab: requestTabState.environmentForTab,
@@ -5136,6 +5142,15 @@ function renderRunnerRequestList(runner) {
   });
 }
 
+function runnerRequestIsDirty(runnerId, requestId) {
+  if (!runnerId || !requestId) {
+    return false;
+  }
+  return (openRequestTabs || []).some((tab) => tab?.runnerId === runnerId
+    && tab?.requestId === requestId
+    && tab?.dirty === true);
+}
+
 function runnerRequestRow(runner, request, index) {
   const row = document.createElement('div');
   row.className = 'runner-request-row';
@@ -5149,9 +5164,17 @@ function runnerRequestRow(runner, request, index) {
   handle.title = 'Drag to reorder';
   handle.setAttribute('aria-label', `Reorder ${request.name || 'runner request'}`);
 
+  const methodCell = document.createElement('span');
+  methodCell.className = 'runner-row-method-cell';
+  const dirtyIndicator = document.createElement('span');
+  dirtyIndicator.className = 'runner-row-dirty-indicator';
+  dirtyIndicator.title = 'Unsaved changes';
+  dirtyIndicator.setAttribute('aria-label', 'Unsaved changes');
+  dirtyIndicator.hidden = !runnerRequestIsDirty(runner.id, request.id);
   const method = document.createElement('span');
   method.className = `runner-row-method ${methodClassName(request.method || 'GET')}`;
   method.textContent = request.method || 'GET';
+  methodCell.append(dirtyIndicator, method);
 
   const name = document.createElement('span');
   name.className = 'runner-row-name';
@@ -5160,6 +5183,35 @@ function runnerRequestRow(runner, request, index) {
   const url = document.createElement('span');
   url.className = 'runner-row-url';
   url.textContent = request.url || '';
+
+  const iterationsField = document.createElement('label');
+  iterationsField.className = 'runner-row-iterations';
+  const iterationsLabel = document.createElement('span');
+  iterationsLabel.textContent = 'Iterations';
+  const iterationsInput = document.createElement('input');
+  iterationsInput.type = 'number';
+  iterationsInput.min = '1';
+  iterationsInput.max = String(MAX_RUNNER_REQUEST_ITERATIONS);
+  iterationsInput.step = '1';
+  iterationsInput.value = String(normalizeRunnerRequestIterations(request.iterations));
+  iterationsInput.setAttribute('aria-label', `Iterations for ${request.name || 'runner request'}`);
+  const updateIterations = (options = {}) => {
+    const previous = normalizeRunnerRequestIterations(request.iterations);
+    const next = normalizeRunnerRequestIterations(iterationsInput.value);
+    request.iterations = next;
+    if (options.commit === true) {
+      iterationsInput.value = String(next);
+    }
+    if (next !== previous) {
+      markActiveRunnerDirty();
+    }
+  };
+  iterationsInput.addEventListener('input', () => updateIterations());
+  iterationsInput.addEventListener('change', () => updateIterations({ commit: true }));
+  for (const eventName of ['click', 'mousedown', 'dragstart']) {
+    iterationsInput.addEventListener(eventName, (event) => event.stopPropagation());
+  }
+  iterationsField.append(iterationsLabel, iterationsInput);
 
   const editButton = document.createElement('button');
   editButton.type = 'button';
@@ -5205,7 +5257,7 @@ function runnerRequestRow(runner, request, index) {
     }
   });
 
-  row.append(handle, method, name, url, editButton, moveUp, moveDown, deleteButton);
+  row.append(handle, methodCell, name, url, iterationsField, editButton, moveUp, moveDown, deleteButton);
   return row;
 }
 
@@ -6388,7 +6440,10 @@ function addNewRunnerLocalRequest() {
     return null;
   }
   runner.requests = normalizeRunnerRequests(runner.requests);
-  runner.requests.push(newRequestObject(uniqueName('New Request', runner.requests.map((request) => request.name))));
+  runner.requests.push({
+    ...newRequestObject(uniqueName('New Request', runner.requests.map((request) => request.name))),
+    iterations: 1
+  });
   markActiveRunnerDirty();
   renderRunnerEditor();
   setStatus('Runner request added.');
@@ -6587,7 +6642,16 @@ function normalizeRunnerRequest(request) {
   normalized.examples = Array.isArray(normalized.examples) ? normalized.examples : [];
   normalized.scripts = normalized.scripts && typeof normalized.scripts === 'object' ? normalized.scripts : { preRequest: '', tests: '' };
   normalized.auth = normalized.auth && typeof normalized.auth === 'object' ? normalized.auth : { type: 'none' };
+  normalized.iterations = normalizeRunnerRequestIterations(normalized.iterations);
   return normalized;
+}
+
+function normalizeRunnerRequestIterations(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return 1;
+  }
+  return Math.min(MAX_RUNNER_REQUEST_ITERATIONS, Math.max(1, Math.floor(numeric)));
 }
 
 function normalizeImportedEnvironment(environment = {}) {
@@ -7202,6 +7266,7 @@ async function saveRunnerFromPane() {
       tab.snapshot = snapshotRunner(runner);
     }
     renderRequestTabs();
+    renderRunnerRequestList(runner);
     setStatus('Runner saved.');
     return true;
   } catch (error) {
@@ -10367,8 +10432,18 @@ function runnerExecutionMeta(item = {}) {
   const request = runnerRequestForExecutionItem(item);
   const method = request?.method || '';
   const url = request?.url || '';
+  const iteration = runnerIterationText(item);
   const duration = Number.isFinite(Number(item.durationMillis)) ? `${Number(item.durationMillis)} ms` : '';
-  return [method, url, duration].filter(Boolean).join(' ');
+  return [method, url, iteration, duration].filter(Boolean).join(' ');
+}
+
+function runnerIterationText(item = {}) {
+  const current = Number(item.runnerIteration);
+  const total = Number(item.runnerIterations);
+  if (!Number.isInteger(current) || !Number.isInteger(total) || total <= 1) {
+    return '';
+  }
+  return `Iteration ${current}/${total}`;
 }
 
 function renderRunnerExecutionDetails(result = lastRunnerResult) {
@@ -10415,6 +10490,7 @@ function runnerExecutionOverview(item = {}, request = null) {
   metrics.className = 'runner-detail-meta';
   metrics.textContent = [
     `Status ${runnerStatusLabel(item)}`,
+    runnerIterationText(item),
     Number.isFinite(Number(item.durationMillis)) ? `${Number(item.durationMillis)} ms` : '',
     item.folderName ? `Folder ${item.folderName}` : '',
     item.startedAt ? `Started ${item.startedAt}` : ''
@@ -10674,12 +10750,12 @@ async function runActiveRunner() {
   $('exportRunnerJsonButton').disabled = true;
   $('exportRunnerCsvButton').disabled = true;
   try {
-    await saveWorkspace(false, { scope: 'runners', collectEditors: false });
     activeRunnerId = runnerId;
     $('runCollectionButton').disabled = true;
     $('cancelRunnerButton').disabled = false;
     renderRunnerExecutionMessage('Starting runner...');
-    const result = await window.postmeter.runner.start(runnerId, cloneJson(runner), cloneJson(runnerEnvironment), {
+    const startRunner = window.__postmeterStartRunner || window.postmeter.runner.start;
+    const result = await startRunner(runnerId, cloneJson(runner), cloneJson(runnerEnvironment), {
       stopOnFailure: runner.stopOnFailure === true,
       allowEnvironmentMutation: runner.allowEnvironmentMutation === true
     });
@@ -12710,6 +12786,33 @@ function collectEnvironmentFromEditor() {
   }
 }
 
+function collectRunnerRequestIterationsFromEditor(runner) {
+  const requestList = $('runnerRequestList');
+  if (!runner || !requestList) {
+    return false;
+  }
+  let changed = false;
+  const rows = requestList.querySelectorAll('.runner-request-row[data-runner-request-index]');
+  for (const row of rows) {
+    const index = Number.parseInt(row.dataset.runnerRequestIndex || '', 10);
+    if (!Number.isInteger(index) || index < 0 || !runner.requests?.[index]) {
+      continue;
+    }
+    const input = row.querySelector('.runner-row-iterations input');
+    if (!input) {
+      continue;
+    }
+    const previous = normalizeRunnerRequestIterations(runner.requests[index].iterations);
+    const next = normalizeRunnerRequestIterations(input.value);
+    runner.requests[index].iterations = next;
+    input.value = String(next);
+    if (next !== previous) {
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 function collectRunnerFromEditor() {
   const runner = activeRunner();
   if (!runner) {
@@ -12719,7 +12822,11 @@ function collectRunnerFromEditor() {
   runner.environmentId = $('runnerEnvironmentSelect')?.value || runner.environmentId || 'none';
   runner.stopOnFailure = $('runnerStopOnFailure')?.checked === true;
   runner.allowEnvironmentMutation = $('runnerAllowEnvironmentMutation')?.checked === true;
+  const iterationsChanged = collectRunnerRequestIterationsFromEditor(runner);
   runner.requests = normalizeRunnerRequests(runner.requests);
+  if (iterationsChanged) {
+    markActiveRunnerDirty();
+  }
   const title = $('runnerMainTitle');
   if (title && title.dataset.editing !== 'true') {
     title.textContent = runnerDisplayName(runner);

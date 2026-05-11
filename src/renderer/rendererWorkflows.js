@@ -669,8 +669,11 @@
       collectRequestFromEditor();
       const environment = activeEnvironment();
       const requestContext = createRequestContext(request, environment);
+      const isRunnerOwnedRequest = Boolean(requestContext.runnerId);
       try {
-        await saveWorkspace(false, { allowDraftBypass: true });
+        if (!isRunnerOwnedRequest) {
+          await saveWorkspace(false, { allowDraftBypass: true });
+        }
         if (!request.scripts?.preRequest?.trim()) {
           const validateRequest = windowObject.__postmeterValidateRequest || windowObject.postmeter.request.validate;
           const errors = await validateRequest(request, environment);
@@ -719,7 +722,9 @@
             ].slice(0, 100);
             renderHistory();
           }
-          syncSavedRequestContextTabs(requestContext);
+          if (!isRunnerOwnedRequest) {
+            syncSavedRequestContextTabs(requestContext);
+          }
         }
         setStatus(skippedBeforeSend ? 'Request skipped.' : failedBeforeSend ? 'Request failed.' : 'Request completed.');
       } catch (error) {

@@ -3,6 +3,7 @@ const test = require('node:test');
 const {
   cloneRequestForRunner,
   CURRENT_SCHEMA_VERSION,
+  MAX_RUNNER_REQUEST_ITERATIONS,
   requestModel,
   runnerModel,
   workspaceModel
@@ -22,6 +23,7 @@ test('normalizes workspace-owned runners with request clones and none environmen
       name: 'Request',
       method: 'POST',
       url: ' https://api.example.test ',
+      iterations: 5,
       source: {
         collectionId: 'collection-1',
         collectionName: 'Collection',
@@ -37,8 +39,27 @@ test('normalizes workspace-owned runners with request clones and none environmen
   assert.equal(runner.allowEnvironmentMutation, true);
   assert.equal(runner.stopOnFailure, true);
   assert.equal(runner.requests[0].id, 'runner-request-1');
+  assert.equal(runner.requests[0].iterations, 5);
   assert.equal(runner.requests[0].source.requestId, 'source-request');
   assert.deepEqual(runner.requests[0].source.folderPath, ['Folder']);
+});
+
+test('normalizes runner request iterations to a bounded positive integer', () => {
+  const runner = runnerModel({
+    requests: [
+      { name: 'Default', url: 'https://example.test/default' },
+      { name: 'Negative', url: 'https://example.test/negative', iterations: -3 },
+      { name: 'Fraction', url: 'https://example.test/fraction', iterations: 4.8 },
+      { name: 'High', url: 'https://example.test/high', iterations: MAX_RUNNER_REQUEST_ITERATIONS + 1 }
+    ]
+  });
+
+  assert.deepEqual(runner.requests.map((request) => request.iterations), [
+    1,
+    1,
+    4,
+    MAX_RUNNER_REQUEST_ITERATIONS
+  ]);
 });
 
 test('imports collection requests into runners without mutating source request state', () => {
@@ -59,6 +80,7 @@ test('imports collection requests into runners without mutating source request s
 
   assert.notEqual(runnerRequest.id, sourceRequest.id);
   assert.equal(runnerRequest.source.requestId, 'collection-request');
+  assert.equal(runnerRequest.iterations, 1);
   assert.equal(sourceRequest.headers[0].value, 'yes');
 });
 
