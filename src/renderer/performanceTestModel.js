@@ -1,4 +1,16 @@
 (function attachPerformanceTestModel(global) {
+  const CSV_VARIABLES = global.PostMeterCsvVariables || {
+    normalizeCsvVariableData: () => ({
+      enabled: true,
+      schema: '',
+      values: '',
+      filePath: '',
+      sourceName: '',
+      activeSource: '',
+      loopRows: false,
+      continueWithoutRows: false
+    })
+  };
   const PERFORMANCE_TEST_TYPES = [
     'latency',
     'throughput',
@@ -65,6 +77,7 @@
       config: DEFAULT_PERFORMANCE_CONFIG.latency,
       safetyLimits: DEFAULT_SAFETY_LIMITS,
       typeSettings: defaultPerformanceTypeSettings(),
+      csvVariables: CSV_VARIABLES.normalizeCsvVariableData(),
       resultsMetadata: {}
     });
   }
@@ -98,6 +111,7 @@
       safetyLimits: legacySafetyLimits
     }, workspace);
     syncPerformanceActiveTypeSettings(test);
+    test.csvVariables = CSV_VARIABLES.normalizeCsvVariableData(test.csvVariables);
     test.resultsMetadata = normalizePerformanceResultsMetadata(test.resultsMetadata);
     return test;
   }

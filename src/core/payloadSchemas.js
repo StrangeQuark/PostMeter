@@ -76,6 +76,7 @@ const LIMITS = {
   performanceTests: 500,
   environments: 500,
   history: 1000,
+  runnerIterations: 1000,
   pairs: 1000,
   cookies: 2000,
   folderDepth: 20,
@@ -98,6 +99,7 @@ const SCHEMA_ENUMS = {
   bodyMethods: BODY_METHODS,
   bodyTypes: BODY_TYPE_VALUES,
   collectionExportFormats: COLLECTION_EXPORT_FORMATS,
+  csvVariableSources: ['', 'file', 'inline'],
   performanceExportFormats: PERFORMANCE_EXPORT_FORMATS,
   performanceTestTypes: PERFORMANCE_TEST_TYPES,
     cookiePriorities: ['', 'Low', 'Medium', 'High'],
@@ -238,6 +240,16 @@ const FIELD_SCHEMAS = {
   runnerConfig: {
     allowEnvironmentMutation: { type: 'boolean', optional: true },
     stopOnFailure: { type: 'boolean', optional: true }
+  },
+  csvVariables: {
+    enabled: { type: 'boolean', optional: true },
+    schema: { type: 'string', limit: 'value', optional: true },
+    values: { type: 'string', limit: 'body', optional: true },
+    filePath: { type: 'string', limit: 'url', optional: true },
+    sourceName: { type: 'string', limit: 'name', optional: true },
+    activeSource: { type: 'string', limit: 'tiny', enum: 'csvVariableSources', optional: true },
+    loopRows: { type: 'boolean', optional: true },
+    continueWithoutRows: { type: 'boolean', optional: true }
   },
   performanceConfig: {
     iterations: { type: 'number', optional: true },
@@ -380,8 +392,13 @@ const FIELD_SCHEMAS = {
   collectionRunRequestResult: {
     requestId: { type: 'string', limit: 'name', optional: true },
     requestName: { type: 'string', limit: 'name', optional: true },
+    requestDisplayName: { type: 'string', limit: 'name', optional: true },
+    requestMethod: { type: 'string', limit: 'short', optional: true },
+    requestUrl: { type: 'string', limit: 'url', optional: true },
     folderName: { type: 'string', limit: 'name', optional: true },
     startedAt: { type: 'string', limit: 'name', optional: true },
+    runnerIteration: { type: 'number', optional: true },
+    runnerIterations: { type: 'number', optional: true },
     statusCode: { type: 'number', optional: true },
     durationMillis: { type: 'number', optional: true },
     responseBody: { type: 'string', limit: 'value', optional: true },
@@ -517,10 +534,11 @@ const payloadSchemas = {
       optional: ['allowEnvironmentMutation', 'stopOnFailure']
     },
     runner: {
-      arrays: ['requests']
+      arrays: ['requests'],
+      nested: ['csvVariables']
     },
     performanceTest: {
-      nested: ['request', 'source', 'config', 'safetyLimits', 'resultsMetadata']
+      nested: ['request', 'source', 'config', 'safetyLimits', 'csvVariables', 'resultsMetadata']
     },
     runnerResult: {
       required: ['collectionId', 'collectionName', 'totalRequests', 'passedRequests', 'failedRequests', 'passed', 'cancelled', 'results']

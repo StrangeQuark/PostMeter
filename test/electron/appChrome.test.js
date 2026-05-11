@@ -256,8 +256,16 @@ test('PostMeter app protocol only serves allowlisted renderer bundle assets', as
   ]);
   assert.equal(appProtocolFilePath(rendererUrl, root), path.join(root, 'src', 'renderer', 'index.html'));
   assert.equal(appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://bundle/src/core/payloadSchemas.js`, root), path.join(root, 'src', 'core', 'payloadSchemas.js'));
+  assert.equal(appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://bundle/src/core/csvVariables.js`, root), path.join(root, 'src', 'core', 'csvVariables.js'));
   assert.equal(appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://bundle/src/core/requestQueryModel.js`, root), path.join(root, 'src', 'core', 'requestQueryModel.js'));
   assert.equal(appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://bundle/build/icon.png`, root), path.join(root, 'build', 'icon.png'));
+  for (const scriptSrc of rendererHtml.matchAll(/<script src="([^"]+)"><\/script>/g)) {
+    const scriptUrl = new URL(scriptSrc[1], rendererUrl).toString();
+    assert.doesNotThrow(
+      () => appProtocolFilePath(scriptUrl, root),
+      `script ${scriptSrc[1]} should be served by the app protocol allowlist`
+    );
+  }
   assert.throws(() => appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://evil/src/renderer/index.html`, root), /Invalid PostMeter app protocol URL/);
   assert.throws(() => appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://bundle/package.json`, root), /not allowlisted/);
   assert.throws(() => appProtocolFilePath(`${APP_PROTOCOL_SCHEME}://bundle/src/core/scriptRuntime.js`, root), /not allowlisted/);

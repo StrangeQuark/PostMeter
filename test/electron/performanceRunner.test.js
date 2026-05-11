@@ -1,5 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
+const { resolveEnvironmentValue } = require('../../src/core/environmentResolver');
 const { performanceTestModel } = require('../../src/core/models');
 const { assertPerformanceTestPayload } = require('../../src/core/ipcValidation');
 const { createPerformancePlan, runPerformanceTest } = require('../../src/core/performanceRunner');
@@ -131,6 +132,163 @@ test('runs bounded performance iterations through the request lifecycle and aggr
   assert.deepEqual(progress.map((event) => event.completedRequests), [1, 2, 3]);
 });
 
+test('performance tests consume CSV variable rows for each planned request', async () => {
+  const sent = [];
+  const performanceTest = performanceTestModel({
+    id: 'perf-csv',
+    name: 'CSV Performance',
+    type: 'throughput',
+    request: {
+      id: 'request-csv',
+      name: 'CSV Request',
+      method: 'POST',
+      url: '${requestUrl}',
+      bodyType: 'RAW_TEXT',
+      body: '${requestBody}',
+      scripts: {
+        tests: `
+          pm.test('iteration data is available', function () {
+            pm.expect(pm.iterationData.get('requestUrl')).to.contain('api.example.test');
+          });
+        `
+      }
+    },
+    csvVariables: {
+      schema: 'requestUrl,requestBody',
+      values: [
+        'https://api.example.test/one,"{""id"":1}"',
+        'https://api.example.test/two,"{""id"":2}"'
+      ].join('\n')
+    },
+    config: { iterations: 2, concurrency: 2 },
+    safetyLimits: { maxTotalRequests: 2, maxConcurrency: 2, maxDurationSeconds: 10 }
+  });
+
+  const result = await runPerformanceTest(performanceTest, { id: 'env', name: 'Env', variables: [] }, {
+    sendRequest: async (request, environment) => {
+      sent.push({
+        url: resolveEnvironmentValue(request.url, environment),
+        body: resolveEnvironmentValue(request.body, environment)
+      });
+      return response();
+    }
+  });
+
+  assert.equal(result.passed, true);
+  assert.deepEqual(sent.map((item) => item.url).sort(), [
+    'https://api.example.test/one',
+    'https://api.example.test/two'
+  ]);
+  assert.deepEqual(sent.map((item) => item.body).sort(), ['{"id":1}', '{"id":2}']);
+  assert.deepEqual(result.samples.map((sample) => sample.requestUrl).sort(), [
+    'https://api.example.test/one',
+    'https://api.example.test/two'
+  ]);
+  assert.deepEqual(result.samples.map((sample) => sample.requestMethod), ['POST', 'POST']);
+  assert.equal(result.samples[0].testScriptResult.tests[0].passed, true);
+});
+
+test('performance tests can loop CSV variable rows across planned requests', async () => {
+  const performanceTest = performanceTestModel({
+    id: 'perf-csv-loop',
+    name: 'CSV Loop Performance',
+    type: 'throughput',
+    request: {
+      id: 'request-csv-loop',
+      name: 'CSV Loop Request',
+      method: 'GET',
+      url: '${requestUrl}'
+    },
+    csvVariables: {
+      schema: 'requestUrl',
+      values: [
+        'https://api.example.test/one',
+        'https://api.example.test/two'
+      ].join('\n'),
+      loopRows: true
+    },
+    config: { iterations: 5, concurrency: 1 },
+    safetyLimits: { maxTotalRequests: 5, maxConcurrency: 1, maxDurationSeconds: 10 }
+  });
+
+  const result = await runPerformanceTest(performanceTest, { id: 'env', name: 'Env', variables: [] }, {
+    sendRequest: async () => response()
+  });
+
+  assert.equal(result.passed, true);
+  assert.deepEqual(result.samples.map((sample) => sample.requestUrl), [
+    'https://api.example.test/one',
+    'https://api.example.test/two',
+    'https://api.example.test/one',
+    'https://api.example.test/two',
+    'https://api.example.test/one'
+  ]);
+});
+
+test('performance tests can continue without CSV variable rows after data runs out', async () => {
+  const performanceTest = performanceTestModel({
+    id: 'perf-csv-continue',
+    name: 'CSV Continue Performance',
+    type: 'throughput',
+    request: {
+      id: 'request-csv-continue',
+      name: 'CSV Continue Request',
+      method: 'GET',
+      url: '${requestUrl}'
+    },
+    csvVariables: {
+      schema: 'requestUrl',
+      values: [
+        'https://api.example.test/one',
+        'https://api.example.test/two'
+      ].join('\n'),
+      continueWithoutRows: true
+    },
+    config: { iterations: 4, concurrency: 1 },
+    safetyLimits: { maxTotalRequests: 4, maxConcurrency: 1, maxDurationSeconds: 10 }
+  });
+
+  const result = await runPerformanceTest(performanceTest, { id: 'env', name: 'Env', variables: [] }, {
+    sendRequest: async () => response()
+  });
+
+  assert.equal(result.passed, true);
+  assert.deepEqual(result.samples.map((sample) => sample.requestUrl), [
+    'https://api.example.test/one',
+    'https://api.example.test/two',
+    '${requestUrl}',
+    '${requestUrl}'
+  ]);
+});
+
+test('performance tests can disable configured CSV variable data from the main pane option', async () => {
+  const performanceTest = performanceTestModel({
+    id: 'perf-csv-disabled',
+    name: 'CSV Disabled Performance',
+    type: 'latency',
+    request: {
+      id: 'request-csv-disabled',
+      name: 'CSV Disabled Request',
+      method: 'GET',
+      url: '${requestUrl}'
+    },
+    csvVariables: {
+      enabled: false,
+      schema: 'requestUrl',
+      values: 'https://api.example.test/one'
+    },
+    config: { iterations: 1, concurrency: 1 },
+    safetyLimits: { maxTotalRequests: 1, maxConcurrency: 1, maxDurationSeconds: 10 }
+  });
+
+  const result = await runPerformanceTest(performanceTest, { id: 'env', name: 'Env', variables: [] }, {
+    sendRequest: async () => response()
+  });
+
+  assert.equal(result.passed, true);
+  assert.equal(result.samples[0].requestUrl, '${requestUrl}');
+});
+
 test('carries runner-style request details into performance samples', async () => {
   const performanceTest = performanceTestModel({
     id: 'perf-details',
@@ -163,6 +321,9 @@ test('carries runner-style request details into performance samples', async () =
   });
 
   const sample = result.samples[0];
+  assert.equal(sample.requestDisplayName, 'Detailed Request');
+  assert.equal(sample.requestMethod, 'GET');
+  assert.equal(sample.requestUrl, 'https://api.example.test/details');
   assert.equal(sample.responseBody, '{"ok":true}');
   assert.equal(sample.responseBytes, 11);
   assert.equal(sample.assertionResults[0].passed, true);

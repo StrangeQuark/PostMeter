@@ -47,7 +47,7 @@ The CLI uses the same import and runner logic as the desktop app. It exits with 
 
 ## Runners
 
-Runners let you save and replay a sequence of requests from the desktop app. They are useful for API workflows where one request sets up data for the next, such as authentication, setup, validation, and cleanup steps.
+Runners let you save and replay a sequence of requests from the desktop app. They are useful for API workflows where one request sets up data for the next, such as authentication, setup, validation, and cleanup steps. Each runner row can repeat for a configured number of iterations without duplicating the same request in the queue.
 
 ## Performance
 

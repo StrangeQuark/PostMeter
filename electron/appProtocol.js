@@ -16,6 +16,7 @@ const APP_RENDERER_QUERY_KEYS = new Set([
 const ALLOWED_CORE_ASSETS = new Set([
   '/src/core/authModel.js',
   '/src/core/cookieModel.js',
+  '/src/core/csvVariables.js',
   '/src/core/payloadSchemas.js',
   '/src/core/requestQueryModel.js'
 ]);

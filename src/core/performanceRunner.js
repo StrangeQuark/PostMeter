@@ -1,5 +1,6 @@
 const crypto = require('node:crypto');
-const { runRunner } = require('./collectionRunner');
+const { csvVariableIterationRows, runRunner } = require('./collectionRunner');
+const { csvVariablesEnabled } = require('./csvVariables');
 const {
   performanceTestModel
 } = require('./models');
@@ -15,6 +16,8 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
   const startedMillis = Date.now();
   const progress = typeof options.onProgress === 'function' ? options.onProgress : () => {};
   const samples = [];
+  const useCsvVariables = csvVariablesEnabled(normalized.csvVariables);
+  const iterationRows = await csvVariableIterationRows(normalized.csvVariables, plan.totalRequests);
   let currentEnvironment = cloneJson(environment) || { id: 'runtime', name: 'Runtime', variables: [] };
   let currentCookies = Array.isArray(options.cookieJar) ? cloneJson(options.cookieJar) : [];
   let nextIteration = 0;
@@ -43,7 +46,10 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
         const iteration = nextIteration;
         nextIteration += 1;
         activeRequests += 1;
-        const sample = await executeIteration(normalized, currentEnvironment, currentCookies, iteration, options);
+        const sample = await executeIteration(normalized, currentEnvironment, currentCookies, iteration, {
+          ...options,
+          iterationData: useCsvVariables ? (iterationRows[iteration] || []) : (options.iterationData || [])
+        });
         activeRequests -= 1;
         samples.push(sample.publicSample);
         if (sample.environment) {
@@ -123,6 +129,9 @@ async function executeIteration(performanceTest, environment, cookies, iteration
         startedAt,
         requestId: performanceTest.request.id,
         requestName: performanceTest.request.name,
+        requestDisplayName: requestResult.requestDisplayName || performanceTest.request.name,
+        requestMethod: requestResult.requestMethod || performanceTest.request.method || '',
+        requestUrl: requestResult.requestUrl || performanceTest.request.url || '',
         statusCode: Number(requestResult.statusCode || 0),
         durationMillis: Number(requestResult.durationMillis || 0),
         responseBody: requestResult.responseBody || '',
@@ -145,6 +154,9 @@ async function executeIteration(performanceTest, environment, cookies, iteration
         startedAt,
         requestId: performanceTest.request.id,
         requestName: performanceTest.request.name,
+        requestDisplayName: performanceTest.request.name,
+        requestMethod: performanceTest.request.method || '',
+        requestUrl: performanceTest.request.url || '',
         statusCode: 0,
         durationMillis: 0,
         responseBody: '',

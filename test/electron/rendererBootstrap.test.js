@@ -109,6 +109,11 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(indexSource, /id="folderDestinationModal"/);
   assert.match(indexSource, /id="folderDestinationList"[^>]+role="radiogroup"/);
   assert.match(indexSource, /id="confirmFolderDestinationButton"[^>]+disabled/);
+  assert.match(indexSource, /id="csvVariablesModal"/);
+  assert.match(indexSource, /id="runnerCsvVariablesButton"/);
+  assert.match(indexSource, /id="runnerUseCsvVariablesInput"/);
+  assert.match(indexSource, /id="performanceCsvVariablesButton"/);
+  assert.match(indexSource, /id="performanceUseCsvVariablesInput"/);
   assert.doesNotMatch(indexSource, /id="fileMenuButton"/);
   assert.doesNotMatch(indexSource, /id="fileMenu"/);
   assert.match(indexSource, /id="settingsModal"[^>]+settings-modal/);
@@ -133,6 +138,8 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(bootstrapSource, /activeRow !== submenuRow/);
   assert.match(bootstrapSource, /getSelectedExportItemId/);
   assert.match(bootstrapSource, /getSelectedFolderDestination/);
+  assert.match(bootstrapSource, /onEditRunnerCsvVariables/);
+  assert.match(bootstrapSource, /onEditPerformanceCsvVariables/);
   assert.doesNotMatch(bootstrapSource, /'fileMenuButton', 'fileMenu'/);
   assert.doesNotMatch(bootstrapSource, /bindClick\(doc, 'openSettingsButton', options\.onOpenSettings\)/);
   assert.match(bootstrapSource, /data-settings-section/);
@@ -299,6 +306,96 @@ test('renderer bootstrap resolves text, confirmation, and notification modals', 
   elements.get('cancelRunnerImportButton').dispatch('click');
 
   assert.deepEqual(resolved, ['single-line-value', null, null, null, true, false, true, null]);
+});
+
+test('renderer bootstrap binds CSV variable edit buttons and modal controls', () => {
+  const calls = [];
+  const elements = new Map([
+    ['runnerCsvVariablesButton', createElement()],
+    ['performanceCsvVariablesButton', createElement()],
+    ['closeCsvVariablesModalButton', createElement()],
+    ['cancelCsvVariablesModalButton', createElement()],
+    ['saveCsvVariablesModalButton', createElement()],
+    ['csvVariablesImportButton', createElement()],
+    ['clearCsvVariablesFileButton', createElement()],
+    ['csvVariablesLoadFileButton', createElement()],
+    ['csvVariablesKeepFileButton', createElement()],
+    ['csvVariablesFileInput', createElement({ tagName: 'INPUT' })],
+    ['csvVariablesFileSourceButton', createElement()],
+    ['csvVariablesInlineSourceButton', createElement()],
+    ['csvVariablesValuesToggle', createElement()],
+    ['csvVariablesValuesInput', createElement({ tagName: 'TEXTAREA' })],
+    ['csvVariablesLoopRowsInput', createElement({ tagName: 'INPUT' })],
+    ['csvVariablesContinueWithoutRowsInput', createElement({ tagName: 'INPUT' })],
+    ['contextMenu', createElement()],
+    ['modalBackdrop', createElement()]
+  ]);
+
+  bindUi({
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} },
+    onEditRunnerCsvVariables: () => calls.push('runner-csv'),
+    onEditPerformanceCsvVariables: () => calls.push('performance-csv'),
+    onResolveActiveModal: (value) => calls.push(`resolve:${value}`),
+    onConfirmCsvVariablesModal: () => calls.push('save-csv'),
+    onImportCsvVariablesFile: () => calls.push('import-csv'),
+    onClearCsvVariablesFile: () => calls.push('clear-csv'),
+    onLoadCsvVariablesFile: () => calls.push('load-csv'),
+    onKeepCsvVariablesFile: () => calls.push('keep-csv'),
+    onCsvVariablesFileSelected: () => calls.push('file-selected'),
+    onSelectCsvVariablesSource: (source) => calls.push(`source:${source}`),
+    onToggleCsvVariablesValues: () => calls.push('toggle-values'),
+    onCsvVariablesValuesInput: () => calls.push('values-input'),
+    onCsvVariablesRowModeChange: (mode) => calls.push(`row-mode:${mode}`)
+  });
+
+  for (const id of [
+    'runnerCsvVariablesButton',
+    'performanceCsvVariablesButton',
+    'closeCsvVariablesModalButton',
+    'cancelCsvVariablesModalButton',
+    'saveCsvVariablesModalButton',
+    'csvVariablesImportButton',
+    'clearCsvVariablesFileButton',
+    'csvVariablesLoadFileButton',
+    'csvVariablesKeepFileButton'
+  ]) {
+    elements.get(id).dispatch('click');
+  }
+  elements.get('csvVariablesFileInput').dispatch('change');
+  elements.get('csvVariablesFileSourceButton').dispatch('click');
+  elements.get('csvVariablesInlineSourceButton').dispatch('click');
+  elements.get('csvVariablesValuesToggle').dispatch('click');
+  elements.get('csvVariablesValuesInput').dispatch('input');
+  elements.get('csvVariablesLoopRowsInput').dispatch('change');
+  elements.get('csvVariablesContinueWithoutRowsInput').dispatch('change');
+
+  assert.deepEqual(calls, [
+    'runner-csv',
+    'performance-csv',
+    'resolve:null',
+    'resolve:null',
+    'save-csv',
+    'import-csv',
+    'clear-csv',
+    'load-csv',
+    'keep-csv',
+    'file-selected',
+    'source:file',
+    'source:inline',
+    'toggle-values',
+    'values-input',
+    'row-mode:loop',
+    'row-mode:continue'
+  ]);
 });
 
 test('renderer bootstrap binds settings menu, category, theme, and setting controls', () => {
@@ -504,6 +601,8 @@ test('renderer bootstrap binds performance creation import export run and config
     'emptyCreatePerformanceTestButton',
     'importPerformanceTestButton',
     'exportPerformanceTestMenuButton',
+    'performanceCsvVariablesButton',
+    'performanceUseCsvVariablesInput',
     'savePerformanceTestButton',
     'deletePerformanceTestButton',
     'runPerformanceTestButton',
@@ -571,6 +670,7 @@ test('renderer bootstrap binds performance creation import export run and config
     onNewPerformanceTest: () => calls.push('new'),
     onImportPerformanceTest: () => calls.push('import-test'),
     onExportPerformanceTest: () => calls.push('export-test'),
+    onEditPerformanceCsvVariables: () => calls.push('csv-performance'),
     onSavePerformanceTest: () => calls.push('save'),
     onDeletePerformanceTest: () => calls.push('delete'),
     onRunPerformanceTest: () => calls.push('run'),
@@ -600,6 +700,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'emptyCreatePerformanceTestButton',
     'importPerformanceTestButton',
     'exportPerformanceTestMenuButton',
+    'performanceCsvVariablesButton',
     'savePerformanceTestButton',
     'deletePerformanceTestButton',
     'runPerformanceTestButton',
@@ -622,6 +723,7 @@ test('renderer bootstrap binds performance creation import export run and config
   ]) {
     elements.get(id).dispatch('click');
   }
+  elements.get('performanceUseCsvVariablesInput').dispatch('change');
   for (const control of [...performanceEnvironmentControls, ...performanceMutationControls]) {
     control.dispatch('change');
   }
@@ -639,11 +741,12 @@ test('renderer bootstrap binds performance creation import export run and config
   elements.get('performanceGraphqlOperationNameInput').dispatch('input');
   elements.get('performanceBinaryBodySourceInput').dispatch('input');
 
-  assert.deepEqual(calls.slice(0, 21), [
+  assert.deepEqual(calls.slice(0, 22), [
     'new',
     'new',
     'import-test',
     'export-test',
+    'csv-performance',
     'save',
     'delete',
     'run',
@@ -662,7 +765,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'calibrate',
     'close-calibration'
   ]);
-  assert.equal(calls.filter((call) => call === 'config').length, 10);
+  assert.equal(calls.filter((call) => call === 'config').length, 11);
   assert.ok(calls.includes('add-form-data'));
   assert.ok(calls.includes('add-urlencoded'));
   assert.equal(calls.filter((call) => call === 'request').length, 7);
@@ -1114,15 +1217,30 @@ test('renderer exposes first-class runner UI and sends runner payloads through r
   assert.match(indexHtml, /id="runnerMainPanel"/);
   assert.match(indexHtml, /id="runnerImportModal"/);
   assert.match(indexHtml, /id="addRunnerRequestButton"/);
+  assert.match(indexHtml, /id="runnerCsvVariablesButton"/);
   assert.match(indexHtml, /id="runnerAllowEnvironmentMutation"/);
+  assert.match(indexHtml, /id="runnerUseCsvVariablesInput"/);
+  assert.match(indexHtml, /id="csvVariablesModal"/);
+  assert.match(indexHtml, /id="csvVariablesFileSourceButton"/);
+  assert.match(indexHtml, /id="csvVariablesInlineSourceButton"/);
+  assert.match(indexHtml, /id="csvVariablesValuesToggle"/);
+  assert.match(indexHtml, /id="csvVariablesValuesPanel"/);
+  assert.match(indexHtml, /id="csvVariablesLoopRowsInput"/);
+  assert.match(indexHtml, /id="csvVariablesContinueWithoutRowsInput"/);
+  assert.match(indexHtml, /id="performanceUseCsvVariablesInput"/);
   assert.doesNotMatch(indexHtml, /id="newRunnerButton"/);
   assert.match(indexHtml, /id="emptyCreateRunnerButton"[^>]*>New Runner<\/button>/);
   assert.match(bootstrapSource, /bindClick\(doc, 'newRunnerMenuButton', options\.onNewRunner\)/);
   assert.match(bootstrapSource, /bindClick\(doc, 'emptyCreateRunnerButton', options\.onNewRunner\)/);
+  assert.match(bootstrapSource, /bindClick\(doc, 'runnerCsvVariablesButton', options\.onEditRunnerCsvVariables\)/);
+  assert.match(bootstrapSource, /bindClick\(doc, 'performanceCsvVariablesButton', options\.onEditPerformanceCsvVariables\)/);
+  assert.match(bootstrapSource, /bindChange\(doc, 'runnerUseCsvVariablesInput', options\.onRunnerConfigChange\)/);
+  assert.match(bootstrapSource, /bindChange\(doc, 'performanceUseCsvVariablesInput', options\.onPerformanceConfigChange\)/);
   assert.match(bootstrapSource, /bindClick\(doc, 'confirmRunnerImportButton'/);
   assert.doesNotMatch(bootstrapSource, /newRunnerButton/);
   assert.doesNotMatch(indexHtml, /id="resultsRunnerTabButton"/);
-  assert.match(rendererSource, /window\.postmeter\.runner\.start\(runnerId, cloneJson\(runner\), cloneJson\(runnerEnvironment\)/);
+  assert.match(rendererSource, /const startRunner = window\.__postmeterStartRunner \|\| window\.postmeter\.runner\.start/);
+  assert.match(rendererSource, /startRunner\(runnerId, cloneJson\(runner\), cloneJson\(runnerEnvironment\)/);
   assert.match(rendererSource, /result\?\.environmentMutationAllowed === true/);
   assert.doesNotMatch(rendererSource, /const runnerCollection = \{/);
 });

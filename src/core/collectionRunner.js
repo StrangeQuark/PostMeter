@@ -1,6 +1,9 @@
+const fs = require('node:fs');
+const fsp = require('node:fs/promises');
 const { evaluateAssertions } = require('./assertions');
+const { resolveEnvironmentValue } = require('./environmentResolver');
 const { sendRequest } = require('./httpClient');
-const { runnerModel, walkRequests } = require('./models');
+const { normalizeRunnerRequestIterations, runnerModel, walkRequests } = require('./models');
 const {
   createScriptedRequestState,
   emptyScriptResult,
@@ -12,11 +15,19 @@ const { runPostmanScriptIsolated } = require('./scriptSandbox');
 const {
   applyExtractedVariables,
   cloneEnvironment,
-  cloneVariables
+  cloneVariables,
+  runtimeEnvironment
 } = require('./variableScope');
+const {
+  csvRecordsToIterationRows,
+  csvVariablesEnabled,
+  csvVariablesToIterationRows,
+  normalizeCsvVariableData
+} = require('./csvVariables');
 
 const MAX_PM_EXECUTION_RUN_REQUEST_DEPTH = 5;
 const MAX_PM_EXECUTION_RUN_REQUESTS_PER_COLLECTION = 50;
+const MAX_RUNNER_TOTAL_ITERATIONS = 1000;
 const MAX_RUN_RESULT_RESPONSE_BODY_CHARS = 32768;
 const RUN_RESULT_RESPONSE_BODY_TRUNCATION_NOTICE = '\n\n[Response body truncated for runner results.]';
 
@@ -46,7 +57,7 @@ async function runCollection(collection, environment, options = {}) {
       Math.max(1, Number(options.maxRunRequestExecutions || MAX_PM_EXECUTION_RUN_REQUESTS_PER_COLLECTION))
     )
   };
-  const createRunRequestBroker = (depth = 0) => async (payload) => {
+  const createRunRequestBroker = (depth = 0, inheritedIterationData = options.iterationData || []) => async (payload) => {
     if (options.signal?.aborted) {
       throw new Error('Collection run was cancelled.');
     }
@@ -86,7 +97,7 @@ async function runCollection(collection, environment, options = {}) {
       signal: options.signal,
       scriptOptions: {
         ...(options.scriptOptions || {}),
-        runRequest: createRunRequestBroker(depth + 1),
+        runRequest: createRunRequestBroker(depth + 1, inheritedIterationData),
         grpcInvoker: options.grpcInvoker || options.scriptOptions?.grpcInvoker,
         sandboxPackages: options.sandboxPackages || options.scriptOptions?.sandboxPackages || [],
         clientCertificates: collection?.certificates || [],
@@ -101,7 +112,7 @@ async function runCollection(collection, environment, options = {}) {
       vault: options.vault || options.scriptOptions?.vault,
       vaultPrompt: options.vaultPrompt || options.scriptOptions?.vaultPrompt,
       trustedCapabilities: options.trustedCapabilities || options.scriptOptions?.trustedCapabilities || {},
-      iterationData: options.iterationData || [],
+      iterationData: inheritedIterationData,
       collectionId: collection?.id || '',
       collectionName: collection?.name || '',
       executionLocation: executionLocationForEntry(collection, targetEntry),
@@ -142,6 +153,9 @@ async function runCollection(collection, environment, options = {}) {
       throw new Error('Collection run exceeded the maximum scripted execution steps.');
     }
     const entry = requests[index];
+    const iterationData = Array.isArray(entry.request?.iterationData)
+      ? entry.request.iterationData
+      : (options.iterationData || []);
     const requestForExecution = requestWithRefreshedAuth(entry.request, refreshedAuthByRequestId);
     const startedAt = new Date().toISOString();
     try {
@@ -166,8 +180,8 @@ async function runCollection(collection, environment, options = {}) {
           trustedCapabilities: options.trustedCapabilities || options.scriptOptions?.trustedCapabilities || {},
           vault: options.vault || options.scriptOptions?.vault,
           vaultPrompt: options.vaultPrompt || options.scriptOptions?.vaultPrompt,
-          runRequest: createRunRequestBroker(0),
-          iterationData: options.iterationData || [],
+          runRequest: createRunRequestBroker(0, iterationData),
+          iterationData,
           collectionId: collection?.id || '',
           collectionName: collection?.name || '',
           executionLocation: executionLocationForEntry(collection, entry),
@@ -181,12 +195,21 @@ async function runCollection(collection, environment, options = {}) {
       if (Array.isArray(scriptedRequest.cookies)) {
         runnerCookies = scriptedRequest.cookies;
       }
+      const displayFields = runResultRequestDisplayFields(
+        entry,
+        scriptedRequest.request || requestForExecution,
+        runtimeEnvironment(runnerCollectionVariables, runnerEnvironment, scriptedRequest.localVariables, {
+          globals: runnerGlobals,
+          iterationData
+        })
+      );
       if (preRequestScriptShouldAbortRequest(scriptedRequest.preRequestScriptResult)) {
         const result = scriptFailureResult(
           entry,
           startedAt,
           scriptedRequest.preRequestScriptResult,
-          scriptedRequest.localVariables
+          scriptedRequest.localVariables,
+          displayFields
         );
         results.push(result);
         progress(progressEvent(index + 1, requests.length, result));
@@ -197,7 +220,7 @@ async function runCollection(collection, environment, options = {}) {
         continue;
       }
       if (scriptedRequest.skipped) {
-        const result = skippedResult(entry, startedAt, scriptedRequest);
+        const result = skippedResult(entry, startedAt, scriptedRequest, displayFields);
         results.push(result);
         progress(progressEvent(index + 1, requests.length, result));
         index = nextRequestIndex(index, requests, scriptedRequest.execution);
@@ -218,7 +241,9 @@ async function runCollection(collection, environment, options = {}) {
       const result = {
         requestId: entry.request.id,
         requestName: entry.request.name,
+        ...displayFields,
         folderName: entry.folderName,
+        ...runnerIterationResultFields(entry),
         startedAt,
         statusCode: response.statusCode,
         durationMillis: response.durationMillis,
@@ -241,10 +266,20 @@ async function runCollection(collection, environment, options = {}) {
       }
       index = nextRequestIndex(index, requests, scriptedRequest.execution);
     } catch (error) {
+      const displayFields = runResultRequestDisplayFields(
+        entry,
+        requestForExecution,
+        runtimeEnvironment(runnerCollectionVariables, runnerEnvironment, requestForExecution.variables || [], {
+          globals: runnerGlobals,
+          iterationData
+        })
+      );
       const result = {
         requestId: entry.request.id,
         requestName: entry.request.name,
+        ...displayFields,
         folderName: entry.folderName,
+        ...runnerIterationResultFields(entry),
         startedAt,
         statusCode: 0,
         durationMillis: 0,
@@ -285,13 +320,20 @@ async function runCollection(collection, environment, options = {}) {
 
 async function runRunner(runner, environment, options = {}) {
   const normalizedRunner = runnerModel(runner);
+  const requests = expandRunnerRequests(normalizedRunner.requests, options.maxRunnerExecutions);
+  const iterationRows = await csvVariableIterationRows(normalizedRunner.csvVariables, requests.length);
+  if (iterationRows.length) {
+    requests.forEach((request, index) => {
+      request.iterationData = iterationRows[index] || [];
+    });
+  }
   const runnerCollection = {
     id: normalizedRunner.id,
     name: normalizedRunner.name,
     description: '',
     variables: [],
     certificates: [],
-    requests: normalizedRunner.requests,
+    requests,
     folders: []
   };
   const result = await runCollection(runnerCollection, environment, {
@@ -308,6 +350,160 @@ async function runRunner(runner, environment, options = {}) {
     result.mutatedEnvironment = result.environment;
   }
   return result;
+}
+
+async function csvVariableIterationRows(csvVariables, requiredRows) {
+  const normalizedCsvVariables = normalizeCsvVariableData(csvVariables);
+  if (!csvVariablesEnabled(normalizedCsvVariables)) {
+    return [];
+  }
+  const normalizedRequiredRows = Number.isFinite(Number(requiredRows))
+    ? Math.max(0, Math.floor(Number(requiredRows)))
+    : 0;
+  if (normalizedRequiredRows <= 0) {
+    return [];
+  }
+  if (normalizedCsvVariables.activeSource === 'inline' && String(normalizedCsvVariables.values || '').trim()) {
+    return csvVariablesToIterationRows(normalizedCsvVariables, String(normalizedCsvVariables.values || ''), { requiredRows: normalizedRequiredRows });
+  }
+  if (normalizedCsvVariables.activeSource !== 'file') {
+    return csvVariablesToIterationRows(normalizedCsvVariables, '', { requiredRows: normalizedRequiredRows });
+  }
+  const filePath = String(normalizedCsvVariables.filePath || '').trim();
+  const records = await csvVariableRecordsFromFile(filePath, normalizedRequiredRows);
+  return csvRecordsToIterationRows(normalizedCsvVariables, records, { requiredRows: normalizedRequiredRows });
+}
+
+async function csvVariableRecordsFromFile(filePath, requiredRows) {
+  const stat = await fsp.stat(filePath).catch((error) => {
+    throw new Error(`Unable to read CSV variable file: ${error?.code || error?.message || 'unknown error'}.`);
+  });
+  if (!stat.isFile()) {
+    throw new Error('CSV variable file must be a regular file.');
+  }
+  return readCsvRecordsFromFile(filePath, requiredRows);
+}
+
+async function readCsvRecordsFromFile(filePath, requiredRows) {
+  const records = [];
+  let record = [];
+  let field = '';
+  let inQuotes = false;
+  let hasOpenRecord = false;
+  let pendingQuote = false;
+  let skipNextLf = false;
+  let firstChar = true;
+
+  const pushField = () => {
+    record.push(field);
+    field = '';
+    hasOpenRecord = true;
+  };
+  const finishRecord = () => {
+    pushField();
+    if (!record.every((value) => String(value || '').trim() === '')) {
+      records.push(record);
+      if (records.length >= requiredRows) {
+        return true;
+      }
+    }
+    record = [];
+    hasOpenRecord = false;
+    return false;
+  };
+  const processOutsideQuote = (char) => {
+    if (char === '"') {
+      if (field.length === 0) {
+        inQuotes = true;
+      } else {
+        field += char;
+      }
+      return false;
+    }
+    if (char === ',') {
+      pushField();
+      return false;
+    }
+    if (char === '\n' || char === '\r') {
+      const done = finishRecord();
+      if (char === '\r') {
+        skipNextLf = true;
+      }
+      return done;
+    }
+    field += char;
+    return false;
+  };
+  const processChar = (char) => {
+    if (firstChar) {
+      firstChar = false;
+      if (char === '\uFEFF') {
+        return false;
+      }
+    }
+    if (skipNextLf) {
+      skipNextLf = false;
+      if (char === '\n') {
+        return false;
+      }
+    }
+    if (pendingQuote) {
+      if (char === '"') {
+        field += '"';
+        pendingQuote = false;
+        return false;
+      }
+      pendingQuote = false;
+      inQuotes = false;
+    }
+    if (inQuotes) {
+      if (char === '"') {
+        pendingQuote = true;
+      } else {
+        field += char;
+      }
+      return false;
+    }
+    return processOutsideQuote(char);
+  };
+
+  for await (const chunk of fs.createReadStream(filePath, { encoding: 'utf8' })) {
+    for (const char of chunk) {
+      if (processChar(char)) {
+        return records;
+      }
+    }
+  }
+  if (pendingQuote) {
+    pendingQuote = false;
+    inQuotes = false;
+  }
+  if (inQuotes) {
+    throw new Error('CSV input has an unterminated quoted field.');
+  }
+  if (hasOpenRecord || field.length > 0) {
+    finishRecord();
+  }
+  return records;
+}
+
+function expandRunnerRequests(requests, maxTotal = MAX_RUNNER_TOTAL_ITERATIONS) {
+  const limit = Math.max(1, Math.min(MAX_RUNNER_TOTAL_ITERATIONS, Number(maxTotal) || MAX_RUNNER_TOTAL_ITERATIONS));
+  const expanded = [];
+  for (const request of Array.isArray(requests) ? requests : []) {
+    const iterations = normalizeRunnerRequestIterations(request?.iterations);
+    if (expanded.length + iterations > limit) {
+      throw new Error(`Runner cannot execute more than ${limit} request iterations in one run.`);
+    }
+    for (let index = 0; index < iterations; index += 1) {
+      expanded.push({
+        ...request,
+        runnerIteration: index + 1,
+        runnerIterations: iterations
+      });
+    }
+  }
+  return expanded;
 }
 
 function requestWithRefreshedAuth(request, refreshedAuthByRequestId) {
@@ -588,11 +784,13 @@ function postmanCompatibleRequestAliases(request) {
   return [...new Set(aliases.map((item) => String(item || '').trim()).filter(Boolean))];
 }
 
-function skippedResult(entry, startedAt, scriptedRequest) {
+function skippedResult(entry, startedAt, scriptedRequest, displayFields = {}) {
   return {
     requestId: entry.request.id,
     requestName: entry.request.name,
+    ...displayFields,
     folderName: entry.folderName,
+    ...runnerIterationResultFields(entry),
     startedAt,
     statusCode: 0,
     durationMillis: 0,
@@ -608,12 +806,14 @@ function skippedResult(entry, startedAt, scriptedRequest) {
   };
 }
 
-function scriptFailureResult(entry, startedAt, preRequestScriptResult, localVariables = []) {
+function scriptFailureResult(entry, startedAt, preRequestScriptResult, localVariables = [], displayFields = {}) {
   const error = scriptResultFailureMessage(preRequestScriptResult, 'Pre-request script failed.');
   return {
     requestId: entry.request.id,
     requestName: entry.request.name,
+    ...displayFields,
     folderName: entry.folderName,
+    ...runnerIterationResultFields(entry),
     startedAt,
     statusCode: 0,
     durationMillis: 0,
@@ -627,6 +827,25 @@ function scriptFailureResult(entry, startedAt, preRequestScriptResult, localVari
     localVariables,
     error
   };
+}
+
+function runResultRequestDisplayFields(entry, request, environment) {
+  const source = request || entry?.request || {};
+  const fallback = entry?.request || {};
+  return {
+    requestDisplayName: resolveEnvironmentValue(source.name || fallback.name || '', environment) || fallback.name || '',
+    requestMethod: String(source.method || fallback.method || '').trim(),
+    requestUrl: resolveEnvironmentValue(source.url || fallback.url || '', environment)
+  };
+}
+
+function runnerIterationResultFields(entry) {
+  const runnerIteration = Number(entry?.request?.runnerIteration);
+  const runnerIterations = Number(entry?.request?.runnerIterations);
+  if (!Number.isInteger(runnerIteration) || !Number.isInteger(runnerIterations) || runnerIteration < 1 || runnerIterations < 1) {
+    return {};
+  }
+  return { runnerIteration, runnerIterations };
 }
 
 function boundedRunResultResponseBody(body) {
@@ -643,7 +862,7 @@ function progressEvent(completedRequests, totalRequests, result) {
     completedRequests,
     totalRequests,
     requestId: result.requestId,
-    requestName: result.requestName,
+    requestName: result.requestDisplayName || result.requestName,
     passed: result.passed
   };
 }
@@ -758,7 +977,10 @@ function csvValue(value) {
 }
 
 module.exports = {
+  MAX_RUNNER_TOTAL_ITERATIONS,
   collectionRunResultToCsv,
+  csvVariableIterationRows,
+  expandRunnerRequests,
   runCollection,
   runRunner
 };

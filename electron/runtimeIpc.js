@@ -553,7 +553,9 @@ function countCollectionRequests(collection = {}) {
 }
 
 function countRunnerRequests(runner = {}) {
-  return Array.isArray(runner.requests) ? runner.requests.length : 0;
+  return Array.isArray(runner.requests)
+    ? runner.requests.reduce((total, request) => total + Math.max(1, Math.floor(Number(request?.iterations) || 1)), 0)
+    : 0;
 }
 
 function failureCodeFromError(error, fallback) {

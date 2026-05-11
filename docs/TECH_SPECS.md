@@ -23,7 +23,7 @@ The migration deliberately does not bridge Electron to the Java services. Core b
 - Import/export Postman Collection v2.1 JSON while preserving folder/request hierarchy order, variables and raw variable metadata, auth inheritance, HTTP/GraphQL/gRPC/local mock scripts, editable examples, cookies and richer cookie metadata including newer priority/partitioning hints where present, supported GraphQL/gRPC protocol metadata, local mock/vault/visualizer/package binding metadata, file/binary body references, request/example/certificate IDs, and supported collection certificate metadata.
 - Import/export OpenAPI and curl collection formats for compatibility workflows, including OpenAPI JSON/YAML input, local `$ref` resolution for common objects, server variables, path/query/header/cookie parameters, Swagger 2.0 body/form-data import, binary body hints, OpenAPI security scheme import/export, OpenAPI response examples and disabled generated response assertions, common curl auth/data/redirect/compression/cookie/file flags, request-name comments and unsupported-feature warnings in generated curl scripts, and preserved curl proxy/retry/client-TLS import metadata.
 - Define request assertions for status, headers, JSON paths, XML XPath, HTML CSS selectors, response time, response size, body text, JSON/XML/HTML variable extraction, and regex variable extraction.
-- Run workspace-owned desktop runners locally, including stop-on-failure, extracted-variable/script-mutation propagation, runtime variable display, progress events, and JSON/CSV result export.
+- Run workspace-owned desktop runners locally, including per-row iterations, stop-on-failure, extracted-variable/script-mutation propagation, runtime variable display, progress events, and JSON/CSV result export.
 - Manage runners from the dedicated left-sidebar Runners section, with runner-local request copies, runner request editing, runner request import from collections, row reorder/delete controls, runner import/export, duplication, and a split execution-results view.
 - Manage open request, environment, workspace, and runner tabs with dirty prompts, force-close actions, optional save-on-force-close behavior, hover/active close buttons, shrink-before-scroll tab sizing, and a 128-tab cap.
 - Edit request, environment, and workspace names inline; request/environment title edits save on Enter and remain dirty on blur, while workspace title edits save automatically.
@@ -420,7 +420,7 @@ Runner fields:
 - `stopOnFailure`
 - `requests`
 
-Runner request fields use the same shape as request fields, but they are runner-owned copies rather than references to collection requests.
+Runner request fields use the same shape as request fields plus `iterations`, but they are runner-owned copies rather than references to collection requests.
 
 Workspace cookie fields:
 
@@ -822,8 +822,8 @@ Runner behavior:
 - Creates runners from `New` > `Runner` in the top toolbar or from the `New Runner` action in the empty Runners pane.
 - Adds runner requests through either local `New Request` creation or an `Import` modal. The modal shows collections first, expands a collection only when selected, and supports Shift+click/Ctrl+click multi-select across collections and requests before adding.
 - Opens runner-owned request copies in normal request editor tabs through each row's `Edit` action. Saving that tab persists only the runner request copy, and discard/close reverts the runner row back to the saved runner request state.
-- Lets users delete and reorder runner request rows. Drag/drop and row-order controls update runner-local order without touching source collections.
-- Walks runner requests in runner row order. Legacy collection execution still walks collection requests in collection/folder order.
+- Lets users set per-row iterations, delete, and reorder runner request rows. Drag/drop and row-order controls update runner-local order without touching source collections.
+- Walks runner requests in runner row order and expands each row's `iterations` value into sequential executions before advancing to the next row. Legacy collection execution still walks collection requests in collection/folder order.
 - Runs pre-request scripts before sending each request; failed pre-request scripts fail the request without sending it.
 - Executes requests sequentially through the same HTTP path as normal sends.
 - Uses the runner's selected environment, which can differ from the top-right request environment selector.
@@ -834,7 +834,8 @@ Runner behavior:
 - Applies extracted variables and script variable mutations to later requests.
 - Propagates cookie jar updates between sequential requests when request cookie jar storage is enabled.
 - Emits progress events to the renderer and renders execution results as a split view: request/status rows on the left and selected request details on the right.
-- Supports cancellation and stop-on-failure.
+- Supports cancellation and stop-on-failure, including stopping inside a repeated runner row when one iteration fails.
+- Caps a single runner run at 1,000 expanded request iterations so result payloads stay within IPC and persistence bounds.
 - Supports bounded `pm.execution.setNextRequest`, `pm.execution.skipRequest`, and `pm.execution.runRequest` against runner-local request IDs.
 - Reports per-request status, timing, pass/fail state, assertion results, script results, extracted variable names, and request errors.
 - Reports final runtime collection/environment variables plus per-request local variables in the desktop runner output and CSV export.

@@ -157,8 +157,10 @@ function assertRequestPayload(value, field = 'request') {
 function assertRunnerPayload(value, field = 'runner') {
   assertSchemaFields('runner', value, field);
   assertNoUnexpectedFields('runner', value, field, [
+    'csvVariables',
     'requests'
   ]);
+  assertCsvVariablesPayload(value.csvVariables || {}, `${field}.csvVariables`);
   assertRunnerRequestArray(value.requests, `${field}.requests`);
 }
 
@@ -174,6 +176,7 @@ function assertRunnerRequestPayload(value, field = 'request') {
     'grpc',
     'headers',
     'id',
+    'iterations',
     'method',
     'methodPath',
     'messages',
@@ -192,6 +195,10 @@ function assertRunnerRequestPayload(value, field = 'request') {
     'variables',
     'websocket'
   ]);
+  assertOptionalInteger(value.iterations, `${field}.iterations`, 1);
+  if (value.iterations != null && Number(value.iterations) > LIMITS.runnerIterations) {
+    fail(`${field}.iterations cannot exceed ${LIMITS.runnerIterations}.`);
+  }
   if (value.source != null) {
     assertRunnerRequestSourcePayload(value.source, `${field}.source`);
   }
@@ -200,6 +207,11 @@ function assertRunnerRequestPayload(value, field = 'request') {
 function assertRequestAutoHeaders(value, field = 'autoHeaders') {
   assertSchemaFields('requestAutoHeaders', value || {}, field);
   assertNoUnexpectedFields('requestAutoHeaders', value || {}, field);
+}
+
+function assertCsvVariablesPayload(value, field = 'csvVariables') {
+  assertSchemaFields('csvVariables', value || {}, field);
+  assertNoUnexpectedFields('csvVariables', value || {}, field);
 }
 
 function assertRunnerRequestSourcePayload(value, field = 'source') {
@@ -216,12 +228,14 @@ function assertPerformanceTestPayload(value, field = 'performanceTest') {
   assertSchemaFields('performanceTest', value, field);
   assertNoUnexpectedFields('performanceTest', value, field, [
     'config',
+    'csvVariables',
     'request',
     'resultsMetadata',
     'safetyLimits',
     'source',
     'typeSettings'
   ]);
+  assertCsvVariablesPayload(value.csvVariables || {}, `${field}.csvVariables`);
   assertRequestPayload(value.request, `${field}.request`);
   assertPerformanceTestSourcePayload(value.source || { sourceType: 'manual' }, `${field}.source`);
   assertPerformanceConfigPayload(value.config || {}, `${field}.config`);
@@ -1024,7 +1038,10 @@ function assertPerformanceSamplePayload(value, field) {
     'passed',
     'preRequestScriptResult',
     'requestId',
+    'requestDisplayName',
+    'requestMethod',
     'requestName',
+    'requestUrl',
     'responseBody',
     'responseBytes',
     'startedAt',
@@ -1036,6 +1053,9 @@ function assertPerformanceSamplePayload(value, field) {
   optionalString(value.startedAt, `${field}.startedAt`, LIMITS.name);
   optionalString(value.requestId, `${field}.requestId`, LIMITS.name);
   optionalString(value.requestName, `${field}.requestName`, LIMITS.name);
+  optionalString(value.requestDisplayName, `${field}.requestDisplayName`, LIMITS.name);
+  optionalString(value.requestMethod, `${field}.requestMethod`, LIMITS.short);
+  optionalString(value.requestUrl, `${field}.requestUrl`, LIMITS.url);
   optionalNumber(value.statusCode, `${field}.statusCode`);
   optionalNumber(value.durationMillis, `${field}.durationMillis`);
   optionalString(value.responseBody, `${field}.responseBody`, LIMITS.value);

@@ -8681,7 +8681,8 @@ function safeStructuredClone(value) {
 }
 
 function replaceVariables(value, ...scopes) {
-  return String(value ?? '').replace(/\{\{\s*([$A-Za-z0-9_.-]+)\s*}}/g, (match, key) => {
+  return String(value ?? '').replace(/\{\{\s*([$A-Za-z0-9_.-]+)\s*}}|\$\{\s*([$A-Za-z0-9_.-]+)\s*}/g, (match, postmanKey, dollarKey) => {
+    const key = postmanKey || dollarKey;
     for (const scope of scopes.slice().reverse()) {
       const replacement = getVariable(scope, key);
       if (replacement != null) {

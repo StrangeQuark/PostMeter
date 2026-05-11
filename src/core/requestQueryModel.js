@@ -43,7 +43,7 @@
 
   function encodeQueryComponentForDisplay(value = '') {
     const text = String(value ?? '');
-    const variablePattern = /{{[^{}]*}}/g;
+    const variablePattern = /{{[^{}]*}}|\$\{[^{}\r\n]*}/g;
     let output = '';
     let lastIndex = 0;
     for (const match of text.matchAll(variablePattern)) {

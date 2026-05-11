@@ -15,6 +15,10 @@ test('resolves enabled environment variables and leaves unknown tokens unchanged
     resolveEnvironmentValue('{{ baseUrl }}/users/{{missing}}/{{name.with-dash_1}}/{{disabled}}', environment),
     'https://api.example.test/users/{{missing}}/resolved/{{disabled}}'
   );
+  assert.equal(
+    resolveEnvironmentValue('${baseUrl}/users/${missing}/${name.with-dash_1}/${disabled}', environment),
+    'https://api.example.test/users/${missing}/resolved/${disabled}'
+  );
 });
 
 test('returns input text when no environment is active', () => {

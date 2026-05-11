@@ -531,6 +531,98 @@ test('renderer workflows persist runner-owned request edits with a targeted requ
   assert.equal(state.openRequestTabs[0].snapshot, JSON.stringify(runnerRequest));
 });
 
+test('renderer workflows send runner-owned requests without saving runner edits', async () => {
+  const state = createRendererState();
+  const savedSnapshot = {
+    id: 'runner-request-1',
+    name: 'Runner Request',
+    method: 'GET',
+    url: 'https://saved-runner.example.test',
+    scripts: { preRequest: '', tests: '' }
+  };
+  const runnerRequest = { ...savedSnapshot, url: 'https://runner.example.test' };
+  state.workspace = {
+    collections: [],
+    environments: [],
+    history: [],
+    runners: [
+      {
+        id: 'runner-1',
+        name: 'Runner',
+        environmentId: 'none',
+        requests: [runnerRequest]
+      }
+    ],
+    settings: {}
+  };
+  state.activeMainPanel = 'request';
+  state.activeRunnerConfigId = 'runner-1';
+  state.activeRunnerRequestRunnerId = 'runner-1';
+  state.activeRequestId = runnerRequest.id;
+  state.openRequestTabs = [
+    {
+      key: 'runner-request:runner-1:runner-request-1',
+      runnerId: 'runner-1',
+      requestId: runnerRequest.id,
+      runnerRequest: true,
+      dirty: true,
+      snapshot: JSON.stringify(savedSnapshot)
+    }
+  ];
+  let fullSaveCalls = 0;
+  let targetedSaveCalls = 0;
+  let sendCalls = 0;
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => runnerRequest,
+    collectRequestFromEditor: () => {
+      runnerRequest.url = 'https://edited-runner.example.test';
+    },
+    displayResponse: () => {},
+    doc: createDocument(),
+    renderHistory: () => {},
+    runFormatting: createRunFormatting(),
+    windowObject: {
+      postmeter: {
+        request: {
+          validate: async () => [],
+          send: async (request) => {
+            sendCalls += 1;
+            assert.equal(request.url, 'https://edited-runner.example.test');
+            return {
+              statusCode: 200,
+              finalUrl: request.url,
+              durationMillis: 12
+            };
+          }
+        },
+        workspace: {
+          save: async (workspace) => {
+            fullSaveCalls += 1;
+            return workspace;
+          },
+          saveRequest: async (payload) => {
+            targetedSaveCalls += 1;
+            return { request: payload.request };
+          }
+        }
+      }
+    }
+  });
+
+  await workflows.sendActiveRequest();
+
+  assert.equal(sendCalls, 1);
+  assert.equal(fullSaveCalls, 0);
+  assert.equal(targetedSaveCalls, 0);
+  assert.equal(runnerRequest.url, 'https://edited-runner.example.test');
+  assert.equal(state.openRequestTabs[0].dirty, true);
+  assert.equal(state.openRequestTabs[0].snapshot, JSON.stringify(savedSnapshot));
+});
+
 test('renderer workflows only persist the active environment tab on a normal save', async () => {
   const state = createRendererState();
   const environmentOneSaved = { id: 'environment-1', name: 'Saved Env One', variables: [{ enabled: true, key: 'baseUrl', value: 'https://saved-one.example.test' }] };

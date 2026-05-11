@@ -12,6 +12,7 @@ const {
   assertPerformanceCalibrationResultPayload,
   assertPerformanceProgressPayload,
   assertPerformanceResultPayload,
+  assertPerformanceTestPayload,
   assertResponsePayload,
   assertRequestPayload,
   assertRuntimeId,
@@ -108,11 +109,19 @@ test('accepts structurally valid IPC payloads', () => {
       environmentId: 'none',
       allowEnvironmentMutation: false,
       stopOnFailure: true,
+      csvVariables: {
+        enabled: true,
+        schema: 'requestUrl',
+        values: 'https://example.test/runner',
+        loopRows: true,
+        continueWithoutRows: true
+      },
       requests: [{
         id: 'runner-request-1',
         name: 'Runner Request',
         method: 'GET',
         url: 'https://example.test/runner',
+        iterations: 3,
         queryParams: [],
         headers: [],
         bodyType: 'NONE',
@@ -141,6 +150,9 @@ test('accepts structurally valid IPC payloads', () => {
     results: [{
       requestId: 'r1',
       requestName: 'Request',
+      requestDisplayName: 'Resolved Request',
+      requestMethod: 'GET',
+      requestUrl: 'https://example.test/resolved',
       passed: true,
       responseBody: '{"ok":true}',
       responseBytes: 11,
@@ -175,6 +187,9 @@ test('accepts structurally valid IPC payloads', () => {
       iteration: 1,
       requestId: 'request-1',
       requestName: 'Request',
+      requestDisplayName: 'Resolved Request',
+      requestMethod: 'GET',
+      requestUrl: 'https://example.test/resolved',
       startedAt: '2026-05-06T00:00:00.000Z',
       statusCode: 200,
       durationMillis: 10,
@@ -420,6 +435,13 @@ test('accepts structurally valid IPC payloads', () => {
     environmentId: 'none',
     allowEnvironmentMutation: true,
     stopOnFailure: false,
+    csvVariables: {
+      enabled: true,
+      schema: 'requestName,requestUrl',
+      values: 'Request,https://example.test',
+      loopRows: true,
+      continueWithoutRows: true
+    },
     requests: [{
       id: 'runner-request-1',
       name: 'Request',
@@ -429,6 +451,29 @@ test('accepts structurally valid IPC payloads', () => {
       headers: [],
       bodyType: 'NONE'
     }]
+  }));
+  assert.doesNotThrow(() => assertPerformanceTestPayload({
+    id: 'perf-1',
+    name: 'CSV Performance',
+    type: 'latency',
+    csvVariables: {
+      enabled: true,
+      schema: 'requestUrl',
+      values: 'https://example.test/perf',
+      loopRows: true,
+      continueWithoutRows: true
+    },
+    request: {
+      id: 'request-1',
+      name: 'Request',
+      method: 'GET',
+      url: '${requestUrl}',
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE'
+    },
+    config: { iterations: 1, concurrency: 1 },
+    safetyLimits: { maxTotalRequests: 1, maxConcurrency: 1, maxDurationSeconds: 10 }
   }));
   assert.doesNotThrow(() => assertRunnerProgressPayload({
     completedRequests: 1,
@@ -494,7 +539,14 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertExternalUrlPayload(42), /external.url must be a string/);
   assert.throws(() => assertRunnerConfigPayload({ stopOnFailure: 'yes' }), /config.stopOnFailure must be a boolean/);
   assert.throws(() => assertRunnerPayload({ id: 'runner', environmentId: 'none', allowEnvironmentMutation: 'yes', requests: [] }), /runner.allowEnvironmentMutation must be a boolean/);
+  assert.throws(() => assertRunnerPayload({ id: 'runner', csvVariables: { schema: 42 }, requests: [] }), /runner.csvVariables.schema must be a string/);
+  assert.throws(() => assertRunnerPayload({ id: 'runner', csvVariables: { enabled: 'yes' }, requests: [] }), /runner.csvVariables.enabled must be a boolean/);
+  assert.throws(() => assertRunnerPayload({ id: 'runner', csvVariables: { activeSource: 'database' }, requests: [] }), /runner.csvVariables.activeSource must be one of/);
+  assert.throws(() => assertRunnerPayload({ id: 'runner', csvVariables: { loopRows: 'yes' }, requests: [] }), /runner.csvVariables.loopRows must be a boolean/);
+  assert.throws(() => assertRunnerPayload({ id: 'runner', csvVariables: { continueWithoutRows: 'yes' }, requests: [] }), /runner.csvVariables.continueWithoutRows must be a boolean/);
   assert.throws(() => assertRunnerPayload({ id: 'runner', requests: [{ method: 'TRACE', url: 'https:\/\/example.test' }] }), /runner.requests\[0\].method is not supported/);
+  assert.throws(() => assertRunnerPayload({ id: 'runner', requests: [{ method: 'GET', url: 'https:\/\/example.test', iterations: 0 }] }), /runner.requests\[0\].iterations must be an integer greater than or equal to 1/);
+  assert.throws(() => assertRunnerPayload({ id: 'runner', requests: [{ method: 'GET', url: 'https:\/\/example.test', iterations: 1001 }] }), /runner.requests\[0\].iterations cannot exceed 1000/);
   assert.throws(() => assertRunnerPayload({ id: 'runner', requests: [{ method: 'GET', url: 'https:\/\/example.test', source: { folderPath: [42] } }] }), /runner.requests\[0\].source.folderPath\[0\] must be a string/);
   assert.throws(() => assertRunnerProgressPayload({ passed: 'yes' }), /progress.passed must be a boolean/);
   assert.throws(() => assertRunnerProgressPayload({ completedRequests: 1, clientSecret: 'raw-secret' }), /progress.clientSecret is not allowed in public IPC payloads/);
@@ -510,6 +562,7 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertCollectionRunResultPayload({ results: [{ accessToken: 'raw-token' }] }), /result.results\[0\].accessToken is not allowed in public IPC payloads/);
   assert.throws(() => assertCollectionRunResultPayload({ accessToken: 'raw-token' }), /result.accessToken is not allowed in public IPC payloads/);
   assert.throws(() => assertPerformanceResultPayload({ samples: [{ responseBody: 42 }] }), /result.samples\[0\].responseBody must be a string/);
+  assert.throws(() => assertPerformanceTestPayload({ type: 'latency', csvVariables: { values: 42 }, request: { method: 'GET', url: 'https:\/\/example.test' } }), /performanceTest.csvVariables.values must be a string/);
   assert.throws(() => assertPerformanceResultPayload({ samples: [{ assertionResults: [{ passed: 'yes' }] }] }), /result.samples\[0\].assertionResults\[0\].passed must be a boolean/);
   assert.throws(() => assertPerformanceCalibrationResultPayload({ endpoint: 42 }), /result.endpoint must be a string/);
   assert.throws(() => assertPerformanceCalibrationResultPayload({ stages: [{ requestsPerSecond: 'fast' }] }), /result.stages\[0\].requestsPerSecond must be a finite number/);

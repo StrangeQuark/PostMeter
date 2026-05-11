@@ -46,6 +46,13 @@ test('defines shared payload schema metadata for IPC and contributors', () => {
   assert.equal(payloadSchemas.fields.modalSettings.closeOnBackdropClick.type, 'boolean');
   assert.equal(payloadSchemas.fields.runnerConfig.stopOnFailure.type, 'boolean');
   assert.equal(payloadSchemas.fields.runner.allowEnvironmentMutation.type, 'boolean');
+  assert.equal(payloadSchemas.fields.csvVariables.schema.limit, 'value');
+  assert.equal(payloadSchemas.fields.csvVariables.values.limit, 'body');
+  assert.equal(payloadSchemas.fields.csvVariables.filePath.limit, 'url');
+  assert.equal(payloadSchemas.fields.csvVariables.activeSource.enum, 'csvVariableSources');
+  assert.equal(payloadSchemas.fields.csvVariables.enabled.type, 'boolean');
+  assert.equal(payloadSchemas.fields.csvVariables.loopRows.type, 'boolean');
+  assert.equal(payloadSchemas.fields.csvVariables.continueWithoutRows.type, 'boolean');
   assert.equal(payloadSchemas.fields.runnerRequestSource.requestId.limit, 'name');
   assert.equal(payloadSchemas.fields.runnerProgress.requestId.limit, 'name');
   assert.equal(payloadSchemas.fields.oauthProgress.type.enum, 'oauthProgressTypes');
@@ -55,9 +62,13 @@ test('defines shared payload schema metadata for IPC and contributors', () => {
   assert.equal(payloadSchemas.fields.fileOperationResult.cancelled.type, 'boolean');
   assert.equal(payloadSchemas.fields.response.finalUrl.limit, 'url');
   assert.equal(payloadSchemas.fields.collectionRunRequestResult.error.limit, 'value');
+  assert.equal(payloadSchemas.fields.collectionRunRequestResult.requestUrl.limit, 'url');
+  assert.equal(payloadSchemas.fields.collectionRunRequestResult.requestDisplayName.limit, 'name');
   assert.equal(payloadSchemas.entities.request.nested[0], 'auth');
   assert.ok(payloadSchemas.entities.workspace.arrays.includes('runners'));
   assert.deepEqual(payloadSchemas.entities.runner.arrays, ['requests']);
+  assert.deepEqual(payloadSchemas.entities.runner.nested, ['csvVariables']);
+  assert.ok(payloadSchemas.entities.performanceTest.nested.includes('csvVariables'));
   assert.equal(payloadSchemas.auth.oauth2GrantTypes[0], 'authorizationCode');
   assert.deepEqual(payloadSchemas.enums.diagnosticLogLevels, ['debug', 'info', 'warn', 'error']);
   assert.deepEqual(payloadSchemas.enums.sameSiteValues, ['', 'Lax', 'Strict', 'None']);

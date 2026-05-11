@@ -1,7 +1,7 @@
 (function attachVariableHighlighter(global) {
   const HIGHLIGHT_STATE = new WeakMap();
   const VARIABLE_NAME_PATTERN = /^[$A-Za-z0-9_.-]+$/;
-  const VARIABLE_TOKEN_PATTERN = /\{\{\s*([^{}\r\n]+?)\s*\}\}/g;
+  const VARIABLE_TOKEN_PATTERN = /\{\{\s*([^{}\r\n]+?)\s*\}\}|\$\{\s*([^{}\r\n]+?)\s*\}/g;
   const TEXT_INPUT_TYPES = new Set(['', 'email', 'search', 'tel', 'text', 'url']);
   let configuredGetVariables = () => [];
 
@@ -17,13 +17,19 @@
     VARIABLE_TOKEN_PATTERN.lastIndex = 0;
     for (let match = VARIABLE_TOKEN_PATTERN.exec(text); match; match = VARIABLE_TOKEN_PATTERN.exec(text)) {
       const token = match[0];
-      const name = String(match[1] || '').trim();
+      const name = String(match[1] || match[2] || '').trim();
+      const source = match[2] == null ? 'environment' : 'csv';
       if (!name) {
         continue;
       }
       html += renderText(text.slice(lastIndex, match.index));
-      const status = variableTokenStatus(name, options);
-      html += `<span class="${escapeAttribute(`${tokenClassName} ${statusClassPrefix}${status}`)}" data-variable-name="${escapeAttribute(name)}" data-variable-status="${status}">${escapeHtml(token)}</span>`;
+      const status = variableTokenStatus(name, { ...options, source });
+      const classes = [
+        tokenClassName,
+        `${statusClassPrefix}${status}`,
+        `${statusClassPrefix}${source}`
+      ].filter(Boolean).join(' ');
+      html += `<span class="${escapeAttribute(classes)}" data-variable-name="${escapeAttribute(name)}" data-variable-status="${status}" data-variable-source="${source}">${escapeHtml(token)}</span>`;
       lastIndex = match.index + token.length;
     }
     html += renderText(text.slice(lastIndex));
@@ -145,19 +151,23 @@
       ? options.isKnownVariable
       : null;
     if (isKnownVariable) {
-      return isKnownVariable(name, options.target) ? 'valid' : 'invalid';
+      return isKnownVariable(name, options.target, options.source) ? 'valid' : 'invalid';
     }
-    return variableNameSet(options, options.target).has(name) ? 'valid' : 'invalid';
+    return variableNameSet(options, options.target, options.source).has(name) ? 'valid' : 'invalid';
   }
 
-  function variableNameSet(options = {}, target = null) {
+  function variableNameSet(options = {}, target = null, source = '') {
     if (options.variableNames instanceof Set) {
       return options.variableNames;
     }
     if (Array.isArray(options.variableNames)) {
       return new Set(options.variableNames.map((name) => String(name || '').trim()).filter(Boolean));
     }
-    return new Set(normalizeVariables(options.variables || configuredVariablesForTarget(target)).map((variable) => variable.key));
+    return new Set(
+      normalizeVariables(options.variables || configuredVariablesForTarget(target))
+        .filter((variable) => variableMatchesSource(variable, source))
+        .map((variable) => variable.key)
+    );
   }
 
   function configuredVariablesForTarget(target) {
@@ -176,10 +186,35 @@
       }
       const key = String(variable.key || '').trim();
       if (key) {
-        normalized.push({ key });
+        normalized.push({
+          key,
+          source: normalizeVariableSource(variable.source || variable.kind || variable.scope || variable.type)
+        });
       }
     }
     return normalized;
+  }
+
+  function normalizeVariableSource(source) {
+    const normalized = String(source || '').trim().toLowerCase();
+    if (normalized === 'csv' || normalized === 'iteration' || normalized === 'iterationdata') {
+      return 'csv';
+    }
+    if (normalized === 'environment' || normalized === 'env') {
+      return 'environment';
+    }
+    return normalized;
+  }
+
+  function variableMatchesSource(variable, source) {
+    const expected = normalizeVariableSource(source);
+    if (!expected) {
+      return true;
+    }
+    if (!variable.source) {
+      return true;
+    }
+    return variable.source === expected;
   }
 
   function syncScroll(textbox) {
