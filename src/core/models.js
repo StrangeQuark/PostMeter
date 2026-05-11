@@ -333,6 +333,9 @@ function normalizeSettings(settings) {
       }
     },
     diagnostics: normalizeDiagnosticsSettings(settings?.diagnostics),
+    editor: {
+      lineNumbers: settings?.editor?.lineNumbers !== false
+    },
     tabs: {
       saveOnForceClose: settings?.tabs?.saveOnForceClose === true
     },

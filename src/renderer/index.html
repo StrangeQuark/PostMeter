@@ -1248,6 +1248,14 @@
                 <button id="themeDarkButton" type="button" data-theme-option="dark" aria-pressed="false">Dark</button>
               </div>
             </div>
+            <div class="settings-card">
+              <div class="settings-card-title">Editors</div>
+              <label class="checkbox-line">
+                <input id="showEditorLineNumbersInput" type="checkbox">
+                <span>Show editor line numbers</span>
+              </label>
+              <p class="settings-help">Show line numbers in request, response, script, import, export, and CSV editors.</p>
+            </div>
           </section>
 
           <section id="settingsTabsSection" class="settings-section" role="tabpanel" aria-labelledby="settingsTabsButton" hidden>
@@ -1485,7 +1493,7 @@
       <p id="requestImportMessage">Paste a curl command or PostMeter request JSON, or choose a request file.</p>
       <label class="field">
         <span>Request text</span>
-        <textarea id="requestImportTextInput" rows="7" spellcheck="false" data-variable-highlight="false" placeholder="curl https://api.example.test/widgets"></textarea>
+        <textarea id="requestImportTextInput" rows="7" spellcheck="false" data-variable-highlight="false" data-code-editor data-code-language="text" placeholder="curl https://api.example.test/widgets"></textarea>
       </label>
       <div id="requestImportDropZone" class="file-picker-dropzone" role="button" tabindex="0">
         <strong>Drop request file here</strong>
@@ -1509,7 +1517,7 @@
       <p id="requestExportMessage">Copy the generated request text or export it to a file.</p>
       <label class="field">
         <span id="requestExportTextLabel">Request export</span>
-        <textarea id="requestExportTextOutput" class="request-export-text" rows="14" spellcheck="false" data-variable-highlight="false" readonly></textarea>
+        <textarea id="requestExportTextOutput" class="request-export-text" rows="14" spellcheck="false" data-variable-highlight="false" data-code-editor data-code-language="text" readonly></textarea>
       </label>
       <p id="requestExportCopyStatus" class="request-export-status" role="status" hidden></p>
       <div class="modal-actions">
@@ -1525,7 +1533,7 @@
       <label class="field">
         <span id="textInputModalLabel">Value</span>
         <input id="textInputModalSingleLineInput" type="text" spellcheck="false" data-variable-highlight="false" hidden>
-        <textarea id="textInputModalInput" rows="4" spellcheck="false" data-variable-highlight="false"></textarea>
+        <textarea id="textInputModalInput" rows="4" spellcheck="false" data-variable-highlight="false" data-code-editor data-code-language="text"></textarea>
       </label>
       <div class="modal-actions">
         <button id="cancelTextInputModalButton" type="button">Cancel</button>
@@ -1578,7 +1586,7 @@
             <div id="csvVariablesValuesPanel" class="csv-variables-disclosure-panel" hidden>
               <label class="field">
                 <span>CSV rows</span>
-                <textarea id="csvVariablesValuesInput" rows="10" spellcheck="false" data-variable-highlight="false" placeholder="request1,https://google.com,&quot;{&quot;&quot;ok&quot;&quot;:true}&quot;&#10;request2,https://youtube.com,&quot;{&quot;&quot;ok&quot;&quot;:true}&quot;"></textarea>
+                <textarea id="csvVariablesValuesInput" rows="10" spellcheck="false" data-variable-highlight="false" data-code-editor data-code-language="text" placeholder="request1,https://google.com,&quot;{&quot;&quot;ok&quot;&quot;:true}&quot;&#10;request2,https://youtube.com,&quot;{&quot;&quot;ok&quot;&quot;:true}&quot;"></textarea>
               </label>
               <p class="csv-variables-inline-note">Inline rows can be saved alongside a file reference. Use the source buttons above to choose which one runs.</p>
             </div>

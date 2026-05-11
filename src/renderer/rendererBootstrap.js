@@ -251,6 +251,7 @@
     bindChange(doc, 'saveOnForceCloseInput', options.onSaveOnForceCloseChange);
     bindChange(doc, 'closeModalsOnBackdropClickInput', options.onCloseModalsOnBackdropClickChange);
     bindChange(doc, 'includePrereleasesInput', options.onIncludePrereleasesChange);
+    bindChange(doc, 'showEditorLineNumbersInput', options.onShowEditorLineNumbersChange);
     for (const id of [
       'diagnosticLoggingEnabledInput',
       'diagnosticLogLevelSelect',

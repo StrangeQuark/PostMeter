@@ -261,10 +261,64 @@
     await nextPaint();
     assertUiSmoke(!$('modalBackdrop').hidden, 'Opening Settings should show the modal backdrop.');
     assertUiSmoke(!$('settingsModal').hidden, 'Opening Settings should show the Settings modal.');
+    await assertEditorLineNumbersSettingSmoke();
     $('closeSettingsModalFooterButton').click();
     await modalPromise;
     await nextPaint();
     assertUiSmoke($('modalBackdrop').hidden, 'Closing Settings should hide the modal backdrop.');
+  }
+
+  async function assertEditorLineNumbersSettingSmoke() {
+    const checkbox = $('showEditorLineNumbersInput');
+    const editor = $('bodyInput')?.closest?.('.code-editor');
+    assertUiSmoke(checkbox, 'Editor line number setting checkbox should exist.');
+    assertUiSmoke(editor, 'Request body editor should exist before toggling editor line numbers.');
+    assertUiSmoke(checkbox.checked === true, 'Editor line number setting should default to checked.');
+    assertUiSmoke(editor.classList.contains('has-line-numbers'), 'Code editors should start with line numbers enabled.');
+
+    clickElementAtCenter(checkbox, 'Editor line number setting checkbox');
+    await waitForUiSmoke(
+      () => checkbox.checked === false && workspace.settings.editor.lineNumbers === false,
+      'Editor line number setting checkbox did not turn off.',
+      1000,
+      global
+    );
+    await waitForUiSmoke(
+      () => lastStatusMessage.includes('Editor line numbers disabled.'),
+      'Editor line number setting save did not complete after disabling.',
+      1000,
+      global
+    );
+    assertUiSmoke(checkbox.checked === false, 'Editor line number setting checkbox should stay unchecked after settings are saved.');
+    assertUiSmoke(!editor.classList.contains('has-line-numbers'), 'Code editors should remove line numbers when the setting is unchecked.');
+
+    clickElementAtCenter(checkbox, 'Editor line number setting checkbox');
+    await waitForUiSmoke(
+      () => checkbox.checked === true && workspace.settings.editor.lineNumbers === true,
+      'Editor line number setting checkbox did not turn back on.',
+      1000,
+      global
+    );
+    await waitForUiSmoke(
+      () => lastStatusMessage.includes('Editor line numbers enabled.'),
+      'Editor line number setting save did not complete after enabling.',
+      1000,
+      global
+    );
+    assertUiSmoke(checkbox.checked === true, 'Editor line number setting checkbox should stay checked after settings are saved.');
+    assertUiSmoke(editor.classList.contains('has-line-numbers'), 'Code editors should restore line numbers when the setting is checked again.');
+  }
+
+  function clickElementAtCenter(element, label) {
+    const rect = element.getBoundingClientRect();
+    const x = rect.left + (rect.width / 2);
+    const y = rect.top + (rect.height / 2);
+    const hitTarget = document.elementFromPoint(x, y);
+    assertUiSmoke(
+      hitTarget === element || element.contains(hitTarget),
+      `${label} should be the top hit target.`
+    );
+    hitTarget.click();
   }
 
   async function assertForcedColorsStylesheetSmoke() {

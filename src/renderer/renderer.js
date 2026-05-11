@@ -501,6 +501,10 @@ function bindUi() {
     onSaveOnForceCloseChange: () => setSaveOnForceClose($('saveOnForceCloseInput')?.checked === true, { save: true }),
     onCloseModalsOnBackdropClickChange: () => setCloseModalsOnBackdropClick($('closeModalsOnBackdropClickInput')?.checked === true, { save: true }),
     onIncludePrereleasesChange: () => setIncludePrereleases($('includePrereleasesInput')?.checked === true, { save: true }),
+    onShowEditorLineNumbersChange: (event) => {
+      const input = event?.currentTarget || $('showEditorLineNumbersInput');
+      return setEditorLineNumbers(input?.checked === true, { save: true });
+    },
     onSendRequest: sendActiveRequest,
     onAddParam: () => addPair('queryParams'),
     onAddHeader: () => addPair('headers'),
@@ -2506,6 +2510,7 @@ function configureRequestExportModal(request = {}, format = 'postmeter', content
   const textOutput = $('requestExportTextOutput');
   if (textOutput) {
     textOutput.value = activeRequestExportContent;
+    refreshCodeEditorIfTextarea(textOutput);
   }
   const copyStatus = $('requestExportCopyStatus');
   if (copyStatus) {
@@ -2519,6 +2524,7 @@ function resetRequestExportModal() {
   const textOutput = $('requestExportTextOutput');
   if (textOutput) {
     textOutput.value = '';
+    refreshCodeEditorIfTextarea(textOutput);
   }
   const copyStatus = $('requestExportCopyStatus');
   if (copyStatus) {
@@ -2568,6 +2574,7 @@ function resetRequestImportModal() {
   const textInput = $('requestImportTextInput');
   if (textInput) {
     textInput.value = '';
+    refreshCodeEditorIfTextarea(textInput);
   }
   const fileInput = $('requestImportFileInput');
   if (fileInput) {
@@ -3419,6 +3426,7 @@ function renderToolbarState() {
 function renderSettings() {
   ensureSettings();
   applyThemePreference(workspace.settings.appearance.theme);
+  applyEditorPreferences();
   renderSettingsControls();
 }
 
@@ -3486,6 +3494,9 @@ function renderSettingsControls() {
   if ($('includePrereleasesInput')) {
     $('includePrereleasesInput').checked = workspace.settings.updates.includePrereleases === true;
   }
+  if ($('showEditorLineNumbersInput')) {
+    $('showEditorLineNumbersInput').checked = workspace.settings.editor.lineNumbers !== false;
+  }
   if ($('trustedScriptSendRequestInput')) {
     $('trustedScriptSendRequestInput').checked = workspace.settings?.sandbox?.trustedCapabilities?.sendRequest === true;
   }
@@ -3511,6 +3522,8 @@ function ensureSettings() {
   workspace.settings.modals ||= { closeOnBackdropClick: false };
   workspace.settings.modals.closeOnBackdropClick = workspace.settings.modals.closeOnBackdropClick === true;
   workspace.settings.diagnostics = normalizeDiagnosticsSettings(workspace.settings.diagnostics);
+  workspace.settings.editor ||= { lineNumbers: true };
+  workspace.settings.editor.lineNumbers = workspace.settings.editor.lineNumbers !== false;
   workspace.settings.sandbox ||= { trustedCapabilities: { sendRequest: true, cookies: true, vault: false } };
   workspace.settings.sandbox.fileBindings = normalizeSandboxFileBindings(workspace.settings.sandbox.fileBindings);
   workspace.settings.sandbox.packageCache = normalizeSandboxPackageCache(workspace.settings.sandbox.packageCache);
@@ -3919,6 +3932,45 @@ async function setIncludePrereleases(includePrereleases, options = {}) {
   return true;
 }
 
+async function setEditorLineNumbers(enabled, options = {}) {
+  ensureSettings();
+  const nextEnabled = enabled !== false;
+  const currentEnabled = workspace.settings.editor.lineNumbers !== false;
+  if (nextEnabled === currentEnabled) {
+    applyEditorPreferences();
+    renderSettingsControls();
+    return true;
+  }
+  const previousSettings = cloneWorkspaceSettings();
+  workspace.settings.editor.lineNumbers = nextEnabled;
+  applyEditorPreferences();
+  renderSettingsControls();
+  if (options.save === true) {
+    const saved = await saveWorkspaceSettingsWithRollback(
+      previousSettings,
+      options.showStatus === false
+        ? ''
+        : `Editor line numbers ${workspace.settings.editor.lineNumbers ? 'enabled' : 'disabled'}.`,
+      'Editor setting save failed',
+      'Editor Settings Save Failed',
+      () => {
+        applyEditorPreferences();
+      }
+    );
+    applyEditorPreferences();
+    return saved;
+  }
+  if (options.showStatus !== false) {
+    setStatus(`Editor line numbers ${workspace.settings.editor.lineNumbers ? 'enabled' : 'disabled'}.`);
+  }
+  return true;
+}
+
+function applyEditorPreferences() {
+  ensureSettings();
+  CodeEditor.setLineNumbersEnabled?.(workspace.settings.editor.lineNumbers !== false, document);
+}
+
 async function setSaveOnForceClose(saveOnForceClose, options = {}) {
   ensureSettings();
   const previousSettings = cloneWorkspaceSettings();
@@ -4154,7 +4206,11 @@ function configureCsvVariablesModal(options = {}) {
   $('csvVariablesModalTitle').textContent = String(options.title || 'CSV variables');
   $('csvVariablesModalMessage').textContent = String(options.message || 'Define a comma-separated schema and provide one CSV row for each request execution.');
   $('csvVariablesSchemaInput').value = value.schema;
-  $('csvVariablesValuesInput').value = value.values;
+  const valuesInput = $('csvVariablesValuesInput');
+  if (valuesInput) {
+    valuesInput.value = value.values;
+    refreshCodeEditorIfTextarea(valuesInput);
+  }
   const loopRowsInput = $('csvVariablesLoopRowsInput');
   if (loopRowsInput) {
     loopRowsInput.checked = value.loopRows === true;
@@ -4342,7 +4398,11 @@ async function loadPendingCsvVariablesFile() {
   }
   try {
     const text = await file.text();
-    $('csvVariablesValuesInput').value = text;
+    const valuesInput = $('csvVariablesValuesInput');
+    if (valuesInput) {
+      valuesInput.value = text;
+      refreshCodeEditorIfTextarea(valuesInput);
+    }
     const modal = $('csvVariablesModal');
     modal.dataset.filePath = '';
     modal.dataset.sourceName = file.name || '';
@@ -7231,6 +7291,13 @@ function setValue(id, value) {
   const input = $(id);
   if (input) {
     input.value = String(value || '');
+    refreshCodeEditorIfTextarea(input);
+  }
+}
+
+function refreshCodeEditorIfTextarea(input) {
+  if (String(input?.tagName || '').toUpperCase() === 'TEXTAREA') {
+    CodeEditor.refreshEditor?.(input);
   }
 }
 

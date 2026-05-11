@@ -1277,6 +1277,7 @@ test('workspace IPC saves only workspace settings through targeted settings save
       logging: { enabled: true, level: 'warn' },
       requestResponseLogging: { urls: true }
     },
+    editor: { lineNumbers: false },
     updates: { includePrereleases: true }
   });
 
@@ -1284,6 +1285,7 @@ test('workspace IPC saves only workspace settings through targeted settings save
   assert.equal(savedSettings.diagnostics.logging.level, 'warn');
   assert.equal(savedSettings.diagnostics.requestResponseLogging.urls, true);
   assert.equal(savedSettings.diagnostics.requestResponseLogging.bodies, false);
+  assert.equal(savedSettings.editor.lineNumbers, false);
   assert.equal(savedSettings.updates.includePrereleases, true);
   assert.equal(appliedWorkspace.collections[0].id, 'collection-1');
   assert.equal(appliedWorkspace.environments[0].id, 'environment-1');
@@ -1330,6 +1332,7 @@ test('workspace IPC partial settings saves preserve diagnostics privacy choices'
         fileBindings: [{ source: 'upload.bin', localPath: '/tmp/upload.bin' }],
         packageCache: []
       },
+      editor: { lineNumbers: false },
       updates: { includePrereleases: true }
     }
   };
@@ -1376,6 +1379,7 @@ test('workspace IPC partial settings saves preserve diagnostics privacy choices'
   assert.equal(currentWorkspace.settings.sandbox.trustedCapabilities.cookies, false);
   assert.equal(currentWorkspace.settings.sandbox.trustedCapabilities.vault, true);
   assert.equal(currentWorkspace.settings.sandbox.fileBindings.length, 1);
+  assert.equal(currentWorkspace.settings.editor.lineNumbers, false);
   assert.equal(currentWorkspace.settings.updates.includePrereleases, true);
   assert.deepEqual(result, { settings: currentWorkspace.settings });
 

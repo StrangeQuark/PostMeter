@@ -2,8 +2,11 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const VariableHighlighter = require('../../src/renderer/variableHighlighter');
 const {
+  codeEditorLineNumbersEnabled,
   editTextForKey,
   highlightCode,
+  lineNumbersForText,
+  setLineNumbersEnabled,
   normalizeLanguage
 } = require('../../src/renderer/codeEditor');
 
@@ -116,4 +119,13 @@ test('code editor highlights JavaScript, JSON, and header text', () => {
   assert.match(highlightCode('https://{{baseUrl}}/users/{{missing}}', 'text'), /tok-variable-invalid/);
   assert.match(highlightCode('pm.sendRequest("{{baseUrl}}")', 'javascript'), /data-variable-name="baseUrl" data-variable-status="valid"/);
   VariableHighlighter.setVariableSource(() => []);
+});
+
+test('code editor generates logical line numbers and toggles the global setting', () => {
+  assert.equal(lineNumbersForText(''), '1');
+  assert.equal(lineNumbersForText('one\ntwo\n'), '1\n2\n3');
+  assert.equal(setLineNumbersEnabled(false, null), false);
+  assert.equal(codeEditorLineNumbersEnabled(), false);
+  assert.equal(setLineNumbersEnabled(true, null), true);
+  assert.equal(codeEditorLineNumbersEnabled(), true);
 });

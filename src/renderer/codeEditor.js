@@ -2,7 +2,9 @@
   const VariableHighlighter = global.PostMeterVariableHighlighter
     || (typeof require === 'function' ? require('./variableHighlighter') : null);
   const EDITOR_STATE = new WeakMap();
+  const EDITOR_TEXTAREAS = new Set();
   const PAIRING_LANGUAGES = new Set(['javascript', 'json']);
+  let lineNumbersEnabled = true;
   const JS_KEYWORDS = new Set([
     'async',
     'await',
@@ -95,11 +97,16 @@
     highlight.setAttribute('aria-hidden', 'true');
     const code = doc.createElement('code');
     highlight.append(code);
+    const lineNumbers = doc.createElement('pre');
+    lineNumbers.className = 'code-editor-line-numbers';
+    lineNumbers.setAttribute('aria-hidden', 'true');
+    const lineNumberCode = doc.createElement('code');
+    lineNumbers.append(lineNumberCode);
 
     const parent = textarea.parentNode;
     if (parent) {
       parent.insertBefore(wrapper, textarea);
-      wrapper.append(highlight, textarea);
+      wrapper.append(highlight, lineNumbers, textarea);
     }
     textarea.classList.add('code-editor-input');
     textarea.autocapitalize = 'off';
@@ -108,6 +115,8 @@
     const state = {
       code,
       highlight,
+      lineNumberCode,
+      lineNumbers,
       onInput: () => refreshEditor(textarea),
       onKeydown: (event) => handleTextareaKeydown(event, textarea),
       onScroll: () => syncScroll(textarea),
@@ -118,6 +127,7 @@
     textarea.addEventListener('keydown', state.onKeydown);
     textarea.addEventListener('scroll', state.onScroll);
     EDITOR_STATE.set(textarea, state);
+    EDITOR_TEXTAREAS.add(textarea);
     refreshEditor(textarea);
     return state;
   }
@@ -135,9 +145,14 @@
     if (!state) {
       return false;
     }
+    const showLineNumbers = shouldShowLineNumbers(textarea);
+    state.wrapper.classList.toggle('has-line-numbers', showLineNumbers);
     state.wrapper.hidden = textarea.hidden === true;
     state.code.innerHTML = highlightCode(textarea.value || '', textarea.dataset.codeLanguage || 'text', { target: textarea });
+    state.lineNumberCode.textContent = lineNumbersForText(textarea.value || '');
+    state.wrapper.style.setProperty('--code-editor-line-number-width', `${lineNumberWidth(textarea.value || '')}ch`);
     copyTextareaMetrics(textarea, state.highlight);
+    copyLineNumberMetrics(textarea, state.lineNumbers);
     syncScroll(textarea);
     return true;
   }
@@ -151,6 +166,21 @@
       enhanceTextarea(textarea);
     }
     return refreshEditor(textarea);
+  }
+
+  function setLineNumbersEnabled(enabled = true, root = global.document) {
+    lineNumbersEnabled = enabled !== false;
+    const refreshed = refreshCodeEditors(root);
+    if (!refreshed) {
+      for (const textarea of EDITOR_TEXTAREAS) {
+        refreshEditor(textarea);
+      }
+    }
+    return lineNumbersEnabled;
+  }
+
+  function codeEditorLineNumbersEnabled() {
+    return lineNumbersEnabled;
   }
 
   function codeTextareasFromRoot(root) {
@@ -174,6 +204,10 @@
 
   function isTextarea(element) {
     return String(element?.tagName || '').toUpperCase() === 'TEXTAREA';
+  }
+
+  function shouldShowLineNumbers(textarea) {
+    return lineNumbersEnabled && textarea?.dataset?.lineNumbers !== 'false';
   }
 
   function handleTextareaKeydown(event, textarea) {
@@ -640,12 +674,52 @@
     }
   }
 
+  function copyLineNumberMetrics(textarea, lineNumbers) {
+    const view = textarea.ownerDocument?.defaultView || global;
+    if (typeof view.getComputedStyle !== 'function') {
+      return;
+    }
+    const style = view.getComputedStyle(textarea);
+    for (const property of [
+      'borderBottomWidth',
+      'borderLeftWidth',
+      'borderRightWidth',
+      'borderTopWidth',
+      'boxSizing',
+      'fontFamily',
+      'fontSize',
+      'fontStyle',
+      'fontVariant',
+      'fontWeight',
+      'lineHeight',
+      'paddingBottom',
+      'paddingTop',
+      'tabSize'
+    ]) {
+      lineNumbers.style[property] = style[property];
+    }
+  }
+
   function syncScroll(textarea) {
     const state = EDITOR_STATE.get(textarea);
     if (!state) {
       return;
     }
     state.code.style.transform = `translate(${-textarea.scrollLeft}px, ${-textarea.scrollTop}px)`;
+    state.lineNumberCode.style.transform = `translateY(${-textarea.scrollTop}px)`;
+  }
+
+  function lineNumbersForText(text) {
+    const count = lineCountForText(text);
+    return Array.from({ length: count }, (_value, index) => String(index + 1)).join('\n');
+  }
+
+  function lineCountForText(text) {
+    return Math.max(1, String(text || '').split('\n').length);
+  }
+
+  function lineNumberWidth(text) {
+    return Math.max(2, String(lineCountForText(text)).length);
   }
 
   function dispatchInput(textarea) {
@@ -657,13 +731,16 @@
   }
 
   const exported = {
+    codeEditorLineNumbersEnabled,
     editTextForKey,
     enhanceCodeTextareas,
     enhanceTextarea,
     highlightCode,
+    lineNumbersForText,
     normalizeLanguage,
     refreshCodeEditors,
     refreshEditor,
+    setLineNumbersEnabled,
     setLanguage
   };
 
