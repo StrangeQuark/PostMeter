@@ -22,14 +22,26 @@ test('variable autocomplete finds the active token around the cursor', () => {
   assert.deepEqual(findVariableToken('Bearer {{tok', 12), {
     start: 7,
     end: 12,
+    open: '{{',
+    close: '}}',
     query: 'tok'
   });
   assert.deepEqual(findVariableToken('x={{tenant}}', 8), {
     start: 2,
     end: 12,
+    open: '{{',
+    close: '}}',
     query: 'tena'
   });
+  assert.deepEqual(findVariableToken('url=${requestU', 14), {
+    start: 4,
+    end: 14,
+    open: '${',
+    close: '}',
+    query: 'requestU'
+  });
   assert.equal(findVariableToken('{{token}}', 9), null);
+  assert.equal(findVariableToken('${token}', 8), null);
   assert.equal(findVariableToken('no token here', 5), null);
 });
 
@@ -52,6 +64,12 @@ test('variable autocomplete replaces the open token with the selected environmen
     value: 'Authorization: Bearer {{token}}',
     selectionStart: 31,
     selectionEnd: 31
+  });
+  const dollarToken = findVariableToken('URL ${req', 9);
+  assert.deepEqual(replaceVariableToken('URL ${req', dollarToken, 'requestUrl'), {
+    value: 'URL ${requestUrl}',
+    selectionStart: 17,
+    selectionEnd: 17
   });
 });
 

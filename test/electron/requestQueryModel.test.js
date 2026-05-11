@@ -18,10 +18,11 @@ test('URL text is rebuilt from enabled params before hash fragments', () => {
   const url = urlWithQueryParams('https://api.example.test/search?old=1#section', [
     { enabled: true, key: 'q', value: 'alpha beta' },
     { enabled: false, key: 'disabled', value: 'nope' },
-    { enabled: true, key: 'token', value: '{{apiToken}}' }
+    { enabled: true, key: 'token', value: '{{apiToken}}' },
+    { enabled: true, key: 'csvUrl', value: '${requestUrl}' }
   ]);
 
-  assert.equal(url, 'https://api.example.test/search?q=alpha%20beta&token={{apiToken}}#section');
+  assert.equal(url, 'https://api.example.test/search?q=alpha%20beta&token={{apiToken}}&csvUrl=${requestUrl}#section');
 });
 
 test('URL query matching compares only enabled structured params', () => {

@@ -360,6 +360,10 @@ textarea.code-editor-input:placeholder-shown {
   color: var(--blue);
 }
 
+.code-editor-token.tok-variable-csv.tok-variable-valid {
+  color: var(--green);
+}
+
 .code-editor-token.tok-variable-invalid {
   color: var(--primary);
 }
@@ -421,6 +425,10 @@ textarea.code-editor-input:placeholder-shown {
 
 .variable-highlight-valid {
   color: var(--blue);
+}
+
+.variable-highlight-csv.variable-highlight-valid {
+  color: var(--green);
 }
 
 .variable-highlight-invalid {

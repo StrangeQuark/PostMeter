@@ -8,6 +8,7 @@ const {
 } = require('./payloadSchemas');
 const { normalizePersistedAuth } = require('./authModel');
 const { normalizeCookies: normalizeCookieCollection } = require('./cookieModel');
+const { normalizeCsvVariableData } = require('./csvVariables');
 const { normalizeSandboxFileBindings } = require('./fileAttachmentBindings');
 const { normalizeDiagnosticsSettings } = require('./diagnosticsSettings');
 
@@ -117,6 +118,7 @@ function runnerModel({
   environmentId,
   allowEnvironmentMutation,
   stopOnFailure,
+  csvVariables,
   requests
 } = {}) {
   return {
@@ -125,6 +127,7 @@ function runnerModel({
     environmentId: normalizeRunnerEnvironmentId(environmentId),
     allowEnvironmentMutation: allowEnvironmentMutation === true,
     stopOnFailure: stopOnFailure === true,
+    csvVariables: normalizeCsvVariableData(csvVariables),
     requests: Array.isArray(requests) ? requests.map(runnerRequestModel) : []
   };
 }
@@ -150,6 +153,7 @@ function performanceTestModel({
   config,
   safetyLimits,
   typeSettings,
+  csvVariables,
   resultsMetadata
 } = {}) {
   const normalizedType = normalizePerformanceType(type);
@@ -171,6 +175,7 @@ function performanceTestModel({
     config: activeSettings.config,
     safetyLimits: activeSettings.safetyLimits,
     typeSettings: normalizedTypeSettings,
+    csvVariables: normalizeCsvVariableData(csvVariables),
     resultsMetadata: normalizePerformanceResultsMetadata(resultsMetadata)
   };
 }

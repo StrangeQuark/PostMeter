@@ -563,6 +563,7 @@
               <div id="runnerMainTitle" class="runner-main-title editable-title" tabindex="0" aria-label="Runner name">Select a runner</div>
             </div>
             <div class="runner-actions">
+              <button id="runnerCsvVariablesButton" type="button">CSV Variables</button>
               <button id="saveRunnerButton" type="button">Save Runner</button>
               <button id="deleteRunnerButton" type="button">Delete Runner</button>
               <button id="runCollectionButton" type="button" class="primary">Run</button>
@@ -583,6 +584,10 @@
             <label class="checkbox-line">
               <input id="runnerAllowEnvironmentMutation" type="checkbox">
               <span>Allow runner to modify environment</span>
+            </label>
+            <label class="checkbox-line">
+              <input id="runnerUseCsvVariablesInput" type="checkbox">
+              <span>Use CSV variables</span>
             </label>
           </div>
           <div class="runner-request-actions">
@@ -642,11 +647,18 @@
               <div id="performanceMainTitle" class="performance-main-title editable-title" tabindex="0" aria-label="Performance test name">Select a performance test</div>
             </div>
             <div class="performance-actions">
+              <button id="performanceCsvVariablesButton" type="button">CSV Variables</button>
               <button id="savePerformanceTestButton" type="button">Save Performance Test</button>
               <button id="deletePerformanceTestButton" type="button">Delete Performance Test</button>
               <button id="importPerformanceRequestButton" type="button">Import Request</button>
               <button id="exportPerformanceTestButton" type="button">Export Test</button>
             </div>
+          </div>
+          <div class="performance-settings">
+            <label class="checkbox-line">
+              <input id="performanceUseCsvVariablesInput" type="checkbox">
+              <span>Use CSV variables</span>
+            </label>
           </div>
           <div class="performance-request-editor">
             <div class="request-line performance-request-line">
@@ -1521,6 +1533,79 @@
       </div>
     </section>
 
+    <section id="csvVariablesModal" class="modal csv-variables-modal" role="dialog" aria-modal="true" aria-labelledby="csvVariablesModalTitle" aria-describedby="csvVariablesModalMessage" hidden>
+      <div class="modal-title-row">
+        <h2 id="csvVariablesModalTitle">CSV variables</h2>
+        <button id="closeCsvVariablesModalButton" type="button" class="modal-close-button" aria-label="Close CSV variables">X</button>
+      </div>
+      <p id="csvVariablesModalMessage">Define a comma-separated schema and provide one CSV data row for each request execution.</p>
+      <div class="csv-variables-body">
+        <label class="field">
+          <span>Variable schema</span>
+          <input id="csvVariablesSchemaInput" type="text" spellcheck="false" autocomplete="off" data-variable-highlight="false" placeholder="requestName,requestUrl,requestBody">
+        </label>
+        <section class="csv-variables-section" aria-labelledby="csvVariablesSourceTitle">
+          <div class="csv-variables-section-heading">
+            <h3 id="csvVariablesSourceTitle">CSV data source</h3>
+            <div class="csv-variables-source-pills" role="group" aria-label="Active CSV data source">
+              <button id="csvVariablesFileSourceButton" class="csv-variables-source-pill" type="button">File reference</button>
+              <button id="csvVariablesInlineSourceButton" class="csv-variables-source-pill" type="button">Inline rows</button>
+            </div>
+          </div>
+          <div class="csv-variables-source-row">
+            <div class="csv-variables-source-copy">
+              <strong>Imported file</strong>
+              <div id="csvVariablesFileStatus" class="csv-variables-file-status" role="status">No CSV file selected.</div>
+            </div>
+            <div class="csv-variables-source-actions">
+              <button id="csvVariablesImportButton" type="button">Import CSV</button>
+              <button id="clearCsvVariablesFileButton" type="button">Clear File</button>
+            </div>
+          </div>
+          <div id="csvVariablesImportChoice" class="csv-variables-import-choice" hidden>
+            <p id="csvVariablesImportChoiceMessage">Load this CSV file into the editor?</p>
+            <div class="modal-actions csv-variables-choice-actions">
+              <button id="csvVariablesKeepFileButton" type="button">Keep File Reference</button>
+              <button id="csvVariablesLoadFileButton" type="button" class="primary">Load Into Editor</button>
+            </div>
+          </div>
+          <div class="csv-variables-disclosure">
+            <button id="csvVariablesValuesToggle" class="csv-variables-disclosure-header" type="button" aria-expanded="false" aria-controls="csvVariablesValuesPanel">
+              <span>Inline CSV values</span>
+              <small id="csvVariablesValuesSummary">No inline rows</small>
+              <span class="csv-variables-disclosure-icon" aria-hidden="true"></span>
+            </button>
+            <div id="csvVariablesValuesPanel" class="csv-variables-disclosure-panel" hidden>
+              <label class="field">
+                <span>CSV rows</span>
+                <textarea id="csvVariablesValuesInput" rows="10" spellcheck="false" data-variable-highlight="false" placeholder="request1,https://google.com,&quot;{&quot;&quot;ok&quot;&quot;:true}&quot;&#10;request2,https://youtube.com,&quot;{&quot;&quot;ok&quot;&quot;:true}&quot;"></textarea>
+              </label>
+              <p class="csv-variables-inline-note">Inline rows can be saved alongside a file reference. Use the source buttons above to choose which one runs.</p>
+            </div>
+          </div>
+        </section>
+        <section class="csv-variables-section csv-variables-row-section" aria-labelledby="csvVariablesRowHandlingTitle">
+          <div class="csv-variables-section-heading">
+            <h3 id="csvVariablesRowHandlingTitle">When rows run out</h3>
+          </div>
+          <label class="checkbox-line csv-variables-loop-option">
+            <input id="csvVariablesLoopRowsInput" type="checkbox">
+            <span>Loop CSV rows when the run needs more rows than the data provides</span>
+          </label>
+          <label class="checkbox-line csv-variables-loop-option">
+            <input id="csvVariablesContinueWithoutRowsInput" type="checkbox">
+            <span>Continue remaining requests without CSV data if rows run out</span>
+          </label>
+        </section>
+      </div>
+      <p id="csvVariablesError" class="file-picker-error" role="alert" hidden></p>
+      <input id="csvVariablesFileInput" type="file" accept=".csv,text/csv,text/plain" hidden>
+      <div class="modal-actions">
+        <button id="cancelCsvVariablesModalButton" type="button">Cancel</button>
+        <button id="saveCsvVariablesModalButton" type="button" class="primary">Save Variables</button>
+      </div>
+    </section>
+
     <section id="confirmActionModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="confirmActionModalTitle" aria-describedby="confirmActionModalMessage" hidden>
       <h2 id="confirmActionModalTitle">Confirm action</h2>
       <p id="confirmActionModalMessage">Continue?</p>
@@ -1615,6 +1700,7 @@
   <script src="contextMenu.js"></script>
   <script src="layoutControls.js"></script>
   <script src="../core/payloadSchemas.js"></script>
+  <script src="../core/csvVariables.js"></script>
   <script src="../core/requestQueryModel.js"></script>
   <script src="../core/authModel.js"></script>
   <script src="../core/cookieModel.js"></script>

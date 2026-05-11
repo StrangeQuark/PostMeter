@@ -891,6 +891,7 @@ h2 {
 }
 
 .runner-settings,
+.performance-settings,
 .runner-request-actions {
   display: flex;
   flex-wrap: wrap;
@@ -928,6 +929,7 @@ h2 {
 }
 
 .runner-editor-section .runner-settings,
+.performance-request-section .performance-settings,
 .runner-editor-section .runner-request-actions {
   margin-top: 0;
 }

@@ -5,17 +5,34 @@ const {
 } = require('../../src/renderer/variableHighlighter');
 
 test('variable highlighter marks Postman-style variable tokens', () => {
-  const html = highlightVariableTokens('https://{{baseUrl}}/users?token={{ token }}', {
+  const html = highlightVariableTokens('https://{{baseUrl}}/users?token={{ token }}&url=${ requestUrl }', {
     variables: [
-      { enabled: true, key: 'baseUrl', value: 'https://api.example.test' },
-      { enabled: true, key: 'token', value: 'secret' }
+      { enabled: true, key: 'baseUrl', source: 'environment', value: 'https://api.example.test' },
+      { enabled: true, key: 'token', source: 'environment', value: 'secret' },
+      { enabled: true, key: 'requestUrl', source: 'csv', value: 'https://csv.example.test' }
     ]
   });
-  assert.match(html, /class="variable-highlight-token variable-highlight-valid"/);
+  assert.match(html, /class="variable-highlight-token variable-highlight-valid variable-highlight-environment"/);
+  assert.match(html, /class="variable-highlight-token variable-highlight-valid variable-highlight-csv"/);
   assert.match(html, /data-variable-name="baseUrl"/);
   assert.match(html, /data-variable-name="token"/);
+  assert.match(html, /data-variable-name="requestUrl"/);
   assert.match(html, /data-variable-status="valid"/);
+  assert.match(html, /data-variable-source="csv"/);
   assert.match(html, /variable-highlight-valid/);
+});
+
+test('variable highlighter validates dollar tokens only against CSV variables', () => {
+  const html = highlightVariableTokens('{{requestUrl}} ${baseUrl} ${requestUrl}', {
+    variables: [
+      { enabled: true, key: 'baseUrl', source: 'environment', value: 'https://api.example.test' },
+      { enabled: true, key: 'requestUrl', source: 'csv', value: 'https://csv.example.test' }
+    ]
+  });
+
+  assert.match(html, /data-variable-name="requestUrl" data-variable-status="invalid" data-variable-source="environment"/);
+  assert.match(html, /data-variable-name="baseUrl" data-variable-status="invalid" data-variable-source="csv"/);
+  assert.match(html, /data-variable-name="requestUrl" data-variable-status="valid" data-variable-source="csv"/);
 });
 
 test('variable highlighter marks unknown or disabled variable tokens as invalid', () => {
@@ -43,4 +60,5 @@ test('variable highlighter escapes regular text and variable names', () => {
 test('variable highlighter ignores empty and multiline tokens', () => {
   assert.doesNotMatch(highlightVariableTokens('{{ }}'), /variable-highlight-token/);
   assert.doesNotMatch(highlightVariableTokens('{{one\ntwo}}'), /variable-highlight-token/);
+  assert.doesNotMatch(highlightVariableTokens('${one\ntwo}'), /variable-highlight-token/);
 });

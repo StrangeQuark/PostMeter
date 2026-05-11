@@ -157,8 +157,10 @@ function assertRequestPayload(value, field = 'request') {
 function assertRunnerPayload(value, field = 'runner') {
   assertSchemaFields('runner', value, field);
   assertNoUnexpectedFields('runner', value, field, [
+    'csvVariables',
     'requests'
   ]);
+  assertCsvVariablesPayload(value.csvVariables || {}, `${field}.csvVariables`);
   assertRunnerRequestArray(value.requests, `${field}.requests`);
 }
 
@@ -207,6 +209,11 @@ function assertRequestAutoHeaders(value, field = 'autoHeaders') {
   assertNoUnexpectedFields('requestAutoHeaders', value || {}, field);
 }
 
+function assertCsvVariablesPayload(value, field = 'csvVariables') {
+  assertSchemaFields('csvVariables', value || {}, field);
+  assertNoUnexpectedFields('csvVariables', value || {}, field);
+}
+
 function assertRunnerRequestSourcePayload(value, field = 'source') {
   assertSchemaFields('runnerRequestSource', value, field);
   assertNoUnexpectedFields('runnerRequestSource', value, field, [
@@ -221,12 +228,14 @@ function assertPerformanceTestPayload(value, field = 'performanceTest') {
   assertSchemaFields('performanceTest', value, field);
   assertNoUnexpectedFields('performanceTest', value, field, [
     'config',
+    'csvVariables',
     'request',
     'resultsMetadata',
     'safetyLimits',
     'source',
     'typeSettings'
   ]);
+  assertCsvVariablesPayload(value.csvVariables || {}, `${field}.csvVariables`);
   assertRequestPayload(value.request, `${field}.request`);
   assertPerformanceTestSourcePayload(value.source || { sourceType: 'manual' }, `${field}.source`);
   assertPerformanceConfigPayload(value.config || {}, `${field}.config`);
@@ -1029,7 +1038,10 @@ function assertPerformanceSamplePayload(value, field) {
     'passed',
     'preRequestScriptResult',
     'requestId',
+    'requestDisplayName',
+    'requestMethod',
     'requestName',
+    'requestUrl',
     'responseBody',
     'responseBytes',
     'startedAt',
@@ -1041,6 +1053,9 @@ function assertPerformanceSamplePayload(value, field) {
   optionalString(value.startedAt, `${field}.startedAt`, LIMITS.name);
   optionalString(value.requestId, `${field}.requestId`, LIMITS.name);
   optionalString(value.requestName, `${field}.requestName`, LIMITS.name);
+  optionalString(value.requestDisplayName, `${field}.requestDisplayName`, LIMITS.name);
+  optionalString(value.requestMethod, `${field}.requestMethod`, LIMITS.short);
+  optionalString(value.requestUrl, `${field}.requestUrl`, LIMITS.url);
   optionalNumber(value.statusCode, `${field}.statusCode`);
   optionalNumber(value.durationMillis, `${field}.durationMillis`);
   optionalString(value.responseBody, `${field}.responseBody`, LIMITS.value);

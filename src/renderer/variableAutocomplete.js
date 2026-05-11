@@ -28,24 +28,32 @@
     }
     const caret = Math.max(0, Math.min(value.length, selectionStart));
     const beforeCaret = value.slice(0, caret);
-    const start = beforeCaret.lastIndexOf('{{');
+    const postmanStart = beforeCaret.lastIndexOf('{{');
+    const dollarStart = beforeCaret.lastIndexOf('${');
+    const useDollarToken = dollarStart > postmanStart;
+    const start = useDollarToken ? dollarStart : postmanStart;
     if (start < 0) {
       return null;
     }
 
-    const query = beforeCaret.slice(start + 2);
-    if (query.includes('{{') || query.includes('}}') || query.includes('\n') || query.includes('\r')) {
+    const open = useDollarToken ? '${' : '{{';
+    const close = useDollarToken ? '}' : '}}';
+    const query = beforeCaret.slice(start + open.length);
+    if (query.includes('{{') || query.includes('${') || query.includes('}}') || query.includes('}') || query.includes('\n') || query.includes('\r')) {
       return null;
     }
 
     let end = caret;
     const afterCaret = value.slice(caret);
-    const closeOffset = afterCaret.indexOf('}}');
-    const openOffset = afterCaret.indexOf('{{');
+    const closeOffset = afterCaret.indexOf(close);
+    const nextPostmanOpenOffset = afterCaret.indexOf('{{');
+    const nextDollarOpenOffset = afterCaret.indexOf('${');
+    const openOffsets = [nextPostmanOpenOffset, nextDollarOpenOffset].filter((offset) => offset >= 0);
+    const openOffset = openOffsets.length ? Math.min(...openOffsets) : -1;
     if (closeOffset >= 0 && (openOffset === -1 || closeOffset < openOffset)) {
-      end = caret + closeOffset + 2;
+      end = caret + closeOffset + close.length;
     } else {
-      while (end < value.length && !/[\r\n{}]/.test(value[end])) {
+      while (end < value.length && !/[\r\n{}$]/.test(value[end])) {
         end += 1;
       }
     }
@@ -53,6 +61,8 @@
     return {
       start,
       end,
+      open,
+      close,
       query
     };
   }
@@ -97,8 +107,10 @@
   function replaceVariableToken(value, token, variableKey) {
     const before = value.slice(0, token.start);
     const after = value.slice(token.end);
-    const replacement = `${before}{{${variableKey}}}${after}`;
-    const caret = before.length + variableKey.length + 4;
+    const open = token.open || '{{';
+    const close = token.close || '}}';
+    const replacement = `${before}${open}${variableKey}${close}${after}`;
+    const caret = before.length + open.length + variableKey.length + close.length;
     return {
       value: replacement,
       selectionStart: caret,
@@ -406,7 +418,7 @@
     }
     syncMeasurementSurface(measurement.root, target, fieldRect, computed);
     measurement.before.textContent = String(target.value || '').slice(0, token.start);
-    measurement.marker.textContent = String(target.value || '').slice(token.start, token.start + 2) || '{{';
+    measurement.marker.textContent = token.open || String(target.value || '').slice(token.start, token.start + 2) || '{{';
     const markerRect = measurement.marker.getBoundingClientRect();
     if (!Number.isFinite(markerRect.left) || !Number.isFinite(markerRect.top)) {
       return null;

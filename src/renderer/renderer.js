@@ -127,6 +127,8 @@ let activeRequestExportContent = '';
 let activeVaultPromptPayload = null;
 let activeFileSourceTarget = null;
 let activeFilePickerOptions = null;
+let pendingCsvVariablesFile = null;
+let pendingCsvVariablesFilePath = '';
 let activeSettingsSection = 'appearance';
 let sessionSaveTimer = null;
 let sessionPersistenceEnabled = false;
@@ -162,6 +164,14 @@ const {
   performanceTestSnapshot: snapshotPerformanceTest,
   syncPerformanceActiveTypeSettings
 } = PostMeterPerformanceTestModel;
+const {
+  csvVariableNames,
+  csvVariablesConfigured,
+  csvVariablesEnabled,
+  csvVariablesToIterationRows,
+  normalizeCsvVariableData,
+  parseCsvVariableSchema
+} = PostMeterCsvVariables;
 const {
   collectAuthFromEditor: collectRequestAuthFromEditor,
   renderAuthEditor: renderRequestAuthEditor,
@@ -400,7 +410,7 @@ initializeRenderer({
     registerCleanup(createVariableAutocomplete({
       doc: document,
       windowObject: window,
-      getVariables: () => activeEnvironment()?.variables || []
+      getVariables: variableHighlightVariablesForTarget
     }).destroy);
     registerCleanup(window.postmeter.app.onMenuAction(handleAppMenuAction));
     registerCleanup(window.postmeter.oauth.onProgress((progress) => {
@@ -566,8 +576,10 @@ function bindUi() {
       scheduleSessionSave();
     },
     onRunnerConfigChange: collectRunnerAndMarkDirty,
+    onEditRunnerCsvVariables: () => { void editActiveRunnerCsvVariables(); },
     onPerformanceConfigChange: collectPerformanceTestAndMarkDirty,
     onPerformanceRequestChange: collectPerformanceTestAndMarkDirty,
+    onEditPerformanceCsvVariables: () => { void editActivePerformanceCsvVariables(); },
     onPerformanceMethodChange: () => {
       updatePerformanceMethodSelectClass();
       collectPerformanceTestAndMarkDirty();
@@ -615,6 +627,16 @@ function bindUi() {
     onCancelActiveModal: cancelActiveModal,
     closeModalsOnBackdropClick: () => modalsCloseOnBackdropClick(),
     onResolveActiveModal: resolveActiveModal,
+    onConfirmCsvVariablesModal: confirmCsvVariablesModal,
+    onImportCsvVariablesFile: importCsvVariablesFile,
+    onClearCsvVariablesFile: clearCsvVariablesFile,
+    onCsvVariablesFileSelected: csvVariablesFileSelected,
+    onSelectCsvVariablesSource: selectCsvVariablesSource,
+    onToggleCsvVariablesValues: toggleCsvVariablesValuesPanel,
+    onCsvVariablesValuesInput: csvVariablesValuesInputChanged,
+    onCsvVariablesRowModeChange: csvVariablesRowModeChanged,
+    onLoadCsvVariablesFile: () => { void loadPendingCsvVariablesFile(); },
+    onKeepCsvVariablesFile: keepPendingCsvVariablesFile,
     onResolveVaultPrompt: resolveVaultPrompt,
     onTrapActiveModalFocus: trapActiveModalFocus,
     getSelectedDraftSaveCollectionId: () => selectedDraftSaveCollectionId,
@@ -2815,6 +2837,7 @@ function focusInitialModalElement(modalId) {
     requestImportModal: 'requestImportTextInput',
     requestExportModal: 'copyRequestExportButton',
     textInputModal: $('textInputModal')?.dataset?.valueControl || 'textInputModalInput',
+    csvVariablesModal: 'csvVariablesSchemaInput',
     confirmActionModal: 'cancelConfirmActionButton',
     notificationModal: 'closeNotificationModalButton',
     performanceCalibrationModal: 'closePerformanceCalibrationModalButton',
@@ -3192,7 +3215,51 @@ function refreshVariableHighlights(root = document) {
 
 function variableHighlightVariablesForTarget(target) {
   const environment = variableHighlightEnvironmentForTarget(target);
-  return environment?.variables || [];
+  return mergeVariableHighlightSources(
+    variableHighlightSourceVariables(environment?.variables || [], 'environment'),
+    csvVariableHighlightVariablesForTarget(target)
+  );
+}
+
+function csvVariableHighlightVariablesForTarget(target) {
+  const runnerId = activeRunnerRequestRunnerId || (target?.closest?.('#runnerMainPanel') ? activeRunnerConfigId : '');
+  if (runnerId) {
+    const runner = (workspace?.runners || []).find((item) => item.id === runnerId);
+    return csvVariablesEnabled(runner?.csvVariables || {})
+      ? csvVariableNames(runner?.csvVariables || {}).map((key) => ({ enabled: true, key, source: 'csv', value: '' }))
+      : [];
+  }
+  if (target?.closest?.('#performanceMainPanel')) {
+    return csvVariablesEnabled(activePerformanceTest()?.csvVariables || {})
+      ? csvVariableNames(activePerformanceTest()?.csvVariables || {}).map((key) => ({ enabled: true, key, source: 'csv', value: '' }))
+      : [];
+  }
+  return [];
+}
+
+function variableHighlightSourceVariables(variables, source) {
+  return (variables || []).map((variable) => ({ ...variable, source }));
+}
+
+function mergeVariableHighlightSources(...sources) {
+  const merged = [];
+  const seen = new Set();
+  for (const source of sources) {
+    for (const variable of source || []) {
+      if (!variable || variable.enabled === false) {
+        continue;
+      }
+      const key = String(variable.key || '').trim();
+      const sourceName = String(variable.source || '').trim().toLowerCase();
+      const identity = `${sourceName}:${key}`;
+      if (!key || seen.has(identity)) {
+        continue;
+      }
+      seen.add(identity);
+      merged.push({ ...variable, key });
+    }
+  }
+  return merged;
 }
 
 function variableHighlightEnvironmentForTarget(target) {
@@ -4031,6 +4098,401 @@ async function promptTextInput(options = {}) {
   return result == null ? null : String(result);
 }
 
+async function editActiveRunnerCsvVariables() {
+  const runner = activeRunner();
+  if (!runner) {
+    return setStatus('Select a runner before editing CSV variables.');
+  }
+  collectRunnerFromEditor();
+  const result = await promptCsvVariables({
+    title: 'Runner CSV variables',
+    message: 'Define variables consumed one row at a time across runner requests and iterations.',
+    value: runner.csvVariables
+  });
+  if (!result) {
+    return null;
+  }
+  runner.csvVariables = normalizeCsvVariableData(result);
+  markActiveRunnerDirty();
+  renderRunnerEditor();
+  setStatus(csvVariablesConfigured(runner.csvVariables) ? 'Runner CSV variables updated.' : 'Runner CSV variables cleared.');
+  return runner.csvVariables;
+}
+
+async function editActivePerformanceCsvVariables() {
+  const test = activePerformanceTest();
+  if (!test) {
+    return setStatus('Select a performance test before editing CSV variables.');
+  }
+  collectPerformanceTestFromEditor();
+  const result = await promptCsvVariables({
+    title: 'Performance CSV variables',
+    message: 'Define variables consumed one row at a time across planned performance requests.',
+    value: test.csvVariables
+  });
+  if (!result) {
+    return null;
+  }
+  test.csvVariables = normalizeCsvVariableData(result);
+  markActivePerformanceDirty();
+  renderPerformanceEditor();
+  setStatus(csvVariablesConfigured(test.csvVariables) ? 'Performance CSV variables updated.' : 'Performance CSV variables cleared.');
+  return test.csvVariables;
+}
+
+async function promptCsvVariables(options = {}) {
+  configureCsvVariablesModal(options);
+  const result = await showModal('csvVariablesModal', null);
+  resetCsvVariablesModal();
+  return result == null ? null : normalizeCsvVariableData(result);
+}
+
+function configureCsvVariablesModal(options = {}) {
+  const value = normalizeCsvVariableData(options.value || {});
+  const hasFile = Boolean(String(value.filePath || '').trim());
+  const hasInlineRows = Boolean(String(value.values || '').trim());
+  $('csvVariablesModalTitle').textContent = String(options.title || 'CSV variables');
+  $('csvVariablesModalMessage').textContent = String(options.message || 'Define a comma-separated schema and provide one CSV row for each request execution.');
+  $('csvVariablesSchemaInput').value = value.schema;
+  $('csvVariablesValuesInput').value = value.values;
+  const loopRowsInput = $('csvVariablesLoopRowsInput');
+  if (loopRowsInput) {
+    loopRowsInput.checked = value.loopRows === true;
+  }
+  const continueWithoutRowsInput = $('csvVariablesContinueWithoutRowsInput');
+  if (continueWithoutRowsInput) {
+    continueWithoutRowsInput.checked = value.continueWithoutRows === true;
+  }
+  const modal = $('csvVariablesModal');
+  modal.dataset.enabled = value.enabled === false ? 'false' : 'true';
+  modal.dataset.filePath = value.filePath;
+  modal.dataset.sourceName = value.sourceName;
+  modal.dataset.activeSource = value.activeSource;
+  modal.dataset.valuesExpanded = value.activeSource === 'inline' || (!hasFile && hasInlineRows) ? 'true' : 'false';
+  pendingCsvVariablesFile = null;
+  pendingCsvVariablesFilePath = '';
+  hideCsvVariablesImportChoice();
+  renderCsvVariablesError('');
+  syncCsvVariablesModalUi();
+}
+
+function resetCsvVariablesModal() {
+  pendingCsvVariablesFile = null;
+  pendingCsvVariablesFilePath = '';
+  hideCsvVariablesImportChoice();
+  const input = $('csvVariablesFileInput');
+  if (input) {
+    input.value = '';
+  }
+}
+
+function confirmCsvVariablesModal() {
+  if (pendingCsvVariablesFile) {
+    renderCsvVariablesError('Choose whether to load the selected CSV into the editor or keep it as a file reference.');
+    return;
+  }
+  const value = currentCsvVariablesModalValue();
+  const hasValues = String(value.values || '').trim();
+  const hasFile = String(value.filePath || '').trim();
+  try {
+    if (hasValues || hasFile) {
+      const names = parseCsvVariableSchema(value.schema);
+      if (!names.length) {
+        throw new Error('CSV variable schema is required when CSV values or a CSV file are configured.');
+      }
+    }
+    if (value.activeSource === 'inline' && hasValues) {
+      csvVariablesToIterationRows(value, value.values);
+    }
+  } catch (error) {
+    renderCsvVariablesError(error.message || String(error));
+    return;
+  }
+  resolveActiveModal(normalizeCsvVariableData(value));
+}
+
+function csvVariablesRowModeChanged(mode) {
+  const loopRowsInput = $('csvVariablesLoopRowsInput');
+  const continueWithoutRowsInput = $('csvVariablesContinueWithoutRowsInput');
+  if (mode === 'loop' && loopRowsInput?.checked === true && continueWithoutRowsInput) {
+    continueWithoutRowsInput.checked = false;
+  }
+  if (mode === 'continue' && continueWithoutRowsInput?.checked === true && loopRowsInput) {
+    loopRowsInput.checked = false;
+  }
+}
+
+function toggleCsvVariablesValuesPanel() {
+  const panel = $('csvVariablesValuesPanel');
+  setCsvVariablesValuesExpanded(panel?.hidden !== false);
+}
+
+function setCsvVariablesValuesExpanded(expanded) {
+  const modal = $('csvVariablesModal');
+  if (modal) {
+    modal.dataset.valuesExpanded = expanded ? 'true' : 'false';
+  }
+  syncCsvVariablesModalUi();
+}
+
+function selectCsvVariablesSource(source) {
+  const modal = $('csvVariablesModal');
+  if (!modal || !csvVariablesSourceAvailable(source)) {
+    return;
+  }
+  modal.dataset.activeSource = source;
+  if (source === 'inline') {
+    modal.dataset.valuesExpanded = 'true';
+  } else if (source === 'file') {
+    modal.dataset.valuesExpanded = 'false';
+  }
+  syncCsvVariablesModalUi();
+}
+
+function csvVariablesSourceAvailable(source) {
+  if (source === 'file') {
+    return Boolean(String($('csvVariablesModal')?.dataset?.filePath || '').trim());
+  }
+  if (source === 'inline') {
+    return Boolean(String($('csvVariablesValuesInput')?.value || '').trim());
+  }
+  return false;
+}
+
+function csvVariablesValuesInputChanged() {
+  const values = $('csvVariablesValuesInput')?.value || '';
+  const modal = $('csvVariablesModal');
+  if (modal) {
+    if (String(values).trim() && !String(modal.dataset.activeSource || '').trim()) {
+      modal.dataset.activeSource = 'inline';
+    } else if (!String(values).trim() && modal.dataset.activeSource === 'inline') {
+      modal.dataset.activeSource = String(modal.dataset.filePath || '').trim() ? 'file' : '';
+    }
+  }
+  syncCsvVariablesModalUi();
+}
+
+function currentCsvVariablesModalValue() {
+  const modal = $('csvVariablesModal');
+  const loopRows = $('csvVariablesLoopRowsInput')?.checked === true;
+  const filePath = modal?.dataset?.filePath || '';
+  const values = $('csvVariablesValuesInput')?.value || '';
+  return {
+    schema: $('csvVariablesSchemaInput')?.value || '',
+    values,
+    filePath,
+    sourceName: modal?.dataset?.sourceName || '',
+    activeSource: normalizeCsvVariablesModalActiveSource(modal?.dataset?.activeSource || '', values, filePath),
+    enabled: modal?.dataset?.enabled !== 'false',
+    loopRows,
+    continueWithoutRows: !loopRows && $('csvVariablesContinueWithoutRowsInput')?.checked === true
+  };
+}
+
+function normalizeCsvVariablesModalActiveSource(source, values, filePath) {
+  const hasValues = Boolean(String(values || '').trim());
+  const hasFile = Boolean(String(filePath || '').trim());
+  if (source === 'inline' && hasValues) {
+    return 'inline';
+  }
+  if (source === 'file' && hasFile) {
+    return 'file';
+  }
+  if (hasFile) {
+    return 'file';
+  }
+  if (hasValues) {
+    return 'inline';
+  }
+  return '';
+}
+
+function importCsvVariablesFile() {
+  renderCsvVariablesError('');
+  $('csvVariablesFileInput')?.click?.();
+}
+
+function csvVariablesFileSelected() {
+  const input = $('csvVariablesFileInput');
+  const file = input?.files?.[0] || null;
+  if (!file) {
+    return;
+  }
+  pendingCsvVariablesFile = file;
+  pendingCsvVariablesFilePath = localPathForFile(file);
+  const choice = $('csvVariablesImportChoice');
+  const message = $('csvVariablesImportChoiceMessage');
+  if (message) {
+    const name = file.name || fileNameFromLocalPath(pendingCsvVariablesFilePath) || 'CSV file';
+    message.textContent = `Load "${name}" into the CSV values editor? Keep a file reference for large files.`;
+  }
+  if (choice) {
+    choice.hidden = false;
+  }
+  setCsvVariablesValuesExpanded(false);
+  renderCsvVariablesError('');
+  syncCsvVariablesModalUi('CSV file selected. Choose how to use it.');
+  input.value = '';
+}
+
+async function loadPendingCsvVariablesFile() {
+  const file = pendingCsvVariablesFile;
+  if (!file) {
+    return;
+  }
+  try {
+    const text = await file.text();
+    $('csvVariablesValuesInput').value = text;
+    const modal = $('csvVariablesModal');
+    modal.dataset.filePath = '';
+    modal.dataset.sourceName = file.name || '';
+    modal.dataset.activeSource = 'inline';
+    pendingCsvVariablesFile = null;
+    pendingCsvVariablesFilePath = '';
+    hideCsvVariablesImportChoice();
+    setCsvVariablesValuesExpanded(true);
+    renderCsvVariablesError('');
+    syncCsvVariablesModalUi('CSV file loaded into the inline editor.');
+  } catch (error) {
+    renderCsvVariablesError(`CSV file could not be loaded: ${error.message || String(error)}`);
+  }
+}
+
+function keepPendingCsvVariablesFile() {
+  const file = pendingCsvVariablesFile;
+  if (!file) {
+    return;
+  }
+  if (!pendingCsvVariablesFilePath) {
+    renderCsvVariablesError('PostMeter could not read a local path for that CSV file. Load it into the editor instead.');
+    return;
+  }
+  const modal = $('csvVariablesModal');
+  modal.dataset.filePath = pendingCsvVariablesFilePath;
+  modal.dataset.sourceName = file.name || fileNameFromLocalPath(pendingCsvVariablesFilePath);
+  modal.dataset.activeSource = 'file';
+  pendingCsvVariablesFile = null;
+  pendingCsvVariablesFilePath = '';
+  hideCsvVariablesImportChoice();
+  setCsvVariablesValuesExpanded(false);
+  renderCsvVariablesError('');
+  syncCsvVariablesModalUi();
+}
+
+function clearCsvVariablesFile() {
+  clearCsvVariablesFileReference();
+  hideCsvVariablesImportChoice();
+  renderCsvVariablesError('');
+  syncCsvVariablesModalUi('CSV file reference cleared.');
+}
+
+function clearCsvVariablesFileReference() {
+  const modal = $('csvVariablesModal');
+  if (modal) {
+    modal.dataset.filePath = '';
+    modal.dataset.sourceName = '';
+    if (modal.dataset.activeSource === 'file') {
+      modal.dataset.activeSource = String($('csvVariablesValuesInput')?.value || '').trim() ? 'inline' : '';
+    }
+  }
+  pendingCsvVariablesFile = null;
+  pendingCsvVariablesFilePath = '';
+}
+
+function hideCsvVariablesImportChoice() {
+  const choice = $('csvVariablesImportChoice');
+  if (choice) {
+    choice.hidden = true;
+  }
+}
+
+function syncCsvVariablesModalUi(statusMessage = '') {
+  const modal = $('csvVariablesModal');
+  if (!modal) {
+    return;
+  }
+  const value = currentCsvVariablesModalValue();
+  const hasFile = Boolean(String(value.filePath || '').trim());
+  const hasPendingFile = Boolean(pendingCsvVariablesFile);
+  const rawValues = $('csvVariablesValuesInput')?.value || '';
+  const hasInlineRows = Boolean(String(rawValues).trim());
+  const activeSource = value.activeSource;
+  modal.dataset.activeSource = activeSource;
+  const valuesPanel = $('csvVariablesValuesPanel');
+  const valuesToggle = $('csvVariablesValuesToggle');
+  const valuesExpanded = modal.dataset.valuesExpanded === 'true';
+  if (valuesPanel) {
+    valuesPanel.hidden = !valuesExpanded;
+  }
+  if (valuesToggle) {
+    valuesToggle.setAttribute('aria-expanded', valuesExpanded ? 'true' : 'false');
+  }
+  modal.classList?.toggle?.('csv-values-expanded', valuesExpanded);
+  const summary = $('csvVariablesValuesSummary');
+  if (summary) {
+    const rowCount = csvVariableTextRowCount(rawValues);
+    summary.textContent = hasInlineRows ? `${rowCount} inline row${rowCount === 1 ? '' : 's'}` : 'No inline rows';
+  }
+  updateCsvVariablesSourceButton('file', hasFile, activeSource === 'file');
+  updateCsvVariablesSourceButton('inline', hasInlineRows, activeSource === 'inline');
+  const clearFileButton = $('clearCsvVariablesFileButton');
+  if (clearFileButton) {
+    clearFileButton.disabled = !hasFile && !hasPendingFile;
+  }
+  updateCsvVariablesFileStatus(statusMessage);
+}
+
+function updateCsvVariablesSourceButton(source, available, active) {
+  const button = source === 'file' ? $('csvVariablesFileSourceButton') : $('csvVariablesInlineSourceButton');
+  if (!button) {
+    return;
+  }
+  button.disabled = !available;
+  button.dataset.state = !available ? 'empty' : active ? 'active' : 'available';
+  button.setAttribute('aria-pressed', active ? 'true' : 'false');
+}
+
+function csvVariableTextRowCount(text) {
+  return String(text || '').split(/\r?\n/).filter((line) => line.trim()).length;
+}
+
+function updateCsvVariablesFileStatus(message = '') {
+  const status = $('csvVariablesFileStatus');
+  if (!status) {
+    return;
+  }
+  const value = currentCsvVariablesModalValue();
+  const hasPendingFile = Boolean(pendingCsvVariablesFile);
+  status.classList?.toggle?.('active', Boolean(value.filePath));
+  status.classList?.toggle?.('pending', hasPendingFile);
+  if (message) {
+    status.textContent = message;
+    return;
+  }
+  if (hasPendingFile) {
+    const name = pendingCsvVariablesFile.name || fileNameFromLocalPath(pendingCsvVariablesFilePath) || 'CSV file';
+    status.textContent = `Pending import: ${name}`;
+    return;
+  }
+  if (value.filePath) {
+    const fileLabel = value.sourceName || fileNameFromLocalPath(value.filePath) || value.filePath;
+    status.textContent = `${value.activeSource === 'file' ? 'Using' : 'Available'} CSV file: ${fileLabel}`;
+  } else if (value.sourceName && String(value.values || '').trim()) {
+    status.textContent = `Loaded into inline editor: ${value.sourceName}`;
+  } else {
+    status.textContent = 'No imported CSV file is active.';
+  }
+}
+
+function renderCsvVariablesError(message) {
+  const error = $('csvVariablesError');
+  if (!error) {
+    return;
+  }
+  error.textContent = String(message || '');
+  error.hidden = !message;
+}
+
 async function confirmActionModal(options = {}) {
   $('confirmActionModalTitle').textContent = String(options.title || 'Confirm action');
   $('confirmActionModalMessage').textContent = String(options.message || 'Continue?');
@@ -4727,6 +5189,16 @@ function renderRunnerEditor() {
     title.setAttribute('aria-label', 'Runner name');
   }
   $('saveRunnerButton').disabled = !runner;
+  const runnerCsvButton = $('runnerCsvVariablesButton');
+  if (runnerCsvButton) {
+    runnerCsvButton.disabled = !runner;
+    runnerCsvButton.textContent = runner && csvVariablesConfigured(runner.csvVariables) ? 'CSV Variables *' : 'CSV Variables';
+  }
+  const runnerUseCsvInput = $('runnerUseCsvVariablesInput');
+  if (runnerUseCsvInput) {
+    runnerUseCsvInput.checked = runner?.csvVariables?.enabled !== false;
+    runnerUseCsvInput.disabled = !runner;
+  }
   $('deleteRunnerButton').disabled = !runner;
   $('runCollectionButton').disabled = !runner || activeRunnerId != null;
   $('cancelRunnerButton').disabled = !activeRunnerId;
@@ -4753,11 +5225,20 @@ function renderPerformanceEditor() {
     title.setAttribute('aria-disabled', test ? 'false' : 'true');
     title.setAttribute('aria-label', 'Performance test name');
   }
-  for (const id of ['savePerformanceTestButton', 'deletePerformanceTestButton', 'runPerformanceTestButton', 'exportPerformanceTestButton', 'importPerformanceRequestButton']) {
+  for (const id of ['performanceCsvVariablesButton', 'savePerformanceTestButton', 'deletePerformanceTestButton', 'runPerformanceTestButton', 'exportPerformanceTestButton', 'importPerformanceRequestButton']) {
     const button = $(id);
     if (button) {
       button.disabled = !test;
     }
+  }
+  const performanceCsvButton = $('performanceCsvVariablesButton');
+  if (performanceCsvButton) {
+    performanceCsvButton.textContent = test && csvVariablesConfigured(test.csvVariables) ? 'CSV Variables *' : 'CSV Variables';
+  }
+  const performanceUseCsvInput = $('performanceUseCsvVariablesInput');
+  if (performanceUseCsvInput) {
+    performanceUseCsvInput.checked = test?.csvVariables?.enabled !== false;
+    performanceUseCsvInput.disabled = !test;
   }
   if ($('runPerformanceTestButton')) {
     $('runPerformanceTestButton').disabled = !test || Boolean(activePerformanceRunId);
@@ -6275,7 +6756,7 @@ function performanceExecutionRow(sample, index) {
   row.className = `runner-execution-row${index === selectedPerformanceResultIndex ? ' active' : ''}`;
   row.dataset.performanceExecutionIndex = String(index);
   row.setAttribute('aria-pressed', index === selectedPerformanceResultIndex ? 'true' : 'false');
-  row.setAttribute('aria-label', `Show details for ${sample?.requestName || 'request'} iteration ${sample?.iteration || index + 1} with status ${runnerStatusLabel(sample)}`);
+  row.setAttribute('aria-label', `Show details for ${sample?.requestDisplayName || sample?.requestName || 'request'} iteration ${sample?.iteration || index + 1} with status ${runnerStatusLabel(sample)}`);
   row.addEventListener('click', () => {
     selectedPerformanceResultIndex = index;
     renderPerformanceResult(lastPerformanceResult);
@@ -6288,7 +6769,7 @@ function performanceExecutionRow(sample, index) {
   const content = document.createElement('span');
   const name = document.createElement('span');
   name.className = 'runner-execution-name';
-  name.textContent = sample?.requestName || 'Performance Request';
+  name.textContent = sample?.requestDisplayName || sample?.requestName || 'Performance Request';
   const meta = document.createElement('span');
   meta.className = 'runner-execution-meta';
   meta.textContent = performanceExecutionMeta(sample);
@@ -6300,8 +6781,8 @@ function performanceExecutionRow(sample, index) {
 function performanceExecutionMeta(sample = {}) {
   const request = performanceRequestForExecutionItem(sample);
   const iteration = Number.isFinite(Number(sample.iteration)) ? `#${Number(sample.iteration)}` : '';
-  const method = request?.method || '';
-  const url = request?.url || '';
+  const method = sample.requestMethod || request?.method || '';
+  const url = sample.requestUrl || request?.url || '';
   const duration = Number.isFinite(Number(sample.durationMillis)) ? `${formatNumber(sample.durationMillis)} ms` : '';
   return [iteration, method, url, duration].filter(Boolean).join(' ');
 }
@@ -6354,10 +6835,10 @@ function performanceExecutionOverview(sample = {}, request = null) {
   block.className = 'runner-detail-block';
   const heading = document.createElement('h4');
   heading.className = 'runner-detail-heading';
-  heading.textContent = sample.requestName || request?.name || 'Performance Request';
+  heading.textContent = sample.requestDisplayName || sample.requestName || request?.name || 'Performance Request';
   const target = document.createElement('div');
   target.className = 'runner-detail-meta';
-  target.textContent = [request?.method || '', request?.url || ''].filter(Boolean).join(' ');
+  target.textContent = [sample.requestMethod || request?.method || '', sample.requestUrl || request?.url || ''].filter(Boolean).join(' ');
   const metrics = document.createElement('div');
   metrics.className = 'runner-detail-meta';
   metrics.textContent = [
@@ -6613,6 +7094,7 @@ function normalizeRunner(runner) {
   runner.environmentId = String(runner.environmentId || 'none') || 'none';
   runner.stopOnFailure = runner.stopOnFailure === true;
   runner.allowEnvironmentMutation = runner.allowEnvironmentMutation === true;
+  runner.csvVariables = normalizeCsvVariableData(runner.csvVariables);
   runner.requests = normalizeRunnerRequests(runner.requests);
   if (runner.environmentId !== 'none' && !(workspace.environments || []).some((environment) => environment.id === runner.environmentId)) {
     runner.environmentId = 'none';
@@ -7101,6 +7583,7 @@ function newRunnerObject(name) {
     environmentId: 'none',
     stopOnFailure: false,
     allowEnvironmentMutation: false,
+    csvVariables: normalizeCsvVariableData(),
     requests: []
   };
 }
@@ -10406,7 +10889,7 @@ function runnerExecutionRow(item, index) {
   row.className = `runner-execution-row${index === selectedRunnerExecutionIndex ? ' active' : ''}`;
   row.dataset.runnerExecutionIndex = String(index);
   row.setAttribute('aria-pressed', index === selectedRunnerExecutionIndex ? 'true' : 'false');
-  row.setAttribute('aria-label', `Show details for ${item?.requestName || 'request'} with status ${runnerStatusLabel(item)}`);
+  row.setAttribute('aria-label', `Show details for ${item?.requestDisplayName || item?.requestName || 'request'} with status ${runnerStatusLabel(item)}`);
   row.addEventListener('click', () => {
     selectedRunnerExecutionIndex = index;
     renderRunnerExecutionResult(lastRunnerResult);
@@ -10419,7 +10902,7 @@ function runnerExecutionRow(item, index) {
   const content = document.createElement('span');
   const name = document.createElement('span');
   name.className = 'runner-execution-name';
-  name.textContent = item?.requestName || 'Untitled Request';
+  name.textContent = item?.requestDisplayName || item?.requestName || 'Untitled Request';
   const meta = document.createElement('span');
   meta.className = 'runner-execution-meta';
   meta.textContent = runnerExecutionMeta(item);
@@ -10430,8 +10913,8 @@ function runnerExecutionRow(item, index) {
 
 function runnerExecutionMeta(item = {}) {
   const request = runnerRequestForExecutionItem(item);
-  const method = request?.method || '';
-  const url = request?.url || '';
+  const method = item.requestMethod || request?.method || '';
+  const url = item.requestUrl || request?.url || '';
   const iteration = runnerIterationText(item);
   const duration = Number.isFinite(Number(item.durationMillis)) ? `${Number(item.durationMillis)} ms` : '';
   return [method, url, iteration, duration].filter(Boolean).join(' ');
@@ -10482,10 +10965,10 @@ function runnerExecutionOverview(item = {}, request = null) {
   block.className = 'runner-detail-block';
   const heading = document.createElement('h4');
   heading.className = 'runner-detail-heading';
-  heading.textContent = item.requestName || request?.name || 'Untitled Request';
+  heading.textContent = item.requestDisplayName || item.requestName || request?.name || 'Untitled Request';
   const target = document.createElement('div');
   target.className = 'runner-detail-meta';
-  target.textContent = [request?.method || '', request?.url || ''].filter(Boolean).join(' ');
+  target.textContent = [item.requestMethod || request?.method || '', item.requestUrl || request?.url || ''].filter(Boolean).join(' ');
   const metrics = document.createElement('div');
   metrics.className = 'runner-detail-meta';
   metrics.textContent = [
@@ -12822,6 +13305,10 @@ function collectRunnerFromEditor() {
   runner.environmentId = $('runnerEnvironmentSelect')?.value || runner.environmentId || 'none';
   runner.stopOnFailure = $('runnerStopOnFailure')?.checked === true;
   runner.allowEnvironmentMutation = $('runnerAllowEnvironmentMutation')?.checked === true;
+  runner.csvVariables = normalizeCsvVariableData({
+    ...(runner.csvVariables || {}),
+    enabled: $('runnerUseCsvVariablesInput')?.checked !== false
+  });
   const iterationsChanged = collectRunnerRequestIterationsFromEditor(runner);
   runner.requests = normalizeRunnerRequests(runner.requests);
   if (iterationsChanged) {
@@ -12844,6 +13331,10 @@ function collectPerformanceTestFromEditor() {
   test.type = type;
   collectPerformanceTypeSettingsFromPanel(test, type, activePerformanceTypePanel());
   syncPerformanceActiveTypeSettings(test);
+  test.csvVariables = normalizeCsvVariableData({
+    ...(test.csvVariables || {}),
+    enabled: $('performanceUseCsvVariablesInput')?.checked !== false
+  });
   test.request ||= {};
   test.request.id ||= crypto.randomUUID();
   test.request.name ||= 'Performance Request';

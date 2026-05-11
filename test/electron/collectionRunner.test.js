@@ -1,7 +1,11 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const os = require('node:os');
+const path = require('node:path');
 const test = require('node:test');
 const { evaluateAssertions, readHtmlSelector, readJsonPath, readXmlPath } = require('../../src/core/assertions');
 const { collectionRunResultToCsv, runCollection, runRunner } = require('../../src/core/collectionRunner');
+const { resolveEnvironmentValue } = require('../../src/core/environmentResolver');
 const { collectionModel, requestModel } = require('../../src/core/models');
 const { importPostmanCollection } = require('../../src/core/postmanImporter');
 const { runRequestWithScripts } = require('../../src/core/requestScriptRunner');
@@ -451,6 +455,299 @@ test('workspace-owned runner repeats a row by its configured iterations', async 
   assert.deepEqual(sent.map((item) => item.runnerIteration), [1, 2, 3, 1]);
   assert.deepEqual(result.results.map((item) => item.runnerIteration), [1, 2, 3, 1]);
   assert.deepEqual(result.results.map((item) => item.runnerIterations), [3, 3, 3, 1]);
+});
+
+test('workspace-owned runner consumes CSV variable rows across request iterations', async () => {
+  const runner = {
+    id: 'runner-csv',
+    name: 'CSV Runner',
+    environmentId: 'none',
+    stopOnFailure: false,
+    csvVariables: {
+      schema: 'requestName,requestUrl,requestBody',
+      values: [
+        'request1,https://api.example.test/one,"{""id"":1,""name"":""one""}"',
+        'request2,https://api.example.test/two,"{""id"":2,""name"":""two""}"',
+        'request3,https://api.example.test/three,"{""id"":3,""name"":""three""}"'
+      ].join('\n')
+    },
+    requests: [{
+      ...requestModel({
+        id: 'csv-request',
+        name: '${requestName}',
+        method: 'POST',
+        url: '${requestUrl}',
+        bodyType: 'RAW_TEXT',
+        body: '${requestBody}',
+        scripts: {
+          tests: `
+            pm.test('iteration data is visible to scripts', function () {
+              pm.expect(pm.iterationData.get('requestName')).to.match(/^request/);
+            });
+          `
+        }
+      }),
+      iterations: 3
+    }]
+  };
+  const sent = [];
+
+  const result = await runRunner(runner, { id: 'env', name: 'Env', variables: [] }, {
+    sendRequest: async (request, environment) => {
+      sent.push({
+        name: resolveEnvironmentValue(request.name, environment),
+        url: resolveEnvironmentValue(request.url, environment),
+        body: resolveEnvironmentValue(request.body, environment)
+      });
+      return response(200, '{"ok":true}');
+    }
+  });
+
+  assert.equal(result.passed, true);
+  assert.deepEqual(sent, [
+    {
+      name: 'request1',
+      url: 'https://api.example.test/one',
+      body: '{"id":1,"name":"one"}'
+    },
+    {
+      name: 'request2',
+      url: 'https://api.example.test/two',
+      body: '{"id":2,"name":"two"}'
+    },
+    {
+      name: 'request3',
+      url: 'https://api.example.test/three',
+      body: '{"id":3,"name":"three"}'
+    }
+  ]);
+  assert.deepEqual(result.results.map((item) => item.requestDisplayName), ['request1', 'request2', 'request3']);
+  assert.deepEqual(result.results.map((item) => item.requestUrl), [
+    'https://api.example.test/one',
+    'https://api.example.test/two',
+    'https://api.example.test/three'
+  ]);
+  assert.deepEqual(result.results.map((item) => item.requestMethod), ['POST', 'POST', 'POST']);
+  assert.deepEqual(result.results.map((item) => item.runnerIteration), [1, 2, 3]);
+  assert.equal(result.results[0].testScriptResult.tests[0].passed, true);
+});
+
+test('workspace-owned runner streams CSV variable rows from a file reference', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-csv-'));
+  const csvPath = path.join(tempDir, 'variables.csv');
+  await fs.writeFile(csvPath, [
+    'https://api.example.test/one,"{""id"":1}"',
+    'https://api.example.test/two,"{""id"":2}"',
+    'https://api.example.test/unused,"{""id"":3}"'
+  ].join('\n'));
+  const sent = [];
+  try {
+    const result = await runRunner({
+      id: 'runner-csv-file',
+      name: 'CSV File Runner',
+      csvVariables: {
+        schema: 'requestUrl,requestBody',
+        values: 'https://api.example.test/stale,"{""id"":0}"',
+        filePath: csvPath,
+        sourceName: 'variables.csv'
+      },
+      requests: [{
+        ...requestModel({
+          id: 'csv-file-request',
+          name: 'CSV File Request',
+          method: 'POST',
+          url: '${requestUrl}',
+          bodyType: 'RAW_TEXT',
+          body: '${requestBody}'
+        }),
+        iterations: 2
+      }]
+    }, { id: 'env', name: 'Env', variables: [] }, {
+      sendRequest: async (request, environment) => {
+        sent.push({
+          url: resolveEnvironmentValue(request.url, environment),
+          body: resolveEnvironmentValue(request.body, environment)
+        });
+        return response(200, '{"ok":true}');
+      }
+    });
+
+    assert.equal(result.passed, true);
+    assert.deepEqual(sent, [
+      { url: 'https://api.example.test/one', body: '{"id":1}' },
+      { url: 'https://api.example.test/two', body: '{"id":2}' }
+    ]);
+    assert.deepEqual(result.results.map((item) => item.requestUrl), [
+      'https://api.example.test/one',
+      'https://api.example.test/two'
+    ]);
+
+    sent.length = 0;
+    await runRunner({
+      id: 'runner-csv-inline-active',
+      name: 'CSV Inline Active Runner',
+      csvVariables: {
+        schema: 'requestUrl,requestBody',
+        values: 'https://api.example.test/inline,"{""id"":9}"',
+        filePath: csvPath,
+        sourceName: 'variables.csv',
+        activeSource: 'inline'
+      },
+      requests: [{
+        ...requestModel({
+          id: 'csv-inline-active-request',
+          name: 'CSV Inline Active Request',
+          method: 'POST',
+          url: '${requestUrl}',
+          bodyType: 'RAW_TEXT',
+          body: '${requestBody}'
+        }),
+        iterations: 1
+      }]
+    }, { id: 'env', name: 'Env', variables: [] }, {
+      sendRequest: async (request, environment) => {
+        sent.push({
+          url: resolveEnvironmentValue(request.url, environment),
+          body: resolveEnvironmentValue(request.body, environment)
+        });
+        return response(200, '{"ok":true}');
+      }
+    });
+    assert.deepEqual(sent, [
+      { url: 'https://api.example.test/inline', body: '{"id":9}' }
+    ]);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('workspace-owned runner rejects CSV variable data with too few rows for expanded iterations', async () => {
+  const runner = {
+    id: 'runner-csv-short',
+    name: 'Short CSV Runner',
+    csvVariables: {
+      schema: 'requestUrl',
+      values: 'https://api.example.test/one'
+    },
+    requests: [{
+      ...requestModel({ id: 'repeat', name: 'Repeat', url: '${requestUrl}' }),
+      iterations: 2
+    }]
+  };
+
+  await assert.rejects(
+    () => runRunner(runner, { id: 'env', name: 'Env', variables: [] }, {
+      sendRequest: async () => response(200, '{}')
+    }),
+    /CSV variable data has 1 row, but this run needs 2/
+  );
+});
+
+test('workspace-owned runner can loop CSV variable rows across more iterations than data rows', async () => {
+  const runner = {
+    id: 'runner-csv-loop',
+    name: 'CSV Loop Runner',
+    csvVariables: {
+      schema: 'requestUrl',
+      values: [
+        'https://api.example.test/one',
+        'https://api.example.test/two',
+        'https://api.example.test/three'
+      ].join('\n'),
+      loopRows: true
+    },
+    requests: [{
+      ...requestModel({ id: 'loop-request', name: 'Loop Request', url: '${requestUrl}' }),
+      iterations: 10
+    }]
+  };
+  const sent = [];
+
+  const result = await runRunner(runner, { id: 'env', name: 'Env', variables: [] }, {
+    sendRequest: async (request, environment) => {
+      sent.push(resolveEnvironmentValue(request.url, environment));
+      return response(200, '{}');
+    }
+  });
+
+  assert.equal(result.passed, true);
+  assert.deepEqual(sent, [
+    'https://api.example.test/one',
+    'https://api.example.test/two',
+    'https://api.example.test/three',
+    'https://api.example.test/one',
+    'https://api.example.test/two',
+    'https://api.example.test/three',
+    'https://api.example.test/one',
+    'https://api.example.test/two',
+    'https://api.example.test/three',
+    'https://api.example.test/one'
+  ]);
+  assert.deepEqual(result.results.map((item) => item.requestUrl), sent);
+});
+
+test('workspace-owned runner can continue without CSV variable rows after data runs out', async () => {
+  const runner = {
+    id: 'runner-csv-continue',
+    name: 'CSV Continue Runner',
+    csvVariables: {
+      schema: 'requestUrl',
+      values: [
+        'https://api.example.test/one',
+        'https://api.example.test/two',
+        'https://api.example.test/three'
+      ].join('\n'),
+      continueWithoutRows: true
+    },
+    requests: [{
+      ...requestModel({ id: 'continue-request', name: 'Continue Request', url: '${requestUrl}' }),
+      iterations: 5
+    }]
+  };
+  const sent = [];
+
+  const result = await runRunner(runner, { id: 'env', name: 'Env', variables: [] }, {
+    sendRequest: async (request, environment) => {
+      sent.push(resolveEnvironmentValue(request.url, environment));
+      return response(200, '{}');
+    }
+  });
+
+  assert.equal(result.passed, true);
+  assert.deepEqual(sent, [
+    'https://api.example.test/one',
+    'https://api.example.test/two',
+    'https://api.example.test/three',
+    '${requestUrl}',
+    '${requestUrl}'
+  ]);
+  assert.deepEqual(result.results.map((item) => item.requestUrl), sent);
+});
+
+test('workspace-owned runner can disable configured CSV variable data from the main pane option', async () => {
+  const sent = [];
+  const result = await runRunner({
+    id: 'runner-csv-disabled',
+    name: 'CSV Disabled Runner',
+    csvVariables: {
+      enabled: false,
+      schema: 'requestUrl',
+      values: 'https://api.example.test/one'
+    },
+    requests: [{
+      ...requestModel({ id: 'disabled-request', name: 'Disabled Request', url: '${requestUrl}' }),
+      iterations: 1
+    }]
+  }, { id: 'env', name: 'Env', variables: [] }, {
+    sendRequest: async (request, environment) => {
+      sent.push(resolveEnvironmentValue(request.url, environment));
+      return response(200, '{}');
+    }
+  });
+
+  assert.equal(result.passed, true);
+  assert.deepEqual(sent, ['${requestUrl}']);
+  assert.equal(result.results[0].requestUrl, '${requestUrl}');
 });
 
 test('workspace-owned runner stop-on-failure stops inside repeated rows', async () => {
