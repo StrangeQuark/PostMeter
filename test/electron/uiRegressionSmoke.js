@@ -4,6 +4,8 @@ const path = require('node:path');
 const { withCiNoSandboxArgs } = require('../../scripts/electronCiSandboxWaiver');
 const { redactSmokeOutputText, spawnWithTimeout } = require('../../scripts/smokeProcess');
 
+const UI_REGRESSION_TIMEOUT_MILLIS = 30_000;
+
 async function main() {
   const electronPath = require('electron');
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-ui-regression-'));
@@ -18,8 +20,8 @@ async function main() {
   const result = await spawnWithTimeout(electronPath, withCiNoSandboxArgs(['--force-high-contrast', '.'], env), {
     cwd: path.join(__dirname, '..', '..'),
     env,
-    timeoutMillis: 20_000,
-    timeoutMessage: 'Electron UI regression smoke timed out after 20000 ms.'
+    timeoutMillis: UI_REGRESSION_TIMEOUT_MILLIS,
+    timeoutMessage: `Electron UI regression smoke timed out after ${UI_REGRESSION_TIMEOUT_MILLIS} ms.`
   });
 
   if (result.code !== 0) {

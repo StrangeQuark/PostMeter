@@ -1059,9 +1059,41 @@
       "notes": ""
     },
     {
+      "id": "ipc.channel.workspace-savecollection",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `workspace:saveCollection`: Targeted collection save validates collection payload shape.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/workspaceIpc.js",
+        "electron/preload.js",
+        "src/core/ipcValidation.js"
+      ],
+      "tests": [
+        "test/electron/workspaceIpc.test.js",
+        "test/electron/ipcValidation.test.js"
+      ],
+      "notes": ""
+    },
+    {
       "id": "ipc.channel.workspace-saveenvironment",
       "area": "IPC channel",
       "target": "renderer-to-main channel `workspace:saveEnvironment`: Targeted environment save validates environment payload shape.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/workspaceIpc.js",
+        "electron/preload.js",
+        "src/core/ipcValidation.js"
+      ],
+      "tests": [
+        "test/electron/workspaceIpc.test.js",
+        "test/electron/ipcValidation.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.workspace-savefolder",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `workspace:saveFolder`: Targeted folder save validates folder payload shape.",
       "status": "implemented",
       "evidenceRefs": [
         "electron/workspaceIpc.js",
