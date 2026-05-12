@@ -4,7 +4,6 @@
     assertUiSmoke,
     dispatchChange,
     dispatchInput,
-    setAssertionRow,
     setPairRow
   } = resolveUiSmokeCommon(global);
 
@@ -71,12 +70,6 @@
     dispatchInput(exampleInputs[0]);
     exampleInputs[1].value = '202';
     dispatchInput(exampleInputs[1]);
-    activateTab('request', 'tests');
-    $('addAssertionButton').click();
-    setAssertionRow('statusCode', '', '', 'equals', '200', global);
-    $('assertionTemplateSelect').value = 'jsonPathExists';
-    dispatchChange($('assertionTemplateSelect'));
-    $('addAssertionTemplateButton').click();
     activateTab('request', 'scripts');
     $('preRequestScriptInput').value = "pm.environment.set('scriptToken', 'ui-script');";
     dispatchInput($('preRequestScriptInput'));

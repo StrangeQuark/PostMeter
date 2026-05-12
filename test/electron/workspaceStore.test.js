@@ -681,7 +681,6 @@ function legacyRequestFixture(id, originalPostmanId) {
     bodyType: 'RAW_JSON',
     body: '{"ok":true}',
     auth: { type: 'bearer', token: 'request-token' },
-    assertions: [],
     scripts: {
       preRequest: 'pm.variables.set("before", "yes");',
       tests: 'pm.test("ok", function () { pm.expect(true).to.equal(true); });',

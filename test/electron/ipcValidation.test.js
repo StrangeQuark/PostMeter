@@ -158,10 +158,8 @@ test('accepts structurally valid IPC payloads', () => {
       passed: true,
       responseBody: '{"ok":true}',
       responseBytes: 11,
-      assertionResults: [],
       preRequestScriptResult: { passed: true, tests: [], logs: [] },
       testScriptResult: { passed: true, tests: [{ name: 'ok', passed: true }], logs: ['done'], visualizer: { html: '<h1>ok</h1>', template: '<h1>{{value}}</h1>' } },
-      extractedVariables: [{ enabled: true, key: 'token', value: 'abc' }],
       localVariables: [{ enabled: true, key: 'local', value: 'value' }]
     }],
     environment: { id: 'e1', name: 'Runtime', variables: [] },
@@ -198,10 +196,8 @@ test('accepts structurally valid IPC payloads', () => {
       responseBody: '{"ok":true}',
       responseBytes: 11,
       passed: true,
-      assertionResults: [{ passed: true, message: 'body contains ok' }],
       preRequestScriptResult: { passed: true, tests: [{ name: 'pre', passed: true }] },
       testScriptResult: { passed: true, tests: [{ name: 'post', passed: true }] },
-      extractedVariables: [{ enabled: true, key: 'token', value: 'abc' }],
       localVariables: [{ enabled: true, key: 'local', value: 'value' }],
       error: ''
     }]
@@ -509,8 +505,6 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertRequestPayload({ method: 'GET', protocol: 'ftp', queryParams: [], headers: [], bodyType: 'NONE' }), /request.protocol is not supported/);
   assert.throws(() => assertRequestPayload({ method: 'GET', protocol: 'grpc', queryParams: [], headers: [], bodyType: 'NONE', messages: [{ data: 'x'.repeat(40000) }] }), /request.messages\[0\].data cannot exceed/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: 'bad', headers: [], bodyType: 'NONE' }), /request.queryParams must be an array/);
-  assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', assertions: [{ type: 'bad' }] }), /assertions\[0\].type must be one of/);
-  assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', assertions: [{ operator: 'near' }] }), /assertions\[0\].operator must be one of/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', scripts: { tests: 42 } }), /request.scripts.tests must be a string/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', examples: [{ statusCode: 200, bodyType: 'bad' }] }), /request.examples\[0\].bodyType must be one of/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', cookieJar: { enabled: 'yes' } }), /request.cookieJar.enabled must be a boolean/);
@@ -561,8 +555,6 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertOAuthProgressPayload({ id: 'flow', type: 'pkce', status: 'unknown' }), /progress.status must be one of/);
   assert.throws(() => assertOAuthProgressPayload({ id: 'flow', type: 'pkce', status: 'starting', accessToken: 'raw-token' }), /progress.accessToken is not allowed in public IPC payloads/);
   assert.throws(() => assertCollectionRunResultPayload({ collectionName: 42 }), /result.collectionName must be a string/);
-  assert.throws(() => assertCollectionRunResultPayload({ results: [{ assertionResults: 'bad' }] }), /result.results\[0\].assertionResults must be an array/);
-  assert.throws(() => assertCollectionRunResultPayload({ results: [{ assertionResults: [{ passed: 'yes' }] }] }), /result.results\[0\].assertionResults\[0\].passed must be a boolean/);
   assert.throws(() => assertCollectionRunResultPayload({ results: [{ testScriptResult: { tests: [{ passed: 'yes' }] } }] }), /result.results\[0\].testScriptResult.tests\[0\].passed must be a boolean/);
   assert.throws(() => assertCollectionRunResultPayload({ results: [{ responseBody: 42 }] }), /result.results\[0\].responseBody must be a string/);
   assert.throws(() => assertCollectionRunResultPayload({ results: [{ updatedAuth: { type: 'oauth2', accessToken: 'raw-token' } }] }), /result.results\[0\].updatedAuth must not be included in public IPC payloads/);
@@ -570,7 +562,6 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertCollectionRunResultPayload({ accessToken: 'raw-token' }), /result.accessToken is not allowed in public IPC payloads/);
   assert.throws(() => assertPerformanceResultPayload({ samples: [{ responseBody: 42 }] }), /result.samples\[0\].responseBody must be a string/);
   assert.throws(() => assertPerformanceTestPayload({ type: 'latency', csvVariables: { values: 42 }, request: { method: 'GET', url: 'https:\/\/example.test' } }), /performanceTest.csvVariables.values must be a string/);
-  assert.throws(() => assertPerformanceResultPayload({ samples: [{ assertionResults: [{ passed: 'yes' }] }] }), /result.samples\[0\].assertionResults\[0\].passed must be a boolean/);
   assert.throws(() => assertPerformanceCalibrationResultPayload({ endpoint: 42 }), /result.endpoint must be a string/);
   assert.throws(() => assertPerformanceCalibrationResultPayload({ stages: [{ requestsPerSecond: 'fast' }] }), /result.stages\[0\].requestsPerSecond must be a finite number/);
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: '', durationMillis: 'slow', responseBytes: 0, finalUrl: '', headers: {} }), /response.durationMillis must be a finite number/);
@@ -606,7 +597,6 @@ test('request and workspace IPC validators follow shared entity schema arrays', 
     bodyType: 'NONE',
     queryParams: [],
     headers: [],
-    assertions: [],
     variables: [],
     examples: []
   };

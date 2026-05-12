@@ -34,7 +34,6 @@
     request.headers.push({ enabled: true, key: 'Accept', value: 'application/json' });
     request.bodyType = 'RAW_JSON';
     request.body = '{\n  "name": "hammer"\n}';
-    request.assertions.push(newAssertion(ASSERTION_TEMPLATES.status200));
     workspace.history.push({
       timestamp: new Date(0).toISOString(),
       method: 'POST',
@@ -147,10 +146,8 @@
             statusCode: 200,
             durationMillis: 42,
             passed: true,
-            assertionResults: [],
             preRequestScriptResult: { passed: true, tests: [] },
             testScriptResult: { passed: true, tests: [{ name: 'health response is OK', passed: true }] },
-            extractedVariables: [],
             localVariables: []
           },
           {
@@ -159,10 +156,8 @@
             statusCode: 500,
             durationMillis: 57,
             passed: false,
-            assertionResults: [],
             preRequestScriptResult: { passed: true, tests: [] },
             testScriptResult: { passed: false, tests: [{ name: 'create response is accepted', passed: false, error: 'Expected 202.' }] },
-            extractedVariables: [],
             localVariables: []
           }
         ]

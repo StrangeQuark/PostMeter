@@ -7,7 +7,7 @@ PostMeter is a local-first desktop API client for building, sending, and testing
 - Send HTTP requests with params, headers, auth, cookies, and body editors.
 - Organize collections, folders, examples, environments, variables, and workspaces.
 - Import and export requests, workspaces, collections, environments, runners, and performance tests.
-- Run pre-request scripts, test scripts, assertions, and workspace-owned runners.
+- Run pre-request scripts, test scripts, and workspace-owned runners.
 - Use first-class desktop runners or the CI-friendly CLI runner.
 - Work with OAuth 2.0, HTTPS client certificates, cookies, and GitHub Releases update checks.
 - Save and run local Performance tests for latency, throughput, concurrency, stress, spike, soak, and ramp checks.

@@ -171,7 +171,6 @@
           <button id="requestAuthTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="auth" aria-selected="false" aria-controls="authTab">Auth</button>
           <button id="requestCookiesTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="cookies" aria-selected="false" aria-controls="cookiesTab">Cookies</button>
           <button id="requestBodyTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="body" aria-selected="false" aria-controls="bodyTab">Body</button>
-          <button id="requestTestsTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="tests" aria-selected="false" aria-controls="testsTab">Tests</button>
           <button id="requestScriptsTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="scripts" aria-selected="false" aria-controls="scriptsTab">Scripts</button>
           <button id="requestExamplesTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="examples" aria-selected="false" aria-controls="examplesTab">Examples</button>
           <button id="requestVariablesTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="collectionVariables" aria-selected="false" aria-controls="collectionVariablesTab">Variables</button>
@@ -429,28 +428,6 @@
           </div>
         </div>
 
-        <div id="testsTab" class="tab-panel" role="tabpanel" aria-labelledby="requestTestsTabButton">
-          <div class="table-actions">
-            <button id="addAssertionButton">Add Assertion</button>
-            <select id="assertionTemplateSelect" aria-label="Assertion template">
-              <option value="status200">Status 200</option>
-              <option value="jsonPathExists">JSON path exists</option>
-              <option value="xmlPathExists">XML XPath exists</option>
-              <option value="htmlSelectorExists">HTML selector exists</option>
-              <option value="headerContains">Header contains</option>
-              <option value="responseUnderOneSecond">Response under 1s</option>
-              <option value="responseUnder10Kb">Response under 10 KB</option>
-              <option value="bodyContains">Body contains</option>
-              <option value="extractVariable">Extract variable</option>
-              <option value="extractXml">Extract XML</option>
-              <option value="extractHtml">Extract HTML</option>
-              <option value="extractRegex">Extract regex</option>
-            </select>
-            <button id="addAssertionTemplateButton">Add Template</button>
-          </div>
-          <div id="assertionsTable" class="kv-table assertions-table"></div>
-        </div>
-
         <div id="scriptsTab" class="tab-panel" role="tabpanel" aria-labelledby="requestScriptsTabButton">
           <div class="script-grid">
             <label class="field script-field">
@@ -682,7 +659,6 @@
               <button id="performanceRequestAuthTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceAuth" aria-selected="false" aria-controls="performanceAuthTab">Auth</button>
               <button id="performanceRequestCookiesTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceCookies" aria-selected="false" aria-controls="performanceCookiesTab">Cookies</button>
               <button id="performanceRequestBodyTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceBody" aria-selected="false" aria-controls="performanceBodyTab">Body</button>
-              <button id="performanceRequestTestsTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceTests" aria-selected="false" aria-controls="performanceTestsTab">Tests</button>
               <button id="performanceRequestScriptsTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceScripts" aria-selected="false" aria-controls="performanceScriptsTab">Scripts</button>
               <button id="performanceRequestExamplesTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceExamples" aria-selected="false" aria-controls="performanceExamplesTab">Examples</button>
               <button id="performanceRequestVariablesTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceVariables" aria-selected="false" aria-controls="performanceVariablesTab">Variables</button>
@@ -951,28 +927,6 @@
                   </label>
                 </div>
               </div>
-            </div>
-
-            <div id="performanceTestsTab" class="tab-panel" role="tabpanel" aria-labelledby="performanceRequestTestsTabButton">
-              <div class="table-actions">
-                <button id="addPerformanceAssertionButton" type="button">Add Assertion</button>
-                <select id="performanceAssertionTemplateSelect" aria-label="Performance assertion template">
-                  <option value="status200">Status 200</option>
-                  <option value="jsonPathExists">JSON path exists</option>
-                  <option value="xmlPathExists">XML XPath exists</option>
-                  <option value="htmlSelectorExists">HTML selector exists</option>
-                  <option value="headerContains">Header contains</option>
-                  <option value="responseUnderOneSecond">Response under 1s</option>
-                  <option value="responseUnder10Kb">Response under 10 KB</option>
-                  <option value="bodyContains">Body contains</option>
-                  <option value="extractVariable">Extract variable</option>
-                  <option value="extractXml">Extract XML</option>
-                  <option value="extractHtml">Extract HTML</option>
-                  <option value="extractRegex">Extract regex</option>
-                </select>
-                <button id="addPerformanceAssertionTemplateButton" type="button">Add Template</button>
-              </div>
-              <div id="performanceAssertionsTable" class="kv-table assertions-table"></div>
             </div>
 
             <div id="performanceScriptsTab" class="tab-panel" role="tabpanel" aria-labelledby="performanceRequestScriptsTabButton">
@@ -1723,7 +1677,6 @@
   <script src="../core/authModel.js"></script>
   <script src="../core/cookieModel.js"></script>
   <script src="collectionModel.js"></script>
-  <script src="assertionModel.js"></script>
   <script src="cookieModel.js"></script>
   <script src="exampleModel.js"></script>
   <script src="performanceTestModel.js"></script>

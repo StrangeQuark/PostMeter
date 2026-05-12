@@ -99,18 +99,7 @@ function variableObservableValue(variable) {
   return value == null ? '' : String(value);
 }
 
-function applyExtractedVariables(environment, variables) {
-  if (!environment || !Array.isArray(variables)) {
-    return;
-  }
-  environment.variables ||= [];
-  for (const variable of variables) {
-    setVariable(environment.variables, variable.key, variable.value);
-  }
-}
-
 module.exports = {
-  applyExtractedVariables,
   cloneEnvironment,
   cloneVariables,
   getVariable,

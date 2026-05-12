@@ -61,9 +61,9 @@ const {
 } = PostMeterRequestQueryModel;
 const RENDERER_STATE_DEFAULTS = PostMeterRendererState.createRendererState();
 const TAB_PANEL_IDS = {
-  request: ['paramsTab', 'headersTab', 'authTab', 'cookiesTab', 'bodyTab', 'testsTab', 'scriptsTab', 'examplesTab', 'collectionVariablesTab'],
+  request: ['paramsTab', 'headersTab', 'authTab', 'cookiesTab', 'bodyTab', 'scriptsTab', 'examplesTab', 'collectionVariablesTab'],
   results: ['responseTab', 'responseHeadersTab', 'responseCookiesTab', 'testResultsTab', 'visualizerTab'],
-  performanceRequest: ['performanceParamsTab', 'performanceHeadersTab', 'performanceAuthTab', 'performanceCookiesTab', 'performanceBodyTab', 'performanceTestsTab', 'performanceScriptsTab', 'performanceExamplesTab', 'performanceVariablesTab'],
+  performanceRequest: ['performanceParamsTab', 'performanceHeadersTab', 'performanceAuthTab', 'performanceCookiesTab', 'performanceBodyTab', 'performanceScriptsTab', 'performanceExamplesTab', 'performanceVariablesTab'],
   performance: ['latencyTab', 'throughputTab', 'concurrencyTab', 'stressTab', 'spikeTab', 'soakTab', 'rampTab'],
   performanceOutput: ['performanceOutputResultsTab', 'performanceOutputRequestsTab', 'performanceOutputGraphsTab']
 };
@@ -145,10 +145,6 @@ let sidebarTreeDragPayload = null;
 const pendingNotificationModals = [];
 
 const $ = (id) => document.getElementById(id);
-const ASSERTION_TEMPLATES = PostMeterAssertionModel.assertionTemplates;
-const {
-  newAssertion
-} = PostMeterAssertionModel;
 const {
   exampleFromResponse,
   newExampleObject
@@ -175,7 +171,6 @@ const {
 const {
   collectAuthFromEditor: collectRequestAuthFromEditor,
   renderAuthEditor: renderRequestAuthEditor,
-  renderAssertions: renderRequestAssertions,
   renderCookieJarEditor: renderRequestCookieJarEditor,
   renderExamples: renderRequestExamples,
   renderRequestPairs: renderEditorRequestPairs,
@@ -510,8 +505,6 @@ function bindUi() {
     onAddHeader: () => addPair('headers'),
     onPostMeterTokenHeaderChange: () => setActiveRequestAutoHeaderOption('sendPostMeterToken', $('sendPostMeterTokenInput')?.checked === true),
     onShowGeneratedHeadersChange: () => setActiveRequestAutoHeaderOption('showGeneratedHeaders', $('showGeneratedHeadersInput')?.checked === true),
-    onAddAssertion: () => addAssertion(),
-    onAddAssertionTemplate: addAssertionTemplate,
     onAddExample: addExample,
     onCaptureResponseExample: captureResponseExample,
     onExportExamples: exportRequestExamples,
@@ -549,8 +542,6 @@ function bindUi() {
     onAddPerformanceHeader: () => addPerformancePair('headers'),
     onPerformancePostMeterTokenHeaderChange: () => setActivePerformanceRequestAutoHeaderOption('sendPostMeterToken', $('performanceSendPostMeterTokenInput')?.checked === true),
     onPerformanceShowGeneratedHeadersChange: () => setActivePerformanceRequestAutoHeaderOption('showGeneratedHeaders', $('performanceShowGeneratedHeadersInput')?.checked === true),
-    onAddPerformanceAssertion: () => addPerformanceAssertion(),
-    onAddPerformanceAssertionTemplate: addPerformanceAssertionTemplate,
     onAddPerformanceExample: addPerformanceExample,
     onExportPerformanceExamples: () => { void exportPerformanceExamples(); },
     onAddPerformanceRequestVariable: addPerformanceRequestVariable,
@@ -5397,7 +5388,6 @@ function renderPerformanceRequestEditor(test = activePerformanceTest()) {
     for (const id of [
       'performanceParamsTable',
       'performanceHeadersTable',
-      'performanceAssertionsTable',
       'performanceRequestVariablesTable',
       'performanceExamplesList',
       'performanceCookiesTable'
@@ -5417,7 +5407,6 @@ function renderPerformanceRequestEditor(test = activePerformanceTest()) {
   ensureRequestQueryEditorMirror(request);
   request.queryParams ||= [];
   request.headers ||= [];
-  request.assertions ||= [];
   request.variables ||= [];
   request.examples ||= [];
   request.scripts ||= { preRequest: '', tests: '' };
@@ -5436,7 +5425,6 @@ function renderPerformanceRequestEditor(test = activePerformanceTest()) {
 
   renderPerformancePairs('performanceParamsTable', request.queryParams);
   renderPerformanceHeaderPairs('performanceHeadersTable', request);
-  renderPerformanceAssertions(request.assertions);
   renderPerformanceRequestVariablePairs(request.variables);
   renderPerformanceExamples(request.examples);
   renderPerformanceCookieJarEditor();
@@ -5498,16 +5486,6 @@ function renderPerformanceHeaderPairs(containerId, request) {
   });
   renderGeneratedHeaderRows(containerId, request);
   renderPerformanceRequestHeaderControls(request);
-}
-
-function renderPerformanceAssertions(assertions) {
-  renderRequestAssertions({
-    doc: document,
-    containerId: 'performanceAssertionsTable',
-    assertions,
-    onDirty: markActivePerformanceDirty,
-    onRerender: () => renderPerformanceAssertions(assertions)
-  });
 }
 
 function renderPerformanceRequestVariablePairs(pairs) {
@@ -6933,10 +6911,8 @@ function renderPerformanceExecutionDetails(result = lastPerformanceResult) {
   if (sample.error) {
     details.append(runnerDetailTextBlock('Error', sample.error, 'runner-detail-error'));
   }
-  appendRunnerAssertionDetails(details, sample.assertionResults || []);
   appendRunnerScriptResultDetails(details, 'Pre-request', sample.preRequestScriptResult);
   appendRunnerScriptResultDetails(details, 'Post-request', sample.testScriptResult);
-  appendRunnerVariableDetails(details, 'Extracted variables', sample.extractedVariables || []);
   appendRunnerVariableDetails(details, 'Request variables', sample.localVariables || []);
   appendRunnerVariableDetails(details, 'Environment variables', result?.environment?.variables || []);
   appendRunnerResponseBodyDetails(details, sample);
@@ -7245,7 +7221,6 @@ function normalizeRunnerRequest(request) {
   normalized.url = String(normalized.url || '');
   normalized.queryParams = Array.isArray(normalized.queryParams) ? normalized.queryParams : [];
   normalized.headers = Array.isArray(normalized.headers) ? normalized.headers : [];
-  normalized.assertions = Array.isArray(normalized.assertions) ? normalized.assertions : [];
   normalized.variables = Array.isArray(normalized.variables) ? normalized.variables : [];
   normalized.examples = Array.isArray(normalized.examples) ? normalized.examples : [];
   normalized.scripts = normalized.scripts && typeof normalized.scripts === 'object' ? normalized.scripts : { preRequest: '', tests: '' };
@@ -9785,7 +9760,6 @@ function renderRequestEditor() {
     $('testScriptInput').value = '';
     $('paramsTable').textContent = '';
     $('headersTable').textContent = '';
-    $('assertionsTable').textContent = '';
     $('examplesList').textContent = '';
     $('requestVariablesTable').textContent = '';
     $('cookiesTable').textContent = '';
@@ -9821,7 +9795,6 @@ function renderRequestEditor() {
   $('requestCookieJarStoreInput').checked = request.cookieJar.storeResponses !== false;
   renderPairs('paramsTable', request.queryParams || [], 'queryParams');
   renderHeaderPairs('headersTable', request);
-  renderAssertions(request.assertions || []);
   renderRequestVariablePairs(request.variables || []);
   renderExamples(request.examples || []);
   renderCookieJarEditor();
@@ -10122,15 +10095,6 @@ function ensureRequestAutoHeaders(request) {
     showGeneratedHeaders: request?.autoHeaders?.showGeneratedHeaders === true
   };
   return request.autoHeaders;
-}
-
-function renderAssertions(assertions) {
-  renderRequestAssertions({
-    doc: document,
-    assertions,
-    onDirty: markActiveRequestDirty,
-    onRerender: () => renderAssertions(assertions)
-  });
 }
 
 function renderEnvironmentSelect() {
@@ -11082,10 +11046,8 @@ function renderRunnerExecutionDetails(result = lastRunnerResult) {
   if (item.error) {
     details.append(runnerDetailTextBlock('Error', item.error, 'runner-detail-error'));
   }
-  appendRunnerAssertionDetails(details, item.assertionResults || []);
   appendRunnerScriptResultDetails(details, 'Pre-request', item.preRequestScriptResult);
   appendRunnerScriptResultDetails(details, 'Post-request', item.testScriptResult);
-  appendRunnerVariableDetails(details, 'Extracted variables', item.extractedVariables || []);
   appendRunnerVariableDetails(details, 'Request variables', item.localVariables || []);
   appendRunnerVariableDetails(details, 'Collection variables', result?.collectionVariables || []);
   appendRunnerVariableDetails(details, 'Environment variables', result?.environment?.variables || []);
@@ -11113,25 +11075,6 @@ function runnerExecutionOverview(item = {}, request = null) {
   ].filter(Boolean).join(' | ');
   block.append(heading, target, metrics);
   return block;
-}
-
-function appendRunnerAssertionDetails(details, assertions) {
-  const block = runnerDetailBlock('Assertions');
-  const list = document.createElement('div');
-  list.className = 'test-result-list';
-  if (!Array.isArray(assertions) || !assertions.length) {
-    appendEmptyTestResult(list, 'No assertions recorded.');
-  } else {
-    for (const assertion of assertions) {
-      appendTestResultRow(list, {
-        status: assertion?.passed === true ? 'passed' : 'failed',
-        name: assertion?.message || assertion?.assertion?.name || 'Assertion',
-        detail: assertion?.passed === true ? '' : String(assertion?.error || assertion?.message || '')
-      });
-    }
-  }
-  block.append(list);
-  details.append(block);
 }
 
 function appendRunnerScriptResultDetails(details, title, scriptResult) {
@@ -11924,7 +11867,6 @@ function openImportedRequest(importedRequest) {
   ]);
   request.queryParams ||= [];
   request.headers ||= [];
-  request.assertions ||= [];
   request.scripts ||= { preRequest: '', tests: '' };
   request.variables ||= [];
   request.examples ||= [];
@@ -12356,9 +12298,6 @@ function requestCurlExportExclusions(request = {}) {
   if (String(request.scripts?.tests || '').trim()) {
     exclusions.push('post-request scripts');
   }
-  if ((request.assertions || []).some((assertion) => assertion?.enabled !== false)) {
-    exclusions.push('assertions');
-  }
   const authType = String(request.auth?.type || 'none');
   if (authType && !['none', 'basic'].includes(authType)) {
     exclusions.push(`${authType} auth helper settings`);
@@ -12680,7 +12619,6 @@ function newRequestObject(name) {
     bodyType: 'NONE',
     body: '',
     auth: { type: 'none' },
-    assertions: [],
     scripts: { preRequest: '', tests: '' },
     variables: [],
     examples: [],
@@ -13001,36 +12939,6 @@ function addPerformancePair(fieldName) {
   }
 }
 
-function addAssertion(template = ASSERTION_TEMPLATES.status200) {
-  const request = activeRequest();
-  if (request) {
-    request.assertions ||= [];
-    request.assertions.push(newAssertion(template));
-    markActiveRequestDirty();
-    renderAssertions(request.assertions);
-  }
-}
-
-function addAssertionTemplate() {
-  const template = ASSERTION_TEMPLATES[$('assertionTemplateSelect').value] || ASSERTION_TEMPLATES.status200;
-  addAssertion(template);
-}
-
-function addPerformanceAssertion(template = ASSERTION_TEMPLATES.status200) {
-  const request = activePerformanceTest()?.request;
-  if (request) {
-    request.assertions ||= [];
-    request.assertions.push(newAssertion(template));
-    markActivePerformanceDirty();
-    renderPerformanceAssertions(request.assertions);
-  }
-}
-
-function addPerformanceAssertionTemplate() {
-  const template = ASSERTION_TEMPLATES[$('performanceAssertionTemplateSelect')?.value] || ASSERTION_TEMPLATES.status200;
-  addPerformanceAssertion(template);
-}
-
 async function renameCollection(collection) {
   const restoreTarget = treeFocusTarget('collection', collection?.id);
   const value = await promptTextInput({
@@ -13320,7 +13228,6 @@ function collectRequestFromEditor() {
   request.url = $('urlInput').value.trim();
   syncRequestBodyFieldsFromEditor('', request);
   request.auth = collectAuthFromEditor();
-  request.assertions ||= [];
   request.scripts = {
     preRequest: $('preRequestScriptInput').value,
     tests: $('testScriptInput').value
@@ -13478,7 +13385,6 @@ function collectPerformanceTestFromEditor() {
   syncRequestBodyFieldsFromEditor('performance', test.request);
   const collectedPerformanceAuth = collectPerformanceAuthFromEditor();
   test.request.auth = collectedPerformanceAuth;
-  test.request.assertions ||= [];
   test.request.scripts = {
     preRequest: $('performancePreRequestScriptInput')?.value || '',
     tests: $('performanceTestScriptInput')?.value || ''

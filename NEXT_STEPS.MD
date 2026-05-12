@@ -40,7 +40,7 @@ PostMeter must remain a standalone local desktop application. Do not add PostMet
   - Runners can be created from `New` > `Runner` or the empty Runners pane, runner requests can be added as local copies or imported from expandable collection/request selections, and Shift+click/Ctrl+click can import multiple selections.
   - Runner-owned requests open in normal request editor tabs through row `Edit`, save only that runner request copy, and can be reordered/deleted without mutating source collection requests.
   - Runner execution results now use a split status/detail pane while keeping the request list scrollable independently.
-  - Runner execution now accepts runner payloads directly, preserves runner-local request order/IDs, supports the existing script/assertion/cookie/vault/package lifecycle, and only writes environment mutations back when `allowEnvironmentMutation` is enabled.
+  - Runner execution now accepts runner payloads directly, preserves runner-local request order/IDs, supports the existing script/cookie/vault/package lifecycle, and only writes environment mutations back when `allowEnvironmentMutation` is enabled.
   - Tests cover runner model normalization, migration, IPC validation/runtime mutation policy, session persistence, tab cap enforcement, dirty runner tab save/discard failure paths, and first-class renderer wiring.
 - Refined desktop tab and sidebar interactions.
   - Request, environment, and workspace names are inline-editable; request/environment title edits save on Enter and stay dirty on blur, while workspace title edits save automatically.
@@ -107,7 +107,7 @@ These are production-readiness items that cannot be fully proven by local Linux 
 
 - Distributed/cloud load execution remains deferred until there is explicit product demand.
 - Team collaboration and shared remote workspaces.
-- Plugin system for custom auth, assertions, importers, reporters, and scripting extensions.
+- Plugin system for custom auth, importers, reporters, and scripting extensions.
 - True auto-download/auto-install updates beyond opening GitHub Releases.
 - Advanced local automation / unsafe script mode is deferred and should not be part of the v1.0.0 release scope. If revisited later, consider a plugin system or settings panel that can grant selected local capabilities or disable sandboxing entirely for users who intentionally want scripts to modify local files. The maintainer has not chosen between those two models yet; any future design must treat this as dangerous, off by default, and visibly separate from the default safe sandbox.
 - Direct first-party Postman account/provider integration for fetching team Package Library `@team/package` sources remains deferred. The current reviewed HTTPS source-URL workflow stays the supported path until a future provider-specific auth/import contract is approved.

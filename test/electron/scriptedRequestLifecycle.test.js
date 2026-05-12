@@ -155,7 +155,7 @@ test('continues the main request when the pre-request script has a top-level err
   assert.equal(result.environment.variables.find((item) => item.key === 'blocked'), undefined);
 });
 
-test('continues the main request when pre-request assertions fail', async () => {
+test('continues the main request when pre-request script tests fail', async () => {
   const sent = [];
   const scripts = [];
 

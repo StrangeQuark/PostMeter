@@ -105,23 +105,6 @@
     dispatchInput(inputs[2]);
   }
 
-  function setAssertionRow(type, name, path, operator, expected, runtimeGlobal = global) {
-    const row = getElement(runtimeGlobal, 'assertionsTable').querySelector('.assertion-row:last-child');
-    assertUiSmoke(row, 'Missing assertion row.');
-    const selects = row.querySelectorAll('select');
-    const inputs = row.querySelectorAll('input');
-    selects[0].value = type;
-    dispatchChange(selects[0]);
-    inputs[1].value = name;
-    dispatchInput(inputs[1]);
-    inputs[2].value = path;
-    dispatchInput(inputs[2]);
-    selects[1].value = operator;
-    dispatchChange(selects[1]);
-    inputs[3].value = expected;
-    dispatchInput(inputs[3]);
-  }
-
   function assertContextMenuSmoke(options = {}, runtimeGlobal = global) {
     const collectionButton = runtimeGlobal.document.querySelector('.collection-node > .tree-item');
     assertUiSmoke(collectionButton, 'Collection tree item was not rendered.');
@@ -206,7 +189,6 @@
     dispatchInput,
     nextPaint,
     queueUiSmokeRun,
-    setAssertionRow,
     setPairRow,
     waitForUiSmoke
   };

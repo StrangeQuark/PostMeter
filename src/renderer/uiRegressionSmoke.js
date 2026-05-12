@@ -148,30 +148,6 @@
     assertUiSmoke(variableRow, 'Request variable editor did not create a row.');
     assertUiSmoke(variableRow.querySelector('[aria-label="Variable 1 enabled"]'), 'Request variable enabled control should expose a contextual accessible label.');
     assertUiSmoke(variableRow.querySelector('[aria-label="Variable 1"]'), 'Request variable key input should expose a contextual accessible label.');
-    activateTab('request', 'tests');
-    $('assertionTemplateSelect').value = 'headerContains';
-    dispatchChange($('assertionTemplateSelect'));
-    $('addAssertionTemplateButton').click();
-    const assertionRow = $('assertionsTable').querySelector('.assertion-row');
-    assertUiSmoke(assertionRow, 'Assertion template did not create a row.');
-    assertUiSmoke(assertionRow.querySelector('[aria-label="Assertion 1 type"]'), 'Assertion type control should expose a contextual accessible label.');
-    assertUiSmoke(assertionRow.querySelector('[aria-label="Assertion 1 expected value"]'), 'Assertion expected-value input should expose a contextual accessible label.');
-    assertUiSmoke(assertionRow.dataset.assertionType === 'header', 'Header assertion template did not mark row type.');
-    const assertionInputs = assertionRow.querySelectorAll('input');
-    assertUiSmoke(assertionInputs[1].placeholder === 'Header name', 'Header assertion did not use header-name placeholder.');
-    assertUiSmoke(assertionInputs[3].placeholder === 'Expected header value', 'Header assertion did not use expected-value placeholder.');
-    $('assertionTemplateSelect').value = 'xmlPathExists';
-    dispatchChange($('assertionTemplateSelect'));
-    $('addAssertionTemplateButton').click();
-    const xmlAssertionRow = Array.from($('assertionsTable').querySelectorAll('.assertion-row')).at(-1);
-    assertUiSmoke(xmlAssertionRow.dataset.assertionType === 'xmlPath', 'XML assertion template did not mark row type.');
-    assertUiSmoke(xmlAssertionRow.querySelectorAll('input')[2].placeholder === 'XPath', 'XML assertion did not use XPath placeholder.');
-    $('assertionTemplateSelect').value = 'htmlSelectorExists';
-    dispatchChange($('assertionTemplateSelect'));
-    $('addAssertionTemplateButton').click();
-    const htmlAssertionRow = Array.from($('assertionsTable').querySelectorAll('.assertion-row')).at(-1);
-    assertUiSmoke(htmlAssertionRow.dataset.assertionType === 'htmlSelector', 'HTML assertion template did not mark row type.');
-    assertUiSmoke(htmlAssertionRow.querySelectorAll('input')[2].placeholder === 'CSS selector', 'HTML assertion did not use selector placeholder.');
     displayResponse({
       statusCode: 200,
       durationMillis: 1,
@@ -1177,7 +1153,6 @@
       bodyType: 'NONE',
       body: '',
       auth: { type: 'none' },
-      assertions: [],
       scripts: { preRequest: '', tests: '' },
       variables: [],
       examples: [],
@@ -2353,7 +2328,6 @@
         ['performanceRequestAuthTabButton', 'Auth'],
         ['performanceRequestCookiesTabButton', 'Cookies'],
         ['performanceRequestBodyTabButton', 'Body'],
-        ['performanceRequestTestsTabButton', 'Tests'],
         ['performanceRequestScriptsTabButton', 'Scripts'],
         ['performanceRequestExamplesTabButton', 'Examples'],
         ['performanceRequestVariablesTabButton', 'Variables']
@@ -2605,10 +2579,8 @@
                 ? '<response><title>Performance</title></response>'
                 : `response body ${index + 1}`,
             error: isTransportError ? 'fetch failed' : '',
-            assertionResults: [{ passed: true, message: `assertion ${index + 1}` }],
             preRequestScriptResult: { passed: true, tests: [{ name: `pre ${index + 1}`, passed: true }] },
             testScriptResult: { passed: true, tests: [{ name: `post ${index + 1}`, passed: true }] },
-            extractedVariables: [],
             localVariables: [{ enabled: true, key: `sampleToken${index + 1}`, value: 'value' }]
           };
         })
@@ -2627,7 +2599,6 @@
       assertUiSmoke($('performanceExecutionDetailsStatus').textContent === '200', 'Performance detail pane should update when selecting a sample row.');
       assertUiSmoke($('performanceExecutionDetails').textContent.includes('Iteration 2'), 'Performance detail pane should show selected sample iteration details.');
       assertUiSmoke(!$('performanceExecutionDetails').textContent.includes('Run summary'), 'Performance request detail pane should not duplicate aggregate run summary details.');
-      assertUiSmoke($('performanceExecutionDetails').textContent.includes('assertion 2'), 'Performance request detail pane should show selected sample assertions.');
       assertUiSmoke($('performanceExecutionDetails').textContent.includes('pre 2'), 'Performance request detail pane should show selected sample pre-request script results.');
       assertUiSmoke($('performanceExecutionDetails').textContent.includes('post 2'), 'Performance request detail pane should show selected sample post-request script results.');
       assertUiSmoke($('performanceExecutionDetails').textContent.includes('"sample": 2'), 'Performance request detail pane should format selected sample JSON response body.');
@@ -3131,10 +3102,8 @@
                 durationMillis: 1,
                 responseBody: '',
                 passed: true,
-                assertionResults: [],
                 preRequestScriptResult: { passed: true, tests: [] },
                 testScriptResult: { passed: true, tests: [] },
-                extractedVariables: [],
                 localVariables: []
               }
             ]
@@ -3300,10 +3269,8 @@
             durationMillis: 21,
             responseBody: '{"runner":true}',
             passed: true,
-            assertionResults: [],
             preRequestScriptResult: { passed: true, tests: [] },
             testScriptResult: { passed: true, tests: [{ name: 'runner request passed', passed: true }] },
-            extractedVariables: [],
             localVariables: [{ enabled: true, key: 'runnerLocalToken', value: 'local-value' }]
           },
           {
@@ -3313,10 +3280,8 @@
             durationMillis: 33,
             responseBody: '<error><message>Bad status</message></error>',
             passed: false,
-            assertionResults: [],
             preRequestScriptResult: { passed: true, tests: [] },
             testScriptResult: { passed: false, tests: [{ name: 'runner request failed', passed: false, error: 'Expected HTTP 200.' }] },
-            extractedVariables: [],
             localVariables: [],
             error: 'Expected HTTP 200.'
           },
@@ -3327,10 +3292,8 @@
             durationMillis: 0,
             responseBody: '',
             passed: false,
-            assertionResults: [],
             preRequestScriptResult: { passed: true, tests: [] },
             testScriptResult: { passed: true, tests: [] },
-            extractedVariables: [],
             localVariables: [],
             error: 'fetch failed'
           }
@@ -3346,10 +3309,8 @@
           durationMillis: 20 + (number % 15),
           responseBody: '',
           passed: statusCode < 400,
-          assertionResults: [],
           preRequestScriptResult: { passed: true, tests: [] },
           testScriptResult: { passed: true, tests: [] },
-          extractedVariables: [],
           localVariables: []
         };
       }));
@@ -3692,7 +3653,6 @@
       bodyType: 'NONE',
       body: '',
       auth: { type: 'none' },
-      assertions: [],
       variables: [],
       examples: []
     }));

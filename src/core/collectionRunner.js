@@ -1,6 +1,5 @@
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
-const { evaluateAssertions } = require('./assertions');
 const { resolveEnvironmentValue } = require('./environmentResolver');
 const { sendRequest } = require('./httpClient');
 const { normalizeRunnerRequestIterations, runnerModel, walkRequests } = require('./models');
@@ -13,7 +12,6 @@ const {
 } = require('./scriptedRequestLifecycle');
 const { runPostmanScriptIsolated } = require('./scriptSandbox');
 const {
-  applyExtractedVariables,
   cloneEnvironment,
   cloneVariables,
   runtimeEnvironment
@@ -126,10 +124,10 @@ async function runCollection(collection, environment, options = {}) {
       scopeState.cookies = scriptedRequest.cookies;
     }
     if (preRequestScriptStoppedBeforeSend(scriptedRequest)) {
-      return runRequestBrokerResult(targetEntry, scriptedRequest, null, []);
+      return runRequestBrokerResult(targetEntry, scriptedRequest, null);
     }
     if (scriptedRequest.skipped) {
-      return runRequestBrokerResult(targetEntry, scriptedRequest, null, [], { skipped: true });
+      return runRequestBrokerResult(targetEntry, scriptedRequest, null, { skipped: true });
     }
     const response = scriptedRequest.response;
     if (Array.isArray(response?.updatedCookies)) {
@@ -138,9 +136,7 @@ async function runCollection(collection, environment, options = {}) {
     if (response?.updatedAuth) {
       rememberRefreshedAuth(targetEntry.request, response.updatedAuth, refreshedAuthByRequestId);
     }
-    const assertions = evaluateAssertions(response, targetRequest.assertions || []);
-    applyExtractedVariables(scopeState.environment, assertions.extractedVariables);
-    return runRequestBrokerResult(targetEntry, scriptedRequest, response, assertions.results);
+    return runRequestBrokerResult(targetEntry, scriptedRequest, response);
   };
   let index = 0;
   let steps = 0;
@@ -233,10 +229,7 @@ async function runCollection(collection, environment, options = {}) {
       if (response.updatedAuth) {
         rememberRefreshedAuth(entry.request, response.updatedAuth, refreshedAuthByRequestId);
       }
-      const assertions = evaluateAssertions(response, requestForExecution.assertions || []);
-      applyExtractedVariables(runnerEnvironment, assertions.extractedVariables);
-      const passed = assertions.passed
-        && scriptedRequest.preRequestScriptResult.passed
+      const passed = scriptedRequest.preRequestScriptResult.passed
         && scriptedRequest.testScriptResult.passed;
       const result = {
         requestId: entry.request.id,
@@ -250,12 +243,10 @@ async function runCollection(collection, environment, options = {}) {
         responseBody: boundedRunResultResponseBody(response.body),
         responseBytes: response.responseBytes || Buffer.byteLength(response.body || '', 'utf8'),
         passed,
-        assertionResults: assertions.results,
         preRequestScriptResult: scriptedRequest.preRequestScriptResult,
         messageScriptResults: scriptedRequest.messageScriptResults || [],
         afterResponseScriptResult: scriptedRequest.afterResponseScriptResult,
         testScriptResult: scriptedRequest.testScriptResult,
-        extractedVariables: assertions.extractedVariables,
         localVariables: scriptedRequest.localVariables,
         error: ''
       };
@@ -284,10 +275,8 @@ async function runCollection(collection, environment, options = {}) {
         statusCode: 0,
         durationMillis: 0,
         passed: false,
-        assertionResults: [],
         preRequestScriptResult: emptyScriptResult(),
         testScriptResult: emptyScriptResult(),
-        extractedVariables: [],
         error: error.message || String(error)
       };
       results.push(result);
@@ -583,7 +572,7 @@ function executionLocationForEntry(collection, entry) {
   };
 }
 
-function runRequestBrokerResult(entry, scriptedRequest, response, assertionResults, options = {}) {
+function runRequestBrokerResult(entry, scriptedRequest, response, options = {}) {
   return {
     collectionVariables: scriptedRequest.collectionVariables || [],
     cookies: scriptedRequest.cookies || [],
@@ -598,7 +587,7 @@ function runRequestBrokerResult(entry, scriptedRequest, response, assertionResul
       finalUrl: response.finalUrl || entry.request.url || ''
     } : null,
     skipped: options.skipped === true,
-    tests: runRequestBrokerTests(entry, scriptedRequest, assertionResults)
+    tests: runRequestBrokerTests(entry, scriptedRequest)
   };
 }
 
@@ -623,17 +612,10 @@ function runRequestScopeState(payload, environment, collectionVariables, globals
   };
 }
 
-function runRequestBrokerTests(entry, scriptedRequest, assertionResults = []) {
+function runRequestBrokerTests(entry, scriptedRequest) {
   const tests = [];
   appendScriptResultTests(tests, entry, 'pre-request', scriptedRequest.preRequestScriptResult);
   appendScriptResultTests(tests, entry, 'test', scriptedRequest.testScriptResult);
-  for (const assertion of assertionResults || []) {
-    tests.push({
-      name: `${entry.request.name}: assertion ${assertion.assertion?.name || assertion.assertion?.type || 'result'}`,
-      passed: assertion.passed === true,
-      error: assertion.passed === true ? '' : assertion.message || 'Assertion failed.'
-    });
-  }
   return tests;
 }
 
@@ -798,10 +780,8 @@ function skippedResult(entry, startedAt, scriptedRequest, displayFields = {}) {
     responseBody: '',
     responseBytes: 0,
     passed: true,
-    assertionResults: [],
     preRequestScriptResult: scriptedRequest.preRequestScriptResult,
     testScriptResult: emptyScriptResult(),
-    extractedVariables: [],
     localVariables: scriptedRequest.localVariables,
     error: ''
   };
@@ -821,10 +801,8 @@ function scriptFailureResult(entry, startedAt, preRequestScriptResult, localVari
     responseBody: '',
     responseBytes: 0,
     passed: false,
-    assertionResults: [],
     preRequestScriptResult,
     testScriptResult: emptyScriptResult(),
-    extractedVariables: [],
     localVariables,
     error
   };
@@ -901,36 +879,10 @@ function collectionRunResultToCsv(result) {
   }
 
   rows.push([]);
-  rows.push(['requestId', 'assertionType', 'assertionName', 'path', 'operator', 'expected', 'actual', 'passed', 'message']);
-  for (const item of result.results || []) {
-    for (const assertion of item.assertionResults || []) {
-      rows.push([
-        item.requestId || '',
-        assertion.assertion?.type || '',
-        assertion.assertion?.name || '',
-        assertion.assertion?.path || '',
-        assertion.assertion?.operator || '',
-        assertion.expected ?? '',
-        assertion.actual ?? '',
-        assertion.passed === true,
-        assertion.message || ''
-      ]);
-    }
-  }
-
-  rows.push([]);
   rows.push(['requestId', 'phase', 'testName', 'passed', 'error']);
   for (const item of result.results || []) {
     appendScriptTests(rows, item, 'preRequest', item.preRequestScriptResult);
     appendScriptTests(rows, item, 'tests', item.testScriptResult);
-  }
-
-  rows.push([]);
-  rows.push(['variableName', 'requestId']);
-  for (const item of result.results || []) {
-    for (const variable of item.extractedVariables || []) {
-      rows.push([variable.key || '', item.requestId || '']);
-    }
   }
 
   rows.push([]);

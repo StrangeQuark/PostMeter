@@ -126,7 +126,6 @@ function assertRequestPayload(value, field = 'request') {
   assertSchemaArrays('request', value, field, {
     queryParams: assertPairs,
     headers: assertPairs,
-    assertions: assertAssertions,
     variables: assertPairs,
     examples: assertExamples,
     metadata: assertPairs,
@@ -187,7 +186,6 @@ function assertRunnerRequestPayload(value, field = 'request') {
     'protocol',
     'protocolProfile',
     'queryParams',
-    'assertions',
     'autoHeaders',
     'scripts',
     'source',
@@ -745,8 +743,6 @@ function assertCollectionRunResultPayload(value, field = 'result') {
       }
       assertNoUnexpectedFields('collectionRunRequestResult', result, itemField, [
         'afterResponseScriptResult',
-        'assertionResults',
-        'extractedVariables',
         'localVariables',
         'messageScriptResults',
         'preRequestScriptResult',
@@ -754,31 +750,6 @@ function assertCollectionRunResultPayload(value, field = 'result') {
         'responseBytes',
         'testScriptResult'
       ]);
-      if (result.assertionResults != null) {
-        array(result.assertionResults, `${itemField}.assertionResults`, LIMITS.pairs).forEach((assertionResult, assertionIndex) => {
-          const assertionField = `${itemField}.assertionResults[${assertionIndex}]`;
-          assertSchemaFields('assertionResult', assertionResult, assertionField);
-          assertNoUnexpectedFields('assertionResult', assertionResult, assertionField, [
-            'actual',
-            'assertion',
-            'expected',
-            'extractedVariable'
-          ]);
-          if (assertionResult.actual != null) {
-            optionalJsonValue(assertionResult.actual, `${assertionField}.actual`, LIMITS.value);
-          }
-          if (assertionResult.assertion != null) {
-            assertSchemaFields('assertion', assertionResult.assertion, `${assertionField}.assertion`);
-            assertNoUnexpectedFields('assertion', assertionResult.assertion, `${assertionField}.assertion`);
-          }
-          if (assertionResult.expected != null) {
-            optionalJsonValue(assertionResult.expected, `${assertionField}.expected`, LIMITS.value);
-          }
-          if (assertionResult.extractedVariable != null) {
-            assertSchemaFields('keyValue', assertionResult.extractedVariable, `${assertionField}.extractedVariable`);
-          }
-        });
-      }
       if (result.preRequestScriptResult != null) {
         assertScriptResult(result.preRequestScriptResult, `${itemField}.preRequestScriptResult`);
       }
@@ -792,9 +763,6 @@ function assertCollectionRunResultPayload(value, field = 'result') {
       }
       if (result.testScriptResult != null) {
         assertScriptResult(result.testScriptResult, `${itemField}.testScriptResult`);
-      }
-      if (result.extractedVariables != null) {
-        assertPairs(result.extractedVariables, `${itemField}.extractedVariables`);
       }
       if (result.localVariables != null) {
         assertPairs(result.localVariables, `${itemField}.localVariables`);
@@ -1034,9 +1002,7 @@ function assertPerformanceCalibrationStagePayload(value, field) {
 function assertPerformanceSamplePayload(value, field) {
   object(value, field);
   assertAllowedObjectFields(value, field, [
-    'assertionResults',
     'error',
-    'extractedVariables',
     'iteration',
     'localVariables',
     'passed',
@@ -1066,39 +1032,11 @@ function assertPerformanceSamplePayload(value, field) {
   optionalNumber(value.responseBytes, `${field}.responseBytes`);
   optionalBoolean(value.passed, `${field}.passed`);
   optionalString(value.error, `${field}.error`, LIMITS.value);
-  if (value.assertionResults != null) {
-    array(value.assertionResults, `${field}.assertionResults`, LIMITS.pairs).forEach((assertionResult, assertionIndex) => {
-      const assertionField = `${field}.assertionResults[${assertionIndex}]`;
-      assertSchemaFields('assertionResult', assertionResult, assertionField);
-      assertNoUnexpectedFields('assertionResult', assertionResult, assertionField, [
-        'actual',
-        'assertion',
-        'expected',
-        'extractedVariable'
-      ]);
-      if (assertionResult.actual != null) {
-        optionalJsonValue(assertionResult.actual, `${assertionField}.actual`, LIMITS.value);
-      }
-      if (assertionResult.assertion != null) {
-        assertSchemaFields('assertion', assertionResult.assertion, `${assertionField}.assertion`);
-        assertNoUnexpectedFields('assertion', assertionResult.assertion, `${assertionField}.assertion`);
-      }
-      if (assertionResult.expected != null) {
-        optionalJsonValue(assertionResult.expected, `${assertionField}.expected`, LIMITS.value);
-      }
-      if (assertionResult.extractedVariable != null) {
-        assertSchemaFields('keyValue', assertionResult.extractedVariable, `${assertionField}.extractedVariable`);
-      }
-    });
-  }
   if (value.preRequestScriptResult != null) {
     assertScriptResult(value.preRequestScriptResult, `${field}.preRequestScriptResult`);
   }
   if (value.testScriptResult != null) {
     assertScriptResult(value.testScriptResult, `${field}.testScriptResult`);
-  }
-  if (value.extractedVariables != null) {
-    assertPairs(value.extractedVariables, `${field}.extractedVariables`);
   }
   if (value.localVariables != null) {
     assertPairs(value.localVariables, `${field}.localVariables`);
@@ -1438,13 +1376,6 @@ function assertPairs(values, field) {
   array(values, field, LIMITS.pairs).forEach((pair, index) => {
     const itemField = `${field}[${index}]`;
     assertSchemaFields('keyValue', pair, itemField);
-  });
-}
-
-function assertAssertions(values, field) {
-  array(values, field, LIMITS.pairs).forEach((assertion, index) => {
-    const itemField = `${field}[${index}]`;
-    assertSchemaFields('assertion', assertion, itemField);
   });
 }
 

@@ -220,7 +220,6 @@ function normalizeSessionRequest(value) {
     bodyType: normalizeEnum(value.bodyType, BODY_TYPES, 'NONE'),
     body: normalizeString(value.body),
     auth: clonePlainObject(value.auth, { type: 'none' }),
-    assertions: normalizeObjectArray(value.assertions),
     scripts: {
       preRequest: normalizeString(value?.scripts?.preRequest),
       tests: normalizeString(value?.scripts?.tests)

@@ -636,8 +636,6 @@ test('renderer bootstrap binds performance creation import export run and config
     'closePerformanceCalibrationModalButton',
     'addPerformanceParamButton',
     'addPerformanceHeaderButton',
-    'addPerformanceAssertionButton',
-    'addPerformanceAssertionTemplateButton',
     'addPerformanceExampleButton',
     'exportPerformanceExamplesButton',
     'addPerformanceRequestVariableButton',
@@ -701,8 +699,6 @@ test('renderer bootstrap binds performance creation import export run and config
     onImportPerformanceRequest: () => calls.push('import-request'),
     onAddPerformanceParam: () => calls.push('add-param'),
     onAddPerformanceHeader: () => calls.push('add-header'),
-    onAddPerformanceAssertion: () => calls.push('add-assertion'),
-    onAddPerformanceAssertionTemplate: () => calls.push('add-template'),
     onAddPerformanceExample: () => calls.push('add-example'),
     onExportPerformanceExamples: () => calls.push('export-examples'),
     onAddPerformanceRequestVariable: () => calls.push('add-variable'),
@@ -732,8 +728,6 @@ test('renderer bootstrap binds performance creation import export run and config
     'importPerformanceRequestButton',
     'addPerformanceParamButton',
     'addPerformanceHeaderButton',
-    'addPerformanceAssertionButton',
-    'addPerformanceAssertionTemplateButton',
     'addPerformanceExampleButton',
     'exportPerformanceExamplesButton',
     'addPerformanceRequestVariableButton',
@@ -764,7 +758,7 @@ test('renderer bootstrap binds performance creation import export run and config
   elements.get('performanceGraphqlOperationNameInput').dispatch('input');
   elements.get('performanceBinaryBodySourceInput').dispatch('input');
 
-  assert.deepEqual(calls.slice(0, 22), [
+  assert.deepEqual(calls.slice(0, 20), [
     'new',
     'new',
     'import-test',
@@ -778,8 +772,6 @@ test('renderer bootstrap binds performance creation import export run and config
     'import-request',
     'add-param',
     'add-header',
-    'add-assertion',
-    'add-template',
     'add-example',
     'export-examples',
     'add-variable',

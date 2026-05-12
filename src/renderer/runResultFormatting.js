@@ -14,14 +14,8 @@
       if (item.error) {
         lines.push(`Error: ${item.error}`);
       }
-      for (const assertion of item.assertionResults || []) {
-        lines.push(`- ${assertion.passed ? 'PASS' : 'FAIL'} ${assertion.message}`);
-      }
       appendScriptResultLines(lines, 'Pre-request', item.preRequestScriptResult);
       appendScriptResultLines(lines, 'Tests', item.testScriptResult);
-      for (const variable of item.extractedVariables || []) {
-        lines.push(`- Extracted ${variable.key}`);
-      }
       const localVariables = visibleVariables(item.localVariables || []);
       for (const variable of localVariables) {
         lines.push(`- Request variable ${variable.key} = ${variableValue(variable)}`);

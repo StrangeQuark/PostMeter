@@ -118,28 +118,13 @@
   align-items: center;
 }
 
-.assertion-row {
-  display: grid;
-  grid-template-columns: 28px minmax(112px, 0.9fr) minmax(130px, 1fr) minmax(130px, 1fr) minmax(92px, 0.7fr) minmax(130px, 1fr) 74px;
-  gap: 6px;
-  align-items: center;
-}
-
 .kv-row input {
   width: 100%;
   min-height: 32px;
   padding: 7px 9px;
 }
 
-.assertion-row input,
-.assertion-row select {
-  width: 100%;
-  min-height: 32px;
-  padding: 7px 9px;
-}
-
 .kv-row input[type="checkbox"],
-.assertion-row input[type="checkbox"],
 .inline-toggle input {
   width: 16px;
   min-height: 16px;
@@ -162,11 +147,6 @@
 
 .generated-header-row input[readonly] {
   cursor: default;
-}
-
-.assertion-row button {
-  min-height: 30px;
-  padding: 4px 8px;
 }
 
 .inline-toggle {

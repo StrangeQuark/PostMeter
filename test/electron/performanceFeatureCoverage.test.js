@@ -91,7 +91,7 @@ test('Performance UI keeps type-specific input fields scoped to applicable test 
   const ramp = htmlPanel(html, 'rampTab', 'performanceResultsResize');
 
   assert.match(performanceRequest, /data-tab-group="performanceRequest"/);
-  for (const label of ['Params', 'Headers', 'Auth', 'Cookies', 'Body', 'Tests', 'Scripts', 'Examples', 'Variables']) {
+  for (const label of ['Params', 'Headers', 'Auth', 'Cookies', 'Body', 'Scripts', 'Examples', 'Variables']) {
     assert.match(performanceRequest, new RegExp(`>${label}<`));
   }
   assert.match(performanceRequest, /id="performanceMethodSelect"/);

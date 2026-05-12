@@ -369,30 +369,7 @@ function importOpenApiResponses(document, responses, request) {
   }
   for (const [status, rawResponse] of Object.entries(resolvedResponses)) {
     const response = resolveOpenApiObject(document, rawResponse);
-    const statusCode = parseOpenApiStatus(status);
-    if (statusCode) {
-      request.assertions.push({
-        enabled: false,
-        type: 'statusCode',
-        name: `OpenAPI ${statusCode}`,
-        path: '',
-        operator: 'equals',
-        expected: String(statusCode),
-        variableName: ''
-      });
-    }
     const responseHeaders = openApiResponseHeaders(document, response?.headers);
-    for (const header of responseHeaders) {
-      request.assertions.push({
-        enabled: false,
-        type: 'header',
-        name: header.key,
-        path: '',
-        operator: header.value ? 'contains' : 'exists',
-        expected: header.value,
-        variableName: ''
-      });
-    }
     request.examples.push(...openApiResponseExamples(document, status, response, responseHeaders));
   }
 }

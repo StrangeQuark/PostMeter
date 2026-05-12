@@ -337,7 +337,6 @@ test('carries runner-style request details into performance samples', async () =
       name: 'Detailed Request',
       method: 'GET',
       url: 'https://api.example.test/details',
-      assertions: [{ type: 'bodyContains', expected: 'ok' }],
       scripts: {
         preRequest: "pm.test('pre-request ran', function () { pm.expect(true).to.equal(true); });",
         tests: "pm.test('post-request saw status', function () { pm.response.to.have.status(200); });"
@@ -364,7 +363,6 @@ test('carries runner-style request details into performance samples', async () =
   assert.equal(sample.requestUrl, 'https://api.example.test/details');
   assert.equal(sample.responseBody, '{"ok":true}');
   assert.equal(sample.responseBytes, 11);
-  assert.equal(sample.assertionResults[0].passed, true);
   assert.equal(sample.preRequestScriptResult.tests[0].name, 'pre-request ran');
   assert.equal(sample.testScriptResult.tests[0].name, 'post-request saw status');
 });

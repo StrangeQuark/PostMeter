@@ -18,7 +18,7 @@ Supported:
 - Environment import/export, including native PostMeter environment JSON and Postman environment JSON import/export.
 - Runner definition import/export for workspace-owned desktop runners.
 - Native Performance-test import/export preserving each saved test's request copy, source metadata, selected environment ID, environment mutation policy, execution policy, safety limits, result-retention metadata, and export metadata.
-- Collections, folders, requests, assertions, scripts, auth metadata, environments, globals, history, cookies, request examples, variables, certificates, mock scripts, visualizer binding metadata, GraphQL/gRPC/protocol metadata, and file-binding metadata. Local app preferences are kept in `settings.json`; workspace-local sandbox/package/vault/diagnostics settings are kept in managed workspace `localsettings` and are not included in native workspace exports.
+- Collections, folders, requests, scripts, auth metadata, environments, globals, history, cookies, request examples, variables, certificates, mock scripts, visualizer binding metadata, GraphQL/gRPC/protocol metadata, and file-binding metadata. Local app preferences are kept in `settings.json`; workspace-local sandbox/package/vault/diagnostics settings are kept in managed workspace `localsettings` and are not included in native workspace exports.
 
 Planned:
 
@@ -78,7 +78,6 @@ Supported:
 - Common HTTP bearer, HTTP basic, header/query/cookie API key, and OAuth 2.0 security-scheme import.
 - Swagger 2.0 `body` and `formData` request parameters are imported into editable request bodies where representable.
 - Response examples are imported as editable request examples when inline examples are present.
-- Response status/header metadata is imported as disabled assertions so users can opt in without making every documented response code fail a run.
 - OpenAPI 3.1 JSON export for collections, including query/header/cookie parameters and mappable PostMeter auth helpers as security schemes.
 
 Known gaps:
@@ -93,7 +92,7 @@ Supported:
 - Common curl command import for URL, method, headers, data flags, cookies, multipart-ish form flags, and proxy/retry/TLS metadata.
 - Basic-auth flags, user-agent/referer headers, repeated headers, redirect/compressed/insecure flags, `--url-query`, `-G` query-data mode, repeated data flags, and binary/file upload intent are imported where representable.
 - Standalone request export and collection export to readable curl commands, including copyable request previews, PostMeter basic auth, and preserved redirect/compressed/insecure/binary metadata when present.
-- Generated collection curl scripts include the PostMeter collection name, per-request comments, and warning comments when scripts/assertions or other PostMeter-only request behavior cannot be represented in curl.
+- Generated collection curl scripts include the PostMeter collection name, per-request comments, and warning comments when scripts or other PostMeter-only request behavior cannot be represented in curl.
 
 Known gaps:
 
@@ -106,12 +105,10 @@ Supported:
 
 - XML response bodies are formatted in the response viewer when the content type or body shape indicates XML.
 - HTML response bodies are formatted in the response viewer when the content type or body shape indicates HTML.
-- XML XPath assertions and XML value extraction run in collection and CLI workflows.
-- HTML CSS selector assertions and HTML text extraction run in collection and CLI workflows.
 
 Known gaps:
 
-- HTML selector assertions check parsed text content; they do not perform full browser layout, JavaScript execution, or accessibility-tree validation.
+- Response formatting does not perform full browser layout, JavaScript execution, or accessibility-tree validation.
 
 ## Scripting
 

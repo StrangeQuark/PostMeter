@@ -1,7 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const {
-  applyExtractedVariables,
   getVariable,
   runtimeEnvironment,
   setVariable,
@@ -46,16 +45,4 @@ test('mutates variable arrays predictably', () => {
 
   unsetVariable(variables, 'token');
   assert.equal(getVariable(variables, 'token'), undefined);
-});
-
-test('applies extracted variables to environments', () => {
-  const environment = { variables: [{ enabled: true, key: 'token', value: 'old' }] };
-
-  applyExtractedVariables(environment, [
-    { key: 'token', value: 'new' },
-    { key: 'next', value: 'value' }
-  ]);
-
-  assert.equal(getVariable(environment.variables, 'token'), 'new');
-  assert.equal(getVariable(environment.variables, 'next'), 'value');
 });

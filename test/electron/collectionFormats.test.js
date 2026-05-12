@@ -77,8 +77,6 @@ test('imports and exports OpenAPI collections', async () => {
   assert.equal(collection.folders[0].requests[0].examples[0].statusCode, 200);
   assert.equal(collection.folders[0].requests[0].examples[0].headers[0].key, 'X-Trace');
   assert.match(collection.folders[0].requests[0].examples[0].body, /"id": "w1"/);
-  assert.equal(collection.folders[0].requests[0].assertions.find((assertion) => assertion.type === 'statusCode' && assertion.expected === '200').enabled, false);
-  assert.equal(collection.folders[0].requests[0].assertions.find((assertion) => assertion.type === 'header').expected, 'trace-1');
   assert.equal(collection.requests[0].bodyType, 'RAW_JSON');
   assert.equal(collection.requests[0].auth.type, 'apiKey');
 
@@ -325,8 +323,7 @@ test('curl collection exports include request comments and unsupported behavior 
       scripts: {
         preRequest: 'pm.environment.set("token", "abc");',
         tests: 'pm.test("ok", function () {});'
-      },
-      assertions: [{ enabled: true, type: 'statusCode', expected: '200' }]
+      }
     }]
   };
   const exportPath = path.join(dir, 'scripted-export.sh');
@@ -337,7 +334,6 @@ test('curl collection exports include request comments and unsupported behavior 
   assert.match(exported, /# Request: Scripted Request/);
   assert.match(exported, /# WARNING: Pre-request scripts are not included in curl exports\./);
   assert.match(exported, /# WARNING: Post-request scripts are not included in curl exports\./);
-  assert.match(exported, /# WARNING: Assertions are not included in curl exports\./);
   assert.match(exported, /curl 'https:\/\/api\.example\.test\/widgets'/);
 });
 
@@ -368,7 +364,6 @@ test('preserves PostMeter device-code OAuth metadata across OpenAPI export and i
         tokenUrl: 'https://auth.example.test/token',
         scopes: 'read'
       },
-      assertions: [],
       scripts: { preRequest: '', tests: '' },
       variables: [],
       examples: [],

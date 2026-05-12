@@ -132,8 +132,6 @@
     bindClick(doc, 'addHeaderButton', options.onAddHeader);
     bindChange(doc, 'sendPostMeterTokenInput', options.onPostMeterTokenHeaderChange);
     bindChange(doc, 'showGeneratedHeadersInput', options.onShowGeneratedHeadersChange);
-    bindClick(doc, 'addAssertionButton', options.onAddAssertion);
-    bindClick(doc, 'addAssertionTemplateButton', options.onAddAssertionTemplate);
     bindClick(doc, 'addExampleButton', options.onAddExample);
     bindClick(doc, 'captureResponseExampleButton', options.onCaptureResponseExample);
     bindClick(doc, 'exportExamplesButton', options.onExportExamples);
@@ -176,8 +174,6 @@
     bindClick(doc, 'addPerformanceHeaderButton', options.onAddPerformanceHeader);
     bindChange(doc, 'performanceSendPostMeterTokenInput', options.onPerformancePostMeterTokenHeaderChange);
     bindChange(doc, 'performanceShowGeneratedHeadersInput', options.onPerformanceShowGeneratedHeadersChange);
-    bindClick(doc, 'addPerformanceAssertionButton', options.onAddPerformanceAssertion);
-    bindClick(doc, 'addPerformanceAssertionTemplateButton', options.onAddPerformanceAssertionTemplate);
     bindClick(doc, 'addPerformanceExampleButton', options.onAddPerformanceExample);
     bindClick(doc, 'exportPerformanceExamplesButton', options.onExportPerformanceExamples);
     bindClick(doc, 'addPerformanceRequestVariableButton', options.onAddPerformanceRequestVariable);

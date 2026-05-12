@@ -53,21 +53,6 @@ const PERFORMANCE_TEST_TYPES = ['latency', 'throughput', 'concurrency', 'stress'
 const PERFORMANCE_EXPORT_FORMATS = ['postmeter', 'json', 'csv'];
 const THEME_VALUES = ['system', 'light', 'dark'];
 const DIAGNOSTIC_LOG_LEVELS = ['debug', 'info', 'warn', 'error'];
-const ASSERTION_TYPES = [
-  'statusCode',
-  'header',
-  'jsonPath',
-  'xmlPath',
-  'htmlSelector',
-  'responseTime',
-  'responseSize',
-  'bodyContains',
-  'extractVariable',
-  'extractXml',
-  'extractHtml',
-  'extractRegex'
-];
-const ASSERTION_OPERATORS = ['equals', 'notEquals', 'contains', 'exists', 'lessThan', 'greaterThan'];
 const LIMITS = {
   collections: 500,
   foldersPerLevel: 500,
@@ -93,8 +78,6 @@ const LIMITS = {
 };
 const SCHEMA_ENUMS = {
   apiKeyLocations: API_KEY_LOCATIONS,
-  assertionOperators: ASSERTION_OPERATORS,
-  assertionTypes: ASSERTION_TYPES,
   authTypes: AUTH_TYPE_VALUES,
   bodyMethods: BODY_METHODS,
   bodyTypes: BODY_TYPE_VALUES,
@@ -154,19 +137,6 @@ const FIELD_SCHEMAS = {
   requestAutoHeaders: {
     sendPostMeterToken: { type: 'boolean', optional: true },
     showGeneratedHeaders: { type: 'boolean', optional: true }
-  },
-  assertion: {
-    enabled: { type: 'boolean', optional: true },
-    type: { type: 'string', limit: 'short', enum: 'assertionTypes', optional: true },
-    name: { type: 'string', limit: 'key', optional: true },
-    path: { type: 'string', limit: 'key', optional: true },
-    operator: { type: 'string', limit: 'short', enum: 'assertionOperators', optional: true },
-    expected: { type: 'string', limit: 'value', optional: true },
-    variableName: { type: 'string', limit: 'key', optional: true }
-  },
-  assertionResult: {
-    passed: { type: 'boolean', optional: true },
-    message: { type: 'string', limit: 'value', optional: true }
   },
   cookie: {
     id: { type: 'string', limit: 'name', optional: true },
@@ -514,17 +484,13 @@ const payloadSchemas = {
     oauthProgressTypes: OAUTH_PROGRESS_TYPES,
     oauthProgressStatuses: OAUTH_PROGRESS_STATUSES
   },
-  assertions: {
-    types: ASSERTION_TYPES,
-    operators: ASSERTION_OPERATORS
-  },
   enums: SCHEMA_ENUMS,
   limits: LIMITS,
   fields: FIELD_SCHEMAS,
   entities: {
     request: {
       required: ['method', 'url'],
-      arrays: ['queryParams', 'headers', 'assertions', 'variables', 'examples', 'metadata', 'messages'],
+      arrays: ['queryParams', 'headers', 'variables', 'examples', 'metadata', 'messages'],
       nested: ['auth', 'scripts', 'cookieJar', 'autoHeaders']
     },
   workspace: {
@@ -597,8 +563,6 @@ function normalizeSchemaString(value, options = {}) {
 
 const exported = {
   API_KEY_LOCATIONS,
-  ASSERTION_OPERATORS,
-  ASSERTION_TYPES,
   AUTH_TYPE_VALUES,
   BODY_METHODS,
   BODY_TYPE_VALUES,

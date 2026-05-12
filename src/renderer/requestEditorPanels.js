@@ -1,10 +1,4 @@
 (function attachRequestEditorPanels(global) {
-  const {
-    applyAssertionTypeDefaults,
-    assertionExpectedPlaceholder,
-    assertionNamePlaceholder,
-    assertionPathPlaceholder
-  } = global.PostMeterAssertionModel || require('./assertionModel');
   const { authEditorState, authFromEditorState } = global.PostMeterAuthModel || require('../core/authModel');
   const {
     exampleHeadersToText,
@@ -334,114 +328,6 @@
     refreshVariableTextboxes(container);
   }
 
-  function renderAssertions(options = {}) {
-    const doc = options.doc || document;
-    const container = element(doc, options.containerId || 'assertionsTable');
-    const assertions = options.assertions || [];
-    const onDirty = options.onDirty || (() => {});
-    const onRerender = options.onRerender || (() => {});
-
-    container.textContent = '';
-    assertions.forEach((assertion, index) => {
-      const row = doc.createElement('div');
-      row.className = 'assertion-row';
-      row.dataset.assertionType = assertion.type || 'statusCode';
-
-      const enabled = doc.createElement('input');
-      enabled.type = 'checkbox';
-      enabled.checked = assertion.enabled !== false;
-      enabled.setAttribute('aria-label', `Assertion ${index + 1} enabled`);
-      enabled.addEventListener('change', () => {
-        assertion.enabled = enabled.checked;
-        onDirty();
-      });
-
-      const type = doc.createElement('select');
-      for (const [value, label] of [
-        ['statusCode', 'Status'],
-        ['header', 'Header'],
-        ['jsonPath', 'JSON Path'],
-        ['xmlPath', 'XML XPath'],
-        ['htmlSelector', 'HTML Selector'],
-        ['responseTime', 'Time'],
-        ['responseSize', 'Size'],
-        ['bodyContains', 'Body Contains'],
-        ['extractVariable', 'Extract JSON'],
-        ['extractXml', 'Extract XML'],
-        ['extractHtml', 'Extract HTML'],
-        ['extractRegex', 'Extract Regex']
-      ]) {
-        type.append(new Option(label, value));
-      }
-      type.value = assertion.type || 'statusCode';
-      type.setAttribute('aria-label', `Assertion ${index + 1} type`);
-      type.addEventListener('change', () => {
-        assertion.type = type.value;
-        applyAssertionTypeDefaults(assertion);
-        onDirty();
-        onRerender();
-      });
-
-      const name = assertionInput(doc, assertionNamePlaceholder(assertion), assertion.name || assertion.variableName || '', (value) => {
-        assertion.name = value;
-        if (assertion.type === 'extractVariable' || assertion.type === 'extractXml' || assertion.type === 'extractHtml' || assertion.type === 'extractRegex') {
-          assertion.variableName = value;
-        }
-      }, onDirty, `Assertion ${index + 1} name`);
-      const path = assertionInput(doc, assertionPathPlaceholder(assertion), assertion.path || '', (value) => {
-        assertion.path = value;
-      }, onDirty, `Assertion ${index + 1} path`);
-
-      const operator = doc.createElement('select');
-      for (const [value, label] of [
-        ['equals', '='],
-        ['notEquals', '!='],
-        ['contains', 'contains'],
-        ['exists', 'exists'],
-        ['lessThan', '<'],
-        ['greaterThan', '>']
-      ]) {
-        operator.append(new Option(label, value));
-      }
-      operator.value = assertion.operator || 'equals';
-      operator.setAttribute('aria-label', `Assertion ${index + 1} operator`);
-      operator.addEventListener('change', () => {
-        assertion.operator = operator.value;
-        onDirty();
-      });
-
-      const expected = assertionInput(doc, assertionExpectedPlaceholder(assertion), assertion.expected ?? '', (value) => {
-        assertion.expected = value;
-      }, onDirty, `Assertion ${index + 1} expected value`);
-
-      const remove = doc.createElement('button');
-      remove.type = 'button';
-      remove.textContent = 'Remove';
-      remove.setAttribute('aria-label', `Remove assertion ${assertion.name || index + 1}`);
-      remove.addEventListener('click', () => {
-        assertions.splice(index, 1);
-        onDirty();
-        onRerender();
-      });
-
-      row.append(enabled, type, name, path, operator, expected, remove);
-      container.append(row);
-    });
-    refreshVariableTextboxes(container);
-  }
-
-  function assertionInput(doc, placeholder, value, onInput, onDirty, ariaLabel = placeholder) {
-    const input = doc.createElement('input');
-    input.placeholder = placeholder;
-    input.setAttribute('aria-label', ariaLabel);
-    input.value = value;
-    input.addEventListener('input', () => {
-      onInput(input.value);
-      onDirty();
-    });
-    return input;
-  }
-
   function buildVariablePreviewText(collection, environment, request) {
     const rows = [];
     const effective = new Map();
@@ -662,7 +548,6 @@
     buildVariablePreviewText,
     collectAuthFromEditor,
     renderAuthEditor,
-    renderAssertions,
     renderCookieJarEditor,
     renderExamples,
     renderRequestPairs,

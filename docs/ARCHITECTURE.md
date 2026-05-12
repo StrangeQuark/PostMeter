@@ -15,13 +15,12 @@ The main rule is that product behavior belongs in the lowest layer that can own 
 Renderer files are loaded directly from `src/renderer/index.html`.
 
 - `renderer.js` is the renderer shell/orchestrator. It should compose focused helpers rather than owning tab state, workflows, or editor subpanels inline, while still hosting shared modal rendering helpers used by flows such as draft-save, collection export selection, runner request import, history clearing, and draggable sidebar-tree placement.
-- `assertionModel.js` owns assertion templates, default values, and placeholder text.
 - `cookieModel.js` owns renderer-side cookie validation, Postman cookie metadata import, and thin adapters over the shared core cookie model.
 - `contextMenu.js` owns renderer context-menu display and positioning.
 - `layoutControls.js` owns resizable pane wiring and persisted layout CSS variables.
 - `collectionModel.js` owns pure collection/folder/request tree traversal and mutation helpers used by the renderer.
 - `exampleModel.js` owns request example formatting, header parsing, and example factory helpers.
-- `requestEditorPanels.js` owns request editor subpanel rendering: auth editor wiring, request pair/assertion tables, request example rendering, cookie panel rendering, and variable preview/editor helpers.
+- `requestEditorPanels.js` owns request editor subpanel rendering: auth editor wiring, request pair tables, request example rendering, cookie panel rendering, and variable preview/editor helpers.
 - `rendererState.js` owns renderer state defaults plus shared active-tab, modal, and dirty-state helpers.
 - `requestTabs.js` owns generic request/environment/workspace/runner tab-bar rendering from tab descriptors, including shrink-before-scroll sizing and hover/active close buttons.
 - `requestTabState.js` owns request/environment/workspace/runner tab lifecycle, selection, dirty handling, sequential close/discard flows, force-close behavior, and the 128-open-tab cap.
@@ -72,7 +71,7 @@ Core modules must not depend on Electron or renderer globals.
 
 - `scriptedRequestLifecycle.js` owns the shared pre-request/send/test pipeline used by both single-request and collection-run execution. It also sanitizes primary-request client-certificate auth mutations so scripts can select reviewed certificate bindings by `certificateId` but cannot inject direct local certificate, key, PFX/P12, CA, or passphrase fields before parent transport execution.
 - `requestScriptRunner.js` adapts the shared scripted-request lifecycle for single-request execution and returns the response plus runtime variable mutations.
-- `collectionRunner.js` sequences collection requests and layers assertions, runner progress, cookies, stop-on-failure, and runner reports on top of the shared scripted-request lifecycle. It also adapts first-class workspace runners by executing runner-owned request copies in runner order while preserving the same script/assertion/cookie/vault/package lifecycle.
+- `collectionRunner.js` sequences collection requests and layers runner progress, cookies, stop-on-failure, and runner reports on top of the shared scripted-request lifecycle. It also adapts first-class workspace runners by executing runner-owned request copies in runner order while preserving the same script/cookie/vault/package lifecycle.
 - `httpClient.js` prepares and sends HTTP requests.
 - `pfxCertificate.js` owns parent-side PFX/P12 bundle extraction and encrypted PEM private-key normalization into in-memory PEM buffers for HTTP and gRPC client-certificate transports. It uses regular-file, byte-capped descriptor reads plus the reviewed `node-forge` PKCS#12/PEM parser in the parent process, and does not shell out or write decrypted PEM material to temp files.
 - `grpcClient.js` owns the parent-side live gRPC transport for imported gRPC requests. It loads trusted proto definitions, builds parent-owned gRPC clients, normalizes metadata/messages/status/trailers/errors, and keeps proto/TLS/client-certificate filesystem access outside the script worker. gRPC mTLS supports PEM cert/key material and the shared parent-side PFX/P12 extraction path used by HTTP client-certificate requests, with configured certificate bindings failing closed instead of falling back to script-mutated direct paths.

@@ -57,7 +57,6 @@ function requestModel({
   bodyType,
   body,
   auth,
-  assertions,
   scripts,
   variables,
   examples,
@@ -86,7 +85,6 @@ function requestModel({
     bodyType: normalizeSchemaEnumValue('bodyTypes', bodyType, DEFAULT_REQUEST_BODY_TYPE),
     body: body ?? '',
     auth: normalizePersistedAuth(auth),
-    assertions: normalizeAssertions(assertions),
     scripts: normalizeScripts(scripts),
     variables: normalizePairs(variables),
     examples: normalizeExamples(examples),
@@ -500,23 +498,6 @@ function normalizePairs(pairs) {
     return [];
   }
   return pairs.map((pair) => keyValue(pair.key, pair.value, pair.enabled !== false));
-}
-
-function normalizeAssertions(assertions) {
-  if (!Array.isArray(assertions)) {
-    return [];
-  }
-  return assertions
-    .filter((assertion) => assertion && typeof assertion === 'object')
-    .map((assertion) => ({
-      enabled: assertion.enabled !== false,
-      type: typeof assertion.type === 'string' ? assertion.type : 'statusCode',
-      name: assertion.name ?? '',
-      path: assertion.path ?? '',
-      operator: assertion.operator ?? 'equals',
-      expected: assertion.expected ?? '',
-      variableName: assertion.variableName ?? ''
-    }));
 }
 
 function normalizeScripts(scripts) {

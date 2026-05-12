@@ -672,7 +672,6 @@ test('runtime IPC treats collection-run progress delivery failures as recoverabl
           bodyType: 'NONE',
           body: '',
           auth: { type: 'none' },
-          assertions: [],
           scripts: { preRequest: '', tests: '' },
           variables: [],
           cookieJar: { enabled: false, storeResponses: false }
@@ -837,7 +836,6 @@ test('runtime IPC rejects duplicate active collection-run ids without replacing 
         bodyType: 'NONE',
         body: '',
         auth: { type: 'none' },
-        assertions: [],
         scripts: { preRequest: '', tests: '' },
         variables: [],
         cookieJar: { enabled: false, storeResponses: false }
