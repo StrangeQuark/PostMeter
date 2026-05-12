@@ -504,6 +504,10 @@ h2 {
   color: var(--method-options);
 }
 
+.entity-collection {
+  color: var(--method-post);
+}
+
 .entity-environment {
   color: var(--entity-environment);
 }
@@ -553,6 +557,11 @@ h2 {
 .tree-badge.method-options {
   background: var(--method-options-bg);
   color: var(--method-options);
+}
+
+.tree-badge.entity-collection {
+  background: var(--method-post-bg);
+  color: var(--method-post);
 }
 
 .tree-badge.entity-environment {
@@ -1640,6 +1649,10 @@ h2 {
 
 .request-tab-method.method-options {
   color: var(--method-options);
+}
+
+.request-tab-method.entity-collection {
+  color: var(--method-post);
 }
 
 .request-tab-method.entity-environment {

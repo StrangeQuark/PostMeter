@@ -1,7 +1,8 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const {
-  highlightVariableTokens
+  highlightVariableTokens,
+  resolvedVariableForToken
 } = require('../../src/renderer/variableHighlighter');
 
 test('variable highlighter marks Postman-style variable tokens', () => {
@@ -50,6 +51,32 @@ test('variable highlighter marks request and collection variables with their win
   assert.match(html, /class="variable-highlight-token variable-highlight-valid variable-highlight-environment"/);
   assert.match(html, /data-variable-name="collectionOnly" data-variable-status="valid" data-variable-source="collection"/);
   assert.match(html, /class="variable-highlight-token variable-highlight-valid variable-highlight-collection"/);
+});
+
+test('variable highlighter resolves hoverable variable values by source', () => {
+  const variables = [
+    { enabled: true, key: 'baseUrl', source: 'environment', value: 'https://env.example.test' },
+    { enabled: true, key: 'collectionOnly', source: 'collection', value: 'collection-value' },
+    { enabled: true, key: 'requestOnly', source: 'request', currentValue: 'request-value' },
+    { enabled: false, key: 'disabled', source: 'environment', value: 'hidden' }
+  ];
+
+  assert.deepEqual(resolvedVariableForToken('baseUrl', { source: 'environment', variables }), {
+    key: 'baseUrl',
+    source: 'environment',
+    value: 'https://env.example.test'
+  });
+  assert.deepEqual(resolvedVariableForToken('collectionOnly', { source: 'collection', variables }), {
+    key: 'collectionOnly',
+    source: 'collection',
+    value: 'collection-value'
+  });
+  assert.deepEqual(resolvedVariableForToken('requestOnly', { source: 'request', variables }), {
+    key: 'requestOnly',
+    source: 'request',
+    value: 'request-value'
+  });
+  assert.equal(resolvedVariableForToken('disabled', { source: 'environment', variables }), null);
 });
 
 test('variable highlighter marks unknown or disabled variable tokens as invalid', () => {

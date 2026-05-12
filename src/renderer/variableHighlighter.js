@@ -1,10 +1,19 @@
 (function attachVariableHighlighter(global) {
   const HIGHLIGHT_STATE = new WeakMap();
+  const INTERACTION_STATE = new WeakMap();
   const TEXT_MEASURE_SPANS = new WeakMap();
+  const TOOLTIP_ELEMENTS = new WeakMap();
   const VARIABLE_NAME_PATTERN = /^[$A-Za-z0-9_.-]+$/;
   const VARIABLE_TOKEN_PATTERN = /\{\{\s*([^{}\r\n]+?)\s*\}\}|\$\{\s*([^{}\r\n]+?)\s*\}/g;
+  const HOVER_VARIABLE_SOURCES = new Set(['environment', 'collection', 'request', 'global']);
+  const OPENABLE_VARIABLE_SOURCES = new Set(['environment', 'collection', 'request']);
   const TEXT_INPUT_TYPES = new Set(['', 'email', 'search', 'tel', 'text', 'url']);
+  const TOOLTIP_DELAY_MS = 1000;
+  const ACTIVE_HOVER_BY_DOCUMENT = new WeakMap();
+  const TOOLTIP_STATE_BY_DOCUMENT = new WeakMap();
   let configuredGetVariables = () => [];
+  let configuredOpenVariable = null;
+  let configuredShouldShowTooltipHints = () => true;
 
   function highlightVariableTokens(value, options = {}) {
     const text = String(value || '');
@@ -72,6 +81,12 @@
     if (typeof options.getVariables === 'function') {
       setVariableSource(options.getVariables);
     }
+    if (typeof options.onOpenVariable === 'function') {
+      setVariableOpenHandler(options.onOpenVariable);
+    }
+    if (typeof options.showTooltipHints === 'function' || typeof options.showTooltipHints === 'boolean') {
+      setVariableTooltipHintsProvider(options.showTooltipHints);
+    }
     enhanceVariableTextboxes(doc);
     const observer = typeof windowObject.MutationObserver === 'function'
       ? new windowObject.MutationObserver((records) => {
@@ -83,12 +98,20 @@
       })
       : null;
     observer?.observe(doc.body || doc.documentElement, { childList: true, subtree: true });
-    const onResize = () => refreshVariableHighlights(doc);
+    const onResize = () => {
+      hideVariableTooltip(doc);
+      refreshVariableHighlights(doc);
+    };
+    const onModifierKeyChange = (event) => updateModifierHoverState(doc, event);
     windowObject.addEventListener?.('resize', onResize);
+    doc.addEventListener?.('keydown', onModifierKeyChange);
+    doc.addEventListener?.('keyup', onModifierKeyChange);
     return {
       destroy() {
         observer?.disconnect();
         windowObject.removeEventListener?.('resize', onResize);
+        doc.removeEventListener?.('keydown', onModifierKeyChange);
+        doc.removeEventListener?.('keyup', onModifierKeyChange);
       }
     };
   }
@@ -99,6 +122,7 @@
     }
     const existing = HIGHLIGHT_STATE.get(textbox);
     if (existing) {
+      attachVariableTokenInteractions(textbox, { overlay: existing.overlay });
       refreshTextbox(textbox);
       return existing;
     }
@@ -135,6 +159,7 @@
     }
     textbox.addEventListener('scroll', state.onScroll);
     HIGHLIGHT_STATE.set(textbox, state);
+    attachVariableTokenInteractions(textbox, { overlay });
     refreshTextbox(textbox);
     return state;
   }
@@ -156,6 +181,50 @@
 
   function setVariableSource(getVariables) {
     configuredGetVariables = typeof getVariables === 'function' ? getVariables : () => [];
+  }
+
+  function setVariableOpenHandler(onOpenVariable) {
+    configuredOpenVariable = typeof onOpenVariable === 'function' ? onOpenVariable : null;
+  }
+
+  function setVariableTooltipHintsProvider(showTooltipHints) {
+    configuredShouldShowTooltipHints = typeof showTooltipHints === 'function'
+      ? showTooltipHints
+      : () => showTooltipHints !== false;
+  }
+
+  function attachVariableTokenInteractions(textbox, options = {}) {
+    if (!isInteractiveVariableTextbox(textbox)) {
+      return { destroy() {} };
+    }
+    const existing = INTERACTION_STATE.get(textbox);
+    if (existing) {
+      existing.overlay = options.overlay || existing.overlay || overlayForTextbox(textbox);
+      return existing.publicApi;
+    }
+    const state = {
+      overlay: options.overlay || overlayForTextbox(textbox),
+      onMouseDown: (event) => handleVariableTokenMouseDown(textbox, event),
+      onMouseLeave: () => clearVariableHoverState(textbox),
+      onMouseMove: (event) => handleVariableTokenMouseMove(textbox, event),
+      onScroll: () => clearVariableHoverState(textbox),
+      publicApi: null
+    };
+    state.publicApi = {
+      destroy() {
+        textbox.removeEventListener('mousedown', state.onMouseDown);
+        textbox.removeEventListener('mouseleave', state.onMouseLeave);
+        textbox.removeEventListener('mousemove', state.onMouseMove);
+        textbox.removeEventListener('scroll', state.onScroll);
+        INTERACTION_STATE.delete(textbox);
+      }
+    };
+    textbox.addEventListener('mousemove', state.onMouseMove);
+    textbox.addEventListener('mouseleave', state.onMouseLeave);
+    textbox.addEventListener('mousedown', state.onMouseDown);
+    textbox.addEventListener('scroll', state.onScroll);
+    INTERACTION_STATE.set(textbox, state);
+    return state.publicApi;
   }
 
   function variableTokenStatus(name, options = {}) {
@@ -207,11 +276,22 @@
       if (key) {
         normalized.push({
           key,
-          source: normalizeVariableSource(variable.source || variable.kind || variable.scope || variable.type)
+          source: normalizeVariableSource(variable.source || variable.kind || variable.scope || variable.type),
+          value: variableObservableValue(variable)
         });
       }
     }
     return normalized;
+  }
+
+  function variableObservableValue(variable) {
+    const value = variable?.value
+      ?? variable?.currentValue
+      ?? variable?.current
+      ?? variable?.initialValue
+      ?? variable?.initial
+      ?? '';
+    return String(value ?? '');
   }
 
   function normalizeVariableSource(source) {
@@ -256,6 +336,490 @@
       return;
     }
     state.code.style.transform = `translate(${-textbox.scrollLeft}px, ${-textbox.scrollTop}px)`;
+    clearVariableHoverState(textbox);
+  }
+
+  function handleVariableTokenMouseMove(textbox, event) {
+    const detail = variableTokenDetailFromPointer(textbox, event);
+    const doc = textbox.ownerDocument || global.document;
+    const source = normalizeVariableSource(detail?.source);
+    if (!detail || !HOVER_VARIABLE_SOURCES.has(source)) {
+      clearVariableHoverState(textbox);
+      return;
+    }
+    const actionHover = Boolean(OPENABLE_VARIABLE_SOURCES.has(source) && (event.ctrlKey || event.metaKey));
+    setActiveVariableHover(doc, textbox, detail);
+    setVariableActionHover(detail, actionHover);
+    textbox.classList.toggle('has-openable-variable-hover', actionHover);
+    scheduleVariableTooltip(doc, variableTooltipText(detail), event, variableDetailKey(detail));
+  }
+
+  function handleVariableTokenMouseDown(textbox, event) {
+    if (
+      event.defaultPrevented
+      || event.button !== 0
+      || (!event.ctrlKey && !event.metaKey)
+    ) {
+      return false;
+    }
+    const detail = variableTokenDetailFromPointer(textbox, event);
+    if (!detail) {
+      return false;
+    }
+    if (!HOVER_VARIABLE_SOURCES.has(normalizeVariableSource(detail.source))) {
+      return false;
+    }
+    if (event.shiftKey) {
+      return replaceVariableTokenWithValue(textbox, detail, event);
+    }
+    if (
+      !OPENABLE_VARIABLE_SOURCES.has(normalizeVariableSource(detail.source))
+      || typeof configuredOpenVariable !== 'function'
+    ) {
+      return false;
+    }
+    const handled = configuredOpenVariable({
+      ...detail,
+      event,
+      target: textbox
+    }) === true;
+    if (!handled) {
+      return false;
+    }
+    event.preventDefault();
+    event.stopPropagation?.();
+    clearVariableHoverState(textbox);
+    return true;
+  }
+
+  function variableTokenDetailFromPointer(textbox, event) {
+    const token = variableTokenElementFromPoint(textbox, event);
+    if (!token) {
+      return variableTokenDetailFromTextPointer(textbox, event);
+    }
+    if (token.getAttribute('data-variable-status') !== 'valid') {
+      return null;
+    }
+    const name = String(token.getAttribute('data-variable-name') || '').trim();
+    const source = normalizeVariableSource(token.getAttribute('data-variable-source') || '');
+    const variable = resolvedVariableForToken(name, {
+      source,
+      target: textbox
+    });
+    if (!variable) {
+      return null;
+    }
+    const range = variableTokenRangeFromElement(textbox, token);
+    return {
+      end: range.end,
+      name,
+      start: range.start,
+      source: variable.source || source,
+      target: textbox,
+      token,
+      value: variable.value ?? '',
+      variable
+    };
+  }
+
+  function variableTokenDetailFromTextPointer(textbox, event) {
+    if (!isInput(textbox) || !Number.isFinite(event.clientX)) {
+      return null;
+    }
+    const match = variableTokenMatchAtIndex(
+      textbox.value || '',
+      caretIndexFromClientX(textbox, event.clientX),
+      { target: textbox }
+    );
+    if (!match || match.status !== 'valid') {
+      return null;
+    }
+    const variable = resolvedVariableForToken(match.name, {
+      source: match.source,
+      target: textbox
+    });
+    if (!variable) {
+      return null;
+    }
+    return {
+      end: match.end,
+      name: match.name,
+      start: match.start,
+      source: variable.source || match.source,
+      target: textbox,
+      token: variableTokenElementForRange(textbox, match.start, match.end),
+      value: variable.value ?? '',
+      variable
+    };
+  }
+
+  function variableTokenMatchAtIndex(value, index, options = {}) {
+    const text = String(value || '');
+    const offset = clampIndex(index, text.length);
+    VARIABLE_TOKEN_PATTERN.lastIndex = 0;
+    for (let match = VARIABLE_TOKEN_PATTERN.exec(text); match; match = VARIABLE_TOKEN_PATTERN.exec(text)) {
+      const token = match[0];
+      const start = match.index;
+      const end = start + token.length;
+      if (offset < start || offset > end) {
+        continue;
+      }
+      const name = String(match[1] || match[2] || '').trim();
+      if (!name) {
+        return null;
+      }
+      const source = match[2] == null ? variableTokenSource(name, options) : 'csv';
+      return {
+        end,
+        name,
+        source,
+        start,
+        status: variableTokenStatus(name, { ...options, source })
+      };
+    }
+    return null;
+  }
+
+  function variableTokenElementFromPoint(textbox, event) {
+    const doc = textbox.ownerDocument || global.document;
+    const state = INTERACTION_STATE.get(textbox);
+    const overlay = state?.overlay || overlayForTextbox(textbox);
+    if (
+      !doc
+      || !overlay
+      || typeof doc.elementFromPoint !== 'function'
+      || !Number.isFinite(event.clientX)
+      || !Number.isFinite(event.clientY)
+    ) {
+      return null;
+    }
+    const previousTextboxPointerEvents = textbox.style.pointerEvents;
+    const previousOverlayPointerEvents = overlay.style.pointerEvents;
+    try {
+      textbox.style.pointerEvents = 'none';
+      overlay.style.pointerEvents = 'auto';
+      const element = doc.elementFromPoint(event.clientX, event.clientY);
+      const token = element?.closest?.('[data-variable-name][data-variable-status]');
+      return token && overlay.contains?.(token) ? token : null;
+    } finally {
+      textbox.style.pointerEvents = previousTextboxPointerEvents;
+      overlay.style.pointerEvents = previousOverlayPointerEvents;
+    }
+  }
+
+  function overlayForTextbox(textbox) {
+    return HIGHLIGHT_STATE.get(textbox)?.overlay
+      || textbox?.closest?.('.code-editor')?.querySelector?.('.code-editor-highlight')
+      || textbox?.closest?.('.variable-highlight-editor')?.querySelector?.('.variable-highlight-overlay')
+      || null;
+  }
+
+  function variableTokenElementForRange(textbox, start, end) {
+    if (!Number.isInteger(start) || !Number.isInteger(end)) {
+      return null;
+    }
+    const overlay = overlayForTextbox(textbox);
+    for (const token of overlay?.querySelectorAll?.('[data-variable-name][data-variable-status]') || []) {
+      const range = variableTokenRangeFromElement(textbox, token);
+      if (range.start === start && range.end === end) {
+        return token;
+      }
+    }
+    return null;
+  }
+
+  function variableTokenRangeFromElement(textbox, token) {
+    const root = token?.closest?.('.variable-highlight-code')
+      || token?.closest?.('.code-editor-highlight')?.querySelector?.('code')
+      || overlayForTextbox(textbox);
+    if (!root || !token || !root.contains?.(token)) {
+      return { end: null, start: null };
+    }
+    const start = textLengthBeforeNode(root, token);
+    return {
+      end: start + String(token.textContent || '').length,
+      start
+    };
+  }
+
+  function textLengthBeforeNode(root, target) {
+    let length = 0;
+    let found = false;
+    const visit = (node) => {
+      if (!node || found) {
+        return;
+      }
+      if (node === target) {
+        found = true;
+        return;
+      }
+      if (node.nodeType === 3) {
+        length += String(node.nodeValue || '').length;
+        return;
+      }
+      for (const child of node.childNodes || []) {
+        visit(child);
+        if (found) {
+          return;
+        }
+      }
+    };
+    visit(root);
+    return length;
+  }
+
+  function resolvedVariableForToken(name, options = {}) {
+    const key = String(name || '').trim();
+    if (!key || !VARIABLE_NAME_PATTERN.test(key)) {
+      return null;
+    }
+    const source = normalizeVariableSource(options.source || variableTokenSource(key, options));
+    return normalizedVariablesForOptions(options, options.target)
+      .filter((variable) => variableMatchesSource(variable, source))
+      .find((variable) => variable.key === key) || null;
+  }
+
+  function variableTooltipText(detail) {
+    const value = String(detail.value ?? '');
+    if (!shouldShowVariableTooltipHints()) {
+      return value;
+    }
+    const actions = OPENABLE_VARIABLE_SOURCES.has(normalizeVariableSource(detail?.source))
+      ? ['Ctrl+click: open variable source', 'Ctrl+Shift+click: replace token with value']
+      : ['Ctrl+Shift+click: replace token with value'];
+    return `${value}\n\n${actions.join('\n')}`;
+  }
+
+  function shouldShowVariableTooltipHints() {
+    try {
+      return configuredShouldShowTooltipHints() !== false;
+    } catch {
+      return true;
+    }
+  }
+
+  function scheduleVariableTooltip(doc, text, event, detailKey) {
+    if (!doc) {
+      return;
+    }
+    const existing = TOOLTIP_STATE_BY_DOCUMENT.get(doc);
+    if (existing?.detailKey === detailKey && existing.visible) {
+      showVariableTooltip(doc, text, event);
+      return;
+    }
+    if (existing?.detailKey === detailKey && existing.timer) {
+      existing.text = text;
+      existing.event = event;
+      return;
+    }
+    hideVariableTooltip(doc);
+    const state = {
+      detailKey,
+      event,
+      text,
+      timer: null,
+      visible: false
+    };
+    const view = doc.defaultView || global;
+    state.timer = (view.setTimeout || setTimeout)(() => {
+      state.timer = null;
+      state.visible = true;
+      showVariableTooltip(doc, state.text, state.event);
+    }, TOOLTIP_DELAY_MS);
+    TOOLTIP_STATE_BY_DOCUMENT.set(doc, state);
+  }
+
+  function showVariableTooltip(doc, text, event) {
+    const tooltip = variableTooltipElement(doc);
+    if (!tooltip) {
+      return;
+    }
+    tooltip.textContent = String(text ?? '');
+    tooltip.hidden = false;
+    positionVariableTooltip(tooltip, event);
+  }
+
+  function hideVariableTooltip(doc = global.document) {
+    const state = TOOLTIP_STATE_BY_DOCUMENT.get(doc);
+    if (state?.timer) {
+      const view = doc.defaultView || global;
+      (view.clearTimeout || clearTimeout)(state.timer);
+    }
+    TOOLTIP_STATE_BY_DOCUMENT.delete(doc);
+    const tooltip = TOOLTIP_ELEMENTS.get(doc);
+    if (tooltip) {
+      tooltip.hidden = true;
+    }
+  }
+
+  function setActiveVariableHover(doc, textbox, detail) {
+    const previous = ACTIVE_HOVER_BY_DOCUMENT.get(doc);
+    if (previous?.detail !== detail) {
+      setVariableActionHover(previous?.detail, false);
+    }
+    ACTIVE_HOVER_BY_DOCUMENT.set(doc, { detail, textbox });
+  }
+
+  function clearVariableHoverState(textbox) {
+    const doc = textbox?.ownerDocument || global.document;
+    const active = ACTIVE_HOVER_BY_DOCUMENT.get(doc);
+    if (active?.textbox === textbox) {
+      setVariableActionHover(active.detail, false);
+      ACTIVE_HOVER_BY_DOCUMENT.delete(doc);
+    }
+    textbox?.classList?.remove('has-openable-variable-hover');
+    hideVariableTooltip(doc);
+  }
+
+  function updateModifierHoverState(doc, event) {
+    const active = ACTIVE_HOVER_BY_DOCUMENT.get(doc);
+    if (!active?.detail || !active?.textbox) {
+      return;
+    }
+    const source = normalizeVariableSource(active.detail.source);
+    const enabled = Boolean(OPENABLE_VARIABLE_SOURCES.has(source) && (event.ctrlKey || event.metaKey));
+    setVariableActionHover(active.detail, enabled);
+    active.textbox.classList.toggle('has-openable-variable-hover', enabled);
+  }
+
+  function setVariableActionHover(detail, enabled) {
+    for (const token of variableTokenElementsForDetail(detail)) {
+      token?.classList?.toggle('is-variable-highlight-action-hover', enabled === true);
+    }
+  }
+
+  function variableTokenElementsForDetail(detail) {
+    if (!detail) {
+      return [];
+    }
+    if (detail.token) {
+      return [detail.token];
+    }
+    const overlay = overlayForTextbox(detail.target);
+    const tokens = Array.from(overlay?.querySelectorAll?.('[data-variable-name][data-variable-status]') || [])
+      .filter((token) => {
+        if (token.getAttribute('data-variable-name') !== detail.name) {
+          return false;
+        }
+        const source = normalizeVariableSource(token.getAttribute('data-variable-source') || '');
+        return !detail.source || source === normalizeVariableSource(detail.source);
+      });
+    if (Number.isInteger(detail.start) && Number.isInteger(detail.end)) {
+      const ranged = tokens.find((token) => {
+        const range = variableTokenRangeFromElement(detail.target, token);
+        return range.start === detail.start && range.end === detail.end;
+      });
+      return ranged ? [ranged] : tokens.slice(0, 1);
+    }
+    return tokens.slice(0, 1);
+  }
+
+  function replaceVariableTokenWithValue(textbox, detail, event) {
+    const value = String(textbox.value || '');
+    if (!Number.isInteger(detail.start) || !Number.isInteger(detail.end) || detail.start < 0 || detail.end < detail.start) {
+      return false;
+    }
+    const replacement = String(detail.value ?? '');
+    event.preventDefault();
+    event.stopPropagation?.();
+    focusWithoutScrolling(textbox);
+    const replacedWithUndo = replaceSelectedTextWithUndo(textbox, detail.start, detail.end, replacement);
+    if (!replacedWithUndo) {
+      textbox.value = `${value.slice(0, detail.start)}${replacement}${value.slice(detail.end)}`;
+      const selection = detail.start + replacement.length;
+      try {
+        textbox.setSelectionRange?.(selection, selection);
+      } catch {
+        // Some input types expose selection APIs but reject range updates.
+      }
+      dispatchTextboxInput(textbox);
+    }
+    clearVariableHoverState(textbox);
+    return true;
+  }
+
+  function replaceSelectedTextWithUndo(textbox, start, end, replacement) {
+    const doc = textbox.ownerDocument || global.document;
+    const valueBeforeReplace = String(textbox.value || '');
+    try {
+      textbox.setSelectionRange?.(start, end);
+    } catch {
+      return false;
+    }
+    if (typeof doc?.execCommand !== 'function') {
+      return false;
+    }
+    try {
+      doc.execCommand('insertText', false, replacement);
+    } catch {
+      return false;
+    }
+    if (String(textbox.value || '') === valueBeforeReplace) {
+      return false;
+    }
+    const selection = start + replacement.length;
+    try {
+      textbox.setSelectionRange?.(selection, selection);
+    } catch {
+      // Some input types expose selection APIs but reject range updates.
+    }
+    return true;
+  }
+
+  function dispatchTextboxInput(textbox) {
+    const view = textbox.ownerDocument?.defaultView || global;
+    const EventConstructor = view.Event || Event;
+    textbox.dispatchEvent(new EventConstructor('input', { bubbles: true }));
+  }
+
+  function variableDetailKey(detail) {
+    return [
+      detail?.source || '',
+      detail?.name || '',
+      detail?.start ?? '',
+      detail?.end ?? ''
+    ].join(':');
+  }
+
+  function variableTooltipElement(doc) {
+    if (!doc) {
+      return null;
+    }
+    const existing = TOOLTIP_ELEMENTS.get(doc);
+    if (existing?.isConnected) {
+      return existing;
+    }
+    const root = doc.body || doc.documentElement;
+    if (!root?.appendChild) {
+      return null;
+    }
+    const tooltip = doc.createElement('div');
+    tooltip.className = 'variable-highlight-tooltip';
+    tooltip.hidden = true;
+    tooltip.setAttribute('role', 'tooltip');
+    root.appendChild(tooltip);
+    TOOLTIP_ELEMENTS.set(doc, tooltip);
+    return tooltip;
+  }
+
+  function positionVariableTooltip(tooltip, event) {
+    const view = tooltip.ownerDocument?.defaultView || global;
+    const viewportWidth = Number(view.innerWidth) || 0;
+    const viewportHeight = Number(view.innerHeight) || 0;
+    const offset = 12;
+    tooltip.style.left = '0px';
+    tooltip.style.top = '0px';
+    const rect = tooltip.getBoundingClientRect?.() || { width: 0, height: 0 };
+    let left = (Number(event.clientX) || 0) + offset;
+    let top = (Number(event.clientY) || 0) + offset;
+    if (viewportWidth > 0 && left + rect.width + offset > viewportWidth) {
+      left = Math.max(offset, viewportWidth - rect.width - offset);
+    }
+    if (viewportHeight > 0 && top + rect.height + offset > viewportHeight) {
+      top = Math.max(offset, (Number(event.clientY) || 0) - rect.height - offset);
+    }
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${top}px`;
   }
 
   function normalizeSingleLineCaret(textbox, event) {
@@ -427,6 +991,14 @@
     return Number.isFinite(parsed) ? parsed : 0;
   }
 
+  function clampIndex(index, length) {
+    const parsed = Number.isInteger(index) ? index : Number.parseInt(index, 10);
+    if (!Number.isFinite(parsed)) {
+      return 0;
+    }
+    return Math.max(0, Math.min(length, parsed));
+  }
+
   function focusWithoutScrolling(textbox) {
     try {
       textbox.focus({ preventScroll: true });
@@ -469,6 +1041,10 @@
       return false;
     }
     return TEXT_INPUT_TYPES.has(String(element.getAttribute('type') || element.type || '').toLowerCase());
+  }
+
+  function isInteractiveVariableTextbox(element) {
+    return isInput(element) || isTextarea(element);
   }
 
   function isInput(element) {
@@ -524,10 +1100,14 @@
   }
 
   const exported = {
+    attachVariableTokenInteractions,
     enhanceVariableTextboxes,
     highlightVariableTokens,
     install,
     refreshVariableHighlights,
+    resolvedVariableForToken,
+    setVariableOpenHandler,
+    setVariableTooltipHintsProvider,
     setVariableSource
   };
 

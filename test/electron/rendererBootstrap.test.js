@@ -182,7 +182,9 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(chromeSource, /\.toolbar-menu:has\(\.toolbar-submenu-row:hover\) \.toolbar-submenu-row:not\(:hover\) \.toolbar-submenu/);
   assert.match(chromeSource, /\.toolbar-submenu::before/);
   assert.match(chromeSource, /\.request-tab-method\.method-post/);
+  assert.match(chromeSource, /\.request-tab-method\.entity-collection/);
   assert.match(chromeSource, /\.request-tab-method\.entity-runner/);
+  assert.match(chromeSource, /\.tree-badge\.entity-collection/);
   assert.match(chromeSource, /\.tree-badge\.entity-performance/);
   assert.doesNotMatch(overlaysSource, /--mono-font/);
   assert.match(overlaysSource, /csv-variables-modal textarea[\s\S]*font-family:\s*var\(--mono\)/);
@@ -202,6 +204,7 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(rendererSource, /Saving diagnostics privacy settings before export/);
   assert.match(rendererSource, /function requestTabMethodText\(request, tab = {}\)/);
   assert.match(rendererSource, /`RUN - \$\{method\}`/);
+  assert.match(rendererSource, /col: 'entity-collection'/);
   assert.match(rendererSource, /methodClassName: \(\) => tagClassName\('ENV'\)/);
   assert.match(rendererSource, /badge\.className = \['tree-badge', tagClassName\(kind\)\]/);
 });
@@ -431,6 +434,7 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
     ['closeSettingsModalButton', createElement()],
     ['closeSettingsModalFooterButton', createElement()],
     ['showEditorLineNumbersInput', createElement({ tagName: 'INPUT' })],
+    ['showVariableTooltipHintsInput', createElement({ tagName: 'INPUT' })],
     ['saveOnForceCloseInput', createElement({ tagName: 'INPUT' })],
     ['closeModalsOnBackdropClickInput', createElement({ tagName: 'INPUT' })],
     ['includePrereleasesInput', createElement({ tagName: 'INPUT' })],
@@ -458,6 +462,7 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
     onSelectSettingsSection: (section) => calls.push(`section:${section}`),
     onSelectTheme: (theme) => calls.push(`theme:${theme}`),
     onShowEditorLineNumbersChange: () => calls.push('line-numbers'),
+    onShowVariableTooltipHintsChange: () => calls.push('variable-tooltip-hints'),
     onSaveOnForceCloseChange: () => calls.push('save-on-force-close'),
     onCloseModalsOnBackdropClickChange: () => calls.push('close-modals-on-backdrop'),
     onIncludePrereleasesChange: () => calls.push('include-prereleases'),
@@ -467,6 +472,7 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
   settingsTabsButton.dispatch('click');
   themeDarkButton.dispatch('click');
   elements.get('showEditorLineNumbersInput').dispatch('change');
+  elements.get('showVariableTooltipHintsInput').dispatch('change');
   elements.get('saveOnForceCloseInput').dispatch('change');
   settingsModalsButton.dispatch('click');
   elements.get('closeModalsOnBackdropClickInput').dispatch('change');
@@ -478,6 +484,7 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
     'section:tabs',
     'theme:dark',
     'line-numbers',
+    'variable-tooltip-hints',
     'save-on-force-close',
     'section:modals',
     'close-modals-on-backdrop',

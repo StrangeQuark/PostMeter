@@ -251,6 +251,7 @@
     bindChange(doc, 'closeModalsOnBackdropClickInput', options.onCloseModalsOnBackdropClickChange);
     bindChange(doc, 'includePrereleasesInput', options.onIncludePrereleasesChange);
     bindChange(doc, 'showEditorLineNumbersInput', options.onShowEditorLineNumbersChange);
+    bindChange(doc, 'showVariableTooltipHintsInput', options.onShowVariableTooltipHintsChange);
     for (const id of [
       'diagnosticLoggingEnabledInput',
       'diagnosticLogLevelSelect',

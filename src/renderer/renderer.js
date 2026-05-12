@@ -397,6 +397,8 @@ initializeRenderer({
     CodeEditor.enhanceCodeTextareas?.(document);
     registerCleanup(VariableHighlighter.install?.(document, {
       getVariables: variableHighlightVariablesForTarget,
+      onOpenVariable: openVariableReferenceFromHighlight,
+      showTooltipHints: variableTooltipHintsEnabled,
       windowObject: window
     })?.destroy);
     updateRequestEditorLanguages();
@@ -522,6 +524,10 @@ function bindUi() {
     onShowEditorLineNumbersChange: (event) => {
       const input = event?.currentTarget || $('showEditorLineNumbersInput');
       return setEditorLineNumbers(input?.checked === true, { save: true });
+    },
+    onShowVariableTooltipHintsChange: (event) => {
+      const input = event?.currentTarget || $('showVariableTooltipHintsInput');
+      return setVariableTooltipHints(input?.checked === true, { save: true });
     },
     onSendRequest: sendActiveRequest,
     onAddParam: () => addPair('queryParams'),
@@ -3574,6 +3580,123 @@ function variableHighlightRequestForTarget(target) {
   return null;
 }
 
+function openVariableReferenceFromHighlight(details = {}) {
+  const source = String(details.source || '').trim().toLowerCase();
+  if (source === 'environment' || source === 'env') {
+    return openEnvironmentFromVariableReference(details.target);
+  }
+  if (source === 'collection' || source === 'collectionvariable' || source === 'collectionvariables') {
+    return openCollectionFromVariableReference(details.target);
+  }
+  if (source === 'request' || source === 'local' || source === 'variable' || source === 'variables') {
+    return openRequestFromVariableReference(details.target);
+  }
+  return false;
+}
+
+function openEnvironmentFromVariableReference(target) {
+  const environment = variableHighlightEnvironmentForTarget(target);
+  if (!environment?.id || environment.id === 'none') {
+    return false;
+  }
+  if (!canOpenEnvironmentTabFor(environment.id)) {
+    return true;
+  }
+  collectActiveEditorState();
+  activeEnvironmentId = environment.id;
+  activeRunnerRequestRunnerId = null;
+  activeSidebarPanel = 'environments';
+  activeMainPanel = 'environment';
+  ensureOpenEnvironmentTabForActive();
+  renderAll();
+  setStatus(`Opened ${environment.name || 'Untitled Environment'} from variable reference.`);
+  return true;
+}
+
+function openCollectionFromVariableReference(target) {
+  const collection = variableHighlightCollectionForTarget(target);
+  if (!collection?.id) {
+    return false;
+  }
+  if (!canOpenCollectionTabFor(collection.id)) {
+    return true;
+  }
+  collectActiveEditorState();
+  activeCollectionId = collection.id;
+  activeFolderId = null;
+  activeRequestId = null;
+  activeRunnerRequestRunnerId = null;
+  activeSidebarPanel = 'collections';
+  activeMainPanel = 'request';
+  ensureOpenCollectionTabForActive();
+  renderAll();
+  activateTab('collection', 'collectionLevelVariables');
+  setStatus(`Opened ${collection.name || 'Untitled Collection'} variables from variable reference.`);
+  return true;
+}
+
+function openRequestFromVariableReference(target) {
+  const request = variableHighlightRequestForTarget(target);
+  if (!request?.id) {
+    return false;
+  }
+  if (activeRunnerRequestRunnerId && activeRequestId === request.id) {
+    if (!canOpenRunnerRequestTabFor(activeRunnerRequestRunnerId, request.id)) {
+      return true;
+    }
+    const runnerId = activeRunnerRequestRunnerId;
+    collectActiveEditorState();
+    activeCollectionId = null;
+    activeFolderId = null;
+    activeRequestId = request.id;
+    activeRunnerRequestRunnerId = runnerId;
+    activeRunnerConfigId = runnerId;
+    activeSidebarPanel = 'runners';
+    activeMainPanel = 'request';
+    ensureOpenRequestTabForActive();
+    renderAll();
+    activateTab('request', 'collectionVariables');
+    setStatus(`Opened ${requestDisplayName(request)} variables from variable reference.`);
+    return true;
+  }
+  if (!activeCollectionId && activeRequestId === request.id && draftRequests.has(request.id)) {
+    if (!canOpenRequestTabFor(null, request.id)) {
+      return true;
+    }
+    collectActiveEditorState();
+    activeCollectionId = null;
+    activeFolderId = null;
+    activeRequestId = request.id;
+    activeRunnerRequestRunnerId = null;
+    activeSidebarPanel = 'collections';
+    activeMainPanel = 'request';
+    ensureOpenRequestTabForActive();
+    renderAll();
+    activateTab('request', 'collectionVariables');
+    setStatus(`Opened ${requestDisplayName(request)} variables from variable reference.`);
+    return true;
+  }
+  const context = findRequestTreeContext(request.id);
+  if (!context?.collection) {
+    return false;
+  }
+  if (!canOpenRequestTabFor(context.collection.id, request.id)) {
+    return true;
+  }
+  collectActiveEditorState();
+  activeCollectionId = context.collection.id;
+  activeFolderId = context.folder?.id || null;
+  activeRequestId = request.id;
+  activeRunnerRequestRunnerId = null;
+  activeSidebarPanel = 'collections';
+  activeMainPanel = 'request';
+  ensureOpenRequestTabForActive();
+  renderAll();
+  activateTab('request', 'collectionVariables');
+  setStatus(`Opened ${requestDisplayName(request)} variables from variable reference.`);
+  return true;
+}
+
 function environmentById(environmentId) {
   if (!environmentId || environmentId === 'none') {
     return null;
@@ -3780,6 +3903,9 @@ function renderSettingsControls() {
   if ($('showEditorLineNumbersInput')) {
     $('showEditorLineNumbersInput').checked = workspace.settings.editor.lineNumbers !== false;
   }
+  if ($('showVariableTooltipHintsInput')) {
+    $('showVariableTooltipHintsInput').checked = workspace.settings.editor.variableTooltipHints !== false;
+  }
   if ($('trustedScriptSendRequestInput')) {
     $('trustedScriptSendRequestInput').checked = workspace.settings?.sandbox?.trustedCapabilities?.sendRequest === true;
   }
@@ -3805,8 +3931,9 @@ function ensureSettings() {
   workspace.settings.modals ||= { closeOnBackdropClick: false };
   workspace.settings.modals.closeOnBackdropClick = workspace.settings.modals.closeOnBackdropClick === true;
   workspace.settings.diagnostics = normalizeDiagnosticsSettings(workspace.settings.diagnostics);
-  workspace.settings.editor ||= { lineNumbers: true };
+  workspace.settings.editor ||= { lineNumbers: true, variableTooltipHints: true };
   workspace.settings.editor.lineNumbers = workspace.settings.editor.lineNumbers !== false;
+  workspace.settings.editor.variableTooltipHints = workspace.settings.editor.variableTooltipHints !== false;
   workspace.settings.sandbox ||= { trustedCapabilities: { sendRequest: true, cookies: true, vault: false } };
   workspace.settings.sandbox.fileBindings = normalizeSandboxFileBindings(workspace.settings.sandbox.fileBindings);
   workspace.settings.sandbox.packageCache = normalizeSandboxPackageCache(workspace.settings.sandbox.packageCache);
@@ -4252,6 +4379,38 @@ async function setEditorLineNumbers(enabled, options = {}) {
 function applyEditorPreferences() {
   ensureSettings();
   CodeEditor.setLineNumbersEnabled?.(workspace.settings.editor.lineNumbers !== false, document);
+}
+
+async function setVariableTooltipHints(enabled, options = {}) {
+  ensureSettings();
+  const nextEnabled = enabled !== false;
+  const currentEnabled = workspace.settings.editor.variableTooltipHints !== false;
+  if (nextEnabled === currentEnabled) {
+    renderSettingsControls();
+    return true;
+  }
+  const previousSettings = cloneWorkspaceSettings();
+  workspace.settings.editor.variableTooltipHints = nextEnabled;
+  renderSettingsControls();
+  if (options.save === true) {
+    return saveWorkspaceSettingsWithRollback(
+      previousSettings,
+      options.showStatus === false
+        ? ''
+        : `Variable tooltip hints ${workspace.settings.editor.variableTooltipHints ? 'enabled' : 'disabled'}.`,
+      'Variable tooltip setting save failed',
+      'Editor Settings Save Failed'
+    );
+  }
+  if (options.showStatus !== false) {
+    setStatus(`Variable tooltip hints ${workspace.settings.editor.variableTooltipHints ? 'enabled' : 'disabled'}.`);
+  }
+  return true;
+}
+
+function variableTooltipHintsEnabled() {
+  ensureSettings();
+  return workspace.settings.editor.variableTooltipHints !== false;
 }
 
 async function setSaveOnForceClose(saveOnForceClose, options = {}) {
@@ -9324,6 +9483,8 @@ function tagClassName(kind) {
   }
   const normalizedKind = String(kind || '').trim().toLowerCase();
   const entityClassByKind = {
+    col: 'entity-collection',
+    collection: 'entity-collection',
     env: 'entity-environment',
     environment: 'entity-environment',
     wrk: 'entity-workspace',

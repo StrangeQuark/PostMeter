@@ -56,10 +56,139 @@
     await assertTreeContextMenuModalFocusSmoke();
     newRequest();
     assertMethodColorSmoke();
+    const variableLinkCollection = activeCollection();
+    const variableLinkRequest = activeRequest();
+    const variableLinkEnvironment = {
+      id: crypto.randomUUID(),
+      name: 'Variable Link Environment',
+      variables: [{ enabled: true, key: 'baseUrl', value: 'https://hover.example.test' }]
+    };
+    workspace.environments.push(variableLinkEnvironment);
+    activeEnvironmentId = variableLinkEnvironment.id;
+    renderEnvironmentSelect();
+    refreshVariableHighlights();
     $('urlInput').value = '{{baseUrl}}/v1/users';
     dispatchInput($('urlInput'));
     await nextPaint();
-    assertVariableHighlight($('urlInput'), 'baseUrl', 'Request URL input should highlight environment variable tokens.');
+    const baseUrlToken = assertVariableHighlight(
+      $('urlInput'),
+      'baseUrl',
+      'Request URL input should highlight environment variable tokens.',
+      'valid'
+    );
+    dispatchVariableTokenMouseEvent($('urlInput'), baseUrlToken, 'mousemove');
+    await nextPaint();
+    const variableTooltip = document.querySelector('.variable-highlight-tooltip');
+    assertUiSmoke(
+      !variableTooltip || variableTooltip.hidden,
+      'Variable hover tooltip should not appear immediately.'
+    );
+    await waitForUiSmoke(
+      () => document.querySelector('.variable-highlight-tooltip')?.hidden === false,
+      'Variable hover tooltip should appear after the hover delay.',
+      2500,
+      global
+    );
+    const variableTooltipText = document.querySelector('.variable-highlight-tooltip')?.textContent || '';
+    assertUiSmoke(
+      variableTooltipText.startsWith('https://hover.example.test\n\n')
+        && variableTooltipText.includes('Ctrl+click: open variable source')
+        && variableTooltipText.includes('Ctrl+Shift+click: replace token with value'),
+      `Variable hover tooltip should contain the value and shortcut hints. Tooltip: ${document.querySelector('.variable-highlight-tooltip')?.outerHTML || 'none'}`
+    );
+    await setVariableTooltipHints(false, { showStatus: false });
+    dispatchVariableTokenMouseEvent($('urlInput'), baseUrlToken, 'mousemove');
+    await nextPaint();
+    assertUiSmoke(
+      document.querySelector('.variable-highlight-tooltip')?.textContent === 'https://hover.example.test',
+      `Variable hover tooltip should contain only the value when hints are disabled. Tooltip: ${document.querySelector('.variable-highlight-tooltip')?.outerHTML || 'none'}`
+    );
+    await setVariableTooltipHints(true, { showStatus: false });
+    dispatchVariableTokenMouseEvent($('urlInput'), baseUrlToken, 'mousemove', { ctrlKey: true });
+    await nextPaint();
+    assertUiSmoke(
+      baseUrlToken.classList.contains('is-variable-highlight-action-hover'),
+      'Holding Ctrl while hovering a resolved variable should underline the variable token.'
+    );
+    assertUiSmoke(
+      $('urlInput').classList.contains('has-openable-variable-hover'),
+      'Hovering a resolved variable while Ctrl is already held should show the pointer cursor.'
+    );
+    dispatchVariableTokenMouseEvent($('urlInput'), baseUrlToken, 'mousedown', { ctrlKey: true });
+    await nextPaint();
+    assertUiSmoke(
+      activeMainPanel === 'environment' && activeEnvironmentId === variableLinkEnvironment.id,
+      'Ctrl+clicking an environment variable should open its environment tab.'
+    );
+    assertUiSmoke(
+      openEnvironmentTabs.some((tab) => tab.environmentId === variableLinkEnvironment.id),
+      'Ctrl+clicking an environment variable should create an environment tab.'
+    );
+    selectRequestTabWithoutCollect(openRequestTabs.find((tab) => tab.collectionId === variableLinkCollection.id && tab.requestId === variableLinkRequest.id));
+    variableLinkCollection.variables = [{ enabled: true, key: 'collectionLink', value: 'collection-value' }];
+    $('urlInput').value = '{{collectionLink}}/v1/users';
+    dispatchInput($('urlInput'));
+    await nextPaint();
+    const collectionLinkToken = assertVariableHighlight(
+      $('urlInput'),
+      'collectionLink',
+      'Request URL input should highlight collection variable tokens.',
+      'valid'
+    );
+    dispatchVariableTokenMouseEvent($('urlInput'), collectionLinkToken, 'mousedown', { ctrlKey: true });
+    await nextPaint();
+    assertUiSmoke(
+      activeMainPanel === 'request' && activeCollectionId === variableLinkCollection.id && !activeRequestId,
+      'Ctrl+clicking a collection variable should open its collection tab.'
+    );
+    assertUiSmoke(
+      $('collectionLevelVariablesTab').classList.contains('active'),
+      'Ctrl+clicking a collection variable should select the collection Variables tab.'
+    );
+    selectRequestTabWithoutCollect(openRequestTabs.find((tab) => tab.collectionId === variableLinkCollection.id && tab.requestId === variableLinkRequest.id));
+    variableLinkRequest.variables = [{ enabled: true, key: 'requestLink', value: 'request-value' }];
+    $('urlInput').value = '{{requestLink}}/v1/users';
+    dispatchInput($('urlInput'));
+    activateTab('request', 'params');
+    await nextPaint();
+    const requestLinkToken = assertVariableHighlight(
+      $('urlInput'),
+      'requestLink',
+      'Request URL input should highlight request variable tokens.',
+      'valid'
+    );
+    dispatchVariableTokenMouseEvent($('urlInput'), requestLinkToken, 'mousedown', { ctrlKey: true });
+    await nextPaint();
+    assertUiSmoke(
+      activeMainPanel === 'request' && activeRequestId === variableLinkRequest.id,
+      'Ctrl+clicking a request variable should open its request tab.'
+    );
+    assertUiSmoke(
+      $('collectionVariablesTab').classList.contains('active'),
+      'Ctrl+clicking a request variable should select the request Variables tab.'
+    );
+    $('urlInput').value = '{{requestLink}}/hardcoded';
+    dispatchInput($('urlInput'));
+    await nextPaint();
+    const requestHardcodeToken = assertVariableHighlight(
+      $('urlInput'),
+      'requestLink',
+      'Request URL input should highlight request variables before hardcoding them.',
+      'valid'
+    );
+    dispatchVariableTokenMouseEvent($('urlInput'), requestHardcodeToken, 'mousedown', { ctrlKey: true, shiftKey: true });
+    await nextPaint();
+    assertUiSmoke(
+      $('urlInput').value === 'request-value/hardcoded',
+      'Ctrl+Shift+clicking a resolved variable should replace the token with the variable value.'
+    );
+    $('urlInput').focus();
+    document.execCommand('undo');
+    await nextPaint();
+    assertUiSmoke(
+      $('urlInput').value === '{{requestLink}}/hardcoded',
+      'Ctrl+Shift+click variable replacement should be undoable.'
+    );
     $('urlInput').value = 'https://api.example.test/v1/users';
     dispatchInput($('urlInput'));
     activateTab('request', 'headers');
@@ -236,6 +365,7 @@
     assertUiSmoke(!$('settingsModal').hidden, 'Opening Settings should show the Settings modal.');
     assertSettingsSandboxHelpText();
     await assertEditorLineNumbersSettingSmoke();
+    await assertVariableTooltipHintsSettingSmoke();
     $('closeSettingsModalFooterButton').click();
     await modalPromise;
     await nextPaint();
@@ -301,6 +431,40 @@
     assertUiSmoke(checkbox.checked === true, 'Editor line number setting checkbox should stay checked after settings are saved.');
     assertUiSmoke(editor.classList.contains('has-line-numbers'), 'Code editors should restore line numbers when the setting is checked again.');
     assertUiSmoke(docsEditor.classList.contains('has-line-numbers'), 'Docs editor should restore line numbers when the setting is checked again.');
+  }
+
+  async function assertVariableTooltipHintsSettingSmoke() {
+    const checkbox = $('showVariableTooltipHintsInput');
+    assertUiSmoke(checkbox, 'Variable tooltip hint setting checkbox should exist.');
+    assertUiSmoke(checkbox.checked === true, 'Variable tooltip hint setting should default to checked.');
+
+    clickElementAtCenter(checkbox, 'Variable tooltip hint setting checkbox');
+    await waitForUiSmoke(
+      () => checkbox.checked === false && workspace.settings.editor.variableTooltipHints === false,
+      'Variable tooltip hint setting checkbox did not turn off.',
+      1000,
+      global
+    );
+    await waitForUiSmoke(
+      () => lastStatusMessage.includes('Variable tooltip hints disabled.'),
+      'Variable tooltip hint setting save did not complete after disabling.',
+      1000,
+      global
+    );
+
+    clickElementAtCenter(checkbox, 'Variable tooltip hint setting checkbox');
+    await waitForUiSmoke(
+      () => checkbox.checked === true && workspace.settings.editor.variableTooltipHints === true,
+      'Variable tooltip hint setting checkbox did not turn back on.',
+      1000,
+      global
+    );
+    await waitForUiSmoke(
+      () => lastStatusMessage.includes('Variable tooltip hints enabled.'),
+      'Variable tooltip hint setting save did not complete after enabling.',
+      1000,
+      global
+    );
   }
 
   function clickElementAtCenter(element, label) {
@@ -469,6 +633,25 @@
     if (expectedStatus) {
       assertUiSmoke(token.getAttribute('data-variable-status') === expectedStatus, `${message} Expected ${expectedStatus} token status.`);
     }
+    return token;
+  }
+
+  function dispatchVariableTokenMouseEvent(control, token, type, options = {}) {
+    const tokenRect = token.getBoundingClientRect();
+    const controlRect = control.getBoundingClientRect();
+    const rect = tokenRect.width > 0 && tokenRect.height > 0 ? tokenRect : controlRect;
+    control.dispatchEvent(new MouseEvent(type, {
+      bubbles: true,
+      button: 0,
+      cancelable: true,
+      clientX: tokenRect.width > 0
+        ? rect.left + Math.max(1, rect.width / 2)
+        : rect.left + 16,
+      clientY: rect.top + Math.max(1, rect.height / 2),
+      ctrlKey: options.ctrlKey === true,
+      metaKey: options.metaKey === true,
+      shiftKey: options.shiftKey === true
+    }));
   }
 
   function assertVariableHighlightUsesInputMetrics(control, variableName, message) {
@@ -609,6 +792,11 @@
       await setIncludePrereleases(true, { save: true });
       assertUiSmoke(workspace.settings.updates.includePrereleases === false, 'Failed prerelease setting save should roll back the in-memory setting.');
       assertStatusIncludes('Prerelease setting save failed', 'Failed prerelease setting save should surface a user-visible status.');
+
+      workspace.settings.editor.variableTooltipHints = true;
+      await setVariableTooltipHints(false, { save: true });
+      assertUiSmoke(workspace.settings.editor.variableTooltipHints === true, 'Failed variable tooltip setting save should roll back the in-memory setting.');
+      assertStatusIncludes('Variable tooltip setting save failed', 'Failed variable tooltip setting save should surface a user-visible status.');
 
       workspace.settings.tabs.saveOnForceClose = false;
       await setSaveOnForceClose(true, { save: true });

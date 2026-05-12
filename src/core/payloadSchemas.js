@@ -103,7 +103,8 @@ const FIELD_SCHEMAS = {
     theme: { type: 'string', limit: 'tiny', enum: 'themeValues', optional: true }
   },
   editorSettings: {
-    lineNumbers: { type: 'boolean', optional: true }
+    lineNumbers: { type: 'boolean', optional: true },
+    variableTooltipHints: { type: 'boolean', optional: true }
   },
   diagnosticsLogging: {
     enabled: { type: 'boolean', optional: true },

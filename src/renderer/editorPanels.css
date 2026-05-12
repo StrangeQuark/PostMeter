@@ -461,6 +461,11 @@ textarea.code-editor-input:placeholder-shown {
   caret-color: var(--text);
 }
 
+.variable-highlight-input.has-openable-variable-hover,
+textarea.code-editor-input.has-openable-variable-hover {
+  cursor: pointer;
+}
+
 .variable-highlight-input.has-variable-highlight-value {
   color: transparent !important;
   -webkit-text-fill-color: transparent;
@@ -468,6 +473,13 @@ textarea.code-editor-input:placeholder-shown {
 
 .variable-highlight-token {
   font-weight: inherit;
+}
+
+.variable-highlight-token.is-variable-highlight-action-hover,
+.code-editor-token.tok-variable.is-variable-highlight-action-hover {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
 }
 
 .variable-highlight-valid {
@@ -489,6 +501,27 @@ textarea.code-editor-input:placeholder-shown {
 
 .variable-highlight-invalid {
   color: var(--primary);
+}
+
+.variable-highlight-tooltip {
+  position: fixed;
+  z-index: 1000;
+  max-width: min(420px, calc(100vw - 24px));
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  white-space: pre-wrap;
+}
+
+.variable-highlight-tooltip[hidden] {
+  display: none;
 }
 
 @media (forced-colors: active) {
