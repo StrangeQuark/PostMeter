@@ -243,10 +243,14 @@ function cloneRequestForRunner(request, source = {}) {
   });
 }
 
-function folderModel({ id, name, requests, folders, postman } = {}) {
+function folderModel({ id, name, description, auth, scripts, variables, requests, folders, postman } = {}) {
   const folder = {
     id: id || newId(),
     name: normalizeName(name, 'Untitled Folder'),
+    description: description ?? '',
+    auth: normalizePersistedAuth(auth),
+    scripts: normalizeScripts(scripts),
+    variables: normalizePairs(variables),
     requests: Array.isArray(requests) ? requests.map(requestModel) : [],
     folders: Array.isArray(folders) ? folders.map(folderModel) : []
   };
@@ -810,19 +814,20 @@ function cloneJson(value) {
 function walkRequests(collection, visitor) {
   for (const entry of orderedChildren(collection)) {
     if (entry.kind === 'request') {
-      visitor(entry.value, collection);
+      visitor(entry.value, collection, null, []);
     } else {
-      walkFolderRequests(entry.value, collection, visitor);
+      walkFolderRequests(entry.value, collection, visitor, []);
     }
   }
 }
 
-function walkFolderRequests(folder, collection, visitor) {
+function walkFolderRequests(folder, collection, visitor, parentPath = []) {
+  const folderPath = [...parentPath, folder].filter(Boolean);
   for (const entry of orderedChildren(folder)) {
     if (entry.kind === 'request') {
-      visitor(entry.value, collection, folder);
+      visitor(entry.value, collection, folder, folderPath);
     } else {
-      walkFolderRequests(entry.value, collection, visitor);
+      walkFolderRequests(entry.value, collection, visitor, folderPath);
     }
   }
 }

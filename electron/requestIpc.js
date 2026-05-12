@@ -50,6 +50,7 @@ function registerRequestIpc(options = {}) {
     const requestContext = request.id ? findWorkspaceRequestContext(workspaceSnapshot, request.id) : null;
     const baseEnvironment = cloneJson(environment);
     const baseCollectionVariables = cloneJson(requestContext?.collection?.variables || []);
+    const folderScope = folderScopeForContext(requestContext);
     const baseLocalVariables = cloneJson(request.variables || requestContext?.request?.variables || []);
     const baseGlobals = cloneJson(workspaceSnapshot.globals || []);
     const baseCookies = cloneJson(workspaceSnapshot.cookies || []);
@@ -60,6 +61,9 @@ function registerRequestIpc(options = {}) {
         collectionAuth: requestContext?.collection?.auth || { type: 'none' },
         collectionScripts: requestContext?.collection?.scripts || {},
         collectionVariables: requestContext?.collection?.variables || [],
+        folderAuth: folderScope.auth,
+        folderScripts: folderScope.scripts,
+        folderVariables: folderScope.variables,
         globals: workspaceSnapshot.globals || [],
         cookieJar: workspaceSnapshot.cookies || [],
         clientCertificates: requestContext?.collection?.certificates || [],
@@ -257,6 +261,59 @@ function failureCodeFromError(error, fallback) {
     return 'script_cookie_denied_or_failed';
   }
   return String(fallback || 'request_failed');
+}
+
+function folderScopeForContext(requestContext) {
+  const folders = Array.isArray(requestContext?.folders)
+    ? requestContext.folders.filter(Boolean)
+    : requestContext?.folder
+      ? [requestContext.folder]
+      : [];
+  return {
+    auth: effectiveFolderAuth(folders),
+    scripts: effectiveFolderScripts(folders),
+    variables: effectiveFolderVariables(folders)
+  };
+}
+
+function effectiveFolderAuth(folders) {
+  for (let index = folders.length - 1; index >= 0; index -= 1) {
+    const auth = folders[index]?.auth;
+    if (auth && typeof auth === 'object' && String(auth.type || 'none') !== 'none') {
+      return auth;
+    }
+  }
+  return { type: 'none' };
+}
+
+function effectiveFolderScripts(folders) {
+  const scripts = {};
+  for (const folder of folders) {
+    for (const [key, value] of Object.entries(folder?.scripts || {})) {
+      if (String(value || '').trim()) {
+        scripts[key] = String(value);
+      }
+    }
+  }
+  return scripts;
+}
+
+function effectiveFolderVariables(folders) {
+  const variables = [];
+  for (const folder of folders) {
+    for (const variable of folder?.variables || []) {
+      if (!variable?.key) {
+        continue;
+      }
+      const index = variables.findIndex((item) => item.key === variable.key);
+      if (index >= 0) {
+        variables[index] = { ...variable };
+      } else {
+        variables.push({ ...variable });
+      }
+    }
+  }
+  return variables;
 }
 
 module.exports = {

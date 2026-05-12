@@ -19,6 +19,7 @@
       activeMainPanel: 'request',
       draftRequests: new Map(),
       openCollectionTabs: [],
+      openFolderTabs: [],
       openRequestTabs: [],
       openEnvironmentTabs: [],
       openWorkspaceTabs: [],
@@ -57,8 +58,14 @@
   }
 
   function activeCollectionTabKey(state) {
-    return state?.activeCollectionId && !state.activeRequestId && state.activeMainPanel === 'request'
+    return state?.activeCollectionId && !state.activeFolderId && !state.activeRequestId && state.activeMainPanel === 'request'
       ? `collection:${state.activeCollectionId}`
+      : '';
+  }
+
+  function activeFolderTabKey(state) {
+    return state?.activeCollectionId && state.activeFolderId && !state.activeRequestId && state.activeMainPanel === 'request'
+      ? `folder:${state.activeCollectionId}:${state.activeFolderId}`
       : '';
   }
 
@@ -88,6 +95,10 @@
     return state?.activeMainPanel === 'request' && tab?.key === activeCollectionTabKey(state);
   }
 
+  function isActiveFolderTab(state, tab) {
+    return state?.activeMainPanel === 'request' && tab?.key === activeFolderTabKey(state);
+  }
+
   function isActiveEnvironmentTab(state, tab) {
     return state?.activeMainPanel === 'environment' && tab?.key === activeEnvironmentTabKey(state);
   }
@@ -115,6 +126,14 @@
   function collectionSnapshot(collection) {
     try {
       return JSON.stringify(collection);
+    } catch {
+      return '{}';
+    }
+  }
+
+  function folderSnapshot(folder) {
+    try {
+      return JSON.stringify(folder);
     } catch {
       return '{}';
     }
@@ -168,6 +187,19 @@
       tab.createdUnsaved = false;
       if (collection) {
         tab.snapshot = collectionSnapshot(collection);
+      }
+    }
+    options.onAfterClear?.();
+  }
+
+  function clearSavedFolderTabDirtyState(state, options = {}) {
+    const folderForTab = options.folderForTab || (() => null);
+    for (const tab of state?.openFolderTabs || []) {
+      const folder = folderForTab(tab);
+      tab.dirty = false;
+      tab.createdUnsaved = false;
+      if (folder) {
+        tab.snapshot = folderSnapshot(folder);
       }
     }
     options.onAfterClear?.();
@@ -228,6 +260,7 @@
     }
     state.openRequestTabs = [];
     state.openCollectionTabs = [];
+    state.openFolderTabs = [];
     state.openEnvironmentTabs = [];
     state.openWorkspaceTabs = [];
     state.openRunnerTabs = [];
@@ -262,12 +295,14 @@
     MAX_OPEN_TABS,
     activeCollectionTabKey,
     activeEnvironmentTabKey,
+    activeFolderTabKey,
     activePerformanceTabKey,
     activeRequestTabKey,
     activeRunnerTabKey,
     activeWorkspaceTabKey,
     clearSavedCollectionTabDirtyState,
     clearSavedEnvironmentDirtyState,
+    clearSavedFolderTabDirtyState,
     clearSavedPerformanceDirtyState,
     clearSavedRunnerDirtyState,
     clearSharedRequestDirtyState,
@@ -275,8 +310,10 @@
     createRendererState,
     collectionSnapshot,
     environmentSnapshot,
+    folderSnapshot,
     isActiveCollectionTab,
     isActiveEnvironmentTab,
+    isActiveFolderTab,
     isActivePerformanceTab,
     isActiveRequestTab,
     isActiveRunnerTab,

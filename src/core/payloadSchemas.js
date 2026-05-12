@@ -164,7 +164,8 @@ const FIELD_SCHEMAS = {
   },
   folder: {
     id: { type: 'string', limit: 'name', optional: true },
-    name: { type: 'string', limit: 'name', optional: true }
+    name: { type: 'string', limit: 'name', optional: true },
+    description: { type: 'string', limit: 'value', optional: true }
   },
   scripts: {
     preRequest: { type: 'string', limit: 'body', optional: true },

@@ -3778,6 +3778,8 @@
     const folder = newFolder();
     assertUiSmoke(folder, 'New Folder should create a folder when a collection is active.');
     assertUiSmoke(collection.folders.length === 1, 'New Folder should be added to the active collection.');
+    assertUiSmoke(openFolderTabs.some((tab) => tab.folderId === folder.id), 'New Folder should open a folder tab.');
+    assertUiSmoke($('requestTabBar').textContent.includes('FOLD'), 'Folder tabs should use the FOLD badge.');
     const firstRequest = newRequest(collection.id, null);
     firstRequest.name = 'First Tab Request';
     renderAll();
@@ -3799,7 +3801,7 @@
     assertUiSmoke(activeRequest()?.id === secondRequest.id, 'ArrowRight on an opened request tab should activate the next tab.');
     const tabBarWidth = $('requestTabBar').clientWidth || 800;
     const targetTabCount = Math.max(6, Math.floor(tabBarWidth / 100));
-    for (let index = openRequestTabs.length; index < targetTabCount; index += 1) {
+    for (let index = openRequestTabs.length; openTabStateCount() < targetTabCount; index += 1) {
       const extraRequest = newRequest(collection.id, null);
       extraRequest.name = `Shrink Fit Request ${index + 1}`;
       renderAll();
@@ -3809,14 +3811,14 @@
       `Opened tabs should shrink before the tab bar scrolls. scrollWidth=${$('requestTabBar').scrollWidth} clientWidth=${$('requestTabBar').clientWidth} tabs=${openRequestTabs.length} widths=${Array.from($('requestTabBar').querySelectorAll('.request-tab-item')).map((item) => Math.round(item.getBoundingClientRect().width)).join(',')}.`
     );
     const overflowTargetTabCount = Math.max(16, Math.ceil(tabBarWidth / 84) + 3);
-    for (let index = openRequestTabs.length; index < overflowTargetTabCount; index += 1) {
+    for (let index = openRequestTabs.length; openTabStateCount() < overflowTargetTabCount; index += 1) {
       const extraRequest = newRequest(collection.id, null);
       extraRequest.name = `Overflow Tab Request ${index + 1}`;
       renderAll();
     }
     const renderedOpenTabItems = Array.from($('requestTabBar').querySelectorAll('.request-tab-item'));
-    const totalOpenTabs = openCollectionTabs.length + openRequestTabs.length + openEnvironmentTabs.length + openWorkspaceTabs.length + openRunnerTabs.length + openPerformanceTabs.length;
-    assertUiSmoke(openRequestTabs.length >= overflowTargetTabCount, 'Opening tabs past the old twelve-tab threshold should keep all opened tabs in state.');
+    const totalOpenTabs = openTabStateCount();
+    assertUiSmoke(totalOpenTabs >= overflowTargetTabCount, 'Opening tabs past the old twelve-tab threshold should keep all opened tabs in state.');
     assertUiSmoke(renderedOpenTabItems.length === totalOpenTabs, 'Rendered opened tabs should match the open tab state after overflow.');
     assertUiSmoke($('requestTabBar').textContent.includes('First Tab Request'), 'Older opened tabs should remain available after the tab bar overflows.');
     assertUiSmoke(
@@ -4249,6 +4251,16 @@
       return require('./uiSmokeCommon');
     }
     throw new Error('PostMeter UI smoke common helpers must load before uiRegressionSmoke.js.');
+  }
+
+  function openTabStateCount() {
+    return openCollectionTabs.length
+      + openFolderTabs.length
+      + openRequestTabs.length
+      + openEnvironmentTabs.length
+      + openWorkspaceTabs.length
+      + openRunnerTabs.length
+      + openPerformanceTabs.length;
   }
 
   const exported = {

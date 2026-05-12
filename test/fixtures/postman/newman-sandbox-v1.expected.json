@@ -63,7 +63,6 @@
     "shared": "environment-from-pre"
   },
   "collectionVariables": {
-    "collectionPreSeen": "yes",
     "folderPreSeen": "yes",
     "step4Collection": "yes",
     "collectionOnly": "collection-only"

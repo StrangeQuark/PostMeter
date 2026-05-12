@@ -27,9 +27,11 @@ const SCRIPT_FALLBACK_FIELDS = [
 ];
 
 function createScriptedRequestState(request, environment, options = {}) {
-  const effectiveRequest = requestWithCollectionDefaults(request, {
-    auth: options.collectionAuth,
-    scripts: options.collectionScripts
+  const effectiveRequest = requestWithScopeDefaults(request, {
+    collectionAuth: options.collectionAuth,
+    collectionScripts: options.collectionScripts,
+    folderAuth: options.folderAuth,
+    folderScripts: options.folderScripts
   });
   return {
     request: effectiveRequest,
@@ -41,6 +43,10 @@ function createScriptedRequestState(request, environment, options = {}) {
     collectionVariables: normalizeVariables(
       options.collectionVariables || [],
       options.cloneCollectionVariables !== false
+    ),
+    folderVariables: normalizeVariables(
+      options.folderVariables || [],
+      options.cloneFolderVariables !== false
     ),
     globals: normalizeVariables(
       options.globals || [],
@@ -54,20 +60,33 @@ function createScriptedRequestState(request, environment, options = {}) {
   };
 }
 
-function requestWithCollectionDefaults(request, collection = {}) {
+function requestWithScopeDefaults(request, defaults = {}) {
   if (!request) {
     return request;
   }
   const nextRequest = { ...request };
-  if (!requestHasOwnAuth(request.auth) && requestHasOwnAuth(collection.auth)) {
-    nextRequest.auth = cloneJsonObject(collection.auth);
+  if (!requestHasOwnAuth(request.auth)) {
+    if (requestHasOwnAuth(defaults.folderAuth)) {
+      nextRequest.auth = cloneJsonObject(defaults.folderAuth);
+    } else if (requestHasOwnAuth(defaults.collectionAuth)) {
+      nextRequest.auth = cloneJsonObject(defaults.collectionAuth);
+    }
   }
   const scripts = { ...(request.scripts || {}) };
-  const collectionScripts = collection.scripts || {};
   let hasScriptFallback = false;
   for (const field of SCRIPT_FALLBACK_FIELDS) {
-    if (!String(scripts[field] || '').trim() && String(collectionScripts[field] || '').trim()) {
-      scripts[field] = String(collectionScripts[field]);
+    if (String(scripts[field] || '').trim()) {
+      continue;
+    }
+    const folderScript = String(defaults.folderScripts?.[field] || '');
+    if (folderScript.trim()) {
+      scripts[field] = folderScript;
+      hasScriptFallback = true;
+      continue;
+    }
+    const collectionScript = String(defaults.collectionScripts?.[field] || '');
+    if (collectionScript.trim()) {
+      scripts[field] = collectionScript;
       hasScriptFallback = true;
     }
   }
@@ -138,6 +157,7 @@ async function runHttpScriptedRequestLifecycle(state, options = {}) {
     state.request,
     runtimeEnvironment(state.collectionVariables, state.environment, state.localVariables, {
       globals: state.globals,
+      folderVariables: state.folderVariables,
       iterationData
     }),
     {
@@ -214,6 +234,7 @@ async function runGrpcRequestLifecycle(state, options = {}) {
   const iterationData = options.iterationData || [];
   const grpcTransportEnvironment = runtimeEnvironment(state.collectionVariables, state.environment, state.localVariables, {
     globals: state.globals,
+    folderVariables: state.folderVariables,
     iterationData
   });
   const scriptOptions = scriptOptionsForLifecycle(options, {
@@ -257,6 +278,7 @@ async function runGrpcRequestLifecycle(state, options = {}) {
 
   const runtimeEnv = runtimeEnvironment(state.collectionVariables, state.environment, state.localVariables, {
     globals: state.globals,
+    folderVariables: state.folderVariables,
     iterationData
   });
   let response;
@@ -349,6 +371,7 @@ function scriptContext(state, options = {}) {
     collectionId: options.collectionId || '',
     collectionName: options.collectionName || options.executionLocation?.collectionName || options.executionLocation?.current?.[0] || '',
     collectionVariables: state.collectionVariables,
+    folderVariables: state.folderVariables,
     globals: state.globals,
     localVariables: state.localVariables,
     environment: state.environment,

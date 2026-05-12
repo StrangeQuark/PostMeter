@@ -508,6 +508,10 @@ h2 {
   color: var(--method-post);
 }
 
+.entity-folder {
+  color: var(--entity-folder);
+}
+
 .entity-environment {
   color: var(--entity-environment);
 }
@@ -562,6 +566,11 @@ h2 {
 .tree-badge.entity-collection {
   background: var(--method-post-bg);
   color: var(--method-post);
+}
+
+.tree-badge.entity-folder {
+  background: var(--entity-folder-bg);
+  color: var(--entity-folder);
 }
 
 .tree-badge.entity-environment {
@@ -627,19 +636,31 @@ h2 {
 .workspace.document-mode #requestEditorPanel,
 .workspace.document-mode #requestEmptyPanel,
 .workspace.document-mode #collectionMainPanel,
+.workspace.document-mode #folderMainPanel,
 .workspace.document-mode .results,
 .workspace.collection-mode #workspacePaneResize,
 .workspace.collection-mode #requestEditorPanel,
 .workspace.collection-mode #requestEmptyPanel,
+.workspace.collection-mode #folderMainPanel,
 .workspace.collection-mode #environmentEmptyPanel,
 .workspace.collection-mode #workspaceEmptyPanel,
 .workspace.collection-mode #runnerEmptyPanel,
 .workspace.collection-mode #performanceEmptyPanel,
 .workspace.collection-mode .results,
+.workspace.folder-mode #workspacePaneResize,
+.workspace.folder-mode #requestEditorPanel,
+.workspace.folder-mode #requestEmptyPanel,
+.workspace.folder-mode #collectionMainPanel,
+.workspace.folder-mode #environmentEmptyPanel,
+.workspace.folder-mode #workspaceEmptyPanel,
+.workspace.folder-mode #runnerEmptyPanel,
+.workspace.folder-mode #performanceEmptyPanel,
+.workspace.folder-mode .results,
 .workspace.environment-mode #workspacePaneResize,
 .workspace.environment-mode #requestEditorPanel,
 .workspace.environment-mode #requestEmptyPanel,
 .workspace.environment-mode #collectionMainPanel,
+.workspace.environment-mode #folderMainPanel,
 .workspace.environment-mode #workspaceEmptyPanel,
 .workspace.environment-mode #runnerEmptyPanel,
 .workspace.environment-mode #performanceEmptyPanel,
@@ -648,6 +669,7 @@ h2 {
 .workspace.workspace-mode #requestEditorPanel,
 .workspace.workspace-mode #requestEmptyPanel,
 .workspace.workspace-mode #collectionMainPanel,
+.workspace.workspace-mode #folderMainPanel,
 .workspace.workspace-mode #environmentEmptyPanel,
 .workspace.workspace-mode #runnerEmptyPanel,
 .workspace.workspace-mode #performanceEmptyPanel,
@@ -656,6 +678,7 @@ h2 {
 .workspace.runner-mode #requestEditorPanel,
 .workspace.runner-mode #requestEmptyPanel,
 .workspace.runner-mode #collectionMainPanel,
+.workspace.runner-mode #folderMainPanel,
 .workspace.runner-mode #environmentEmptyPanel,
 .workspace.runner-mode #workspaceEmptyPanel,
 .workspace.runner-mode #performanceEmptyPanel,
@@ -664,6 +687,7 @@ h2 {
 .workspace.performance-mode #requestEditorPanel,
 .workspace.performance-mode #requestEmptyPanel,
 .workspace.performance-mode #collectionMainPanel,
+.workspace.performance-mode #folderMainPanel,
 .workspace.performance-mode #environmentEmptyPanel,
 .workspace.performance-mode #workspaceEmptyPanel,
 .workspace.performance-mode #runnerEmptyPanel,
@@ -671,6 +695,7 @@ h2 {
 .workspace.request-empty-mode #workspacePaneResize,
 .workspace.request-empty-mode #requestEditorPanel,
 .workspace.request-empty-mode #collectionMainPanel,
+.workspace.request-empty-mode #folderMainPanel,
 .workspace.request-empty-mode .results,
 .workspace.environment-empty-mode #environmentMainPanel,
 .workspace.workspace-empty-mode #workspaceMainPanel,
@@ -684,6 +709,7 @@ h2 {
 .workspace.document-mode #runnerMainPanel,
 .workspace.document-mode #performanceMainPanel,
 .workspace.collection-mode #collectionMainPanel,
+.workspace.folder-mode #folderMainPanel,
 .workspace.environment-mode #environmentMainPanel,
 .workspace.workspace-mode #workspaceMainPanel,
 .workspace.runner-mode #runnerMainPanel,
@@ -1653,6 +1679,10 @@ h2 {
 
 .request-tab-method.entity-collection {
   color: var(--method-post);
+}
+
+.request-tab-method.entity-folder {
+  color: var(--entity-folder);
 }
 
 .request-tab-method.entity-environment {

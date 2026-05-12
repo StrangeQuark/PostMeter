@@ -5,8 +5,8 @@
   const TOOLTIP_ELEMENTS = new WeakMap();
   const VARIABLE_NAME_PATTERN = /^[$A-Za-z0-9_.-]+$/;
   const VARIABLE_TOKEN_PATTERN = /\{\{\s*([^{}\r\n]+?)\s*\}\}|\$\{\s*([^{}\r\n]+?)\s*\}/g;
-  const HOVER_VARIABLE_SOURCES = new Set(['environment', 'collection', 'request', 'global']);
-  const OPENABLE_VARIABLE_SOURCES = new Set(['environment', 'collection', 'request']);
+  const HOVER_VARIABLE_SOURCES = new Set(['environment', 'collection', 'folder', 'request', 'global']);
+  const OPENABLE_VARIABLE_SOURCES = new Set(['environment', 'collection', 'folder', 'request']);
   const TEXT_INPUT_TYPES = new Set(['', 'email', 'search', 'tel', 'text', 'url']);
   const TOOLTIP_DELAY_MS = 1000;
   const ACTIVE_HOVER_BY_DOCUMENT = new WeakMap();
@@ -305,6 +305,9 @@
     if (normalized === 'collection' || normalized === 'collectionvariable' || normalized === 'collectionvariables') {
       return 'collection';
     }
+    if (normalized === 'folder' || normalized === 'foldervariable' || normalized === 'foldervariables') {
+      return 'folder';
+    }
     if (normalized === 'request' || normalized === 'local' || normalized === 'variable' || normalized === 'variables') {
       return 'request';
     }
@@ -314,9 +317,9 @@
     return normalized;
   }
 
-  function variableMatchesPostmanToken(variable) {
+function variableMatchesPostmanToken(variable) {
     const source = normalizeVariableSource(variable?.source);
-    return !source || source === 'environment' || source === 'collection' || source === 'request' || source === 'global';
+    return !source || source === 'environment' || source === 'collection' || source === 'folder' || source === 'request' || source === 'global';
   }
 
   function variableMatchesSource(variable, source) {

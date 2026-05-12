@@ -6,12 +6,18 @@ const EXTERNAL_PACKAGE_PREFIX_PATTERN = /^(?:npm:|jsr:|@)/i;
 
 function collectSandboxPackageReferencesFromCollection(collection = {}) {
   const references = new Map();
+  for (const source of requestScriptSources(collection)) {
+    collectSandboxPackageReferencesFromText(source, references);
+  }
   const visitRequest = (request = {}) => {
     for (const source of requestScriptSources(request)) {
       collectSandboxPackageReferencesFromText(source, references);
     }
   };
   const visitFolder = (folder = {}) => {
+    for (const source of requestScriptSources(folder)) {
+      collectSandboxPackageReferencesFromText(source, references);
+    }
     for (const request of folder.requests || []) {
       visitRequest(request);
     }

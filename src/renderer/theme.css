@@ -29,6 +29,8 @@
   --method-head-bg: #e4f7f8;
   --method-options: #c8479f;
   --method-options-bg: #fdebf7;
+  --entity-folder: var(--method-options);
+  --entity-folder-bg: var(--method-options-bg);
   --entity-environment: var(--blue);
   --entity-environment-bg: #e6fffb;
   --entity-workspace: #6d28d9;
@@ -87,6 +89,8 @@
   --method-head-bg: #14383b;
   --method-options: #f18ad0;
   --method-options-bg: #3a1f32;
+  --entity-folder: var(--method-options);
+  --entity-folder-bg: var(--method-options-bg);
   --entity-environment: var(--blue);
   --entity-environment-bg: #143b37;
   --entity-workspace: #a78bfa;
@@ -141,6 +145,8 @@
     --method-head-bg: #14383b;
     --method-options: #f18ad0;
     --method-options-bg: #3a1f32;
+    --entity-folder: var(--method-options);
+    --entity-folder-bg: var(--method-options-bg);
     --entity-environment: var(--blue);
     --entity-environment-bg: #143b37;
     --entity-workspace: #a78bfa;
@@ -184,6 +190,8 @@
     --blue: LinkText;
     --green: CanvasText;
     --danger: Highlight;
+    --entity-folder: CanvasText;
+    --entity-folder-bg: Canvas;
     --entity-environment: CanvasText;
     --entity-environment-bg: Canvas;
     --entity-workspace: CanvasText;

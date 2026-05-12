@@ -25,6 +25,8 @@ const {
   assertWorkspaceCollectionSaveResultPayload,
   assertWorkspaceEnvironmentSavePayload,
   assertWorkspaceEnvironmentSaveResultPayload,
+  assertWorkspaceFolderSavePayload,
+  assertWorkspaceFolderSaveResultPayload,
   assertWorkspaceLoadResultPayload,
   assertWorkspaceRequestSavePayload,
   assertWorkspaceRequestSaveResultPayload,
@@ -409,6 +411,42 @@ test('accepts structurally valid IPC payloads', () => {
       folders: []
     }
   }));
+  assert.doesNotThrow(() => assertWorkspaceFolderSavePayload({
+    collectionId: 'c1',
+    folderId: 'f1',
+    createdUnsaved: true,
+    folder: {
+      id: 'f1',
+      name: 'Folder',
+      description: 'Folder defaults',
+      auth: { type: 'apiKey', key: 'X-Folder-Key', value: 'secret', location: 'header' },
+      scripts: { preRequest: "pm.environment.set('fromFolder', 'yes');", tests: '' },
+      variables: [{ enabled: true, key: 'folderToken', value: 'secret' }],
+      requests: [],
+      folders: []
+    },
+    collectionShell: {
+      id: 'c1',
+      name: 'Collection',
+      auth: { type: 'none' },
+      scripts: {},
+      variables: [],
+      certificates: []
+    },
+    folderPath: [{ id: 'f1', name: 'Folder' }],
+    settings: { updates: { includePrereleases: true } }
+  }));
+  assert.doesNotThrow(() => assertWorkspaceFolderSaveResultPayload({
+    folder: {
+      id: 'f1',
+      name: 'Folder',
+      auth: { type: 'none' },
+      scripts: {},
+      variables: [],
+      requests: [],
+      folders: []
+    }
+  }));
   assert.doesNotThrow(() => assertSessionPayload({
     activeMainPanel: 'request',
     openCollectionTabs: [{
@@ -420,6 +458,21 @@ test('accepts structurally valid IPC payloads', () => {
       currentState: {
         id: 'c1',
         name: 'Collection',
+        variables: [],
+        requests: [],
+        folders: []
+      }
+    }],
+    openFolderTabs: [{
+      key: 'folder:c1:f1',
+      collectionId: 'c1',
+      folderId: 'f1',
+      dirty: true,
+      createdUnsaved: false,
+      snapshot: '{"id":"f1"}',
+      currentState: {
+        id: 'f1',
+        name: 'Folder',
         variables: [],
         requests: [],
         folders: []
@@ -648,6 +701,8 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertFileOperationResultPayload({ cancelled: 'yes' }), /result.cancelled must be a boolean/);
   assert.throws(() => assertFileOperationResultPayload({ cancelled: false, collection: [] }), /result.collection must be an object/);
   assert.throws(() => assertSessionPayload({ openCollectionTabs: Array.from({ length: 129 }, (_value, index) => ({ key: `collection:${index}`, collectionId: `collection-${index}` })) }), /session.openCollectionTabs cannot contain more than 128 items/);
+  assert.throws(() => assertSessionPayload({ openFolderTabs: Array.from({ length: 129 }, (_value, index) => ({ key: `folder:collection:${index}`, collectionId: 'collection', folderId: `folder-${index}` })) }), /session.openFolderTabs cannot contain more than 128 items/);
+  assert.throws(() => assertWorkspaceFolderSavePayload({ collectionId: 'c1', folderId: 'f1', folder: { id: 'f1', name: 'Folder', variables: [{ enabled: true, key: 'x', value: [] }] } }), /payload\.folder\.variables\[0\]\.value must be a string/);
   assert.throws(() => assertRuntimeId({ bad: true }), /id must be a string/);
   assert.throws(() => assertExportFormat('xml'), /format must be one of/);
   assert.throws(() => assertCollectionExportFormat('bad'), /format must be one of/);

@@ -36,12 +36,13 @@ test('variable highlighter validates dollar tokens only against CSV variables', 
   assert.match(html, /data-variable-name="requestUrl" data-variable-status="valid" data-variable-source="csv"/);
 });
 
-test('variable highlighter marks request and collection variables with their winning sources', () => {
-  const html = highlightVariableTokens('{{baseUrl}} {{envOnly}} {{collectionOnly}}', {
+test('variable highlighter marks request, folder, and collection variables with their winning sources', () => {
+  const html = highlightVariableTokens('{{baseUrl}} {{envOnly}} {{collectionOnly}} {{folderOnly}}', {
     variables: [
       { enabled: true, key: 'baseUrl', source: 'request', value: 'https://request.example.test' },
       { enabled: true, key: 'envOnly', source: 'environment', value: 'https://env.example.test' },
-      { enabled: true, key: 'collectionOnly', source: 'collection', value: 'collection-value' }
+      { enabled: true, key: 'collectionOnly', source: 'collection', value: 'collection-value' },
+      { enabled: true, key: 'folderOnly', source: 'folder', value: 'folder-value' }
     ]
   });
 
@@ -51,12 +52,15 @@ test('variable highlighter marks request and collection variables with their win
   assert.match(html, /class="variable-highlight-token variable-highlight-valid variable-highlight-environment"/);
   assert.match(html, /data-variable-name="collectionOnly" data-variable-status="valid" data-variable-source="collection"/);
   assert.match(html, /class="variable-highlight-token variable-highlight-valid variable-highlight-collection"/);
+  assert.match(html, /data-variable-name="folderOnly" data-variable-status="valid" data-variable-source="folder"/);
+  assert.match(html, /class="variable-highlight-token variable-highlight-valid variable-highlight-folder"/);
 });
 
 test('variable highlighter resolves hoverable variable values by source', () => {
   const variables = [
     { enabled: true, key: 'baseUrl', source: 'environment', value: 'https://env.example.test' },
     { enabled: true, key: 'collectionOnly', source: 'collection', value: 'collection-value' },
+    { enabled: true, key: 'folderOnly', source: 'folder', value: 'folder-value' },
     { enabled: true, key: 'requestOnly', source: 'request', currentValue: 'request-value' },
     { enabled: false, key: 'disabled', source: 'environment', value: 'hidden' }
   ];
@@ -70,6 +74,11 @@ test('variable highlighter resolves hoverable variable values by source', () => 
     key: 'collectionOnly',
     source: 'collection',
     value: 'collection-value'
+  });
+  assert.deepEqual(resolvedVariableForToken('folderOnly', { source: 'folder', variables }), {
+    key: 'folderOnly',
+    source: 'folder',
+    value: 'folder-value'
   });
   assert.deepEqual(resolvedVariableForToken('requestOnly', { source: 'request', variables }), {
     key: 'requestOnly',

@@ -17,6 +17,7 @@ function runtimeEnvironment(collectionVariables = [], environment = null, localV
   mergeVariables(merged, options.globals || [], false);
   mergeVariables(merged, environment?.variables || [], true);
   mergeVariables(merged, collectionVariables, true);
+  mergeVariables(merged, options.folderVariables || [], true);
   mergeVariables(merged, options.iterationData || [], true);
   mergeVariables(merged, localVariables || [], true);
   return {

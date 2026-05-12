@@ -3,6 +3,7 @@ const test = require('node:test');
 const { collectionModel, environmentModel, requestModel, runnerModel, workspaceModel } = require('../../src/core/models');
 const {
   applyEnvironmentSaveToWorkspace,
+  applyFolderSaveToWorkspace,
   applyCollectionRunMutationsToWorkspace,
   applyRequestSaveToWorkspace,
   applyWorkspaceSettingsSaveToWorkspace,
@@ -311,6 +312,71 @@ test('applies environment saves by replacing or appending the selected environme
   assert.equal(updatedWorkspace.settings.updates.includePrereleases, true);
   assert.equal(appendedWorkspace.environments.length, 2);
   assert.equal(appendedWorkspace.environments[1].id, 'environment-2');
+});
+
+test('applies folder saves by replacing nested folders or creating missing paths', () => {
+  const workspace = workspaceModel({
+    collections: [collectionModel({
+      id: 'collection-1',
+      name: 'Collection',
+      folders: [{
+        id: 'parent-folder',
+        name: 'Parent',
+        requests: [],
+        folders: [{
+          id: 'folder-1',
+          name: 'Old Folder',
+          variables: [],
+          requests: [],
+          folders: []
+        }]
+      }]
+    })],
+    settings: { updates: { includePrereleases: false } }
+  });
+
+  const updatedWorkspace = applyFolderSaveToWorkspace(workspace, {
+    collectionId: 'collection-1',
+    folderId: 'folder-1',
+    folder: {
+      id: 'folder-1',
+      name: 'Saved Folder',
+      description: 'Saved description',
+      auth: { type: 'bearer', token: 'folder-token' },
+      scripts: { preRequest: "pm.environment.set('fromFolder', 'yes');", tests: '' },
+      variables: [{ enabled: true, key: 'folderBaseUrl', value: 'https://folder.example.test' }],
+      requests: [],
+      folders: []
+    },
+    folderPath: [
+      { id: 'parent-folder', name: 'Parent' },
+      { id: 'folder-1', name: 'Saved Folder' }
+    ],
+    settings: { updates: { includePrereleases: true } }
+  });
+  const appendedWorkspace = applyFolderSaveToWorkspace(workspaceModel({
+    collections: [collectionModel({ id: 'collection-1', name: 'Collection', folders: [] })]
+  }), {
+    collectionId: 'collection-1',
+    folderId: 'child-folder',
+    folder: {
+      id: 'child-folder',
+      name: 'Child Folder',
+      requests: [],
+      folders: []
+    },
+    folderPath: [
+      { id: 'parent-folder', name: 'Parent' },
+      { id: 'child-folder', name: 'Child Folder' }
+    ]
+  });
+
+  assert.equal(workspace.collections[0].folders[0].folders[0].name, 'Old Folder');
+  assert.equal(updatedWorkspace.collections[0].folders[0].folders[0].name, 'Saved Folder');
+  assert.equal(updatedWorkspace.collections[0].folders[0].folders[0].variables[0].key, 'folderBaseUrl');
+  assert.equal(updatedWorkspace.settings.updates.includePrereleases, true);
+  assert.equal(appendedWorkspace.collections[0].folders[0].id, 'parent-folder');
+  assert.equal(appendedWorkspace.collections[0].folders[0].folders[0].id, 'child-folder');
 });
 
 test('applies workspace settings saves without touching request or environment data', () => {

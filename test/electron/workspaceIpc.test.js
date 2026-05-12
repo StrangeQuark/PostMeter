@@ -143,6 +143,7 @@ test('workspace IPC registers stable workspace, collection, and request channels
     'workspace:save',
     'workspace:saveCollection',
     'workspace:saveEnvironment',
+    'workspace:saveFolder',
     'workspace:saveRequest',
     'workspace:saveSettings',
     'workspace:switch'
@@ -1149,6 +1150,115 @@ test('workspace IPC saves only the selected collection payload through targeted 
   assert.equal(refreshCalls, 1);
   assert.deepEqual(result, {
     collection: appliedWorkspace.collections[0]
+  });
+  assert.equal(syncHandlers.has('workspace:saveSync'), true);
+});
+
+test('workspace IPC saves only the selected folder payload through targeted folder save', async () => {
+  const handlers = new Map();
+  const syncHandlers = new Map();
+  const currentWorkspace = {
+    schemaVersion: 11,
+    collections: [{
+      id: 'collection-1',
+      name: 'Collection',
+      description: '',
+      variables: [],
+      certificates: [],
+      requests: [],
+      folders: [{
+        id: 'folder-1',
+        name: 'Old Folder',
+        description: '',
+        auth: { type: 'none' },
+        scripts: {},
+        variables: [],
+        requests: [],
+        folders: []
+      }]
+    }, {
+      id: 'collection-2',
+      name: 'Other Collection',
+      description: '',
+      variables: [],
+      certificates: [],
+      requests: [],
+      folders: []
+    }],
+    environments: [],
+    history: [],
+    cookies: [],
+    settings: { updates: { includePrereleases: false } }
+  };
+  let savedWorkspace = null;
+  let appliedWorkspace = null;
+  let refreshCalls = 0;
+
+  registerWorkspaceIpc({
+    dialog: {
+      showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+      showSaveDialog: async () => ({ canceled: true })
+    },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => currentWorkspace,
+    getWorkspaceStore: () => ({
+      describeCurrent: async (workspace) => ({ workspace, path: '/tmp/Local Workspace.json', activeWorkspaceId: 'Local Workspace.json', workspaces: [] })
+    }),
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      },
+      on(channel, handler) {
+        syncHandlers.set(channel, handler);
+      }
+    },
+    refreshApplicationMenu: () => { refreshCalls += 1; },
+    saveWorkspace: async (workspace) => {
+      savedWorkspace = workspace;
+      return workspace;
+    },
+    saveWorkspaceSync: (workspace) => workspace,
+    setWorkspace: (workspace) => {
+      appliedWorkspace = workspace;
+    }
+  });
+
+  const editedFolder = {
+    id: 'folder-1',
+    name: 'Edited Folder',
+    description: 'Edited description',
+    auth: { type: 'bearer', token: 'folder-token' },
+    scripts: { preRequest: "pm.environment.set('fromFolder', 'yes');", tests: '' },
+    variables: [{ enabled: true, key: 'folderBaseUrl', value: 'https://folder.example.test' }],
+    requests: [],
+    folders: []
+  };
+  const result = await handlers.get('workspace:saveFolder')(null, {
+    collectionId: 'collection-1',
+    folderId: 'folder-1',
+    folder: editedFolder,
+    folderPath: [{ id: 'folder-1', name: 'Edited Folder' }],
+    collectionShell: {
+      id: 'collection-1',
+      name: 'Collection',
+      description: '',
+      auth: { type: 'none' },
+      scripts: {},
+      variables: [],
+      certificates: []
+    },
+    settings: { updates: { includePrereleases: true } }
+  });
+
+  assert.equal(savedWorkspace.collections[0].folders[0].name, 'Edited Folder');
+  assert.equal(savedWorkspace.collections[1].name, 'Other Collection');
+  assert.equal(savedWorkspace.settings.updates.includePrereleases, true);
+  assert.equal(appliedWorkspace.collections[0].folders[0].auth.token, 'folder-token');
+  assert.equal(appliedWorkspace.collections[0].folders[0].variables[0].key, 'folderBaseUrl');
+  assert.equal(refreshCalls, 1);
+  assert.deepEqual(result, {
+    folder: appliedWorkspace.collections[0].folders[0]
   });
   assert.equal(syncHandlers.has('workspace:saveSync'), true);
 });

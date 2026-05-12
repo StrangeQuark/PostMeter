@@ -33,11 +33,14 @@ async function runCollection(collection, environment, options = {}) {
   const send = options.sendRequest || sendRequest;
   const runScript = options.scriptRunner || runPostmanScriptIsolated;
   const requests = [];
-  walkRequests(collection, (request, _collection, folder) => {
+  walkRequests(collection, (request, _collection, folder, folderPath = []) => {
+    const folders = Array.isArray(folderPath) ? folderPath.filter(Boolean) : (folder ? [folder] : []);
     requests.push({
       request,
+      folder,
+      folders,
       folderName: folder?.name || '',
-      folderPath: folder?.name ? [folder.name] : [],
+      folderPath: folders.map((item) => item?.name || '').filter(Boolean),
       index: requests.length
     });
   });
@@ -71,21 +74,27 @@ async function runCollection(collection, environment, options = {}) {
       throw new Error(`pm.execution.runRequest target was not found: ${payload?.target || ''}.`);
     }
     const targetRequest = requestWithRefreshedAuth(targetEntry.request, refreshedAuthByRequestId);
+    const targetFolderScope = folderScopeForEntry(targetEntry);
     const scopeState = runRequestScopeState(
       payload,
       runnerEnvironment,
       runnerCollectionVariables,
+      targetFolderScope.variables,
       runnerGlobals,
       runnerCookies
     );
     const targetState = createScriptedRequestState(targetRequest, runnerEnvironment, {
       collectionAuth: collection?.auth || { type: 'none' },
       collectionScripts: collection?.scripts || {},
+      folderAuth: targetFolderScope.auth,
+      folderScripts: targetFolderScope.scripts,
       collectionVariables: scopeState.collectionVariables,
+      folderVariables: scopeState.folderVariables,
       globals: scopeState.globals,
       cookieJar: scopeState.cookies,
       cloneEnvironment: false,
       cloneCollectionVariables: false,
+      cloneFolderVariables: false,
       cloneGlobals: false,
       localVariables: runRequestLocalVariables(targetRequest, payload?.options?.variables)
     });
@@ -155,17 +164,22 @@ async function runCollection(collection, environment, options = {}) {
       ? entry.request.iterationData
       : (options.iterationData || []);
     const requestForExecution = requestWithRefreshedAuth(entry.request, refreshedAuthByRequestId);
+    const folderScope = folderScopeForEntry(entry);
     const startedAt = new Date().toISOString();
     try {
       const scriptedRequest = await runScriptedRequestLifecycle(
         createScriptedRequestState(requestForExecution, runnerEnvironment, {
           collectionAuth: collection?.auth || { type: 'none' },
           collectionScripts: collection?.scripts || {},
+          folderAuth: folderScope.auth,
+          folderScripts: folderScope.scripts,
           collectionVariables: runnerCollectionVariables,
+          folderVariables: folderScope.variables,
           globals: runnerGlobals,
           cookieJar: runnerCookies,
           cloneEnvironment: false,
           cloneCollectionVariables: false,
+          cloneFolderVariables: false,
           cloneGlobals: false
         }),
         {
@@ -200,6 +214,7 @@ async function runCollection(collection, environment, options = {}) {
         scriptedRequest.request || requestForExecution,
         runtimeEnvironment(runnerCollectionVariables, runnerEnvironment, scriptedRequest.localVariables, {
           globals: runnerGlobals,
+          folderVariables: folderScope.variables,
           iterationData
         })
       );
@@ -266,6 +281,7 @@ async function runCollection(collection, environment, options = {}) {
         requestForExecution,
         runtimeEnvironment(runnerCollectionVariables, runnerEnvironment, requestForExecution.variables || [], {
           globals: runnerGlobals,
+          folderVariables: folderScope.variables,
           iterationData
         })
       );
@@ -595,11 +611,14 @@ function runRequestBrokerResult(entry, scriptedRequest, response, options = {}) 
   };
 }
 
-function runRequestScopeState(payload, environment, collectionVariables, globals, cookies) {
+function runRequestScopeState(payload, environment, collectionVariables, folderVariables, globals, cookies) {
   return {
     collectionVariables: Array.isArray(payload?.scopes?.collectionVariables)
       ? cloneVariables(payload.scopes.collectionVariables)
       : cloneVariables(collectionVariables),
+    folderVariables: Array.isArray(payload?.scopes?.folderVariables)
+      ? cloneVariables(payload.scopes.folderVariables)
+      : cloneVariables(folderVariables),
     cookies: Array.isArray(payload?.cookies)
       ? cloneJsonArray(payload.cookies)
       : cloneJsonArray(cookies),
@@ -614,6 +633,59 @@ function runRequestScopeState(payload, environment, collectionVariables, globals
       ? cloneVariables(payload.scopes.globals)
       : cloneVariables(globals)
   };
+}
+
+function folderScopeForEntry(entry) {
+  const folders = Array.isArray(entry?.folders) ? entry.folders.filter(Boolean) : [];
+  return {
+    auth: effectiveFolderAuth(folders),
+    scripts: effectiveFolderScripts(folders),
+    variables: effectiveFolderVariables(folders)
+  };
+}
+
+function effectiveFolderAuth(folders) {
+  for (let index = folders.length - 1; index >= 0; index -= 1) {
+    const auth = folders[index]?.auth;
+    if (auth && typeof auth === 'object' && String(auth.type || 'none') !== 'none') {
+      return auth;
+    }
+  }
+  return { type: 'none' };
+}
+
+function effectiveFolderScripts(folders) {
+  const scripts = {};
+  for (const folder of folders) {
+    for (const [key, value] of Object.entries(folder?.scripts || {})) {
+      if (String(value || '').trim()) {
+        scripts[key] = String(value);
+      }
+    }
+  }
+  return scripts;
+}
+
+function effectiveFolderVariables(folders) {
+  const variables = [];
+  for (const folder of folders) {
+    mergeVariablesByKey(variables, folder?.variables || []);
+  }
+  return variables;
+}
+
+function mergeVariablesByKey(target, source) {
+  for (const variable of source || []) {
+    if (!variable?.key) {
+      continue;
+    }
+    const existingIndex = target.findIndex((item) => item.key === variable.key);
+    if (existingIndex >= 0) {
+      target[existingIndex] = { ...variable };
+    } else {
+      target.push({ ...variable });
+    }
+  }
 }
 
 function runRequestBrokerTests(entry, scriptedRequest) {

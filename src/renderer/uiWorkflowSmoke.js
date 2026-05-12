@@ -49,7 +49,26 @@
     $('addCollectionVariableButton').click();
     setPairRow('collectionVariablesTable', 'collectionToken', 'from-collection', global);
     assertUiSmoke($('collectionVariablePreview').textContent.includes('collectionToken = from-collection'), 'Collection variable preview did not render.');
-    newRequest();
+    const folder = newFolder(collection.id, null);
+    assertUiSmoke(folder, 'New folder was not created.');
+    assertUiSmoke(!$('folderMainPanel').hidden, 'New folder did not show the folder editor.');
+    assertUiSmoke(openFolderTabs.some((tab) => tab.folderId === folder.id), 'New folder did not open a folder tab.');
+    assertUiSmoke($('requestTabBar').textContent.includes('FOLD'), 'Folder tab should use the FOLD badge.');
+    const folderBadge = document.querySelector('.folder-node .tree-badge');
+    const folderTabBadge = document.querySelector('.folder-tab-button .request-tab-method');
+    assertUiSmoke(folderBadge?.textContent === 'FOLD', 'Folder tree badge should use FOLD.');
+    assertUiSmoke(folderBadge?.classList.contains('entity-folder'), 'Folder tree badge should use the folder entity color class.');
+    assertUiSmoke(folderTabBadge?.textContent === 'FOLD', 'Folder open tab badge should use FOLD.');
+    assertUiSmoke(folderTabBadge?.classList.contains('entity-folder'), 'Folder open tab badge should use the folder entity color class.');
+    const folderColorProbe = document.createElement('span');
+    folderColorProbe.className = 'variable-highlight-folder variable-highlight-valid';
+    document.body.append(folderColorProbe);
+    const folderHighlightColor = getComputedStyle(folderColorProbe).color;
+    folderColorProbe.remove();
+    assertUiSmoke(getComputedStyle(folderBadge).color === folderHighlightColor, 'Folder tree badge color should match folder variable highlighting.');
+    assertUiSmoke(getComputedStyle(folderTabBadge).color === folderHighlightColor, 'Folder tab badge color should match folder variable highlighting.');
+
+    newRequest(collection.id, null);
     const request = activeRequest();
     assertUiSmoke(request, 'New request was not selected.');
     assertUiSmoke($('requestEmptyPanel').hidden, 'Create request screen should hide once a request is selected.');

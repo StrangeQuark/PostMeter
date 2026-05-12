@@ -58,9 +58,12 @@ function looksLikePostmanCollection(document) {
 
 function importItem(item, inheritedEvents = emptyEvents(), inheritedAuth = { type: 'none' }, inheritedVariables = [], pathSegments = [], options = {}) {
   const itemPath = pathSegments.concat(item?.name || item?.id || item?._postman_id || item?.uid || 'item');
-  const itemEvents = mergeEvents(inheritedEvents, importEvents(item?.event));
+  const ownEvents = importEvents(item?.event);
+  const itemEvents = mergeEvents(inheritedEvents, ownEvents);
+  const ownAuth = item?.auth ? importAuth(item.auth, { type: 'none' }) : { type: 'none' };
   const itemAuth = item?.auth ? importAuth(item.auth, inheritedAuth) : inheritedAuth;
-  const itemVariables = mergeVariables(inheritedVariables, importVariables(item?.variable));
+  const ownVariables = importVariables(item?.variable);
+  const itemVariables = mergeVariables(inheritedVariables, ownVariables);
   if (item?.request) {
     return { kind: 'request', value: importRequest(item, itemEvents, itemAuth, itemVariables, itemPath, options) };
   }
@@ -69,6 +72,10 @@ function importItem(item, inheritedEvents = emptyEvents(), inheritedAuth = { typ
     const folder = folderModel({
       id: folderId.modelId,
       name: item.name || 'Imported Folder',
+      description: postmanDescription(item.description),
+      auth: ownAuth,
+      scripts: ownEvents,
+      variables: ownVariables,
       postman: folderPostmanMetadata(item, folderId, options.orderIndex)
     });
     for (const [index, child] of item.item.entries()) {
@@ -91,7 +98,7 @@ function importRequest(item, inheritedEvents = emptyEvents(), inheritedAuth = { 
   const requestNode = item.request || {};
   const protocol = detectRequestProtocol(item, requestNode);
   const protocolFields = importProtocolFields(item, requestNode, protocol);
-  const scripts = scriptsForProtocol(inheritedEvents, protocol);
+  const scripts = scriptsForProtocol(importEvents(item.event), protocol);
   const requestId = postmanIdForNode(item, 'request', pathSegments);
   const request = requestModel({
     id: requestId.modelId,
@@ -99,9 +106,9 @@ function importRequest(item, inheritedEvents = emptyEvents(), inheritedAuth = { 
     protocol,
     method: httpMethodForProtocol(requestNode.method, protocol),
     url: importUrl(requestNode.url),
-    auth: requestNode.auth ? importAuth(requestNode.auth, inheritedAuth) : inheritedAuth,
+    auth: requestNode.auth ? importAuth(requestNode.auth, inheritedAuth) : { type: 'none' },
     cookieJar: { enabled: true, storeResponses: true },
-    variables: mergeVariables(inheritedVariables, importVariables(requestNode.variable || item.variable)),
+    variables: importVariables(requestNode.variable || item.variable),
     docs: postmanDescription(item.description || requestNode.description),
     scripts: {
       ...scripts
@@ -1151,10 +1158,9 @@ function exportPostmanFolder(folder) {
   const exported = compactObject({
     id: postmanEntityId(folder, 'folder'),
     name: folder?.name || 'Folder',
-    description: metadata.description,
-    event: exportPostmanEvents(folder),
-    variable: exportPostmanVariables([], metadata.variables),
-    auth: clonePostmanObject(metadata.auth),
+    description: folder?.description || metadata.description,
+    event: exportPostmanEvents(folder, { preferModel: true }),
+    auth: exportPostmanAuthModel(folder?.auth),
     item: exportPostmanItems(folder)
   });
   assignPostmanExtensions(exported, metadata.bindings);

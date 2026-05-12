@@ -62,6 +62,7 @@ const RENDERER_STATE_DEFAULTS = PostMeterRendererState.createRendererState();
 const TAB_PANEL_IDS = {
   request: ['paramsTab', 'headersTab', 'authTab', 'cookiesTab', 'bodyTab', 'scriptsTab', 'collectionVariablesTab', 'docsTab'],
   collection: ['collectionOverviewTab', 'collectionAuthTab', 'collectionScriptsTab', 'collectionLevelVariablesTab'],
+  folder: ['folderOverviewTab', 'folderAuthTab', 'folderScriptsTab', 'folderLevelVariablesTab'],
   results: ['responseTab', 'responseHeadersTab', 'responseCookiesTab', 'testResultsTab', 'visualizerTab'],
   performanceRequest: ['performanceParamsTab', 'performanceHeadersTab', 'performanceAuthTab', 'performanceCookiesTab', 'performanceBodyTab', 'performanceScriptsTab', 'performanceVariablesTab', 'performanceDocsTab'],
   performance: ['latencyTab', 'throughputTab', 'concurrencyTab', 'stressTab', 'spikeTab', 'soakTab', 'rampTab'],
@@ -84,6 +85,7 @@ let activeSidebarPanel = RENDERER_STATE_DEFAULTS.activeSidebarPanel;
 let activeMainPanel = RENDERER_STATE_DEFAULTS.activeMainPanel;
 let draftRequests = RENDERER_STATE_DEFAULTS.draftRequests;
 let openCollectionTabs = RENDERER_STATE_DEFAULTS.openCollectionTabs;
+let openFolderTabs = RENDERER_STATE_DEFAULTS.openFolderTabs;
 let openRequestTabs = RENDERER_STATE_DEFAULTS.openRequestTabs;
 let openEnvironmentTabs = RENDERER_STATE_DEFAULTS.openEnvironmentTabs;
 let openWorkspaceTabs = RENDERER_STATE_DEFAULTS.openWorkspaceTabs;
@@ -138,6 +140,7 @@ let lastModalFocusTarget = null;
 let notificationModalActive = false;
 let requestTitleEditOriginal = '';
 let collectionTitleEditOriginal = '';
+let folderTitleEditOriginal = '';
 let environmentTitleEditOriginal = '';
 let workspaceTitleEditOriginal = '';
 let runnerTitleEditOriginal = '';
@@ -194,12 +197,14 @@ const VariableHighlighter = window.PostMeterVariableHighlighter || {};
 const {
   activeCollectionTabKey: buildActiveCollectionTabKey,
   activeEnvironmentTabKey: buildActiveEnvironmentTabKey,
+  activeFolderTabKey: buildActiveFolderTabKey,
   activePerformanceTabKey: buildActivePerformanceTabKey,
   activeRequestTabKey: buildActiveRequestTabKey,
   activeRunnerTabKey: buildActiveRunnerTabKey,
   activeWorkspaceTabKey: buildActiveWorkspaceTabKey,
   clearSavedCollectionTabDirtyState: clearRendererSavedCollectionTabDirtyState,
   clearSavedEnvironmentDirtyState: clearRendererSavedEnvironmentDirtyState,
+  clearSavedFolderTabDirtyState: clearRendererSavedFolderTabDirtyState,
   clearSavedPerformanceDirtyState: clearRendererSavedPerformanceDirtyState,
   clearSavedRunnerDirtyState: clearRendererSavedRunnerDirtyState,
   clearSharedRequestDirtyState: clearRendererSharedRequestDirtyState,
@@ -207,6 +212,8 @@ const {
   collectionSnapshot: snapshotCollection,
   isActiveCollectionTab: isRendererActiveCollectionTab,
   isActiveEnvironmentTab: isRendererActiveEnvironmentTab,
+  folderSnapshot: snapshotFolder,
+  isActiveFolderTab: isRendererActiveFolderTab,
   isActivePerformanceTab: isRendererActivePerformanceTab,
   isActiveRequestTab: isRendererActiveRequestTab,
   isActiveRunnerTab: isRendererActiveRunnerTab,
@@ -260,6 +267,8 @@ const state = {
   set draftRequests(value) { draftRequests = value; },
   get openCollectionTabs() { return openCollectionTabs; },
   set openCollectionTabs(value) { openCollectionTabs = value; },
+  get openFolderTabs() { return openFolderTabs; },
+  set openFolderTabs(value) { openFolderTabs = value; },
   get openRequestTabs() { return openRequestTabs; },
   set openRequestTabs(value) { openRequestTabs = value; },
   get openEnvironmentTabs() { return openEnvironmentTabs; },
@@ -309,6 +318,7 @@ const requestTabState = createRequestTabState({
   state,
   activeCollection,
   activeEnvironment,
+  activeFolder,
   activeRequest,
   activeRunner,
   activePerformanceTest,
@@ -316,12 +326,15 @@ const requestTabState = createRequestTabState({
   clearActiveWorkspaceItem,
   collectCollectionFromEditor,
   collectEnvironmentFromEditor,
+  collectFolderFromEditor,
   collectRequestFromEditor,
   collectRunnerFromEditor,
   collectPerformanceTestFromEditor,
+  findFolder,
   findRequest,
   persistWorkspace: (...args) => persistWorkspace(...args),
   promptUnsavedRequestClose,
+  removeFolderFromCollection: removeFolder,
   removeRequestFromCollection,
   renderAll,
   renderCollections,
@@ -331,6 +344,7 @@ const requestTabState = createRequestTabState({
   setStatus,
   selectCollectionTab: (tab) => selectCollectionTabWithoutCollect(tab),
   selectEnvironmentTab: (tab) => selectEnvironmentTabWithoutCollect(tab),
+  selectFolderTab: (tab) => selectFolderTabWithoutCollect(tab),
   selectRequestTab: (tab) => selectRequestTabWithoutCollect(tab),
   selectRunnerTab: (tab) => selectRunnerTabWithoutCollect(tab),
   selectPerformanceTab: (tab) => selectPerformanceTabWithoutCollect(tab),
@@ -346,11 +360,14 @@ const rendererWorkflows = createRendererWorkflows({
   applyWorkspaceCatalogUpdate,
   activeCollection,
   activeEnvironment,
+  activeFolder,
+  activeFolderPath: activeFolderPathForActiveRequest,
   activeRequest,
   applyPostmanCookieMetadata,
   clearSavedRequestDirtyState,
   collectCollectionFromEditor,
   collectEnvironmentFromEditor,
+  collectFolderFromEditor,
   collectRequestFromEditor,
   collectSettingsFromEditor,
   displayResponse,
@@ -484,8 +501,24 @@ function initializeCollectionAuthEditor() {
   target.append(clone);
 }
 
+function initializeFolderAuthEditor() {
+  const target = $('folderAuthEditor');
+  const source = document.querySelector('#authTab .auth-grid');
+  if (!target || !source || target.children.length) {
+    return;
+  }
+  const clone = source.cloneNode(true);
+  clone.querySelector('.oauth-actions')?.remove();
+  clone.querySelector('.oauth-progress')?.remove();
+  for (const element of clone.querySelectorAll('[id]')) {
+    element.id = `folder${element.id[0].toUpperCase()}${element.id.slice(1)}`;
+  }
+  target.append(clone);
+}
+
 function bindUi() {
   initializeCollectionAuthEditor();
+  initializeFolderAuthEditor();
   bindRendererUi({
     doc: document,
     windowObject: window,
@@ -498,6 +531,7 @@ function bindUi() {
     onNewEnvironment: () => newEnvironment(),
     onSaveRequest: () => { void saveRequestFromPane(); },
     onSaveCollection: () => { void saveCollectionFromPane(); },
+    onSaveFolder: () => { void saveFolderFromPane(); },
     onSaveEnvironment: () => { void saveEnvironmentFromPane(); },
     onImportWorkspace: importWorkspace,
     onExportWorkspace: () => { void exportWorkspaceFromPicker(); },
@@ -548,6 +582,7 @@ function bindUi() {
     onResetVault: () => { void resetVaultFromWorkspacePanel(); },
     onAddEnvironmentVariable: addVariable,
     onAddCollectionVariable: addCollectionVariable,
+    onAddFolderVariable: addFolderVariable,
     onAddRequestVariable: addRequestVariable,
     onAddCookie: addCookie,
     onClearExpiredCookies: clearExpiredCookies,
@@ -619,6 +654,9 @@ function bindUi() {
     onCollectionAuthTypeChange: showCollectionAuthSection,
     onCollectionInput: collectCollectionAndMarkDirty,
     onCollectionAuthInput: collectCollectionAndMarkDirty,
+    onFolderAuthTypeChange: showFolderAuthSection,
+    onFolderInput: collectFolderAndMarkDirty,
+    onFolderAuthInput: collectFolderAndMarkDirty,
     onPerformanceFilterCookiesChange: renderPerformanceCookieJarEditor,
     onMethodChange: () => {
       updateMethodSelectClass();
@@ -672,6 +710,7 @@ function bindUi() {
   });
   bindRequestTitleEditor();
   bindCollectionTitleEditor();
+  bindFolderTitleEditor();
   bindWorkspaceTitleEditor();
   bindEnvironmentTitleEditor();
   bindRunnerTitleEditor();
@@ -778,6 +817,7 @@ function openTabRef(kind, tab) {
 function openTabRefs() {
   return [
     ...openCollectionTabs.map((tab) => openTabRef('collection', tab)),
+    ...openFolderTabs.map((tab) => openTabRef('folder', tab)),
     ...openRequestTabs.map((tab) => openTabRef('request', tab)),
     ...openEnvironmentTabs.map((tab) => openTabRef('environment', tab)),
     ...openWorkspaceTabs.map((tab) => openTabRef('workspace', tab)),
@@ -829,6 +869,8 @@ async function closeOpenTabsSequential(refs, options = {}) {
 async function closeOpenTab(ref) {
   if (ref?.kind === 'collection') {
     await closeCollectionTab(ref.tab);
+  } else if (ref?.kind === 'folder') {
+    await closeFolderTab(ref.tab);
   } else if (ref?.kind === 'request') {
     await closeRequestTab(ref.tab);
   } else if (ref?.kind === 'environment') {
@@ -847,6 +889,8 @@ async function forceCloseOpenTab(ref) {
   const options = { save: forceCloseSavesChanges() };
   if (ref?.kind === 'collection') {
     await forceCloseCollectionTab(ref.tab, options);
+  } else if (ref?.kind === 'folder') {
+    await forceCloseFolderTab(ref.tab, options);
   } else if (ref?.kind === 'request') {
     await forceCloseRequestTab(ref.tab, options);
   } else if (ref?.kind === 'environment') {
@@ -1116,6 +1160,85 @@ function finishCollectionTitleEdit(options = {}) {
   collectCollectionFromEditor();
   if (collection) {
     title.textContent = collection.name || 'Untitled Collection';
+  }
+  renderCollections();
+}
+
+function bindFolderTitleEditor() {
+  const title = $('folderMainTitle');
+  if (!title) {
+    return;
+  }
+  title.addEventListener('click', beginFolderTitleEdit);
+  title.addEventListener('keydown', handleFolderTitleKeydown);
+  title.addEventListener('input', collectFolderAndMarkDirty);
+  title.addEventListener('blur', () => finishFolderTitleEdit());
+}
+
+function beginFolderTitleEdit() {
+  const folder = activeFolder();
+  const title = $('folderMainTitle');
+  if (!folder || !title || title.dataset.editing === 'true') {
+    return;
+  }
+  folderTitleEditOriginal = folder.name || 'Untitled Folder';
+  title.dataset.editing = 'true';
+  title.classList.add('is-editing');
+  title.setAttribute('contenteditable', 'plaintext-only');
+  title.setAttribute('role', 'textbox');
+  title.setAttribute('aria-label', 'Folder name');
+  title.focus();
+  selectElementContents(title);
+}
+
+function handleFolderTitleKeydown(event) {
+  const title = $('folderMainTitle');
+  if (!title) {
+    return;
+  }
+  if (title.dataset.editing !== 'true') {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      beginFolderTitleEdit();
+    }
+    return;
+  }
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    const shouldSave = (folderTitleInputValue() || 'Untitled Folder')
+      !== (folderTitleEditOriginal || 'Untitled Folder');
+    finishFolderTitleEdit();
+    title.blur();
+    if (shouldSave) {
+      void saveFolderFromPane();
+    }
+  } else if (event.key === 'Escape') {
+    event.preventDefault();
+    finishFolderTitleEdit({ revert: true });
+    title.blur();
+  }
+}
+
+function finishFolderTitleEdit(options = {}) {
+  const title = $('folderMainTitle');
+  if (!title || title.dataset.editing !== 'true') {
+    return;
+  }
+  const folder = activeFolder();
+  delete title.dataset.editing;
+  title.classList.remove('is-editing');
+  title.setAttribute('contenteditable', 'false');
+  title.removeAttribute('role');
+  title.setAttribute('aria-label', 'Folder name');
+  if (folder && options.revert === true) {
+    folder.name = folderTitleEditOriginal || 'Untitled Folder';
+    title.textContent = folder.name;
+    renderCollections();
+    return;
+  }
+  collectFolderFromEditor();
+  if (folder) {
+    title.textContent = folder.name || 'Untitled Folder';
   }
   renderCollections();
 }
@@ -1449,6 +1572,23 @@ function renderRequestTabs() {
         onContextMenu: (event, tab, item, menuOptions) => showOpenTabContextMenu(event, 'collection', tab, item, menuOptions)
       },
       {
+        kind: 'folder',
+        tabs: openFolderTabs,
+        resolve: requestTabState.folderForTab,
+        isActive: isActiveFolderTab,
+        idPrefix: 'open-folder-tab',
+        controlsId: 'folderMainPanel',
+        buttonClassName: 'request-tab-button folder-tab-button',
+        methodText: () => 'FOLD',
+        methodClassName: () => tagClassName('FOLD'),
+        title: (folder) => folder.name || 'Untitled Folder',
+        closeTitle: () => 'Close folder',
+        closeAriaLabel: (folder) => `Close ${folder.name || 'Untitled Folder'}`,
+        onSelect: (tab) => selectFolderTab(tab),
+        onClose: closeFolderTab,
+        onContextMenu: (event, tab, item, menuOptions) => showOpenTabContextMenu(event, 'folder', tab, item, menuOptions)
+      },
+      {
         kind: 'request',
         tabs: openRequestTabs,
         resolve: requestTabState.requestForTab,
@@ -1561,6 +1701,10 @@ function ensureOpenCollectionTabForActive(options = {}) {
   return requestTabState.ensureOpenCollectionTabForActive(options);
 }
 
+function ensureOpenFolderTabForActive(options = {}) {
+  return requestTabState.ensureOpenFolderTabForActive(options);
+}
+
 function ensureOpenEnvironmentTabForActive(options = {}) {
   return requestTabState.ensureOpenEnvironmentTabForActive(options);
 }
@@ -1583,6 +1727,10 @@ function canOpenAdditionalRequestTab(options = {}) {
 
 function canOpenCollectionTabFor(collectionId, options = {}) {
   return requestTabState.canOpenCollectionTabFor(collectionId, options);
+}
+
+function canOpenFolderTabFor(collectionId, folderId, options = {}) {
+  return requestTabState.canOpenFolderTabFor(collectionId, folderId, options);
 }
 
 function canOpenRequestTabFor(collectionId, requestId, options = {}) {
@@ -1678,12 +1826,24 @@ function selectCollectionTabWithoutCollect(tab) {
   requestTabState.selectCollectionTab(tab, { collect: false });
 }
 
+function selectFolderTab(tab) {
+  requestTabState.selectFolderTab(tab);
+}
+
+function selectFolderTabWithoutCollect(tab) {
+  requestTabState.selectFolderTab(tab, { collect: false });
+}
+
 function markActiveRequestDirty() {
   requestTabState.markActiveRequestDirty();
 }
 
 function markActiveCollectionTabDirty() {
   requestTabState.markActiveCollectionTabDirty();
+}
+
+function markActiveFolderTabDirty() {
+  requestTabState.markActiveFolderTabDirty();
 }
 
 function markActiveEnvironmentDirty() {
@@ -1761,6 +1921,11 @@ function collectActiveEditorState() {
     return;
   }
   if (activeMainPanel === 'request') {
+    if (activeFolder() && !activeRequest()) {
+      finishFolderTitleEdit();
+      collectFolderFromEditor();
+      return;
+    }
     if (activeCollection() && !activeRequest()) {
       finishCollectionTitleEdit();
       collectCollectionFromEditor();
@@ -1774,6 +1939,10 @@ function collectActiveEditorState() {
 function clearSavedRequestDirtyState() {
   clearRendererSavedCollectionTabDirtyState(state, {
     collectionForTab: requestTabState.collectionForTab,
+    onAfterClear: () => {}
+  });
+  clearRendererSavedFolderTabDirtyState(state, {
+    folderForTab: requestTabState.folderForTab,
     onAfterClear: () => {}
   });
   clearRendererSavedRequestDirtyState(state, {
@@ -1859,6 +2028,10 @@ function activeCollectionTabKey() {
   return buildActiveCollectionTabKey(state);
 }
 
+function activeFolderTabKey() {
+  return buildActiveFolderTabKey(state);
+}
+
 function activeEnvironmentTabKey() {
   return buildActiveEnvironmentTabKey(state);
 }
@@ -1883,6 +2056,10 @@ function isActiveCollectionTab(tab) {
   return isRendererActiveCollectionTab(state, tab);
 }
 
+function isActiveFolderTab(tab) {
+  return isRendererActiveFolderTab(state, tab);
+}
+
 function isActiveEnvironmentTab(tab) {
   return isRendererActiveEnvironmentTab(state, tab);
 }
@@ -1905,6 +2082,10 @@ function requestForTab(tab) {
 
 function collectionForTab(tab) {
   return requestTabState.collectionForTab(tab);
+}
+
+function folderForTab(tab) {
+  return requestTabState.folderForTab(tab);
 }
 
 function environmentForTab(tab) {
@@ -1935,6 +2116,10 @@ function removeOpenCollectionTab(keyOrCollectionId) {
   requestTabState.removeOpenCollectionTab(keyOrCollectionId);
 }
 
+function removeOpenFolderTab(keyOrCollectionId, folderId) {
+  requestTabState.removeOpenFolderTab(keyOrCollectionId, folderId);
+}
+
 function removeOpenRequestTabsForCollection(collectionId) {
   requestTabState.removeOpenRequestTabsForCollection(collectionId);
 }
@@ -1963,8 +2148,16 @@ function closeCollectionTab(tab) {
   return requestTabState.closeCollectionTab(tab);
 }
 
+function closeFolderTab(tab) {
+  return requestTabState.closeFolderTab(tab);
+}
+
 function forceCloseCollectionTab(tab, options = {}) {
   return requestTabState.forceCloseCollectionTab(tab, options);
+}
+
+function forceCloseFolderTab(tab, options = {}) {
+  return requestTabState.forceCloseFolderTab(tab, options);
 }
 
 function forceCloseWorkspaceTab(tab, options = {}) {
@@ -3335,6 +3528,7 @@ function buildSessionState() {
     state,
     doc: document,
     collectionForTab: requestTabState.collectionForTab,
+    folderForTab: requestTabState.folderForTab,
     requestForTab: requestTabState.requestForTab,
     environmentForTab: requestTabState.environmentForTab
   });
@@ -3442,8 +3636,10 @@ function renderAll() {
   renderHistory();
   renderRequestTabs();
   renderCollectionEditor();
+  renderFolderEditor();
   renderRequestEditor();
   renderCollectionVariablesEditor();
+  renderFolderVariablesEditor();
   renderEnvironmentEditor();
   refreshVariableHighlights();
   scheduleSessionSave();
@@ -3467,6 +3663,7 @@ function postmanVariableHighlightVariablesForTarget(target) {
   mergeVariableHighlightScope(variables, workspace?.globals || [], false, 'global');
   mergeVariableHighlightScope(variables, variableHighlightEnvironmentForTarget(target)?.variables || [], true, 'environment');
   mergeVariableHighlightScope(variables, variableHighlightCollectionForTarget(target)?.variables || [], true, 'collection');
+  mergeVariableHighlightScope(variables, effectiveFolderVariablesForPath(variableHighlightFolderPathForTarget(target)), true, 'folder');
   mergeVariableHighlightScope(variables, variableHighlightRequestForTarget(target)?.variables || [], true, 'request');
   return variables;
 }
@@ -3564,10 +3761,23 @@ function variableHighlightCollectionForTarget(target) {
   if (target?.closest?.('#collectionMainPanel')) {
     return activeCollection();
   }
+  if (target?.closest?.('#folderMainPanel')) {
+    return activeCollection();
+  }
   if (target?.closest?.('#requestEditorPanel')) {
     return activeCollection();
   }
   return null;
+}
+
+function variableHighlightFolderPathForTarget(target) {
+  if (target?.closest?.('#folderMainPanel')) {
+    return activeFolderPathForActiveRequest();
+  }
+  if (target?.closest?.('#requestEditorPanel')) {
+    return activeFolderPathForActiveRequest();
+  }
+  return [];
 }
 
 function variableHighlightRequestForTarget(target) {
@@ -3587,6 +3797,9 @@ function openVariableReferenceFromHighlight(details = {}) {
   }
   if (source === 'collection' || source === 'collectionvariable' || source === 'collectionvariables') {
     return openCollectionFromVariableReference(details.target);
+  }
+  if (source === 'folder' || source === 'foldervariable' || source === 'foldervariables') {
+    return openFolderFromVariableReference(details.target);
   }
   if (source === 'request' || source === 'local' || source === 'variable' || source === 'variables') {
     return openRequestFromVariableReference(details.target);
@@ -3632,6 +3845,30 @@ function openCollectionFromVariableReference(target) {
   renderAll();
   activateTab('collection', 'collectionLevelVariables');
   setStatus(`Opened ${collection.name || 'Untitled Collection'} variables from variable reference.`);
+  return true;
+}
+
+function openFolderFromVariableReference(target) {
+  const folders = variableHighlightFolderPathForTarget(target);
+  const folder = folders[folders.length - 1] || null;
+  const collection = variableHighlightCollectionForTarget(target);
+  if (!collection?.id || !folder?.id) {
+    return false;
+  }
+  if (!canOpenFolderTabFor(collection.id, folder.id)) {
+    return true;
+  }
+  collectActiveEditorState();
+  activeCollectionId = collection.id;
+  activeFolderId = folder.id;
+  activeRequestId = null;
+  activeRunnerRequestRunnerId = null;
+  activeSidebarPanel = 'collections';
+  activeMainPanel = 'request';
+  ensureOpenFolderTabForActive();
+  renderAll();
+  activateTab('folder', 'folderLevelVariables');
+  setStatus(`Opened ${folder.name || 'Untitled Folder'} variables from variable reference.`);
   return true;
 }
 
@@ -3791,8 +4028,9 @@ function renderMainPanels() {
   const showRunner = activeMainPanel === 'runner';
   const showPerformance = activeMainPanel === 'performance';
   const showDocument = showEnvironment || showWorkspace || showRunner || showPerformance;
-  const showCollection = activeMainPanel === 'request' && Boolean(activeCollection()) && !activeRequest();
-  const showRequestEmpty = activeMainPanel === 'request' && !activeRequest() && !showCollection;
+  const showFolder = activeMainPanel === 'request' && Boolean(activeFolder()) && !activeRequest();
+  const showCollection = activeMainPanel === 'request' && Boolean(activeCollection()) && !activeFolder() && !activeRequest();
+  const showRequestEmpty = activeMainPanel === 'request' && !activeRequest() && !showCollection && !showFolder;
   const showEnvironmentEmpty = showEnvironment && !activeEnvironment();
   const showWorkspaceEmpty = showWorkspace && !activeWorkspaceItem();
   const showRunnerEmpty = showRunner && !activeRunner();
@@ -3803,6 +4041,7 @@ function renderMainPanels() {
   document.querySelector('.workspace').classList.toggle('runner-mode', showRunner);
   document.querySelector('.workspace').classList.toggle('performance-mode', showPerformance);
   document.querySelector('.workspace').classList.toggle('collection-mode', showCollection);
+  document.querySelector('.workspace').classList.toggle('folder-mode', showFolder);
   document.querySelector('.workspace').classList.toggle('request-empty-mode', showRequestEmpty);
   document.querySelector('.workspace').classList.toggle('environment-empty-mode', showEnvironmentEmpty);
   document.querySelector('.workspace').classList.toggle('workspace-empty-mode', showWorkspaceEmpty);
@@ -3810,16 +4049,17 @@ function renderMainPanels() {
   document.querySelector('.workspace').classList.toggle('performance-empty-mode', showPerformanceEmpty);
   $('requestEmptyPanel').hidden = !showRequestEmpty;
   $('collectionMainPanel').hidden = !showCollection;
+  $('folderMainPanel').hidden = !showFolder;
   $('environmentEmptyPanel').hidden = !showEnvironmentEmpty;
   $('workspaceEmptyPanel').hidden = !showWorkspaceEmpty;
   $('runnerEmptyPanel').hidden = !showRunnerEmpty;
   $('performanceEmptyPanel').hidden = !showPerformanceEmpty;
-  $('requestEditorPanel').hidden = showDocument || showRequestEmpty || showCollection;
+  $('requestEditorPanel').hidden = showDocument || showRequestEmpty || showCollection || showFolder;
   $('environmentMainPanel').hidden = !showEnvironment || showEnvironmentEmpty;
   $('workspaceMainPanel').hidden = !showWorkspace || showWorkspaceEmpty;
   $('runnerMainPanel').hidden = !showRunner || showRunnerEmpty;
   $('performanceMainPanel').hidden = !showPerformance || showPerformanceEmpty;
-  $('workspacePaneResize').hidden = showDocument || showRequestEmpty || showCollection;
+  $('workspacePaneResize').hidden = showDocument || showRequestEmpty || showCollection || showFolder;
   document.querySelector('.results').hidden = showDocument || showRequestEmpty || showCollection;
 }
 
@@ -8366,7 +8606,7 @@ function collectionNode(collection) {
 function folderNode(collection, folder) {
   const wrapper = document.createElement('div');
   wrapper.className = 'tree-node tree-folder folder-node';
-  const button = treeButton(folder.name, folder.id === activeFolderId && !activeRequestId, 'DIR', {
+  const button = treeButton(folder.name, folder.id === activeFolderId && !activeRequestId, 'FOLD', {
     treeKind: 'folder',
     treeId: folder.id
   });
@@ -8376,8 +8616,7 @@ function folderNode(collection, folder) {
     collectionId: collection.id
   });
   button.addEventListener('click', () => {
-    const firstRequest = firstRequestInFolder(folder);
-    if (firstRequest?.request && !canOpenRequestTabFor(collection.id, firstRequest.request.id)) {
+    if (!canOpenFolderTabFor(collection.id, folder.id)) {
       return;
     }
     collectActiveEditorState();
@@ -8385,8 +8624,8 @@ function folderNode(collection, folder) {
     activeMainPanel = 'request';
     activeCollectionId = collection.id;
     activeFolderId = folder.id;
-    activeRequestId = firstRequestInFolder(folder)?.request?.id;
-    ensureOpenRequestTabForActive();
+    activeRequestId = null;
+    ensureOpenFolderTabForActive();
     renderAll();
   });
   attachTreeContextMenu(button, [
@@ -9485,6 +9724,9 @@ function tagClassName(kind) {
   const entityClassByKind = {
     col: 'entity-collection',
     collection: 'entity-collection',
+    dir: 'entity-folder',
+    fold: 'entity-folder',
+    folder: 'entity-folder',
     env: 'entity-environment',
     environment: 'entity-environment',
     wrk: 'entity-workspace',
@@ -10073,6 +10315,11 @@ function updateCollectionEditorLanguages() {
   CodeEditor.setLanguage?.($('collectionTestScriptInput'), 'javascript');
 }
 
+function updateFolderEditorLanguages() {
+  CodeEditor.setLanguage?.($('folderPreRequestScriptInput'), 'javascript');
+  CodeEditor.setLanguage?.($('folderTestScriptInput'), 'javascript');
+}
+
 function updatePerformanceRequestEditorLanguages() {
   updatePerformanceRequestBodyEditorLanguage();
   CodeEditor.setLanguage?.($('performancePreRequestScriptInput'), 'javascript');
@@ -10237,6 +10484,39 @@ function renderCollectionEditor() {
   refreshVariableHighlights($('collectionMainPanel'));
 }
 
+function renderFolderEditor() {
+  const folder = activeFolder();
+  renderFolderTitle(folder);
+  const saveButton = $('saveFolderButton');
+  if (saveButton) {
+    saveButton.disabled = !folder;
+  }
+  const addVariableButton = $('addFolderVariableButton');
+  if (addVariableButton) {
+    addVariableButton.disabled = !folder;
+  }
+  if (!folder) {
+    $('folderDescriptionInput').value = '';
+    $('folderPreRequestScriptInput').value = '';
+    $('folderTestScriptInput').value = '';
+    $('folderVariablesTable').textContent = '';
+    $('folderVariablePreview').textContent = 'No variables';
+    renderFolderAuthEditor({ type: 'none' });
+    return;
+  }
+  folder.auth ||= { type: 'none' };
+  folder.scripts ||= { preRequest: '', tests: '' };
+  folder.variables ||= [];
+  $('folderDescriptionInput').value = folder.description || '';
+  renderFolderAuthEditor(folder.auth);
+  $('folderPreRequestScriptInput').value = folder.scripts.preRequest || '';
+  $('folderTestScriptInput').value = folder.scripts.tests || '';
+  renderFolderVariablePairs(folder.variables || []);
+  renderFolderVariablePreview();
+  updateFolderEditorLanguages();
+  refreshVariableHighlights($('folderMainPanel'));
+}
+
 function renderCollectionTitle(collection) {
   const title = $('collectionMainTitle');
   if (!title) {
@@ -10251,6 +10531,22 @@ function renderCollectionTitle(collection) {
   title.tabIndex = collection ? 0 : -1;
   title.setAttribute('aria-disabled', collection ? 'false' : 'true');
   title.setAttribute('aria-label', 'Collection name');
+}
+
+function renderFolderTitle(folder) {
+  const title = $('folderMainTitle');
+  if (!title) {
+    return;
+  }
+  if (title.dataset.editing !== 'true') {
+    title.textContent = folder ? (folder.name || 'Untitled Folder') : 'Select a folder';
+    title.setAttribute('contenteditable', 'false');
+    title.removeAttribute('role');
+    title.classList.remove('is-editing');
+  }
+  title.tabIndex = folder ? 0 : -1;
+  title.setAttribute('aria-disabled', folder ? 'false' : 'true');
+  title.setAttribute('aria-label', 'Folder name');
 }
 
 function renderRequestTitle(request) {
@@ -10284,6 +10580,14 @@ function renderCollectionAuthEditor(auth) {
   });
 }
 
+function renderFolderAuthEditor(auth) {
+  renderRequestAuthEditor(auth, {
+    doc: document,
+    idPrefix: 'folder',
+    showAuthSection: showFolderAuthSection
+  });
+}
+
 function showAuthSection(type) {
   for (const section of document.querySelectorAll('#authTab .auth-section')) {
     section.classList.toggle('active', section.dataset.authSection === type);
@@ -10292,6 +10596,12 @@ function showAuthSection(type) {
 
 function showCollectionAuthSection(type) {
   for (const section of document.querySelectorAll('#collectionAuthTab .auth-section')) {
+    section.classList.toggle('active', section.dataset.authSection === type);
+  }
+}
+
+function showFolderAuthSection(type) {
+  for (const section of document.querySelectorAll('#folderAuthTab .auth-section')) {
     section.classList.toggle('active', section.dataset.authSection === type);
   }
 }
@@ -10451,7 +10761,12 @@ function addGeneratedHeader(headers, request, key, value) {
 }
 
 function generatedAuthHeaders(request) {
-  const auth = requestHasOwnAuth(request?.auth) ? request.auth : (activeCollection()?.auth || request?.auth || {});
+  const folderAuth = effectiveFolderAuthForPath(activeFolderPathForActiveRequest());
+  const auth = requestHasOwnAuth(request?.auth)
+    ? request.auth
+    : requestHasOwnAuth(folderAuth)
+      ? folderAuth
+      : (activeCollection()?.auth || request?.auth || {});
   const type = auth.type || 'none';
   if (['bearer', 'basic', 'oauth2', 'digest', 'hawk', 'aws', 'oauth1', 'ntlm', 'akamaiEdgeGrid', 'jwtBearer', 'asap'].includes(type)) {
     return [{ key: 'Authorization', value: AUTO_HEADER_PLACEHOLDER }];
@@ -10621,6 +10936,12 @@ function resetOauthProgressPanel() {
 
 function renderCollectionVariablesEditor() {
   renderCollectionVariablePreview();
+  renderFolderVariablePreview();
+  renderVariablePreview();
+}
+
+function renderFolderVariablesEditor() {
+  renderFolderVariablePreview();
   renderVariablePreview();
 }
 
@@ -10652,6 +10973,36 @@ function renderCollectionVariablePreview() {
   });
 }
 
+function renderFolderVariablePairs(pairs) {
+  renderEditorVariablePairs({
+    doc: document,
+    containerId: 'folderVariablesTable',
+    pairs,
+    onChange: () => {
+      collectFolderFromEditor({ includeVariables: false });
+      markActiveFolderTabDirty();
+      renderFolderVariablePreview();
+      renderVariablePreview();
+      refreshVariableHighlights();
+    },
+    onRemove: () => {
+      markActiveFolderTabDirty();
+      renderFolderEditor();
+      refreshVariableHighlights();
+    }
+  });
+}
+
+function renderFolderVariablePreview() {
+  renderEditorVariablePreview({
+    collection: activeCollection(),
+    containerId: 'folderVariablePreview',
+    doc: document,
+    folder: activeFolder(),
+    folders: activeFolderPathForActiveRequest()
+  });
+}
+
 function renderRequestVariablePairs(pairs) {
   renderEditorVariablePairs({
     doc: document,
@@ -10674,6 +11025,8 @@ function renderVariablePreview() {
     doc: document,
     collection: activeCollection(),
     environment: activeEnvironment(),
+    folder: activeFolderForActiveRequest(),
+    folders: activeFolderPathForActiveRequest(),
     request: activeRequest()
   });
 }
@@ -11919,6 +12272,26 @@ async function saveCollectionFromPane() {
   }
 }
 
+async function saveFolderFromPane() {
+  if (!activeFolder()) {
+    setStatus('Select a folder before saving.');
+    return false;
+  }
+  try {
+    ensureOpenFolderTabForActive();
+    const saved = await saveWorkspace(false, { folderTabKey: activeFolderTabKey() });
+    if (saved) {
+      setStatus('Folder saved.');
+    }
+    return saved;
+  } catch (error) {
+    const message = error.message || String(error);
+    setStatus(`Folder save failed: ${message}`);
+    notifyUser('Folder Save Failed', message);
+    return false;
+  }
+}
+
 async function saveEnvironmentFromPane() {
   if (!activeEnvironment()) {
     setStatus('Select an environment before saving.');
@@ -13089,6 +13462,10 @@ function newFolder(collectionId = activeCollectionId, parentFolderId = activeFol
   const folder = {
     id: crypto.randomUUID(),
     name: uniqueName('New Folder', allFolderNames(collection)),
+    description: '',
+    auth: { type: 'none' },
+    scripts: { preRequest: '', tests: '' },
+    variables: [],
     requests: [],
     folders: []
   };
@@ -13101,6 +13478,7 @@ function newFolder(collectionId = activeCollectionId, parentFolderId = activeFol
   activeCollectionId = collection.id;
   activeFolderId = folder.id;
   activeRequestId = null;
+  ensureOpenFolderTabForActive({ dirty: true, createdUnsaved: true });
   renderAll();
   return folder;
 }
@@ -13206,6 +13584,16 @@ function addCollectionVariable() {
     collection.variables.push({ enabled: true, key: '', value: '' });
     collectCollectionAndMarkDirty({ includeVariables: false });
     renderCollectionEditor();
+  }
+}
+
+function addFolderVariable() {
+  const folder = activeFolder();
+  if (folder) {
+    folder.variables ||= [];
+    folder.variables.push({ enabled: true, key: '', value: '' });
+    collectFolderAndMarkDirty({ includeVariables: false });
+    renderFolderEditor();
   }
 }
 
@@ -13403,9 +13791,9 @@ async function duplicateFolder(folder) {
   context.list.splice(context.index + 1, 0, duplicate);
   activeRunnerRequestRunnerId = null;
   activeCollectionId = context.collection.id;
-  const firstRequest = firstRequestInFolder(duplicate);
-  activeFolderId = firstRequest?.folderId || duplicate.id;
-  activeRequestId = firstRequest?.request?.id || null;
+  activeFolderId = duplicate.id;
+  activeRequestId = null;
+  ensureOpenFolderTabForActive();
   renderAll();
   await persistWorkspaceStructureOnly('Folder duplicated.', previousWorkspace);
   return duplicate;
@@ -13605,6 +13993,15 @@ function collectCollectionAndMarkDirty(options = {}) {
   refreshVariableHighlights();
 }
 
+function collectFolderAndMarkDirty(options = {}) {
+  collectFolderFromEditor(options);
+  markActiveFolderTabDirty();
+  renderCollections();
+  renderFolderVariablePreview();
+  renderVariablePreview();
+  refreshVariableHighlights();
+}
+
 function collectCollectionFromEditor(options = {}) {
   const collection = activeCollection();
   if (!collection || !$('collectionMainPanel') || $('collectionMainPanel').hidden) {
@@ -13623,6 +14020,27 @@ function collectCollectionFromEditor(options = {}) {
   };
   if (options.includeVariables !== false) {
     collection.variables = collectKeyValueRowsFromTable('collectionVariablesTable', collection.variables || []);
+  }
+}
+
+function collectFolderFromEditor(options = {}) {
+  const folder = activeFolder();
+  if (!folder || !$('folderMainPanel') || $('folderMainPanel').hidden) {
+    return;
+  }
+  const title = $('folderMainTitle');
+  if (title && title.dataset.editing === 'true') {
+    folder.name = folderTitleInputValue() || 'Untitled Folder';
+  }
+  folder.auth = collectFolderAuthFromEditor();
+  folder.description = $('folderDescriptionInput')?.value || '';
+  folder.scripts = {
+    ...(folder.scripts || {}),
+    preRequest: $('folderPreRequestScriptInput')?.value || '',
+    tests: $('folderTestScriptInput')?.value || ''
+  };
+  if (options.includeVariables !== false) {
+    folder.variables = collectKeyValueRowsFromTable('folderVariablesTable', folder.variables || []);
   }
 }
 
@@ -13676,6 +14094,14 @@ function collectCollectionAuthFromEditor() {
     doc: document,
     existingAuth: activeCollection()?.auth || {},
     idPrefix: 'collection'
+  });
+}
+
+function collectFolderAuthFromEditor() {
+  return collectRequestAuthFromEditor({
+    doc: document,
+    existingAuth: activeFolder()?.auth || {},
+    idPrefix: 'folder'
   });
 }
 
@@ -13938,6 +14364,12 @@ function collectionTitleInputValue() {
     .trim();
 }
 
+function folderTitleInputValue() {
+  return String($('folderMainTitle')?.textContent || '')
+    .replace(/[\r\n]+/g, ' ')
+    .trim();
+}
+
 function workspaceTitleInputValue() {
   return String($('workspaceMainTitle')?.textContent || '')
     .replace(/[\r\n]+/g, ' ')
@@ -13964,6 +14396,62 @@ function requestTitleInputValue() {
 
 function activeCollection() {
   return (workspace?.collections || []).find((collection) => collection.id === activeCollectionId) || null;
+}
+
+function activeFolder() {
+  const collection = activeCollection();
+  return collection && activeFolderId ? findFolder(collection, activeFolderId) : null;
+}
+
+function activeFolderForActiveRequest() {
+  const collection = activeCollection();
+  if (!collection) {
+    return null;
+  }
+  if (activeRequestId) {
+    return findRequest(collection, activeRequestId)?.folder || null;
+  }
+  return activeFolder();
+}
+
+function activeFolderPathForActiveRequest() {
+  const collection = activeCollection();
+  if (!collection) {
+    return [];
+  }
+  if (activeRequestId) {
+    return findRequest(collection, activeRequestId)?.folders || [];
+  }
+  return activeFolderId ? findFolderPath(collection, activeFolderId) : [];
+}
+
+function effectiveFolderVariablesForPath(folders) {
+  const variables = [];
+  for (const folder of folders || []) {
+    for (const variable of folder?.variables || []) {
+      if (!variable || variable.enabled === false || !String(variable.key || '').trim()) {
+        continue;
+      }
+      const key = String(variable.key).trim();
+      const existing = variables.findIndex((item) => item.key === key);
+      if (existing >= 0) {
+        variables[existing] = { ...variable, key };
+      } else {
+        variables.push({ ...variable, key });
+      }
+    }
+  }
+  return variables;
+}
+
+function effectiveFolderAuthForPath(folders) {
+  for (let index = (folders || []).length - 1; index >= 0; index -= 1) {
+    const auth = folders[index]?.auth;
+    if (requestHasOwnAuth(auth)) {
+      return auth;
+    }
+  }
+  return { type: 'none' };
 }
 
 function activeRunner() {

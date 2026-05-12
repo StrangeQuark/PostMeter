@@ -37,6 +37,8 @@ const {
   assertWorkspaceCollectionSaveResultPayload,
   assertWorkspaceEnvironmentSavePayload,
   assertWorkspaceEnvironmentSaveResultPayload,
+  assertWorkspaceFolderSavePayload,
+  assertWorkspaceFolderSaveResultPayload,
   assertWorkspaceLoadResultPayload,
   assertWorkspaceRequestSavePayload,
   assertWorkspaceRequestSaveResultPayload,
@@ -47,6 +49,7 @@ const {
 const {
   applyCollectionSaveToWorkspace,
   applyEnvironmentSaveToWorkspace,
+  applyFolderSaveToWorkspace,
   applyRequestSaveToWorkspace,
   applyWorkspaceSettingsSaveToWorkspace,
   findWorkspaceRunnerRequestContext,
@@ -143,6 +146,17 @@ function registerWorkspaceIpc(options = {}) {
     const collection = (workspace.collections || []).find((candidate) => candidate.id === payload.collectionId) || payload.collection;
     const result = { collection };
     assertWorkspaceCollectionSaveResultPayload(result);
+    return result;
+  });
+
+  ipcMain.handle('workspace:saveFolder', async (_event, payload) => {
+    assertWorkspaceFolderSavePayload(payload);
+    const workspace = await mutateWorkspace(async (currentWorkspace) => applyFolderSaveToWorkspace(currentWorkspace, payload));
+    refreshApplicationMenu();
+    const collection = (workspace.collections || []).find((candidate) => candidate.id === payload.collectionId) || null;
+    const folder = collection ? findFolderInCollection(collection, payload.folderId) : null;
+    const result = { folder: folder || payload.folder };
+    assertWorkspaceFolderSaveResultPayload(result);
     return result;
   });
 
@@ -606,6 +620,29 @@ function attachRollbackFailure(error, rollbackError) {
   const wrapped = new Error(String(error || 'Workspace operation failed.'));
   wrapped.rollbackError = rollbackError;
   return wrapped;
+}
+
+function findFolderInCollection(collection, folderId) {
+  for (const folder of collection?.folders || []) {
+    const found = findFolderRecursive(folder, folderId);
+    if (found) {
+      return found;
+    }
+  }
+  return null;
+}
+
+function findFolderRecursive(folder, folderId) {
+  if (folder?.id === folderId) {
+    return folder;
+  }
+  for (const child of folder?.folders || []) {
+    const found = findFolderRecursive(child, folderId);
+    if (found) {
+      return found;
+    }
+  }
+  return null;
 }
 
 module.exports = {

@@ -827,12 +827,13 @@ test('imports native collection exports and Postman collections without confusin
   assert.equal(postman.variables[0].key, 'baseUrl');
   assert.match(postman.scripts.preRequest, /fromCollection/);
   assert.equal(postman.folders[0].name, 'Folder A');
+  assert.match(postman.folders[0].scripts.tests, /folder test/);
   const nestedRequest = postman.folders[0].folders[0].requests[0];
   assert.equal(nestedRequest.name, 'Nested Request');
   assert.equal(nestedRequest.bodyType, 'RAW_JSON');
   assert.equal(nestedRequest.queryParams.length, 2);
-  assert.match(nestedRequest.scripts.preRequest, /fromCollection/);
-  assert.match(nestedRequest.scripts.tests, /folder test/);
+  assert.equal(nestedRequest.scripts.preRequest, '');
+  assert.doesNotMatch(nestedRequest.scripts.tests, /folder test/);
   assert.match(nestedRequest.scripts.tests, /request test/);
 
   const openApiYamlPath = path.join(temp, 'openapi.yaml');

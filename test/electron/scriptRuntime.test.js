@@ -170,6 +170,33 @@ test('supports request-local pm.variables overrides', () => {
   assert.equal(environment.variables.find((item) => item.key === 'token').value, 'env');
 });
 
+test('supports folder pm.variables precedence between request and collection scopes', () => {
+  const environment = { variables: [{ enabled: true, key: 'token', value: 'env' }] };
+  const collectionVariables = [
+    { enabled: true, key: 'token', value: 'collection' },
+    { enabled: true, key: 'collectionOnly', value: 'collection' }
+  ];
+  const folderVariables = [
+    { enabled: true, key: 'token', value: 'folder' },
+    { enabled: true, key: 'folderOnly', value: 'folder' }
+  ];
+  const localVariables = [{ enabled: true, key: 'localOnly', value: 'local' }];
+
+  const result = runPostmanScript(`
+    pm.test('folder precedence', function () {
+      pm.expect(pm.variables.get('token')).to.equal('folder');
+      pm.expect(pm.variables.replaceIn('{{token}}/{{folderOnly}}/{{collectionOnly}}/{{localOnly}}')).to.equal('folder/folder/collection/local');
+    });
+  `, {
+    collectionVariables,
+    environment,
+    folderVariables,
+    localVariables
+  });
+
+  assert.equal(result.passed, true);
+});
+
 test('blocks direct host access while allowing sandboxed dynamic code', () => {
   const requireResult = runPostmanScript('require("node:fs");');
   assert.equal(requireResult.passed, false);

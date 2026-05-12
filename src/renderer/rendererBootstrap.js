@@ -29,9 +29,11 @@
   ];
   const PERFORMANCE_AUTH_EDITOR_INPUT_IDS = AUTH_EDITOR_INPUT_IDS.map((id) => `performance${id[0].toUpperCase()}${id.slice(1)}`);
   const COLLECTION_AUTH_EDITOR_INPUT_IDS = AUTH_EDITOR_INPUT_IDS.map((id) => `collection${id[0].toUpperCase()}${id.slice(1)}`);
+  const FOLDER_AUTH_EDITOR_INPUT_IDS = AUTH_EDITOR_INPUT_IDS.map((id) => `folder${id[0].toUpperCase()}${id.slice(1)}`);
   const AUTH_EDITOR_INPUT_ID_SET = new Set(AUTH_EDITOR_INPUT_IDS);
   const PERFORMANCE_AUTH_EDITOR_INPUT_ID_SET = new Set(PERFORMANCE_AUTH_EDITOR_INPUT_IDS);
   const COLLECTION_AUTH_EDITOR_INPUT_ID_SET = new Set(COLLECTION_AUTH_EDITOR_INPUT_IDS);
+  const FOLDER_AUTH_EDITOR_INPUT_ID_SET = new Set(FOLDER_AUTH_EDITOR_INPUT_IDS);
 
   function initializeRenderer(options = {}) {
     const doc = options.doc || document;
@@ -135,6 +137,11 @@
     bindInput(doc, 'collectionDescriptionInput', options.onCollectionInput);
     bindInput(doc, 'collectionPreRequestScriptInput', options.onCollectionInput);
     bindInput(doc, 'collectionTestScriptInput', options.onCollectionInput);
+    bindClick(doc, 'saveFolderButton', options.onSaveFolder);
+    bindClick(doc, 'addFolderVariableButton', options.onAddFolderVariable);
+    bindInput(doc, 'folderDescriptionInput', options.onFolderInput);
+    bindInput(doc, 'folderPreRequestScriptInput', options.onFolderInput);
+    bindInput(doc, 'folderTestScriptInput', options.onFolderInput);
     bindClick(doc, 'addParamButton', options.onAddParam);
     bindClick(doc, 'addHeaderButton', options.onAddHeader);
     bindChange(doc, 'sendPostMeterTokenInput', options.onPostMeterTokenHeaderChange);
@@ -296,6 +303,16 @@
         handleCollectionAuthEditorInput(id, input, options);
       });
     }
+    for (const id of FOLDER_AUTH_EDITOR_INPUT_IDS) {
+      const input = getElement(doc, id);
+      if (!input) {
+        continue;
+      }
+      input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', (event) => {
+        event.__postmeterAuthHandled = true;
+        handleFolderAuthEditorInput(id, input, options);
+      });
+    }
     bindDelegatedAuthEditorInputs(doc, options);
 
     for (const button of doc.querySelectorAll('.tab')) {
@@ -428,6 +445,8 @@
         handlePerformanceAuthEditorInput(id, target, options);
       } else if (COLLECTION_AUTH_EDITOR_INPUT_ID_SET.has(id)) {
         handleCollectionAuthEditorInput(id, target, options);
+      } else if (FOLDER_AUTH_EDITOR_INPUT_ID_SET.has(id)) {
+        handleFolderAuthEditorInput(id, target, options);
       }
     };
     doc.addEventListener('input', handleDelegatedAuthEvent);
@@ -453,6 +472,13 @@
       options.onCollectionAuthTypeChange?.(input.value);
     }
     options.onCollectionAuthInput?.();
+  }
+
+  function handleFolderAuthEditorInput(id, input, options) {
+    if (id === 'folderAuthTypeSelect') {
+      options.onFolderAuthTypeChange?.(input.value);
+    }
+    options.onFolderAuthInput?.();
   }
 
   function bindToolbarMenus(doc = document, options = {}) {

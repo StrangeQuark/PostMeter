@@ -148,6 +148,63 @@ test('uses collection auth and scripts only when the request does not define the
   assert.equal(result.testScriptResult.tests[0].name, 'request test');
 });
 
+test('uses folder auth and scripts ahead of collection defaults when request fields are empty', async () => {
+  const scripts = [];
+  const sends = [];
+  const result = await runScriptedRequestLifecycle(
+    createScriptedRequestState({
+      id: 'folder-fallback',
+      name: 'Folder Fallback',
+      method: 'GET',
+      url: 'https://api.example.test/folder',
+      auth: { type: 'none' },
+      scripts: { preRequest: '', tests: '' }
+    }, { id: 'env', name: 'Env', variables: [] }, {
+      collectionAuth: { type: 'bearer', token: 'collection-token' },
+      collectionScripts: {
+        preRequest: "throw new Error('collection pre-request should not run');",
+        tests: "pm.test('collection test should not run', function () {});"
+      },
+      folderAuth: { type: 'apiKey', key: 'X-Folder-Key', value: 'folder-token', location: 'header' },
+      folderScripts: {
+        preRequest: "pm.environment.set('fromFolderPre', 'yes');",
+        tests: "pm.test('folder test fallback', function () {});"
+      }
+    }),
+    {
+      scriptRunner: async (scriptText, context) => {
+        scripts.push(scriptText);
+        return {
+          result: {
+            passed: true,
+            tests: scriptText.includes('folder test fallback')
+              ? [{ name: 'folder test fallback', passed: true, error: '' }]
+              : [],
+            error: '',
+            logs: []
+          },
+          environmentVariables: context.environment.variables,
+          collectionVariables: context.collectionVariables,
+          folderVariables: context.folderVariables,
+          localVariables: context.localVariables,
+          request: context.request
+        };
+      },
+      sendRequest: async (sentRequest) => {
+        sends.push(sentRequest);
+        return response(200, '{"ok":true}');
+      }
+    }
+  );
+
+  assert.equal(sends[0].auth.type, 'apiKey');
+  assert.equal(sends[0].auth.key, 'X-Folder-Key');
+  assert.ok(scripts[0].includes('fromFolderPre'));
+  assert.ok(scripts[1].includes('folder test fallback'));
+  assert.doesNotMatch(scripts.join('\n'), /collection/);
+  assert.equal(result.testScriptResult.tests[0].name, 'folder test fallback');
+});
+
 test('keeps request auth and request script fields ahead of collection defaults', async () => {
   const scripts = [];
   const sends = [];

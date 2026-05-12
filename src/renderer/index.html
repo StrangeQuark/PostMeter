@@ -193,6 +193,55 @@
         </div>
       </section>
 
+      <section id="folderMainPanel" class="panel collection-main-panel folder-main-panel" role="tabpanel" hidden>
+        <div class="collection-main-header">
+          <div>
+            <div id="folderMainTitle" class="collection-main-title editable-title" tabindex="0" aria-label="Folder name">Select a folder</div>
+          </div>
+          <div class="collection-actions">
+            <button id="saveFolderButton" type="button">Save Folder</button>
+          </div>
+        </div>
+
+        <div class="tabs" role="tablist" aria-label="Folder editor sections" data-tab-group="folder">
+          <button id="folderOverviewTabButton" class="tab active" type="button" role="tab" data-tab-group="folder" data-tab="folderOverview" aria-selected="true" aria-controls="folderOverviewTab">Overview</button>
+          <button id="folderAuthTabButton" class="tab" type="button" role="tab" data-tab-group="folder" data-tab="folderAuth" aria-selected="false" aria-controls="folderAuthTab">Auth</button>
+          <button id="folderScriptsTabButton" class="tab" type="button" role="tab" data-tab-group="folder" data-tab="folderScripts" aria-selected="false" aria-controls="folderScriptsTab">Scripts</button>
+          <button id="folderVariablesTabButton" class="tab" type="button" role="tab" data-tab-group="folder" data-tab="folderLevelVariables" aria-selected="false" aria-controls="folderLevelVariablesTab">Variables</button>
+        </div>
+
+        <div id="folderOverviewTab" class="tab-panel active" role="tabpanel" aria-labelledby="folderOverviewTabButton">
+          <div class="collection-overview-field">
+            <textarea id="folderDescriptionInput" spellcheck="true" placeholder="What this folder is for" aria-label="Folder overview" data-code-editor data-code-language="text"></textarea>
+          </div>
+        </div>
+
+        <div id="folderAuthTab" class="tab-panel" role="tabpanel" aria-labelledby="folderAuthTabButton">
+          <div id="folderAuthEditor"></div>
+        </div>
+
+        <div id="folderScriptsTab" class="tab-panel" role="tabpanel" aria-labelledby="folderScriptsTabButton">
+          <div class="script-grid">
+            <label class="field script-field collection-script-field">
+              <span>Pre-request Script</span>
+              <textarea id="folderPreRequestScriptInput" spellcheck="false" placeholder="pm.environment.set('token', 'value');" data-code-editor data-code-language="javascript"></textarea>
+            </label>
+            <label class="field script-field collection-script-field">
+              <span>Post-request Script</span>
+              <textarea id="folderTestScriptInput" spellcheck="false" placeholder="pm.test('status is 200', function () { pm.response.to.have.status(200); });" data-code-editor data-code-language="javascript"></textarea>
+            </label>
+          </div>
+        </div>
+
+        <div id="folderLevelVariablesTab" class="tab-panel" role="tabpanel" aria-labelledby="folderVariablesTabButton">
+          <div class="environment-actions variable-actions">
+            <button id="addFolderVariableButton" type="button">Add Variable</button>
+          </div>
+          <div id="folderVariablesTable" class="kv-table"></div>
+          <pre id="folderVariablePreview" class="variable-preview">No variables</pre>
+        </div>
+      </section>
+
       <section id="requestEditorPanel" class="panel request-panel" role="tabpanel">
         <div class="request-main-header">
           <div id="requestNameTitle" class="request-main-title editable-title" tabindex="0" aria-label="Request name">Select a request</div>

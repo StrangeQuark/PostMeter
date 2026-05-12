@@ -213,7 +213,7 @@
     refreshVariableTextboxes(container);
   }
 
-  function buildVariablePreviewText(collection, environment, request) {
+  function buildVariablePreviewText(collection, environment, request, folder, folders = null) {
     const rows = [];
     const effective = new Map();
 
@@ -237,6 +237,19 @@
         source: 'Collection'
       });
     }
+    const folderScopes = Array.isArray(folders) ? folders : (folder ? [folder] : []);
+    for (const folderScope of folderScopes) {
+      for (const pair of folderScope?.variables || []) {
+        if (pair.enabled === false || !pair.key) {
+          continue;
+        }
+        effective.set(pair.key, {
+          key: pair.key,
+          value: pair.value ?? '',
+          source: 'Folder'
+        });
+      }
+    }
     for (const pair of request?.variables || []) {
       if (pair.enabled === false || !pair.key) {
         continue;
@@ -257,7 +270,7 @@
   function renderVariablePreview(options = {}) {
     const doc = options.doc || document;
     const container = element(doc, options.containerId || 'variablePreview');
-    container.textContent = buildVariablePreviewText(options.collection, options.environment, options.request);
+    container.textContent = buildVariablePreviewText(options.collection, options.environment, options.request, options.folder, options.folders);
   }
 
   function renderCookieJarEditor(options = {}) {

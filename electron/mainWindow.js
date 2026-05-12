@@ -363,6 +363,7 @@ function requiredPreloadApiSurface() {
     ['workspace', 'load'],
     ['workspace', 'save'],
     ['workspace', 'saveCollection'],
+    ['workspace', 'saveFolder'],
     ['workspace', 'saveRequest'],
     ['workspace', 'saveEnvironment'],
     ['workspace', 'saveSettings'],

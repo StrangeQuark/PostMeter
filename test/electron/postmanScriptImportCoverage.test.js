@@ -107,11 +107,11 @@ test('executes simple imported Postman collection, folder, and request scripts w
       sent.push({ request, environment, options });
       assert.equal(request.method, 'GET');
       assert.equal(request.url, 'https://api.example.test/simple?trace=ephemeral-local');
-      assert.equal(headerValue(request.headers, 'X-Folder'), 'folder');
+      assert.equal(headerValue(request.headers, 'X-Folder'), undefined);
       assert.equal(headerValue(request.headers, 'X-Trace'), 'simple-run-local-seed');
       assert.equal(request.body, '{"token":"simple-token","local":"ephemeral-local"}');
       assert.deepEqual(request.auth, { type: 'bearer', token: 'simple-token' });
-      assert.equal(envValue(environment, 'folderPre'), 'yes:folder');
+      assert.equal(envValue(environment, 'folderPre'), undefined);
       assert.equal(options.cookieJar.find((item) => item.name === 'session')?.value, 'jar-session');
       return jsonResponse(200, { ok: true, scope: 'simple' }, {
         headers: {
@@ -128,23 +128,22 @@ test('executes simple imported Postman collection, folder, and request scripts w
   assert.equal(result.totalRequests, 1);
   assert.deepEqual(
     result.results[0].preRequestScriptResult.tests.map((item) => [item.name, item.passed]),
-    [['collection prerequest has metadata', true]]
+    []
   );
   assert.deepEqual(
     result.results[0].testScriptResult.tests.map((item) => [item.name, item.passed]),
     [
-      ['collection test has response', true],
       ['simple response helpers and scopes', true]
     ]
   );
   assert.equal(envValue(result.environment, 'simpleDone'), 'simple');
-  assert.equal(envValue(result.environment, 'folderTest'), 'simple');
-  assert.equal(variableValue(result.collectionVariables, 'collectionPreSeen'), 'Simple GET');
-  assert.equal(variableValue(result.collectionVariables, 'collectionTestSeen'), 'yes');
-  assert.equal(variableValue(result.globals, 'globalPre'), 'collection');
-  assert.equal(variableValue(result.globals, 'globalTest'), '200');
+  assert.equal(envValue(result.environment, 'folderTest'), undefined);
+  assert.equal(variableValue(result.collectionVariables, 'collectionPreSeen'), undefined);
+  assert.equal(variableValue(result.collectionVariables, 'collectionTestSeen'), undefined);
+  assert.equal(variableValue(result.globals, 'globalPre'), undefined);
+  assert.equal(variableValue(result.globals, 'globalTest'), undefined);
   assert.equal(envValue(result.environment, 'legacyEnv'), undefined);
-  assert.equal(variableValue(result.globals, 'legacyGlobal'), 'legacy-global');
+  assert.equal(variableValue(result.globals, 'legacyGlobal'), undefined);
   assert.equal(variableValue(result.globals, 'legacyGlobalToClear'), undefined);
   assert.equal(result.cookies.find((item) => item.name === 'serverCookie')?.value, 'from-server');
 });

@@ -81,6 +81,84 @@ test('request IPC validates public responses before mutating workspace state', a
   assert.equal(workspace.history.length, 0);
 });
 
+test('request IPC passes effective folder scope to scripted request execution', async () => {
+  const handlers = new Map();
+  const request = requestModel({
+    id: 'request-1',
+    method: 'GET',
+    url: 'https://example.test'
+  });
+  const workspace = workspaceModel({
+    collections: [
+      collectionModel({
+        id: 'collection-1',
+        folders: [{
+          id: 'parent-folder',
+          name: 'Parent',
+          variables: [{ enabled: true, key: 'scope', value: 'parent' }],
+          scripts: { preRequest: "pm.environment.set('scope', 'parent');" },
+          folders: [{
+            id: 'child-folder',
+            name: 'Child',
+            auth: { type: 'bearer', token: 'folder-token' },
+            variables: [
+              { enabled: true, key: 'scope', value: 'child' },
+              { enabled: true, key: 'childOnly', value: 'yes' }
+            ],
+            scripts: { tests: "pm.test('child', function () {});" },
+            requests: [request]
+          }]
+        }]
+      })
+    ],
+    environments: [],
+    cookies: [],
+    history: []
+  });
+  let capturedOptions = null;
+
+  registerRequestIpc({
+    getWorkspace: () => workspace,
+    getWorkspaceId: () => 'workspace-1',
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    },
+    mutateWorkspace: async (mutator) => mutator(workspace),
+    runRequestWithScripts: async (_request, _environment, options) => {
+      capturedOptions = options;
+      return {
+        response: {
+          statusCode: 200,
+          headers: {},
+          body: 'ok',
+          durationMillis: 1,
+          responseBytes: 2,
+          finalUrl: 'https://example.test',
+          requestSent: true
+        },
+        environment: null,
+        collectionVariables: [],
+        localVariables: [],
+        globals: []
+      };
+    },
+    saveWorkspace: async (nextWorkspace) => nextWorkspace,
+    setWorkspace: () => {}
+  });
+
+  await handlers.get('request:send')(null, request, null);
+
+  assert.equal(capturedOptions.folderAuth.token, 'folder-token');
+  assert.equal(capturedOptions.folderScripts.preRequest, "pm.environment.set('scope', 'parent');");
+  assert.equal(capturedOptions.folderScripts.tests, "pm.test('child', function () {});");
+  assert.deepEqual(capturedOptions.folderVariables.map((item) => [item.key, item.value]), [
+    ['scope', 'child'],
+    ['childOnly', 'yes']
+  ]);
+});
+
 test('request IPC reports refreshed auth persisted only when the workspace mutation applies', async () => {
   const handlers = new Map();
   const workspace = workspaceModel({

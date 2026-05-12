@@ -407,6 +407,10 @@ textarea.code-editor-input:placeholder-shown {
   color: var(--method-post);
 }
 
+.code-editor-token.tok-variable-folder.tok-variable-valid {
+  color: var(--method-options);
+}
+
 .code-editor-token.tok-variable-csv.tok-variable-valid {
   color: var(--green);
 }
@@ -493,6 +497,10 @@ textarea.code-editor-input.has-openable-variable-hover {
 
 .variable-highlight-collection.variable-highlight-valid {
   color: var(--method-post);
+}
+
+.variable-highlight-folder.variable-highlight-valid {
+  color: var(--method-options);
 }
 
 .variable-highlight-csv.variable-highlight-valid {
@@ -617,7 +625,8 @@ textarea.code-editor-input.has-openable-variable-hover {
   min-height: 320px;
 }
 
-#collectionOverviewTab.active {
+#collectionOverviewTab.active,
+#folderOverviewTab.active {
   display: flex;
   flex-direction: column;
   overflow: hidden;

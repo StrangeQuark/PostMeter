@@ -1029,7 +1029,7 @@ test('runs imported Postman collection, folder, and request scripts through the 
             exec: [
               "pm.test('postman event scripts ran', function () {",
               "  pm.response.to.have.status(200);",
-              "  pm.expect(pm.collectionVariables.get('collectionStage')).to.equal('collection');",
+              "  pm.expect(pm.collectionVariables.get('collectionStage')).to.equal(undefined);",
               "  pm.expect(pm.environment.get('folderStage')).to.equal('folder');",
               "  pm.expect(pm.request.url.toString()).to.include('/status');",
               "});"
@@ -1049,7 +1049,78 @@ test('runs imported Postman collection, folder, and request scripts through the 
 
   assert.equal(result.passed, true);
   assert.equal(result.results[0].testScriptResult.tests[0].name, 'postman event scripts ran');
-  assert.equal(result.collectionVariables.find((item) => item.key === 'collectionStage').value, 'collection');
+  assert.equal(result.collectionVariables.find((item) => item.key === 'collectionStage'), undefined);
+});
+
+test('collection runner resolves variables with request, folder, collection, environment precedence', async () => {
+  const seenScopes = [];
+  const collection = collectionModel({
+    name: 'Folder Variable Precedence',
+    variables: [
+      { enabled: true, key: 'scope', value: 'collection' },
+      { enabled: true, key: 'collectionOnly', value: 'collection' }
+    ],
+    requests: [
+      requestModel({
+        id: 'root',
+        name: 'Root',
+        method: 'GET',
+        url: 'https://api.example.test/root',
+        variables: []
+      })
+    ],
+    folders: [{
+      id: 'folder',
+      name: 'Folder',
+      variables: [
+        { enabled: true, key: 'scope', value: 'folder' },
+        { enabled: true, key: 'folderOnly', value: 'folder' }
+      ],
+      requests: [
+        requestModel({
+          id: 'folder-fallback',
+          name: 'Folder Fallback',
+          method: 'GET',
+          url: 'https://api.example.test/folder',
+          variables: []
+        }),
+        requestModel({
+          id: 'request-override',
+          name: 'Request Override',
+          method: 'GET',
+          url: 'https://api.example.test/request',
+          variables: [{ enabled: true, key: 'scope', value: 'request' }]
+        })
+      ],
+      folders: []
+    }]
+  });
+
+  await runCollection(collection, {
+    id: 'env',
+    name: 'Env',
+    variables: [
+      { enabled: true, key: 'scope', value: 'environment' },
+      { enabled: true, key: 'envOnly', value: 'environment' }
+    ]
+  }, {
+    sendRequest: async (request, environment) => {
+      seenScopes.push({
+        requestId: request.id,
+        scope: environment.variables.find((item) => item.key === 'scope')?.value,
+        envOnly: environment.variables.find((item) => item.key === 'envOnly')?.value,
+        collectionOnly: environment.variables.find((item) => item.key === 'collectionOnly')?.value,
+        folderOnly: environment.variables.find((item) => item.key === 'folderOnly')?.value
+      });
+      return response(200, '{}');
+    }
+  });
+
+  assert.deepEqual(seenScopes, [
+    { requestId: 'root', scope: 'collection', envOnly: 'environment', collectionOnly: 'collection', folderOnly: undefined },
+    { requestId: 'folder-fallback', scope: 'folder', envOnly: 'environment', collectionOnly: 'collection', folderOnly: 'folder' },
+    { requestId: 'request-override', scope: 'request', envOnly: 'environment', collectionOnly: 'collection', folderOnly: 'folder' }
+  ]);
 });
 
 test('honors pm.execution.setNextRequest during collection runs', async () => {

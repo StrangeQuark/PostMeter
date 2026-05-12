@@ -7,7 +7,7 @@ const {
   unsetVariable
 } = require('../../src/core/variableScope');
 
-test('builds runtime environment with request variables overriding collection variables, which override environment variables', () => {
+test('builds runtime environment with request variables overriding folder, collection, and environment variables', () => {
   const runtime = runtimeEnvironment(
     [
       { enabled: true, key: 'baseUrl', value: 'https://collection.example.test' },
@@ -26,23 +26,32 @@ test('builds runtime environment with request variables overriding collection va
     [
       { enabled: true, key: 'baseUrl', value: 'https://request.example.test' },
       { enabled: true, key: 'requestOnly', value: 'yes' }
-    ]
+    ],
+    {
+      folderVariables: [
+        { enabled: true, key: 'baseUrl', value: 'https://folder.example.test' },
+        { enabled: true, key: 'shared', value: 'folder' },
+        { enabled: true, key: 'folderOnly', value: 'yes' }
+      ]
+    }
   );
 
   assert.equal(runtime.id, 'env');
   assert.equal(getVariable(runtime.variables, 'baseUrl'), 'https://request.example.test');
-  assert.equal(getVariable(runtime.variables, 'shared'), 'collection');
+  assert.equal(getVariable(runtime.variables, 'shared'), 'folder');
+  assert.equal(getVariable(runtime.variables, 'folderOnly'), 'yes');
   assert.equal(getVariable(runtime.variables, 'collectionOnly'), 'yes');
   assert.equal(getVariable(runtime.variables, 'requestOnly'), 'yes');
   assert.equal(getVariable(runtime.variables, 'disabled'), undefined);
 });
 
-test('falls back through request, collection, environment, and globals without disabled variables shadowing lower scopes', () => {
+test('falls back through request, folder, collection, environment, and globals without disabled variables shadowing lower scopes', () => {
   const runtime = runtimeEnvironment(
     [
       { enabled: true, key: 'collectionOnly', value: 'collection-value' },
       { enabled: true, key: 'collectionBeatsEnv', value: 'collection-value' },
       { enabled: false, key: 'disabledCollectionFallsBackToEnv', value: 'disabled-collection' },
+      { enabled: true, key: 'disabledFolderFallsBackToCollection', value: 'collection-value' },
       { enabled: true, key: 'disabledRequestFallsBackToCollection', value: 'collection-value' },
       { enabled: true, key: 'shared', value: 'collection-value' }
     ],
@@ -63,6 +72,12 @@ test('falls back through request, collection, environment, and globals without d
       { enabled: false, key: 'disabledRequestFallsBackToCollection', value: 'disabled-request' }
     ],
     {
+      folderVariables: [
+        { enabled: true, key: 'folderOnly', value: 'folder-value' },
+        { enabled: true, key: 'disabledRequestFallsBackToCollection', value: 'folder-value' },
+        { enabled: false, key: 'disabledFolderFallsBackToCollection', value: 'disabled-folder' },
+        { enabled: true, key: 'shared', value: 'folder-value' }
+      ],
       globals: [
         { enabled: true, key: 'globalOnly', value: 'global-value' },
         { enabled: true, key: 'globalBeatsEnv', value: 'global-value' }
@@ -71,12 +86,14 @@ test('falls back through request, collection, environment, and globals without d
   );
 
   assert.equal(getVariable(runtime.variables, 'requestOnly'), 'request-value');
+  assert.equal(getVariable(runtime.variables, 'folderOnly'), 'folder-value');
   assert.equal(getVariable(runtime.variables, 'collectionOnly'), 'collection-value');
   assert.equal(getVariable(runtime.variables, 'envOnly'), 'env-value');
   assert.equal(getVariable(runtime.variables, 'globalOnly'), 'global-value');
   assert.equal(getVariable(runtime.variables, 'shared'), 'request-value');
   assert.equal(getVariable(runtime.variables, 'collectionBeatsEnv'), 'collection-value');
-  assert.equal(getVariable(runtime.variables, 'disabledRequestFallsBackToCollection'), 'collection-value');
+  assert.equal(getVariable(runtime.variables, 'disabledRequestFallsBackToCollection'), 'folder-value');
+  assert.equal(getVariable(runtime.variables, 'disabledFolderFallsBackToCollection'), 'collection-value');
   assert.equal(getVariable(runtime.variables, 'disabledCollectionFallsBackToEnv'), 'env-value');
   assert.equal(getVariable(runtime.variables, 'globalBeatsEnv'), 'env-value');
 });

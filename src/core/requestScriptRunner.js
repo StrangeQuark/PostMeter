@@ -12,6 +12,9 @@ async function runRequestWithScripts(request, environment, options = {}) {
       collectionVariables: options.collectionVariables || [],
       collectionAuth: options.collectionAuth,
       collectionScripts: options.collectionScripts,
+      folderVariables: options.folderVariables || [],
+      folderAuth: options.folderAuth,
+      folderScripts: options.folderScripts,
       globals: options.globals || [],
       cookieJar: options.cookieJar || []
     }),

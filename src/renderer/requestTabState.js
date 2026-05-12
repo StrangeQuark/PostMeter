@@ -5,6 +5,7 @@
     const state = options.state;
     const activeCollection = options.activeCollection || (() => null);
     const activeEnvironment = options.activeEnvironment || (() => null);
+    const activeFolder = options.activeFolder || (() => null);
     const activeRequest = options.activeRequest || (() => null);
     const activeRunner = options.activeRunner || (() => null);
     const activePerformanceTest = options.activePerformanceTest || (() => null);
@@ -12,6 +13,7 @@
     const clearActiveWorkspaceItem = options.clearActiveWorkspaceItem || (() => {});
     const collectCollectionFromEditor = options.collectCollectionFromEditor || (() => {});
     const collectEnvironmentFromEditor = options.collectEnvironmentFromEditor || (() => {});
+    const collectFolderFromEditor = options.collectFolderFromEditor || (() => {});
     const collectRequestFromEditor = options.collectRequestFromEditor || (() => {});
     const collectRunnerFromEditor = options.collectRunnerFromEditor || (() => {});
     const collectPerformanceTestFromEditor = options.collectPerformanceTestFromEditor || (() => {});
@@ -19,6 +21,7 @@
     const notifyUser = options.notifyUser || (() => {});
     const persistWorkspace = options.persistWorkspace || (async () => true);
     const promptUnsavedRequestClose = options.promptUnsavedRequestClose || (async () => 'cancel');
+    const removeFolderFromCollection = options.removeFolderFromCollection || (() => false);
     const removeRequestFromCollection = options.removeRequestFromCollection || (() => false);
     const renderAll = options.renderAll || (() => {});
     const renderCollections = options.renderCollections || (() => {});
@@ -26,6 +29,7 @@
     const saveDraftRequestWithPrompt = options.saveDraftRequestWithPrompt || (async () => null);
     const selectCollectionTabCallback = options.selectCollectionTab || (() => {});
     const selectEnvironmentTabCallback = options.selectEnvironmentTab || (() => {});
+    const selectFolderTabCallback = options.selectFolderTab || (() => {});
     const selectRequestTabCallback = options.selectRequestTab || (() => {});
     const selectRunnerTabCallback = options.selectRunnerTab || (() => {});
     const selectPerformanceTabCallback = options.selectPerformanceTab || (() => {});
@@ -50,6 +54,11 @@
 
     function collectionForTab(tab) {
       return state.workspace?.collections?.find((collection) => collection.id === tab?.collectionId) || null;
+    }
+
+    function folderForTab(tab) {
+      const collection = collectionForTab(tab);
+      return collection && tab?.folderId ? options.findFolder?.(collection, tab.folderId) || null : null;
     }
 
     function environmentForTab(tab) {
@@ -143,6 +152,7 @@
 
     function pruneOpenTabs() {
       state.openCollectionTabs = state.openCollectionTabs.filter((tab) => Boolean(collectionForTab(tab)));
+      state.openFolderTabs = state.openFolderTabs.filter((tab) => Boolean(folderForTab(tab)));
       state.openRequestTabs = state.openRequestTabs.filter((tab) => Boolean(requestForTab(tab)));
       state.openEnvironmentTabs = state.openEnvironmentTabs.filter((tab) => Boolean(environmentForTab(tab)));
       state.openWorkspaceTabs = state.openWorkspaceTabs.filter((tab) => Boolean(workspaceForTab(tab)));
@@ -158,6 +168,7 @@
 
     function openTabCount() {
       return (state.openCollectionTabs || []).length
+        + (state.openFolderTabs || []).length
         + (state.openRequestTabs || []).length
         + (state.openEnvironmentTabs || []).length
         + (state.openWorkspaceTabs || []).length
@@ -197,6 +208,13 @@
         return false;
       }
       return canOpenTab(state.openCollectionTabs, `collection:${collectionId}`, options);
+    }
+
+    function canOpenFolderTabFor(collectionId, folderId, options = {}) {
+      if (!collectionId || !folderId) {
+        return false;
+      }
+      return canOpenTab(state.openFolderTabs, `folder:${collectionId}:${folderId}`, options);
     }
 
     function canOpenRequestTabFor(collectionId, requestId, options = {}) {
@@ -260,7 +278,7 @@
 
     function ensureOpenCollectionTabForActive(config = {}) {
       const collection = activeCollection();
-      if (!collection || !state.activeCollectionId || state.activeRequestId) {
+      if (!collection || !state.activeCollectionId || state.activeFolderId || state.activeRequestId) {
         return null;
       }
       const key = rendererState.activeCollectionTabKey(state);
@@ -280,6 +298,40 @@
       }
       tab.collectionId = state.activeCollectionId;
       tab.snapshot ||= rendererState.collectionSnapshot(collection);
+      if (config.createdUnsaved === true) {
+        tab.createdUnsaved = true;
+      }
+      if (config.dirty === true) {
+        tab.dirty = true;
+      }
+      renderRequestTabs();
+      return tab;
+    }
+
+    function ensureOpenFolderTabForActive(config = {}) {
+      const folder = activeFolder();
+      if (!folder || !state.activeCollectionId || !state.activeFolderId || state.activeRequestId) {
+        return null;
+      }
+      const key = rendererState.activeFolderTabKey(state);
+      let tab = state.openFolderTabs.find((candidate) => candidate.key === key);
+      if (!tab) {
+        if (!canOpenTab(state.openFolderTabs, key)) {
+          return null;
+        }
+        tab = {
+          key,
+          collectionId: state.activeCollectionId,
+          folderId: state.activeFolderId,
+          dirty: config.dirty === true,
+          createdUnsaved: config.createdUnsaved === true,
+          snapshot: rendererState.folderSnapshot(folder)
+        };
+        state.openFolderTabs.push(tab);
+      }
+      tab.collectionId = state.activeCollectionId;
+      tab.folderId = state.activeFolderId;
+      tab.snapshot ||= rendererState.folderSnapshot(folder);
       if (config.createdUnsaved === true) {
         tab.createdUnsaved = true;
       }
@@ -488,7 +540,9 @@
 
     function selectRequestTab(tab, options = {}) {
       if (options.collect !== false) {
-        if (state.activeMainPanel === 'request' && activeCollection() && !activeRequest()) {
+        if (state.activeMainPanel === 'request' && activeFolder() && !activeRequest()) {
+          collectFolderFromEditor();
+        } else if (state.activeMainPanel === 'request' && activeCollection() && !activeRequest()) {
           collectCollectionFromEditor();
         } else {
           collectRequestFromEditor();
@@ -544,7 +598,9 @@
 
     function selectCollectionTab(tab, options = {}) {
       if (options.collect !== false) {
-        if (state.activeMainPanel === 'request' && activeCollection() && !activeRequest()) {
+        if (state.activeMainPanel === 'request' && activeFolder() && !activeRequest()) {
+          collectFolderFromEditor();
+        } else if (state.activeMainPanel === 'request' && activeCollection() && !activeRequest()) {
           collectCollectionFromEditor();
         } else {
           collectRequestFromEditor();
@@ -563,6 +619,33 @@
       state.activeFolderId = null;
       state.activeRequestId = null;
       ensureOpenCollectionTabForActive();
+      renderAll();
+    }
+
+    function selectFolderTab(tab, options = {}) {
+      if (options.collect !== false) {
+        if (state.activeMainPanel === 'request' && activeFolder() && !activeRequest()) {
+          collectFolderFromEditor();
+        } else if (state.activeMainPanel === 'request' && activeCollection() && !activeRequest()) {
+          collectCollectionFromEditor();
+        } else {
+          collectRequestFromEditor();
+        }
+      }
+      const collection = collectionForTab(tab);
+      const folder = folderForTab(tab);
+      if (!collection || !folder) {
+        removeOpenFolderTab(tab?.key);
+        renderAll();
+        return;
+      }
+      state.activeSidebarPanel = 'collections';
+      state.activeMainPanel = 'request';
+      state.activeRunnerRequestRunnerId = null;
+      state.activeCollectionId = collection.id;
+      state.activeFolderId = folder.id;
+      state.activeRequestId = null;
+      ensureOpenFolderTabForActive();
       renderAll();
     }
 
@@ -642,6 +725,14 @@
       }
     }
 
+    function markActiveFolderTabDirty() {
+      const tab = ensureOpenFolderTabForActive({ dirty: true });
+      if (tab) {
+        tab.dirty = true;
+        renderRequestTabs();
+      }
+    }
+
     function markActiveEnvironmentDirty() {
       const tab = ensureOpenEnvironmentTabForActive({ dirty: true });
       if (tab) {
@@ -678,9 +769,17 @@
       state.openCollectionTabs = state.openCollectionTabs.filter((tab) => tab.key !== key);
     }
 
+    function removeOpenFolderTab(keyOrCollectionId, folderId) {
+      const key = folderId == null
+        ? keyOrCollectionId
+        : `folder:${keyOrCollectionId}:${folderId}`;
+      state.openFolderTabs = state.openFolderTabs.filter((tab) => tab.key !== key);
+    }
+
     function removeOpenRequestTabsForCollection(collectionId) {
       state.openRequestTabs = state.openRequestTabs.filter((tab) => tab.collectionId !== collectionId);
       state.openCollectionTabs = state.openCollectionTabs.filter((tab) => tab.collectionId !== collectionId);
+      state.openFolderTabs = state.openFolderTabs.filter((tab) => tab.collectionId !== collectionId);
     }
 
     function removeOpenEnvironmentTab(keyOrEnvironmentId) {
@@ -777,6 +876,39 @@
       closeCollectionTabAfterResolved(tab, { wasActive });
     }
 
+    async function closeFolderTab(tab) {
+      if (!tab) {
+        renderRequestTabs();
+        return;
+      }
+      const wasActive = rendererState.isActiveFolderTab(state, tab);
+      if (wasActive) {
+        collectFolderFromEditor();
+      }
+      const folder = folderForTab(tab);
+      if (!folder) {
+        closeFolderTabAfterResolved(tab, { wasActive });
+        return;
+      }
+      if (tab.dirty) {
+        const action = await promptUnsavedRequestClose(tab, folder);
+        if (action === 'cancel') {
+          return;
+        }
+        if (action === 'save') {
+          try {
+            await persistWorkspace(false, { folderTabKey: tab.key, collectEditors: false });
+          } catch (error) {
+            reportCloseSaveFailure('Folder Save Failed', error);
+            return;
+          }
+        } else {
+          discardFolderTabChanges(tab);
+        }
+      }
+      closeFolderTabAfterResolved(tab, { wasActive });
+    }
+
     async function forceCloseCollectionTab(tab, options = {}) {
       if (!tab) {
         renderRequestTabs();
@@ -802,6 +934,34 @@
         discardCollectionTabChanges(tab);
       }
       closeCollectionTabAfterResolved(tab, { wasActive });
+      return true;
+    }
+
+    async function forceCloseFolderTab(tab, options = {}) {
+      if (!tab) {
+        renderRequestTabs();
+        return false;
+      }
+      const wasActive = rendererState.isActiveFolderTab(state, tab);
+      if (wasActive) {
+        collectFolderFromEditor();
+      }
+      const folder = folderForTab(tab);
+      if (!folder) {
+        closeFolderTabAfterResolved(tab, { wasActive });
+        return true;
+      }
+      if (options.save === true && tab.dirty) {
+        try {
+          await persistWorkspace(false, { folderTabKey: tab.key, collectEditors: false });
+        } catch (error) {
+          reportCloseSaveFailure('Folder Save Failed', error);
+          return false;
+        }
+      } else {
+        discardFolderTabChanges(tab);
+      }
+      closeFolderTabAfterResolved(tab, { wasActive });
       return true;
     }
 
@@ -851,6 +1011,42 @@
       renderAll();
     }
 
+    function closeFolderTabAfterResolved(tab, options = {}) {
+      const index = state.openFolderTabs.findIndex((candidate) => candidate === tab || candidate.key === tab.key);
+      if (index < 0) {
+        renderRequestTabs();
+        return;
+      }
+      const wasActive = options.wasActive === true || rendererState.isActiveFolderTab(state, tab);
+      state.openFolderTabs.splice(index, 1);
+      if (!wasActive) {
+        renderRequestTabs();
+        return;
+      }
+      const fallbackFolder = state.openFolderTabs[Math.min(index, state.openFolderTabs.length - 1)] || state.openFolderTabs[index - 1] || null;
+      if (fallbackFolder) {
+        selectFolderTabCallback(fallbackFolder);
+        return;
+      }
+      const fallbackCollection = state.openCollectionTabs[state.openCollectionTabs.length - 1] || null;
+      if (fallbackCollection) {
+        selectCollectionTabCallback(fallbackCollection);
+        return;
+      }
+      const fallbackRequest = state.openRequestTabs[state.openRequestTabs.length - 1] || null;
+      if (fallbackRequest) {
+        selectRequestTabCallback(fallbackRequest, { collect: false });
+        return;
+      }
+      state.activeCollectionId = null;
+      state.activeFolderId = null;
+      state.activeRequestId = null;
+      state.activeRunnerRequestRunnerId = null;
+      state.activeSidebarPanel = 'collections';
+      state.activeMainPanel = 'request';
+      renderAll();
+    }
+
     function discardCollectionTabChanges(tab) {
       if (tab.createdUnsaved) {
         state.workspace.collections = (state.workspace.collections || []).filter((collection) => collection.id !== tab.collectionId);
@@ -862,6 +1058,39 @@
         return;
       }
       restoreCollectionFromSnapshot(tab);
+    }
+
+    function discardFolderTabChanges(tab) {
+      const collection = collectionForTab(tab);
+      if (!collection) {
+        return;
+      }
+      if (tab.createdUnsaved) {
+        removeFolderFromCollection(collection, tab.folderId);
+        if (state.activeFolderId === tab.folderId) {
+          state.activeFolderId = null;
+          state.activeRequestId = null;
+        }
+        return;
+      }
+      restoreFolderFromSnapshot(tab);
+    }
+
+    function restoreFolderFromSnapshot(tab) {
+      const folder = folderForTab(tab);
+      if (!folder || !tab.snapshot) {
+        return false;
+      }
+      try {
+        const snapshot = JSON.parse(tab.snapshot);
+        for (const key of Object.keys(folder)) {
+          delete folder[key];
+        }
+        Object.assign(folder, snapshot);
+        return true;
+      } catch {
+        return false;
+      }
     }
 
     function restoreCollectionFromSnapshot(tab) {
@@ -1448,6 +1677,7 @@
       canOpenAdditionalWorkspaceTab,
       canOpenCollectionTabFor,
       canOpenEnvironmentTabFor,
+      canOpenFolderTabFor,
       canOpenPerformanceTabFor,
       canOpenRequestTabFor,
       canOpenRunnerRequestTabFor,
@@ -1455,6 +1685,7 @@
       canOpenWorkspaceTabFor,
       closeCollectionTab,
       closeEnvironmentTab,
+      closeFolderTab,
       closePerformanceTab,
       closeRequestTab,
       closeRunnerTab,
@@ -1462,25 +1693,30 @@
       collectionForTab,
       ensureOpenEnvironmentTabForActive,
       ensureOpenCollectionTabForActive,
+      ensureOpenFolderTabForActive,
       ensureOpenPerformanceTabForActive,
       ensureOpenRequestTabForActive,
       ensureOpenRunnerTabForActive,
       ensureOpenWorkspaceTabForActive,
       environmentForTab,
+      folderForTab,
       forceCloseCollectionTab,
       forceCloseEnvironmentTab,
+      forceCloseFolderTab,
       forceClosePerformanceTab,
       forceCloseRequestTab,
       forceCloseRunnerTab,
       forceCloseWorkspaceTab,
       markActiveCollectionTabDirty,
       markActiveEnvironmentDirty,
+      markActiveFolderTabDirty,
       markActivePerformanceDirty,
       markActiveRequestDirty,
       markActiveRunnerDirty,
       pruneOpenTabs,
       removeOpenCollectionTab,
       removeOpenEnvironmentTab,
+      removeOpenFolderTab,
       removeOpenPerformanceTab,
       removeOpenRequestTab,
       removeOpenRequestTabsForCollection,
@@ -1491,6 +1727,7 @@
       performanceTestForTab,
       selectCollectionTab,
       selectEnvironmentTab,
+      selectFolderTab,
       selectPerformanceTab,
       selectRequestTab,
       selectRunnerTab,

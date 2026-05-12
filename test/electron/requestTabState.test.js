@@ -99,6 +99,70 @@ test('request tab state opens and dirties collection tabs with snapshots', () =>
   assert.equal(tabRenders, 4);
 });
 
+test('request tab state opens and dirties folder tabs with snapshots', () => {
+  const state = createRendererState();
+  const folder = {
+    id: 'folder-1',
+    name: 'Folder One',
+    description: '',
+    variables: [],
+    requests: [],
+    folders: []
+  };
+  const collection = {
+    id: 'collection-1',
+    name: 'Collection One',
+    description: '',
+    variables: [],
+    requests: [],
+    folders: [folder]
+  };
+  state.workspace = {
+    collections: [collection],
+    environments: []
+  };
+  state.activeMainPanel = 'request';
+  state.activeCollectionId = 'collection-1';
+  state.activeFolderId = 'folder-1';
+  state.activeRequestId = null;
+  let renders = 0;
+  let tabRenders = 0;
+
+  const tabState = createRequestTabState({
+    state,
+    activeCollection: () => collection,
+    activeEnvironment: () => null,
+    activeFolder: () => folder,
+    activeRequest: () => null,
+    activeWorkspaceItem: () => null,
+    findFolder: (_collection, folderId) => folderId === folder.id ? folder : null,
+    renderAll: () => { renders += 1; },
+    renderRequestTabs: () => { tabRenders += 1; },
+    workspaceListItems: () => []
+  });
+
+  const tab = tabState.ensureOpenFolderTabForActive();
+  assert.equal(tab.key, 'folder:collection-1:folder-1');
+  assert.equal(tab.collectionId, 'collection-1');
+  assert.equal(tab.folderId, 'folder-1');
+  assert.equal(tab.snapshot, JSON.stringify(folder));
+  assert.equal(state.openFolderTabs.length, 1);
+
+  tabState.markActiveFolderTabDirty();
+  assert.equal(tab.dirty, true);
+
+  state.activeCollectionId = null;
+  state.activeFolderId = null;
+  tabState.selectFolderTab(tab, { collect: false });
+  assert.equal(state.activeMainPanel, 'request');
+  assert.equal(state.activeSidebarPanel, 'collections');
+  assert.equal(state.activeCollectionId, 'collection-1');
+  assert.equal(state.activeFolderId, 'folder-1');
+  assert.equal(state.activeRequestId, null);
+  assert.equal(renders, 1);
+  assert.equal(tabRenders, 4);
+});
+
 test('request tab state prompts for dirty collection tabs and can discard or save them', async () => {
   const state = createRendererState();
   const collection = {

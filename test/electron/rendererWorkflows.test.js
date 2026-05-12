@@ -592,6 +592,102 @@ test('renderer workflows persist collection edits with a targeted collection sav
   assert.equal(renders, 1);
 });
 
+test('renderer workflows persist folder edits with a targeted folder save', async () => {
+  const state = createRendererState();
+  const folder = {
+    id: 'folder-1',
+    name: 'Edited Folder',
+    description: 'Folder description',
+    auth: { type: 'apiKey', key: 'X-Folder-Key', value: 'folder-token', location: 'header' },
+    scripts: { preRequest: "pm.environment.set('fromFolder', 'yes');", tests: '' },
+    variables: [{ enabled: true, key: 'folderBaseUrl', value: 'https://folder.example.test' }],
+    requests: [],
+    folders: []
+  };
+  const collection = {
+    id: 'collection-1',
+    name: 'Collection',
+    description: '',
+    auth: { type: 'none' },
+    scripts: {},
+    variables: [],
+    certificates: [],
+    requests: [],
+    folders: [folder]
+  };
+  state.workspace = {
+    collections: [collection],
+    environments: [],
+    settings: { updates: { includePrereleases: true } }
+  };
+  state.activeMainPanel = 'request';
+  state.activeCollectionId = 'collection-1';
+  state.activeFolderId = 'folder-1';
+  state.activeRequestId = null;
+  state.openFolderTabs = [{
+    key: 'folder:collection-1:folder-1',
+    collectionId: 'collection-1',
+    folderId: 'folder-1',
+    dirty: true,
+    createdUnsaved: false,
+    snapshot: JSON.stringify({ ...folder, name: 'Saved Folder' })
+  }];
+  let saveFolderPayload = null;
+  let fullSaveCalls = 0;
+  let renders = 0;
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => collection,
+    activeEnvironment: () => null,
+    activeFolder: () => folder,
+    activeFolderPath: () => [folder],
+    activeRequest: () => null,
+    collectCollectionFromEditor: () => {},
+    collectEnvironmentFromEditor: () => {},
+    collectFolderFromEditor: () => {},
+    collectRequestFromEditor: () => {},
+    collectSettingsFromEditor: () => {},
+    doc: createDocument(),
+    renderAll: () => { renders += 1; },
+    runFormatting: createRunFormatting(),
+    windowObject: {
+      postmeter: {
+        workspace: {
+          save: async () => {
+            fullSaveCalls += 1;
+            return state.workspace;
+          },
+          saveFolder: async (payload) => {
+            saveFolderPayload = structuredClone(payload);
+            return {
+              folder: { ...payload.folder, name: 'Edited Folder Saved' }
+            };
+          }
+        }
+      }
+    }
+  });
+
+  const result = await workflows.persistWorkspace(false);
+
+  assert.equal(result, true);
+  assert.equal(fullSaveCalls, 0);
+  assert.equal(saveFolderPayload.collectionId, 'collection-1');
+  assert.equal(saveFolderPayload.folderId, 'folder-1');
+  assert.equal(saveFolderPayload.folder.description, 'Folder description');
+  assert.equal(saveFolderPayload.folder.auth.key, 'X-Folder-Key');
+  assert.equal(saveFolderPayload.folder.variables[0].key, 'folderBaseUrl');
+  assert.deepEqual(saveFolderPayload.folderPath.map((item) => item.id), ['folder-1']);
+  assert.equal(saveFolderPayload.collectionShell.name, 'Collection');
+  assert.equal(saveFolderPayload.settings.updates.includePrereleases, true);
+  assert.equal(state.workspace.collections[0].folders[0].name, 'Edited Folder Saved');
+  assert.equal(state.openFolderTabs[0].dirty, false);
+  assert.equal(state.openFolderTabs[0].createdUnsaved, false);
+  assert.equal(state.openFolderTabs[0].snapshot, JSON.stringify(state.workspace.collections[0].folders[0]));
+  assert.equal(renders, 1);
+});
+
 test('renderer workflows persist runner-owned request edits with a targeted request save', async () => {
   const state = createRendererState();
   const runnerRequest = { id: 'runner-request-1', name: 'Runner Request', method: 'GET', url: 'https://runner.example.test' };

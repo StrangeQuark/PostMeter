@@ -104,8 +104,9 @@ test('imports common Postman auth helpers with collection and folder inheritance
   assert.equal(collection.auth.type, 'bearer');
   assert.equal(collection.auth.token, '{{collectionToken}}');
   assert.equal(collection.requests[0].auth.type, 'none');
-  assert.equal(collection.folders[0].requests[0].auth.type, 'basic');
-  assert.equal(collection.folders[0].requests[0].auth.username, 'user');
+  assert.equal(collection.folders[0].auth.type, 'basic');
+  assert.equal(collection.folders[0].auth.username, 'user');
+  assert.equal(collection.folders[0].requests[0].auth.type, 'none');
   assert.equal(collection.requests[1].auth.type, 'apiKey');
   assert.equal(collection.requests[1].auth.location, 'query');
   assert.equal(collection.requests[1].headers.find((header) => header.key === 'Cookie').value, 'session=abc; __Host-postman=host-value');
@@ -739,8 +740,7 @@ test('preserves imported Postman local mock scripts without request Examples fie
 
   assert.match(collection.scripts.mock, /pm\.state\.increment/);
   assert.match(collection.scripts.mock, /pm\.mock\.sendExample/);
-  assert.match(collection.requests[0].scripts.mock, /pm\.state\.increment/);
-  assert.match(collection.requests[0].scripts.mock, /pm\.mock\.sendExample/);
+  assert.equal(collection.requests[0].scripts.mock, '');
   assert.equal(Object.hasOwn(collection.requests[0], 'examples'), false);
   assert.deepEqual(collection.requests[0].postman.mockResponses, [{
     body: '{"ok":true}',
@@ -858,6 +858,8 @@ test('round-trips Postman hierarchy scripts, IDs, variables, certificates, proto
   assert.equal(collection.folders[0].id, 'folder-postman-id');
   assert.equal(collection.folders[0].postman.events[0].listen, 'prerequest');
   assert.equal(collection.folders[0].postman.variables[0].type, 'string');
+  assert.equal(collection.folders[0].variables[0].key, 'folderVariable');
+  assert.equal(collection.folders[0].variables[0].value, 'folder-value');
   const request = collection.folders[0].requests[0];
   assert.equal(request.id, 'request-postman-id');
   assert.equal(request.postman.events[0].script.type, 'text/javascript');
@@ -870,7 +872,7 @@ test('round-trips Postman hierarchy scripts, IDs, variables, certificates, proto
   assert.equal(exported.info._postman_id, 'collection-postman-id');
   assert.equal(exported.item[0].id, 'folder-postman-id');
   assert.equal(exported.item[0].event[0].script.exec[0], 'pm.collectionVariables.set("folder", "yes");');
-  assert.equal(exported.item[0].variable[0].type, 'string');
+  assert.equal(exported.item[0].variable, undefined);
   assert.equal(exported.item[0].item[0].id, 'request-postman-id');
   assert.equal(exported.item[0].item[0].event[0].script.type, 'text/javascript');
   assert.equal(exported.item[0].item[0].request.body.mode, 'formdata');
@@ -913,7 +915,8 @@ test('imports the real-world Postman script compatibility corpus without losing 
   assert.match(byName.get('GraphQL Account Lookup').scripts.beforeQuery, /X-GraphQL-Before/);
   assert.equal(byName.get('gRPC Stream Account Events').protocol, 'grpc');
   assert.equal(byName.get('gRPC Stream Account Events').methodPath, 'accounts.AccountService/StreamEvents');
-  assert.match(byName.get('Mock Account').scripts.mock, /pm\.state\.increment/);
+  assert.equal(byName.get('Mock Account').scripts.mock, '');
+  assert.match(collection.folders.find((folder) => folder.name === 'Local Mock Workflows').scripts.mock, /pm\.state\.increment/);
   assert.match(byName.get('RunRequest Caller').scripts.tests, /run-request-target-id/);
   assert.equal(byName.get('File Upload Binding').postman.fileReferences[0].src, '/Users/example/fixtures/upload.json');
   assert.equal(byName.get('Binary Body Binding').postman.fileReferences[0].src, '/Users/example/fixtures/blob.bin');

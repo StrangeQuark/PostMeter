@@ -10,6 +10,7 @@
     const state = options.state || {};
     const doc = options.doc || document;
     const collectionForTab = options.collectionForTab || ((tab) => findCollection(state, tab?.collectionId));
+    const folderForTab = options.folderForTab || (() => null);
     const requestForTab = options.requestForTab || (() => null);
     const environmentForTab = options.environmentForTab || (() => null);
 
@@ -29,6 +30,9 @@
       activeResultsTab: normalizeEnum(activeTabName(doc, 'results', DEFAULT_RESULTS_TAB), RESULTS_TABS, DEFAULT_RESULTS_TAB),
       openCollectionTabs: (Array.isArray(state.openCollectionTabs) ? state.openCollectionTabs : [])
         .map((tab) => serializeCollectionTab(tab, collectionForTab(tab)))
+        .filter(Boolean),
+      openFolderTabs: (Array.isArray(state.openFolderTabs) ? state.openFolderTabs : [])
+        .map((tab) => serializeFolderTab(tab, folderForTab(tab)))
         .filter(Boolean),
       openRequestTabs: (Array.isArray(state.openRequestTabs) ? state.openRequestTabs : [])
         .map((tab) => serializeRequestTab(tab, requestForTab(tab)))
@@ -70,6 +74,7 @@
     }
 
     restoreCollectionStates(state, session.openCollectionTabs);
+    restoreFolderStates(state, session.openFolderTabs, { findFolder });
     restoreRequestStates(state, session.openRequestTabs, { findFolder, findRequest });
     restoreEnvironmentStates(state, session.openEnvironmentTabs);
     restoreRunnerStates(state, session.openRunnerTabs);
@@ -78,6 +83,9 @@
     state.openCollectionTabs = session.openCollectionTabs
       .filter((tab) => collectionExists(state, tab.collectionId))
       .map(stripCollectionTabState);
+    state.openFolderTabs = session.openFolderTabs
+      .filter((tab) => folderExists(state, tab.collectionId, tab.folderId, findFolder))
+      .map(stripFolderTabState);
     state.openRequestTabs = session.openRequestTabs
       .filter((tab) => requestTabExists(state, tab, findRequest))
       .map(stripRequestTabState);
@@ -180,7 +188,9 @@
 
     if (!state.activeRequestId && session.activeMainPanel === 'request' && findCollection(state, session.activeCollectionId)) {
       state.activeCollectionId = session.activeCollectionId;
-      state.activeFolderId = null;
+      state.activeFolderId = folderExists(state, session.activeCollectionId, session.activeFolderId, findFolder)
+        ? session.activeFolderId
+        : null;
       state.activeRunnerRequestRunnerId = null;
     }
 
@@ -230,6 +240,21 @@
       createdUnsaved: tab.createdUnsaved === true,
       snapshot: typeof tab.snapshot === 'string' ? tab.snapshot : '',
       currentState: !(tab.dirty === true || tab.createdUnsaved === true) ? null : cloneJson(collection)
+    };
+  }
+
+  function serializeFolderTab(tab, folder) {
+    if (!tab?.collectionId || !tab?.folderId) {
+      return null;
+    }
+    return {
+      key: normalizeString(tab.key) || `folder:${tab.collectionId}:${tab.folderId}`,
+      collectionId: normalizeId(tab.collectionId),
+      folderId: normalizeId(tab.folderId),
+      dirty: tab.dirty === true,
+      createdUnsaved: tab.createdUnsaved === true,
+      snapshot: typeof tab.snapshot === 'string' ? tab.snapshot : '',
+      currentState: !(tab.dirty === true || tab.createdUnsaved === true) ? null : cloneJson(folder)
     };
   }
 
@@ -363,6 +388,28 @@
     }
   }
 
+  function restoreFolderStates(state, tabs, helpers) {
+    state.workspace.collections ||= [];
+    for (const tab of tabs) {
+      if (!tab.currentState) {
+        continue;
+      }
+      const collection = findCollection(state, tab.collectionId);
+      if (!collection) {
+        continue;
+      }
+      const existing = helpers.findFolder(collection, tab.folderId);
+      if (tab.createdUnsaved === true && !existing) {
+        collection.folders ||= [];
+        collection.folders.push(cloneJson(tab.currentState));
+        continue;
+      }
+      if ((tab.dirty === true || tab.createdUnsaved === true) && existing) {
+        replaceObject(existing, cloneJson(tab.currentState));
+      }
+    }
+  }
+
   function restoreEnvironmentStates(state, tabs) {
     state.workspace.environments ||= [];
     for (const tab of tabs) {
@@ -458,6 +505,11 @@
 
   function collectionExists(state, collectionId) {
     return Boolean(findCollection(state, collectionId));
+  }
+
+  function folderExists(state, collectionId, folderId, findFolder) {
+    const collection = findCollection(state, collectionId);
+    return Boolean(collection && folderId && findFolder(collection, folderId));
   }
 
   function environmentExists(state, environmentId) {
@@ -584,6 +636,17 @@
     };
   }
 
+  function stripFolderTabState(tab) {
+    return {
+      key: tab.key,
+      collectionId: tab.collectionId,
+      folderId: tab.folderId,
+      dirty: tab.dirty === true,
+      createdUnsaved: tab.createdUnsaved === true,
+      snapshot: typeof tab.snapshot === 'string' ? tab.snapshot : ''
+    };
+  }
+
   function stripEnvironmentTabState(tab) {
     return {
       key: tab.key,
@@ -639,6 +702,7 @@
       activeRequestTab: normalizeEnum(session.activeRequestTab, REQUEST_TABS, DEFAULT_REQUEST_TAB),
       activeResultsTab: normalizeEnum(session.activeResultsTab, RESULTS_TABS, DEFAULT_RESULTS_TAB),
       openCollectionTabs: Array.isArray(session.openCollectionTabs) ? session.openCollectionTabs.filter(isObject) : [],
+      openFolderTabs: Array.isArray(session.openFolderTabs) ? session.openFolderTabs.filter(isObject) : [],
       openRequestTabs: Array.isArray(session.openRequestTabs) ? session.openRequestTabs.filter(isObject) : [],
       openEnvironmentTabs: Array.isArray(session.openEnvironmentTabs) ? session.openEnvironmentTabs.filter(isObject) : [],
       openWorkspaceTabs: Array.isArray(session.openWorkspaceTabs) ? session.openWorkspaceTabs.filter(isObject) : [],
