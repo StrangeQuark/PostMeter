@@ -66,7 +66,13 @@ PostMeter must remain a standalone local desktop application. Do not add PostMet
 
 ## Highest Priority Steps
 
-1. Prepare public beta/release candidate documentation.
+1. Expand automated test coverage and UI snapshot coverage.
+   - Treat this as a dedicated test-upgrade pass before the next release-hardening tranche.
+   - Expand `npm run test:ui:snapshot` beyond the current smoke snapshots to cover more first-class panes and modal states, including Docs, Variables, Environments, runner request editing, Performance request/results, import/export modals, settings categories, and constrained-size/theme variants.
+   - Decide whether snapshot coverage should remain smoke-only or graduate selected states to golden-image visual regression with reviewed baseline images and intentional-update workflow.
+   - Broaden renderer/UI workflow and regression tests around recently changed surfaces: tab context actions, Docs persistence, Scripts assertions behavior, runner/performance request exports, environment variable precedence, and failure-reporting panels.
+   - Audit the wider Electron/unit suite for stale feature assumptions, missing negative cases, and missing cross-surface coverage before adding new product features.
+2. Prepare public beta/release candidate documentation.
    - Add or update `docs/SECURITY.md`, privacy notes, threat model summary, install/uninstall docs, unsigned artifact warnings, known limitations, compatibility matrix links, OAuth certification docs, diagnostics docs, and support channels.
    - Create a release checklist with separate beta, release-candidate, and stable sections. Each section must name required commands, native GitHub Actions runner jobs, artifact validations, OAuth certification status, signing/notarization status, docs checks, and known waivers.
    - Add a Mac manual QA checklist for the later maintainer-owned Mac pass. Until then, `macos-latest` GitHub Actions validation is the required pre-production evidence, not a substitute for final manual production signoff.
@@ -74,7 +80,7 @@ PostMeter must remain a standalone local desktop application. Do not add PostMet
    - Make release notes templates call out security-sensitive changes, sandbox changes, compatibility changes, migration notes, signing/notarization status, native-runner validation results, and known issues.
    - Document the unsigned-release path and the signed/notarized-release path separately. Signing and notarization stay blocked until maintainer-controlled certificates are available.
    - Ensure public docs do not overclaim: Postman script parity is claim-gated for the tracked target, platform OS sandbox coverage is tracked separately, local Performance remains desktop-bounded, and JMeter import/export/execution is not supported.
-2. Add native Windows curl export support.
+3. Add native Windows curl export support.
    - Keep the current shell-oriented curl export for Linux/macOS, but add Windows-native curl serialization for collection exports.
    - Generate `.bat` output on Windows with `cmd.exe`-safe quoting, escaped special characters, line continuations, and explicit `curl.exe` usage where needed to avoid PowerShell aliases.
    - Consider a PowerShell-friendly copy/export mode so Windows users can paste generated commands directly into `cmd.exe` or PowerShell without Git Bash/WSL.

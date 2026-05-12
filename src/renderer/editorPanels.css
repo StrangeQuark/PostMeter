@@ -102,6 +102,10 @@
   margin-bottom: 8px;
 }
 
+.variable-actions {
+  margin-bottom: 10px;
+}
+
 .headers-auto-toggle {
   min-height: 30px;
 }
@@ -386,6 +390,11 @@ textarea.code-editor-input:placeholder-shown {
   color: var(--blue);
 }
 
+.code-editor-token.tok-variable-request.tok-variable-valid,
+.code-editor-token.tok-variable-global.tok-variable-valid {
+  color: var(--method-patch);
+}
+
 .code-editor-token.tok-variable-csv.tok-variable-valid {
   color: var(--green);
 }
@@ -451,6 +460,11 @@ textarea.code-editor-input:placeholder-shown {
 
 .variable-highlight-valid {
   color: var(--blue);
+}
+
+.variable-highlight-request.variable-highlight-valid,
+.variable-highlight-global.variable-highlight-valid {
+  color: var(--method-patch);
 }
 
 .variable-highlight-csv.variable-highlight-valid {

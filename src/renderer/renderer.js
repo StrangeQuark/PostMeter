@@ -512,7 +512,6 @@ function bindUi() {
     onRefreshVaultMetadata: () => { void refreshVaultMetadata(); },
     onResetVault: () => { void resetVaultFromWorkspacePanel(); },
     onAddEnvironmentVariable: addVariable,
-    onAddCollectionVariable: addCollectionVariable,
     onAddRequestVariable: addRequestVariable,
     onAddCookie: addCookie,
     onClearExpiredCookies: clearExpiredCookies,
@@ -3242,11 +3241,45 @@ function refreshVariableHighlights(root = document) {
 }
 
 function variableHighlightVariablesForTarget(target) {
-  const environment = variableHighlightEnvironmentForTarget(target);
   return mergeVariableHighlightSources(
-    variableHighlightSourceVariables(environment?.variables || [], 'environment'),
+    postmanVariableHighlightVariablesForTarget(target),
     csvVariableHighlightVariablesForTarget(target)
   );
+}
+
+function postmanVariableHighlightVariablesForTarget(target) {
+  const variables = [];
+  mergeVariableHighlightScope(variables, workspace?.globals || [], false, 'global');
+  mergeVariableHighlightScope(variables, variableHighlightEnvironmentForTarget(target)?.variables || [], true, 'environment');
+  mergeVariableHighlightScope(variables, variableHighlightRequestForTarget(target)?.variables || [], true, 'request');
+  return variables;
+}
+
+function mergeVariableHighlightScope(target, source, override, scope) {
+  if (!Array.isArray(source)) {
+    return;
+  }
+  for (const variable of source) {
+    if (!variable || variable.enabled === false || !String(variable.key || '').trim()) {
+      continue;
+    }
+    const key = String(variable.key).trim();
+    const existing = target.find((item) => item.key === key);
+    if (existing) {
+      if (override) {
+        existing.value = variableObservableValue(variable);
+        existing.enabled = true;
+        existing.source = scope;
+      }
+      continue;
+    }
+    target.push({
+      enabled: true,
+      key,
+      source: scope,
+      value: variableObservableValue(variable)
+    });
+  }
 }
 
 function csvVariableHighlightVariablesForTarget(target) {
@@ -3263,10 +3296,6 @@ function csvVariableHighlightVariablesForTarget(target) {
       : [];
   }
   return [];
-}
-
-function variableHighlightSourceVariables(variables, source) {
-  return (variables || []).map((variable) => ({ ...variable, source }));
 }
 
 function mergeVariableHighlightSources(...sources) {
@@ -3313,6 +3342,16 @@ function variableHighlightEnvironmentForTarget(target) {
     }
   }
   return activeEnvironment();
+}
+
+function variableHighlightRequestForTarget(target) {
+  if (target?.closest?.('#performanceMainPanel')) {
+    return activePerformanceTest()?.request || null;
+  }
+  if (target?.closest?.('#requestEditorPanel')) {
+    return activeRequest();
+  }
+  return null;
 }
 
 function environmentById(environmentId) {
@@ -5485,9 +5524,11 @@ function renderPerformanceRequestVariablePairs(pairs) {
     onChange: () => {
       markActivePerformanceDirty();
       renderPerformanceVariablePreview();
+      refreshVariableHighlights();
     },
     onRemove: () => {
       renderPerformanceRequestEditor();
+      refreshVariableHighlights();
     }
   });
 }
@@ -10123,9 +10164,6 @@ function resetOauthProgressPanel() {
 }
 
 function renderCollectionVariablesEditor() {
-  const collection = activeCollection();
-  $('addCollectionVariableButton').disabled = !collection;
-  renderCollectionVariablePairs(collection?.variables || []);
   renderVariablePreview();
 }
 
@@ -10137,27 +10175,11 @@ function renderRequestVariablePairs(pairs) {
     onChange: () => {
       markActiveRequestDirty();
       renderVariablePreview();
+      refreshVariableHighlights();
     },
     onRemove: () => {
       renderRequestEditor();
-      renderCollectionVariablesEditor();
-    }
-  });
-}
-
-function renderCollectionVariablePairs(pairs) {
-  renderEditorVariablePairs({
-    doc: document,
-    containerId: 'collectionVariablesTable',
-    pairs,
-    onChange: () => {
-      markActiveCollectionDirty();
-      renderVariablePreview();
-    },
-    onRemove: () => {
-      markActiveCollectionDirty();
-      renderRequestEditor();
-      renderCollectionVariablesEditor();
+      refreshVariableHighlights();
     }
   });
 }
@@ -10165,7 +10187,6 @@ function renderCollectionVariablePairs(pairs) {
 function renderVariablePreview() {
   renderEditorVariablePreview({
     doc: document,
-    collection: activeCollection(),
     environment: activeEnvironment(),
     request: activeRequest()
   });
@@ -10184,6 +10205,16 @@ function renderCookieJarEditor() {
 
 function variableValue(pair) {
   return pair?.value ?? '';
+}
+
+function variableObservableValue(variable) {
+  const value = variable?.value
+    ?? variable?.currentValue
+    ?? variable?.current
+    ?? variable?.initialValue
+    ?? variable?.initial
+    ?? '';
+  return value == null ? '' : String(value);
 }
 
 function renderEnvironmentPairs(pairs) {
@@ -12656,16 +12687,6 @@ function addVariable() {
     environment.variables.push({ enabled: true, key: '', value: '' });
     markActiveEnvironmentDirty();
     renderEnvironmentEditor();
-  }
-}
-
-function addCollectionVariable() {
-  const collection = activeCollection();
-  if (collection) {
-    markActiveCollectionDirty();
-    collection.variables ||= [];
-    collection.variables.push({ enabled: true, key: '', value: '' });
-    renderCollectionVariablesEditor();
   }
 }
 

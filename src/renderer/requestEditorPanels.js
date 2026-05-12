@@ -213,20 +213,10 @@
     refreshVariableTextboxes(container);
   }
 
-  function buildVariablePreviewText(collection, environment, request) {
+  function buildVariablePreviewText(_collection, environment, request) {
     const rows = [];
     const effective = new Map();
 
-    for (const pair of collection?.variables || []) {
-      if (pair.enabled === false || !pair.key) {
-        continue;
-      }
-      effective.set(pair.key, {
-        key: pair.key,
-        value: pair.value ?? '',
-        source: 'Collection'
-      });
-    }
     for (const pair of environment?.variables || []) {
       if (pair.enabled === false || !pair.key) {
         continue;

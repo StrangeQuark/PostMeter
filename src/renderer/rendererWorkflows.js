@@ -655,6 +655,53 @@
       return publicResponse;
     }
 
+    function validationEnvironmentForRequest(request, environment) {
+      const variables = [];
+      mergeValidationVariables(variables, state.workspace?.globals || [], false);
+      mergeValidationVariables(variables, environment?.variables || [], true);
+      mergeValidationVariables(variables, request?.variables || [], true);
+      return {
+        id: environment?.id || 'runtime',
+        name: environment?.name || 'Runtime',
+        variables
+      };
+    }
+
+    function mergeValidationVariables(target, source, override) {
+      if (!Array.isArray(source)) {
+        return;
+      }
+      for (const variable of source) {
+        if (!variable || variable.enabled === false || !String(variable.key || '').trim()) {
+          continue;
+        }
+        const key = String(variable.key).trim();
+        const existing = target.find((item) => item.key === key);
+        if (existing) {
+          if (override) {
+            existing.value = validationVariableValue(variable);
+            existing.enabled = true;
+          }
+          continue;
+        }
+        target.push({
+          enabled: true,
+          key,
+          value: validationVariableValue(variable)
+        });
+      }
+    }
+
+    function validationVariableValue(variable) {
+      const value = variable?.value
+        ?? variable?.currentValue
+        ?? variable?.current
+        ?? variable?.initialValue
+        ?? variable?.initial
+        ?? '';
+      return value == null ? '' : String(value);
+    }
+
     async function sendActiveRequest() {
       const request = activeRequest();
       if (!request) {
@@ -670,7 +717,7 @@
         }
         if (!request.scripts?.preRequest?.trim()) {
           const validateRequest = windowObject.__postmeterValidateRequest || windowObject.postmeter.request.validate;
-          const errors = await validateRequest(request, environment);
+          const errors = await validateRequest(request, validationEnvironmentForRequest(request, environment));
           if (errors.length) {
             element('validationLabel').textContent = errors.join(' ');
             return setStatus('Fix validation errors.');

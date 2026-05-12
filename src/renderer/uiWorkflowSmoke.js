@@ -36,10 +36,25 @@
     activateTab('request', 'collectionVariables');
     $('addRequestVariableButton').click();
     setPairRow('requestVariablesTable', 'requestToken', 'from-request', global);
-    $('addCollectionVariableButton').click();
-    setPairRow('collectionVariablesTable', 'collectionToken', 'from-collection', global);
     assertUiSmoke($('variablePreview').textContent.includes('requestToken = from-request'), 'Request variable preview did not render.');
-    assertUiSmoke($('variablePreview').textContent.includes('collectionToken = from-collection'), 'Collection variable preview did not render.');
+    $('urlInput').value = '{{requestToken}}/tail';
+    dispatchInput($('urlInput'));
+    assertVariableHighlight($('urlInput'), 'requestToken', 'Request variables should render as request-scope tokens.', 'valid', 'request');
+    const requestVariableInputs = $('requestVariablesTable').querySelector('.kv-row').querySelectorAll('input');
+    assertHighClickPlacesCaret($('urlInput'), 'URL input');
+    assertHighClickPlacesCaret(requestVariableInputs[2], 'Request variable value input');
+    requestVariableInputs[0].checked = false;
+    dispatchChange(requestVariableInputs[0]);
+    assertVariableHighlight($('urlInput'), 'requestToken', 'Disabling a request variable should refresh URL highlighting immediately.', 'invalid');
+    requestVariableInputs[0].checked = true;
+    dispatchChange(requestVariableInputs[0]);
+    assertVariableHighlight($('urlInput'), 'requestToken', 'Re-enabling a request variable should refresh URL highlighting immediately.', 'valid', 'request');
+    requestVariableInputs[1].value = 'renamedRequestToken';
+    dispatchInput(requestVariableInputs[1]);
+    assertVariableHighlight($('urlInput'), 'requestToken', 'Renaming a request variable should refresh URL highlighting immediately.', 'invalid');
+    requestVariableInputs[1].value = 'requestToken';
+    dispatchInput(requestVariableInputs[1]);
+    assertVariableHighlight($('urlInput'), 'requestToken', 'Restoring a request variable key should refresh URL highlighting immediately.', 'valid', 'request');
     await setIncludePrereleases(true, { showStatus: false });
 
     editRequestTitle('Smoke Request');
@@ -68,7 +83,7 @@
     activateTab('request', 'scripts');
     $('preRequestScriptInput').value = "pm.environment.set('scriptToken', 'ui-script');";
     dispatchInput($('preRequestScriptInput'));
-    $('testScriptInput').value = "pm.environment.set('responseMethod', pm.response.json().method); pm.test('script token exists', function () { pm.expect(pm.environment.get('scriptToken')).to.equal('ui-script'); pm.expect(pm.collectionVariables.get('collectionToken')).to.equal('from-collection'); pm.response.to.have.status(200); });";
+    $('testScriptInput').value = "pm.environment.set('responseMethod', pm.response.json().method); pm.test('script token exists', function () { pm.expect(pm.environment.get('scriptToken')).to.equal('ui-script'); pm.expect(pm.variables.get('requestToken')).to.equal('from-request'); pm.response.to.have.status(200); });";
     dispatchInput($('testScriptInput'));
 
     newEnvironment();
@@ -83,7 +98,7 @@
     const bodyInput = $('bodyInput');
     const originalBody = bodyInput.value;
     bodyInput.focus();
-    bodyInput.value = 'prefix {{';
+    bodyInput.value = 'prefix {{loc';
     bodyInput.setSelectionRange(bodyInput.value.length, bodyInput.value.length);
     dispatchInput(bodyInput);
     assertUiSmoke(variableAutocomplete && !variableAutocomplete.hidden, 'Environment variable autocomplete did not open for a request field.');
@@ -148,6 +163,43 @@
     assertUiSmoke($('runnerExecutionDetails').textContent.includes('requestToken'), 'Runner execution details did not render request variables.');
     assertUiSmoke(!$('exportRunnerJsonButton').disabled, 'Runner JSON export button was not enabled after a run.');
     assertUiSmoke(!$('exportRunnerCsvButton').disabled, 'Runner CSV export button was not enabled after a run.');
+  }
+
+  function assertVariableHighlight(control, variableName, message, expectedStatus = '', expectedSource = '') {
+    const wrapper = control.closest?.('.variable-highlight-editor') || control.closest?.('.code-editor');
+    const token = wrapper?.querySelector?.(`[data-variable-name="${cssAttributeValue(variableName)}"]`);
+    assertUiSmoke(token, message);
+    if (expectedStatus) {
+      assertUiSmoke(token.getAttribute('data-variable-status') === expectedStatus, `${message} Expected ${expectedStatus} token status.`);
+    }
+    if (expectedSource) {
+      assertUiSmoke(token.getAttribute('data-variable-source') === expectedSource, `${message} Expected ${expectedSource} token source.`);
+    }
+  }
+
+  function cssAttributeValue(value) {
+    return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  }
+
+  function assertHighClickPlacesCaret(control, label) {
+    const value = String(control.value || 'https://example.test/widgets');
+    control.value = value;
+    dispatchInput(control);
+    control.setSelectionRange?.(0, 0);
+    const rect = control.getBoundingClientRect();
+    const style = getComputedStyle(control);
+    const paddingRight = Number.parseFloat(style.paddingRight) || 8;
+    const borderTop = Number.parseFloat(style.borderTopWidth) || 1;
+    control.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true,
+      button: 0,
+      cancelable: true,
+      clientX: rect.right - paddingRight - 2,
+      clientY: rect.top + borderTop + 1,
+      detail: 1
+    }));
+    assertUiSmoke(control.selectionStart > 0, `${label} high click should not move the caret to the beginning.`);
+    assertUiSmoke(control.selectionStart === control.selectionEnd, `${label} high click should keep a collapsed selection.`);
   }
 
   function editRequestTitle(value) {

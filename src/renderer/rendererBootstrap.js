@@ -148,7 +148,6 @@
     bindClick(doc, 'bindVaultSecretButton', options.onBindVaultSecret);
     bindClick(doc, 'refreshVaultMetadataButton', options.onRefreshVaultMetadata);
     bindClick(doc, 'resetVaultButton', options.onResetVault);
-    bindClick(doc, 'addCollectionVariableButton', options.onAddCollectionVariable);
     bindClick(doc, 'addRequestVariableButton', options.onAddRequestVariable);
     bindClick(doc, 'addCookieButton', options.onAddCookie);
     bindClick(doc, 'clearExpiredCookiesButton', options.onClearExpiredCookies);

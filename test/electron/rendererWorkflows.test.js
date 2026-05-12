@@ -101,6 +101,75 @@ test('renderer workflows allow sending an active draft request without forcing a
   assert.equal(workspaceSaveCalls, 0);
 });
 
+test('renderer workflows validate drafts with request-local variables in scope', async () => {
+  const state = createRendererState();
+  const environment = {
+    id: 'environment-1',
+    name: 'Local',
+    variables: [{ enabled: true, key: 'baseUrl', value: 'https://env.example.test' }]
+  };
+  const draftRequest = {
+    id: 'draft-1',
+    name: 'Draft Request',
+    method: 'GET',
+    url: '{{requestHost}}/search',
+    variables: [
+      { enabled: true, key: 'baseUrl', value: 'https://request.example.test' },
+      { enabled: true, key: 'requestHost', value: 'google.com' }
+    ],
+    scripts: { preRequest: '', tests: '' }
+  };
+  state.workspace = { collections: [], environments: [environment], globals: [], history: [], settings: {} };
+  state.activeMainPanel = 'request';
+  state.activeRequestId = draftRequest.id;
+  state.activeEnvironmentId = environment.id;
+  state.openRequestTabs = [{ key: 'draft:draft-1', requestId: draftRequest.id, draft: true, dirty: true }];
+  state.draftRequests.set(draftRequest.id, draftRequest);
+  let validationEnvironment = null;
+  let sendEnvironment = null;
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => environment,
+    activeRequest: () => draftRequest,
+    collectRequestFromEditor: () => {},
+    displayResponse: () => {},
+    doc: createDocument(),
+    renderAuthEditor: () => {},
+    renderCookieJarEditor: () => {},
+    renderHistory: () => {},
+    runFormatting: createRunFormatting(),
+    windowObject: {
+      postmeter: {
+        request: {
+          validate: async (_request, runtimeEnvironment) => {
+            validationEnvironment = runtimeEnvironment;
+            return [];
+          },
+          send: async (_request, selectedEnvironment) => {
+            sendEnvironment = selectedEnvironment;
+            return {
+              statusCode: 200,
+              finalUrl: 'http://google.com/search',
+              durationMillis: 10
+            };
+          }
+        },
+        workspace: {
+          save: async (workspace) => workspace
+        }
+      }
+    }
+  });
+
+  await workflows.sendActiveRequest();
+
+  assert.equal(validationEnvironment.variables.find((item) => item.key === 'requestHost').value, 'google.com');
+  assert.equal(validationEnvironment.variables.find((item) => item.key === 'baseUrl').value, 'https://request.example.test');
+  assert.equal(sendEnvironment, environment);
+});
+
 test('renderer workflows render pre-request script failures inline without history or blocking notification', async () => {
   const state = createRendererState();
   const draftRequest = {

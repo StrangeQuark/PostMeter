@@ -35,6 +35,22 @@ test('variable highlighter validates dollar tokens only against CSV variables', 
   assert.match(html, /data-variable-name="requestUrl" data-variable-status="valid" data-variable-source="csv"/);
 });
 
+test('variable highlighter marks request variables as the winning source over environment variables and ignores collection scope', () => {
+  const html = highlightVariableTokens('{{baseUrl}} {{envOnly}} {{collectionOnly}}', {
+    variables: [
+      { enabled: true, key: 'baseUrl', source: 'request', value: 'https://request.example.test' },
+      { enabled: true, key: 'envOnly', source: 'environment', value: 'https://env.example.test' },
+      { enabled: true, key: 'collectionOnly', source: 'collection', value: 'collection-value' }
+    ]
+  });
+
+  assert.match(html, /data-variable-name="baseUrl" data-variable-status="valid" data-variable-source="request"/);
+  assert.match(html, /class="variable-highlight-token variable-highlight-valid variable-highlight-request"/);
+  assert.match(html, /data-variable-name="envOnly" data-variable-status="valid" data-variable-source="environment"/);
+  assert.match(html, /class="variable-highlight-token variable-highlight-valid variable-highlight-environment"/);
+  assert.match(html, /data-variable-name="collectionOnly" data-variable-status="invalid" data-variable-source="environment"/);
+});
+
 test('variable highlighter marks unknown or disabled variable tokens as invalid', () => {
   const html = highlightVariableTokens('{{known}} {{missing}} {{ disabled }} {{bad name}}', {
     variables: [
