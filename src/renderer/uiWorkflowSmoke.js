@@ -61,15 +61,10 @@
     dispatchChange($('bodyRawFormatSelect'));
     $('bodyInput').value = '{"workflow":"smoke"}';
     dispatchInput($('bodyInput'));
-    activateTab('request', 'examples');
-    $('addExampleButton').click();
-    const exampleItem = $('examplesList').querySelector('.example-item');
-    assertUiSmoke(exampleItem, 'Example editor did not render.');
-    const exampleInputs = exampleItem.querySelectorAll('input');
-    exampleInputs[0].value = 'Manual Example';
-    dispatchInput(exampleInputs[0]);
-    exampleInputs[1].value = '202';
-    dispatchInput(exampleInputs[1]);
+    activateTab('request', 'docs');
+    $('docsInput').value = 'Smoke request docs';
+    dispatchInput($('docsInput'));
+    assertUiSmoke(activeRequest().docs === 'Smoke request docs', 'Docs field did not update the active request.');
     activateTab('request', 'scripts');
     $('preRequestScriptInput').value = "pm.environment.set('scriptToken', 'ui-script');";
     dispatchInput($('preRequestScriptInput'));
@@ -133,8 +128,6 @@
     assertUiSmoke(activeEnvironment().variables.some((variable) => variable.key === 'responseMethod' && variable.value === 'POST'), 'Single request test script did not update the active environment.');
     assertUiSmoke(workspace.history.length > 0, 'Smoke request did not add history.');
     assertUiSmoke(workspace.cookies.some((cookie) => cookie.name === 'uiSession'), 'Smoke response cookie was not stored.');
-    captureResponseExample();
-    assertUiSmoke(activeRequest().examples.length >= 2, 'Captured response example was not stored.');
 
     selectSidebarPanel('runners');
     const runner = newRunner();

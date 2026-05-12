@@ -9,7 +9,6 @@ const BODY_TYPES = [
   'URLENCODED',
   'BINARY'
 ];
-const EXAMPLE_BODY_TYPES = ['NONE', 'RAW_JSON', 'RAW_TEXT'];
 const BODY_MODES = ['NONE', 'FORM_DATA', 'URLENCODED', 'RAW', 'BINARY', 'GRAPHQL'];
 const RAW_BODY_FORMATS = ['text', 'javascript', 'json', 'html', 'xml'];
 const RAW_FORMAT_BODY_TYPES = {
@@ -61,9 +60,9 @@ const {
 } = PostMeterRequestQueryModel;
 const RENDERER_STATE_DEFAULTS = PostMeterRendererState.createRendererState();
 const TAB_PANEL_IDS = {
-  request: ['paramsTab', 'headersTab', 'authTab', 'cookiesTab', 'bodyTab', 'scriptsTab', 'examplesTab', 'collectionVariablesTab'],
+  request: ['paramsTab', 'headersTab', 'authTab', 'cookiesTab', 'bodyTab', 'scriptsTab', 'collectionVariablesTab', 'docsTab'],
   results: ['responseTab', 'responseHeadersTab', 'responseCookiesTab', 'testResultsTab', 'visualizerTab'],
-  performanceRequest: ['performanceParamsTab', 'performanceHeadersTab', 'performanceAuthTab', 'performanceCookiesTab', 'performanceBodyTab', 'performanceScriptsTab', 'performanceExamplesTab', 'performanceVariablesTab'],
+  performanceRequest: ['performanceParamsTab', 'performanceHeadersTab', 'performanceAuthTab', 'performanceCookiesTab', 'performanceBodyTab', 'performanceScriptsTab', 'performanceVariablesTab', 'performanceDocsTab'],
   performance: ['latencyTab', 'throughputTab', 'concurrencyTab', 'stressTab', 'spikeTab', 'soakTab', 'rampTab'],
   performanceOutput: ['performanceOutputResultsTab', 'performanceOutputRequestsTab', 'performanceOutputGraphsTab']
 };
@@ -146,10 +145,6 @@ const pendingNotificationModals = [];
 
 const $ = (id) => document.getElementById(id);
 const {
-  exampleFromResponse,
-  newExampleObject
-} = PostMeterExampleModel;
-const {
   PERFORMANCE_TEST_TYPES: RENDERER_PERFORMANCE_TEST_TYPES,
   MAX_SAFETY_LIMITS: PERFORMANCE_MAX_SAFETY_LIMITS,
   cloneRequestForPerformanceTest,
@@ -172,7 +167,6 @@ const {
   collectAuthFromEditor: collectRequestAuthFromEditor,
   renderAuthEditor: renderRequestAuthEditor,
   renderCookieJarEditor: renderRequestCookieJarEditor,
-  renderExamples: renderRequestExamples,
   renderRequestPairs: renderEditorRequestPairs,
   renderVariablePairs: renderEditorVariablePairs,
   renderVariablePreview: renderEditorVariablePreview
@@ -505,9 +499,6 @@ function bindUi() {
     onAddHeader: () => addPair('headers'),
     onPostMeterTokenHeaderChange: () => setActiveRequestAutoHeaderOption('sendPostMeterToken', $('sendPostMeterTokenInput')?.checked === true),
     onShowGeneratedHeadersChange: () => setActiveRequestAutoHeaderOption('showGeneratedHeaders', $('showGeneratedHeadersInput')?.checked === true),
-    onAddExample: addExample,
-    onCaptureResponseExample: captureResponseExample,
-    onExportExamples: exportRequestExamples,
     onDeleteEnvironment: () => deleteEnvironment(),
     onDeleteWorkspace: () => { void deleteWorkspace(); },
     onSwitchWorkspace: () => { void switchWorkspace(selectedWorkspaceId || activeWorkspaceId, { focus: 'workspace' }); },
@@ -542,8 +533,6 @@ function bindUi() {
     onAddPerformanceHeader: () => addPerformancePair('headers'),
     onPerformancePostMeterTokenHeaderChange: () => setActivePerformanceRequestAutoHeaderOption('sendPostMeterToken', $('performanceSendPostMeterTokenInput')?.checked === true),
     onPerformanceShowGeneratedHeadersChange: () => setActivePerformanceRequestAutoHeaderOption('showGeneratedHeaders', $('performanceShowGeneratedHeadersInput')?.checked === true),
-    onAddPerformanceExample: addPerformanceExample,
-    onExportPerformanceExamples: () => { void exportPerformanceExamples(); },
     onAddPerformanceRequestVariable: addPerformanceRequestVariable,
     onAddPerformanceCookie: addPerformanceCookie,
     onClearExpiredPerformanceCookies: clearExpiredPerformanceCookies,
@@ -5382,6 +5371,7 @@ function renderPerformanceRequestEditor(test = activePerformanceTest()) {
     renderRequestBodyEditor('performance', null);
     setValue('performancePreRequestScriptInput', '');
     setValue('performanceTestScriptInput', '');
+    setValue('performanceDocsInput', '');
     renderPerformanceRequestHeaderControls(null);
     setChecked('performanceRequestCookieJarEnabledInput', false);
     setChecked('performanceRequestCookieJarStoreInput', true);
@@ -5389,7 +5379,6 @@ function renderPerformanceRequestEditor(test = activePerformanceTest()) {
       'performanceParamsTable',
       'performanceHeadersTable',
       'performanceRequestVariablesTable',
-      'performanceExamplesList',
       'performanceCookiesTable'
     ]) {
       const container = $(id);
@@ -5408,7 +5397,7 @@ function renderPerformanceRequestEditor(test = activePerformanceTest()) {
   request.queryParams ||= [];
   request.headers ||= [];
   request.variables ||= [];
-  request.examples ||= [];
+  request.docs = request.docs == null ? '' : String(request.docs);
   request.scripts ||= { preRequest: '', tests: '' };
   request.cookieJar ||= { enabled: false, storeResponses: true };
   request.auth ||= { type: 'none' };
@@ -5420,13 +5409,13 @@ function renderPerformanceRequestEditor(test = activePerformanceTest()) {
   renderRequestBodyEditor('performance', request);
   setValue('performancePreRequestScriptInput', request.scripts.preRequest || '');
   setValue('performanceTestScriptInput', request.scripts.tests || '');
+  setValue('performanceDocsInput', request.docs || '');
   setChecked('performanceRequestCookieJarEnabledInput', request.cookieJar.enabled === true);
   setChecked('performanceRequestCookieJarStoreInput', request.cookieJar.storeResponses !== false);
 
   renderPerformancePairs('performanceParamsTable', request.queryParams);
   renderPerformanceHeaderPairs('performanceHeadersTable', request);
   renderPerformanceRequestVariablePairs(request.variables);
-  renderPerformanceExamples(request.examples);
   renderPerformanceCookieJarEditor();
   renderPerformanceAuthEditor(request.auth);
   renderPerformanceVariablePreview();
@@ -5512,19 +5501,6 @@ function renderPerformanceVariablePreview() {
     environment: performanceSelectedEnvironment(test),
     request: test?.request || null
   });
-}
-
-function renderPerformanceExamples(examples) {
-  renderRequestExamples(examples, {
-    doc: document,
-    containerId: 'performanceExamplesList',
-    exportButtonId: 'exportPerformanceExamplesButton',
-    bodyTypes: EXAMPLE_BODY_TYPES,
-    onDirty: markActivePerformanceDirty,
-    onDuplicate: duplicatePerformanceExample,
-    onDelete: deletePerformanceExample
-  });
-  CodeEditor.enhanceCodeTextareas?.($('performanceExamplesList'));
 }
 
 function renderPerformanceAuthEditor(auth) {
@@ -7222,7 +7198,7 @@ function normalizeRunnerRequest(request) {
   normalized.queryParams = Array.isArray(normalized.queryParams) ? normalized.queryParams : [];
   normalized.headers = Array.isArray(normalized.headers) ? normalized.headers : [];
   normalized.variables = Array.isArray(normalized.variables) ? normalized.variables : [];
-  normalized.examples = Array.isArray(normalized.examples) ? normalized.examples : [];
+  normalized.docs = normalized.docs == null ? '' : String(normalized.docs);
   normalized.scripts = normalized.scripts && typeof normalized.scripts === 'object' ? normalized.scripts : { preRequest: '', tests: '' };
   normalized.auth = normalized.auth && typeof normalized.auth === 'object' ? normalized.auth : { type: 'none' };
   normalized.iterations = normalizeRunnerRequestIterations(normalized.iterations);
@@ -9758,18 +9734,15 @@ function renderRequestEditor() {
     renderRequestBodyEditor('', null);
     $('preRequestScriptInput').value = '';
     $('testScriptInput').value = '';
+    setValue('docsInput', '');
     $('paramsTable').textContent = '';
     $('headersTable').textContent = '';
-    $('examplesList').textContent = '';
     $('requestVariablesTable').textContent = '';
     $('cookiesTable').textContent = '';
     renderRequestHeaderControls(null);
     $('requestCookieJarEnabledInput').checked = false;
     $('requestCookieJarStoreInput').checked = true;
     $('addRequestVariableButton').disabled = true;
-    $('addExampleButton').disabled = true;
-    $('captureResponseExampleButton').disabled = true;
-    $('exportExamplesButton').disabled = true;
     renderAuthEditor({ type: 'none' });
     updateRequestEditorLanguages();
     refreshVariableHighlights($('requestEditorPanel'));
@@ -9778,9 +9751,6 @@ function renderRequestEditor() {
   ensureRequestQueryEditorMirror(request);
   $('saveRequestButton').disabled = false;
   $('addRequestVariableButton').disabled = false;
-  $('addExampleButton').disabled = false;
-  $('captureResponseExampleButton').disabled = !canCaptureResponseExampleForRequest(request);
-  $('exportExamplesButton').disabled = !(request.examples || []).length;
   renderRequestTitle(request);
   $('methodSelect').value = request.method;
   updateMethodSelectClass();
@@ -9789,6 +9759,8 @@ function renderRequestEditor() {
   request.scripts ||= { preRequest: '', tests: '' };
   $('preRequestScriptInput').value = request.scripts.preRequest || '';
   $('testScriptInput').value = request.scripts.tests || '';
+  request.docs = request.docs == null ? '' : String(request.docs);
+  setValue('docsInput', request.docs);
   request.cookieJar ||= { enabled: false, storeResponses: true };
   ensureRequestAutoHeaders(request);
   $('requestCookieJarEnabledInput').checked = request.cookieJar.enabled === true;
@@ -9796,7 +9768,6 @@ function renderRequestEditor() {
   renderPairs('paramsTable', request.queryParams || [], 'queryParams');
   renderHeaderPairs('headersTable', request);
   renderRequestVariablePairs(request.variables || []);
-  renderExamples(request.examples || []);
   renderCookieJarEditor();
   renderAuthEditor(request.auth || { type: 'none' });
   updateRequestEditorLanguages();
@@ -9817,17 +9788,6 @@ function renderRequestTitle(request) {
   title.tabIndex = request ? 0 : -1;
   title.setAttribute('aria-disabled', request ? 'false' : 'true');
   title.setAttribute('aria-label', 'Request name');
-}
-
-function renderExamples(examples) {
-  renderRequestExamples(examples, {
-    doc: document,
-    bodyTypes: EXAMPLE_BODY_TYPES,
-    onDirty: markActiveRequestDirty,
-    onDuplicate: duplicateExample,
-    onDelete: deleteExample
-  });
-  CodeEditor.enhanceCodeTextareas?.($('examplesList'));
 }
 
 function renderAuthEditor(auth) {
@@ -11869,7 +11829,7 @@ function openImportedRequest(importedRequest) {
   request.headers ||= [];
   request.scripts ||= { preRequest: '', tests: '' };
   request.variables ||= [];
-  request.examples ||= [];
+  request.docs = request.docs == null ? '' : String(request.docs);
   request.cookieJar ||= { enabled: false, storeResponses: true };
   request.autoHeaders ||= { sendPostMeterToken: false, showGeneratedHeaders: false };
   draftRequests.set(request.id, request);
@@ -12308,9 +12268,6 @@ function requestCurlExportExclusions(request = {}) {
   if ((request.variables || []).some((variable) => variable?.enabled !== false && variable?.key && !String(variable.key).startsWith('curl.'))) {
     exclusions.push('request variables');
   }
-  if ((request.examples || []).length) {
-    exclusions.push('saved examples');
-  }
   const bodyMode = String(request.postmanBody?.mode || '').toLowerCase();
   if (['formdata', 'urlencoded', 'file', 'binary', 'graphql'].includes(bodyMode) || ['FORM_DATA', 'URLENCODED', 'BINARY'].includes(request.bodyType)) {
     exclusions.push('structured body metadata and file bindings');
@@ -12621,7 +12578,7 @@ function newRequestObject(name) {
     auth: { type: 'none' },
     scripts: { preRequest: '', tests: '' },
     variables: [],
-    examples: [],
+    docs: '',
     cookieJar: { enabled: false, storeResponses: true },
     autoHeaders: { sendPostMeterToken: false, showGeneratedHeaders: false }
   };
@@ -12770,150 +12727,6 @@ function clearExpiredPerformanceCookies() {
   workspace.cookies = workspace.cookies.filter((cookie) => !isExpiredCookie(cookie));
   renderPerformanceCookieJarEditor();
   setStatus(`Removed ${before - workspace.cookies.length} expired cookies.`);
-}
-
-function addExample() {
-  const request = activeRequest();
-  if (!request) {
-    return;
-  }
-  request.examples ||= [];
-  request.examples.push(newExampleObject({
-    existingNames: request.examples.map((example) => example.name)
-  }));
-  markActiveRequestDirty();
-  renderExamples(request.examples);
-}
-
-function addPerformanceExample() {
-  const request = activePerformanceTest()?.request;
-  if (!request) {
-    return;
-  }
-  request.examples ||= [];
-  request.examples.push(newExampleObject({
-    existingNames: request.examples.map((example) => example.name)
-  }));
-  markActivePerformanceDirty();
-  renderPerformanceExamples(request.examples);
-}
-
-function captureResponseExample() {
-  const request = activeRequest();
-  if (!request || !canCaptureResponseExampleForRequest(request)) {
-    return setStatus('Send a request before capturing a response example.');
-  }
-  request.examples ||= [];
-  request.examples.push(exampleFromResponse(lastResponse, {
-    existingNames: request.examples.map((example) => example.name)
-  }));
-  markActiveRequestDirty();
-  renderExamples(request.examples);
-  setStatus('Captured response example.');
-}
-
-function canCaptureResponseExampleForRequest(request) {
-  return Boolean(request && lastResponse && lastResponse.requestId === request.id);
-}
-
-async function exportRequestExamples() {
-  const request = activeRequest();
-  if (!request) {
-    return setStatus('Select a request before exporting examples.');
-  }
-  if (!request.examples?.length) {
-    return setStatus('This request does not have examples to export.');
-  }
-  collectRequestFromEditor();
-  try {
-    const exportExamplesBoundary = window.__postmeterExportExamples || window.postmeter.request.exportExamples;
-    const result = await exportExamplesBoundary(request);
-    if (!result.cancelled) {
-      setStatus(`Examples exported to ${result.path}.`);
-    }
-  } catch (error) {
-    const message = error.message || String(error);
-    setStatus('Example export failed.');
-    notifyUser('Example Export Failed', message);
-  }
-}
-
-async function exportPerformanceExamples() {
-  const request = activePerformanceTest()?.request;
-  if (!request) {
-    return setStatus('Select a performance test before exporting examples.');
-  }
-  if (!request.examples?.length) {
-    return setStatus('This performance request does not have examples to export.');
-  }
-  collectPerformanceTestFromEditor();
-  try {
-    const exportExamplesBoundary = window.__postmeterExportExamples || window.postmeter.request.exportExamples;
-    const result = await exportExamplesBoundary(request);
-    if (!result.cancelled) {
-      setStatus(`Examples exported to ${result.path}.`);
-    }
-  } catch (error) {
-    const message = error.message || String(error);
-    setStatus('Performance example export failed.');
-    notifyUser('Performance Example Export Failed', message);
-  }
-}
-
-function duplicateExample(index) {
-  const request = activeRequest();
-  if (!request?.examples?.[index]) {
-    return;
-  }
-  const duplicate = structuredClone(request.examples[index]);
-  duplicate.id = crypto.randomUUID();
-  duplicate.name = uniqueName(`${duplicate.name || 'Example Response'} Copy`, request.examples.map((example) => example.name));
-  request.examples.splice(index + 1, 0, duplicate);
-  markActiveRequestDirty();
-  renderExamples(request.examples);
-}
-
-function duplicatePerformanceExample(index) {
-  const request = activePerformanceTest()?.request;
-  if (!request?.examples?.[index]) {
-    return;
-  }
-  const duplicate = structuredClone(request.examples[index]);
-  duplicate.id = crypto.randomUUID();
-  duplicate.name = uniqueName(`${duplicate.name || 'Example Response'} Copy`, request.examples.map((example) => example.name));
-  request.examples.splice(index + 1, 0, duplicate);
-  markActivePerformanceDirty();
-  renderPerformanceExamples(request.examples);
-}
-
-async function deleteExample(index) {
-  const request = activeRequest();
-  if (!request?.examples?.[index] || !(await confirmActionModal({
-    title: 'Delete example?',
-    message: `Delete ${request.examples[index].name || 'example'}?`,
-    confirmLabel: 'Delete Example',
-    danger: true
-  }))) {
-    return;
-  }
-  request.examples.splice(index, 1);
-  markActiveRequestDirty();
-  renderExamples(request.examples);
-}
-
-async function deletePerformanceExample(index) {
-  const request = activePerformanceTest()?.request;
-  if (!request?.examples?.[index] || !(await confirmActionModal({
-    title: 'Delete example?',
-    message: `Delete ${request.examples[index].name || 'example'}?`,
-    confirmLabel: 'Delete Example',
-    danger: true
-  }))) {
-    return;
-  }
-  request.examples.splice(index, 1);
-  markActivePerformanceDirty();
-  renderPerformanceExamples(request.examples);
 }
 
 function addPair(fieldName) {
@@ -13232,6 +13045,7 @@ function collectRequestFromEditor() {
     preRequest: $('preRequestScriptInput').value,
     tests: $('testScriptInput').value
   };
+  request.docs = $('docsInput')?.value || '';
   request.cookieJar = {
     enabled: $('requestCookieJarEnabledInput').checked,
     storeResponses: $('requestCookieJarStoreInput').checked
@@ -13389,6 +13203,7 @@ function collectPerformanceTestFromEditor() {
     preRequest: $('performancePreRequestScriptInput')?.value || '',
     tests: $('performanceTestScriptInput')?.value || ''
   };
+  test.request.docs = $('performanceDocsInput')?.value || '';
   test.request.cookieJar = {
     enabled: $('performanceRequestCookieJarEnabledInput')?.checked === true,
     storeResponses: $('performanceRequestCookieJarStoreInput')?.checked !== false
@@ -13400,7 +13215,6 @@ function collectPerformanceTestFromEditor() {
   test.request.queryParams = collectKeyValueRowsFromTable('performanceParamsTable', test.request.queryParams);
   test.request.headers = collectKeyValueRowsFromTable('performanceHeadersTable', test.request.headers);
   test.request.variables = collectKeyValueRowsFromTable('performanceRequestVariablesTable', test.request.variables);
-  test.request.examples = Array.isArray(test.request.examples) ? test.request.examples : [];
   test.source ||= { sourceType: 'manual' };
   const title = $('performanceMainTitle');
   if (title && title.dataset.editing !== 'true') {

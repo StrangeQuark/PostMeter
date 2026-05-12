@@ -486,10 +486,10 @@ test('imports and exports advanced Postman auth helper shapes', () => {
   assert.equal(exported.item[5].request.auth.type, 'asap');
 });
 
-test('imports Postman examples and collection certificates', () => {
+test('imports Postman collection certificates without request examples', () => {
   const collection = importPostmanCollection({
     info: {
-      name: 'Postman Examples',
+      name: 'Postman Certificates',
       schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
     },
     certificate: [{
@@ -519,9 +519,7 @@ test('imports Postman examples and collection certificates', () => {
   assert.equal(collection.requests[0].auth.type, 'clientCertificate');
   assert.equal(collection.requests[0].auth.certificateId, collection.certificates[0].id);
   assert.equal(collection.requests[0].auth.certPath, undefined);
-  assert.equal(collection.requests[0].examples.length, 1);
-  assert.equal(collection.requests[0].examples[0].statusCode, 200);
-  assert.equal(collection.requests[0].examples[0].bodyType, 'RAW_JSON');
+  assert.equal(Object.hasOwn(collection.requests[0], 'examples'), false);
 });
 
 test('round-trips Postman PFX/P12 certificate references for gRPC requests', () => {
@@ -705,7 +703,7 @@ test('annotates package references found in protocol-specific Postman hook scrip
   assert.deepEqual(metadata.map((item) => item.specifier), ['@team/protocol-tools', 'jsr:@scope/protocol@1.0.0']);
 });
 
-test('preserves imported Postman local mock scripts and saved example IDs', () => {
+test('preserves imported Postman local mock scripts without request Examples fields', () => {
   const collection = importPostmanCollection({
     info: {
       name: 'Postman Mock Scripts',
@@ -740,7 +738,13 @@ test('preserves imported Postman local mock scripts and saved example IDs', () =
 
   assert.match(collection.requests[0].scripts.mock, /pm\.state\.increment/);
   assert.match(collection.requests[0].scripts.mock, /pm\.mock\.sendExample/);
-  assert.equal(collection.requests[0].examples[0].id, 'mock-example');
+  assert.equal(Object.hasOwn(collection.requests[0], 'examples'), false);
+  assert.deepEqual(collection.requests[0].postman.mockResponses, [{
+    body: '{"ok":true}',
+    id: 'mock-example',
+    name: 'Mock example',
+    statusCode: 200
+  }]);
 });
 
 test('round-trips Postman hierarchy scripts, IDs, variables, certificates, protocol metadata, and file body references', () => {
@@ -856,7 +860,7 @@ test('round-trips Postman hierarchy scripts, IDs, variables, certificates, proto
   assert.equal(request.postman.events[0].script.type, 'text/javascript');
   assert.equal(request.postman.fileReferences[0].src, '/tmp/payload.json');
   assert.equal(request.postmanBody.mode, 'formdata');
-  assert.equal(request.examples[0].id, 'example-postman-id');
+  assert.equal(Object.hasOwn(request, 'examples'), false);
   assert.equal(collection.certificates[0].id, 'certificate-postman-id');
 
   const exported = exportPostmanCollection(collection);
@@ -869,7 +873,7 @@ test('round-trips Postman hierarchy scripts, IDs, variables, certificates, proto
   assert.equal(exported.item[0].item[0].request.body.mode, 'formdata');
   assert.equal(exported.item[0].item[0].request.body.formdata[0].src, '/tmp/payload.json');
   assert.equal(exported.item[0].item[0].request.protocolProfileBehavior.disableBodyPruning, true);
-  assert.equal(exported.item[0].item[0].response[0].id, 'example-postman-id');
+  assert.equal(exported.item[0].item[0].response, undefined);
   assert.equal(exported.item[1].id, 'caller-postman-id');
   assert.equal(exported.variable[0].type, 'secret');
   assert.equal(exported.certificate[0].id, 'certificate-postman-id');

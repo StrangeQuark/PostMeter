@@ -81,7 +81,7 @@ test('collection import registry exports Postman-compatible collections', () => 
         tests: "pm.test('ok', function () {});"
       },
       variables: [],
-      examples: []
+      docs: ''
     }],
     folders: []
   };

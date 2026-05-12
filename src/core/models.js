@@ -18,7 +18,6 @@ const SUPPORTED_METHODS = new Set(HTTP_METHODS);
 const BODY_METHODS = new Set(BODY_METHOD_VALUES);
 const BODY_TYPES = Object.freeze(Object.fromEntries(BODY_TYPE_VALUES.map((type) => [type, type])));
 const DEFAULT_REQUEST_BODY_TYPE = 'NONE';
-const DEFAULT_EXAMPLE_BODY_TYPE = 'RAW_TEXT';
 const POSTMAN_METADATA_MAX_BYTES = 10 * 1024 * 1024;
 const DEFAULT_PERFORMANCE_TEST_TYPE = 'latency';
 const DEFAULT_PERFORMANCE_CONFIG = Object.freeze({
@@ -59,7 +58,7 @@ function requestModel({
   auth,
   scripts,
   variables,
-  examples,
+  docs,
   cookieJar,
   autoHeaders,
   protocol,
@@ -87,7 +86,7 @@ function requestModel({
     auth: normalizePersistedAuth(auth),
     scripts: normalizeScripts(scripts),
     variables: normalizePairs(variables),
-    examples: normalizeExamples(examples),
+    docs: docs == null ? '' : String(docs),
     cookieJar: normalizeRequestCookieJar(cookieJar),
     autoHeaders: normalizeRequestAutoHeaders(autoHeaders),
     methodPath: methodPath == null ? '' : String(methodPath).slice(0, 512),
@@ -575,26 +574,6 @@ function safeJsonStringify(value) {
   } catch {
     return '{}';
   }
-}
-
-function normalizeExamples(examples) {
-  if (!Array.isArray(examples)) {
-    return [];
-  }
-  return examples
-    .filter((example) => example && typeof example === 'object')
-    .map((example) => {
-      const normalized = {
-        id: example.id || newId(),
-        name: normalizeName(example.name, 'Example Response'),
-        statusCode: Number.isFinite(Number(example.statusCode)) ? Number(example.statusCode) : 0,
-        headers: normalizePairs(example.headers),
-        bodyType: normalizeSchemaEnumValue('bodyTypes', example.bodyType, DEFAULT_EXAMPLE_BODY_TYPE),
-        body: example.body == null ? '' : String(example.body)
-      };
-      addOptionalJsonObject(normalized, 'postman', example.postman, POSTMAN_METADATA_MAX_BYTES);
-      return normalized;
-    });
 }
 
 function normalizeRequestCookieJar(cookieJar) {

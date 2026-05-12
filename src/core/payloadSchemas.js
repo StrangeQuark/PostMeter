@@ -154,13 +154,6 @@ const FIELD_SCHEMAS = {
     partitioned: { type: 'boolean', optional: true },
     source: { type: 'string', limit: 'short', optional: true }
   },
-  example: {
-    id: { type: 'string', limit: 'name', optional: true },
-    name: { type: 'string', limit: 'name', optional: true },
-    statusCode: { type: 'number', optional: true },
-    bodyType: { type: 'string', limit: 'short', enum: 'bodyTypes', optional: true },
-    body: { type: 'string', limit: 'body', optional: true }
-  },
   historyEntry: {
     timestamp: { type: 'string', limit: 'name', optional: true },
     method: { type: 'string', limit: 'method', optional: true },
@@ -490,7 +483,7 @@ const payloadSchemas = {
   entities: {
     request: {
       required: ['method', 'url'],
-      arrays: ['queryParams', 'headers', 'variables', 'examples', 'metadata', 'messages'],
+      arrays: ['queryParams', 'headers', 'variables', 'metadata', 'messages'],
       nested: ['auth', 'scripts', 'cookieJar', 'autoHeaders']
     },
   workspace: {

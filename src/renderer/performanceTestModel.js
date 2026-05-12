@@ -135,7 +135,7 @@
       auth: request.auth && typeof request.auth === 'object' ? cloneJson(request.auth) || { type: 'none' } : { type: 'none' },
       scripts: request.scripts && typeof request.scripts === 'object' ? cloneJson(request.scripts) || { preRequest: '', tests: '' } : { preRequest: '', tests: '' },
       variables: Array.isArray(request.variables) ? cloneJson(request.variables) || [] : [],
-      examples: Array.isArray(request.examples) ? cloneJson(request.examples) || [] : [],
+      docs: request.docs == null ? '' : String(request.docs),
       cookieJar: request.cookieJar && typeof request.cookieJar === 'object'
         ? cloneJson(request.cookieJar) || { enabled: false, storeResponses: true }
         : { enabled: false, storeResponses: true },

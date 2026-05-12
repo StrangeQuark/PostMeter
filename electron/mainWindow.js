@@ -380,7 +380,6 @@ function requiredPreloadApiSurface() {
     ['request', 'importRequest'],
     ['request', 'exportRequest'],
     ['request', 'exportRequestText'],
-    ['request', 'exportExamples'],
     ['clipboard', 'writeText'],
     ['oauth', 'startPkceFlow'],
     ['oauth', 'startDeviceFlow'],

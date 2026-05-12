@@ -42,7 +42,6 @@ const ELECTRON_IPC_CHANNELS = Object.freeze([
   ipcChannel('request:import', 'renderer-to-main', 'Standalone request import accepts direct pasted text or a renderer-selected file path, then validates curl or native PostMeter request JSON before returning an unsaved request payload.', ['electron/workspaceIpc.js', 'electron/preload.js', 'electron/fileDialogs.js', 'src/core/requestFormats.js', 'src/core/ipcValidation.js'], ['test/electron/workspaceIpc.test.js', 'test/electron/requestFormats.test.js']),
   ipcChannel('request:export', 'renderer-to-main', 'Standalone request export validates request payloads and writes native PostMeter request JSON or curl through a main-process save picker.', ['electron/workspaceIpc.js', 'electron/preload.js', 'electron/fileDialogs.js', 'src/core/requestFormats.js', 'src/core/ipcValidation.js'], ['test/electron/workspaceIpc.test.js', 'test/electron/requestFormats.test.js']),
   ipcChannel('request:exportText', 'renderer-to-main', 'Standalone request export preview validates request payloads and returns native PostMeter request JSON or curl text for copyable renderer display.', ['electron/workspaceIpc.js', 'electron/preload.js', 'src/core/requestFormats.js', 'src/core/ipcValidation.js'], ['test/electron/workspaceIpc.test.js', 'test/electron/requestFormats.test.js']),
-  ipcChannel('request:examples:export', 'renderer-to-main', 'Request example export validates the request payload before writing a selected JSON file.', ['electron/workspaceIpc.js', 'electron/preload.js', 'electron/fileDialogs.js', 'src/core/ipcValidation.js'], ['test/electron/workspaceIpc.test.js', 'test/electron/ipcValidation.test.js']),
   ipcChannel('request:validate', 'renderer-to-main', 'Single request validation validates request and environment payloads.', ['electron/requestIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/requestIpc.test.js', 'test/electron/ipcValidation.test.js']),
   ipcChannel('request:send', 'renderer-to-main', 'Single request send validates request/environment payloads and validates response payloads before returning.', ['electron/requestIpc.js', 'electron/preload.js', 'src/core/ipcValidation.js'], ['test/electron/requestIpc.test.js', 'test/electron/ipcValidation.test.js']),
   ipcChannel('diagnostics:export', 'renderer-to-main', 'Diagnostic export opens a main-process save dialog and writes a sanitized local bundle only to the selected path.', ['electron/diagnosticsIpc.js', 'electron/preload.js', 'src/core/diagnostics.js'], ['test/electron/diagnosticsIpc.test.js', 'test/electron/diagnostics.test.js']),
@@ -101,7 +100,7 @@ const REQUIRED_ELECTRON_SECURITY_ROWS = Object.freeze([
   'ipc.sandbox-package',
   'ipc.sender-validation',
   'file-dialogs.workspace',
-  'file-dialogs.collection-and-examples',
+  'file-dialogs.collection-and-runner',
   'external-url.app-help-allowlist',
   'external-url.oauth-browser-launch',
   'protocol.oauth-custom-scheme',
@@ -357,7 +356,7 @@ function buildElectronSecurityMatrix() {
       evidenceRefs: ['electron/sessionIpc.js', 'electron/sessionStore.js', 'src/core/ipcValidation.js'],
       tests: ['test/electron/sessionIpc.test.js', 'test/electron/sessionStore.test.js', 'test/electron/ipcValidation.test.js']
     }),
-    row('ipc.workspace', 'IPC', 'Workspace, collection, and request-example IPC channels validate payloads and route native file dialogs through main-process handlers.', 'implemented', {
+    row('ipc.workspace', 'IPC', 'Workspace and collection IPC channels validate payloads and route native file dialogs through main-process handlers.', 'implemented', {
       evidenceRefs: ['electron/workspaceIpc.js', 'electron/fileDialogs.js', 'src/core/ipcValidation.js'],
       tests: ['test/electron/workspaceIpc.test.js', 'test/electron/workspaceStore.test.js', 'test/electron/ipcValidation.test.js']
     }),
@@ -394,7 +393,7 @@ function buildElectronSecurityMatrix() {
       evidenceRefs: ['electron/workspaceIpc.js', 'electron/fileDialogs.js'],
       tests: ['test/electron/workspaceIpc.test.js', 'test/electron/workspaceStore.test.js']
     }),
-    row('file-dialogs.collection-and-examples', 'File dialogs', 'Collection import/export, request-example export, and collection-run export dialogs are main-process owned, use constrained filters/default filenames, validate selected path shape, and validate cancellation/result payloads.', 'implemented', {
+    row('file-dialogs.collection-and-runner', 'File dialogs', 'Collection import/export and collection-run export dialogs are main-process owned, use constrained filters/default filenames, validate selected path shape, and validate cancellation/result payloads.', 'implemented', {
       evidenceRefs: ['electron/workspaceIpc.js', 'electron/runtimeIpc.js', 'electron/fileDialogs.js'],
       tests: ['test/electron/workspaceIpc.test.js', 'test/electron/runtimeIpc.test.js', 'test/electron/collectionFormats.test.js']
     }),
@@ -465,7 +464,7 @@ function buildWorkspaceDurabilityMatrix() {
 
 function buildNonPostmanCompatibilityMatrix() {
   return matrix('non-postman-compatibility', 'src/core/productionSupportMatrices.js', [
-    row('openapi.import-export', 'OpenAPI', 'OpenAPI/Swagger JSON/YAML import and OpenAPI 3.1 export cover common local references, server variables, path/query/header/cookie parameters, Swagger 2.0 body/form-data, auth, binary body hints, request bodies, and examples where representable.', 'implemented', {
+    row('openapi.import-export', 'OpenAPI', 'OpenAPI/Swagger JSON/YAML import and OpenAPI 3.1 export cover common local references, server variables, path/query/header/cookie parameters, Swagger 2.0 body/form-data, auth, binary body hints, and request bodies where representable.', 'implemented', {
       evidenceRefs: ['src/core/openApiFormats.js', 'docs/COMPATIBILITY.md'],
       tests: ['test/electron/collectionFormats.test.js']
     }),
@@ -473,7 +472,7 @@ function buildNonPostmanCompatibilityMatrix() {
       evidenceRefs: ['src/core/curlFormats.js', 'src/core/requestFormats.js', 'docs/COMPATIBILITY.md'],
       tests: ['test/electron/collectionFormats.test.js', 'test/electron/requestFormats.test.js']
     }),
-    row('native-postmeter.roundtrip', 'Native PostMeter', 'Native workspace round trips preserve auth, variables, examples, cookies, certificates, package/vault/mock/visualizer metadata, protocols, and file bindings.', 'implemented', {
+    row('native-postmeter.roundtrip', 'Native PostMeter', 'Native workspace round trips preserve auth, variables, docs, cookies, certificates, package/vault/mock/visualizer metadata, protocols, and file bindings.', 'implemented', {
       evidenceRefs: ['src/core/workspaceStore.js', 'src/core/workspacePersistence.js'],
       tests: ['test/electron/workspaceStore.test.js', 'test/electron/postmanImporter.test.js']
     }),

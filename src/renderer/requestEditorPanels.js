@@ -1,17 +1,10 @@
 (function attachRequestEditorPanels(global) {
   const { authEditorState, authFromEditorState } = global.PostMeterAuthModel || require('../core/authModel');
   const {
-    exampleHeadersToText,
-    formatExampleBody,
-    parseHeadersText
-  } = global.PostMeterExampleModel || require('./exampleModel');
-  const {
     cookieFieldIssues,
     domainFromRequestUrl,
     rendererCookieMatchesHost
   } = global.PostMeterCookieModel || require('./cookieModel');
-
-  const DEFAULT_BODY_TYPES = ['NONE', 'RAW_JSON', 'RAW_TEXT'];
 
   function element(doc, id) {
     return doc.getElementById(id);
@@ -39,114 +32,6 @@
   function refreshVariableTextboxes(root) {
     global.PostMeterVariableHighlighter?.enhanceVariableTextboxes?.(root);
     global.PostMeterVariableHighlighter?.refreshVariableHighlights?.(root);
-  }
-
-  function renderExamples(examples, options = {}) {
-    const doc = options.doc || document;
-    const container = element(doc, options.containerId || 'examplesList');
-    const exportButton = element(doc, options.exportButtonId || 'exportExamplesButton');
-    const bodyTypes = Array.isArray(options.bodyTypes) && options.bodyTypes.length
-      ? options.bodyTypes
-      : DEFAULT_BODY_TYPES;
-    const onDirty = options.onDirty || (() => {});
-    const onDuplicate = options.onDuplicate || (() => {});
-    const onDelete = options.onDelete || (() => {});
-
-    if (exportButton) {
-      exportButton.disabled = !examples.length;
-    }
-    container.textContent = '';
-    if (!examples.length) {
-      const empty = doc.createElement('div');
-      empty.className = 'empty-state';
-      empty.textContent = 'No examples';
-      container.append(empty);
-      return;
-    }
-
-    examples.forEach((example, index) => {
-      const item = doc.createElement('section');
-      item.className = 'example-item';
-
-      const header = doc.createElement('div');
-      header.className = 'example-heading';
-
-      const name = doc.createElement('input');
-      name.value = example.name || 'Example Response';
-      name.placeholder = 'Example name';
-      name.setAttribute('aria-label', `Example ${index + 1} name`);
-      name.addEventListener('input', () => {
-        example.name = name.value;
-        onDirty();
-      });
-
-      const status = doc.createElement('input');
-      status.type = 'number';
-      status.min = '0';
-      status.max = '999';
-      status.value = example.statusCode || '';
-      status.placeholder = 'Status';
-      status.setAttribute('aria-label', `Example ${index + 1} status code`);
-      status.addEventListener('input', () => {
-        example.statusCode = Number(status.value) || 0;
-        onDirty();
-      });
-
-      const bodyType = doc.createElement('select');
-      for (const type of bodyTypes) {
-        bodyType.append(new Option(type, type));
-      }
-      bodyType.value = bodyTypes.includes(example.bodyType) ? example.bodyType : 'RAW_TEXT';
-      bodyType.setAttribute('aria-label', `Example ${index + 1} body type`);
-
-      const body = doc.createElement('textarea');
-      body.spellcheck = false;
-      body.value = formatExampleBody(example);
-      body.dataset.codeEditor = 'true';
-      body.dataset.codeLanguage = bodyTypeCodeLanguage(bodyType.value);
-      body.setAttribute('aria-label', `Example ${index + 1} body`);
-      body.addEventListener('input', () => {
-        example.body = body.value;
-        onDirty();
-      });
-
-      bodyType.addEventListener('change', () => {
-        example.bodyType = bodyType.value;
-        body.value = formatExampleBody(example);
-        global.PostMeterCodeEditor?.setLanguage?.(body, bodyTypeCodeLanguage(bodyType.value));
-        onDirty();
-      });
-
-      const duplicate = doc.createElement('button');
-      duplicate.textContent = 'Duplicate';
-      duplicate.setAttribute('aria-label', `Duplicate example ${example.name || index + 1}`);
-      duplicate.addEventListener('click', () => onDuplicate(index));
-
-      const remove = doc.createElement('button');
-      remove.className = 'danger';
-      remove.textContent = 'Delete';
-      remove.setAttribute('aria-label', `Delete example ${example.name || index + 1}`);
-      remove.addEventListener('click', () => onDelete(index));
-
-      header.append(name, status, bodyType, duplicate, remove);
-
-      const headers = doc.createElement('textarea');
-      headers.spellcheck = false;
-      headers.value = exampleHeadersToText(example.headers || []);
-      headers.placeholder = 'Header-Name: value';
-      headers.dataset.codeEditor = 'true';
-      headers.dataset.codeLanguage = 'headers';
-      headers.setAttribute('aria-label', `Example ${index + 1} headers`);
-      headers.addEventListener('input', () => {
-        example.headers = parseHeadersText(headers.value);
-        onDirty();
-      });
-
-      item.append(header, headers, body);
-      container.append(item);
-      global.PostMeterCodeEditor?.enhanceCodeTextareas?.(item);
-    });
-    refreshVariableTextboxes(container);
   }
 
   function renderAuthEditor(auth, options = {}) {
@@ -549,7 +434,6 @@
     collectAuthFromEditor,
     renderAuthEditor,
     renderCookieJarEditor,
-    renderExamples,
     renderRequestPairs,
     renderVariablePairs,
     renderVariablePreview

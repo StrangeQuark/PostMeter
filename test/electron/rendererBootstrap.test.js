@@ -636,8 +636,6 @@ test('renderer bootstrap binds performance creation import export run and config
     'closePerformanceCalibrationModalButton',
     'addPerformanceParamButton',
     'addPerformanceHeaderButton',
-    'addPerformanceExampleButton',
-    'exportPerformanceExamplesButton',
     'addPerformanceRequestVariableButton',
     'addPerformanceCookieButton',
     'clearExpiredPerformanceCookiesButton',
@@ -649,6 +647,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'performanceGraphqlQueryInput',
     'performanceGraphqlVariablesInput',
     'performanceGraphqlOperationNameInput',
+    'performanceDocsInput',
     'addPerformanceFormDataBodyRowButton',
     'addPerformanceUrlencodedBodyRowButton',
     'performanceBinaryBodySourceInput'
@@ -699,8 +698,6 @@ test('renderer bootstrap binds performance creation import export run and config
     onImportPerformanceRequest: () => calls.push('import-request'),
     onAddPerformanceParam: () => calls.push('add-param'),
     onAddPerformanceHeader: () => calls.push('add-header'),
-    onAddPerformanceExample: () => calls.push('add-example'),
-    onExportPerformanceExamples: () => calls.push('export-examples'),
     onAddPerformanceRequestVariable: () => calls.push('add-variable'),
     onAddPerformanceCookie: () => calls.push('add-cookie'),
     onClearExpiredPerformanceCookies: () => calls.push('clear-cookies'),
@@ -728,8 +725,6 @@ test('renderer bootstrap binds performance creation import export run and config
     'importPerformanceRequestButton',
     'addPerformanceParamButton',
     'addPerformanceHeaderButton',
-    'addPerformanceExampleButton',
-    'exportPerformanceExamplesButton',
     'addPerformanceRequestVariableButton',
     'addPerformanceCookieButton',
     'clearExpiredPerformanceCookiesButton',
@@ -756,9 +751,10 @@ test('renderer bootstrap binds performance creation import export run and config
   elements.get('performanceGraphqlQueryInput').dispatch('input');
   elements.get('performanceGraphqlVariablesInput').dispatch('input');
   elements.get('performanceGraphqlOperationNameInput').dispatch('input');
+  elements.get('performanceDocsInput').dispatch('input');
   elements.get('performanceBinaryBodySourceInput').dispatch('input');
 
-  assert.deepEqual(calls.slice(0, 20), [
+  assert.deepEqual(calls.slice(0, 18), [
     'new',
     'new',
     'import-test',
@@ -772,8 +768,6 @@ test('renderer bootstrap binds performance creation import export run and config
     'import-request',
     'add-param',
     'add-header',
-    'add-example',
-    'export-examples',
     'add-variable',
     'add-cookie',
     'clear-cookies',
@@ -783,7 +777,7 @@ test('renderer bootstrap binds performance creation import export run and config
   assert.equal(calls.filter((call) => call === 'config').length, 11);
   assert.ok(calls.includes('add-form-data'));
   assert.ok(calls.includes('add-urlencoded'));
-  assert.equal(calls.filter((call) => call === 'request').length, 7);
+  assert.equal(calls.filter((call) => call === 'request').length, 8);
   assert.equal(calls.filter((call) => call === 'body-type').length, 2);
   assert.ok(calls.includes('performance:spike'));
 });
@@ -1279,7 +1273,7 @@ test('renderer loads code editor helpers before request editor panels and render
   assert.ok(codeEditorIndex >= 0, 'codeEditor.js should be loaded');
   assert.ok(requestPanelsIndex >= 0, 'requestEditorPanels.js should be loaded');
   assert.ok(rendererIndex >= 0, 'renderer.js should be loaded');
-  assert.ok(codeEditorIndex < requestPanelsIndex, 'codeEditor.js should load before dynamic example editors are rendered.');
+  assert.ok(codeEditorIndex < requestPanelsIndex, 'codeEditor.js should load before request editor panels are rendered.');
   assert.ok(codeEditorIndex < rendererIndex, 'codeEditor.js should load before renderer.js initializes textareas.');
 });
 

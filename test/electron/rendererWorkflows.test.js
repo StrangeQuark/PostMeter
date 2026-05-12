@@ -1415,7 +1415,6 @@ test('renderer workflows scope captured responses to the active request', async 
   await workflows.sendActiveRequest();
 
   assert.equal(state.lastResponse.requestId, 'request-1');
-  assert.equal(doc.getElementById('captureResponseExampleButton').disabled, false);
 });
 
 test('renderer workflows apply single-request completions to the request that started the send', async () => {
@@ -1567,7 +1566,6 @@ test('renderer workflows apply single-request completions to the request that st
   assert.equal(state.lastResponse.requestId, requestOne.id);
   assert.equal(state.lastResponse.updatedAuth, undefined);
   assert.equal(state.lastResponse.updatedAuthPersisted, undefined);
-  assert.equal(doc.getElementById('captureResponseExampleButton').disabled, true);
   assert.equal(state.workspace.history[0].method, 'GET');
   assert.equal(state.workspace.history[0].url, 'https://example.test/widgets');
 });
@@ -2089,7 +2087,6 @@ test('renderer workflows clear stale captured responses after a send failure', a
   state.workspace = { collections: [], environments: [], history: [], settings: {} };
   state.lastResponse = { requestId: 'request-1', statusCode: 200 };
   const doc = createDocument();
-  doc.getElementById('captureResponseExampleButton').disabled = false;
 
   const workflows = createRendererWorkflows({
     state,
@@ -2119,7 +2116,6 @@ test('renderer workflows clear stale captured responses after a send failure', a
   await workflows.sendActiveRequest();
 
   assert.equal(state.lastResponse, null);
-  assert.equal(doc.getElementById('captureResponseExampleButton').disabled, true);
 });
 
 test('renderer workflows surface request save failures inline before sending', async () => {

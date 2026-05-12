@@ -482,27 +482,6 @@ function registerWorkspaceIpc(options = {}) {
     return fileOperationResult({ cancelled: false, path: filePath });
   });
 
-  ipcMain.handle('request:examples:export', async (_event, request) => {
-    assertRequestPayload(request);
-    const result = await dialog.showSaveDialog(getMainWindow(), {
-      title: 'Export Request Examples',
-      defaultPath: `${safeFilename(request?.name || 'request')}-examples.json`,
-      filters: jsonFilters()
-    });
-    const filePath = selectedSaveFilePath(result);
-    if (!filePath) {
-      return fileOperationResult({ cancelled: true });
-    }
-    const payload = {
-      requestId: request.id || '',
-      requestName: request.name || 'Untitled Request',
-      exportedAt: new Date().toISOString(),
-      examples: request.examples || []
-    };
-    await writeTextFileAtomic(filePath, JSON.stringify(payload, null, 2), { prefix: 'postmeter-examples-export' });
-    return fileOperationResult({ cancelled: false, path: filePath });
-  });
-
   ipcMain.handle('request:import', async (_event, source = {}) => {
     const normalizedSource = normalizeRequestImportSource(source);
     let content = normalizedSource.text;

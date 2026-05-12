@@ -55,7 +55,7 @@
     {
       "id": "native-postmeter.roundtrip",
       "area": "Native PostMeter",
-      "target": "Native workspace round trips preserve auth, variables, examples, cookies, certificates, package/vault/mock/visualizer metadata, protocols, and file bindings.",
+      "target": "Native workspace round trips preserve auth, variables, docs, cookies, certificates, package/vault/mock/visualizer metadata, protocols, and file bindings.",
       "status": "implemented",
       "evidenceRefs": [
         "src/core/workspaceStore.js",
@@ -70,7 +70,7 @@
     {
       "id": "openapi.import-export",
       "area": "OpenAPI",
-      "target": "OpenAPI/Swagger JSON/YAML import and OpenAPI 3.1 export cover common local references, server variables, path/query/header/cookie parameters, Swagger 2.0 body/form-data, auth, binary body hints, request bodies, and examples where representable.",
+      "target": "OpenAPI/Swagger JSON/YAML import and OpenAPI 3.1 export cover common local references, server variables, path/query/header/cookie parameters, Swagger 2.0 body/form-data, auth, binary body hints, and request bodies where representable.",
       "status": "implemented",
       "evidenceRefs": [
         "src/core/openApiFormats.js",

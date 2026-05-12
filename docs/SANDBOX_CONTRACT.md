@@ -198,7 +198,7 @@ Target pre-request mutations:
 Non-goals for sandbox v1:
 
 - Test-script request mutations affecting a completed send.
-- Mutating app settings, runner config, workspace paths, request examples, or UI state from scripts.
+- Mutating app settings, runner config, workspace paths, request docs, or UI state from scripts.
 
 ## Cookie Contract
 
@@ -462,12 +462,12 @@ Local mock server parity:
 
 Import/export and data model parity:
 
-- Preserve Postman Collection v2.1 script events at collection, folder, and request levels without flattening away information needed for exact run order, nested folders, request IDs, examples, package references, certificates, auth inheritance, variables, protocol profiles, GraphQL/gRPC definitions, WebSocket definitions if supported, and file/binary body references.
+- Preserve Postman Collection v2.1 script events at collection, folder, and request levels without flattening away information needed for exact run order, nested folders, request IDs, docs, package references, certificates, auth inheritance, variables, protocol profiles, GraphQL/gRPC definitions, WebSocket definitions if supported, and file/binary body references.
 - Preserve and resolve request IDs used by `pm.execution.runRequest`. Because Postman exports may not preserve all IDs, import must provide a deterministic mapping, a repair UI, or name/link fallback that makes imported scripts runnable.
 - Import Postman package references and team/external package metadata into the reviewed package-cache workflow. A collection that references packages must show missing packages before execution and allow parent-side fetch/review resolution for supported exact references rather than failing obscurely inside a script.
 - Import cookie domain allowlists, vault access metadata, mock scripts, local mock state configuration, and visualizer assets when Postman exports them. If Postman does not export a needed permission or asset, provide a PostMeter binding UI and record the binding in workspace metadata.
-- Round-trip exported Postman-compatible collections without losing script text, script type, event location, package references, request IDs where possible, examples, variables, certificates, and protocol metadata.
-- Current implementation status: PostMeter stores bounded Postman compatibility metadata on imported collections, folders, requests, examples, and certificates. Import preserves collection/folder/request event locations, original and deterministic Postman IDs, mixed folder/request item order, raw variable metadata, package-reference scan results, cookie/vault/mock/visualizer binding metadata, protocol profiles, GraphQL/gRPC definitions, examples, certificates, auth metadata, and file/binary body references without exposing those local file paths to scripts. Collection runs resolve `pm.execution.runRequest` and `pm.execution.setNextRequest` against regenerated model IDs, original Postman IDs, deterministic fallback IDs, Postman request-link targets that can be mapped to preserved IDs, and request names; `pm.info.requestId` and `pm.execution.location.requestId` report the preserved Postman ID when one exists. The desktop app can export Postman-compatible Collection v2.1 JSON through `Export > Postman`, and focused tests cover round-tripping script text/type/location, request/example/certificate IDs, variables, protocol metadata, and imported bindings.
+- Round-trip exported Postman-compatible collections without losing script text, script type, event location, package references, request IDs where possible, request docs, variables, certificates, and protocol metadata.
+- Current implementation status: PostMeter stores bounded Postman compatibility metadata on imported collections, folders, requests, and certificates. Import preserves collection/folder/request event locations, original and deterministic Postman IDs, mixed folder/request item order, raw variable metadata, package-reference scan results, cookie/vault/mock/visualizer binding metadata, protocol profiles, GraphQL/gRPC definitions, request docs, certificates, auth metadata, and file/binary body references without exposing those local file paths to scripts. Collection runs resolve `pm.execution.runRequest` and `pm.execution.setNextRequest` against regenerated model IDs, original Postman IDs, deterministic fallback IDs, Postman request-link targets that can be mapped to preserved IDs, and request names; `pm.info.requestId` and `pm.execution.location.requestId` report the preserved Postman ID when one exists. The desktop app can export Postman-compatible Collection v2.1 JSON through `Export > Postman`, and focused tests cover round-tripping script text/type/location, request/certificate IDs, variables, protocol metadata, and imported bindings.
 
 Security requirements for parity work:
 

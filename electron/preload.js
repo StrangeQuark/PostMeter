@@ -87,8 +87,7 @@ const postmeterApi = {
     send: (request, environment) => ipcRenderer.invoke('request:send', request, environment),
     importRequest: (source) => ipcRenderer.invoke('request:import', safeRequestImportSource(source)),
     exportRequest: (request, format) => ipcRenderer.invoke('request:export', request, format),
-    exportRequestText: (request, format) => ipcRenderer.invoke('request:exportText', request, format),
-    exportExamples: (request) => ipcRenderer.invoke('request:examples:export', request)
+    exportRequestText: (request, format) => ipcRenderer.invoke('request:exportText', request, format)
   },
   oauth: {
     startPkceFlow: (id, auth, environment, strategy) => ipcRenderer.invoke('oauth:pkce:start', id, auth, environment, strategy),

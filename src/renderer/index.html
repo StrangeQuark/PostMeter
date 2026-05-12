@@ -172,8 +172,8 @@
           <button id="requestCookiesTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="cookies" aria-selected="false" aria-controls="cookiesTab">Cookies</button>
           <button id="requestBodyTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="body" aria-selected="false" aria-controls="bodyTab">Body</button>
           <button id="requestScriptsTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="scripts" aria-selected="false" aria-controls="scriptsTab">Scripts</button>
-          <button id="requestExamplesTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="examples" aria-selected="false" aria-controls="examplesTab">Examples</button>
           <button id="requestVariablesTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="collectionVariables" aria-selected="false" aria-controls="collectionVariablesTab">Variables</button>
+          <button id="requestDocsTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="docs" aria-selected="false" aria-controls="docsTab">Docs</button>
         </div>
 
         <div id="paramsTab" class="tab-panel active" role="tabpanel" aria-labelledby="requestParamsTabButton">
@@ -441,15 +441,6 @@
           </div>
         </div>
 
-        <div id="examplesTab" class="tab-panel" role="tabpanel" aria-labelledby="requestExamplesTabButton">
-          <div class="table-actions">
-            <button id="addExampleButton">Add Example</button>
-            <button id="captureResponseExampleButton">Capture Response</button>
-            <button id="exportExamplesButton">Export Examples</button>
-          </div>
-          <div id="examplesList" class="examples-list"></div>
-        </div>
-
         <div id="cookiesTab" class="tab-panel" role="tabpanel" aria-labelledby="requestCookiesTabButton">
           <div class="cookie-jar-options">
             <label class="field inline">
@@ -482,6 +473,10 @@
           <h3 class="section-heading">Collection Variables</h3>
           <div id="collectionVariablesTable" class="kv-table"></div>
           <pre id="variablePreview" class="variable-preview">No variables</pre>
+        </div>
+
+        <div id="docsTab" class="tab-panel" role="tabpanel" aria-labelledby="requestDocsTabButton">
+          <textarea id="docsInput" class="docs-input" spellcheck="false" placeholder="Request docs" aria-label="Request docs" data-code-editor data-code-language="text"></textarea>
         </div>
 
       </section>
@@ -660,8 +655,8 @@
               <button id="performanceRequestCookiesTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceCookies" aria-selected="false" aria-controls="performanceCookiesTab">Cookies</button>
               <button id="performanceRequestBodyTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceBody" aria-selected="false" aria-controls="performanceBodyTab">Body</button>
               <button id="performanceRequestScriptsTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceScripts" aria-selected="false" aria-controls="performanceScriptsTab">Scripts</button>
-              <button id="performanceRequestExamplesTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceExamples" aria-selected="false" aria-controls="performanceExamplesTab">Examples</button>
               <button id="performanceRequestVariablesTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceVariables" aria-selected="false" aria-controls="performanceVariablesTab">Variables</button>
+              <button id="performanceRequestDocsTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceDocs" aria-selected="false" aria-controls="performanceDocsTab">Docs</button>
             </div>
 
             <div id="performanceParamsTab" class="tab-panel active" role="tabpanel" aria-labelledby="performanceRequestParamsTabButton">
@@ -942,20 +937,16 @@
               </div>
             </div>
 
-            <div id="performanceExamplesTab" class="tab-panel" role="tabpanel" aria-labelledby="performanceRequestExamplesTabButton">
-              <div class="table-actions">
-                <button id="addPerformanceExampleButton" type="button">Add Example</button>
-                <button id="exportPerformanceExamplesButton" type="button">Export Examples</button>
-              </div>
-              <div id="performanceExamplesList" class="examples-list"></div>
-            </div>
-
             <div id="performanceVariablesTab" class="tab-panel" role="tabpanel" aria-labelledby="performanceRequestVariablesTabButton">
               <div class="environment-actions">
                 <button id="addPerformanceRequestVariableButton" type="button">Add Request Variable</button>
               </div>
               <div id="performanceRequestVariablesTable" class="kv-table"></div>
               <pre id="performanceVariablePreview" class="variable-preview">No variables</pre>
+            </div>
+
+            <div id="performanceDocsTab" class="tab-panel" role="tabpanel" aria-labelledby="performanceRequestDocsTabButton">
+              <textarea id="performanceDocsInput" class="docs-input" spellcheck="false" placeholder="Request docs" aria-label="Performance request docs" data-code-editor data-code-language="text"></textarea>
             </div>
           </div>
         </div>
@@ -1208,7 +1199,7 @@
                 <input id="showEditorLineNumbersInput" type="checkbox">
                 <span>Show editor line numbers</span>
               </label>
-              <p class="settings-help">Show line numbers in request, response, script, import, export, and CSV editors.</p>
+              <p class="settings-help">Show line numbers in request, docs, response, script, import, export, and CSV editors.</p>
             </div>
           </section>
 
@@ -1678,7 +1669,6 @@
   <script src="../core/cookieModel.js"></script>
   <script src="collectionModel.js"></script>
   <script src="cookieModel.js"></script>
-  <script src="exampleModel.js"></script>
   <script src="performanceTestModel.js"></script>
   <script src="variableHighlighter.js"></script>
   <script src="codeEditor.js"></script>

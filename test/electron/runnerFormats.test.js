@@ -28,7 +28,7 @@ test('exports and imports native runner documents with schema validation', () =>
       auth: { type: 'none' },
       scripts: { preRequest: '', tests: '' },
       variables: [],
-      examples: [],
+      docs: '',
       cookieJar: { enabled: false, storeResponses: true },
       autoHeaders: { sendPostMeterToken: false, showGeneratedHeaders: false }
     }]

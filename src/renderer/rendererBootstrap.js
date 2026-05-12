@@ -132,9 +132,6 @@
     bindClick(doc, 'addHeaderButton', options.onAddHeader);
     bindChange(doc, 'sendPostMeterTokenInput', options.onPostMeterTokenHeaderChange);
     bindChange(doc, 'showGeneratedHeadersInput', options.onShowGeneratedHeadersChange);
-    bindClick(doc, 'addExampleButton', options.onAddExample);
-    bindClick(doc, 'captureResponseExampleButton', options.onCaptureResponseExample);
-    bindClick(doc, 'exportExamplesButton', options.onExportExamples);
     bindClick(doc, 'saveRequestButton', options.onSaveRequest);
     bindClick(doc, 'saveEnvironmentButton', options.onSaveEnvironment);
     bindClick(doc, 'deleteEnvironmentButton', options.onDeleteEnvironment);
@@ -174,8 +171,6 @@
     bindClick(doc, 'addPerformanceHeaderButton', options.onAddPerformanceHeader);
     bindChange(doc, 'performanceSendPostMeterTokenInput', options.onPerformancePostMeterTokenHeaderChange);
     bindChange(doc, 'performanceShowGeneratedHeadersInput', options.onPerformanceShowGeneratedHeadersChange);
-    bindClick(doc, 'addPerformanceExampleButton', options.onAddPerformanceExample);
-    bindClick(doc, 'exportPerformanceExamplesButton', options.onExportPerformanceExamples);
     bindClick(doc, 'addPerformanceRequestVariableButton', options.onAddPerformanceRequestVariable);
     bindClick(doc, 'addPerformanceCookieButton', options.onAddPerformanceCookie);
     bindClick(doc, 'clearExpiredPerformanceCookiesButton', options.onClearExpiredPerformanceCookies);
@@ -222,6 +217,7 @@
     bindInput(doc, 'performanceBinaryBodySourceInput', options.onPerformanceRequestChange);
     bindInput(doc, 'performancePreRequestScriptInput', options.onPerformanceRequestChange);
     bindInput(doc, 'performanceTestScriptInput', options.onPerformanceRequestChange);
+    bindInput(doc, 'performanceDocsInput', options.onPerformanceRequestChange);
     bindChange(doc, 'performanceRequestCookieJarEnabledInput', options.onPerformanceRequestChange);
     bindChange(doc, 'performanceRequestCookieJarStoreInput', options.onPerformanceRequestChange);
     bindChange(doc, 'performanceFilterCookiesToRequestHostInput', options.onPerformanceFilterCookiesChange);
@@ -238,6 +234,7 @@
     bindInput(doc, 'binaryBodySourceInput', options.onBodyInput);
     bindInput(doc, 'preRequestScriptInput', options.onPreRequestScriptInput);
     bindInput(doc, 'testScriptInput', options.onTestScriptInput);
+    bindInput(doc, 'docsInput', options.onDocsInput || options.onBodyInput);
     bindChange(doc, 'requestCookieJarEnabledInput', options.onRequestCookieJarChange);
     bindChange(doc, 'requestCookieJarStoreInput', options.onRequestCookieJarChange);
     bindChange(doc, 'filterCookiesToRequestHostInput', options.onFilterCookiesChange);

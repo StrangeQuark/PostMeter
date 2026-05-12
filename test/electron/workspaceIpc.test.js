@@ -32,7 +32,7 @@ test('file dialog helpers validate selected paths before IPC file operations', (
   assert.throws(() => validateDialogFilePath('', 'custom path'), /custom path must be a non-empty string/);
 });
 
-test('workspace IPC registers stable workspace, collection, and example channels', async () => {
+test('workspace IPC registers stable workspace, collection, and request channels', async () => {
   const handlers = new Map();
   const syncHandlers = new Map();
   let describeCurrentCalls = 0;
@@ -128,7 +128,6 @@ test('workspace IPC registers stable workspace, collection, and example channels
     'collection:import',
     'environment:export',
     'environment:import',
-    'request:examples:export',
     'request:export',
     'request:exportText',
     'request:import',

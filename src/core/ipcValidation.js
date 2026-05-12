@@ -116,6 +116,7 @@ function assertRequestPayload(value, field = 'request') {
     fail(`${field}.protocol is not supported.`);
   }
   optionalString(value.methodPath, `${field}.methodPath`, fieldLimit('url'));
+  optionalString(value.docs, `${field}.docs`, fieldLimit('body'));
   assertPairs(value.queryParams || [], `${field}.queryParams`);
   assertPairs(value.headers || [], `${field}.headers`);
   optionalString(value.bodyType, `${field}.bodyType`, fieldLimit('short'));
@@ -127,7 +128,6 @@ function assertRequestPayload(value, field = 'request') {
     queryParams: assertPairs,
     headers: assertPairs,
     variables: assertPairs,
-    examples: assertExamples,
     metadata: assertPairs,
     messages: assertProtocolMessages
   });
@@ -151,6 +151,9 @@ function assertRequestPayload(value, field = 'request') {
   if (value.loadTestPolicy != null) {
     fail(`${field}.loadTestPolicy is no longer supported.`);
   }
+  if (value.examples != null) {
+    fail(`${field}.examples is no longer supported.`);
+  }
 }
 
 function assertRunnerPayload(value, field = 'runner') {
@@ -170,7 +173,7 @@ function assertRunnerRequestPayload(value, field = 'request') {
     'body',
     'bodyType',
     'cookieJar',
-    'examples',
+    'docs',
     'graphql',
     'grpc',
     'headers',
@@ -1381,15 +1384,6 @@ function assertPairs(values, field) {
 
 function assertScripts(value, field) {
   assertSchemaFields('scripts', value, field);
-}
-
-function assertExamples(values, field) {
-  array(values, field, LIMITS.pairs).forEach((example, index) => {
-    const itemField = `${field}[${index}]`;
-    assertSchemaFields('example', example, itemField);
-    optionalJsonObject(example.postman, `${itemField}.postman`, LIMITS.body);
-    assertPairs(example.headers || [], `${itemField}.headers`);
-  });
 }
 
 function assertProtocolMessages(values, field) {

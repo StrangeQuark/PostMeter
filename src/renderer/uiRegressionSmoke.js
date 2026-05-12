@@ -136,12 +136,9 @@
     assertUiSmoke(!$('cookiesTable').querySelector('.cookie-row'), 'Cookie active-host filter did not hide non-matching rows.');
     $('filterCookiesToRequestHostInput').checked = false;
     dispatchChange($('filterCookiesToRequestHostInput'));
-    activateTab('request', 'examples');
-    $('addExampleButton').click();
-    const exampleItem = $('examplesList').querySelector('.example-item');
-    assertUiSmoke(exampleItem, 'Example editor did not create a row.');
-    assertUiSmoke(exampleItem.querySelector('[aria-label="Example 1 name"]'), 'Example name input should expose a contextual accessible label.');
-    assertUiSmoke(exampleItem.querySelector('[aria-label="Example 1 headers"]'), 'Example headers textarea should expose a contextual accessible label.');
+    activateTab('request', 'docs');
+    assertUiSmoke($('docsInput').getAttribute('aria-label') === 'Request docs', 'Docs textarea should expose an accessible label.');
+    assertUiSmoke($('docsInput').closest('.code-editor'), 'Docs textarea should be wrapped by the line-number editor.');
     activateTab('request', 'collectionVariables');
     $('addRequestVariableButton').click();
     const variableRow = $('requestVariablesTable').querySelector('.kv-row');
@@ -263,10 +260,13 @@
   async function assertEditorLineNumbersSettingSmoke() {
     const checkbox = $('showEditorLineNumbersInput');
     const editor = $('bodyInput')?.closest?.('.code-editor');
+    const docsEditor = $('docsInput')?.closest?.('.code-editor');
     assertUiSmoke(checkbox, 'Editor line number setting checkbox should exist.');
     assertUiSmoke(editor, 'Request body editor should exist before toggling editor line numbers.');
+    assertUiSmoke(docsEditor, 'Docs editor should exist before toggling editor line numbers.');
     assertUiSmoke(checkbox.checked === true, 'Editor line number setting should default to checked.');
     assertUiSmoke(editor.classList.contains('has-line-numbers'), 'Code editors should start with line numbers enabled.');
+    assertUiSmoke(docsEditor.classList.contains('has-line-numbers'), 'Docs editor should start with line numbers enabled.');
 
     clickElementAtCenter(checkbox, 'Editor line number setting checkbox');
     await waitForUiSmoke(
@@ -283,6 +283,7 @@
     );
     assertUiSmoke(checkbox.checked === false, 'Editor line number setting checkbox should stay unchecked after settings are saved.');
     assertUiSmoke(!editor.classList.contains('has-line-numbers'), 'Code editors should remove line numbers when the setting is unchecked.');
+    assertUiSmoke(!docsEditor.classList.contains('has-line-numbers'), 'Docs editor should remove line numbers when the setting is unchecked.');
 
     clickElementAtCenter(checkbox, 'Editor line number setting checkbox');
     await waitForUiSmoke(
@@ -299,6 +300,7 @@
     );
     assertUiSmoke(checkbox.checked === true, 'Editor line number setting checkbox should stay checked after settings are saved.');
     assertUiSmoke(editor.classList.contains('has-line-numbers'), 'Code editors should restore line numbers when the setting is checked again.');
+    assertUiSmoke(docsEditor.classList.contains('has-line-numbers'), 'Docs editor should restore line numbers when the setting is checked again.');
   }
 
   function clickElementAtCenter(element, label) {
@@ -1155,7 +1157,7 @@
       auth: { type: 'none' },
       scripts: { preRequest: '', tests: '' },
       variables: [],
-      examples: [],
+      docs: '',
       cookieJar: { enabled: false, storeResponses: true }
     };
   }
@@ -1600,7 +1602,6 @@
   }
 
   async function assertExportCancellationSmoke() {
-    const originalExportExamples = window.__postmeterExportExamples;
     const originalImportWorkspace = window.__postmeterImportWorkspace;
     const originalExportCollection = window.__postmeterExportCollection;
     const originalImportCollection = window.__postmeterImportCollection;
@@ -1608,25 +1609,6 @@
     const originalSaveWorkspace = window.__postmeterSaveWorkspace;
     const originalDiagnostics = window.__postmeterDiagnostics;
     try {
-      let exportedExampleCount = 0;
-      window.__postmeterExportExamples = async (request) => {
-        exportedExampleCount = request.examples?.length || 0;
-        return { cancelled: true };
-      };
-      setStatus('Ready.');
-      await exportRequestExamples();
-      assertUiSmoke(exportedExampleCount > 0, 'Example export did not pass examples to the export boundary.');
-      assertUiSmoke(lastStatusMessage === 'Ready.', 'Cancelled example export should leave the current status unchanged.');
-
-      window.__postmeterExportExamples = async () => {
-        throw new Error('mocked example export failure');
-      };
-      lastUserNotification = null;
-      await exportRequestExamples();
-      assertUiSmoke(lastStatusMessage === 'Example export failed.', 'Failed example export should update visible status.');
-      assertUiSmoke(lastUserNotification?.title === 'Example Export Failed', 'Failed example export should show a popup notification.');
-      assertUiSmoke(lastUserNotification?.message.includes('mocked example export failure'), 'Failed example export popup should include the error message.');
-
       let exportedFormat = '';
       window.__postmeterExportCollection = async (_collection, format) => {
         exportedFormat = format;
@@ -1706,7 +1688,6 @@
       assertStatusIncludes('Diagnostics export failed: mocked diagnostics export failure', 'Failed diagnostics export did not update visible status.');
       assertUiSmoke(lastUserNotification?.title === 'Diagnostics Export Failed', 'Failed diagnostics export should show a popup notification.');
     } finally {
-      window.__postmeterExportExamples = originalExportExamples;
       window.__postmeterImportWorkspace = originalImportWorkspace;
       window.__postmeterExportCollection = originalExportCollection;
       window.__postmeterImportCollection = originalImportCollection;
@@ -2329,11 +2310,12 @@
         ['performanceRequestCookiesTabButton', 'Cookies'],
         ['performanceRequestBodyTabButton', 'Body'],
         ['performanceRequestScriptsTabButton', 'Scripts'],
-        ['performanceRequestExamplesTabButton', 'Examples'],
-        ['performanceRequestVariablesTabButton', 'Variables']
+        ['performanceRequestVariablesTabButton', 'Variables'],
+        ['performanceRequestDocsTabButton', 'Docs']
       ]) {
         assertUiSmoke($(tabId).getAttribute('role') === 'tab', `Performance request ${label} tab should expose role=tab.`);
       }
+      assertUiSmoke($('performanceDocsInput').closest('.code-editor'), 'Performance docs textarea should be wrapped by the line-number editor.');
       $('addPerformanceParamButton').click();
       let performanceRowInputs = $('performanceParamsTable').querySelectorAll('input');
       assertUiSmoke(performanceRowInputs.length >= 3, 'Performance Params Add should create editable inputs.');
@@ -3654,7 +3636,7 @@
       body: '',
       auth: { type: 'none' },
       variables: [],
-      examples: []
+      docs: ''
     }));
     collection.requests = cappedRequests;
     collection.folders = [];

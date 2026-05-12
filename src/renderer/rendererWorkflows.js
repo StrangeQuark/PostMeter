@@ -49,7 +49,6 @@
 
     function clearFailedResponseDetails(message) {
       state.lastResponse = null;
-      updateCaptureResponseButton();
       element('responseStatus').textContent = 'ERR';
       element('responseTime').textContent = '-';
       element('responseSize').textContent = '-';
@@ -580,11 +579,6 @@
       );
     }
 
-    function updateCaptureResponseButton() {
-      const request = activeRequest();
-      element('captureResponseExampleButton').disabled = !(request && state.lastResponse && state.lastResponse.requestId === request.id);
-    }
-
     function syncSavedRequestContext(context) {
       if (!context?.requestId || !isActiveWorkspaceContext(context)) {
         return false;
@@ -707,7 +701,6 @@
           applySingleRequestScriptMutations(response, requestContext);
           const publicResponse = publicResponseResult(response);
           state.lastResponse = requestActuallySent ? { ...publicResponse, requestId: requestContext.requestId } : null;
-          updateCaptureResponseButton();
           displayResponse(publicResponse);
           if (requestActuallySent) {
             state.workspace.history = [

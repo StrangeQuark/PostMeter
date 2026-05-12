@@ -311,9 +311,6 @@ function curlExportExclusions(request = {}) {
   if ((request.variables || []).some((variable) => variable?.enabled !== false && variable?.key && !String(variable.key).startsWith('curl.'))) {
     exclusions.push('Request variables are exported as literal values and are not resolved by curl.');
   }
-  if ((request.examples || []).length) {
-    exclusions.push('Saved examples are not included in curl exports.');
-  }
   const bodyMode = String(request.postmanBody?.mode || '').toLowerCase();
   if (bodyMode === 'formdata' || request.bodyType === BODY_TYPES.FORM_DATA) {
     exclusions.push('Form-data body metadata and file bindings may not be represented exactly in curl exports.');

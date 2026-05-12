@@ -170,14 +170,7 @@ function largeRequestFixture(collectionIndex, folderIndex, requestIndex) {
     bodyType: requestIndex % 2 === 0 ? 'NONE' : 'RAW_JSON',
     body: requestIndex % 2 === 0 ? '' : '{"ok":true}',
     scripts: { preRequest: '', tests: '' },
-    examples: [{
-      id: `example-${collectionIndex}-${folderIndex}-${requestIndex}`,
-      name: 'Example',
-      statusCode: 200,
-      headers: [],
-      bodyType: 'RAW_JSON',
-      body: '{"ok":true}'
-    }]
+    docs: `Docs ${collectionIndex}.${folderIndex}.${requestIndex}`
   });
 }
 

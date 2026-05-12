@@ -73,10 +73,7 @@ test('imports and exports OpenAPI collections', async () => {
   assert.equal(collection.folders[0].requests[0].url, 'https://api.example.test/v1/widgets/{{id}}');
   assert.equal(collection.folders[0].requests[0].queryParams[0].key, 'expand');
   assert.equal(collection.folders[0].requests[0].auth.type, 'bearer');
-  assert.equal(collection.folders[0].requests[0].examples[0].name, '200 application/json Found widget');
-  assert.equal(collection.folders[0].requests[0].examples[0].statusCode, 200);
-  assert.equal(collection.folders[0].requests[0].examples[0].headers[0].key, 'X-Trace');
-  assert.match(collection.folders[0].requests[0].examples[0].body, /"id": "w1"/);
+  assert.equal(Object.hasOwn(collection.folders[0].requests[0], 'examples'), false);
   assert.equal(collection.requests[0].bodyType, 'RAW_JSON');
   assert.equal(collection.requests[0].auth.type, 'apiKey');
 
@@ -222,8 +219,7 @@ test('imports OpenAPI local references and Swagger 2 request body variants', asy
   assert.equal(referencedRequest.variables.find((variable) => variable.key === 'id').value, 'ref-1');
   assert.equal(referencedRequest.headers.find((header) => header.key === 'X-Trace').value, 'trace-ref');
   assert.match(referencedRequest.body, /referenced/);
-  assert.equal(referencedRequest.examples[0].statusCode, 201);
-  assert.equal(referencedRequest.examples[0].headers.find((header) => header.key === 'Location').value, '/widgets/ref-1');
+  assert.equal(Object.hasOwn(referencedRequest, 'examples'), false);
 
   const swaggerBodyPath = path.join(dir, 'swagger-body.json');
   await fs.writeFile(swaggerBodyPath, JSON.stringify({
@@ -366,7 +362,7 @@ test('preserves PostMeter device-code OAuth metadata across OpenAPI export and i
       },
       scripts: { preRequest: '', tests: '' },
       variables: [],
-      examples: [],
+      docs: '',
       cookieJar: { enabled: false, storeResponses: true }
     }],
     folders: []
