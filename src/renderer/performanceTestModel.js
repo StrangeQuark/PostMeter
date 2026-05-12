@@ -7,6 +7,7 @@
       filePath: '',
       sourceName: '',
       activeSource: '',
+      reuseFirstRow: false,
       loopRows: false,
       continueWithoutRows: false
     })

@@ -251,6 +251,7 @@ const FIELD_SCHEMAS = {
     filePath: { type: 'string', limit: 'url', optional: true },
     sourceName: { type: 'string', limit: 'name', optional: true },
     activeSource: { type: 'string', limit: 'tiny', enum: 'csvVariableSources', optional: true },
+    reuseFirstRow: { type: 'boolean', optional: true },
     loopRows: { type: 'boolean', optional: true },
     continueWithoutRows: { type: 'boolean', optional: true }
   },

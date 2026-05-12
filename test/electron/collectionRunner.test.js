@@ -724,6 +724,72 @@ test('workspace-owned runner can continue without CSV variable rows after data r
   assert.deepEqual(result.results.map((item) => item.requestUrl), sent);
 });
 
+test('workspace-owned runner can reuse the first CSV variable row across all requests', async () => {
+  const runner = {
+    id: 'runner-csv-reuse-first',
+    name: 'CSV Reuse First Runner',
+    csvVariables: {
+      schema: 'username,password',
+      values: 'alice,correct-horse',
+      reuseFirstRow: true
+    },
+    requests: [
+      {
+        ...requestModel({
+          id: 'login',
+          name: 'Login ${username}',
+          method: 'POST',
+          url: 'https://api.example.test/login',
+          bodyType: 'RAW_TEXT',
+          body: '${username}:${password}'
+        }),
+        iterations: 1
+      },
+      {
+        ...requestModel({
+          id: 'profile',
+          name: 'Profile ${username}',
+          method: 'GET',
+          url: 'https://api.example.test/users/${username}'
+        }),
+        iterations: 2
+      }
+    ]
+  };
+  const sent = [];
+
+  const result = await runRunner(runner, { id: 'env', name: 'Env', variables: [] }, {
+    sendRequest: async (request, environment) => {
+      sent.push({
+        name: resolveEnvironmentValue(request.name, environment),
+        url: resolveEnvironmentValue(request.url, environment),
+        body: resolveEnvironmentValue(request.body, environment)
+      });
+      return response(200, '{}');
+    }
+  });
+
+  assert.equal(result.passed, true);
+  assert.deepEqual(sent, [
+    {
+      name: 'Login alice',
+      url: 'https://api.example.test/login',
+      body: 'alice:correct-horse'
+    },
+    {
+      name: 'Profile alice',
+      url: 'https://api.example.test/users/alice',
+      body: ''
+    },
+    {
+      name: 'Profile alice',
+      url: 'https://api.example.test/users/alice',
+      body: ''
+    }
+  ]);
+  assert.deepEqual(result.results.map((item) => item.requestDisplayName), ['Login alice', 'Profile alice', 'Profile alice']);
+});
+
 test('workspace-owned runner can disable configured CSV variable data from the main pane option', async () => {
   const sent = [];
   const result = await runRunner({

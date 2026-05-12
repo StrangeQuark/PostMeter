@@ -261,11 +261,27 @@
     await nextPaint();
     assertUiSmoke(!$('modalBackdrop').hidden, 'Opening Settings should show the modal backdrop.');
     assertUiSmoke(!$('settingsModal').hidden, 'Opening Settings should show the Settings modal.');
+    assertSettingsSandboxHelpText();
     await assertEditorLineNumbersSettingSmoke();
     $('closeSettingsModalFooterButton').click();
     await modalPromise;
     await nextPaint();
     assertUiSmoke($('modalBackdrop').hidden, 'Closing Settings should hide the modal backdrop.');
+  }
+
+  function assertSettingsSandboxHelpText() {
+    assertUiSmoke(
+      $('settingsVaultDescription')?.textContent.includes('local secret values'),
+      'Vault settings should explain that vault values are local script secrets.'
+    );
+    assertUiSmoke(
+      $('settingsPackagesDescription')?.textContent.includes('reviewed JavaScript bundles'),
+      'Packages settings should explain reviewed script package bundles.'
+    );
+    assertUiSmoke(
+      $('settingsFilesDescription')?.textContent.includes('imported file references'),
+      'Files settings should explain imported file bindings.'
+    );
   }
 
   async function assertEditorLineNumbersSettingSmoke() {
@@ -402,6 +418,15 @@
     scriptInput.setSelectionRange(0, 0);
     scriptInput.dispatchEvent(new KeyboardEvent('keydown', { key: '{', bubbles: true, cancelable: true }));
     assertUiSmoke(scriptInput.value === '{}', 'Script editor should create closing braces for JavaScript input.');
+    scriptInput.value = 'const response = pm.response.json();\n// keep metrics aligned';
+    dispatchInput(scriptInput);
+    const scriptEditor = scriptInput.closest('.code-editor');
+    const keywordToken = scriptEditor?.querySelector?.('.code-editor-token.tok-keyword');
+    const commentToken = scriptEditor?.querySelector?.('.code-editor-token.tok-comment');
+    assertUiSmoke(keywordToken, 'Script editor should render keyword syntax tokens.');
+    assertUiSmoke(commentToken, 'Script editor should render comment syntax tokens.');
+    assertHighlightedTextUsesInputMetrics(scriptInput, keywordToken, 'Script keyword highlighting should not alter caret text metrics.');
+    assertHighlightedTextUsesInputMetrics(scriptInput, commentToken, 'Script comment highlighting should not alter caret text metrics.');
     const originalActiveEnvironmentId = activeEnvironmentId;
     const highlightEnvironment = {
       id: 'ui-regression-variable-highlight-env',
@@ -472,10 +497,18 @@
     const wrapper = control.closest?.('.variable-highlight-editor') || control.closest?.('.code-editor');
     const token = wrapper?.querySelector?.(`[data-variable-name="${cssAttributeValue(variableName)}"]`);
     assertUiSmoke(token, message);
-    assertUiSmoke(
-      getComputedStyle(token).fontWeight === getComputedStyle(control).fontWeight,
-      `${message} Token font weight should match the editable text.`
-    );
+    assertHighlightedTextUsesInputMetrics(control, token, message);
+  }
+
+  function assertHighlightedTextUsesInputMetrics(control, highlightedNode, message) {
+    const controlStyle = getComputedStyle(control);
+    const highlightedStyle = getComputedStyle(highlightedNode);
+    for (const property of ['fontSize', 'fontStyle', 'fontWeight', 'letterSpacing', 'lineHeight', 'wordSpacing']) {
+      assertUiSmoke(
+        highlightedStyle[property] === controlStyle[property],
+        `${message} ${property} should match the editable text. Expected ${controlStyle[property]}, got ${highlightedStyle[property]}.`
+      );
+    }
   }
 
   function highlightedTextboxText(control) {

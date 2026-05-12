@@ -52,6 +52,7 @@ test('defines shared payload schema metadata for IPC and contributors', () => {
   assert.equal(payloadSchemas.fields.csvVariables.filePath.limit, 'url');
   assert.equal(payloadSchemas.fields.csvVariables.activeSource.enum, 'csvVariableSources');
   assert.equal(payloadSchemas.fields.csvVariables.enabled.type, 'boolean');
+  assert.equal(payloadSchemas.fields.csvVariables.reuseFirstRow.type, 'boolean');
   assert.equal(payloadSchemas.fields.csvVariables.loopRows.type, 'boolean');
   assert.equal(payloadSchemas.fields.csvVariables.continueWithoutRows.type, 'boolean');
   assert.equal(payloadSchemas.fields.runnerRequestSource.requestId.limit, 'name');

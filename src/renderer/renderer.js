@@ -4158,7 +4158,7 @@ async function editActiveRunnerCsvVariables() {
   collectRunnerFromEditor();
   const result = await promptCsvVariables({
     title: 'Runner CSV variables',
-    message: 'Define variables consumed one row at a time across runner requests and iterations.',
+    message: 'Define variables consumed across runner requests and iterations. Use CSV row usage options to reuse, loop, or stop consuming rows.',
     value: runner.csvVariables
   });
   if (!result) {
@@ -4179,7 +4179,7 @@ async function editActivePerformanceCsvVariables() {
   collectPerformanceTestFromEditor();
   const result = await promptCsvVariables({
     title: 'Performance CSV variables',
-    message: 'Define variables consumed one row at a time across planned performance requests.',
+    message: 'Define variables consumed across planned performance requests. Use CSV row usage options to reuse, loop, or stop consuming rows.',
     value: test.csvVariables
   });
   if (!result) {
@@ -4204,12 +4204,16 @@ function configureCsvVariablesModal(options = {}) {
   const hasFile = Boolean(String(value.filePath || '').trim());
   const hasInlineRows = Boolean(String(value.values || '').trim());
   $('csvVariablesModalTitle').textContent = String(options.title || 'CSV variables');
-  $('csvVariablesModalMessage').textContent = String(options.message || 'Define a comma-separated schema and provide one CSV row for each request execution.');
+  $('csvVariablesModalMessage').textContent = String(options.message || 'Define a comma-separated schema and provide CSV rows for request executions.');
   $('csvVariablesSchemaInput').value = value.schema;
   const valuesInput = $('csvVariablesValuesInput');
   if (valuesInput) {
     valuesInput.value = value.values;
     refreshCodeEditorIfTextarea(valuesInput);
+  }
+  const reuseFirstRowInput = $('csvVariablesReuseFirstRowInput');
+  if (reuseFirstRowInput) {
+    reuseFirstRowInput.checked = value.reuseFirstRow === true;
   }
   const loopRowsInput = $('csvVariablesLoopRowsInput');
   if (loopRowsInput) {
@@ -4258,7 +4262,7 @@ function confirmCsvVariablesModal() {
       }
     }
     if (value.activeSource === 'inline' && hasValues) {
-      csvVariablesToIterationRows(value, value.values);
+      csvVariablesToIterationRows(value, value.values, { requiredRows: value.reuseFirstRow === true ? 1 : 0 });
     }
   } catch (error) {
     renderCsvVariablesError(error.message || String(error));
@@ -4268,13 +4272,32 @@ function confirmCsvVariablesModal() {
 }
 
 function csvVariablesRowModeChanged(mode) {
+  const reuseFirstRowInput = $('csvVariablesReuseFirstRowInput');
   const loopRowsInput = $('csvVariablesLoopRowsInput');
   const continueWithoutRowsInput = $('csvVariablesContinueWithoutRowsInput');
-  if (mode === 'loop' && loopRowsInput?.checked === true && continueWithoutRowsInput) {
-    continueWithoutRowsInput.checked = false;
+  if (mode === 'reuse' && reuseFirstRowInput?.checked === true) {
+    if (loopRowsInput) {
+      loopRowsInput.checked = false;
+    }
+    if (continueWithoutRowsInput) {
+      continueWithoutRowsInput.checked = false;
+    }
   }
-  if (mode === 'continue' && continueWithoutRowsInput?.checked === true && loopRowsInput) {
-    loopRowsInput.checked = false;
+  if (mode === 'loop' && loopRowsInput?.checked === true) {
+    if (reuseFirstRowInput) {
+      reuseFirstRowInput.checked = false;
+    }
+    if (continueWithoutRowsInput) {
+      continueWithoutRowsInput.checked = false;
+    }
+  }
+  if (mode === 'continue' && continueWithoutRowsInput?.checked === true) {
+    if (reuseFirstRowInput) {
+      reuseFirstRowInput.checked = false;
+    }
+    if (loopRowsInput) {
+      loopRowsInput.checked = false;
+    }
   }
 }
 
@@ -4330,7 +4353,8 @@ function csvVariablesValuesInputChanged() {
 
 function currentCsvVariablesModalValue() {
   const modal = $('csvVariablesModal');
-  const loopRows = $('csvVariablesLoopRowsInput')?.checked === true;
+  const reuseFirstRow = $('csvVariablesReuseFirstRowInput')?.checked === true;
+  const loopRows = !reuseFirstRow && $('csvVariablesLoopRowsInput')?.checked === true;
   const filePath = modal?.dataset?.filePath || '';
   const values = $('csvVariablesValuesInput')?.value || '';
   return {
@@ -4340,8 +4364,9 @@ function currentCsvVariablesModalValue() {
     sourceName: modal?.dataset?.sourceName || '',
     activeSource: normalizeCsvVariablesModalActiveSource(modal?.dataset?.activeSource || '', values, filePath),
     enabled: modal?.dataset?.enabled !== 'false',
+    reuseFirstRow,
     loopRows,
-    continueWithoutRows: !loopRows && $('csvVariablesContinueWithoutRowsInput')?.checked === true
+    continueWithoutRows: !reuseFirstRow && !loopRows && $('csvVariablesContinueWithoutRowsInput')?.checked === true
   };
 }
 

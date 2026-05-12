@@ -261,6 +261,44 @@ test('performance tests can continue without CSV variable rows after data runs o
   ]);
 });
 
+test('performance tests can reuse the first CSV variable row for all planned requests', async () => {
+  const performanceTest = performanceTestModel({
+    id: 'perf-csv-reuse-first',
+    name: 'CSV Reuse First Performance',
+    type: 'throughput',
+    request: {
+      id: 'request-csv-reuse-first',
+      name: 'CSV Reuse First Request',
+      method: 'POST',
+      url: 'https://api.example.test/login',
+      bodyType: 'RAW_TEXT',
+      body: '${username}:${password}'
+    },
+    csvVariables: {
+      schema: 'username,password',
+      values: 'alice,correct-horse',
+      reuseFirstRow: true
+    },
+    config: { iterations: 3, concurrency: 2 },
+    safetyLimits: { maxTotalRequests: 3, maxConcurrency: 2, maxDurationSeconds: 10 }
+  });
+
+  const sent = [];
+  const result = await runPerformanceTest(performanceTest, { id: 'env', name: 'Env', variables: [] }, {
+    sendRequest: async (request, environment) => {
+      sent.push(resolveEnvironmentValue(request.body, environment));
+      return response();
+    }
+  });
+
+  assert.equal(result.passed, true);
+  assert.deepEqual(sent, [
+    'alice:correct-horse',
+    'alice:correct-horse',
+    'alice:correct-horse'
+  ]);
+});
+
 test('performance tests can disable configured CSV variable data from the main pane option', async () => {
   const performanceTest = performanceTestModel({
     id: 'perf-csv-disabled',

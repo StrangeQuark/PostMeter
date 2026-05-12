@@ -370,7 +370,8 @@ async function csvVariableIterationRows(csvVariables, requiredRows) {
     return csvVariablesToIterationRows(normalizedCsvVariables, '', { requiredRows: normalizedRequiredRows });
   }
   const filePath = String(normalizedCsvVariables.filePath || '').trim();
-  const records = await csvVariableRecordsFromFile(filePath, normalizedRequiredRows);
+  const recordsToRead = normalizedCsvVariables.reuseFirstRow === true ? 1 : normalizedRequiredRows;
+  const records = await csvVariableRecordsFromFile(filePath, recordsToRead);
   return csvRecordsToIterationRows(normalizedCsvVariables, records, { requiredRows: normalizedRequiredRows });
 }
 

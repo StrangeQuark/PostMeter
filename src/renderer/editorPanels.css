@@ -374,7 +374,6 @@ textarea.code-editor-input:placeholder-shown {
 .code-editor-token.tok-keyword,
 .code-editor-token.tok-builtin {
   color: var(--blue);
-  font-weight: 700;
 }
 
 .code-editor-token.tok-key,
@@ -393,7 +392,6 @@ textarea.code-editor-input:placeholder-shown {
 
 .code-editor-token.tok-comment {
   color: var(--muted);
-  font-style: italic;
 }
 
 .code-editor-token.tok-punctuation {
@@ -890,7 +888,7 @@ textarea.code-editor-input:placeholder-shown {
   gap: 5px;
 }
 
-.field span {
+.field > span {
   color: var(--muted);
   font-weight: 700;
 }

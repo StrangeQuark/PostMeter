@@ -93,6 +93,8 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   const root = path.join(__dirname, '..', '..');
   const indexSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'index.html'), 'utf8');
   const chromeSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'chrome.css'), 'utf8');
+  const editorPanelsSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'editorPanels.css'), 'utf8');
+  const overlaysSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'overlays.css'), 'utf8');
   const layoutSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'layoutControls.js'), 'utf8');
   const bootstrapSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'rendererBootstrap.js'), 'utf8');
   const rendererSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'renderer.js'), 'utf8');
@@ -182,6 +184,19 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(chromeSource, /\.request-tab-method\.method-post/);
   assert.match(chromeSource, /\.request-tab-method\.entity-runner/);
   assert.match(chromeSource, /\.tree-badge\.entity-performance/);
+  assert.doesNotMatch(overlaysSource, /--mono-font/);
+  assert.match(overlaysSource, /csv-variables-modal textarea[\s\S]*font-family:\s*var\(--mono\)/);
+  assert.doesNotMatch(editorPanelsSource, /--mono-font/);
+  assert.doesNotMatch(editorPanelsSource, /\.field\s+span\s*\{/);
+  assert.match(editorPanelsSource, /\.field\s*>\s*span\s*\{/);
+  const codeEditorTokenCss = editorPanelsSource.slice(
+    editorPanelsSource.indexOf('.code-editor-token.tok-keyword'),
+    editorPanelsSource.indexOf('.variable-highlight-editor')
+  );
+  const metricChangingTokenStyles = Array.from(codeEditorTokenCss.matchAll(/font-(?:style|weight)\s*:\s*([^;]+);/g))
+    .map((match) => match[0])
+    .filter((declaration) => !/:\s*inherit\s*;/.test(declaration));
+  assert.deepEqual(metricChangingTokenStyles, []);
   assert.match(rendererSource, /pendingDiagnosticsSettingsSave/);
   assert.match(rendererSource, /Switch to this workspace before exporting local diagnostics/);
   assert.match(rendererSource, /Saving diagnostics privacy settings before export/);
@@ -326,6 +341,7 @@ test('renderer bootstrap binds CSV variable edit buttons and modal controls', ()
     ['csvVariablesInlineSourceButton', createElement()],
     ['csvVariablesValuesToggle', createElement()],
     ['csvVariablesValuesInput', createElement({ tagName: 'TEXTAREA' })],
+    ['csvVariablesReuseFirstRowInput', createElement({ tagName: 'INPUT' })],
     ['csvVariablesLoopRowsInput', createElement({ tagName: 'INPUT' })],
     ['csvVariablesContinueWithoutRowsInput', createElement({ tagName: 'INPUT' })],
     ['contextMenu', createElement()],
@@ -376,6 +392,7 @@ test('renderer bootstrap binds CSV variable edit buttons and modal controls', ()
   elements.get('csvVariablesInlineSourceButton').dispatch('click');
   elements.get('csvVariablesValuesToggle').dispatch('click');
   elements.get('csvVariablesValuesInput').dispatch('input');
+  elements.get('csvVariablesReuseFirstRowInput').dispatch('change');
   elements.get('csvVariablesLoopRowsInput').dispatch('change');
   elements.get('csvVariablesContinueWithoutRowsInput').dispatch('change');
 
@@ -394,6 +411,7 @@ test('renderer bootstrap binds CSV variable edit buttons and modal controls', ()
     'source:inline',
     'toggle-values',
     'values-input',
+    'row-mode:reuse',
     'row-mode:loop',
     'row-mode:continue'
   ]);
@@ -1230,6 +1248,7 @@ test('renderer exposes first-class runner UI and sends runner payloads through r
   assert.match(indexHtml, /id="csvVariablesInlineSourceButton"/);
   assert.match(indexHtml, /id="csvVariablesValuesToggle"/);
   assert.match(indexHtml, /id="csvVariablesValuesPanel"/);
+  assert.match(indexHtml, /id="csvVariablesReuseFirstRowInput"/);
   assert.match(indexHtml, /id="csvVariablesLoopRowsInput"/);
   assert.match(indexHtml, /id="csvVariablesContinueWithoutRowsInput"/);
   assert.match(indexHtml, /id="performanceUseCsvVariablesInput"/);
@@ -1241,6 +1260,7 @@ test('renderer exposes first-class runner UI and sends runner payloads through r
   assert.match(bootstrapSource, /bindClick\(doc, 'performanceCsvVariablesButton', options\.onEditPerformanceCsvVariables\)/);
   assert.match(bootstrapSource, /bindChange\(doc, 'runnerUseCsvVariablesInput', options\.onRunnerConfigChange\)/);
   assert.match(bootstrapSource, /bindChange\(doc, 'performanceUseCsvVariablesInput', options\.onPerformanceConfigChange\)/);
+  assert.match(bootstrapSource, /bindChange\(doc, 'csvVariablesReuseFirstRowInput'/);
   assert.match(bootstrapSource, /bindClick\(doc, 'confirmRunnerImportButton'/);
   assert.doesNotMatch(bootstrapSource, /newRunnerButton/);
   assert.doesNotMatch(indexHtml, /id="resultsRunnerTabButton"/);
