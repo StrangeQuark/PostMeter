@@ -299,12 +299,22 @@ function applyRequestSaveToWorkspace(workspace, payload) {
       id: collectionId,
       name: payload.collectionShell.name || 'Untitled Collection',
       description: payload.collectionShell.description || '',
+      auth: cloneJson(payload.collectionShell.auth || { type: 'none' }),
+      scripts: cloneJson(payload.collectionShell.scripts || {}),
       certificates: Array.isArray(payload.collectionShell.certificates) ? cloneJson(payload.collectionShell.certificates) : [],
       variables: Array.isArray(payload.collectionVariables) ? clonePairs(payload.collectionVariables) : [],
       requests: [],
       folders: []
     };
     collectionIndex = nextWorkspace.collections.length;
+  } else if (payload.collectionShell) {
+    collection.name = payload.collectionShell.name || collection.name || 'Untitled Collection';
+    collection.description = payload.collectionShell.description || '';
+    collection.auth = cloneJson(payload.collectionShell.auth || { type: 'none' });
+    collection.scripts = cloneJson(payload.collectionShell.scripts || {});
+    if (Array.isArray(payload.collectionShell.certificates)) {
+      collection.certificates = cloneJson(payload.collectionShell.certificates);
+    }
   }
 
   if (!replaceRequestInCollection(collection, requestId, payload.request)) {
@@ -382,6 +392,24 @@ function applyEnvironmentSaveToWorkspace(workspace, payload) {
     nextWorkspace.environments[environmentIndex] = cloneJson(payload.environment);
   } else {
     nextWorkspace.environments.push(cloneJson(payload.environment));
+  }
+  if (payload?.settings && typeof payload.settings === 'object') {
+    nextWorkspace.settings = normalizeSettings(mergeWorkspaceSettingsForSave(workspace?.settings, payload.settings));
+  }
+  return nextWorkspace;
+}
+
+function applyCollectionSaveToWorkspace(workspace, payload) {
+  const nextWorkspace = {
+    ...workspace,
+    collections: Array.isArray(workspace?.collections) ? [...workspace.collections] : []
+  };
+  const collectionId = payload?.collectionId || payload?.collection?.id || '';
+  const collectionIndex = nextWorkspace.collections.findIndex((collection) => collection.id === collectionId);
+  if (collectionIndex >= 0) {
+    nextWorkspace.collections[collectionIndex] = cloneJson(payload.collection);
+  } else {
+    nextWorkspace.collections.push(cloneJson(payload.collection));
   }
   if (payload?.settings && typeof payload.settings === 'object') {
     nextWorkspace.settings = normalizeSettings(mergeWorkspaceSettingsForSave(workspace?.settings, payload.settings));
@@ -487,6 +515,7 @@ function ensureFolderPath(collection, folderPath) {
 }
 
 module.exports = {
+  applyCollectionSaveToWorkspace,
   applyEnvironmentSaveToWorkspace,
   applyCollectionRunMutationsToWorkspace,
   applyRequestSaveToWorkspace,

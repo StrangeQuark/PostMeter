@@ -69,6 +69,7 @@ function assertSessionPayload(value, field = 'session') {
   ]) {
     optionalString(value[name], `${field}.${name}`, LIMITS.short);
   }
+  assertSessionCollectionTabs(value.openCollectionTabs || [], `${field}.openCollectionTabs`);
   assertSessionRequestTabs(value.openRequestTabs || [], `${field}.openRequestTabs`);
   assertSessionEnvironmentTabs(value.openEnvironmentTabs || [], `${field}.openEnvironmentTabs`);
   assertSessionWorkspaceTabs(value.openWorkspaceTabs || [], `${field}.openWorkspaceTabs`);
@@ -96,6 +97,8 @@ function assertCollectionPayload(value, field = 'collection') {
   optionalString(value.name, `${field}.name`, LIMITS.name);
   optionalString(value.description, `${field}.description`, LIMITS.value);
   optionalJsonObject(value.postman, `${field}.postman`, LIMITS.body);
+  assertAuthPayload(value.auth || { type: 'none' }, `${field}.auth`);
+  assertScripts(value.scripts || {}, `${field}.scripts`);
   assertPairs(value.variables || [], `${field}.variables`);
   assertCertificates(value.certificates || [], `${field}.certificates`);
   assertRequestArray(value.requests || [], `${field}.requests`);
@@ -655,6 +658,8 @@ function assertWorkspaceRequestSavePayload(value, field = 'payload') {
     optionalString(value.collectionShell.id, `${field}.collectionShell.id`, LIMITS.name);
     optionalString(value.collectionShell.name, `${field}.collectionShell.name`, LIMITS.name);
     optionalString(value.collectionShell.description, `${field}.collectionShell.description`, LIMITS.value);
+    assertAuthPayload(value.collectionShell.auth || { type: 'none' }, `${field}.collectionShell.auth`);
+    assertScripts(value.collectionShell.scripts || {}, `${field}.collectionShell.scripts`);
     assertCertificates(value.collectionShell.certificates || [], `${field}.collectionShell.certificates`);
   }
   if (value.runnerShell != null) {
@@ -698,6 +703,21 @@ function assertWorkspaceRequestSaveResultPayload(value, field = 'result') {
   if (value.cookies != null) {
     assertCookies(value.cookies, `${field}.cookies`);
   }
+}
+
+function assertWorkspaceCollectionSavePayload(value, field = 'payload') {
+  object(value, field);
+  string(value.collectionId, `${field}.collectionId`, LIMITS.name);
+  optionalBoolean(value.createdUnsaved, `${field}.createdUnsaved`);
+  assertCollectionPayload(value.collection, `${field}.collection`);
+  if (value.settings != null) {
+    assertSettingsPayload(value.settings, `${field}.settings`);
+  }
+}
+
+function assertWorkspaceCollectionSaveResultPayload(value, field = 'result') {
+  object(value, field);
+  assertCollectionPayload(value.collection, `${field}.collection`);
 }
 
 function assertWorkspaceEnvironmentSavePayload(value, field = 'payload') {
@@ -1283,6 +1303,21 @@ function assertSessionRequestTabs(values, field) {
   });
 }
 
+function assertSessionCollectionTabs(values, field) {
+  array(values, field, MAX_OPEN_TABS).forEach((tab, index) => {
+    const itemField = `${field}[${index}]`;
+    object(tab, itemField);
+    optionalString(tab.key, `${itemField}.key`, LIMITS.value);
+    optionalString(tab.collectionId, `${itemField}.collectionId`, LIMITS.value);
+    optionalBoolean(tab.dirty, `${itemField}.dirty`);
+    optionalBoolean(tab.createdUnsaved, `${itemField}.createdUnsaved`);
+    optionalString(tab.snapshot, `${itemField}.snapshot`, LIMITS.body);
+    if (tab.currentState != null) {
+      assertCollectionPayload(tab.currentState, `${itemField}.currentState`);
+    }
+  });
+}
+
 function assertSessionEnvironmentTabs(values, field) {
   array(values, field, MAX_OPEN_TABS).forEach((tab, index) => {
     const itemField = `${field}[${index}]`;
@@ -1682,6 +1717,8 @@ module.exports = {
   assertRuntimeId,
   assertRunnerPayload,
   assertUpdateCheckOptionsPayload,
+  assertWorkspaceCollectionSavePayload,
+  assertWorkspaceCollectionSaveResultPayload,
   assertWorkspaceEnvironmentSavePayload,
   assertWorkspaceEnvironmentSaveResultPayload,
   assertWorkspaceLoadResultPayload,

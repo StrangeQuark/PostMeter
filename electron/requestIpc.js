@@ -57,6 +57,8 @@ function registerRequestIpc(options = {}) {
       try {
         const { response: result, environment: nextEnvironment, collectionVariables, localVariables, globals } = await runRequest(request, environment, {
         collectionId: requestContext?.collection?.id || '',
+        collectionAuth: requestContext?.collection?.auth || { type: 'none' },
+        collectionScripts: requestContext?.collection?.scripts || {},
         collectionVariables: requestContext?.collection?.variables || [],
         globals: workspaceSnapshot.globals || [],
         cookieJar: workspaceSnapshot.cookies || [],

@@ -99,6 +99,109 @@ test('runs the shared scripted request lifecycle and applies script mutations ac
   assert.equal(request.variables[0].value, 'local-token');
 });
 
+test('uses collection auth and scripts only when the request does not define them', async () => {
+  const scripts = [];
+  const sends = [];
+  const result = await runScriptedRequestLifecycle(
+    createScriptedRequestState({
+      id: 'fallback',
+      name: 'Fallback',
+      method: 'GET',
+      url: 'https://api.example.test/fallback',
+      auth: { type: 'none' },
+      scripts: { preRequest: '', tests: "pm.test('request test', function () {});" }
+    }, { id: 'env', name: 'Env', variables: [] }, {
+      collectionAuth: { type: 'bearer', token: 'collection-token' },
+      collectionScripts: {
+        preRequest: "pm.environment.set('fromCollectionPre', 'yes');",
+        tests: "throw new Error('collection tests should not run');"
+      }
+    }),
+    {
+      scriptRunner: async (scriptText, context) => {
+        scripts.push(scriptText);
+        return {
+          result: {
+            passed: true,
+            tests: scriptText.includes('request test') ? [{ name: 'request test', passed: true, error: '' }] : [],
+            error: '',
+            logs: []
+          },
+          environmentVariables: context.environment.variables,
+          collectionVariables: context.collectionVariables,
+          localVariables: context.localVariables,
+          request: context.request
+        };
+      },
+      sendRequest: async (sentRequest) => {
+        sends.push(sentRequest);
+        return response(200, '{"ok":true}');
+      }
+    }
+  );
+
+  assert.equal(sends[0].auth.type, 'bearer');
+  assert.equal(sends[0].auth.token, 'collection-token');
+  assert.ok(scripts[0].includes('fromCollectionPre'));
+  assert.ok(scripts[1].includes('request test'));
+  assert.doesNotMatch(scripts.join('\n'), /collection tests should not run/);
+  assert.equal(result.testScriptResult.tests[0].name, 'request test');
+});
+
+test('keeps request auth and request script fields ahead of collection defaults', async () => {
+  const scripts = [];
+  const sends = [];
+  const result = await runScriptedRequestLifecycle(
+    createScriptedRequestState({
+      id: 'request-overrides',
+      name: 'Request Overrides',
+      method: 'GET',
+      url: 'https://api.example.test/overrides',
+      auth: { type: 'bearer', token: 'request-token' },
+      scripts: {
+        preRequest: "pm.environment.set('scriptScope', 'request-pre');",
+        tests: ''
+      }
+    }, { id: 'env', name: 'Env', variables: [] }, {
+      collectionAuth: { type: 'basic', username: 'collection-user', password: 'collection-pass' },
+      collectionScripts: {
+        preRequest: "throw new Error('collection pre-request should not run');",
+        tests: "pm.test('collection test fallback', function () {});"
+      }
+    }),
+    {
+      scriptRunner: async (scriptText, context) => {
+        scripts.push(scriptText);
+        return {
+          result: {
+            passed: true,
+            tests: scriptText.includes('collection test fallback')
+              ? [{ name: 'collection test fallback', passed: true, error: '' }]
+              : [],
+            error: '',
+            logs: []
+          },
+          environmentVariables: context.environment.variables,
+          collectionVariables: context.collectionVariables,
+          localVariables: context.localVariables,
+          request: context.request
+        };
+      },
+      sendRequest: async (sentRequest) => {
+        sends.push(sentRequest);
+        return response(200, '{"ok":true}');
+      }
+    }
+  );
+
+  assert.equal(sends[0].auth.type, 'bearer');
+  assert.equal(sends[0].auth.token, 'request-token');
+  assert.ok(scripts[0].includes('request-pre'));
+  assert.ok(scripts[1].includes('collection test fallback'));
+  assert.doesNotMatch(scripts.join('\n'), /collection pre-request should not run/);
+  assert.equal(result.testScriptResult.tests[0].name, 'collection test fallback');
+});
+
 test('continues the main request when the pre-request script has a top-level error', async () => {
   const scripts = [];
   const sent = [];

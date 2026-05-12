@@ -254,11 +254,13 @@ function folderModel({ id, name, requests, folders, postman } = {}) {
   return folder;
 }
 
-function collectionModel({ id, name, description, variables, certificates, requests, folders, postman } = {}) {
+function collectionModel({ id, name, description, auth, scripts, variables, certificates, requests, folders, postman } = {}) {
   const collection = {
     id: id || newId(),
     name: normalizeName(name, 'Untitled Collection'),
     description: description ?? '',
+    auth: normalizePersistedAuth(auth),
+    scripts: normalizeScripts(scripts),
     variables: normalizePairs(variables),
     certificates: normalizeCertificates(certificates),
     requests: Array.isArray(requests) ? requests.map(requestModel) : [],

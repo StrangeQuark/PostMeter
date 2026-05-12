@@ -222,6 +222,9 @@
     if (normalized === 'environment' || normalized === 'env') {
       return 'environment';
     }
+    if (normalized === 'collection' || normalized === 'collectionvariable' || normalized === 'collectionvariables') {
+      return 'collection';
+    }
     if (normalized === 'request' || normalized === 'local' || normalized === 'variable' || normalized === 'variables') {
       return 'request';
     }
@@ -233,7 +236,7 @@
 
   function variableMatchesPostmanToken(variable) {
     const source = normalizeVariableSource(variable?.source);
-    return !source || source === 'environment' || source === 'request' || source === 'global';
+    return !source || source === 'environment' || source === 'collection' || source === 'request' || source === 'global';
   }
 
   function variableMatchesSource(variable, source) {

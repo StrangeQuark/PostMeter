@@ -825,6 +825,7 @@ test('imports native collection exports and Postman collections without confusin
   assert.equal(postman.requests.length, 0);
   assert.equal(postman.variables.length, 2);
   assert.equal(postman.variables[0].key, 'baseUrl');
+  assert.match(postman.scripts.preRequest, /fromCollection/);
   assert.equal(postman.folders[0].name, 'Folder A');
   const nestedRequest = postman.folders[0].folders[0].requests[0];
   assert.equal(nestedRequest.name, 'Nested Request');

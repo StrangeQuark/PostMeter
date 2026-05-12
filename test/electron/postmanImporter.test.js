@@ -101,8 +101,9 @@ test('imports common Postman auth helpers with collection and folder inheritance
     ]
   });
 
-  assert.equal(collection.requests[0].auth.type, 'bearer');
-  assert.equal(collection.requests[0].auth.token, '{{collectionToken}}');
+  assert.equal(collection.auth.type, 'bearer');
+  assert.equal(collection.auth.token, '{{collectionToken}}');
+  assert.equal(collection.requests[0].auth.type, 'none');
   assert.equal(collection.folders[0].requests[0].auth.type, 'basic');
   assert.equal(collection.folders[0].requests[0].auth.username, 'user');
   assert.equal(collection.requests[1].auth.type, 'apiKey');
@@ -736,6 +737,8 @@ test('preserves imported Postman local mock scripts without request Examples fie
     }]
   });
 
+  assert.match(collection.scripts.mock, /pm\.state\.increment/);
+  assert.match(collection.scripts.mock, /pm\.mock\.sendExample/);
   assert.match(collection.requests[0].scripts.mock, /pm\.state\.increment/);
   assert.match(collection.requests[0].scripts.mock, /pm\.mock\.sendExample/);
   assert.equal(Object.hasOwn(collection.requests[0], 'examples'), false);

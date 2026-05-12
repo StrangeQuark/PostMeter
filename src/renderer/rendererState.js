@@ -18,6 +18,7 @@
       activeSidebarPanel: 'collections',
       activeMainPanel: 'request',
       draftRequests: new Map(),
+      openCollectionTabs: [],
       openRequestTabs: [],
       openEnvironmentTabs: [],
       openWorkspaceTabs: [],
@@ -55,6 +56,12 @@
       : `draft:${state.activeRequestId}`;
   }
 
+  function activeCollectionTabKey(state) {
+    return state?.activeCollectionId && !state.activeRequestId && state.activeMainPanel === 'request'
+      ? `collection:${state.activeCollectionId}`
+      : '';
+  }
+
   function activeEnvironmentTabKey(state) {
     return state?.activeEnvironmentId && state.activeEnvironmentId !== 'none'
       ? `environment:${state.activeEnvironmentId}`
@@ -77,6 +84,10 @@
     return state?.activeMainPanel === 'request' && tab?.key === activeRequestTabKey(state);
   }
 
+  function isActiveCollectionTab(state, tab) {
+    return state?.activeMainPanel === 'request' && tab?.key === activeCollectionTabKey(state);
+  }
+
   function isActiveEnvironmentTab(state, tab) {
     return state?.activeMainPanel === 'environment' && tab?.key === activeEnvironmentTabKey(state);
   }
@@ -96,6 +107,14 @@
   function requestSnapshot(request) {
     try {
       return JSON.stringify(request);
+    } catch {
+      return '{}';
+    }
+  }
+
+  function collectionSnapshot(collection) {
+    try {
+      return JSON.stringify(collection);
     } catch {
       return '{}';
     }
@@ -136,6 +155,19 @@
       tab.createdUnsaved = false;
       if (request) {
         tab.snapshot = requestSnapshot(request);
+      }
+    }
+    options.onAfterClear?.();
+  }
+
+  function clearSavedCollectionTabDirtyState(state, options = {}) {
+    const collectionForTab = options.collectionForTab || (() => null);
+    for (const tab of state?.openCollectionTabs || []) {
+      const collection = collectionForTab(tab);
+      tab.dirty = false;
+      tab.createdUnsaved = false;
+      if (collection) {
+        tab.snapshot = collectionSnapshot(collection);
       }
     }
     options.onAfterClear?.();
@@ -195,6 +227,7 @@
       return;
     }
     state.openRequestTabs = [];
+    state.openCollectionTabs = [];
     state.openEnvironmentTabs = [];
     state.openWorkspaceTabs = [];
     state.openRunnerTabs = [];
@@ -227,18 +260,22 @@
 
   const exported = {
     MAX_OPEN_TABS,
+    activeCollectionTabKey,
     activeEnvironmentTabKey,
     activePerformanceTabKey,
     activeRequestTabKey,
     activeRunnerTabKey,
     activeWorkspaceTabKey,
+    clearSavedCollectionTabDirtyState,
     clearSavedEnvironmentDirtyState,
     clearSavedPerformanceDirtyState,
     clearSavedRunnerDirtyState,
     clearSharedRequestDirtyState,
     clearSavedRequestDirtyState,
     createRendererState,
+    collectionSnapshot,
     environmentSnapshot,
+    isActiveCollectionTab,
     isActiveEnvironmentTab,
     isActivePerformanceTab,
     isActiveRequestTab,

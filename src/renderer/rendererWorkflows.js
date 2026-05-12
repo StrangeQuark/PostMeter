@@ -17,6 +17,7 @@
       ? options.promptForCollectionExport
       : null;
     const applyPostmanCookieMetadata = options.applyPostmanCookieMetadata || ((cookie) => cookie);
+    const collectCollectionFromEditor = options.collectCollectionFromEditor || (() => {});
     const collectEnvironmentFromEditor = options.collectEnvironmentFromEditor || (() => {});
     const collectRequestFromEditor = options.collectRequestFromEditor || (() => {});
     const collectSettingsFromEditor = options.collectSettingsFromEditor || (() => {});
@@ -240,17 +241,38 @@
         : '';
     }
 
+    function collectionTabKey(context) {
+      return context?.collectionId && !context.requestId
+        ? `collection:${context.collectionId}`
+        : '';
+    }
+
     function resolveRequestSaveTarget(config = {}) {
       if (typeof config.requestTabKey === 'string') {
         return config.requestTabKey;
       }
-      if (config.scope === 'all' || config.scope === 'runners') {
+      if (config.scope === 'all' || config.scope === 'runners' || typeof config.collectionTabKey === 'string') {
         return '';
       }
       if (typeof config.environmentTabKey === 'string') {
         return '';
       }
       return state?.activeMainPanel === 'request' ? currentRequestTabKey() : '';
+    }
+
+    function resolveCollectionSaveTarget(config = {}) {
+      if (typeof config.collectionTabKey === 'string') {
+        return config.collectionTabKey;
+      }
+      if (config.scope === 'all' || config.scope === 'runners') {
+        return '';
+      }
+      if (typeof config.requestTabKey === 'string' || typeof config.environmentTabKey === 'string') {
+        return '';
+      }
+      return state?.activeMainPanel === 'request' && state.activeCollectionId && !state.activeRequestId
+        ? collectionTabKey({ collectionId: state.activeCollectionId })
+        : '';
     }
 
     function resolveEnvironmentSaveTarget(config = {}) {
@@ -260,7 +282,7 @@
       if (config.scope === 'all') {
         return '';
       }
-      if (typeof config.requestTabKey === 'string') {
+      if (typeof config.requestTabKey === 'string' || typeof config.collectionTabKey === 'string') {
         return '';
       }
       return state?.activeMainPanel === 'environment' ? currentEnvironmentTabKey() : '';
@@ -268,6 +290,10 @@
 
     function requestTabForKey(tabKey) {
       return (state.openRequestTabs || []).find((tab) => tab.key === tabKey) || null;
+    }
+
+    function collectionTabForKey(tabKey) {
+      return (state.openCollectionTabs || []).find((tab) => tab.key === tabKey) || null;
     }
 
     function environmentTabForKey(tabKey) {
@@ -372,6 +398,18 @@
       return index >= 0 ? workspaceValue.environments[index] : null;
     }
 
+    function findCollectionIndexInWorkspace(workspaceValue, collectionId) {
+      if (!collectionId) {
+        return -1;
+      }
+      return (workspaceValue?.collections || []).findIndex((collection) => collection.id === collectionId);
+    }
+
+    function collectionForTabInWorkspace(workspaceValue, tab) {
+      const index = findCollectionIndexInWorkspace(workspaceValue, tab?.collectionId);
+      return index >= 0 ? workspaceValue.collections[index] : null;
+    }
+
     function replaceObject(target, nextValue) {
       if (!target || !nextValue) {
         return;
@@ -434,6 +472,8 @@
           id: collection.id,
           name: collection.name,
           description: collection.description || '',
+          auth: cloneJson(collection.auth || { type: 'none' }, { type: 'none' }),
+          scripts: cloneJson(collection.scripts || {}, {}),
           certificates: cloneValueArray(collection.certificates)
         },
         folderPath: requestFolderPath(collection, requestTab.folderId)
@@ -480,6 +520,19 @@
         environmentId: environmentTab.environmentId,
         createdUnsaved: environmentTab.createdUnsaved === true,
         environment,
+        settings: cloneJson(state.workspace?.settings, {})
+      };
+    }
+
+    function buildCollectionSavePayload(collectionTab) {
+      const collection = collectionForTabInWorkspace(state.workspace, collectionTab);
+      if (!collection) {
+        throw new Error('The selected collection could not be found for saving.');
+      }
+      return {
+        collectionId: collectionTab.collectionId,
+        createdUnsaved: collectionTab.createdUnsaved === true,
+        collection,
         settings: cloneJson(state.workspace?.settings, {})
       };
     }
@@ -550,6 +603,22 @@
       return true;
     }
 
+    function applySavedCollectionResult(collectionTab, result) {
+      const collection = collectionForTabInWorkspace(state.workspace, collectionTab);
+      if (!collection || !result?.collection) {
+        return false;
+      }
+      replaceObject(collection, result.collection);
+      if (result.settings && typeof result.settings === 'object') {
+        state.workspace.settings = cloneJson(result.settings, {});
+      }
+      collectionTab.dirty = false;
+      collectionTab.createdUnsaved = false;
+      collectionTab.snapshot = JSON.stringify(collection);
+      renderAll();
+      return true;
+    }
+
     async function persistRequestTab(requestTab) {
       const saveRequest = windowObject.__postmeterSaveRequest || windowObject.postmeter.workspace.saveRequest;
       return applySavedRequestResult(requestTab, await saveRequest(buildRequestSavePayload(requestTab)));
@@ -558,6 +627,19 @@
     async function persistEnvironmentTab(environmentTab) {
       const saveEnvironment = windowObject.__postmeterSaveEnvironment || windowObject.postmeter.workspace.saveEnvironment;
       return applySavedEnvironmentResult(environmentTab, await saveEnvironment(buildEnvironmentSavePayload(environmentTab)));
+    }
+
+    async function persistCollectionTab(collectionTab) {
+      const saveCollection = windowObject.__postmeterSaveCollection || windowObject.postmeter?.workspace?.saveCollection;
+      if (typeof saveCollection !== 'function') {
+        state.workspace = await saveWorkspaceStateOnly();
+        collectionTab.dirty = false;
+        collectionTab.createdUnsaved = false;
+        collectionTab.snapshot = JSON.stringify(collectionForTabInWorkspace(state.workspace, collectionTab) || {});
+        renderAll();
+        return true;
+      }
+      return applySavedCollectionResult(collectionTab, await saveCollection(buildCollectionSavePayload(collectionTab)));
     }
 
     async function persistWorkspaceSettings() {
@@ -655,10 +737,11 @@
       return publicResponse;
     }
 
-    function validationEnvironmentForRequest(request, environment) {
+    function validationEnvironmentForRequest(request, environment, collection = null) {
       const variables = [];
       mergeValidationVariables(variables, state.workspace?.globals || [], false);
       mergeValidationVariables(variables, environment?.variables || [], true);
+      mergeValidationVariables(variables, collection?.variables || [], true);
       mergeValidationVariables(variables, request?.variables || [], true);
       return {
         id: environment?.id || 'runtime',
@@ -702,6 +785,33 @@
       return value == null ? '' : String(value);
     }
 
+    function requestWithCollectionDefaults(request, collection = null) {
+      if (!request) {
+        return request;
+      }
+      const nextRequest = { ...request };
+      if (!requestHasOwnAuth(request.auth) && requestHasOwnAuth(collection?.auth)) {
+        nextRequest.auth = cloneJson(collection.auth);
+      }
+      const scripts = { ...(request.scripts || {}) };
+      const collectionScripts = collection?.scripts || {};
+      let hasScriptFallback = false;
+      for (const field of ['preRequest', 'tests', 'beforeQuery', 'afterResponse', 'beforeInvoke', 'onMessage', 'onIncomingMessage', 'mock']) {
+        if (!String(scripts[field] || '').trim() && String(collectionScripts[field] || '').trim()) {
+          scripts[field] = String(collectionScripts[field]);
+          hasScriptFallback = true;
+        }
+      }
+      if (hasScriptFallback) {
+        nextRequest.scripts = scripts;
+      }
+      return nextRequest;
+    }
+
+    function requestHasOwnAuth(auth) {
+      return Boolean(auth && typeof auth === 'object' && String(auth.type || 'none') !== 'none');
+    }
+
     async function sendActiveRequest() {
       const request = activeRequest();
       if (!request) {
@@ -715,9 +825,11 @@
         if (!isRunnerOwnedRequest) {
           await saveWorkspace(false, { allowDraftBypass: true });
         }
-        if (!request.scripts?.preRequest?.trim()) {
+        const collection = activeCollection();
+        const effectiveRequest = requestWithCollectionDefaults(request, collection);
+        if (!effectiveRequest.scripts?.preRequest?.trim()) {
           const validateRequest = windowObject.__postmeterValidateRequest || windowObject.postmeter.request.validate;
-          const errors = await validateRequest(request, validationEnvironmentForRequest(request, environment));
+          const errors = await validateRequest(effectiveRequest, validationEnvironmentForRequest(request, environment, collection));
           if (errors.length) {
             element('validationLabel').textContent = errors.join(' ');
             return setStatus('Fix validation errors.');
@@ -790,7 +902,7 @@
       };
       clearRunnerResultState();
       try {
-        await saveWorkspace(false);
+        await saveWorkspace(false, { scope: 'all' });
         runnerId = runtimeId();
         state.activeRunnerId = runnerId;
         runnerStarted = true;
@@ -1045,17 +1157,19 @@
 
     async function persistWorkspace(showStatus = true, config = {}) {
       const requestTargetKey = resolveRequestSaveTarget(config);
+      const collectionTargetKey = resolveCollectionSaveTarget(config);
       const environmentTargetKey = resolveEnvironmentSaveTarget(config);
       const settingsOnly = config.scope === 'settings'
-        || (state?.activeMainPanel === 'workspace' && config.scope !== 'all' && !requestTargetKey && !environmentTargetKey);
+        || (state?.activeMainPanel === 'workspace' && config.scope !== 'all' && !requestTargetKey && !collectionTargetKey && !environmentTargetKey);
       if (config.collectEditors !== false) {
         collectSettingsFromEditor();
         if (!settingsOnly) {
+          collectCollectionFromEditor();
           collectRequestFromEditor();
           collectEnvironmentFromEditor();
         }
       }
-      if (config.scope === 'all' || config.scope === 'runners' || (!settingsOnly && !requestTargetKey && !environmentTargetKey)) {
+      if (config.scope === 'all' || config.scope === 'runners' || (!settingsOnly && !requestTargetKey && !collectionTargetKey && !environmentTargetKey)) {
         const save = windowObject.__postmeterSaveWorkspace || windowObject.postmeter.workspace.save;
         state.workspace = await save(state.workspace);
         options.clearSavedRequestDirtyState?.();
@@ -1070,6 +1184,12 @@
           throw new Error('The selected request tab could not be saved.');
         }
         await persistRequestTab(requestTab);
+      } else if (collectionTargetKey) {
+        const collectionTab = collectionTabForKey(collectionTargetKey);
+        if (!collectionTab) {
+          throw new Error('The selected collection tab could not be saved.');
+        }
+        await persistCollectionTab(collectionTab);
       } else {
         const environmentTab = environmentTabForKey(environmentTargetKey);
         if (!environmentTab) {

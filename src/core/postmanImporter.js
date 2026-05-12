@@ -18,18 +18,16 @@ function importPostmanCollection(document) {
     id: postmanIdForNode(document.info || document, 'collection', [document.info?.name || 'collection']).modelId,
     name: document.info?.name || 'Imported Postman Collection',
     description: postmanDescription(document.info?.description || document.description),
+    auth: importAuth(document.auth, { type: 'none' }),
+    scripts: importEvents(document.event),
     variables: importVariables(document.variable),
     certificates: importCertificates(document.certificate),
     requests: [],
     folders: [],
     postman: collectionPostmanMetadata(document)
   });
-  const collectionEvents = importEvents(document.event);
-  const collectionAuth = importAuth(document.auth, { type: 'none' });
-  const collectionVariables = importVariables(document.variable);
-
   for (const [index, item] of (document.item || []).entries()) {
-    const imported = importItem(item, collectionEvents, collectionAuth, collectionVariables, [collection.name], { orderIndex: index });
+    const imported = importItem(item, collection.scripts, { type: 'none' }, [], [collection.name], { orderIndex: index });
     if (!imported) {
       continue;
     }
@@ -858,7 +856,7 @@ function exportPostmanCollection(collection) {
   if (collection?.description || metadata.info?.description) {
     document.info.description = metadata.info?.description || collection.description;
   }
-  const events = exportPostmanEvents(collection);
+  const events = exportPostmanEvents(collection, { preferModel: true });
   if (events.length) {
     document.event = events;
   }
@@ -866,8 +864,9 @@ function exportPostmanCollection(collection) {
   if (variables.length) {
     document.variable = variables;
   }
-  if (metadata.auth && Object.keys(metadata.auth).length) {
-    document.auth = clonePostmanObject(metadata.auth);
+  const auth = exportPostmanAuthModel(collection?.auth);
+  if (auth) {
+    document.auth = auth;
   }
   const certificates = exportPostmanCertificates(collection?.certificates, metadata.certificates);
   if (certificates.length) {
@@ -1462,8 +1461,8 @@ function exportPostmanAuthModel(auth) {
   return undefined;
 }
 
-function exportPostmanEvents(entity) {
-  if (Array.isArray(entity?.postman?.events) && entity.postman.events.length) {
+function exportPostmanEvents(entity, options = {}) {
+  if (options.preferModel !== true && Array.isArray(entity?.postman?.events) && entity.postman.events.length) {
     return entity.postman.events.map((event) => normalizeExportedEvent(event)).filter(Boolean);
   }
   const scripts = entity?.scripts || {};

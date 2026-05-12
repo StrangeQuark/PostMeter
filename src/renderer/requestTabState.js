@@ -10,6 +10,7 @@
     const activePerformanceTest = options.activePerformanceTest || (() => null);
     const activeWorkspaceItem = options.activeWorkspaceItem || (() => null);
     const clearActiveWorkspaceItem = options.clearActiveWorkspaceItem || (() => {});
+    const collectCollectionFromEditor = options.collectCollectionFromEditor || (() => {});
     const collectEnvironmentFromEditor = options.collectEnvironmentFromEditor || (() => {});
     const collectRequestFromEditor = options.collectRequestFromEditor || (() => {});
     const collectRunnerFromEditor = options.collectRunnerFromEditor || (() => {});
@@ -23,6 +24,7 @@
     const renderCollections = options.renderCollections || (() => {});
     const renderRequestTabs = options.renderRequestTabs || (() => {});
     const saveDraftRequestWithPrompt = options.saveDraftRequestWithPrompt || (async () => null);
+    const selectCollectionTabCallback = options.selectCollectionTab || (() => {});
     const selectEnvironmentTabCallback = options.selectEnvironmentTab || (() => {});
     const selectRequestTabCallback = options.selectRequestTab || (() => {});
     const selectRunnerTabCallback = options.selectRunnerTab || (() => {});
@@ -44,6 +46,10 @@
       }
       const collection = state.workspace?.collections?.find((item) => item.id === tab.collectionId);
       return collection ? findRequest(collection, tab.requestId)?.request || null : null;
+    }
+
+    function collectionForTab(tab) {
+      return state.workspace?.collections?.find((collection) => collection.id === tab?.collectionId) || null;
     }
 
     function environmentForTab(tab) {
@@ -136,6 +142,7 @@
     }
 
     function pruneOpenTabs() {
+      state.openCollectionTabs = state.openCollectionTabs.filter((tab) => Boolean(collectionForTab(tab)));
       state.openRequestTabs = state.openRequestTabs.filter((tab) => Boolean(requestForTab(tab)));
       state.openEnvironmentTabs = state.openEnvironmentTabs.filter((tab) => Boolean(environmentForTab(tab)));
       state.openWorkspaceTabs = state.openWorkspaceTabs.filter((tab) => Boolean(workspaceForTab(tab)));
@@ -150,7 +157,8 @@
     }
 
     function openTabCount() {
-      return (state.openRequestTabs || []).length
+      return (state.openCollectionTabs || []).length
+        + (state.openRequestTabs || []).length
         + (state.openEnvironmentTabs || []).length
         + (state.openWorkspaceTabs || []).length
         + (state.openRunnerTabs || []).length
@@ -182,6 +190,13 @@
 
     function canOpenAdditionalRequestTab(options = {}) {
       return canOpenTab(state.openRequestTabs, '__new-request-tab__', options);
+    }
+
+    function canOpenCollectionTabFor(collectionId, options = {}) {
+      if (!collectionId) {
+        return false;
+      }
+      return canOpenTab(state.openCollectionTabs, `collection:${collectionId}`, options);
     }
 
     function canOpenRequestTabFor(collectionId, requestId, options = {}) {
@@ -241,6 +256,38 @@
 
     function canOpenAdditionalPerformanceTab(options = {}) {
       return canOpenTab(state.openPerformanceTabs, '__new-performance-tab__', options);
+    }
+
+    function ensureOpenCollectionTabForActive(config = {}) {
+      const collection = activeCollection();
+      if (!collection || !state.activeCollectionId || state.activeRequestId) {
+        return null;
+      }
+      const key = rendererState.activeCollectionTabKey(state);
+      let tab = state.openCollectionTabs.find((candidate) => candidate.key === key);
+      if (!tab) {
+        if (!canOpenTab(state.openCollectionTabs, key)) {
+          return null;
+        }
+        tab = {
+          key,
+          collectionId: state.activeCollectionId,
+          dirty: config.dirty === true,
+          createdUnsaved: config.createdUnsaved === true,
+          snapshot: rendererState.collectionSnapshot(collection)
+        };
+        state.openCollectionTabs.push(tab);
+      }
+      tab.collectionId = state.activeCollectionId;
+      tab.snapshot ||= rendererState.collectionSnapshot(collection);
+      if (config.createdUnsaved === true) {
+        tab.createdUnsaved = true;
+      }
+      if (config.dirty === true) {
+        tab.dirty = true;
+      }
+      renderRequestTabs();
+      return tab;
     }
 
     function ensureOpenEnvironmentTabForActive(config = {}) {
@@ -441,7 +488,11 @@
 
     function selectRequestTab(tab, options = {}) {
       if (options.collect !== false) {
-        collectRequestFromEditor();
+        if (state.activeMainPanel === 'request' && activeCollection() && !activeRequest()) {
+          collectCollectionFromEditor();
+        } else {
+          collectRequestFromEditor();
+        }
       }
       state.activeSidebarPanel = 'collections';
       state.activeMainPanel = 'request';
@@ -488,6 +539,30 @@
       state.activeRequestId = found.request.id;
       state.activeRunnerRequestRunnerId = null;
       ensureOpenRequestTabForActive();
+      renderAll();
+    }
+
+    function selectCollectionTab(tab, options = {}) {
+      if (options.collect !== false) {
+        if (state.activeMainPanel === 'request' && activeCollection() && !activeRequest()) {
+          collectCollectionFromEditor();
+        } else {
+          collectRequestFromEditor();
+        }
+      }
+      const collection = collectionForTab(tab);
+      if (!collection) {
+        removeOpenCollectionTab(tab?.key);
+        renderAll();
+        return;
+      }
+      state.activeSidebarPanel = 'collections';
+      state.activeMainPanel = 'request';
+      state.activeRunnerRequestRunnerId = null;
+      state.activeCollectionId = collection.id;
+      state.activeFolderId = null;
+      state.activeRequestId = null;
+      ensureOpenCollectionTabForActive();
       renderAll();
     }
 
@@ -559,6 +634,14 @@
       }
     }
 
+    function markActiveCollectionTabDirty() {
+      const tab = ensureOpenCollectionTabForActive({ dirty: true });
+      if (tab) {
+        tab.dirty = true;
+        renderRequestTabs();
+      }
+    }
+
     function markActiveEnvironmentDirty() {
       const tab = ensureOpenEnvironmentTabForActive({ dirty: true });
       if (tab) {
@@ -588,8 +671,16 @@
       state.openRequestTabs = state.openRequestTabs.filter((tab) => tab.key !== key);
     }
 
+    function removeOpenCollectionTab(keyOrCollectionId) {
+      const key = String(keyOrCollectionId || '').startsWith('collection:')
+        ? keyOrCollectionId
+        : `collection:${keyOrCollectionId}`;
+      state.openCollectionTabs = state.openCollectionTabs.filter((tab) => tab.key !== key);
+    }
+
     function removeOpenRequestTabsForCollection(collectionId) {
       state.openRequestTabs = state.openRequestTabs.filter((tab) => tab.collectionId !== collectionId);
+      state.openCollectionTabs = state.openCollectionTabs.filter((tab) => tab.collectionId !== collectionId);
     }
 
     function removeOpenEnvironmentTab(keyOrEnvironmentId) {
@@ -651,6 +742,143 @@
         }
       }
       closeRunnerTabAfterResolved(tab, { wasActive });
+    }
+
+    async function closeCollectionTab(tab) {
+      if (!tab) {
+        renderRequestTabs();
+        return;
+      }
+      const wasActive = rendererState.isActiveCollectionTab(state, tab);
+      if (wasActive) {
+        collectCollectionFromEditor();
+      }
+      const collection = collectionForTab(tab);
+      if (!collection) {
+        closeCollectionTabAfterResolved(tab, { wasActive });
+        return;
+      }
+      if (tab.dirty) {
+        const action = await promptUnsavedRequestClose(tab, collection);
+        if (action === 'cancel') {
+          return;
+        }
+        if (action === 'save') {
+          try {
+            await persistWorkspace(false, { collectionTabKey: tab.key, collectEditors: false });
+          } catch (error) {
+            reportCloseSaveFailure('Collection Save Failed', error);
+            return;
+          }
+        } else {
+          discardCollectionTabChanges(tab);
+        }
+      }
+      closeCollectionTabAfterResolved(tab, { wasActive });
+    }
+
+    async function forceCloseCollectionTab(tab, options = {}) {
+      if (!tab) {
+        renderRequestTabs();
+        return false;
+      }
+      const wasActive = rendererState.isActiveCollectionTab(state, tab);
+      if (wasActive) {
+        collectCollectionFromEditor();
+      }
+      const collection = collectionForTab(tab);
+      if (!collection) {
+        closeCollectionTabAfterResolved(tab, { wasActive });
+        return true;
+      }
+      if (options.save === true && tab.dirty) {
+        try {
+          await persistWorkspace(false, { collectionTabKey: tab.key, collectEditors: false });
+        } catch (error) {
+          reportCloseSaveFailure('Collection Save Failed', error);
+          return false;
+        }
+      } else {
+        discardCollectionTabChanges(tab);
+      }
+      closeCollectionTabAfterResolved(tab, { wasActive });
+      return true;
+    }
+
+    function closeCollectionTabAfterResolved(tab, options = {}) {
+      const index = state.openCollectionTabs.findIndex((candidate) => candidate === tab || candidate.key === tab.key);
+      if (index < 0) {
+        renderRequestTabs();
+        return;
+      }
+      const wasActive = options.wasActive === true || rendererState.isActiveCollectionTab(state, tab);
+      state.openCollectionTabs.splice(index, 1);
+      if (!wasActive) {
+        renderRequestTabs();
+        return;
+      }
+      const fallbackCollection = state.openCollectionTabs[Math.min(index, state.openCollectionTabs.length - 1)] || state.openCollectionTabs[index - 1] || null;
+      if (fallbackCollection) {
+        selectCollectionTabCallback(fallbackCollection);
+        return;
+      }
+      const fallbackRequest = state.openRequestTabs[state.openRequestTabs.length - 1] || null;
+      if (fallbackRequest) {
+        selectRequestTabCallback(fallbackRequest, { collect: false });
+        return;
+      }
+      const fallbackEnvironment = state.openEnvironmentTabs[state.openEnvironmentTabs.length - 1] || null;
+      if (fallbackEnvironment) {
+        selectEnvironmentTabCallback(fallbackEnvironment);
+        return;
+      }
+      const fallbackWorkspace = state.openWorkspaceTabs[state.openWorkspaceTabs.length - 1] || null;
+      if (fallbackWorkspace) {
+        selectWorkspaceTabCallback(fallbackWorkspace);
+        return;
+      }
+      const fallbackRunner = state.openRunnerTabs[state.openRunnerTabs.length - 1] || null;
+      if (fallbackRunner) {
+        selectRunnerTabCallback(fallbackRunner);
+        return;
+      }
+      state.activeCollectionId = null;
+      state.activeFolderId = null;
+      state.activeRequestId = null;
+      state.activeRunnerRequestRunnerId = null;
+      state.activeSidebarPanel = 'collections';
+      state.activeMainPanel = 'request';
+      renderAll();
+    }
+
+    function discardCollectionTabChanges(tab) {
+      if (tab.createdUnsaved) {
+        state.workspace.collections = (state.workspace.collections || []).filter((collection) => collection.id !== tab.collectionId);
+        if (state.activeCollectionId === tab.collectionId) {
+          state.activeCollectionId = null;
+          state.activeFolderId = null;
+          state.activeRequestId = null;
+        }
+        return;
+      }
+      restoreCollectionFromSnapshot(tab);
+    }
+
+    function restoreCollectionFromSnapshot(tab) {
+      const collection = collectionForTab(tab);
+      if (!collection || !tab.snapshot) {
+        return false;
+      }
+      try {
+        const snapshot = JSON.parse(tab.snapshot);
+        for (const key of Object.keys(collection)) {
+          delete collection[key];
+        }
+        Object.assign(collection, snapshot);
+        return true;
+      } catch {
+        return false;
+      }
     }
 
     async function closePerformanceTab(tab) {
@@ -741,6 +969,11 @@
         selectEnvironmentTabCallback(fallbackEnvironment);
         return;
       }
+      const fallbackCollection = state.openCollectionTabs[state.openCollectionTabs.length - 1] || null;
+      if (fallbackCollection) {
+        selectCollectionTabCallback(fallbackCollection);
+        return;
+      }
       const fallbackRequest = state.openRequestTabs[state.openRequestTabs.length - 1] || null;
       if (fallbackRequest) {
         selectRequestTabCallback(fallbackRequest);
@@ -829,6 +1062,11 @@
         selectEnvironmentTabCallback(fallbackEnvironment);
         return;
       }
+      const fallbackCollection = state.openCollectionTabs[state.openCollectionTabs.length - 1] || null;
+      if (fallbackCollection) {
+        selectCollectionTabCallback(fallbackCollection);
+        return;
+      }
       const fallbackRequest = state.openRequestTabs[state.openRequestTabs.length - 1] || null;
       if (fallbackRequest) {
         selectRequestTabCallback(fallbackRequest);
@@ -886,6 +1124,11 @@
       const fallbackEnvironment = state.openEnvironmentTabs[state.openEnvironmentTabs.length - 1] || null;
       if (fallbackEnvironment) {
         selectEnvironmentTabCallback(fallbackEnvironment);
+        return;
+      }
+      const fallbackCollection = state.openCollectionTabs[state.openCollectionTabs.length - 1] || null;
+      if (fallbackCollection) {
+        selectCollectionTabCallback(fallbackCollection);
         return;
       }
       const fallbackRequest = state.openRequestTabs[state.openRequestTabs.length - 1] || null;
@@ -999,6 +1242,11 @@
       const fallbackRunner = state.openRunnerTabs[state.openRunnerTabs.length - 1] || null;
       if (fallbackRunner) {
         selectRunnerTabCallback(fallbackRunner);
+        return;
+      }
+      const fallbackCollection = state.openCollectionTabs[state.openCollectionTabs.length - 1] || null;
+      if (fallbackCollection) {
+        selectCollectionTabCallback(fallbackCollection);
         return;
       }
       const fallbackRequest = state.openRequestTabs[state.openRequestTabs.length - 1] || null;
@@ -1144,6 +1392,11 @@
         selectRunnerTabCallback(fallbackRunner);
         return;
       }
+      const fallbackCollection = state.openCollectionTabs[state.openCollectionTabs.length - 1] || null;
+      if (fallbackCollection) {
+        selectCollectionTabCallback(fallbackCollection);
+        return;
+      }
       state.activeRunnerRequestRunnerId = null;
       clearActiveWorkspaceItem();
       renderAll();
@@ -1193,33 +1446,40 @@
       canOpenAdditionalRequestTab,
       canOpenAdditionalRunnerTab,
       canOpenAdditionalWorkspaceTab,
+      canOpenCollectionTabFor,
       canOpenEnvironmentTabFor,
       canOpenPerformanceTabFor,
       canOpenRequestTabFor,
       canOpenRunnerRequestTabFor,
       canOpenRunnerTabFor,
       canOpenWorkspaceTabFor,
+      closeCollectionTab,
       closeEnvironmentTab,
       closePerformanceTab,
       closeRequestTab,
       closeRunnerTab,
       closeWorkspaceTab,
+      collectionForTab,
       ensureOpenEnvironmentTabForActive,
+      ensureOpenCollectionTabForActive,
       ensureOpenPerformanceTabForActive,
       ensureOpenRequestTabForActive,
       ensureOpenRunnerTabForActive,
       ensureOpenWorkspaceTabForActive,
       environmentForTab,
+      forceCloseCollectionTab,
       forceCloseEnvironmentTab,
       forceClosePerformanceTab,
       forceCloseRequestTab,
       forceCloseRunnerTab,
       forceCloseWorkspaceTab,
+      markActiveCollectionTabDirty,
       markActiveEnvironmentDirty,
       markActivePerformanceDirty,
       markActiveRequestDirty,
       markActiveRunnerDirty,
       pruneOpenTabs,
+      removeOpenCollectionTab,
       removeOpenEnvironmentTab,
       removeOpenPerformanceTab,
       removeOpenRequestTab,
@@ -1229,6 +1489,7 @@
       requestForTab,
       runnerForTab,
       performanceTestForTab,
+      selectCollectionTab,
       selectEnvironmentTab,
       selectPerformanceTab,
       selectRequestTab,

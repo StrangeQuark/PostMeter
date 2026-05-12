@@ -15,10 +15,24 @@ const CLIENT_CERTIFICATE_DIRECT_AUTH_FIELDS = [
   'caPath',
   'passphrase'
 ];
+const SCRIPT_FALLBACK_FIELDS = [
+  'preRequest',
+  'tests',
+  'beforeQuery',
+  'afterResponse',
+  'beforeInvoke',
+  'onMessage',
+  'onIncomingMessage',
+  'mock'
+];
 
 function createScriptedRequestState(request, environment, options = {}) {
+  const effectiveRequest = requestWithCollectionDefaults(request, {
+    auth: options.collectionAuth,
+    scripts: options.collectionScripts
+  });
   return {
-    request,
+    request: effectiveRequest,
     environment: normalizeRuntimeEnvironment(
       options.cloneEnvironment === false
         ? environment
@@ -38,6 +52,33 @@ function createScriptedRequestState(request, environment, options = {}) {
     ),
     cookies: Array.isArray(options.cookieJar) ? cloneJson(options.cookieJar) : []
   };
+}
+
+function requestWithCollectionDefaults(request, collection = {}) {
+  if (!request) {
+    return request;
+  }
+  const nextRequest = { ...request };
+  if (!requestHasOwnAuth(request.auth) && requestHasOwnAuth(collection.auth)) {
+    nextRequest.auth = cloneJsonObject(collection.auth);
+  }
+  const scripts = { ...(request.scripts || {}) };
+  const collectionScripts = collection.scripts || {};
+  let hasScriptFallback = false;
+  for (const field of SCRIPT_FALLBACK_FIELDS) {
+    if (!String(scripts[field] || '').trim() && String(collectionScripts[field] || '').trim()) {
+      scripts[field] = String(collectionScripts[field]);
+      hasScriptFallback = true;
+    }
+  }
+  if (hasScriptFallback) {
+    nextRequest.scripts = scripts;
+  }
+  return nextRequest;
+}
+
+function requestHasOwnAuth(auth) {
+  return normalizeAuth(auth || {}).type !== 'none';
 }
 
 async function runScriptedRequestLifecycle(state, options = {}) {

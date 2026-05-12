@@ -12,7 +12,7 @@ test('request editor panels choose code editor language from body type', () => {
   assert.equal(bodyTypeCodeLanguage('NONE'), 'text');
 });
 
-test('request editor panels build variable preview text using request-over-environment precedence', () => {
+test('request editor panels build variable preview text using request-over-collection-over-environment precedence', () => {
   const text = buildVariablePreviewText(
     {
       variables: [
@@ -37,6 +37,7 @@ test('request editor panels build variable preview text using request-over-envir
   assert.equal(
     text,
     [
+      'baseUrl = https://collection.example.test (Collection)',
       'envOnly = present (Environment)',
       'shared = request (Request)'
     ].join('\n')

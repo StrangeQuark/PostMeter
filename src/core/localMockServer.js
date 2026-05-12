@@ -91,7 +91,9 @@ async function handleLocalMockRequest(collection, incomingRequest, options = {})
   const fallbackResponse = responseFromSavedResponse(match.savedResponses[0]);
   let response = fallbackResponse;
   let scriptExecution = null;
-  const scriptText = String(match.request?.scripts?.mock || '');
+  const requestMockScript = String(match.request?.scripts?.mock || '');
+  const collectionMockScript = String(collection?.scripts?.mock || '');
+  const scriptText = requestMockScript.trim() ? requestMockScript : collectionMockScript;
   if (scriptText.trim()) {
     const context = mockScriptContext(match, request, fallbackResponse, options);
     scriptExecution = await runPostmanScriptIsolated(scriptText, context, {

@@ -288,8 +288,15 @@
 
 .code-editor-highlight code {
   display: block;
+  font: inherit;
+  letter-spacing: inherit;
   min-width: 100%;
+  tab-size: inherit;
+  text-indent: inherit;
+  text-transform: inherit;
   transform-origin: 0 0;
+  white-space: inherit;
+  word-spacing: inherit;
 }
 
 .code-editor-line-numbers {
@@ -317,6 +324,7 @@
 
 .code-editor-line-numbers code {
   display: block;
+  font: inherit;
   min-width: 100%;
   padding-right: 4px;
   transform-origin: 0 0;
@@ -395,6 +403,10 @@ textarea.code-editor-input:placeholder-shown {
   color: var(--method-patch);
 }
 
+.code-editor-token.tok-variable-collection.tok-variable-valid {
+  color: var(--method-post);
+}
+
 .code-editor-token.tok-variable-csv.tok-variable-valid {
   color: var(--green);
 }
@@ -465,6 +477,10 @@ textarea.code-editor-input:placeholder-shown {
 .variable-highlight-request.variable-highlight-valid,
 .variable-highlight-global.variable-highlight-valid {
   color: var(--method-patch);
+}
+
+.variable-highlight-collection.variable-highlight-valid {
+  color: var(--method-post);
 }
 
 .variable-highlight-csv.variable-highlight-valid {
@@ -562,6 +578,41 @@ textarea.code-editor-input:placeholder-shown {
   font-size: 12px;
   line-height: 1.45;
   resize: vertical;
+}
+
+.collection-script-field textarea {
+  min-height: 320px;
+}
+
+#collectionOverviewTab.active {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-top: 0;
+}
+
+.collection-overview-field {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.collection-overview-field > .code-editor {
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+}
+
+.collection-overview-field .code-editor-highlight,
+.collection-overview-field .code-editor-line-numbers,
+.collection-overview-field textarea.code-editor-input {
+  height: 100%;
+  min-height: 0;
+}
+
+.collection-overview-field textarea.code-editor-input {
+  resize: none;
 }
 
 .response-editor-panel {

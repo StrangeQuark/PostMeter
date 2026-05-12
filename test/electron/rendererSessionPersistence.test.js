@@ -22,6 +22,9 @@ test('renderer session persistence serializes active tabs, drafts, and dirty tab
     { id: 'Workspace.json', name: 'Workspace' }
   ];
   state.workspace = {
+    collections: [
+      { id: 'collection-1', name: 'Dirty Collection', requests: [], folders: [], variables: [] }
+    ],
     runners: [
       {
         id: 'runner-1',
@@ -44,6 +47,14 @@ test('renderer session persistence serializes active tabs, drafts, and dirty tab
     ]
   };
   state.draftRequests.set('draft-1', { id: 'draft-1', name: 'Draft Request', method: 'GET', url: '' });
+  state.openCollectionTabs = [
+    {
+      key: 'collection:collection-1',
+      collectionId: 'collection-1',
+      dirty: true,
+      snapshot: '{"saved":true}'
+    }
+  ];
   state.openRequestTabs = [
     {
       key: 'request:collection-1:request-1',
@@ -116,6 +127,7 @@ test('renderer session persistence serializes active tabs, drafts, and dirty tab
   assert.equal(session.activeResultsTab, 'responseHeaders');
   assert.equal(session.selectedWorkspaceId, 'Workspace 2.json');
   assert.deepEqual(session.workspaceOrder, ['Workspace 2.json', 'Workspace.json']);
+  assert.equal(session.openCollectionTabs[0].currentState.name, 'Dirty Collection');
   assert.equal(session.openRequestTabs[0].currentState.url, 'https://example.test');
   assert.equal(session.openRequestTabs[1].currentState, null);
   assert.equal(session.openEnvironmentTabs[0].currentState.name, 'Dirty Environment');
@@ -794,6 +806,100 @@ test('renderer session persistence restores a closed performance tab as the empt
   assert.equal(state.activeSidebarPanel, 'performance');
   assert.equal(state.activeMainPanel, 'performance');
   assert.deepEqual(state.openPerformanceTabs, []);
+});
+
+test('renderer session persistence restores the selected collection editor without an open request', () => {
+  const state = createRendererState();
+  state.activeMainPanel = 'environment';
+  state.workspace = {
+    collections: [
+      {
+        id: 'collection-1',
+        name: 'Collection',
+        requests: [],
+        folders: [],
+        variables: [],
+        certificates: [],
+        description: ''
+      }
+    ],
+    environments: []
+  };
+
+  restoreRendererSession({
+    state,
+    session: {
+      activeWorkspaceId: 'Local Workspace.json',
+      selectedWorkspaceId: 'Local Workspace.json',
+      activeSidebarPanel: 'collections',
+      activeMainPanel: 'request',
+      activeCollectionId: 'collection-1',
+      activeRequestId: '',
+      openRequestTabs: []
+    },
+    workspaceListItems: () => [
+      { id: 'Local Workspace.json', name: 'Local Workspace', path: '/tmp/Local Workspace.json', current: true, deletable: false }
+    ],
+    findFolder,
+    findRequest
+  });
+
+  assert.equal(state.activeCollectionId, 'collection-1');
+  assert.equal(state.activeRequestId, null);
+  assert.equal(state.activeMainPanel, 'request');
+  assert.deepEqual(state.openRequestTabs, []);
+});
+
+test('renderer session persistence restores dirty collection tabs', () => {
+  const state = createRendererState();
+  state.workspace = {
+    collections: [
+      {
+        id: 'collection-1',
+        name: 'Saved Collection',
+        requests: [],
+        folders: [],
+        variables: [],
+        certificates: [],
+        description: ''
+      }
+    ],
+    environments: []
+  };
+
+  restoreRendererSession({
+    state,
+    session: {
+      activeWorkspaceId: 'Local Workspace.json',
+      selectedWorkspaceId: 'Local Workspace.json',
+      activeSidebarPanel: 'collections',
+      activeMainPanel: 'request',
+      activeCollectionId: 'collection-1',
+      activeRequestId: '',
+      openCollectionTabs: [{
+        key: 'collection:collection-1',
+        collectionId: 'collection-1',
+        dirty: true,
+        snapshot: JSON.stringify({ id: 'collection-1', name: 'Saved Collection', requests: [], folders: [], variables: [] }),
+        currentState: { id: 'collection-1', name: 'Dirty Collection', requests: [], folders: [], variables: [{ key: 'token', value: 'dirty', enabled: true }] }
+      }]
+    },
+    workspaceListItems: () => [
+      { id: 'Local Workspace.json', name: 'Local Workspace', path: '/tmp/Local Workspace.json', current: true, deletable: false }
+    ],
+    findFolder,
+    findRequest
+  });
+
+  assert.equal(state.workspace.collections[0].name, 'Dirty Collection');
+  assert.equal(state.workspace.collections[0].variables[0].key, 'token');
+  assert.deepEqual(state.openCollectionTabs, [{
+    key: 'collection:collection-1',
+    collectionId: 'collection-1',
+    dirty: true,
+    createdUnsaved: false,
+    snapshot: JSON.stringify({ id: 'collection-1', name: 'Saved Collection', requests: [], folders: [], variables: [] })
+  }]);
 });
 
 test('renderer session persistence does not restore the default first request when no request tabs were open', () => {

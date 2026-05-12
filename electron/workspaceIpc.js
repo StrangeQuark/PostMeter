@@ -33,6 +33,8 @@ const {
   assertEnvironmentPayload,
   assertRequestPayload,
   assertRunnerPayload,
+  assertWorkspaceCollectionSavePayload,
+  assertWorkspaceCollectionSaveResultPayload,
   assertWorkspaceEnvironmentSavePayload,
   assertWorkspaceEnvironmentSaveResultPayload,
   assertWorkspaceLoadResultPayload,
@@ -43,6 +45,7 @@ const {
   assertWorkspacePayload
 } = require('../src/core/ipcValidation');
 const {
+  applyCollectionSaveToWorkspace,
   applyEnvironmentSaveToWorkspace,
   applyRequestSaveToWorkspace,
   applyWorkspaceSettingsSaveToWorkspace,
@@ -130,6 +133,16 @@ function registerWorkspaceIpc(options = {}) {
       result.cookies = workspace.cookies || [];
     }
     assertWorkspaceRequestSaveResultPayload(result);
+    return result;
+  });
+
+  ipcMain.handle('workspace:saveCollection', async (_event, payload) => {
+    assertWorkspaceCollectionSavePayload(payload);
+    const workspace = await mutateWorkspace(async (currentWorkspace) => applyCollectionSaveToWorkspace(currentWorkspace, payload));
+    refreshApplicationMenu();
+    const collection = (workspace.collections || []).find((candidate) => candidate.id === payload.collectionId) || payload.collection;
+    const result = { collection };
+    assertWorkspaceCollectionSaveResultPayload(result);
     return result;
   });
 

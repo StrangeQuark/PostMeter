@@ -213,7 +213,7 @@
     refreshVariableTextboxes(container);
   }
 
-  function buildVariablePreviewText(_collection, environment, request) {
+  function buildVariablePreviewText(collection, environment, request) {
     const rows = [];
     const effective = new Map();
 
@@ -225,6 +225,16 @@
         key: pair.key,
         value: pair.value ?? '',
         source: 'Environment'
+      });
+    }
+    for (const pair of collection?.variables || []) {
+      if (pair.enabled === false || !pair.key) {
+        continue;
+      }
+      effective.set(pair.key, {
+        key: pair.key,
+        value: pair.value ?? '',
+        source: 'Collection'
       });
     }
     for (const pair of request?.variables || []) {

@@ -79,6 +79,8 @@ async function runCollection(collection, environment, options = {}) {
       runnerCookies
     );
     const targetState = createScriptedRequestState(targetRequest, runnerEnvironment, {
+      collectionAuth: collection?.auth || { type: 'none' },
+      collectionScripts: collection?.scripts || {},
       collectionVariables: scopeState.collectionVariables,
       globals: scopeState.globals,
       cookieJar: scopeState.cookies,
@@ -157,6 +159,8 @@ async function runCollection(collection, environment, options = {}) {
     try {
       const scriptedRequest = await runScriptedRequestLifecycle(
         createScriptedRequestState(requestForExecution, runnerEnvironment, {
+          collectionAuth: collection?.auth || { type: 'none' },
+          collectionScripts: collection?.scripts || {},
           collectionVariables: runnerCollectionVariables,
           globals: runnerGlobals,
           cookieJar: runnerCookies,

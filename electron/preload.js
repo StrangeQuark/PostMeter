@@ -62,6 +62,7 @@ const postmeterApi = {
   workspace: {
     load: () => ipcRenderer.invoke('workspace:load'),
     save: (workspace) => ipcRenderer.invoke('workspace:save', workspace),
+    saveCollection: (payload) => ipcRenderer.invoke('workspace:saveCollection', payload),
     saveRequest: (payload) => ipcRenderer.invoke('workspace:saveRequest', payload),
     saveEnvironment: (payload) => ipcRenderer.invoke('workspace:saveEnvironment', payload),
     saveSettings: (settings) => ipcRenderer.invoke('workspace:saveSettings', settings),

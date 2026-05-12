@@ -1037,6 +1037,7 @@
     const originalSelectedWorkspaceId = selectedWorkspaceId;
     const originalSidebarPanel = activeSidebarPanel;
     const originalMainPanel = activeMainPanel;
+    const originalOpenCollectionTabs = structuredClone(openCollectionTabs);
     const originalOpenRequestTabs = structuredClone(openRequestTabs);
     try {
       workspace = largeUiWorkspace();
@@ -1062,6 +1063,7 @@
       activeCollectionId = workspace.collections[0].id;
       activeFolderId = null;
       activeRequestId = workspace.collections[0].requests[0].id;
+      openCollectionTabs = [];
       openRequestTabs = [];
 
       const renderStarted = performance.now();
@@ -1095,6 +1097,7 @@
       selectedWorkspaceId = originalSelectedWorkspaceId;
       activeSidebarPanel = originalSidebarPanel;
       activeMainPanel = originalMainPanel;
+      openCollectionTabs = originalOpenCollectionTabs;
       openRequestTabs = originalOpenRequestTabs;
       renderAll();
     }
@@ -1206,6 +1209,7 @@
     const originalSelectedWorkspaceId = selectedWorkspaceId;
     const originalSidebarPanel = activeSidebarPanel;
     const originalMainPanel = activeMainPanel;
+    const originalOpenCollectionTabs = structuredClone(openCollectionTabs);
     const originalOpenRequestTabs = structuredClone(openRequestTabs);
     const originalEnvironmentTabs = structuredClone(openEnvironmentTabs);
     const originalRunnerTabs = structuredClone(openRunnerTabs);
@@ -1538,6 +1542,7 @@
       selectedWorkspaceId = originalSelectedWorkspaceId;
       activeSidebarPanel = originalSidebarPanel;
       activeMainPanel = originalMainPanel;
+      openCollectionTabs = originalOpenCollectionTabs;
       openRequestTabs = originalOpenRequestTabs;
       openEnvironmentTabs = originalEnvironmentTabs;
       openRunnerTabs = originalRunnerTabs;
@@ -1880,6 +1885,7 @@
     const originalActiveEnvironmentId = activeEnvironmentId;
     const originalActiveMainPanel = activeMainPanel;
     const originalActiveSidebarPanel = activeSidebarPanel;
+    const originalOpenCollectionTabs = structuredClone(openCollectionTabs);
     const originalOpenRequestTabs = structuredClone(openRequestTabs);
     const originalOpenEnvironmentTabs = structuredClone(openEnvironmentTabs);
     const originalOpenWorkspaceTabs = structuredClone(openWorkspaceTabs);
@@ -1969,6 +1975,7 @@
       activeEnvironmentId = originalActiveEnvironmentId;
       activeMainPanel = originalActiveMainPanel;
       activeSidebarPanel = originalActiveSidebarPanel;
+      openCollectionTabs = originalOpenCollectionTabs;
       openRequestTabs = originalOpenRequestTabs;
       openEnvironmentTabs = originalOpenEnvironmentTabs;
       openWorkspaceTabs = originalOpenWorkspaceTabs;
@@ -2111,6 +2118,7 @@
     const originalSelectedWorkspaceId = selectedWorkspaceId;
     const originalSidebarPanel = activeSidebarPanel;
     const originalMainPanel = activeMainPanel;
+    const originalCollectionTabs = structuredClone(openCollectionTabs);
     const originalRequestTabs = structuredClone(openRequestTabs);
     const originalEnvironmentTabs = structuredClone(openEnvironmentTabs);
     const originalWorkspaceTabs = structuredClone(openWorkspaceTabs);
@@ -2159,7 +2167,7 @@
         assertUiSmoke(!$(`${expectedEmptyPanel}`).hidden, `Clicking ${tabId} should show ${expectedEmptyPanel}.`);
         assertUiSmoke($(`${expectedEmptyPanel}`).textContent.includes(expectedText), `${expectedEmptyPanel} should render the expected empty-state text.`);
         assertUiSmoke(getComputedStyle($(`${expectedEmptyPanel}`)).display !== 'none', `${expectedEmptyPanel} should be visible in layout.`);
-        for (const panelId of ['requestEmptyPanel', 'environmentEmptyPanel', 'workspaceEmptyPanel', 'runnerEmptyPanel', 'performanceEmptyPanel']) {
+        for (const panelId of ['requestEmptyPanel', 'collectionMainPanel', 'environmentEmptyPanel', 'workspaceEmptyPanel', 'runnerEmptyPanel', 'performanceEmptyPanel']) {
           if (panelId === expectedEmptyPanel) {
             continue;
           }
@@ -2843,6 +2851,9 @@
       selectSidebarPanel('collections');
       if (activeRequest()) {
         assertUiSmoke(!$('requestEditorPanel').hidden, 'Selecting Collections should return the main pane to the request editor.');
+      } else if (activeCollection()) {
+        assertUiSmoke(!$('collectionMainPanel').hidden, 'Selecting Collections without an active request should show the collection editor.');
+        assertUiSmoke($('requestEmptyPanel').hidden, 'Selecting Collections with a collection selected should not show the create request screen.');
       } else {
         assertUiSmoke(!$('requestEmptyPanel').hidden, 'Selecting Collections without an active request should show the create request screen.');
         assertUiSmoke($('requestEditorPanel').hidden, 'Selecting Collections without an active request should keep the request editor hidden.');
@@ -3433,6 +3444,7 @@
       selectedWorkspaceId = originalSelectedWorkspaceId;
       activeSidebarPanel = originalSidebarPanel;
       activeMainPanel = originalMainPanel;
+      openCollectionTabs = originalCollectionTabs;
       openRequestTabs = originalRequestTabs;
       openEnvironmentTabs = originalEnvironmentTabs;
       openWorkspaceTabs = originalWorkspaceTabs;
@@ -3571,6 +3583,9 @@
     assertUiSmoke(collection, 'New collection should be created.');
     assertUiSmoke(collection.requests.length === 0, 'New collection should not auto-create a request.');
     assertUiSmoke(!activeRequest(), 'New collection should not auto-select a request.');
+    assertUiSmoke(!$('collectionMainPanel').hidden, 'New collection should open the collection editor.');
+    assertUiSmoke($('requestTabBar').textContent.includes(collection.name), 'New collection should open a collection tab.');
+    assertUiSmoke(openCollectionTabs.some((tab) => tab.collectionId === collection.id && tab.dirty), 'New collection tab should start dirty.');
     assertUiSmoke(!$('newFolderButton').disabled, 'New Folder should be enabled when a collection is active.');
     const folder = newFolder();
     assertUiSmoke(folder, 'New Folder should create a folder when a collection is active.');
@@ -3612,7 +3627,7 @@
       renderAll();
     }
     const renderedOpenTabItems = Array.from($('requestTabBar').querySelectorAll('.request-tab-item'));
-    const totalOpenTabs = openRequestTabs.length + openEnvironmentTabs.length + openWorkspaceTabs.length;
+    const totalOpenTabs = openCollectionTabs.length + openRequestTabs.length + openEnvironmentTabs.length + openWorkspaceTabs.length + openRunnerTabs.length + openPerformanceTabs.length;
     assertUiSmoke(openRequestTabs.length >= overflowTargetTabCount, 'Opening tabs past the old twelve-tab threshold should keep all opened tabs in state.');
     assertUiSmoke(renderedOpenTabItems.length === totalOpenTabs, 'Rendered opened tabs should match the open tab state after overflow.');
     assertUiSmoke($('requestTabBar').textContent.includes('First Tab Request'), 'Older opened tabs should remain available after the tab bar overflows.');
@@ -3643,6 +3658,7 @@
     activeCollectionId = collection.id;
     activeFolderId = null;
     activeRequestId = cappedRequests[0].id;
+    openCollectionTabs = [];
     openRequestTabs = cappedRequests.map((request) => ({
       key: `request:${collection.id}:${request.id}`,
       collectionId: collection.id,
@@ -3674,8 +3690,10 @@
     const originalSaveWorkspace = window.__postmeterSaveWorkspace;
     const originalPostmeterWorkspaceSave = window.postmeter?.workspace?.save;
     const originalSaveRequest = window.__postmeterSaveRequest;
+    const originalSaveCollection = window.__postmeterSaveCollection;
     const originalSaveEnvironment = window.__postmeterSaveEnvironment;
     let requestSaveCalls = 0;
+    let collectionSaveCalls = 0;
     let environmentSaveCalls = 0;
     try {
       window.__postmeterSaveWorkspace = async (nextWorkspace) => nextWorkspace;
@@ -3685,6 +3703,12 @@
           request: payload.request,
           collectionVariables: payload.collectionVariables,
           cookies: payload.cookies
+        };
+      };
+      window.__postmeterSaveCollection = async (payload) => {
+        collectionSaveCalls += 1;
+        return {
+          collection: payload.collection
         };
       };
       window.__postmeterSaveEnvironment = async (payload) => {
@@ -3892,6 +3916,8 @@
       renderAll();
       const tabCollection = newCollection();
       tabCollection.name = 'Tab Context Collection';
+      await saveWorkspace(false);
+      assertUiSmoke(collectionSaveCalls > 0, 'Saving a collection tab should use the targeted collection save path.');
       const closeTarget = newRequest(tabCollection.id, null);
       editRequestTitle('Tab Context Close Target');
       const closeTargetTab = openRequestTabs.find((tab) => tab.requestId === closeTarget.id);
@@ -4016,6 +4042,7 @@
         window.postmeter.workspace.save = originalPostmeterWorkspaceSave;
       }
       window.__postmeterSaveRequest = originalSaveRequest;
+      window.__postmeterSaveCollection = originalSaveCollection;
       window.__postmeterSaveEnvironment = originalSaveEnvironment;
       workspace.collections = [];
       workspace.environments = [];

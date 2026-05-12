@@ -513,6 +513,85 @@ test('renderer workflows only persist the active request tab on a normal save', 
   assert.equal(renders, 1);
 });
 
+test('renderer workflows persist collection edits with a targeted collection save', async () => {
+  const state = createRendererState();
+  const collection = {
+    id: 'collection-1',
+    name: 'Edited Collection',
+    description: 'Edited description',
+    auth: { type: 'bearer', token: 'collection-token' },
+    scripts: { preRequest: "pm.environment.set('fromCollection', 'yes');", tests: '' },
+    variables: [{ enabled: true, key: 'baseUrl', value: 'https://collection.example.test' }],
+    certificates: [],
+    requests: [],
+    folders: []
+  };
+  state.workspace = {
+    collections: [collection],
+    environments: [],
+    settings: { updates: { includePrereleases: true } }
+  };
+  state.activeMainPanel = 'request';
+  state.activeCollectionId = 'collection-1';
+  state.activeRequestId = null;
+  state.openCollectionTabs = [{
+    key: 'collection:collection-1',
+    collectionId: 'collection-1',
+    dirty: true,
+    createdUnsaved: false,
+    snapshot: JSON.stringify({ ...collection, name: 'Saved Collection' })
+  }];
+  let saveCollectionPayload = null;
+  let fullSaveCalls = 0;
+  let renders = 0;
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => collection,
+    activeEnvironment: () => null,
+    activeRequest: () => null,
+    collectCollectionFromEditor: () => {},
+    collectEnvironmentFromEditor: () => {},
+    collectRequestFromEditor: () => {},
+    collectSettingsFromEditor: () => {},
+    doc: createDocument(),
+    renderAll: () => { renders += 1; },
+    runFormatting: createRunFormatting(),
+    windowObject: {
+      postmeter: {
+        workspace: {
+          save: async () => {
+            fullSaveCalls += 1;
+            return state.workspace;
+          },
+          saveCollection: async (payload) => {
+            saveCollectionPayload = structuredClone(payload);
+            return {
+              collection: { ...payload.collection, name: 'Edited Collection Saved' }
+            };
+          }
+        }
+      }
+    }
+  });
+
+  const result = await workflows.persistWorkspace(false);
+
+  assert.equal(result, true);
+  assert.equal(fullSaveCalls, 0);
+  assert.equal(saveCollectionPayload.collectionId, 'collection-1');
+  assert.equal(saveCollectionPayload.collection.name, 'Edited Collection');
+  assert.equal(saveCollectionPayload.collection.description, 'Edited description');
+  assert.equal(saveCollectionPayload.collection.auth.token, 'collection-token');
+  assert.equal(saveCollectionPayload.collection.variables[0].key, 'baseUrl');
+  assert.equal(saveCollectionPayload.settings.updates.includePrereleases, true);
+  assert.equal(state.workspace.collections[0].name, 'Edited Collection Saved');
+  assert.equal(state.openCollectionTabs[0].dirty, false);
+  assert.equal(state.openCollectionTabs[0].createdUnsaved, false);
+  assert.equal(state.openCollectionTabs[0].snapshot, JSON.stringify(state.workspace.collections[0]));
+  assert.equal(renders, 1);
+});
+
 test('renderer workflows persist runner-owned request edits with a targeted request save', async () => {
   const state = createRendererState();
   const runnerRequest = { id: 'runner-request-1', name: 'Runner Request', method: 'GET', url: 'https://runner.example.test' };

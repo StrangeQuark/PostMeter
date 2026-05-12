@@ -15,8 +15,8 @@ function cloneVariables(variables) {
 function runtimeEnvironment(collectionVariables = [], environment = null, localVariables = [], options = {}) {
   const merged = [];
   mergeVariables(merged, options.globals || [], false);
-  mergeVariables(merged, collectionVariables, false);
   mergeVariables(merged, environment?.variables || [], true);
+  mergeVariables(merged, collectionVariables, true);
   mergeVariables(merged, options.iterationData || [], true);
   mergeVariables(merged, localVariables || [], true);
   return {

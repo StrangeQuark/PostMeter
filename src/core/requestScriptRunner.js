@@ -10,6 +10,8 @@ async function runRequestWithScripts(request, environment, options = {}) {
   const lifecycleResult = await runScriptedRequestLifecycle(
     createScriptedRequestState(request, environment, {
       collectionVariables: options.collectionVariables || [],
+      collectionAuth: options.collectionAuth,
+      collectionScripts: options.collectionScripts,
       globals: options.globals || [],
       cookieJar: options.cookieJar || []
     }),

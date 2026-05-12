@@ -28,8 +28,10 @@
     'authClientPassphraseInput'
   ];
   const PERFORMANCE_AUTH_EDITOR_INPUT_IDS = AUTH_EDITOR_INPUT_IDS.map((id) => `performance${id[0].toUpperCase()}${id.slice(1)}`);
+  const COLLECTION_AUTH_EDITOR_INPUT_IDS = AUTH_EDITOR_INPUT_IDS.map((id) => `collection${id[0].toUpperCase()}${id.slice(1)}`);
   const AUTH_EDITOR_INPUT_ID_SET = new Set(AUTH_EDITOR_INPUT_IDS);
   const PERFORMANCE_AUTH_EDITOR_INPUT_ID_SET = new Set(PERFORMANCE_AUTH_EDITOR_INPUT_IDS);
+  const COLLECTION_AUTH_EDITOR_INPUT_ID_SET = new Set(COLLECTION_AUTH_EDITOR_INPUT_IDS);
 
   function initializeRenderer(options = {}) {
     const doc = options.doc || document;
@@ -128,6 +130,11 @@
     bindClick(doc, 'exportRunnerDefinitionButton', options.onExportRunnerDefinition);
     bindClick(doc, 'exportPerformanceTestMenuButton', options.onExportPerformanceTest);
     bindClick(doc, 'sendButton', options.onSendRequest);
+    bindClick(doc, 'saveCollectionButton', options.onSaveCollection);
+    bindClick(doc, 'addCollectionVariableButton', options.onAddCollectionVariable);
+    bindInput(doc, 'collectionDescriptionInput', options.onCollectionInput);
+    bindInput(doc, 'collectionPreRequestScriptInput', options.onCollectionInput);
+    bindInput(doc, 'collectionTestScriptInput', options.onCollectionInput);
     bindClick(doc, 'addParamButton', options.onAddParam);
     bindClick(doc, 'addHeaderButton', options.onAddHeader);
     bindChange(doc, 'sendPostMeterTokenInput', options.onPostMeterTokenHeaderChange);
@@ -278,6 +285,16 @@
         handlePerformanceAuthEditorInput(id, input, options);
       });
     }
+    for (const id of COLLECTION_AUTH_EDITOR_INPUT_IDS) {
+      const input = getElement(doc, id);
+      if (!input) {
+        continue;
+      }
+      input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', (event) => {
+        event.__postmeterAuthHandled = true;
+        handleCollectionAuthEditorInput(id, input, options);
+      });
+    }
     bindDelegatedAuthEditorInputs(doc, options);
 
     for (const button of doc.querySelectorAll('.tab')) {
@@ -408,6 +425,8 @@
         handleAuthEditorInput(id, target, options);
       } else if (PERFORMANCE_AUTH_EDITOR_INPUT_ID_SET.has(id)) {
         handlePerformanceAuthEditorInput(id, target, options);
+      } else if (COLLECTION_AUTH_EDITOR_INPUT_ID_SET.has(id)) {
+        handleCollectionAuthEditorInput(id, target, options);
       }
     };
     doc.addEventListener('input', handleDelegatedAuthEvent);
@@ -426,6 +445,13 @@
       options.onPerformanceAuthTypeChange?.(input.value);
     }
     options.onPerformanceAuthInput?.();
+  }
+
+  function handleCollectionAuthEditorInput(id, input, options) {
+    if (id === 'collectionAuthTypeSelect') {
+      options.onCollectionAuthTypeChange?.(input.value);
+    }
+    options.onCollectionAuthInput?.();
   }
 
   function bindToolbarMenus(doc = document, options = {}) {

@@ -601,6 +601,7 @@ h2 {
 }
 
 .workspace.environment-mode,
+.workspace.collection-mode,
 .workspace.workspace-mode,
 .workspace.runner-mode,
 .workspace.performance-mode,
@@ -616,10 +617,20 @@ h2 {
 .workspace.document-mode #workspacePaneResize,
 .workspace.document-mode #requestEditorPanel,
 .workspace.document-mode #requestEmptyPanel,
+.workspace.document-mode #collectionMainPanel,
 .workspace.document-mode .results,
+.workspace.collection-mode #workspacePaneResize,
+.workspace.collection-mode #requestEditorPanel,
+.workspace.collection-mode #requestEmptyPanel,
+.workspace.collection-mode #environmentEmptyPanel,
+.workspace.collection-mode #workspaceEmptyPanel,
+.workspace.collection-mode #runnerEmptyPanel,
+.workspace.collection-mode #performanceEmptyPanel,
+.workspace.collection-mode .results,
 .workspace.environment-mode #workspacePaneResize,
 .workspace.environment-mode #requestEditorPanel,
 .workspace.environment-mode #requestEmptyPanel,
+.workspace.environment-mode #collectionMainPanel,
 .workspace.environment-mode #workspaceEmptyPanel,
 .workspace.environment-mode #runnerEmptyPanel,
 .workspace.environment-mode #performanceEmptyPanel,
@@ -627,6 +638,7 @@ h2 {
 .workspace.workspace-mode #workspacePaneResize,
 .workspace.workspace-mode #requestEditorPanel,
 .workspace.workspace-mode #requestEmptyPanel,
+.workspace.workspace-mode #collectionMainPanel,
 .workspace.workspace-mode #environmentEmptyPanel,
 .workspace.workspace-mode #runnerEmptyPanel,
 .workspace.workspace-mode #performanceEmptyPanel,
@@ -634,6 +646,7 @@ h2 {
 .workspace.runner-mode #workspacePaneResize,
 .workspace.runner-mode #requestEditorPanel,
 .workspace.runner-mode #requestEmptyPanel,
+.workspace.runner-mode #collectionMainPanel,
 .workspace.runner-mode #environmentEmptyPanel,
 .workspace.runner-mode #workspaceEmptyPanel,
 .workspace.runner-mode #performanceEmptyPanel,
@@ -641,12 +654,14 @@ h2 {
 .workspace.performance-mode #workspacePaneResize,
 .workspace.performance-mode #requestEditorPanel,
 .workspace.performance-mode #requestEmptyPanel,
+.workspace.performance-mode #collectionMainPanel,
 .workspace.performance-mode #environmentEmptyPanel,
 .workspace.performance-mode #workspaceEmptyPanel,
 .workspace.performance-mode #runnerEmptyPanel,
 .workspace.performance-mode .results,
 .workspace.request-empty-mode #workspacePaneResize,
 .workspace.request-empty-mode #requestEditorPanel,
+.workspace.request-empty-mode #collectionMainPanel,
 .workspace.request-empty-mode .results,
 .workspace.environment-empty-mode #environmentMainPanel,
 .workspace.workspace-empty-mode #workspaceMainPanel,
@@ -659,6 +674,7 @@ h2 {
 .workspace.document-mode #workspaceMainPanel,
 .workspace.document-mode #runnerMainPanel,
 .workspace.document-mode #performanceMainPanel,
+.workspace.collection-mode #collectionMainPanel,
 .workspace.environment-mode #environmentMainPanel,
 .workspace.workspace-mode #workspaceMainPanel,
 .workspace.runner-mode #runnerMainPanel,
@@ -751,6 +767,7 @@ h2 {
 }
 
 .environment-main-panel,
+.collection-main-panel,
 .workspace-main-panel,
 .runner-main-panel,
 .performance-main-panel {
@@ -772,6 +789,7 @@ h2 {
 }
 
 .environment-main-panel[hidden],
+.collection-main-panel[hidden],
 .workspace-main-panel[hidden],
 .runner-main-panel[hidden],
 .performance-main-panel[hidden] {
@@ -779,6 +797,7 @@ h2 {
 }
 
 .request-main-header,
+.collection-main-header,
 .environment-main-header,
 .workspace-main-header,
 .runner-main-header,
@@ -798,6 +817,7 @@ h2 {
 }
 
 .request-main-header > div:first-child,
+.collection-main-header > div:first-child,
 .environment-main-header > div:first-child,
 .workspace-main-header > div:first-child,
 .runner-main-header > div:first-child,
@@ -807,6 +827,7 @@ h2 {
 }
 
 .request-main-title,
+.collection-main-title,
 .environment-main-title,
 .workspace-main-title,
 .runner-main-title,
@@ -816,6 +837,7 @@ h2 {
 }
 
 .request-main-title.editable-title,
+.collection-main-title.editable-title,
 .environment-main-title.editable-title,
 .workspace-main-title.editable-title,
 .runner-main-title.editable-title,
@@ -835,6 +857,8 @@ h2 {
   outline: none;
 }
 
+.collection-main-title.editable-title:hover,
+.collection-main-title.editable-title:focus-visible,
 .environment-main-title.editable-title:hover,
 .environment-main-title.editable-title:focus-visible,
 .runner-main-title.editable-title:hover,
@@ -849,6 +873,7 @@ h2 {
   background: var(--surface-muted);
 }
 
+.collection-main-title.editable-title.is-editing,
 .environment-main-title.editable-title.is-editing,
 .runner-main-title.editable-title.is-editing,
 .performance-main-title.editable-title.is-editing,
@@ -859,6 +884,7 @@ h2 {
   box-shadow: 0 0 0 3px rgba(255, 108, 55, 0.18);
 }
 
+.collection-main-title.editable-title[aria-disabled="true"],
 .environment-main-title.editable-title[aria-disabled="true"],
 .runner-main-title.editable-title[aria-disabled="true"],
 .performance-main-title.editable-title[aria-disabled="true"],
@@ -868,6 +894,7 @@ h2 {
 }
 
 .request-main-header .request-actions,
+.collection-main-header .collection-actions,
 .environment-main-header .environment-actions,
 .workspace-main-header .workspace-actions,
 .runner-main-header .runner-actions,
@@ -877,6 +904,7 @@ h2 {
   max-width: 620px;
 }
 
+.collection-actions,
 .workspace-actions,
 .runner-actions,
 .performance-actions {

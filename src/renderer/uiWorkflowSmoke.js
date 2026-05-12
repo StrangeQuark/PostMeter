@@ -20,16 +20,42 @@
     assertUiSmoke(activeMainPanel === 'request', 'Creating a collection should switch the main pane to request mode.');
     assertUiSmoke(collection.requests.length === 0, 'New collection should start without requests.');
     assertUiSmoke(!activeRequest(), 'New collection should not auto-select or create a request.');
-    assertUiSmoke(!$('requestEmptyPanel').hidden, 'No-request state should show the create request screen.');
+    assertUiSmoke(!$('collectionMainPanel').hidden, 'Selecting a collection should show the collection editor.');
+    assertUiSmoke($('requestEmptyPanel').hidden, 'Collection editor should replace the no-request empty state.');
     assertUiSmoke($('requestEditorPanel').hidden, 'Request editor should be hidden when no request is selected.');
     assertUiSmoke(document.querySelector('.results').hidden, 'Response panel should be hidden when no request is selected.');
+    assertUiSmoke($('requestTabBar').textContent.includes(collection.name), 'New collection did not open a collection tab.');
+    const collectionOpenTab = openCollectionTabs.find((tab) => tab.collectionId === collection.id);
+    assertUiSmoke(collectionOpenTab?.dirty === true, 'New collection tab should show unsaved changes.');
+    const descriptionEditor = $('collectionDescriptionInput').closest('.code-editor');
+    assertUiSmoke(descriptionEditor?.classList.contains('has-line-numbers'), 'Collection overview description should render as a line-numbered editor.');
+    assertUiSmoke(descriptionEditor.getBoundingClientRect().height > 220, 'Collection overview description editor should fill the collection pane.');
+    assertUiSmoke(!document.querySelector('#collectionOverviewTab .field > span'), 'Collection overview should not reserve space for a description label.');
+    assertUiSmoke(descriptionEditor.getBoundingClientRect().top - $('collectionOverviewTab').getBoundingClientRect().top < 4, 'Collection overview editor should start at the top of the overview pane.');
+    const descriptionCode = descriptionEditor.querySelector('.code-editor-highlight code');
+    assertUiSmoke(
+      getComputedStyle(descriptionCode).fontFamily === getComputedStyle($('collectionDescriptionInput')).fontFamily,
+      'Collection overview highlighted text should use the same font metrics as the editable textarea.'
+    );
     collection.name = 'Smoke Collection';
+    renderAll();
+    activateTab('collection', 'collectionScripts');
+    const scriptFields = Array.from($('collectionScriptsTab').querySelectorAll('.collection-script-field'));
+    assertUiSmoke(scriptFields.length === 2, 'Collection scripts tab should render both script editors.');
+    const preRequestRect = scriptFields[0].getBoundingClientRect();
+    const postRequestRect = scriptFields[1].getBoundingClientRect();
+    assertUiSmoke(postRequestRect.left > preRequestRect.left && Math.abs(postRequestRect.top - preRequestRect.top) < 8, 'Collection script editors should sit side by side.');
+    activateTab('collection', 'collectionLevelVariables');
+    $('addCollectionVariableButton').click();
+    setPairRow('collectionVariablesTable', 'collectionToken', 'from-collection', global);
+    assertUiSmoke($('collectionVariablePreview').textContent.includes('collectionToken = from-collection'), 'Collection variable preview did not render.');
     newRequest();
     const request = activeRequest();
     assertUiSmoke(request, 'New request was not selected.');
     assertUiSmoke($('requestEmptyPanel').hidden, 'Create request screen should hide once a request is selected.');
     assertUiSmoke($('requestTabBar').textContent.includes('New Request'), 'New request tab did not render.');
-    assertUiSmoke(!$('requestTabBar').querySelector('.request-tab-dirty').hidden, 'New request tab should show unsaved changes.');
+    const requestOpenTab = openRequestTabs.find((tab) => tab.requestId === request.id);
+    assertUiSmoke(requestOpenTab?.dirty === true, 'New request tab should show unsaved changes.');
     request.name = 'Smoke Request';
     renderAll();
 
@@ -37,9 +63,11 @@
     $('addRequestVariableButton').click();
     setPairRow('requestVariablesTable', 'requestToken', 'from-request', global);
     assertUiSmoke($('variablePreview').textContent.includes('requestToken = from-request'), 'Request variable preview did not render.');
-    $('urlInput').value = '{{requestToken}}/tail';
+    assertUiSmoke($('variablePreview').textContent.includes('collectionToken = from-collection'), 'Request variable preview did not include collection variables.');
+    $('urlInput').value = '{{requestToken}}{{collectionToken}}/tail';
     dispatchInput($('urlInput'));
     assertVariableHighlight($('urlInput'), 'requestToken', 'Request variables should render as request-scope tokens.', 'valid', 'request');
+    assertVariableHighlight($('urlInput'), 'collectionToken', 'Collection variables should render as collection-scope tokens.', 'valid', 'collection');
     const requestVariableInputs = $('requestVariablesTable').querySelector('.kv-row').querySelectorAll('input');
     assertHighClickPlacesCaret($('urlInput'), 'URL input');
     assertHighClickPlacesCaret(requestVariableInputs[2], 'Request variable value input');
@@ -83,7 +111,7 @@
     activateTab('request', 'scripts');
     $('preRequestScriptInput').value = "pm.environment.set('scriptToken', 'ui-script');";
     dispatchInput($('preRequestScriptInput'));
-    $('testScriptInput').value = "pm.environment.set('responseMethod', pm.response.json().method); pm.test('script token exists', function () { pm.expect(pm.environment.get('scriptToken')).to.equal('ui-script'); pm.expect(pm.variables.get('requestToken')).to.equal('from-request'); pm.response.to.have.status(200); });";
+    $('testScriptInput').value = "pm.environment.set('responseMethod', pm.response.json().method); pm.test('script token exists', function () { pm.expect(pm.environment.get('scriptToken')).to.equal('ui-script'); pm.expect(pm.variables.get('requestToken')).to.equal('from-request'); pm.expect(pm.variables.get('collectionToken')).to.equal('from-collection'); pm.response.to.have.status(200); });";
     dispatchInput($('testScriptInput'));
 
     newEnvironment();
