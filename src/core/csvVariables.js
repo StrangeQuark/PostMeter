@@ -9,7 +9,8 @@
     const filePath = boundedString(input.filePath, MAX_CSV_VARIABLE_PATH_CHARS);
     const values = boundedString(input.values, MAX_CSV_VARIABLE_VALUES_CHARS);
     const activeSource = normalizeCsvVariableActiveSource(input.activeSource, values, filePath);
-    const loopRows = input.loopRows === true;
+    const reuseFirstRow = input.reuseFirstRow === true;
+    const loopRows = !reuseFirstRow && input.loopRows === true;
     return {
       enabled: input.enabled !== false,
       schema: boundedString(input.schema, MAX_CSV_VARIABLE_SCHEMA_CHARS),
@@ -17,8 +18,9 @@
       filePath,
       sourceName: boundedString(input.sourceName, MAX_CSV_VARIABLE_SOURCE_NAME_CHARS),
       activeSource,
+      reuseFirstRow,
       loopRows,
-      continueWithoutRows: !loopRows && input.continueWithoutRows === true
+      continueWithoutRows: !reuseFirstRow && !loopRows && input.continueWithoutRows === true
     };
   }
 
@@ -88,7 +90,13 @@
     if (!names.length) {
       return [];
     }
-    const rows = (Array.isArray(records) ? records : []).map((record, index) => {
+    const requiredRows = Number.isFinite(Number(options.requiredRows))
+      ? Math.max(0, Math.floor(Number(options.requiredRows)))
+      : 0;
+    const sourceRecords = normalized.reuseFirstRow === true && requiredRows > 0 && Array.isArray(records)
+      ? records.slice(0, 1)
+      : records;
+    const rows = (Array.isArray(sourceRecords) ? sourceRecords : []).map((record, index) => {
       if (record.length !== names.length) {
         throw new Error(`CSV variable row ${index + 1} has ${record.length} value${record.length === 1 ? '' : 's'} but the schema defines ${names.length}.`);
       }
@@ -98,9 +106,9 @@
         value: record[columnIndex] == null ? '' : String(record[columnIndex])
       }));
     });
-    const requiredRows = Number.isFinite(Number(options.requiredRows))
-      ? Math.max(0, Math.floor(Number(options.requiredRows)))
-      : 0;
+    if (requiredRows > 0 && normalized.reuseFirstRow === true && rows.length > 0) {
+      return Array.from({ length: requiredRows }, () => cloneIterationRow(rows[0]));
+    }
     if (requiredRows > 0 && rows.length < requiredRows) {
       if (normalized.loopRows === true && rows.length > 0) {
         return Array.from({ length: requiredRows }, (_item, index) => cloneIterationRow(rows[index % rows.length]));

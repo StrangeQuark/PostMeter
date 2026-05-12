@@ -588,7 +588,7 @@
 .csv-variables-modal textarea {
   min-height: 220px;
   resize: vertical;
-  font-family: var(--mono-font);
+  font-family: var(--mono);
   line-height: 1.45;
   white-space: pre;
 }
@@ -653,7 +653,7 @@
 .request-export-text {
   min-height: 280px;
   resize: vertical;
-  font-family: var(--mono-font);
+  font-family: var(--mono);
   line-height: 1.45;
   white-space: pre;
 }

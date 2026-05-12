@@ -1311,9 +1311,11 @@
             </div>
           </section>
 
-          <section id="settingsVaultSection" class="settings-section" role="tabpanel" aria-labelledby="settingsVaultButton" hidden>
+          <section id="settingsVaultSection" class="settings-section" role="tabpanel" aria-labelledby="settingsVaultButton" aria-describedby="settingsVaultDescription" hidden>
             <h3>Vault</h3>
+            <p id="settingsVaultDescription" class="settings-help">Vault stores local secret values for request scripts that use pm.vault. Secret values stay on this machine and are not exported with the workspace.</p>
             <div class="settings-card workspace-vault-panel">
+              <div class="settings-card-title">Local Secrets</div>
               <div class="workspace-sandbox-note" id="sandboxVaultSummary" role="status" aria-live="polite">Vault metadata has not been loaded.</div>
               <div id="sandboxVaultList" class="workspace-package-list"></div>
               <div id="sandboxVaultAuditList" class="workspace-package-list"></div>
@@ -1325,9 +1327,11 @@
             </div>
           </section>
 
-          <section id="settingsPackagesSection" class="settings-section" role="tabpanel" aria-labelledby="settingsPackagesButton" hidden>
+          <section id="settingsPackagesSection" class="settings-section" role="tabpanel" aria-labelledby="settingsPackagesButton" aria-describedby="settingsPackagesDescription" hidden>
             <h3>Packages</h3>
+            <p id="settingsPackagesDescription" class="settings-help">Packages are reviewed JavaScript bundles that imported scripts can require. Scripts can use built-in packages and packages listed here without fetching code during execution.</p>
             <div class="settings-card workspace-package-cache">
+              <div class="settings-card-title">Reviewed Script Packages</div>
               <div class="workspace-sandbox-note" id="sandboxPackageCacheSummary" role="status" aria-live="polite">Reviewed package cache is empty.</div>
               <div id="sandboxPackageMissingList" class="workspace-package-list"></div>
               <div id="sandboxPackageCacheList" class="workspace-package-list"></div>
@@ -1339,9 +1343,11 @@
             </div>
           </section>
 
-          <section id="settingsFilesSection" class="settings-section" role="tabpanel" aria-labelledby="settingsFilesButton" hidden>
+          <section id="settingsFilesSection" class="settings-section" role="tabpanel" aria-labelledby="settingsFilesButton" aria-describedby="settingsFilesDescription" hidden>
             <h3>Files</h3>
+            <p id="settingsFilesDescription" class="settings-help">Files bind imported file references to real files on this machine. This is used for imported file bodies and multipart uploads, and the local paths stay out of workspace exports.</p>
             <div class="settings-card workspace-file-bindings">
+              <div class="settings-card-title">Imported File Bindings</div>
               <div class="workspace-sandbox-note" id="sandboxFileBindingSummary" role="status" aria-live="polite">No imported file attachments need binding.</div>
               <div id="sandboxFileBindingMissingList" class="workspace-package-list"></div>
               <div id="sandboxFileBindingList" class="workspace-package-list"></div>
@@ -1546,7 +1552,7 @@
         <h2 id="csvVariablesModalTitle">CSV variables</h2>
         <button id="closeCsvVariablesModalButton" type="button" class="modal-close-button" aria-label="Close CSV variables">X</button>
       </div>
-      <p id="csvVariablesModalMessage">Define a comma-separated schema and provide one CSV data row for each request execution.</p>
+      <p id="csvVariablesModalMessage">Define a comma-separated schema and provide CSV data rows for request executions.</p>
       <div class="csv-variables-body">
         <label class="field">
           <span>Variable schema</span>
@@ -1586,7 +1592,7 @@
             <div id="csvVariablesValuesPanel" class="csv-variables-disclosure-panel" hidden>
               <label class="field">
                 <span>CSV rows</span>
-                <textarea id="csvVariablesValuesInput" rows="10" spellcheck="false" data-variable-highlight="false" data-code-editor data-code-language="text" placeholder="request1,https://google.com,&quot;{&quot;&quot;ok&quot;&quot;:true}&quot;&#10;request2,https://youtube.com,&quot;{&quot;&quot;ok&quot;&quot;:true}&quot;"></textarea>
+                <textarea id="csvVariablesValuesInput" rows="10" spellcheck="false" data-variable-highlight="false" data-code-editor data-code-language="text"></textarea>
               </label>
               <p class="csv-variables-inline-note">Inline rows can be saved alongside a file reference. Use the source buttons above to choose which one runs.</p>
             </div>
@@ -1594,8 +1600,12 @@
         </section>
         <section class="csv-variables-section csv-variables-row-section" aria-labelledby="csvVariablesRowHandlingTitle">
           <div class="csv-variables-section-heading">
-            <h3 id="csvVariablesRowHandlingTitle">When rows run out</h3>
+            <h3 id="csvVariablesRowHandlingTitle">CSV row usage</h3>
           </div>
+          <label class="checkbox-line csv-variables-loop-option">
+            <input id="csvVariablesReuseFirstRowInput" type="checkbox">
+            <span>Use the first CSV row for every request</span>
+          </label>
           <label class="checkbox-line csv-variables-loop-option">
             <input id="csvVariablesLoopRowsInput" type="checkbox">
             <span>Loop CSV rows when the run needs more rows than the data provides</span>

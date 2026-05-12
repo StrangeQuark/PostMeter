@@ -114,6 +114,7 @@ test('accepts structurally valid IPC payloads', () => {
         enabled: true,
         schema: 'requestUrl',
         values: 'https://example.test/runner',
+        reuseFirstRow: true,
         loopRows: true,
         continueWithoutRows: true
       },
@@ -441,6 +442,7 @@ test('accepts structurally valid IPC payloads', () => {
       enabled: true,
       schema: 'requestName,requestUrl',
       values: 'Request,https://example.test',
+      reuseFirstRow: true,
       loopRows: true,
       continueWithoutRows: true
     },
@@ -462,6 +464,7 @@ test('accepts structurally valid IPC payloads', () => {
       enabled: true,
       schema: 'requestUrl',
       values: 'https://example.test/perf',
+      reuseFirstRow: true,
       loopRows: true,
       continueWithoutRows: true
     },
@@ -545,6 +548,7 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertRunnerPayload({ id: 'runner', csvVariables: { schema: 42 }, requests: [] }), /runner.csvVariables.schema must be a string/);
   assert.throws(() => assertRunnerPayload({ id: 'runner', csvVariables: { enabled: 'yes' }, requests: [] }), /runner.csvVariables.enabled must be a boolean/);
   assert.throws(() => assertRunnerPayload({ id: 'runner', csvVariables: { activeSource: 'database' }, requests: [] }), /runner.csvVariables.activeSource must be one of/);
+  assert.throws(() => assertRunnerPayload({ id: 'runner', csvVariables: { reuseFirstRow: 'yes' }, requests: [] }), /runner.csvVariables.reuseFirstRow must be a boolean/);
   assert.throws(() => assertRunnerPayload({ id: 'runner', csvVariables: { loopRows: 'yes' }, requests: [] }), /runner.csvVariables.loopRows must be a boolean/);
   assert.throws(() => assertRunnerPayload({ id: 'runner', csvVariables: { continueWithoutRows: 'yes' }, requests: [] }), /runner.csvVariables.continueWithoutRows must be a boolean/);
   assert.throws(() => assertRunnerPayload({ id: 'runner', requests: [{ method: 'TRACE', url: 'https:\/\/example.test' }] }), /runner.requests\[0\].method is not supported/);

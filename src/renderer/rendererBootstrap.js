@@ -364,6 +364,7 @@
     bindClick(doc, 'csvVariablesInlineSourceButton', () => options.onSelectCsvVariablesSource?.('inline'));
     bindClick(doc, 'csvVariablesValuesToggle', options.onToggleCsvVariablesValues);
     bindInput(doc, 'csvVariablesValuesInput', options.onCsvVariablesValuesInput);
+    bindChange(doc, 'csvVariablesReuseFirstRowInput', () => options.onCsvVariablesRowModeChange?.('reuse'));
     bindChange(doc, 'csvVariablesLoopRowsInput', () => options.onCsvVariablesRowModeChange?.('loop'));
     bindChange(doc, 'csvVariablesContinueWithoutRowsInput', () => options.onCsvVariablesRowModeChange?.('continue'));
     bindClick(doc, 'cancelConfirmActionButton', () => options.onResolveActiveModal?.(false));

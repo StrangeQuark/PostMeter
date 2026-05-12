@@ -92,6 +92,24 @@ test('CSV variable helpers can continue without CSV data when rows run out', () 
   assert.deepEqual(rows.map((row) => row[0].value), ['one', 'two', 'three']);
 });
 
+test('CSV variable helpers can reuse the first data row for every required request', () => {
+  const rows = csvVariablesToIterationRows({
+    schema: 'username,password',
+    reuseFirstRow: true
+  }, [
+    'alice,correct-horse',
+    'bob'
+  ].join('\n'), { requiredRows: 4 });
+
+  assert.deepEqual(rows.map((row) => row.map((variable) => variable.value)), [
+    ['alice', 'correct-horse'],
+    ['alice', 'correct-horse'],
+    ['alice', 'correct-horse'],
+    ['alice', 'correct-horse']
+  ]);
+  assert.notEqual(rows[0][0], rows[1][0]);
+});
+
 test('normalizes CSV variable definitions and exposes configured names', () => {
   const normalized = normalizeCsvVariableData({
     enabled: false,
@@ -99,6 +117,7 @@ test('normalizes CSV variable definitions and exposes configured names', () => {
     values: 'request,https://example.test',
     filePath: '/tmp/variables.csv',
     sourceName: 'variables.csv',
+    reuseFirstRow: true,
     loopRows: true,
     continueWithoutRows: true,
     ignored: true
@@ -111,12 +130,15 @@ test('normalizes CSV variable definitions and exposes configured names', () => {
     filePath: '/tmp/variables.csv',
     sourceName: 'variables.csv',
     activeSource: 'file',
-    loopRows: true,
+    reuseFirstRow: true,
+    loopRows: false,
     continueWithoutRows: false
   });
   assert.equal(normalizeCsvVariableData({ values: 'inline-row' }).activeSource, 'inline');
   assert.equal(normalizeCsvVariableData({ values: 'inline-row', filePath: '/tmp/variables.csv', activeSource: 'inline' }).activeSource, 'inline');
   assert.equal(normalizeCsvVariableData({ continueWithoutRows: true }).continueWithoutRows, true);
+  assert.equal(normalizeCsvVariableData({ loopRows: true, continueWithoutRows: true }).loopRows, true);
+  assert.equal(normalizeCsvVariableData({ loopRows: true, continueWithoutRows: true }).continueWithoutRows, false);
   assert.equal(normalizeCsvVariableData({ values: 'inline-row' }).values, 'inline-row');
   assert.equal(csvVariablesConfigured(normalized), true);
   assert.equal(csvVariablesEnabled(normalized), false);
