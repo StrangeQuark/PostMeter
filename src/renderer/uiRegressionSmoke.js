@@ -3048,6 +3048,54 @@
         runner.requests.find((request) => request.id === runnerLocalRequest.id)?.postmanBody?.formdata?.some((part) => part.key === 'runnerBody' && part.value === 'value'),
         'Runner-owned request editor should collect Postman-style form-data body rows.'
       );
+      {
+        const originalExportRequest = window.__postmeterExportRequest;
+        const originalExportRequestText = window.__postmeterExportRequestText;
+        const originalPostmeterRequestExportText = window.postmeter?.request?.exportRequestText;
+        let exportedRunnerRequest = null;
+        try {
+          window.__postmeterExportRequestText = null;
+          if (window.postmeter?.request) {
+            window.postmeter.request.exportRequestText = null;
+          }
+          window.__postmeterExportRequest = async (request, format) => {
+            exportedRunnerRequest = { request, format };
+            return { cancelled: true };
+          };
+          const runnerRequestTab = openRequestTabs.find((tab) => tab.runnerId === runner.id && tab.requestId === runnerLocalRequest.id);
+          openOpenTabContextMenu(runnerRequestTab);
+          const exportMenuItem = Array.from($('contextMenu').querySelectorAll('button'))
+            .find((button) => button.textContent.trim() === 'Export');
+          assertUiSmoke(exportMenuItem, 'Runner request tab context menu should include Export.');
+          exportMenuItem.focus();
+          exportMenuItem.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Enter' }));
+          const postmeterExportItem = document.activeElement;
+          assertUiSmoke(postmeterExportItem?.textContent.trim() === 'PostMeter', 'Opening the tab Export submenu should focus PostMeter.');
+          postmeterExportItem.click();
+          await waitForUiSmoke(
+            () => exportedRunnerRequest || !$('requestExportModal').hidden,
+            'Runner request tab export should start the single-request export flow.',
+            3000,
+            global
+          );
+          if (!exportedRunnerRequest) {
+            $('fileRequestExportButton').click();
+          }
+          await waitForUiSmoke(
+            () => exportedRunnerRequest?.request?.id === runnerLocalRequest.id,
+            'Runner request tab export should export the runner-owned request as a single request.',
+            3000,
+            global
+          );
+          assertUiSmoke(exportedRunnerRequest.format === 'postmeter', 'Runner request tab export should use the single-request PostMeter format.');
+        } finally {
+          window.__postmeterExportRequest = originalExportRequest;
+          window.__postmeterExportRequestText = originalExportRequestText;
+          if (window.postmeter?.request) {
+            window.postmeter.request.exportRequestText = originalPostmeterRequestExportText;
+          }
+        }
+      }
       const runnerTab = openRunnerTabs.find((tab) => tab.runnerId === runner.id);
       assertUiSmoke(runnerTab, 'Runner tab should remain open while editing a runner request.');
       selectRunnerTab(runnerTab);
@@ -3907,7 +3955,7 @@
       const closeTargetTab = openRequestTabs.find((tab) => tab.requestId === closeTarget.id);
       openOpenTabContextMenu(closeTargetTab);
       const tabContextLabels = Array.from($('contextMenu').querySelectorAll('button')).map((button) => button.textContent.trim());
-      for (const label of ['New Request', 'Close Tab', 'Close Other Tabs', 'Close All Tabs', 'Force Close Tab', 'Force Close Other Tabs', 'Force Close All Tabs']) {
+      for (const label of ['New Request', 'Export', 'Close Tab', 'Close Other Tabs', 'Close All Tabs', 'Force Close Tab', 'Force Close Other Tabs', 'Force Close All Tabs']) {
         assertUiSmoke(tabContextLabels.includes(label), `Open-tab context menu should include ${label}.`);
       }
       activateContextMenuItem('Close Tab');

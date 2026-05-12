@@ -685,6 +685,7 @@ function showOpenTabContextMenu(event, kind, tab, _item, options = {}) {
   const y = Number.isFinite(options.y) ? options.y : event?.clientY || 0;
   showContextMenu(x, y, [
     ['New Request', () => newRequest()],
+    openTabExportMenuItem(targetRef),
     ['Close Tab', () => { void queueOpenTabCloseSequence([targetRef]); }],
     ['Close Other Tabs', () => { void queueOpenTabCloseSequence(openTabRefs().filter((ref) => ref.key !== targetRef.key)); }],
     ['Close All Tabs', () => { void queueOpenTabCloseSequence(openTabRefs()); }],
@@ -695,6 +696,45 @@ function showOpenTabContextMenu(event, kind, tab, _item, options = {}) {
     focusFirst: options.keyboard === true,
     trigger: options.trigger || event?.currentTarget || null
   });
+}
+
+function openTabExportMenuItem(ref) {
+  if (ref?.kind === 'request') {
+    return ['Export', [
+      ['PostMeter', () => { void exportOpenTab(ref, 'postmeter'); }],
+      ['curl', () => { void exportOpenTab(ref, 'curl'); }]
+    ]];
+  }
+  if (ref?.kind === 'environment') {
+    return ['Export', [
+      ['PostMeter', () => { void exportOpenTab(ref, 'postmeter'); }],
+      ['Postman', () => { void exportOpenTab(ref, 'postman'); }]
+    ]];
+  }
+  return ['Export', () => { void exportOpenTab(ref); }];
+}
+
+async function exportOpenTab(ref, format = 'postmeter') {
+  if (!openTabRefStillExists(ref)) {
+    return setStatus('Select an open tab before exporting.');
+  }
+  if (ref.kind === 'request') {
+    return exportRequest(requestForTab(ref.tab), format);
+  }
+  if (ref.kind === 'environment') {
+    return exportEnvironment(environmentForTab(ref.tab), format);
+  }
+  if (ref.kind === 'workspace') {
+    const workspaceItem = workspaceForTab(ref.tab);
+    return exportWorkspace(workspaceItem?.id || null);
+  }
+  if (ref.kind === 'runner') {
+    return exportRunnerDefinition(runnerForTab(ref.tab));
+  }
+  if (ref.kind === 'performance') {
+    return exportActivePerformanceTest(performanceTestForTab(ref.tab));
+  }
+  return setStatus('Select an open tab before exporting.');
 }
 
 function openTabRef(kind, tab) {
