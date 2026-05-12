@@ -137,10 +137,35 @@ function ensureRequestCompatibilityFields(requests = []) {
     if (!Array.isArray(request.variables)) {
       request.variables = [];
     }
-    if (!Array.isArray(request.examples)) {
-      request.examples = [];
+    if (typeof request.docs !== 'string') {
+      request.docs = '';
     }
+    if (String(request.scripts?.mock || '').trim() && Array.isArray(request.examples) && request.examples.length) {
+      request.postman = request.postman && typeof request.postman === 'object' && !Array.isArray(request.postman)
+        ? request.postman
+        : {};
+      if (!Array.isArray(request.postman.mockResponses) || !request.postman.mockResponses.length) {
+        request.postman.mockResponses = migrateSavedMockResponses(request.examples);
+      }
+    }
+    delete request.examples;
   }
+}
+
+function migrateSavedMockResponses(responses = []) {
+  return (Array.isArray(responses) ? responses : [])
+    .filter((response) => response && typeof response === 'object')
+    .map((response, index) => ({
+      id: response.id == null || response.id === '' ? `mock-response-${index + 1}` : String(response.id),
+      name: response.name == null || response.name === '' ? `Mock Response ${index + 1}` : String(response.name),
+      statusCode: Number.isFinite(Number(response.statusCode ?? response.code ?? response.status))
+        ? Number(response.statusCode ?? response.code ?? response.status)
+        : 200,
+      headers: Array.isArray(response.headers || response.header)
+        ? (response.headers || response.header).map((header) => ({ ...header }))
+        : [],
+      body: response.body == null ? '' : String(response.body)
+    }));
 }
 
 function ensureCollectionCookieJarFields(collection) {

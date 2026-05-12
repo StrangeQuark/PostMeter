@@ -301,9 +301,6 @@ function curlExportExclusions(request = {}) {
   if (String(scripts.tests || '').trim()) {
     exclusions.push('Post-request scripts are not included in curl exports.');
   }
-  if (Array.isArray(request.assertions) && request.assertions.some((assertion) => assertion?.enabled !== false)) {
-    exclusions.push('Assertions are not included in curl exports.');
-  }
   const auth = normalizeAuth(request.auth || {});
   if (auth.type && !['none', 'basic'].includes(auth.type)) {
     exclusions.push(`${auth.type} auth settings are not fully translated to curl.`);
@@ -313,9 +310,6 @@ function curlExportExclusions(request = {}) {
   }
   if ((request.variables || []).some((variable) => variable?.enabled !== false && variable?.key && !String(variable.key).startsWith('curl.'))) {
     exclusions.push('Request variables are exported as literal values and are not resolved by curl.');
-  }
-  if ((request.examples || []).length) {
-    exclusions.push('Saved examples are not included in curl exports.');
   }
   const bodyMode = String(request.postmanBody?.mode || '').toLowerCase();
   if (bodyMode === 'formdata' || request.bodyType === BODY_TYPES.FORM_DATA) {

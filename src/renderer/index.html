@@ -143,6 +143,105 @@
           <button id="emptyCreateRequestButton" type="button" class="primary">New Request</button>
         </div>
       </section>
+
+      <section id="collectionMainPanel" class="panel collection-main-panel" role="tabpanel" hidden>
+        <div class="collection-main-header">
+          <div>
+            <div id="collectionMainTitle" class="collection-main-title editable-title" tabindex="0" aria-label="Collection name">Select a collection</div>
+          </div>
+          <div class="collection-actions">
+            <button id="saveCollectionButton" type="button">Save Collection</button>
+          </div>
+        </div>
+
+        <div class="tabs" role="tablist" aria-label="Collection editor sections" data-tab-group="collection">
+          <button id="collectionOverviewTabButton" class="tab active" type="button" role="tab" data-tab-group="collection" data-tab="collectionOverview" aria-selected="true" aria-controls="collectionOverviewTab">Overview</button>
+          <button id="collectionAuthTabButton" class="tab" type="button" role="tab" data-tab-group="collection" data-tab="collectionAuth" aria-selected="false" aria-controls="collectionAuthTab">Auth</button>
+          <button id="collectionScriptsTabButton" class="tab" type="button" role="tab" data-tab-group="collection" data-tab="collectionScripts" aria-selected="false" aria-controls="collectionScriptsTab">Scripts</button>
+          <button id="collectionVariablesTabButton" class="tab" type="button" role="tab" data-tab-group="collection" data-tab="collectionLevelVariables" aria-selected="false" aria-controls="collectionLevelVariablesTab">Variables</button>
+        </div>
+
+        <div id="collectionOverviewTab" class="tab-panel active" role="tabpanel" aria-labelledby="collectionOverviewTabButton">
+          <div class="collection-overview-field">
+            <textarea id="collectionDescriptionInput" spellcheck="true" placeholder="What this collection is for" aria-label="Collection overview" data-code-editor data-code-language="text"></textarea>
+          </div>
+        </div>
+
+        <div id="collectionAuthTab" class="tab-panel" role="tabpanel" aria-labelledby="collectionAuthTabButton">
+          <div id="collectionAuthEditor"></div>
+        </div>
+
+        <div id="collectionScriptsTab" class="tab-panel" role="tabpanel" aria-labelledby="collectionScriptsTabButton">
+          <div class="script-grid">
+            <label class="field script-field collection-script-field">
+              <span>Pre-request Script</span>
+              <textarea id="collectionPreRequestScriptInput" spellcheck="false" placeholder="pm.environment.set('token', 'value');" data-code-editor data-code-language="javascript"></textarea>
+            </label>
+            <label class="field script-field collection-script-field">
+              <span>Post-request Script</span>
+              <textarea id="collectionTestScriptInput" spellcheck="false" placeholder="pm.test('status is 200', function () { pm.response.to.have.status(200); });" data-code-editor data-code-language="javascript"></textarea>
+            </label>
+          </div>
+        </div>
+
+        <div id="collectionLevelVariablesTab" class="tab-panel" role="tabpanel" aria-labelledby="collectionVariablesTabButton">
+          <div class="environment-actions variable-actions">
+            <button id="addCollectionVariableButton" type="button">Add Variable</button>
+          </div>
+          <div id="collectionVariablesTable" class="kv-table"></div>
+          <pre id="collectionVariablePreview" class="variable-preview">No variables</pre>
+        </div>
+      </section>
+
+      <section id="folderMainPanel" class="panel collection-main-panel folder-main-panel" role="tabpanel" hidden>
+        <div class="collection-main-header">
+          <div>
+            <div id="folderMainTitle" class="collection-main-title editable-title" tabindex="0" aria-label="Folder name">Select a folder</div>
+          </div>
+          <div class="collection-actions">
+            <button id="saveFolderButton" type="button">Save Folder</button>
+          </div>
+        </div>
+
+        <div class="tabs" role="tablist" aria-label="Folder editor sections" data-tab-group="folder">
+          <button id="folderOverviewTabButton" class="tab active" type="button" role="tab" data-tab-group="folder" data-tab="folderOverview" aria-selected="true" aria-controls="folderOverviewTab">Overview</button>
+          <button id="folderAuthTabButton" class="tab" type="button" role="tab" data-tab-group="folder" data-tab="folderAuth" aria-selected="false" aria-controls="folderAuthTab">Auth</button>
+          <button id="folderScriptsTabButton" class="tab" type="button" role="tab" data-tab-group="folder" data-tab="folderScripts" aria-selected="false" aria-controls="folderScriptsTab">Scripts</button>
+          <button id="folderVariablesTabButton" class="tab" type="button" role="tab" data-tab-group="folder" data-tab="folderLevelVariables" aria-selected="false" aria-controls="folderLevelVariablesTab">Variables</button>
+        </div>
+
+        <div id="folderOverviewTab" class="tab-panel active" role="tabpanel" aria-labelledby="folderOverviewTabButton">
+          <div class="collection-overview-field">
+            <textarea id="folderDescriptionInput" spellcheck="true" placeholder="What this folder is for" aria-label="Folder overview" data-code-editor data-code-language="text"></textarea>
+          </div>
+        </div>
+
+        <div id="folderAuthTab" class="tab-panel" role="tabpanel" aria-labelledby="folderAuthTabButton">
+          <div id="folderAuthEditor"></div>
+        </div>
+
+        <div id="folderScriptsTab" class="tab-panel" role="tabpanel" aria-labelledby="folderScriptsTabButton">
+          <div class="script-grid">
+            <label class="field script-field collection-script-field">
+              <span>Pre-request Script</span>
+              <textarea id="folderPreRequestScriptInput" spellcheck="false" placeholder="pm.environment.set('token', 'value');" data-code-editor data-code-language="javascript"></textarea>
+            </label>
+            <label class="field script-field collection-script-field">
+              <span>Post-request Script</span>
+              <textarea id="folderTestScriptInput" spellcheck="false" placeholder="pm.test('status is 200', function () { pm.response.to.have.status(200); });" data-code-editor data-code-language="javascript"></textarea>
+            </label>
+          </div>
+        </div>
+
+        <div id="folderLevelVariablesTab" class="tab-panel" role="tabpanel" aria-labelledby="folderVariablesTabButton">
+          <div class="environment-actions variable-actions">
+            <button id="addFolderVariableButton" type="button">Add Variable</button>
+          </div>
+          <div id="folderVariablesTable" class="kv-table"></div>
+          <pre id="folderVariablePreview" class="variable-preview">No variables</pre>
+        </div>
+      </section>
+
       <section id="requestEditorPanel" class="panel request-panel" role="tabpanel">
         <div class="request-main-header">
           <div id="requestNameTitle" class="request-main-title editable-title" tabindex="0" aria-label="Request name">Select a request</div>
@@ -171,10 +270,9 @@
           <button id="requestAuthTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="auth" aria-selected="false" aria-controls="authTab">Auth</button>
           <button id="requestCookiesTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="cookies" aria-selected="false" aria-controls="cookiesTab">Cookies</button>
           <button id="requestBodyTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="body" aria-selected="false" aria-controls="bodyTab">Body</button>
-          <button id="requestTestsTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="tests" aria-selected="false" aria-controls="testsTab">Tests</button>
           <button id="requestScriptsTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="scripts" aria-selected="false" aria-controls="scriptsTab">Scripts</button>
-          <button id="requestExamplesTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="examples" aria-selected="false" aria-controls="examplesTab">Examples</button>
           <button id="requestVariablesTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="collectionVariables" aria-selected="false" aria-controls="collectionVariablesTab">Variables</button>
+          <button id="requestDocsTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="docs" aria-selected="false" aria-controls="docsTab">Docs</button>
         </div>
 
         <div id="paramsTab" class="tab-panel active" role="tabpanel" aria-labelledby="requestParamsTabButton">
@@ -429,28 +527,6 @@
           </div>
         </div>
 
-        <div id="testsTab" class="tab-panel" role="tabpanel" aria-labelledby="requestTestsTabButton">
-          <div class="table-actions">
-            <button id="addAssertionButton">Add Assertion</button>
-            <select id="assertionTemplateSelect" aria-label="Assertion template">
-              <option value="status200">Status 200</option>
-              <option value="jsonPathExists">JSON path exists</option>
-              <option value="xmlPathExists">XML XPath exists</option>
-              <option value="htmlSelectorExists">HTML selector exists</option>
-              <option value="headerContains">Header contains</option>
-              <option value="responseUnderOneSecond">Response under 1s</option>
-              <option value="responseUnder10Kb">Response under 10 KB</option>
-              <option value="bodyContains">Body contains</option>
-              <option value="extractVariable">Extract variable</option>
-              <option value="extractXml">Extract XML</option>
-              <option value="extractHtml">Extract HTML</option>
-              <option value="extractRegex">Extract regex</option>
-            </select>
-            <button id="addAssertionTemplateButton">Add Template</button>
-          </div>
-          <div id="assertionsTable" class="kv-table assertions-table"></div>
-        </div>
-
         <div id="scriptsTab" class="tab-panel" role="tabpanel" aria-labelledby="requestScriptsTabButton">
           <div class="script-grid">
             <label class="field script-field">
@@ -462,15 +538,6 @@
               <textarea id="testScriptInput" spellcheck="false" placeholder="pm.test('status is 200', function () { pm.response.to.have.status(200); });" data-code-editor data-code-language="javascript"></textarea>
             </label>
           </div>
-        </div>
-
-        <div id="examplesTab" class="tab-panel" role="tabpanel" aria-labelledby="requestExamplesTabButton">
-          <div class="table-actions">
-            <button id="addExampleButton">Add Example</button>
-            <button id="captureResponseExampleButton">Capture Response</button>
-            <button id="exportExamplesButton">Export Examples</button>
-          </div>
-          <div id="examplesList" class="examples-list"></div>
         </div>
 
         <div id="cookiesTab" class="tab-panel" role="tabpanel" aria-labelledby="requestCookiesTabButton">
@@ -497,14 +564,15 @@
         </div>
 
         <div id="collectionVariablesTab" class="tab-panel" role="tabpanel" aria-labelledby="requestVariablesTabButton">
-          <div class="environment-actions">
-            <button id="addRequestVariableButton">Add Request Variable</button>
-            <button id="addCollectionVariableButton">Add Variable</button>
+          <div class="environment-actions variable-actions">
+            <button id="addRequestVariableButton">Add Variable</button>
           </div>
           <div id="requestVariablesTable" class="kv-table"></div>
-          <h3 class="section-heading">Collection Variables</h3>
-          <div id="collectionVariablesTable" class="kv-table"></div>
           <pre id="variablePreview" class="variable-preview">No variables</pre>
+        </div>
+
+        <div id="docsTab" class="tab-panel" role="tabpanel" aria-labelledby="requestDocsTabButton">
+          <textarea id="docsInput" class="docs-input" spellcheck="false" placeholder="Request docs" aria-label="Request docs" data-code-editor data-code-language="text"></textarea>
         </div>
 
       </section>
@@ -682,10 +750,9 @@
               <button id="performanceRequestAuthTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceAuth" aria-selected="false" aria-controls="performanceAuthTab">Auth</button>
               <button id="performanceRequestCookiesTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceCookies" aria-selected="false" aria-controls="performanceCookiesTab">Cookies</button>
               <button id="performanceRequestBodyTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceBody" aria-selected="false" aria-controls="performanceBodyTab">Body</button>
-              <button id="performanceRequestTestsTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceTests" aria-selected="false" aria-controls="performanceTestsTab">Tests</button>
               <button id="performanceRequestScriptsTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceScripts" aria-selected="false" aria-controls="performanceScriptsTab">Scripts</button>
-              <button id="performanceRequestExamplesTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceExamples" aria-selected="false" aria-controls="performanceExamplesTab">Examples</button>
               <button id="performanceRequestVariablesTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceVariables" aria-selected="false" aria-controls="performanceVariablesTab">Variables</button>
+              <button id="performanceRequestDocsTabButton" class="tab" type="button" role="tab" data-tab-group="performanceRequest" data-tab="performanceDocs" aria-selected="false" aria-controls="performanceDocsTab">Docs</button>
             </div>
 
             <div id="performanceParamsTab" class="tab-panel active" role="tabpanel" aria-labelledby="performanceRequestParamsTabButton">
@@ -953,28 +1020,6 @@
               </div>
             </div>
 
-            <div id="performanceTestsTab" class="tab-panel" role="tabpanel" aria-labelledby="performanceRequestTestsTabButton">
-              <div class="table-actions">
-                <button id="addPerformanceAssertionButton" type="button">Add Assertion</button>
-                <select id="performanceAssertionTemplateSelect" aria-label="Performance assertion template">
-                  <option value="status200">Status 200</option>
-                  <option value="jsonPathExists">JSON path exists</option>
-                  <option value="xmlPathExists">XML XPath exists</option>
-                  <option value="htmlSelectorExists">HTML selector exists</option>
-                  <option value="headerContains">Header contains</option>
-                  <option value="responseUnderOneSecond">Response under 1s</option>
-                  <option value="responseUnder10Kb">Response under 10 KB</option>
-                  <option value="bodyContains">Body contains</option>
-                  <option value="extractVariable">Extract variable</option>
-                  <option value="extractXml">Extract XML</option>
-                  <option value="extractHtml">Extract HTML</option>
-                  <option value="extractRegex">Extract regex</option>
-                </select>
-                <button id="addPerformanceAssertionTemplateButton" type="button">Add Template</button>
-              </div>
-              <div id="performanceAssertionsTable" class="kv-table assertions-table"></div>
-            </div>
-
             <div id="performanceScriptsTab" class="tab-panel" role="tabpanel" aria-labelledby="performanceRequestScriptsTabButton">
               <div class="script-grid">
                 <label class="field script-field">
@@ -988,20 +1033,16 @@
               </div>
             </div>
 
-            <div id="performanceExamplesTab" class="tab-panel" role="tabpanel" aria-labelledby="performanceRequestExamplesTabButton">
-              <div class="table-actions">
-                <button id="addPerformanceExampleButton" type="button">Add Example</button>
-                <button id="exportPerformanceExamplesButton" type="button">Export Examples</button>
-              </div>
-              <div id="performanceExamplesList" class="examples-list"></div>
-            </div>
-
             <div id="performanceVariablesTab" class="tab-panel" role="tabpanel" aria-labelledby="performanceRequestVariablesTabButton">
-              <div class="environment-actions">
-                <button id="addPerformanceRequestVariableButton" type="button">Add Request Variable</button>
+              <div class="environment-actions variable-actions">
+                <button id="addPerformanceRequestVariableButton" type="button">Add Variable</button>
               </div>
               <div id="performanceRequestVariablesTable" class="kv-table"></div>
               <pre id="performanceVariablePreview" class="variable-preview">No variables</pre>
+            </div>
+
+            <div id="performanceDocsTab" class="tab-panel" role="tabpanel" aria-labelledby="performanceRequestDocsTabButton">
+              <textarea id="performanceDocsInput" class="docs-input" spellcheck="false" placeholder="Request docs" aria-label="Performance request docs" data-code-editor data-code-language="text"></textarea>
             </div>
           </div>
         </div>
@@ -1254,7 +1295,10 @@
                 <input id="showEditorLineNumbersInput" type="checkbox">
                 <span>Show editor line numbers</span>
               </label>
-              <p class="settings-help">Show line numbers in request, response, script, import, export, and CSV editors.</p>
+              <label class="checkbox-line">
+                <input id="showVariableTooltipHintsInput" type="checkbox">
+                <span>Show variable tooltip shortcut hints</span>
+              </label>
             </div>
           </section>
 
@@ -1723,9 +1767,7 @@
   <script src="../core/authModel.js"></script>
   <script src="../core/cookieModel.js"></script>
   <script src="collectionModel.js"></script>
-  <script src="assertionModel.js"></script>
   <script src="cookieModel.js"></script>
-  <script src="exampleModel.js"></script>
   <script src="performanceTestModel.js"></script>
   <script src="variableHighlighter.js"></script>
   <script src="codeEditor.js"></script>

@@ -29,9 +29,6 @@ function regenerateFolderIds(folder) {
 
 function regenerateRequestIds(request) {
   request.id = newId();
-  for (const example of request.examples || []) {
-    example.id = newId();
-  }
 }
 
 module.exports = {

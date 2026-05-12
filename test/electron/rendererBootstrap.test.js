@@ -182,7 +182,9 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(chromeSource, /\.toolbar-menu:has\(\.toolbar-submenu-row:hover\) \.toolbar-submenu-row:not\(:hover\) \.toolbar-submenu/);
   assert.match(chromeSource, /\.toolbar-submenu::before/);
   assert.match(chromeSource, /\.request-tab-method\.method-post/);
+  assert.match(chromeSource, /\.request-tab-method\.entity-collection/);
   assert.match(chromeSource, /\.request-tab-method\.entity-runner/);
+  assert.match(chromeSource, /\.tree-badge\.entity-collection/);
   assert.match(chromeSource, /\.tree-badge\.entity-performance/);
   assert.doesNotMatch(overlaysSource, /--mono-font/);
   assert.match(overlaysSource, /csv-variables-modal textarea[\s\S]*font-family:\s*var\(--mono\)/);
@@ -202,6 +204,7 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(rendererSource, /Saving diagnostics privacy settings before export/);
   assert.match(rendererSource, /function requestTabMethodText\(request, tab = {}\)/);
   assert.match(rendererSource, /`RUN - \$\{method\}`/);
+  assert.match(rendererSource, /col: 'entity-collection'/);
   assert.match(rendererSource, /methodClassName: \(\) => tagClassName\('ENV'\)/);
   assert.match(rendererSource, /badge\.className = \['tree-badge', tagClassName\(kind\)\]/);
 });
@@ -431,6 +434,7 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
     ['closeSettingsModalButton', createElement()],
     ['closeSettingsModalFooterButton', createElement()],
     ['showEditorLineNumbersInput', createElement({ tagName: 'INPUT' })],
+    ['showVariableTooltipHintsInput', createElement({ tagName: 'INPUT' })],
     ['saveOnForceCloseInput', createElement({ tagName: 'INPUT' })],
     ['closeModalsOnBackdropClickInput', createElement({ tagName: 'INPUT' })],
     ['includePrereleasesInput', createElement({ tagName: 'INPUT' })],
@@ -458,6 +462,7 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
     onSelectSettingsSection: (section) => calls.push(`section:${section}`),
     onSelectTheme: (theme) => calls.push(`theme:${theme}`),
     onShowEditorLineNumbersChange: () => calls.push('line-numbers'),
+    onShowVariableTooltipHintsChange: () => calls.push('variable-tooltip-hints'),
     onSaveOnForceCloseChange: () => calls.push('save-on-force-close'),
     onCloseModalsOnBackdropClickChange: () => calls.push('close-modals-on-backdrop'),
     onIncludePrereleasesChange: () => calls.push('include-prereleases'),
@@ -467,6 +472,7 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
   settingsTabsButton.dispatch('click');
   themeDarkButton.dispatch('click');
   elements.get('showEditorLineNumbersInput').dispatch('change');
+  elements.get('showVariableTooltipHintsInput').dispatch('change');
   elements.get('saveOnForceCloseInput').dispatch('change');
   settingsModalsButton.dispatch('click');
   elements.get('closeModalsOnBackdropClickInput').dispatch('change');
@@ -478,6 +484,7 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
     'section:tabs',
     'theme:dark',
     'line-numbers',
+    'variable-tooltip-hints',
     'save-on-force-close',
     'section:modals',
     'close-modals-on-backdrop',
@@ -636,10 +643,6 @@ test('renderer bootstrap binds performance creation import export run and config
     'closePerformanceCalibrationModalButton',
     'addPerformanceParamButton',
     'addPerformanceHeaderButton',
-    'addPerformanceAssertionButton',
-    'addPerformanceAssertionTemplateButton',
-    'addPerformanceExampleButton',
-    'exportPerformanceExamplesButton',
     'addPerformanceRequestVariableButton',
     'addPerformanceCookieButton',
     'clearExpiredPerformanceCookiesButton',
@@ -651,6 +654,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'performanceGraphqlQueryInput',
     'performanceGraphqlVariablesInput',
     'performanceGraphqlOperationNameInput',
+    'performanceDocsInput',
     'addPerformanceFormDataBodyRowButton',
     'addPerformanceUrlencodedBodyRowButton',
     'performanceBinaryBodySourceInput'
@@ -701,10 +705,6 @@ test('renderer bootstrap binds performance creation import export run and config
     onImportPerformanceRequest: () => calls.push('import-request'),
     onAddPerformanceParam: () => calls.push('add-param'),
     onAddPerformanceHeader: () => calls.push('add-header'),
-    onAddPerformanceAssertion: () => calls.push('add-assertion'),
-    onAddPerformanceAssertionTemplate: () => calls.push('add-template'),
-    onAddPerformanceExample: () => calls.push('add-example'),
-    onExportPerformanceExamples: () => calls.push('export-examples'),
     onAddPerformanceRequestVariable: () => calls.push('add-variable'),
     onAddPerformanceCookie: () => calls.push('add-cookie'),
     onClearExpiredPerformanceCookies: () => calls.push('clear-cookies'),
@@ -732,10 +732,6 @@ test('renderer bootstrap binds performance creation import export run and config
     'importPerformanceRequestButton',
     'addPerformanceParamButton',
     'addPerformanceHeaderButton',
-    'addPerformanceAssertionButton',
-    'addPerformanceAssertionTemplateButton',
-    'addPerformanceExampleButton',
-    'exportPerformanceExamplesButton',
     'addPerformanceRequestVariableButton',
     'addPerformanceCookieButton',
     'clearExpiredPerformanceCookiesButton',
@@ -762,9 +758,10 @@ test('renderer bootstrap binds performance creation import export run and config
   elements.get('performanceGraphqlQueryInput').dispatch('input');
   elements.get('performanceGraphqlVariablesInput').dispatch('input');
   elements.get('performanceGraphqlOperationNameInput').dispatch('input');
+  elements.get('performanceDocsInput').dispatch('input');
   elements.get('performanceBinaryBodySourceInput').dispatch('input');
 
-  assert.deepEqual(calls.slice(0, 22), [
+  assert.deepEqual(calls.slice(0, 18), [
     'new',
     'new',
     'import-test',
@@ -778,10 +775,6 @@ test('renderer bootstrap binds performance creation import export run and config
     'import-request',
     'add-param',
     'add-header',
-    'add-assertion',
-    'add-template',
-    'add-example',
-    'export-examples',
     'add-variable',
     'add-cookie',
     'clear-cookies',
@@ -791,7 +784,7 @@ test('renderer bootstrap binds performance creation import export run and config
   assert.equal(calls.filter((call) => call === 'config').length, 11);
   assert.ok(calls.includes('add-form-data'));
   assert.ok(calls.includes('add-urlencoded'));
-  assert.equal(calls.filter((call) => call === 'request').length, 7);
+  assert.equal(calls.filter((call) => call === 'request').length, 8);
   assert.equal(calls.filter((call) => call === 'body-type').length, 2);
   assert.ok(calls.includes('performance:spike'));
 });
@@ -1287,7 +1280,7 @@ test('renderer loads code editor helpers before request editor panels and render
   assert.ok(codeEditorIndex >= 0, 'codeEditor.js should be loaded');
   assert.ok(requestPanelsIndex >= 0, 'requestEditorPanels.js should be loaded');
   assert.ok(rendererIndex >= 0, 'renderer.js should be loaded');
-  assert.ok(codeEditorIndex < requestPanelsIndex, 'codeEditor.js should load before dynamic example editors are rendered.');
+  assert.ok(codeEditorIndex < requestPanelsIndex, 'codeEditor.js should load before request editor panels are rendered.');
   assert.ok(codeEditorIndex < rendererIndex, 'codeEditor.js should load before renderer.js initializes textareas.');
 });
 

@@ -26,9 +26,9 @@ function updateWorkspaceRequestAuth(workspace, requestId, auth) {
 
 function findWorkspaceRequestContext(workspace, requestId) {
   for (const collection of workspace.collections || []) {
-    const request = findRequestInCollection(collection, requestId);
-    if (request) {
-      return { collection, request };
+    const found = findRequestInCollection(collection, requestId);
+    if (found?.request) {
+      return { collection, request: found.request, folder: found.folder || null, folders: found.folders || [] };
     }
   }
   return null;
@@ -45,9 +45,9 @@ function findWorkspaceRunnerRequestContext(workspace, runnerId, requestId) {
 
 function findRequestInCollection(collection, requestId) {
   let match = null;
-  walkRequests(collection, (request) => {
+  walkRequests(collection, (request, _collection, folder, folders = []) => {
     if (!match && request.id === requestId) {
-      match = request;
+      match = { request, folder, folders };
     }
   });
   return match;
@@ -100,7 +100,8 @@ function applyCollectionRunMutationsToWorkspace(workspace, result, options = {})
       : clonePairs(result.collectionVariables);
   }
   for (const item of result.results || []) {
-    const request = item.requestId ? findRequestInCollection(collection, item.requestId) : null;
+    const found = item.requestId ? findRequestInCollection(collection, item.requestId) : null;
+    const request = found?.request || null;
     if (request && item.updatedAuth) {
       request.auth = cloneJson(item.updatedAuth);
     }
@@ -113,9 +114,9 @@ function applyCollectionRunMutationsToWorkspace(workspace, result, options = {})
   }
   if (result.authUpdates instanceof Map) {
     for (const [requestId, auth] of result.authUpdates.entries()) {
-      const request = findRequestInCollection(collection, requestId);
-      if (request) {
-        request.auth = cloneJson(auth);
+      const found = findRequestInCollection(collection, requestId);
+      if (found?.request) {
+        found.request.auth = cloneJson(auth);
       }
     }
   }
@@ -299,12 +300,22 @@ function applyRequestSaveToWorkspace(workspace, payload) {
       id: collectionId,
       name: payload.collectionShell.name || 'Untitled Collection',
       description: payload.collectionShell.description || '',
+      auth: cloneJson(payload.collectionShell.auth || { type: 'none' }),
+      scripts: cloneJson(payload.collectionShell.scripts || {}),
       certificates: Array.isArray(payload.collectionShell.certificates) ? cloneJson(payload.collectionShell.certificates) : [],
       variables: Array.isArray(payload.collectionVariables) ? clonePairs(payload.collectionVariables) : [],
       requests: [],
       folders: []
     };
     collectionIndex = nextWorkspace.collections.length;
+  } else if (payload.collectionShell) {
+    collection.name = payload.collectionShell.name || collection.name || 'Untitled Collection';
+    collection.description = payload.collectionShell.description || '';
+    collection.auth = cloneJson(payload.collectionShell.auth || { type: 'none' });
+    collection.scripts = cloneJson(payload.collectionShell.scripts || {});
+    if (Array.isArray(payload.collectionShell.certificates)) {
+      collection.certificates = cloneJson(payload.collectionShell.certificates);
+    }
   }
 
   if (!replaceRequestInCollection(collection, requestId, payload.request)) {
@@ -389,6 +400,82 @@ function applyEnvironmentSaveToWorkspace(workspace, payload) {
   return nextWorkspace;
 }
 
+function applyCollectionSaveToWorkspace(workspace, payload) {
+  const nextWorkspace = {
+    ...workspace,
+    collections: Array.isArray(workspace?.collections) ? [...workspace.collections] : []
+  };
+  const collectionId = payload?.collectionId || payload?.collection?.id || '';
+  const collectionIndex = nextWorkspace.collections.findIndex((collection) => collection.id === collectionId);
+  if (collectionIndex >= 0) {
+    nextWorkspace.collections[collectionIndex] = cloneJson(payload.collection);
+  } else {
+    nextWorkspace.collections.push(cloneJson(payload.collection));
+  }
+  if (payload?.settings && typeof payload.settings === 'object') {
+    nextWorkspace.settings = normalizeSettings(mergeWorkspaceSettingsForSave(workspace?.settings, payload.settings));
+  }
+  return nextWorkspace;
+}
+
+function applyFolderSaveToWorkspace(workspace, payload) {
+  const nextWorkspace = {
+    ...workspace,
+    collections: Array.isArray(workspace?.collections) ? [...workspace.collections] : []
+  };
+  const collectionId = payload?.collectionId || '';
+  const folderId = payload?.folderId || payload?.folder?.id || '';
+  let collectionIndex = nextWorkspace.collections.findIndex((collection) => collection.id === collectionId);
+  let collection = collectionIndex >= 0 ? cloneJson(nextWorkspace.collections[collectionIndex]) : null;
+
+  if (!collection) {
+    if (!payload?.collectionShell) {
+      throw new Error(`Collection "${collectionId}" was not found.`);
+    }
+    collection = {
+      id: collectionId,
+      name: payload.collectionShell.name || 'Untitled Collection',
+      description: payload.collectionShell.description || '',
+      auth: cloneJson(payload.collectionShell.auth || { type: 'none' }),
+      scripts: cloneJson(payload.collectionShell.scripts || {}),
+      variables: Array.isArray(payload.collectionShell.variables) ? clonePairs(payload.collectionShell.variables) : [],
+      certificates: Array.isArray(payload.collectionShell.certificates) ? cloneJson(payload.collectionShell.certificates) : [],
+      requests: [],
+      folders: []
+    };
+    collectionIndex = nextWorkspace.collections.length;
+  } else if (payload.collectionShell) {
+    collection.name = payload.collectionShell.name || collection.name || 'Untitled Collection';
+    collection.description = payload.collectionShell.description || '';
+    collection.auth = cloneJson(payload.collectionShell.auth || { type: 'none' });
+    collection.scripts = cloneJson(payload.collectionShell.scripts || {});
+    if (Array.isArray(payload.collectionShell.variables)) {
+      collection.variables = clonePairs(payload.collectionShell.variables);
+    }
+    if (Array.isArray(payload.collectionShell.certificates)) {
+      collection.certificates = cloneJson(payload.collectionShell.certificates);
+    }
+  }
+
+  if (!replaceFolderInCollection(collection, folderId, payload.folder)) {
+    const folderPath = Array.isArray(payload.folderPath) ? payload.folderPath : [];
+    const parentPath = folderPath.length && folderPath[folderPath.length - 1]?.id === folderId
+      ? folderPath.slice(0, -1)
+      : folderPath;
+    const targetFolder = ensureFolderPath(collection, parentPath);
+    targetFolder.folders ||= [];
+    targetFolder.folders.push(cloneJson(payload.folder));
+  }
+
+  nextWorkspace.collections[collectionIndex] = collection;
+
+  if (payload?.settings && typeof payload.settings === 'object') {
+    nextWorkspace.settings = normalizeSettings(mergeWorkspaceSettingsForSave(workspace?.settings, payload.settings));
+  }
+
+  return nextWorkspace;
+}
+
 function applyWorkspaceSettingsSaveToWorkspace(workspace, settings) {
   return {
     ...workspace,
@@ -448,6 +535,36 @@ function replaceRequestInCollection(collection, requestId, request) {
   return false;
 }
 
+function replaceFolderInCollection(collection, folderId, folder) {
+  collection.folders ||= [];
+  const folderIndex = collection.folders.findIndex((candidate) => candidate.id === folderId);
+  if (folderIndex >= 0) {
+    collection.folders[folderIndex] = cloneJson(folder);
+    return true;
+  }
+  for (const child of collection.folders || []) {
+    if (replaceFolderInFolder(child, folderId, folder)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function replaceFolderInFolder(parentFolder, folderId, folder) {
+  parentFolder.folders ||= [];
+  const folderIndex = parentFolder.folders.findIndex((candidate) => candidate.id === folderId);
+  if (folderIndex >= 0) {
+    parentFolder.folders[folderIndex] = cloneJson(folder);
+    return true;
+  }
+  for (const child of parentFolder.folders || []) {
+    if (replaceFolderInFolder(child, folderId, folder)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function replaceRequestInFolder(folder, requestId, request) {
   folder.requests ||= [];
   const requestIndex = folder.requests.findIndex((candidate) => candidate.id === requestId);
@@ -473,6 +590,10 @@ function ensureFolderPath(collection, folderPath) {
       folder = {
         id: folderId,
         name: segment?.name || 'Untitled Folder',
+        description: segment?.description || '',
+        auth: cloneJson(segment?.auth || { type: 'none' }),
+        scripts: cloneJson(segment?.scripts || {}),
+        variables: Array.isArray(segment?.variables) ? clonePairs(segment.variables) : [],
         requests: [],
         folders: []
       };
@@ -487,7 +608,9 @@ function ensureFolderPath(collection, folderPath) {
 }
 
 module.exports = {
+  applyCollectionSaveToWorkspace,
   applyEnvironmentSaveToWorkspace,
+  applyFolderSaveToWorkspace,
   applyCollectionRunMutationsToWorkspace,
   applyRequestSaveToWorkspace,
   applyWorkspaceSettingsSaveToWorkspace,

@@ -56,10 +56,139 @@
     await assertTreeContextMenuModalFocusSmoke();
     newRequest();
     assertMethodColorSmoke();
+    const variableLinkCollection = activeCollection();
+    const variableLinkRequest = activeRequest();
+    const variableLinkEnvironment = {
+      id: crypto.randomUUID(),
+      name: 'Variable Link Environment',
+      variables: [{ enabled: true, key: 'baseUrl', value: 'https://hover.example.test' }]
+    };
+    workspace.environments.push(variableLinkEnvironment);
+    activeEnvironmentId = variableLinkEnvironment.id;
+    renderEnvironmentSelect();
+    refreshVariableHighlights();
     $('urlInput').value = '{{baseUrl}}/v1/users';
     dispatchInput($('urlInput'));
     await nextPaint();
-    assertVariableHighlight($('urlInput'), 'baseUrl', 'Request URL input should highlight environment variable tokens.');
+    const baseUrlToken = assertVariableHighlight(
+      $('urlInput'),
+      'baseUrl',
+      'Request URL input should highlight environment variable tokens.',
+      'valid'
+    );
+    dispatchVariableTokenMouseEvent($('urlInput'), baseUrlToken, 'mousemove');
+    await nextPaint();
+    const variableTooltip = document.querySelector('.variable-highlight-tooltip');
+    assertUiSmoke(
+      !variableTooltip || variableTooltip.hidden,
+      'Variable hover tooltip should not appear immediately.'
+    );
+    await waitForUiSmoke(
+      () => document.querySelector('.variable-highlight-tooltip')?.hidden === false,
+      'Variable hover tooltip should appear after the hover delay.',
+      2500,
+      global
+    );
+    const variableTooltipText = document.querySelector('.variable-highlight-tooltip')?.textContent || '';
+    assertUiSmoke(
+      variableTooltipText.startsWith('https://hover.example.test\n\n')
+        && variableTooltipText.includes('Ctrl+click: open variable source')
+        && variableTooltipText.includes('Ctrl+Shift+click: replace token with value'),
+      `Variable hover tooltip should contain the value and shortcut hints. Tooltip: ${document.querySelector('.variable-highlight-tooltip')?.outerHTML || 'none'}`
+    );
+    await setVariableTooltipHints(false, { showStatus: false });
+    dispatchVariableTokenMouseEvent($('urlInput'), baseUrlToken, 'mousemove');
+    await nextPaint();
+    assertUiSmoke(
+      document.querySelector('.variable-highlight-tooltip')?.textContent === 'https://hover.example.test',
+      `Variable hover tooltip should contain only the value when hints are disabled. Tooltip: ${document.querySelector('.variable-highlight-tooltip')?.outerHTML || 'none'}`
+    );
+    await setVariableTooltipHints(true, { showStatus: false });
+    dispatchVariableTokenMouseEvent($('urlInput'), baseUrlToken, 'mousemove', { ctrlKey: true });
+    await nextPaint();
+    assertUiSmoke(
+      baseUrlToken.classList.contains('is-variable-highlight-action-hover'),
+      'Holding Ctrl while hovering a resolved variable should underline the variable token.'
+    );
+    assertUiSmoke(
+      $('urlInput').classList.contains('has-openable-variable-hover'),
+      'Hovering a resolved variable while Ctrl is already held should show the pointer cursor.'
+    );
+    dispatchVariableTokenMouseEvent($('urlInput'), baseUrlToken, 'mousedown', { ctrlKey: true });
+    await nextPaint();
+    assertUiSmoke(
+      activeMainPanel === 'environment' && activeEnvironmentId === variableLinkEnvironment.id,
+      'Ctrl+clicking an environment variable should open its environment tab.'
+    );
+    assertUiSmoke(
+      openEnvironmentTabs.some((tab) => tab.environmentId === variableLinkEnvironment.id),
+      'Ctrl+clicking an environment variable should create an environment tab.'
+    );
+    selectRequestTabWithoutCollect(openRequestTabs.find((tab) => tab.collectionId === variableLinkCollection.id && tab.requestId === variableLinkRequest.id));
+    variableLinkCollection.variables = [{ enabled: true, key: 'collectionLink', value: 'collection-value' }];
+    $('urlInput').value = '{{collectionLink}}/v1/users';
+    dispatchInput($('urlInput'));
+    await nextPaint();
+    const collectionLinkToken = assertVariableHighlight(
+      $('urlInput'),
+      'collectionLink',
+      'Request URL input should highlight collection variable tokens.',
+      'valid'
+    );
+    dispatchVariableTokenMouseEvent($('urlInput'), collectionLinkToken, 'mousedown', { ctrlKey: true });
+    await nextPaint();
+    assertUiSmoke(
+      activeMainPanel === 'request' && activeCollectionId === variableLinkCollection.id && !activeRequestId,
+      'Ctrl+clicking a collection variable should open its collection tab.'
+    );
+    assertUiSmoke(
+      $('collectionLevelVariablesTab').classList.contains('active'),
+      'Ctrl+clicking a collection variable should select the collection Variables tab.'
+    );
+    selectRequestTabWithoutCollect(openRequestTabs.find((tab) => tab.collectionId === variableLinkCollection.id && tab.requestId === variableLinkRequest.id));
+    variableLinkRequest.variables = [{ enabled: true, key: 'requestLink', value: 'request-value' }];
+    $('urlInput').value = '{{requestLink}}/v1/users';
+    dispatchInput($('urlInput'));
+    activateTab('request', 'params');
+    await nextPaint();
+    const requestLinkToken = assertVariableHighlight(
+      $('urlInput'),
+      'requestLink',
+      'Request URL input should highlight request variable tokens.',
+      'valid'
+    );
+    dispatchVariableTokenMouseEvent($('urlInput'), requestLinkToken, 'mousedown', { ctrlKey: true });
+    await nextPaint();
+    assertUiSmoke(
+      activeMainPanel === 'request' && activeRequestId === variableLinkRequest.id,
+      'Ctrl+clicking a request variable should open its request tab.'
+    );
+    assertUiSmoke(
+      $('collectionVariablesTab').classList.contains('active'),
+      'Ctrl+clicking a request variable should select the request Variables tab.'
+    );
+    $('urlInput').value = '{{requestLink}}/hardcoded';
+    dispatchInput($('urlInput'));
+    await nextPaint();
+    const requestHardcodeToken = assertVariableHighlight(
+      $('urlInput'),
+      'requestLink',
+      'Request URL input should highlight request variables before hardcoding them.',
+      'valid'
+    );
+    dispatchVariableTokenMouseEvent($('urlInput'), requestHardcodeToken, 'mousedown', { ctrlKey: true, shiftKey: true });
+    await nextPaint();
+    assertUiSmoke(
+      $('urlInput').value === 'request-value/hardcoded',
+      'Ctrl+Shift+clicking a resolved variable should replace the token with the variable value.'
+    );
+    $('urlInput').focus();
+    document.execCommand('undo');
+    await nextPaint();
+    assertUiSmoke(
+      $('urlInput').value === '{{requestLink}}/hardcoded',
+      'Ctrl+Shift+click variable replacement should be undoable.'
+    );
     $('urlInput').value = 'https://api.example.test/v1/users';
     dispatchInput($('urlInput'));
     activateTab('request', 'headers');
@@ -136,42 +265,15 @@
     assertUiSmoke(!$('cookiesTable').querySelector('.cookie-row'), 'Cookie active-host filter did not hide non-matching rows.');
     $('filterCookiesToRequestHostInput').checked = false;
     dispatchChange($('filterCookiesToRequestHostInput'));
-    activateTab('request', 'examples');
-    $('addExampleButton').click();
-    const exampleItem = $('examplesList').querySelector('.example-item');
-    assertUiSmoke(exampleItem, 'Example editor did not create a row.');
-    assertUiSmoke(exampleItem.querySelector('[aria-label="Example 1 name"]'), 'Example name input should expose a contextual accessible label.');
-    assertUiSmoke(exampleItem.querySelector('[aria-label="Example 1 headers"]'), 'Example headers textarea should expose a contextual accessible label.');
+    activateTab('request', 'docs');
+    assertUiSmoke($('docsInput').getAttribute('aria-label') === 'Request docs', 'Docs textarea should expose an accessible label.');
+    assertUiSmoke($('docsInput').closest('.code-editor'), 'Docs textarea should be wrapped by the line-number editor.');
     activateTab('request', 'collectionVariables');
     $('addRequestVariableButton').click();
     const variableRow = $('requestVariablesTable').querySelector('.kv-row');
     assertUiSmoke(variableRow, 'Request variable editor did not create a row.');
     assertUiSmoke(variableRow.querySelector('[aria-label="Variable 1 enabled"]'), 'Request variable enabled control should expose a contextual accessible label.');
     assertUiSmoke(variableRow.querySelector('[aria-label="Variable 1"]'), 'Request variable key input should expose a contextual accessible label.');
-    activateTab('request', 'tests');
-    $('assertionTemplateSelect').value = 'headerContains';
-    dispatchChange($('assertionTemplateSelect'));
-    $('addAssertionTemplateButton').click();
-    const assertionRow = $('assertionsTable').querySelector('.assertion-row');
-    assertUiSmoke(assertionRow, 'Assertion template did not create a row.');
-    assertUiSmoke(assertionRow.querySelector('[aria-label="Assertion 1 type"]'), 'Assertion type control should expose a contextual accessible label.');
-    assertUiSmoke(assertionRow.querySelector('[aria-label="Assertion 1 expected value"]'), 'Assertion expected-value input should expose a contextual accessible label.');
-    assertUiSmoke(assertionRow.dataset.assertionType === 'header', 'Header assertion template did not mark row type.');
-    const assertionInputs = assertionRow.querySelectorAll('input');
-    assertUiSmoke(assertionInputs[1].placeholder === 'Header name', 'Header assertion did not use header-name placeholder.');
-    assertUiSmoke(assertionInputs[3].placeholder === 'Expected header value', 'Header assertion did not use expected-value placeholder.');
-    $('assertionTemplateSelect').value = 'xmlPathExists';
-    dispatchChange($('assertionTemplateSelect'));
-    $('addAssertionTemplateButton').click();
-    const xmlAssertionRow = Array.from($('assertionsTable').querySelectorAll('.assertion-row')).at(-1);
-    assertUiSmoke(xmlAssertionRow.dataset.assertionType === 'xmlPath', 'XML assertion template did not mark row type.');
-    assertUiSmoke(xmlAssertionRow.querySelectorAll('input')[2].placeholder === 'XPath', 'XML assertion did not use XPath placeholder.');
-    $('assertionTemplateSelect').value = 'htmlSelectorExists';
-    dispatchChange($('assertionTemplateSelect'));
-    $('addAssertionTemplateButton').click();
-    const htmlAssertionRow = Array.from($('assertionsTable').querySelectorAll('.assertion-row')).at(-1);
-    assertUiSmoke(htmlAssertionRow.dataset.assertionType === 'htmlSelector', 'HTML assertion template did not mark row type.');
-    assertUiSmoke(htmlAssertionRow.querySelectorAll('input')[2].placeholder === 'CSS selector', 'HTML assertion did not use selector placeholder.');
     displayResponse({
       statusCode: 200,
       durationMillis: 1,
@@ -263,6 +365,7 @@
     assertUiSmoke(!$('settingsModal').hidden, 'Opening Settings should show the Settings modal.');
     assertSettingsSandboxHelpText();
     await assertEditorLineNumbersSettingSmoke();
+    await assertVariableTooltipHintsSettingSmoke();
     $('closeSettingsModalFooterButton').click();
     await modalPromise;
     await nextPaint();
@@ -287,10 +390,13 @@
   async function assertEditorLineNumbersSettingSmoke() {
     const checkbox = $('showEditorLineNumbersInput');
     const editor = $('bodyInput')?.closest?.('.code-editor');
+    const docsEditor = $('docsInput')?.closest?.('.code-editor');
     assertUiSmoke(checkbox, 'Editor line number setting checkbox should exist.');
     assertUiSmoke(editor, 'Request body editor should exist before toggling editor line numbers.');
+    assertUiSmoke(docsEditor, 'Docs editor should exist before toggling editor line numbers.');
     assertUiSmoke(checkbox.checked === true, 'Editor line number setting should default to checked.');
     assertUiSmoke(editor.classList.contains('has-line-numbers'), 'Code editors should start with line numbers enabled.');
+    assertUiSmoke(docsEditor.classList.contains('has-line-numbers'), 'Docs editor should start with line numbers enabled.');
 
     clickElementAtCenter(checkbox, 'Editor line number setting checkbox');
     await waitForUiSmoke(
@@ -307,6 +413,7 @@
     );
     assertUiSmoke(checkbox.checked === false, 'Editor line number setting checkbox should stay unchecked after settings are saved.');
     assertUiSmoke(!editor.classList.contains('has-line-numbers'), 'Code editors should remove line numbers when the setting is unchecked.');
+    assertUiSmoke(!docsEditor.classList.contains('has-line-numbers'), 'Docs editor should remove line numbers when the setting is unchecked.');
 
     clickElementAtCenter(checkbox, 'Editor line number setting checkbox');
     await waitForUiSmoke(
@@ -323,6 +430,41 @@
     );
     assertUiSmoke(checkbox.checked === true, 'Editor line number setting checkbox should stay checked after settings are saved.');
     assertUiSmoke(editor.classList.contains('has-line-numbers'), 'Code editors should restore line numbers when the setting is checked again.');
+    assertUiSmoke(docsEditor.classList.contains('has-line-numbers'), 'Docs editor should restore line numbers when the setting is checked again.');
+  }
+
+  async function assertVariableTooltipHintsSettingSmoke() {
+    const checkbox = $('showVariableTooltipHintsInput');
+    assertUiSmoke(checkbox, 'Variable tooltip hint setting checkbox should exist.');
+    assertUiSmoke(checkbox.checked === true, 'Variable tooltip hint setting should default to checked.');
+
+    clickElementAtCenter(checkbox, 'Variable tooltip hint setting checkbox');
+    await waitForUiSmoke(
+      () => checkbox.checked === false && workspace.settings.editor.variableTooltipHints === false,
+      'Variable tooltip hint setting checkbox did not turn off.',
+      1000,
+      global
+    );
+    await waitForUiSmoke(
+      () => lastStatusMessage.includes('Variable tooltip hints disabled.'),
+      'Variable tooltip hint setting save did not complete after disabling.',
+      1000,
+      global
+    );
+
+    clickElementAtCenter(checkbox, 'Variable tooltip hint setting checkbox');
+    await waitForUiSmoke(
+      () => checkbox.checked === true && workspace.settings.editor.variableTooltipHints === true,
+      'Variable tooltip hint setting checkbox did not turn back on.',
+      1000,
+      global
+    );
+    await waitForUiSmoke(
+      () => lastStatusMessage.includes('Variable tooltip hints enabled.'),
+      'Variable tooltip hint setting save did not complete after enabling.',
+      1000,
+      global
+    );
   }
 
   function clickElementAtCenter(element, label) {
@@ -491,6 +633,25 @@
     if (expectedStatus) {
       assertUiSmoke(token.getAttribute('data-variable-status') === expectedStatus, `${message} Expected ${expectedStatus} token status.`);
     }
+    return token;
+  }
+
+  function dispatchVariableTokenMouseEvent(control, token, type, options = {}) {
+    const tokenRect = token.getBoundingClientRect();
+    const controlRect = control.getBoundingClientRect();
+    const rect = tokenRect.width > 0 && tokenRect.height > 0 ? tokenRect : controlRect;
+    control.dispatchEvent(new MouseEvent(type, {
+      bubbles: true,
+      button: 0,
+      cancelable: true,
+      clientX: tokenRect.width > 0
+        ? rect.left + Math.max(1, rect.width / 2)
+        : rect.left + 16,
+      clientY: rect.top + Math.max(1, rect.height / 2),
+      ctrlKey: options.ctrlKey === true,
+      metaKey: options.metaKey === true,
+      shiftKey: options.shiftKey === true
+    }));
   }
 
   function assertVariableHighlightUsesInputMetrics(control, variableName, message) {
@@ -631,6 +792,11 @@
       await setIncludePrereleases(true, { save: true });
       assertUiSmoke(workspace.settings.updates.includePrereleases === false, 'Failed prerelease setting save should roll back the in-memory setting.');
       assertStatusIncludes('Prerelease setting save failed', 'Failed prerelease setting save should surface a user-visible status.');
+
+      workspace.settings.editor.variableTooltipHints = true;
+      await setVariableTooltipHints(false, { save: true });
+      assertUiSmoke(workspace.settings.editor.variableTooltipHints === true, 'Failed variable tooltip setting save should roll back the in-memory setting.');
+      assertStatusIncludes('Variable tooltip setting save failed', 'Failed variable tooltip setting save should surface a user-visible status.');
 
       workspace.settings.tabs.saveOnForceClose = false;
       await setSaveOnForceClose(true, { save: true });
@@ -1059,6 +1225,7 @@
     const originalSelectedWorkspaceId = selectedWorkspaceId;
     const originalSidebarPanel = activeSidebarPanel;
     const originalMainPanel = activeMainPanel;
+    const originalOpenCollectionTabs = structuredClone(openCollectionTabs);
     const originalOpenRequestTabs = structuredClone(openRequestTabs);
     try {
       workspace = largeUiWorkspace();
@@ -1084,6 +1251,7 @@
       activeCollectionId = workspace.collections[0].id;
       activeFolderId = null;
       activeRequestId = workspace.collections[0].requests[0].id;
+      openCollectionTabs = [];
       openRequestTabs = [];
 
       const renderStarted = performance.now();
@@ -1117,6 +1285,7 @@
       selectedWorkspaceId = originalSelectedWorkspaceId;
       activeSidebarPanel = originalSidebarPanel;
       activeMainPanel = originalMainPanel;
+      openCollectionTabs = originalOpenCollectionTabs;
       openRequestTabs = originalOpenRequestTabs;
       renderAll();
     }
@@ -1177,10 +1346,9 @@
       bodyType: 'NONE',
       body: '',
       auth: { type: 'none' },
-      assertions: [],
       scripts: { preRequest: '', tests: '' },
       variables: [],
-      examples: [],
+      docs: '',
       cookieJar: { enabled: false, storeResponses: true }
     };
   }
@@ -1229,6 +1397,7 @@
     const originalSelectedWorkspaceId = selectedWorkspaceId;
     const originalSidebarPanel = activeSidebarPanel;
     const originalMainPanel = activeMainPanel;
+    const originalOpenCollectionTabs = structuredClone(openCollectionTabs);
     const originalOpenRequestTabs = structuredClone(openRequestTabs);
     const originalEnvironmentTabs = structuredClone(openEnvironmentTabs);
     const originalRunnerTabs = structuredClone(openRunnerTabs);
@@ -1561,6 +1730,7 @@
       selectedWorkspaceId = originalSelectedWorkspaceId;
       activeSidebarPanel = originalSidebarPanel;
       activeMainPanel = originalMainPanel;
+      openCollectionTabs = originalOpenCollectionTabs;
       openRequestTabs = originalOpenRequestTabs;
       openEnvironmentTabs = originalEnvironmentTabs;
       openRunnerTabs = originalRunnerTabs;
@@ -1625,7 +1795,6 @@
   }
 
   async function assertExportCancellationSmoke() {
-    const originalExportExamples = window.__postmeterExportExamples;
     const originalImportWorkspace = window.__postmeterImportWorkspace;
     const originalExportCollection = window.__postmeterExportCollection;
     const originalImportCollection = window.__postmeterImportCollection;
@@ -1633,25 +1802,6 @@
     const originalSaveWorkspace = window.__postmeterSaveWorkspace;
     const originalDiagnostics = window.__postmeterDiagnostics;
     try {
-      let exportedExampleCount = 0;
-      window.__postmeterExportExamples = async (request) => {
-        exportedExampleCount = request.examples?.length || 0;
-        return { cancelled: true };
-      };
-      setStatus('Ready.');
-      await exportRequestExamples();
-      assertUiSmoke(exportedExampleCount > 0, 'Example export did not pass examples to the export boundary.');
-      assertUiSmoke(lastStatusMessage === 'Ready.', 'Cancelled example export should leave the current status unchanged.');
-
-      window.__postmeterExportExamples = async () => {
-        throw new Error('mocked example export failure');
-      };
-      lastUserNotification = null;
-      await exportRequestExamples();
-      assertUiSmoke(lastStatusMessage === 'Example export failed.', 'Failed example export should update visible status.');
-      assertUiSmoke(lastUserNotification?.title === 'Example Export Failed', 'Failed example export should show a popup notification.');
-      assertUiSmoke(lastUserNotification?.message.includes('mocked example export failure'), 'Failed example export popup should include the error message.');
-
       let exportedFormat = '';
       window.__postmeterExportCollection = async (_collection, format) => {
         exportedFormat = format;
@@ -1731,7 +1881,6 @@
       assertStatusIncludes('Diagnostics export failed: mocked diagnostics export failure', 'Failed diagnostics export did not update visible status.');
       assertUiSmoke(lastUserNotification?.title === 'Diagnostics Export Failed', 'Failed diagnostics export should show a popup notification.');
     } finally {
-      window.__postmeterExportExamples = originalExportExamples;
       window.__postmeterImportWorkspace = originalImportWorkspace;
       window.__postmeterExportCollection = originalExportCollection;
       window.__postmeterImportCollection = originalImportCollection;
@@ -1924,6 +2073,7 @@
     const originalActiveEnvironmentId = activeEnvironmentId;
     const originalActiveMainPanel = activeMainPanel;
     const originalActiveSidebarPanel = activeSidebarPanel;
+    const originalOpenCollectionTabs = structuredClone(openCollectionTabs);
     const originalOpenRequestTabs = structuredClone(openRequestTabs);
     const originalOpenEnvironmentTabs = structuredClone(openEnvironmentTabs);
     const originalOpenWorkspaceTabs = structuredClone(openWorkspaceTabs);
@@ -2013,6 +2163,7 @@
       activeEnvironmentId = originalActiveEnvironmentId;
       activeMainPanel = originalActiveMainPanel;
       activeSidebarPanel = originalActiveSidebarPanel;
+      openCollectionTabs = originalOpenCollectionTabs;
       openRequestTabs = originalOpenRequestTabs;
       openEnvironmentTabs = originalOpenEnvironmentTabs;
       openWorkspaceTabs = originalOpenWorkspaceTabs;
@@ -2155,6 +2306,7 @@
     const originalSelectedWorkspaceId = selectedWorkspaceId;
     const originalSidebarPanel = activeSidebarPanel;
     const originalMainPanel = activeMainPanel;
+    const originalCollectionTabs = structuredClone(openCollectionTabs);
     const originalRequestTabs = structuredClone(openRequestTabs);
     const originalEnvironmentTabs = structuredClone(openEnvironmentTabs);
     const originalWorkspaceTabs = structuredClone(openWorkspaceTabs);
@@ -2203,7 +2355,7 @@
         assertUiSmoke(!$(`${expectedEmptyPanel}`).hidden, `Clicking ${tabId} should show ${expectedEmptyPanel}.`);
         assertUiSmoke($(`${expectedEmptyPanel}`).textContent.includes(expectedText), `${expectedEmptyPanel} should render the expected empty-state text.`);
         assertUiSmoke(getComputedStyle($(`${expectedEmptyPanel}`)).display !== 'none', `${expectedEmptyPanel} should be visible in layout.`);
-        for (const panelId of ['requestEmptyPanel', 'environmentEmptyPanel', 'workspaceEmptyPanel', 'runnerEmptyPanel', 'performanceEmptyPanel']) {
+        for (const panelId of ['requestEmptyPanel', 'collectionMainPanel', 'environmentEmptyPanel', 'workspaceEmptyPanel', 'runnerEmptyPanel', 'performanceEmptyPanel']) {
           if (panelId === expectedEmptyPanel) {
             continue;
           }
@@ -2353,13 +2505,13 @@
         ['performanceRequestAuthTabButton', 'Auth'],
         ['performanceRequestCookiesTabButton', 'Cookies'],
         ['performanceRequestBodyTabButton', 'Body'],
-        ['performanceRequestTestsTabButton', 'Tests'],
         ['performanceRequestScriptsTabButton', 'Scripts'],
-        ['performanceRequestExamplesTabButton', 'Examples'],
-        ['performanceRequestVariablesTabButton', 'Variables']
+        ['performanceRequestVariablesTabButton', 'Variables'],
+        ['performanceRequestDocsTabButton', 'Docs']
       ]) {
         assertUiSmoke($(tabId).getAttribute('role') === 'tab', `Performance request ${label} tab should expose role=tab.`);
       }
+      assertUiSmoke($('performanceDocsInput').closest('.code-editor'), 'Performance docs textarea should be wrapped by the line-number editor.');
       $('addPerformanceParamButton').click();
       let performanceRowInputs = $('performanceParamsTable').querySelectorAll('input');
       assertUiSmoke(performanceRowInputs.length >= 3, 'Performance Params Add should create editable inputs.');
@@ -2605,10 +2757,8 @@
                 ? '<response><title>Performance</title></response>'
                 : `response body ${index + 1}`,
             error: isTransportError ? 'fetch failed' : '',
-            assertionResults: [{ passed: true, message: `assertion ${index + 1}` }],
             preRequestScriptResult: { passed: true, tests: [{ name: `pre ${index + 1}`, passed: true }] },
             testScriptResult: { passed: true, tests: [{ name: `post ${index + 1}`, passed: true }] },
-            extractedVariables: [],
             localVariables: [{ enabled: true, key: `sampleToken${index + 1}`, value: 'value' }]
           };
         })
@@ -2627,7 +2777,6 @@
       assertUiSmoke($('performanceExecutionDetailsStatus').textContent === '200', 'Performance detail pane should update when selecting a sample row.');
       assertUiSmoke($('performanceExecutionDetails').textContent.includes('Iteration 2'), 'Performance detail pane should show selected sample iteration details.');
       assertUiSmoke(!$('performanceExecutionDetails').textContent.includes('Run summary'), 'Performance request detail pane should not duplicate aggregate run summary details.');
-      assertUiSmoke($('performanceExecutionDetails').textContent.includes('assertion 2'), 'Performance request detail pane should show selected sample assertions.');
       assertUiSmoke($('performanceExecutionDetails').textContent.includes('pre 2'), 'Performance request detail pane should show selected sample pre-request script results.');
       assertUiSmoke($('performanceExecutionDetails').textContent.includes('post 2'), 'Performance request detail pane should show selected sample post-request script results.');
       assertUiSmoke($('performanceExecutionDetails').textContent.includes('"sample": 2'), 'Performance request detail pane should format selected sample JSON response body.');
@@ -2890,6 +3039,9 @@
       selectSidebarPanel('collections');
       if (activeRequest()) {
         assertUiSmoke(!$('requestEditorPanel').hidden, 'Selecting Collections should return the main pane to the request editor.');
+      } else if (activeCollection()) {
+        assertUiSmoke(!$('collectionMainPanel').hidden, 'Selecting Collections without an active request should show the collection editor.');
+        assertUiSmoke($('requestEmptyPanel').hidden, 'Selecting Collections with a collection selected should not show the create request screen.');
       } else {
         assertUiSmoke(!$('requestEmptyPanel').hidden, 'Selecting Collections without an active request should show the create request screen.');
         assertUiSmoke($('requestEditorPanel').hidden, 'Selecting Collections without an active request should keep the request editor hidden.');
@@ -3048,6 +3200,54 @@
         runner.requests.find((request) => request.id === runnerLocalRequest.id)?.postmanBody?.formdata?.some((part) => part.key === 'runnerBody' && part.value === 'value'),
         'Runner-owned request editor should collect Postman-style form-data body rows.'
       );
+      {
+        const originalExportRequest = window.__postmeterExportRequest;
+        const originalExportRequestText = window.__postmeterExportRequestText;
+        const originalPostmeterRequestExportText = window.postmeter?.request?.exportRequestText;
+        let exportedRunnerRequest = null;
+        try {
+          window.__postmeterExportRequestText = null;
+          if (window.postmeter?.request) {
+            window.postmeter.request.exportRequestText = null;
+          }
+          window.__postmeterExportRequest = async (request, format) => {
+            exportedRunnerRequest = { request, format };
+            return { cancelled: true };
+          };
+          const runnerRequestTab = openRequestTabs.find((tab) => tab.runnerId === runner.id && tab.requestId === runnerLocalRequest.id);
+          openOpenTabContextMenu(runnerRequestTab);
+          const exportMenuItem = Array.from($('contextMenu').querySelectorAll('button'))
+            .find((button) => button.textContent.trim() === 'Export');
+          assertUiSmoke(exportMenuItem, 'Runner request tab context menu should include Export.');
+          exportMenuItem.focus();
+          exportMenuItem.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Enter' }));
+          const postmeterExportItem = document.activeElement;
+          assertUiSmoke(postmeterExportItem?.textContent.trim() === 'PostMeter', 'Opening the tab Export submenu should focus PostMeter.');
+          postmeterExportItem.click();
+          await waitForUiSmoke(
+            () => exportedRunnerRequest || !$('requestExportModal').hidden,
+            'Runner request tab export should start the single-request export flow.',
+            3000,
+            global
+          );
+          if (!exportedRunnerRequest) {
+            $('fileRequestExportButton').click();
+          }
+          await waitForUiSmoke(
+            () => exportedRunnerRequest?.request?.id === runnerLocalRequest.id,
+            'Runner request tab export should export the runner-owned request as a single request.',
+            3000,
+            global
+          );
+          assertUiSmoke(exportedRunnerRequest.format === 'postmeter', 'Runner request tab export should use the single-request PostMeter format.');
+        } finally {
+          window.__postmeterExportRequest = originalExportRequest;
+          window.__postmeterExportRequestText = originalExportRequestText;
+          if (window.postmeter?.request) {
+            window.postmeter.request.exportRequestText = originalPostmeterRequestExportText;
+          }
+        }
+      }
       const runnerTab = openRunnerTabs.find((tab) => tab.runnerId === runner.id);
       assertUiSmoke(runnerTab, 'Runner tab should remain open while editing a runner request.');
       selectRunnerTab(runnerTab);
@@ -3083,10 +3283,8 @@
                 durationMillis: 1,
                 responseBody: '',
                 passed: true,
-                assertionResults: [],
                 preRequestScriptResult: { passed: true, tests: [] },
                 testScriptResult: { passed: true, tests: [] },
-                extractedVariables: [],
                 localVariables: []
               }
             ]
@@ -3252,10 +3450,8 @@
             durationMillis: 21,
             responseBody: '{"runner":true}',
             passed: true,
-            assertionResults: [],
             preRequestScriptResult: { passed: true, tests: [] },
             testScriptResult: { passed: true, tests: [{ name: 'runner request passed', passed: true }] },
-            extractedVariables: [],
             localVariables: [{ enabled: true, key: 'runnerLocalToken', value: 'local-value' }]
           },
           {
@@ -3265,10 +3461,8 @@
             durationMillis: 33,
             responseBody: '<error><message>Bad status</message></error>',
             passed: false,
-            assertionResults: [],
             preRequestScriptResult: { passed: true, tests: [] },
             testScriptResult: { passed: false, tests: [{ name: 'runner request failed', passed: false, error: 'Expected HTTP 200.' }] },
-            extractedVariables: [],
             localVariables: [],
             error: 'Expected HTTP 200.'
           },
@@ -3279,10 +3473,8 @@
             durationMillis: 0,
             responseBody: '',
             passed: false,
-            assertionResults: [],
             preRequestScriptResult: { passed: true, tests: [] },
             testScriptResult: { passed: true, tests: [] },
-            extractedVariables: [],
             localVariables: [],
             error: 'fetch failed'
           }
@@ -3298,10 +3490,8 @@
           durationMillis: 20 + (number % 15),
           responseBody: '',
           passed: statusCode < 400,
-          assertionResults: [],
           preRequestScriptResult: { passed: true, tests: [] },
           testScriptResult: { passed: true, tests: [] },
-          extractedVariables: [],
           localVariables: []
         };
       }));
@@ -3442,6 +3632,7 @@
       selectedWorkspaceId = originalSelectedWorkspaceId;
       activeSidebarPanel = originalSidebarPanel;
       activeMainPanel = originalMainPanel;
+      openCollectionTabs = originalCollectionTabs;
       openRequestTabs = originalRequestTabs;
       openEnvironmentTabs = originalEnvironmentTabs;
       openWorkspaceTabs = originalWorkspaceTabs;
@@ -3580,10 +3771,15 @@
     assertUiSmoke(collection, 'New collection should be created.');
     assertUiSmoke(collection.requests.length === 0, 'New collection should not auto-create a request.');
     assertUiSmoke(!activeRequest(), 'New collection should not auto-select a request.');
+    assertUiSmoke(!$('collectionMainPanel').hidden, 'New collection should open the collection editor.');
+    assertUiSmoke($('requestTabBar').textContent.includes(collection.name), 'New collection should open a collection tab.');
+    assertUiSmoke(openCollectionTabs.some((tab) => tab.collectionId === collection.id && tab.dirty), 'New collection tab should start dirty.');
     assertUiSmoke(!$('newFolderButton').disabled, 'New Folder should be enabled when a collection is active.');
     const folder = newFolder();
     assertUiSmoke(folder, 'New Folder should create a folder when a collection is active.');
     assertUiSmoke(collection.folders.length === 1, 'New Folder should be added to the active collection.');
+    assertUiSmoke(openFolderTabs.some((tab) => tab.folderId === folder.id), 'New Folder should open a folder tab.');
+    assertUiSmoke($('requestTabBar').textContent.includes('FOLD'), 'Folder tabs should use the FOLD badge.');
     const firstRequest = newRequest(collection.id, null);
     firstRequest.name = 'First Tab Request';
     renderAll();
@@ -3605,7 +3801,7 @@
     assertUiSmoke(activeRequest()?.id === secondRequest.id, 'ArrowRight on an opened request tab should activate the next tab.');
     const tabBarWidth = $('requestTabBar').clientWidth || 800;
     const targetTabCount = Math.max(6, Math.floor(tabBarWidth / 100));
-    for (let index = openRequestTabs.length; index < targetTabCount; index += 1) {
+    for (let index = openRequestTabs.length; openTabStateCount() < targetTabCount; index += 1) {
       const extraRequest = newRequest(collection.id, null);
       extraRequest.name = `Shrink Fit Request ${index + 1}`;
       renderAll();
@@ -3615,14 +3811,14 @@
       `Opened tabs should shrink before the tab bar scrolls. scrollWidth=${$('requestTabBar').scrollWidth} clientWidth=${$('requestTabBar').clientWidth} tabs=${openRequestTabs.length} widths=${Array.from($('requestTabBar').querySelectorAll('.request-tab-item')).map((item) => Math.round(item.getBoundingClientRect().width)).join(',')}.`
     );
     const overflowTargetTabCount = Math.max(16, Math.ceil(tabBarWidth / 84) + 3);
-    for (let index = openRequestTabs.length; index < overflowTargetTabCount; index += 1) {
+    for (let index = openRequestTabs.length; openTabStateCount() < overflowTargetTabCount; index += 1) {
       const extraRequest = newRequest(collection.id, null);
       extraRequest.name = `Overflow Tab Request ${index + 1}`;
       renderAll();
     }
     const renderedOpenTabItems = Array.from($('requestTabBar').querySelectorAll('.request-tab-item'));
-    const totalOpenTabs = openRequestTabs.length + openEnvironmentTabs.length + openWorkspaceTabs.length;
-    assertUiSmoke(openRequestTabs.length >= overflowTargetTabCount, 'Opening tabs past the old twelve-tab threshold should keep all opened tabs in state.');
+    const totalOpenTabs = openTabStateCount();
+    assertUiSmoke(totalOpenTabs >= overflowTargetTabCount, 'Opening tabs past the old twelve-tab threshold should keep all opened tabs in state.');
     assertUiSmoke(renderedOpenTabItems.length === totalOpenTabs, 'Rendered opened tabs should match the open tab state after overflow.');
     assertUiSmoke($('requestTabBar').textContent.includes('First Tab Request'), 'Older opened tabs should remain available after the tab bar overflows.');
     assertUiSmoke(
@@ -3644,15 +3840,15 @@
       bodyType: 'NONE',
       body: '',
       auth: { type: 'none' },
-      assertions: [],
       variables: [],
-      examples: []
+      docs: ''
     }));
     collection.requests = cappedRequests;
     collection.folders = [];
     activeCollectionId = collection.id;
     activeFolderId = null;
     activeRequestId = cappedRequests[0].id;
+    openCollectionTabs = [];
     openRequestTabs = cappedRequests.map((request) => ({
       key: `request:${collection.id}:${request.id}`,
       collectionId: collection.id,
@@ -3684,8 +3880,10 @@
     const originalSaveWorkspace = window.__postmeterSaveWorkspace;
     const originalPostmeterWorkspaceSave = window.postmeter?.workspace?.save;
     const originalSaveRequest = window.__postmeterSaveRequest;
+    const originalSaveCollection = window.__postmeterSaveCollection;
     const originalSaveEnvironment = window.__postmeterSaveEnvironment;
     let requestSaveCalls = 0;
+    let collectionSaveCalls = 0;
     let environmentSaveCalls = 0;
     try {
       window.__postmeterSaveWorkspace = async (nextWorkspace) => nextWorkspace;
@@ -3695,6 +3893,12 @@
           request: payload.request,
           collectionVariables: payload.collectionVariables,
           cookies: payload.cookies
+        };
+      };
+      window.__postmeterSaveCollection = async (payload) => {
+        collectionSaveCalls += 1;
+        return {
+          collection: payload.collection
         };
       };
       window.__postmeterSaveEnvironment = async (payload) => {
@@ -3902,12 +4106,14 @@
       renderAll();
       const tabCollection = newCollection();
       tabCollection.name = 'Tab Context Collection';
+      await saveWorkspace(false);
+      assertUiSmoke(collectionSaveCalls > 0, 'Saving a collection tab should use the targeted collection save path.');
       const closeTarget = newRequest(tabCollection.id, null);
       editRequestTitle('Tab Context Close Target');
       const closeTargetTab = openRequestTabs.find((tab) => tab.requestId === closeTarget.id);
       openOpenTabContextMenu(closeTargetTab);
       const tabContextLabels = Array.from($('contextMenu').querySelectorAll('button')).map((button) => button.textContent.trim());
-      for (const label of ['New Request', 'Close Tab', 'Close Other Tabs', 'Close All Tabs', 'Force Close Tab', 'Force Close All Tabs']) {
+      for (const label of ['New Request', 'Export', 'Close Tab', 'Close Other Tabs', 'Close All Tabs', 'Force Close Tab', 'Force Close Other Tabs', 'Force Close All Tabs']) {
         assertUiSmoke(tabContextLabels.includes(label), `Open-tab context menu should include ${label}.`);
       }
       activateContextMenuItem('Close Tab');
@@ -4026,6 +4232,7 @@
         window.postmeter.workspace.save = originalPostmeterWorkspaceSave;
       }
       window.__postmeterSaveRequest = originalSaveRequest;
+      window.__postmeterSaveCollection = originalSaveCollection;
       window.__postmeterSaveEnvironment = originalSaveEnvironment;
       workspace.collections = [];
       workspace.environments = [];
@@ -4044,6 +4251,16 @@
       return require('./uiSmokeCommon');
     }
     throw new Error('PostMeter UI smoke common helpers must load before uiRegressionSmoke.js.');
+  }
+
+  function openTabStateCount() {
+    return openCollectionTabs.length
+      + openFolderTabs.length
+      + openRequestTabs.length
+      + openEnvironmentTabs.length
+      + openWorkspaceTabs.length
+      + openRunnerTabs.length
+      + openPerformanceTabs.length;
   }
 
   const exported = {

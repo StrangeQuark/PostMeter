@@ -169,6 +169,7 @@ function runPostmanScript(scriptText, context = {}, options = {}) {
   const environmentVariables = context.environment?.variables || [];
   const environmentName = context.environment?.name || '';
   const collectionVariables = context.collectionVariables || [];
+  const folderVariables = context.folderVariables || [];
   const globals = context.globals || [];
   const localVariables = context.localVariables || [];
   const legacyExecution = {};
@@ -176,6 +177,7 @@ function runPostmanScript(scriptText, context = {}, options = {}) {
     collectionVariables,
     environmentVariables,
     environmentName,
+    folderVariables,
     globals,
     localVariables,
     logs,
@@ -295,6 +297,7 @@ async function runPostmanScriptAsync(scriptText, context = {}, options = {}) {
   const environmentVariables = context.environment?.variables || [];
   const environmentName = context.environment?.name || '';
   const collectionVariables = context.collectionVariables || [];
+  const folderVariables = context.folderVariables || [];
   const localVariables = context.localVariables || [];
   const globals = context.globals || [];
   const iterationData = normalizeIterationData(context.iterationData);
@@ -316,6 +319,7 @@ async function runPostmanScriptAsync(scriptText, context = {}, options = {}) {
     execution,
     eventName: context.eventName,
     executionLocation: context.executionLocation,
+    folderVariables,
     globals,
     iteration: context.iteration,
     iterationCount: context.iterationCount,
@@ -1206,6 +1210,7 @@ function createAsyncPmApi({
   execution,
   eventName,
   executionLocation,
+  folderVariables = [],
   globals,
   iteration,
   iterationCount,
@@ -1278,6 +1283,7 @@ function createAsyncPmApi({
     variables: pmVariablesApi({
       collectionVariables,
       environmentVariables,
+      folderVariables,
       globals,
       iterationData,
       localVariables
@@ -1319,7 +1325,7 @@ function sendRequestPayloadForBroker(input) {
   return input;
 }
 
-function createPmApi({ collectionVariables, environmentName, environmentVariables, globals = [], localVariables, logs, message, packageRegistry, request, response, tests, visualizer }) {
+function createPmApi({ collectionVariables, environmentName, environmentVariables, folderVariables = [], globals = [], localVariables, logs, message, packageRegistry, request, response, tests, visualizer }) {
   const testApi = createPmTestApi({ tests });
   const api = {
     collectionVariables: variableApi(collectionVariables),
@@ -1340,6 +1346,7 @@ function createPmApi({ collectionVariables, environmentName, environmentVariable
     variables: pmVariablesApi({
       collectionVariables,
       environmentVariables,
+      folderVariables,
       globals,
       iterationData: [],
       localVariables
@@ -5770,9 +5777,9 @@ function runTestCallback(fn) {
   return value;
 }
 
-function pmVariablesApi({ collectionVariables = [], environmentVariables = [], globals = [], iterationData = [], localVariables = [] } = {}) {
-  const broadToNarrow = [globals, collectionVariables, environmentVariables, iterationData, localVariables];
-  const narrowToBroad = [localVariables, iterationData, environmentVariables, collectionVariables, globals];
+function pmVariablesApi({ collectionVariables = [], environmentVariables = [], folderVariables = [], globals = [], iterationData = [], localVariables = [] } = {}) {
+  const broadToNarrow = [globals, environmentVariables, collectionVariables, folderVariables, iterationData, localVariables];
+  const narrowToBroad = [localVariables, iterationData, folderVariables, collectionVariables, environmentVariables, globals];
   return hardenSandboxValue({
     get(key) {
       const variableName = String(key || '').trim();

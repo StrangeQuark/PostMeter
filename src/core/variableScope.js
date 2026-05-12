@@ -15,8 +15,9 @@ function cloneVariables(variables) {
 function runtimeEnvironment(collectionVariables = [], environment = null, localVariables = [], options = {}) {
   const merged = [];
   mergeVariables(merged, options.globals || [], false);
-  mergeVariables(merged, collectionVariables, false);
   mergeVariables(merged, environment?.variables || [], true);
+  mergeVariables(merged, collectionVariables, true);
+  mergeVariables(merged, options.folderVariables || [], true);
   mergeVariables(merged, options.iterationData || [], true);
   mergeVariables(merged, localVariables || [], true);
   return {
@@ -99,18 +100,7 @@ function variableObservableValue(variable) {
   return value == null ? '' : String(value);
 }
 
-function applyExtractedVariables(environment, variables) {
-  if (!environment || !Array.isArray(variables)) {
-    return;
-  }
-  environment.variables ||= [];
-  for (const variable of variables) {
-    setVariable(environment.variables, variable.key, variable.value);
-  }
-}
-
 module.exports = {
-  applyExtractedVariables,
   cloneEnvironment,
   cloneVariables,
   getVariable,

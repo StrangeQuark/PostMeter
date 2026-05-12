@@ -101,6 +101,75 @@ test('renderer workflows allow sending an active draft request without forcing a
   assert.equal(workspaceSaveCalls, 0);
 });
 
+test('renderer workflows validate drafts with request-local variables in scope', async () => {
+  const state = createRendererState();
+  const environment = {
+    id: 'environment-1',
+    name: 'Local',
+    variables: [{ enabled: true, key: 'baseUrl', value: 'https://env.example.test' }]
+  };
+  const draftRequest = {
+    id: 'draft-1',
+    name: 'Draft Request',
+    method: 'GET',
+    url: '{{requestHost}}/search',
+    variables: [
+      { enabled: true, key: 'baseUrl', value: 'https://request.example.test' },
+      { enabled: true, key: 'requestHost', value: 'google.com' }
+    ],
+    scripts: { preRequest: '', tests: '' }
+  };
+  state.workspace = { collections: [], environments: [environment], globals: [], history: [], settings: {} };
+  state.activeMainPanel = 'request';
+  state.activeRequestId = draftRequest.id;
+  state.activeEnvironmentId = environment.id;
+  state.openRequestTabs = [{ key: 'draft:draft-1', requestId: draftRequest.id, draft: true, dirty: true }];
+  state.draftRequests.set(draftRequest.id, draftRequest);
+  let validationEnvironment = null;
+  let sendEnvironment = null;
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => environment,
+    activeRequest: () => draftRequest,
+    collectRequestFromEditor: () => {},
+    displayResponse: () => {},
+    doc: createDocument(),
+    renderAuthEditor: () => {},
+    renderCookieJarEditor: () => {},
+    renderHistory: () => {},
+    runFormatting: createRunFormatting(),
+    windowObject: {
+      postmeter: {
+        request: {
+          validate: async (_request, runtimeEnvironment) => {
+            validationEnvironment = runtimeEnvironment;
+            return [];
+          },
+          send: async (_request, selectedEnvironment) => {
+            sendEnvironment = selectedEnvironment;
+            return {
+              statusCode: 200,
+              finalUrl: 'http://google.com/search',
+              durationMillis: 10
+            };
+          }
+        },
+        workspace: {
+          save: async (workspace) => workspace
+        }
+      }
+    }
+  });
+
+  await workflows.sendActiveRequest();
+
+  assert.equal(validationEnvironment.variables.find((item) => item.key === 'requestHost').value, 'google.com');
+  assert.equal(validationEnvironment.variables.find((item) => item.key === 'baseUrl').value, 'https://request.example.test');
+  assert.equal(sendEnvironment, environment);
+});
+
 test('renderer workflows render pre-request script failures inline without history or blocking notification', async () => {
   const state = createRendererState();
   const draftRequest = {
@@ -441,6 +510,181 @@ test('renderer workflows only persist the active request tab on a normal save', 
   assert.equal(state.collectionDirtyOwners.get('collection-1'), 'request:collection-1:request-2');
   assert.notEqual(state.cookieJarDirtySnapshot, null);
   assert.equal(state.cookieJarDirtyOwner, 'request:collection-1:request-2');
+  assert.equal(renders, 1);
+});
+
+test('renderer workflows persist collection edits with a targeted collection save', async () => {
+  const state = createRendererState();
+  const collection = {
+    id: 'collection-1',
+    name: 'Edited Collection',
+    description: 'Edited description',
+    auth: { type: 'bearer', token: 'collection-token' },
+    scripts: { preRequest: "pm.environment.set('fromCollection', 'yes');", tests: '' },
+    variables: [{ enabled: true, key: 'baseUrl', value: 'https://collection.example.test' }],
+    certificates: [],
+    requests: [],
+    folders: []
+  };
+  state.workspace = {
+    collections: [collection],
+    environments: [],
+    settings: { updates: { includePrereleases: true } }
+  };
+  state.activeMainPanel = 'request';
+  state.activeCollectionId = 'collection-1';
+  state.activeRequestId = null;
+  state.openCollectionTabs = [{
+    key: 'collection:collection-1',
+    collectionId: 'collection-1',
+    dirty: true,
+    createdUnsaved: false,
+    snapshot: JSON.stringify({ ...collection, name: 'Saved Collection' })
+  }];
+  let saveCollectionPayload = null;
+  let fullSaveCalls = 0;
+  let renders = 0;
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => collection,
+    activeEnvironment: () => null,
+    activeRequest: () => null,
+    collectCollectionFromEditor: () => {},
+    collectEnvironmentFromEditor: () => {},
+    collectRequestFromEditor: () => {},
+    collectSettingsFromEditor: () => {},
+    doc: createDocument(),
+    renderAll: () => { renders += 1; },
+    runFormatting: createRunFormatting(),
+    windowObject: {
+      postmeter: {
+        workspace: {
+          save: async () => {
+            fullSaveCalls += 1;
+            return state.workspace;
+          },
+          saveCollection: async (payload) => {
+            saveCollectionPayload = structuredClone(payload);
+            return {
+              collection: { ...payload.collection, name: 'Edited Collection Saved' }
+            };
+          }
+        }
+      }
+    }
+  });
+
+  const result = await workflows.persistWorkspace(false);
+
+  assert.equal(result, true);
+  assert.equal(fullSaveCalls, 0);
+  assert.equal(saveCollectionPayload.collectionId, 'collection-1');
+  assert.equal(saveCollectionPayload.collection.name, 'Edited Collection');
+  assert.equal(saveCollectionPayload.collection.description, 'Edited description');
+  assert.equal(saveCollectionPayload.collection.auth.token, 'collection-token');
+  assert.equal(saveCollectionPayload.collection.variables[0].key, 'baseUrl');
+  assert.equal(saveCollectionPayload.settings.updates.includePrereleases, true);
+  assert.equal(state.workspace.collections[0].name, 'Edited Collection Saved');
+  assert.equal(state.openCollectionTabs[0].dirty, false);
+  assert.equal(state.openCollectionTabs[0].createdUnsaved, false);
+  assert.equal(state.openCollectionTabs[0].snapshot, JSON.stringify(state.workspace.collections[0]));
+  assert.equal(renders, 1);
+});
+
+test('renderer workflows persist folder edits with a targeted folder save', async () => {
+  const state = createRendererState();
+  const folder = {
+    id: 'folder-1',
+    name: 'Edited Folder',
+    description: 'Folder description',
+    auth: { type: 'apiKey', key: 'X-Folder-Key', value: 'folder-token', location: 'header' },
+    scripts: { preRequest: "pm.environment.set('fromFolder', 'yes');", tests: '' },
+    variables: [{ enabled: true, key: 'folderBaseUrl', value: 'https://folder.example.test' }],
+    requests: [],
+    folders: []
+  };
+  const collection = {
+    id: 'collection-1',
+    name: 'Collection',
+    description: '',
+    auth: { type: 'none' },
+    scripts: {},
+    variables: [],
+    certificates: [],
+    requests: [],
+    folders: [folder]
+  };
+  state.workspace = {
+    collections: [collection],
+    environments: [],
+    settings: { updates: { includePrereleases: true } }
+  };
+  state.activeMainPanel = 'request';
+  state.activeCollectionId = 'collection-1';
+  state.activeFolderId = 'folder-1';
+  state.activeRequestId = null;
+  state.openFolderTabs = [{
+    key: 'folder:collection-1:folder-1',
+    collectionId: 'collection-1',
+    folderId: 'folder-1',
+    dirty: true,
+    createdUnsaved: false,
+    snapshot: JSON.stringify({ ...folder, name: 'Saved Folder' })
+  }];
+  let saveFolderPayload = null;
+  let fullSaveCalls = 0;
+  let renders = 0;
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => collection,
+    activeEnvironment: () => null,
+    activeFolder: () => folder,
+    activeFolderPath: () => [folder],
+    activeRequest: () => null,
+    collectCollectionFromEditor: () => {},
+    collectEnvironmentFromEditor: () => {},
+    collectFolderFromEditor: () => {},
+    collectRequestFromEditor: () => {},
+    collectSettingsFromEditor: () => {},
+    doc: createDocument(),
+    renderAll: () => { renders += 1; },
+    runFormatting: createRunFormatting(),
+    windowObject: {
+      postmeter: {
+        workspace: {
+          save: async () => {
+            fullSaveCalls += 1;
+            return state.workspace;
+          },
+          saveFolder: async (payload) => {
+            saveFolderPayload = structuredClone(payload);
+            return {
+              folder: { ...payload.folder, name: 'Edited Folder Saved' }
+            };
+          }
+        }
+      }
+    }
+  });
+
+  const result = await workflows.persistWorkspace(false);
+
+  assert.equal(result, true);
+  assert.equal(fullSaveCalls, 0);
+  assert.equal(saveFolderPayload.collectionId, 'collection-1');
+  assert.equal(saveFolderPayload.folderId, 'folder-1');
+  assert.equal(saveFolderPayload.folder.description, 'Folder description');
+  assert.equal(saveFolderPayload.folder.auth.key, 'X-Folder-Key');
+  assert.equal(saveFolderPayload.folder.variables[0].key, 'folderBaseUrl');
+  assert.deepEqual(saveFolderPayload.folderPath.map((item) => item.id), ['folder-1']);
+  assert.equal(saveFolderPayload.collectionShell.name, 'Collection');
+  assert.equal(saveFolderPayload.settings.updates.includePrereleases, true);
+  assert.equal(state.workspace.collections[0].folders[0].name, 'Edited Folder Saved');
+  assert.equal(state.openFolderTabs[0].dirty, false);
+  assert.equal(state.openFolderTabs[0].createdUnsaved, false);
+  assert.equal(state.openFolderTabs[0].snapshot, JSON.stringify(state.workspace.collections[0].folders[0]));
   assert.equal(renders, 1);
 });
 
@@ -1415,7 +1659,6 @@ test('renderer workflows scope captured responses to the active request', async 
   await workflows.sendActiveRequest();
 
   assert.equal(state.lastResponse.requestId, 'request-1');
-  assert.equal(doc.getElementById('captureResponseExampleButton').disabled, false);
 });
 
 test('renderer workflows apply single-request completions to the request that started the send', async () => {
@@ -1567,7 +1810,6 @@ test('renderer workflows apply single-request completions to the request that st
   assert.equal(state.lastResponse.requestId, requestOne.id);
   assert.equal(state.lastResponse.updatedAuth, undefined);
   assert.equal(state.lastResponse.updatedAuthPersisted, undefined);
-  assert.equal(doc.getElementById('captureResponseExampleButton').disabled, true);
   assert.equal(state.workspace.history[0].method, 'GET');
   assert.equal(state.workspace.history[0].url, 'https://example.test/widgets');
 });
@@ -2089,7 +2331,6 @@ test('renderer workflows clear stale captured responses after a send failure', a
   state.workspace = { collections: [], environments: [], history: [], settings: {} };
   state.lastResponse = { requestId: 'request-1', statusCode: 200 };
   const doc = createDocument();
-  doc.getElementById('captureResponseExampleButton').disabled = false;
 
   const workflows = createRendererWorkflows({
     state,
@@ -2119,7 +2360,6 @@ test('renderer workflows clear stale captured responses after a send failure', a
   await workflows.sendActiveRequest();
 
   assert.equal(state.lastResponse, null);
-  assert.equal(doc.getElementById('captureResponseExampleButton').disabled, true);
 });
 
 test('renderer workflows surface request save failures inline before sending', async () => {

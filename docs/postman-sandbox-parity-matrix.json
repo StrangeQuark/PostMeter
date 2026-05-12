@@ -276,7 +276,7 @@
     "focused-importer-tests": {
       "type": "postmeter-focused-tests",
       "path": "test/electron/postmanImporter.test.js",
-      "notes": "Focused Postman import/export tests for protocol hooks, package annotations, mock scripts, examples, certificates, file bindings, and advanced auth helper metadata round trips."
+      "notes": "Focused Postman import/export tests for protocol hooks, package annotations, mock scripts, request docs, certificates, file bindings, and advanced auth helper metadata round trips."
     },
     "focused-protocol-tests": {
       "type": "postmeter-focused-tests",
@@ -4505,28 +4505,6 @@
       ],
       "fixtureRefs": [
         "protocol-script-hooks",
-        "real-world-import-corpus"
-      ],
-      "differential": {
-        "newman": "not-applicable",
-        "desktopObservation": "not-required",
-        "desktopEvidence": "not-required"
-      },
-      "securityDecision": "data-model",
-      "notes": ""
-    },
-    {
-      "id": "import.request-examples",
-      "area": "import-export",
-      "claimScope": "default-import",
-      "kind": "data-preservation",
-      "target": "Postman import/export preservation: request-examples",
-      "status": "implemented",
-      "sourceRefs": [
-        "sandboxOverview",
-        "execution"
-      ],
-      "fixtureRefs": [
         "real-world-import-corpus"
       ],
       "differential": {

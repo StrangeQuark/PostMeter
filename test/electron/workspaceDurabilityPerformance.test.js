@@ -63,8 +63,7 @@ test('large collection run setup and execution stay within the production budget
       id: `runner-request-${index}`,
       name: `Runner Request ${index}`,
       method: 'GET',
-      url: `https://api.example.test/items/${index}`,
-      assertions: [{ type: 'statusCode', expected: 200 }]
+      url: `https://api.example.test/items/${index}`
     })),
     folders: []
   });
@@ -170,16 +169,8 @@ function largeRequestFixture(collectionIndex, folderIndex, requestIndex) {
     queryParams: [{ enabled: true, key: 'page', value: String(requestIndex) }],
     bodyType: requestIndex % 2 === 0 ? 'NONE' : 'RAW_JSON',
     body: requestIndex % 2 === 0 ? '' : '{"ok":true}',
-    assertions: [{ type: 'statusCode', expected: 200 }],
     scripts: { preRequest: '', tests: '' },
-    examples: [{
-      id: `example-${collectionIndex}-${folderIndex}-${requestIndex}`,
-      name: 'Example',
-      statusCode: 200,
-      headers: [],
-      bodyType: 'RAW_JSON',
-      body: '{"ok":true}'
-    }]
+    docs: `Docs ${collectionIndex}.${folderIndex}.${requestIndex}`
   });
 }
 

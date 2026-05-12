@@ -3,8 +3,6 @@ const test = require('node:test');
 const {
   AUTH_TYPE_VALUES,
   BODY_TYPE_VALUES,
-  ASSERTION_OPERATORS,
-  ASSERTION_TYPES,
   COLLECTION_EXPORT_FORMATS,
   fieldLimit,
   hasSchemaEnumValue,
@@ -22,12 +20,6 @@ test('defines shared payload schema metadata for IPC and contributors', () => {
   assert.ok(HTTP_METHODS.includes('PATCH'));
   assert.ok(BODY_TYPE_VALUES.includes('RAW_JSON'));
   assert.ok(AUTH_TYPE_VALUES.includes('oauth2'));
-  assert.ok(ASSERTION_TYPES.includes('jsonPath'));
-  assert.ok(ASSERTION_TYPES.includes('xmlPath'));
-  assert.ok(ASSERTION_TYPES.includes('htmlSelector'));
-  assert.ok(ASSERTION_TYPES.includes('extractXml'));
-  assert.ok(ASSERTION_TYPES.includes('extractHtml'));
-  assert.ok(ASSERTION_OPERATORS.includes('lessThan'));
   assert.equal(payloadSchemas.fields.keyValue.value.limit, 'value');
   assert.equal(payloadSchemas.fields.appearance.theme.enum, 'themeValues');
   assert.equal(payloadSchemas.fields.editorSettings.lineNumbers.type, 'boolean');
@@ -36,7 +28,6 @@ test('defines shared payload schema metadata for IPC and contributors', () => {
   assert.equal(payloadSchemas.fields.cookie.sameSite.enum, 'sameSiteValues');
   assert.equal(payloadSchemas.fields.cookie.priority.enum, 'cookiePriorities');
   assert.equal(payloadSchemas.fields.cookie.source.limit, 'short');
-  assert.equal(payloadSchemas.fields.assertion.type.enum, 'assertionTypes');
   assert.equal(payloadSchemas.fields.auth.type.enum, 'authTypes');
   assert.equal(payloadSchemas.fields.auth.location.enum, 'apiKeyLocations');
   assert.equal(payloadSchemas.fields.auth.grantType.enum, 'oauth2GrantTypes');

@@ -270,7 +270,7 @@ const FIXTURES = Object.freeze({
   'focused-importer-tests': {
     type: 'postmeter-focused-tests',
     path: 'test/electron/postmanImporter.test.js',
-    notes: 'Focused Postman import/export tests for protocol hooks, package annotations, mock scripts, examples, certificates, file bindings, and advanced auth helper metadata round trips.'
+    notes: 'Focused Postman import/export tests for protocol hooks, package annotations, mock scripts, request docs, certificates, file bindings, and advanced auth helper metadata round trips.'
   },
   'focused-protocol-tests': {
     type: 'postmeter-focused-tests',
@@ -1125,7 +1125,6 @@ function buildPostmanParityMatrix() {
     'cookie-allowlists',
     'vault-metadata',
     'mock-scripts',
-    'request-examples',
     'request-variables',
     'collection-certificates',
     'body-modes',
@@ -1388,7 +1387,6 @@ function importStatus(name) {
     'cookie-allowlists',
     'vault-metadata',
     'mock-scripts',
-    'request-examples',
     'request-variables',
     'collection-certificates',
     'body-modes',
@@ -1416,7 +1414,6 @@ function importFixture(name) {
     'visualizer-assets',
     'cookie-allowlists',
     'vault-metadata',
-    'request-examples',
     'request-variables',
     'collection-certificates',
     'body-modes',

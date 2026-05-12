@@ -28,8 +28,12 @@
     'authClientPassphraseInput'
   ];
   const PERFORMANCE_AUTH_EDITOR_INPUT_IDS = AUTH_EDITOR_INPUT_IDS.map((id) => `performance${id[0].toUpperCase()}${id.slice(1)}`);
+  const COLLECTION_AUTH_EDITOR_INPUT_IDS = AUTH_EDITOR_INPUT_IDS.map((id) => `collection${id[0].toUpperCase()}${id.slice(1)}`);
+  const FOLDER_AUTH_EDITOR_INPUT_IDS = AUTH_EDITOR_INPUT_IDS.map((id) => `folder${id[0].toUpperCase()}${id.slice(1)}`);
   const AUTH_EDITOR_INPUT_ID_SET = new Set(AUTH_EDITOR_INPUT_IDS);
   const PERFORMANCE_AUTH_EDITOR_INPUT_ID_SET = new Set(PERFORMANCE_AUTH_EDITOR_INPUT_IDS);
+  const COLLECTION_AUTH_EDITOR_INPUT_ID_SET = new Set(COLLECTION_AUTH_EDITOR_INPUT_IDS);
+  const FOLDER_AUTH_EDITOR_INPUT_ID_SET = new Set(FOLDER_AUTH_EDITOR_INPUT_IDS);
 
   function initializeRenderer(options = {}) {
     const doc = options.doc || document;
@@ -128,15 +132,20 @@
     bindClick(doc, 'exportRunnerDefinitionButton', options.onExportRunnerDefinition);
     bindClick(doc, 'exportPerformanceTestMenuButton', options.onExportPerformanceTest);
     bindClick(doc, 'sendButton', options.onSendRequest);
+    bindClick(doc, 'saveCollectionButton', options.onSaveCollection);
+    bindClick(doc, 'addCollectionVariableButton', options.onAddCollectionVariable);
+    bindInput(doc, 'collectionDescriptionInput', options.onCollectionInput);
+    bindInput(doc, 'collectionPreRequestScriptInput', options.onCollectionInput);
+    bindInput(doc, 'collectionTestScriptInput', options.onCollectionInput);
+    bindClick(doc, 'saveFolderButton', options.onSaveFolder);
+    bindClick(doc, 'addFolderVariableButton', options.onAddFolderVariable);
+    bindInput(doc, 'folderDescriptionInput', options.onFolderInput);
+    bindInput(doc, 'folderPreRequestScriptInput', options.onFolderInput);
+    bindInput(doc, 'folderTestScriptInput', options.onFolderInput);
     bindClick(doc, 'addParamButton', options.onAddParam);
     bindClick(doc, 'addHeaderButton', options.onAddHeader);
     bindChange(doc, 'sendPostMeterTokenInput', options.onPostMeterTokenHeaderChange);
     bindChange(doc, 'showGeneratedHeadersInput', options.onShowGeneratedHeadersChange);
-    bindClick(doc, 'addAssertionButton', options.onAddAssertion);
-    bindClick(doc, 'addAssertionTemplateButton', options.onAddAssertionTemplate);
-    bindClick(doc, 'addExampleButton', options.onAddExample);
-    bindClick(doc, 'captureResponseExampleButton', options.onCaptureResponseExample);
-    bindClick(doc, 'exportExamplesButton', options.onExportExamples);
     bindClick(doc, 'saveRequestButton', options.onSaveRequest);
     bindClick(doc, 'saveEnvironmentButton', options.onSaveEnvironment);
     bindClick(doc, 'deleteEnvironmentButton', options.onDeleteEnvironment);
@@ -153,7 +162,6 @@
     bindClick(doc, 'bindVaultSecretButton', options.onBindVaultSecret);
     bindClick(doc, 'refreshVaultMetadataButton', options.onRefreshVaultMetadata);
     bindClick(doc, 'resetVaultButton', options.onResetVault);
-    bindClick(doc, 'addCollectionVariableButton', options.onAddCollectionVariable);
     bindClick(doc, 'addRequestVariableButton', options.onAddRequestVariable);
     bindClick(doc, 'addCookieButton', options.onAddCookie);
     bindClick(doc, 'clearExpiredCookiesButton', options.onClearExpiredCookies);
@@ -176,10 +184,6 @@
     bindClick(doc, 'addPerformanceHeaderButton', options.onAddPerformanceHeader);
     bindChange(doc, 'performanceSendPostMeterTokenInput', options.onPerformancePostMeterTokenHeaderChange);
     bindChange(doc, 'performanceShowGeneratedHeadersInput', options.onPerformanceShowGeneratedHeadersChange);
-    bindClick(doc, 'addPerformanceAssertionButton', options.onAddPerformanceAssertion);
-    bindClick(doc, 'addPerformanceAssertionTemplateButton', options.onAddPerformanceAssertionTemplate);
-    bindClick(doc, 'addPerformanceExampleButton', options.onAddPerformanceExample);
-    bindClick(doc, 'exportPerformanceExamplesButton', options.onExportPerformanceExamples);
     bindClick(doc, 'addPerformanceRequestVariableButton', options.onAddPerformanceRequestVariable);
     bindClick(doc, 'addPerformanceCookieButton', options.onAddPerformanceCookie);
     bindClick(doc, 'clearExpiredPerformanceCookiesButton', options.onClearExpiredPerformanceCookies);
@@ -226,6 +230,7 @@
     bindInput(doc, 'performanceBinaryBodySourceInput', options.onPerformanceRequestChange);
     bindInput(doc, 'performancePreRequestScriptInput', options.onPerformanceRequestChange);
     bindInput(doc, 'performanceTestScriptInput', options.onPerformanceRequestChange);
+    bindInput(doc, 'performanceDocsInput', options.onPerformanceRequestChange);
     bindChange(doc, 'performanceRequestCookieJarEnabledInput', options.onPerformanceRequestChange);
     bindChange(doc, 'performanceRequestCookieJarStoreInput', options.onPerformanceRequestChange);
     bindChange(doc, 'performanceFilterCookiesToRequestHostInput', options.onPerformanceFilterCookiesChange);
@@ -242,6 +247,7 @@
     bindInput(doc, 'binaryBodySourceInput', options.onBodyInput);
     bindInput(doc, 'preRequestScriptInput', options.onPreRequestScriptInput);
     bindInput(doc, 'testScriptInput', options.onTestScriptInput);
+    bindInput(doc, 'docsInput', options.onDocsInput || options.onBodyInput);
     bindChange(doc, 'requestCookieJarEnabledInput', options.onRequestCookieJarChange);
     bindChange(doc, 'requestCookieJarStoreInput', options.onRequestCookieJarChange);
     bindChange(doc, 'filterCookiesToRequestHostInput', options.onFilterCookiesChange);
@@ -252,6 +258,7 @@
     bindChange(doc, 'closeModalsOnBackdropClickInput', options.onCloseModalsOnBackdropClickChange);
     bindChange(doc, 'includePrereleasesInput', options.onIncludePrereleasesChange);
     bindChange(doc, 'showEditorLineNumbersInput', options.onShowEditorLineNumbersChange);
+    bindChange(doc, 'showVariableTooltipHintsInput', options.onShowVariableTooltipHintsChange);
     for (const id of [
       'diagnosticLoggingEnabledInput',
       'diagnosticLogLevelSelect',
@@ -284,6 +291,26 @@
       input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', (event) => {
         event.__postmeterAuthHandled = true;
         handlePerformanceAuthEditorInput(id, input, options);
+      });
+    }
+    for (const id of COLLECTION_AUTH_EDITOR_INPUT_IDS) {
+      const input = getElement(doc, id);
+      if (!input) {
+        continue;
+      }
+      input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', (event) => {
+        event.__postmeterAuthHandled = true;
+        handleCollectionAuthEditorInput(id, input, options);
+      });
+    }
+    for (const id of FOLDER_AUTH_EDITOR_INPUT_IDS) {
+      const input = getElement(doc, id);
+      if (!input) {
+        continue;
+      }
+      input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', (event) => {
+        event.__postmeterAuthHandled = true;
+        handleFolderAuthEditorInput(id, input, options);
       });
     }
     bindDelegatedAuthEditorInputs(doc, options);
@@ -416,6 +443,10 @@
         handleAuthEditorInput(id, target, options);
       } else if (PERFORMANCE_AUTH_EDITOR_INPUT_ID_SET.has(id)) {
         handlePerformanceAuthEditorInput(id, target, options);
+      } else if (COLLECTION_AUTH_EDITOR_INPUT_ID_SET.has(id)) {
+        handleCollectionAuthEditorInput(id, target, options);
+      } else if (FOLDER_AUTH_EDITOR_INPUT_ID_SET.has(id)) {
+        handleFolderAuthEditorInput(id, target, options);
       }
     };
     doc.addEventListener('input', handleDelegatedAuthEvent);
@@ -434,6 +465,20 @@
       options.onPerformanceAuthTypeChange?.(input.value);
     }
     options.onPerformanceAuthInput?.();
+  }
+
+  function handleCollectionAuthEditorInput(id, input, options) {
+    if (id === 'collectionAuthTypeSelect') {
+      options.onCollectionAuthTypeChange?.(input.value);
+    }
+    options.onCollectionAuthInput?.();
+  }
+
+  function handleFolderAuthEditorInput(id, input, options) {
+    if (id === 'folderAuthTypeSelect') {
+      options.onFolderAuthTypeChange?.(input.value);
+    }
+    options.onFolderAuthInput?.();
   }
 
   function bindToolbarMenus(doc = document, options = {}) {

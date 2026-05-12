@@ -53,7 +53,7 @@ test('creates a default current-schema workspace when no file exists', async () 
         }
       }
     },
-    editor: { lineNumbers: true },
+    editor: { lineNumbers: true, variableTooltipHints: true },
     tabs: { saveOnForceClose: false },
     modals: { closeOnBackdropClick: false },
     updates: { includePrereleases: false }
@@ -143,7 +143,7 @@ test('migrates schema 2 workspaces to the current schema and creates a backup', 
     mock: ''
   });
   assert.deepEqual(workspace.collections[0].requests[0].variables, []);
-  assert.deepEqual(workspace.collections[0].requests[0].examples, []);
+  assert.equal(workspace.collections[0].requests[0].docs, '');
   assert.deepEqual(workspace.collections[0].requests[0].cookieJar, { enabled: false, storeResponses: true });
   assert.equal(workspace.collections[0].requests[0].loadTestPolicy, undefined);
   assert.equal(backups.length, 1);
@@ -681,22 +681,13 @@ function legacyRequestFixture(id, originalPostmanId) {
     bodyType: 'RAW_JSON',
     body: '{"ok":true}',
     auth: { type: 'bearer', token: 'request-token' },
-    assertions: [],
     scripts: {
       preRequest: 'pm.variables.set("before", "yes");',
       tests: 'pm.test("ok", function () { pm.expect(true).to.equal(true); });',
       mock: 'pm.state.set("count", 1);'
     },
     variables: [{ enabled: true, key: 'requestLocal', value: 'local-secret' }],
-    examples: [{
-      id: `${id}-example`,
-      name: 'Imported Example',
-      statusCode: 200,
-      headers: [{ enabled: true, key: 'Content-Type', value: 'application/json' }],
-      bodyType: 'RAW_JSON',
-      body: '{"ok":true}',
-      postman: { ids: { original: `${originalPostmanId}-example` } }
-    }],
+    docs: 'Imported request docs',
     cookieJar: { enabled: true, storeResponses: true },
     methodPath: 'Greeter/SayHello',
     metadata: [{ enabled: true, key: 'grpc-status', value: '0' }],
@@ -736,7 +727,7 @@ function assertLegacyMetadataPreserved(workspace, schemaVersion) {
   assert.equal(request.graphql.operationName, 'GetOk');
   assert.equal(request.grpc.service, 'Greeter');
   assert.equal(request.websocket.url, 'wss://example.test/socket');
-  assert.equal(request.examples[0].postman.ids.original, 'postman-request-1-example');
+  assert.equal(request.docs, 'Imported request docs');
   assert.equal(workspace.globals[0].key, 'globalToken');
   assert.equal(workspace.cookies[0].httpOnly, true);
 }
@@ -834,13 +825,15 @@ test('imports native collection exports and Postman collections without confusin
   assert.equal(postman.requests.length, 0);
   assert.equal(postman.variables.length, 2);
   assert.equal(postman.variables[0].key, 'baseUrl');
+  assert.match(postman.scripts.preRequest, /fromCollection/);
   assert.equal(postman.folders[0].name, 'Folder A');
+  assert.match(postman.folders[0].scripts.tests, /folder test/);
   const nestedRequest = postman.folders[0].folders[0].requests[0];
   assert.equal(nestedRequest.name, 'Nested Request');
   assert.equal(nestedRequest.bodyType, 'RAW_JSON');
   assert.equal(nestedRequest.queryParams.length, 2);
-  assert.match(nestedRequest.scripts.preRequest, /fromCollection/);
-  assert.match(nestedRequest.scripts.tests, /folder test/);
+  assert.equal(nestedRequest.scripts.preRequest, '');
+  assert.doesNotMatch(nestedRequest.scripts.tests, /folder test/);
   assert.match(nestedRequest.scripts.tests, /request test/);
 
   const openApiYamlPath = path.join(temp, 'openapi.yaml');
@@ -915,7 +908,7 @@ test('round-trips native PostMeter workspaces and collection exports with metada
   assert.equal(request.graphql.operationName, 'GetOk');
   assert.equal(request.grpc.service, 'Greeter');
   assert.equal(request.websocket.url, 'wss://example.test/socket');
-  assert.equal(request.examples[0].postman.ids.original, 'postman-request-1-example');
+  assert.equal(request.docs, 'Imported request docs');
   assert.equal(request.postman.bindings.vaultKeys[0], 'apiToken');
   assert.equal(request.postman.fileReferences[0].source, 'fixtures/upload.bin');
 });

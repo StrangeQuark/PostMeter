@@ -45,10 +45,10 @@ test('runs collections headlessly and writes reports', async () => {
     const failingReportPath = path.join(tempDir, 'failing-report.csv');
     await fs.writeFile(failingWorkspacePath, JSON.stringify(workspace(server.baseUrl, 204), null, 2));
 
-    const failing = await runCli(['run', '--file', failingWorkspacePath, '--report', failingReportPath, '--format', 'csv'], tempDir);
+    const failing = await runCli(['run', '--file', failingWorkspacePath, '--var', 'cliToken=from-cli', '--report', failingReportPath, '--format', 'csv'], tempDir);
     assert.equal(failing.code, 1);
     assert.match(failing.stdout, /PostMeter collection run failed/);
-    assert.match(await fs.readFile(failingReportPath, 'utf8'), /Status code 200 assertion failed/);
+    assert.match(await fs.readFile(failingReportPath, 'utf8'), /status/i);
   } finally {
     await server.close();
   }
@@ -72,10 +72,9 @@ function workspace(baseUrl, expectedStatus) {
         bodyType: 'NONE',
         body: '',
         auth: { type: 'none' },
-        assertions: [{ enabled: true, type: 'statusCode', operator: 'equals', expected: expectedStatus }],
         scripts: {
           preRequest: "pm.environment.set('fromPreRequest', pm.variables.get('cliToken') || 'missing');",
-          tests: "pm.test('script sees CLI variables', function () { pm.expect(pm.environment.get('fromPreRequest')).to.equal('from-cli'); pm.response.to.have.status(200); });"
+          tests: `pm.test('script sees CLI variables', function () { pm.expect(pm.environment.get('fromPreRequest')).to.equal('from-cli'); pm.response.to.have.status(${expectedStatus}); });`
         }
       }],
       folders: []

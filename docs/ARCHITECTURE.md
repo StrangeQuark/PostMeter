@@ -15,13 +15,11 @@ The main rule is that product behavior belongs in the lowest layer that can own 
 Renderer files are loaded directly from `src/renderer/index.html`.
 
 - `renderer.js` is the renderer shell/orchestrator. It should compose focused helpers rather than owning tab state, workflows, or editor subpanels inline, while still hosting shared modal rendering helpers used by flows such as draft-save, collection export selection, runner request import, history clearing, and draggable sidebar-tree placement.
-- `assertionModel.js` owns assertion templates, default values, and placeholder text.
 - `cookieModel.js` owns renderer-side cookie validation, Postman cookie metadata import, and thin adapters over the shared core cookie model.
 - `contextMenu.js` owns renderer context-menu display and positioning.
 - `layoutControls.js` owns resizable pane wiring and persisted layout CSS variables.
 - `collectionModel.js` owns pure collection/folder/request tree traversal and mutation helpers used by the renderer.
-- `exampleModel.js` owns request example formatting, header parsing, and example factory helpers.
-- `requestEditorPanels.js` owns request editor subpanel rendering: auth editor wiring, request pair/assertion tables, request example rendering, cookie panel rendering, and variable preview/editor helpers.
+- `requestEditorPanels.js` owns request editor subpanel rendering: auth editor wiring, request pair tables, cookie panel rendering, and variable preview/editor helpers.
 - `rendererState.js` owns renderer state defaults plus shared active-tab, modal, and dirty-state helpers.
 - `requestTabs.js` owns generic request/environment/workspace/runner tab-bar rendering from tab descriptors, including shrink-before-scroll sizing and hover/active close buttons.
 - `requestTabState.js` owns request/environment/workspace/runner tab lifecycle, selection, dirty handling, sequential close/discard flows, force-close behavior, and the 128-open-tab cap.
@@ -36,7 +34,7 @@ Renderer files are loaded directly from `src/renderer/index.html`.
 - `theme.css` owns design tokens, method colors, and light/dark/system theme variables.
 - `base.css` owns element defaults and common control states.
 - `chrome.css` owns application chrome, sidebar, tree, drag/drop insertion bars, workspace framing, runner framing, and request-tab layout rules.
-- `editorPanels.css` owns request, response, auth, cookie, example, and editor component rules.
+- `editorPanels.css` owns request, response, auth, cookie, docs, and editor component rules.
 - `overlays.css` owns modal and context-menu presentation.
 - `styles.css` is the renderer stylesheet entry point and imports the modular CSS slices.
 
@@ -58,7 +56,7 @@ Keep DOM IDs stable unless tests and IPC-facing workflows are migrated at the sa
 - `runtimeIpc.js` owns collection-run IPC channels, cancellation maps, progress events, and result exports.
 - `sessionIpc.js` owns renderer session load/save IPC, including the synchronous shutdown flush path.
 - `sessionStore.js` owns persisted UI session state in Electron `userData/session.json`.
-- `workspaceIpc.js` owns workspace import/export/duplicate, collection import/export, environment import/export, runner-definition import/export, standalone request import/export/preview, workspace save/load, request-example export IPC channels, and the refreshed managed-workspace payloads returned after workspace import or duplication.
+- `workspaceIpc.js` owns workspace import/export/duplicate, collection import/export, environment import/export, runner-definition import/export, standalone request import/export/preview, workspace save/load, and the refreshed managed-workspace payloads returned after workspace import or duplication.
 - `workspaceMutations.js` owns workspace updates after request sends and collection runs.
 - `vaultPrompt.js` owns metadata-only vault prompt IPC, renderer/dialog fallback decisions, prompt-response sender binding, and scoped vault-grant persistence helpers. `vaultPromptQueue.js` serializes renderer prompt UI so concurrent script vault calls cannot overwrite active prompt state. `requestIpc.js` and `runtimeIpc.js` pass the prompt broker into the shared scripted lifecycle so single-request sends, collection runs, and nested request executions all use the same request/collection/workspace-scoped prompt path.
 
@@ -72,7 +70,7 @@ Core modules must not depend on Electron or renderer globals.
 
 - `scriptedRequestLifecycle.js` owns the shared pre-request/send/test pipeline used by both single-request and collection-run execution. It also sanitizes primary-request client-certificate auth mutations so scripts can select reviewed certificate bindings by `certificateId` but cannot inject direct local certificate, key, PFX/P12, CA, or passphrase fields before parent transport execution.
 - `requestScriptRunner.js` adapts the shared scripted-request lifecycle for single-request execution and returns the response plus runtime variable mutations.
-- `collectionRunner.js` sequences collection requests and layers assertions, runner progress, cookies, stop-on-failure, and runner reports on top of the shared scripted-request lifecycle. It also adapts first-class workspace runners by executing runner-owned request copies in runner order while preserving the same script/assertion/cookie/vault/package lifecycle.
+- `collectionRunner.js` sequences collection requests and layers runner progress, cookies, stop-on-failure, and runner reports on top of the shared scripted-request lifecycle. It also adapts first-class workspace runners by executing runner-owned request copies in runner order while preserving the same script/cookie/vault/package lifecycle.
 - `httpClient.js` prepares and sends HTTP requests.
 - `pfxCertificate.js` owns parent-side PFX/P12 bundle extraction and encrypted PEM private-key normalization into in-memory PEM buffers for HTTP and gRPC client-certificate transports. It uses regular-file, byte-capped descriptor reads plus the reviewed `node-forge` PKCS#12/PEM parser in the parent process, and does not shell out or write decrypted PEM material to temp files.
 - `grpcClient.js` owns the parent-side live gRPC transport for imported gRPC requests. It loads trusted proto definitions, builds parent-owned gRPC clients, normalizes metadata/messages/status/trailers/errors, and keeps proto/TLS/client-certificate filesystem access outside the script worker. gRPC mTLS supports PEM cert/key material and the shared parent-side PFX/P12 extraction path used by HTTP client-certificate requests, with configured certificate bindings failing closed instead of falling back to script-mutated direct paths.
@@ -88,7 +86,7 @@ Core modules must not depend on Electron or renderer globals.
 - `scriptRuntime.js`, `sandboxPackageCache.js`, `postmanBuiltinPackages.js`, `postmanSandboxBootcodeBundle.js`, `visualizerHandlebarsBundle.js`, `scriptSandbox.js`, `scriptWorker.js`, and `osSandbox.js` implement the constrained Postman-style script environment, reviewed package-cache policy, version-pinned Postman package bundle, isolated Handlebars visualizer runtime, worker transport, broker boundary, and OS sandbox launcher layer.
 - `models.js`, `payloadSchemas.js`, and `ipcValidation.js` define normalized payload shape and validation contracts, including schema-12 `workspace.runners` data and runner-owned request payloads.
 - `workspacePersistence.js` owns workspace-path defaults, workspace normalization, structured-content parsing, and JSON persistence helpers.
-- `importedCollectionIds.js` owns imported collection/folder/request/example/certificate ID regeneration.
+- `importedCollectionIds.js` owns imported collection/folder/request/certificate ID regeneration.
 - `workspaceStore.js` owns high-level workspace orchestration and file-facing service methods.
 - `workspaceMigrations.js` owns workspace schema migration, including the schema-12 default `runners: []` migration for older workspaces.
 
@@ -104,7 +102,7 @@ Runtime IPC accepts first-class runner payloads on the existing `runner:start` c
 
 The Performance section follows the same ownership rule: Performance tests are local first-class saved performance tests under `workspace.performanceTests`, not request result-panel state and not collection-owned data. The sidebar places Performance between Runners and History, and saved performance-test tabs use the same tab cap, session restore, dirty close, force-close, save, discard, and empty-pane semantics as requests, environments, workspaces, and runners.
 
-Performance request import must deep-copy a collection request into the performance test. Editing headers, auth, body, scripts, variables, examples, cookies, URL, or method inside Performance must never mutate the source collection request. Manual request entry should create the same request-copy shape without source metadata.
+Performance request import must deep-copy a collection request into the performance test. Editing headers, auth, body, scripts, variables, docs, cookies, URL, or method inside Performance must never mutate the source collection request. Manual request entry should create the same request-copy shape without source metadata.
 
 Performance execution is owned by core/main-process modules. The engine runs local bounded iterations through the existing request/script lifecycle, streams progress, supports cancellation, aggregates latency/status/error summaries, rejects unsafe safety-cap combinations, and keeps result samples bounded. Each V1 type has a scoped input contract: latency is single-user samples; throughput is fixed requests at configured concurrency; concurrency multiplies requests per virtual user; stress and ramp execute stepped stages from start users to peak users and reject descending start/peak plans; spike validates baseline users multiplied by the spike multiplier; soak runs against duration and request caps without exposing irrelevant iterations. The Performance sidebar calibration flow starts a temporary `127.0.0.1` HTTP server, runs a short warmup, walks a deterministic target-rate probe ladder, stops after repeated probe failures, and verifies only a small target band around the observed edge. The default calibration budget is capped to about two minutes, with a hard runtime guard, so it cannot expand into a long near-edge search. The reported sustained local RPS is the highest contiguous confirmed target, so an isolated high pass cannot override a failed lower neighbor or a target where local p95 latency jumps enough to show PostMeter is queueing work. The modal streams calibration progress with the current phase, target, pass, request count, and progress bar. Calibration also reports a conservative planning cap separately from the measured maximum, and judges target hit rate, request completion, scheduler lag, event-loop delay, errors, repeatability, and stability so it does not treat a short burst as a sustained local limit. Dedicated `performance:*` IPC/preload channels are least-privilege, schema-validated, sender-validated, and listed in the Electron security matrix. Distributed/cloud load execution remains deferred.
 

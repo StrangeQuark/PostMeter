@@ -1,6 +1,5 @@
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
-const { evaluateAssertions } = require('./assertions');
 const { resolveEnvironmentValue } = require('./environmentResolver');
 const { sendRequest } = require('./httpClient');
 const { normalizeRunnerRequestIterations, runnerModel, walkRequests } = require('./models');
@@ -13,7 +12,6 @@ const {
 } = require('./scriptedRequestLifecycle');
 const { runPostmanScriptIsolated } = require('./scriptSandbox');
 const {
-  applyExtractedVariables,
   cloneEnvironment,
   cloneVariables,
   runtimeEnvironment
@@ -35,11 +33,14 @@ async function runCollection(collection, environment, options = {}) {
   const send = options.sendRequest || sendRequest;
   const runScript = options.scriptRunner || runPostmanScriptIsolated;
   const requests = [];
-  walkRequests(collection, (request, _collection, folder) => {
+  walkRequests(collection, (request, _collection, folder, folderPath = []) => {
+    const folders = Array.isArray(folderPath) ? folderPath.filter(Boolean) : (folder ? [folder] : []);
     requests.push({
       request,
+      folder,
+      folders,
       folderName: folder?.name || '',
-      folderPath: folder?.name ? [folder.name] : [],
+      folderPath: folders.map((item) => item?.name || '').filter(Boolean),
       index: requests.length
     });
   });
@@ -73,19 +74,27 @@ async function runCollection(collection, environment, options = {}) {
       throw new Error(`pm.execution.runRequest target was not found: ${payload?.target || ''}.`);
     }
     const targetRequest = requestWithRefreshedAuth(targetEntry.request, refreshedAuthByRequestId);
+    const targetFolderScope = folderScopeForEntry(targetEntry);
     const scopeState = runRequestScopeState(
       payload,
       runnerEnvironment,
       runnerCollectionVariables,
+      targetFolderScope.variables,
       runnerGlobals,
       runnerCookies
     );
     const targetState = createScriptedRequestState(targetRequest, runnerEnvironment, {
+      collectionAuth: collection?.auth || { type: 'none' },
+      collectionScripts: collection?.scripts || {},
+      folderAuth: targetFolderScope.auth,
+      folderScripts: targetFolderScope.scripts,
       collectionVariables: scopeState.collectionVariables,
+      folderVariables: scopeState.folderVariables,
       globals: scopeState.globals,
       cookieJar: scopeState.cookies,
       cloneEnvironment: false,
       cloneCollectionVariables: false,
+      cloneFolderVariables: false,
       cloneGlobals: false,
       localVariables: runRequestLocalVariables(targetRequest, payload?.options?.variables)
     });
@@ -125,11 +134,11 @@ async function runCollection(collection, environment, options = {}) {
     if (Array.isArray(scriptedRequest.cookies)) {
       scopeState.cookies = scriptedRequest.cookies;
     }
-    if (preRequestScriptShouldAbortRequest(scriptedRequest.preRequestScriptResult)) {
-      return runRequestBrokerResult(targetEntry, scriptedRequest, null, []);
+    if (preRequestScriptStoppedBeforeSend(scriptedRequest)) {
+      return runRequestBrokerResult(targetEntry, scriptedRequest, null);
     }
     if (scriptedRequest.skipped) {
-      return runRequestBrokerResult(targetEntry, scriptedRequest, null, [], { skipped: true });
+      return runRequestBrokerResult(targetEntry, scriptedRequest, null, { skipped: true });
     }
     const response = scriptedRequest.response;
     if (Array.isArray(response?.updatedCookies)) {
@@ -138,9 +147,7 @@ async function runCollection(collection, environment, options = {}) {
     if (response?.updatedAuth) {
       rememberRefreshedAuth(targetEntry.request, response.updatedAuth, refreshedAuthByRequestId);
     }
-    const assertions = evaluateAssertions(response, targetRequest.assertions || []);
-    applyExtractedVariables(scopeState.environment, assertions.extractedVariables);
-    return runRequestBrokerResult(targetEntry, scriptedRequest, response, assertions.results);
+    return runRequestBrokerResult(targetEntry, scriptedRequest, response);
   };
   let index = 0;
   let steps = 0;
@@ -157,15 +164,22 @@ async function runCollection(collection, environment, options = {}) {
       ? entry.request.iterationData
       : (options.iterationData || []);
     const requestForExecution = requestWithRefreshedAuth(entry.request, refreshedAuthByRequestId);
+    const folderScope = folderScopeForEntry(entry);
     const startedAt = new Date().toISOString();
     try {
       const scriptedRequest = await runScriptedRequestLifecycle(
         createScriptedRequestState(requestForExecution, runnerEnvironment, {
+          collectionAuth: collection?.auth || { type: 'none' },
+          collectionScripts: collection?.scripts || {},
+          folderAuth: folderScope.auth,
+          folderScripts: folderScope.scripts,
           collectionVariables: runnerCollectionVariables,
+          folderVariables: folderScope.variables,
           globals: runnerGlobals,
           cookieJar: runnerCookies,
           cloneEnvironment: false,
           cloneCollectionVariables: false,
+          cloneFolderVariables: false,
           cloneGlobals: false
         }),
         {
@@ -200,10 +214,11 @@ async function runCollection(collection, environment, options = {}) {
         scriptedRequest.request || requestForExecution,
         runtimeEnvironment(runnerCollectionVariables, runnerEnvironment, scriptedRequest.localVariables, {
           globals: runnerGlobals,
+          folderVariables: folderScope.variables,
           iterationData
         })
       );
-      if (preRequestScriptShouldAbortRequest(scriptedRequest.preRequestScriptResult)) {
+      if (preRequestScriptStoppedBeforeSend(scriptedRequest)) {
         const result = scriptFailureResult(
           entry,
           startedAt,
@@ -233,10 +248,7 @@ async function runCollection(collection, environment, options = {}) {
       if (response.updatedAuth) {
         rememberRefreshedAuth(entry.request, response.updatedAuth, refreshedAuthByRequestId);
       }
-      const assertions = evaluateAssertions(response, requestForExecution.assertions || []);
-      applyExtractedVariables(runnerEnvironment, assertions.extractedVariables);
-      const passed = assertions.passed
-        && scriptedRequest.preRequestScriptResult.passed
+      const passed = scriptedRequest.preRequestScriptResult.passed
         && scriptedRequest.testScriptResult.passed;
       const result = {
         requestId: entry.request.id,
@@ -250,14 +262,12 @@ async function runCollection(collection, environment, options = {}) {
         responseBody: boundedRunResultResponseBody(response.body),
         responseBytes: response.responseBytes || Buffer.byteLength(response.body || '', 'utf8'),
         passed,
-        assertionResults: assertions.results,
         preRequestScriptResult: scriptedRequest.preRequestScriptResult,
         messageScriptResults: scriptedRequest.messageScriptResults || [],
         afterResponseScriptResult: scriptedRequest.afterResponseScriptResult,
         testScriptResult: scriptedRequest.testScriptResult,
-        extractedVariables: assertions.extractedVariables,
         localVariables: scriptedRequest.localVariables,
-        error: scriptedRequest.testScriptResult.error || ''
+        error: ''
       };
       results.push(result);
       progress(progressEvent(index + 1, requests.length, result));
@@ -271,6 +281,7 @@ async function runCollection(collection, environment, options = {}) {
         requestForExecution,
         runtimeEnvironment(runnerCollectionVariables, runnerEnvironment, requestForExecution.variables || [], {
           globals: runnerGlobals,
+          folderVariables: folderScope.variables,
           iterationData
         })
       );
@@ -284,10 +295,8 @@ async function runCollection(collection, environment, options = {}) {
         statusCode: 0,
         durationMillis: 0,
         passed: false,
-        assertionResults: [],
         preRequestScriptResult: emptyScriptResult(),
         testScriptResult: emptyScriptResult(),
-        extractedVariables: [],
         error: error.message || String(error)
       };
       results.push(result);
@@ -583,7 +592,7 @@ function executionLocationForEntry(collection, entry) {
   };
 }
 
-function runRequestBrokerResult(entry, scriptedRequest, response, assertionResults, options = {}) {
+function runRequestBrokerResult(entry, scriptedRequest, response, options = {}) {
   return {
     collectionVariables: scriptedRequest.collectionVariables || [],
     cookies: scriptedRequest.cookies || [],
@@ -598,15 +607,18 @@ function runRequestBrokerResult(entry, scriptedRequest, response, assertionResul
       finalUrl: response.finalUrl || entry.request.url || ''
     } : null,
     skipped: options.skipped === true,
-    tests: runRequestBrokerTests(entry, scriptedRequest, assertionResults)
+    tests: runRequestBrokerTests(entry, scriptedRequest)
   };
 }
 
-function runRequestScopeState(payload, environment, collectionVariables, globals, cookies) {
+function runRequestScopeState(payload, environment, collectionVariables, folderVariables, globals, cookies) {
   return {
     collectionVariables: Array.isArray(payload?.scopes?.collectionVariables)
       ? cloneVariables(payload.scopes.collectionVariables)
       : cloneVariables(collectionVariables),
+    folderVariables: Array.isArray(payload?.scopes?.folderVariables)
+      ? cloneVariables(payload.scopes.folderVariables)
+      : cloneVariables(folderVariables),
     cookies: Array.isArray(payload?.cookies)
       ? cloneJsonArray(payload.cookies)
       : cloneJsonArray(cookies),
@@ -623,17 +635,63 @@ function runRequestScopeState(payload, environment, collectionVariables, globals
   };
 }
 
-function runRequestBrokerTests(entry, scriptedRequest, assertionResults = []) {
+function folderScopeForEntry(entry) {
+  const folders = Array.isArray(entry?.folders) ? entry.folders.filter(Boolean) : [];
+  return {
+    auth: effectiveFolderAuth(folders),
+    scripts: effectiveFolderScripts(folders),
+    variables: effectiveFolderVariables(folders)
+  };
+}
+
+function effectiveFolderAuth(folders) {
+  for (let index = folders.length - 1; index >= 0; index -= 1) {
+    const auth = folders[index]?.auth;
+    if (auth && typeof auth === 'object' && String(auth.type || 'none') !== 'none') {
+      return auth;
+    }
+  }
+  return { type: 'none' };
+}
+
+function effectiveFolderScripts(folders) {
+  const scripts = {};
+  for (const folder of folders) {
+    for (const [key, value] of Object.entries(folder?.scripts || {})) {
+      if (String(value || '').trim()) {
+        scripts[key] = String(value);
+      }
+    }
+  }
+  return scripts;
+}
+
+function effectiveFolderVariables(folders) {
+  const variables = [];
+  for (const folder of folders) {
+    mergeVariablesByKey(variables, folder?.variables || []);
+  }
+  return variables;
+}
+
+function mergeVariablesByKey(target, source) {
+  for (const variable of source || []) {
+    if (!variable?.key) {
+      continue;
+    }
+    const existingIndex = target.findIndex((item) => item.key === variable.key);
+    if (existingIndex >= 0) {
+      target[existingIndex] = { ...variable };
+    } else {
+      target.push({ ...variable });
+    }
+  }
+}
+
+function runRequestBrokerTests(entry, scriptedRequest) {
   const tests = [];
   appendScriptResultTests(tests, entry, 'pre-request', scriptedRequest.preRequestScriptResult);
   appendScriptResultTests(tests, entry, 'test', scriptedRequest.testScriptResult);
-  for (const assertion of assertionResults || []) {
-    tests.push({
-      name: `${entry.request.name}: assertion ${assertion.assertion?.name || assertion.assertion?.type || 'result'}`,
-      passed: assertion.passed === true,
-      error: assertion.passed === true ? '' : assertion.message || 'Assertion failed.'
-    });
-  }
   return tests;
 }
 
@@ -798,10 +856,8 @@ function skippedResult(entry, startedAt, scriptedRequest, displayFields = {}) {
     responseBody: '',
     responseBytes: 0,
     passed: true,
-    assertionResults: [],
     preRequestScriptResult: scriptedRequest.preRequestScriptResult,
     testScriptResult: emptyScriptResult(),
-    extractedVariables: [],
     localVariables: scriptedRequest.localVariables,
     error: ''
   };
@@ -821,13 +877,16 @@ function scriptFailureResult(entry, startedAt, preRequestScriptResult, localVari
     responseBody: '',
     responseBytes: 0,
     passed: false,
-    assertionResults: [],
     preRequestScriptResult,
     testScriptResult: emptyScriptResult(),
-    extractedVariables: [],
     localVariables,
     error
   };
+}
+
+function preRequestScriptStoppedBeforeSend(scriptedRequest) {
+  return scriptedRequest?.requestSent !== true
+    && preRequestScriptShouldAbortRequest(scriptedRequest?.preRequestScriptResult);
 }
 
 function runResultRequestDisplayFields(entry, request, environment) {
@@ -896,36 +955,10 @@ function collectionRunResultToCsv(result) {
   }
 
   rows.push([]);
-  rows.push(['requestId', 'assertionType', 'assertionName', 'path', 'operator', 'expected', 'actual', 'passed', 'message']);
-  for (const item of result.results || []) {
-    for (const assertion of item.assertionResults || []) {
-      rows.push([
-        item.requestId || '',
-        assertion.assertion?.type || '',
-        assertion.assertion?.name || '',
-        assertion.assertion?.path || '',
-        assertion.assertion?.operator || '',
-        assertion.expected ?? '',
-        assertion.actual ?? '',
-        assertion.passed === true,
-        assertion.message || ''
-      ]);
-    }
-  }
-
-  rows.push([]);
   rows.push(['requestId', 'phase', 'testName', 'passed', 'error']);
   for (const item of result.results || []) {
     appendScriptTests(rows, item, 'preRequest', item.preRequestScriptResult);
     appendScriptTests(rows, item, 'tests', item.testScriptResult);
-  }
-
-  rows.push([]);
-  rows.push(['variableName', 'requestId']);
-  for (const item of result.results || []) {
-    for (const variable of item.extractedVariables || []) {
-      rows.push([variable.key || '', item.requestId || '']);
-    }
   }
 
   rows.push([]);

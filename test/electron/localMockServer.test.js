@@ -28,13 +28,15 @@ test('matches local mock routes by method and path only with path variables', as
       method: 'GET',
       name: 'Get user',
       url: 'https://api.example.test/users/:id',
-      examples: [{
-        id: 'ok-example',
-        name: 'User 200',
-        statusCode: 200,
-        headers: [{ key: 'Content-Type', value: 'application/json' }],
-        body: '{"source":"example"}'
-      }],
+      postman: {
+        mockResponses: [{
+          id: 'ok-example',
+          name: 'User 200',
+          statusCode: 200,
+          headers: [{ key: 'Content-Type', value: 'application/json' }],
+          body: '{"source":"example"}'
+        }]
+      },
       scripts: {
         mock: `
           pm.test('mock surface is available', function () {
@@ -337,13 +339,15 @@ test('starts a loopback local mock HTTP server with saved-example and fallback r
       id: 'server-route',
       method: 'GET',
       url: '/ready',
-      examples: [{
-        id: 'ready-example',
-        name: 'Ready',
-        statusCode: 202,
-        headers: [{ key: 'X-Mock', value: 'example' }],
-        body: 'ready'
-      }]
+      postman: {
+        mockResponses: [{
+          id: 'ready-example',
+          name: 'Ready',
+          statusCode: 202,
+          headers: [{ key: 'X-Mock', value: 'example' }],
+          body: 'ready'
+        }]
+      }
     })]
   });
   const server = await startLocalMockServer(collection, { requireNodePermission: false });

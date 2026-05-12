@@ -12,7 +12,7 @@ test('request editor panels choose code editor language from body type', () => {
   assert.equal(bodyTypeCodeLanguage('NONE'), 'text');
 });
 
-test('request editor panels build variable preview text using request-over-environment-over-collection precedence', () => {
+test('request editor panels build variable preview text using request-over-folder-over-collection-over-environment precedence', () => {
   const text = buildVariablePreviewText(
     {
       variables: [
@@ -31,7 +31,14 @@ test('request editor panels build variable preview text using request-over-envir
         { enabled: true, key: 'shared', value: 'request' },
         { enabled: false, key: 'disabled', value: 'ignored' }
       ]
-    }
+    },
+    null,
+    [{
+      variables: [
+        { enabled: true, key: 'shared', value: 'folder' },
+        { enabled: true, key: 'folderOnly', value: 'present' }
+      ]
+    }]
   );
 
   assert.equal(
@@ -39,6 +46,7 @@ test('request editor panels build variable preview text using request-over-envir
     [
       'baseUrl = https://collection.example.test (Collection)',
       'envOnly = present (Environment)',
+      'folderOnly = present (Folder)',
       'shared = request (Request)'
     ].join('\n')
   );

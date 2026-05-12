@@ -1,9 +1,7 @@
 const {
   applyScriptMutations,
-  createPreRequestScriptError,
   createScriptedRequestState,
   emptyScriptResult,
-  preRequestScriptShouldAbortRequest,
   runScriptedRequestLifecycle,
   scriptResultOnly
 } = require('./scriptedRequestLifecycle');
@@ -12,14 +10,16 @@ async function runRequestWithScripts(request, environment, options = {}) {
   const lifecycleResult = await runScriptedRequestLifecycle(
     createScriptedRequestState(request, environment, {
       collectionVariables: options.collectionVariables || [],
+      collectionAuth: options.collectionAuth,
+      collectionScripts: options.collectionScripts,
+      folderVariables: options.folderVariables || [],
+      folderAuth: options.folderAuth,
+      folderScripts: options.folderScripts,
       globals: options.globals || [],
       cookieJar: options.cookieJar || []
     }),
     options
   );
-  if (preRequestScriptShouldAbortRequest(lifecycleResult.preRequestScriptResult)) {
-    throw createPreRequestScriptError(lifecycleResult);
-  }
   if (lifecycleResult.skipped) {
     const response = skippedRequestResponse(request, lifecycleResult);
     return {

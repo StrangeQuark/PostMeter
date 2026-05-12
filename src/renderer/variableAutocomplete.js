@@ -1,5 +1,10 @@
 (function attachVariableAutocomplete(global) {
-  const SCRIPT_INPUT_IDS = new Set(['preRequestScriptInput', 'testScriptInput']);
+  const SCRIPT_INPUT_IDS = new Set([
+    'preRequestScriptInput',
+    'testScriptInput',
+    'collectionPreRequestScriptInput',
+    'collectionTestScriptInput'
+  ]);
   const SUPPORTED_INPUT_TYPES = new Set(['', 'text', 'search', 'url', 'email', 'password', 'tel']);
   const MENU_ID = 'variableAutocompleteMenu';
   const MEASUREMENT_SURFACE_ID = 'variableAutocompleteMeasurementSurface';

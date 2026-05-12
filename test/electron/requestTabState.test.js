@@ -49,6 +49,208 @@ test('request tab state opens a saved request tab with a snapshot and folder met
   assert.equal(tabRenders, 1);
 });
 
+test('request tab state opens and dirties collection tabs with snapshots', () => {
+  const state = createRendererState();
+  const collection = {
+    id: 'collection-1',
+    name: 'Collection One',
+    description: '',
+    variables: [],
+    requests: [],
+    folders: []
+  };
+  state.workspace = {
+    collections: [collection],
+    environments: []
+  };
+  state.activeMainPanel = 'request';
+  state.activeCollectionId = 'collection-1';
+  state.activeRequestId = null;
+  let renders = 0;
+  let tabRenders = 0;
+
+  const tabState = createRequestTabState({
+    state,
+    activeCollection: () => collection,
+    activeEnvironment: () => null,
+    activeRequest: () => null,
+    activeWorkspaceItem: () => null,
+    renderAll: () => { renders += 1; },
+    renderRequestTabs: () => { tabRenders += 1; },
+    workspaceListItems: () => []
+  });
+
+  const tab = tabState.ensureOpenCollectionTabForActive();
+  assert.equal(tab.key, 'collection:collection-1');
+  assert.equal(tab.collectionId, 'collection-1');
+  assert.equal(tab.snapshot, JSON.stringify(collection));
+  assert.equal(state.openCollectionTabs.length, 1);
+
+  tabState.markActiveCollectionTabDirty();
+  assert.equal(tab.dirty, true);
+
+  state.activeCollectionId = null;
+  tabState.selectCollectionTab(tab, { collect: false });
+  assert.equal(state.activeMainPanel, 'request');
+  assert.equal(state.activeSidebarPanel, 'collections');
+  assert.equal(state.activeCollectionId, 'collection-1');
+  assert.equal(state.activeRequestId, null);
+  assert.equal(renders, 1);
+  assert.equal(tabRenders, 4);
+});
+
+test('request tab state opens and dirties folder tabs with snapshots', () => {
+  const state = createRendererState();
+  const folder = {
+    id: 'folder-1',
+    name: 'Folder One',
+    description: '',
+    variables: [],
+    requests: [],
+    folders: []
+  };
+  const collection = {
+    id: 'collection-1',
+    name: 'Collection One',
+    description: '',
+    variables: [],
+    requests: [],
+    folders: [folder]
+  };
+  state.workspace = {
+    collections: [collection],
+    environments: []
+  };
+  state.activeMainPanel = 'request';
+  state.activeCollectionId = 'collection-1';
+  state.activeFolderId = 'folder-1';
+  state.activeRequestId = null;
+  let renders = 0;
+  let tabRenders = 0;
+
+  const tabState = createRequestTabState({
+    state,
+    activeCollection: () => collection,
+    activeEnvironment: () => null,
+    activeFolder: () => folder,
+    activeRequest: () => null,
+    activeWorkspaceItem: () => null,
+    findFolder: (_collection, folderId) => folderId === folder.id ? folder : null,
+    renderAll: () => { renders += 1; },
+    renderRequestTabs: () => { tabRenders += 1; },
+    workspaceListItems: () => []
+  });
+
+  const tab = tabState.ensureOpenFolderTabForActive();
+  assert.equal(tab.key, 'folder:collection-1:folder-1');
+  assert.equal(tab.collectionId, 'collection-1');
+  assert.equal(tab.folderId, 'folder-1');
+  assert.equal(tab.snapshot, JSON.stringify(folder));
+  assert.equal(state.openFolderTabs.length, 1);
+
+  tabState.markActiveFolderTabDirty();
+  assert.equal(tab.dirty, true);
+
+  state.activeCollectionId = null;
+  state.activeFolderId = null;
+  tabState.selectFolderTab(tab, { collect: false });
+  assert.equal(state.activeMainPanel, 'request');
+  assert.equal(state.activeSidebarPanel, 'collections');
+  assert.equal(state.activeCollectionId, 'collection-1');
+  assert.equal(state.activeFolderId, 'folder-1');
+  assert.equal(state.activeRequestId, null);
+  assert.equal(renders, 1);
+  assert.equal(tabRenders, 4);
+});
+
+test('request tab state prompts for dirty collection tabs and can discard or save them', async () => {
+  const state = createRendererState();
+  const collection = {
+    id: 'collection-1',
+    name: 'Edited Collection',
+    variables: [],
+    requests: [],
+    folders: []
+  };
+  state.workspace = {
+    collections: [collection],
+    environments: []
+  };
+  state.activeMainPanel = 'request';
+  state.activeCollectionId = 'collection-1';
+  state.activeRequestId = null;
+  state.openCollectionTabs = [{
+    key: 'collection:collection-1',
+    collectionId: 'collection-1',
+    dirty: true,
+    createdUnsaved: false,
+    snapshot: JSON.stringify({ ...collection, name: 'Saved Collection' })
+  }];
+  const prompted = [];
+  let collected = 0;
+  let renders = 0;
+
+  const tabState = createRequestTabState({
+    state,
+    activeCollection: () => state.workspace.collections.find((item) => item.id === state.activeCollectionId) || null,
+    activeEnvironment: () => null,
+    activeRequest: () => null,
+    activeWorkspaceItem: () => null,
+    collectCollectionFromEditor: () => { collected += 1; },
+    promptUnsavedRequestClose: async (tab, item) => {
+      prompted.push({ tab, item });
+      return 'discard';
+    },
+    renderAll: () => { renders += 1; },
+    renderRequestTabs: () => {},
+    workspaceListItems: () => []
+  });
+
+  await tabState.closeCollectionTab(state.openCollectionTabs[0]);
+
+  assert.equal(prompted.length, 1);
+  assert.equal(prompted[0].item.id, collection.id);
+  assert.equal(collected, 1);
+  assert.equal(state.workspace.collections[0].name, 'Saved Collection');
+  assert.equal(state.openCollectionTabs.length, 0);
+  assert.equal(state.activeCollectionId, null);
+  assert.equal(renders, 1);
+
+  state.workspace.collections[0].name = 'Edited Again';
+  state.activeCollectionId = 'collection-1';
+  state.openCollectionTabs = [{
+    key: 'collection:collection-1',
+    collectionId: 'collection-1',
+    dirty: true,
+    createdUnsaved: false,
+    snapshot: JSON.stringify({ ...state.workspace.collections[0], name: 'Saved Again' })
+  }];
+  let saveConfig = null;
+  const saveTabState = createRequestTabState({
+    state,
+    activeCollection: () => state.workspace.collections.find((item) => item.id === state.activeCollectionId) || null,
+    activeEnvironment: () => null,
+    activeRequest: () => null,
+    activeWorkspaceItem: () => null,
+    collectCollectionFromEditor: () => { collected += 1; },
+    persistWorkspace: async (_showStatus, config) => {
+      saveConfig = config;
+      state.openCollectionTabs[0].dirty = false;
+      return true;
+    },
+    promptUnsavedRequestClose: async () => 'save',
+    renderAll: () => { renders += 1; },
+    renderRequestTabs: () => {},
+    workspaceListItems: () => []
+  });
+
+  await saveTabState.closeCollectionTab(state.openCollectionTabs[0]);
+
+  assert.deepEqual(saveConfig, { collectionTabKey: 'collection:collection-1', collectEditors: false });
+  assert.equal(state.workspace.collections[0].name, 'Edited Again');
+  assert.equal(state.openCollectionTabs.length, 0);
+});
+
 test('request tab state opens and selects runner-owned request tabs independently from collections', () => {
   const state = createRendererState();
   const runnerRequest = { id: 'runner-request-1', name: 'Runner Local Request', method: 'POST', url: 'https://runner.example.test' };

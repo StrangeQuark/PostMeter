@@ -99,40 +99,223 @@ test('runs the shared scripted request lifecycle and applies script mutations ac
   assert.equal(request.variables[0].value, 'local-token');
 });
 
-test('returns top-level pre-request errors from the shared lifecycle without sending the request', async () => {
-  let sends = 0;
+test('uses collection auth and scripts only when the request does not define them', async () => {
+  const scripts = [];
+  const sends = [];
+  const result = await runScriptedRequestLifecycle(
+    createScriptedRequestState({
+      id: 'fallback',
+      name: 'Fallback',
+      method: 'GET',
+      url: 'https://api.example.test/fallback',
+      auth: { type: 'none' },
+      scripts: { preRequest: '', tests: "pm.test('request test', function () {});" }
+    }, { id: 'env', name: 'Env', variables: [] }, {
+      collectionAuth: { type: 'bearer', token: 'collection-token' },
+      collectionScripts: {
+        preRequest: "pm.environment.set('fromCollectionPre', 'yes');",
+        tests: "throw new Error('collection tests should not run');"
+      }
+    }),
+    {
+      scriptRunner: async (scriptText, context) => {
+        scripts.push(scriptText);
+        return {
+          result: {
+            passed: true,
+            tests: scriptText.includes('request test') ? [{ name: 'request test', passed: true, error: '' }] : [],
+            error: '',
+            logs: []
+          },
+          environmentVariables: context.environment.variables,
+          collectionVariables: context.collectionVariables,
+          localVariables: context.localVariables,
+          request: context.request
+        };
+      },
+      sendRequest: async (sentRequest) => {
+        sends.push(sentRequest);
+        return response(200, '{"ok":true}');
+      }
+    }
+  );
+
+  assert.equal(sends[0].auth.type, 'bearer');
+  assert.equal(sends[0].auth.token, 'collection-token');
+  assert.ok(scripts[0].includes('fromCollectionPre'));
+  assert.ok(scripts[1].includes('request test'));
+  assert.doesNotMatch(scripts.join('\n'), /collection tests should not run/);
+  assert.equal(result.testScriptResult.tests[0].name, 'request test');
+});
+
+test('uses folder auth and scripts ahead of collection defaults when request fields are empty', async () => {
+  const scripts = [];
+  const sends = [];
+  const result = await runScriptedRequestLifecycle(
+    createScriptedRequestState({
+      id: 'folder-fallback',
+      name: 'Folder Fallback',
+      method: 'GET',
+      url: 'https://api.example.test/folder',
+      auth: { type: 'none' },
+      scripts: { preRequest: '', tests: '' }
+    }, { id: 'env', name: 'Env', variables: [] }, {
+      collectionAuth: { type: 'bearer', token: 'collection-token' },
+      collectionScripts: {
+        preRequest: "throw new Error('collection pre-request should not run');",
+        tests: "pm.test('collection test should not run', function () {});"
+      },
+      folderAuth: { type: 'apiKey', key: 'X-Folder-Key', value: 'folder-token', location: 'header' },
+      folderScripts: {
+        preRequest: "pm.environment.set('fromFolderPre', 'yes');",
+        tests: "pm.test('folder test fallback', function () {});"
+      }
+    }),
+    {
+      scriptRunner: async (scriptText, context) => {
+        scripts.push(scriptText);
+        return {
+          result: {
+            passed: true,
+            tests: scriptText.includes('folder test fallback')
+              ? [{ name: 'folder test fallback', passed: true, error: '' }]
+              : [],
+            error: '',
+            logs: []
+          },
+          environmentVariables: context.environment.variables,
+          collectionVariables: context.collectionVariables,
+          folderVariables: context.folderVariables,
+          localVariables: context.localVariables,
+          request: context.request
+        };
+      },
+      sendRequest: async (sentRequest) => {
+        sends.push(sentRequest);
+        return response(200, '{"ok":true}');
+      }
+    }
+  );
+
+  assert.equal(sends[0].auth.type, 'apiKey');
+  assert.equal(sends[0].auth.key, 'X-Folder-Key');
+  assert.ok(scripts[0].includes('fromFolderPre'));
+  assert.ok(scripts[1].includes('folder test fallback'));
+  assert.doesNotMatch(scripts.join('\n'), /collection/);
+  assert.equal(result.testScriptResult.tests[0].name, 'folder test fallback');
+});
+
+test('keeps request auth and request script fields ahead of collection defaults', async () => {
+  const scripts = [];
+  const sends = [];
+  const result = await runScriptedRequestLifecycle(
+    createScriptedRequestState({
+      id: 'request-overrides',
+      name: 'Request Overrides',
+      method: 'GET',
+      url: 'https://api.example.test/overrides',
+      auth: { type: 'bearer', token: 'request-token' },
+      scripts: {
+        preRequest: "pm.environment.set('scriptScope', 'request-pre');",
+        tests: ''
+      }
+    }, { id: 'env', name: 'Env', variables: [] }, {
+      collectionAuth: { type: 'basic', username: 'collection-user', password: 'collection-pass' },
+      collectionScripts: {
+        preRequest: "throw new Error('collection pre-request should not run');",
+        tests: "pm.test('collection test fallback', function () {});"
+      }
+    }),
+    {
+      scriptRunner: async (scriptText, context) => {
+        scripts.push(scriptText);
+        return {
+          result: {
+            passed: true,
+            tests: scriptText.includes('collection test fallback')
+              ? [{ name: 'collection test fallback', passed: true, error: '' }]
+              : [],
+            error: '',
+            logs: []
+          },
+          environmentVariables: context.environment.variables,
+          collectionVariables: context.collectionVariables,
+          localVariables: context.localVariables,
+          request: context.request
+        };
+      },
+      sendRequest: async (sentRequest) => {
+        sends.push(sentRequest);
+        return response(200, '{"ok":true}');
+      }
+    }
+  );
+
+  assert.equal(sends[0].auth.type, 'bearer');
+  assert.equal(sends[0].auth.token, 'request-token');
+  assert.ok(scripts[0].includes('request-pre'));
+  assert.ok(scripts[1].includes('collection test fallback'));
+  assert.doesNotMatch(scripts.join('\n'), /collection pre-request should not run/);
+  assert.equal(result.testScriptResult.tests[0].name, 'collection test fallback');
+});
+
+test('continues the main request when the pre-request script has a top-level error', async () => {
+  const scripts = [];
+  const sent = [];
 
   const result = await runScriptedRequestLifecycle(
     createScriptedRequestState({
       id: 'pre-fail',
+      method: 'GET',
+      url: 'https://api.example.test/main',
       scripts: { preRequest: 'pre', tests: 'tests' }
     }, null),
     {
-      scriptRunner: async () => ({
-        result: {
-          passed: false,
-          tests: [],
-          error: 'no send',
-          logs: []
-        },
-        environmentVariables: [],
-        collectionVariables: [],
-        localVariables: []
-      }),
-      sendRequest: async () => {
-        sends++;
+      scriptRunner: async (scriptText) => {
+        scripts.push(scriptText);
+        if (scriptText === 'pre') {
+          return {
+            result: {
+              passed: false,
+              tests: [],
+              error: 'pre failed',
+              logs: [],
+              commitSideEffects: false
+            },
+            environmentVariables: [{ enabled: true, key: 'blocked', value: 'yes' }],
+            collectionVariables: [],
+            localVariables: []
+          };
+        }
+        return {
+          result: {
+            passed: true,
+            tests: [{ name: 'post still ran', passed: true, error: '' }],
+            error: '',
+            logs: []
+          },
+          environmentVariables: [],
+          collectionVariables: [],
+          localVariables: []
+        };
+      },
+      sendRequest: async (request) => {
+        sent.push(request.url);
         return response(200, '{}');
       }
     }
   );
 
-  assert.equal(sends, 0);
-  assert.equal(result.response, null);
-  assert.equal(result.preRequestScriptResult.error, 'no send');
-  assert.deepEqual(result.testScriptResult, emptyScriptResult());
+  assert.deepEqual(sent, ['https://api.example.test/main']);
+  assert.deepEqual(scripts, ['pre', 'tests']);
+  assert.equal(result.requestSent, true);
+  assert.equal(result.response.statusCode, 200);
+  assert.equal(result.preRequestScriptResult.error, 'pre failed');
+  assert.equal(result.testScriptResult.tests[0].name, 'post still ran');
+  assert.equal(result.environment.variables.find((item) => item.key === 'blocked'), undefined);
 });
 
-test('continues the main request when pre-request assertions fail', async () => {
+test('continues the main request when pre-request script tests fail', async () => {
   const sent = [];
   const scripts = [];
 
@@ -374,33 +557,29 @@ test('allows script selection of configured primary request client-certificate b
   assert.deepEqual(result.request.auth, { type: 'clientCertificate', certificateId: 'cert-1' });
 });
 
-test('throws enriched pre-request errors for single-request execution', async () => {
-  await assert.rejects(
-    () => runRequestWithScripts({
-      id: 'single-pre-fail',
-      scripts: { preRequest: 'pre' }
-    }, null, {
-      scriptRunner: async () => ({
-        result: {
-          passed: false,
-          tests: [],
-          error: 'bad pre-request',
-          logs: []
-        },
-        environmentVariables: [{ enabled: true, key: 'token', value: 'blocked' }],
-        collectionVariables: [{ enabled: true, key: 'fromPre', value: 'yes' }],
-        localVariables: [{ enabled: true, key: 'local', value: 'nope' }]
-      })
-    }),
-    (error) => {
-      assert.match(error.message, /bad pre-request/);
-      assert.equal(error.preRequestScriptResult.error, 'bad pre-request');
-      assert.equal(error.environment.variables.find((item) => item.key === 'token').value, 'blocked');
-      assert.equal(error.collectionVariables.find((item) => item.key === 'fromPre').value, 'yes');
-      assert.equal(error.localVariables.find((item) => item.key === 'local').value, 'nope');
-      return true;
+test('single-request execution captures pre-request and post-request script errors while sending the request', async () => {
+  const sent = [];
+
+  const result = await runRequestWithScripts({
+    id: 'single-script-failures',
+    method: 'GET',
+    url: 'https://api.example.test/script-failures',
+    scripts: {
+      preRequest: 'asdf',
+      tests: 'fdsa'
     }
-  );
+  }, null, {
+    sendRequest: async (request) => {
+      sent.push(request.url);
+      return response(200, '{"ok":true}');
+    }
+  });
+
+  assert.deepEqual(sent, ['https://api.example.test/script-failures']);
+  assert.equal(result.response.requestSent, true);
+  assert.equal(result.response.statusCode, 200);
+  assert.match(result.preRequestScriptResult.error, /asdf is not defined/);
+  assert.match(result.testScriptResult.error, /fdsa is not defined/);
 });
 
 test('propagates diagnostics callbacks into single-request sandbox broker denials', async () => {

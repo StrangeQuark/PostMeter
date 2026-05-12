@@ -6,6 +6,11 @@
     const runFormatting = options.runFormatting || global.PostMeterRunFormatting || require('./runResultFormatting');
     const activeCollection = options.activeCollection || (() => null);
     const activeEnvironment = options.activeEnvironment || (() => null);
+    const activeFolder = options.activeFolder || (() => null);
+    const activeFolderPath = options.activeFolderPath || (() => {
+      const folder = activeFolder();
+      return folder ? [folder] : [];
+    });
     const activeRequest = options.activeRequest || (() => null);
     const applyLoadedWorkspace = typeof options.applyLoadedWorkspace === 'function'
       ? options.applyLoadedWorkspace
@@ -17,7 +22,9 @@
       ? options.promptForCollectionExport
       : null;
     const applyPostmanCookieMetadata = options.applyPostmanCookieMetadata || ((cookie) => cookie);
+    const collectCollectionFromEditor = options.collectCollectionFromEditor || (() => {});
     const collectEnvironmentFromEditor = options.collectEnvironmentFromEditor || (() => {});
+    const collectFolderFromEditor = options.collectFolderFromEditor || (() => {});
     const collectRequestFromEditor = options.collectRequestFromEditor || (() => {});
     const collectSettingsFromEditor = options.collectSettingsFromEditor || (() => {});
     const displayResponse = options.displayResponse || (() => {});
@@ -49,7 +56,6 @@
 
     function clearFailedResponseDetails(message) {
       state.lastResponse = null;
-      updateCaptureResponseButton();
       element('responseStatus').textContent = 'ERR';
       element('responseTime').textContent = '-';
       element('responseSize').textContent = '-';
@@ -99,6 +105,14 @@
         return;
       }
       if (state?.activeMainPanel === 'request') {
+        if (activeFolder() && !activeRequest()) {
+          collectFolderFromEditor();
+          return;
+        }
+        if (activeCollection() && !activeRequest()) {
+          collectCollectionFromEditor();
+          return;
+        }
         collectRequestFromEditor();
       }
     }
@@ -241,17 +255,72 @@
         : '';
     }
 
+    function collectionTabKey(context) {
+      return context?.collectionId && !context.requestId
+        ? `collection:${context.collectionId}`
+        : '';
+    }
+
+    function folderTabKey(context) {
+      return context?.collectionId && context.folderId && !context.requestId
+        ? `folder:${context.collectionId}:${context.folderId}`
+        : '';
+    }
+
     function resolveRequestSaveTarget(config = {}) {
       if (typeof config.requestTabKey === 'string') {
         return config.requestTabKey;
       }
-      if (config.scope === 'all' || config.scope === 'runners') {
+      if (
+        config.scope === 'all'
+        || config.scope === 'runners'
+        || typeof config.collectionTabKey === 'string'
+        || typeof config.folderTabKey === 'string'
+      ) {
         return '';
       }
       if (typeof config.environmentTabKey === 'string') {
         return '';
       }
       return state?.activeMainPanel === 'request' ? currentRequestTabKey() : '';
+    }
+
+    function resolveCollectionSaveTarget(config = {}) {
+      if (typeof config.collectionTabKey === 'string') {
+        return config.collectionTabKey;
+      }
+      if (config.scope === 'all' || config.scope === 'runners') {
+        return '';
+      }
+      if (
+        typeof config.requestTabKey === 'string'
+        || typeof config.folderTabKey === 'string'
+        || typeof config.environmentTabKey === 'string'
+      ) {
+        return '';
+      }
+      return state?.activeMainPanel === 'request' && state.activeCollectionId && !state.activeFolderId && !state.activeRequestId
+        ? collectionTabKey({ collectionId: state.activeCollectionId })
+        : '';
+    }
+
+    function resolveFolderSaveTarget(config = {}) {
+      if (typeof config.folderTabKey === 'string') {
+        return config.folderTabKey;
+      }
+      if (config.scope === 'all' || config.scope === 'runners') {
+        return '';
+      }
+      if (
+        typeof config.requestTabKey === 'string'
+        || typeof config.collectionTabKey === 'string'
+        || typeof config.environmentTabKey === 'string'
+      ) {
+        return '';
+      }
+      return state?.activeMainPanel === 'request' && state.activeCollectionId && state.activeFolderId && !state.activeRequestId
+        ? folderTabKey({ collectionId: state.activeCollectionId, folderId: state.activeFolderId })
+        : '';
     }
 
     function resolveEnvironmentSaveTarget(config = {}) {
@@ -261,7 +330,11 @@
       if (config.scope === 'all') {
         return '';
       }
-      if (typeof config.requestTabKey === 'string') {
+      if (
+        typeof config.requestTabKey === 'string'
+        || typeof config.collectionTabKey === 'string'
+        || typeof config.folderTabKey === 'string'
+      ) {
         return '';
       }
       return state?.activeMainPanel === 'environment' ? currentEnvironmentTabKey() : '';
@@ -269,6 +342,14 @@
 
     function requestTabForKey(tabKey) {
       return (state.openRequestTabs || []).find((tab) => tab.key === tabKey) || null;
+    }
+
+    function collectionTabForKey(tabKey) {
+      return (state.openCollectionTabs || []).find((tab) => tab.key === tabKey) || null;
+    }
+
+    function folderTabForKey(tabKey) {
+      return (state.openFolderTabs || []).find((tab) => tab.key === tabKey) || null;
     }
 
     function environmentTabForKey(tabKey) {
@@ -373,6 +454,53 @@
       return index >= 0 ? workspaceValue.environments[index] : null;
     }
 
+    function findCollectionIndexInWorkspace(workspaceValue, collectionId) {
+      if (!collectionId) {
+        return -1;
+      }
+      return (workspaceValue?.collections || []).findIndex((collection) => collection.id === collectionId);
+    }
+
+    function collectionForTabInWorkspace(workspaceValue, tab) {
+      const index = findCollectionIndexInWorkspace(workspaceValue, tab?.collectionId);
+      return index >= 0 ? workspaceValue.collections[index] : null;
+    }
+
+    function findFolderLocationInWorkspace(workspaceValue, collectionId, folderId) {
+      if (!collectionId || !folderId) {
+        return null;
+      }
+      const collection = (workspaceValue?.collections || []).find((item) => item.id === collectionId);
+      if (!collection) {
+        return null;
+      }
+      function search(container) {
+        const folders = Array.isArray(container?.folders) ? container.folders : [];
+        const index = folders.findIndex((folder) => folder.id === folderId);
+        if (index >= 0) {
+          return {
+            collection,
+            container,
+            list: folders,
+            index,
+            folder: folders[index]
+          };
+        }
+        for (const folder of folders) {
+          const found = search(folder);
+          if (found) {
+            return found;
+          }
+        }
+        return null;
+      }
+      return search(collection);
+    }
+
+    function folderForTabInWorkspace(workspaceValue, tab) {
+      return findFolderLocationInWorkspace(workspaceValue, tab?.collectionId, tab?.folderId)?.folder || null;
+    }
+
     function replaceObject(target, nextValue) {
       if (!target || !nextValue) {
         return;
@@ -435,6 +563,8 @@
           id: collection.id,
           name: collection.name,
           description: collection.description || '',
+          auth: cloneJson(collection.auth || { type: 'none' }, { type: 'none' }),
+          scripts: cloneJson(collection.scripts || {}, {}),
           certificates: cloneValueArray(collection.certificates)
         },
         folderPath: requestFolderPath(collection, requestTab.folderId)
@@ -481,6 +611,44 @@
         environmentId: environmentTab.environmentId,
         createdUnsaved: environmentTab.createdUnsaved === true,
         environment,
+        settings: cloneJson(state.workspace?.settings, {})
+      };
+    }
+
+    function buildCollectionSavePayload(collectionTab) {
+      const collection = collectionForTabInWorkspace(state.workspace, collectionTab);
+      if (!collection) {
+        throw new Error('The selected collection could not be found for saving.');
+      }
+      return {
+        collectionId: collectionTab.collectionId,
+        createdUnsaved: collectionTab.createdUnsaved === true,
+        collection,
+        settings: cloneJson(state.workspace?.settings, {})
+      };
+    }
+
+    function buildFolderSavePayload(folderTab) {
+      const collection = findWorkspaceCollection(folderTab?.collectionId);
+      const folder = folderForTabInWorkspace(state.workspace, folderTab);
+      if (!collection || !folder) {
+        throw new Error('The selected folder could not be found for saving.');
+      }
+      return {
+        collectionId: folderTab.collectionId,
+        folderId: folderTab.folderId,
+        createdUnsaved: folderTab.createdUnsaved === true,
+        folder,
+        collectionShell: {
+          id: collection.id,
+          name: collection.name,
+          description: collection.description || '',
+          auth: cloneJson(collection.auth || { type: 'none' }, { type: 'none' }),
+          scripts: cloneJson(collection.scripts || {}, {}),
+          variables: clonePairArray(collection.variables),
+          certificates: cloneValueArray(collection.certificates)
+        },
+        folderPath: requestFolderPath(collection, folderTab.folderId),
         settings: cloneJson(state.workspace?.settings, {})
       };
     }
@@ -551,6 +719,38 @@
       return true;
     }
 
+    function applySavedCollectionResult(collectionTab, result) {
+      const collection = collectionForTabInWorkspace(state.workspace, collectionTab);
+      if (!collection || !result?.collection) {
+        return false;
+      }
+      replaceObject(collection, result.collection);
+      if (result.settings && typeof result.settings === 'object') {
+        state.workspace.settings = cloneJson(result.settings, {});
+      }
+      collectionTab.dirty = false;
+      collectionTab.createdUnsaved = false;
+      collectionTab.snapshot = JSON.stringify(collection);
+      renderAll();
+      return true;
+    }
+
+    function applySavedFolderResult(folderTab, result) {
+      const folder = folderForTabInWorkspace(state.workspace, folderTab);
+      if (!folder || !result?.folder) {
+        return false;
+      }
+      replaceObject(folder, result.folder);
+      if (result.settings && typeof result.settings === 'object') {
+        state.workspace.settings = cloneJson(result.settings, {});
+      }
+      folderTab.dirty = false;
+      folderTab.createdUnsaved = false;
+      folderTab.snapshot = JSON.stringify(folder);
+      renderAll();
+      return true;
+    }
+
     async function persistRequestTab(requestTab) {
       const saveRequest = windowObject.__postmeterSaveRequest || windowObject.postmeter.workspace.saveRequest;
       return applySavedRequestResult(requestTab, await saveRequest(buildRequestSavePayload(requestTab)));
@@ -559,6 +759,32 @@
     async function persistEnvironmentTab(environmentTab) {
       const saveEnvironment = windowObject.__postmeterSaveEnvironment || windowObject.postmeter.workspace.saveEnvironment;
       return applySavedEnvironmentResult(environmentTab, await saveEnvironment(buildEnvironmentSavePayload(environmentTab)));
+    }
+
+    async function persistCollectionTab(collectionTab) {
+      const saveCollection = windowObject.__postmeterSaveCollection || windowObject.postmeter?.workspace?.saveCollection;
+      if (typeof saveCollection !== 'function') {
+        state.workspace = await saveWorkspaceStateOnly();
+        collectionTab.dirty = false;
+        collectionTab.createdUnsaved = false;
+        collectionTab.snapshot = JSON.stringify(collectionForTabInWorkspace(state.workspace, collectionTab) || {});
+        renderAll();
+        return true;
+      }
+      return applySavedCollectionResult(collectionTab, await saveCollection(buildCollectionSavePayload(collectionTab)));
+    }
+
+    async function persistFolderTab(folderTab) {
+      const saveFolder = windowObject.__postmeterSaveFolder || windowObject.postmeter?.workspace?.saveFolder;
+      if (typeof saveFolder !== 'function') {
+        state.workspace = await saveWorkspaceStateOnly();
+        folderTab.dirty = false;
+        folderTab.createdUnsaved = false;
+        folderTab.snapshot = JSON.stringify(folderForTabInWorkspace(state.workspace, folderTab) || {});
+        renderAll();
+        return true;
+      }
+      return applySavedFolderResult(folderTab, await saveFolder(buildFolderSavePayload(folderTab)));
     }
 
     async function persistWorkspaceSettings() {
@@ -578,11 +804,6 @@
         && (state.activeRunnerRequestRunnerId || null) === (context.runnerId || null)
         && (state.activeCollectionId || null) === (context.collectionId || null)
       );
-    }
-
-    function updateCaptureResponseButton() {
-      const request = activeRequest();
-      element('captureResponseExampleButton').disabled = !(request && state.lastResponse && state.lastResponse.requestId === request.id);
     }
 
     function syncSavedRequestContext(context) {
@@ -661,6 +882,137 @@
       return publicResponse;
     }
 
+    function validationEnvironmentForRequest(request, environment, collection = null, folders = []) {
+      const variables = [];
+      mergeValidationVariables(variables, state.workspace?.globals || [], false);
+      mergeValidationVariables(variables, environment?.variables || [], true);
+      mergeValidationVariables(variables, collection?.variables || [], true);
+      mergeValidationVariables(variables, effectiveFolderVariables(folders), true);
+      mergeValidationVariables(variables, request?.variables || [], true);
+      return {
+        id: environment?.id || 'runtime',
+        name: environment?.name || 'Runtime',
+        variables
+      };
+    }
+
+    function mergeValidationVariables(target, source, override) {
+      if (!Array.isArray(source)) {
+        return;
+      }
+      for (const variable of source) {
+        if (!variable || variable.enabled === false || !String(variable.key || '').trim()) {
+          continue;
+        }
+        const key = String(variable.key).trim();
+        const existing = target.find((item) => item.key === key);
+        if (existing) {
+          if (override) {
+            existing.value = validationVariableValue(variable);
+            existing.enabled = true;
+          }
+          continue;
+        }
+        target.push({
+          enabled: true,
+          key,
+          value: validationVariableValue(variable)
+        });
+      }
+    }
+
+    function validationVariableValue(variable) {
+      const value = variable?.value
+        ?? variable?.currentValue
+        ?? variable?.current
+        ?? variable?.initialValue
+        ?? variable?.initial
+        ?? '';
+      return value == null ? '' : String(value);
+    }
+
+    function requestWithCollectionDefaults(request, collection = null, folders = []) {
+      if (!request) {
+        return request;
+      }
+      const nextRequest = { ...request };
+      const folderAuth = effectiveFolderAuth(folders);
+      if (!requestHasOwnAuth(request.auth)) {
+        if (requestHasOwnAuth(folderAuth)) {
+          nextRequest.auth = cloneJson(folderAuth);
+        } else if (requestHasOwnAuth(collection?.auth)) {
+          nextRequest.auth = cloneJson(collection.auth);
+        }
+      }
+      const scripts = { ...(request.scripts || {}) };
+      const collectionScripts = collection?.scripts || {};
+      const folderScripts = effectiveFolderScripts(folders);
+      let hasScriptFallback = false;
+      for (const field of ['preRequest', 'tests', 'beforeQuery', 'afterResponse', 'beforeInvoke', 'onMessage', 'onIncomingMessage', 'mock']) {
+        if (String(scripts[field] || '').trim()) {
+          continue;
+        }
+        if (String(folderScripts[field] || '').trim()) {
+          scripts[field] = String(folderScripts[field]);
+          hasScriptFallback = true;
+          continue;
+        }
+        if (String(collectionScripts[field] || '').trim()) {
+          scripts[field] = String(collectionScripts[field]);
+          hasScriptFallback = true;
+        }
+      }
+      if (hasScriptFallback) {
+        nextRequest.scripts = scripts;
+      }
+      return nextRequest;
+    }
+
+    function requestHasOwnAuth(auth) {
+      return Boolean(auth && typeof auth === 'object' && String(auth.type || 'none') !== 'none');
+    }
+
+    function effectiveFolderAuth(folders) {
+      for (let index = folders.length - 1; index >= 0; index -= 1) {
+        const auth = folders[index]?.auth;
+        if (requestHasOwnAuth(auth)) {
+          return auth;
+        }
+      }
+      return { type: 'none' };
+    }
+
+    function effectiveFolderScripts(folders) {
+      const scripts = {};
+      for (const folder of folders || []) {
+        for (const [key, value] of Object.entries(folder?.scripts || {})) {
+          if (String(value || '').trim()) {
+            scripts[key] = String(value);
+          }
+        }
+      }
+      return scripts;
+    }
+
+    function effectiveFolderVariables(folders) {
+      const variables = [];
+      for (const folder of folders || []) {
+        for (const variable of folder?.variables || []) {
+          if (!variable?.key) {
+            continue;
+          }
+          const key = String(variable.key).trim();
+          const index = variables.findIndex((item) => item.key === key);
+          if (index >= 0) {
+            variables[index] = { ...variable, key };
+          } else {
+            variables.push({ ...variable, key });
+          }
+        }
+      }
+      return variables;
+    }
+
     async function sendActiveRequest() {
       const request = activeRequest();
       if (!request) {
@@ -674,9 +1026,12 @@
         if (!isRunnerOwnedRequest) {
           await saveWorkspace(false, { allowDraftBypass: true });
         }
-        if (!request.scripts?.preRequest?.trim()) {
+        const collection = activeCollection();
+        const folders = activeFolderPath();
+        const effectiveRequest = requestWithCollectionDefaults(request, collection, folders);
+        if (!effectiveRequest.scripts?.preRequest?.trim()) {
           const validateRequest = windowObject.__postmeterValidateRequest || windowObject.postmeter.request.validate;
-          const errors = await validateRequest(request, environment);
+          const errors = await validateRequest(effectiveRequest, validationEnvironmentForRequest(request, environment, collection, folders));
           if (errors.length) {
             element('validationLabel').textContent = errors.join(' ');
             return setStatus('Fix validation errors.');
@@ -707,7 +1062,6 @@
           applySingleRequestScriptMutations(response, requestContext);
           const publicResponse = publicResponseResult(response);
           state.lastResponse = requestActuallySent ? { ...publicResponse, requestId: requestContext.requestId } : null;
-          updateCaptureResponseButton();
           displayResponse(publicResponse);
           if (requestActuallySent) {
             state.workspace.history = [
@@ -750,7 +1104,7 @@
       };
       clearRunnerResultState();
       try {
-        await saveWorkspace(false);
+        await saveWorkspace(false, { scope: 'all' });
         runnerId = runtimeId();
         state.activeRunnerId = runnerId;
         runnerStarted = true;
@@ -1005,17 +1359,21 @@
 
     async function persistWorkspace(showStatus = true, config = {}) {
       const requestTargetKey = resolveRequestSaveTarget(config);
+      const collectionTargetKey = resolveCollectionSaveTarget(config);
+      const folderTargetKey = resolveFolderSaveTarget(config);
       const environmentTargetKey = resolveEnvironmentSaveTarget(config);
       const settingsOnly = config.scope === 'settings'
-        || (state?.activeMainPanel === 'workspace' && config.scope !== 'all' && !requestTargetKey && !environmentTargetKey);
+        || (state?.activeMainPanel === 'workspace' && config.scope !== 'all' && !requestTargetKey && !collectionTargetKey && !folderTargetKey && !environmentTargetKey);
       if (config.collectEditors !== false) {
         collectSettingsFromEditor();
         if (!settingsOnly) {
+          collectCollectionFromEditor();
+          collectFolderFromEditor();
           collectRequestFromEditor();
           collectEnvironmentFromEditor();
         }
       }
-      if (config.scope === 'all' || config.scope === 'runners' || (!settingsOnly && !requestTargetKey && !environmentTargetKey)) {
+      if (config.scope === 'all' || config.scope === 'runners' || (!settingsOnly && !requestTargetKey && !collectionTargetKey && !folderTargetKey && !environmentTargetKey)) {
         const save = windowObject.__postmeterSaveWorkspace || windowObject.postmeter.workspace.save;
         state.workspace = await save(state.workspace);
         options.clearSavedRequestDirtyState?.();
@@ -1030,6 +1388,18 @@
           throw new Error('The selected request tab could not be saved.');
         }
         await persistRequestTab(requestTab);
+      } else if (collectionTargetKey) {
+        const collectionTab = collectionTabForKey(collectionTargetKey);
+        if (!collectionTab) {
+          throw new Error('The selected collection tab could not be saved.');
+        }
+        await persistCollectionTab(collectionTab);
+      } else if (folderTargetKey) {
+        const folderTab = folderTabForKey(folderTargetKey);
+        if (!folderTab) {
+          throw new Error('The selected folder tab could not be saved.');
+        }
+        await persistFolderTab(folderTab);
       } else {
         const environmentTab = environmentTabForKey(environmentTargetKey);
         if (!environmentTab) {
@@ -1202,6 +1572,11 @@
       if (!selectedCollection) {
         return setStatus('Select a valid collection to export.');
       }
+      if (format === 'postman' && collectionHasFolderVariables(selectedCollection)) {
+        const message = 'Folder-level variables are PostMeter-only and will not be included in the Postman export.';
+        setStatus(message);
+        notifyUser('Postman Export Warning', message);
+      }
       const exportCollectionBoundary = windowObject.__postmeterExportCollection || windowObject.postmeter.collection.exportCollection;
       try {
         const result = await exportCollectionBoundary(selectedCollection, format);
@@ -1213,6 +1588,16 @@
         setStatus(`Collection export failed: ${message}`);
         notifyUser('Collection Export Failed', message);
       }
+    }
+
+    function collectionHasFolderVariables(collection) {
+      function folderHasVariables(folder) {
+        if ((folder?.variables || []).some((variable) => String(variable?.key || '').trim())) {
+          return true;
+        }
+        return (folder?.folders || []).some(folderHasVariables);
+      }
+      return (collection?.folders || []).some(folderHasVariables);
     }
 
     function promoteCookieHeadersToJar(collection) {

@@ -45,11 +45,11 @@ function firstRequestInFolder(folder) {
 function findRequest(collection, requestId) {
   for (const request of collection.requests || []) {
     if (request.id === requestId) {
-      return { request, folder: null };
+      return { request, folder: null, folders: [] };
     }
   }
   for (const folder of collection.folders || []) {
-    const found = findRequestInFolder(folder, requestId);
+    const found = findRequestInFolder(folder, requestId, []);
     if (found) {
       return found;
     }
@@ -57,14 +57,15 @@ function findRequest(collection, requestId) {
   return null;
 }
 
-function findRequestInFolder(folder, requestId) {
+function findRequestInFolder(folder, requestId, parentPath = []) {
+  const folders = [...parentPath, folder].filter(Boolean);
   for (const request of folder.requests || []) {
     if (request.id === requestId) {
-      return { request, folder };
+      return { request, folder, folders };
     }
   }
   for (const child of folder.folders || []) {
-    const found = findRequestInFolder(child, requestId);
+    const found = findRequestInFolder(child, requestId, folders);
     if (found) {
       return found;
     }
@@ -75,6 +76,30 @@ function findRequestInFolder(folder, requestId) {
 function findFolder(collection, folderId) {
   for (const folder of collection.folders || []) {
     const found = findFolderRecursive(folder, folderId);
+    if (found) {
+      return found;
+    }
+  }
+  return null;
+}
+
+function findFolderPath(collection, folderId) {
+  for (const folder of collection.folders || []) {
+    const found = findFolderPathRecursive(folder, folderId, []);
+    if (found) {
+      return found;
+    }
+  }
+  return [];
+}
+
+function findFolderPathRecursive(folder, folderId, parentPath = []) {
+  const path = [...parentPath, folder].filter(Boolean);
+  if (folder.id === folderId) {
+    return path;
+  }
+  for (const child of folder.folders || []) {
+    const found = findFolderPathRecursive(child, folderId, path);
     if (found) {
       return found;
     }
@@ -197,6 +222,8 @@ if (typeof module !== 'undefined' && module.exports) {
     allFolderNames,
     allRequestNames,
     findFolder,
+    findFolderPath,
+    findFolderPathRecursive,
     findFolderRecursive,
     findRequest,
     findRequestInFolder,

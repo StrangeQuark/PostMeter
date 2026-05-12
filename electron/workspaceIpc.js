@@ -33,8 +33,12 @@ const {
   assertEnvironmentPayload,
   assertRequestPayload,
   assertRunnerPayload,
+  assertWorkspaceCollectionSavePayload,
+  assertWorkspaceCollectionSaveResultPayload,
   assertWorkspaceEnvironmentSavePayload,
   assertWorkspaceEnvironmentSaveResultPayload,
+  assertWorkspaceFolderSavePayload,
+  assertWorkspaceFolderSaveResultPayload,
   assertWorkspaceLoadResultPayload,
   assertWorkspaceRequestSavePayload,
   assertWorkspaceRequestSaveResultPayload,
@@ -43,7 +47,9 @@ const {
   assertWorkspacePayload
 } = require('../src/core/ipcValidation');
 const {
+  applyCollectionSaveToWorkspace,
   applyEnvironmentSaveToWorkspace,
+  applyFolderSaveToWorkspace,
   applyRequestSaveToWorkspace,
   applyWorkspaceSettingsSaveToWorkspace,
   findWorkspaceRunnerRequestContext,
@@ -130,6 +136,27 @@ function registerWorkspaceIpc(options = {}) {
       result.cookies = workspace.cookies || [];
     }
     assertWorkspaceRequestSaveResultPayload(result);
+    return result;
+  });
+
+  ipcMain.handle('workspace:saveCollection', async (_event, payload) => {
+    assertWorkspaceCollectionSavePayload(payload);
+    const workspace = await mutateWorkspace(async (currentWorkspace) => applyCollectionSaveToWorkspace(currentWorkspace, payload));
+    refreshApplicationMenu();
+    const collection = (workspace.collections || []).find((candidate) => candidate.id === payload.collectionId) || payload.collection;
+    const result = { collection };
+    assertWorkspaceCollectionSaveResultPayload(result);
+    return result;
+  });
+
+  ipcMain.handle('workspace:saveFolder', async (_event, payload) => {
+    assertWorkspaceFolderSavePayload(payload);
+    const workspace = await mutateWorkspace(async (currentWorkspace) => applyFolderSaveToWorkspace(currentWorkspace, payload));
+    refreshApplicationMenu();
+    const collection = (workspace.collections || []).find((candidate) => candidate.id === payload.collectionId) || null;
+    const folder = collection ? findFolderInCollection(collection, payload.folderId) : null;
+    const result = { folder: folder || payload.folder };
+    assertWorkspaceFolderSaveResultPayload(result);
     return result;
   });
 
@@ -482,27 +509,6 @@ function registerWorkspaceIpc(options = {}) {
     return fileOperationResult({ cancelled: false, path: filePath });
   });
 
-  ipcMain.handle('request:examples:export', async (_event, request) => {
-    assertRequestPayload(request);
-    const result = await dialog.showSaveDialog(getMainWindow(), {
-      title: 'Export Request Examples',
-      defaultPath: `${safeFilename(request?.name || 'request')}-examples.json`,
-      filters: jsonFilters()
-    });
-    const filePath = selectedSaveFilePath(result);
-    if (!filePath) {
-      return fileOperationResult({ cancelled: true });
-    }
-    const payload = {
-      requestId: request.id || '',
-      requestName: request.name || 'Untitled Request',
-      exportedAt: new Date().toISOString(),
-      examples: request.examples || []
-    };
-    await writeTextFileAtomic(filePath, JSON.stringify(payload, null, 2), { prefix: 'postmeter-examples-export' });
-    return fileOperationResult({ cancelled: false, path: filePath });
-  });
-
   ipcMain.handle('request:import', async (_event, source = {}) => {
     const normalizedSource = normalizeRequestImportSource(source);
     let content = normalizedSource.text;
@@ -614,6 +620,29 @@ function attachRollbackFailure(error, rollbackError) {
   const wrapped = new Error(String(error || 'Workspace operation failed.'));
   wrapped.rollbackError = rollbackError;
   return wrapped;
+}
+
+function findFolderInCollection(collection, folderId) {
+  for (const folder of collection?.folders || []) {
+    const found = findFolderRecursive(folder, folderId);
+    if (found) {
+      return found;
+    }
+  }
+  return null;
+}
+
+function findFolderRecursive(folder, folderId) {
+  if (folder?.id === folderId) {
+    return folder;
+  }
+  for (const child of folder?.folders || []) {
+    const found = findFolderRecursive(child, folderId);
+    if (found) {
+      return found;
+    }
+  }
+  return null;
 }
 
 module.exports = {

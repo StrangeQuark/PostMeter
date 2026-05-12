@@ -4,7 +4,6 @@
     assertUiSmoke,
     dispatchChange,
     dispatchInput,
-    setAssertionRow,
     setPairRow
   } = resolveUiSmokeCommon(global);
 
@@ -21,26 +20,88 @@
     assertUiSmoke(activeMainPanel === 'request', 'Creating a collection should switch the main pane to request mode.');
     assertUiSmoke(collection.requests.length === 0, 'New collection should start without requests.');
     assertUiSmoke(!activeRequest(), 'New collection should not auto-select or create a request.');
-    assertUiSmoke(!$('requestEmptyPanel').hidden, 'No-request state should show the create request screen.');
+    assertUiSmoke(!$('collectionMainPanel').hidden, 'Selecting a collection should show the collection editor.');
+    assertUiSmoke($('requestEmptyPanel').hidden, 'Collection editor should replace the no-request empty state.');
     assertUiSmoke($('requestEditorPanel').hidden, 'Request editor should be hidden when no request is selected.');
     assertUiSmoke(document.querySelector('.results').hidden, 'Response panel should be hidden when no request is selected.');
+    assertUiSmoke($('requestTabBar').textContent.includes(collection.name), 'New collection did not open a collection tab.');
+    const collectionOpenTab = openCollectionTabs.find((tab) => tab.collectionId === collection.id);
+    assertUiSmoke(collectionOpenTab?.dirty === true, 'New collection tab should show unsaved changes.');
+    const descriptionEditor = $('collectionDescriptionInput').closest('.code-editor');
+    assertUiSmoke(descriptionEditor?.classList.contains('has-line-numbers'), 'Collection overview description should render as a line-numbered editor.');
+    assertUiSmoke(descriptionEditor.getBoundingClientRect().height > 220, 'Collection overview description editor should fill the collection pane.');
+    assertUiSmoke(!document.querySelector('#collectionOverviewTab .field > span'), 'Collection overview should not reserve space for a description label.');
+    assertUiSmoke(descriptionEditor.getBoundingClientRect().top - $('collectionOverviewTab').getBoundingClientRect().top < 4, 'Collection overview editor should start at the top of the overview pane.');
+    const descriptionCode = descriptionEditor.querySelector('.code-editor-highlight code');
+    assertUiSmoke(
+      getComputedStyle(descriptionCode).fontFamily === getComputedStyle($('collectionDescriptionInput')).fontFamily,
+      'Collection overview highlighted text should use the same font metrics as the editable textarea.'
+    );
     collection.name = 'Smoke Collection';
-    newRequest();
+    renderAll();
+    activateTab('collection', 'collectionScripts');
+    const scriptFields = Array.from($('collectionScriptsTab').querySelectorAll('.collection-script-field'));
+    assertUiSmoke(scriptFields.length === 2, 'Collection scripts tab should render both script editors.');
+    const preRequestRect = scriptFields[0].getBoundingClientRect();
+    const postRequestRect = scriptFields[1].getBoundingClientRect();
+    assertUiSmoke(postRequestRect.left > preRequestRect.left && Math.abs(postRequestRect.top - preRequestRect.top) < 8, 'Collection script editors should sit side by side.');
+    activateTab('collection', 'collectionLevelVariables');
+    $('addCollectionVariableButton').click();
+    setPairRow('collectionVariablesTable', 'collectionToken', 'from-collection', global);
+    assertUiSmoke($('collectionVariablePreview').textContent.includes('collectionToken = from-collection'), 'Collection variable preview did not render.');
+    const folder = newFolder(collection.id, null);
+    assertUiSmoke(folder, 'New folder was not created.');
+    assertUiSmoke(!$('folderMainPanel').hidden, 'New folder did not show the folder editor.');
+    assertUiSmoke(openFolderTabs.some((tab) => tab.folderId === folder.id), 'New folder did not open a folder tab.');
+    assertUiSmoke($('requestTabBar').textContent.includes('FOLD'), 'Folder tab should use the FOLD badge.');
+    const folderBadge = document.querySelector('.folder-node .tree-badge');
+    const folderTabBadge = document.querySelector('.folder-tab-button .request-tab-method');
+    assertUiSmoke(folderBadge?.textContent === 'FOLD', 'Folder tree badge should use FOLD.');
+    assertUiSmoke(folderBadge?.classList.contains('entity-folder'), 'Folder tree badge should use the folder entity color class.');
+    assertUiSmoke(folderTabBadge?.textContent === 'FOLD', 'Folder open tab badge should use FOLD.');
+    assertUiSmoke(folderTabBadge?.classList.contains('entity-folder'), 'Folder open tab badge should use the folder entity color class.');
+    const folderColorProbe = document.createElement('span');
+    folderColorProbe.className = 'variable-highlight-folder variable-highlight-valid';
+    document.body.append(folderColorProbe);
+    const folderHighlightColor = getComputedStyle(folderColorProbe).color;
+    folderColorProbe.remove();
+    assertUiSmoke(getComputedStyle(folderBadge).color === folderHighlightColor, 'Folder tree badge color should match folder variable highlighting.');
+    assertUiSmoke(getComputedStyle(folderTabBadge).color === folderHighlightColor, 'Folder tab badge color should match folder variable highlighting.');
+
+    newRequest(collection.id, null);
     const request = activeRequest();
     assertUiSmoke(request, 'New request was not selected.');
     assertUiSmoke($('requestEmptyPanel').hidden, 'Create request screen should hide once a request is selected.');
     assertUiSmoke($('requestTabBar').textContent.includes('New Request'), 'New request tab did not render.');
-    assertUiSmoke(!$('requestTabBar').querySelector('.request-tab-dirty').hidden, 'New request tab should show unsaved changes.');
+    const requestOpenTab = openRequestTabs.find((tab) => tab.requestId === request.id);
+    assertUiSmoke(requestOpenTab?.dirty === true, 'New request tab should show unsaved changes.');
     request.name = 'Smoke Request';
     renderAll();
 
     activateTab('request', 'collectionVariables');
     $('addRequestVariableButton').click();
     setPairRow('requestVariablesTable', 'requestToken', 'from-request', global);
-    $('addCollectionVariableButton').click();
-    setPairRow('collectionVariablesTable', 'collectionToken', 'from-collection', global);
     assertUiSmoke($('variablePreview').textContent.includes('requestToken = from-request'), 'Request variable preview did not render.');
-    assertUiSmoke($('variablePreview').textContent.includes('collectionToken = from-collection'), 'Collection variable preview did not render.');
+    assertUiSmoke($('variablePreview').textContent.includes('collectionToken = from-collection'), 'Request variable preview did not include collection variables.');
+    $('urlInput').value = '{{requestToken}}{{collectionToken}}/tail';
+    dispatchInput($('urlInput'));
+    assertVariableHighlight($('urlInput'), 'requestToken', 'Request variables should render as request-scope tokens.', 'valid', 'request');
+    assertVariableHighlight($('urlInput'), 'collectionToken', 'Collection variables should render as collection-scope tokens.', 'valid', 'collection');
+    const requestVariableInputs = $('requestVariablesTable').querySelector('.kv-row').querySelectorAll('input');
+    assertHighClickPlacesCaret($('urlInput'), 'URL input');
+    assertHighClickPlacesCaret(requestVariableInputs[2], 'Request variable value input');
+    requestVariableInputs[0].checked = false;
+    dispatchChange(requestVariableInputs[0]);
+    assertVariableHighlight($('urlInput'), 'requestToken', 'Disabling a request variable should refresh URL highlighting immediately.', 'invalid');
+    requestVariableInputs[0].checked = true;
+    dispatchChange(requestVariableInputs[0]);
+    assertVariableHighlight($('urlInput'), 'requestToken', 'Re-enabling a request variable should refresh URL highlighting immediately.', 'valid', 'request');
+    requestVariableInputs[1].value = 'renamedRequestToken';
+    dispatchInput(requestVariableInputs[1]);
+    assertVariableHighlight($('urlInput'), 'requestToken', 'Renaming a request variable should refresh URL highlighting immediately.', 'invalid');
+    requestVariableInputs[1].value = 'requestToken';
+    dispatchInput(requestVariableInputs[1]);
+    assertVariableHighlight($('urlInput'), 'requestToken', 'Restoring a request variable key should refresh URL highlighting immediately.', 'valid', 'request');
     await setIncludePrereleases(true, { showStatus: false });
 
     editRequestTitle('Smoke Request');
@@ -62,25 +123,14 @@
     dispatchChange($('bodyRawFormatSelect'));
     $('bodyInput').value = '{"workflow":"smoke"}';
     dispatchInput($('bodyInput'));
-    activateTab('request', 'examples');
-    $('addExampleButton').click();
-    const exampleItem = $('examplesList').querySelector('.example-item');
-    assertUiSmoke(exampleItem, 'Example editor did not render.');
-    const exampleInputs = exampleItem.querySelectorAll('input');
-    exampleInputs[0].value = 'Manual Example';
-    dispatchInput(exampleInputs[0]);
-    exampleInputs[1].value = '202';
-    dispatchInput(exampleInputs[1]);
-    activateTab('request', 'tests');
-    $('addAssertionButton').click();
-    setAssertionRow('statusCode', '', '', 'equals', '200', global);
-    $('assertionTemplateSelect').value = 'jsonPathExists';
-    dispatchChange($('assertionTemplateSelect'));
-    $('addAssertionTemplateButton').click();
+    activateTab('request', 'docs');
+    $('docsInput').value = 'Smoke request docs';
+    dispatchInput($('docsInput'));
+    assertUiSmoke(activeRequest().docs === 'Smoke request docs', 'Docs field did not update the active request.');
     activateTab('request', 'scripts');
     $('preRequestScriptInput').value = "pm.environment.set('scriptToken', 'ui-script');";
     dispatchInput($('preRequestScriptInput'));
-    $('testScriptInput').value = "pm.environment.set('responseMethod', pm.response.json().method); pm.test('script token exists', function () { pm.expect(pm.environment.get('scriptToken')).to.equal('ui-script'); pm.expect(pm.collectionVariables.get('collectionToken')).to.equal('from-collection'); pm.response.to.have.status(200); });";
+    $('testScriptInput').value = "pm.environment.set('responseMethod', pm.response.json().method); pm.test('script token exists', function () { pm.expect(pm.environment.get('scriptToken')).to.equal('ui-script'); pm.expect(pm.variables.get('requestToken')).to.equal('from-request'); pm.expect(pm.variables.get('collectionToken')).to.equal('from-collection'); pm.response.to.have.status(200); });";
     dispatchInput($('testScriptInput'));
 
     newEnvironment();
@@ -95,7 +145,7 @@
     const bodyInput = $('bodyInput');
     const originalBody = bodyInput.value;
     bodyInput.focus();
-    bodyInput.value = 'prefix {{';
+    bodyInput.value = 'prefix {{loc';
     bodyInput.setSelectionRange(bodyInput.value.length, bodyInput.value.length);
     dispatchInput(bodyInput);
     assertUiSmoke(variableAutocomplete && !variableAutocomplete.hidden, 'Environment variable autocomplete did not open for a request field.');
@@ -140,8 +190,6 @@
     assertUiSmoke(activeEnvironment().variables.some((variable) => variable.key === 'responseMethod' && variable.value === 'POST'), 'Single request test script did not update the active environment.');
     assertUiSmoke(workspace.history.length > 0, 'Smoke request did not add history.');
     assertUiSmoke(workspace.cookies.some((cookie) => cookie.name === 'uiSession'), 'Smoke response cookie was not stored.');
-    captureResponseExample();
-    assertUiSmoke(activeRequest().examples.length >= 2, 'Captured response example was not stored.');
 
     selectSidebarPanel('runners');
     const runner = newRunner();
@@ -162,6 +210,43 @@
     assertUiSmoke($('runnerExecutionDetails').textContent.includes('requestToken'), 'Runner execution details did not render request variables.');
     assertUiSmoke(!$('exportRunnerJsonButton').disabled, 'Runner JSON export button was not enabled after a run.');
     assertUiSmoke(!$('exportRunnerCsvButton').disabled, 'Runner CSV export button was not enabled after a run.');
+  }
+
+  function assertVariableHighlight(control, variableName, message, expectedStatus = '', expectedSource = '') {
+    const wrapper = control.closest?.('.variable-highlight-editor') || control.closest?.('.code-editor');
+    const token = wrapper?.querySelector?.(`[data-variable-name="${cssAttributeValue(variableName)}"]`);
+    assertUiSmoke(token, message);
+    if (expectedStatus) {
+      assertUiSmoke(token.getAttribute('data-variable-status') === expectedStatus, `${message} Expected ${expectedStatus} token status.`);
+    }
+    if (expectedSource) {
+      assertUiSmoke(token.getAttribute('data-variable-source') === expectedSource, `${message} Expected ${expectedSource} token source.`);
+    }
+  }
+
+  function cssAttributeValue(value) {
+    return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  }
+
+  function assertHighClickPlacesCaret(control, label) {
+    const value = String(control.value || 'https://example.test/widgets');
+    control.value = value;
+    dispatchInput(control);
+    control.setSelectionRange?.(0, 0);
+    const rect = control.getBoundingClientRect();
+    const style = getComputedStyle(control);
+    const paddingRight = Number.parseFloat(style.paddingRight) || 8;
+    const borderTop = Number.parseFloat(style.borderTopWidth) || 1;
+    control.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true,
+      button: 0,
+      cancelable: true,
+      clientX: rect.right - paddingRight - 2,
+      clientY: rect.top + borderTop + 1,
+      detail: 1
+    }));
+    assertUiSmoke(control.selectionStart > 0, `${label} high click should not move the caret to the beginning.`);
+    assertUiSmoke(control.selectionStart === control.selectionEnd, `${label} high click should keep a collapsed selection.`);
   }
 
   function editRequestTitle(value) {

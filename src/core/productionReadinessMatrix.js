@@ -165,7 +165,7 @@ function buildProductionReadinessMatrix() {
         'test/electron/workspaceStore.test.js',
         'test/electron/postmanImporter.test.js'
       ],
-      notes: 'The source-owned non-Postman matrix has 7 implemented rows covering OpenAPI, curl, native PostMeter round trips, invalid input behavior, cross-shell quoting, and explicit preserve-only claim boundaries. Focused format tests exercise OpenAPI local references, server variables, path/query/header/cookie params, cookie API-key security, Swagger 2.0 body/form-data import, binary body hints, response examples and disabled assertions; curl auth, redirects, compression, repeated/query data, binary/file intent, generated names, and Windows-style line-continuation quoting; plus native workspace/Postman durability coverage for complex workspace features.'
+      notes: 'The source-owned non-Postman matrix has 7 implemented rows covering OpenAPI, curl, native PostMeter round trips, invalid input behavior, cross-shell quoting, and explicit preserve-only claim boundaries. Focused format tests exercise OpenAPI local references, server variables, path/query/header/cookie params, cookie API-key security, Swagger 2.0 body/form-data import, binary body hints, and request body examples; curl auth, redirects, compression, repeated/query data, binary/file intent, generated names, and Windows-style line-continuation quoting; plus native workspace/Postman durability coverage for complex workspace features.'
     }),
     row('dependencies.audit', 'security', 'Release dependency audit must pass with no high-severity vulnerabilities.', 'validated', {
       releaseBlocking: true,

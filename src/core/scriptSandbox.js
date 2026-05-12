@@ -1921,6 +1921,7 @@ function runtimeEnvironmentForBroker(state) {
     state.context.environment || null,
     state.context.localVariables || [],
     {
+      folderVariables: state.context.folderVariables || [],
       globals: state.context.globals || [],
       iterationData: state.context.iterationData || []
     }

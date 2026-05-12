@@ -32,7 +32,7 @@ test('file dialog helpers validate selected paths before IPC file operations', (
   assert.throws(() => validateDialogFilePath('', 'custom path'), /custom path must be a non-empty string/);
 });
 
-test('workspace IPC registers stable workspace, collection, and example channels', async () => {
+test('workspace IPC registers stable workspace, collection, and request channels', async () => {
   const handlers = new Map();
   const syncHandlers = new Map();
   let describeCurrentCalls = 0;
@@ -128,7 +128,6 @@ test('workspace IPC registers stable workspace, collection, and example channels
     'collection:import',
     'environment:export',
     'environment:import',
-    'request:examples:export',
     'request:export',
     'request:exportText',
     'request:import',
@@ -142,7 +141,9 @@ test('workspace IPC registers stable workspace, collection, and example channels
     'workspace:load',
     'workspace:rename',
     'workspace:save',
+    'workspace:saveCollection',
     'workspace:saveEnvironment',
+    'workspace:saveFolder',
     'workspace:saveRequest',
     'workspace:saveSettings',
     'workspace:switch'
@@ -1064,6 +1065,204 @@ test('workspace IPC saves only the selected request payload through targeted req
   assert.equal(syncHandlers.has('workspace:saveSync'), true);
 });
 
+test('workspace IPC saves only the selected collection payload through targeted collection save', async () => {
+  const handlers = new Map();
+  const syncHandlers = new Map();
+  const currentWorkspace = {
+    schemaVersion: 11,
+    collections: [{
+      id: 'collection-1',
+      name: 'Old Collection',
+      description: '',
+      variables: [],
+      certificates: [],
+      requests: [],
+      folders: []
+    }, {
+      id: 'collection-2',
+      name: 'Other Collection',
+      description: '',
+      variables: [],
+      certificates: [],
+      requests: [],
+      folders: []
+    }],
+    environments: [],
+    history: [],
+    cookies: [],
+    settings: { updates: { includePrereleases: false } }
+  };
+  let savedWorkspace = null;
+  let appliedWorkspace = null;
+  let refreshCalls = 0;
+
+  registerWorkspaceIpc({
+    dialog: {
+      showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+      showSaveDialog: async () => ({ canceled: true })
+    },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => currentWorkspace,
+    getWorkspaceStore: () => ({
+      describeCurrent: async (workspace) => ({ workspace, path: '/tmp/Local Workspace.json', activeWorkspaceId: 'Local Workspace.json', workspaces: [] })
+    }),
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      },
+      on(channel, handler) {
+        syncHandlers.set(channel, handler);
+      }
+    },
+    refreshApplicationMenu: () => { refreshCalls += 1; },
+    saveWorkspace: async (workspace) => {
+      savedWorkspace = workspace;
+      return workspace;
+    },
+    saveWorkspaceSync: (workspace) => workspace,
+    setWorkspace: (workspace) => {
+      appliedWorkspace = workspace;
+    }
+  });
+
+  const editedCollection = {
+    id: 'collection-1',
+    name: 'Edited Collection',
+    description: 'Edited description',
+    auth: { type: 'bearer', token: 'collection-token' },
+    scripts: { preRequest: "pm.environment.set('fromCollection', 'yes');", tests: '' },
+    variables: [{ enabled: true, key: 'baseUrl', value: 'https://collection.example.test' }],
+    certificates: [],
+    requests: [],
+    folders: []
+  };
+  const result = await handlers.get('workspace:saveCollection')(null, {
+    collectionId: 'collection-1',
+    collection: editedCollection,
+    settings: { updates: { includePrereleases: true } }
+  });
+
+  assert.equal(savedWorkspace.collections[0].name, 'Edited Collection');
+  assert.equal(savedWorkspace.collections[1].name, 'Other Collection');
+  assert.equal(savedWorkspace.settings.updates.includePrereleases, true);
+  assert.equal(appliedWorkspace.collections[0].auth.token, 'collection-token');
+  assert.equal(refreshCalls, 1);
+  assert.deepEqual(result, {
+    collection: appliedWorkspace.collections[0]
+  });
+  assert.equal(syncHandlers.has('workspace:saveSync'), true);
+});
+
+test('workspace IPC saves only the selected folder payload through targeted folder save', async () => {
+  const handlers = new Map();
+  const syncHandlers = new Map();
+  const currentWorkspace = {
+    schemaVersion: 11,
+    collections: [{
+      id: 'collection-1',
+      name: 'Collection',
+      description: '',
+      variables: [],
+      certificates: [],
+      requests: [],
+      folders: [{
+        id: 'folder-1',
+        name: 'Old Folder',
+        description: '',
+        auth: { type: 'none' },
+        scripts: {},
+        variables: [],
+        requests: [],
+        folders: []
+      }]
+    }, {
+      id: 'collection-2',
+      name: 'Other Collection',
+      description: '',
+      variables: [],
+      certificates: [],
+      requests: [],
+      folders: []
+    }],
+    environments: [],
+    history: [],
+    cookies: [],
+    settings: { updates: { includePrereleases: false } }
+  };
+  let savedWorkspace = null;
+  let appliedWorkspace = null;
+  let refreshCalls = 0;
+
+  registerWorkspaceIpc({
+    dialog: {
+      showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+      showSaveDialog: async () => ({ canceled: true })
+    },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => currentWorkspace,
+    getWorkspaceStore: () => ({
+      describeCurrent: async (workspace) => ({ workspace, path: '/tmp/Local Workspace.json', activeWorkspaceId: 'Local Workspace.json', workspaces: [] })
+    }),
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      },
+      on(channel, handler) {
+        syncHandlers.set(channel, handler);
+      }
+    },
+    refreshApplicationMenu: () => { refreshCalls += 1; },
+    saveWorkspace: async (workspace) => {
+      savedWorkspace = workspace;
+      return workspace;
+    },
+    saveWorkspaceSync: (workspace) => workspace,
+    setWorkspace: (workspace) => {
+      appliedWorkspace = workspace;
+    }
+  });
+
+  const editedFolder = {
+    id: 'folder-1',
+    name: 'Edited Folder',
+    description: 'Edited description',
+    auth: { type: 'bearer', token: 'folder-token' },
+    scripts: { preRequest: "pm.environment.set('fromFolder', 'yes');", tests: '' },
+    variables: [{ enabled: true, key: 'folderBaseUrl', value: 'https://folder.example.test' }],
+    requests: [],
+    folders: []
+  };
+  const result = await handlers.get('workspace:saveFolder')(null, {
+    collectionId: 'collection-1',
+    folderId: 'folder-1',
+    folder: editedFolder,
+    folderPath: [{ id: 'folder-1', name: 'Edited Folder' }],
+    collectionShell: {
+      id: 'collection-1',
+      name: 'Collection',
+      description: '',
+      auth: { type: 'none' },
+      scripts: {},
+      variables: [],
+      certificates: []
+    },
+    settings: { updates: { includePrereleases: true } }
+  });
+
+  assert.equal(savedWorkspace.collections[0].folders[0].name, 'Edited Folder');
+  assert.equal(savedWorkspace.collections[1].name, 'Other Collection');
+  assert.equal(savedWorkspace.settings.updates.includePrereleases, true);
+  assert.equal(appliedWorkspace.collections[0].folders[0].auth.token, 'folder-token');
+  assert.equal(appliedWorkspace.collections[0].folders[0].variables[0].key, 'folderBaseUrl');
+  assert.equal(refreshCalls, 1);
+  assert.deepEqual(result, {
+    folder: appliedWorkspace.collections[0].folders[0]
+  });
+  assert.equal(syncHandlers.has('workspace:saveSync'), true);
+});
+
 test('workspace IPC saves only the selected runner request payload through targeted request save', async () => {
   const handlers = new Map();
   const syncHandlers = new Map();
@@ -1277,7 +1476,7 @@ test('workspace IPC saves only workspace settings through targeted settings save
       logging: { enabled: true, level: 'warn' },
       requestResponseLogging: { urls: true }
     },
-    editor: { lineNumbers: false },
+    editor: { lineNumbers: false, variableTooltipHints: false },
     updates: { includePrereleases: true }
   });
 
@@ -1286,6 +1485,7 @@ test('workspace IPC saves only workspace settings through targeted settings save
   assert.equal(savedSettings.diagnostics.requestResponseLogging.urls, true);
   assert.equal(savedSettings.diagnostics.requestResponseLogging.bodies, false);
   assert.equal(savedSettings.editor.lineNumbers, false);
+  assert.equal(savedSettings.editor.variableTooltipHints, false);
   assert.equal(savedSettings.updates.includePrereleases, true);
   assert.equal(appliedWorkspace.collections[0].id, 'collection-1');
   assert.equal(appliedWorkspace.environments[0].id, 'environment-1');
@@ -1332,7 +1532,7 @@ test('workspace IPC partial settings saves preserve diagnostics privacy choices'
         fileBindings: [{ source: 'upload.bin', localPath: '/tmp/upload.bin' }],
         packageCache: []
       },
-      editor: { lineNumbers: false },
+      editor: { lineNumbers: false, variableTooltipHints: false },
       updates: { includePrereleases: true }
     }
   };
@@ -1380,6 +1580,7 @@ test('workspace IPC partial settings saves preserve diagnostics privacy choices'
   assert.equal(currentWorkspace.settings.sandbox.trustedCapabilities.vault, true);
   assert.equal(currentWorkspace.settings.sandbox.fileBindings.length, 1);
   assert.equal(currentWorkspace.settings.editor.lineNumbers, false);
+  assert.equal(currentWorkspace.settings.editor.variableTooltipHints, false);
   assert.equal(currentWorkspace.settings.updates.includePrereleases, true);
   assert.deepEqual(result, { settings: currentWorkspace.settings });
 

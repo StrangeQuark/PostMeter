@@ -88,10 +88,12 @@ async function handleLocalMockRequest(collection, incomingRequest, options = {})
     };
   }
 
-  const fallbackResponse = responseFromExample(match.examples[0]);
+  const fallbackResponse = responseFromSavedResponse(match.savedResponses[0]);
   let response = fallbackResponse;
   let scriptExecution = null;
-  const scriptText = String(match.request?.scripts?.mock || '');
+  const requestMockScript = String(match.request?.scripts?.mock || '');
+  const collectionMockScript = String(collection?.scripts?.mock || '');
+  const scriptText = requestMockScript.trim() ? requestMockScript : collectionMockScript;
   if (scriptText.trim()) {
     const context = mockScriptContext(match, request, fallbackResponse, options);
     scriptExecution = await runPostmanScriptIsolated(scriptText, context, {
@@ -193,7 +195,7 @@ function matchRequestRoute(candidate, incomingRequest) {
     return null;
   }
   return {
-    examples: normalizeExamples(candidate.examples),
+    savedResponses: normalizeSavedResponses(candidate.postman?.mockResponses),
     pathVariables: pathMatch.pathVariables,
     request: candidate,
     routePath
@@ -231,7 +233,7 @@ function routeVariableName(segment) {
 }
 
 function mockScriptContext(match, request, fallbackResponse, options = {}) {
-  const examples = normalizeExamples(match.examples);
+  const savedResponses = normalizeSavedResponses(match.savedResponses);
   const pathVariables = Object.entries(match.pathVariables || {}).map(([key, value]) => ({
     enabled: true,
     key,
@@ -248,7 +250,7 @@ function mockScriptContext(match, request, fallbackResponse, options = {}) {
     localVariables: [...pathVariables, ...(options.localVariables || [])],
     mock: {
       enabled: true,
-      examples,
+      examples: savedResponses,
       match: mockMatchPayload(match, request),
       request: scriptRequestPayload(request, match.pathVariables)
     },
@@ -259,7 +261,7 @@ function mockScriptContext(match, request, fallbackResponse, options = {}) {
 
 function mockMatchPayload(match, request) {
   return {
-    exampleIds: normalizeExamples(match.examples).map((example) => example.id),
+    exampleIds: normalizeSavedResponses(match.savedResponses).map((response) => response.id),
     matched: true,
     method: request.method,
     path: request.path,
@@ -373,21 +375,21 @@ function pathSegments(pathname) {
     .map((segment) => decodeURIComponent(segment));
 }
 
-function normalizeExamples(examples = []) {
-  return (Array.isArray(examples) ? examples : [])
-    .filter((example) => example && typeof example === 'object')
-    .map((example) => ({
-      body: example.body == null ? '' : String(example.body),
-      bodyType: example.bodyType || (looksLikeJson(example.body) ? BODY_TYPES.RAW_JSON : BODY_TYPES.RAW_TEXT),
-      headers: Array.isArray(example.headers) ? example.headers.map((header) => ({ ...header })) : [],
-      id: String(example.id || ''),
-      name: String(example.name || 'Example Response'),
-      statusCode: Number.isFinite(Number(example.statusCode)) ? Number(example.statusCode) : 200
+function normalizeSavedResponses(responses = []) {
+  return (Array.isArray(responses) ? responses : [])
+    .filter((response) => response && typeof response === 'object')
+    .map((response) => ({
+      body: response.body == null ? '' : String(response.body),
+      bodyType: response.bodyType || (looksLikeJson(response.body) ? BODY_TYPES.RAW_JSON : BODY_TYPES.RAW_TEXT),
+      headers: Array.isArray(response.headers) ? response.headers.map((header) => ({ ...header })) : [],
+      id: String(response.id || ''),
+      name: String(response.name || 'Mock Response'),
+      statusCode: Number.isFinite(Number(response.statusCode)) ? Number(response.statusCode) : 200
     }));
 }
 
-function responseFromExample(example) {
-  if (!example) {
+function responseFromSavedResponse(savedResponse) {
+  if (!savedResponse) {
     return {
       body: '',
       headers: {},
@@ -395,9 +397,9 @@ function responseFromExample(example) {
     };
   }
   return normalizeMockResponse({
-    body: example.body || '',
-    headers: example.headers || [],
-    statusCode: example.statusCode || 200
+    body: savedResponse.body || '',
+    headers: savedResponse.headers || [],
+    statusCode: savedResponse.statusCode || 200
   });
 }
 

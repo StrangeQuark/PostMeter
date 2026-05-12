@@ -120,6 +120,7 @@
       onInput: () => refreshEditor(textarea),
       onKeydown: (event) => handleTextareaKeydown(event, textarea),
       onScroll: () => syncScroll(textarea),
+      variableTokenInteractions: null,
       wrapper
     };
     textarea.addEventListener('input', state.onInput);
@@ -127,6 +128,7 @@
     textarea.addEventListener('keydown', state.onKeydown);
     textarea.addEventListener('scroll', state.onScroll);
     EDITOR_STATE.set(textarea, state);
+    state.variableTokenInteractions = VariableHighlighter?.attachVariableTokenInteractions?.(textarea, { overlay: highlight }) || null;
     EDITOR_TEXTAREAS.add(textarea);
     refreshEditor(textarea);
     return state;

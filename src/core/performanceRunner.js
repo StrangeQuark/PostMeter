@@ -138,10 +138,8 @@ async function executeIteration(performanceTest, environment, cookies, iteration
         responseBytes: Number(requestResult.responseBytes || 0),
         passed: requestResult.passed === true,
         error: requestResult.error || '',
-        assertionResults: Array.isArray(requestResult.assertionResults) ? requestResult.assertionResults : [],
         preRequestScriptResult: requestResult.preRequestScriptResult,
         testScriptResult: requestResult.testScriptResult,
-        extractedVariables: Array.isArray(requestResult.extractedVariables) ? requestResult.extractedVariables : [],
         localVariables: Array.isArray(requestResult.localVariables) ? requestResult.localVariables : []
       }
     };
@@ -163,10 +161,8 @@ async function executeIteration(performanceTest, environment, cookies, iteration
         responseBytes: 0,
         passed: false,
         error: error.message || String(error),
-        assertionResults: [],
         preRequestScriptResult: undefined,
         testScriptResult: undefined,
-        extractedVariables: [],
         localVariables: []
       }
     };

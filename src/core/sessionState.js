@@ -12,7 +12,7 @@ const BODY_TYPES = new Set([
 ]);
 const SIDEBAR_PANELS = new Set(['collections', 'environments', 'workspaces', 'runners', 'performance', 'history']);
 const MAIN_PANELS = new Set(['request', 'environment', 'workspace', 'runner', 'performance']);
-const REQUEST_EDITOR_TABS = new Set(['params', 'headers', 'auth', 'cookies', 'body', 'tests', 'scripts', 'examples', 'collectionVariables']);
+const REQUEST_EDITOR_TABS = new Set(['params', 'headers', 'auth', 'cookies', 'body', 'scripts', 'collectionVariables', 'docs']);
 const RESULTS_TABS = new Set(['response', 'responseHeaders', 'responseCookies', 'testResults', 'visualizer']);
 const SESSION_VERSION = 1;
 const MAX_OPEN_TABS = 128;
@@ -220,13 +220,12 @@ function normalizeSessionRequest(value) {
     bodyType: normalizeEnum(value.bodyType, BODY_TYPES, 'NONE'),
     body: normalizeString(value.body),
     auth: clonePlainObject(value.auth, { type: 'none' }),
-    assertions: normalizeObjectArray(value.assertions),
     scripts: {
       preRequest: normalizeString(value?.scripts?.preRequest),
       tests: normalizeString(value?.scripts?.tests)
     },
     variables: normalizePairs(value.variables),
-    examples: normalizeObjectArray(value.examples),
+    docs: normalizeString(value.docs),
     cookieJar: {
       enabled: value?.cookieJar?.enabled === true,
       storeResponses: value?.cookieJar?.storeResponses !== false

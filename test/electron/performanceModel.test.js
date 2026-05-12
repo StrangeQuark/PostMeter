@@ -181,7 +181,7 @@ test('Performance request import deep-copies collection requests and preserves s
     },
     scripts: { preRequest: 'pm.environment.set("a", "b");', tests: 'pm.test("ok", () => {});' },
     variables: [{ enabled: true, key: 'local', value: 'value' }],
-    examples: [{ id: 'example-1', name: 'Example', statusCode: 200, headers: [], body: '{}', bodyType: 'RAW_JSON' }],
+    docs: 'Performance docs',
     cookieJar: { enabled: true, storeResponses: true }
   };
   const original = JSON.parse(JSON.stringify(collectionRequest));
@@ -203,7 +203,7 @@ test('Performance request import deep-copies collection requests and preserves s
   performanceTest.request.postman.fileReferences[0].source = 'changed.txt';
   performanceTest.request.scripts.tests = 'pm.test("changed", () => {});';
   performanceTest.request.variables[0].value = 'changed';
-  performanceTest.request.examples[0].body = '{"changed":true}';
+  performanceTest.request.docs = 'Changed docs';
   performanceTest.request.cookieJar.enabled = false;
   performanceTest.request.url = 'https://example.test/performance';
   performanceTest.request.method = 'PUT';

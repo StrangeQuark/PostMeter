@@ -18,18 +18,16 @@ function importPostmanCollection(document) {
     id: postmanIdForNode(document.info || document, 'collection', [document.info?.name || 'collection']).modelId,
     name: document.info?.name || 'Imported Postman Collection',
     description: postmanDescription(document.info?.description || document.description),
+    auth: importAuth(document.auth, { type: 'none' }),
+    scripts: importEvents(document.event),
     variables: importVariables(document.variable),
     certificates: importCertificates(document.certificate),
     requests: [],
     folders: [],
     postman: collectionPostmanMetadata(document)
   });
-  const collectionEvents = importEvents(document.event);
-  const collectionAuth = importAuth(document.auth, { type: 'none' });
-  const collectionVariables = importVariables(document.variable);
-
   for (const [index, item] of (document.item || []).entries()) {
-    const imported = importItem(item, collectionEvents, collectionAuth, collectionVariables, [collection.name], { orderIndex: index });
+    const imported = importItem(item, collection.scripts, { type: 'none' }, [], [collection.name], { orderIndex: index });
     if (!imported) {
       continue;
     }
@@ -60,9 +58,12 @@ function looksLikePostmanCollection(document) {
 
 function importItem(item, inheritedEvents = emptyEvents(), inheritedAuth = { type: 'none' }, inheritedVariables = [], pathSegments = [], options = {}) {
   const itemPath = pathSegments.concat(item?.name || item?.id || item?._postman_id || item?.uid || 'item');
-  const itemEvents = mergeEvents(inheritedEvents, importEvents(item?.event));
+  const ownEvents = importEvents(item?.event);
+  const itemEvents = mergeEvents(inheritedEvents, ownEvents);
+  const ownAuth = item?.auth ? importAuth(item.auth, { type: 'none' }) : { type: 'none' };
   const itemAuth = item?.auth ? importAuth(item.auth, inheritedAuth) : inheritedAuth;
-  const itemVariables = mergeVariables(inheritedVariables, importVariables(item?.variable));
+  const ownVariables = importVariables(item?.variable);
+  const itemVariables = mergeVariables(inheritedVariables, ownVariables);
   if (item?.request) {
     return { kind: 'request', value: importRequest(item, itemEvents, itemAuth, itemVariables, itemPath, options) };
   }
@@ -71,6 +72,10 @@ function importItem(item, inheritedEvents = emptyEvents(), inheritedAuth = { typ
     const folder = folderModel({
       id: folderId.modelId,
       name: item.name || 'Imported Folder',
+      description: postmanDescription(item.description),
+      auth: ownAuth,
+      scripts: ownEvents,
+      variables: ownVariables,
       postman: folderPostmanMetadata(item, folderId, options.orderIndex)
     });
     for (const [index, child] of item.item.entries()) {
@@ -93,7 +98,7 @@ function importRequest(item, inheritedEvents = emptyEvents(), inheritedAuth = { 
   const requestNode = item.request || {};
   const protocol = detectRequestProtocol(item, requestNode);
   const protocolFields = importProtocolFields(item, requestNode, protocol);
-  const scripts = scriptsForProtocol(inheritedEvents, protocol);
+  const scripts = scriptsForProtocol(importEvents(item.event), protocol);
   const requestId = postmanIdForNode(item, 'request', pathSegments);
   const request = requestModel({
     id: requestId.modelId,
@@ -101,10 +106,10 @@ function importRequest(item, inheritedEvents = emptyEvents(), inheritedAuth = { 
     protocol,
     method: httpMethodForProtocol(requestNode.method, protocol),
     url: importUrl(requestNode.url),
-    auth: requestNode.auth ? importAuth(requestNode.auth, inheritedAuth) : inheritedAuth,
+    auth: requestNode.auth ? importAuth(requestNode.auth, inheritedAuth) : { type: 'none' },
     cookieJar: { enabled: true, storeResponses: true },
-    variables: mergeVariables(inheritedVariables, importVariables(requestNode.variable || item.variable)),
-    examples: importExamples(item.response),
+    variables: importVariables(requestNode.variable || item.variable),
+    docs: postmanDescription(item.description || requestNode.description),
     scripts: {
       ...scripts
     },
@@ -580,30 +585,6 @@ function clonePlainJson(value) {
   }
 }
 
-function importExamples(responses) {
-  if (!Array.isArray(responses)) {
-    return [];
-  }
-  return responses
-    .filter((response) => response && typeof response === 'object')
-    .map((response, index) => {
-      const headers = Array.isArray(response.header)
-        ? response.header.filter((header) => header?.key).map((header) => keyValue(header.key, header.value ?? '', header.disabled !== true))
-        : [];
-      const body = response.body == null ? '' : String(response.body);
-      const responseId = postmanIdForNode(response, 'example', [response.name || response.id || `example-${index}`]);
-      return {
-        id: responseId.modelId,
-        name: response.name || response.originalRequest?.name || 'Example Response',
-        statusCode: Number(response.code || response.statusCode || 0),
-        headers,
-        bodyType: looksLikeJson(body) ? BODY_TYPES.RAW_JSON : BODY_TYPES.RAW_TEXT,
-        body,
-        postman: examplePostmanMetadata(response, responseId)
-      };
-    });
-}
-
 function annotatePackageReferences(collection) {
   const references = collectSandboxPackageReferencesFromCollection(collection);
   if (!references.length) {
@@ -882,7 +863,7 @@ function exportPostmanCollection(collection) {
   if (collection?.description || metadata.info?.description) {
     document.info.description = metadata.info?.description || collection.description;
   }
-  const events = exportPostmanEvents(collection);
+  const events = exportPostmanEvents(collection, { preferModel: true });
   if (events.length) {
     document.event = events;
   }
@@ -890,8 +871,9 @@ function exportPostmanCollection(collection) {
   if (variables.length) {
     document.variable = variables;
   }
-  if (metadata.auth && Object.keys(metadata.auth).length) {
-    document.auth = clonePostmanObject(metadata.auth);
+  const auth = exportPostmanAuthModel(collection?.auth);
+  if (auth) {
+    document.auth = auth;
   }
   const certificates = exportPostmanCertificates(collection?.certificates, metadata.certificates);
   if (certificates.length) {
@@ -940,6 +922,7 @@ function requestPostmanMetadata(item, requestNode, ids, orderIndex) {
     events: importPostmanEvents(item?.event),
     variables: clonePostmanArray(requestNode?.variable || item?.variable),
     auth: clonePostmanObject(requestNode?.auth || item?.auth),
+    mockResponses: importPostmanMockResponses(item?.response),
     request: compactObject({
       method: requestNode?.method,
       url: clonePostmanJson(requestNode?.url),
@@ -968,12 +951,21 @@ function requestPostmanMetadata(item, requestNode, ids, orderIndex) {
   });
 }
 
-function examplePostmanMetadata(response, ids) {
-  return compactObject({
-    schema: 'postman-response-v2.1',
-    ids,
-    response: clonePostmanObject(response)
-  });
+function importPostmanMockResponses(responses) {
+  if (!Array.isArray(responses)) {
+    return [];
+  }
+  return responses
+    .filter((response) => response && typeof response === 'object')
+    .map((response, index) => compactObject({
+      id: stringValue(response.id || response._postman_id || response.uid) || `mock-response-${index + 1}`,
+      name: stringValue(response.name) || `Mock Response ${index + 1}`,
+      statusCode: Number.isFinite(Number(response.code ?? response.statusCode ?? response.status))
+        ? Number(response.code ?? response.statusCode ?? response.status)
+        : 200,
+      headers: clonePostmanArray(response.header || response.headers),
+      body: response.body == null ? '' : String(response.body)
+    }));
 }
 
 function certificatePostmanMetadata(certificate, ids) {
@@ -1166,10 +1158,9 @@ function exportPostmanFolder(folder) {
   const exported = compactObject({
     id: postmanEntityId(folder, 'folder'),
     name: folder?.name || 'Folder',
-    description: metadata.description,
-    event: exportPostmanEvents(folder),
-    variable: exportPostmanVariables([], metadata.variables),
-    auth: clonePostmanObject(metadata.auth),
+    description: folder?.description || metadata.description,
+    event: exportPostmanEvents(folder, { preferModel: true }),
+    auth: exportPostmanAuthModel(folder?.auth),
     item: exportPostmanItems(folder)
   });
   assignPostmanExtensions(exported, metadata.bindings);
@@ -1181,10 +1172,9 @@ function exportPostmanRequestItem(request) {
   const exported = compactObject({
     id: postmanEntityId(request, 'request'),
     name: request?.name || 'Request',
-    description: metadata.description,
+    description: request?.docs || metadata.description,
     event: exportPostmanEvents(request),
-    request: exportPostmanRequest(request),
-    response: exportPostmanExamples(request?.examples)
+    request: exportPostmanRequest(request)
   });
   assignPostmanExtensions(exported, metadata.bindings);
   return exported;
@@ -1477,8 +1467,8 @@ function exportPostmanAuthModel(auth) {
   return undefined;
 }
 
-function exportPostmanEvents(entity) {
-  if (Array.isArray(entity?.postman?.events) && entity.postman.events.length) {
+function exportPostmanEvents(entity, options = {}) {
+  if (options.preferModel !== true && Array.isArray(entity?.postman?.events) && entity.postman.events.length) {
     return entity.postman.events.map((event) => normalizeExportedEvent(event)).filter(Boolean);
   }
   const scripts = entity?.scripts || {};
@@ -1559,22 +1549,6 @@ function exportPostmanVariables(pairs = [], rawVariables = []) {
     exported.push(clonePostmanObject(raw));
   }
   return exported;
-}
-
-function exportPostmanExamples(examples = []) {
-  return (examples || []).map((example) => {
-    const raw = clonePostmanObject(example?.postman?.response);
-    const exported = {
-      ...raw,
-      id: postmanEntityId(example, 'example') || undefined,
-      name: example?.name || raw.name || 'Example Response',
-      code: Number(example?.statusCode || raw.code || 0),
-      status: raw.status || String(example?.statusCode || raw.code || ''),
-      header: exportPostmanPairs(example?.headers, raw.header),
-      body: example?.body == null ? raw.body || '' : String(example.body)
-    };
-    return removeEmptyPostmanFields(exported);
-  });
 }
 
 function exportPostmanCertificates(certificates = [], rawCertificates = []) {

@@ -60,7 +60,6 @@ test('single request curl exports include warning comments for unsupported reque
     bodyType: 'RAW_JSON',
     body: '{"ok":true}',
     auth: { type: 'bearer', token: '{{token}}' },
-    assertions: [{ enabled: true, type: 'statusCode', expected: '200' }],
     scripts: {
       preRequest: 'pm.environment.set("token", "abc");',
       tests: 'pm.test("ok", function () {});'
@@ -72,7 +71,6 @@ test('single request curl exports include warning comments for unsupported reque
   assert.match(exported, /^# Request: Scripted Request\n/);
   assert.match(exported, /WARNING: Pre-request scripts are not included/);
   assert.match(exported, /WARNING: Post-request scripts are not included/);
-  assert.match(exported, /WARNING: Assertions are not included/);
   assert.match(exported, /curl 'https:\/\/api\.example\.test\/widgets'/);
   assert.match(exported, /--data-raw '\{"ok":true\}'/);
 });

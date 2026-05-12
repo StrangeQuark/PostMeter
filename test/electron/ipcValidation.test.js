@@ -19,9 +19,14 @@ const {
   assertRunnerConfigPayload,
   assertRunnerPayload,
   assertRunnerProgressPayload,
+  assertSessionPayload,
   assertUpdateCheckOptionsPayload,
+  assertWorkspaceCollectionSavePayload,
+  assertWorkspaceCollectionSaveResultPayload,
   assertWorkspaceEnvironmentSavePayload,
   assertWorkspaceEnvironmentSaveResultPayload,
+  assertWorkspaceFolderSavePayload,
+  assertWorkspaceFolderSaveResultPayload,
   assertWorkspaceLoadResultPayload,
   assertWorkspaceRequestSavePayload,
   assertWorkspaceRequestSaveResultPayload,
@@ -49,7 +54,7 @@ test('accepts structurally valid IPC payloads', () => {
     postman: { ids: { original: 'postman-request-id' }, events: [{ listen: 'test', script: { exec: ['pm.test("ok", function () {});'] } }] },
     scripts: { preRequest: "pm.environment.set('x', '1');", tests: "pm.test('ok', function () {});", beforeInvoke: "pm.request.metadata.add({ key: 'x', value: 'y' });" },
     variables: [{ enabled: true, key: 'local', value: 'value' }],
-    examples: [{ name: 'Example', statusCode: 200, headers: [{ enabled: true, key: 'Content-Type', value: 'application/json' }], bodyType: 'RAW_JSON', body: '{}' }],
+    docs: 'Request docs',
     cookieJar: { enabled: true, storeResponses: true },
     autoHeaders: { sendPostMeterToken: true, showGeneratedHeaders: true },
     auth: { type: 'bearer', token: 'secret' }
@@ -58,6 +63,8 @@ test('accepts structurally valid IPC payloads', () => {
     id: 'c1',
     name: 'Collection',
     description: '',
+    auth: { type: 'bearer', token: '{{token}}' },
+    scripts: { preRequest: "pm.variables.set('x', '1');", tests: "pm.test('ok', function () {});" },
     variables: [{ enabled: true, key: 'baseUrl', value: 'https://example.test' }],
     postman: { info: { _postman_id: 'postman-collection-id' }, itemOrder: [{ kind: 'request', id: 'postman-request-id' }] },
     certificates: [{ name: 'Client Cert', matches: ['https://example.test/*'], certPath: '/tmp/client.crt', keyPath: '/tmp/client.key', passphrase: 'secret' }],
@@ -69,7 +76,7 @@ test('accepts structurally valid IPC payloads', () => {
     name: 'Workspace',
     settings: {
       appearance: { theme: 'dark' },
-      editor: { lineNumbers: false },
+      editor: { lineNumbers: false, variableTooltipHints: false },
       tabs: { saveOnForceClose: true },
       sandbox: {
         fileBindings: [{
@@ -158,10 +165,8 @@ test('accepts structurally valid IPC payloads', () => {
       passed: true,
       responseBody: '{"ok":true}',
       responseBytes: 11,
-      assertionResults: [],
       preRequestScriptResult: { passed: true, tests: [], logs: [] },
       testScriptResult: { passed: true, tests: [{ name: 'ok', passed: true }], logs: ['done'], visualizer: { html: '<h1>ok</h1>', template: '<h1>{{value}}</h1>' } },
-      extractedVariables: [{ enabled: true, key: 'token', value: 'abc' }],
       localVariables: [{ enabled: true, key: 'local', value: 'value' }]
     }],
     environment: { id: 'e1', name: 'Runtime', variables: [] },
@@ -198,10 +203,8 @@ test('accepts structurally valid IPC payloads', () => {
       responseBody: '{"ok":true}',
       responseBytes: 11,
       passed: true,
-      assertionResults: [{ passed: true, message: 'body contains ok' }],
       preRequestScriptResult: { passed: true, tests: [{ name: 'pre', passed: true }] },
       testScriptResult: { passed: true, tests: [{ name: 'post', passed: true }] },
-      extractedVariables: [{ enabled: true, key: 'token', value: 'abc' }],
       localVariables: [{ enabled: true, key: 'local', value: 'value' }],
       error: ''
     }]
@@ -378,6 +381,109 @@ test('accepts structurally valid IPC payloads', () => {
     collectionVariables: [{ enabled: true, key: 'baseUrl', value: 'https://example.test' }],
     cookies: [{ enabled: true, name: 'sid', value: 'secret', domain: 'example.test', path: '/' }]
   }));
+  assert.doesNotThrow(() => assertWorkspaceCollectionSavePayload({
+    collectionId: 'c1',
+    createdUnsaved: true,
+    collection: {
+      id: 'c1',
+      name: 'Collection',
+      description: 'Shared collection defaults',
+      auth: { type: 'bearer', token: '{{collectionToken}}' },
+      scripts: {
+        preRequest: "pm.collectionVariables.set('fromCollection', 'yes');",
+        tests: "pm.test('collection post-request', function () {});"
+      },
+      variables: [{ enabled: true, key: 'collectionToken', value: 'secret' }],
+      certificates: [],
+      requests: [],
+      folders: []
+    },
+    settings: { updates: { includePrereleases: true } }
+  }));
+  assert.doesNotThrow(() => assertWorkspaceCollectionSaveResultPayload({
+    collection: {
+      id: 'c1',
+      name: 'Collection',
+      auth: { type: 'none' },
+      scripts: {},
+      variables: [],
+      requests: [],
+      folders: []
+    }
+  }));
+  assert.doesNotThrow(() => assertWorkspaceFolderSavePayload({
+    collectionId: 'c1',
+    folderId: 'f1',
+    createdUnsaved: true,
+    folder: {
+      id: 'f1',
+      name: 'Folder',
+      description: 'Folder defaults',
+      auth: { type: 'apiKey', key: 'X-Folder-Key', value: 'secret', location: 'header' },
+      scripts: { preRequest: "pm.environment.set('fromFolder', 'yes');", tests: '' },
+      variables: [{ enabled: true, key: 'folderToken', value: 'secret' }],
+      requests: [],
+      folders: []
+    },
+    collectionShell: {
+      id: 'c1',
+      name: 'Collection',
+      auth: { type: 'none' },
+      scripts: {},
+      variables: [],
+      certificates: []
+    },
+    folderPath: [{ id: 'f1', name: 'Folder' }],
+    settings: { updates: { includePrereleases: true } }
+  }));
+  assert.doesNotThrow(() => assertWorkspaceFolderSaveResultPayload({
+    folder: {
+      id: 'f1',
+      name: 'Folder',
+      auth: { type: 'none' },
+      scripts: {},
+      variables: [],
+      requests: [],
+      folders: []
+    }
+  }));
+  assert.doesNotThrow(() => assertSessionPayload({
+    activeMainPanel: 'request',
+    openCollectionTabs: [{
+      key: 'collection:c1',
+      collectionId: 'c1',
+      dirty: true,
+      createdUnsaved: false,
+      snapshot: '{"id":"c1"}',
+      currentState: {
+        id: 'c1',
+        name: 'Collection',
+        variables: [],
+        requests: [],
+        folders: []
+      }
+    }],
+    openFolderTabs: [{
+      key: 'folder:c1:f1',
+      collectionId: 'c1',
+      folderId: 'f1',
+      dirty: true,
+      createdUnsaved: false,
+      snapshot: '{"id":"f1"}',
+      currentState: {
+        id: 'f1',
+        name: 'Folder',
+        variables: [],
+        requests: [],
+        folders: []
+      }
+    }],
+    openRequestTabs: [],
+    openEnvironmentTabs: [],
+    openWorkspaceTabs: [],
+    openRunnerTabs: [],
+    openPerformanceTabs: []
+  }));
   assert.doesNotThrow(() => assertWorkspaceEnvironmentSavePayload({
     environmentId: 'e1',
     createdUnsaved: true,
@@ -389,7 +495,7 @@ test('accepts structurally valid IPC payloads', () => {
   }));
   assert.doesNotThrow(() => assertWorkspaceSettingsSavePayload({
     appearance: { theme: 'dark' },
-    editor: { lineNumbers: true },
+    editor: { lineNumbers: true, variableTooltipHints: true },
     diagnostics: {
       logging: { enabled: true, level: 'warn' },
       requestResponseLogging: {
@@ -509,10 +615,9 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertRequestPayload({ method: 'GET', protocol: 'ftp', queryParams: [], headers: [], bodyType: 'NONE' }), /request.protocol is not supported/);
   assert.throws(() => assertRequestPayload({ method: 'GET', protocol: 'grpc', queryParams: [], headers: [], bodyType: 'NONE', messages: [{ data: 'x'.repeat(40000) }] }), /request.messages\[0\].data cannot exceed/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: 'bad', headers: [], bodyType: 'NONE' }), /request.queryParams must be an array/);
-  assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', assertions: [{ type: 'bad' }] }), /assertions\[0\].type must be one of/);
-  assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', assertions: [{ operator: 'near' }] }), /assertions\[0\].operator must be one of/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', scripts: { tests: 42 } }), /request.scripts.tests must be a string/);
-  assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', examples: [{ statusCode: 200, bodyType: 'bad' }] }), /request.examples\[0\].bodyType must be one of/);
+  assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', docs: 'x'.repeat((10 * 1024 * 1024) + 1) }), /request.docs cannot exceed/);
+  assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', examples: [] }), /request.examples is no longer supported/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', cookieJar: { enabled: 'yes' } }), /request.cookieJar.enabled must be a boolean/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', autoHeaders: { sendPostMeterToken: 'yes' } }), /request.autoHeaders.sendPostMeterToken must be a boolean/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', loadTestPolicy: { hostPolicies: [{ host: 42 }] } }), /request.loadTestPolicy is no longer supported/);
@@ -524,6 +629,7 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertWorkspacePayload({ collections: [], runners: {}, environments: [], history: [] }), /workspace.runners must be an array/);
   assert.throws(() => assertWorkspacePayload({ settings: { updates: { includePrereleases: 'yes' } }, collections: [], environments: [], history: [] }), /workspace.settings.updates.includePrereleases must be a boolean/);
   assert.throws(() => assertWorkspacePayload({ settings: { editor: { lineNumbers: 'yes' } }, collections: [], environments: [], history: [] }), /workspace.settings.editor.lineNumbers must be a boolean/);
+  assert.throws(() => assertWorkspaceSettingsSavePayload({ editor: { variableTooltipHints: 'yes' } }), /settings.editor.variableTooltipHints must be a boolean/);
   assert.throws(() => assertWorkspacePayload({ settings: { appearance: { theme: 'sepia' } }, collections: [], environments: [], history: [] }), /workspace.settings.appearance.theme must be one of/);
   assert.throws(() => assertWorkspacePayload({ settings: { diagnostics: { requestResponseLogging: { bodies: 'yes' } } }, collections: [], environments: [], history: [] }), /workspace.settings.diagnostics.requestResponseLogging.bodies must be a boolean/);
   assert.throws(() => assertWorkspacePayload({ settings: { diagnostics: { logging: { level: 'trace' } } }, collections: [], environments: [], history: [] }), /workspace.settings.diagnostics.logging.level must be one of/);
@@ -561,8 +667,6 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertOAuthProgressPayload({ id: 'flow', type: 'pkce', status: 'unknown' }), /progress.status must be one of/);
   assert.throws(() => assertOAuthProgressPayload({ id: 'flow', type: 'pkce', status: 'starting', accessToken: 'raw-token' }), /progress.accessToken is not allowed in public IPC payloads/);
   assert.throws(() => assertCollectionRunResultPayload({ collectionName: 42 }), /result.collectionName must be a string/);
-  assert.throws(() => assertCollectionRunResultPayload({ results: [{ assertionResults: 'bad' }] }), /result.results\[0\].assertionResults must be an array/);
-  assert.throws(() => assertCollectionRunResultPayload({ results: [{ assertionResults: [{ passed: 'yes' }] }] }), /result.results\[0\].assertionResults\[0\].passed must be a boolean/);
   assert.throws(() => assertCollectionRunResultPayload({ results: [{ testScriptResult: { tests: [{ passed: 'yes' }] } }] }), /result.results\[0\].testScriptResult.tests\[0\].passed must be a boolean/);
   assert.throws(() => assertCollectionRunResultPayload({ results: [{ responseBody: 42 }] }), /result.results\[0\].responseBody must be a string/);
   assert.throws(() => assertCollectionRunResultPayload({ results: [{ updatedAuth: { type: 'oauth2', accessToken: 'raw-token' } }] }), /result.results\[0\].updatedAuth must not be included in public IPC payloads/);
@@ -570,7 +674,6 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertCollectionRunResultPayload({ accessToken: 'raw-token' }), /result.accessToken is not allowed in public IPC payloads/);
   assert.throws(() => assertPerformanceResultPayload({ samples: [{ responseBody: 42 }] }), /result.samples\[0\].responseBody must be a string/);
   assert.throws(() => assertPerformanceTestPayload({ type: 'latency', csvVariables: { values: 42 }, request: { method: 'GET', url: 'https:\/\/example.test' } }), /performanceTest.csvVariables.values must be a string/);
-  assert.throws(() => assertPerformanceResultPayload({ samples: [{ assertionResults: [{ passed: 'yes' }] }] }), /result.samples\[0\].assertionResults\[0\].passed must be a boolean/);
   assert.throws(() => assertPerformanceCalibrationResultPayload({ endpoint: 42 }), /result.endpoint must be a string/);
   assert.throws(() => assertPerformanceCalibrationResultPayload({ stages: [{ requestsPerSecond: 'fast' }] }), /result.stages\[0\].requestsPerSecond must be a finite number/);
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: '', durationMillis: 'slow', responseBytes: 0, finalUrl: '', headers: {} }), /response.durationMillis must be a finite number/);
@@ -582,6 +685,9 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertWorkspaceRequestSavePayload({ requestId: 'r1', request: { method: 'GET', queryParams: [], headers: [], bodyType: 'NONE' } }), /payload must include collectionId or runnerId/);
   assert.throws(() => assertWorkspaceRequestSavePayload({ collectionId: 'c1', runnerId: 'runner-1', requestId: 'r1', request: { method: 'GET', queryParams: [], headers: [], bodyType: 'NONE' } }), /payload must target either collectionId or runnerId/);
   assert.throws(() => assertWorkspaceRequestSavePayload({ collectionId: 'c1', requestId: 'r1', request: { method: 'GET', queryParams: [], headers: [], bodyType: 'NONE' }, folderPath: 'bad' }), /payload.folderPath must be an array/);
+  assert.throws(() => assertWorkspaceCollectionSavePayload({ collection: { id: 'c1', requests: [], folders: [] } }), /payload.collectionId must be a string/);
+  assert.throws(() => assertWorkspaceCollectionSavePayload({ collectionId: 'c1', collection: { id: 'c1', scripts: { tests: 42 }, requests: [], folders: [] } }), /payload.collection.scripts.tests must be a string/);
+  assert.throws(() => assertWorkspaceCollectionSaveResultPayload({ collection: { id: 'c1', variables: 'bad', requests: [], folders: [] } }), /result.collection.variables must be an array/);
   assert.throws(() => assertWorkspaceEnvironmentSavePayload({ environment: { id: 'e1', name: 'Env', variables: [] } }), /payload.environmentId must be a string/);
   assert.throws(() => assertWorkspaceSettingsSavePayload({ appearance: { theme: 'sepia' } }), /settings.appearance.theme must be one of/);
   assert.throws(() => assertWorkspaceSettingsSavePayload({ tabs: { saveOnForceClose: 'yes' } }), /settings.tabs.saveOnForceClose must be a boolean/);
@@ -594,6 +700,9 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertWorkspaceLoadResultPayload({ workspace: null }), /result.workspace must be an object/);
   assert.throws(() => assertFileOperationResultPayload({ cancelled: 'yes' }), /result.cancelled must be a boolean/);
   assert.throws(() => assertFileOperationResultPayload({ cancelled: false, collection: [] }), /result.collection must be an object/);
+  assert.throws(() => assertSessionPayload({ openCollectionTabs: Array.from({ length: 129 }, (_value, index) => ({ key: `collection:${index}`, collectionId: `collection-${index}` })) }), /session.openCollectionTabs cannot contain more than 128 items/);
+  assert.throws(() => assertSessionPayload({ openFolderTabs: Array.from({ length: 129 }, (_value, index) => ({ key: `folder:collection:${index}`, collectionId: 'collection', folderId: `folder-${index}` })) }), /session.openFolderTabs cannot contain more than 128 items/);
+  assert.throws(() => assertWorkspaceFolderSavePayload({ collectionId: 'c1', folderId: 'f1', folder: { id: 'f1', name: 'Folder', variables: [{ enabled: true, key: 'x', value: [] }] } }), /payload\.folder\.variables\[0\]\.value must be a string/);
   assert.throws(() => assertRuntimeId({ bad: true }), /id must be a string/);
   assert.throws(() => assertExportFormat('xml'), /format must be one of/);
   assert.throws(() => assertCollectionExportFormat('bad'), /format must be one of/);
@@ -606,9 +715,7 @@ test('request and workspace IPC validators follow shared entity schema arrays', 
     bodyType: 'NONE',
     queryParams: [],
     headers: [],
-    assertions: [],
-    variables: [],
-    examples: []
+    variables: []
   };
   for (const field of payloadSchemas.entities.request.arrays) {
     assert.throws(

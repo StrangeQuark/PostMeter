@@ -26,10 +26,9 @@ test('exports and imports native runner documents with schema validation', () =>
       bodyType: 'NONE',
       body: '',
       auth: { type: 'none' },
-      assertions: [],
       scripts: { preRequest: '', tests: '' },
       variables: [],
-      examples: [],
+      docs: '',
       cookieJar: { enabled: false, storeResponses: true },
       autoHeaders: { sendPostMeterToken: false, showGeneratedHeaders: false }
     }]

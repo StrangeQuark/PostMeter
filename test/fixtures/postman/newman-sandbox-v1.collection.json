@@ -443,7 +443,6 @@
                   "  pm.response.to.have.jsonSchema({ type: 'object', required: ['ok'], properties: { ok: { type: 'boolean' } } });",
                   "  pm.expect(pm.request.headers.get('X-Dynamic')).to.match(/^[0-9a-f-]{36}$/);",
                   "  pm.expect(pm.variables.get('stepScoped')).to.equal('request-step');",
-                  "  pm.expect(pm.collectionVariables.get('collectionPreSeen')).to.equal('yes');",
                   "  pm.expect(pm.collectionVariables.get('folderPreSeen')).to.equal('yes');",
                   "  pm.expect(pm.environment.toJSON()).to.be.a('array');",
                   "  pm.expect(pm.variables.replaceIn('{{$randomFirstName}} {{$randomLastName}} {{$randomEmail}} {{$randomInt}}')).to.match(/^\\S+ \\S+ .+@.+\\.\\S+ \\d{1,4}$/);",

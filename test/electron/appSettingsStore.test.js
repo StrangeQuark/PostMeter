@@ -44,7 +44,7 @@ test('app settings store persists only app-wide settings and merges workspace-lo
 
   await store.mergeWorkspaceSettings('Workspace A.json', {
     appearance: { theme: 'dark' },
-    editor: { lineNumbers: false },
+    editor: { lineNumbers: false, variableTooltipHints: false },
     tabs: { saveOnForceClose: true },
     modals: { closeOnBackdropClick: true },
     updates: { includePrereleases: true },
@@ -72,6 +72,7 @@ test('app settings store persists only app-wide settings and merges workspace-lo
   const persisted = JSON.parse(await fs.readFile(settingsPath, 'utf8'));
   assert.equal(persisted.app.appearance.theme, 'dark');
   assert.equal(persisted.app.editor.lineNumbers, false);
+  assert.equal(persisted.app.editor.variableTooltipHints, false);
   assert.equal(persisted.app.tabs.saveOnForceClose, true);
   assert.equal(persisted.app.modals.closeOnBackdropClick, true);
   assert.equal(persisted.app.updates.includePrereleases, true);
@@ -99,6 +100,7 @@ test('app settings store persists only app-wide settings and merges workspace-lo
   });
   assert.equal(workspaceASettings.appearance.theme, 'dark');
   assert.equal(workspaceASettings.editor.lineNumbers, false);
+  assert.equal(workspaceASettings.editor.variableTooltipHints, false);
   assert.equal(workspaceASettings.diagnostics.requestResponseLogging.urls, true);
   assert.equal(workspaceASettings.sandbox.trustedCapabilities.sendRequest, false);
   assert.equal(workspaceASettings.sandbox.fileBindings[0].source, 'upload.bin');
@@ -106,6 +108,7 @@ test('app settings store persists only app-wide settings and merges workspace-lo
   const workspaceBSettings = store.settingsForWorkspace('Workspace B.json');
   assert.equal(workspaceBSettings.appearance.theme, 'dark');
   assert.equal(workspaceBSettings.editor.lineNumbers, false);
+  assert.equal(workspaceBSettings.editor.variableTooltipHints, false);
   assert.equal(workspaceBSettings.tabs.saveOnForceClose, true);
   assert.equal(workspaceBSettings.diagnostics.requestResponseLogging.urls, false);
   assert.equal(workspaceBSettings.sandbox.trustedCapabilities.sendRequest, false);

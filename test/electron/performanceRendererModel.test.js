@@ -95,7 +95,7 @@ test('renderer performance import deep-copies request-owned data from collection
     auth: { type: 'bearer', bearer: { token: 'source-token' } },
     scripts: { preRequest: 'pm.environment.set("a", "b");', tests: 'pm.test("ok", () => {});' },
     variables: [{ enabled: true, key: 'local', value: 'source' }],
-    examples: [{ id: 'example-1', name: 'Example', statusCode: 200, headers: [], body: '{}' }],
+    docs: 'Source docs',
     cookieJar: { enabled: true, storeResponses: true }
   };
   const original = JSON.parse(JSON.stringify(source));
@@ -110,7 +110,7 @@ test('renderer performance import deep-copies request-owned data from collection
   imported.request.auth.bearer.token = 'changed';
   imported.request.scripts.tests = 'pm.test("changed", () => {});';
   imported.request.variables[0].value = 'changed';
-  imported.request.examples[0].body = 'changed';
+  imported.request.docs = 'changed';
   imported.request.cookieJar.enabled = false;
 
   assert.deepEqual(source, original);

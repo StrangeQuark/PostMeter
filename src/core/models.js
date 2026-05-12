@@ -18,7 +18,6 @@ const SUPPORTED_METHODS = new Set(HTTP_METHODS);
 const BODY_METHODS = new Set(BODY_METHOD_VALUES);
 const BODY_TYPES = Object.freeze(Object.fromEntries(BODY_TYPE_VALUES.map((type) => [type, type])));
 const DEFAULT_REQUEST_BODY_TYPE = 'NONE';
-const DEFAULT_EXAMPLE_BODY_TYPE = 'RAW_TEXT';
 const POSTMAN_METADATA_MAX_BYTES = 10 * 1024 * 1024;
 const DEFAULT_PERFORMANCE_TEST_TYPE = 'latency';
 const DEFAULT_PERFORMANCE_CONFIG = Object.freeze({
@@ -57,10 +56,9 @@ function requestModel({
   bodyType,
   body,
   auth,
-  assertions,
   scripts,
   variables,
-  examples,
+  docs,
   cookieJar,
   autoHeaders,
   protocol,
@@ -86,10 +84,9 @@ function requestModel({
     bodyType: normalizeSchemaEnumValue('bodyTypes', bodyType, DEFAULT_REQUEST_BODY_TYPE),
     body: body ?? '',
     auth: normalizePersistedAuth(auth),
-    assertions: normalizeAssertions(assertions),
     scripts: normalizeScripts(scripts),
     variables: normalizePairs(variables),
-    examples: normalizeExamples(examples),
+    docs: docs == null ? '' : String(docs),
     cookieJar: normalizeRequestCookieJar(cookieJar),
     autoHeaders: normalizeRequestAutoHeaders(autoHeaders),
     methodPath: methodPath == null ? '' : String(methodPath).slice(0, 512),
@@ -246,10 +243,14 @@ function cloneRequestForRunner(request, source = {}) {
   });
 }
 
-function folderModel({ id, name, requests, folders, postman } = {}) {
+function folderModel({ id, name, description, auth, scripts, variables, requests, folders, postman } = {}) {
   const folder = {
     id: id || newId(),
     name: normalizeName(name, 'Untitled Folder'),
+    description: description ?? '',
+    auth: normalizePersistedAuth(auth),
+    scripts: normalizeScripts(scripts),
+    variables: normalizePairs(variables),
     requests: Array.isArray(requests) ? requests.map(requestModel) : [],
     folders: Array.isArray(folders) ? folders.map(folderModel) : []
   };
@@ -257,11 +258,13 @@ function folderModel({ id, name, requests, folders, postman } = {}) {
   return folder;
 }
 
-function collectionModel({ id, name, description, variables, certificates, requests, folders, postman } = {}) {
+function collectionModel({ id, name, description, auth, scripts, variables, certificates, requests, folders, postman } = {}) {
   const collection = {
     id: id || newId(),
     name: normalizeName(name, 'Untitled Collection'),
     description: description ?? '',
+    auth: normalizePersistedAuth(auth),
+    scripts: normalizeScripts(scripts),
     variables: normalizePairs(variables),
     certificates: normalizeCertificates(certificates),
     requests: Array.isArray(requests) ? requests.map(requestModel) : [],
@@ -334,7 +337,8 @@ function normalizeSettings(settings) {
     },
     diagnostics: normalizeDiagnosticsSettings(settings?.diagnostics),
     editor: {
-      lineNumbers: settings?.editor?.lineNumbers !== false
+      lineNumbers: settings?.editor?.lineNumbers !== false,
+      variableTooltipHints: settings?.editor?.variableTooltipHints !== false
     },
     tabs: {
       saveOnForceClose: settings?.tabs?.saveOnForceClose === true
@@ -502,23 +506,6 @@ function normalizePairs(pairs) {
   return pairs.map((pair) => keyValue(pair.key, pair.value, pair.enabled !== false));
 }
 
-function normalizeAssertions(assertions) {
-  if (!Array.isArray(assertions)) {
-    return [];
-  }
-  return assertions
-    .filter((assertion) => assertion && typeof assertion === 'object')
-    .map((assertion) => ({
-      enabled: assertion.enabled !== false,
-      type: typeof assertion.type === 'string' ? assertion.type : 'statusCode',
-      name: assertion.name ?? '',
-      path: assertion.path ?? '',
-      operator: assertion.operator ?? 'equals',
-      expected: assertion.expected ?? '',
-      variableName: assertion.variableName ?? ''
-    }));
-}
-
 function normalizeScripts(scripts) {
   if (!scripts || typeof scripts !== 'object') {
     return emptyScripts();
@@ -594,26 +581,6 @@ function safeJsonStringify(value) {
   } catch {
     return '{}';
   }
-}
-
-function normalizeExamples(examples) {
-  if (!Array.isArray(examples)) {
-    return [];
-  }
-  return examples
-    .filter((example) => example && typeof example === 'object')
-    .map((example) => {
-      const normalized = {
-        id: example.id || newId(),
-        name: normalizeName(example.name, 'Example Response'),
-        statusCode: Number.isFinite(Number(example.statusCode)) ? Number(example.statusCode) : 0,
-        headers: normalizePairs(example.headers),
-        bodyType: normalizeSchemaEnumValue('bodyTypes', example.bodyType, DEFAULT_EXAMPLE_BODY_TYPE),
-        body: example.body == null ? '' : String(example.body)
-      };
-      addOptionalJsonObject(normalized, 'postman', example.postman, POSTMAN_METADATA_MAX_BYTES);
-      return normalized;
-    });
 }
 
 function normalizeRequestCookieJar(cookieJar) {
@@ -847,19 +814,20 @@ function cloneJson(value) {
 function walkRequests(collection, visitor) {
   for (const entry of orderedChildren(collection)) {
     if (entry.kind === 'request') {
-      visitor(entry.value, collection);
+      visitor(entry.value, collection, null, []);
     } else {
-      walkFolderRequests(entry.value, collection, visitor);
+      walkFolderRequests(entry.value, collection, visitor, []);
     }
   }
 }
 
-function walkFolderRequests(folder, collection, visitor) {
+function walkFolderRequests(folder, collection, visitor, parentPath = []) {
+  const folderPath = [...parentPath, folder].filter(Boolean);
   for (const entry of orderedChildren(folder)) {
     if (entry.kind === 'request') {
-      visitor(entry.value, collection, folder);
+      visitor(entry.value, collection, folder, folderPath);
     } else {
-      walkFolderRequests(entry.value, collection, visitor);
+      walkFolderRequests(entry.value, collection, visitor, folderPath);
     }
   }
 }
