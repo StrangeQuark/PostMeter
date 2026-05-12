@@ -408,7 +408,7 @@ textarea.code-editor-input:placeholder-shown {
 }
 
 .code-editor-token.tok-variable-folder.tok-variable-valid {
-  color: var(--method-options);
+  color: var(--entity-folder);
 }
 
 .code-editor-token.tok-variable-csv.tok-variable-valid {
@@ -500,7 +500,7 @@ textarea.code-editor-input.has-openable-variable-hover {
 }
 
 .variable-highlight-folder.variable-highlight-valid {
-  color: var(--method-options);
+  color: var(--entity-folder);
 }
 
 .variable-highlight-csv.variable-highlight-valid {
