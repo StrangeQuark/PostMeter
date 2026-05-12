@@ -69,6 +69,7 @@ test('accepts structurally valid IPC payloads', () => {
     name: 'Workspace',
     settings: {
       appearance: { theme: 'dark' },
+      editor: { lineNumbers: false },
       tabs: { saveOnForceClose: true },
       sandbox: {
         fileBindings: [{
@@ -387,6 +388,7 @@ test('accepts structurally valid IPC payloads', () => {
   }));
   assert.doesNotThrow(() => assertWorkspaceSettingsSavePayload({
     appearance: { theme: 'dark' },
+    editor: { lineNumbers: true },
     diagnostics: {
       logging: { enabled: true, level: 'warn' },
       requestResponseLogging: {
@@ -518,6 +520,7 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertWorkspacePayload({ collections: {}, environments: [], history: [] }), /workspace.collections must be an array/);
   assert.throws(() => assertWorkspacePayload({ collections: [], runners: {}, environments: [], history: [] }), /workspace.runners must be an array/);
   assert.throws(() => assertWorkspacePayload({ settings: { updates: { includePrereleases: 'yes' } }, collections: [], environments: [], history: [] }), /workspace.settings.updates.includePrereleases must be a boolean/);
+  assert.throws(() => assertWorkspacePayload({ settings: { editor: { lineNumbers: 'yes' } }, collections: [], environments: [], history: [] }), /workspace.settings.editor.lineNumbers must be a boolean/);
   assert.throws(() => assertWorkspacePayload({ settings: { appearance: { theme: 'sepia' } }, collections: [], environments: [], history: [] }), /workspace.settings.appearance.theme must be one of/);
   assert.throws(() => assertWorkspacePayload({ settings: { diagnostics: { requestResponseLogging: { bodies: 'yes' } } }, collections: [], environments: [], history: [] }), /workspace.settings.diagnostics.requestResponseLogging.bodies must be a boolean/);
   assert.throws(() => assertWorkspacePayload({ settings: { diagnostics: { logging: { level: 'trace' } } }, collections: [], environments: [], history: [] }), /workspace.settings.diagnostics.logging.level must be one of/);

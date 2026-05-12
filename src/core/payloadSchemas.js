@@ -119,6 +119,9 @@ const FIELD_SCHEMAS = {
   appearance: {
     theme: { type: 'string', limit: 'tiny', enum: 'themeValues', optional: true }
   },
+  editorSettings: {
+    lineNumbers: { type: 'boolean', optional: true }
+  },
   diagnosticsLogging: {
     enabled: { type: 'boolean', optional: true },
     level: { type: 'string', limit: 'tiny', enum: 'diagnosticLogLevels', optional: true }

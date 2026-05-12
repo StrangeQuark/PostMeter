@@ -59,6 +59,7 @@ function appScopedSettings(settings = {}) {
   const normalized = normalizeSettings(settings);
   return {
     appearance: normalized.appearance,
+    editor: normalized.editor,
     tabs: normalized.tabs,
     modals: normalized.modals,
     updates: normalized.updates,
@@ -99,6 +100,7 @@ function effectiveSettingsForWorkspace(appSettings, workspaceId, fallbackSetting
   const fallback = normalizeWorkspaceLocalSettings(fallbackSettings || {});
   const appSettingsOnly = normalizeSettings({
     appearance: normalizedAppSettings.app.appearance,
+    editor: normalizedAppSettings.app.editor,
     tabs: normalizedAppSettings.app.tabs,
     modals: normalizedAppSettings.app.modals,
     updates: normalizedAppSettings.app.updates,

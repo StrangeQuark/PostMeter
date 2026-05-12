@@ -120,6 +120,7 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(indexSource, /id="settingsAppearanceButton"[^>]+data-settings-section="appearance"/);
   assert.match(indexSource, /id="settingsModalsButton"[^>]+data-settings-section="modals"/);
   assert.match(indexSource, /id="themeDarkButton"[^>]+data-theme-option="dark"/);
+  assert.match(indexSource, /id="showEditorLineNumbersInput"/);
   assert.match(indexSource, /id="saveOnForceCloseInput"/);
   assert.match(indexSource, /id="closeModalsOnBackdropClickInput"/);
   assert.match(indexSource, /id="includePrereleasesInput"/);
@@ -411,6 +412,7 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
   const elements = new Map([
     ['closeSettingsModalButton', createElement()],
     ['closeSettingsModalFooterButton', createElement()],
+    ['showEditorLineNumbersInput', createElement({ tagName: 'INPUT' })],
     ['saveOnForceCloseInput', createElement({ tagName: 'INPUT' })],
     ['closeModalsOnBackdropClickInput', createElement({ tagName: 'INPUT' })],
     ['includePrereleasesInput', createElement({ tagName: 'INPUT' })],
@@ -437,6 +439,7 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
     windowObject: { addEventListener() {} },
     onSelectSettingsSection: (section) => calls.push(`section:${section}`),
     onSelectTheme: (theme) => calls.push(`theme:${theme}`),
+    onShowEditorLineNumbersChange: () => calls.push('line-numbers'),
     onSaveOnForceCloseChange: () => calls.push('save-on-force-close'),
     onCloseModalsOnBackdropClickChange: () => calls.push('close-modals-on-backdrop'),
     onIncludePrereleasesChange: () => calls.push('include-prereleases'),
@@ -445,6 +448,7 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
 
   settingsTabsButton.dispatch('click');
   themeDarkButton.dispatch('click');
+  elements.get('showEditorLineNumbersInput').dispatch('change');
   elements.get('saveOnForceCloseInput').dispatch('change');
   settingsModalsButton.dispatch('click');
   elements.get('closeModalsOnBackdropClickInput').dispatch('change');
@@ -455,6 +459,7 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
   assert.deepEqual(calls, [
     'section:tabs',
     'theme:dark',
+    'line-numbers',
     'save-on-force-close',
     'section:modals',
     'close-modals-on-backdrop',

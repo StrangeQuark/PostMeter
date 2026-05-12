@@ -53,6 +53,7 @@ test('creates a default current-schema workspace when no file exists', async () 
         }
       }
     },
+    editor: { lineNumbers: true },
     tabs: { saveOnForceClose: false },
     modals: { closeOnBackdropClick: false },
     updates: { includePrereleases: false }

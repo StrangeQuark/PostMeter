@@ -399,6 +399,10 @@ function assertSettingsPayload(value, field) {
   if (value.appearance != null) {
     assertSchemaFields('appearance', value.appearance, `${field}.appearance`);
   }
+  if (value.editor != null) {
+    assertSchemaFields('editorSettings', value.editor, `${field}.editor`);
+    assertNoUnexpectedFields('editorSettings', value.editor, `${field}.editor`);
+  }
   if (value.tabs != null) {
     assertSchemaFields('tabSettings', value.tabs, `${field}.tabs`);
     assertNoUnexpectedFields('tabSettings', value.tabs, `${field}.tabs`);

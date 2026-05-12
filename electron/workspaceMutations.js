@@ -415,6 +415,7 @@ function mergeWorkspaceSettingsForSave(currentSettings, nextSettings) {
       ...(isPlainObject(next.sandbox) ? next.sandbox : {}),
       trustedCapabilities: mergeObject(current.sandbox?.trustedCapabilities, next.sandbox?.trustedCapabilities)
     },
+    editor: mergeObject(current.editor, next.editor),
     tabs: mergeObject(current.tabs, next.tabs),
     modals: mergeObject(current.modals, next.modals),
     updates: mergeObject(current.updates, next.updates)

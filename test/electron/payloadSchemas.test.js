@@ -30,6 +30,7 @@ test('defines shared payload schema metadata for IPC and contributors', () => {
   assert.ok(ASSERTION_OPERATORS.includes('lessThan'));
   assert.equal(payloadSchemas.fields.keyValue.value.limit, 'value');
   assert.equal(payloadSchemas.fields.appearance.theme.enum, 'themeValues');
+  assert.equal(payloadSchemas.fields.editorSettings.lineNumbers.type, 'boolean');
   assert.equal(payloadSchemas.fields.diagnosticsLogging.level.enum, 'diagnosticLogLevels');
   assert.equal(payloadSchemas.fields.requestResponseLoggingSettings.bodies.type, 'boolean');
   assert.equal(payloadSchemas.fields.cookie.sameSite.enum, 'sameSiteValues');
