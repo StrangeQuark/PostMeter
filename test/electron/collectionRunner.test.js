@@ -1149,8 +1149,11 @@ test('fails collection runs when scripts fail', async () => {
   });
 
   assert.equal(result.passed, false);
-  assert.equal(sends, 1);
-  assert.match(result.results[0].error, /no send/);
+  assert.equal(sends, 2);
+  assert.equal(result.results[0].statusCode, 200);
+  assert.equal(result.results[0].error, '');
+  assert.equal(result.results[0].preRequestScriptResult.error, 'no send');
+  assert.equal(result.results[1].error, '');
   assert.equal(result.results[1].testScriptResult.tests[0].passed, false);
 });
 
@@ -1517,7 +1520,8 @@ test('does not commit pm.execution.runRequest side effects when the caller phase
   });
 
   assert.equal(result.passed, false);
-  assert.match(result.results[0].error, /abort caller phase/);
+  assert.equal(result.results[0].error, '');
+  assert.match(result.results[0].testScriptResult.error, /abort caller phase/);
   assert.equal(result.environment.variables.find((item) => item.key === 'fromRolledBackTarget'), undefined);
 });
 

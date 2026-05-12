@@ -369,6 +369,38 @@ test('carries runner-style request details into performance samples', async () =
   assert.equal(sample.testScriptResult.tests[0].name, 'post-request saw status');
 });
 
+test('keeps script failures out of performance sample top-level errors', async () => {
+  const performanceTest = performanceTestModel({
+    id: 'perf-script-fail',
+    name: 'Script Failure Performance',
+    type: 'latency',
+    request: {
+      id: 'script-fail-request',
+      name: 'Script Failure Request',
+      method: 'GET',
+      url: 'https://api.example.test/script-fail',
+      scripts: {
+        preRequest: "throw new Error('pre failed');",
+        tests: "throw new Error('post failed');"
+      }
+    },
+    config: { iterations: 1, concurrency: 1 },
+    safetyLimits: { maxTotalRequests: 1, maxConcurrency: 1, maxDurationSeconds: 10 }
+  });
+
+  const result = await runPerformanceTest(performanceTest, null, {
+    sendRequest: async () => response()
+  });
+
+  const sample = result.samples[0];
+  assert.equal(result.passed, false);
+  assert.equal(sample.statusCode, 200);
+  assert.equal(sample.error, '');
+  assert.deepEqual(result.summary.errors, {});
+  assert.equal(sample.preRequestScriptResult.error, 'pre failed');
+  assert.equal(sample.testScriptResult.error, 'post failed');
+});
+
 test('keeps performance environment mutations temporary unless persistence is allowed', async () => {
   const base = {
     id: 'env',

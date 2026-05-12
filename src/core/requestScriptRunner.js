@@ -1,9 +1,7 @@
 const {
   applyScriptMutations,
-  createPreRequestScriptError,
   createScriptedRequestState,
   emptyScriptResult,
-  preRequestScriptShouldAbortRequest,
   runScriptedRequestLifecycle,
   scriptResultOnly
 } = require('./scriptedRequestLifecycle');
@@ -17,9 +15,6 @@ async function runRequestWithScripts(request, environment, options = {}) {
     }),
     options
   );
-  if (preRequestScriptShouldAbortRequest(lifecycleResult.preRequestScriptResult)) {
-    throw createPreRequestScriptError(lifecycleResult);
-  }
   if (lifecycleResult.skipped) {
     const response = skippedRequestResponse(request, lifecycleResult);
     return {

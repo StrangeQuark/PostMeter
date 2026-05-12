@@ -99,37 +99,60 @@ test('runs the shared scripted request lifecycle and applies script mutations ac
   assert.equal(request.variables[0].value, 'local-token');
 });
 
-test('returns top-level pre-request errors from the shared lifecycle without sending the request', async () => {
-  let sends = 0;
+test('continues the main request when the pre-request script has a top-level error', async () => {
+  const scripts = [];
+  const sent = [];
 
   const result = await runScriptedRequestLifecycle(
     createScriptedRequestState({
       id: 'pre-fail',
+      method: 'GET',
+      url: 'https://api.example.test/main',
       scripts: { preRequest: 'pre', tests: 'tests' }
     }, null),
     {
-      scriptRunner: async () => ({
-        result: {
-          passed: false,
-          tests: [],
-          error: 'no send',
-          logs: []
-        },
-        environmentVariables: [],
-        collectionVariables: [],
-        localVariables: []
-      }),
-      sendRequest: async () => {
-        sends++;
+      scriptRunner: async (scriptText) => {
+        scripts.push(scriptText);
+        if (scriptText === 'pre') {
+          return {
+            result: {
+              passed: false,
+              tests: [],
+              error: 'pre failed',
+              logs: [],
+              commitSideEffects: false
+            },
+            environmentVariables: [{ enabled: true, key: 'blocked', value: 'yes' }],
+            collectionVariables: [],
+            localVariables: []
+          };
+        }
+        return {
+          result: {
+            passed: true,
+            tests: [{ name: 'post still ran', passed: true, error: '' }],
+            error: '',
+            logs: []
+          },
+          environmentVariables: [],
+          collectionVariables: [],
+          localVariables: []
+        };
+      },
+      sendRequest: async (request) => {
+        sent.push(request.url);
         return response(200, '{}');
       }
     }
   );
 
-  assert.equal(sends, 0);
-  assert.equal(result.response, null);
-  assert.equal(result.preRequestScriptResult.error, 'no send');
-  assert.deepEqual(result.testScriptResult, emptyScriptResult());
+  assert.deepEqual(sent, ['https://api.example.test/main']);
+  assert.deepEqual(scripts, ['pre', 'tests']);
+  assert.equal(result.requestSent, true);
+  assert.equal(result.response.statusCode, 200);
+  assert.equal(result.preRequestScriptResult.error, 'pre failed');
+  assert.equal(result.testScriptResult.tests[0].name, 'post still ran');
+  assert.equal(result.environment.variables.find((item) => item.key === 'blocked'), undefined);
 });
 
 test('continues the main request when pre-request assertions fail', async () => {
@@ -374,33 +397,29 @@ test('allows script selection of configured primary request client-certificate b
   assert.deepEqual(result.request.auth, { type: 'clientCertificate', certificateId: 'cert-1' });
 });
 
-test('throws enriched pre-request errors for single-request execution', async () => {
-  await assert.rejects(
-    () => runRequestWithScripts({
-      id: 'single-pre-fail',
-      scripts: { preRequest: 'pre' }
-    }, null, {
-      scriptRunner: async () => ({
-        result: {
-          passed: false,
-          tests: [],
-          error: 'bad pre-request',
-          logs: []
-        },
-        environmentVariables: [{ enabled: true, key: 'token', value: 'blocked' }],
-        collectionVariables: [{ enabled: true, key: 'fromPre', value: 'yes' }],
-        localVariables: [{ enabled: true, key: 'local', value: 'nope' }]
-      })
-    }),
-    (error) => {
-      assert.match(error.message, /bad pre-request/);
-      assert.equal(error.preRequestScriptResult.error, 'bad pre-request');
-      assert.equal(error.environment.variables.find((item) => item.key === 'token').value, 'blocked');
-      assert.equal(error.collectionVariables.find((item) => item.key === 'fromPre').value, 'yes');
-      assert.equal(error.localVariables.find((item) => item.key === 'local').value, 'nope');
-      return true;
+test('single-request execution captures pre-request and post-request script errors while sending the request', async () => {
+  const sent = [];
+
+  const result = await runRequestWithScripts({
+    id: 'single-script-failures',
+    method: 'GET',
+    url: 'https://api.example.test/script-failures',
+    scripts: {
+      preRequest: 'asdf',
+      tests: 'fdsa'
     }
-  );
+  }, null, {
+    sendRequest: async (request) => {
+      sent.push(request.url);
+      return response(200, '{"ok":true}');
+    }
+  });
+
+  assert.deepEqual(sent, ['https://api.example.test/script-failures']);
+  assert.equal(result.response.requestSent, true);
+  assert.equal(result.response.statusCode, 200);
+  assert.match(result.preRequestScriptResult.error, /asdf is not defined/);
+  assert.match(result.testScriptResult.error, /fdsa is not defined/);
 });
 
 test('propagates diagnostics callbacks into single-request sandbox broker denials', async () => {

@@ -125,7 +125,7 @@ async function runCollection(collection, environment, options = {}) {
     if (Array.isArray(scriptedRequest.cookies)) {
       scopeState.cookies = scriptedRequest.cookies;
     }
-    if (preRequestScriptShouldAbortRequest(scriptedRequest.preRequestScriptResult)) {
+    if (preRequestScriptStoppedBeforeSend(scriptedRequest)) {
       return runRequestBrokerResult(targetEntry, scriptedRequest, null, []);
     }
     if (scriptedRequest.skipped) {
@@ -203,7 +203,7 @@ async function runCollection(collection, environment, options = {}) {
           iterationData
         })
       );
-      if (preRequestScriptShouldAbortRequest(scriptedRequest.preRequestScriptResult)) {
+      if (preRequestScriptStoppedBeforeSend(scriptedRequest)) {
         const result = scriptFailureResult(
           entry,
           startedAt,
@@ -257,7 +257,7 @@ async function runCollection(collection, environment, options = {}) {
         testScriptResult: scriptedRequest.testScriptResult,
         extractedVariables: assertions.extractedVariables,
         localVariables: scriptedRequest.localVariables,
-        error: scriptedRequest.testScriptResult.error || ''
+        error: ''
       };
       results.push(result);
       progress(progressEvent(index + 1, requests.length, result));
@@ -828,6 +828,11 @@ function scriptFailureResult(entry, startedAt, preRequestScriptResult, localVari
     localVariables,
     error
   };
+}
+
+function preRequestScriptStoppedBeforeSend(scriptedRequest) {
+  return scriptedRequest?.requestSent !== true
+    && preRequestScriptShouldAbortRequest(scriptedRequest?.preRequestScriptResult);
 }
 
 function runResultRequestDisplayFields(entry, request, environment) {

@@ -60,7 +60,7 @@ async function runHttpScriptedRequestLifecycle(state, options = {}) {
   const iterationData = options.iterationData || [];
   const scriptOptions = scriptOptionsForLifecycle(options, { sendRequest: send });
 
-  const preRequestScriptExecution = await runScript(state.request?.scripts?.preRequest, scriptContext(state, {
+  const preRequestScriptContext = scriptContext(state, {
     collectionId: options.collectionId,
     collectionName: options.collectionName,
     eventName: options.preRequestEventName || 'prerequest',
@@ -70,20 +70,16 @@ async function runHttpScriptedRequestLifecycle(state, options = {}) {
     iterationData,
     workspaceId: options.workspaceId,
     workspaceName: options.workspaceName
-  }), scriptOptions);
+  });
+  const preRequestScriptExecution = await runScriptSafely(
+    runScript,
+    state.request?.scripts?.preRequest,
+    preRequestScriptContext,
+    scriptOptions
+  );
   applyScriptMutations(state, preRequestScriptExecution, { allowRequestMutation: true });
   const preRequestScriptResult = scriptResultOnly(preRequestScriptExecution);
   const preRequestExecution = preRequestScriptResult.execution || {};
-  if (preRequestScriptShouldAbortRequest(preRequestScriptResult)) {
-    return {
-      ...state,
-      response: null,
-      preRequestScriptResult,
-      testScriptResult: emptyScriptResult(),
-      requestSent: false,
-      execution: preRequestExecution
-    };
-  }
   if (preRequestExecution.skipRequest === true) {
     return {
       ...state,
@@ -95,6 +91,7 @@ async function runHttpScriptedRequestLifecycle(state, options = {}) {
       execution: preRequestExecution
     };
   }
+  throwIfAborted(options.signal);
 
   const response = await send(
     state.request,
@@ -112,7 +109,7 @@ async function runHttpScriptedRequestLifecycle(state, options = {}) {
   if (Array.isArray(response.updatedCookies)) {
     state.cookies = response.updatedCookies;
   }
-  const testScriptExecution = await runScript(state.request?.scripts?.tests, scriptContext(state, {
+  const testScriptContext = scriptContext(state, {
     collectionId: options.collectionId,
     collectionName: options.collectionName,
     eventName: options.testEventName || 'test',
@@ -123,7 +120,13 @@ async function runHttpScriptedRequestLifecycle(state, options = {}) {
     response,
     workspaceId: options.workspaceId,
     workspaceName: options.workspaceName
-  }), scriptOptions);
+  });
+  const testScriptExecution = await runScriptSafely(
+    runScript,
+    state.request?.scripts?.tests,
+    testScriptContext,
+    scriptOptions
+  );
   applyScriptMutations(state, testScriptExecution, { allowRequestMutation: false });
   if (Array.isArray(state.cookies)) {
     response.updatedCookies = state.cookies;
@@ -176,7 +179,7 @@ async function runGrpcRequestLifecycle(state, options = {}) {
     sendRequest: options.sendRequest || sendRequest
   });
 
-  const beforeInvokeExecution = await runScript(protocolScript(state.request, 'beforeInvoke', 'preRequest'), scriptContext(state, {
+  const beforeInvokeContext = scriptContext(state, {
     collectionId: options.collectionId,
     collectionName: options.collectionName,
     eventName: 'beforeInvoke',
@@ -186,22 +189,16 @@ async function runGrpcRequestLifecycle(state, options = {}) {
     iterationData,
     workspaceId: options.workspaceId,
     workspaceName: options.workspaceName
-  }), scriptOptions);
+  });
+  const beforeInvokeExecution = await runScriptSafely(
+    runScript,
+    protocolScript(state.request, 'beforeInvoke', 'preRequest'),
+    beforeInvokeContext,
+    scriptOptions
+  );
   applyScriptMutations(state, beforeInvokeExecution, { allowRequestMutation: true });
   const beforeInvokeResult = scriptResultOnly(beforeInvokeExecution);
   const beforeInvokeRuntime = beforeInvokeResult.execution || {};
-  if (preRequestScriptShouldAbortRequest(beforeInvokeResult)) {
-    return {
-      ...state,
-      response: null,
-      preRequestScriptResult: beforeInvokeResult,
-      messageScriptResults: [],
-      afterResponseScriptResult: emptyScriptResult(),
-      testScriptResult: emptyScriptResult(),
-      requestSent: false,
-      execution: beforeInvokeRuntime
-    };
-  }
   if (beforeInvokeRuntime.skipRequest === true) {
     return {
       ...state,
@@ -215,6 +212,7 @@ async function runGrpcRequestLifecycle(state, options = {}) {
       execution: beforeInvokeRuntime
     };
   }
+  throwIfAborted(options.signal);
 
   const runtimeEnv = runtimeEnvironment(state.collectionVariables, state.environment, state.localVariables, {
     globals: state.globals,
@@ -243,7 +241,7 @@ async function runGrpcRequestLifecycle(state, options = {}) {
       ...response,
       messages: [message]
     };
-    const messageScriptExecution = await runScript(onMessageScript, scriptContext(state, {
+    const messageScriptContext = scriptContext(state, {
       collectionId: options.collectionId,
       collectionName: options.collectionName,
       eventName: 'onIncomingMessage',
@@ -255,14 +253,20 @@ async function runGrpcRequestLifecycle(state, options = {}) {
       response: messageResponse,
       workspaceId: options.workspaceId,
       workspaceName: options.workspaceName
-    }), scriptOptions);
+    });
+    const messageScriptExecution = await runScriptSafely(
+      runScript,
+      onMessageScript,
+      messageScriptContext,
+      scriptOptions
+    );
     applyScriptMutations(state, messageScriptExecution, { allowRequestMutation: false });
     const result = scriptResultOnly(messageScriptExecution);
     messageScriptResults.push(result);
     messageExecution = mergeExecution(messageExecution, result.execution);
   }
 
-  const afterResponseExecution = await runScript(protocolScript(state.request, 'afterResponse', 'tests'), scriptContext(state, {
+  const afterResponseContext = scriptContext(state, {
     collectionId: options.collectionId,
     collectionName: options.collectionName,
     eventName: 'afterResponse',
@@ -273,7 +277,13 @@ async function runGrpcRequestLifecycle(state, options = {}) {
     response,
     workspaceId: options.workspaceId,
     workspaceName: options.workspaceName
-  }), scriptOptions);
+  });
+  const afterResponseExecution = await runScriptSafely(
+    runScript,
+    protocolScript(state.request, 'afterResponse', 'tests'),
+    afterResponseContext,
+    scriptOptions
+  );
   applyScriptMutations(state, afterResponseExecution, { allowRequestMutation: false });
   const afterResponseResult = scriptResultOnly(afterResponseExecution);
   const testScriptResult = aggregateGrpcScriptResult(messageScriptResults, afterResponseResult);
@@ -330,6 +340,45 @@ function scriptOptionsForLifecycle(options = {}, overrides = {}) {
     fileBindings: options.scriptOptions?.fileBindings || options.fileBindings || [],
     recordDiagnosticEvent: options.scriptOptions?.recordDiagnosticEvent || options.recordDiagnosticEvent
   };
+}
+
+async function runScriptSafely(runScript, scriptText, context, options = {}) {
+  try {
+    return await runScript(scriptText, context, options);
+  } catch (error) {
+    if (options.signal?.aborted === true || error?.name === 'AbortError') {
+      throw error;
+    }
+    return failedScriptExecution(error, context);
+  }
+}
+
+function failedScriptExecution(error, context = {}) {
+  const message = error?.message || String(error || 'Script failed.');
+  return {
+    result: {
+      passed: false,
+      tests: [],
+      error: message,
+      logs: [],
+      commitSideEffects: false,
+      execution: {}
+    },
+    environmentVariables: context.environment?.variables || [],
+    collectionVariables: context.collectionVariables || [],
+    globals: context.globals || [],
+    localVariables: context.localVariables || [],
+    cookies: context.cookieJar || [],
+    request: context.request || {}
+  };
+}
+
+function throwIfAborted(signal) {
+  if (signal?.aborted === true) {
+    const error = new Error('Request was cancelled.');
+    error.name = 'AbortError';
+    throw error;
+  }
 }
 
 function requestProtocol(request = {}) {
@@ -844,16 +893,6 @@ function hasDirectClientCertificateMaterial(auth) {
     || Boolean(auth.cert?.src || auth.key?.src || auth.pfx?.src);
 }
 
-function createPreRequestScriptError(result) {
-  const error = new Error(scriptResultFailureMessage(result?.preRequestScriptResult, 'Pre-request script failed.'));
-  error.preRequestScriptResult = result?.preRequestScriptResult || emptyScriptResult();
-  error.environment = normalizeRuntimeEnvironment(result?.environment);
-  error.collectionVariables = Array.isArray(result?.collectionVariables) ? result.collectionVariables : [];
-  error.globals = Array.isArray(result?.globals) ? result.globals : [];
-  error.localVariables = Array.isArray(result?.localVariables) ? result.localVariables : [];
-  return error;
-}
-
 function preRequestScriptShouldAbortRequest(scriptResult) {
   const result = scriptResult && typeof scriptResult === 'object' ? scriptResult : {};
   if (result.passed !== false) {
@@ -937,7 +976,6 @@ function cloneJson(value) {
 
 module.exports = {
   applyScriptMutations,
-  createPreRequestScriptError,
   createScriptedRequestState,
   emptyScriptResult,
   preRequestScriptShouldAbortRequest,

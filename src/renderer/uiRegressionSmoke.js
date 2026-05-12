@@ -3907,7 +3907,7 @@
       const closeTargetTab = openRequestTabs.find((tab) => tab.requestId === closeTarget.id);
       openOpenTabContextMenu(closeTargetTab);
       const tabContextLabels = Array.from($('contextMenu').querySelectorAll('button')).map((button) => button.textContent.trim());
-      for (const label of ['New Request', 'Close Tab', 'Close Other Tabs', 'Close All Tabs', 'Force Close Tab', 'Force Close All Tabs']) {
+      for (const label of ['New Request', 'Close Tab', 'Close Other Tabs', 'Close All Tabs', 'Force Close Tab', 'Force Close Other Tabs', 'Force Close All Tabs']) {
         assertUiSmoke(tabContextLabels.includes(label), `Open-tab context menu should include ${label}.`);
       }
       activateContextMenuItem('Close Tab');

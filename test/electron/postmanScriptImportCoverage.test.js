@@ -483,12 +483,13 @@ test('covers negative imported Postman scripts with explicit failures and sandbo
   });
 
   assert.equal(result.passed, false);
-  assert.deepEqual(sentRequests, ['Failing Test Assertion', 'Sandbox Denials']);
+  assert.deepEqual(sentRequests, ['Failing Prerequest', 'Failing Test Assertion', 'Sandbox Denials']);
   assert.equal(result.results.length, 3);
   assert.equal(result.results[0].requestName, 'Failing Prerequest');
   assert.equal(result.results[0].passed, false);
-  assert.equal(result.results[0].statusCode, 0);
-  assert.match(result.results[0].error, /preflight failed intentionally/);
+  assert.equal(result.results[0].statusCode, 200);
+  assert.equal(result.results[0].error, '');
+  assert.match(result.results[0].preRequestScriptResult.error, /preflight failed intentionally/);
   assert.equal(envValue(result.environment, 'rolledBackPre'), undefined);
   assert.equal(result.results[1].requestName, 'Failing Test Assertion');
   assert.equal(result.results[1].passed, false);

@@ -143,7 +143,7 @@ test('request IPC reports refreshed auth persisted only when the workspace mutat
   assert.equal(workspace.collections[0].requests[0].auth.accessToken, 'stale-token');
 });
 
-test('request IPC returns pre-request script failures without committing top-level error mutations', async () => {
+test('request IPC sends despite top-level pre-request failures without committing failed script mutations', async () => {
   const handlers = new Map();
   const workspace = workspaceModel({
     collections: [
@@ -196,6 +196,17 @@ test('request IPC returns pre-request script failures without committing top-lev
       savedWorkspace = structuredClone(nextWorkspace);
       return nextWorkspace;
     },
+    runRequestWithScripts: (request, environment, options) => runRequestWithScripts(request, environment, {
+      ...options,
+      sendRequest: async () => ({
+        statusCode: 200,
+        headers: { 'content-type': ['text/plain'] },
+        body: 'main response',
+        durationMillis: 7,
+        responseBytes: 13,
+        finalUrl: 'https://api.example.test'
+      })
+    }),
     setWorkspace: (nextWorkspace) => {
       appliedWorkspace = structuredClone(nextWorkspace);
     }
@@ -207,17 +218,17 @@ test('request IPC returns pre-request script failures without committing top-lev
     structuredClone(workspace.environments[0])
   );
 
-  assert.equal(response.requestSent, false);
-  assert.equal(response.statusCode, 0);
-  assert.equal(response.body, 'bad pre-request');
+  assert.equal(response.requestSent, true);
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body, 'main response');
   assert.equal(response.preRequestScriptResult.error, 'bad pre-request');
   assert.equal(response.environment.variables.find((item) => item.key === 'token').value, 'old-token');
   assert.equal(response.collectionVariables.find((item) => item.key === 'fromPre').value, 'old-value');
   assert.equal(response.localVariables.find((item) => item.key === 'local').value, 'old-local');
-  assert.equal(saveCalls, 0);
-  assert.equal(savedWorkspace, null);
-  assert.equal(appliedWorkspace, null);
-  assert.equal(workspace.history.length, 0);
+  assert.equal(saveCalls, 1);
+  assert.equal(savedWorkspace.history.length, 1);
+  assert.equal(appliedWorkspace.history.length, 1);
+  assert.equal(appliedWorkspace.history[0].statusCode, 200);
   assert.equal(workspace.environments[0].variables.find((item) => item.key === 'token').value, 'old-token');
   assert.equal(workspace.collections[0].variables.find((item) => item.key === 'fromPre').value, 'old-value');
   assert.equal(workspace.collections[0].requests[0].variables.find((item) => item.key === 'local').value, 'old-local');

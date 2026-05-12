@@ -689,6 +689,7 @@ function showOpenTabContextMenu(event, kind, tab, _item, options = {}) {
     ['Close Other Tabs', () => { void queueOpenTabCloseSequence(openTabRefs().filter((ref) => ref.key !== targetRef.key)); }],
     ['Close All Tabs', () => { void queueOpenTabCloseSequence(openTabRefs()); }],
     ['Force Close Tab', () => { void queueOpenTabCloseSequence([targetRef], { force: true }); }, 'danger'],
+    ['Force Close Other Tabs', () => { void queueOpenTabCloseSequence(openTabRefs().filter((ref) => ref.key !== targetRef.key), { force: true }); }, 'danger'],
     ['Force Close All Tabs', () => { void queueOpenTabCloseSequence(openTabRefs(), { force: true }); }, 'danger']
   ], {
     focusFirst: options.keyboard === true,
