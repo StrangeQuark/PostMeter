@@ -666,6 +666,23 @@
               <input id="runnerAllowEnvironmentMutation" type="checkbox">
               <span>Allow runner to modify environment</span>
             </label>
+            <button id="runnerCaptureSettingsButton" type="button" aria-expanded="false" aria-controls="runnerCaptureSettingsPanel">Capture Settings</button>
+          </div>
+          <div id="runnerCaptureSettingsPanel" class="capture-settings-panel" hidden>
+            <label class="field compact">
+              <span>Response Body</span>
+              <select id="runnerCaptureResponseBodySelect">
+                <option value="all">All</option>
+                <option value="failed">Failed only</option>
+                <option value="sampled">Sampled</option>
+                <option value="none">None</option>
+              </select>
+            </label>
+            <label class="field compact-number-field"><span>Preview Bytes</span><input id="runnerCaptureBodyPreviewBytesInput" type="number" min="0" max="32768" step="1024"></label>
+            <label class="checkbox-line"><input id="runnerCapturePreRequestInput" type="checkbox"><span>Pre-request output</span></label>
+            <label class="checkbox-line"><input id="runnerCapturePostRequestInput" type="checkbox"><span>Post-request output</span></label>
+            <label class="checkbox-line"><input id="runnerCaptureScriptLogsInput" type="checkbox"><span>Script logs</span></label>
+            <label class="checkbox-line"><input id="runnerCaptureLocalVariablesInput" type="checkbox"><span>Local variables</span></label>
           </div>
           <div class="runner-request-actions">
             <button id="addRunnerRequestButton" type="button" aria-haspopup="menu" aria-expanded="false">Add Request</button>
@@ -735,6 +752,7 @@
               <button id="deletePerformanceTestButton" class="danger-button" type="button">Delete Performance Test</button>
               <button id="importPerformanceRequestButton" type="button">Import Request</button>
               <button id="exportPerformanceTestButton" type="button">Export Test</button>
+              <button id="performanceCaptureSettingsButton" type="button" aria-expanded="false" aria-controls="performanceCaptureSettingsPanel">Capture Settings</button>
               <button id="exportPerformanceResultCsvButton" type="button">Export Result CSV</button>
             </div>
           </div>
@@ -1081,9 +1099,27 @@
               <label class="checkbox-line performance-mutation-option"><input data-performance-mutation type="checkbox"><span>Allow performance test to modify environment</span></label>
             </div>
           </div>
+          <div id="performanceCaptureSettingsPanel" class="capture-settings-panel" hidden>
+            <label class="field compact">
+              <span>Response Body</span>
+              <select id="performanceCaptureResponseBodySelect">
+                <option value="all">All</option>
+                <option value="failed">Failed only</option>
+                <option value="sampled">Sampled</option>
+                <option value="none">None</option>
+              </select>
+            </label>
+            <label class="field compact-number-field"><span>Preview Bytes</span><input id="performanceCaptureBodyPreviewBytesInput" type="number" min="0" max="32768" step="1024"></label>
+            <label class="checkbox-line"><input id="performanceCapturePreRequestInput" type="checkbox"><span>Pre-request output</span></label>
+            <label class="checkbox-line"><input id="performanceCapturePostRequestInput" type="checkbox"><span>Post-request output</span></label>
+            <label class="checkbox-line"><input id="performanceCaptureScriptLogsInput" type="checkbox"><span>Script logs</span></label>
+            <label class="checkbox-line"><input id="performanceCaptureLocalVariablesInput" type="checkbox"><span>Local variables</span></label>
+            <label class="checkbox-line"><input id="performanceCaptureHeadersInput" type="checkbox"><span>Response headers</span></label>
+            <label class="checkbox-line"><input id="performanceCaptureTimingsInput" type="checkbox"><span>Transport timings</span></label>
+          </div>
           <div id="latencyTab" class="tab-panel performance-type-panel" role="tabpanel" aria-labelledby="performanceLatencyTabButton">
             <div class="performance-type-grid">
-              <label class="field compact-number-field"><span>Samples</span><input data-performance-config="iterations" type="number" min="1" max="1000" step="1"></label>
+              <label class="field compact-number-field"><span>Samples</span><input data-performance-config="iterations" type="number" min="1" max="1000000" step="1"></label>
               <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
               <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
               <label class="checkbox-line performance-mutation-option"><input data-performance-mutation type="checkbox"><span>Allow performance test to modify environment</span></label>
@@ -1091,9 +1127,9 @@
           </div>
           <div id="throughputTab" class="tab-panel performance-type-panel" role="tabpanel" aria-labelledby="performanceThroughputTabButton">
             <div class="performance-type-grid">
-              <label class="field compact-number-field"><span>Requests</span><input data-performance-config="iterations" type="number" min="1" max="1000" step="1"></label>
+              <label class="field compact-number-field"><span>Requests</span><input data-performance-config="iterations" type="number" min="1" max="1000000" step="1"></label>
               <label class="field compact-number-field"><span>Concurrency</span><input data-performance-config="concurrency" type="number" min="1" max="25" step="1"></label>
-              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000000" step="1"></label>
               <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
               <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
               <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
@@ -1103,8 +1139,8 @@
           <div id="concurrencyTab" class="tab-panel performance-type-panel" role="tabpanel" aria-labelledby="performanceConcurrencyTabButton">
             <div class="performance-type-grid">
               <label class="field compact-number-field"><span>Virtual Users</span><input data-performance-config="concurrency" type="number" min="1" max="25" step="1"></label>
-              <label class="field compact-number-field"><span>Requests / User</span><input data-performance-config="iterations" type="number" min="1" max="1000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000" step="1"></label>
+              <label class="field compact-number-field"><span>Requests / User</span><input data-performance-config="iterations" type="number" min="1" max="1000000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000000" step="1"></label>
               <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
               <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
               <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
@@ -1115,9 +1151,9 @@
             <div class="performance-type-grid">
               <label class="field compact-number-field"><span>Start Users</span><input data-performance-config="startConcurrency" type="number" min="1" max="25" step="1"></label>
               <label class="field compact-number-field"><span>Peak Users</span><input data-performance-config="concurrency" type="number" min="1" max="25" step="1"></label>
-              <label class="field compact-number-field"><span>Steps</span><input data-performance-config="rampSteps" type="number" min="1" max="1000" step="1"></label>
-              <label class="field compact-number-field"><span>Requests / Step</span><input data-performance-config="iterations" type="number" min="1" max="1000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000" step="1"></label>
+              <label class="field compact-number-field"><span>Steps</span><input data-performance-config="rampSteps" type="number" min="1" max="1000000" step="1"></label>
+              <label class="field compact-number-field"><span>Requests / Step</span><input data-performance-config="iterations" type="number" min="1" max="1000000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000000" step="1"></label>
               <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
               <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
               <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
@@ -1128,8 +1164,8 @@
             <div class="performance-type-grid">
               <label class="field compact-number-field"><span>Baseline Users</span><input data-performance-config="concurrency" type="number" min="1" max="25" step="1"></label>
               <label class="field compact-number-field"><span>Spike Multiplier</span><input data-performance-config="spikeMultiplier" type="number" min="1" max="25" step="1"></label>
-              <label class="field compact-number-field"><span>Spike Requests</span><input data-performance-config="iterations" type="number" min="1" max="1000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000" step="1"></label>
+              <label class="field compact-number-field"><span>Spike Requests</span><input data-performance-config="iterations" type="number" min="1" max="1000000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000000" step="1"></label>
               <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
               <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
               <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
@@ -1140,7 +1176,7 @@
             <div class="performance-type-grid">
               <label class="field compact-number-field"><span>Duration (s)</span><input data-performance-config="durationSeconds" type="number" min="1" max="3600" step="1"></label>
               <label class="field compact-number-field"><span>Users</span><input data-performance-config="concurrency" type="number" min="1" max="25" step="1"></label>
-              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000000" step="1"></label>
               <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
               <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
               <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
@@ -1151,9 +1187,9 @@
             <div class="performance-type-grid">
               <label class="field compact-number-field"><span>Start Users</span><input data-performance-config="startConcurrency" type="number" min="1" max="25" step="1"></label>
               <label class="field compact-number-field"><span>Peak Users</span><input data-performance-config="concurrency" type="number" min="1" max="25" step="1"></label>
-              <label class="field compact-number-field"><span>Steps</span><input data-performance-config="rampSteps" type="number" min="1" max="1000" step="1"></label>
-              <label class="field compact-number-field"><span>Requests / Step</span><input data-performance-config="iterations" type="number" min="1" max="1000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000" step="1"></label>
+              <label class="field compact-number-field"><span>Steps</span><input data-performance-config="rampSteps" type="number" min="1" max="1000000" step="1"></label>
+              <label class="field compact-number-field"><span>Requests / Step</span><input data-performance-config="iterations" type="number" min="1" max="1000000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000000" step="1"></label>
               <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
               <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
               <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
@@ -1837,6 +1873,7 @@
   <script src="layoutControls.js"></script>
   <script src="../core/payloadSchemas.js"></script>
   <script src="../core/csvVariables.js"></script>
+  <script src="../core/resultCapturePolicy.js"></script>
   <script src="../core/requestQueryModel.js"></script>
   <script src="../core/authModel.js"></script>
   <script src="../core/cookieModel.js"></script>

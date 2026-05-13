@@ -81,7 +81,7 @@ const LIMITS = {
   performanceTests: 500,
   environments: 500,
   history: 1000,
-  runnerIterations: 1000,
+  runnerIterations: 1000000,
   pairs: 1000,
   cookies: 2000,
   folderDepth: 20,

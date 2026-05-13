@@ -27,6 +27,9 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
   const startedMillis = Date.now();
   const progress = typeof options.onProgress === 'function' ? options.onProgress : () => {};
   const samples = [];
+  const retainedSummarySamples = [];
+  const retainSamples = options.retainSamples !== false;
+  const resultWriter = typeof options.resultWriter?.recordPerformanceSample === 'function' ? options.resultWriter : null;
   const useCsvVariables = csvVariablesEnabled(normalized.csvVariables);
   const iterationRows = await csvVariableIterationRows(normalized.csvVariables, plan.totalRequests);
   let currentEnvironment = cloneJson(environment) || { id: 'runtime', name: 'Runtime', variables: [] };
@@ -74,7 +77,17 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
           scheduledAtMillis
         });
         activeRequests -= 1;
-        samples.push(sample.publicSample);
+        const sampleIndex = retainedSummarySamples.length;
+        retainedSummarySamples.push(summarySampleForPerformance(sample.publicSample));
+        if (retainSamples) {
+          samples.push(sample.publicSample);
+        }
+        if (resultWriter) {
+          await resultWriter.recordPerformanceSample(sample.publicSample, {
+            index: sampleIndex,
+            totalRequests: plan.totalRequests
+          });
+        }
         if (sample.environment) {
           currentEnvironment = sample.environment;
         }
@@ -82,7 +95,7 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
           currentCookies = sample.cookies;
         }
         progress({
-          completedRequests: samples.length,
+          completedRequests: retainedSummarySamples.length,
           totalRequests: plan.totalRequests,
           activeRequests,
           phase: stage.phase || stage.name,
@@ -98,10 +111,11 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
     await Promise.all(workers);
   }
   const completedAt = new Date().toISOString();
-  const summary = summarizeSamples(samples, Date.now() - startedMillis);
+  const summarySamples = diagnosisContext ? (retainSamples ? samples : retainedSummarySamples) : retainedSummarySamples;
+  const summary = summarizeSamples(summarySamples, Date.now() - startedMillis);
   if (diagnosisContext) {
     eventLoopMonitor?.disable();
-    summary.diagnosis = summarizeEndpointDiagnosis(samples, {
+    summary.diagnosis = summarizeEndpointDiagnosis(summarySamples, {
       cancelled: options.signal?.aborted === true,
       config: normalized.config,
       csvVariablesEnabled: useCsvVariables,
@@ -111,11 +125,11 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
       memoryDeltaBytes: Math.max(0, process.memoryUsage().heapUsed - memoryStarted),
       plannedRequests: plan.totalRequests,
       request: normalized.request,
-      safetyLimited: samples.length < plan.totalRequests,
+      safetyLimited: summarySamples.length < plan.totalRequests,
       safetyLimits: normalized.safetyLimits
     });
   }
-  const failedRequests = samples.filter((sample) => sample.passed !== true).length;
+  const failedRequests = summarySamples.filter((sample) => sample.passed !== true).length;
   const result = {
     id: cryptoRandomId(),
     performanceTestId: normalized.id,
@@ -124,8 +138,8 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
     environmentId: normalized.environmentId,
     environmentMutationAllowed: normalized.allowEnvironmentMutation === true,
     totalRequests: plan.totalRequests,
-    completedRequests: samples.length,
-    successfulRequests: samples.length - failedRequests,
+    completedRequests: summarySamples.length,
+    successfulRequests: summarySamples.length - failedRequests,
     failedRequests,
     passed: failedRequests === 0 && options.signal?.aborted !== true,
     cancelled: options.signal?.aborted === true,
@@ -135,7 +149,7 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
     config: normalized.config,
     safetyLimits: normalized.safetyLimits,
     summary,
-    samples: samples.sort((left, right) => left.iteration - right.iteration),
+    samples: retainSamples ? samples.sort((left, right) => left.iteration - right.iteration) : [],
     environment: currentEnvironment,
     cookies: currentCookies
   };
@@ -237,9 +251,37 @@ function runnerOptions(options) {
     abortController,
     diagnosisContext,
     onProgress,
+    resultWriter,
+    retainSamples,
     ...rest
   } = options || {};
   return rest;
+}
+
+function summarySampleForPerformance(sample = {}) {
+  return {
+    iteration: sample.iteration,
+    startedAt: sample.startedAt,
+    requestId: sample.requestId,
+    requestName: sample.requestName,
+    requestDisplayName: sample.requestDisplayName,
+    requestMethod: sample.requestMethod,
+    requestUrl: sample.requestUrl,
+    finalUrl: sample.finalUrl,
+    phase: sample.phase,
+    stageName: sample.stageName,
+    stageIndex: sample.stageIndex,
+    stageConcurrency: sample.stageConcurrency,
+    statusCode: sample.statusCode,
+    durationMillis: sample.durationMillis,
+    schedulerLagMillis: sample.schedulerLagMillis,
+    responseBody: sample.responseBody,
+    responseBytes: sample.responseBytes,
+    responseHeaders: sample.responseHeaders,
+    timings: sample.timings,
+    passed: sample.passed,
+    error: sample.error
+  };
 }
 
 function requestForPerformanceStage(request, stage = {}) {

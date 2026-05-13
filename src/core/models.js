@@ -11,6 +11,7 @@ const { normalizeCookies: normalizeCookieCollection } = require('./cookieModel')
 const { normalizeCsvVariableData } = require('./csvVariables');
 const { normalizeSandboxFileBindings } = require('./fileAttachmentBindings');
 const { normalizeDiagnosticsSettings } = require('./diagnosticsSettings');
+const { normalizeCapturePolicy } = require('./resultCapturePolicy');
 const {
   DEFAULT_DIAGNOSIS_CONCURRENCY,
   DEFAULT_DIAGNOSIS_SCOPE,
@@ -51,10 +52,10 @@ const DEFAULT_PERFORMANCE_SAFETY_LIMITS = Object.freeze({
   maxConcurrency: 10,
   maxDurationSeconds: 60
 });
-const MAX_PERFORMANCE_TOTAL_REQUESTS = 1000;
+const MAX_PERFORMANCE_TOTAL_REQUESTS = 1000000;
 const MAX_PERFORMANCE_CONCURRENCY = 25;
 const MAX_PERFORMANCE_DURATION_SECONDS = 60 * 60;
-const MAX_RUNNER_REQUEST_ITERATIONS = 1000;
+const MAX_RUNNER_REQUEST_ITERATIONS = 1000000;
 
 function newId() {
   return crypto.randomUUID();
@@ -133,6 +134,7 @@ function runnerModel({
   environmentId,
   allowEnvironmentMutation,
   stopOnFailure,
+  capturePolicy,
   csvVariables,
   requests
 } = {}) {
@@ -142,6 +144,7 @@ function runnerModel({
     environmentId: normalizeRunnerEnvironmentId(environmentId),
     allowEnvironmentMutation: allowEnvironmentMutation === true,
     stopOnFailure: stopOnFailure === true,
+    capturePolicy: normalizeCapturePolicy(capturePolicy, 'runner'),
     csvVariables: normalizeCsvVariableData(csvVariables),
     requests: Array.isArray(requests) ? requests.map(runnerRequestModel) : []
   };
@@ -167,6 +170,7 @@ function performanceTestModel({
   allowEnvironmentMutation,
   config,
   safetyLimits,
+  capturePolicy,
   typeSettings,
   csvVariables,
   resultsMetadata
@@ -189,6 +193,7 @@ function performanceTestModel({
     allowEnvironmentMutation: activeSettings.allowEnvironmentMutation,
     config: activeSettings.config,
     safetyLimits: activeSettings.safetyLimits,
+    capturePolicy: normalizeCapturePolicy(capturePolicy, 'performance', { diagnostic: normalizedType === DIAGNOSIS_TYPE }),
     typeSettings: normalizedTypeSettings,
     csvVariables: normalizeCsvVariableData(csvVariables),
     resultsMetadata: normalizePerformanceResultsMetadata(resultsMetadata)
@@ -224,6 +229,7 @@ function cloneRequestForPerformanceTest(request, source = {}, options = {}) {
     allowEnvironmentMutation: options.allowEnvironmentMutation,
     config: options.config,
     safetyLimits: options.safetyLimits,
+    capturePolicy: options.capturePolicy,
     typeSettings: options.typeSettings,
     resultsMetadata: options.resultsMetadata
   });

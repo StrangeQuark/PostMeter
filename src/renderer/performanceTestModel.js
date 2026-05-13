@@ -12,6 +12,19 @@
       continueWithoutRows: false
     })
   };
+  const CAPTURE_POLICY = global.PostMeterResultCapturePolicy || {
+    normalizeCapturePolicy: (value = {}) => ({
+      responseBody: value.responseBody || 'all',
+      bodyPreviewBytes: Number(value.bodyPreviewBytes || 32768),
+      maxBodyPreviews: Number(value.maxBodyPreviews || 1000),
+      preRequestOutput: value.preRequestOutput !== false,
+      postRequestOutput: value.postRequestOutput !== false,
+      scriptLogs: value.scriptLogs !== false,
+      localVariables: value.localVariables !== false,
+      responseHeaders: value.responseHeaders !== false,
+      transportTimings: value.transportTimings !== false
+    })
+  };
   const PERFORMANCE_TEST_TYPES = [
     'diagnosis',
     'latency',
@@ -57,7 +70,7 @@
     maxDurationSeconds: 60
   };
   const MAX_SAFETY_LIMITS = {
-    maxTotalRequests: 1000,
+    maxTotalRequests: 1000000,
     maxConcurrency: 25,
     maxDurationSeconds: 60 * 60
   };
@@ -86,6 +99,7 @@
       source: { sourceType: 'manual' },
       config: DEFAULT_PERFORMANCE_CONFIG.diagnosis,
       safetyLimits: DEFAULT_SAFETY_LIMITS,
+      capturePolicy: CAPTURE_POLICY.normalizeCapturePolicy({}, 'performance'),
       typeSettings: defaultPerformanceTypeSettings(),
       csvVariables: CSV_VARIABLES.normalizeCsvVariableData(),
       resultsMetadata: {}
@@ -122,6 +136,7 @@
     }, workspace);
     syncPerformanceActiveTypeSettings(test);
     test.csvVariables = CSV_VARIABLES.normalizeCsvVariableData(test.csvVariables);
+    test.capturePolicy = CAPTURE_POLICY.normalizeCapturePolicy(test.capturePolicy, 'performance', { diagnostic: test.type === 'diagnosis' });
     test.resultsMetadata = normalizePerformanceResultsMetadata(test.resultsMetadata);
     return test;
   }

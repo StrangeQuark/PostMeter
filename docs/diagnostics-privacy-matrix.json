@@ -141,18 +141,22 @@
     {
       "id": "privacy.performance-results",
       "area": "Performance results",
-      "target": "Local Performance tests keep configurations, progress, result samples, exports, diagnostics, and failure artifacts bounded and default-deny for request/response data; no Performance diagnostic path introduces telemetry, cloud upload, account-gated execution, or distributed result collection.",
+      "target": "Local Performance tests keep configurations, progress, capture-policy-controlled result samples, exports, diagnostics, and failure artifacts bounded; high-volume runs use one reusable local runtime result store with pre-run disk-space warnings, shutdown cleanup, and guardrails for optional response/body/script capture, and no Performance diagnostic path introduces telemetry, cloud upload, account-gated execution, distributed result collection, or retained run history.",
       "status": "implemented",
       "evidenceRefs": [
         "docs/TECH_SPECS.md",
         "docs/RELEASE_READINESS.md",
         "src/core/performanceRunner.js",
-        "electron/runtimeIpc.js"
+        "src/core/resultCapturePolicy.js",
+        "src/core/runtimeResultStore.js",
+        "electron/runtimeIpc.js",
+        "electron/main.js"
       ],
       "tests": [
         "test/electron/performanceFeatureCoverage.test.js",
         "test/electron/performanceRunner.test.js",
         "test/electron/runtimeIpc.test.js",
+        "test/electron/runtimeResultStore.test.js",
         "test/electron/diagnostics.test.js",
         "test/electron/diagnosticsIpc.test.js"
       ],

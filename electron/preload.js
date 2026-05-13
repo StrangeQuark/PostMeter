@@ -150,6 +150,9 @@ const postmeterApi = {
     start: (id, collection, environment, config) => ipcRenderer.invoke('runner:start', id, collection, environment, config),
     cancel: (id) => ipcRenderer.invoke('runner:cancel', id),
     export: (result, format) => ipcRenderer.invoke('runner:export', result, format),
+    estimateResultStore: (collection, config) => ipcRenderer.invoke('runner:estimateResultStore', collection, config),
+    resultPage: (id, query) => ipcRenderer.invoke('runner:resultPage', id, query),
+    resultDetail: (id, resultIndex) => ipcRenderer.invoke('runner:resultDetail', id, resultIndex),
     importDefinition: (filePath) => ipcRenderer.invoke('runner:importDefinition', optionalFilePath(filePath)),
     exportDefinition: (runner, format) => ipcRenderer.invoke('runner:exportDefinition', runner, format),
     onProgress: (callback) => {
@@ -166,6 +169,9 @@ const postmeterApi = {
     importTest: (filePath) => ipcRenderer.invoke('performance:import', optionalFilePath(filePath)),
     exportTest: (performanceTest, format) => ipcRenderer.invoke('performance:export', performanceTest, format),
     exportResult: (result, format) => ipcRenderer.invoke('performance:exportResult', result, format),
+    estimateResultStore: (performanceTest) => ipcRenderer.invoke('performance:estimateResultStore', performanceTest),
+    resultPage: (id, query) => ipcRenderer.invoke('performance:resultPage', id, query),
+    resultDetail: (id, resultIndex) => ipcRenderer.invoke('performance:resultDetail', id, resultIndex),
     onProgress: (callback) => {
       const listener = (_event, payload) => callback(payload);
       ipcRenderer.on('performance:progress', listener);

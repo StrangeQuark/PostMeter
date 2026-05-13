@@ -1,10 +1,14 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
 const http = require('node:http');
+const os = require('node:os');
+const path = require('node:path');
 const test = require('node:test');
 const { resolveEnvironmentValue } = require('../../src/core/environmentResolver');
 const { performanceTestModel } = require('../../src/core/models');
 const { assertPerformanceTestPayload } = require('../../src/core/ipcValidation');
 const { createPerformancePlan, runPerformanceTest } = require('../../src/core/performanceRunner');
+const { createRuntimeResultStore } = require('../../src/core/runtimeResultStore');
 
 const PERFORMANCE_TYPES = ['diagnosis', 'latency', 'throughput', 'concurrency', 'stress', 'spike', 'soak', 'ramp'];
 
@@ -176,6 +180,65 @@ test('full endpoint diagnosis measures a real local endpoint and builds the diag
   }
 });
 
+test('full endpoint diagnosis survives unstable HTTP behavior and still reports diagnostics', async () => {
+  const server = await createUnstableDiagnosticServer();
+  try {
+    const performanceTest = performanceTestModel({
+      id: 'perf-diagnosis-unstable',
+      name: 'Unstable Local Diagnosis',
+      type: 'diagnosis',
+      request: {
+        id: 'request-diagnosis-unstable',
+        name: 'Unstable Endpoint',
+        method: 'GET',
+        url: `${server.baseUrl}/unstable?token=demo`
+      },
+      safetyLimits: { maxTotalRequests: 12, maxConcurrency: 5, maxDurationSeconds: 10 }
+    });
+
+    const result = await runPerformanceTest(performanceTest, null);
+    const diagnosis = result.summary.diagnosis;
+
+    assert.equal(result.completedRequests, 44);
+    assert.equal(diagnosis.completedChecks, diagnosis.requestedChecks);
+    assert.equal(result.samples.some((sample) => sample.phase === 'head-probe' && sample.statusCode === 405), true);
+    assert.equal(result.samples.some((sample) => sample.phase === 'options-probe' && sample.statusCode === 204), true);
+    assert.equal(Object.hasOwn(result.summary.statusCodes, '503'), true);
+    assert.equal(findDiagnosisCheck(diagnosis, 'http_status_distribution').status, 'fail');
+    assert.equal(findDiagnosisCheck(diagnosis, 'sensitive_data_in_url').status, 'warn');
+    assert.ok(['high', 'medium', 'low'].includes(diagnosis.confidence));
+  } finally {
+    await server.close();
+  }
+});
+
+test('full endpoint diagnosis completes with diagnostics when the endpoint refuses connections', async () => {
+  const url = await closedLocalUrl('/offline');
+  const performanceTest = performanceTestModel({
+    id: 'perf-diagnosis-refused',
+    name: 'Refused Local Diagnosis',
+    type: 'diagnosis',
+    request: {
+      id: 'request-diagnosis-refused',
+      name: 'Refused Endpoint',
+      method: 'GET',
+      url
+    },
+    safetyLimits: { maxTotalRequests: 12, maxConcurrency: 4, maxDurationSeconds: 10 }
+  });
+
+  const result = await runPerformanceTest(performanceTest, null);
+  const diagnosis = result.summary.diagnosis;
+
+  assert.equal(result.completedRequests, 44);
+  assert.equal(result.successfulRequests, 0);
+  assert.equal(result.failedRequests, 44);
+  assert.equal(diagnosis.completedChecks, diagnosis.requestedChecks);
+  assert.equal(findDiagnosisCheck(diagnosis, 'error_distribution').status, 'fail');
+  assert.equal(findDiagnosisCheck(diagnosis, 'success_rate').status, 'fail');
+  assert.equal(findDiagnosisCheck(diagnosis, 'failure_rate').status, 'fail');
+});
+
 test('runs bounded performance iterations through the request lifecycle and aggregates summaries', async () => {
   const progress = [];
   const performanceTest = performanceTestModel({
@@ -211,6 +274,87 @@ test('runs bounded performance iterations through the request lifecycle and aggr
   assert.equal(result.summary.p95DurationMillis, 12);
   assert.equal(result.summary.statusCodes['200'], 3);
   assert.deepEqual(progress.map((event) => event.completedRequests), [1, 2, 3]);
+});
+
+test('performance result streaming writes only outer performance samples with stable indexes', async () => {
+  const runnerRows = [];
+  const performanceRows = [];
+  const performanceTest = performanceTestModel({
+    id: 'perf-streamed-results',
+    name: 'Streamed Performance',
+    type: 'throughput',
+    request: {
+      id: 'request-streamed-results',
+      name: 'Streamed Request',
+      method: 'GET',
+      url: 'https://api.example.test/streamed'
+    },
+    config: { iterations: 3, concurrency: 2 },
+    safetyLimits: { maxTotalRequests: 3, maxConcurrency: 2, maxDurationSeconds: 10 }
+  });
+
+  const result = await runPerformanceTest(performanceTest, { id: 'env', name: 'Env', variables: [] }, {
+    retainSamples: false,
+    resultWriter: {
+      async recordRunnerResult(item, context) {
+        runnerRows.push({ item, context });
+      },
+      async recordPerformanceSample(item, context) {
+        performanceRows.push({ item, context });
+      }
+    },
+    sendRequest: async () => response()
+  });
+
+  assert.equal(result.completedRequests, 3);
+  assert.equal(result.samples.length, 0);
+  assert.equal(runnerRows.length, 0);
+  assert.deepEqual(performanceRows.map((row) => row.context.index), [0, 1, 2]);
+  assert.deepEqual(performanceRows.map((row) => row.item.iteration).sort((left, right) => left - right), [1, 2, 3]);
+});
+
+test('performance result streaming stores SQLite samples without nested runner collisions', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-performance-store-'));
+  const store = createRuntimeResultStore(path.join(temp, 'current.sqlite'));
+  const performanceTest = performanceTestModel({
+    id: 'perf-sqlite-streamed-results',
+    name: 'SQLite Streamed Performance',
+    type: 'throughput',
+    request: {
+      id: 'request-sqlite-streamed-results',
+      name: 'SQLite Streamed Request',
+      method: 'GET',
+      url: 'https://api.example.test/sqlite-streamed'
+    },
+    config: { iterations: 3, concurrency: 2 },
+    safetyLimits: { maxTotalRequests: 3, maxConcurrency: 2, maxDurationSeconds: 10 }
+  });
+  try {
+    await store.reset();
+    store.beginRun({
+      id: 'perf-sqlite-streamed-results-run',
+      kind: 'performance',
+      plannedRequests: 3,
+      capturePolicy: { responseBody: 'none' },
+      metadata: { type: 'throughput' }
+    });
+
+    const result = await runPerformanceTest(performanceTest, { id: 'env', name: 'Env', variables: [] }, {
+      retainSamples: false,
+      resultWriter: store,
+      sendRequest: async () => response()
+    });
+    store.finishRun(result);
+
+    assert.equal(store.count('performance'), 3);
+    assert.equal(store.count('runner'), 0);
+    assert.equal(store.detail({ kind: 'performance', resultIndex: 0 }).requestId, 'request-sqlite-streamed-results');
+    assert.equal(store.detail({ kind: 'performance', resultIndex: 1 }).requestId, 'request-sqlite-streamed-results');
+    assert.equal(store.detail({ kind: 'performance', resultIndex: 2 }).requestId, 'request-sqlite-streamed-results');
+  } finally {
+    store.close();
+    await fs.rm(temp, { recursive: true, force: true });
+  }
 });
 
 test('performance tests consume CSV variable rows for each planned request', async () => {
@@ -583,6 +727,57 @@ async function createDiagnosticServer() {
     baseUrl: `http://localhost:${address.port}`,
     close: () => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
   };
+}
+
+async function createUnstableDiagnosticServer() {
+  let count = 0;
+  const server = http.createServer((request, response) => {
+    count += 1;
+    response.setHeader('Content-Type', 'application/json');
+    response.setHeader('Cache-Control', 'max-age=15');
+    response.setHeader('ETag', `"unstable-${count % 3}"`);
+    response.setHeader('Server-Timing', `app;dur=${count % 5}`);
+    response.setHeader('X-Request-ID', `unstable-${count}`);
+    response.setHeader('RateLimit-Limit', '50');
+    response.setHeader('RateLimit-Remaining', String(Math.max(0, 50 - count)));
+    if (request.method === 'HEAD') {
+      response.statusCode = 405;
+      response.end();
+      return;
+    }
+    if (request.method === 'OPTIONS') {
+      response.statusCode = 204;
+      response.setHeader('Access-Control-Allow-Origin', '*');
+      response.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+      response.end();
+      return;
+    }
+    if (count % 7 === 0) {
+      response.statusCode = 503;
+      response.end(JSON.stringify({ ok: false, count, retry: true }));
+      return;
+    }
+    response.statusCode = 200;
+    response.end(JSON.stringify({
+      ok: true,
+      count,
+      payload: count % 5 === 0 ? 'x'.repeat(8192) : 'small'
+    }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    close: () => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
+  };
+}
+
+async function closedLocalUrl(pathname = '/') {
+  const server = http.createServer((_request, response) => response.end('closed'));
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address();
+  await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  return `http://127.0.0.1:${port}${pathname}`;
 }
 
 function findDiagnosisCheck(diagnosis, id) {

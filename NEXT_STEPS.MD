@@ -112,6 +112,7 @@ These are production-readiness items that cannot be fully proven by local Linux 
 
 ## Deferred / Larger Follow-Ups
 
+- Format large integer inputs with comma separators in Runner and Performance panes. Native `type="number"` inputs do not display `1,000,000`, so this likely needs comma-aware text inputs plus shared parse/clamp helpers that preserve the existing 1m request caps and cross-field max-request validation.
 - Distributed/cloud load execution remains deferred until there is explicit product demand.
 - Team collaboration and shared remote workspaces.
 - Plugin system for custom auth, importers, reporters, and scripting extensions.

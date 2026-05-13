@@ -1007,6 +1007,29 @@ h2 {
   margin-top: 12px;
 }
 
+.capture-settings-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: center;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.capture-settings-panel[hidden] {
+  display: none;
+}
+
+.capture-settings-panel .capture-guardrail-disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.capture-settings-panel .capture-guardrail-limited {
+  color: var(--muted);
+}
+
 .compact-number-field input {
   width: 84px;
 }

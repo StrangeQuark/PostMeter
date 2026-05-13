@@ -1,4 +1,6 @@
 const fs = require('node:fs/promises');
+const os = require('node:os');
+const path = require('node:path');
 const { collectionRunResultToCsv, runCollection, runRunner } = require('../src/core/collectionRunner');
 const {
   exportPerformanceTestToJson,
@@ -8,6 +10,14 @@ const {
 const { runPerformanceCalibration } = require('../src/core/performanceCalibration');
 const { runPerformanceTest } = require('../src/core/performanceRunner');
 const { writeTextFileAtomic } = require('../src/core/workspacePersistence');
+const {
+  cleanupRuntimeResultStore,
+  createRuntimeResultStore,
+  defaultRuntimeResultStorePath,
+  estimateRuntimeResultStoreSize,
+  runtimeResultStoreFiles
+} = require('../src/core/runtimeResultStore');
+const { normalizeCapturePolicy } = require('../src/core/resultCapturePolicy');
 const {
   performanceExportExtension,
   performanceExportFilters,
@@ -38,6 +48,8 @@ const {
   assertRunnerProgressPayload
 } = require('../src/core/ipcValidation');
 
+const RESULT_STORE_WARNING_MARGIN_BYTES = 1024 * 1024 * 1024;
+
 function registerRuntimeIpc(options = {}) {
   const {
     dialog,
@@ -53,6 +65,7 @@ function registerRuntimeIpc(options = {}) {
     runPerformanceCalibration: runPerformanceCalibrationImpl = runPerformanceCalibration,
     runPerformanceTest: runPerformanceTestImpl = runPerformanceTest,
     runRunner: runRunnerImpl = runRunner,
+    resultStorePath = defaultRuntimeResultStorePath(process.env.POSTMETER_RESULT_STORE_PATH || path.join(os.tmpdir(), 'postmeter')),
     recordDiagnosticEvent = async () => {},
     mutateWorkspace = async (mutator) => {
       const nextWorkspace = await mutator(cloneJson(getWorkspace()));
@@ -66,6 +79,15 @@ function registerRuntimeIpc(options = {}) {
   const activeCollectionRuns = new Map();
   const activePerformanceRuns = new Map();
   const activePerformanceCalibrations = new Map();
+  let currentResultStore = null;
+  let activeResultStoreRunId = '';
+  prepareRuntimeResultStore.path = resultStorePath;
+  currentStoreAccessor.getStore = () => currentResultStore;
+  const closeCurrentResultStore = () => {
+    currentResultStore?.close?.();
+    currentResultStore = null;
+    activeResultStoreRunId = '';
+  };
 
   ipcMain.handle('runner:start', async (event, id, collection, environment, config = {}) => {
     assertRuntimeId(id);
@@ -80,7 +102,11 @@ function registerRuntimeIpc(options = {}) {
     if (activeCollectionRuns.has(id)) {
       throw new Error(`Collection run is already running for id "${id}".`);
     }
+    if (activeResultStoreRunId) {
+      throw new Error('Another result-producing run is already running.');
+    }
     const abortController = new AbortController();
+    activeResultStoreRunId = id;
     const workspaceId = getWorkspaceId();
     const progressDelivery = createProgressDelivery({
       abortController,
@@ -93,6 +119,18 @@ function registerRuntimeIpc(options = {}) {
     activeCollectionRuns.set(id, abortController);
     try {
       const workspace = getWorkspace();
+      const plannedRequests = firstClassRunner ? countRunnerRequests(collection) : countCollectionRequests(collection);
+      currentResultStore?.close?.();
+      currentResultStore = await prepareRuntimeResultStore({
+        capturePolicy: config.capturePolicy || collection.capturePolicy,
+        id,
+        kind: 'runner',
+        metadata: {
+          name: collection?.name || '',
+          runnerOwned: firstClassRunner
+        },
+        plannedRequests
+      });
       const baseEnvironment = cloneJson(environment);
       const baseCollectionVariables = cloneJson(collection?.variables || []);
       const baseGlobals = cloneJson(workspace.globals || []);
@@ -113,13 +151,22 @@ function registerRuntimeIpc(options = {}) {
         stopOnFailure: config.stopOnFailure ?? collection?.stopOnFailure,
         allowEnvironmentMutation: config.allowEnvironmentMutation ?? collection?.allowEnvironmentMutation,
         onProgress: progressDelivery.send,
+        plannedRequests,
+        resultWriter: currentResultStore,
+        retainResults: !firstClassRunner,
         recordDiagnosticEvent
       };
       const result = firstClassRunner
         ? await runRunnerImpl(collection, environment, runnerOptions)
         : await runCollectionImpl(collection, environment, runnerOptions);
       progressDelivery.throwIfFailed();
-      const publicResult = publicCollectionRunResult(result);
+      if (currentResultStore.count('runner') === 0 && Array.isArray(result.results)) {
+        for (const [index, item] of result.results.entries()) {
+          currentResultStore.recordRunnerResult(item, { index, totalRequests: plannedRequests });
+        }
+      }
+      currentResultStore.finishRun(result);
+      const publicResult = storedCollectionRunResult(publicCollectionRunResult(result), currentResultStore);
       assertCollectionRunResultPayload(publicResult);
       await recordDiagnosticEvent({
         type: 'runner.start.completed',
@@ -167,6 +214,7 @@ function registerRuntimeIpc(options = {}) {
       }
       return publicResult;
     } catch (error) {
+      currentResultStore?.failRun?.({ error: error?.message || String(error), id });
       await recordDiagnosticEvent({
         type: 'runner.start.failed',
         level: 'error',
@@ -182,6 +230,9 @@ function registerRuntimeIpc(options = {}) {
     } finally {
       if (activeCollectionRuns.get(id) === abortController) {
         activeCollectionRuns.delete(id);
+      }
+      if (activeResultStoreRunId === id) {
+        activeResultStoreRunId = '';
       }
     }
   });
@@ -213,9 +264,38 @@ function registerRuntimeIpc(options = {}) {
     if (!filePath) {
       return fileOperationResult({ cancelled: true });
     }
+    if (publicResult.storeBacked === true) {
+      assertCurrentStoreResult(publicResult, 'runner');
+      if (format === 'csv') {
+        await currentResultStore.exportCsv(filePath, { kind: 'runner', result: publicResult });
+      } else {
+        await currentResultStore.exportJson(filePath, { kind: 'runner', result: publicResult });
+      }
+      return fileOperationResult({ cancelled: false, path: filePath });
+    }
     const content = format === 'csv' ? collectionRunResultToCsv(publicResult) : JSON.stringify(publicResult, null, 2);
     await writeTextFileAtomic(filePath, content, { prefix: 'postmeter-runner-export' });
     return fileOperationResult({ cancelled: false, path: filePath });
+  });
+
+  ipcMain.handle('runner:estimateResultStore', async (_event, collection, config = {}) => {
+    const firstClassRunner = looksLikeRunnerPayload(collection);
+    if (firstClassRunner) {
+      assertRunnerPayload(collection);
+    } else {
+      assertCollectionPayload(collection);
+    }
+    assertRunnerConfigPayload(config);
+    const plannedRequests = firstClassRunner ? countRunnerRequests(collection) : countCollectionRequests(collection);
+    return runtimeResultStoreEstimate({
+      averageMetadataBytes: firstClassRunner
+        ? averageRunnerRequestMetadataBytes(collection)
+        : averageCollectionRequestMetadataBytes(collection),
+      capturePolicy: config.capturePolicy || collection.capturePolicy,
+      diagnostic: false,
+      kind: 'runner',
+      plannedRequests
+    });
   });
 
   ipcMain.handle('performance:start', async (event, id, performanceTest, environment) => {
@@ -225,7 +305,11 @@ function registerRuntimeIpc(options = {}) {
     if (activePerformanceRuns.has(id)) {
       throw new Error(`Performance test is already running for id "${id}".`);
     }
+    if (activeResultStoreRunId) {
+      throw new Error('Another result-producing run is already running.');
+    }
     const abortController = new AbortController();
+    activeResultStoreRunId = id;
     const workspaceId = getWorkspaceId();
     const progressDelivery = createProgressDelivery({
       abortController,
@@ -240,6 +324,18 @@ function registerRuntimeIpc(options = {}) {
       const workspace = getWorkspace();
       const baseEnvironment = cloneJson(environment);
       const baseCookies = cloneJson(workspace.cookies || []);
+      const plannedRequests = estimatePerformancePlannedRequests(performanceTest);
+      currentResultStore?.close?.();
+      currentResultStore = await prepareRuntimeResultStore({
+        capturePolicy: performanceTest.capturePolicy,
+        id,
+        kind: 'performance',
+        metadata: {
+          name: performanceTest?.name || '',
+          type: performanceTest?.type || ''
+        },
+        plannedRequests
+      });
       const result = await runPerformanceTestImpl(performanceTest, environment, {
         abortController,
         signal: abortController.signal,
@@ -253,10 +349,19 @@ function registerRuntimeIpc(options = {}) {
         workspaceId,
         workspaceName: workspaceId,
         onProgress: progressDelivery.send,
+        plannedRequests,
+        resultWriter: currentResultStore,
+        retainSamples: false,
         recordDiagnosticEvent
       });
       progressDelivery.throwIfFailed();
-      const publicResult = publicPerformanceResult(result);
+      if (currentResultStore.count('performance') === 0 && Array.isArray(result.samples)) {
+        for (const [index, item] of result.samples.entries()) {
+          currentResultStore.recordPerformanceSample(item, { index, totalRequests: plannedRequests });
+        }
+      }
+      currentResultStore.finishRun(result);
+      const publicResult = storedPerformanceResult(publicPerformanceResult(result), currentResultStore);
       assertPerformanceResultPayload(publicResult);
       await recordDiagnosticEvent({
         type: 'performance.start.completed',
@@ -280,6 +385,7 @@ function registerRuntimeIpc(options = {}) {
       }, { workspaceId });
       return publicResult;
     } catch (error) {
+      currentResultStore?.failRun?.({ error: error?.message || String(error), id });
       await recordDiagnosticEvent({
         type: 'performance.start.failed',
         level: 'error',
@@ -294,6 +400,9 @@ function registerRuntimeIpc(options = {}) {
     } finally {
       if (activePerformanceRuns.get(id) === abortController) {
         activePerformanceRuns.delete(id);
+      }
+      if (activeResultStoreRunId === id) {
+        activeResultStoreRunId = '';
       }
     }
   });
@@ -421,11 +530,268 @@ function registerRuntimeIpc(options = {}) {
     if (!filePath) {
       return fileOperationResult({ cancelled: true });
     }
+    if (publicResult.storeBacked === true) {
+      assertCurrentStoreResult(publicResult, 'performance');
+      if (format === 'csv') {
+        await currentResultStore.exportCsv(filePath, { kind: 'performance', result: publicResult });
+      } else {
+        await currentResultStore.exportJson(filePath, { kind: 'performance', result: publicResult });
+      }
+      return fileOperationResult({ cancelled: false, path: filePath });
+    }
     const content = format === 'csv' ? performanceResultToCsv(publicResult) : JSON.stringify(publicResult, null, 2);
     await writeTextFileAtomic(filePath, content, { prefix: 'postmeter-performance-result-export' });
     return fileOperationResult({ cancelled: false, path: filePath });
   });
 
+  ipcMain.handle('performance:estimateResultStore', async (_event, performanceTest) => {
+    assertPerformanceTestPayload(performanceTest);
+    const plannedRequests = estimatePerformancePlannedRequests(performanceTest);
+    return runtimeResultStoreEstimate({
+      averageMetadataBytes: requestMetadataBytes(performanceTest?.request),
+      capturePolicy: performanceTest.capturePolicy,
+      diagnostic: performanceTest?.type === 'diagnosis',
+      kind: 'performance',
+      plannedRequests
+    });
+  });
+
+  ipcMain.handle('runner:resultPage', async (_event, resultId, query = {}) => {
+    assertRuntimeId(resultId);
+    assertCurrentStoreId(resultId, 'runner');
+    return currentResultStore.page({ kind: 'runner', ...safeResultQuery(query) });
+  });
+
+  ipcMain.handle('runner:resultDetail', async (_event, resultId, resultIndex = 0) => {
+    assertRuntimeId(resultId);
+    assertCurrentStoreId(resultId, 'runner');
+    return currentResultStore.detail({ kind: 'runner', resultIndex });
+  });
+
+  ipcMain.handle('performance:resultPage', async (_event, resultId, query = {}) => {
+    assertRuntimeId(resultId);
+    assertCurrentStoreId(resultId, 'performance');
+    return currentResultStore.page({ kind: 'performance', ...safeResultQuery(query) });
+  });
+
+  ipcMain.handle('performance:resultDetail', async (_event, resultId, resultIndex = 0) => {
+    assertRuntimeId(resultId);
+    assertCurrentStoreId(resultId, 'performance');
+    return currentResultStore.detail({ kind: 'performance', resultIndex });
+  });
+
+  return {
+    cleanupResultStore: async () => {
+      closeCurrentResultStore();
+      await cleanupRuntimeResultStore(resultStorePath);
+    },
+    closeResultStore: closeCurrentResultStore
+  };
+}
+
+async function prepareRuntimeResultStore({ id, kind, capturePolicy, plannedRequests, metadata }) {
+  const store = createRuntimeResultStore(prepareRuntimeResultStore.path);
+  await store.reset();
+  store.beginRun({
+    id,
+    kind,
+    capturePolicy: normalizeCapturePolicy(capturePolicy, kind, {
+      diagnostic: metadata?.type === 'diagnosis',
+      plannedRequests
+    }),
+    plannedRequests,
+    metadata
+  });
+  return store;
+}
+
+prepareRuntimeResultStore.path = '';
+
+async function runtimeResultStoreEstimate(options = {}) {
+  const estimate = estimateRuntimeResultStoreSize(options);
+  const disk = await resultStoreDiskSpace(prepareRuntimeResultStore.path);
+  const effectiveAvailableBytes = disk.availableBytes == null
+    ? null
+    : disk.availableBytes + disk.existingResultStoreBytes;
+  const exceedsAvailable = effectiveAvailableBytes != null && estimate.estimatedBytes > effectiveAvailableBytes;
+  const withinAvailableMargin = effectiveAvailableBytes != null
+    && !exceedsAvailable
+    && effectiveAvailableBytes - estimate.estimatedBytes <= RESULT_STORE_WARNING_MARGIN_BYTES;
+  return {
+    ...estimate,
+    ...disk,
+    effectiveAvailableBytes,
+    warningMarginBytes: RESULT_STORE_WARNING_MARGIN_BYTES,
+    exceedsAvailable,
+    withinAvailableMargin,
+    shouldWarn: exceedsAvailable || withinAvailableMargin,
+    canContinue: !exceedsAvailable
+  };
+}
+
+async function resultStoreDiskSpace(filePath) {
+  const directory = path.dirname(path.resolve(filePath));
+  await fs.mkdir(directory, { recursive: true });
+  const existingResultStoreBytes = await existingResultStoreSize(filePath);
+  try {
+    const stats = await fs.statfs(directory);
+    const availableBytes = Number(stats.bavail) * Number(stats.bsize);
+    return {
+      availableBytes: Number.isFinite(availableBytes) ? availableBytes : null,
+      existingResultStoreBytes,
+      resultStoreDirectory: directory
+    };
+  } catch {
+    return {
+      availableBytes: null,
+      existingResultStoreBytes,
+      resultStoreDirectory: directory
+    };
+  }
+}
+
+async function existingResultStoreSize(filePath) {
+  let total = 0;
+  for (const candidate of runtimeResultStoreFiles(filePath)) {
+    const stat = await fs.stat(candidate).catch(() => null);
+    if (stat?.isFile?.()) {
+      total += Number(stat.size || 0);
+    }
+  }
+  return total;
+}
+
+function storedCollectionRunResult(result, store) {
+  const page = store.page({ kind: 'runner', offset: 0, limit: 50, status: 'all' });
+  return {
+    ...result,
+    id: store.runId,
+    resultStoreId: store.runId,
+    storeBacked: true,
+    capturePolicy: store.capturePolicy,
+    detailCaptureTruncated: store.detailCaptureTruncated,
+    detailCaptureTruncationReason: store.detailCaptureTruncationReason,
+    httpResponses: httpResponseCountFromStatusCounts(page.statusCounts),
+    resultPage: {
+      offset: page.offset,
+      limit: page.limit,
+      total: page.total,
+      totalAll: page.totalAll,
+      statusCounts: page.statusCounts
+    },
+    results: page.items
+  };
+}
+
+function storedPerformanceResult(result, store) {
+  const page = store.page({ kind: 'performance', offset: 0, limit: 50, status: 'all' });
+  return {
+    ...result,
+    resultStoreId: store.runId,
+    storeBacked: true,
+    capturePolicy: store.capturePolicy,
+    detailCaptureTruncated: store.detailCaptureTruncated,
+    detailCaptureTruncationReason: store.detailCaptureTruncationReason,
+    resultPage: {
+      offset: page.offset,
+      limit: page.limit,
+      total: page.total,
+      totalAll: page.totalAll,
+      statusCounts: page.statusCounts
+    },
+    samples: page.items
+  };
+}
+
+function safeResultQuery(query = {}) {
+  const input = query && typeof query === 'object' && !Array.isArray(query) ? query : {};
+  return {
+    offset: Math.max(0, Math.floor(Number(input.offset || 0))),
+    limit: Math.min(500, Math.max(1, Math.floor(Number(input.limit || 50)))),
+    status: String(input.status || 'all').slice(0, 16)
+  };
+}
+
+function assertCurrentStoreResult(result, kind) {
+  assertCurrentStoreId(result?.resultStoreId || result?.id, kind);
+}
+
+function assertCurrentStoreId(resultId, kind) {
+  const store = currentStoreAccessor.getStore();
+  if (!store || store.runId !== resultId || store.kind !== kind) {
+    throw new Error('The requested run result is no longer available. Run the test again before exporting or inspecting it.');
+  }
+}
+
+const currentStoreAccessor = {
+  getStore: () => null
+};
+
+function httpResponseCountFromStatusCounts(statusCounts = {}) {
+  return Object.entries(statusCounts).reduce((total, [status, count]) => {
+    return /^\d+$/.test(status) ? total + Number(count || 0) : total;
+  }, 0);
+}
+
+function estimatePerformancePlannedRequests(performanceTest = {}) {
+  const type = String(performanceTest.type || '').trim();
+  const config = performanceTest.config || {};
+  const safety = performanceTest.safetyLimits || {};
+  if (type === 'diagnosis') {
+    return Number(config.iterations || safety.maxTotalRequests || 1);
+  }
+  if (type === 'soak') {
+    return Number(safety.maxTotalRequests || config.iterations || 1);
+  }
+  if (type === 'concurrency') {
+    return Number(config.iterations || 1) * Number(config.concurrency || 1);
+  }
+  if (type === 'stress' || type === 'ramp') {
+    return Number(config.iterations || 1) * Number(config.rampSteps || 1);
+  }
+  return Number(config.iterations || safety.maxTotalRequests || 1);
+}
+
+function averageRunnerRequestMetadataBytes(runner = {}) {
+  let totalBytes = 0;
+  let totalRequests = 0;
+  for (const request of runner.requests || []) {
+    const iterations = Math.max(1, Math.floor(Number(request?.iterations) || 1));
+    totalBytes += requestMetadataBytes(request) * iterations;
+    totalRequests += iterations;
+  }
+  return totalRequests ? Math.ceil(totalBytes / totalRequests) : 0;
+}
+
+function averageCollectionRequestMetadataBytes(collection = {}) {
+  let totalBytes = 0;
+  let totalRequests = 0;
+  const visit = (node, folderPath = []) => {
+    for (const request of node?.requests || []) {
+      totalBytes += requestMetadataBytes(request, folderPath);
+      totalRequests += 1;
+    }
+    for (const folder of node?.folders || []) {
+      visit(folder, [...folderPath, folder?.name || '']);
+    }
+  };
+  visit(collection, []);
+  return totalRequests ? Math.ceil(totalBytes / totalRequests) : 0;
+}
+
+function requestMetadataBytes(request = {}, folderPath = []) {
+  return byteLength([
+    request?.id,
+    request?.name,
+    request?.method,
+    request?.url,
+    request?.requestDisplayName,
+    Array.isArray(folderPath) ? folderPath.join('/') : ''
+  ].filter(Boolean).join(' '));
+}
+
+function byteLength(value) {
+  return Buffer.byteLength(String(value || ''), 'utf8');
 }
 
 function requestLocalVariablesById(collection) {

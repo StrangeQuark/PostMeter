@@ -25,7 +25,7 @@ const {
 
 const MAX_PM_EXECUTION_RUN_REQUEST_DEPTH = 5;
 const MAX_PM_EXECUTION_RUN_REQUESTS_PER_COLLECTION = 50;
-const MAX_RUNNER_TOTAL_ITERATIONS = 1000;
+const MAX_RUNNER_TOTAL_ITERATIONS = 1000000;
 const MAX_RUN_RESULT_RESPONSE_BODY_CHARS = 32768;
 const RUN_RESULT_RESPONSE_BODY_TRUNCATION_NOTICE = '\n\n[Response body truncated for runner results.]';
 
@@ -49,6 +49,10 @@ async function runCollection(collection, environment, options = {}) {
   const runnerGlobals = cloneVariables(options.globals || []);
   let runnerCookies = Array.isArray(options.cookieJar) ? structuredClone(options.cookieJar) : [];
   const results = [];
+  const retainResults = options.retainResults !== false;
+  const resultWriter = typeof options.resultWriter?.recordRunnerResult === 'function' ? options.resultWriter : null;
+  let recordedResults = 0;
+  let recordedFailures = 0;
   const progress = typeof options.onProgress === 'function' ? options.onProgress : () => {};
   const refreshedAuthByRequestId = new Map();
   const runRequestBudget = {
@@ -226,7 +230,7 @@ async function runCollection(collection, environment, options = {}) {
           scriptedRequest.localVariables,
           displayFields
         );
-        results.push(result);
+        await recordCollectionRunResult(result);
         progress(progressEvent(index + 1, requests.length, result));
         if (options.stopOnFailure === true) {
           break;
@@ -236,7 +240,7 @@ async function runCollection(collection, environment, options = {}) {
       }
       if (scriptedRequest.skipped) {
         const result = skippedResult(entry, startedAt, scriptedRequest, displayFields);
-        results.push(result);
+        await recordCollectionRunResult(result);
         progress(progressEvent(index + 1, requests.length, result));
         index = nextRequestIndex(index, requests, scriptedRequest.execution);
         continue;
@@ -270,7 +274,7 @@ async function runCollection(collection, environment, options = {}) {
         localVariables: scriptedRequest.localVariables,
         error: ''
       };
-      results.push(result);
+      await recordCollectionRunResult(result);
       progress(progressEvent(index + 1, requests.length, result));
       if (options.stopOnFailure === true && !result.passed) {
         break;
@@ -300,7 +304,7 @@ async function runCollection(collection, environment, options = {}) {
         testScriptResult: emptyScriptResult(),
         error: error.message || String(error)
       };
-      results.push(result);
+      await recordCollectionRunResult(result);
       progress(progressEvent(index + 1, requests.length, result));
       if (options.stopOnFailure === true) {
         break;
@@ -309,12 +313,12 @@ async function runCollection(collection, environment, options = {}) {
     }
   }
 
-  const failedRequests = results.filter((result) => !result.passed).length;
+  const failedRequests = retainResults ? results.filter((result) => !result.passed).length : recordedFailures;
   const result = {
     collectionId: collection?.id || '',
     collectionName: collection?.name || '',
-    totalRequests: results.length,
-    passedRequests: results.length - failedRequests,
+    totalRequests: retainResults ? results.length : recordedResults,
+    passedRequests: (retainResults ? results.length : recordedResults) - failedRequests,
     failedRequests,
     passed: failedRequests === 0,
     cancelled: options.signal?.aborted === true,
@@ -326,6 +330,23 @@ async function runCollection(collection, environment, options = {}) {
   };
   attachInternalAuthUpdates(result, refreshedAuthByRequestId);
   return result;
+
+  async function recordCollectionRunResult(result) {
+    const index = recordedResults;
+    recordedResults += 1;
+    if (result.passed !== true) {
+      recordedFailures += 1;
+    }
+    if (retainResults) {
+      results.push(result);
+    }
+    if (resultWriter) {
+      await resultWriter.recordRunnerResult(result, {
+        index,
+        totalRequests: options.plannedRequests || requests.length
+      });
+    }
+  }
 }
 
 function transportDiagnosticFields(response = {}, options = {}) {
@@ -359,6 +380,7 @@ async function runRunner(runner, environment, options = {}) {
   };
   const result = await runCollection(runnerCollection, environment, {
     ...options,
+    plannedRequests: options.plannedRequests || requests.length,
     stopOnFailure: options.stopOnFailure ?? normalizedRunner.stopOnFailure
   });
   result.runnerId = normalizedRunner.id;

@@ -4,7 +4,8 @@
     assertUiSmoke,
     dispatchChange,
     dispatchInput,
-    setPairRow
+    setPairRow,
+    waitForUiSmoke
   } = resolveUiSmokeCommon(global);
 
   async function runUiWorkflowSmoke(params) {
@@ -197,7 +198,33 @@
     importCollectionIntoRunner(workspace.collections[0]);
     assertUiSmoke(runner.requests.length > 0, 'Workflow runner did not import collection requests.');
     runner.requests[0].scripts.tests = "pm.environment.set('responseMethod', pm.response.json().method); pm.test('script token exists', function () { pm.expect(pm.environment.get('scriptToken')).to.equal('ui-script'); pm.response.to.have.status(200); });";
+    $('runnerCaptureSettingsButton').click();
+    const runnerIterationsInput = $('runnerRequestList').querySelector('.runner-row-iterations input');
+    assertUiSmoke(runnerIterationsInput, 'Runner request iterations input did not render.');
+    runnerIterationsInput.value = '1000000';
+    dispatchInput(runnerIterationsInput);
+    assertUiSmoke($('runnerCapturePreRequestInput').disabled && !$('runnerCapturePreRequestInput').checked, 'Runner very high-volume guardrail should force pre-request output off in the capture panel.');
+    assertUiSmoke($('runnerCapturePostRequestInput').disabled && !$('runnerCapturePostRequestInput').checked, 'Runner very high-volume guardrail should force post-request output off in the capture panel.');
+    assertUiSmoke($('runnerCaptureScriptLogsInput').disabled && !$('runnerCaptureScriptLogsInput').checked, 'Runner high-volume guardrail should force script logs off in the capture panel.');
+    assertUiSmoke($('runnerCaptureLocalVariablesInput').disabled && !$('runnerCaptureLocalVariablesInput').checked, 'Runner high-volume guardrail should force local variables off in the capture panel.');
+    assertUiSmoke($('runnerCaptureResponseBodySelect').value === 'failed', 'Runner high-volume guardrail should display failed-only response body capture.');
+    assertUiSmoke($('runnerCaptureResponseBodySelect').querySelector('option[value="all"]').disabled, 'Runner high-volume guardrail should disable all-body capture.');
+    assertUiSmoke($('runnerCaptureBodyPreviewBytesInput').value === '2048' && $('runnerCaptureBodyPreviewBytesInput').max === '2048', 'Runner high-volume guardrail should display the million-request preview-byte cap.');
+    assertUiSmoke($('runnerCaptureScriptLogsInput').closest('label').title.includes('1,000,000 planned requests'), 'Runner forced capture controls should explain why they are disabled.');
+    runnerIterationsInput.value = '1';
+    dispatchInput(runnerIterationsInput);
+    dispatchChange(runnerIterationsInput);
+    assertUiSmoke(!$('runnerCapturePreRequestInput').disabled && $('runnerCapturePreRequestInput').checked, 'Runner capture panel should restore pre-request output preference after lowering planned requests.');
+    assertUiSmoke(!$('runnerCapturePostRequestInput').disabled && $('runnerCapturePostRequestInput').checked, 'Runner capture panel should restore post-request output preference after lowering planned requests.');
+    assertUiSmoke(!$('runnerCaptureScriptLogsInput').disabled && $('runnerCaptureScriptLogsInput').checked, 'Runner capture panel should restore script log preference after lowering planned requests.');
+    assertUiSmoke(!$('runnerCaptureLocalVariablesInput').disabled && $('runnerCaptureLocalVariablesInput').checked, 'Runner capture panel should restore local variable preference after lowering planned requests.');
     await runActiveCollection();
+    await waitForUiSmoke(
+      () => $('runnerExecutionList').querySelectorAll('.runner-execution-row').length > 0,
+      'Runner execution list did not render completed requests.',
+      3000,
+      global
+    );
     const runnerExecutionRows = Array.from($('runnerExecutionList').querySelectorAll('.runner-execution-row'));
     assertUiSmoke(runnerExecutionRows.length > 0, 'Runner execution list did not render completed requests.');
     assertUiSmoke(
@@ -205,11 +232,82 @@
       `Runner execution list did not render response status badges. ${$('runnerResults').textContent.slice(0, 800)}`
     );
     runnerExecutionRows[0].click();
+    await waitForUiSmoke(
+      () => $('runnerExecutionDetails').textContent.includes('script token exists'),
+      'Runner execution details did not render script test results.',
+      3000,
+      global
+    );
     assertUiSmoke($('runnerExecutionDetails').textContent.includes('script token exists'), 'Runner execution details did not render script test results.');
     assertUiSmoke($('runnerExecutionDetails').textContent.includes('scriptToken'), 'Runner execution details did not render environment variables.');
     assertUiSmoke($('runnerExecutionDetails').textContent.includes('requestToken'), 'Runner execution details did not render request variables.');
     assertUiSmoke(!$('exportRunnerJsonButton').disabled, 'Runner JSON export button was not enabled after a run.');
     assertUiSmoke(!$('exportRunnerCsvButton').disabled, 'Runner CSV export button was not enabled after a run.');
+
+    selectSidebarPanel('performance');
+    const performanceTest = newPerformanceTest();
+    assertUiSmoke(performanceTest, 'New performance test was not created.');
+    assertUiSmoke(activeMainPanel === 'performance', 'Creating a performance test should switch the main pane to performance mode.');
+    $('performanceCaptureSettingsButton').click();
+    assertPerformanceNumericGuards();
+    activateTab('performance', 'latency');
+    const latencyIterationsInput = $('latencyTab').querySelector('[data-performance-config="iterations"]');
+    latencyIterationsInput.value = '1000000';
+    dispatchInput(latencyIterationsInput);
+    assertUiSmoke($('performanceCapturePreRequestInput').disabled && !$('performanceCapturePreRequestInput').checked, 'Performance very high-volume guardrail should force pre-request output off in the capture panel.');
+    assertUiSmoke($('performanceCapturePostRequestInput').disabled && !$('performanceCapturePostRequestInput').checked, 'Performance very high-volume guardrail should force post-request output off in the capture panel.');
+    assertUiSmoke($('performanceCaptureScriptLogsInput').disabled && !$('performanceCaptureScriptLogsInput').checked, 'Performance high-volume guardrail should force script logs off in the capture panel.');
+    assertUiSmoke($('performanceCaptureLocalVariablesInput').disabled && !$('performanceCaptureLocalVariablesInput').checked, 'Performance high-volume guardrail should force local variables off in the capture panel.');
+    assertUiSmoke($('performanceCaptureHeadersInput').disabled && !$('performanceCaptureHeadersInput').checked, 'Performance high-volume guardrail should force response headers off outside diagnosis.');
+    assertUiSmoke($('performanceCaptureTimingsInput').checked && !$('performanceCaptureTimingsInput').disabled, 'Performance high-volume guardrail should keep transport timings available.');
+    assertUiSmoke($('performanceCaptureBodyPreviewBytesInput').value === '2048' && $('performanceCaptureBodyPreviewBytesInput').max === '2048', 'Performance high-volume guardrail should display the million-request preview-byte cap.');
+    assertUiSmoke($('performanceCaptureScriptLogsInput').closest('label').title.includes('1,000,000 planned requests'), 'Performance forced capture controls should explain why they are disabled.');
+    activateTab('performance', 'diagnosis');
+    assertUiSmoke(!$('performanceCapturePreRequestInput').disabled && $('performanceCapturePreRequestInput').checked, 'Performance capture panel should restore pre-request output preference after switching back to diagnosis.');
+    assertUiSmoke(!$('performanceCapturePostRequestInput').disabled && $('performanceCapturePostRequestInput').checked, 'Performance capture panel should restore post-request output preference after switching back to diagnosis.');
+    assertUiSmoke(!$('performanceCaptureScriptLogsInput').disabled && $('performanceCaptureScriptLogsInput').checked, 'Performance capture panel should restore script log preference after switching back to diagnosis.');
+    assertUiSmoke(!$('performanceCaptureHeadersInput').disabled && $('performanceCaptureHeadersInput').checked, 'Performance diagnosis should keep response header capture available.');
+    $('performanceUrlInput').value = `${baseUrl}/diagnostic?api_key=ui-smoke`;
+    dispatchInput($('performanceUrlInput'));
+    const diagnosisScopeSelect = $('diagnosisTab').querySelector('[data-performance-config="diagnosisScope"]');
+    diagnosisScopeSelect.value = 'quick';
+    dispatchChange(diagnosisScopeSelect);
+    const diagnosisResult = await runActivePerformanceTest();
+    assertUiSmoke(diagnosisResult, `Full Endpoint Diagnosis did not return a result. ${$('performanceResults').textContent.slice(0, 800)}`);
+    assertUiSmoke(diagnosisResult.storeBacked === true, 'Full Endpoint Diagnosis should use store-backed results.');
+    assertUiSmoke(diagnosisResult.completedRequests === 44, `Full Endpoint Diagnosis should complete 44 quick samples, saw ${diagnosisResult.completedRequests}.`);
+    assertUiSmoke(diagnosisResult.summary?.diagnosis?.completedChecks === diagnosisResult.summary?.diagnosis?.requestedChecks, 'Full Endpoint Diagnosis did not complete every diagnostic check.');
+    await waitForUiSmoke(
+      () => $('performanceResultsSummary').textContent.includes('44/44 requests completed'),
+      'Full Endpoint Diagnosis summary did not render completed request count.',
+      5000,
+      global
+    );
+    assertUiSmoke($('performanceRunDetails').textContent.includes('Endpoint diagnosis'), 'Full Endpoint Diagnosis summary block did not render.');
+    assertUiSmoke($('performanceRunDetails').textContent.includes('Diagnostic checks'), 'Full Endpoint Diagnosis checks did not render.');
+    assertUiSmoke($('performanceRunDetails').textContent.includes('Time to first byte'), 'Full Endpoint Diagnosis timing checks did not render.');
+    activateTab('performanceOutput', 'performanceOutputRequests');
+    await waitForUiSmoke(
+      () => $('performanceExecutionList').querySelectorAll('.runner-execution-row').length > 0,
+      'Full Endpoint Diagnosis request rows did not render.',
+      5000,
+      global
+    );
+    const performanceRows = Array.from($('performanceExecutionList').querySelectorAll('.runner-execution-row'));
+    assertUiSmoke(performanceRows.length > 0, 'Full Endpoint Diagnosis request list is empty.');
+    assertUiSmoke(
+      performanceRows.some((row) => row.querySelector('.runner-status-badge')?.textContent === '200'),
+      `Full Endpoint Diagnosis request list did not show HTTP 200 rows. ${$('performanceExecutionList').textContent.slice(0, 800)}`
+    );
+    performanceRows[0].click();
+    await waitForUiSmoke(
+      () => $('performanceExecutionDetails').textContent.includes('Status 200'),
+      'Full Endpoint Diagnosis request detail did not render selected sample details.',
+      5000,
+      global
+    );
+    assertUiSmoke($('performanceExecutionDetails').textContent.includes('/diagnostic?api_key=ui-smoke'), 'Full Endpoint Diagnosis detail did not render the target URL.');
+    assertUiSmoke(!$('exportPerformanceResultCsvButton').disabled, 'Performance CSV export button was not enabled after Full Endpoint Diagnosis.');
   }
 
   function assertVariableHighlight(control, variableName, message, expectedStatus = '', expectedSource = '') {
@@ -222,6 +320,79 @@
     if (expectedSource) {
       assertUiSmoke(token.getAttribute('data-variable-source') === expectedSource, `${message} Expected ${expectedSource} token source.`);
     }
+  }
+
+  function assertPerformanceNumericGuards() {
+    activateTab('performance', 'diagnosis');
+    assertPerformanceClamp('diagnosis', 'safety', 'maxConcurrency', '999', '25', 'Diagnosis max concurrency should clamp to the global cap.');
+    assertPerformanceClamp('diagnosis', 'safety', 'maxDurationSeconds', '9999', '3600', 'Diagnosis max duration should clamp to the global cap.');
+
+    activateTab('performance', 'latency');
+    assertPerformanceClamp('latency', 'config', 'iterations', '1000001', '1000000', 'Latency samples should clamp to one million.');
+
+    activateTab('performance', 'throughput');
+    assertPerformanceClamp('throughput', 'safety', 'maxTotalRequests', '1000001', '1000000', 'Throughput max requests should clamp to one million.');
+    setPerformanceNumber('throughput', 'safety', 'maxTotalRequests', '99999');
+    assertPerformanceClamp('throughput', 'config', 'iterations', '100998', '99999', 'Throughput requests should not exceed max requests.');
+    setPerformanceNumber('throughput', 'safety', 'maxConcurrency', '3');
+    assertPerformanceClamp('throughput', 'config', 'concurrency', '99', '3', 'Throughput concurrency should not exceed max concurrency.');
+
+    activateTab('performance', 'concurrency');
+    setPerformanceNumber('concurrency', 'safety', 'maxTotalRequests', '100');
+    setPerformanceNumber('concurrency', 'config', 'concurrency', '10');
+    assertPerformanceClamp('concurrency', 'config', 'iterations', '999', '10', 'Concurrency requests per user should keep total requests within max requests.');
+    setPerformanceNumber('concurrency', 'safety', 'maxConcurrency', '4');
+    assertPerformanceClamp('concurrency', 'config', 'concurrency', '99', '4', 'Concurrency virtual users should not exceed max concurrency.');
+
+    activateTab('performance', 'stress');
+    setPerformanceNumber('stress', 'safety', 'maxTotalRequests', '120');
+    setPerformanceNumber('stress', 'config', 'rampSteps', '12');
+    assertPerformanceClamp('stress', 'config', 'iterations', '999', '10', 'Stress requests per step should keep total requests within max requests.');
+    setPerformanceNumber('stress', 'safety', 'maxConcurrency', '6');
+    assertPerformanceClamp('stress', 'config', 'startConcurrency', '99', '6', 'Stress start users should not exceed max concurrency.');
+    assertPerformanceClamp('stress', 'config', 'concurrency', '99', '6', 'Stress peak users should not exceed max concurrency.');
+
+    activateTab('performance', 'spike');
+    setPerformanceNumber('spike', 'safety', 'maxTotalRequests', '77');
+    assertPerformanceClamp('spike', 'config', 'iterations', '999', '77', 'Spike requests should not exceed max requests.');
+    setPerformanceNumber('spike', 'safety', 'maxConcurrency', '12');
+    setPerformanceNumber('spike', 'config', 'concurrency', '4');
+    assertPerformanceClamp('spike', 'config', 'spikeMultiplier', '99', '3', 'Spike multiplier should keep effective concurrency within max concurrency.');
+
+    activateTab('performance', 'soak');
+    assertPerformanceClamp('soak', 'safety', 'maxTotalRequests', '1000001', '1000000', 'Soak max requests should clamp to one million.');
+    setPerformanceNumber('soak', 'safety', 'maxConcurrency', '5');
+    assertPerformanceClamp('soak', 'config', 'concurrency', '99', '5', 'Soak users should not exceed max concurrency.');
+    assertPerformanceClamp('soak', 'safety', 'maxDurationSeconds', '9999', '3600', 'Soak max duration should clamp to the global cap.');
+    assertPerformanceClamp('soak', 'config', 'durationSeconds', '9999', '3600', 'Soak duration should clamp to the global cap.');
+    setPerformanceNumber('soak', 'safety', 'maxDurationSeconds', '45');
+    assertPerformanceClamp('soak', 'config', 'durationSeconds', '999', '45', 'Soak duration should not exceed max duration.');
+
+    activateTab('performance', 'ramp');
+    setPerformanceNumber('ramp', 'safety', 'maxTotalRequests', '50');
+    setPerformanceNumber('ramp', 'config', 'iterations', '5');
+    assertPerformanceClamp('ramp', 'config', 'rampSteps', '999', '10', 'Ramp steps should keep total requests within max requests.');
+    setPerformanceNumber('ramp', 'safety', 'maxConcurrency', '8');
+    assertPerformanceClamp('ramp', 'config', 'startConcurrency', '99', '8', 'Ramp start users should not exceed max concurrency.');
+    assertPerformanceClamp('ramp', 'config', 'concurrency', '99', '8', 'Ramp peak users should not exceed max concurrency.');
+  }
+
+  function assertPerformanceClamp(type, kind, name, value, expected, message) {
+    const input = setPerformanceNumber(type, kind, name, value);
+    assertUiSmoke(input.value === expected, `${message} Expected ${expected}, saw ${input.value}.`);
+  }
+
+  function setPerformanceNumber(type, kind, name, value) {
+    const input = performanceNumberInput(type, kind, name);
+    assertUiSmoke(input, `${type} ${name} input should exist.`);
+    input.value = value;
+    dispatchInput(input);
+    return input;
+  }
+
+  function performanceNumberInput(type, kind, name) {
+    const attribute = kind === 'safety' ? 'data-performance-safety' : 'data-performance-config';
+    return $(`${type}Tab`)?.querySelector(`[${attribute}="${name}"]`);
   }
 
   function cssAttributeValue(value) {

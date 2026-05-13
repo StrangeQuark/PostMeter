@@ -517,6 +517,24 @@
       "notes": ""
     },
     {
+      "id": "ipc.channel.performance-estimateresultstore",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `performance:estimateResultStore`: Performance result-store estimation validates the saved test payload before returning a rough SQLite size estimate, effective available disk space, and whether the renderer must block Continue.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/runtimeIpc.js",
+        "electron/preload.js",
+        "src/core/ipcValidation.js",
+        "src/core/runtimeResultStore.js"
+      ],
+      "tests": [
+        "test/electron/runtimeIpc.test.js",
+        "test/electron/ipcValidation.test.js",
+        "test/electron/runtimeResultStore.test.js"
+      ],
+      "notes": ""
+    },
+    {
       "id": "ipc.channel.performance-export",
       "area": "IPC channel",
       "target": "renderer-to-main channel `performance:export`: Performance-test export validates a saved test definition before writing native performance-test JSON through a main-process save picker.",
@@ -538,19 +556,21 @@
     {
       "id": "ipc.channel.performance-exportresult",
       "area": "IPC channel",
-      "target": "renderer-to-main channel `performance:exportResult`: Performance-result export validates bounded run output before writing JSON or CSV through a main-process save picker.",
+      "target": "renderer-to-main channel `performance:exportResult`: Performance-result export validates bounded run output before writing JSON or CSV through a main-process save picker and streams store-backed exports from the current runtime result store.",
       "status": "implemented",
       "evidenceRefs": [
         "electron/runtimeIpc.js",
         "electron/preload.js",
         "electron/fileDialogs.js",
         "src/core/ipcValidation.js",
-        "src/core/performanceFormats.js"
+        "src/core/performanceFormats.js",
+        "src/core/runtimeResultStore.js"
       ],
       "tests": [
         "test/electron/runtimeIpc.test.js",
         "test/electron/ipcValidation.test.js",
-        "test/electron/performanceRunner.test.js"
+        "test/electron/performanceRunner.test.js",
+        "test/electron/runtimeResultStore.test.js"
       ],
       "notes": ""
     },
@@ -588,20 +608,59 @@
       "notes": ""
     },
     {
-      "id": "ipc.channel.performance-start",
+      "id": "ipc.channel.performance-resultdetail",
       "area": "IPC channel",
-      "target": "renderer-to-main channel `performance:start`: Performance-test start validates ID, saved test payload, environment, safety limits, and progress payloads before local execution.",
+      "target": "renderer-to-main channel `performance:resultDetail`: Performance result detail lookup validates the active result ID and row index before returning one captured sample detail row from the reusable runtime result store.",
       "status": "implemented",
       "evidenceRefs": [
         "electron/runtimeIpc.js",
         "electron/preload.js",
         "src/core/ipcValidation.js",
-        "src/core/performanceRunner.js"
+        "src/core/runtimeResultStore.js"
       ],
       "tests": [
         "test/electron/runtimeIpc.test.js",
         "test/electron/ipcValidation.test.js",
-        "test/electron/performanceRunner.test.js"
+        "test/electron/runtimeResultStore.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.performance-resultpage",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `performance:resultPage`: Performance result paging validates the active result ID and bounded page query before reading a renderer-sized sample page from the reusable runtime result store.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/runtimeIpc.js",
+        "electron/preload.js",
+        "src/core/ipcValidation.js",
+        "src/core/runtimeResultStore.js"
+      ],
+      "tests": [
+        "test/electron/runtimeIpc.test.js",
+        "test/electron/ipcValidation.test.js",
+        "test/electron/runtimeResultStore.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.performance-start",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `performance:start`: Performance-test start validates ID, saved test payload, environment, capture settings, safety limits, and progress payloads before local execution writes high-volume samples to the reusable local runtime result store.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/runtimeIpc.js",
+        "electron/preload.js",
+        "src/core/ipcValidation.js",
+        "src/core/performanceRunner.js",
+        "src/core/runtimeResultStore.js",
+        "src/core/resultCapturePolicy.js"
+      ],
+      "tests": [
+        "test/electron/runtimeIpc.test.js",
+        "test/electron/ipcValidation.test.js",
+        "test/electron/performanceRunner.test.js",
+        "test/electron/runtimeResultStore.test.js"
       ],
       "notes": ""
     },
@@ -707,19 +766,39 @@
       "notes": ""
     },
     {
+      "id": "ipc.channel.runner-estimateresultstore",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `runner:estimateResultStore`: Collection-run result-store estimation validates runner/config payloads before returning a rough SQLite size estimate, effective available disk space, and whether the renderer must block Continue.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/runtimeIpc.js",
+        "electron/preload.js",
+        "src/core/ipcValidation.js",
+        "src/core/runtimeResultStore.js"
+      ],
+      "tests": [
+        "test/electron/runtimeIpc.test.js",
+        "test/electron/ipcValidation.test.js",
+        "test/electron/runtimeResultStore.test.js"
+      ],
+      "notes": ""
+    },
+    {
       "id": "ipc.channel.runner-export",
       "area": "IPC channel",
-      "target": "renderer-to-main channel `runner:export`: Collection-run export validates result/format payloads before a main-process save picker.",
+      "target": "renderer-to-main channel `runner:export`: Collection-run export validates result/format payloads before a main-process save picker and streams store-backed CSV/JSON exports from the current runtime result store.",
       "status": "implemented",
       "evidenceRefs": [
         "electron/runtimeIpc.js",
         "electron/preload.js",
         "electron/fileDialogs.js",
-        "src/core/ipcValidation.js"
+        "src/core/ipcValidation.js",
+        "src/core/runtimeResultStore.js"
       ],
       "tests": [
         "test/electron/runtimeIpc.test.js",
-        "test/electron/ipcValidation.test.js"
+        "test/electron/ipcValidation.test.js",
+        "test/electron/runtimeResultStore.test.js"
       ],
       "notes": ""
     },
@@ -777,18 +856,57 @@
       "notes": ""
     },
     {
-      "id": "ipc.channel.runner-start",
+      "id": "ipc.channel.runner-resultdetail",
       "area": "IPC channel",
-      "target": "renderer-to-main channel `runner:start`: Collection-run start validates ID, collection, environment, and config payloads.",
+      "target": "renderer-to-main channel `runner:resultDetail`: Collection-run result detail lookup validates the active result ID and row index before returning one captured detail row from the reusable runtime result store.",
       "status": "implemented",
       "evidenceRefs": [
         "electron/runtimeIpc.js",
         "electron/preload.js",
-        "src/core/ipcValidation.js"
+        "src/core/ipcValidation.js",
+        "src/core/runtimeResultStore.js"
       ],
       "tests": [
         "test/electron/runtimeIpc.test.js",
-        "test/electron/ipcValidation.test.js"
+        "test/electron/ipcValidation.test.js",
+        "test/electron/runtimeResultStore.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.runner-resultpage",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `runner:resultPage`: Collection-run result paging validates the active result ID and bounded page query before reading a renderer-sized page from the reusable runtime result store.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/runtimeIpc.js",
+        "electron/preload.js",
+        "src/core/ipcValidation.js",
+        "src/core/runtimeResultStore.js"
+      ],
+      "tests": [
+        "test/electron/runtimeIpc.test.js",
+        "test/electron/ipcValidation.test.js",
+        "test/electron/runtimeResultStore.test.js"
+      ],
+      "notes": ""
+    },
+    {
+      "id": "ipc.channel.runner-start",
+      "area": "IPC channel",
+      "target": "renderer-to-main channel `runner:start`: Collection-run start validates ID, collection, environment, capture settings, and config payloads before writing high-volume results to the reusable local runtime result store.",
+      "status": "implemented",
+      "evidenceRefs": [
+        "electron/runtimeIpc.js",
+        "electron/preload.js",
+        "src/core/ipcValidation.js",
+        "src/core/runtimeResultStore.js",
+        "src/core/resultCapturePolicy.js"
+      ],
+      "tests": [
+        "test/electron/runtimeIpc.test.js",
+        "test/electron/ipcValidation.test.js",
+        "test/electron/runtimeResultStore.test.js"
       ],
       "notes": ""
     },

@@ -414,6 +414,9 @@ function requiredPreloadApiSurface() {
     ['runner', 'start'],
     ['runner', 'cancel'],
     ['runner', 'export'],
+    ['runner', 'estimateResultStore'],
+    ['runner', 'resultPage'],
+    ['runner', 'resultDetail'],
     ['runner', 'onProgress'],
     ['performance', 'start'],
     ['performance', 'cancel'],
@@ -422,6 +425,9 @@ function requiredPreloadApiSurface() {
     ['performance', 'importTest'],
     ['performance', 'exportTest'],
     ['performance', 'exportResult'],
+    ['performance', 'estimateResultStore'],
+    ['performance', 'resultPage'],
+    ['performance', 'resultDetail'],
     ['performance', 'onProgress']
   ];
 }

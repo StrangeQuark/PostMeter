@@ -27,7 +27,7 @@ const MAX_SANDBOX_PACKAGE_PACKAGE_DEPENDENCIES = 64;
 const MAX_SANDBOX_PACKAGE_SOURCE_BYTES = 128 * 1024;
 const MAX_VAULT_GRANT_IDS = 1000;
 const HARD_PERFORMANCE_LIMITS = Object.freeze({
-  maxTotalRequests: 1000,
+  maxTotalRequests: 1000000,
   maxConcurrency: 25,
   maxDurationSeconds: 60 * 60
 });
@@ -169,9 +169,13 @@ function assertRequestPayload(value, field = 'request') {
 function assertRunnerPayload(value, field = 'runner') {
   assertSchemaFields('runner', value, field);
   assertNoUnexpectedFields('runner', value, field, [
+    'capturePolicy',
     'csvVariables',
     'requests'
   ]);
+  if (value.capturePolicy != null) {
+    assertCapturePolicyPayload(value.capturePolicy, `${field}.capturePolicy`);
+  }
   assertCsvVariablesPayload(value.csvVariables || {}, `${field}.csvVariables`);
   assertRunnerRequestArray(value.requests, `${field}.requests`);
 }
@@ -225,6 +229,63 @@ function assertCsvVariablesPayload(value, field = 'csvVariables') {
   assertNoUnexpectedFields('csvVariables', value || {}, field);
 }
 
+function assertCapturePolicyPayload(value, field = 'capturePolicy') {
+  object(value, field);
+  assertAllowedObjectFields(value, field, [
+    'bodyPreviewBytes',
+    'guardrailNotes',
+    'localVariables',
+    'maxBodyPreviews',
+    'postRequestOutput',
+    'preRequestOutput',
+    'responseBody',
+    'responseHeaders',
+    'resultFileBudgetBytes',
+    'scriptLogs',
+    'transportTimings'
+  ]);
+  if (value.responseBody != null) {
+    const mode = String(value.responseBody || '').trim().toLowerCase();
+    optionalString(value.responseBody, `${field}.responseBody`, LIMITS.short);
+    if (!['none', 'failed', 'sampled', 'all'].includes(mode)) {
+      fail(`${field}.responseBody must be one of: none, failed, sampled, all.`);
+    }
+  }
+  for (const name of ['bodyPreviewBytes', 'maxBodyPreviews', 'resultFileBudgetBytes']) {
+    if (value[name] != null) {
+      assertOptionalInteger(value[name], `${field}.${name}`, 0);
+    }
+  }
+  for (const name of ['preRequestOutput', 'postRequestOutput', 'scriptLogs', 'localVariables', 'responseHeaders', 'transportTimings']) {
+    optionalBoolean(value[name], `${field}.${name}`);
+  }
+  if (value.guardrailNotes != null) {
+    assertStringArray(value.guardrailNotes, `${field}.guardrailNotes`, 8, LIMITS.value);
+  }
+}
+
+function assertResultPagePayload(value, field = 'resultPage') {
+  object(value, field);
+  assertAllowedObjectFields(value, field, [
+    'limit',
+    'offset',
+    'statusCounts',
+    'total',
+    'totalAll'
+  ]);
+  optionalNumber(value.offset, `${field}.offset`);
+  optionalNumber(value.limit, `${field}.limit`);
+  optionalNumber(value.total, `${field}.total`);
+  optionalNumber(value.totalAll, `${field}.totalAll`);
+  if (value.statusCounts != null) {
+    object(value.statusCounts, `${field}.statusCounts`);
+    for (const [status, count] of Object.entries(value.statusCounts)) {
+      string(status, `${field}.statusCounts key`, LIMITS.short);
+      optionalNumber(count, `${field}.statusCounts.${status}`);
+    }
+  }
+}
+
 function assertRunnerRequestSourcePayload(value, field = 'source') {
   assertSchemaFields('runnerRequestSource', value, field);
   assertNoUnexpectedFields('runnerRequestSource', value, field, [
@@ -238,6 +299,7 @@ function assertRunnerRequestSourcePayload(value, field = 'source') {
 function assertPerformanceTestPayload(value, field = 'performanceTest') {
   assertSchemaFields('performanceTest', value, field);
   assertNoUnexpectedFields('performanceTest', value, field, [
+    'capturePolicy',
     'config',
     'csvVariables',
     'request',
@@ -251,6 +313,9 @@ function assertPerformanceTestPayload(value, field = 'performanceTest') {
   assertPerformanceTestSourcePayload(value.source || { sourceType: 'manual' }, `${field}.source`);
   assertPerformanceConfigPayload(value.config || {}, `${field}.config`);
   assertPerformanceSafetyLimitsPayload(value.safetyLimits || {}, `${field}.safetyLimits`);
+  if (value.capturePolicy != null) {
+    assertCapturePolicyPayload(value.capturePolicy, `${field}.capturePolicy`);
+  }
   if (value.typeSettings != null) {
     assertPerformanceTypeSettingsPayload(value.typeSettings, `${field}.typeSettings`);
   }
@@ -817,11 +882,19 @@ function assertCollectionRunResultPayload(value, field = 'result') {
   }
   assertSchemaFields('collectionRunResult', value, field);
   assertNoUnexpectedFields('collectionRunResult', value, field, [
+    'capturePolicy',
     'collectionVariables',
     'cookies',
+    'detailCaptureTruncated',
+    'detailCaptureTruncationReason',
     'environment',
     'globals',
+    'httpResponses',
+    'id',
     'mutatedEnvironment',
+    'resultPage',
+    'resultStoreId',
+    'storeBacked',
     'results'
   ]);
   if (value.results != null) {
@@ -833,11 +906,22 @@ function assertCollectionRunResultPayload(value, field = 'result') {
       }
       assertNoUnexpectedFields('collectionRunRequestResult', result, itemField, [
         'afterResponseScriptResult',
+        'bodySha256',
+        'finalUrl',
+        'iteration',
         'localVariables',
         'messageScriptResults',
+        'phase',
         'preRequestScriptResult',
         'responseBody',
         'responseBytes',
+        'responseHeaders',
+        'resultIndex',
+        'schedulerLagMillis',
+        'stageConcurrency',
+        'stageIndex',
+        'stageName',
+        'timings',
         'testScriptResult'
       ]);
       if (result.preRequestScriptResult != null) {
@@ -857,8 +941,25 @@ function assertCollectionRunResultPayload(value, field = 'result') {
       if (result.localVariables != null) {
         assertPairs(result.localVariables, `${itemField}.localVariables`);
       }
+      optionalNumber(result.resultIndex, `${itemField}.resultIndex`);
+      optionalString(result.bodySha256, `${itemField}.bodySha256`, LIMITS.value);
+      optionalString(result.finalUrl, `${itemField}.finalUrl`, LIMITS.url);
+      optionalJsonObject(result.responseHeaders, `${itemField}.responseHeaders`, LIMITS.body);
+      optionalJsonObject(result.timings, `${itemField}.timings`, LIMITS.body);
     });
   }
+  if (value.capturePolicy != null) {
+    assertCapturePolicyPayload(value.capturePolicy, `${field}.capturePolicy`);
+  }
+  if (value.resultPage != null) {
+    assertResultPagePayload(value.resultPage, `${field}.resultPage`);
+  }
+  optionalString(value.resultStoreId, `${field}.resultStoreId`, LIMITS.name);
+  optionalString(value.id, `${field}.id`, LIMITS.name);
+  optionalBoolean(value.storeBacked, `${field}.storeBacked`);
+  optionalBoolean(value.detailCaptureTruncated, `${field}.detailCaptureTruncated`);
+  optionalString(value.detailCaptureTruncationReason, `${field}.detailCaptureTruncationReason`, LIMITS.value);
+  optionalNumber(value.httpResponses, `${field}.httpResponses`);
   if (value.environment != null) {
     assertEnvironmentPayload(value.environment, `${field}.environment`);
   }
@@ -878,6 +979,12 @@ function assertCollectionRunResultPayload(value, field = 'result') {
 
 function assertRunnerConfigPayload(value, field = 'config') {
   assertSchemaFields('runnerConfig', value || {}, field);
+  assertNoUnexpectedFields('runnerConfig', value || {}, field, [
+    'capturePolicy'
+  ]);
+  if (value?.capturePolicy != null) {
+    assertCapturePolicyPayload(value.capturePolicy, `${field}.capturePolicy`);
+  }
 }
 
 function assertRunnerProgressPayload(value, field = 'progress') {
@@ -898,12 +1005,18 @@ function assertPerformanceResultPayload(value, field = 'result') {
   }
   assertSchemaFields('performanceResult', value, field);
   assertNoUnexpectedFields('performanceResult', value, field, [
+    'capturePolicy',
     'config',
     'cookies',
+    'detailCaptureTruncated',
+    'detailCaptureTruncationReason',
     'environment',
     'mutatedEnvironment',
+    'resultPage',
+    'resultStoreId',
     'safetyLimits',
     'samples',
+    'storeBacked',
     'summary'
   ]);
   if (value.summary != null) {
@@ -915,6 +1028,16 @@ function assertPerformanceResultPayload(value, field = 'result') {
   if (value.safetyLimits != null) {
     assertPerformanceSafetyLimitsPayload(value.safetyLimits, `${field}.safetyLimits`);
   }
+  if (value.capturePolicy != null) {
+    assertCapturePolicyPayload(value.capturePolicy, `${field}.capturePolicy`);
+  }
+  if (value.resultPage != null) {
+    assertResultPagePayload(value.resultPage, `${field}.resultPage`);
+  }
+  optionalString(value.resultStoreId, `${field}.resultStoreId`, LIMITS.name);
+  optionalBoolean(value.storeBacked, `${field}.storeBacked`);
+  optionalBoolean(value.detailCaptureTruncated, `${field}.detailCaptureTruncated`);
+  optionalString(value.detailCaptureTruncationReason, `${field}.detailCaptureTruncationReason`, LIMITS.value);
   if (value.samples != null) {
     array(value.samples, `${field}.samples`, LIMITS.history).forEach((sample, index) => {
       assertPerformanceSamplePayload(sample, `${field}.samples[${index}]`);
@@ -1092,10 +1215,14 @@ function assertPerformanceCalibrationStagePayload(value, field) {
 function assertPerformanceSamplePayload(value, field) {
   object(value, field);
   assertAllowedObjectFields(value, field, [
+    'afterResponseScriptResult',
+    'bodySha256',
     'error',
     'finalUrl',
+    'folderName',
     'iteration',
     'localVariables',
+    'messageScriptResults',
     'passed',
     'phase',
     'preRequestScriptResult',
@@ -1107,6 +1234,9 @@ function assertPerformanceSamplePayload(value, field) {
     'responseBody',
     'responseBytes',
     'responseHeaders',
+    'resultIndex',
+    'runnerIteration',
+    'runnerIterations',
     'schedulerLagMillis',
     'startedAt',
     'stageConcurrency',
@@ -1118,6 +1248,7 @@ function assertPerformanceSamplePayload(value, field) {
     'timings'
   ]);
   optionalNumber(value.iteration, `${field}.iteration`);
+  optionalNumber(value.resultIndex, `${field}.resultIndex`);
   optionalString(value.startedAt, `${field}.startedAt`, LIMITS.name);
   optionalString(value.requestId, `${field}.requestId`, LIMITS.name);
   optionalString(value.requestName, `${field}.requestName`, LIMITS.name);
@@ -1125,6 +1256,9 @@ function assertPerformanceSamplePayload(value, field) {
   optionalString(value.requestMethod, `${field}.requestMethod`, LIMITS.short);
   optionalString(value.requestUrl, `${field}.requestUrl`, LIMITS.url);
   optionalString(value.finalUrl, `${field}.finalUrl`, LIMITS.url);
+  optionalString(value.folderName, `${field}.folderName`, LIMITS.name);
+  optionalNumber(value.runnerIteration, `${field}.runnerIteration`);
+  optionalNumber(value.runnerIterations, `${field}.runnerIterations`);
   optionalString(value.phase, `${field}.phase`, LIMITS.short);
   optionalString(value.stageName, `${field}.stageName`, LIMITS.short);
   optionalNumber(value.stageIndex, `${field}.stageIndex`);
@@ -1133,6 +1267,7 @@ function assertPerformanceSamplePayload(value, field) {
   optionalNumber(value.durationMillis, `${field}.durationMillis`);
   optionalNumber(value.schedulerLagMillis, `${field}.schedulerLagMillis`);
   optionalString(value.responseBody, `${field}.responseBody`, LIMITS.value);
+  optionalString(value.bodySha256, `${field}.bodySha256`, LIMITS.value);
   optionalNumber(value.responseBytes, `${field}.responseBytes`);
   optionalJsonObject(value.responseHeaders, `${field}.responseHeaders`, LIMITS.body);
   optionalJsonObject(value.timings, `${field}.timings`, LIMITS.body);
@@ -1143,6 +1278,14 @@ function assertPerformanceSamplePayload(value, field) {
   }
   if (value.testScriptResult != null) {
     assertScriptResult(value.testScriptResult, `${field}.testScriptResult`);
+  }
+  if (value.afterResponseScriptResult != null) {
+    assertScriptResult(value.afterResponseScriptResult, `${field}.afterResponseScriptResult`);
+  }
+  if (value.messageScriptResults != null) {
+    array(value.messageScriptResults, `${field}.messageScriptResults`, LIMITS.pairs).forEach((scriptResult, scriptIndex) => {
+      assertScriptResult(scriptResult, `${field}.messageScriptResults[${scriptIndex}]`);
+    });
   }
   if (value.localVariables != null) {
     assertPairs(value.localVariables, `${field}.localVariables`);

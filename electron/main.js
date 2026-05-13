@@ -25,6 +25,7 @@ const {
 const { registerSessionIpc } = require('./sessionIpc');
 const { SessionStore, defaultSessionPath } = require('./sessionStore');
 const { registerRuntimeIpc } = require('./runtimeIpc');
+const { cleanupRuntimeResultStoreSync } = require('../src/core/runtimeResultStore');
 const { registerSandboxPackageIpc } = require('./sandboxPackageIpc');
 const { registerDiagnosticsIpc } = require('./diagnosticsIpc');
 const { registerExportIpc } = require('./exportIpc');
@@ -52,6 +53,7 @@ const vaultStores = new Map();
 const trustedIpcMain = createTrustedIpcMain(ipcMain);
 const oauthFlows = createOAuthFlowController({ app, shell, emitProgress: emitOAuthProgress });
 let diagnosticsLogger;
+let runtimeIpcController;
 
 registerAppProtocolScheme(protocol);
 
@@ -60,6 +62,8 @@ if (process.env.POSTMETER_DATA_PATH) {
   require('node:fs').mkdirSync(smokeUserDataPath, { recursive: true });
   app.setPath('userData', smokeUserDataPath);
 }
+
+const runtimeResultStorePath = path.join(app.getPath('userData'), 'runtime', 'postmeter-current-results.sqlite');
 
 diagnosticsLogger = new LocalDiagnosticsLogger({
   logDirectory: path.join(app.getPath('userData'), 'diagnostics', 'logs'),
@@ -196,6 +200,11 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+app.on('will-quit', () => {
+  runtimeIpcController?.closeResultStore?.();
+  cleanupRuntimeResultStoreSync(runtimeResultStorePath);
 });
 
 app.on('activate', () => {
@@ -520,7 +529,7 @@ registerSessionIpc({
   }
 });
 
-registerRuntimeIpc({
+runtimeIpcController = registerRuntimeIpc({
   dialog,
   fileOperationResult,
   getMainWindow: () => mainWindow,
@@ -531,6 +540,7 @@ registerRuntimeIpc({
   ipcMain: trustedIpcMain,
   mutateWorkspace,
   recordDiagnosticEvent,
+  resultStorePath: runtimeResultStorePath,
   saveWorkspace,
   setWorkspace: (nextWorkspace) => {
     workspace = nextWorkspace;

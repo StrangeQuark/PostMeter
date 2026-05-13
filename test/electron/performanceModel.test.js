@@ -44,7 +44,7 @@ test('Performance model accepts the eight V1 types and rejects unsafe limits for
     const unsafe = type === 'diagnosis'
       ? {
           ...candidate,
-          safetyLimits: { ...candidate.safetyLimits, maxTotalRequests: 1001 }
+          safetyLimits: { ...candidate.safetyLimits, maxTotalRequests: 1000001 }
         }
       : performanceTestModel({
           ...candidate,
@@ -188,9 +188,9 @@ test('Performance safety validation uses type-specific effective request and con
       type: 'throughput',
       request: { method: 'GET', url: 'https://example.test/hard-cap' },
       config: { iterations: 1, concurrency: 1 },
-      safetyLimits: { maxTotalRequests: 1001, maxConcurrency: 10, maxDurationSeconds: 60 }
+      safetyLimits: { maxTotalRequests: 1000001, maxConcurrency: 10, maxDurationSeconds: 60 }
     }),
-    /safetyLimits\.maxTotalRequests cannot exceed 1000/
+    /safetyLimits\.maxTotalRequests cannot exceed 1000000/
   );
 
   assert.throws(
