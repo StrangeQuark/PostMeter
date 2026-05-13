@@ -3116,6 +3116,27 @@
       assertUiSmoke($('performanceMethodSelect').classList.contains('method-get'), 'Performance request method dropdown should use the same method color class as requests.');
       assertUiSmoke($('importPerformanceRequestButton').closest('.performance-actions'), 'Performance import request action should live with the performance pane actions.');
       assertUiSmoke($('deletePerformanceTestButton').classList.contains('danger-button'), 'Performance delete button should use danger styling.');
+      assertUiSmoke(!document.getElementById('performanceUseCsvVariablesInput'), 'Performance editor should not render a separate Use CSV variables checkbox.');
+      assertUiSmoke($('performanceCsvVariablesButton').textContent.trim() === 'CSV Variables: On', 'Performance CSV button should show the enabled state.');
+      assertUiSmoke($('performanceCsvVariablesButton').classList.contains('csv-variables-active'), 'Performance CSV button should use the active color when enabled.');
+      $('performanceCsvVariablesButton').click();
+      assertUiSmoke(!$('performanceCsvVariablesMenu').hidden, 'Performance CSV button should open a dropdown menu.');
+      let performanceCsvMenuLabels = Array.from($('performanceCsvVariablesMenu').querySelectorAll('button')).map((button) => button.textContent.trim());
+      assertUiSmoke(performanceCsvMenuLabels.join('|') === 'Turn Off|Edit', `Performance CSV menu should expose toggle and edit actions. labels=${performanceCsvMenuLabels.join('|')}`);
+      $('performanceToggleCsvVariablesButton').click();
+      assertUiSmoke(performanceTest.csvVariables.enabled === false, 'Performance CSV toggle should turn CSV variables off.');
+      assertUiSmoke($('performanceCsvVariablesButton').textContent.trim() === 'CSV Variables: Off', 'Performance CSV button should show the disabled state.');
+      assertUiSmoke(!$('performanceCsvVariablesButton').classList.contains('csv-variables-active'), 'Performance CSV button should drop the active color when disabled.');
+      $('performanceCsvVariablesButton').click();
+      performanceCsvMenuLabels = Array.from($('performanceCsvVariablesMenu').querySelectorAll('button')).map((button) => button.textContent.trim());
+      assertUiSmoke(performanceCsvMenuLabels.join('|') === 'Turn On|Edit', `Performance CSV menu should update the toggle label when disabled. labels=${performanceCsvMenuLabels.join('|')}`);
+      $('performanceToggleCsvVariablesButton').click();
+      assertUiSmoke(performanceTest.csvVariables.enabled === true, 'Performance CSV toggle should turn CSV variables on.');
+      $('performanceCsvVariablesButton').click();
+      $('performanceEditCsvVariablesButton').click();
+      await waitForUiSmoke(() => !$('csvVariablesModal').hidden, 'Performance CSV edit action should open the CSV variables modal.', 3000, global);
+      $('cancelCsvVariablesModalButton').click();
+      await waitForUiSmoke(() => $('csvVariablesModal').hidden, 'Performance CSV edit cancellation should close the modal.', 3000, global);
       assertUiSmoke(
         !Array.from($('performanceMainPanel').querySelectorAll('button')).some((button) => button.textContent.trim() === 'Export Request'),
         'Performance test editor should not include the request Export Request button.'
@@ -3745,6 +3766,27 @@
       assertUiSmoke($('runnerEnvironmentSelect'), 'Runner environment selector is missing.');
       assertUiSmoke($('runnerAllowEnvironmentMutation'), 'Runner environment mutation checkbox is missing.');
       assertUiSmoke($('deleteRunnerButton').classList.contains('danger-button'), 'Runner delete button should use danger styling.');
+      assertUiSmoke(!document.getElementById('runnerUseCsvVariablesInput'), 'Runner editor should not render a separate Use CSV variables checkbox.');
+      assertUiSmoke($('runnerCsvVariablesButton').textContent.trim() === 'CSV Variables: On', 'Runner CSV button should show the enabled state.');
+      assertUiSmoke($('runnerCsvVariablesButton').classList.contains('csv-variables-active'), 'Runner CSV button should use the active color when enabled.');
+      $('runnerCsvVariablesButton').click();
+      assertUiSmoke(!$('runnerCsvVariablesMenu').hidden, 'Runner CSV button should open a dropdown menu.');
+      let runnerCsvMenuLabels = Array.from($('runnerCsvVariablesMenu').querySelectorAll('button')).map((button) => button.textContent.trim());
+      assertUiSmoke(runnerCsvMenuLabels.join('|') === 'Turn Off|Edit', `Runner CSV menu should expose toggle and edit actions. labels=${runnerCsvMenuLabels.join('|')}`);
+      $('runnerToggleCsvVariablesButton').click();
+      assertUiSmoke(runner.csvVariables.enabled === false, 'Runner CSV toggle should turn CSV variables off.');
+      assertUiSmoke($('runnerCsvVariablesButton').textContent.trim() === 'CSV Variables: Off', 'Runner CSV button should show the disabled state.');
+      assertUiSmoke(!$('runnerCsvVariablesButton').classList.contains('csv-variables-active'), 'Runner CSV button should drop the active color when disabled.');
+      $('runnerCsvVariablesButton').click();
+      runnerCsvMenuLabels = Array.from($('runnerCsvVariablesMenu').querySelectorAll('button')).map((button) => button.textContent.trim());
+      assertUiSmoke(runnerCsvMenuLabels.join('|') === 'Turn On|Edit', `Runner CSV menu should update the toggle label when disabled. labels=${runnerCsvMenuLabels.join('|')}`);
+      $('runnerToggleCsvVariablesButton').click();
+      assertUiSmoke(runner.csvVariables.enabled === true, 'Runner CSV toggle should turn CSV variables on.');
+      $('runnerCsvVariablesButton').click();
+      $('runnerEditCsvVariablesButton').click();
+      await waitForUiSmoke(() => !$('csvVariablesModal').hidden, 'Runner CSV edit action should open the CSV variables modal.', 3000, global);
+      $('cancelCsvVariablesModalButton').click();
+      await waitForUiSmoke(() => $('csvVariablesModal').hidden, 'Runner CSV edit cancellation should close the modal.', 3000, global);
       const runnerTreeButton = treeButtonByTarget('runner', runner.id);
       assertUiSmoke(runnerTreeButton, 'Runner sidebar should render the created runner row.');
       runnerTreeButton.dispatchEvent(new MouseEvent('contextmenu', {

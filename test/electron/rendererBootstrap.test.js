@@ -120,9 +120,11 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(indexSource, /id="confirmFolderDestinationButton"[^>]+disabled/);
   assert.match(indexSource, /id="csvVariablesModal"/);
   assert.match(indexSource, /id="runnerCsvVariablesButton"/);
-  assert.match(indexSource, /id="runnerUseCsvVariablesInput"/);
+  assert.match(indexSource, /id="runnerToggleCsvVariablesButton"/);
+  assert.match(indexSource, /id="runnerEditCsvVariablesButton"/);
   assert.match(indexSource, /id="performanceCsvVariablesButton"/);
-  assert.match(indexSource, /id="performanceUseCsvVariablesInput"/);
+  assert.match(indexSource, /id="performanceToggleCsvVariablesButton"/);
+  assert.match(indexSource, /id="performanceEditCsvVariablesButton"/);
   assert.doesNotMatch(indexSource, /id="fileMenuButton"/);
   assert.doesNotMatch(indexSource, /id="fileMenu"/);
   assert.match(indexSource, /id="settingsModal"[^>]+settings-modal/);
@@ -160,7 +162,9 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(bootstrapSource, /activeRow !== submenuRow/);
   assert.match(bootstrapSource, /getSelectedExportItemId/);
   assert.match(bootstrapSource, /getSelectedFolderDestination/);
+  assert.match(bootstrapSource, /onToggleRunnerCsvVariables/);
   assert.match(bootstrapSource, /onEditRunnerCsvVariables/);
+  assert.match(bootstrapSource, /onTogglePerformanceCsvVariables/);
   assert.match(bootstrapSource, /onEditPerformanceCsvVariables/);
   assert.doesNotMatch(bootstrapSource, /'fileMenuButton', 'fileMenu'/);
   assert.doesNotMatch(bootstrapSource, /bindClick\(doc, 'openSettingsButton', options\.onOpenSettings\)/);
@@ -360,7 +364,13 @@ test('renderer bootstrap binds CSV variable edit buttons and modal controls', ()
   const calls = [];
   const elements = new Map([
     ['runnerCsvVariablesButton', createElement()],
+    ['runnerCsvVariablesMenu', createElement()],
+    ['runnerToggleCsvVariablesButton', createElement()],
+    ['runnerEditCsvVariablesButton', createElement()],
     ['performanceCsvVariablesButton', createElement()],
+    ['performanceCsvVariablesMenu', createElement()],
+    ['performanceToggleCsvVariablesButton', createElement()],
+    ['performanceEditCsvVariablesButton', createElement()],
     ['closeCsvVariablesModalButton', createElement()],
     ['cancelCsvVariablesModalButton', createElement()],
     ['saveCsvVariablesModalButton', createElement()],
@@ -385,13 +395,21 @@ test('renderer bootstrap binds CSV variable edit buttons and modal controls', ()
       getElementById(id) {
         return elements.get(id) || null;
       },
-      querySelectorAll() {
+      querySelectorAll(selector) {
+        if (selector === '.toolbar-menu') {
+          return [elements.get('runnerCsvVariablesMenu'), elements.get('performanceCsvVariablesMenu')];
+        }
+        if (selector === '.menu-trigger') {
+          return [elements.get('runnerCsvVariablesButton'), elements.get('performanceCsvVariablesButton')];
+        }
         return [];
       },
       addEventListener() {}
     },
     windowObject: { addEventListener() {} },
+    onToggleRunnerCsvVariables: () => calls.push('runner-toggle-csv'),
     onEditRunnerCsvVariables: () => calls.push('runner-csv'),
+    onTogglePerformanceCsvVariables: () => calls.push('performance-toggle-csv'),
     onEditPerformanceCsvVariables: () => calls.push('performance-csv'),
     onResolveActiveModal: (value) => calls.push(`resolve:${value}`),
     onConfirmCsvVariablesModal: () => calls.push('save-csv'),
@@ -406,9 +424,15 @@ test('renderer bootstrap binds CSV variable edit buttons and modal controls', ()
     onCsvVariablesRowModeChange: (mode) => calls.push(`row-mode:${mode}`)
   });
 
+  elements.get('runnerCsvVariablesButton').dispatch('click');
+  assert.equal(elements.get('runnerCsvVariablesMenu').hidden, false);
+  elements.get('runnerToggleCsvVariablesButton').dispatch('click');
+  elements.get('runnerEditCsvVariablesButton').dispatch('click');
+  elements.get('performanceCsvVariablesButton').dispatch('click');
+  assert.equal(elements.get('performanceCsvVariablesMenu').hidden, false);
+  elements.get('performanceToggleCsvVariablesButton').dispatch('click');
+  elements.get('performanceEditCsvVariablesButton').dispatch('click');
   for (const id of [
-    'runnerCsvVariablesButton',
-    'performanceCsvVariablesButton',
     'closeCsvVariablesModalButton',
     'cancelCsvVariablesModalButton',
     'saveCsvVariablesModalButton',
@@ -429,7 +453,9 @@ test('renderer bootstrap binds CSV variable edit buttons and modal controls', ()
   elements.get('csvVariablesContinueWithoutRowsInput').dispatch('change');
 
   assert.deepEqual(calls, [
+    'runner-toggle-csv',
     'runner-csv',
+    'performance-toggle-csv',
     'performance-csv',
     'resolve:null',
     'resolve:null',
@@ -713,7 +739,9 @@ test('renderer bootstrap binds performance creation import export run and config
     'importPerformanceTestButton',
     'exportPerformanceTestMenuButton',
     'performanceCsvVariablesButton',
-    'performanceUseCsvVariablesInput',
+    'performanceCsvVariablesMenu',
+    'performanceToggleCsvVariablesButton',
+    'performanceEditCsvVariablesButton',
     'savePerformanceTestButton',
     'deletePerformanceTestButton',
     'runPerformanceTestButton',
@@ -767,6 +795,12 @@ test('renderer bootstrap binds performance creation import export run and config
         if (selector === '[data-performance-safety]') {
           return performanceSafetyControls;
         }
+        if (selector === '.toolbar-menu') {
+          return [elements.get('performanceCsvVariablesMenu')];
+        }
+        if (selector === '.menu-trigger') {
+          return [elements.get('performanceCsvVariablesButton')];
+        }
         if (selector === '.tab' || selector === '.tab[data-tab-group="performance"]') {
           return [performanceTab];
         }
@@ -778,6 +812,7 @@ test('renderer bootstrap binds performance creation import export run and config
     onNewPerformanceTest: () => calls.push('new'),
     onImportPerformanceTest: () => calls.push('import-test'),
     onExportPerformanceTest: () => calls.push('export-test'),
+    onTogglePerformanceCsvVariables: () => calls.push('toggle-csv-performance'),
     onEditPerformanceCsvVariables: () => calls.push('csv-performance'),
     onSavePerformanceTest: () => calls.push('save'),
     onDeletePerformanceTest: () => calls.push('delete'),
@@ -805,6 +840,8 @@ test('renderer bootstrap binds performance creation import export run and config
     'importPerformanceTestButton',
     'exportPerformanceTestMenuButton',
     'performanceCsvVariablesButton',
+    'performanceToggleCsvVariablesButton',
+    'performanceEditCsvVariablesButton',
     'savePerformanceTestButton',
     'deletePerformanceTestButton',
     'runPerformanceTestButton',
@@ -823,7 +860,6 @@ test('renderer bootstrap binds performance creation import export run and config
   ]) {
     elements.get(id).dispatch('click');
   }
-  elements.get('performanceUseCsvVariablesInput').dispatch('change');
   for (const control of [...performanceEnvironmentControls, ...performanceMutationControls]) {
     control.dispatch('change');
   }
@@ -842,11 +878,12 @@ test('renderer bootstrap binds performance creation import export run and config
   elements.get('performanceDocsInput').dispatch('input');
   elements.get('performanceBinaryBodySourceInput').dispatch('input');
 
-  assert.deepEqual(calls.slice(0, 18), [
+  assert.deepEqual(calls.slice(0, 19), [
     'new',
     'new',
     'import-test',
     'export-test',
+    'toggle-csv-performance',
     'csv-performance',
     'save',
     'delete',
@@ -862,7 +899,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'calibrate',
     'close-calibration'
   ]);
-  assert.equal(calls.filter((call) => call === 'config').length, 11);
+  assert.equal(calls.filter((call) => call === 'config').length, 10);
   assert.ok(calls.includes('add-form-data'));
   assert.ok(calls.includes('add-urlencoded'));
   assert.equal(calls.filter((call) => call === 'request').length, 8);
@@ -1329,7 +1366,8 @@ test('renderer exposes first-class runner UI and sends runner payloads through r
   assert.match(indexHtml, /id="addRunnerRequestButton"/);
   assert.match(indexHtml, /id="runnerCsvVariablesButton"/);
   assert.match(indexHtml, /id="runnerAllowEnvironmentMutation"/);
-  assert.match(indexHtml, /id="runnerUseCsvVariablesInput"/);
+  assert.match(indexHtml, /id="runnerToggleCsvVariablesButton"/);
+  assert.match(indexHtml, /id="runnerEditCsvVariablesButton"/);
   assert.match(indexHtml, /id="csvVariablesModal"/);
   assert.match(indexHtml, /id="csvVariablesFileSourceButton"/);
   assert.match(indexHtml, /id="csvVariablesInlineSourceButton"/);
@@ -1338,15 +1376,18 @@ test('renderer exposes first-class runner UI and sends runner payloads through r
   assert.match(indexHtml, /id="csvVariablesReuseFirstRowInput"/);
   assert.match(indexHtml, /id="csvVariablesLoopRowsInput"/);
   assert.match(indexHtml, /id="csvVariablesContinueWithoutRowsInput"/);
-  assert.match(indexHtml, /id="performanceUseCsvVariablesInput"/);
+  assert.match(indexHtml, /id="performanceToggleCsvVariablesButton"/);
+  assert.match(indexHtml, /id="performanceEditCsvVariablesButton"/);
+  assert.doesNotMatch(indexHtml, /id="runnerUseCsvVariablesInput"/);
+  assert.doesNotMatch(indexHtml, /id="performanceUseCsvVariablesInput"/);
   assert.doesNotMatch(indexHtml, /id="newRunnerButton"/);
   assert.match(indexHtml, /id="emptyCreateRunnerButton"[^>]*>New Runner<\/button>/);
   assert.match(bootstrapSource, /bindClick\(doc, 'newRunnerMenuButton', options\.onNewRunner\)/);
   assert.match(bootstrapSource, /bindClick\(doc, 'emptyCreateRunnerButton', options\.onNewRunner\)/);
-  assert.match(bootstrapSource, /bindClick\(doc, 'runnerCsvVariablesButton', options\.onEditRunnerCsvVariables\)/);
-  assert.match(bootstrapSource, /bindClick\(doc, 'performanceCsvVariablesButton', options\.onEditPerformanceCsvVariables\)/);
-  assert.match(bootstrapSource, /bindChange\(doc, 'runnerUseCsvVariablesInput', options\.onRunnerConfigChange\)/);
-  assert.match(bootstrapSource, /bindChange\(doc, 'performanceUseCsvVariablesInput', options\.onPerformanceConfigChange\)/);
+  assert.match(bootstrapSource, /bindClick\(doc, 'runnerToggleCsvVariablesButton', options\.onToggleRunnerCsvVariables\)/);
+  assert.match(bootstrapSource, /bindClick\(doc, 'runnerEditCsvVariablesButton', options\.onEditRunnerCsvVariables\)/);
+  assert.match(bootstrapSource, /bindClick\(doc, 'performanceToggleCsvVariablesButton', options\.onTogglePerformanceCsvVariables\)/);
+  assert.match(bootstrapSource, /bindClick\(doc, 'performanceEditCsvVariablesButton', options\.onEditPerformanceCsvVariables\)/);
   assert.match(bootstrapSource, /bindChange\(doc, 'csvVariablesReuseFirstRowInput'/);
   assert.match(bootstrapSource, /bindClick\(doc, 'confirmRunnerImportButton'/);
   assert.doesNotMatch(bootstrapSource, /newRunnerButton/);

@@ -623,9 +623,11 @@ function bindUi() {
     onCancelCollectionRun: cancelCollectionRun,
     onExportRunnerJson: () => exportRunnerResult('json'),
     onExportRunnerCsv: () => exportRunnerResult('csv'),
+    onToggleRunnerCsvVariables: toggleActiveRunnerCsvVariables,
     onSaveRunner: () => { void saveRunnerFromPane(); },
     onDeleteRunner: () => { void deleteRunner(); },
     onAddRunnerRequest: (event) => showAddRunnerRequestMenu(event),
+    onTogglePerformanceCsvVariables: toggleActivePerformanceCsvVariables,
     onSavePerformanceTest: () => { void savePerformanceTestFromPane(); },
     onDeletePerformanceTest: () => { void deletePerformanceTest(); },
     onRunPerformanceTest: () => { void runActivePerformanceTest(); },
@@ -5154,6 +5156,44 @@ async function editActivePerformanceCsvVariables() {
   return test.csvVariables;
 }
 
+function toggleActiveRunnerCsvVariables() {
+  const runner = activeRunner();
+  if (!runner) {
+    setStatus('Select a runner before changing CSV variables.');
+    return null;
+  }
+  collectRunnerFromEditor();
+  const enabled = normalizeCsvVariableData(runner.csvVariables).enabled !== false;
+  runner.csvVariables = normalizeCsvVariableData({
+    ...(runner.csvVariables || {}),
+    enabled: !enabled
+  });
+  markActiveRunnerDirty();
+  renderRunnerEditor();
+  refreshVariableHighlights();
+  setStatus(runner.csvVariables.enabled ? 'Runner CSV variables enabled.' : 'Runner CSV variables disabled.');
+  return runner.csvVariables;
+}
+
+function toggleActivePerformanceCsvVariables() {
+  const test = activePerformanceTest();
+  if (!test) {
+    setStatus('Select a performance test before changing CSV variables.');
+    return null;
+  }
+  collectPerformanceTestFromEditor();
+  const enabled = normalizeCsvVariableData(test.csvVariables).enabled !== false;
+  test.csvVariables = normalizeCsvVariableData({
+    ...(test.csvVariables || {}),
+    enabled: !enabled
+  });
+  markActivePerformanceDirty();
+  renderPerformanceEditor();
+  refreshVariableHighlights();
+  setStatus(test.csvVariables.enabled ? 'Performance CSV variables enabled.' : 'Performance CSV variables disabled.');
+  return test.csvVariables;
+}
+
 async function promptCsvVariables(options = {}) {
   configureCsvVariablesModal(options);
   const result = await showModal('csvVariablesModal', null);
@@ -6221,6 +6261,28 @@ function renderWorkspacePanel() {
   }
 }
 
+function renderCsvVariablesDropdown(prefix, csvVariables, enabledForTarget) {
+  const trigger = $(`${prefix}CsvVariablesButton`);
+  const toggle = $(`${prefix}ToggleCsvVariablesButton`);
+  const edit = $(`${prefix}EditCsvVariablesButton`);
+  const normalized = normalizeCsvVariableData(csvVariables || {});
+  const enabled = enabledForTarget && normalized.enabled !== false;
+  const labelScope = prefix === 'runner' ? 'Runner' : 'Performance';
+  if (trigger) {
+    trigger.disabled = !enabledForTarget;
+    trigger.textContent = `CSV Variables: ${enabled ? 'On' : 'Off'}`;
+    trigger.classList.toggle('csv-variables-active', enabled);
+    trigger.setAttribute('aria-label', `${labelScope} CSV variables ${enabled ? 'on' : 'off'}`);
+  }
+  if (toggle) {
+    toggle.disabled = !enabledForTarget;
+    toggle.textContent = enabled ? 'Turn Off' : 'Turn On';
+  }
+  if (edit) {
+    edit.disabled = !enabledForTarget;
+  }
+}
+
 function renderRunnerEditor() {
   const runner = activeRunner();
   const title = $('runnerMainTitle');
@@ -6236,16 +6298,7 @@ function renderRunnerEditor() {
     title.setAttribute('aria-label', 'Runner name');
   }
   $('saveRunnerButton').disabled = !runner;
-  const runnerCsvButton = $('runnerCsvVariablesButton');
-  if (runnerCsvButton) {
-    runnerCsvButton.disabled = !runner;
-    runnerCsvButton.textContent = runner && csvVariablesConfigured(runner.csvVariables) ? 'CSV Variables *' : 'CSV Variables';
-  }
-  const runnerUseCsvInput = $('runnerUseCsvVariablesInput');
-  if (runnerUseCsvInput) {
-    runnerUseCsvInput.checked = runner?.csvVariables?.enabled !== false;
-    runnerUseCsvInput.disabled = !runner;
-  }
+  renderCsvVariablesDropdown('runner', runner?.csvVariables, Boolean(runner));
   $('deleteRunnerButton').disabled = !runner;
   $('runCollectionButton').disabled = !runner || activeRunnerId != null;
   $('cancelRunnerButton').disabled = !activeRunnerId;
@@ -6272,21 +6325,13 @@ function renderPerformanceEditor() {
     title.setAttribute('aria-disabled', test ? 'false' : 'true');
     title.setAttribute('aria-label', 'Performance test name');
   }
-  for (const id of ['performanceCsvVariablesButton', 'savePerformanceTestButton', 'deletePerformanceTestButton', 'runPerformanceTestButton', 'exportPerformanceTestButton', 'importPerformanceRequestButton']) {
+  for (const id of ['performanceCsvVariablesButton', 'performanceToggleCsvVariablesButton', 'performanceEditCsvVariablesButton', 'savePerformanceTestButton', 'deletePerformanceTestButton', 'runPerformanceTestButton', 'exportPerformanceTestButton', 'importPerformanceRequestButton']) {
     const button = $(id);
     if (button) {
       button.disabled = !test;
     }
   }
-  const performanceCsvButton = $('performanceCsvVariablesButton');
-  if (performanceCsvButton) {
-    performanceCsvButton.textContent = test && csvVariablesConfigured(test.csvVariables) ? 'CSV Variables *' : 'CSV Variables';
-  }
-  const performanceUseCsvInput = $('performanceUseCsvVariablesInput');
-  if (performanceUseCsvInput) {
-    performanceUseCsvInput.checked = test?.csvVariables?.enabled !== false;
-    performanceUseCsvInput.disabled = !test;
-  }
+  renderCsvVariablesDropdown('performance', test?.csvVariables, Boolean(test));
   if ($('runPerformanceTestButton')) {
     $('runPerformanceTestButton').disabled = !test || Boolean(activePerformanceRunId);
   }
@@ -14468,10 +14513,7 @@ function collectRunnerFromEditor() {
   runner.environmentId = $('runnerEnvironmentSelect')?.value || runner.environmentId || 'none';
   runner.stopOnFailure = $('runnerStopOnFailure')?.checked === true;
   runner.allowEnvironmentMutation = $('runnerAllowEnvironmentMutation')?.checked === true;
-  runner.csvVariables = normalizeCsvVariableData({
-    ...(runner.csvVariables || {}),
-    enabled: $('runnerUseCsvVariablesInput')?.checked !== false
-  });
+  runner.csvVariables = normalizeCsvVariableData(runner.csvVariables || {});
   const iterationsChanged = collectRunnerRequestIterationsFromEditor(runner);
   runner.requests = normalizeRunnerRequests(runner.requests);
   if (iterationsChanged) {
@@ -14494,10 +14536,7 @@ function collectPerformanceTestFromEditor() {
   test.type = type;
   collectPerformanceTypeSettingsFromPanel(test, type, activePerformanceTypePanel());
   syncPerformanceActiveTypeSettings(test);
-  test.csvVariables = normalizeCsvVariableData({
-    ...(test.csvVariables || {}),
-    enabled: $('performanceUseCsvVariablesInput')?.checked !== false
-  });
+  test.csvVariables = normalizeCsvVariableData(test.csvVariables || {});
   test.request ||= {};
   test.request.id ||= crypto.randomUUID();
   test.request.name ||= 'Performance Request';

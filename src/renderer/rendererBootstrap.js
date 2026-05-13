@@ -172,11 +172,13 @@
     bindClick(doc, 'cancelRunnerButton', options.onCancelCollectionRun);
     bindClick(doc, 'exportRunnerJsonButton', options.onExportRunnerJson);
     bindClick(doc, 'exportRunnerCsvButton', options.onExportRunnerCsv);
-    bindClick(doc, 'runnerCsvVariablesButton', options.onEditRunnerCsvVariables);
+    bindClick(doc, 'runnerToggleCsvVariablesButton', options.onToggleRunnerCsvVariables);
+    bindClick(doc, 'runnerEditCsvVariablesButton', options.onEditRunnerCsvVariables);
     bindClick(doc, 'saveRunnerButton', options.onSaveRunner);
     bindClick(doc, 'deleteRunnerButton', options.onDeleteRunner);
     bindClick(doc, 'addRunnerRequestButton', options.onAddRunnerRequest);
-    bindClick(doc, 'performanceCsvVariablesButton', options.onEditPerformanceCsvVariables);
+    bindClick(doc, 'performanceToggleCsvVariablesButton', options.onTogglePerformanceCsvVariables);
+    bindClick(doc, 'performanceEditCsvVariablesButton', options.onEditPerformanceCsvVariables);
     bindClick(doc, 'savePerformanceTestButton', options.onSavePerformanceTest);
     bindClick(doc, 'deletePerformanceTestButton', options.onDeletePerformanceTest);
     bindClick(doc, 'runPerformanceTestButton', options.onRunPerformanceTest);
@@ -214,8 +216,6 @@
     });
     bindChange(doc, 'runnerStopOnFailure', options.onRunnerConfigChange);
     bindChange(doc, 'runnerAllowEnvironmentMutation', options.onRunnerConfigChange);
-    bindChange(doc, 'runnerUseCsvVariablesInput', options.onRunnerConfigChange);
-    bindChange(doc, 'performanceUseCsvVariablesInput', options.onPerformanceConfigChange);
     bindAll(doc, '[data-performance-environment]', 'change', options.onPerformanceConfigChange);
     bindAll(doc, '[data-performance-mutation]', 'change', options.onPerformanceConfigChange);
     bindAll(doc, '[data-performance-config]', 'input', options.onPerformanceConfigChange);
@@ -495,7 +495,9 @@
       ['newMenuButton', 'newMenu'],
       ['importMenuButton', 'importMenu'],
       ['exportMenuButton', 'exportMenu'],
-      ['exportRequestPanelButton', 'exportRequestPanelMenu']
+      ['exportRequestPanelButton', 'exportRequestPanelMenu'],
+      ['runnerCsvVariablesButton', 'runnerCsvVariablesMenu'],
+      ['performanceCsvVariablesButton', 'performanceCsvVariablesMenu']
     ]) {
       const button = getElement(doc, buttonId);
       const menu = getElement(doc, menuId);
