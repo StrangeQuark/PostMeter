@@ -148,6 +148,8 @@
     bindChange(doc, 'sendPostMeterTokenInput', options.onPostMeterTokenHeaderChange);
     bindChange(doc, 'showGeneratedHeadersInput', options.onShowGeneratedHeadersChange);
     bindClick(doc, 'saveRequestButton', options.onSaveRequest);
+    bindClick(doc, 'exportRequestPanelPostmeterButton', options.onExportCurrentRequest);
+    bindClick(doc, 'exportRequestPanelCurlButton', options.onExportCurrentRequestCurl);
     bindClick(doc, 'saveEnvironmentButton', options.onSaveEnvironment);
     bindClick(doc, 'deleteEnvironmentButton', options.onDeleteEnvironment);
     bindClick(doc, 'deleteWorkspacePanelButton', options.onDeleteWorkspace);
@@ -492,7 +494,8 @@
     for (const [buttonId, menuId] of [
       ['newMenuButton', 'newMenu'],
       ['importMenuButton', 'importMenu'],
-      ['exportMenuButton', 'exportMenu']
+      ['exportMenuButton', 'exportMenu'],
+      ['exportRequestPanelButton', 'exportRequestPanelMenu']
     ]) {
       const button = getElement(doc, buttonId);
       const menu = getElement(doc, menuId);

@@ -247,6 +247,13 @@
           <div id="requestNameTitle" class="request-main-title editable-title" tabindex="0" aria-label="Request name">Select a request</div>
           <div class="request-actions">
             <button id="saveRequestButton" type="button">Save Request</button>
+            <div class="toolbar-group menu-group request-export-menu-group" aria-label="Export request">
+              <button id="exportRequestPanelButton" class="menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false">Export Request</button>
+              <div id="exportRequestPanelMenu" class="toolbar-menu" role="menu" aria-labelledby="exportRequestPanelButton" hidden>
+                <button id="exportRequestPanelPostmeterButton" type="button" role="menuitem">PostMeter</button>
+                <button id="exportRequestPanelCurlButton" type="button" role="menuitem">curl</button>
+              </div>
+            </div>
           </div>
         </div>
         <div class="request-line">

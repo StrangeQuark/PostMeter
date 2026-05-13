@@ -241,6 +241,83 @@
     requestParamInputs = $('paramsTable').querySelectorAll('input');
     assertUiSmoke(requestParamInputs[1].value === 'from' && requestParamInputs[2].value === 'url', 'Editing the request URL should update the Params table.');
     assertUiSmoke(requestParamInputs[4].value === 'multi' && requestParamInputs[5].value === 'one', 'URL query parsing should keep repeated request params.');
+    assertUiSmoke($('exportRequestPanelButton')?.textContent === 'Export Request', 'Request editor should render an Export Request button.');
+    assertUiSmoke(!$('exportRequestPanelButton').disabled, 'Request editor should enable the request export button.');
+    $('exportRequestPanelButton').click();
+    assertUiSmoke(!$('exportRequestPanelMenu').hidden, 'Request editor Export Request button should open a format menu.');
+    assertUiSmoke(
+      Array.from($('exportRequestPanelMenu').querySelectorAll('button')).map((button) => button.textContent.trim()).join('|') === 'PostMeter|curl',
+      'Request editor Export Request menu should match the main Export > Request formats.'
+    );
+    {
+      const originalExportRequest = window.__postmeterExportRequest;
+      const originalExportRequestText = window.__postmeterExportRequestText;
+      const originalPostmeterRequestExportText = window.postmeter?.request?.exportRequestText;
+      let exportedRequest = null;
+      try {
+        window.__postmeterExportRequestText = null;
+        if (window.postmeter?.request) {
+          window.postmeter.request.exportRequestText = null;
+        }
+        window.__postmeterExportRequest = async (request, format) => {
+          exportedRequest = { request, format };
+          return { cancelled: true };
+        };
+        $('exportRequestPanelPostmeterButton').click();
+        await waitForUiSmoke(
+          () => exportedRequest || !$('requestExportModal').hidden,
+          'Request editor Export Request button should start the active request export.',
+          3000,
+          global
+        );
+        if (!exportedRequest) {
+          $('fileRequestExportButton').click();
+        }
+        await waitForUiSmoke(
+          () => exportedRequest?.request?.id === activeRequest()?.id,
+          'Request editor Export Request button should export the active request.',
+          3000,
+          global
+        );
+        assertUiSmoke(exportedRequest.format === 'postmeter', 'Request editor Export Request button should use the PostMeter request format.');
+        assertUiSmoke(exportedRequest.request.url.includes('from=url'), 'Request editor Export Request button should collect current URL edits before exporting.');
+        exportedRequest = null;
+        $('exportRequestPanelButton').click();
+        assertUiSmoke(!$('exportRequestPanelMenu').hidden, 'Request editor Export Request button should reopen the format menu.');
+        $('exportRequestPanelCurlButton').click();
+        await waitForUiSmoke(
+          () => exportedRequest || !$('requestExportModal').hidden || !$('confirmActionModal').hidden,
+          'Request editor Export Request curl menu item should start the active request export.',
+          3000,
+          global
+        );
+        if (!exportedRequest && !$('confirmActionModal').hidden) {
+          $('confirmActionButton').click();
+          await waitForUiSmoke(
+            () => exportedRequest || !$('requestExportModal').hidden,
+            'Request editor Export Request curl menu item should continue after confirming unsupported curl features.',
+            3000,
+            global
+          );
+        }
+        if (!exportedRequest && !$('requestExportModal').hidden) {
+          $('fileRequestExportButton').click();
+        }
+        await waitForUiSmoke(
+          () => exportedRequest?.request?.id === activeRequest()?.id,
+          'Request editor Export Request curl menu item should export the active request.',
+          3000,
+          global
+        );
+        assertUiSmoke(exportedRequest.format === 'curl', 'Request editor Export Request curl menu item should use the curl request format.');
+      } finally {
+        window.__postmeterExportRequest = originalExportRequest;
+        window.__postmeterExportRequestText = originalExportRequestText;
+        if (window.postmeter?.request) {
+          window.postmeter.request.exportRequestText = originalPostmeterRequestExportText;
+        }
+      }
+    }
     activateTab('request', 'cookies');
     assertUiSmoke($('requestCookieJarEnabledInput'), 'Cookie jar request toggle is missing.');
     $('addCookieButton').click();
@@ -3004,6 +3081,10 @@
       assertUiSmoke($('runPerformanceTestButton').closest('.performance-request-line'), 'Performance Run action should live next to the request URL.');
       assertUiSmoke($('performanceMethodSelect').classList.contains('method-get'), 'Performance request method dropdown should use the same method color class as requests.');
       assertUiSmoke($('importPerformanceRequestButton').closest('.performance-actions'), 'Performance import request action should live with the performance pane actions.');
+      assertUiSmoke(
+        !Array.from($('performanceMainPanel').querySelectorAll('button')).some((button) => button.textContent.trim() === 'Export Request'),
+        'Performance test editor should not include the request Export Request button.'
+      );
       assertUiSmoke($('cancelPerformanceTestButton').previousElementSibling === $('runPerformanceTestButton'), 'Performance Cancel action should sit immediately after Run.');
       assertUiSmoke($('cancelPerformanceTestButton').classList.contains('danger-button'), 'Performance Cancel action should use danger styling.');
       assertUiSmoke(
@@ -3729,6 +3810,70 @@
             exportedRunnerRequest = { request, format };
             return { cancelled: true };
           };
+          assertUiSmoke($('exportRequestPanelButton')?.textContent === 'Export Request', 'Runner-owned request editor should render an Export Request button.');
+          assertUiSmoke(!$('exportRequestPanelButton').disabled, 'Runner-owned request editor should enable the request export button.');
+          assertUiSmoke(
+            activeRequest()?.id === runnerLocalRequest.id && activeRunnerRequestRunnerId === runner.id,
+            `Runner-owned request editor should still be active before panel export. active=${activeRequest()?.id || 'none'} runner=${activeRunnerRequestRunnerId || 'none'}`
+          );
+          $('exportRequestPanelButton').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+          assertUiSmoke(!$('exportRequestPanelMenu').hidden, 'Runner-owned request editor Export Request button should open a format menu.');
+          assertUiSmoke(
+            Array.from($('exportRequestPanelMenu').querySelectorAll('button')).map((button) => button.textContent.trim()).join('|') === 'PostMeter|curl',
+            'Runner-owned request editor Export Request menu should match the main Export > Request formats.'
+          );
+          $('exportRequestPanelPostmeterButton').click();
+          await waitForUiSmoke(
+            () => exportedRunnerRequest || !$('requestExportModal').hidden,
+            'Runner-owned request editor Export Request button should start the active request export.',
+            3000,
+            global
+          );
+          if (!exportedRunnerRequest) {
+            $('fileRequestExportButton').click();
+          }
+          await waitForUiSmoke(
+            () => Boolean(exportedRunnerRequest),
+            'Runner-owned request editor Export Request button should export after confirming the request export preview.',
+            3000,
+            global
+          );
+          assertUiSmoke(
+            exportedRunnerRequest.request?.id === runnerLocalRequest.id,
+            `Runner-owned request editor Export Request button should export the runner-owned request. exported=${exportedRunnerRequest.request?.id || 'none'} expected=${runnerLocalRequest.id} active=${activeRequest()?.id || 'none'} runner=${activeRunnerRequestRunnerId || 'none'}`
+          );
+          assertUiSmoke(exportedRunnerRequest.format === 'postmeter', 'Runner-owned request editor Export Request button should use the PostMeter request format.');
+          assertUiSmoke(exportedRunnerRequest.request.url.includes('from=url'), 'Runner-owned request editor Export Request button should collect current runner request edits before exporting.');
+          exportedRunnerRequest = null;
+          $('exportRequestPanelButton').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+          assertUiSmoke(!$('exportRequestPanelMenu').hidden, 'Runner-owned request editor Export Request button should reopen the format menu.');
+          $('exportRequestPanelCurlButton').click();
+          await waitForUiSmoke(
+            () => exportedRunnerRequest || !$('requestExportModal').hidden || !$('confirmActionModal').hidden,
+            'Runner-owned request editor Export Request curl menu item should start the active request export.',
+            3000,
+            global
+          );
+          if (!exportedRunnerRequest && !$('confirmActionModal').hidden) {
+            $('confirmActionButton').click();
+            await waitForUiSmoke(
+              () => exportedRunnerRequest || !$('requestExportModal').hidden,
+              'Runner-owned request editor Export Request curl menu item should continue after confirming unsupported curl features.',
+              3000,
+              global
+            );
+          }
+          if (!exportedRunnerRequest && !$('requestExportModal').hidden) {
+            $('fileRequestExportButton').click();
+          }
+          await waitForUiSmoke(
+            () => exportedRunnerRequest?.request?.id === runnerLocalRequest.id,
+            'Runner-owned request editor Export Request curl menu item should export the runner-owned request.',
+            3000,
+            global
+          );
+          assertUiSmoke(exportedRunnerRequest.format === 'curl', 'Runner-owned request editor Export Request curl menu item should use the curl request format.');
+          exportedRunnerRequest = null;
           const runnerRequestTab = openRequestTabs.find((tab) => tab.runnerId === runner.id && tab.requestId === runnerLocalRequest.id);
           openOpenTabContextMenu(runnerRequestTab);
           const exportMenuItem = Array.from($('contextMenu').querySelectorAll('button'))
@@ -4189,6 +4334,8 @@
     assertUiSmoke(!document.getElementById('requestNameInput'), 'Request editor should not render a separate request name text box.');
     assertUiSmoke($('saveRequestButton')?.textContent === 'Save Request', 'Request editor should render a Save Request button.');
     assertUiSmoke(!$('saveRequestButton').disabled, 'Request editor should enable the request save button.');
+    assertUiSmoke($('exportRequestPanelButton')?.textContent === 'Export Request', 'Request editor should render an Export Request button next to Save Request.');
+    assertUiSmoke(!$('exportRequestPanelButton').disabled, 'Request editor should enable the request export button.');
     assertUiSmoke($('requestNameTitle').getAttribute('aria-label') === 'Request name', 'Request title should expose an accessible name.');
     assertUiSmoke(getComputedStyle($('requestNameTitle')).whiteSpace === 'nowrap', 'Request title should stay on a single line.');
     $('requestNameTitle').click();

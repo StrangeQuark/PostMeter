@@ -89,6 +89,11 @@
   display: none;
 }
 
+.request-export-menu-group .toolbar-menu {
+  right: 0;
+  left: auto;
+}
+
 .toolbar-menu button {
   justify-content: flex-start;
   width: 100%;

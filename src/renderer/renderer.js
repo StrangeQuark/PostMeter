@@ -557,6 +557,8 @@ function bindUi() {
     onNewWorkspace: () => { void newWorkspace(); },
     onNewEnvironment: () => newEnvironment(),
     onSaveRequest: () => { void saveRequestFromPane(); },
+    onExportCurrentRequest: () => { void exportRequestFromPane('postmeter'); },
+    onExportCurrentRequestCurl: () => { void exportRequestFromPane('curl'); },
     onSaveCollection: () => { void saveCollectionFromPane(); },
     onSaveFolder: () => { void saveFolderFromPane(); },
     onSaveEnvironment: () => { void saveEnvironmentFromPane(); },
@@ -10683,6 +10685,9 @@ function renderRequestEditor() {
   if (!request) {
     renderRequestTitle(null);
     $('saveRequestButton').disabled = true;
+    $('exportRequestPanelButton').disabled = true;
+    $('exportRequestPanelPostmeterButton').disabled = true;
+    $('exportRequestPanelCurlButton').disabled = true;
     $('methodSelect').value = 'GET';
     updateMethodSelectClass();
     $('urlInput').value = '';
@@ -10705,6 +10710,9 @@ function renderRequestEditor() {
   }
   ensureRequestQueryEditorMirror(request);
   $('saveRequestButton').disabled = false;
+  $('exportRequestPanelButton').disabled = false;
+  $('exportRequestPanelPostmeterButton').disabled = false;
+  $('exportRequestPanelCurlButton').disabled = false;
   $('addRequestVariableButton').disabled = false;
   renderRequestTitle(request);
   $('methodSelect').value = request.method;
@@ -13140,6 +13148,16 @@ async function exportRequestFromPicker(format = 'postmeter') {
     return null;
   }
   return exportRequest(selectedEntry.request, format);
+}
+
+async function exportRequestFromPane(format = 'postmeter') {
+  const request = activeRequest();
+  if (!request) {
+    setStatus('Select a request before exporting.');
+    return null;
+  }
+  collectRequestFromEditor();
+  return exportRequest(request, format);
 }
 
 async function promptForRequestExport(preferredEntry = null) {

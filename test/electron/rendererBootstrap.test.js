@@ -329,7 +329,13 @@ test('renderer bootstrap resolves text, confirmation, and notification modals', 
       getElementById(id) {
         return elements.get(id) || null;
       },
-      querySelectorAll() {
+      querySelectorAll(selector) {
+        if (selector === '.toolbar-menu') {
+          return [elements.get('exportRequestPanelMenu')];
+        }
+        if (selector === '.menu-trigger') {
+          return [elements.get('exportRequestPanelButton')];
+        }
         return [];
       },
       addEventListener() {}
@@ -1007,6 +1013,10 @@ test('tree context menus close toolbar peers before opening', () => {
 test('renderer bootstrap binds pane save buttons', () => {
   const elements = new Map([
     ['saveRequestButton', createElement()],
+    ['exportRequestPanelButton', createElement()],
+    ['exportRequestPanelMenu', createElement()],
+    ['exportRequestPanelPostmeterButton', createElement()],
+    ['exportRequestPanelCurlButton', createElement()],
     ['saveEnvironmentButton', createElement()]
   ]);
   const calls = [];
@@ -1023,13 +1033,22 @@ test('renderer bootstrap binds pane save buttons', () => {
     },
     windowObject: { addEventListener() {} },
     onSaveRequest: () => calls.push('request'),
+    onExportCurrentRequest: () => calls.push('request-export'),
+    onExportCurrentRequestCurl: () => calls.push('request-export-curl'),
     onSaveEnvironment: () => calls.push('environment')
   });
 
   elements.get('saveRequestButton').dispatch('click');
+  elements.get('exportRequestPanelButton').dispatch('click');
+  assert.equal(elements.get('exportRequestPanelMenu').hidden, false);
+  elements.get('exportRequestPanelPostmeterButton').dispatch('click');
+  elements.get('exportRequestPanelMenu').hidden = true;
+  elements.get('exportRequestPanelButton').dispatch('click');
+  assert.equal(elements.get('exportRequestPanelMenu').hidden, false);
+  elements.get('exportRequestPanelCurlButton').dispatch('click');
   elements.get('saveEnvironmentButton').dispatch('click');
 
-  assert.deepEqual(calls, ['request', 'environment']);
+  assert.deepEqual(calls, ['request', 'request-export', 'request-export-curl', 'environment']);
 });
 
 test('renderer bootstrap binds request environment and runner import/export menu actions', () => {
