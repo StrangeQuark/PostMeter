@@ -43,7 +43,7 @@ test('creates a default current-schema workspace when no file exists', async () 
       trustedCapabilities: {
         sendRequest: true,
         cookies: true,
-        vault: false,
+        vault: true,
         vaultGrants: {
           workspace: false,
           collections: [],

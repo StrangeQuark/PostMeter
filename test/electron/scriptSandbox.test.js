@@ -635,7 +635,7 @@ test('bounds and can disable pm.execution.runRequest broker calls', async () => 
   assert.equal(calls, 10);
 });
 
-test('runs pm.vault through the broker only when explicitly enabled', async () => {
+test('runs pm.vault through the broker unless explicitly disabled', async () => {
   const vault = new MemoryVaultStore({ existing: 'secret' });
   const disabled = await runPostmanScriptIsolated(`
     pm.test('vault disabled', async function () {
@@ -650,6 +650,19 @@ test('runs pm.vault through the broker only when explicitly enabled', async () =
 
   assert.equal(disabled.result.passed, false);
   assert.match(disabled.result.tests[0].error, /pm\.vault is disabled/);
+
+  const defaultEnabled = await runPostmanScriptIsolated(`
+    pm.test('vault defaults enabled', async function () {
+      pm.expect(await pm.vault.get('existing')).to.equal('secret');
+    });
+  `, {}, {
+    trustedCapabilities: {},
+    vault,
+    timeoutMillis: 500,
+    workerTimeoutMillis: 1000
+  });
+
+  assert.equal(defaultEnabled.result.passed, true);
 
   const enabled = await runPostmanScriptIsolated(`
     pm.test('vault get/set/unset', async function () {

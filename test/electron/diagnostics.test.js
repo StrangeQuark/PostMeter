@@ -1357,6 +1357,7 @@ test('diagnostics summaries expose counts and audited settings without raw works
       vault: true
     }
   });
+  assert.equal(sanitizeSettingsSummary({ sandbox: { trustedCapabilities: {} } }).sandbox.trustedCapabilities.vault, true);
   assert.equal(settings.diagnostics.requestResponseLogging.urls, true);
   assert.deepEqual(summary, {
     schemaVersion: 11,

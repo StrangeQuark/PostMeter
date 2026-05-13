@@ -34,6 +34,9 @@ test('app settings store creates local settings.json without looking like a work
   assert.equal(workspaceSettings.updates.includePrereleases, false);
   assert.equal(workspaceSettings.diagnostics.requestResponseLogging.urls, false);
   assert.equal(workspaceSettings.sandbox.trustedCapabilities.sendRequest, true);
+  assert.equal(workspaceSettings.sandbox.trustedCapabilities.cookies, true);
+  assert.equal(workspaceSettings.sandbox.trustedCapabilities.vault, true);
+  assert.equal(workspaceSettings.sandbox.trustedCapabilities.vaultGrants.workspace, false);
 });
 
 test('app settings store persists only app-wide settings and merges workspace-local fallbacks', async () => {

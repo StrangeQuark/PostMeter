@@ -11,56 +11,75 @@ function createApplicationMenuTemplate(options = {}) {
     sendMenuAction = () => {},
     openExternal = () => {}
   } = options;
+  const actionItem = (label, action, itemOptions = {}) => ({
+    label,
+    ...itemOptions,
+    click: () => sendMenuAction(action)
+  });
   const fileEditViewHelpMenus = [
     {
       label: 'File',
       submenu: [
         {
-          label: 'New Request',
-          accelerator: 'CmdOrCtrl+N',
-          click: () => sendMenuAction('new-request')
-        },
-        {
-          label: 'New Collection',
-          accelerator: 'CmdOrCtrl+Shift+N',
-          click: () => sendMenuAction('new-collection')
-        },
-        {
-          label: 'New Folder',
-          accelerator: 'CmdOrCtrl+Alt+N',
-          click: () => sendMenuAction('new-folder')
+          label: 'New',
+          submenu: [
+            actionItem('Workspace', 'new-workspace'),
+            actionItem('Request', 'new-request', { accelerator: 'CmdOrCtrl+N' }),
+            actionItem('Collection', 'new-collection', { accelerator: 'CmdOrCtrl+Shift+N' }),
+            actionItem('Folder', 'new-folder', { accelerator: 'CmdOrCtrl+Alt+N' }),
+            actionItem('Environment', 'new-environment'),
+            actionItem('Runner', 'new-runner'),
+            actionItem('Performance Test', 'new-performance-test')
+          ]
         },
         { type: 'separator' },
-        {
-          label: 'Save Workspace',
-          accelerator: 'CmdOrCtrl+S',
-          click: () => sendMenuAction('save-workspace')
-        },
-        {
-          label: 'Settings...',
-          accelerator: 'CmdOrCtrl+,',
-          click: () => sendMenuAction('settings')
-        },
+        actionItem('Save', 'save-active-tab', { accelerator: 'CmdOrCtrl+S' }),
         { type: 'separator' },
         {
-          label: 'Import Workspace...',
-          click: () => sendMenuAction('import-workspace')
+          label: 'Import',
+          submenu: [
+            actionItem('Workspace', 'import-workspace'),
+            actionItem('Request', 'import-request'),
+            actionItem('Collection', 'import-collection'),
+            actionItem('Environment', 'import-environment'),
+            actionItem('Runner', 'import-runner'),
+            actionItem('Performance Test', 'import-performance-test')
+          ]
         },
         {
-          label: 'Import Collection...',
-          click: () => sendMenuAction('import-collection')
+          label: 'Export',
+          submenu: [
+            actionItem('Workspace', 'export-workspace'),
+            {
+              label: 'Request',
+              submenu: [
+                actionItem('PostMeter', 'export-request'),
+                actionItem('curl', 'export-request-curl')
+              ]
+            },
+            {
+              label: 'Collection',
+              submenu: [
+                actionItem('PostMeter', 'export-collection'),
+                actionItem('Postman', 'export-postman'),
+                actionItem('OpenAPI', 'export-openapi'),
+                actionItem('curl', 'export-curl')
+              ]
+            },
+            {
+              label: 'Environment',
+              submenu: [
+                actionItem('PostMeter', 'export-environment'),
+                actionItem('Postman', 'export-postman-environment')
+              ]
+            },
+            actionItem('Runner', 'export-runner-definition'),
+            actionItem('Performance Test', 'export-performance-test')
+          ]
         },
         { type: 'separator' },
-        {
-          label: 'Export Workspace...',
-          click: () => sendMenuAction('export-workspace')
-        },
-        {
-          label: 'Export Collection...',
-          click: () => sendMenuAction('export-collection')
-        },
+        actionItem('Settings', 'settings', { accelerator: 'CmdOrCtrl+,' }),
         { type: 'separator' },
-        { role: 'close' },
         { role: 'quit' }
       ]
     },

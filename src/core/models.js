@@ -331,8 +331,8 @@ function normalizeSettings(settings) {
       trustedCapabilities: {
         sendRequest: settings?.sandbox?.trustedCapabilities?.sendRequest !== false,
         cookies: settings?.sandbox?.trustedCapabilities?.cookies !== false,
-        vault: settings?.sandbox?.trustedCapabilities?.vault === true,
-        vaultGrants: normalizeVaultGrants(settings?.sandbox?.trustedCapabilities?.vaultGrants, settings?.sandbox?.trustedCapabilities?.vault === true)
+        vault: settings?.sandbox?.trustedCapabilities?.vault !== false,
+        vaultGrants: normalizeVaultGrants(settings?.sandbox?.trustedCapabilities?.vaultGrants)
       }
     },
     diagnostics: normalizeDiagnosticsSettings(settings?.diagnostics),

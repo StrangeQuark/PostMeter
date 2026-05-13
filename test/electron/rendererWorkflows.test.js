@@ -2362,7 +2362,7 @@ test('renderer workflows clear stale captured responses after a send failure', a
   assert.equal(state.lastResponse, null);
 });
 
-test('renderer workflows surface request save failures inline before sending', async () => {
+test('renderer workflows send collection requests without saving the selected tab first', async () => {
   const state = createRendererState();
   const request = {
     id: 'request-1',
@@ -2393,6 +2393,7 @@ test('renderer workflows surface request save failures inline before sending', a
   doc.getElementById('finalUrl').textContent = 'https://old.example.test';
   doc.getElementById('responseHeaders').value = 'x-old: yes';
   let requestSends = 0;
+  let saveRequestCalls = 0;
   let validations = 0;
   let status = '';
 
@@ -2423,7 +2424,8 @@ test('renderer workflows surface request save failures inline before sending', a
         },
         workspace: {
           saveRequest: async () => {
-            throw new Error('disk full before send');
+            saveRequestCalls += 1;
+            throw new Error('send should not save');
           }
         }
       }
@@ -2432,17 +2434,12 @@ test('renderer workflows surface request save failures inline before sending', a
 
   await workflows.sendActiveRequest();
 
-  assert.equal(validations, 0);
-  assert.equal(requestSends, 0);
-  assert.equal(state.lastResponse, null);
-  assert.equal(doc.getElementById('responseStatus').textContent, 'ERR');
-  assert.equal(doc.getElementById('responseTime').textContent, '-');
-  assert.equal(doc.getElementById('responseSize').textContent, '-');
-  assert.equal(doc.getElementById('finalUrl').textContent, '-');
-  assert.equal(doc.getElementById('responseHeaders').value, '');
-  assert.equal(doc.getElementById('responseCookies').value, '');
-  assert.equal(doc.getElementById('responseBody').value, 'disk full before send');
-  assert.equal(status, 'Request failed: disk full before send');
+  assert.equal(validations, 1);
+  assert.equal(requestSends, 1);
+  assert.equal(saveRequestCalls, 0);
+  assert.equal(state.lastResponse.requestId, request.id);
+  assert.equal(state.openRequestTabs[0].dirty, true);
+  assert.equal(status, 'Request completed.');
 });
 
 test('renderer workflows surface collection-run save failures without starting a run', async () => {

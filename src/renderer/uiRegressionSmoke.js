@@ -19,14 +19,6 @@
       submenuLabels: ['PostMeter', 'Postman', 'OpenAPI', 'curl']
     });
     assertToolbarMenuKeyboardActivationSmoke();
-    await setThemePreference('dark', { save: false, showStatus: false });
-    assertUiSmoke(document.documentElement.dataset.theme === 'dark', 'Dark theme was not applied.');
-    assertUiSmoke($('themeDarkButton').getAttribute('aria-pressed') === 'true', 'Dark theme control did not show active state.');
-    await setThemePreference('light', { save: false, showStatus: false });
-    assertUiSmoke(document.documentElement.dataset.theme === 'light', 'Light theme was not applied.');
-    assertUiSmoke($('themeLightButton').getAttribute('aria-pressed') === 'true', 'Light theme control did not show active state.');
-    await setThemePreference('system', { save: false, showStatus: false });
-    assertUiSmoke(document.documentElement.dataset.theme === 'system', 'System theme was not restored.');
     await assertSettingsRollbackSmoke();
     assertConstrainedViewportSmoke();
     await assertForcedColorsStylesheetSmoke();
@@ -96,14 +88,14 @@
         && variableTooltipText.includes('Ctrl+Shift+click: replace token with value'),
       `Variable hover tooltip should contain the value and shortcut hints. Tooltip: ${document.querySelector('.variable-highlight-tooltip')?.outerHTML || 'none'}`
     );
-    await setVariableTooltipHints(false, { showStatus: false });
+    await setVariableTooltipHintsFromSettingsPanel(false);
     dispatchVariableTokenMouseEvent($('urlInput'), baseUrlToken, 'mousemove');
     await nextPaint();
     assertUiSmoke(
       document.querySelector('.variable-highlight-tooltip')?.textContent === 'https://hover.example.test',
       `Variable hover tooltip should contain only the value when hints are disabled. Tooltip: ${document.querySelector('.variable-highlight-tooltip')?.outerHTML || 'none'}`
     );
-    await setVariableTooltipHints(true, { showStatus: false });
+    await setVariableTooltipHintsFromSettingsPanel(true);
     dispatchVariableTokenMouseEvent($('urlInput'), baseUrlToken, 'mousemove', { ctrlKey: true });
     await nextPaint();
     assertUiSmoke(
@@ -364,12 +356,19 @@
     assertUiSmoke(!$('modalBackdrop').hidden, 'Opening Settings should show the modal backdrop.');
     assertUiSmoke(!$('settingsModal').hidden, 'Opening Settings should show the Settings modal.');
     assertSettingsSandboxHelpText();
+    await assertThemePreferenceSettingSmoke();
     await assertEditorLineNumbersSettingSmoke();
     await assertVariableTooltipHintsSettingSmoke();
+    await assertSettingsPanelNavigationSmoke();
+    await assertTabsModalsUpdatesSettingSmoke();
+    await assertScriptCapabilitiesSettingSmoke();
+    await assertDiagnosticsSettingsPanelSmoke();
+    selectSettingsSection('appearance');
     $('closeSettingsModalFooterButton').click();
     await modalPromise;
     await nextPaint();
     assertUiSmoke($('modalBackdrop').hidden, 'Closing Settings should hide the modal backdrop.');
+    await assertModalBackdropSettingRuntimeSmoke();
   }
 
   function assertSettingsSandboxHelpText() {
@@ -385,6 +384,324 @@
       $('settingsFilesDescription')?.textContent.includes('imported file references'),
       'Files settings should explain imported file bindings.'
     );
+  }
+
+  async function assertSettingsPanelNavigationSmoke() {
+    const sections = [
+      ['appearance', 'Appearance'],
+      ['tabs', 'Tabs'],
+      ['modals', 'Modals'],
+      ['updates', 'Updates'],
+      ['scripts', 'Scripts'],
+      ['vault', 'Vault'],
+      ['packages', 'Packages'],
+      ['files', 'Files'],
+      ['diagnostics', 'Diagnostics']
+    ];
+    for (const [section, heading] of sections) {
+      const button = $(`settings${capitalize(section)}Button`);
+      const panel = $(`settings${capitalize(section)}Section`);
+      assertUiSmoke(button, `Settings ${heading} tab button should exist.`);
+      assertUiSmoke(panel, `Settings ${heading} panel should exist.`);
+      button.click();
+      await nextPaint();
+      assertUiSmoke(activeSettingsSection === section, `Clicking Settings ${heading} should update the active settings section.`);
+      assertUiSmoke(button.getAttribute('aria-selected') === 'true', `Settings ${heading} tab should be selected.`);
+      assertUiSmoke(panel.hidden === false, `Settings ${heading} panel should be visible.`);
+      assertUiSmoke(panel.querySelector('h3')?.textContent.trim() === heading, `Settings ${heading} panel should render its heading.`);
+      for (const [otherSection, otherHeading] of sections) {
+        if (otherSection === section) {
+          continue;
+        }
+        assertUiSmoke(
+          $(`settings${capitalize(otherSection)}Section`).hidden === true,
+          `Settings ${otherHeading} panel should hide when ${heading} is active.`
+        );
+      }
+    }
+  }
+
+  async function assertTabsModalsUpdatesSettingSmoke() {
+    $('settingsTabsButton').click();
+    await nextPaint();
+    await clickSettingCheckboxAndWait(
+      $('saveOnForceCloseInput'),
+      true,
+      () => workspace.settings.tabs.saveOnForceClose === true,
+      'Save on force close enabled.',
+      'Save on force close should enable from the Settings Tabs panel.'
+    );
+    await clickSettingCheckboxAndWait(
+      $('saveOnForceCloseInput'),
+      false,
+      () => workspace.settings.tabs.saveOnForceClose === false,
+      'Save on force close disabled.',
+      'Save on force close should disable from the Settings Tabs panel.'
+    );
+
+    $('settingsModalsButton').click();
+    await nextPaint();
+    await clickSettingCheckboxAndWait(
+      $('closeModalsOnBackdropClickInput'),
+      true,
+      () => workspace.settings.modals.closeOnBackdropClick === true && modalsCloseOnBackdropClick() === true,
+      'Modal backdrop close enabled.',
+      'Modal backdrop close should enable from the Settings Modals panel.'
+    );
+    await clickSettingCheckboxAndWait(
+      $('closeModalsOnBackdropClickInput'),
+      false,
+      () => workspace.settings.modals.closeOnBackdropClick === false && modalsCloseOnBackdropClick() === false,
+      'Modal backdrop close disabled.',
+      'Modal backdrop close should disable from the Settings Modals panel.'
+    );
+
+    $('settingsUpdatesButton').click();
+    await nextPaint();
+    await clickSettingCheckboxAndWait(
+      $('includePrereleasesInput'),
+      true,
+      () => workspace.settings.updates.includePrereleases === true,
+      'Prerelease update checks enabled.',
+      'Prerelease update checks should enable from the Settings Updates panel.'
+    );
+    await clickSettingCheckboxAndWait(
+      $('includePrereleasesInput'),
+      false,
+      () => workspace.settings.updates.includePrereleases === false,
+      'Prerelease update checks disabled.',
+      'Prerelease update checks should disable from the Settings Updates panel.'
+    );
+  }
+
+  async function assertThemePreferenceSettingSmoke() {
+    $('settingsAppearanceButton').click();
+    await nextPaint();
+    const themeCases = [
+      ['dark', 'themeDarkButton', 'Theme set to dark.'],
+      ['light', 'themeLightButton', 'Theme set to light.'],
+      ['system', 'themeSystemButton', 'Theme set to system.']
+    ];
+    for (const [theme, buttonId, statusText] of themeCases) {
+      $(buttonId).click();
+      await waitForUiSmoke(
+        () => workspace.settings.appearance.theme === theme
+          && document.documentElement.dataset.theme === theme
+          && $(buttonId).getAttribute('aria-pressed') === 'true',
+        `Settings Appearance theme control did not apply ${theme}.`,
+        3000,
+        global
+      );
+      await waitForStatusIncludes(statusText, `Settings Appearance theme control did not save ${theme}.`);
+    }
+  }
+
+  async function assertModalBackdropSettingRuntimeSmoke() {
+    const originalCloseOnBackdrop = workspace.settings?.modals?.closeOnBackdropClick === true;
+    try {
+      await setCloseModalsOnBackdropClickFromSettingsPanel(false);
+      const disabledBackdropPromise = confirmActionModal({
+        title: 'Backdrop disabled smoke',
+        message: 'Backdrop clicks should not close this modal.',
+        confirmLabel: 'Continue'
+      });
+      await nextPaint();
+      $('modalBackdrop').click();
+      await nextPaint();
+      assertUiSmoke(!$('confirmActionModal').hidden, 'Disabled modal backdrop setting should keep modals open on backdrop click.');
+      $('cancelConfirmActionButton').click();
+      assertUiSmoke(await disabledBackdropPromise === false, 'Disabled modal backdrop smoke should resolve through the explicit cancel action.');
+
+      await setCloseModalsOnBackdropClickFromSettingsPanel(true);
+      const enabledBackdropPromise = confirmActionModal({
+        title: 'Backdrop enabled smoke',
+        message: 'Backdrop clicks should close this modal.',
+        confirmLabel: 'Continue'
+      });
+      await nextPaint();
+      $('modalBackdrop').click();
+      assertUiSmoke(await enabledBackdropPromise === false, 'Enabled modal backdrop setting should cancel a modal from a backdrop click.');
+      await nextPaint();
+      assertUiSmoke($('modalBackdrop').hidden, 'Enabled modal backdrop setting should hide the modal backdrop after backdrop click.');
+    } finally {
+      await setCloseModalsOnBackdropClickFromSettingsPanel(originalCloseOnBackdrop);
+    }
+  }
+
+  async function assertScriptCapabilitiesSettingSmoke() {
+    $('settingsScriptsButton').click();
+    await nextPaint();
+    assertUiSmoke($('trustedScriptSendRequestInput').nextElementSibling?.textContent.trim() === 'Script network requests access', 'Script network setting label should match the current Settings copy.');
+    assertUiSmoke($('trustedScriptSendRequestInput').checked === true, 'Script network request access should default to enabled.');
+    assertUiSmoke($('trustedScriptCookiesInput').checked === true, 'Script cookie access should default to enabled.');
+    assertUiSmoke($('trustedScriptVaultInput').checked === true, 'Script vault access should default to enabled.');
+
+    const scriptCapabilityChecks = [
+      ['trustedScriptSendRequestInput', () => workspace.settings.sandbox.trustedCapabilities.sendRequest, 'network request'],
+      ['trustedScriptCookiesInput', () => workspace.settings.sandbox.trustedCapabilities.cookies, 'cookie'],
+      ['trustedScriptVaultInput', () => workspace.settings.sandbox.trustedCapabilities.vault, 'vault']
+    ];
+    for (const [id, readValue, label] of scriptCapabilityChecks) {
+      await clickSettingCheckboxAndWait(
+        $(id),
+        false,
+        () => readValue() === false,
+        'Script sandbox capabilities updated.',
+        `Script ${label} capability should disable from the Settings Scripts panel.`
+      );
+      await clickSettingCheckboxAndWait(
+        $(id),
+        true,
+        () => readValue() === true,
+        'Script sandbox capabilities updated.',
+        `Script ${label} capability should enable from the Settings Scripts panel.`
+      );
+    }
+    assertUiSmoke(
+      workspace.settings.sandbox.trustedCapabilities.vaultGrants.workspace === true,
+      'Re-enabling script vault access should preserve a workspace-level vault grant.'
+    );
+  }
+
+  async function assertDiagnosticsSettingsPanelSmoke() {
+    const originalDiagnostics = structuredClone(workspace.settings.diagnostics);
+    const originalDiagnosticsApi = window.__postmeterDiagnostics;
+    try {
+      $('settingsDiagnosticsButton').click();
+      await nextPaint();
+      $('diagnosticLoggingEnabledInput').checked = false;
+      $('diagnosticLogLevelSelect').value = 'debug';
+      for (const id of [
+        'diagnosticLogUrlsInput',
+        'diagnosticLogHeadersInput',
+        'diagnosticLogCookiesInput',
+        'diagnosticLogBodiesInput',
+        'diagnosticLogProtocolMessagesInput',
+        'diagnosticLogScriptConsoleInput',
+        'diagnosticLogPayloadIdentifiersInput'
+      ]) {
+        $(id).checked = true;
+      }
+      dispatchChange($('diagnosticLogPayloadIdentifiersInput'));
+      await waitForUiSmoke(
+        () => workspace.settings.diagnostics.logging.enabled === false
+          && workspace.settings.diagnostics.logging.level === 'debug'
+          && Object.values(workspace.settings.diagnostics.requestResponseLogging).every(Boolean),
+        'Diagnostics settings panel did not persist logging and request/response category controls.',
+        3000,
+        global
+      );
+      await waitForStatusIncludes('Diagnostics privacy settings updated.', 'Diagnostics settings panel should save positive changes.');
+      assertUiSmoke(
+        $('diagnosticsPrivacySummary').textContent.includes('7 request/response log categories are enabled'),
+        'Diagnostics summary should report enabled request/response categories.'
+      );
+
+      window.__postmeterDiagnostics = {
+        export: async () => ({ path: '/tmp/settings-panel-diagnostics.json' })
+      };
+      $('exportDiagnosticsButton').click();
+      await waitForStatusIncludes('Local diagnostics exported to /tmp/settings-panel-diagnostics.json. Review before sharing.', 'Diagnostics settings panel should export local diagnostics.');
+
+      window.__postmeterDiagnostics = {
+        export: async () => {
+          throw new Error('settings panel export failure');
+        }
+      };
+      $('exportDiagnosticsButton').click();
+      await waitForStatusIncludes('Diagnostics export failed: settings panel export failure', 'Diagnostics settings panel should surface export failures.');
+    } finally {
+      window.__postmeterDiagnostics = originalDiagnosticsApi;
+      workspace.settings.diagnostics = originalDiagnostics;
+      renderDiagnosticsPrivacyPanel();
+    }
+  }
+
+  async function clickSettingCheckboxAndWait(checkbox, expected, predicate, statusText, message) {
+    assertUiSmoke(checkbox, `${message} Checkbox is missing.`);
+    const changed = checkbox.checked !== expected;
+    if (changed) {
+      checkbox.click();
+    }
+    await waitForUiSmoke(
+      () => checkbox.checked === expected && predicate(),
+      message,
+      3000,
+      global
+    );
+    if (statusText && changed) {
+      await waitForStatusIncludes(statusText, message);
+    }
+  }
+
+  async function setSettingCheckboxFromSettingsPanel(section, inputId, expected, statusText, predicate, message) {
+    const openedHere = $('settingsModal').hidden;
+    const modalPromise = openedHere ? openSettingsModal(section) : null;
+    await nextPaint();
+    selectSettingsSection(section);
+    await nextPaint();
+    await clickSettingCheckboxAndWait(
+      $(inputId),
+      expected,
+      predicate,
+      statusText,
+      message
+    );
+    if (openedHere) {
+      $('closeSettingsModalFooterButton').click();
+      await modalPromise;
+      await nextPaint();
+    }
+  }
+
+  async function setSaveOnForceCloseFromSettingsPanel(enabled) {
+    await setSettingCheckboxFromSettingsPanel(
+      'tabs',
+      'saveOnForceCloseInput',
+      enabled === true,
+      `Save on force close ${enabled ? 'enabled' : 'disabled'}.`,
+      () => workspace.settings.tabs.saveOnForceClose === (enabled === true),
+      `Settings Tabs panel should ${enabled ? 'enable' : 'disable'} save-on-force-close.`
+    );
+  }
+
+  async function setCloseModalsOnBackdropClickFromSettingsPanel(enabled) {
+    await setSettingCheckboxFromSettingsPanel(
+      'modals',
+      'closeModalsOnBackdropClickInput',
+      enabled === true,
+      `Modal backdrop close ${enabled ? 'enabled' : 'disabled'}.`,
+      () => workspace.settings.modals.closeOnBackdropClick === (enabled === true)
+        && modalsCloseOnBackdropClick() === (enabled === true),
+      `Settings Modals panel should ${enabled ? 'enable' : 'disable'} backdrop-close behavior.`
+    );
+  }
+
+  async function setIncludePrereleasesFromSettingsPanel(enabled) {
+    await setSettingCheckboxFromSettingsPanel(
+      'updates',
+      'includePrereleasesInput',
+      enabled === true,
+      `Prerelease update checks ${enabled ? 'enabled' : 'disabled'}.`,
+      () => workspace.settings.updates.includePrereleases === (enabled === true),
+      `Settings Updates panel should ${enabled ? 'enable' : 'disable'} prerelease update checks.`
+    );
+  }
+
+  async function setVariableTooltipHintsFromSettingsPanel(enabled) {
+    await setSettingCheckboxFromSettingsPanel(
+      'appearance',
+      'showVariableTooltipHintsInput',
+      enabled !== false,
+      `Variable tooltip hints ${enabled !== false ? 'enabled' : 'disabled'}.`,
+      () => workspace.settings.editor.variableTooltipHints === (enabled !== false),
+      `Settings Appearance panel should ${enabled !== false ? 'enable' : 'disable'} variable tooltip hints.`
+    );
+  }
+
+  function capitalize(value) {
+    const text = String(value || '');
+    return text.charAt(0).toUpperCase() + text.slice(1);
   }
 
   async function assertEditorLineNumbersSettingSmoke() {
@@ -808,6 +1125,17 @@
       assertUiSmoke(workspace.settings.modals.closeOnBackdropClick === false, 'Failed modal setting save should roll back the in-memory setting.');
       assertStatusIncludes('Modal setting save failed', 'Failed modal setting save should surface a user-visible status.');
 
+      const previousScriptCapabilities = structuredClone(workspace.settings.sandbox.trustedCapabilities);
+      $('trustedScriptSendRequestInput').checked = false;
+      $('trustedScriptCookiesInput').checked = false;
+      $('trustedScriptVaultInput').checked = false;
+      await setTrustedScriptCapabilitiesFromInputs();
+      assertUiSmoke(
+        JSON.stringify(workspace.settings.sandbox.trustedCapabilities) === JSON.stringify(previousScriptCapabilities),
+        'Failed script capability save should roll back network, cookie, vault, and grant settings.'
+      );
+      assertStatusIncludes('Script sandbox capability update failed', 'Failed script capability save should surface a user-visible status.');
+
       workspace.settings.diagnostics = normalizeDiagnosticsSettings({
         logging: { enabled: true, level: 'info' },
         requestResponseLogging: { urls: false }
@@ -841,7 +1169,7 @@
         };
       };
       window.__postmeterOpenExternal = async () => true;
-      await handleAppMenuAction({ type: 'set-prereleases', includePrereleases: true });
+      await setIncludePrereleasesFromSettingsPanel(true);
       const updatePromise = checkForUpdates();
       await nextPaint();
       assertUiSmoke(!$('confirmActionModal').hidden, 'Available update should use the in-app confirmation modal.');
@@ -849,15 +1177,21 @@
       await updatePromise;
       assertUiSmoke(checkOptions?.includePrereleases === true, 'Update check did not pass prerelease opt-in.');
       assertStatusIncludes('0.3.0', 'Update check did not track latest version.');
-      window.__postmeterUpdateCheck = async (options) => ({
-        currentVersion: '0.3.0',
-        latestVersion: '0.3.0',
-        updateAvailable: false,
-        releaseUrl: '',
-        includePrereleases: options?.includePrereleases === true
-      });
+      window.__postmeterUpdateCheck = async (options) => {
+        checkOptions = options;
+        return {
+          currentVersion: '0.3.0',
+          latestVersion: '0.3.0',
+          updateAvailable: false,
+          releaseUrl: '',
+          includePrereleases: options?.includePrereleases === true
+        };
+      };
       lastUserNotification = null;
+      await setIncludePrereleasesFromSettingsPanel(false);
+      checkOptions = null;
       await checkForUpdates();
+      assertUiSmoke(checkOptions?.includePrereleases === false, 'Update check should omit prerelease opt-in when Settings Updates disables it.');
       assertUiSmoke(lastUserNotification?.title === 'No Updates Available', 'No-update check did not show a popup notification.');
       assertUiSmoke(lastUserNotification?.message.includes('0.3.0'), 'No-update popup did not include the current version.');
       assertStatusIncludes('up to date', 'No-update check did not update the visible status.');
@@ -1100,6 +1434,19 @@
       await fetchPromise;
       assertUiSmoke(workspace.settings.sandbox.packageCache.some((item) => item.specifier === 'npm:fetched-package@1.0.0'), 'Fetched package should be cached after review and settings save.');
 
+      const invalidPackagePromise = addSandboxPackageFromPrompt('invalid package');
+      await resolveTextInputModal('invalid package', 'Invalid package review should still use the text input modal.');
+      await invalidPackagePromise;
+      assertStatusIncludes('Package review requires', 'Invalid package review should explain the accepted package specifier formats.');
+
+      window.__postmeterFetchSandboxPackage = async () => {
+        throw new Error('mock package fetch failure');
+      };
+      const failedFetchPromise = fetchSandboxPackageFromPrompt('npm:failed-package@1.0.0');
+      await resolveTextInputModal('npm:failed-package@1.0.0', 'Failed package fetch should prompt for the package specifier.');
+      await failedFetchPromise;
+      assertStatusIncludes('Package fetch failed: mock package fetch failure', 'Failed package fetch should surface a visible status.');
+
       const cancelPackageRemove = sandboxPanelButton('sandboxPackageCacheList', 'Remove reviewed sandbox package npm:cached-package@1.0.0');
       assertUiSmoke(cancelPackageRemove, 'Cached package remove button should be present for cancellation smoke.');
       cancelPackageRemove.click();
@@ -1132,6 +1479,17 @@
       assertUiSmoke(workspace.settings.sandbox.fileBindings.some((item) => item.source === 'fixture-data.csv'), 'Reviewed file binding should be added after settings save succeeds.');
       $('refreshSandboxFilesButton').click();
       assertStatusIncludes('1 imported file attachment bound. 0 attachment references need local binding.', 'File-binding refresh should report bound and missing counts through the app status.');
+
+      window.__postmeterSaveWorkspaceSettings = async () => {
+        throw new Error('settings persistence failed');
+      };
+      const failedBindPromise = bindSandboxFileFromPrompt('failed-bind.csv');
+      await resolveTextInputModal('failed-bind.csv', 'Failed file binding should prompt for the imported file reference.');
+      await resolveTextInputModal('/tmp/failed-bind.csv', 'Failed file binding should prompt for the local file path.');
+      await failedBindPromise;
+      assertStatusIncludes('Imported file binding save failed: settings persistence failed', 'Failed file binding save should surface a visible recovery status.');
+      assertUiSmoke(!workspace.settings.sandbox.fileBindings.some((item) => item.source === 'failed-bind.csv'), 'Failed file binding save should roll back the binding settings.');
+      window.__postmeterSaveWorkspaceSettings = async (settings) => ({ settings: structuredClone(settings) });
 
       const cancelFileRemove = sandboxPanelButton('sandboxFileBindingList', 'Remove imported file binding bound-data.csv');
       assertUiSmoke(cancelFileRemove, 'Bound file remove button should be present for cancellation smoke.');
@@ -1187,6 +1545,36 @@
       await resolveConfirmActionModal('Vault reset should use the in-app confirmation modal.');
       await resetPromise;
       assertUiSmoke(vaultReset, 'Vault reset should call the parent-side vault API.');
+
+      window.__postmeterVault = {
+        bindSecret: async () => {
+          throw new Error('mock vault bind failure');
+        },
+        metadata: async () => {
+          throw new Error('mock vault metadata failure');
+        },
+        reset: async () => {
+          throw new Error('mock vault reset failure');
+        },
+        unsetSecret: async () => {
+          throw new Error('mock vault unset failure');
+        }
+      };
+      await refreshVaultMetadata();
+      assertStatusIncludes('Vault metadata refresh failed: mock vault metadata failure', 'Failed vault metadata refresh should surface a visible status.');
+      const failedVaultBindPromise = bindVaultSecretFromPrompt();
+      await resolveTextInputModal('api-token', 'Failed vault binding should prompt for a secret key.');
+      await resolveTextInputModal('local-secret-value', 'Failed vault binding should prompt for a secret value.');
+      await failedVaultBindPromise;
+      assertStatusIncludes('Vault secret binding failed: mock vault bind failure', 'Failed vault binding should surface a visible status.');
+      const failedUnsetPromise = unsetVaultSecret('api-token');
+      await resolveConfirmActionModal('Failed vault removal should still use the in-app confirmation modal.');
+      await failedUnsetPromise;
+      assertStatusIncludes('Vault secret removal failed: mock vault unset failure', 'Failed vault removal should surface a visible status.');
+      const failedResetPromise = resetVaultFromWorkspacePanel();
+      await resolveConfirmActionModal('Failed vault reset should still use the in-app confirmation modal.');
+      await failedResetPromise;
+      assertStatusIncludes('Vault reset failed: mock vault reset failure', 'Failed vault reset should surface a visible status.');
 
       const previousCapabilities = structuredClone(workspace.settings.sandbox.trustedCapabilities);
       window.__postmeterSaveWorkspaceSettings = async () => {
@@ -4158,7 +4546,7 @@
       await waitForUiSmoke(() => openRequestTabs.length === 0, 'Force Close All Tabs should close every request tab without prompting.', 3000, global);
       assertUiSmoke($('unsavedRequestModal').hidden, 'Force Close All Tabs should not prompt by default.');
 
-      await setSaveOnForceClose(true, { save: false, showStatus: false });
+      await setSaveOnForceCloseFromSettingsPanel(true);
       const saveOnForceRequest = newRequest(tabCollection.id, null);
       editRequestTitle('Tab Context Save On Force', { commit: false });
       pressEditableTitleEnter($('requestNameTitle'));
@@ -4172,7 +4560,7 @@
       await waitForUiSmoke(() => !openRequestTabs.some((tab) => tab.key === saveOnForceTab.key), 'Force Close Tab with saving enabled should close after saving.', 3000, global);
       assertUiSmoke(requestSaveCalls === requestSaveCallsBeforeForceSave + 1, 'Save on force close should save dirty saved request tabs.');
       assertUiSmoke(tabCollection.requests.find((item) => item.id === saveOnForceRequest.id)?.url === 'https://force-close-save.example.test/widgets', 'Save on force close should persist dirty request changes.');
-      await setSaveOnForceClose(false, { save: false, showStatus: false });
+      await setSaveOnForceCloseFromSettingsPanel(false);
 
       const activeDiscardRequest = newRequest(tabCollection.id, null);
       editRequestTitle('Tab Context Active Discard', { commit: false });

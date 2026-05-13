@@ -1496,6 +1496,9 @@ async function handleAppMenuAction(action) {
   const type = typeof action === 'string' ? action : action?.type;
   try {
     switch (type) {
+      case 'new-workspace':
+        await newWorkspace();
+        break;
       case 'new-request':
         newRequest();
         break;
@@ -1503,10 +1506,19 @@ async function handleAppMenuAction(action) {
         newCollection();
         break;
       case 'new-folder':
-        newFolder();
+        await newFolderFromToolbar();
         break;
-      case 'save-workspace':
-        await saveWorkspace(true, { promptForDraft: true });
+      case 'new-environment':
+        newEnvironment();
+        break;
+      case 'new-runner':
+        newRunner();
+        break;
+      case 'new-performance-test':
+        newPerformanceTest();
+        break;
+      case 'save-active-tab':
+        await saveActiveTabFromMenu();
         break;
       case 'settings':
         await openSettingsModal();
@@ -1514,14 +1526,53 @@ async function handleAppMenuAction(action) {
       case 'import-workspace':
         await importWorkspace();
         break;
+      case 'import-request':
+        await importRequest();
+        break;
       case 'import-collection':
         await importCollection();
         break;
+      case 'import-environment':
+        await importEnvironment();
+        break;
+      case 'import-runner':
+        await importRunner();
+        break;
+      case 'import-performance-test':
+        await importPerformanceTest();
+        break;
       case 'export-workspace':
-        await exportWorkspace();
+        await exportWorkspaceFromPicker();
+        break;
+      case 'export-request':
+        await exportRequestFromPicker('postmeter');
+        break;
+      case 'export-request-curl':
+        await exportRequestFromPicker('curl');
         break;
       case 'export-collection':
         await exportCollection(null, 'postmeter');
+        break;
+      case 'export-postman':
+        await exportCollection(null, 'postman');
+        break;
+      case 'export-openapi':
+        await exportCollection(null, 'openapi');
+        break;
+      case 'export-curl':
+        await exportCollection(null, 'curl');
+        break;
+      case 'export-environment':
+        await exportEnvironmentFromPicker('postmeter');
+        break;
+      case 'export-postman-environment':
+        await exportEnvironmentFromPicker('postman');
+        break;
+      case 'export-runner-definition':
+        await exportRunnerDefinitionFromPicker();
+        break;
+      case 'export-performance-test':
+        await exportPerformanceTestFromPicker();
         break;
       case 'export-diagnostics':
         await exportDiagnostics({ allowNonCurrentWorkspaceView: true });
@@ -1543,6 +1594,30 @@ async function handleAppMenuAction(action) {
     setStatus(`Menu action failed: ${message}`);
     notifyUser('Menu Action Failed', message);
   }
+}
+
+async function saveActiveTabFromMenu() {
+  if (activeMainPanel === 'request') {
+    if (activeRequest()) {
+      return saveRequestFromPane();
+    }
+    if (activeFolder()) {
+      return saveFolderFromPane();
+    }
+    if (activeCollection()) {
+      return saveCollectionFromPane();
+    }
+  }
+  if (activeMainPanel === 'environment') {
+    return saveEnvironmentFromPane();
+  }
+  if (activeMainPanel === 'runner') {
+    return saveRunnerFromPane();
+  }
+  if (activeMainPanel === 'performance') {
+    return savePerformanceTestFromPane();
+  }
+  return saveWorkspace(true, { promptForDraft: true });
 }
 
 function closeToolbarMenus() {
@@ -4174,16 +4249,15 @@ function ensureSettings() {
   workspace.settings.editor ||= { lineNumbers: true, variableTooltipHints: true };
   workspace.settings.editor.lineNumbers = workspace.settings.editor.lineNumbers !== false;
   workspace.settings.editor.variableTooltipHints = workspace.settings.editor.variableTooltipHints !== false;
-  workspace.settings.sandbox ||= { trustedCapabilities: { sendRequest: true, cookies: true, vault: false } };
+  workspace.settings.sandbox ||= { trustedCapabilities: { sendRequest: true, cookies: true, vault: true } };
   workspace.settings.sandbox.fileBindings = normalizeSandboxFileBindings(workspace.settings.sandbox.fileBindings);
   workspace.settings.sandbox.packageCache = normalizeSandboxPackageCache(workspace.settings.sandbox.packageCache);
-  workspace.settings.sandbox.trustedCapabilities ||= { sendRequest: true, cookies: true, vault: false };
+  workspace.settings.sandbox.trustedCapabilities ||= { sendRequest: true, cookies: true, vault: true };
   workspace.settings.sandbox.trustedCapabilities.sendRequest = workspace.settings.sandbox.trustedCapabilities.sendRequest !== false;
   workspace.settings.sandbox.trustedCapabilities.cookies = workspace.settings.sandbox.trustedCapabilities.cookies !== false;
-  workspace.settings.sandbox.trustedCapabilities.vault = workspace.settings.sandbox.trustedCapabilities.vault === true;
+  workspace.settings.sandbox.trustedCapabilities.vault = workspace.settings.sandbox.trustedCapabilities.vault !== false;
   workspace.settings.sandbox.trustedCapabilities.vaultGrants = normalizeVaultGrants(
-    workspace.settings.sandbox.trustedCapabilities.vaultGrants,
-    workspace.settings.sandbox.trustedCapabilities.vault
+    workspace.settings.sandbox.trustedCapabilities.vaultGrants
   );
   workspace.settings.appearance.theme = normalizeThemeOption(workspace.settings.appearance.theme);
   delete workspace.settings.loadTestPolicy;
@@ -7935,7 +8009,7 @@ function renderDiagnosticsPrivacyPanel() {
     } else if (enabledRequestResponseCategories) {
       summary.textContent = `${enabledRequestResponseCategories} request/response log categor${enabledRequestResponseCategories === 1 ? 'y is' : 'ies are'} enabled. Review exported diagnostics before sharing.`;
     } else {
-      summary.textContent = 'Local diagnostics are user-exported only. Request and response details are not logged unless enabled below.';
+      summary.textContent = '';
     }
   }
 }

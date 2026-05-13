@@ -162,7 +162,8 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(rendererSource, /Environment Save Failed/);
   assert.match(rendererSource, /const previousSettings = structuredClone\(workspace\.settings\)/);
   assert.match(rendererSource, /workspace\.settings = previousSettings/);
-  assert.match(indexSource, /<fieldset class="settings-card workspace-diagnostics-panel" aria-describedby="diagnosticsPrivacySummary diagnosticsSensitiveWarning">/);
+  assert.match(indexSource, /<fieldset class="settings-card workspace-diagnostics-panel" aria-describedby="diagnosticsPrivacySummary">/);
+  assert.doesNotMatch(indexSource, /diagnosticsSensitiveWarning/);
   for (const id of [
     'diagnosticLogUrlsInput',
     'diagnosticLogHeadersInput',
@@ -173,7 +174,7 @@ test('renderer accessibility source keeps splitters body editor and pane save re
     'diagnosticLogPayloadIdentifiersInput',
     'exportDiagnosticsButton'
   ]) {
-    assert.match(indexSource, new RegExp(`id="${id}"[^>]+aria-describedby="diagnosticsSensitiveWarning"`));
+    assert.doesNotMatch(indexSource, new RegExp(`id="${id}"[^>]+aria-describedby=`));
   }
   assert.match(chromeSource, /\.workspace-diagnostics-panel/);
   assert.match(chromeSource, /\.toolbar-group\s*\{[^}]*background:\s*transparent;/s);
@@ -422,12 +423,22 @@ test('renderer bootstrap binds CSV variable edit buttons and modal controls', ()
 
 test('renderer bootstrap binds settings menu, category, theme, and setting controls', () => {
   const calls = [];
-  const settingsAppearanceButton = createElement();
-  settingsAppearanceButton.dataset.settingsSection = 'appearance';
-  const settingsTabsButton = createElement();
-  settingsTabsButton.dataset.settingsSection = 'tabs';
-  const settingsModalsButton = createElement();
-  settingsModalsButton.dataset.settingsSection = 'modals';
+  const settingsSections = [
+    'appearance',
+    'tabs',
+    'modals',
+    'updates',
+    'scripts',
+    'vault',
+    'packages',
+    'files',
+    'diagnostics'
+  ];
+  const settingsButtons = settingsSections.map((section) => {
+    const button = createElement();
+    button.dataset.settingsSection = section;
+    return button;
+  });
   const themeDarkButton = createElement();
   themeDarkButton.dataset.themeOption = 'dark';
   const elements = new Map([
@@ -438,6 +449,9 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
     ['saveOnForceCloseInput', createElement({ tagName: 'INPUT' })],
     ['closeModalsOnBackdropClickInput', createElement({ tagName: 'INPUT' })],
     ['includePrereleasesInput', createElement({ tagName: 'INPUT' })],
+    ['trustedScriptSendRequestInput', createElement({ tagName: 'INPUT' })],
+    ['trustedScriptCookiesInput', createElement({ tagName: 'INPUT' })],
+    ['trustedScriptVaultInput', createElement({ tagName: 'INPUT' })],
     ['contextMenu', createElement()],
     ['modalBackdrop', createElement()]
   ]);
@@ -449,7 +463,7 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
       },
       querySelectorAll(selector) {
         if (selector === '[data-settings-section]') {
-          return [settingsAppearanceButton, settingsTabsButton, settingsModalsButton];
+          return settingsButtons;
         }
         if (selector === '[data-theme-option]') {
           return [themeDarkButton];
@@ -466,17 +480,24 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
     onSaveOnForceCloseChange: () => calls.push('save-on-force-close'),
     onCloseModalsOnBackdropClickChange: () => calls.push('close-modals-on-backdrop'),
     onIncludePrereleasesChange: () => calls.push('include-prereleases'),
+    onTrustedScriptCapabilityChange: () => calls.push('script-capability'),
     onResolveActiveModal: (value) => calls.push(`resolve:${value}`)
   });
 
-  settingsTabsButton.dispatch('click');
+  settingsButtons.find((button) => button.dataset.settingsSection === 'tabs').dispatch('click');
   themeDarkButton.dispatch('click');
   elements.get('showEditorLineNumbersInput').dispatch('change');
   elements.get('showVariableTooltipHintsInput').dispatch('change');
   elements.get('saveOnForceCloseInput').dispatch('change');
-  settingsModalsButton.dispatch('click');
+  settingsButtons.find((button) => button.dataset.settingsSection === 'modals').dispatch('click');
   elements.get('closeModalsOnBackdropClickInput').dispatch('change');
+  for (const section of ['updates', 'scripts', 'vault', 'packages', 'files', 'diagnostics', 'appearance']) {
+    settingsButtons.find((button) => button.dataset.settingsSection === section).dispatch('click');
+  }
   elements.get('includePrereleasesInput').dispatch('change');
+  elements.get('trustedScriptSendRequestInput').dispatch('change');
+  elements.get('trustedScriptCookiesInput').dispatch('change');
+  elements.get('trustedScriptVaultInput').dispatch('change');
   elements.get('closeSettingsModalButton').dispatch('click');
   elements.get('closeSettingsModalFooterButton').dispatch('click');
 
@@ -488,7 +509,17 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
     'save-on-force-close',
     'section:modals',
     'close-modals-on-backdrop',
+    'section:updates',
+    'section:scripts',
+    'section:vault',
+    'section:packages',
+    'section:files',
+    'section:diagnostics',
+    'section:appearance',
     'include-prereleases',
+    'script-capability',
+    'script-capability',
+    'script-capability',
     'resolve:true',
     'resolve:true'
   ]);

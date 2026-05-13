@@ -1021,11 +1021,7 @@
       collectRequestFromEditor();
       const environment = activeEnvironment();
       const requestContext = createRequestContext(request, environment);
-      const isRunnerOwnedRequest = Boolean(requestContext.runnerId);
       try {
-        if (!isRunnerOwnedRequest) {
-          await saveWorkspace(false, { allowDraftBypass: true });
-        }
         const collection = activeCollection();
         const folders = activeFolderPath();
         const effectiveRequest = requestWithCollectionDefaults(request, collection, folders);
@@ -1075,9 +1071,6 @@
               ...(state.workspace.history || [])
             ].slice(0, 100);
             renderHistory();
-          }
-          if (!isRunnerOwnedRequest) {
-            syncSavedRequestContextTabs(requestContext);
           }
         }
         setStatus(skippedBeforeSend ? 'Request skipped.' : failedBeforeSend ? 'Request failed.' : 'Request completed.');
