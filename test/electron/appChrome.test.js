@@ -48,6 +48,7 @@ test('Electron shell keeps custom File/Edit/View/Help menus without the default 
     'Environment',
     'Runner',
     'Performance Test',
+    'Save',
     'Import',
     'Export',
     'PostMeter',
@@ -66,6 +67,7 @@ test('Electron shell keeps custom File/Edit/View/Help menus without the default 
     'new-environment',
     'new-runner',
     'new-performance-test',
+    'save-active-tab',
     'import-workspace',
     'import-request',
     'import-collection',
@@ -88,6 +90,7 @@ test('Electron shell keeps custom File/Edit/View/Help menus without the default 
   }
   assert.match(appMenuSource, /click:\s*\(\)\s*=>\s*sendMenuAction\(action\)/);
   assert.doesNotMatch(appMenuSource, /label:\s*'Save Workspace'/);
+  assert.match(appMenuSource, /actionItem\('Save',\s*'save-active-tab',\s*\{ accelerator: 'CmdOrCtrl\+S' \}\)/);
   assert.doesNotMatch(appMenuSource, /role:\s*'close'/);
   assert.match(appMenuSource, /role:\s*'quit'/);
   assert.match(appMenuSource, /role:\s*'editMenu'/);
@@ -107,12 +110,14 @@ test('Electron shell keeps custom File/Edit/View/Help menus without the default 
 
   assert.match(preloadSource, /onMenuAction/);
   assert.match(preloadSource, /'new-workspace'/);
+  assert.match(preloadSource, /'save-active-tab'/);
   assert.match(preloadSource, /'import-request'/);
   assert.match(preloadSource, /'export-request-curl'/);
   assert.match(preloadSource, /'export-performance-test'/);
   assert.match(preloadSource, /'settings'/);
   assert.match(preloadSource, /process\.isMainFrame\s*===\s*true/);
   assert.match(rendererSource, /case 'settings':[\s\S]*openSettingsModal\(\)/);
+  assert.match(rendererSource, /case 'save-active-tab':[\s\S]*saveActiveTabFromMenu\(\)/);
   assert.match(rendererSource, /case 'new-folder':[\s\S]*newFolderFromToolbar\(\)/);
   assert.match(rendererSource, /case 'export-workspace':[\s\S]*exportWorkspaceFromPicker\(\)/);
   assert.match(rendererSource, /case 'export-request-curl':[\s\S]*exportRequestFromPicker\('curl'\)/);

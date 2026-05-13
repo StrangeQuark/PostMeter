@@ -1517,6 +1517,9 @@ async function handleAppMenuAction(action) {
       case 'new-performance-test':
         newPerformanceTest();
         break;
+      case 'save-active-tab':
+        await saveActiveTabFromMenu();
+        break;
       case 'settings':
         await openSettingsModal();
         break;
@@ -1591,6 +1594,30 @@ async function handleAppMenuAction(action) {
     setStatus(`Menu action failed: ${message}`);
     notifyUser('Menu Action Failed', message);
   }
+}
+
+async function saveActiveTabFromMenu() {
+  if (activeMainPanel === 'request') {
+    if (activeRequest()) {
+      return saveRequestFromPane();
+    }
+    if (activeFolder()) {
+      return saveFolderFromPane();
+    }
+    if (activeCollection()) {
+      return saveCollectionFromPane();
+    }
+  }
+  if (activeMainPanel === 'environment') {
+    return saveEnvironmentFromPane();
+  }
+  if (activeMainPanel === 'runner') {
+    return saveRunnerFromPane();
+  }
+  if (activeMainPanel === 'performance') {
+    return savePerformanceTestFromPane();
+  }
+  return saveWorkspace(true, { promptForDraft: true });
 }
 
 function closeToolbarMenus() {

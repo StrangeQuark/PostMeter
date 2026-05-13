@@ -33,6 +33,8 @@ function createApplicationMenuTemplate(options = {}) {
           ]
         },
         { type: 'separator' },
+        actionItem('Save', 'save-active-tab', { accelerator: 'CmdOrCtrl+S' }),
+        { type: 'separator' },
         {
           label: 'Import',
           submenu: [

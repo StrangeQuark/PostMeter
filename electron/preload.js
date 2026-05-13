@@ -17,6 +17,7 @@ const postmeterApi = {
         'new-environment',
         'new-runner',
         'new-performance-test',
+        'save-active-tab',
         'settings',
         'import-workspace',
         'import-request',
