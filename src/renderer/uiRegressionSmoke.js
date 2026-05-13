@@ -3850,6 +3850,34 @@
       assertUiSmoke(activeRunnerRequestRunnerId === runner.id, 'Editing a runner request should bind the request editor to the runner.');
       assertUiSmoke(activeRequest()?.id === runnerLocalRequest.id, 'Editing a runner request should activate the runner-owned request.');
       assertUiSmoke(!$('requestEditorPanel').hidden, 'Runner request edit should show the standard request editor.');
+      runner.csvVariables = {
+        enabled: true,
+        schema: 'url,csvOnly',
+        values: 'https://csv.example.test,csv-value',
+        activeSource: 'inline'
+      };
+      runnerLocalRequest.variables = [{ enabled: true, key: 'runnerToken', value: 'runner-value' }];
+      if (activeRequest()) {
+        activeRequest().variables = [{ enabled: true, key: 'runnerToken', value: 'runner-value' }];
+      }
+      const runnerVariableAutocomplete = document.getElementById('variableAutocompleteMenu');
+      $('urlInput').focus();
+      $('urlInput').value = '${u';
+      $('urlInput').setSelectionRange($('urlInput').value.length, $('urlInput').value.length);
+      dispatchInput($('urlInput'));
+      await nextPaint();
+      assertUiSmoke(runnerVariableAutocomplete && !runnerVariableAutocomplete.hidden, 'Runner request CSV autocomplete did not open for ${ tokens.');
+      assertUiSmoke(runnerVariableAutocomplete.textContent.includes('url'), 'Runner request CSV autocomplete should list CSV variables for ${ tokens.');
+      assertUiSmoke(!runnerVariableAutocomplete.textContent.includes('runnerToken'), 'Runner request CSV autocomplete should not list request variables for ${ tokens.');
+      assertUiSmoke(!runnerVariableAutocomplete.textContent.includes('Empty value'), 'Runner request CSV autocomplete should omit placeholder values.');
+      assertUiSmoke(!runnerVariableAutocomplete.textContent.includes('https://csv.example.test'), 'Runner request CSV autocomplete should omit CSV row values.');
+      $('urlInput').value = '{{runner';
+      $('urlInput').setSelectionRange($('urlInput').value.length, $('urlInput').value.length);
+      dispatchInput($('urlInput'));
+      await nextPaint();
+      assertUiSmoke(runnerVariableAutocomplete && !runnerVariableAutocomplete.hidden, 'Runner request variable autocomplete did not open for {{ tokens.');
+      assertUiSmoke(runnerVariableAutocomplete.textContent.includes('runnerToken'), 'Runner request variable autocomplete should list request variables for {{ tokens.');
+      assertUiSmoke(!runnerVariableAutocomplete.textContent.includes('csvOnly'), 'Runner request variable autocomplete should not list CSV variables for {{ tokens.');
       $('urlInput').value = 'https://runner-local.example.test';
       dispatchInput($('urlInput'));
       activateTab('request', 'params');

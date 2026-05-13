@@ -856,6 +856,11 @@
   text-align: left;
 }
 
+.variable-autocomplete-option.is-key-only {
+  align-content: center;
+  min-height: 30px;
+}
+
 .variable-autocomplete-option:hover,
 .variable-autocomplete-option.active {
   background: var(--surface-muted);

@@ -72,8 +72,8 @@
     };
   }
 
-  function buildVariableSuggestions(variables, query = '') {
-    const items = normalizeSuggestionVariables(variables);
+  function buildVariableSuggestions(variables, query = '', options = {}) {
+    const items = normalizeSuggestionVariables(variables, suggestionSyntax(options));
     if (!query) {
       return items;
     }
@@ -91,22 +91,64 @@
     return prefixMatches.concat(containsMatches);
   }
 
-  function normalizeSuggestionVariables(variables) {
+  function normalizeSuggestionVariables(variables, syntax = 'all') {
     const byKey = new Map();
     for (const variable of variables || []) {
       if (!variable || variable.enabled === false) {
+        continue;
+      }
+      const source = normalizeSuggestionVariableSource(variable.source || variable.kind || variable.scope || variable.type);
+      if (!variableMatchesSuggestionSyntax(source, syntax)) {
         continue;
       }
       const key = String(variable.key || '').trim();
       if (!key) {
         continue;
       }
-      byKey.set(key, {
-        key,
-        value: variable.value == null ? '' : String(variable.value)
-      });
+      const item = { key };
+      if (source === 'csv') {
+        item.showValue = false;
+      } else {
+        item.value = variable.value == null ? '' : String(variable.value);
+      }
+      byKey.set(key, item);
     }
     return [...byKey.values()].sort((left, right) => left.key.localeCompare(right.key));
+  }
+
+  function suggestionSyntax(options = {}) {
+    if (!options || typeof options !== 'object') {
+      return 'all';
+    }
+    const syntax = String(options.syntax || '').trim().toLowerCase();
+    if (syntax === 'csv' || syntax === 'postman' || syntax === 'all') {
+      return syntax;
+    }
+    if (options.token?.open === '${') {
+      return 'csv';
+    }
+    if (options.token?.open === '{{') {
+      return 'postman';
+    }
+    return 'all';
+  }
+
+  function variableMatchesSuggestionSyntax(source, syntax) {
+    if (syntax === 'csv') {
+      return source === 'csv';
+    }
+    if (syntax === 'postman') {
+      return source !== 'csv';
+    }
+    return true;
+  }
+
+  function normalizeSuggestionVariableSource(source) {
+    const normalized = String(source || '').trim().toLowerCase();
+    if (normalized === 'csv' || normalized === 'iteration' || normalized === 'iterationdata') {
+      return 'csv';
+    }
+    return normalized;
   }
 
   function replaceVariableToken(value, token, variableKey) {
@@ -225,7 +267,7 @@
         close();
         return false;
       }
-      const items = buildVariableSuggestions(getVariables(target), token.query);
+      const items = buildVariableSuggestions(getVariables(target), token.query, { token });
       if (!items.length) {
         close();
         return false;
@@ -345,11 +387,15 @@
       key.className = 'variable-autocomplete-key';
       key.textContent = item.key;
 
-      const value = doc.createElement('span');
-      value.className = 'variable-autocomplete-value';
-      value.textContent = item.value || 'Empty value';
-
-      option.append(key, value);
+      if (item.showValue === false) {
+        option.classList.add('is-key-only');
+        option.append(key);
+      } else {
+        const value = doc.createElement('span');
+        value.className = 'variable-autocomplete-value';
+        value.textContent = item.value || 'Empty value';
+        option.append(key, value);
+      }
       menu.append(option);
     });
     menu.hidden = false;
