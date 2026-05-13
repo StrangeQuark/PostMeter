@@ -55,7 +55,7 @@ test('Electron shell keeps custom File/Edit/View/Help menus without the default 
     'Postman',
     'OpenAPI',
     'curl',
-    'Settings...'
+    'Settings'
   ]) {
     assert.match(appMenuSource, new RegExp(`(?:label:\\s*|actionItem\\()'${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`));
   }
@@ -96,7 +96,7 @@ test('Electron shell keeps custom File/Edit/View/Help menus without the default 
   assert.match(appMenuSource, /role:\s*'editMenu'/);
   assert.match(appMenuSource, /role:\s*'viewMenu'/);
   assert.match(appMenuSource, /label:\s*'Help'/);
-  assert.match(appMenuSource, /actionItem\('Settings\.\.\.',\s*'settings',\s*\{ accelerator: 'CmdOrCtrl\+,' \}\)/);
+  assert.match(appMenuSource, /actionItem\('Settings',\s*'settings',\s*\{ accelerator: 'CmdOrCtrl\+,' \}\)/);
   assert.match(appMenuSource, /label:\s*'PostMeter Documentation'/);
   assert.match(appMenuSource, /label:\s*'Report Issue'/);
   assert.match(appMenuSource, /label:\s*'Export Local Diagnostics\.\.\.'[\s\S]*sendMenuAction\('export-diagnostics'\)/);

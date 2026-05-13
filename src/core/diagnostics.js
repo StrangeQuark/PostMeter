@@ -1726,7 +1726,7 @@ function sanitizeSettingsSummary(settings = {}) {
       trustedCapabilities: {
         cookies: settings.sandbox?.trustedCapabilities?.cookies !== false,
         sendRequest: settings.sandbox?.trustedCapabilities?.sendRequest !== false,
-        vault: settings.sandbox?.trustedCapabilities?.vault === true
+        vault: settings.sandbox?.trustedCapabilities?.vault !== false
       }
     },
     updates: {

@@ -1972,7 +1972,7 @@ function vaultCapabilityDecision(state) {
       return { allowed: false, explicitDenied: true };
     }
   }
-  if (trustedCapabilities.vault === true) {
+  if (trustedCapabilities.vault !== false) {
     return { allowed: true, explicitDenied: false };
   }
   if (!grants || typeof grants !== 'object') {

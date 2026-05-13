@@ -4249,16 +4249,15 @@ function ensureSettings() {
   workspace.settings.editor ||= { lineNumbers: true, variableTooltipHints: true };
   workspace.settings.editor.lineNumbers = workspace.settings.editor.lineNumbers !== false;
   workspace.settings.editor.variableTooltipHints = workspace.settings.editor.variableTooltipHints !== false;
-  workspace.settings.sandbox ||= { trustedCapabilities: { sendRequest: true, cookies: true, vault: false } };
+  workspace.settings.sandbox ||= { trustedCapabilities: { sendRequest: true, cookies: true, vault: true } };
   workspace.settings.sandbox.fileBindings = normalizeSandboxFileBindings(workspace.settings.sandbox.fileBindings);
   workspace.settings.sandbox.packageCache = normalizeSandboxPackageCache(workspace.settings.sandbox.packageCache);
-  workspace.settings.sandbox.trustedCapabilities ||= { sendRequest: true, cookies: true, vault: false };
+  workspace.settings.sandbox.trustedCapabilities ||= { sendRequest: true, cookies: true, vault: true };
   workspace.settings.sandbox.trustedCapabilities.sendRequest = workspace.settings.sandbox.trustedCapabilities.sendRequest !== false;
   workspace.settings.sandbox.trustedCapabilities.cookies = workspace.settings.sandbox.trustedCapabilities.cookies !== false;
-  workspace.settings.sandbox.trustedCapabilities.vault = workspace.settings.sandbox.trustedCapabilities.vault === true;
+  workspace.settings.sandbox.trustedCapabilities.vault = workspace.settings.sandbox.trustedCapabilities.vault !== false;
   workspace.settings.sandbox.trustedCapabilities.vaultGrants = normalizeVaultGrants(
-    workspace.settings.sandbox.trustedCapabilities.vaultGrants,
-    workspace.settings.sandbox.trustedCapabilities.vault
+    workspace.settings.sandbox.trustedCapabilities.vaultGrants
   );
   workspace.settings.appearance.theme = normalizeThemeOption(workspace.settings.appearance.theme);
   delete workspace.settings.loadTestPolicy;
@@ -8010,7 +8009,7 @@ function renderDiagnosticsPrivacyPanel() {
     } else if (enabledRequestResponseCategories) {
       summary.textContent = `${enabledRequestResponseCategories} request/response log categor${enabledRequestResponseCategories === 1 ? 'y is' : 'ies are'} enabled. Review exported diagnostics before sharing.`;
     } else {
-      summary.textContent = 'Local diagnostics are user-exported only. Request and response details are not logged unless enabled below.';
+      summary.textContent = '';
     }
   }
 }

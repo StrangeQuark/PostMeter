@@ -162,7 +162,8 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(rendererSource, /Environment Save Failed/);
   assert.match(rendererSource, /const previousSettings = structuredClone\(workspace\.settings\)/);
   assert.match(rendererSource, /workspace\.settings = previousSettings/);
-  assert.match(indexSource, /<fieldset class="settings-card workspace-diagnostics-panel" aria-describedby="diagnosticsPrivacySummary diagnosticsSensitiveWarning">/);
+  assert.match(indexSource, /<fieldset class="settings-card workspace-diagnostics-panel" aria-describedby="diagnosticsPrivacySummary">/);
+  assert.doesNotMatch(indexSource, /diagnosticsSensitiveWarning/);
   for (const id of [
     'diagnosticLogUrlsInput',
     'diagnosticLogHeadersInput',
@@ -173,7 +174,7 @@ test('renderer accessibility source keeps splitters body editor and pane save re
     'diagnosticLogPayloadIdentifiersInput',
     'exportDiagnosticsButton'
   ]) {
-    assert.match(indexSource, new RegExp(`id="${id}"[^>]+aria-describedby="diagnosticsSensitiveWarning"`));
+    assert.doesNotMatch(indexSource, new RegExp(`id="${id}"[^>]+aria-describedby=`));
   }
   assert.match(chromeSource, /\.workspace-diagnostics-panel/);
   assert.match(chromeSource, /\.toolbar-group\s*\{[^}]*background:\s*transparent;/s);

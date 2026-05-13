@@ -78,7 +78,7 @@ function createApplicationMenuTemplate(options = {}) {
           ]
         },
         { type: 'separator' },
-        actionItem('Settings...', 'settings', { accelerator: 'CmdOrCtrl+,' }),
+        actionItem('Settings', 'settings', { accelerator: 'CmdOrCtrl+,' }),
         { type: 'separator' },
         { role: 'quit' }
       ]
