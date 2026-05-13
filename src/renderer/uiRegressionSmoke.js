@@ -39,7 +39,7 @@
     await assertLargeWorkspaceBudgetSmoke();
     await assertEditorCollectionSmoke();
     await assertSidebarTreeDragSmoke();
-    assertCreationSemanticsSmoke();
+    await assertCreationSemanticsSmoke();
     await assertRequestTabCloseSmoke();
 
     newCollection();
@@ -62,7 +62,7 @@
     $('urlInput').value = '{{baseUrl}}/v1/users';
     dispatchInput($('urlInput'));
     await nextPaint();
-    const baseUrlToken = assertVariableHighlight(
+    let baseUrlToken = assertVariableHighlight(
       $('urlInput'),
       'baseUrl',
       'Request URL input should highlight environment variable tokens.',
@@ -94,6 +94,51 @@
     assertUiSmoke(
       document.querySelector('.variable-highlight-tooltip')?.textContent === 'https://hover.example.test',
       `Variable hover tooltip should contain only the value when hints are disabled. Tooltip: ${document.querySelector('.variable-highlight-tooltip')?.outerHTML || 'none'}`
+    );
+    $('urlInput').value = '{{baseUrl}}';
+    dispatchInput($('urlInput'));
+    await nextPaint();
+    baseUrlToken = assertVariableHighlight(
+      $('urlInput'),
+      'baseUrl',
+      'Request URL input should highlight a standalone environment variable token.',
+      'valid'
+    );
+    dispatchVariableTokenMouseEvent($('urlInput'), baseUrlToken, 'mousemove');
+    await waitForUiSmoke(
+      () => document.querySelector('.variable-highlight-tooltip')?.hidden === false,
+      'Variable hover tooltip should appear for a standalone URL variable token.',
+      2500,
+      global
+    );
+    dispatchTextboxMouseMove(
+      $('urlInput'),
+      $('urlInput').getBoundingClientRect().left + 2,
+      baseUrlToken.getBoundingClientRect().top + (baseUrlToken.getBoundingClientRect().height / 2)
+    );
+    await nextPaint();
+    assertUiSmoke(
+      document.querySelector('.variable-highlight-tooltip')?.hidden !== false,
+      'Variable hover tooltip should hide when moving left of a leading URL variable token.'
+    );
+    dispatchVariableTokenMouseEvent($('urlInput'), baseUrlToken, 'mousemove');
+    await waitForUiSmoke(
+      () => document.querySelector('.variable-highlight-tooltip')?.hidden === false,
+      'Variable hover tooltip should reappear for a standalone URL variable token.',
+      2500,
+      global
+    );
+    const urlRect = $('urlInput').getBoundingClientRect();
+    const baseUrlRect = baseUrlToken.getBoundingClientRect();
+    dispatchTextboxMouseMove(
+      $('urlInput'),
+      Math.min(urlRect.right - 4, baseUrlRect.right + 40),
+      baseUrlRect.top + (baseUrlRect.height / 2)
+    );
+    await nextPaint();
+    assertUiSmoke(
+      document.querySelector('.variable-highlight-tooltip')?.hidden !== false,
+      'Variable hover tooltip should hide when moving right of a trailing URL variable token.'
     );
     await setVariableTooltipHintsFromSettingsPanel(true);
     dispatchVariableTokenMouseEvent($('urlInput'), baseUrlToken, 'mousemove', { ctrlKey: true });
@@ -205,6 +250,7 @@
     await nextPaint();
     assertVariableHighlight($('authBearerTokenInput'), 'baseUrl', 'Bearer token fields should highlight environment variable tokens.');
     assertVariableHighlightUsesInputMetrics($('authBearerTokenInput'), 'baseUrl', 'Bearer token variable highlighting should not alter input text metrics.');
+    await assertSingleLineVariableTooltipEdges($('authBearerTokenInput'), 'baseUrl', 'Bearer token field');
     const generatedHeadersAfterBearerAuth = Array.from($('headersTable').querySelectorAll('[data-generated-header="true"] input[aria-label^="Auto-generated"]'))
       .map((input) => input.value);
     assertUiSmoke(generatedHeadersAfterBearerAuth.includes('Authorization'), 'Generated request headers should update when Auth tab enables Authorization.');
@@ -226,6 +272,7 @@
     dispatchInput(requestParamInputs[2]);
     await nextPaint();
     assertVariableHighlight(requestParamInputs[2], 'baseUrl', 'Request Params values should highlight environment variable tokens.');
+    await assertSingleLineVariableTooltipEdges(requestParamInputs[2], 'baseUrl', 'Request Params value field');
     requestParamInputs[2].value = 'car';
     dispatchInput(requestParamInputs[2]);
     assertUiSmoke($('urlInput').value.endsWith('/v1/users?taco=car'), 'Editing request params should update the request URL.');
@@ -1178,6 +1225,94 @@
       metaKey: options.metaKey === true,
       shiftKey: options.shiftKey === true
     }));
+  }
+
+  function dispatchTextboxMouseMove(control, clientX, clientY) {
+    control.dispatchEvent(new MouseEvent('mousemove', {
+      bubbles: true,
+      cancelable: true,
+      clientX,
+      clientY
+    }));
+  }
+
+  async function assertSingleLineVariableTooltipEdges(control, variableName, label) {
+    assertUiSmoke(control && String(control.tagName || '').toUpperCase() === 'INPUT', `${label} should be a single-line input.`);
+    const originalValue = control.value;
+    const tokenValue = `{{${variableName}}}`;
+    const restoreGlobalVariable = ensureTooltipProbeVariable(control, variableName);
+    try {
+      control.value = tokenValue;
+      dispatchInput(control);
+      await nextPaint();
+      const token = assertVariableHighlight(
+        control,
+        variableName,
+        `${label} should highlight a standalone variable token.`,
+        'valid'
+      );
+      const tokenRect = token.getBoundingClientRect();
+      const controlRect = control.getBoundingClientRect();
+      const tokenY = tokenRect.top + (tokenRect.height / 2);
+      const leftProbeX = controlRect.left + 1;
+      const rightProbeX = Math.min(controlRect.right - 4, tokenRect.right + 40);
+      const hasLeftProbeSpace = leftProbeX < tokenRect.left - 0.5;
+      const hasRightProbeSpace = rightProbeX > tokenRect.right + 0.5;
+
+      if (hasLeftProbeSpace) {
+        dispatchVariableTokenMouseEvent(control, token, 'mousemove');
+        await waitForUiSmoke(
+          () => document.querySelector('.variable-highlight-tooltip')?.hidden === false,
+          `${label} variable tooltip should appear for a standalone token.`,
+          2500,
+          global
+        );
+        dispatchTextboxMouseMove(control, leftProbeX, tokenY);
+        await nextPaint();
+        assertUiSmoke(
+          document.querySelector('.variable-highlight-tooltip')?.hidden !== false,
+          `${label} variable tooltip should hide when moving left of a leading token.`
+        );
+      }
+
+      if (hasRightProbeSpace) {
+        dispatchVariableTokenMouseEvent(control, token, 'mousemove');
+        await waitForUiSmoke(
+          () => document.querySelector('.variable-highlight-tooltip')?.hidden === false,
+          `${label} variable tooltip should ${hasLeftProbeSpace ? 'reappear' : 'appear'} for a standalone token.`,
+          2500,
+          global
+        );
+        dispatchTextboxMouseMove(control, rightProbeX, tokenY);
+        await nextPaint();
+        assertUiSmoke(
+          document.querySelector('.variable-highlight-tooltip')?.hidden !== false,
+          `${label} variable tooltip should hide when moving right of a trailing token.`
+        );
+      }
+    } finally {
+      control.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true, cancelable: true }));
+      control.value = originalValue;
+      dispatchInput(control);
+      restoreGlobalVariable?.();
+      await nextPaint();
+    }
+  }
+
+  function ensureTooltipProbeVariable(control, variableName) {
+    if (VariableHighlighter.resolvedVariableForToken?.(variableName, { target: control })) {
+      return null;
+    }
+    const originalGlobals = structuredClone(workspace.globals || []);
+    workspace.globals = [
+      ...(workspace.globals || []).filter((variable) => String(variable?.key || '').trim() !== variableName),
+      { enabled: true, key: variableName, value: `${variableName}-tooltip-probe` }
+    ];
+    refreshVariableHighlights();
+    return () => {
+      workspace.globals = originalGlobals;
+      refreshVariableHighlights();
+    };
   }
 
   function assertVariableHighlightUsesInputMetrics(control, variableName, message) {
@@ -3151,6 +3286,7 @@
       dispatchInput($('performanceUrlInput'));
       await nextPaint();
       assertVariableHighlight($('performanceUrlInput'), 'perfHost', 'Performance URL input should highlight environment variable tokens.');
+      await assertSingleLineVariableTooltipEdges($('performanceUrlInput'), 'perfHost', 'Performance URL field');
       for (const [tabId, label] of [
         ['performanceRequestParamsTabButton', 'Params'],
         ['performanceRequestHeadersTabButton', 'Headers'],
@@ -3173,6 +3309,7 @@
       dispatchInput(performanceRowInputs[2]);
       await nextPaint();
       assertVariableHighlight(performanceRowInputs[2], 'perfToken', 'Performance Params values should highlight environment variable tokens.');
+      await assertSingleLineVariableTooltipEdges(performanceRowInputs[2], 'perfToken', 'Performance Params value field');
       performanceRowInputs[2].value = 'enabled';
       dispatchInput(performanceRowInputs[2]);
       assertUiSmoke($('performanceUrlInput').value.includes('?probe=enabled'), 'Editing performance request params should update the performance request URL.');
@@ -3272,6 +3409,7 @@
       await nextPaint();
       assertVariableHighlight($('performanceBinaryBodySourceInput'), 'perfHost', 'Performance binary file source fields should highlight environment variable tokens.');
       assertVariableHighlightUsesInputMetrics($('performanceBinaryBodySourceInput'), 'perfHost', 'Performance binary file source highlighting should not alter input text metrics.');
+      await assertSingleLineVariableTooltipEdges($('performanceBinaryBodySourceInput'), 'perfHost', 'Performance binary file source field');
       $('performanceBinaryBodySourceInput').value = 'fixtures/performance-upload.dat';
       dispatchInput($('performanceBinaryBodySourceInput'));
       collectPerformanceTestFromEditor();
@@ -3889,6 +4027,7 @@
       dispatchInput(runnerParamInputs[2]);
       await nextPaint();
       assertVariableHighlight(runnerParamInputs[2], 'runnerToken', 'Runner-owned request Params values should highlight environment variable tokens.');
+      await assertSingleLineVariableTooltipEdges(runnerParamInputs[2], 'runnerToken', 'Runner-owned request Params value field');
       runnerParamInputs[2].value = 'local';
       dispatchInput(runnerParamInputs[2]);
       assertUiSmoke($('urlInput').value === 'https://runner-local.example.test?runner=local', 'Runner request params should update the runner request URL.');
@@ -4428,7 +4567,7 @@
     }
   }
 
-  function assertCreationSemanticsSmoke() {
+  async function assertCreationSemanticsSmoke() {
     workspace.collections = [];
     activeEnvironmentId = 'none';
     clearActiveWorkspaceItem();
@@ -4515,17 +4654,18 @@
       draft.bodyType === 'URLENCODED' && draft.postmanBody?.urlencoded?.some((part) => part.key === 'search' && part.value === 'postmeter'),
       'Request Body dropdown should collect x-www-form-urlencoded rows.'
     );
-	    $('bodyTypeSelect').value = 'BINARY';
-	    dispatchChange($('bodyTypeSelect'));
-	    $('binaryBodySourceInput').click();
-	    assertUiSmoke(!$('fileSourceMenu').hidden, 'Clicking a binary file source field should open the local file source menu.');
-	    document.body.click();
-	    $('binaryBodySourceInput').value = '{{baseUrl}}';
-	    dispatchInput($('binaryBodySourceInput'));
-	    assertVariableHighlight($('binaryBodySourceInput'), 'baseUrl', 'Binary file source fields should highlight environment variable tokens.');
-	    assertVariableHighlightUsesInputMetrics($('binaryBodySourceInput'), 'baseUrl', 'Binary file source highlighting should not alter input text metrics.');
-	    $('binaryBodySourceInput').value = 'fixtures/binary.dat';
-	    dispatchInput($('binaryBodySourceInput'));
+    $('bodyTypeSelect').value = 'BINARY';
+    dispatchChange($('bodyTypeSelect'));
+    $('binaryBodySourceInput').click();
+    assertUiSmoke(!$('fileSourceMenu').hidden, 'Clicking a binary file source field should open the local file source menu.');
+    document.body.click();
+    $('binaryBodySourceInput').value = '{{baseUrl}}';
+    dispatchInput($('binaryBodySourceInput'));
+    assertVariableHighlight($('binaryBodySourceInput'), 'baseUrl', 'Binary file source fields should highlight environment variable tokens.');
+    assertVariableHighlightUsesInputMetrics($('binaryBodySourceInput'), 'baseUrl', 'Binary file source highlighting should not alter input text metrics.');
+    await assertSingleLineVariableTooltipEdges($('binaryBodySourceInput'), 'baseUrl', 'Binary file source field');
+    $('binaryBodySourceInput').value = 'fixtures/binary.dat';
+    dispatchInput($('binaryBodySourceInput'));
     collectRequestFromEditor();
     assertUiSmoke(
       draft.bodyType === 'BINARY'
