@@ -1496,6 +1496,9 @@ async function handleAppMenuAction(action) {
   const type = typeof action === 'string' ? action : action?.type;
   try {
     switch (type) {
+      case 'new-workspace':
+        await newWorkspace();
+        break;
       case 'new-request':
         newRequest();
         break;
@@ -1503,10 +1506,16 @@ async function handleAppMenuAction(action) {
         newCollection();
         break;
       case 'new-folder':
-        newFolder();
+        await newFolderFromToolbar();
         break;
-      case 'save-workspace':
-        await saveWorkspace(true, { promptForDraft: true });
+      case 'new-environment':
+        newEnvironment();
+        break;
+      case 'new-runner':
+        newRunner();
+        break;
+      case 'new-performance-test':
+        newPerformanceTest();
         break;
       case 'settings':
         await openSettingsModal();
@@ -1514,14 +1523,53 @@ async function handleAppMenuAction(action) {
       case 'import-workspace':
         await importWorkspace();
         break;
+      case 'import-request':
+        await importRequest();
+        break;
       case 'import-collection':
         await importCollection();
         break;
+      case 'import-environment':
+        await importEnvironment();
+        break;
+      case 'import-runner':
+        await importRunner();
+        break;
+      case 'import-performance-test':
+        await importPerformanceTest();
+        break;
       case 'export-workspace':
-        await exportWorkspace();
+        await exportWorkspaceFromPicker();
+        break;
+      case 'export-request':
+        await exportRequestFromPicker('postmeter');
+        break;
+      case 'export-request-curl':
+        await exportRequestFromPicker('curl');
         break;
       case 'export-collection':
         await exportCollection(null, 'postmeter');
+        break;
+      case 'export-postman':
+        await exportCollection(null, 'postman');
+        break;
+      case 'export-openapi':
+        await exportCollection(null, 'openapi');
+        break;
+      case 'export-curl':
+        await exportCollection(null, 'curl');
+        break;
+      case 'export-environment':
+        await exportEnvironmentFromPicker('postmeter');
+        break;
+      case 'export-postman-environment':
+        await exportEnvironmentFromPicker('postman');
+        break;
+      case 'export-runner-definition':
+        await exportRunnerDefinitionFromPicker();
+        break;
+      case 'export-performance-test':
+        await exportPerformanceTestFromPicker();
         break;
       case 'export-diagnostics':
         await exportDiagnostics({ allowNonCurrentWorkspaceView: true });

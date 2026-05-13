@@ -40,22 +40,60 @@ test('Electron shell keeps custom File/Edit/View/Help menus without the default 
   assert.match(appMenuSource, /Menu\.setApplicationMenu\(Menu\.buildFromTemplate\(createApplicationMenuTemplate\(options\)\)\)/);
   assert.match(appMenuSource, /label:\s*'File'/);
   for (const label of [
-    'New Request',
-    'New Collection',
-    'New Folder',
-    'Save Workspace',
-    'Settings...',
-    'Import Workspace...',
-    'Import Collection...',
-    'Export Workspace...',
-    'Export Collection...'
+    'New',
+    'Workspace',
+    'Request',
+    'Collection',
+    'Folder',
+    'Environment',
+    'Runner',
+    'Performance Test',
+    'Import',
+    'Export',
+    'PostMeter',
+    'Postman',
+    'OpenAPI',
+    'curl',
+    'Settings...'
   ]) {
-    assert.match(appMenuSource, new RegExp(`label:\\s*'${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`));
+    assert.match(appMenuSource, new RegExp(`(?:label:\\s*|actionItem\\()'${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`));
   }
+  for (const action of [
+    'new-workspace',
+    'new-request',
+    'new-collection',
+    'new-folder',
+    'new-environment',
+    'new-runner',
+    'new-performance-test',
+    'import-workspace',
+    'import-request',
+    'import-collection',
+    'import-environment',
+    'import-runner',
+    'import-performance-test',
+    'export-workspace',
+    'export-request',
+    'export-request-curl',
+    'export-collection',
+    'export-postman',
+    'export-openapi',
+    'export-curl',
+    'export-environment',
+    'export-postman-environment',
+    'export-runner-definition',
+    'export-performance-test'
+  ]) {
+    assert.match(appMenuSource, new RegExp(`'${action.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'`));
+  }
+  assert.match(appMenuSource, /click:\s*\(\)\s*=>\s*sendMenuAction\(action\)/);
+  assert.doesNotMatch(appMenuSource, /label:\s*'Save Workspace'/);
+  assert.doesNotMatch(appMenuSource, /role:\s*'close'/);
+  assert.match(appMenuSource, /role:\s*'quit'/);
   assert.match(appMenuSource, /role:\s*'editMenu'/);
   assert.match(appMenuSource, /role:\s*'viewMenu'/);
   assert.match(appMenuSource, /label:\s*'Help'/);
-  assert.match(appMenuSource, /label:\s*'Settings\.\.\.'[\s\S]*sendMenuAction\('settings'\)/);
+  assert.match(appMenuSource, /actionItem\('Settings\.\.\.',\s*'settings',\s*\{ accelerator: 'CmdOrCtrl\+,' \}\)/);
   assert.match(appMenuSource, /label:\s*'PostMeter Documentation'/);
   assert.match(appMenuSource, /label:\s*'Report Issue'/);
   assert.match(appMenuSource, /label:\s*'Export Local Diagnostics\.\.\.'[\s\S]*sendMenuAction\('export-diagnostics'\)/);
@@ -68,9 +106,17 @@ test('Electron shell keeps custom File/Edit/View/Help menus without the default 
   assert.doesNotMatch(`${mainSource}\n${appMenuSource}`, /\.setMenuBarVisibility\(false\)/);
 
   assert.match(preloadSource, /onMenuAction/);
+  assert.match(preloadSource, /'new-workspace'/);
+  assert.match(preloadSource, /'import-request'/);
+  assert.match(preloadSource, /'export-request-curl'/);
+  assert.match(preloadSource, /'export-performance-test'/);
   assert.match(preloadSource, /'settings'/);
   assert.match(preloadSource, /process\.isMainFrame\s*===\s*true/);
   assert.match(rendererSource, /case 'settings':[\s\S]*openSettingsModal\(\)/);
+  assert.match(rendererSource, /case 'new-folder':[\s\S]*newFolderFromToolbar\(\)/);
+  assert.match(rendererSource, /case 'export-workspace':[\s\S]*exportWorkspaceFromPicker\(\)/);
+  assert.match(rendererSource, /case 'export-request-curl':[\s\S]*exportRequestFromPicker\('curl'\)/);
+  assert.match(rendererSource, /case 'export-performance-test':[\s\S]*exportPerformanceTestFromPicker\(\)/);
   assert.match(preloadSource, /contextBridge\.exposeInMainWorld\('postmeter',\s*postmeterApi\)/);
   assert.match(preloadSource, /webUtils\.getPathForFile/);
   assert.match(preloadSource, /files:\s*\{[\s\S]*pathForFile/);
