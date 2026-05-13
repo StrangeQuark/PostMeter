@@ -91,7 +91,7 @@ const TAB_PANEL_IDS = {
   folder: ['folderOverviewTab', 'folderAuthTab', 'folderScriptsTab', 'folderLevelVariablesTab'],
   results: ['responseTab', 'responseHeadersTab', 'responseCookiesTab', 'testResultsTab', 'visualizerTab'],
   performanceRequest: ['performanceParamsTab', 'performanceHeadersTab', 'performanceAuthTab', 'performanceCookiesTab', 'performanceBodyTab', 'performanceScriptsTab', 'performanceVariablesTab', 'performanceDocsTab'],
-  performance: ['latencyTab', 'throughputTab', 'concurrencyTab', 'stressTab', 'spikeTab', 'soakTab', 'rampTab'],
+  performance: ['diagnosisTab', 'latencyTab', 'throughputTab', 'concurrencyTab', 'stressTab', 'spikeTab', 'soakTab', 'rampTab'],
   performanceOutput: ['performanceOutputResultsTab', 'performanceOutputRequestsTab', 'performanceOutputGraphsTab']
 };
 
@@ -179,6 +179,7 @@ const $ = (id) => document.getElementById(id);
 const {
   PERFORMANCE_TEST_TYPES: RENDERER_PERFORMANCE_TEST_TYPES,
   MAX_SAFETY_LIMITS: PERFORMANCE_MAX_SAFETY_LIMITS,
+  DIAGNOSIS_SCOPE_PROFILES,
   cloneRequestForPerformanceTest,
   newPerformanceTestObject,
   normalizePerformanceTest,
@@ -633,6 +634,7 @@ function bindUi() {
     onRunPerformanceTest: () => { void runActivePerformanceTest(); },
     onCancelPerformanceTest: () => { void cancelPerformanceTestRun(); },
     onExportPerformanceTest: () => { void exportPerformanceTestFromPicker(); },
+    onExportPerformanceResultCsv: () => { void exportActivePerformanceResultCsv(); },
     onImportPerformanceRequest: () => { void promptAndImportPerformanceRequest(); },
     onAddPerformanceParam: () => addPerformancePair('queryParams'),
     onAddPerformanceHeader: () => addPerformancePair('headers'),
@@ -3858,7 +3860,7 @@ function variableHighlightEnvironmentForTarget(target) {
   }
   if (target?.closest?.('#performanceMainPanel')) {
     const test = activePerformanceTest();
-    const type = activePerformanceType() || test?.type || 'latency';
+    const type = activePerformanceType() || test?.type || 'diagnosis';
     const performanceEnvironment = environmentById(performanceTypeSettings(test, type).environmentId);
     if (performanceEnvironment) {
       return performanceEnvironment;
@@ -6331,6 +6333,9 @@ function renderPerformanceEditor() {
       button.disabled = !test;
     }
   }
+  if ($('exportPerformanceResultCsvButton')) {
+    $('exportPerformanceResultCsvButton').disabled = !test || !lastPerformanceResult || Boolean(activePerformanceRunId);
+  }
   renderCsvVariablesDropdown('performance', test?.csvVariables, Boolean(test));
   if ($('runPerformanceTestButton')) {
     $('runPerformanceTestButton').disabled = !test || Boolean(activePerformanceRunId);
@@ -6520,14 +6525,14 @@ function renderPerformanceCookieJarEditor() {
 }
 
 function performanceSelectedEnvironment(test = activePerformanceTest()) {
-  const environmentId = test?.environmentId || performanceTypeSettings(test, test?.type || 'latency')?.environmentId || 'none';
+  const environmentId = test?.environmentId || performanceTypeSettings(test, test?.type || 'diagnosis')?.environmentId || 'none';
   return environmentId && environmentId !== 'none'
     ? (workspace.environments || []).find((environment) => environment.id === environmentId) || null
     : null;
 }
 
 function renderPerformanceTypeTabs(test) {
-  const type = RENDERER_PERFORMANCE_TEST_TYPES.includes(test?.type) ? test.type : 'latency';
+  const type = RENDERER_PERFORMANCE_TEST_TYPES.includes(test?.type) ? test.type : 'diagnosis';
   for (const button of document.querySelectorAll('.tab[data-tab-group="performance"]')) {
     const isActive = button.dataset.tab === type;
     button.classList.toggle('active', isActive);
@@ -6580,6 +6585,7 @@ function renderPerformanceConfigControls(test) {
     setPerformancePanelControlValue(panel, 'config', 'durationSeconds', config.durationSeconds || 0);
     setPerformancePanelControlValue(panel, 'config', 'rampSteps', config.rampSteps || 1);
     setPerformancePanelControlValue(panel, 'config', 'spikeMultiplier', config.spikeMultiplier || 1);
+    setPerformancePanelControlValue(panel, 'config', 'diagnosisScope', normalizeDiagnosisScope(config.diagnosisScope));
   }
   setPerformanceControlsDisabled('config', !test);
 }
@@ -6618,7 +6624,7 @@ function setPerformanceControlsDisabled(kind, disabled) {
 }
 
 function performanceTypeSettings(test, type) {
-  const normalizedType = RENDERER_PERFORMANCE_TEST_TYPES.includes(type) ? type : 'latency';
+  const normalizedType = RENDERER_PERFORMANCE_TEST_TYPES.includes(type) ? type : 'diagnosis';
   const typeSettings = ensurePerformanceTypeSettings(test);
   return typeSettings[normalizedType] || ensurePerformanceTypeSettings(null)[normalizedType];
 }
@@ -7491,6 +7497,28 @@ async function exportPerformanceTestFromPicker() {
   return exportActivePerformanceTest(selectedTest);
 }
 
+async function exportActivePerformanceResultCsv() {
+  if (!lastPerformanceResult) {
+    return setStatus('Run a performance test before exporting result CSV.');
+  }
+  const performanceApi = window.postmeter?.performance;
+  if (!performanceApi?.exportResult) {
+    return setStatus('Performance result export is unavailable in this runtime.');
+  }
+  try {
+    const result = await performanceApi.exportResult(cloneJson(lastPerformanceResult), 'csv');
+    if (result?.path) {
+      setStatus(`Performance result CSV exported to ${result.path}.`);
+    }
+    return result;
+  } catch (error) {
+    const message = error.message || String(error);
+    setStatus(`Performance result CSV export failed: ${message}`);
+    notifyUser('Performance Result Export Failed', message);
+    return null;
+  }
+}
+
 async function importPerformanceTest() {
   const performanceApi = window.postmeter?.performance;
   if (!performanceApi?.importTest) {
@@ -7649,8 +7677,9 @@ function renderPerformanceResult(result = lastPerformanceResult) {
     `${result.failedRequests || 0} failed${result.cancelled ? ', cancelled' : ''}`,
     `RPS ${formatNumber(summary.requestsPerSecond)}`,
     `p95 ${formatNumber(summary.p95DurationMillis)} ms`,
+    summary.diagnosis ? `confidence ${summary.diagnosis.confidence || 'low'}` : '',
     `statuses ${statusCodes}`
-  ].join(' | ');
+  ].filter(Boolean).join(' | ');
   renderPerformanceRunDetails(result);
   performanceExecutionPage = executionPageForFilteredEntries(selectedPerformanceResultIndex, filteredSamples, performanceExecutionPage);
   const pageRange = executionPageRange(filteredSamples.length, performanceExecutionPage);
@@ -7894,6 +7923,7 @@ function renderPerformanceRunDetails(result = lastPerformanceResult) {
     return;
   }
   appendPerformanceRunSummary(details, result);
+  appendPerformanceDiagnosisSummary(details, result);
   appendPerformanceErrorSummary(details, result);
 }
 
@@ -7942,6 +7972,47 @@ function appendPerformanceRunSummary(details, result = {}) {
     block.append(row);
   }
   details.append(block);
+}
+
+function appendPerformanceDiagnosisSummary(details, result = {}) {
+  const diagnosis = result.summary?.diagnosis;
+  if (!diagnosis) {
+    return;
+  }
+  const overview = runnerDetailBlock('Endpoint diagnosis');
+  for (const [key, value] of [
+    ['Confidence', `${diagnosis.confidence || 'low'} (${formatNumber(diagnosis.confidenceScore)} / 100)`],
+    ['Best observed RPS', formatNumber(diagnosis.bestObservedRequestsPerSecond)],
+    ['Stable RPS', formatNumber(diagnosis.stableRequestsPerSecond)],
+    ['Saturation point', diagnosis.saturationPoint || 'Not reached'],
+    ['Checks', `${diagnosis.completedChecks || 0}/${diagnosis.requestedChecks || 0}`],
+    ['Final URL', diagnosis.finalUrl || 'Not captured']
+  ]) {
+    const row = document.createElement('div');
+    row.className = 'runner-detail-variable';
+    const label = document.createElement('span');
+    label.textContent = key;
+    const text = document.createElement('span');
+    text.textContent = value;
+    row.append(label, text);
+    overview.append(row);
+  }
+  details.append(overview);
+
+  const checks = runnerDetailBlock('Diagnostic checks');
+  for (const check of diagnosis.checks || []) {
+    const row = document.createElement('div');
+    row.className = 'runner-detail-variable';
+    const label = document.createElement('span');
+    label.textContent = `${check.status || 'info'} | ${check.group || 'Diagnostics'}`;
+    const text = document.createElement('span');
+    text.textContent = [check.label || check.id || 'Check', check.value, check.details]
+      .filter(Boolean)
+      .join(' - ');
+    row.append(label, text);
+    checks.append(row);
+  }
+  details.append(checks);
 }
 
 function appendPerformanceErrorSummary(details, result = {}) {
@@ -14532,7 +14603,7 @@ function collectPerformanceTestFromEditor() {
     return;
   }
   test.name = performanceTitleInputValue() || 'Untitled Performance Test';
-  const type = activePerformanceType() || test.type || 'latency';
+  const type = activePerformanceType() || test.type || 'diagnosis';
   test.type = type;
   collectPerformanceTypeSettingsFromPanel(test, type, activePerformanceTypePanel());
   syncPerformanceActiveTypeSettings(test);
@@ -14614,13 +14685,24 @@ function collectPerformanceTypeSettingsFromPanel(test, type, panel) {
     concurrency: clampPerformanceConfigInput('concurrency', 1, PERFORMANCE_MAX_SAFETY_LIMITS.maxConcurrency, previous.config?.concurrency || 1, panel),
     durationSeconds: clampPerformanceConfigInput('durationSeconds', minimumDurationSeconds, PERFORMANCE_MAX_SAFETY_LIMITS.maxDurationSeconds, previous.config?.durationSeconds || minimumDurationSeconds, panel),
     rampSteps: clampPerformanceConfigInput('rampSteps', 1, PERFORMANCE_MAX_SAFETY_LIMITS.maxTotalRequests, previous.config?.rampSteps || 1, panel),
-    spikeMultiplier: clampPerformanceConfigInput('spikeMultiplier', 1, PERFORMANCE_MAX_SAFETY_LIMITS.maxConcurrency, previous.config?.spikeMultiplier || 1, panel)
+    spikeMultiplier: clampPerformanceConfigInput('spikeMultiplier', 1, PERFORMANCE_MAX_SAFETY_LIMITS.maxConcurrency, previous.config?.spikeMultiplier || 1, panel),
+    diagnosisScope: collectPerformanceDiagnosisScope(panel, previous.config?.diagnosisScope)
   };
+  if (type === 'diagnosis') {
+    const profile = diagnosisProfileForScope(config.diagnosisScope);
+    config.iterations = profile.totalRequests;
+  }
   const safetyLimits = {
     maxTotalRequests: clampPerformanceSafetyInput('maxTotalRequests', 1, PERFORMANCE_MAX_SAFETY_LIMITS.maxTotalRequests, previous.safetyLimits?.maxTotalRequests || 100, panel),
     maxConcurrency: clampPerformanceSafetyInput('maxConcurrency', 1, PERFORMANCE_MAX_SAFETY_LIMITS.maxConcurrency, previous.safetyLimits?.maxConcurrency || 10, panel),
     maxDurationSeconds: clampPerformanceSafetyInput('maxDurationSeconds', 1, PERFORMANCE_MAX_SAFETY_LIMITS.maxDurationSeconds, previous.safetyLimits?.maxDurationSeconds || 60, panel)
   };
+  if (type === 'diagnosis') {
+    const profile = diagnosisProfileForScope(config.diagnosisScope);
+    safetyLimits.maxTotalRequests = profile.totalRequests;
+    safetyLimits.maxDurationSeconds = Math.max(safetyLimits.maxDurationSeconds, profile.maxDurationSeconds);
+    setPerformancePanelControlValue(panel, 'safety', 'maxDurationSeconds', safetyLimits.maxDurationSeconds);
+  }
   if (!panel.querySelector('[data-performance-safety="maxTotalRequests"]')) {
     safetyLimits.maxTotalRequests = Math.max(
       safetyLimits.maxTotalRequests,
@@ -14642,6 +14724,9 @@ function collectPerformanceTypeSettingsFromPanel(test, type, panel) {
 }
 
 function performancePlannedRequestCount(type, config, safetyLimits) {
+  if (type === 'diagnosis') {
+    return diagnosisProfileForScope(config.diagnosisScope).totalRequests;
+  }
   if (type === 'soak') {
     return safetyLimits.maxTotalRequests || 1;
   }
@@ -14655,6 +14740,9 @@ function performancePlannedRequestCount(type, config, safetyLimits) {
 }
 
 function performanceEffectiveConcurrency(type, config) {
+  if (type === 'diagnosis') {
+    return Math.min(25, Math.max(config.concurrency || 5, (config.concurrency || 5) * (config.spikeMultiplier || 2)));
+  }
   if (type === 'latency') {
     return 1;
   }
@@ -14665,6 +14753,20 @@ function performanceEffectiveConcurrency(type, config) {
     return Math.max(config.startConcurrency || 1, config.concurrency || 1);
   }
   return config.concurrency || 1;
+}
+
+function normalizeDiagnosisScope(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return DIAGNOSIS_SCOPE_PROFILES?.[normalized] ? normalized : 'quick';
+}
+
+function diagnosisProfileForScope(value) {
+  return DIAGNOSIS_SCOPE_PROFILES[normalizeDiagnosisScope(value)];
+}
+
+function collectPerformanceDiagnosisScope(panel, fallback = 'quick') {
+  const value = panel?.querySelector('[data-performance-config="diagnosisScope"]')?.value;
+  return normalizeDiagnosisScope(value || fallback);
 }
 
 function activePerformanceType() {

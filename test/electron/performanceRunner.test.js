@@ -1,11 +1,12 @@
 const assert = require('node:assert/strict');
+const http = require('node:http');
 const test = require('node:test');
 const { resolveEnvironmentValue } = require('../../src/core/environmentResolver');
 const { performanceTestModel } = require('../../src/core/models');
 const { assertPerformanceTestPayload } = require('../../src/core/ipcValidation');
 const { createPerformancePlan, runPerformanceTest } = require('../../src/core/performanceRunner');
 
-const PERFORMANCE_TYPES = ['latency', 'throughput', 'concurrency', 'stress', 'spike', 'soak', 'ramp'];
+const PERFORMANCE_TYPES = ['diagnosis', 'latency', 'throughput', 'concurrency', 'stress', 'spike', 'soak', 'ramp'];
 
 test('runs a positive bounded execution for each V1 performance type', async () => {
   for (const type of PERFORMANCE_TYPES) {
@@ -28,14 +29,55 @@ test('runs a positive bounded execution for each V1 performance type', async () 
     });
 
     assert.equal(result.type, type);
-    assert.equal(result.completedRequests, 1);
-    assert.equal(result.successfulRequests, 1);
+    const expectedRequests = type === 'diagnosis' ? 44 : 1;
+    assert.equal(result.completedRequests, expectedRequests);
+    assert.equal(result.successfulRequests, expectedRequests);
     assert.equal(result.failedRequests, 0);
-    assert.equal(result.summary.statusCodes['200'], 1);
+    assert.equal(result.summary.statusCodes['200'], expectedRequests);
   }
 });
 
 test('creates type-specific bounded plans and rejects unsafe effective concurrency', () => {
+  const diagnosis = performanceTestModel({
+    type: 'diagnosis',
+    request: { method: 'GET', url: 'https://api.example.test/diagnosis' },
+    safetyLimits: { maxTotalRequests: 25, maxConcurrency: 4, maxDurationSeconds: 10 }
+  });
+  const diagnosisPlan = createPerformancePlan(diagnosis);
+  assert.equal(diagnosisPlan.totalRequests, 44);
+  assert.equal(diagnosisPlan.concurrency, 4);
+  assert.equal(diagnosisPlan.durationMillis, 60000);
+  assert.deepEqual(diagnosisPlan.stages.map((stage) => stage.phase).slice(0, 5), [
+    'preflight',
+    'head-probe',
+    'options-probe',
+    'warmup',
+    'baseline-latency'
+  ]);
+  assert.deepEqual(diagnosisPlan.stages.map((stage) => stage.totalRequests), [1, 1, 1, 3, 5, 5, 5, 5, 10, 5, 3]);
+
+  const mediumDiagnosis = performanceTestModel({
+    type: 'diagnosis',
+    request: { method: 'GET', url: 'https://api.example.test/diagnosis' },
+    config: { diagnosisScope: 'medium' },
+    safetyLimits: { maxTotalRequests: 1, maxConcurrency: 4, maxDurationSeconds: 10 }
+  });
+  const mediumDiagnosisPlan = createPerformancePlan(mediumDiagnosis);
+  assert.equal(mediumDiagnosisPlan.totalRequests, 300);
+  assert.equal(mediumDiagnosisPlan.durationMillis, 300000);
+  assert.equal(mediumDiagnosisPlan.stages.find((stage) => stage.phase === 'baseline-latency').totalRequests, 120);
+
+  const extendedDiagnosis = performanceTestModel({
+    type: 'diagnosis',
+    request: { method: 'GET', url: 'https://api.example.test/diagnosis' },
+    config: { diagnosisScope: 'extended' },
+    safetyLimits: { maxTotalRequests: 1, maxConcurrency: 4, maxDurationSeconds: 10 }
+  });
+  const extendedDiagnosisPlan = createPerformancePlan(extendedDiagnosis);
+  assert.equal(extendedDiagnosisPlan.totalRequests, 1000);
+  assert.equal(extendedDiagnosisPlan.durationMillis, 900000);
+  assert.equal(extendedDiagnosisPlan.stages.find((stage) => stage.phase === 'baseline-latency').totalRequests, 500);
+
   const spike = performanceTestModel({
     type: 'spike',
     request: { method: 'GET', url: 'https://api.example.test/spike' },
@@ -93,6 +135,45 @@ test('creates type-specific bounded plans and rejects unsafe effective concurren
     })),
     /config.concurrency exceeds safetyLimits.maxConcurrency/
   );
+});
+
+test('full endpoint diagnosis measures a real local endpoint and builds the diagnostic report', async () => {
+  const server = await createDiagnosticServer();
+  try {
+    const performanceTest = performanceTestModel({
+      id: 'perf-diagnosis-local',
+      name: 'Local Diagnosis',
+      type: 'diagnosis',
+      request: {
+        id: 'request-diagnosis-local',
+        name: 'Local Endpoint',
+        method: 'GET',
+        url: `${server.baseUrl}/diagnostic?api_key=demo`
+      },
+      safetyLimits: { maxTotalRequests: 12, maxConcurrency: 4, maxDurationSeconds: 10 }
+    });
+
+    const result = await runPerformanceTest(performanceTest, null);
+    const diagnosis = result.summary.diagnosis;
+
+    assert.equal(result.type, 'diagnosis');
+    assert.equal(result.completedRequests, 44);
+    assert.equal(result.samples.some((sample) => sample.phase === 'head-probe'), true);
+    assert.equal(result.samples.some((sample) => sample.phase === 'options-probe'), true);
+    assert.ok(result.samples.some((sample) => sample.timings?.timeToFirstByteMillis >= 0));
+    assert.ok(result.samples.some((sample) => sample.responseHeaders?.['server-timing']));
+    assert.equal(diagnosis.requestedChecks, 76);
+    assert.equal(diagnosis.completedChecks, 76);
+    assert.ok(diagnosis.bestObservedRequestsPerSecond >= 0);
+    assert.ok(['high', 'medium', 'low'].includes(diagnosis.confidence));
+    assert.equal(findDiagnosisCheck(diagnosis, 'server_timing_headers').status, 'pass');
+    assert.equal(findDiagnosisCheck(diagnosis, 'rate_limit_headers').status, 'warn');
+    assert.equal(findDiagnosisCheck(diagnosis, 'sensitive_data_in_url').status, 'warn');
+    assert.equal(findDiagnosisCheck(diagnosis, 'head_probe').status, 'pass');
+    assert.equal(findDiagnosisCheck(diagnosis, 'options_probe').status, 'pass');
+  } finally {
+    await server.close();
+  }
 });
 
 test('runs bounded performance iterations through the request lifecycle and aggregates summaries', async () => {
@@ -461,4 +542,49 @@ function response() {
     responseBytes: 2,
     finalUrl: 'https://api.example.test'
   };
+}
+
+async function createDiagnosticServer() {
+  const server = http.createServer((request, response) => {
+    setTimeout(() => {
+      response.setHeader('Content-Type', 'application/json');
+      response.setHeader('Cache-Control', 'max-age=60');
+      response.setHeader('ETag', '"diagnostic-test"');
+      response.setHeader('Server-Timing', 'app;dur=5');
+      response.setHeader('X-Request-ID', 'diagnostic-request');
+      response.setHeader('RateLimit-Limit', '100');
+      response.setHeader('RateLimit-Remaining', '99');
+      response.setHeader('Access-Control-Allow-Origin', '*');
+      response.setHeader('Strict-Transport-Security', 'max-age=31536000');
+      response.setHeader('Content-Security-Policy', "default-src 'none'");
+      response.setHeader('X-Content-Type-Options', 'nosniff');
+      if (request.method === 'OPTIONS') {
+        response.setHeader('Allow', 'GET, HEAD, OPTIONS');
+        response.statusCode = 204;
+        response.end();
+        return;
+      }
+      if (request.method === 'HEAD') {
+        response.statusCode = 200;
+        response.end();
+        return;
+      }
+      response.statusCode = 200;
+      response.end(JSON.stringify({
+        ok: true,
+        method: request.method,
+        url: request.url
+      }));
+    }, 5);
+  });
+  await new Promise((resolve) => server.listen(0, 'localhost', resolve));
+  const address = server.address();
+  return {
+    baseUrl: `http://localhost:${address.port}`,
+    close: () => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
+  };
+}
+
+function findDiagnosisCheck(diagnosis, id) {
+  return diagnosis.checks.find((check) => check.id === id) || {};
 }

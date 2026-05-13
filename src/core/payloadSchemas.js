@@ -49,7 +49,8 @@ const OAUTH_PROGRESS_STATUSES = [
   'failed'
 ];
 const COLLECTION_EXPORT_FORMATS = ['postmeter', 'postman', 'openapi', 'curl'];
-const PERFORMANCE_TEST_TYPES = ['latency', 'throughput', 'concurrency', 'stress', 'spike', 'soak', 'ramp'];
+const PERFORMANCE_TEST_TYPES = ['diagnosis', 'latency', 'throughput', 'concurrency', 'stress', 'spike', 'soak', 'ramp'];
+const PERFORMANCE_DIAGNOSIS_SCOPES = ['quick', 'medium', 'extended'];
 const PERFORMANCE_EXPORT_FORMATS = ['postmeter', 'json', 'csv'];
 const THEME_VALUES = ['system', 'light', 'dark'];
 const TYPOGRAPHY_FONT_VALUES = [
@@ -102,6 +103,7 @@ const SCHEMA_ENUMS = {
   bodyTypes: BODY_TYPE_VALUES,
   collectionExportFormats: COLLECTION_EXPORT_FORMATS,
   csvVariableSources: ['', 'file', 'inline'],
+  performanceDiagnosisScopes: PERFORMANCE_DIAGNOSIS_SCOPES,
   performanceExportFormats: PERFORMANCE_EXPORT_FORMATS,
   performanceTestTypes: PERFORMANCE_TEST_TYPES,
   cookiePriorities: ['', 'Low', 'Medium', 'High'],
@@ -251,7 +253,8 @@ const FIELD_SCHEMAS = {
     concurrency: { type: 'number', optional: true },
     durationSeconds: { type: 'number', optional: true },
     rampSteps: { type: 'number', optional: true },
-    spikeMultiplier: { type: 'number', optional: true }
+    spikeMultiplier: { type: 'number', optional: true },
+    diagnosisScope: { type: 'string', limit: 'tiny', enum: 'performanceDiagnosisScopes', optional: true }
   },
   performanceSafetyLimits: {
     maxTotalRequests: { type: 'number', optional: true },
@@ -599,6 +602,7 @@ const exported = {
   OAUTH_PROGRESS_TYPES,
   PAYLOAD_SCHEMA_VERSION,
   PERFORMANCE_EXPORT_FORMATS,
+  PERFORMANCE_DIAGNOSIS_SCOPES,
   PERFORMANCE_TEST_TYPES,
   SCHEMA_ENUMS,
   THEME_VALUES,

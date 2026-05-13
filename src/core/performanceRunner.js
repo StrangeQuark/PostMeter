@@ -1,12 +1,23 @@
 const crypto = require('node:crypto');
+const http = require('node:http');
+const https = require('node:https');
+const { monitorEventLoopDelay } = require('node:perf_hooks');
 const { csvVariableIterationRows, runRunner } = require('./collectionRunner');
 const { csvVariablesEnabled } = require('./csvVariables');
+const { buildUrl, sendRequest } = require('./httpClient');
 const {
   performanceTestModel
 } = require('./models');
 const {
   assertPerformanceTestPayload
 } = require('./ipcValidation');
+const {
+  DIAGNOSIS_TYPE,
+  buildDiagnosisStages,
+  diagnosisEffectiveConcurrency,
+  diagnosisPlannedRequestCount,
+  summarizeEndpointDiagnosis
+} = require('./performanceDiagnosis');
 
 async function runPerformanceTest(performanceTest, environment, options = {}) {
   const normalized = performanceTestModel(performanceTest);
@@ -22,9 +33,14 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
   let currentCookies = Array.isArray(options.cookieJar) ? cloneJson(options.cookieJar) : [];
   let nextIteration = 0;
   let activeRequests = 0;
+  let maxActiveRequests = 0;
   const endsAtMillis = plan.durationMillis > 0 ? startedMillis + plan.durationMillis : 0;
+  const diagnosisContext = normalized.type === DIAGNOSIS_TYPE ? createDiagnosisRunContext(normalized) : null;
+  const eventLoopMonitor = diagnosisContext ? monitorEventLoopDelay({ resolution: 20 }) : null;
+  const memoryStarted = diagnosisContext ? process.memoryUsage().heapUsed : 0;
+  eventLoopMonitor?.enable();
 
-  for (const stage of plan.stages) {
+  for (const [stageIndex, stage] of plan.stages.entries()) {
     if (options.signal?.aborted === true || (endsAtMillis > 0 && Date.now() >= endsAtMillis)) {
       break;
     }
@@ -45,10 +61,17 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
         }
         const iteration = nextIteration;
         nextIteration += 1;
+        const scheduledAtMillis = Date.now();
         activeRequests += 1;
+        maxActiveRequests = Math.max(maxActiveRequests, activeRequests);
         const sample = await executeIteration(normalized, currentEnvironment, currentCookies, iteration, {
           ...options,
+          diagnosisContext,
           iterationData: useCsvVariables ? (iterationRows[iteration] || []) : (options.iterationData || [])
+        }, {
+          stage,
+          stageIndex: stageIndex + 1,
+          scheduledAtMillis
         });
         activeRequests -= 1;
         samples.push(sample.publicSample);
@@ -62,6 +85,9 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
           completedRequests: samples.length,
           totalRequests: plan.totalRequests,
           activeRequests,
+          phase: stage.phase || stage.name,
+          stageIndex: stageIndex + 1,
+          stageCount: plan.stages.length,
           requestId: normalized.request.id,
           requestName: normalized.request.name,
           passed: sample.publicSample.passed === true,
@@ -73,6 +99,22 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
   }
   const completedAt = new Date().toISOString();
   const summary = summarizeSamples(samples, Date.now() - startedMillis);
+  if (diagnosisContext) {
+    eventLoopMonitor?.disable();
+    summary.diagnosis = summarizeEndpointDiagnosis(samples, {
+      cancelled: options.signal?.aborted === true,
+      config: normalized.config,
+      csvVariablesEnabled: useCsvVariables,
+      eventLoopDelayMillis: eventLoopMonitor ? Math.round(eventLoopMonitor.percentile(95) / 1000000) : 0,
+      maxActiveRequests,
+      maxConcurrency: plan.concurrency,
+      memoryDeltaBytes: Math.max(0, process.memoryUsage().heapUsed - memoryStarted),
+      plannedRequests: plan.totalRequests,
+      request: normalized.request,
+      safetyLimited: samples.length < plan.totalRequests,
+      safetyLimits: normalized.safetyLimits
+    });
+  }
   const failedRequests = samples.filter((sample) => sample.passed !== true).length;
   const result = {
     id: cryptoRandomId(),
@@ -100,24 +142,29 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
   if (normalized.allowEnvironmentMutation === true) {
     result.mutatedEnvironment = currentEnvironment;
   }
+  diagnosisContext?.destroy?.();
   return result;
 }
 
-async function executeIteration(performanceTest, environment, cookies, iteration, options) {
+async function executeIteration(performanceTest, environment, cookies, iteration, options, execution = {}) {
   const startedAt = new Date().toISOString();
+  const stage = execution.stage || {};
+  const request = requestForPerformanceStage(performanceTest.request, stage);
   const runner = {
     id: `${performanceTest.id}:iteration:${iteration + 1}`,
     name: performanceTest.name,
     environmentId: performanceTest.environmentId,
     allowEnvironmentMutation: performanceTest.allowEnvironmentMutation,
     stopOnFailure: false,
-    requests: [cloneJson(performanceTest.request)]
+    requests: [request]
   };
   try {
     const result = await runRunner(runner, cloneJson(environment), {
       ...runnerOptions(options),
       allowEnvironmentMutation: performanceTest.allowEnvironmentMutation,
       cookieJar: cloneJson(cookies),
+      includeTransportDiagnostics: performanceTest.type === DIAGNOSIS_TYPE,
+      sendRequest: diagnosticSendRequestForStage(options, stage),
       signal: options.signal
     });
     const requestResult = result.results?.[0] || {};
@@ -132,10 +179,18 @@ async function executeIteration(performanceTest, environment, cookies, iteration
         requestDisplayName: requestResult.requestDisplayName || performanceTest.request.name,
         requestMethod: requestResult.requestMethod || performanceTest.request.method || '',
         requestUrl: requestResult.requestUrl || performanceTest.request.url || '',
+        finalUrl: requestResult.finalUrl || requestResult.requestUrl || '',
+        phase: stage.phase || stage.name || performanceTest.type,
+        stageName: stage.name || performanceTest.type,
+        stageIndex: execution.stageIndex || 0,
+        stageConcurrency: stage.concurrency || 1,
         statusCode: Number(requestResult.statusCode || 0),
         durationMillis: Number(requestResult.durationMillis || 0),
+        schedulerLagMillis: Math.max(0, Date.now() - Number(execution.scheduledAtMillis || Date.now())),
         responseBody: requestResult.responseBody || '',
         responseBytes: Number(requestResult.responseBytes || 0),
+        responseHeaders: requestResult.responseHeaders || {},
+        timings: requestResult.timings || {},
         passed: requestResult.passed === true,
         error: requestResult.error || '',
         preRequestScriptResult: requestResult.preRequestScriptResult,
@@ -155,10 +210,18 @@ async function executeIteration(performanceTest, environment, cookies, iteration
         requestDisplayName: performanceTest.request.name,
         requestMethod: performanceTest.request.method || '',
         requestUrl: performanceTest.request.url || '',
+        finalUrl: '',
+        phase: stage.phase || stage.name || performanceTest.type,
+        stageName: stage.name || performanceTest.type,
+        stageIndex: execution.stageIndex || 0,
+        stageConcurrency: stage.concurrency || 1,
         statusCode: 0,
         durationMillis: 0,
+        schedulerLagMillis: Math.max(0, Date.now() - Number(execution.scheduledAtMillis || Date.now())),
         responseBody: '',
         responseBytes: 0,
+        responseHeaders: {},
+        timings: {},
         passed: false,
         error: error.message || String(error),
         preRequestScriptResult: undefined,
@@ -172,16 +235,84 @@ async function executeIteration(performanceTest, environment, cookies, iteration
 function runnerOptions(options) {
   const {
     abortController,
+    diagnosisContext,
     onProgress,
     ...rest
   } = options || {};
   return rest;
 }
 
+function requestForPerformanceStage(request, stage = {}) {
+  const nextRequest = cloneJson(request) || {};
+  if (stage.methodOverride) {
+    nextRequest.method = stage.methodOverride;
+    nextRequest.bodyType = 'NONE';
+    nextRequest.body = '';
+    nextRequest.postmanBody = {};
+    nextRequest.graphql = {};
+  }
+  return nextRequest;
+}
+
+function diagnosticSendRequestForStage(options = {}, stage = {}) {
+  const context = options.diagnosisContext;
+  if (!context) {
+    return options.sendRequest;
+  }
+  const baseSendRequest = options.sendRequest || sendRequest;
+  return async (request, environment, sendOptions = {}) => {
+    const agent = stage.coldConnection === true ? false : context.agentFor(request, environment);
+    return baseSendRequest(request, environment, {
+      ...sendOptions,
+      collectTimings: true,
+      forceNode: true,
+      agent
+    });
+  };
+}
+
+function createDiagnosisRunContext(performanceTest) {
+  const httpAgent = new http.Agent({
+    keepAlive: true,
+    maxSockets: Math.max(1, integerAtLeast(performanceTest.safetyLimits?.maxConcurrency, 1, 10)),
+    maxFreeSockets: 16
+  });
+  const httpsAgent = new https.Agent({
+    keepAlive: true,
+    maxSockets: Math.max(1, integerAtLeast(performanceTest.safetyLimits?.maxConcurrency, 1, 10)),
+    maxFreeSockets: 16
+  });
+  return {
+    agentFor(request, environment) {
+      try {
+        const url = buildUrl(request, environment);
+        return url.protocol === 'https:' ? httpsAgent : httpAgent;
+      } catch {
+        return httpAgent;
+      }
+    },
+    destroy() {
+      httpAgent.destroy();
+      httpsAgent.destroy();
+    }
+  };
+}
+
 function createPerformancePlan(performanceTest) {
   const type = performanceTest.type || 'latency';
   const config = performanceTest.config || {};
   const safetyLimits = performanceTest.safetyLimits || {};
+  if (type === DIAGNOSIS_TYPE) {
+    const stages = buildDiagnosisStages(config, safetyLimits);
+    const totalRequests = stages.reduce((total, stage) => total + stage.totalRequests, 0);
+    const maxDurationSeconds = integerAtLeast(safetyLimits.maxDurationSeconds, 0, 0);
+    return {
+      totalRequests,
+      concurrency: Math.min(totalRequests, diagnosisEffectiveConcurrency(config, safetyLimits)),
+      durationMillis: maxDurationSeconds > 0 ? maxDurationSeconds * 1000 : 0,
+      stages
+    };
+  }
   const totalRequests = Math.min(
     plannedRequestCount(type, config, safetyLimits),
     integerAtLeast(safetyLimits.maxTotalRequests, 1, 1)
@@ -204,6 +335,9 @@ function createPerformancePlan(performanceTest) {
 }
 
 function buildPerformanceStages(type, config, plan) {
+  if (type === DIAGNOSIS_TYPE) {
+    return buildDiagnosisStages(config, { maxTotalRequests: plan.totalRequests, maxConcurrency: plan.maxConcurrency });
+  }
   if (type === 'stress' || type === 'ramp') {
     return buildSteppedStages(config, plan);
   }
@@ -236,6 +370,9 @@ function buildSteppedStages(config, plan) {
 }
 
 function plannedRequestCount(type, config, safetyLimits) {
+  if (type === DIAGNOSIS_TYPE) {
+    return diagnosisPlannedRequestCount(config, safetyLimits);
+  }
   if (type === 'soak') {
     return integerAtLeast(safetyLimits.maxTotalRequests, 1, 1);
   }
@@ -249,6 +386,9 @@ function plannedRequestCount(type, config, safetyLimits) {
 }
 
 function plannedConcurrency(type, config) {
+  if (type === DIAGNOSIS_TYPE) {
+    return diagnosisEffectiveConcurrency(config, { maxConcurrency: 25 });
+  }
   if (type === 'latency') {
     return 1;
   }

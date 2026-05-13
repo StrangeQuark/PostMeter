@@ -735,6 +735,7 @@
               <button id="deletePerformanceTestButton" class="danger-button" type="button">Delete Performance Test</button>
               <button id="importPerformanceRequestButton" type="button">Import Request</button>
               <button id="exportPerformanceTestButton" type="button">Export Test</button>
+              <button id="exportPerformanceResultCsvButton" type="button">Export Result CSV</button>
             </div>
           </div>
           <div class="performance-request-editor">
@@ -1058,7 +1059,8 @@
         <div id="performanceSettingsResize" class="splitter horizontal performance-settings-resize" role="separator" aria-orientation="horizontal" tabindex="0"></div>
         <div id="performanceEditorSection" class="performance-editor-section">
           <div class="tabs performance-type-tabs" role="tablist" aria-label="Performance test types" data-tab-group="performance">
-            <button id="performanceLatencyTabButton" class="tab active" type="button" role="tab" data-tab-group="performance" data-tab="latency" aria-selected="true" aria-controls="latencyTab">Latency</button>
+            <button id="performanceDiagnosisTabButton" class="tab active" type="button" role="tab" data-tab-group="performance" data-tab="diagnosis" aria-selected="true" aria-controls="diagnosisTab">Full Endpoint Diagnosis</button>
+            <button id="performanceLatencyTabButton" class="tab" type="button" role="tab" data-tab-group="performance" data-tab="latency" aria-selected="false" aria-controls="latencyTab">Latency</button>
             <button id="performanceThroughputTabButton" class="tab" type="button" role="tab" data-tab-group="performance" data-tab="throughput" aria-selected="false" aria-controls="throughputTab">RPS / Throughput</button>
             <button id="performanceConcurrencyTabButton" class="tab" type="button" role="tab" data-tab-group="performance" data-tab="concurrency" aria-selected="false" aria-controls="concurrencyTab">Concurrency</button>
             <button id="performanceStressTabButton" class="tab" type="button" role="tab" data-tab-group="performance" data-tab="stress" aria-selected="false" aria-controls="stressTab">Stress</button>
@@ -1066,7 +1068,20 @@
             <button id="performanceSoakTabButton" class="tab" type="button" role="tab" data-tab-group="performance" data-tab="soak" aria-selected="false" aria-controls="soakTab">Soak</button>
             <button id="performanceRampTabButton" class="tab" type="button" role="tab" data-tab-group="performance" data-tab="ramp" aria-selected="false" aria-controls="rampTab">Ramp</button>
           </div>
-          <div id="latencyTab" class="tab-panel performance-type-panel active" role="tabpanel" aria-labelledby="performanceLatencyTabButton">
+          <div id="diagnosisTab" class="tab-panel performance-type-panel active" role="tabpanel" aria-labelledby="performanceDiagnosisTabButton">
+            <div class="performance-type-grid">
+              <label class="field compact-number-field"><span>Scope</span><select data-performance-config="diagnosisScope">
+                <option value="quick">Quick Test</option>
+                <option value="medium">Medium Test</option>
+                <option value="extended">Extended Test</option>
+              </select></label>
+              <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
+              <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
+              <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
+              <label class="checkbox-line performance-mutation-option"><input data-performance-mutation type="checkbox"><span>Allow performance test to modify environment</span></label>
+            </div>
+          </div>
+          <div id="latencyTab" class="tab-panel performance-type-panel" role="tabpanel" aria-labelledby="performanceLatencyTabButton">
             <div class="performance-type-grid">
               <label class="field compact-number-field"><span>Samples</span><input data-performance-config="iterations" type="number" min="1" max="1000" step="1"></label>
               <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>

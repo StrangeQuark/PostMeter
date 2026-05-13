@@ -261,6 +261,7 @@ async function runCollection(collection, environment, options = {}) {
         durationMillis: response.durationMillis,
         responseBody: boundedRunResultResponseBody(response.body),
         responseBytes: response.responseBytes || Buffer.byteLength(response.body || '', 'utf8'),
+        ...transportDiagnosticFields(response, options),
         passed,
         preRequestScriptResult: scriptedRequest.preRequestScriptResult,
         messageScriptResults: scriptedRequest.messageScriptResults || [],
@@ -325,6 +326,17 @@ async function runCollection(collection, environment, options = {}) {
   };
   attachInternalAuthUpdates(result, refreshedAuthByRequestId);
   return result;
+}
+
+function transportDiagnosticFields(response = {}, options = {}) {
+  if (options.includeTransportDiagnostics !== true) {
+    return {};
+  }
+  return {
+    finalUrl: response.finalUrl || response.url || '',
+    responseHeaders: response.headers || {},
+    timings: response.timings || {}
+  };
 }
 
 async function runRunner(runner, environment, options = {}) {

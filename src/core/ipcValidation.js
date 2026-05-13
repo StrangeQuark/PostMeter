@@ -9,6 +9,12 @@ const {
   normalizePerformanceConfig,
   normalizePerformanceSafetyLimits
 } = require('./models');
+const {
+  DIAGNOSIS_TYPE,
+  diagnosisEffectiveConcurrency,
+  diagnosisPlannedRequestCount,
+  normalizeDiagnosisScope
+} = require('./performanceDiagnosis');
 const { MAX_OPEN_TABS } = require('./sessionState');
 
 const FIELD_ENUMS = payloadSchemas.enums;
@@ -271,6 +277,13 @@ function assertPerformanceConfigPayload(value, field = 'config') {
   for (const name of ['iterations', 'startConcurrency', 'concurrency', 'durationSeconds', 'rampSteps', 'spikeMultiplier']) {
     assertOptionalInteger(value?.[name], `${field}.${name}`, name === 'durationSeconds' ? 0 : 1);
   }
+  if (value?.diagnosisScope != null) {
+    const scope = String(value.diagnosisScope).trim().toLowerCase();
+    optionalString(value.diagnosisScope, `${field}.diagnosisScope`, LIMITS.tiny);
+    if (normalizeDiagnosisScope(scope) !== scope) {
+      fail(`${field}.diagnosisScope must be one of: quick, medium, extended.`);
+    }
+  }
 }
 
 function assertPerformanceSafetyLimitsPayload(value, field = 'safetyLimits') {
@@ -315,7 +328,7 @@ function assertPerformanceResultsMetadataPayload(value, field = 'resultsMetadata
 }
 
 function assertPerformanceSafety(value, field = 'performanceTest') {
-  const type = normalizeSchemaEnumValue('performanceTestTypes', value?.type, 'latency', { trim: true });
+  const type = normalizeSchemaEnumValue('performanceTestTypes', value?.type, DIAGNOSIS_TYPE, { trim: true });
   const rawConfig = value?.config && typeof value.config === 'object' && !Array.isArray(value.config) ? value.config : {};
   const rawSafetyLimits = value?.safetyLimits && typeof value.safetyLimits === 'object' && !Array.isArray(value.safetyLimits) ? value.safetyLimits : {};
   assertPerformanceMaximum(rawSafetyLimits.maxTotalRequests, `${field}.safetyLimits.maxTotalRequests`, HARD_PERFORMANCE_LIMITS.maxTotalRequests);
@@ -342,14 +355,14 @@ function assertPerformanceSafety(value, field = 'performanceTest') {
     fail(`${field}.config.startConcurrency cannot exceed config.concurrency.`);
   }
   const plannedRequests = performancePlannedRequests(type, config, safetyLimits);
-  const effectiveConcurrency = performanceEffectiveConcurrency(type, config);
+  const effectiveConcurrency = performanceEffectiveConcurrency(type, config, safetyLimits);
   if (type === 'concurrency' && plannedRequests > safetyLimits.maxTotalRequests) {
     fail(`${field}.config.iterations multiplied by config.concurrency exceeds safetyLimits.maxTotalRequests.`);
   }
   if ((type === 'stress' || type === 'ramp') && plannedRequests > safetyLimits.maxTotalRequests) {
     fail(`${field}.config.iterations multiplied by config.rampSteps exceeds safetyLimits.maxTotalRequests.`);
   }
-  if (!['concurrency', 'stress', 'ramp', 'soak'].includes(type) && config.iterations > safetyLimits.maxTotalRequests) {
+  if (!['diagnosis', 'concurrency', 'stress', 'ramp', 'soak'].includes(type) && config.iterations > safetyLimits.maxTotalRequests) {
     fail(`${field}.config.iterations exceeds safetyLimits.maxTotalRequests.`);
   }
   if (effectiveConcurrency > safetyLimits.maxConcurrency) {
@@ -371,6 +384,9 @@ function assertPerformanceMaximum(value, field, max) {
 }
 
 function performancePlannedRequests(type, config, safetyLimits) {
+  if (type === DIAGNOSIS_TYPE) {
+    return diagnosisPlannedRequestCount(config, safetyLimits);
+  }
   if (type === 'soak') {
     return safetyLimits.maxTotalRequests;
   }
@@ -383,7 +399,10 @@ function performancePlannedRequests(type, config, safetyLimits) {
   return config.iterations;
 }
 
-function performanceEffectiveConcurrency(type, config) {
+function performanceEffectiveConcurrency(type, config, safetyLimits = {}) {
+  if (type === DIAGNOSIS_TYPE) {
+    return diagnosisEffectiveConcurrency(config, safetyLimits);
+  }
   if (type === 'latency') {
     return 1;
   }
@@ -1074,9 +1093,11 @@ function assertPerformanceSamplePayload(value, field) {
   object(value, field);
   assertAllowedObjectFields(value, field, [
     'error',
+    'finalUrl',
     'iteration',
     'localVariables',
     'passed',
+    'phase',
     'preRequestScriptResult',
     'requestId',
     'requestDisplayName',
@@ -1085,10 +1106,16 @@ function assertPerformanceSamplePayload(value, field) {
     'requestUrl',
     'responseBody',
     'responseBytes',
+    'responseHeaders',
+    'schedulerLagMillis',
     'startedAt',
+    'stageConcurrency',
+    'stageIndex',
+    'stageName',
     'statusCode',
     'durationMillis',
-    'testScriptResult'
+    'testScriptResult',
+    'timings'
   ]);
   optionalNumber(value.iteration, `${field}.iteration`);
   optionalString(value.startedAt, `${field}.startedAt`, LIMITS.name);
@@ -1097,10 +1124,18 @@ function assertPerformanceSamplePayload(value, field) {
   optionalString(value.requestDisplayName, `${field}.requestDisplayName`, LIMITS.name);
   optionalString(value.requestMethod, `${field}.requestMethod`, LIMITS.short);
   optionalString(value.requestUrl, `${field}.requestUrl`, LIMITS.url);
+  optionalString(value.finalUrl, `${field}.finalUrl`, LIMITS.url);
+  optionalString(value.phase, `${field}.phase`, LIMITS.short);
+  optionalString(value.stageName, `${field}.stageName`, LIMITS.short);
+  optionalNumber(value.stageIndex, `${field}.stageIndex`);
+  optionalNumber(value.stageConcurrency, `${field}.stageConcurrency`);
   optionalNumber(value.statusCode, `${field}.statusCode`);
   optionalNumber(value.durationMillis, `${field}.durationMillis`);
+  optionalNumber(value.schedulerLagMillis, `${field}.schedulerLagMillis`);
   optionalString(value.responseBody, `${field}.responseBody`, LIMITS.value);
   optionalNumber(value.responseBytes, `${field}.responseBytes`);
+  optionalJsonObject(value.responseHeaders, `${field}.responseHeaders`, LIMITS.body);
+  optionalJsonObject(value.timings, `${field}.timings`, LIMITS.body);
   optionalBoolean(value.passed, `${field}.passed`);
   optionalString(value.error, `${field}.error`, LIMITS.value);
   if (value.preRequestScriptResult != null) {

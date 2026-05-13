@@ -101,6 +101,7 @@ function validateRequest(request, environment) {
 }
 
 async function sendRequest(request, environment, options = {}) {
+  const requestStarted = performance.now();
   const prepared = await prepareRequestForSend(request, environment, options);
   const requestForSend = prepared.request;
   const validationErrors = validateRequest(requestForSend, environment);
@@ -158,7 +159,9 @@ async function sendRequest(request, environment, options = {}) {
   const tlsOptions = await loadClientCertificateOptions(requestForSend.auth, environment, url, options.clientCertificates || []);
   const proxyOptions = normalizeProxyConfig(requestForSend.proxy, environment);
   const response = await sendWithAuthRetries(requestForSend, environment, url, fetchOptions, {
+    agent: options.agent,
     body: body || '',
+    collectTimings: options.collectTimings,
     forceNode: options.forceNode,
     now: options.now,
     proxyOptions,
@@ -182,6 +185,13 @@ async function sendRequest(request, environment, options = {}) {
   }
   if (prepared.updatedAuth) {
     result.updatedAuth = prepared.updatedAuth;
+  }
+  if (options.collectTimings === true || response.timings) {
+    result.timings = {
+      ...(response.timings || {}),
+      requestPreparationMillis: Math.max(0, Math.round((response.timings?.transportStartedAt || performance.now()) - requestStarted))
+    };
+    delete result.timings.transportStartedAt;
   }
   return result;
 }
@@ -244,6 +254,7 @@ async function sendWithTransport(url, fetchOptions, options = {}) {
   if (options.forceNode || options.tlsOptions || options.proxyOptions) {
     return sendNodeRequest(url, fetchOptions, options.tlsOptions, 0, url.origin, {
       agent: options.agent,
+      collectTimings: options.collectTimings,
       cookieJarState: options.cookieJarState,
       proxyOptions: options.proxyOptions
     });
@@ -488,7 +499,9 @@ async function readCertificateFile(filePath, label) {
 }
 
 async function sendNodeRequest(url, requestOptions, tlsOptions, redirectCount = 0, originalOrigin = url.origin, options = {}) {
-  const response = await sendSingleNodeRequest(url, requestOptions, tlsOptions, options.proxyOptions, options.agent);
+  const response = await sendSingleNodeRequest(url, requestOptions, tlsOptions, options.proxyOptions, options.agent, {
+    collectTimings: options.collectTimings
+  });
   recordResponseCookies(response, url.toString(), options.cookieJarState);
   const location = response.headers.location?.[0];
   if (requestOptions.redirect === 'manual' || !REDIRECT_STATUS_CODES.has(response.statusCode) || !location) {
@@ -526,18 +539,25 @@ async function sendNodeRequest(url, requestOptions, tlsOptions, redirectCount = 
   applyCookieJarStateHeader(nextOptions.headers, redirectUrl, options.cookieJarState, {
     includeExplicit: includeExplicitCookies
   });
-  return sendNodeRequest(redirectUrl, nextOptions, tlsOptions, redirectCount + 1, originalOrigin, {
+  const redirected = await sendNodeRequest(redirectUrl, nextOptions, tlsOptions, redirectCount + 1, originalOrigin, {
     ...options,
     includeExplicitCookies
   });
+  redirected.timings = combineRedirectTimings(response, redirected, {
+    from: url.toString(),
+    statusCode: response.statusCode || 0,
+    to: redirectUrl.toString()
+  });
+  return redirected;
 }
 
-function sendSingleNodeRequest(url, requestOptions, tlsOptions, proxyOptions = null, agent = null) {
+function sendSingleNodeRequest(url, requestOptions, tlsOptions, proxyOptions = null, agent = null, options = {}) {
   if (proxyOptions) {
-    return sendSingleNodeRequestViaProxy(url, requestOptions, tlsOptions, proxyOptions);
+    return sendSingleNodeRequestViaProxy(url, requestOptions, tlsOptions, proxyOptions, options);
   }
   return new Promise((resolve, reject) => {
     const transport = url.protocol === 'https:' ? https : http;
+    const timings = options.collectTimings ? createNodeRequestTimings(url) : null;
     const nodeOptions = {
       protocol: url.protocol,
       hostname: url.hostname,
@@ -549,22 +569,30 @@ function sendSingleNodeRequest(url, requestOptions, tlsOptions, proxyOptions = n
       signal: requestOptions.signal,
       ...(url.protocol === 'https:' ? tlsOptions : {})
     };
-    const request = transport.request(nodeOptions, (response) => collectNodeResponse(response, url.toString(), resolve, reject));
+    const request = transport.request(nodeOptions, (response) => collectNodeResponse(response, url.toString(), resolve, reject, timings));
 
+    attachNodeRequestTimingListeners(request, timings);
     request.on('error', reject);
+    const uploadStartedAt = performance.now();
     if (requestOptions.body != null) {
       request.write(requestOptions.body);
+    }
+    if (timings) {
+      request.once('finish', () => {
+        timings.uploadMillis = elapsedSince(uploadStartedAt);
+      });
     }
     request.end();
   });
 }
 
-function sendSingleNodeRequestViaProxy(url, requestOptions, tlsOptions, proxyOptions) {
+function sendSingleNodeRequestViaProxy(url, requestOptions, tlsOptions, proxyOptions, options = {}) {
   if (url.protocol === 'https:' || proxyOptions.tunnel === true) {
-    return sendSingleNodeRequestViaProxyTunnel(url, requestOptions, tlsOptions, proxyOptions);
+    return sendSingleNodeRequestViaProxyTunnel(url, requestOptions, tlsOptions, proxyOptions, options);
   }
   return new Promise((resolve, reject) => {
     const transport = proxyOptions.protocol === 'https:' ? https : http;
+    const timings = options.collectTimings ? createNodeRequestTimings(url, { proxy: true }) : null;
     const headers = {
       ...requestOptions.headers,
       Host: hostHeaderForUrl(url)
@@ -579,19 +607,27 @@ function sendSingleNodeRequestViaProxy(url, requestOptions, tlsOptions, proxyOpt
       headers,
       signal: requestOptions.signal
     };
-    const request = transport.request(nodeOptions, (response) => collectNodeResponse(response, url.toString(), resolve, reject));
+    const request = transport.request(nodeOptions, (response) => collectNodeResponse(response, url.toString(), resolve, reject, timings));
+    attachNodeRequestTimingListeners(request, timings);
     request.on('error', reject);
+    const uploadStartedAt = performance.now();
     if (requestOptions.body != null) {
       request.write(requestOptions.body);
+    }
+    if (timings) {
+      request.once('finish', () => {
+        timings.uploadMillis = elapsedSince(uploadStartedAt);
+      });
     }
     request.end();
   });
 }
 
-async function sendSingleNodeRequestViaProxyTunnel(url, requestOptions, tlsOptions, proxyOptions) {
+async function sendSingleNodeRequestViaProxyTunnel(url, requestOptions, tlsOptions, proxyOptions, options = {}) {
   const tunnelSocket = await openProxyTunnel(url, requestOptions.signal, proxyOptions);
   return new Promise((resolve, reject) => {
     const transport = url.protocol === 'https:' ? https : http;
+    const timings = options.collectTimings ? createNodeRequestTimings(url, { proxy: true }) : null;
     const nodeOptions = {
       protocol: url.protocol,
       hostname: url.hostname,
@@ -611,15 +647,22 @@ async function sendSingleNodeRequestViaProxyTunnel(url, requestOptions, tlsOptio
         return tunnelSocket;
       }
     };
-    const request = transport.request(nodeOptions, (response) => collectNodeResponse(response, url.toString(), resolve, reject));
+    const request = transport.request(nodeOptions, (response) => collectNodeResponse(response, url.toString(), resolve, reject, timings));
+    attachNodeRequestTimingListeners(request, timings);
     request.on('error', reject);
     request.on('close', () => {
       if (!tunnelSocket.destroyed) {
         tunnelSocket.destroy();
       }
     });
+    const uploadStartedAt = performance.now();
     if (requestOptions.body != null) {
       request.write(requestOptions.body);
+    }
+    if (timings) {
+      request.once('finish', () => {
+        timings.uploadMillis = elapsedSince(uploadStartedAt);
+      });
     }
     request.end();
   });
@@ -656,22 +699,159 @@ function openProxyTunnel(url, signal, proxyOptions) {
   });
 }
 
-function collectNodeResponse(response, finalUrl, resolve, reject) {
+function collectNodeResponse(response, finalUrl, resolve, reject, timings = null) {
   const chunks = [];
+  const responseStarted = performance.now();
+  if (timings) {
+    timings.timeToFirstByteMillis = elapsedSince(timings.transportStartedAt);
+    timings.httpVersion = response.httpVersion || '';
+  }
   response.on('data', (chunk) => chunks.push(chunk));
   response.on('end', () => {
     try {
       const bodyBuffer = Buffer.concat(chunks);
+      if (timings) {
+        timings.downloadMillis = elapsedSince(responseStarted);
+        timings.totalTransportMillis = elapsedSince(timings.transportStartedAt);
+      }
       resolve({
         statusCode: response.statusCode || 0,
         headers: headersToObject(response.headers),
         body: decodedNodeResponseBody(response.headers, bodyBuffer),
-        url: finalUrl
+        url: finalUrl,
+        timings: publicNodeTimings(timings)
       });
     } catch (error) {
       reject(error);
     }
   });
+}
+
+function createNodeRequestTimings(url, options = {}) {
+  return {
+    transportStartedAt: performance.now(),
+    url: url.toString(),
+    protocol: url.protocol,
+    proxy: options.proxy === true,
+    reusedSocket: false,
+    dnsLookupMillis: 0,
+    tcpConnectMillis: 0,
+    tlsHandshakeMillis: 0,
+    uploadMillis: 0,
+    timeToFirstByteMillis: 0,
+    downloadMillis: 0,
+    totalTransportMillis: 0,
+    redirectCount: 0,
+    redirectMillis: 0,
+    redirects: [],
+    httpVersion: '',
+    tls: undefined
+  };
+}
+
+function attachNodeRequestTimingListeners(request, timings) {
+  if (!timings) {
+    return;
+  }
+  request.once('socket', (socket) => {
+    timings.reusedSocket = request.reusedSocket === true;
+    if (request.reusedSocket === true) {
+      timings.dnsLookupMillis = 0;
+      timings.tcpConnectMillis = 0;
+      timings.tlsHandshakeMillis = 0;
+      timings.tls = tlsDiagnostics(socket);
+      return;
+    }
+    const socketStartedAt = performance.now();
+    let connectStartedAt = socketStartedAt;
+    let tlsStartedAt = socketStartedAt;
+    socket.once('lookup', () => {
+      timings.dnsLookupMillis = elapsedSince(socketStartedAt);
+      connectStartedAt = performance.now();
+    });
+    socket.once('connect', () => {
+      timings.tcpConnectMillis = elapsedSince(connectStartedAt);
+      tlsStartedAt = performance.now();
+    });
+    socket.once('secureConnect', () => {
+      timings.tlsHandshakeMillis = elapsedSince(tlsStartedAt);
+      timings.tls = tlsDiagnostics(socket);
+    });
+  });
+}
+
+function tlsDiagnostics(socket) {
+  const certificate = safePeerCertificate(socket);
+  const cipher = typeof socket.getCipher === 'function' ? socket.getCipher() : null;
+  return {
+    authorized: socket.authorized === true,
+    authorizationError: socket.authorizationError || '',
+    protocol: typeof socket.getProtocol === 'function' ? socket.getProtocol() || '' : '',
+    cipher: cipher ? {
+      name: cipher.name || '',
+      standardName: cipher.standardName || '',
+      version: cipher.version || ''
+    } : {},
+    certificate
+  };
+}
+
+function safePeerCertificate(socket) {
+  if (typeof socket.getPeerCertificate !== 'function') {
+    return {};
+  }
+  const certificate = socket.getPeerCertificate(false) || {};
+  return {
+    subject: certificate.subject?.CN || '',
+    issuer: certificate.issuer?.CN || '',
+    subjectaltname: certificate.subjectaltname || '',
+    validFrom: certificate.valid_from || '',
+    validTo: certificate.valid_to || '',
+    fingerprint256: certificate.fingerprint256 || ''
+  };
+}
+
+function publicNodeTimings(timings) {
+  if (!timings) {
+    return undefined;
+  }
+  return {
+    transportStartedAt: timings.transportStartedAt,
+    protocol: timings.protocol,
+    proxy: timings.proxy === true,
+    reusedSocket: timings.reusedSocket === true,
+    dnsLookupMillis: Math.max(0, Math.round(timings.dnsLookupMillis || 0)),
+    tcpConnectMillis: Math.max(0, Math.round(timings.tcpConnectMillis || 0)),
+    tlsHandshakeMillis: Math.max(0, Math.round(timings.tlsHandshakeMillis || 0)),
+    uploadMillis: Math.max(0, Math.round(timings.uploadMillis || 0)),
+    timeToFirstByteMillis: Math.max(0, Math.round(timings.timeToFirstByteMillis || 0)),
+    downloadMillis: Math.max(0, Math.round(timings.downloadMillis || 0)),
+    totalTransportMillis: Math.max(0, Math.round(timings.totalTransportMillis || 0)),
+    redirectCount: Math.max(0, Math.round(timings.redirectCount || 0)),
+    redirectMillis: Math.max(0, Math.round(timings.redirectMillis || 0)),
+    redirects: Array.isArray(timings.redirects) ? timings.redirects.slice(0, MAX_REDIRECTS) : [],
+    httpVersion: timings.httpVersion || '',
+    tls: timings.tls
+  };
+}
+
+function combineRedirectTimings(response, redirected, redirect) {
+  const first = response.timings || {};
+  const next = redirected.timings || {};
+  return {
+    ...next,
+    transportStartedAt: first.transportStartedAt || next.transportStartedAt,
+    redirectCount: Number(next.redirectCount || 0) + 1,
+    redirectMillis: Number(next.redirectMillis || 0) + Number(first.totalTransportMillis || 0),
+    redirects: [
+      redirect,
+      ...(Array.isArray(next.redirects) ? next.redirects : [])
+    ].slice(0, MAX_REDIRECTS)
+  };
+}
+
+function elapsedSince(startedAt) {
+  return Math.max(0, Math.round(performance.now() - startedAt));
 }
 
 function decodedNodeResponseBody(headers, bodyBuffer) {

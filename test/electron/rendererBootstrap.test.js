@@ -747,6 +747,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'runPerformanceTestButton',
     'cancelPerformanceTestButton',
     'exportPerformanceTestButton',
+    'exportPerformanceResultCsvButton',
     'importPerformanceRequestButton',
     'calibratePerformanceButton',
     'closePerformanceCalibrationModalButton',
@@ -818,6 +819,7 @@ test('renderer bootstrap binds performance creation import export run and config
     onDeletePerformanceTest: () => calls.push('delete'),
     onRunPerformanceTest: () => calls.push('run'),
     onCancelPerformanceTest: () => calls.push('cancel'),
+    onExportPerformanceResultCsv: () => calls.push('export-result-csv'),
     onImportPerformanceRequest: () => calls.push('import-request'),
     onAddPerformanceParam: () => calls.push('add-param'),
     onAddPerformanceHeader: () => calls.push('add-header'),
@@ -847,6 +849,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'runPerformanceTestButton',
     'cancelPerformanceTestButton',
     'exportPerformanceTestButton',
+    'exportPerformanceResultCsvButton',
     'importPerformanceRequestButton',
     'addPerformanceParamButton',
     'addPerformanceHeaderButton',
@@ -866,6 +869,7 @@ test('renderer bootstrap binds performance creation import export run and config
   for (const control of [...performanceConfigControls, ...performanceSafetyControls]) {
     control.dispatch('input');
   }
+  performanceConfigControls[0].dispatch('change');
   performanceTab.dispatch('click');
   elements.get('performanceMethodSelect').dispatch('change');
   elements.get('performanceUrlInput').dispatch('input');
@@ -878,7 +882,7 @@ test('renderer bootstrap binds performance creation import export run and config
   elements.get('performanceDocsInput').dispatch('input');
   elements.get('performanceBinaryBodySourceInput').dispatch('input');
 
-  assert.deepEqual(calls.slice(0, 19), [
+  assert.deepEqual(calls.slice(0, 20), [
     'new',
     'new',
     'import-test',
@@ -890,6 +894,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'run',
     'cancel',
     'export-test',
+    'export-result-csv',
     'import-request',
     'add-param',
     'add-header',
@@ -899,7 +904,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'calibrate',
     'close-calibration'
   ]);
-  assert.equal(calls.filter((call) => call === 'config').length, 10);
+  assert.equal(calls.filter((call) => call === 'config').length, 11);
   assert.ok(calls.includes('add-form-data'));
   assert.ok(calls.includes('add-urlencoded'));
   assert.equal(calls.filter((call) => call === 'request').length, 8);

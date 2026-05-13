@@ -184,6 +184,7 @@
     bindClick(doc, 'runPerformanceTestButton', options.onRunPerformanceTest);
     bindClick(doc, 'cancelPerformanceTestButton', options.onCancelPerformanceTest);
     bindClick(doc, 'exportPerformanceTestButton', options.onExportPerformanceTest);
+    bindClick(doc, 'exportPerformanceResultCsvButton', options.onExportPerformanceResultCsv);
     bindClick(doc, 'importPerformanceRequestButton', options.onImportPerformanceRequest);
     bindClick(doc, 'addPerformanceParamButton', options.onAddPerformanceParam);
     bindClick(doc, 'addPerformanceHeaderButton', options.onAddPerformanceHeader);
@@ -219,6 +220,7 @@
     bindAll(doc, '[data-performance-environment]', 'change', options.onPerformanceConfigChange);
     bindAll(doc, '[data-performance-mutation]', 'change', options.onPerformanceConfigChange);
     bindAll(doc, '[data-performance-config]', 'input', options.onPerformanceConfigChange);
+    bindAll(doc, '[data-performance-config]', 'change', options.onPerformanceConfigChange);
     bindAll(doc, '[data-performance-safety]', 'input', options.onPerformanceConfigChange);
     bindChange(doc, 'performanceMethodSelect', options.onPerformanceMethodChange || options.onPerformanceRequestChange);
     bindInput(doc, 'performanceUrlInput', options.onPerformanceUrlInput || options.onPerformanceRequestChange);

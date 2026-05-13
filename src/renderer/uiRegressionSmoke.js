@@ -3469,6 +3469,7 @@
       assertUiSmoke(performanceTest.request.variables.some((pair) => pair.key === 'perfLocal'), 'Performance request Variables tab should update the performance request copy.');
       $('performanceRequestParamsTabButton').click();
       for (const [tabId, type, label] of [
+        ['performanceDiagnosisTabButton', 'diagnosis', 'Full Endpoint Diagnosis'],
         ['performanceLatencyTabButton', 'latency', 'Latency'],
         ['performanceThroughputTabButton', 'throughput', 'RPS / Throughput'],
         ['performanceConcurrencyTabButton', 'concurrency', 'Concurrency'],

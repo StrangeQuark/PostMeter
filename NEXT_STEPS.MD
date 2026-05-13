@@ -52,7 +52,8 @@ PostMeter must remain a standalone local desktop application. Do not add PostMet
 - Implemented the local Performance section.
   - `Performance` now lives between `Runners` and `History`, persists workspace-owned `workspace.performanceTests` under the current schema, and uses dirty-aware tabs, session restore, close/force-close behavior, and the 128-tab cap.
   - Users can create Performance tests from `New` or the empty Performance pane, import/export native Performance test files, import deep-copied collection requests, manually enter request details, choose an environment, configure safety limits, run/cancel tests, and review bounded result summaries.
-  - The seven V1 local types are `Latency`, `RPS / throughput`, `Concurrency`, `Stress`, `Spike`, `Soak`, and `Ramp`.
+  - The eight V1 local types are `Full Endpoint Diagnosis`, `Latency`, `RPS / throughput`, `Concurrency`, `Stress`, `Spike`, `Soak`, and `Ramp`.
+  - `Full Endpoint Diagnosis` is the first one-click type, supports Quick/Medium/Extended scopes for deeper UAT evidence, and records transport timing, endpoint behavior, passive security/configuration signals, local-client confidence, diagnostic phases, and UAT-ready CSV rows.
   - Tests cover model normalization, import/export validation, request-copy isolation, environment copy-vs-mutate behavior, safety-cap rejection, cancellation, IPC progress/mutation behavior, renderer wiring, sidebar ordering, and tab-limit behavior.
 - Implemented GraphQL body editing and execution.
   - Request, runner-owned request, and Performance request editors now expose a GraphQL body mode with query, variables, and operation-name fields.
@@ -130,7 +131,7 @@ These are production-readiness items that cannot be fully proven by local Linux 
 - IPC validation uses shared schema metadata for common fields, update/external payloads, file-operation results, OAuth progress, runner config/progress, and result payloads, but some complex validators are still partly handwritten rather than fully generated.
 - Signing/notarization remains incomplete; unsigned GitHub Release artifact publishing is configured.
 - In-app update checks can open GitHub Releases, but PostMeter does not yet auto-download or auto-install updates.
-- The legacy Load Test implementation is removed; the seven-type local V1 Performance model is implemented and should continue receiving result-presentation and real-world workload hardening.
+- The legacy Load Test implementation is removed; the eight-type local V1 Performance model is implemented with scoped Full Endpoint Diagnosis profiles and should continue receiving result-presentation and real-world workload hardening.
 
 ## Next Iteration Starting Point
 

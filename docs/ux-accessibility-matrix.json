@@ -249,7 +249,7 @@
     {
       "id": "workflow.performance",
       "area": "Performance",
-      "target": "The Performance section exposes local workspace-owned saved tests in the sidebar between Runners and History, empty-pane creation, New > Performance Test creation, import-request and manual request-entry paths, seven local modes with type-scoped input fields, dirty performance tabs, save/discard semantics, type-specific safety-cap rejection, cancellation, target-rate cancellable local calibration with phase progress, bounded probe-and-verification stages, local latency-knee rejection, and local result panes without claiming distributed/cloud execution.",
+      "target": "The Performance section exposes local workspace-owned saved tests in the sidebar between Runners and History, empty-pane creation, New > Performance Test creation, import-request and manual request-entry paths, eight local modes with type-scoped input fields including one-click Full Endpoint Diagnosis with Quick/Medium/Extended scopes, dirty performance tabs, save/discard semantics, type-specific safety-cap rejection, cancellation, target-rate cancellable local calibration with phase progress, bounded probe-and-verification stages, local latency-knee rejection, UAT-ready diagnostic CSV export, and local result panes without claiming distributed/cloud execution.",
       "status": "implemented",
       "evidenceRefs": [
         "src/renderer/index.html",

@@ -88,5 +88,59 @@ test('exports performance result summaries to CSV', () => {
 
   assert.match(csv, /performanceTestName,Latency/);
   assert.match(csv, /requestsPerSecond,1/);
-  assert.match(csv, /iteration,requestId,requestName/);
+  assert.match(csv, /iteration,phase,stageName,stageConcurrency,requestId,requestName/);
+});
+
+test('exports diagnosis checks and phases to CSV for UAT review', () => {
+  const csv = performanceResultToCsv({
+    id: 'result-diagnosis',
+    performanceTestId: 'perf-diagnosis',
+    performanceTestName: 'Endpoint Diagnosis',
+    type: 'diagnosis',
+    environmentId: 'none',
+    environmentMutationAllowed: false,
+    totalRequests: 1,
+    completedRequests: 1,
+    successfulRequests: 1,
+    failedRequests: 0,
+    passed: true,
+    cancelled: false,
+    startedAt: '2026-05-06T00:00:00.000Z',
+    completedAt: '2026-05-06T00:00:01.000Z',
+    durationMillis: 1000,
+    summary: {
+      requestsPerSecond: 1,
+      averageDurationMillis: 25,
+      p95DurationMillis: 25,
+      diagnosis: {
+        confidence: 'high',
+        confidenceScore: 95,
+        bestObservedRequestsPerSecond: 20,
+        stableRequestsPerSecond: 18,
+        saturationPoint: '5 users',
+        checks: [{
+          group: 'Transport',
+          label: 'DNS lookup time',
+          status: 'pass',
+          value: '1 ms',
+          details: ''
+        }],
+        phases: [{
+          phase: 'baseline-latency',
+          requests: 1,
+          concurrency: 1,
+          successfulResponses: 1,
+          failedResponses: 0,
+          averageDurationMillis: 25,
+          p95DurationMillis: 25,
+          requestsPerSecond: 1
+        }]
+      }
+    },
+    samples: []
+  });
+
+  assert.match(csv, /diagnosticGroup,diagnostic,status,value,details/);
+  assert.match(csv, /Transport,DNS lookup time,pass,1 ms/);
+  assert.match(csv, /phase,requests,concurrency,successfulResponses/);
 });

@@ -10,7 +10,7 @@ PostMeter is a local-first desktop API client for building, sending, and testing
 - Run pre-request scripts, test scripts, and workspace-owned runners.
 - Use first-class desktop runners or the CI-friendly CLI runner.
 - Work with OAuth 2.0, HTTPS client certificates, cookies, and GitHub Releases update checks.
-- Save and run local Performance tests for latency, throughput, concurrency, stress, spike, soak, and ramp checks.
+- Save and run local Performance tests for full endpoint diagnosis, latency, throughput, concurrency, stress, spike, soak, and ramp checks.
 
 ## Quick Start
 
@@ -51,7 +51,9 @@ Runners let you save and replay a sequence of requests from the desktop app. The
 
 ## Performance
 
-Performance tests are saved workspace items for checking how an endpoint behaves under local load. You can create a test from scratch or import a copy of a request from Collections, choose an environment, pick the performance mode that matches the question you are asking, run a local-machine calibration to estimate maximum sustained local RPS and a conservative planning cap, run the test, and review status-code, error, latency, and request-rate summaries.
+Performance tests are saved workspace items for checking how an endpoint behaves under local load. You can create a test from scratch or import a copy of a request from Collections, choose an environment, pick the performance mode that matches the question you are asking, run a local-machine calibration to estimate maximum sustained local RPS and a conservative planning cap, run the test, and review status-code, error, latency, request-rate, and endpoint-diagnosis summaries.
+
+The first mode, Full Endpoint Diagnosis, is a one-click local report for an endpoint. It offers Quick, Medium, and Extended scopes that automatically choose the request budget and raise the duration cap for deeper UAT evidence, then runs bounded preflight, HEAD/OPTIONS probe, warmup, baseline, throughput, spike, mini-soak, and recovery stages, captures transport timing and passive endpoint signals, scores local-client confidence, and exports a formatted CSV that Product Owners can use for UAT review.
 
 The legacy Load Test panel has been removed. Distributed/cloud load execution, JMeter import/export/execution, and hosted load agents are not part of the current production claim.
 
