@@ -131,6 +131,19 @@ jobs:
           POSTMETER_CI_ELECTRON_NO_SANDBOX: "1"
           POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-regression
 
+      - name: UI typography smoke
+        if: matrix.platform == 'macos'
+        run: npm run test:ui:typography
+        env:
+          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-typography
+
+      - name: Linux UI typography smoke
+        if: matrix.platform == 'linux'
+        run: xvfb-run -a npm run test:ui:typography
+        env:
+          POSTMETER_CI_ELECTRON_NO_SANDBOX: "1"
+          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-typography
+
       - name: UI snapshot smoke
         if: matrix.platform == 'macos'
         run: npm run test:ui:snapshot

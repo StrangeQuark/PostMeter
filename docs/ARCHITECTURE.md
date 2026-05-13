@@ -29,7 +29,7 @@ Renderer files are loaded directly from `src/renderer/index.html`.
 - `responseFormatting.js` owns renderer-side response body formatting for JSON, XML, and HTML display.
 - `runResultFormatting.js` owns renderer-side text formatting for runner and OAuth progress/result displays.
 - `uiSmokeCommon.js` owns shared test-only UI smoke helpers such as queueing, waits, DOM dispatch helpers, assertions, and snapshot capture.
-- `uiWorkflowSmoke.js`, `uiRegressionSmoke.js`, `uiSnapshotSmoke.js`, and `uiOauthSmoke.js` each own one Electron UI smoke suite instead of sharing a single renderer test harness file.
+- `uiWorkflowSmoke.js`, `uiRegressionSmoke.js`, `uiTypographySmoke.js`, `uiSnapshotSmoke.js`, and `uiOauthSmoke.js` each own one Electron UI smoke suite instead of sharing a single renderer test harness file.
 - `uiSmoke.js` is the stable test-only queue/entry-point layer. Production code should only call the `queueUi*Smoke` entry points.
 - `theme.css` owns design tokens, method colors, and light/dark/system theme variables.
 - `base.css` owns element defaults and common control states.

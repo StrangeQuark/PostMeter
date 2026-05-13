@@ -1290,6 +1290,66 @@
               </div>
             </div>
             <div class="settings-card">
+              <div class="settings-card-title">Interface Text</div>
+              <div class="settings-typography-grid">
+                <label class="settings-field">
+                  <span>Font</span>
+                  <select id="interfaceFontSelect">
+                    <option value="default">Default</option>
+                    <option value="system">System</option>
+                    <option value="segoe-ui">Segoe UI</option>
+                    <option value="arial">Arial</option>
+                    <option value="helvetica">Helvetica</option>
+                    <option value="verdana">Verdana</option>
+                    <option value="tahoma">Tahoma</option>
+                    <option value="georgia">Georgia</option>
+                    <option value="system-mono">System Mono</option>
+                    <option value="jetbrains-mono">JetBrains Mono</option>
+                    <option value="sf-mono">SF Mono</option>
+                    <option value="consolas">Consolas</option>
+                    <option value="menlo">Menlo</option>
+                    <option value="monaco">Monaco</option>
+                    <option value="courier-new">Courier New</option>
+                  </select>
+                </label>
+                <label class="settings-field settings-size-field">
+                  <span>Size</span>
+                  <input id="interfaceFontSizeInput" type="number" min="11" max="18" step="1" inputmode="numeric">
+                </label>
+                <button id="resetInterfaceTypographyButton" type="button">Reset to Default</button>
+              </div>
+            </div>
+            <div class="settings-card">
+              <div class="settings-card-title">Editor Text</div>
+              <div class="settings-typography-grid">
+                <label class="settings-field">
+                  <span>Font</span>
+                  <select id="editorFontSelect">
+                    <option value="default">Default</option>
+                    <option value="system">System</option>
+                    <option value="segoe-ui">Segoe UI</option>
+                    <option value="arial">Arial</option>
+                    <option value="helvetica">Helvetica</option>
+                    <option value="verdana">Verdana</option>
+                    <option value="tahoma">Tahoma</option>
+                    <option value="georgia">Georgia</option>
+                    <option value="system-mono">System Mono</option>
+                    <option value="jetbrains-mono">JetBrains Mono</option>
+                    <option value="sf-mono">SF Mono</option>
+                    <option value="consolas">Consolas</option>
+                    <option value="menlo">Menlo</option>
+                    <option value="monaco">Monaco</option>
+                    <option value="courier-new">Courier New</option>
+                  </select>
+                </label>
+                <label class="settings-field settings-size-field">
+                  <span>Size</span>
+                  <input id="editorFontSizeInput" type="number" min="11" max="20" step="1" inputmode="numeric">
+                </label>
+                <button id="resetEditorTypographyButton" type="button">Reset to Default</button>
+              </div>
+            </div>
+            <div class="settings-card">
               <div class="settings-card-title">Editors</div>
               <label class="checkbox-line">
                 <input id="showEditorLineNumbersInput" type="checkbox">
@@ -1776,6 +1836,7 @@
   <script src="uiWorkflowSmoke.js"></script>
   <script src="uiRegressionSmoke.js"></script>
   <script src="uiSnapshotSmoke.js"></script>
+  <script src="uiTypographySmoke.js"></script>
   <script src="uiOauthSmoke.js"></script>
   <script src="uiSmoke.js"></script>
 </body>

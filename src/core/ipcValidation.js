@@ -403,6 +403,9 @@ function assertSettingsPayload(value, field) {
   }
   if (value.appearance != null) {
     assertSchemaFields('appearance', value.appearance, `${field}.appearance`);
+    assertNoUnexpectedFields('appearance', value.appearance, `${field}.appearance`);
+    assertOptionalNumberInRange(value.appearance.interfaceFontSize, `${field}.appearance.interfaceFontSize`, 11, 18);
+    assertOptionalNumberInRange(value.appearance.editorFontSize, `${field}.appearance.editorFontSize`, 11, 20);
   }
   if (value.editor != null) {
     assertSchemaFields('editorSettings', value.editor, `${field}.editor`);
@@ -1739,6 +1742,17 @@ function optionalNumber(value, field) {
     return;
   }
   number(value, field);
+}
+
+function assertOptionalNumberInRange(value, field, min, max) {
+  if (value == null) {
+    return;
+  }
+  number(value, field);
+  const numeric = Number(value);
+  if (numeric < min || numeric > max) {
+    fail(`${field} must be between ${min} and ${max}.`);
+  }
 }
 
 function assertOptionalInteger(value, field, min) {

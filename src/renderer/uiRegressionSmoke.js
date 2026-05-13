@@ -357,6 +357,7 @@
     assertUiSmoke(!$('settingsModal').hidden, 'Opening Settings should show the Settings modal.');
     assertSettingsSandboxHelpText();
     await assertThemePreferenceSettingSmoke();
+    await assertTypographySettingSmoke();
     await assertEditorLineNumbersSettingSmoke();
     await assertVariableTooltipHintsSettingSmoke();
     await assertSettingsPanelNavigationSmoke();
@@ -493,6 +494,110 @@
         global
       );
       await waitForStatusIncludes(statusText, `Settings Appearance theme control did not save ${theme}.`);
+    }
+  }
+
+  async function assertTypographySettingSmoke() {
+    $('settingsAppearanceButton').click();
+    await nextPaint();
+    assertUiSmoke($('interfaceFontSelect'), 'Interface font setting should exist.');
+    assertUiSmoke($('interfaceFontSizeInput'), 'Interface font size setting should exist.');
+    assertUiSmoke($('resetInterfaceTypographyButton'), 'Interface typography reset button should exist.');
+    assertUiSmoke($('editorFontSelect'), 'Editor font setting should exist.');
+    assertUiSmoke($('editorFontSizeInput'), 'Editor font size setting should exist.');
+    assertUiSmoke($('resetEditorTypographyButton'), 'Editor typography reset button should exist.');
+
+    $('interfaceFontSelect').value = 'system-mono';
+    $('interfaceFontSelect').dispatchEvent(new Event('change', { bubbles: true }));
+    await waitForUiSmoke(
+      () => workspace.settings.appearance.interfaceFont === 'system-mono'
+        && document.documentElement.style.getPropertyValue('--ui-font').includes('ui-monospace'),
+      'Interface font setting did not apply.',
+      3000,
+      global
+    );
+    $('interfaceFontSizeInput').value = '18';
+    $('interfaceFontSizeInput').dispatchEvent(new Event('change', { bubbles: true }));
+    await waitForUiSmoke(
+      () => workspace.settings.appearance.interfaceFont === 'system-mono'
+        && workspace.settings.appearance.interfaceFontSize === 18
+        && document.documentElement.style.getPropertyValue('--ui-font').includes('ui-monospace')
+        && document.documentElement.style.getPropertyValue('--ui-font-size') === '18px',
+      'Interface typography settings did not apply.',
+      3000,
+      global
+    );
+    assertSidebarTabRailFitsTypography();
+    await waitForStatusIncludes('Interface typography updated.', 'Interface typography settings should save.');
+
+    $('editorFontSelect').value = 'georgia';
+    $('editorFontSelect').dispatchEvent(new Event('change', { bubbles: true }));
+    await waitForUiSmoke(
+      () => workspace.settings.appearance.editorFont === 'georgia'
+        && document.documentElement.style.getPropertyValue('--editor-font').includes('Georgia'),
+      'Editor font setting did not apply.',
+      3000,
+      global
+    );
+    $('editorFontSizeInput').value = '17';
+    $('editorFontSizeInput').dispatchEvent(new Event('change', { bubbles: true }));
+    await waitForUiSmoke(
+      () => workspace.settings.appearance.editorFont === 'georgia'
+        && workspace.settings.appearance.editorFontSize === 17
+        && document.documentElement.style.getPropertyValue('--editor-font').includes('Georgia')
+        && document.documentElement.style.getPropertyValue('--editor-font-size') === '17px'
+        && getComputedStyle($('bodyInput')).fontSize === '17px',
+      'Editor typography settings did not apply.',
+      3000,
+      global
+    );
+    await waitForStatusIncludes('Editor typography updated.', 'Editor typography settings should save.');
+
+    $('resetInterfaceTypographyButton').click();
+    await waitForUiSmoke(
+      () => workspace.settings.appearance.interfaceFont === 'default'
+        && workspace.settings.appearance.interfaceFontSize === 13
+        && $('interfaceFontSelect').value === 'default'
+        && $('interfaceFontSizeInput').value === '13'
+        && document.documentElement.style.getPropertyValue('--ui-font-size') === '13px',
+      'Interface typography reset did not restore defaults.',
+      3000,
+      global
+    );
+    await waitForStatusIncludes('Interface typography reset to defaults.', 'Interface typography reset should save.');
+
+    $('resetEditorTypographyButton').click();
+    await waitForUiSmoke(
+      () => workspace.settings.appearance.editorFont === 'default'
+        && workspace.settings.appearance.editorFontSize === 12
+        && $('editorFontSelect').value === 'default'
+        && $('editorFontSizeInput').value === '12'
+        && document.documentElement.style.getPropertyValue('--editor-font-size') === '12px',
+      'Editor typography reset did not restore defaults.',
+      3000,
+      global
+    );
+    await waitForStatusIncludes('Editor typography reset to defaults.', 'Editor typography reset should save.');
+  }
+
+  function assertSidebarTabRailFitsTypography() {
+    const sidebar = document.querySelector('.sidebar');
+    const rail = document.querySelector('.sidebar-tabs');
+    assertUiSmoke(sidebar, 'Sidebar should exist when typography settings are changed.');
+    assertUiSmoke(rail, 'Sidebar rail should exist when typography settings are changed.');
+    assertUiSmoke(
+      rail.getBoundingClientRect().width >= 145,
+      'Sidebar rail should grow when the interface font size increases.'
+    );
+    assertUiSmoke(
+      sidebar.getBoundingClientRect().width >= 315,
+      'Sidebar should keep enough total width when the interface font size increases.'
+    );
+    for (const tab of document.querySelectorAll('.sidebar-tab')) {
+      assertUiSmoke(
+        tab.scrollWidth <= tab.clientWidth + 1,
+        `Sidebar tab "${tab.textContent.trim()}" should fit inside the rail at the large interface font size.`
+      );
     }
   }
 
@@ -1093,8 +1198,13 @@
     try {
       ensureSettings();
       workspace.settings.appearance.theme = 'system';
+      workspace.settings.appearance.interfaceFont = 'default';
+      workspace.settings.appearance.interfaceFontSize = 13;
+      workspace.settings.appearance.editorFont = 'default';
+      workspace.settings.appearance.editorFontSize = 12;
       workspace.settings.updates.includePrereleases = false;
       applyThemePreference('system');
+      applyTypographyPreferences();
       renderSettingsControls();
       window.__postmeterSaveWorkspaceSettings = async () => {
         throw new Error('mock settings save failure');
@@ -1105,6 +1215,22 @@
       assertUiSmoke(document.documentElement.dataset.theme === 'system', 'Failed theme save should roll back the applied theme.');
       assertUiSmoke($('themeSystemButton').getAttribute('aria-pressed') === 'true', 'Failed theme save should restore theme button state.');
       assertStatusIncludes('Theme save failed', 'Failed theme save should surface a user-visible status.');
+
+      $('interfaceFontSelect').value = 'system-mono';
+      $('interfaceFontSizeInput').value = '16';
+      await setInterfaceTypographyFromControls({ save: true });
+      assertUiSmoke(workspace.settings.appearance.interfaceFont === 'default', 'Failed interface font save should roll back the workspace setting.');
+      assertUiSmoke(workspace.settings.appearance.interfaceFontSize === 13, 'Failed interface font size save should roll back the workspace setting.');
+      assertUiSmoke(document.documentElement.style.getPropertyValue('--ui-font-size') === '13px', 'Failed interface typography save should roll back the applied font size.');
+      assertStatusIncludes('Interface typography save failed', 'Failed interface typography save should surface a user-visible status.');
+
+      $('editorFontSelect').value = 'georgia';
+      $('editorFontSizeInput').value = '17';
+      await setEditorTypographyFromControls({ save: true });
+      assertUiSmoke(workspace.settings.appearance.editorFont === 'default', 'Failed editor font save should roll back the workspace setting.');
+      assertUiSmoke(workspace.settings.appearance.editorFontSize === 12, 'Failed editor font size save should roll back the workspace setting.');
+      assertUiSmoke(document.documentElement.style.getPropertyValue('--editor-font-size') === '12px', 'Failed editor typography save should roll back the applied font size.');
+      assertStatusIncludes('Editor typography save failed', 'Failed editor typography save should surface a user-visible status.');
 
       await setIncludePrereleases(true, { save: true });
       assertUiSmoke(workspace.settings.updates.includePrereleases === false, 'Failed prerelease setting save should roll back the in-memory setting.');
@@ -1149,6 +1275,7 @@
       window.__postmeterSaveWorkspaceSettings = originalSaveSettings;
       workspace.settings = originalSettings;
       applyThemePreference(workspace.settings?.appearance?.theme || 'system');
+      applyTypographyPreferences();
       renderSettingsControls();
     }
   }

@@ -6,7 +6,7 @@ function initResizablePanes() {
     label: 'Resize sidebar',
     orientation: 'vertical',
     max: () => Math.max(260, Math.min(560, window.innerWidth - 520)),
-    min: 220,
+    min: () => Math.max(220, sidebarMinimumWidthPixels()),
     valueFromEvent: (event) => event.clientX
   });
   setupDragResize('workspacePaneResize', {
@@ -163,12 +163,20 @@ function applySplitterValue(handle, config, value) {
 }
 
 function normalizedSplitterBounds(config) {
-  const min = Number(config.min || 0);
+  const min = typeof config.min === 'function' ? Number(config.min()) : Number(config.min || 0);
   const max = typeof config.max === 'function' ? Number(config.max()) : Number(config.max);
   return {
     min,
     max: Math.max(min, Number.isFinite(max) ? max : min)
   };
+}
+
+function sidebarMinimumWidthPixels() {
+  const rootStyle = getComputedStyle(document.documentElement);
+  const uiFontSize = Number.parseFloat(rootStyle.getPropertyValue('--ui-font-size')) || 13;
+  const railWidth = Math.min(156, Math.max(102, uiFontSize * 8.2));
+  const contentWidth = Math.min(268, Math.max(208, uiFontSize * 14.5));
+  return Math.ceil(railWidth + contentWidth);
 }
 
 function currentLayoutPixels(name, fallbackPixels, config = {}) {

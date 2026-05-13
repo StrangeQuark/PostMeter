@@ -80,6 +80,7 @@
       ['uiWorkflowSmoke', 'PostMeter UI Workflow'],
       ['uiRegressionSmoke', 'PostMeter UI Regression'],
       ['uiSnapshotSmoke', 'PostMeter UI Snapshot'],
+      ['uiTypographySmoke', 'PostMeter UI Typography'],
       ['uiOauthSmoke', 'PostMeter UI OAuth']
     ]) {
       if (params.get(flag) === '1') {
@@ -259,6 +260,12 @@
     bindChange(doc, 'includePrereleasesInput', options.onIncludePrereleasesChange);
     bindChange(doc, 'showEditorLineNumbersInput', options.onShowEditorLineNumbersChange);
     bindChange(doc, 'showVariableTooltipHintsInput', options.onShowVariableTooltipHintsChange);
+    bindChange(doc, 'interfaceFontSelect', options.onInterfaceTypographyChange);
+    bindChange(doc, 'interfaceFontSizeInput', options.onInterfaceTypographyChange);
+    bindClick(doc, 'resetInterfaceTypographyButton', options.onResetInterfaceTypography);
+    bindChange(doc, 'editorFontSelect', options.onEditorTypographyChange);
+    bindChange(doc, 'editorFontSizeInput', options.onEditorTypographyChange);
+    bindClick(doc, 'resetEditorTypographyButton', options.onResetEditorTypography);
     for (const id of [
       'diagnosticLoggingEnabledInput',
       'diagnosticLogLevelSelect',

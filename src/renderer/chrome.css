@@ -21,7 +21,7 @@
   height: 32px;
   padding: 0 10px 0 2px;
   color: var(--primary);
-  font-size: 17px;
+  font-size: var(--ui-font-size-brand);
   font-weight: 800;
 }
 
@@ -158,13 +158,13 @@
 
 .app-grid {
   display: grid;
-  grid-template-columns: var(--sidebar-width) 6px minmax(0, 1fr);
+  grid-template-columns: max(var(--sidebar-width), var(--sidebar-min-width)) 6px minmax(0, 1fr);
   height: calc(100vh - 52px);
 }
 
 .sidebar {
   display: grid;
-  grid-template-columns: 102px minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-rail-width) minmax(0, 1fr);
   min-width: 0;
   border-right: 1px solid var(--line);
   background: var(--sidebar);
@@ -192,7 +192,7 @@
   border-radius: 6px;
   background: transparent;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--ui-font-size-xs);
   font-weight: 700;
   line-height: 1.15;
   text-align: center;
@@ -283,7 +283,7 @@
 
 .workspace-summary-label {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--ui-font-size-xs);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -356,7 +356,7 @@
 h2 {
   margin: 0 0 7px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--ui-font-size-xs);
   font-weight: 800;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -468,7 +468,7 @@ h2 {
   background: var(--badge-bg);
   color: var(--muted);
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: var(--ui-font-size-xxs);
   font-weight: 800;
 }
 
@@ -797,7 +797,7 @@ h2 {
 
 .request-empty-content h2 {
   margin: 0;
-  font-size: 20px;
+  font-size: var(--ui-font-size-hero);
   font-weight: 650;
 }
 
@@ -867,7 +867,7 @@ h2 {
 .workspace-main-title,
 .runner-main-title,
 .performance-main-title {
-  font-size: 18px;
+  font-size: var(--ui-font-size-title);
   font-weight: 800;
 }
 
@@ -881,7 +881,7 @@ h2 {
   box-sizing: border-box;
   width: 100%;
   max-width: 100%;
-  margin-left: -4px;
+  margin-left: 0;
   padding: 2px 4px;
   border: 1px solid transparent;
   border-radius: 4px;
@@ -1058,6 +1058,7 @@ h2 {
   min-height: 36px;
   padding: 8px 10px;
   font-family: var(--mono);
+  font-size: var(--editor-font-size);
 }
 
 #runPerformanceTestButton,
@@ -1069,10 +1070,10 @@ h2 {
 #performanceBodyInput {
   width: 100%;
   min-height: 160px;
-  margin-top: 8px;
   padding: 10px;
   border-radius: 6px;
   font-family: var(--mono);
+  font-size: var(--editor-font-size);
   line-height: 1.45;
   resize: none;
 }
@@ -1241,7 +1242,7 @@ h2 {
 }
 
 .runner-row-method {
-  font-size: 11px;
+  font-size: var(--ui-font-size-xs);
   font-weight: 800;
 }
 
@@ -1256,7 +1257,7 @@ h2 {
 .runner-row-url {
   color: var(--muted);
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--editor-font-size);
 }
 
 .runner-row-iterations {
@@ -1264,7 +1265,7 @@ h2 {
   gap: 2px;
   min-width: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--ui-font-size-xs);
   font-weight: 700;
 }
 
@@ -1329,13 +1330,14 @@ h2 {
 .runner-execution-page-status,
 .runner-execution-page-range {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
   font-weight: 700;
 }
 
 .runner-execution-page-range {
   margin-left: auto;
   font-family: var(--mono);
+  font-size: var(--editor-font-size);
 }
 
 .runner-execution-row {
@@ -1371,7 +1373,7 @@ h2 {
   padding: 3px 6px;
   border-radius: 4px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--editor-font-size-sm);
   font-weight: 800;
   text-align: center;
 }
@@ -1415,7 +1417,7 @@ h2 {
   overflow: hidden;
   color: var(--muted);
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--editor-font-size);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1432,7 +1434,7 @@ h2 {
 .runner-detail-title {
   margin: 0 0 6px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -1440,14 +1442,14 @@ h2 {
 .runner-detail-heading {
   margin: 0;
   overflow-wrap: anywhere;
-  font-size: 14px;
+  font-size: var(--ui-font-size-lg);
 }
 
 .runner-detail-code,
 .runner-detail-error {
   margin: 0;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--editor-font-size);
   line-height: 1.45;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -1463,7 +1465,7 @@ h2 {
   gap: 8px;
   padding: 3px 0;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--editor-font-size);
 }
 
 .runner-detail-variable span {
@@ -1489,7 +1491,7 @@ h2 {
 
 .workspace-sandbox-note {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
   line-height: 1.4;
 }
 
@@ -1499,7 +1501,7 @@ h2 {
   gap: 8px;
   min-width: 0;
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--ui-font-size-md);
 }
 
 .workspace-file-bindings,
@@ -1525,7 +1527,7 @@ h2 {
 .workspace-diagnostics-panel legend {
   padding: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -1556,7 +1558,7 @@ h2 {
 
 .workspace-package-row span {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
 }
 
 .workspace-package-actions {
@@ -1645,7 +1647,7 @@ h2 {
 .request-tab-method {
   flex: 0 0 auto;
   color: var(--green);
-  font-size: 10px;
+  font-size: var(--ui-font-size-xxs);
   font-weight: 800;
 }
 
@@ -1736,7 +1738,7 @@ h2 {
   border-radius: 4px;
   background: transparent;
   color: var(--muted);
-  font-size: 16px;
+  font-size: var(--ui-font-size-xl);
   line-height: 1;
   opacity: 0;
   pointer-events: none;

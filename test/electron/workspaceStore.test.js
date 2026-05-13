@@ -21,7 +21,13 @@ test('creates a default current-schema workspace when no file exists', async () 
   assert.equal(store.getWorkspacePath(), workspacePath);
   assert.equal(workspace.schemaVersion, CURRENT_SCHEMA_VERSION);
   assert.deepEqual(workspace.settings, {
-    appearance: { theme: 'system' },
+    appearance: {
+      theme: 'system',
+      interfaceFont: 'default',
+      interfaceFontSize: 13,
+      editorFont: 'default',
+      editorFontSize: 12
+    },
     diagnostics: {
       logging: {
         enabled: true,

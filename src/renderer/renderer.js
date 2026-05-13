@@ -47,6 +47,32 @@ const FILE_EXTENSION_CONTENT_TYPES = new Map(Object.entries({
 }));
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 const THEME_OPTIONS = ['system', 'light', 'dark'];
+const DEFAULT_INTERFACE_FONT = 'default';
+const DEFAULT_INTERFACE_FONT_SIZE = 13;
+const MIN_INTERFACE_FONT_SIZE = 11;
+const MAX_INTERFACE_FONT_SIZE = 18;
+const DEFAULT_EDITOR_FONT = 'default';
+const DEFAULT_EDITOR_FONT_SIZE = 12;
+const MIN_EDITOR_FONT_SIZE = 11;
+const MAX_EDITOR_FONT_SIZE = 20;
+const DEFAULT_INTERFACE_FONT_STACK = 'Inter, "Segoe UI", Arial, sans-serif';
+const DEFAULT_EDITOR_FONT_STACK = '"JetBrains Mono", "SFMono-Regular", Consolas, monospace';
+const TYPOGRAPHY_FONT_STACKS = Object.freeze({
+  system: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+  'segoe-ui': '"Segoe UI", Arial, sans-serif',
+  arial: 'Arial, Helvetica, sans-serif',
+  helvetica: 'Helvetica, Arial, sans-serif',
+  verdana: 'Verdana, Geneva, sans-serif',
+  tahoma: 'Tahoma, Geneva, sans-serif',
+  georgia: 'Georgia, "Times New Roman", serif',
+  'system-mono': 'ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace',
+  'jetbrains-mono': '"JetBrains Mono", "SFMono-Regular", Consolas, monospace',
+  'sf-mono': '"SFMono-Regular", "SF Mono", Menlo, monospace',
+  consolas: 'Consolas, "Liberation Mono", monospace',
+  menlo: 'Menlo, Monaco, Consolas, monospace',
+  monaco: 'Monaco, Menlo, Consolas, monospace',
+  'courier-new': '"Courier New", Courier, monospace'
+});
 const EXECUTION_RESULT_PAGE_SIZE = 100;
 const MAX_RUNNER_REQUEST_ITERATIONS = 1000;
 const POSTMETER_USER_AGENT = 'PostMeter/0.2.0';
@@ -475,6 +501,7 @@ initializeRenderer({
     queueUiWorkflowSmoke();
     queueUiRegressionSmoke();
     queueUiSnapshotSmoke();
+    queueUiTypographySmoke();
     queueUiOauthSmoke();
     markUiWorkflowStartupStep('after-smoke-queue');
   }
@@ -552,6 +579,10 @@ function bindUi() {
     onOpenSettings: () => { openSettingsModalSafely(); },
     onSelectSettingsSection: selectSettingsSection,
     onSelectTheme: (themeOption) => setThemePreference(themeOption, { save: true }),
+    onInterfaceTypographyChange: () => setInterfaceTypographyFromControls({ save: true }),
+    onEditorTypographyChange: () => setEditorTypographyFromControls({ save: true }),
+    onResetInterfaceTypography: () => resetInterfaceTypography({ save: true }),
+    onResetEditorTypography: () => resetEditorTypography({ save: true }),
     onSaveOnForceCloseChange: () => setSaveOnForceClose($('saveOnForceCloseInput')?.checked === true, { save: true }),
     onCloseModalsOnBackdropClickChange: () => setCloseModalsOnBackdropClick($('closeModalsOnBackdropClickInput')?.checked === true, { save: true }),
     onIncludePrereleasesChange: () => setIncludePrereleases($('includePrereleasesInput')?.checked === true, { save: true }),
@@ -4147,6 +4178,7 @@ function renderToolbarState() {
 function renderSettings() {
   ensureSettings();
   applyThemePreference(workspace.settings.appearance.theme);
+  applyTypographyPreferences();
   applyEditorPreferences();
   renderSettingsControls();
 }
@@ -4206,6 +4238,7 @@ function selectSettingsSection(section) {
 function renderSettingsControls() {
   ensureSettings();
   renderThemeControl();
+  renderTypographyControls();
   if ($('saveOnForceCloseInput')) {
     $('saveOnForceCloseInput').checked = workspace.settings.tabs.saveOnForceClose === true;
   }
@@ -4240,7 +4273,7 @@ function ensureSettings() {
   workspace.runners = normalizeWorkspaceRunners(workspace.runners);
   workspace.settings ||= {};
   workspace.settings.updates ||= { includePrereleases: false };
-  workspace.settings.appearance ||= { theme: 'system' };
+  workspace.settings.appearance ||= {};
   workspace.settings.tabs ||= { saveOnForceClose: false };
   workspace.settings.tabs.saveOnForceClose = workspace.settings.tabs.saveOnForceClose === true;
   workspace.settings.modals ||= { closeOnBackdropClick: false };
@@ -4260,6 +4293,10 @@ function ensureSettings() {
     workspace.settings.sandbox.trustedCapabilities.vaultGrants
   );
   workspace.settings.appearance.theme = normalizeThemeOption(workspace.settings.appearance.theme);
+  workspace.settings.appearance.interfaceFont = normalizeInterfaceFontOption(workspace.settings.appearance.interfaceFont);
+  workspace.settings.appearance.interfaceFontSize = normalizeInterfaceFontSize(workspace.settings.appearance.interfaceFontSize);
+  workspace.settings.appearance.editorFont = normalizeEditorFontOption(workspace.settings.appearance.editorFont);
+  workspace.settings.appearance.editorFontSize = normalizeEditorFontSize(workspace.settings.appearance.editorFontSize);
   delete workspace.settings.loadTestPolicy;
 }
 
@@ -4575,6 +4612,38 @@ function normalizeThemeOption(value) {
   return THEME_OPTIONS.includes(theme) ? theme : 'system';
 }
 
+function normalizeInterfaceFontOption(value) {
+  return normalizeTypographyFontOption(value, DEFAULT_INTERFACE_FONT);
+}
+
+function normalizeEditorFontOption(value) {
+  return normalizeTypographyFontOption(value, DEFAULT_EDITOR_FONT);
+}
+
+function normalizeTypographyFontOption(value, fallback) {
+  const font = String(value || '').trim();
+  if (font === 'default' || Object.hasOwn(TYPOGRAPHY_FONT_STACKS, font)) {
+    return font;
+  }
+  return fallback;
+}
+
+function normalizeInterfaceFontSize(value) {
+  return normalizeFontSize(value, DEFAULT_INTERFACE_FONT_SIZE, MIN_INTERFACE_FONT_SIZE, MAX_INTERFACE_FONT_SIZE);
+}
+
+function normalizeEditorFontSize(value) {
+  return normalizeFontSize(value, DEFAULT_EDITOR_FONT_SIZE, MIN_EDITOR_FONT_SIZE, MAX_EDITOR_FONT_SIZE);
+}
+
+function normalizeFontSize(value, fallback, min, max) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, Math.round(numeric)));
+}
+
 function applyThemePreference(theme) {
   const normalizedTheme = normalizeThemeOption(theme);
   document.documentElement.dataset.theme = normalizedTheme;
@@ -4609,6 +4678,43 @@ function renderThemeControl() {
   }
 }
 
+function renderTypographyControls() {
+  const appearance = workspace.settings?.appearance || {};
+  const interfaceFont = normalizeInterfaceFontOption(appearance.interfaceFont);
+  const interfaceFontSize = normalizeInterfaceFontSize(appearance.interfaceFontSize);
+  const editorFont = normalizeEditorFontOption(appearance.editorFont);
+  const editorFontSize = normalizeEditorFontSize(appearance.editorFontSize);
+  if ($('interfaceFontSelect')) {
+    $('interfaceFontSelect').value = interfaceFont;
+  }
+  if ($('interfaceFontSizeInput')) {
+    $('interfaceFontSizeInput').value = String(interfaceFontSize);
+  }
+  if ($('editorFontSelect')) {
+    $('editorFontSelect').value = editorFont;
+  }
+  if ($('editorFontSizeInput')) {
+    $('editorFontSizeInput').value = String(editorFontSize);
+  }
+}
+
+function applyTypographyPreferences() {
+  ensureSettings();
+  const appearance = workspace.settings.appearance;
+  document.documentElement.style.setProperty('--ui-font', typographyFontStack(appearance.interfaceFont, DEFAULT_INTERFACE_FONT_STACK));
+  document.documentElement.style.setProperty('--ui-font-size', `${appearance.interfaceFontSize}px`);
+  document.documentElement.style.setProperty('--editor-font', typographyFontStack(appearance.editorFont, DEFAULT_EDITOR_FONT_STACK));
+  document.documentElement.style.setProperty('--editor-font-size', `${appearance.editorFontSize}px`);
+  CodeEditor.refreshCodeEditors?.(document);
+}
+
+function typographyFontStack(font, defaultStack) {
+  if (font === 'default') {
+    return defaultStack;
+  }
+  return TYPOGRAPHY_FONT_STACKS[font] || defaultStack;
+}
+
 async function setThemePreference(theme, options = {}) {
   ensureSettings();
   const previousSettings = cloneWorkspaceSettings();
@@ -4631,6 +4737,104 @@ async function setThemePreference(theme, options = {}) {
   }
   if (options.showStatus !== false) {
     setStatus(`Theme set to ${normalizedTheme}.`);
+  }
+  return true;
+}
+
+async function setInterfaceTypographyFromControls(options = {}) {
+  return setTypographyPreference({
+    interfaceFont: $('interfaceFontSelect')?.value,
+    interfaceFontSize: $('interfaceFontSizeInput')?.value
+  }, {
+    ...options,
+    statusMessage: 'Interface typography updated.',
+    failureMessage: 'Interface typography save failed',
+    failureTitle: 'Interface Typography Save Failed'
+  });
+}
+
+async function setEditorTypographyFromControls(options = {}) {
+  return setTypographyPreference({
+    editorFont: $('editorFontSelect')?.value,
+    editorFontSize: $('editorFontSizeInput')?.value
+  }, {
+    ...options,
+    statusMessage: 'Editor typography updated.',
+    failureMessage: 'Editor typography save failed',
+    failureTitle: 'Editor Typography Save Failed'
+  });
+}
+
+async function resetInterfaceTypography(options = {}) {
+  return setTypographyPreference({
+    interfaceFont: DEFAULT_INTERFACE_FONT,
+    interfaceFontSize: DEFAULT_INTERFACE_FONT_SIZE
+  }, {
+    ...options,
+    statusMessage: 'Interface typography reset to defaults.',
+    failureMessage: 'Interface typography reset failed',
+    failureTitle: 'Interface Typography Reset Failed'
+  });
+}
+
+async function resetEditorTypography(options = {}) {
+  return setTypographyPreference({
+    editorFont: DEFAULT_EDITOR_FONT,
+    editorFontSize: DEFAULT_EDITOR_FONT_SIZE
+  }, {
+    ...options,
+    statusMessage: 'Editor typography reset to defaults.',
+    failureMessage: 'Editor typography reset failed',
+    failureTitle: 'Editor Typography Reset Failed'
+  });
+}
+
+async function setTypographyPreference(patch, options = {}) {
+  ensureSettings();
+  const previousSettings = cloneWorkspaceSettings();
+  const nextAppearance = {
+    ...workspace.settings.appearance
+  };
+  if (Object.hasOwn(patch, 'interfaceFont')) {
+    nextAppearance.interfaceFont = normalizeInterfaceFontOption(patch.interfaceFont);
+  }
+  if (Object.hasOwn(patch, 'interfaceFontSize')) {
+    nextAppearance.interfaceFontSize = normalizeInterfaceFontSize(patch.interfaceFontSize);
+  }
+  if (Object.hasOwn(patch, 'editorFont')) {
+    nextAppearance.editorFont = normalizeEditorFontOption(patch.editorFont);
+  }
+  if (Object.hasOwn(patch, 'editorFontSize')) {
+    nextAppearance.editorFontSize = normalizeEditorFontSize(patch.editorFontSize);
+  }
+  const changed = [
+    'interfaceFont',
+    'interfaceFontSize',
+    'editorFont',
+    'editorFontSize'
+  ].some((key) => workspace.settings.appearance[key] !== nextAppearance[key]);
+  workspace.settings.appearance = nextAppearance;
+  applyTypographyPreferences();
+  renderSettingsControls();
+  if (!changed) {
+    return true;
+  }
+  if (options.save === true) {
+    const saved = await saveWorkspaceSettingsWithRollback(
+      previousSettings,
+      options.showStatus === false ? '' : options.statusMessage || 'Typography settings updated.',
+      options.failureMessage || 'Typography settings save failed',
+      options.failureTitle || 'Typography Settings Save Failed',
+      () => {
+        applyTypographyPreferences();
+        renderSettingsControls();
+      }
+    );
+    applyTypographyPreferences();
+    return saved;
+  }
+  if (options.showStatus !== false) {
+    setStatus(options.statusMessage || 'Typography settings updated.');
   }
   return true;
 }
@@ -14637,5 +14841,6 @@ function isAutomatedUiSmoke() {
   return params.get('uiWorkflowSmoke') === '1'
     || params.get('uiRegressionSmoke') === '1'
     || params.get('uiSnapshotSmoke') === '1'
+    || params.get('uiTypographySmoke') === '1'
     || params.get('uiOauthSmoke') === '1';
 }

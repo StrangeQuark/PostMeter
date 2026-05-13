@@ -12,8 +12,8 @@ body {
   overflow: hidden;
   background: var(--bg);
   color: var(--text);
-  font-family: Inter, "Segoe UI", Arial, sans-serif;
-  font-size: 13px;
+  font-family: var(--ui-font);
+  font-size: var(--ui-font-size);
 }
 
 body.is-resizing {

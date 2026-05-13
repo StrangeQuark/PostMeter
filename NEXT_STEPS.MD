@@ -119,6 +119,7 @@ These are production-readiness items that cannot be fully proven by local Linux 
 - Direct first-party Postman account/provider integration for fetching team Package Library `@team/package` sources remains deferred. The current reviewed HTTPS source-URL workflow stays the supported path until a future provider-specific auth/import contract is approved.
 - Maintainer-provided real-world Postman collection corpora remain deferred until a sanitized folder of collections is available. When provided, add them as compatibility fixtures or external report inputs without copying third-party copyrighted content blindly.
 - A stricter Linux deny-by-default seccomp-BPF allowlist is optional future hardening. The maintainer has accepted the current Linux `bubblewrap` namespace isolation plus dangerous-syscall seccomp policy for the current public Linux OS-sandbox claim.
+- User-imported custom fonts for Settings > Appearance remain deferred. If revisited later, support importing and deleting local `.ttf`, `.otf`, `.woff`, and `.woff2` fonts from an app-controlled local font store, expose them in both Interface Text and Editor Text selectors, reset affected selections when a custom font is deleted, avoid storing raw local paths in exported workspace files, and add E2E coverage for import, selection, deletion, persistence, invalid files, and privacy behavior.
 
 ## Risks / Gaps Blocking Production Readiness
 

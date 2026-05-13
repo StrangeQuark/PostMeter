@@ -93,6 +93,11 @@ jobs:
         env:
           POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-regression
 
+      - name: UI typography smoke
+        run: xvfb-run -a npm run test:ui:typography
+        env:
+          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-typography
+
       - name: UI OAuth smoke
         run: xvfb-run -a npm run test:ui:oauth
         env:

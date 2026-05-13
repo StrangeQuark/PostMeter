@@ -9,6 +9,7 @@ const APP_RENDERER_QUERY_KEYS = new Set([
   'uiWorkflowSmoke',
   'uiRegressionSmoke',
   'uiSnapshotSmoke',
+  'uiTypographySmoke',
   'uiOauthSmoke',
   'uiWorkflowBaseUrl',
   'uiOauthBaseUrl'

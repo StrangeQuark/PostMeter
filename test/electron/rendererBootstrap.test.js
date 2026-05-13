@@ -9,6 +9,12 @@ const {
 } = require('../../src/renderer/rendererBootstrap');
 const { setContextMenuPeerCloser, showContextMenu } = require('../../src/renderer/contextMenu');
 
+function selectOptionValues(source, id) {
+  const match = source.match(new RegExp(`<select id="${id}">([\\s\\S]*?)</select>`));
+  assert.ok(match, `Expected ${id} select to exist.`);
+  return [...match[1].matchAll(/<option value="([^"]+)"/g)].map((optionMatch) => optionMatch[1]);
+}
+
 test('renderer bootstrap initializes theme and runs registered cleanup callbacks on unload', async () => {
   const documentListeners = new Map();
   const windowListeners = new Map();
@@ -92,6 +98,7 @@ test('renderer bootstrap closes toolbar menus and resets trigger aria state', ()
 test('renderer accessibility source keeps splitters body editor and pane save recovery wired', async () => {
   const root = path.join(__dirname, '..', '..');
   const indexSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'index.html'), 'utf8');
+  const themeSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'theme.css'), 'utf8');
   const chromeSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'chrome.css'), 'utf8');
   const editorPanelsSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'editorPanels.css'), 'utf8');
   const overlaysSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'overlays.css'), 'utf8');
@@ -122,6 +129,15 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(indexSource, /id="settingsAppearanceButton"[^>]+data-settings-section="appearance"/);
   assert.match(indexSource, /id="settingsModalsButton"[^>]+data-settings-section="modals"/);
   assert.match(indexSource, /id="themeDarkButton"[^>]+data-theme-option="dark"/);
+  assert.match(indexSource, /id="interfaceFontSelect"/);
+  assert.match(indexSource, /id="interfaceFontSelect"[\s\S]*value="system-mono"/);
+  assert.match(indexSource, /id="interfaceFontSizeInput"[^>]+min="11"[^>]+max="18"/);
+  assert.match(indexSource, /id="resetInterfaceTypographyButton"/);
+  assert.match(indexSource, /id="editorFontSelect"/);
+  assert.match(indexSource, /id="editorFontSelect"[\s\S]*value="georgia"/);
+  assert.match(indexSource, /id="editorFontSizeInput"[^>]+min="11"[^>]+max="20"/);
+  assert.match(indexSource, /id="resetEditorTypographyButton"/);
+  assert.deepEqual(selectOptionValues(indexSource, 'interfaceFontSelect'), selectOptionValues(indexSource, 'editorFontSelect'));
   assert.match(indexSource, /id="showEditorLineNumbersInput"/);
   assert.match(indexSource, /id="saveOnForceCloseInput"/);
   assert.match(indexSource, /id="closeModalsOnBackdropClickInput"/);
@@ -131,6 +147,9 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(layoutSource, /aria-valuemin/);
   assert.match(layoutSource, /aria-valuemax/);
   assert.match(layoutSource, /aria-valuenow/);
+  assert.match(layoutSource, /sidebarMinimumWidthPixels/);
+  assert.match(themeSource, /--sidebar-rail-width:\s*clamp\(102px,\s*calc\(var\(--ui-font-size\) \* 8\.2\),\s*156px\)/);
+  assert.match(chromeSource, /grid-template-columns:\s*max\(var\(--sidebar-width\),\s*var\(--sidebar-min-width\)\)\s+6px\s+minmax\(0,\s*1fr\)/);
   assert.match(layoutSource, /event\.key === 'ArrowLeft'/);
   assert.match(layoutSource, /event\.key === 'ArrowRight'/);
   assert.match(bootstrapSource, /aria-orientation/);
@@ -189,7 +208,10 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(chromeSource, /\.tree-badge\.entity-performance/);
   assert.doesNotMatch(overlaysSource, /--mono-font/);
   assert.match(overlaysSource, /csv-variables-modal textarea[\s\S]*font-family:\s*var\(--mono\)/);
+  assert.match(overlaysSource, /csv-variables-modal textarea[\s\S]*font-size:\s*var\(--editor-font-size\)/);
   assert.doesNotMatch(editorPanelsSource, /--mono-font/);
+  assert.match(editorPanelsSource, /\.code-editor\s*\{[\s\S]*font-family:\s*var\(--mono\)/);
+  assert.match(editorPanelsSource, /\.code-editor\s*\{[\s\S]*font-size:\s*var\(--editor-font-size\)/);
   assert.doesNotMatch(editorPanelsSource, /\.field\s+span\s*\{/);
   assert.match(editorPanelsSource, /\.field\s*>\s*span\s*\{/);
   const codeEditorTokenCss = editorPanelsSource.slice(
@@ -444,6 +466,12 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
   const elements = new Map([
     ['closeSettingsModalButton', createElement()],
     ['closeSettingsModalFooterButton', createElement()],
+    ['interfaceFontSelect', createElement({ tagName: 'SELECT' })],
+    ['interfaceFontSizeInput', createElement({ tagName: 'INPUT' })],
+    ['resetInterfaceTypographyButton', createElement()],
+    ['editorFontSelect', createElement({ tagName: 'SELECT' })],
+    ['editorFontSizeInput', createElement({ tagName: 'INPUT' })],
+    ['resetEditorTypographyButton', createElement()],
     ['showEditorLineNumbersInput', createElement({ tagName: 'INPUT' })],
     ['showVariableTooltipHintsInput', createElement({ tagName: 'INPUT' })],
     ['saveOnForceCloseInput', createElement({ tagName: 'INPUT' })],
@@ -475,6 +503,10 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
     windowObject: { addEventListener() {} },
     onSelectSettingsSection: (section) => calls.push(`section:${section}`),
     onSelectTheme: (theme) => calls.push(`theme:${theme}`),
+    onInterfaceTypographyChange: () => calls.push('interface-typography'),
+    onEditorTypographyChange: () => calls.push('editor-typography'),
+    onResetInterfaceTypography: () => calls.push('reset-interface-typography'),
+    onResetEditorTypography: () => calls.push('reset-editor-typography'),
     onShowEditorLineNumbersChange: () => calls.push('line-numbers'),
     onShowVariableTooltipHintsChange: () => calls.push('variable-tooltip-hints'),
     onSaveOnForceCloseChange: () => calls.push('save-on-force-close'),
@@ -486,6 +518,12 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
 
   settingsButtons.find((button) => button.dataset.settingsSection === 'tabs').dispatch('click');
   themeDarkButton.dispatch('click');
+  elements.get('interfaceFontSelect').dispatch('change');
+  elements.get('interfaceFontSizeInput').dispatch('change');
+  elements.get('resetInterfaceTypographyButton').dispatch('click');
+  elements.get('editorFontSelect').dispatch('change');
+  elements.get('editorFontSizeInput').dispatch('change');
+  elements.get('resetEditorTypographyButton').dispatch('click');
   elements.get('showEditorLineNumbersInput').dispatch('change');
   elements.get('showVariableTooltipHintsInput').dispatch('change');
   elements.get('saveOnForceCloseInput').dispatch('change');
@@ -504,6 +542,12 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
   assert.deepEqual(calls, [
     'section:tabs',
     'theme:dark',
+    'interface-typography',
+    'interface-typography',
+    'reset-interface-typography',
+    'editor-typography',
+    'editor-typography',
+    'reset-editor-typography',
     'line-numbers',
     'variable-tooltip-hints',
     'save-on-force-close',
