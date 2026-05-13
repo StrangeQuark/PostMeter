@@ -6739,6 +6739,7 @@ function runnerRequestRow(runner, request, index) {
 
   const deleteButton = document.createElement('button');
   deleteButton.type = 'button';
+  deleteButton.className = 'danger-button';
   deleteButton.textContent = 'Delete';
   deleteButton.setAttribute('aria-label', `Delete ${request.name || 'request'} from runner`);
   deleteButton.addEventListener('click', () => deleteRunnerRequest(runner, index));
@@ -8348,6 +8349,7 @@ function fileBindingRow(item) {
   text.append(title, document.createElement('br'), detail);
   const remove = document.createElement('button');
   remove.type = 'button';
+  remove.className = 'danger-button';
   remove.textContent = 'Remove';
   remove.setAttribute('aria-label', `Remove imported file binding ${binding.source || item.source}`);
   remove.addEventListener('click', () => {
@@ -8403,6 +8405,7 @@ function packageCacheRow(item) {
   text.append(title, document.createElement('br'), detail);
   const remove = document.createElement('button');
   remove.type = 'button';
+  remove.className = 'danger-button';
   remove.textContent = 'Remove';
   remove.setAttribute('aria-label', `Remove reviewed sandbox package ${item.specifier}`);
   remove.addEventListener('click', () => {
@@ -8458,6 +8461,9 @@ function vaultMetadataRow(titleText, detailText, options = {}) {
     const action = document.createElement('button');
     action.type = 'button';
     action.textContent = options.actionLabel;
+    if (/^(Delete|Remove)\b/.test(String(options.actionLabel))) {
+      action.classList.add('danger-button');
+    }
     if (options.actionAccessibleLabel) {
       action.setAttribute('aria-label', options.actionAccessibleLabel);
     }
@@ -10301,6 +10307,7 @@ function createBodyFormDataRow(prefix, row = {}) {
   value.value = row.value || '';
   const remove = document.createElement('button');
   remove.type = 'button';
+  remove.className = 'danger-button';
   remove.textContent = 'Remove';
   remove.addEventListener('click', () => {
     wrapper.remove();
@@ -10357,6 +10364,7 @@ function createBodyUrlencodedRow(prefix, row = {}) {
   value.value = row.value || '';
   const remove = document.createElement('button');
   remove.type = 'button';
+  remove.className = 'danger-button';
   remove.textContent = 'Remove';
   remove.addEventListener('click', () => {
     wrapper.remove();
@@ -11382,6 +11390,7 @@ function renderEnvironmentPairs(pairs) {
       renderVariablePreview();
     });
     const remove = document.createElement('button');
+    remove.className = 'danger-button';
     remove.textContent = 'Remove';
     remove.setAttribute('aria-label', `Remove environment variable ${variableLabel}`);
     remove.addEventListener('click', () => {

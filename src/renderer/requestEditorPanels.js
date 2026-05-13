@@ -143,6 +143,7 @@
       });
 
       const remove = doc.createElement('button');
+      remove.className = 'danger-button';
       remove.textContent = 'Remove';
       remove.setAttribute('aria-label', `Remove ${keyPlaceholder.toLowerCase()} ${pair.key || index + 1}`);
       remove.addEventListener('click', () => {
@@ -198,6 +199,7 @@
       });
 
       const remove = doc.createElement('button');
+      remove.className = 'danger-button';
       remove.textContent = 'Remove';
       remove.setAttribute('aria-label', `Remove ${keyPlaceholder.toLowerCase()} ${pair.key || index + 1}`);
       remove.addEventListener('click', () => {
@@ -382,7 +384,7 @@
       });
 
       const remove = doc.createElement('button');
-      remove.className = 'danger';
+      remove.className = 'danger-button';
       remove.textContent = 'Remove';
       remove.setAttribute('aria-label', `Remove cookie ${cookie.name || index + 1}`);
       remove.addEventListener('click', () => {

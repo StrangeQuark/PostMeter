@@ -94,6 +94,17 @@
   left: auto;
 }
 
+.request-export-menu-group > .menu-trigger {
+  min-height: 30px;
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+.request-export-menu-group > .menu-trigger:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  background: var(--button-hover);
+}
+
 .toolbar-menu button {
   justify-content: flex-start;
   width: 100%;

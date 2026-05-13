@@ -233,7 +233,9 @@
     requestParamInputs[0].checked = false;
     dispatchChange(requestParamInputs[0]);
     assertUiSmoke(!$('urlInput').value.includes('taco=car'), 'Disabling a request param should remove it from the URL.');
-    $('paramsTable').querySelector('.kv-row button').click();
+    const requestParamRemoveButton = $('paramsTable').querySelector('.kv-row button');
+    assertUiSmoke(requestParamRemoveButton.classList.contains('danger-button'), 'Request param remove button should use danger styling.');
+    requestParamRemoveButton.click();
     assertUiSmoke($('paramsTable').querySelectorAll('.kv-row').length === 0, 'Removing a request param should delete the Params row.');
     assertUiSmoke(!activeRequest().queryParams.length, 'Removing a request param should delete it from the request model.');
     $('urlInput').value = 'https://api.example.test/v1/users?from=url&multi=one&multi=two';
@@ -325,6 +327,7 @@
     assertUiSmoke(cookieRow, 'Cookie editor did not create a row.');
     assertUiSmoke(cookieRow.querySelector('[aria-label^="Cookie"][aria-label$="name"]'), 'Cookie row name input should expose a contextual accessible label.');
     assertUiSmoke(cookieRow.querySelector('[aria-label^="Cookie"][aria-label*="SameSite"]'), 'Cookie SameSite control should expose a contextual accessible label.');
+    assertUiSmoke(cookieRow.querySelector('[aria-label^="Remove cookie"]')?.classList.contains('danger-button'), 'Cookie row remove button should use danger styling.');
     $('filterCookiesToRequestHostInput').checked = true;
     dispatchChange($('filterCookiesToRequestHostInput'));
     assertUiSmoke($('cookiesTable').querySelector('.cookie-row'), 'Cookie active-host filter hid the matching row.');
@@ -343,6 +346,7 @@
     assertUiSmoke(variableRow, 'Request variable editor did not create a row.');
     assertUiSmoke(variableRow.querySelector('[aria-label="Variable 1 enabled"]'), 'Request variable enabled control should expose a contextual accessible label.');
     assertUiSmoke(variableRow.querySelector('[aria-label="Variable 1"]'), 'Request variable key input should expose a contextual accessible label.');
+    assertUiSmoke(variableRow.querySelector('[aria-label^="Remove variable"]')?.classList.contains('danger-button'), 'Request variable remove button should use danger styling.');
     displayResponse({
       statusCode: 200,
       durationMillis: 1,
@@ -419,6 +423,29 @@
     assertUiSmoke($('exportRunnerJsonButton').disabled, 'Runner JSON export should be disabled before a run.');
     assertUiSmoke($('exportRunnerCsvButton').disabled, 'Runner CSV export should be disabled before a run.');
     assertUiSmoke($('runnerStopOnFailure'), 'Runner stop-on-failure control is missing.');
+    assertDestructiveButtonsUseDangerStyle();
+  }
+
+  function assertDestructiveButtonsUseDangerStyle() {
+    const destructiveButtons = Array.from(document.querySelectorAll('button')).filter((button) => {
+      const text = button.textContent.trim();
+      const ariaLabel = button.getAttribute('aria-label') || '';
+      return /^(Delete|Remove)\b/.test(text) || /^(Delete|Remove)\b/.test(ariaLabel);
+    });
+    const offenders = destructiveButtons.filter((button) => {
+      if (button.closest('#contextMenu')) {
+        return !button.classList.contains('danger');
+      }
+      return !button.classList.contains('danger-button');
+    });
+    assertUiSmoke(
+      offenders.length === 0,
+      `Delete/Remove buttons should use danger styling. Offenders: ${offenders.map((button) => {
+        const id = button.id ? `#${button.id}` : '';
+        const text = button.textContent.trim() || button.getAttribute('aria-label') || button.outerHTML;
+        return `${id}${text}`;
+      }).join(', ')}`
+    );
   }
 
   function assertConstrainedViewportSmoke() {
@@ -1426,6 +1453,7 @@
 
       selectSidebarPanel('workspaces');
       assertUiSmoke($('deleteWorkspacePanelButton').disabled, 'Workspace delete should be disabled when only one workspace exists.');
+      assertUiSmoke($('deleteWorkspacePanelButton').classList.contains('danger-button'), 'Workspace delete button should use danger styling.');
       const originalWorkspaceId = activeWorkspaceId;
       await newWorkspace();
       assertUiSmoke(activeSidebarPanel === 'workspaces', 'Creating a workspace should switch the sidebar to Workspaces.');
@@ -1603,9 +1631,13 @@
       renderWorkspacePanel();
       assertUiSmoke($('sandboxPackageMissingList').querySelector('[aria-label="Review sandbox package npm:sample-package@1.0.0"]'), 'Missing package review action should expose a package-specific accessible label.');
       assertUiSmoke($('sandboxPackageMissingList').querySelector('[aria-label="Fetch sandbox package npm:sample-package@1.0.0 for review"]'), 'Missing package fetch action should expose a package-specific accessible label.');
-      assertUiSmoke($('sandboxPackageCacheList').querySelector('[aria-label="Remove reviewed sandbox package npm:cached-package@1.0.0"]'), 'Cached package remove action should expose a package-specific accessible label.');
+      const cachedPackageRemoveButton = $('sandboxPackageCacheList').querySelector('[aria-label="Remove reviewed sandbox package npm:cached-package@1.0.0"]');
+      assertUiSmoke(cachedPackageRemoveButton, 'Cached package remove action should expose a package-specific accessible label.');
+      assertUiSmoke(cachedPackageRemoveButton.classList.contains('danger-button'), 'Cached package remove action should use danger styling.');
       assertUiSmoke($('sandboxFileBindingMissingList').querySelector('[aria-label="Bind imported file fixture-data.csv"]'), 'Missing file binding action should expose a file-specific accessible label.');
-      assertUiSmoke($('sandboxFileBindingList').querySelector('[aria-label="Remove imported file binding bound-data.csv"]'), 'Bound file remove action should expose a file-specific accessible label.');
+      const boundFileRemoveButton = $('sandboxFileBindingList').querySelector('[aria-label="Remove imported file binding bound-data.csv"]');
+      assertUiSmoke(boundFileRemoveButton, 'Bound file remove action should expose a file-specific accessible label.');
+      assertUiSmoke(boundFileRemoveButton.classList.contains('danger-button'), 'Bound file remove action should use danger styling.');
 
       window.__postmeterSaveWorkspaceSettings = async (settings) => ({ settings: structuredClone(settings) });
 
@@ -1723,7 +1755,9 @@
       lastVaultMetadata = { available: true, secrets: [{ key: 'api-token', updatedAt: '2026-01-01T00:00:00.000Z' }], audit: [] };
       lastVaultMetadataWorkspaceId = activeWorkspaceId || '';
       renderWorkspacePanel();
-      assertUiSmoke($('sandboxVaultList').querySelector('[aria-label="Remove vault secret api-token"]'), 'Vault secret remove action should expose a secret-specific accessible label.');
+      const vaultSecretRemoveButton = $('sandboxVaultList').querySelector('[aria-label="Remove vault secret api-token"]');
+      assertUiSmoke(vaultSecretRemoveButton, 'Vault secret remove action should expose a secret-specific accessible label.');
+      assertUiSmoke(vaultSecretRemoveButton.classList.contains('danger-button'), 'Vault secret remove action should use danger styling.');
 
       let vaultBoundKey = '';
       let vaultUnsetKey = '';
@@ -3081,6 +3115,7 @@
       assertUiSmoke($('runPerformanceTestButton').closest('.performance-request-line'), 'Performance Run action should live next to the request URL.');
       assertUiSmoke($('performanceMethodSelect').classList.contains('method-get'), 'Performance request method dropdown should use the same method color class as requests.');
       assertUiSmoke($('importPerformanceRequestButton').closest('.performance-actions'), 'Performance import request action should live with the performance pane actions.');
+      assertUiSmoke($('deletePerformanceTestButton').classList.contains('danger-button'), 'Performance delete button should use danger styling.');
       assertUiSmoke(
         !Array.from($('performanceMainPanel').querySelectorAll('button')).some((button) => button.textContent.trim() === 'Export Request'),
         'Performance test editor should not include the request Export Request button.'
@@ -3121,7 +3156,9 @@
       dispatchInput(performanceRowInputs[2]);
       assertUiSmoke($('performanceUrlInput').value.includes('?probe=enabled'), 'Editing performance request params should update the performance request URL.');
       assertUiSmoke(highlightedTextboxText($('performanceUrlInput')).includes('?probe=enabled'), 'Editing performance request params should refresh the visible performance request URL text.');
-      $('performanceParamsTable').querySelector('.kv-row button').click();
+      const performanceParamRemoveButton = $('performanceParamsTable').querySelector('.kv-row button');
+      assertUiSmoke(performanceParamRemoveButton.classList.contains('danger-button'), 'Performance request param remove button should use danger styling.');
+      performanceParamRemoveButton.click();
       assertUiSmoke($('performanceParamsTable').querySelectorAll('.kv-row').length === 0, 'Removing a performance request param should delete the Params row.');
       assertUiSmoke(!activePerformanceTest().request.queryParams.length, 'Removing a performance request param should delete it from the performance request model.');
       $('performanceUrlInput').value = 'https://performance.example.test/run?from=url';
@@ -3178,6 +3215,7 @@
       dispatchChange($('performanceBodyTypeSelect'));
       $('addPerformanceFormDataBodyRowButton').click();
       let performanceBodyRow = $('performanceFormDataBodyTable').querySelector('[data-body-form-data-row]');
+      assertUiSmoke(performanceBodyRow.querySelector('button')?.classList.contains('danger-button'), 'Performance form-data row remove button should use danger styling.');
       let performanceBodyControls = performanceBodyRow.querySelectorAll('select, input');
       performanceBodyControls[1].value = 'file';
       dispatchChange(performanceBodyControls[1]);
@@ -3596,10 +3634,16 @@
       assertUiSmoke($('saveEnvironmentButton')?.textContent === 'Save Environment', 'Environment editor should render a Save Environment button.');
       assertUiSmoke(!$('saveEnvironmentButton').disabled, 'Environment editor should enable the environment save button.');
       assertUiSmoke($('deleteEnvironmentButton')?.textContent === 'Delete Environment', 'Environment delete button should use the full Delete Environment label.');
+      assertUiSmoke($('deleteEnvironmentButton').classList.contains('danger-button'), 'Environment delete button should use danger styling.');
       assertUiSmoke(environmentTitle.getAttribute('aria-label') === 'Environment name', 'Environment title should expose an accessible name.');
       assertUiSmoke(getComputedStyle(environmentTitle).whiteSpace === 'nowrap', 'Environment title should stay on a single line.');
       const environmentHeader = $('environmentMainPanel').querySelector('.environment-main-header');
       const environmentActions = environmentHeader.querySelector('.environment-actions');
+      const environmentActionLabels = Array.from(environmentActions.querySelectorAll('button')).map((button) => button.textContent.trim());
+      assertUiSmoke(
+        environmentActionLabels.join('|') === 'Add Variable|Save Environment|Delete Environment',
+        `Environment editor header actions should order Add Variable before save and delete. labels=${environmentActionLabels.join('|')}`
+      );
       const titleWidth = environmentTitle.getBoundingClientRect().width;
       const expectedTitleWidth = environmentHeader.getBoundingClientRect().width - environmentActions.getBoundingClientRect().width - 36;
       assertUiSmoke(titleWidth >= expectedTitleWidth, 'Environment title editor should use nearly all available header width.');
@@ -3612,7 +3656,9 @@
       assertUiSmoke(environmentVariableRow.querySelector('[aria-label="Environment variable 1 enabled"]'), 'Environment variable enabled control should expose a contextual accessible label.');
       assertUiSmoke(environmentVariableRow.querySelector('[aria-label="Environment variable 1 name"]'), 'Environment variable name input should expose a contextual accessible label.');
       assertUiSmoke(environmentVariableRow.querySelector('[aria-label="Environment variable 1 value"]'), 'Environment variable value input should expose a contextual accessible label.');
-      assertUiSmoke(environmentVariableRow.querySelector('[aria-label^="Remove environment variable"]'), 'Environment variable remove button should expose a contextual accessible label.');
+      const environmentVariableRemoveButton = environmentVariableRow.querySelector('[aria-label^="Remove environment variable"]');
+      assertUiSmoke(environmentVariableRemoveButton, 'Environment variable remove button should expose a contextual accessible label.');
+      assertUiSmoke(environmentVariableRemoveButton.classList.contains('danger-button'), 'Environment variable remove button should use danger styling.');
       assertUiSmoke(!$('environmentsSidebarPanel').querySelector('#environmentMainTitle'), 'Environment editor controls should not render in the sidebar.');
       assertUiSmoke($('environmentsList').textContent.includes(environment.name), 'Environments panel did not render the new environment.');
       const environmentOpenTabCount = openEnvironmentTabs.length;
@@ -3698,6 +3744,7 @@
       assertUiSmoke(!$('runnerMainPanel').hidden, 'Creating a runner should show the runner editor.');
       assertUiSmoke($('runnerEnvironmentSelect'), 'Runner environment selector is missing.');
       assertUiSmoke($('runnerAllowEnvironmentMutation'), 'Runner environment mutation checkbox is missing.');
+      assertUiSmoke($('deleteRunnerButton').classList.contains('danger-button'), 'Runner delete button should use danger styling.');
       const runnerTreeButton = treeButtonByTarget('runner', runner.id);
       assertUiSmoke(runnerTreeButton, 'Runner sidebar should render the created runner row.');
       runnerTreeButton.dispatchEvent(new MouseEvent('contextmenu', {
@@ -3748,6 +3795,10 @@
       runnerLocalRow = runnerRows[0];
       assertUiSmoke(runnerLocalRow?.querySelector('.runner-row-iterations input')?.value === '2', 'Runner iteration edits should survive runner pane re-renders.');
       assertUiSmoke(runnerRows[1]?.querySelector('.runner-row-iterations input')?.value === '1', 'Runner iteration re-render should not copy the first row value to new rows.');
+      assertUiSmoke(
+        Array.from(runnerLocalRow?.querySelectorAll('button') || []).some((button) => button.textContent.trim() === 'Delete' && button.classList.contains('danger-button')),
+        'Runner request row delete button should use danger styling.'
+      );
       const runnerLocalEditButton = Array.from(runnerLocalRow?.querySelectorAll('button') || [])
         .find((button) => button.textContent.trim() === 'Edit');
       assertUiSmoke(runnerLocalEditButton, 'Runner request rows should expose an Edit button.');
@@ -3780,6 +3831,7 @@
       dispatchChange($('bodyTypeSelect'));
       $('addFormDataBodyRowButton').click();
       const runnerBodyRow = $('formDataBodyTable').querySelector('[data-body-form-data-row]');
+      assertUiSmoke(runnerBodyRow.querySelector('button')?.classList.contains('danger-button'), 'Runner request form-data row remove button should use danger styling.');
       const runnerBodyControls = runnerBodyRow.querySelectorAll('select, input');
       runnerBodyControls[1].value = 'text';
       dispatchChange(runnerBodyControls[1]);
@@ -4346,6 +4398,7 @@
     dispatchChange($('bodyTypeSelect'));
     $('addFormDataBodyRowButton').click();
     let formDataRow = $('formDataBodyTable').querySelector('[data-body-form-data-row]');
+    assertUiSmoke(formDataRow.querySelector('button')?.classList.contains('danger-button'), 'Request form-data row remove button should use danger styling.');
     let formDataControls = formDataRow.querySelectorAll('select, input');
     formDataControls[1].value = 'text';
     dispatchChange(formDataControls[1]);
@@ -4380,7 +4433,9 @@
     $('bodyTypeSelect').value = 'URLENCODED';
     dispatchChange($('bodyTypeSelect'));
     $('addUrlencodedBodyRowButton').click();
-    const urlencodedControls = $('urlencodedBodyTable').querySelector('[data-body-urlencoded-row]').querySelectorAll('input');
+    const urlencodedRow = $('urlencodedBodyTable').querySelector('[data-body-urlencoded-row]');
+    assertUiSmoke(urlencodedRow.querySelector('button')?.classList.contains('danger-button'), 'Request URL-encoded row remove button should use danger styling.');
+    const urlencodedControls = urlencodedRow.querySelectorAll('input');
     urlencodedControls[1].value = 'search';
     dispatchInput(urlencodedControls[1]);
     urlencodedControls[2].value = 'postmeter';

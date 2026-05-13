@@ -590,9 +590,9 @@
             <div id="environmentMainTitle" class="environment-main-title editable-title" tabindex="0" aria-label="Environment name">Select an environment</div>
           </div>
           <div class="environment-actions">
+            <button id="addVariableButton" type="button">Add Variable</button>
             <button id="saveEnvironmentButton" type="button">Save Environment</button>
-            <button id="deleteEnvironmentButton">Delete Environment</button>
-            <button id="addVariableButton">Add Variable</button>
+            <button id="deleteEnvironmentButton" class="danger-button" type="button">Delete Environment</button>
           </div>
         </div>
         <div id="environmentTable" class="kv-table environment-table"></div>
@@ -616,7 +616,7 @@
           <div class="workspace-actions">
             <button id="switchWorkspacePanelButton" type="button">Switch to this Workspace</button>
             <button id="exportWorkspacePanelButton" type="button">Export Workspace</button>
-            <button id="deleteWorkspacePanelButton" type="button">Delete Workspace</button>
+            <button id="deleteWorkspacePanelButton" class="danger-button" type="button">Delete Workspace</button>
           </div>
         </div>
         <div id="workspaceSummary" class="workspace-summary workspace-main-summary"></div>
@@ -640,7 +640,7 @@
             <div class="runner-actions">
               <button id="runnerCsvVariablesButton" type="button">CSV Variables</button>
               <button id="saveRunnerButton" type="button">Save Runner</button>
-              <button id="deleteRunnerButton" type="button">Delete Runner</button>
+              <button id="deleteRunnerButton" class="danger-button" type="button">Delete Runner</button>
               <button id="runCollectionButton" type="button" class="primary">Run</button>
               <button id="cancelRunnerButton" type="button" disabled>Cancel</button>
               <button id="exportRunnerJsonButton" type="button" disabled>Export JSON</button>
@@ -724,7 +724,7 @@
             <div class="performance-actions">
               <button id="performanceCsvVariablesButton" type="button">CSV Variables</button>
               <button id="savePerformanceTestButton" type="button">Save Performance Test</button>
-              <button id="deletePerformanceTestButton" type="button">Delete Performance Test</button>
+              <button id="deletePerformanceTestButton" class="danger-button" type="button">Delete Performance Test</button>
               <button id="importPerformanceRequestButton" type="button">Import Request</button>
               <button id="exportPerformanceTestButton" type="button">Export Test</button>
             </div>
