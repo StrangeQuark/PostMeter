@@ -466,6 +466,7 @@
     assertHorizontalContainersFit(context);
     assertNoSiblingOverlaps(context);
     assertLineNumberEditorsAligned(context);
+    assertSingleLineVariableOverlaysAligned(context);
     assertVisibleModalFitsViewport(context);
   }
 
@@ -591,6 +592,34 @@
       getComputedStyle(target)[property] === getComputedStyle(textarea)[property],
       `${message} expected=${getComputedStyle(textarea)[property]} actual=${getComputedStyle(target)[property]}`
     );
+  }
+
+  function assertSingleLineVariableOverlaysAligned(context) {
+    for (const wrapper of document.querySelectorAll('.variable-highlight-editor.is-input')) {
+      if (!isVisible(wrapper)) {
+        continue;
+      }
+      const input = wrapper.querySelector('input.variable-highlight-input');
+      const overlay = wrapper.querySelector('.variable-highlight-overlay');
+      const token = wrapper.querySelector('.variable-highlight-token');
+      if (!isVisible(input) || !isVisible(overlay) || !token) {
+        continue;
+      }
+      const inputRect = input.getBoundingClientRect();
+      const tokenRect = token.getBoundingClientRect();
+      if (tokenRect.height <= 0) {
+        continue;
+      }
+      const delta = Math.abs(rectCenterY(inputRect) - rectCenterY(tokenRect));
+      assertUiSmoke(
+        delta <= Math.max(2.5, inputRect.height * 0.08),
+        `${context}: highlighted text should be vertically centered in ${input.id || input.name || 'single-line input'}. delta=${delta.toFixed(2)} input=${inputRect.top}/${inputRect.bottom} token=${tokenRect.top}/${tokenRect.bottom}`
+      );
+    }
+  }
+
+  function rectCenterY(rect) {
+    return rect.top + (rect.height / 2);
   }
 
   function editorTextLeft(highlight) {

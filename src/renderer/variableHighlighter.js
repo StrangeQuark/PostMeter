@@ -1089,6 +1089,24 @@ function variableMatchesPostmanToken(variable) {
     ]) {
       overlay.style[property] = style[property];
     }
+    alignSingleLineOverlay(textbox, overlay, style);
+  }
+
+  function alignSingleLineOverlay(textbox, overlay, style) {
+    if (!isInput(textbox)) {
+      return;
+    }
+    const rect = textbox.getBoundingClientRect?.();
+    const height = Number(rect?.height) || cssPixels(style.height);
+    const lineHeight = computedLineHeight(style);
+    if (!Number.isFinite(height) || height <= 0 || lineHeight <= 0) {
+      return;
+    }
+    const verticalSpace = Math.max(0, height - cssPixels(style.borderTopWidth) - cssPixels(style.borderBottomWidth));
+    const paddingTop = Math.max(0, (verticalSpace - lineHeight) / 2);
+    const paddingBottom = Math.max(0, verticalSpace - lineHeight - paddingTop);
+    overlay.style.paddingTop = `${paddingTop}px`;
+    overlay.style.paddingBottom = `${paddingBottom}px`;
   }
 
   function escapeHtml(value) {
