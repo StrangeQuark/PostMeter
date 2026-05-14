@@ -28,16 +28,23 @@
     assertUiSmoke($('requestTabBar').textContent.includes(collection.name), 'New collection did not open a collection tab.');
     const collectionOpenTab = openCollectionTabs.find((tab) => tab.collectionId === collection.id);
     assertUiSmoke(collectionOpenTab?.dirty === true, 'New collection tab should show unsaved changes.');
-    const descriptionEditor = $('collectionDescriptionInput').closest('.code-editor');
-    assertUiSmoke(descriptionEditor?.classList.contains('has-line-numbers'), 'Collection overview description should render as a line-numbered editor.');
-    assertUiSmoke(descriptionEditor.getBoundingClientRect().height > 220, 'Collection overview description editor should fill the collection pane.');
+    assertUiSmoke(!$('collectionDescriptionPreview').hidden, 'Collection overview should render Markdown preview by default.');
+    assertUiSmoke($('collectionDescriptionSaveButton').hidden && $('collectionDescriptionCancelButton').hidden, 'Collection overview should hide Save/Cancel before editing.');
+    assertUiSmoke($('collectionDescriptionPreview').getBoundingClientRect().height > 220, 'Collection overview Markdown preview should fill the collection pane.');
     assertUiSmoke(!document.querySelector('#collectionOverviewTab .field > span'), 'Collection overview should not reserve space for a description label.');
-    assertUiSmoke(descriptionEditor.getBoundingClientRect().top - $('collectionOverviewTab').getBoundingClientRect().top < 4, 'Collection overview editor should start at the top of the overview pane.');
-    const descriptionCode = descriptionEditor.querySelector('.code-editor-highlight code');
-    assertUiSmoke(
-      getComputedStyle(descriptionCode).fontFamily === getComputedStyle($('collectionDescriptionInput')).fontFamily,
-      'Collection overview highlighted text should use the same font metrics as the editable textarea.'
-    );
+    editMarkdownPane('collectionDescription', '## Smoke overview\n\n- Fast setup\n- **Markdown** docs\n\n```json\n{"collection": true}\n```');
+    assertUiSmoke(collection.description === '', 'Collection overview draft should not save before the pane Save button.');
+    $('collectionDescriptionCancelButton').click();
+    assertUiSmoke(collection.description === '', 'Collection overview Cancel should discard the Markdown draft.');
+    editMarkdownPane('collectionDescription', '## Smoke overview\n\n- Fast setup\n- **Markdown** docs\n\n```json\n{"collection": true}\n```');
+    $('collectionDescriptionSaveButton').click();
+    assertUiSmoke(collection.description.includes('## Smoke overview'), 'Collection overview Save should store Markdown source.');
+    assertMarkdownPreview('collectionDescriptionPreview', {
+      heading: 'Smoke overview',
+      strong: 'Markdown',
+      code: '{"collection": true}'
+    });
+    assertUiSmoke(!$('collectionDescriptionPreview').hidden && $('collectionDescriptionSaveButton').hidden, 'Collection overview should return to preview controls after Save.');
     collection.name = 'Smoke Collection';
     renderAll();
     activateTab('collection', 'collectionScripts');
@@ -68,6 +75,13 @@
     folderColorProbe.remove();
     assertUiSmoke(getComputedStyle(folderBadge).color === folderHighlightColor, 'Folder tree badge color should match folder variable highlighting.');
     assertUiSmoke(getComputedStyle(folderTabBadge).color === folderHighlightColor, 'Folder tab badge color should match folder variable highlighting.');
+    editMarkdownPane('folderDescription', '### Folder overview\n\n> Shared auth setup\n\nUse `folderToken`.');
+    $('folderDescriptionSaveButton').click();
+    assertUiSmoke(folder.description.includes('### Folder overview'), 'Folder overview Save should store Markdown source.');
+    assertMarkdownPreview('folderDescriptionPreview', {
+      heading: 'Folder overview',
+      code: 'folderToken'
+    });
 
     newRequest(collection.id, null);
     const request = activeRequest();
@@ -125,9 +139,17 @@
     $('bodyInput').value = '{"workflow":"smoke"}';
     dispatchInput($('bodyInput'));
     activateTab('request', 'docs');
-    $('docsInput').value = 'Smoke request docs';
-    dispatchInput($('docsInput'));
-    assertUiSmoke(activeRequest().docs === 'Smoke request docs', 'Docs field did not update the active request.');
+    assertUiSmoke(!$('docsPreview').hidden && $('docsSaveButton').hidden && $('docsCancelButton').hidden, 'Request docs should render Markdown preview before editing.');
+    editMarkdownPane('docs', '## Smoke request docs\n\n1. Send request\n2. Review **Markdown** output\n\n```http\nGET /echo\n```\n\n[Fixture](https://example.test)');
+    assertUiSmoke(activeRequest().docs === '', 'Request docs draft should not update the active request before pane Save.');
+    $('docsSaveButton').click();
+    assertUiSmoke(activeRequest().docs.includes('## Smoke request docs'), 'Docs Save should store Markdown source.');
+    assertMarkdownPreview('docsPreview', {
+      heading: 'Smoke request docs',
+      strong: 'Markdown',
+      code: 'GET /echo',
+      link: 'Fixture'
+    });
     activateTab('request', 'scripts');
     $('preRequestScriptInput').value = "pm.environment.set('scriptToken', 'ui-script');";
     dispatchInput($('preRequestScriptInput'));
@@ -397,6 +419,38 @@
 
   function cssAttributeValue(value) {
     return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  }
+
+  function editMarkdownPane(prefix, value) {
+    $(`${prefix}Preview`).click();
+    assertUiSmoke(!$(`${prefix}SaveButton`).hidden && !$(`${prefix}CancelButton`).hidden, `${prefix} Save and Cancel buttons should appear while editing.`);
+    assertUiSmoke(!$(`${prefix}EditorShell`).hidden && $(`${prefix}Preview`).hidden, `${prefix} Markdown editor should replace the preview while editing.`);
+    const input = $(`${prefix}Input`);
+    const editor = input.closest('.code-editor');
+    assertUiSmoke(editor?.classList.contains('has-line-numbers'), `${prefix} Markdown source should use the normal line-numbered text editor.`);
+    input.value = value;
+    dispatchInput(input);
+  }
+
+  function assertMarkdownPreview(previewId, expected = {}) {
+    const preview = $(previewId);
+    assertUiSmoke(preview && !preview.hidden, `${previewId} Markdown preview should be visible.`);
+    if (expected.heading) {
+      assertUiSmoke(
+        Array.from(preview.querySelectorAll('h1,h2,h3,h4,h5,h6')).some((heading) => heading.textContent === expected.heading),
+        `${previewId} should render Markdown headings.`
+      );
+    }
+    if (expected.strong) {
+      assertUiSmoke(preview.querySelector('strong')?.textContent === expected.strong, `${previewId} should render Markdown strong text.`);
+    }
+    if (expected.code) {
+      assertUiSmoke(preview.querySelector('code')?.textContent.includes(expected.code), `${previewId} should render Markdown code.`);
+    }
+    if (expected.link) {
+      const link = preview.querySelector('a');
+      assertUiSmoke(link?.textContent === expected.link && link.getAttribute('rel') === 'noreferrer', `${previewId} should render safe Markdown links.`);
+    }
   }
 
   function assertHighClickPlacesCaret(control, label) {

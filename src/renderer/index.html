@@ -162,8 +162,15 @@
         </div>
 
         <div id="collectionOverviewTab" class="tab-panel active" role="tabpanel" aria-labelledby="collectionOverviewTabButton">
-          <div class="collection-overview-field">
-            <textarea id="collectionDescriptionInput" spellcheck="true" placeholder="What this collection is for" aria-label="Collection overview" data-code-editor data-code-language="text"></textarea>
+          <div class="markdown-pane collection-overview-field" data-markdown-pane="collectionOverview">
+            <div class="markdown-pane-actions">
+              <button id="collectionDescriptionSaveButton" class="primary" type="button" hidden>Save</button>
+              <button id="collectionDescriptionCancelButton" type="button" hidden>Cancel</button>
+            </div>
+            <div id="collectionDescriptionPreview" class="markdown-renderer markdown-body" tabindex="0" aria-label="Collection overview"></div>
+            <div id="collectionDescriptionEditorShell" class="markdown-editor-shell" hidden>
+              <textarea id="collectionDescriptionInput" spellcheck="true" placeholder="Use markdown to describe what this collection is for" aria-label="Collection overview Markdown source" data-code-editor data-code-language="markdown"></textarea>
+            </div>
           </div>
         </div>
 
@@ -211,8 +218,15 @@
         </div>
 
         <div id="folderOverviewTab" class="tab-panel active" role="tabpanel" aria-labelledby="folderOverviewTabButton">
-          <div class="collection-overview-field">
-            <textarea id="folderDescriptionInput" spellcheck="true" placeholder="What this folder is for" aria-label="Folder overview" data-code-editor data-code-language="text"></textarea>
+          <div class="markdown-pane collection-overview-field" data-markdown-pane="folderOverview">
+            <div class="markdown-pane-actions">
+              <button id="folderDescriptionSaveButton" class="primary" type="button" hidden>Save</button>
+              <button id="folderDescriptionCancelButton" type="button" hidden>Cancel</button>
+            </div>
+            <div id="folderDescriptionPreview" class="markdown-renderer markdown-body" tabindex="0" aria-label="Folder overview"></div>
+            <div id="folderDescriptionEditorShell" class="markdown-editor-shell" hidden>
+              <textarea id="folderDescriptionInput" spellcheck="true" placeholder="Use markdown to describe what this folder is for" aria-label="Folder overview Markdown source" data-code-editor data-code-language="markdown"></textarea>
+            </div>
           </div>
         </div>
 
@@ -579,7 +593,16 @@
         </div>
 
         <div id="docsTab" class="tab-panel" role="tabpanel" aria-labelledby="requestDocsTabButton">
-          <textarea id="docsInput" class="docs-input" spellcheck="false" placeholder="Request docs" aria-label="Request docs" data-code-editor data-code-language="text"></textarea>
+          <div class="markdown-pane" data-markdown-pane="requestDocs">
+            <div class="markdown-pane-actions">
+              <button id="docsSaveButton" class="primary" type="button" hidden>Save</button>
+              <button id="docsCancelButton" type="button" hidden>Cancel</button>
+            </div>
+            <div id="docsPreview" class="markdown-renderer markdown-body" tabindex="0" aria-label="Request docs"></div>
+            <div id="docsEditorShell" class="markdown-editor-shell" hidden>
+              <textarea id="docsInput" class="docs-input" spellcheck="false" placeholder="Use markdown to describe what this request is for" aria-label="Request docs Markdown source" data-code-editor data-code-language="markdown"></textarea>
+            </div>
+          </div>
         </div>
 
       </section>
@@ -1892,6 +1915,8 @@
   <script src="vaultPromptQueue.js"></script>
   <script src="rendererWorkflows.js"></script>
   <script src="runResultFormatting.js"></script>
+  <script src="vendor/markdown-it.min.js"></script>
+  <script src="markdownRenderer.js"></script>
   <script src="renderer.js"></script>
   <script src="uiSmokeCommon.js"></script>
   <script src="uiWorkflowSmoke.js"></script>

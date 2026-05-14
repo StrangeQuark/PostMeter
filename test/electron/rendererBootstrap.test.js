@@ -141,6 +141,10 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(indexSource, /id="resetEditorTypographyButton"/);
   assert.deepEqual(selectOptionValues(indexSource, 'interfaceFontSelect'), selectOptionValues(indexSource, 'editorFontSelect'));
   assert.match(indexSource, /id="showEditorLineNumbersInput"/);
+  assert.match(indexSource, /src="vendor\/markdown-it\.min\.js"/);
+  assert.match(indexSource, /src="markdownRenderer\.js"/);
+  assert.match(indexSource, /id="docsPreview"[^>]+markdown-renderer/);
+  assert.match(indexSource, /id="collectionDescriptionPreview"[^>]+markdown-renderer/);
   assert.match(indexSource, /id="saveOnForceCloseInput"/);
   assert.match(indexSource, /id="closeModalsOnBackdropClickInput"/);
   assert.match(indexSource, /id="includePrereleasesInput"/);
@@ -1052,16 +1056,26 @@ test('tree context menus close toolbar peers before opening', () => {
   }
 });
 
-test('renderer bootstrap binds pane save buttons', () => {
+test('renderer bootstrap binds markdown pane preview and save buttons', () => {
   const elements = new Map([
     ['saveRequestButton', createElement()],
+    ['docsPreview', createElement({ tagName: 'DIV' })],
+    ['docsSaveButton', createElement()],
+    ['docsCancelButton', createElement()],
     ['exportRequestPanelButton', createElement()],
     ['exportRequestPanelMenu', createElement()],
     ['exportRequestPanelPostmeterButton', createElement()],
     ['exportRequestPanelCurlButton', createElement()],
+    ['collectionDescriptionPreview', createElement({ tagName: 'DIV' })],
+    ['collectionDescriptionSaveButton', createElement()],
+    ['collectionDescriptionCancelButton', createElement()],
+    ['folderDescriptionPreview', createElement({ tagName: 'DIV' })],
+    ['folderDescriptionSaveButton', createElement()],
+    ['folderDescriptionCancelButton', createElement()],
     ['saveEnvironmentButton', createElement()]
   ]);
   const calls = [];
+  let previewKeyPrevented = false;
 
   bindUi({
     doc: {
@@ -1075,12 +1089,24 @@ test('renderer bootstrap binds pane save buttons', () => {
     },
     windowObject: { addEventListener() {} },
     onSaveRequest: () => calls.push('request'),
+    onEditRequestDocs: () => calls.push('docs-edit'),
+    onSaveRequestDocs: () => calls.push('docs-save'),
+    onCancelRequestDocs: () => calls.push('docs-cancel'),
     onExportCurrentRequest: () => calls.push('request-export'),
     onExportCurrentRequestCurl: () => calls.push('request-export-curl'),
+    onEditCollectionDescription: () => calls.push('collection-description-edit'),
+    onSaveCollectionDescription: () => calls.push('collection-description-save'),
+    onCancelCollectionDescription: () => calls.push('collection-description-cancel'),
+    onEditFolderDescription: () => calls.push('folder-description-edit'),
+    onSaveFolderDescription: () => calls.push('folder-description-save'),
+    onCancelFolderDescription: () => calls.push('folder-description-cancel'),
     onSaveEnvironment: () => calls.push('environment')
   });
 
   elements.get('saveRequestButton').dispatch('click');
+  elements.get('docsPreview').dispatch('click');
+  elements.get('docsSaveButton').dispatch('click');
+  elements.get('docsCancelButton').dispatch('click');
   elements.get('exportRequestPanelButton').dispatch('click');
   assert.equal(elements.get('exportRequestPanelMenu').hidden, false);
   elements.get('exportRequestPanelPostmeterButton').dispatch('click');
@@ -1088,9 +1114,36 @@ test('renderer bootstrap binds pane save buttons', () => {
   elements.get('exportRequestPanelButton').dispatch('click');
   assert.equal(elements.get('exportRequestPanelMenu').hidden, false);
   elements.get('exportRequestPanelCurlButton').dispatch('click');
+  elements.get('collectionDescriptionPreview').dispatch('keydown', {
+    key: 'Enter',
+    preventDefault() {
+      previewKeyPrevented = true;
+    }
+  });
+  elements.get('collectionDescriptionSaveButton').dispatch('click');
+  elements.get('collectionDescriptionCancelButton').dispatch('click');
+  elements.get('folderDescriptionPreview').dispatch('click');
+  elements.get('folderDescriptionSaveButton').dispatch('click');
+  elements.get('folderDescriptionCancelButton').dispatch('click');
   elements.get('saveEnvironmentButton').dispatch('click');
 
-  assert.deepEqual(calls, ['request', 'request-export', 'request-export-curl', 'environment']);
+  assert.equal(previewKeyPrevented, true);
+
+  assert.deepEqual(calls, [
+    'request',
+    'docs-edit',
+    'docs-save',
+    'docs-cancel',
+    'request-export',
+    'request-export-curl',
+    'collection-description-edit',
+    'collection-description-save',
+    'collection-description-cancel',
+    'folder-description-edit',
+    'folder-description-save',
+    'folder-description-cancel',
+    'environment'
+  ]);
 });
 
 test('renderer bootstrap binds request environment and runner import/export menu actions', () => {
@@ -1460,7 +1513,7 @@ function createElement({ tagName = 'BUTTON', value = '' } = {}) {
       for (const handler of listeners.get(name) || []) {
         handler({
           stopPropagation() {},
-          preventDefault() {},
+          preventDefault: event.preventDefault || (() => {}),
           target: this,
           currentTarget: this,
           key: event.key

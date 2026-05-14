@@ -227,7 +227,38 @@ const {
 const { createVaultPromptQueue } = PostMeterVaultPromptQueue;
 const { createVariableAutocomplete } = PostMeterVariableAutocomplete;
 const CodeEditor = window.PostMeterCodeEditor || {};
+const MarkdownRenderer = window.PostMeterMarkdownRenderer || {};
 const VariableHighlighter = window.PostMeterVariableHighlighter || {};
+const MARKDOWN_PANE_CONFIGS = Object.freeze({
+  collectionOverview: {
+    cancelButtonId: 'collectionDescriptionCancelButton',
+    editorShellId: 'collectionDescriptionEditorShell',
+    emptyText: 'No collection overview yet.',
+    inputId: 'collectionDescriptionInput',
+    previewId: 'collectionDescriptionPreview',
+    saveButtonId: 'collectionDescriptionSaveButton'
+  },
+  folderOverview: {
+    cancelButtonId: 'folderDescriptionCancelButton',
+    editorShellId: 'folderDescriptionEditorShell',
+    emptyText: 'No folder overview yet.',
+    inputId: 'folderDescriptionInput',
+    previewId: 'folderDescriptionPreview',
+    saveButtonId: 'folderDescriptionSaveButton'
+  },
+  requestDocs: {
+    cancelButtonId: 'docsCancelButton',
+    editorShellId: 'docsEditorShell',
+    emptyText: 'No request docs yet.',
+    inputId: 'docsInput',
+    previewId: 'docsPreview',
+    saveButtonId: 'docsSaveButton'
+  }
+});
+const markdownPaneStates = Object.fromEntries(Object.keys(MARKDOWN_PANE_CONFIGS).map((pane) => [pane, {
+  contextKey: '',
+  editing: false
+}]));
 const {
   activeCollectionTabKey: buildActiveCollectionTabKey,
   activeEnvironmentTabKey: buildActiveEnvironmentTabKey,
@@ -700,9 +731,15 @@ function bindUi() {
     onCollectionAuthTypeChange: showCollectionAuthSection,
     onCollectionInput: collectCollectionAndMarkDirty,
     onCollectionAuthInput: collectCollectionAndMarkDirty,
+    onEditCollectionDescription: () => beginMarkdownPaneEdit('collectionOverview'),
+    onSaveCollectionDescription: () => saveMarkdownPaneEdit('collectionOverview'),
+    onCancelCollectionDescription: () => cancelMarkdownPaneEdit('collectionOverview'),
     onFolderAuthTypeChange: showFolderAuthSection,
     onFolderInput: collectFolderAndMarkDirty,
     onFolderAuthInput: collectFolderAndMarkDirty,
+    onEditFolderDescription: () => beginMarkdownPaneEdit('folderOverview'),
+    onSaveFolderDescription: () => saveMarkdownPaneEdit('folderOverview'),
+    onCancelFolderDescription: () => cancelMarkdownPaneEdit('folderOverview'),
     onPerformanceFilterCookiesChange: renderPerformanceCookieJarEditor,
     onMethodChange: () => {
       updateMethodSelectClass();
@@ -722,6 +759,9 @@ function bindUi() {
     onBodyInput: collectRequestAndMarkDirty,
     onPreRequestScriptInput: collectRequestAndMarkDirty,
     onTestScriptInput: collectRequestAndMarkDirty,
+    onEditRequestDocs: () => beginMarkdownPaneEdit('requestDocs'),
+    onSaveRequestDocs: () => saveMarkdownPaneEdit('requestDocs'),
+    onCancelRequestDocs: () => cancelMarkdownPaneEdit('requestDocs'),
     onRequestCookieJarChange: collectRequestAndMarkDirty,
     onFilterCookiesChange: renderCookieJarEditor,
     onTrustedScriptCapabilityChange: setTrustedScriptCapabilitiesFromInputs,
@@ -3770,6 +3810,184 @@ function refreshVariableHighlights(root = document) {
   VariableHighlighter.enhanceVariableTextboxes?.(root);
   VariableHighlighter.refreshVariableHighlights?.(root);
   CodeEditor.refreshCodeEditors?.(root);
+}
+
+function renderMarkdownPane(pane) {
+  const config = MARKDOWN_PANE_CONFIGS[pane];
+  const paneData = markdownPaneData(pane);
+  if (!config || !paneData) {
+    return;
+  }
+  const state = markdownPaneStates[pane];
+  if (!paneData.item || state.contextKey !== paneData.contextKey) {
+    state.contextKey = paneData.contextKey;
+    state.editing = false;
+  }
+
+  const value = paneData.value();
+  const saveButton = $(config.saveButtonId);
+  const cancelButton = $(config.cancelButtonId);
+  const actions = saveButton?.parentElement?.classList?.contains('markdown-pane-actions')
+    ? saveButton.parentElement
+    : cancelButton?.parentElement?.classList?.contains('markdown-pane-actions')
+      ? cancelButton.parentElement
+      : null;
+  const preview = $(config.previewId);
+  const editorShell = $(config.editorShellId);
+  const input = $(config.inputId);
+
+  if (actions) {
+    actions.hidden = !state.editing;
+  }
+  if (saveButton) {
+    saveButton.hidden = !state.editing;
+    saveButton.disabled = !paneData.item;
+  }
+  if (cancelButton) {
+    cancelButton.hidden = !state.editing;
+    cancelButton.disabled = !paneData.item;
+  }
+  if (preview) {
+    preview.hidden = state.editing;
+    preview.classList.toggle('is-editable', Boolean(paneData.item) && !state.editing);
+    preview.setAttribute('role', paneData.item ? 'button' : 'region');
+    preview.setAttribute('aria-disabled', paneData.item ? 'false' : 'true');
+    preview.setAttribute('title', paneData.item ? 'Click to edit' : '');
+    preview.tabIndex = paneData.item ? 0 : -1;
+    renderMarkdownPreview(preview, value, config.emptyText);
+  }
+  if (editorShell) {
+    editorShell.hidden = !state.editing;
+  }
+  if (input) {
+    const renderKey = `${paneData.contextKey}:${value}`;
+    if (!state.editing || input.dataset.markdownRenderKey !== renderKey) {
+      input.value = value;
+      input.dataset.markdownRenderKey = renderKey;
+    }
+    refreshCodeEditorIfTextarea(input);
+  }
+}
+
+function markdownPaneData(pane) {
+  if (pane === 'requestDocs') {
+    const request = activeRequest();
+    return {
+      contextKey: request ? `request:${request.id}` : 'request:none',
+      item: request,
+      markDirty: markActiveRequestDirty,
+      setValue(value) {
+        if (request) {
+          request.docs = value;
+        }
+      },
+      value() {
+        return request?.docs == null ? '' : String(request.docs);
+      }
+    };
+  }
+  if (pane === 'collectionOverview') {
+    const collection = activeCollection();
+    return {
+      contextKey: collection ? `collection:${collection.id}` : 'collection:none',
+      item: collection,
+      markDirty: markActiveCollectionTabDirty,
+      setValue(value) {
+        if (collection) {
+          collection.description = value;
+        }
+      },
+      value() {
+        return collection?.description == null ? '' : String(collection.description);
+      }
+    };
+  }
+  if (pane === 'folderOverview') {
+    const folder = activeFolder();
+    return {
+      contextKey: folder ? `folder:${folder.id}` : 'folder:none',
+      item: folder,
+      markDirty: markActiveFolderTabDirty,
+      setValue(value) {
+        if (folder) {
+          folder.description = value;
+        }
+      },
+      value() {
+        return folder?.description == null ? '' : String(folder.description);
+      }
+    };
+  }
+  return null;
+}
+
+function beginMarkdownPaneEdit(pane) {
+  const config = MARKDOWN_PANE_CONFIGS[pane];
+  const paneData = markdownPaneData(pane);
+  if (!config || !paneData?.item) {
+    return;
+  }
+  const state = markdownPaneStates[pane];
+  state.contextKey = paneData.contextKey;
+  state.editing = true;
+  const input = $(config.inputId);
+  if (input) {
+    input.dataset.markdownRenderKey = '';
+  }
+  renderMarkdownPane(pane);
+  focusMarkdownPaneInput(config.inputId);
+}
+
+function cancelMarkdownPaneEdit(pane) {
+  const config = MARKDOWN_PANE_CONFIGS[pane];
+  const state = markdownPaneStates[pane];
+  if (!config || !state) {
+    return;
+  }
+  state.editing = false;
+  const input = $(config.inputId);
+  if (input) {
+    input.dataset.markdownRenderKey = '';
+  }
+  renderMarkdownPane(pane);
+}
+
+function saveMarkdownPaneEdit(pane) {
+  const config = MARKDOWN_PANE_CONFIGS[pane];
+  const paneData = markdownPaneData(pane);
+  const state = markdownPaneStates[pane];
+  if (!config || !paneData?.item || !state) {
+    return;
+  }
+  const input = $(config.inputId);
+  paneData.setValue(input?.value || '');
+  paneData.markDirty();
+  state.editing = false;
+  if (input) {
+    input.dataset.markdownRenderKey = '';
+  }
+  renderMarkdownPane(pane);
+}
+
+function focusMarkdownPaneInput(inputId) {
+  const input = $(inputId);
+  if (!input) {
+    return;
+  }
+  input.focus();
+  const end = input.value.length;
+  input.setSelectionRange?.(end, end);
+}
+
+function renderMarkdownPreview(preview, value, emptyText) {
+  const source = String(value || '');
+  if (!source.trim()) {
+    preview.innerHTML = `<p class="markdown-empty">${escapeHtmlText(emptyText)}</p>`;
+    return;
+  }
+  preview.innerHTML = MarkdownRenderer.renderMarkdown
+    ? MarkdownRenderer.renderMarkdown(source)
+    : escapeHtmlText(source).replace(/\n/g, '<br>');
 }
 
 function variableHighlightVariablesForTarget(target) {
@@ -11264,6 +11482,7 @@ function renderRequestEditor() {
     $('preRequestScriptInput').value = '';
     $('testScriptInput').value = '';
     setValue('docsInput', '');
+    renderMarkdownPane('requestDocs');
     $('paramsTable').textContent = '';
     $('headersTable').textContent = '';
     $('requestVariablesTable').textContent = '';
@@ -11293,6 +11512,7 @@ function renderRequestEditor() {
   $('testScriptInput').value = request.scripts.tests || '';
   request.docs = request.docs == null ? '' : String(request.docs);
   setValue('docsInput', request.docs);
+  renderMarkdownPane('requestDocs');
   request.cookieJar ||= { enabled: false, storeResponses: true };
   ensureRequestAutoHeaders(request);
   $('requestCookieJarEnabledInput').checked = request.cookieJar.enabled === true;
@@ -11319,6 +11539,7 @@ function renderCollectionEditor() {
   }
   if (!collection) {
     $('collectionDescriptionInput').value = '';
+    renderMarkdownPane('collectionOverview');
     $('collectionPreRequestScriptInput').value = '';
     $('collectionTestScriptInput').value = '';
     $('collectionVariablesTable').textContent = '';
@@ -11330,6 +11551,7 @@ function renderCollectionEditor() {
   collection.scripts ||= { preRequest: '', tests: '' };
   collection.variables ||= [];
   $('collectionDescriptionInput').value = collection.description || '';
+  renderMarkdownPane('collectionOverview');
   renderCollectionAuthEditor(collection.auth);
   $('collectionPreRequestScriptInput').value = collection.scripts.preRequest || '';
   $('collectionTestScriptInput').value = collection.scripts.tests || '';
@@ -11352,6 +11574,7 @@ function renderFolderEditor() {
   }
   if (!folder) {
     $('folderDescriptionInput').value = '';
+    renderMarkdownPane('folderOverview');
     $('folderPreRequestScriptInput').value = '';
     $('folderTestScriptInput').value = '';
     $('folderVariablesTable').textContent = '';
@@ -11363,6 +11586,7 @@ function renderFolderEditor() {
   folder.scripts ||= { preRequest: '', tests: '' };
   folder.variables ||= [];
   $('folderDescriptionInput').value = folder.description || '';
+  renderMarkdownPane('folderOverview');
   renderFolderAuthEditor(folder.auth);
   $('folderPreRequestScriptInput').value = folder.scripts.preRequest || '';
   $('folderTestScriptInput').value = folder.scripts.tests || '';
@@ -13116,6 +13340,13 @@ function escapeHtmlAttribute(value) {
   return String(value == null ? '' : value)
     .replaceAll('&', '&amp;')
     .replaceAll('"', '&quot;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+}
+
+function escapeHtmlText(value) {
+  return String(value == null ? '' : value)
+    .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;');
 }
@@ -15014,7 +15245,6 @@ function collectRequestFromEditor() {
     preRequest: $('preRequestScriptInput').value,
     tests: $('testScriptInput').value
   };
-  request.docs = $('docsInput')?.value || '';
   request.cookieJar = {
     enabled: $('requestCookieJarEnabledInput').checked,
     storeResponses: $('requestCookieJarStoreInput').checked
@@ -15053,7 +15283,6 @@ function collectCollectionFromEditor(options = {}) {
     collection.name = collectionTitleInputValue() || 'Untitled Collection';
   }
   collection.auth = collectCollectionAuthFromEditor();
-  collection.description = $('collectionDescriptionInput')?.value || '';
   collection.scripts = {
     ...(collection.scripts || {}),
     preRequest: $('collectionPreRequestScriptInput')?.value || '',
@@ -15074,7 +15303,6 @@ function collectFolderFromEditor(options = {}) {
     folder.name = folderTitleInputValue() || 'Untitled Folder';
   }
   folder.auth = collectFolderAuthFromEditor();
-  folder.description = $('folderDescriptionInput')?.value || '';
   folder.scripts = {
     ...(folder.scripts || {}),
     preRequest: $('folderPreRequestScriptInput')?.value || '',

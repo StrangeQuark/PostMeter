@@ -385,8 +385,13 @@
     $('filterCookiesToRequestHostInput').checked = false;
     dispatchChange($('filterCookiesToRequestHostInput'));
     activateTab('request', 'docs');
-    assertUiSmoke($('docsInput').getAttribute('aria-label') === 'Request docs', 'Docs textarea should expose an accessible label.');
-    assertUiSmoke($('docsInput').closest('.code-editor'), 'Docs textarea should be wrapped by the line-number editor.');
+    assertUiSmoke($('docsPreview').getAttribute('aria-label') === 'Request docs', 'Docs Markdown preview should expose an accessible label.');
+    assertUiSmoke($('docsPreview').getAttribute('role') === 'button' && $('docsSaveButton').hidden && $('docsCancelButton').hidden, 'Docs preview should be the edit trigger and hide Save/Cancel before editing.');
+    $('docsPreview').dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Enter' }));
+    assertUiSmoke($('docsInput').getAttribute('aria-label') === 'Request docs Markdown source', 'Docs textarea should expose an accessible Markdown source label.');
+    assertUiSmoke($('docsInput').closest('.code-editor'), 'Docs textarea should be wrapped by the line-number editor while editing.');
+    $('docsCancelButton').click();
+    assertUiSmoke(!$('docsPreview').hidden && $('docsSaveButton').hidden && $('docsCancelButton').hidden, 'Docs Cancel should return to Markdown preview.');
     activateTab('request', 'collectionVariables');
     $('addRequestVariableButton').click();
     const variableRow = $('requestVariablesTable').querySelector('.kv-row');
@@ -963,6 +968,10 @@
   async function assertEditorLineNumbersSettingSmoke() {
     const checkbox = $('showEditorLineNumbersInput');
     const editor = $('bodyInput')?.closest?.('.code-editor');
+    activateTab('request', 'docs');
+    if ($('docsEditorShell').hidden) {
+      $('docsPreview').click();
+    }
     const docsEditor = $('docsInput')?.closest?.('.code-editor');
     assertUiSmoke(checkbox, 'Editor line number setting checkbox should exist.');
     assertUiSmoke(editor, 'Request body editor should exist before toggling editor line numbers.');
@@ -1004,6 +1013,9 @@
     assertUiSmoke(checkbox.checked === true, 'Editor line number setting checkbox should stay checked after settings are saved.');
     assertUiSmoke(editor.classList.contains('has-line-numbers'), 'Code editors should restore line numbers when the setting is checked again.');
     assertUiSmoke(docsEditor.classList.contains('has-line-numbers'), 'Docs editor should restore line numbers when the setting is checked again.');
+    if (!$('docsCancelButton').hidden) {
+      $('docsCancelButton').click();
+    }
   }
 
   async function assertVariableTooltipHintsSettingSmoke() {

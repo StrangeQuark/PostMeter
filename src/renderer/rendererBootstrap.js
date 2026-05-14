@@ -135,12 +135,18 @@
     bindClick(doc, 'sendButton', options.onSendRequest);
     bindClick(doc, 'saveCollectionButton', options.onSaveCollection);
     bindClick(doc, 'addCollectionVariableButton', options.onAddCollectionVariable);
-    bindInput(doc, 'collectionDescriptionInput', options.onCollectionInput);
+    bindClick(doc, 'collectionDescriptionPreview', options.onEditCollectionDescription);
+    bindKey(doc, 'collectionDescriptionPreview', options.onEditCollectionDescription, ['Enter', ' ']);
+    bindClick(doc, 'collectionDescriptionSaveButton', options.onSaveCollectionDescription);
+    bindClick(doc, 'collectionDescriptionCancelButton', options.onCancelCollectionDescription);
     bindInput(doc, 'collectionPreRequestScriptInput', options.onCollectionInput);
     bindInput(doc, 'collectionTestScriptInput', options.onCollectionInput);
     bindClick(doc, 'saveFolderButton', options.onSaveFolder);
     bindClick(doc, 'addFolderVariableButton', options.onAddFolderVariable);
-    bindInput(doc, 'folderDescriptionInput', options.onFolderInput);
+    bindClick(doc, 'folderDescriptionPreview', options.onEditFolderDescription);
+    bindKey(doc, 'folderDescriptionPreview', options.onEditFolderDescription, ['Enter', ' ']);
+    bindClick(doc, 'folderDescriptionSaveButton', options.onSaveFolderDescription);
+    bindClick(doc, 'folderDescriptionCancelButton', options.onCancelFolderDescription);
     bindInput(doc, 'folderPreRequestScriptInput', options.onFolderInput);
     bindInput(doc, 'folderTestScriptInput', options.onFolderInput);
     bindClick(doc, 'addParamButton', options.onAddParam);
@@ -258,7 +264,10 @@
     bindInput(doc, 'binaryBodySourceInput', options.onBodyInput);
     bindInput(doc, 'preRequestScriptInput', options.onPreRequestScriptInput);
     bindInput(doc, 'testScriptInput', options.onTestScriptInput);
-    bindInput(doc, 'docsInput', options.onDocsInput || options.onBodyInput);
+    bindClick(doc, 'docsPreview', options.onEditRequestDocs);
+    bindKey(doc, 'docsPreview', options.onEditRequestDocs, ['Enter', ' ']);
+    bindClick(doc, 'docsSaveButton', options.onSaveRequestDocs);
+    bindClick(doc, 'docsCancelButton', options.onCancelRequestDocs);
     bindChange(doc, 'requestCookieJarEnabledInput', options.onRequestCookieJarChange);
     bindChange(doc, 'requestCookieJarStoreInput', options.onRequestCookieJarChange);
     bindChange(doc, 'filterCookiesToRequestHostInput', options.onFilterCookiesChange);
@@ -729,6 +738,20 @@
 
   function bindChange(doc, id, handler) {
     bindEvent(doc, id, 'change', handler);
+  }
+
+  function bindKey(doc, id, handler, keys = []) {
+    const element = getElement(doc, id);
+    if (!element || typeof handler !== 'function') {
+      return;
+    }
+    element.addEventListener('keydown', (event) => {
+      if (!keys.includes(event.key)) {
+        return;
+      }
+      event.preventDefault();
+      handler(event);
+    });
   }
 
   function bindAll(doc, selector, eventName, handler) {
