@@ -25,6 +25,8 @@ test('renderer state builds active tab keys from the current ids', () => {
   assert.equal(activeCollectionTabKey(state), '');
   assert.equal(activeEnvironmentTabKey(state), 'environment:environment-1');
   assert.equal(activeWorkspaceTabKey(state), 'workspace:workspace-2');
+  assert.ok(state.collapsedCollectionIds instanceof Set);
+  assert.ok(state.collapsedFolderIds instanceof Set);
 
   state.activeCollectionId = null;
   assert.equal(activeRequestTabKey(state), 'draft:request-1');

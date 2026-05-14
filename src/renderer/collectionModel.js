@@ -217,10 +217,103 @@ function uniqueName(baseName, existingNames) {
   return `${baseName} ${suffix}`;
 }
 
+function normalizeCollectionTreeCollapseSet(value) {
+  const values = value instanceof Set
+    ? Array.from(value)
+    : Array.isArray(value)
+      ? value
+      : [];
+  return new Set(values.map((item) => String(item || '').trim()).filter(Boolean));
+}
+
+function ensureCollectionTreeCollapseState(state = {}) {
+  const target = state && typeof state === 'object' ? state : {};
+  target.collapsedCollectionIds = normalizeCollectionTreeCollapseSet(target.collapsedCollectionIds);
+  target.collapsedFolderIds = normalizeCollectionTreeCollapseSet(target.collapsedFolderIds);
+  return target;
+}
+
+function collectionTreeItemHasChildren(item) {
+  return Boolean((item?.requests || []).length || (item?.folders || []).length);
+}
+
+function collectionTreeCollapseSetForKind(state, kind) {
+  const normalizedState = ensureCollectionTreeCollapseState(state);
+  if (kind === 'collection') {
+    return normalizedState.collapsedCollectionIds;
+  }
+  if (kind === 'folder') {
+    return normalizedState.collapsedFolderIds;
+  }
+  return null;
+}
+
+function isCollectionTreeItemCollapsed(state, kind, id) {
+  const normalizedId = String(id || '').trim();
+  const collapseSet = normalizedId ? collectionTreeCollapseSetForKind(state, kind) : null;
+  return collapseSet?.has(normalizedId) === true;
+}
+
+function setCollectionTreeItemCollapsed(state, kind, id, collapsed) {
+  const normalizedId = String(id || '').trim();
+  const collapseSet = normalizedId ? collectionTreeCollapseSetForKind(state, kind) : null;
+  if (!collapseSet) {
+    return false;
+  }
+  if (collapsed) {
+    collapseSet.add(normalizedId);
+  } else {
+    collapseSet.delete(normalizedId);
+  }
+  return true;
+}
+
+function toggleCollectionTreeItemCollapsed(state, kind, id) {
+  const nextCollapsed = !isCollectionTreeItemCollapsed(state, kind, id);
+  return setCollectionTreeItemCollapsed(state, kind, id, nextCollapsed) ? nextCollapsed : false;
+}
+
+function pruneCollectionTreeCollapseState(state, collections = []) {
+  const normalizedState = ensureCollectionTreeCollapseState(state);
+  const collectionIds = new Set();
+  const folderIds = new Set();
+  for (const collection of collections || []) {
+    if (collection?.id) {
+      collectionIds.add(String(collection.id));
+    }
+    for (const folder of collection?.folders || []) {
+      collectFolderIds(folder, folderIds);
+    }
+  }
+  pruneCollapseSet(normalizedState.collapsedCollectionIds, collectionIds);
+  pruneCollapseSet(normalizedState.collapsedFolderIds, folderIds);
+  return normalizedState;
+}
+
+function collectFolderIds(folder, folderIds) {
+  if (folder?.id) {
+    folderIds.add(String(folder.id));
+  }
+  for (const child of folder?.folders || []) {
+    collectFolderIds(child, folderIds);
+  }
+}
+
+function pruneCollapseSet(collapseSet, allowedIds) {
+  for (const id of Array.from(collapseSet)) {
+    if (!allowedIds.has(id)) {
+      collapseSet.delete(id);
+    }
+  }
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     allFolderNames,
     allRequestNames,
+    collectionTreeItemHasChildren,
+    collectionTreeCollapseSetForKind,
+    ensureCollectionTreeCollapseState,
     findFolder,
     findFolderPath,
     findFolderPathRecursive,
@@ -229,10 +322,15 @@ if (typeof module !== 'undefined' && module.exports) {
     findRequestInFolder,
     firstRequestInCollection,
     firstRequestInFolder,
+    isCollectionTreeItemCollapsed,
+    normalizeCollectionTreeCollapseSet,
+    pruneCollectionTreeCollapseState,
     removeFolder,
     removeFolderFromParent,
     removeRequestFromCollection,
     removeRequestFromFolder,
+    setCollectionTreeItemCollapsed,
+    toggleCollectionTreeItemCollapsed,
     uniqueName,
     walkCollectionRequests,
     walkFolderRequests

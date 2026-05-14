@@ -422,6 +422,42 @@ h2 {
   margin-left: 14px;
 }
 
+.tree-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  min-width: 0;
+}
+
+.tree-row.no-disclosure {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.tree-disclosure,
+.tree-disclosure-placeholder {
+  width: 18px;
+  height: 30px;
+}
+
+.tree-disclosure {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--ui-font-size-xs);
+  font-weight: 800;
+  line-height: 1;
+}
+
+.tree-disclosure:hover,
+.tree-disclosure:focus-visible {
+  background: var(--tree-hover);
+  color: var(--text);
+}
+
 .tree-item,
 .history-item {
   width: 100%;
@@ -491,7 +527,7 @@ h2 {
   outline-offset: 1px;
 }
 
-.folder-node.is-folder-drop-target > .tree-item {
+.folder-node.is-folder-drop-target > .tree-row > .tree-item {
   background: var(--primary-soft);
   box-shadow: inset 3px 0 0 var(--primary);
 }

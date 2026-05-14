@@ -3,11 +3,17 @@ const test = require('node:test');
 const {
   allFolderNames,
   allRequestNames,
+  collectionTreeItemHasChildren,
+  ensureCollectionTreeCollapseState,
   findFolder,
   findRequest,
   firstRequestInCollection,
+  isCollectionTreeItemCollapsed,
+  pruneCollectionTreeCollapseState,
   removeFolder,
   removeRequestFromCollection,
+  setCollectionTreeItemCollapsed,
+  toggleCollectionTreeItemCollapsed,
   uniqueName,
   walkCollectionRequests
 } = require('../../src/renderer/collectionModel');
@@ -51,4 +57,28 @@ test('renderer collection model removes nested items and generates unique names'
   assert.equal(removeFolder(collection, 'f2'), true);
   assert.equal(findFolder(collection, 'f2'), null);
   assert.equal(uniqueName('Request', ['Request', 'Request 2']), 'Request 3');
+});
+
+test('renderer collection model manages collapsible tree state without mutating collections', () => {
+  const collection = nestedCollection();
+  collection.id = 'c1';
+  const state = ensureCollectionTreeCollapseState({
+    collapsedCollectionIds: ['c1', '', null],
+    collapsedFolderIds: new Set(['f2', 'missing'])
+  });
+
+  assert.equal(collectionTreeItemHasChildren(collection), true);
+  assert.equal(collectionTreeItemHasChildren({ requests: [], folders: [] }), false);
+  assert.equal(isCollectionTreeItemCollapsed(state, 'collection', 'c1'), true);
+  assert.equal(isCollectionTreeItemCollapsed(state, 'folder', 'f2'), true);
+  assert.equal(toggleCollectionTreeItemCollapsed(state, 'folder', 'f2'), false);
+  assert.equal(isCollectionTreeItemCollapsed(state, 'folder', 'f2'), false);
+  assert.equal(setCollectionTreeItemCollapsed(state, 'folder', 'f1', true), true);
+  assert.equal(setCollectionTreeItemCollapsed(state, 'request', 'r1', true), false);
+
+  pruneCollectionTreeCollapseState(state, [collection]);
+
+  assert.deepEqual(Array.from(state.collapsedCollectionIds), ['c1']);
+  assert.deepEqual(Array.from(state.collapsedFolderIds), ['f1']);
+  assert.deepEqual(allRequestNames(collection), ['Root', 'Nested 1', 'Nested 2']);
 });

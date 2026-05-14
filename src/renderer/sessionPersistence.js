@@ -50,6 +50,8 @@
         .map((tab) => serializePerformanceTab(tab, performanceTestForTab(state, tab)))
         .filter(Boolean),
       workspaceOrder: serializeWorkspaceOrder(state),
+      collapsedCollectionIds: serializeCollapsedCollectionIds(state),
+      collapsedFolderIds: serializeCollapsedFolderIds(state),
       draftRequests: Array.from(state.draftRequests instanceof Map ? state.draftRequests.values() : [])
         .map(cloneJson)
         .filter(Boolean),
@@ -79,6 +81,7 @@
     restoreEnvironmentStates(state, session.openEnvironmentTabs);
     restoreRunnerStates(state, session.openRunnerTabs);
     restorePerformanceStates(state, session.openPerformanceTabs);
+    restoreCollectionTreeCollapseState(state, session);
 
     state.openCollectionTabs = session.openCollectionTabs
       .filter((tab) => collectionExists(state, tab.collectionId))
@@ -709,6 +712,8 @@
       openRunnerTabs: Array.isArray(session.openRunnerTabs) ? session.openRunnerTabs.filter(isObject) : [],
       openPerformanceTabs: Array.isArray(session.openPerformanceTabs) ? session.openPerformanceTabs.filter(isObject) : [],
       workspaceOrder: Array.isArray(session.workspaceOrder) ? session.workspaceOrder.map(normalizeId).filter(Boolean) : [],
+      collapsedCollectionIds: Array.isArray(session.collapsedCollectionIds) ? session.collapsedCollectionIds.map(normalizeId).filter(Boolean) : [],
+      collapsedFolderIds: Array.isArray(session.collapsedFolderIds) ? session.collapsedFolderIds.map(normalizeId).filter(Boolean) : [],
       draftRequests: Array.isArray(session.draftRequests) ? session.draftRequests.filter(isObject) : [],
       dirtyCollectionStates: Array.isArray(session.dirtyCollectionStates) ? session.dirtyCollectionStates.filter(isObject) : [],
       dirtyCookieJarState: isObject(session.dirtyCookieJarState) ? session.dirtyCookieJarState : null
@@ -729,6 +734,52 @@
     return (Array.isArray(state.workspaces) ? state.workspaces : [])
       .map((workspace) => normalizeId(workspace?.id))
       .filter(Boolean);
+  }
+
+  function serializeCollapsedCollectionIds(state) {
+    const values = state?.collapsedCollectionIds instanceof Set
+      ? Array.from(state.collapsedCollectionIds)
+      : Array.isArray(state?.collapsedCollectionIds)
+        ? state.collapsedCollectionIds
+        : [];
+    return uniqueNormalizedIds(values).filter((id) => collectionExists(state, id));
+  }
+
+  function serializeCollapsedFolderIds(state) {
+    const values = state?.collapsedFolderIds instanceof Set
+      ? Array.from(state.collapsedFolderIds)
+      : Array.isArray(state?.collapsedFolderIds)
+        ? state.collapsedFolderIds
+        : [];
+    return uniqueNormalizedIds(values).filter((id) => folderExistsInAnyCollection(state, id));
+  }
+
+  function restoreCollectionTreeCollapseState(state, session) {
+    state.collapsedCollectionIds = new Set((session.collapsedCollectionIds || [])
+      .filter((id) => collectionExists(state, id)));
+    state.collapsedFolderIds = new Set((session.collapsedFolderIds || [])
+      .filter((id) => folderExistsInAnyCollection(state, id)));
+  }
+
+  function folderExistsInAnyCollection(state, folderId) {
+    const normalizedId = normalizeId(folderId);
+    if (!normalizedId) {
+      return false;
+    }
+    return (state?.workspace?.collections || []).some((collection) => folderExistsInList(collection?.folders || [], normalizedId));
+  }
+
+  function folderExistsInList(folders, folderId) {
+    for (const folder of folders || []) {
+      if (folder?.id === folderId || folderExistsInList(folder?.folders || [], folderId)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function uniqueNormalizedIds(values) {
+    return Array.from(new Set((values || []).map(normalizeId).filter(Boolean)));
   }
 
   function applyWorkspaceOrder(state, order) {

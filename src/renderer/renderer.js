@@ -117,6 +117,8 @@ let openEnvironmentTabs = RENDERER_STATE_DEFAULTS.openEnvironmentTabs;
 let openWorkspaceTabs = RENDERER_STATE_DEFAULTS.openWorkspaceTabs;
 let openRunnerTabs = RENDERER_STATE_DEFAULTS.openRunnerTabs;
 let openPerformanceTabs = RENDERER_STATE_DEFAULTS.openPerformanceTabs;
+let collapsedCollectionIds = RENDERER_STATE_DEFAULTS.collapsedCollectionIds;
+let collapsedFolderIds = RENDERER_STATE_DEFAULTS.collapsedFolderIds;
 let collectionDirtySnapshots = RENDERER_STATE_DEFAULTS.collectionDirtySnapshots;
 let collectionDirtyOwners = RENDERER_STATE_DEFAULTS.collectionDirtyOwners;
 let cookieJarDirtySnapshot = RENDERER_STATE_DEFAULTS.cookieJarDirtySnapshot;
@@ -345,6 +347,10 @@ const state = {
   set openRunnerTabs(value) { openRunnerTabs = value; },
   get openPerformanceTabs() { return openPerformanceTabs; },
   set openPerformanceTabs(value) { openPerformanceTabs = value; },
+  get collapsedCollectionIds() { return collapsedCollectionIds; },
+  set collapsedCollectionIds(value) { collapsedCollectionIds = normalizeCollectionTreeCollapseSet(value); },
+  get collapsedFolderIds() { return collapsedFolderIds; },
+  set collapsedFolderIds(value) { collapsedFolderIds = normalizeCollectionTreeCollapseSet(value); },
   get collectionDirtySnapshots() { return collectionDirtySnapshots; },
   set collectionDirtySnapshots(value) { collectionDirtySnapshots = value; },
   get collectionDirtyOwners() { return collectionDirtyOwners; },
@@ -1949,10 +1955,12 @@ function canOpenPerformanceTabFor(performanceTestId, options = {}) {
 
 function selectRequestTab(tab) {
   collectActiveEditorState();
+  revealOpenRequestTabInCollectionTree(tab);
   requestTabState.selectRequestTab(tab, { collect: false });
 }
 
 function selectRequestTabWithoutCollect(tab) {
+  revealOpenRequestTabInCollectionTree(tab);
   requestTabState.selectRequestTab(tab, { collect: false });
 }
 
@@ -2001,11 +2009,35 @@ function selectCollectionTabWithoutCollect(tab) {
 }
 
 function selectFolderTab(tab) {
+  revealOpenFolderTabInCollectionTree(tab);
   requestTabState.selectFolderTab(tab);
 }
 
 function selectFolderTabWithoutCollect(tab) {
+  revealOpenFolderTabInCollectionTree(tab);
   requestTabState.selectFolderTab(tab, { collect: false });
+}
+
+function revealOpenRequestTabInCollectionTree(tab) {
+  if (!tab || tab.draft === true || tab.runnerRequest === true || tab.runnerId) {
+    return false;
+  }
+  const collection = (workspace?.collections || []).find((item) => item.id === tab.collectionId);
+  const found = collection ? findRequest(collection, tab.requestId) : null;
+  if (!collection || !found?.request) {
+    return false;
+  }
+  expandCollectionTreePath(collection, found.folder?.id || null);
+  return true;
+}
+
+function revealOpenFolderTabInCollectionTree(tab) {
+  const collection = (workspace?.collections || []).find((item) => item.id === tab?.collectionId);
+  if (!collection || !tab?.folderId || !findFolder(collection, tab.folderId)) {
+    return false;
+  }
+  expandCollectionTreePath(collection, tab.folderId, { includeTargetFolder: false });
+  return true;
 }
 
 function markActiveRequestDirty() {
@@ -3711,6 +3743,8 @@ function applyLoadedWorkspace(loaded, options = {}) {
 
 function resetWorkspaceTransientUi() {
   lastRenderedRequestEditorContextKey = '';
+  collapsedCollectionIds = new Set();
+  collapsedFolderIds = new Set();
   $('validationLabel').textContent = '';
   renderRunnerExecutionMessage('No runner run yet.');
   displayTestResults(null);
@@ -6856,6 +6890,7 @@ function selectFirstRequest(collection) {
 function renderCollections() {
   const root = $('collectionsTree');
   root.textContent = '';
+  pruneCollectionTreeCollapseState(state, workspace.collections || []);
   if (!workspace.collections.length) {
     const empty = document.createElement('div');
     empty.className = 'empty-state';
@@ -10187,6 +10222,9 @@ function countWorkspaceFolders() {
 function collectionNode(collection) {
   const wrapper = document.createElement('div');
   wrapper.className = 'tree-node collection-node';
+  const hasChildren = collectionTreeItemHasChildren(collection);
+  const collapsed = hasChildren && isCollectionTreeItemCollapsed(state, 'collection', collection.id);
+  wrapper.classList.toggle('is-collapsed', collapsed);
   const button = treeButton(collection.name, collection.id === activeCollectionId && !activeRequestId, 'COL', {
     treeKind: 'collection',
     treeId: collection.id
@@ -10194,12 +10232,19 @@ function collectionNode(collection) {
   appendSidebarTreeRow(wrapper, button, {
     kind: 'collection',
     id: collection.id
+  }, {
+    expanded: !collapsed,
+    hasChildren,
+    label: collection.name || 'Untitled Collection',
+    onToggle: () => toggleCollectionTreeNode('collection', collection.id),
+    reserveDisclosure: true
   });
   button.addEventListener('click', () => {
     if (!canOpenCollectionTabFor(collection.id)) {
       return;
     }
     collectActiveEditorState();
+    setCollectionTreeItemCollapsed(state, 'collection', collection.id, false);
     activeRunnerRequestRunnerId = null;
     activeMainPanel = 'request';
     activeCollectionId = collection.id;
@@ -10221,13 +10266,18 @@ function collectionNode(collection) {
     ]],
     ['Delete', () => deleteCollection(collection), 'danger']
   ]);
-  appendSidebarTreeRows(wrapper, sidebarTreeChildRows(collection, collection, null), { className: 'tree-folder' });
+  if (!collapsed) {
+    appendSidebarTreeRows(wrapper, sidebarTreeChildRows(collection, collection, null), { className: 'tree-folder' });
+  }
   return wrapper;
 }
 
 function folderNode(collection, folder) {
   const wrapper = document.createElement('div');
   wrapper.className = 'tree-node tree-folder folder-node';
+  const hasChildren = collectionTreeItemHasChildren(folder);
+  const collapsed = hasChildren && isCollectionTreeItemCollapsed(state, 'folder', folder.id);
+  wrapper.classList.toggle('is-collapsed', collapsed);
   const button = treeButton(folder.name, folder.id === activeFolderId && !activeRequestId, 'FOLD', {
     treeKind: 'folder',
     treeId: folder.id
@@ -10236,12 +10286,19 @@ function folderNode(collection, folder) {
     kind: 'folder',
     id: folder.id,
     collectionId: collection.id
+  }, {
+    expanded: !collapsed,
+    hasChildren,
+    label: folder.name || 'Untitled Folder',
+    onToggle: () => toggleCollectionTreeNode('folder', folder.id),
+    reserveDisclosure: true
   });
   button.addEventListener('click', () => {
     if (!canOpenFolderTabFor(collection.id, folder.id)) {
       return;
     }
     collectActiveEditorState();
+    setCollectionTreeItemCollapsed(state, 'folder', folder.id, false);
     activeRunnerRequestRunnerId = null;
     activeMainPanel = 'request';
     activeCollectionId = collection.id;
@@ -10257,7 +10314,9 @@ function folderNode(collection, folder) {
     ['Duplicate', () => { void duplicateFolder(folder); }],
     ['Delete', () => deleteFolder(collection, folder), 'danger']
   ]);
-  appendSidebarTreeRows(wrapper, sidebarTreeChildRows(folder, collection, folder), { className: 'tree-folder' });
+  if (!collapsed) {
+    appendSidebarTreeRows(wrapper, sidebarTreeChildRows(folder, collection, folder), { className: 'tree-folder' });
+  }
   return wrapper;
 }
 
@@ -10273,6 +10332,8 @@ function requestNode(collection, folder, request) {
     id: request.id,
     collectionId: collection.id,
     folderId: folder?.id || ''
+  }, {
+    reserveDisclosure: true
   });
   button.addEventListener('click', () => {
     if (!canOpenRequestTabFor(collection.id, request.id)) {
@@ -10320,12 +10381,54 @@ function treeButton(text, active, kind, options = {}) {
   return button;
 }
 
-function appendSidebarTreeRow(wrapper, button, payload) {
+function appendSidebarTreeRow(wrapper, button, payload, options = {}) {
   button.__postmeterDropBars = {};
   attachSidebarTreeDrag(button, payload);
   wrapper.__postmeterTreePayload = payload;
   wrapper.__postmeterTreeButton = button;
-  wrapper.append(button);
+  wrapper.append(treeRow(button, payload, options));
+}
+
+function treeRow(button, payload, options = {}) {
+  const row = document.createElement('div');
+  const reserveDisclosure = options.reserveDisclosure === true || options.hasChildren === true;
+  row.className = `tree-row${reserveDisclosure ? '' : ' no-disclosure'}`;
+  if (options.hasChildren) {
+    row.append(treeDisclosureButton(payload, options));
+  } else if (reserveDisclosure) {
+    const spacer = document.createElement('span');
+    spacer.className = 'tree-disclosure-placeholder';
+    spacer.setAttribute('aria-hidden', 'true');
+    row.append(spacer);
+  }
+  row.append(button);
+  return row;
+}
+
+function treeDisclosureButton(payload, options = {}) {
+  const button = document.createElement('button');
+  const expanded = options.expanded !== false;
+  const label = String(options.label || titleCaseTreeKind(payload?.kind)).trim();
+  button.className = 'tree-disclosure';
+  button.type = 'button';
+  button.textContent = expanded ? 'v' : '>';
+  button.dataset.treeKind = payload?.kind || '';
+  button.dataset.treeId = payload?.id || '';
+  button.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+  button.setAttribute('aria-label', `${expanded ? 'Collapse' : 'Expand'} ${label}`);
+  button.addEventListener('click', (event) => {
+    event.stopPropagation();
+    options.onToggle?.();
+  });
+  return button;
+}
+
+function toggleCollectionTreeNode(kind, id) {
+  const target = treeFocusTarget(kind, id);
+  toggleCollectionTreeItemCollapsed(state, kind, id);
+  renderCollections();
+  restoreTreeFocus(target, activeCollectionTreeFocusTargets());
+  scheduleSessionSave();
 }
 
 function appendSidebarTreeRows(parent, rows, options = {}) {
@@ -15369,6 +15472,7 @@ function newRequest(collectionId = activeCollectionId, folderId = activeFolderId
     collection.requests.push(request);
     activeFolderId = null;
   }
+  expandCollectionTreePath(collection, activeFolderId);
   activeCollectionId = collection.id;
   activeRequestId = request.id;
   ensureOpenRequestTabForActive({ dirty: true, createdUnsaved: true });
@@ -15402,6 +15506,7 @@ function newFolder(collectionId = activeCollectionId, parentFolderId = activeFol
   } else {
     collection.folders.push(folder);
   }
+  expandCollectionTreePath(collection, parent?.id || null);
   activeCollectionId = collection.id;
   activeFolderId = folder.id;
   activeRequestId = null;
@@ -15428,6 +15533,20 @@ function newRequestObject(name) {
     autoHeaders: { sendPostMeterToken: false, showGeneratedHeaders: false },
     settings: { sslCertificateVerification: 'inherit' }
   };
+}
+
+function expandCollectionTreePath(collection, folderId = null, options = {}) {
+  if (!collection?.id) {
+    return;
+  }
+  setCollectionTreeItemCollapsed(state, 'collection', collection.id, false);
+  const folderPath = folderId ? findFolderPath(collection, folderId) : [];
+  const foldersToExpand = options.includeTargetFolder === false
+    ? folderPath.slice(0, -1)
+    : folderPath;
+  for (const folder of foldersToExpand) {
+    setCollectionTreeItemCollapsed(state, 'folder', folder.id, false);
+  }
 }
 
 function newEnvironment() {

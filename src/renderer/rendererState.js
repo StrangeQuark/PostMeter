@@ -25,6 +25,8 @@
       openWorkspaceTabs: [],
       openRunnerTabs: [],
       openPerformanceTabs: [],
+      collapsedCollectionIds: new Set(),
+      collapsedFolderIds: new Set(),
       collectionDirtySnapshots: new Map(),
       collectionDirtyOwners: new Map(),
       cookieJarDirtySnapshot: null,

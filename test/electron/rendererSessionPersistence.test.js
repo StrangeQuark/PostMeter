@@ -162,6 +162,59 @@ test('renderer session persistence restores workspace list order', () => {
   assert.deepEqual(state.workspaces.map((workspace) => workspace.id), ['c.json', 'a.json', 'b.json']);
 });
 
+test('renderer session persistence serializes and restores collapsed collection tree nodes', () => {
+  const state = createRendererState();
+  state.workspace = {
+    collections: [
+      {
+        id: 'collection-1',
+        name: 'Collection',
+        requests: [],
+        folders: [
+          {
+            id: 'folder-1',
+            name: 'Folder',
+            requests: [],
+            folders: [
+              { id: 'folder-2', name: 'Nested Folder', requests: [], folders: [] }
+            ]
+          }
+        ]
+      }
+    ],
+    environments: [],
+    runners: []
+  };
+  state.collapsedCollectionIds = new Set(['collection-1', 'missing-collection']);
+  state.collapsedFolderIds = new Set(['folder-2', 'missing-folder']);
+
+  const session = buildRendererSession({
+    state,
+    doc: { querySelector: () => null },
+    requestForTab: () => null,
+    environmentForTab: () => null
+  });
+
+  assert.deepEqual(session.collapsedCollectionIds, ['collection-1']);
+  assert.deepEqual(session.collapsedFolderIds, ['folder-2']);
+
+  const restoredState = createRendererState();
+  restoredState.workspace = state.workspace;
+  restoreRendererSession({
+    state: restoredState,
+    session: {
+      collapsedCollectionIds: ['collection-1', 'missing-collection'],
+      collapsedFolderIds: ['folder-1', 'missing-folder']
+    },
+    workspaceListItems: () => [],
+    findFolder,
+    findRequest
+  });
+
+  assert.deepEqual(Array.from(restoredState.collapsedCollectionIds), ['collection-1']);
+  assert.deepEqual(Array.from(restoredState.collapsedFolderIds), ['folder-1']);
+});
+
 test('renderer session persistence serializes and restores runner-owned request tabs', () => {
   const state = createRendererState();
   const runnerRequest = {
