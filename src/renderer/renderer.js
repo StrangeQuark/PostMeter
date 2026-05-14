@@ -207,6 +207,7 @@ const {
   normalizeCapturePolicy: normalizeResultCapturePolicy
 } = PostMeterResultCapturePolicy;
 const {
+  beautifyBodyText,
   collectAuthFromEditor: collectRequestAuthFromEditor,
   renderAuthEditor: renderRequestAuthEditor,
   renderCookieJarEditor: renderRequestCookieJarEditor,
@@ -737,6 +738,7 @@ function bindUi() {
       updatePerformanceRequestBodyEditorLanguage();
       collectPerformanceTestAndMarkDirty();
     },
+    onBeautifyPerformanceBody: () => beautifyBodyEditor('performance'),
     onAddPerformanceFormDataBodyRow: () => addBodyFormDataRow('performance'),
     onAddPerformanceUrlencodedBodyRow: () => addBodyUrlencodedRow('performance'),
     onPerformanceAuthTypeChange: showPerformanceAuthSection,
@@ -767,6 +769,7 @@ function bindUi() {
       updateRequestBodyEditorLanguage();
       collectRequestAndMarkDirty();
     },
+    onBeautifyBody: () => beautifyBodyEditor(''),
     onAddFormDataBodyRow: () => addBodyFormDataRow(''),
     onAddUrlencodedBodyRow: () => addBodyUrlencodedRow(''),
     onBodyInput: collectRequestAndMarkDirty,
@@ -11543,7 +11546,7 @@ function rawBodyEditorLanguage(format) {
     return normalized;
   }
   if (normalized === 'html' || normalized === 'xml') {
-    return 'markup';
+    return normalized;
   }
   return 'text';
 }
@@ -11646,14 +11649,59 @@ function updateBodyModePanels(prefix) {
   if (rawField) {
     rawField.hidden = mode !== 'RAW';
   }
+  const graphqlOperationField = bodyElement(prefix, 'graphqlOperationNameField');
+  if (graphqlOperationField) {
+    graphqlOperationField.hidden = mode !== 'GRAPHQL';
+  }
+  const beautifyButton = bodyElement(prefix, 'beautifyBodyButton');
+  if (beautifyButton) {
+    beautifyButton.hidden = mode !== 'RAW' && mode !== 'GRAPHQL';
+  }
 }
 
 function updateBodyEditorLanguage(prefix) {
   updateBodyModePanels(prefix);
   const format = bodyElement(prefix, 'bodyRawFormatSelect')?.value || 'text';
   CodeEditor.setLanguage?.(bodyElement(prefix, 'bodyInput'), rawBodyEditorLanguage(format));
-  CodeEditor.setLanguage?.(bodyElement(prefix, 'graphqlQueryInput'), 'text');
+  CodeEditor.setLanguage?.(bodyElement(prefix, 'graphqlQueryInput'), 'graphql');
   CodeEditor.setLanguage?.(bodyElement(prefix, 'graphqlVariablesInput'), 'json');
+}
+
+function beautifyBodyEditor(prefix) {
+  const mode = bodyElement(prefix, 'bodyTypeSelect')?.value || 'NONE';
+  let changed = false;
+  if (mode === 'RAW') {
+    const format = bodyElement(prefix, 'bodyRawFormatSelect')?.value || 'text';
+    changed = setBeautifiedTextareaValue(
+      bodyElement(prefix, 'bodyInput'),
+      (value) => beautifyBodyText(value, format)
+    ) || changed;
+  } else if (mode === 'GRAPHQL') {
+    changed = setBeautifiedTextareaValue(
+      bodyElement(prefix, 'graphqlQueryInput'),
+      (value) => beautifyBodyText(value, 'graphql')
+    ) || changed;
+    changed = setBeautifiedTextareaValue(
+      bodyElement(prefix, 'graphqlVariablesInput'),
+      (value) => beautifyBodyText(value, 'json')
+    ) || changed;
+  }
+  if (changed) {
+    collectBodyEditorAndMarkDirty(prefix);
+  }
+}
+
+function setBeautifiedTextareaValue(textarea, formatter) {
+  if (!textarea || typeof formatter !== 'function') {
+    return false;
+  }
+  const nextValue = formatter(textarea.value || '');
+  if (nextValue === textarea.value) {
+    return false;
+  }
+  textarea.value = nextValue;
+  refreshVariableHighlights(textarea.parentElement || textarea);
+  return true;
 }
 
 function formDataRowsForRequest(request) {

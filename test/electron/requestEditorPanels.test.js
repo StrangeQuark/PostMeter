@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const {
+  beautifyBodyText,
   bodyTypeCodeLanguage,
   buildVariablePreviewText,
   collectAuthFromEditor
@@ -10,6 +11,46 @@ test('request editor panels choose code editor language from body type', () => {
   assert.equal(bodyTypeCodeLanguage('RAW_JSON'), 'json');
   assert.equal(bodyTypeCodeLanguage('RAW_TEXT'), 'text');
   assert.equal(bodyTypeCodeLanguage('NONE'), 'text');
+});
+
+test('request editor panels beautify raw JSON with four-space indentation', () => {
+  assert.equal(beautifyBodyText('{"test":"object"}', 'json'), [
+    '{',
+    '    "test": "object"',
+    '}'
+  ].join('\n'));
+  assert.equal(beautifyBodyText('{"test":', 'json'), '{"test":');
+});
+
+test('request editor panels beautify JavaScript, markup, and GraphQL body text', () => {
+  assert.equal(beautifyBodyText('const payload={test:"object",count:1};', 'javascript'), [
+    'const payload = {',
+    '    test: "object",',
+    '    count: 1',
+    '};'
+  ].join('\n'));
+  assert.equal(beautifyBodyText('<div><span>Hi</span></div>', 'html'), [
+    '<div>',
+    '    <span>',
+    '        Hi',
+    '    </span>',
+    '</div>'
+  ].join('\n'));
+  assert.equal(beautifyBodyText('<root><item id="1">value</item></root>', 'xml'), [
+    '<root>',
+    '    <item id="1">',
+    '        value',
+    '    </item>',
+    '</root>'
+  ].join('\n'));
+  assert.equal(beautifyBodyText('query User($id: ID!) { user(id: $id) { id name } }', 'graphql'), [
+    'query User($id: ID!) {',
+    '    user(id: $id) {',
+    '        id',
+    '        name',
+    '    }',
+    '}'
+  ].join('\n'));
 });
 
 test('request editor panels build variable preview text using request-over-folder-over-collection-over-environment precedence', () => {

@@ -74,6 +74,149 @@ test('code editor auto-pairs JavaScript delimiters and expands paired braces on 
   assert.equal(expanded.selectionEnd, expanded.selectionStart);
 });
 
+test('code editor completes JavaScript block comments and expands them on Enter', () => {
+  const paired = editTextForKey({
+    key: '*',
+    language: 'javascript',
+    selectionEnd: 1,
+    selectionStart: 1,
+    value: '/'
+  });
+  assert.equal(paired.value, '/**/');
+  assert.equal(paired.selectionStart, 2);
+  assert.equal(paired.selectionEnd, 2);
+
+  const expanded = editTextForKey({
+    key: 'Enter',
+    language: 'javascript',
+    selectionEnd: paired.selectionEnd,
+    selectionStart: paired.selectionStart,
+    value: paired.value
+  });
+  assert.equal(expanded.value, '/*\n * \n */');
+  assert.equal(expanded.selectionStart, '/*\n * '.length);
+  assert.equal(expanded.selectionEnd, expanded.selectionStart);
+});
+
+test('code editor auto-pairs GraphQL delimiters like raw code editors', () => {
+  assert.equal(normalizeLanguage('graphql'), 'graphql');
+  const value = 'query GetUser ';
+  const paired = editTextForKey({
+    key: '{',
+    language: 'graphql',
+    selectionEnd: value.length,
+    selectionStart: value.length,
+    value
+  });
+  assert.equal(paired.value, 'query GetUser {}');
+  assert.equal(paired.selectionStart, value.length + 1);
+
+  const expanded = editTextForKey({
+    key: 'Enter',
+    language: 'graphql',
+    selectionEnd: paired.selectionEnd,
+    selectionStart: paired.selectionStart,
+    value: paired.value
+  });
+  assert.equal(expanded.value, 'query GetUser {\n\t\n}');
+});
+
+test('code editor auto-closes HTML tags and expands matching tag pairs on Enter', () => {
+  assert.equal(normalizeLanguage('html'), 'html');
+  const paired = editTextForKey({
+    key: '>',
+    language: 'html',
+    selectionEnd: '<div class="card"'.length,
+    selectionStart: '<div class="card"'.length,
+    value: '<div class="card"'
+  });
+  assert.equal(paired.value, '<div class="card"></div>');
+  assert.equal(paired.selectionStart, '<div class="card">'.length);
+  assert.equal(paired.selectionEnd, paired.selectionStart);
+
+  const expanded = editTextForKey({
+    key: 'Enter',
+    language: 'html',
+    selectionEnd: paired.selectionEnd,
+    selectionStart: paired.selectionStart,
+    value: paired.value
+  });
+  assert.equal(expanded.value, '<div class="card">\n\t\n</div>');
+  assert.equal(expanded.selectionStart, '<div class="card">\n\t'.length);
+
+  const removedClosingTag = editTextForKey({
+    key: 'Backspace',
+    language: 'html',
+    selectionEnd: '<div class="card">'.length,
+    selectionStart: '<div class="card">'.length,
+    value: paired.value
+  });
+  assert.equal(removedClosingTag.value, '<div class="card"');
+  assert.equal(removedClosingTag.selectionStart, '<div class="card"'.length);
+});
+
+test('code editor applies HTML-specific tag completion exclusions', () => {
+  assert.equal(editTextForKey({
+    key: '>',
+    language: 'html',
+    selectionEnd: '<input'.length,
+    selectionStart: '<input'.length,
+    value: '<input'
+  }).handled, false);
+  assert.equal(editTextForKey({
+    key: '>',
+    language: 'html',
+    selectionEnd: '</section'.length,
+    selectionStart: '</section'.length,
+    value: '</section'
+  }).handled, false);
+  assert.equal(editTextForKey({
+    key: '>',
+    language: 'html',
+    selectionEnd: '<!doctype html'.length,
+    selectionStart: '<!doctype html'.length,
+    value: '<!doctype html'
+  }).handled, false);
+  assert.equal(editTextForKey({
+    key: '>',
+    language: 'html',
+    selectionEnd: '<section /'.length,
+    selectionStart: '<section /'.length,
+    value: '<section /'
+  }).handled, false);
+});
+
+test('code editor auto-closes XML tags without HTML void-element shortcuts', () => {
+  assert.equal(normalizeLanguage('xml'), 'xml');
+  const paired = editTextForKey({
+    key: '>',
+    language: 'xml',
+    selectionEnd: '<input'.length,
+    selectionStart: '<input'.length,
+    value: '<input'
+  });
+  assert.equal(paired.value, '<input></input>');
+  assert.equal(paired.selectionStart, '<input>'.length);
+
+  const selfClosing = editTextForKey({
+    key: '>',
+    language: 'xml',
+    selectionEnd: '<input /'.length,
+    selectionStart: '<input /'.length,
+    value: '<input /'
+  });
+  assert.equal(selfClosing.handled, false);
+
+  const caseSensitive = editTextForKey({
+    key: 'Enter',
+    language: 'xml',
+    selectionEnd: '<User>'.length,
+    selectionStart: '<User>'.length,
+    value: '<User></user>'
+  });
+  assert.equal(caseSensitive.handled, false);
+});
+
 test('code editor wraps selections and skips over existing closing characters', () => {
   const wrapped = editTextForKey({
     key: '"',
@@ -100,6 +243,7 @@ test('code editor wraps selections and skips over existing closing characters', 
 test('code editor keeps pairing limited to code-like languages', () => {
   assert.equal(normalizeLanguage('js'), 'javascript');
   assert.equal(normalizeLanguage('http-headers'), 'headers');
+  assert.equal(normalizeLanguage('markup'), 'markup');
   assert.equal(editTextForKey({
     key: '{',
     language: 'text',
@@ -114,6 +258,8 @@ test('code editor highlights JavaScript, JSON, and header text', () => {
   assert.match(highlightCode('pm.test("ok", function () {})', 'javascript'), /tok-builtin/);
   assert.match(highlightCode('pm.test("ok", function () {})', 'javascript'), /tok-keyword/);
   assert.match(highlightCode('{ "probe": true }', 'json'), /tok-key/);
+  assert.match(highlightCode('<div class="card"></div>', 'html'), /tok-key/);
+  assert.match(highlightCode('<root><item \\/><\\/root>', 'xml'), /tok-key/);
   assert.match(highlightCode('content-type: application\\/json', 'headers'), /tok-key/);
   assert.match(highlightCode('https://{{baseUrl}}/users/{{missing}}', 'text'), /tok-variable-valid/);
   assert.match(highlightCode('https://{{baseUrl}}/users/{{missing}}', 'text'), /tok-variable-invalid/);

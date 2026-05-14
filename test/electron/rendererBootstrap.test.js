@@ -107,8 +107,10 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   const rendererSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'renderer.js'), 'utf8');
 
   assert.match(indexSource, /id="bodyInput"[^>]+aria-label="Request body"/);
-  assert.match(indexSource, /id="graphqlQueryInput"[^>]+aria-label="GraphQL query"/);
-  assert.match(indexSource, /id="performanceGraphqlQueryInput"[^>]+aria-label="Performance GraphQL query"/);
+  assert.match(indexSource, /id="graphqlOperationNameField"[\s\S]*id="graphqlOperationNameInput"[\s\S]*id="beautifyBodyButton"/);
+  assert.match(indexSource, /id="graphqlQueryInput"[^>]+aria-label="GraphQL query"[^>]+data-code-language="graphql"/);
+  assert.match(indexSource, /id="performanceGraphqlOperationNameField"[\s\S]*id="performanceGraphqlOperationNameInput"[\s\S]*id="performanceBeautifyBodyButton"/);
+  assert.match(indexSource, /id="performanceGraphqlQueryInput"[^>]+aria-label="Performance GraphQL query"[^>]+data-code-language="graphql"/);
   assert.match(indexSource, /id="exportItemModal"/);
   assert.match(indexSource, /id="exportItemList"[^>]+role="radiogroup"/);
   assert.match(indexSource, /id="confirmExportItemButton"[^>]+disabled/);
@@ -174,6 +176,13 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(bootstrapSource, /onEditRunnerCsvVariables/);
   assert.match(bootstrapSource, /onTogglePerformanceCsvVariables/);
   assert.match(bootstrapSource, /onEditPerformanceCsvVariables/);
+  assert.match(bootstrapSource, /bindClick\(doc, 'beautifyBodyButton', options\.onBeautifyBody/);
+  assert.match(bootstrapSource, /bindClick\(doc, 'performanceBeautifyBodyButton', options\.onBeautifyPerformanceBody/);
+  assert.match(rendererSource, /CodeEditor\.setLanguage\?\.\(bodyElement\(prefix, 'graphqlQueryInput'\), 'graphql'\)/);
+  assert.match(rendererSource, /if \(normalized === 'html' \|\| normalized === 'xml'\) \{\s*return normalized;\s*\}/);
+  assert.match(rendererSource, /function beautifyBodyEditor\(prefix\)/);
+  assert.match(editorPanelsSource, /\.body-editor-controls \.graphql-operation-field/);
+  assert.match(editorPanelsSource, /\.body-beautify-button/);
   assert.doesNotMatch(bootstrapSource, /'fileMenuButton', 'fileMenu'/);
   assert.doesNotMatch(bootstrapSource, /bindClick\(doc, 'openSettingsButton', options\.onOpenSettings\)/);
   assert.match(bootstrapSource, /data-settings-section/);
@@ -862,6 +871,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'performanceUrlInput',
     'performanceBodyTypeSelect',
     'performanceBodyRawFormatSelect',
+    'performanceBeautifyBodyButton',
     'performanceBodyInput',
     'performanceGraphqlQueryInput',
     'performanceGraphqlVariablesInput',
@@ -933,6 +943,7 @@ test('renderer bootstrap binds performance creation import export run and config
     onPerformanceConfigChange: () => calls.push('config'),
     onPerformanceRequestChange: () => calls.push('request'),
     onPerformanceBodyTypeChange: () => calls.push('body-type'),
+    onBeautifyPerformanceBody: () => calls.push('beautify-performance'),
     onAddPerformanceFormDataBodyRow: () => calls.push('add-form-data'),
     onAddPerformanceUrlencodedBodyRow: () => calls.push('add-urlencoded'),
     onActivateTab: (group, tab) => calls.push(`${group}:${tab}`)
@@ -960,6 +971,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'clearExpiredPerformanceCookiesButton',
     'calibratePerformanceButton',
     'closePerformanceCalibrationModalButton',
+    'performanceBeautifyBodyButton',
     'addPerformanceFormDataBodyRowButton',
     'addPerformanceUrlencodedBodyRowButton'
   ]) {
@@ -1007,11 +1019,70 @@ test('renderer bootstrap binds performance creation import export run and config
     'close-calibration'
   ]);
   assert.equal(calls.filter((call) => call === 'config').length, 11);
+  assert.ok(calls.includes('beautify-performance'));
   assert.ok(calls.includes('add-form-data'));
   assert.ok(calls.includes('add-urlencoded'));
   assert.equal(calls.filter((call) => call === 'request').length, 8);
   assert.equal(calls.filter((call) => call === 'body-type').length, 2);
   assert.ok(calls.includes('performance:spike'));
+});
+
+test('renderer bootstrap binds request body format and beautify controls', () => {
+  const calls = [];
+  const elements = new Map([
+    ['bodyTypeSelect', createElement({ tagName: 'SELECT' })],
+    ['bodyRawFormatSelect', createElement({ tagName: 'SELECT' })],
+    ['beautifyBodyButton', createElement()],
+    ['bodyInput', createElement({ tagName: 'TEXTAREA' })],
+    ['graphqlQueryInput', createElement({ tagName: 'TEXTAREA' })],
+    ['graphqlVariablesInput', createElement({ tagName: 'TEXTAREA' })],
+    ['graphqlOperationNameInput', createElement({ tagName: 'INPUT' })],
+    ['addFormDataBodyRowButton', createElement()],
+    ['addUrlencodedBodyRowButton', createElement()],
+    ['binaryBodySourceInput', createElement({ tagName: 'INPUT' })]
+  ]);
+
+  bindUi({
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} },
+    onBodyTypeChange: () => calls.push('body-type'),
+    onBeautifyBody: () => calls.push('beautify'),
+    onBodyInput: () => calls.push('body-input'),
+    onAddFormDataBodyRow: () => calls.push('form-data'),
+    onAddUrlencodedBodyRow: () => calls.push('urlencoded')
+  });
+
+  elements.get('bodyTypeSelect').dispatch('change');
+  elements.get('bodyRawFormatSelect').dispatch('change');
+  elements.get('beautifyBodyButton').dispatch('click');
+  elements.get('bodyInput').dispatch('input');
+  elements.get('graphqlQueryInput').dispatch('input');
+  elements.get('graphqlVariablesInput').dispatch('input');
+  elements.get('graphqlOperationNameInput').dispatch('input');
+  elements.get('addFormDataBodyRowButton').dispatch('click');
+  elements.get('addUrlencodedBodyRowButton').dispatch('click');
+  elements.get('binaryBodySourceInput').dispatch('input');
+
+  assert.deepEqual(calls, [
+    'body-type',
+    'body-type',
+    'beautify',
+    'body-input',
+    'body-input',
+    'body-input',
+    'body-input',
+    'form-data',
+    'urlencoded',
+    'body-input'
+  ]);
 });
 
 test('renderer bootstrap closes open toolbar menus on Tab without native dialogs', () => {

@@ -506,6 +506,11 @@
                 <option value="xml">XML</option>
               </select>
             </label>
+            <label id="graphqlOperationNameField" class="field compact graphql-operation-field" hidden>
+              <span>Operation Name</span>
+              <input id="graphqlOperationNameInput" autocomplete="off" placeholder="GetUser">
+            </label>
+            <button id="beautifyBodyButton" class="body-beautify-button" type="button" hidden>Beautify</button>
           </div>
           <div id="bodyNonePanel" class="body-mode-panel empty-state">No request body</div>
           <div id="bodyRawPanel" class="body-mode-panel">
@@ -535,15 +540,11 @@
             <div class="graphql-body-grid">
               <label class="field graphql-query-field">
                 <span>Query</span>
-                <textarea id="graphqlQueryInput" spellcheck="false" placeholder="query GetUser { user { id name } }" aria-label="GraphQL query" data-code-editor data-code-language="text"></textarea>
+                <textarea id="graphqlQueryInput" spellcheck="false" placeholder="query GetUser { user { id name } }" aria-label="GraphQL query" data-code-editor data-code-language="graphql"></textarea>
               </label>
               <label class="field graphql-variables-field">
                 <span>Variables</span>
                 <textarea id="graphqlVariablesInput" spellcheck="false" placeholder="{&#10;  &quot;id&quot;: &quot;{{userId}}&quot;&#10;}" aria-label="GraphQL variables" data-code-editor data-code-language="json"></textarea>
-              </label>
-              <label class="field graphql-operation-field">
-                <span>Operation Name</span>
-                <input id="graphqlOperationNameInput" autocomplete="off" placeholder="GetUser">
               </label>
             </div>
           </div>
@@ -1038,6 +1039,11 @@
                     <option value="xml">XML</option>
                   </select>
                 </label>
+                <label id="performanceGraphqlOperationNameField" class="field compact graphql-operation-field" hidden>
+                  <span>Operation Name</span>
+                  <input id="performanceGraphqlOperationNameInput" autocomplete="off" placeholder="GetUser">
+                </label>
+                <button id="performanceBeautifyBodyButton" class="body-beautify-button" type="button" hidden>Beautify</button>
               </div>
               <div id="performanceBodyNonePanel" class="body-mode-panel empty-state">No request body</div>
               <div id="performanceBodyRawPanel" class="body-mode-panel">
@@ -1067,15 +1073,11 @@
                 <div class="graphql-body-grid">
                   <label class="field graphql-query-field">
                     <span>Query</span>
-                    <textarea id="performanceGraphqlQueryInput" spellcheck="false" placeholder="query GetUser { user { id name } }" aria-label="Performance GraphQL query" data-code-editor data-code-language="text"></textarea>
+                    <textarea id="performanceGraphqlQueryInput" spellcheck="false" placeholder="query GetUser { user { id name } }" aria-label="Performance GraphQL query" data-code-editor data-code-language="graphql"></textarea>
                   </label>
                   <label class="field graphql-variables-field">
                     <span>Variables</span>
                     <textarea id="performanceGraphqlVariablesInput" spellcheck="false" placeholder="{&#10;  &quot;id&quot;: &quot;{{userId}}&quot;&#10;}" aria-label="Performance GraphQL variables" data-code-editor data-code-language="json"></textarea>
-                  </label>
-                  <label class="field graphql-operation-field">
-                    <span>Operation Name</span>
-                    <input id="performanceGraphqlOperationNameInput" autocomplete="off" placeholder="GetUser">
                   </label>
                 </div>
               </div>

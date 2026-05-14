@@ -238,6 +238,7 @@
     bindInput(doc, 'performanceUrlInput', options.onPerformanceUrlInput || options.onPerformanceRequestChange);
     bindChange(doc, 'performanceBodyTypeSelect', options.onPerformanceBodyTypeChange || options.onPerformanceRequestChange);
     bindChange(doc, 'performanceBodyRawFormatSelect', options.onPerformanceBodyTypeChange || options.onPerformanceRequestChange);
+    bindClick(doc, 'performanceBeautifyBodyButton', options.onBeautifyPerformanceBody || options.onPerformanceRequestChange);
     bindInput(doc, 'performanceBodyInput', options.onPerformanceRequestChange);
     bindInput(doc, 'performanceGraphqlQueryInput', options.onPerformanceRequestChange);
     bindInput(doc, 'performanceGraphqlVariablesInput', options.onPerformanceRequestChange);
@@ -255,6 +256,7 @@
     bindInput(doc, 'urlInput', options.onUrlInput);
     bindChange(doc, 'bodyTypeSelect', options.onBodyTypeChange);
     bindChange(doc, 'bodyRawFormatSelect', options.onBodyTypeChange);
+    bindClick(doc, 'beautifyBodyButton', options.onBeautifyBody || options.onBodyInput);
     bindInput(doc, 'bodyInput', options.onBodyInput);
     bindInput(doc, 'graphqlQueryInput', options.onBodyInput);
     bindInput(doc, 'graphqlVariablesInput', options.onBodyInput);

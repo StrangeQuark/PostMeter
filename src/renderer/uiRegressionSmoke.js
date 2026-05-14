@@ -4943,6 +4943,15 @@
     assertUiSmoke($('requestNameTitle').getAttribute('contenteditable') === 'plaintext-only', 'Clicking the request title should make it editable inline.');
     editRequestTitle('Draft Request');
     activateTab('request', 'body');
+    $('bodyTypeSelect').value = 'RAW';
+    dispatchChange($('bodyTypeSelect'));
+    $('bodyRawFormatSelect').value = 'json';
+    dispatchChange($('bodyRawFormatSelect'));
+    assertUiSmoke(!$('beautifyBodyButton').hidden, 'Raw body mode should show the Beautify button.');
+    $('bodyInput').value = '{"test":"object"}';
+    dispatchInput($('bodyInput'));
+    $('beautifyBodyButton').click();
+    assertUiSmoke($('bodyInput').value === '{\n    "test": "object"\n}', 'Raw JSON Beautify should format compact JSON bodies.');
     $('bodyTypeSelect').value = 'FORM_DATA';
     dispatchChange($('bodyTypeSelect'));
     $('addFormDataBodyRowButton').click();
@@ -5015,10 +5024,18 @@
     );
     $('bodyTypeSelect').value = 'GRAPHQL';
     dispatchChange($('bodyTypeSelect'));
-    $('graphqlQueryInput').value = 'query User($id: ID!) { user(id: $id) { name } }';
+    assertUiSmoke(!$('graphqlOperationNameField').hidden, 'GraphQL body mode should move Operation Name into the top controls row.');
+    assertUiSmoke(!$('beautifyBodyButton').hidden, 'GraphQL body mode should show the Beautify button.');
+    $('graphqlQueryInput').value = 'query User($id: ID!) { user(id: $id) { id name } }';
     dispatchInput($('graphqlQueryInput'));
     $('graphqlVariablesInput').value = '{"id":"{{localToken}}"}';
     dispatchInput($('graphqlVariablesInput'));
+    $('beautifyBodyButton').click();
+    assertUiSmoke(
+      $('graphqlQueryInput').value.includes('\n    user(id: $id) {\n        id\n        name\n    }\n'),
+      'GraphQL Beautify should format the query selection tree.'
+    );
+    assertUiSmoke($('graphqlVariablesInput').value.includes('\n    "id": "{{localToken}}"\n'), 'GraphQL Beautify should format JSON variables.');
     $('graphqlOperationNameInput').value = 'User';
     dispatchInput($('graphqlOperationNameInput'));
     collectRequestFromEditor();
@@ -5031,7 +5048,8 @@
       'Request Body dropdown should collect GraphQL query, variables, and operation name.'
     );
     const postmanGraphqlBody = JSON.parse(draft.body);
-    assertUiSmoke(postmanGraphqlBody.variables === '{"id":"{{localToken}}"}', 'Request GraphQL body JSON should preserve variables text for Postman round-tripping.');
+    assertUiSmoke(postmanGraphqlBody.variables.includes('\n    "id": "{{localToken}}"\n'), 'Request GraphQL body JSON should preserve beautified variables text for Postman round-tripping.');
+    assertUiSmoke(JSON.parse(postmanGraphqlBody.variables).id === '{{localToken}}', 'Request GraphQL beautified variables should remain valid JSON.');
     assertUiSmoke(draft.name === 'Draft Request', 'Draft request should be editable before being saved anywhere.');
 
     const collection = newCollection();
