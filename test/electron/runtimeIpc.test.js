@@ -347,6 +347,102 @@ test('runtime IPC starts performance runs with progress, diagnostics, and allowe
   assert.deepEqual(events.map((event) => event.type), ['performance.start.completed']);
 });
 
+test('runtime IPC coalesces high-rate performance progress delivery', async () => {
+  const handlers = new Map();
+  const progressMessages = [];
+  const workspace = {
+    cookies: [],
+    globals: [],
+    settings: { sandbox: { fileBindings: [], packageCache: [], trustedCapabilities: {} } },
+    environments: []
+  };
+  registerRuntimeIpc({
+    dialog: { showSaveDialog: async () => ({ canceled: true }) },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => workspace,
+    getWorkspaceId: () => 'workspace-1',
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    },
+    mutateWorkspace: async (mutator) => {
+      await mutator(workspace);
+      return workspace;
+    },
+    recordDiagnosticEvent: async () => {},
+    runPerformanceTest: async (performanceTest, _environment, options) => {
+      for (let index = 1; index <= 20; index += 1) {
+        options.onProgress({
+          completedRequests: index,
+          totalRequests: 20,
+          activeRequests: 20 - index,
+          requestId: performanceTest.request.id,
+          requestName: performanceTest.request.name,
+          passed: true,
+          durationMillis: index
+        });
+      }
+      return {
+        id: 'perf-coalesced-result',
+        performanceTestId: performanceTest.id,
+        performanceTestName: performanceTest.name,
+        type: performanceTest.type,
+        environmentId: 'none',
+        environmentMutationAllowed: false,
+        totalRequests: 20,
+        completedRequests: 20,
+        successfulRequests: 20,
+        failedRequests: 0,
+        passed: true,
+        cancelled: false,
+        startedAt: '2026-05-06T00:00:00.000Z',
+        completedAt: '2026-05-06T00:00:01.000Z',
+        durationMillis: 1000,
+        config: performanceTest.config,
+        safetyLimits: performanceTest.safetyLimits,
+        summary: { requestsPerSecond: 20, statusCodes: { 200: 20 } },
+        samples: [{
+          iteration: 1,
+          requestId: performanceTest.request.id,
+          requestName: performanceTest.request.name,
+          startedAt: '2026-05-06T00:00:00.000Z',
+          statusCode: 200,
+          durationMillis: 1,
+          passed: true,
+          error: ''
+        }],
+        environment: { id: 'runtime', name: 'Runtime', variables: [] },
+        cookies: []
+      };
+    },
+    saveWorkspace: async (nextWorkspace) => nextWorkspace,
+    setWorkspace: () => {}
+  });
+
+  const performanceTest = defaultPerformanceTest({
+    id: 'perf-coalesced',
+    name: 'Coalesced',
+    type: 'throughput',
+    request: { id: 'request-1', name: 'Target', method: 'GET', url: 'https://example.test' },
+    config: { iterations: 20, concurrency: 5 },
+    safetyLimits: { maxTotalRequests: 20, maxConcurrency: 5, maxDurationSeconds: 60 }
+  });
+  await handlers.get('performance:start')({
+    sender: {
+      isDestroyed: () => false,
+      send(channel, payload) {
+        progressMessages.push({ channel, payload });
+      }
+    }
+  }, 'performance-coalesced-run', performanceTest, null);
+
+  assert.ok(progressMessages.length <= 2);
+  assert.equal(progressMessages[0].payload.progress.completedRequests, 1);
+  assert.equal(progressMessages.at(-1).payload.progress.completedRequests, 20);
+});
+
 test('runtime IPC keeps performance environment mutations temporary unless the result explicitly allows persistence', async () => {
   const handlers = new Map();
   const workspace = {

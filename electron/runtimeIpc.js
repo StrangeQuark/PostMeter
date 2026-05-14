@@ -49,6 +49,7 @@ const {
 } = require('../src/core/ipcValidation');
 
 const RESULT_STORE_WARNING_MARGIN_BYTES = 1024 * 1024 * 1024;
+const RUN_PROGRESS_MIN_INTERVAL_MILLIS = 250;
 
 function registerRuntimeIpc(options = {}) {
   const {
@@ -114,7 +115,8 @@ function registerRuntimeIpc(options = {}) {
       channel: 'runner:progress',
       event,
       id,
-      label: 'Collection-run progress'
+      label: 'Collection-run progress',
+      minIntervalMillis: RUN_PROGRESS_MIN_INTERVAL_MILLIS
     });
     activeCollectionRuns.set(id, abortController);
     try {
@@ -228,6 +230,7 @@ function registerRuntimeIpc(options = {}) {
       });
       throw error;
     } finally {
+      progressDelivery.dispose();
       if (activeCollectionRuns.get(id) === abortController) {
         activeCollectionRuns.delete(id);
       }
@@ -317,7 +320,8 @@ function registerRuntimeIpc(options = {}) {
       channel: 'performance:progress',
       event,
       id,
-      label: 'Performance-test progress'
+      label: 'Performance-test progress',
+      minIntervalMillis: RUN_PROGRESS_MIN_INTERVAL_MILLIS
     });
     activePerformanceRuns.set(id, abortController);
     try {
@@ -398,6 +402,7 @@ function registerRuntimeIpc(options = {}) {
       });
       throw error;
     } finally {
+      progressDelivery.dispose();
       if (activePerformanceRuns.get(id) === abortController) {
         activePerformanceRuns.delete(id);
       }
@@ -464,6 +469,7 @@ function registerRuntimeIpc(options = {}) {
       });
       throw error;
     } finally {
+      progressDelivery.dispose();
       if (activePerformanceCalibrations.get(id) === abortController) {
         activePerformanceCalibrations.delete(id);
       }
@@ -855,26 +861,88 @@ function cloneJson(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-function createProgressDelivery({ abortController, assertPayload, channel, event, id, label }) {
+function createProgressDelivery({ abortController, assertPayload, channel, event, id, label, minIntervalMillis = 0 }) {
   let deliveryError = null;
+  let pendingProgress = null;
+  let timer = null;
+  let lastSentAtMillis = 0;
+  const normalizedMinIntervalMillis = Math.max(0, Math.floor(Number(minIntervalMillis || 0)));
+  const sendNow = (progress) => {
+    assertPayload(progress);
+    if (!event?.sender || event.sender?.isDestroyed?.() === true) {
+      throw new Error('renderer sender is destroyed');
+    }
+    event.sender.send(channel, { id, progress });
+    lastSentAtMillis = Date.now();
+  };
+  const clearDeliveryTimer = () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  };
+  const failDelivery = (error) => {
+    const message = error.message || String(error);
+    deliveryError = new Error(`${label} delivery failed: ${message}`);
+    clearDeliveryTimer();
+    abortController.abort();
+  };
+  const flushPending = () => {
+    if (!pendingProgress || deliveryError) {
+      return;
+    }
+    const progress = pendingProgress;
+    pendingProgress = null;
+    clearDeliveryTimer();
+    try {
+      sendNow(progress);
+    } catch (error) {
+      failDelivery(error);
+    }
+  };
+  const schedulePendingFlush = () => {
+    if (timer || !pendingProgress || deliveryError) {
+      return;
+    }
+    const elapsed = Date.now() - lastSentAtMillis;
+    const delay = Math.max(0, normalizedMinIntervalMillis - elapsed);
+    timer = setTimeout(flushPending, delay);
+    timer.unref?.();
+  };
   return {
     send(progress) {
       if (deliveryError) {
         return;
       }
-      try {
-        assertPayload(progress);
-        if (!event?.sender || event.sender?.isDestroyed?.() === true) {
-          throw new Error('renderer sender is destroyed');
+      if (!normalizedMinIntervalMillis) {
+        try {
+          sendNow(progress);
+        } catch (error) {
+          failDelivery(error);
         }
-        event.sender.send(channel, { id, progress });
-      } catch (error) {
-        const message = error.message || String(error);
-        deliveryError = new Error(`${label} delivery failed: ${message}`);
-        abortController.abort();
+        return;
       }
+      const now = Date.now();
+      if (!lastSentAtMillis || now - lastSentAtMillis >= normalizedMinIntervalMillis) {
+        pendingProgress = null;
+        clearDeliveryTimer();
+        try {
+          sendNow(progress);
+        } catch (error) {
+          failDelivery(error);
+        }
+        return;
+      }
+      pendingProgress = progress;
+      schedulePendingFlush();
+    },
+    flush: flushPending,
+    dispose() {
+      pendingProgress = null;
+      clearDeliveryTimer();
     },
     throwIfFailed() {
+      flushPending();
       if (deliveryError) {
         throw deliveryError;
       }

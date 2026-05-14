@@ -52,6 +52,14 @@ test('capture policy keeps current defaults for small runs and applies high-volu
   assert.equal(veryLarge.postRequestOutput, false);
   assert.equal(veryLarge.scriptLogs, false);
   assert.equal(veryLarge.localVariables, false);
+  assert.equal(veryLarge.transportTimings, false);
+
+  const veryLargeDiagnosis = normalizeCapturePolicy({
+    responseHeaders: true,
+    transportTimings: true
+  }, 'performance', { plannedRequests: 500000, diagnostic: true });
+  assert.equal(veryLargeDiagnosis.responseHeaders, true);
+  assert.equal(veryLargeDiagnosis.transportTimings, true);
 });
 
 test('runtime result store estimates high-volume file size from capture settings', () => {

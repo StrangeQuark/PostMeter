@@ -8,6 +8,7 @@ const { buildUrl, sendRequest } = require('./httpClient');
 const {
   performanceTestModel
 } = require('./models');
+const { normalizeCapturePolicy } = require('./resultCapturePolicy');
 const {
   assertPerformanceTestPayload
 } = require('./ipcValidation');
@@ -19,15 +20,23 @@ const {
   summarizeEndpointDiagnosis
 } = require('./performanceDiagnosis');
 
+const DEFAULT_PERFORMANCE_REQUEST_TIMEOUT_MILLIS = 10000;
+const MAX_PERFORMANCE_REQUEST_TIMEOUT_MILLIS = 3 * 60 * 1000;
+
 async function runPerformanceTest(performanceTest, environment, options = {}) {
   const normalized = performanceTestModel(performanceTest);
   assertPerformanceTestPayload(normalized);
   const plan = createPerformancePlan(normalized);
+  const capturePolicy = normalizeCapturePolicy(normalized.capturePolicy, 'performance', {
+    diagnostic: normalized.type === DIAGNOSIS_TYPE,
+    plannedRequests: plan.totalRequests
+  });
   const startedAt = new Date().toISOString();
   const startedMillis = Date.now();
   const progress = typeof options.onProgress === 'function' ? options.onProgress : () => {};
   const samples = [];
-  const retainedSummarySamples = [];
+  const summaryTracker = createPerformanceSummaryTracker();
+  const diagnosisSummarySamples = normalized.type === DIAGNOSIS_TYPE ? [] : null;
   const retainSamples = options.retainSamples !== false;
   const resultWriter = typeof options.resultWriter?.recordPerformanceSample === 'function' ? options.resultWriter : null;
   const useCsvVariables = csvVariablesEnabled(normalized.csvVariables);
@@ -38,83 +47,96 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
   let activeRequests = 0;
   let maxActiveRequests = 0;
   const endsAtMillis = plan.durationMillis > 0 ? startedMillis + plan.durationMillis : 0;
-  const diagnosisContext = normalized.type === DIAGNOSIS_TYPE ? createDiagnosisRunContext(normalized) : null;
+  const performanceContext = createPerformanceRunContext(normalized, plan);
+  const diagnosisContext = normalized.type === DIAGNOSIS_TYPE ? performanceContext : null;
   const eventLoopMonitor = diagnosisContext ? monitorEventLoopDelay({ resolution: 20 }) : null;
   const memoryStarted = diagnosisContext ? process.memoryUsage().heapUsed : 0;
+  const requestTimeoutMillis = normalizePerformanceRequestTimeoutMillis(options.requestTimeoutMillis);
+  const collectTransportTimings = normalized.type === DIAGNOSIS_TYPE || capturePolicy.transportTimings === true;
   eventLoopMonitor?.enable();
 
-  for (const [stageIndex, stage] of plan.stages.entries()) {
-    if (options.signal?.aborted === true || (endsAtMillis > 0 && Date.now() >= endsAtMillis)) {
-      break;
-    }
-    let stageNextIteration = 0;
-    const workerCount = Math.min(stage.concurrency, stage.totalRequests);
-    const workers = Array.from({ length: workerCount }, async () => {
-      while (true) {
-        if (options.signal?.aborted === true) {
-          return;
-        }
-        if (endsAtMillis > 0 && Date.now() >= endsAtMillis) {
-          return;
-        }
-        const stageIteration = stageNextIteration;
-        stageNextIteration += 1;
-        if (stageIteration >= stage.totalRequests || nextIteration >= plan.totalRequests) {
-          return;
-        }
-        const iteration = nextIteration;
-        nextIteration += 1;
-        const scheduledAtMillis = Date.now();
-        activeRequests += 1;
-        maxActiveRequests = Math.max(maxActiveRequests, activeRequests);
-        const sample = await executeIteration(normalized, currentEnvironment, currentCookies, iteration, {
-          ...options,
-          diagnosisContext,
-          iterationData: useCsvVariables ? (iterationRows[iteration] || []) : (options.iterationData || [])
-        }, {
-          stage,
-          stageIndex: stageIndex + 1,
-          scheduledAtMillis
-        });
-        activeRequests -= 1;
-        const sampleIndex = retainedSummarySamples.length;
-        retainedSummarySamples.push(summarySampleForPerformance(sample.publicSample));
-        if (retainSamples) {
-          samples.push(sample.publicSample);
-        }
-        if (resultWriter) {
-          await resultWriter.recordPerformanceSample(sample.publicSample, {
-            index: sampleIndex,
-            totalRequests: plan.totalRequests
+  try {
+    for (const [stageIndex, stage] of plan.stages.entries()) {
+      if (options.signal?.aborted === true || (endsAtMillis > 0 && Date.now() >= endsAtMillis)) {
+        break;
+      }
+      let stageNextIteration = 0;
+      const workerCount = Math.min(stage.concurrency, stage.totalRequests);
+      const workers = Array.from({ length: workerCount }, async () => {
+        while (true) {
+          if (options.signal?.aborted === true) {
+            return;
+          }
+          if (endsAtMillis > 0 && Date.now() >= endsAtMillis) {
+            return;
+          }
+          const stageIteration = stageNextIteration;
+          stageNextIteration += 1;
+          if (stageIteration >= stage.totalRequests || nextIteration >= plan.totalRequests) {
+            return;
+          }
+          const iteration = nextIteration;
+          nextIteration += 1;
+          const scheduledAtMillis = Date.now();
+          activeRequests += 1;
+          maxActiveRequests = Math.max(maxActiveRequests, activeRequests);
+          const sample = await executeIteration(normalized, currentEnvironment, currentCookies, iteration, {
+            ...options,
+            collectTransportTimings,
+            diagnosisContext,
+            performanceContext,
+            requestTimeoutMillis,
+            iterationData: useCsvVariables ? (iterationRows[iteration] || []) : (options.iterationData || [])
+          }, {
+            stage,
+            stageIndex: stageIndex + 1,
+            scheduledAtMillis
+          });
+          activeRequests -= 1;
+          const sampleIndex = summaryTracker.count;
+          summaryTracker.record(sample.publicSample);
+          if (diagnosisSummarySamples) {
+            diagnosisSummarySamples.push(summarySampleForPerformance(sample.publicSample));
+          }
+          if (retainSamples) {
+            samples.push(sample.publicSample);
+          }
+          if (resultWriter) {
+            await resultWriter.recordPerformanceSample(sample.publicSample, {
+              index: sampleIndex,
+              totalRequests: plan.totalRequests
+            });
+          }
+          if (sample.environment) {
+            currentEnvironment = sample.environment;
+          }
+          if (Array.isArray(sample.cookies)) {
+            currentCookies = sample.cookies;
+          }
+          progress({
+            completedRequests: summaryTracker.count,
+            totalRequests: plan.totalRequests,
+            activeRequests,
+            phase: stage.phase || stage.name,
+            stageIndex: stageIndex + 1,
+            stageCount: plan.stages.length,
+            requestId: normalized.request.id,
+            requestName: normalized.request.name,
+            passed: sample.publicSample.passed === true,
+            durationMillis: sample.publicSample.durationMillis || 0
           });
         }
-        if (sample.environment) {
-          currentEnvironment = sample.environment;
-        }
-        if (Array.isArray(sample.cookies)) {
-          currentCookies = sample.cookies;
-        }
-        progress({
-          completedRequests: retainedSummarySamples.length,
-          totalRequests: plan.totalRequests,
-          activeRequests,
-          phase: stage.phase || stage.name,
-          stageIndex: stageIndex + 1,
-          stageCount: plan.stages.length,
-          requestId: normalized.request.id,
-          requestName: normalized.request.name,
-          passed: sample.publicSample.passed === true,
-          durationMillis: sample.publicSample.durationMillis || 0
-        });
-      }
-    });
-    await Promise.all(workers);
+      });
+      await Promise.all(workers);
+    }
+  } finally {
+    eventLoopMonitor?.disable();
+    performanceContext?.destroy?.();
   }
   const completedAt = new Date().toISOString();
-  const summarySamples = diagnosisContext ? (retainSamples ? samples : retainedSummarySamples) : retainedSummarySamples;
-  const summary = summarizeSamples(summarySamples, Date.now() - startedMillis);
+  const summary = summaryTracker.summarize(Date.now() - startedMillis);
   if (diagnosisContext) {
-    eventLoopMonitor?.disable();
+    const summarySamples = diagnosisSummarySamples || [];
     summary.diagnosis = summarizeEndpointDiagnosis(summarySamples, {
       cancelled: options.signal?.aborted === true,
       config: normalized.config,
@@ -125,11 +147,11 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
       memoryDeltaBytes: Math.max(0, process.memoryUsage().heapUsed - memoryStarted),
       plannedRequests: plan.totalRequests,
       request: normalized.request,
-      safetyLimited: summarySamples.length < plan.totalRequests,
+      safetyLimited: summaryTracker.count < plan.totalRequests,
       safetyLimits: normalized.safetyLimits
     });
   }
-  const failedRequests = summarySamples.filter((sample) => sample.passed !== true).length;
+  const failedRequests = summaryTracker.failedRequests;
   const result = {
     id: cryptoRandomId(),
     performanceTestId: normalized.id,
@@ -138,8 +160,8 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
     environmentId: normalized.environmentId,
     environmentMutationAllowed: normalized.allowEnvironmentMutation === true,
     totalRequests: plan.totalRequests,
-    completedRequests: summarySamples.length,
-    successfulRequests: summarySamples.length - failedRequests,
+    completedRequests: summaryTracker.count,
+    successfulRequests: summaryTracker.count - failedRequests,
     failedRequests,
     passed: failedRequests === 0 && options.signal?.aborted !== true,
     cancelled: options.signal?.aborted === true,
@@ -156,12 +178,12 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
   if (normalized.allowEnvironmentMutation === true) {
     result.mutatedEnvironment = currentEnvironment;
   }
-  diagnosisContext?.destroy?.();
   return result;
 }
 
 async function executeIteration(performanceTest, environment, cookies, iteration, options, execution = {}) {
   const startedAt = new Date().toISOString();
+  const startedMillis = Date.now();
   const stage = execution.stage || {};
   const request = requestForPerformanceStage(performanceTest.request, stage);
   const runner = {
@@ -177,8 +199,8 @@ async function executeIteration(performanceTest, environment, cookies, iteration
       ...runnerOptions(options),
       allowEnvironmentMutation: performanceTest.allowEnvironmentMutation,
       cookieJar: cloneJson(cookies),
-      includeTransportDiagnostics: performanceTest.type === DIAGNOSIS_TYPE,
-      sendRequest: diagnosticSendRequestForStage(options, stage),
+      includeTransportDiagnostics: options.collectTransportTimings === true || performanceTest.type === DIAGNOSIS_TYPE,
+      sendRequest: performanceSendRequestForStage(options, stage),
       signal: options.signal
     });
     const requestResult = result.results?.[0] || {};
@@ -230,7 +252,7 @@ async function executeIteration(performanceTest, environment, cookies, iteration
         stageIndex: execution.stageIndex || 0,
         stageConcurrency: stage.concurrency || 1,
         statusCode: 0,
-        durationMillis: 0,
+        durationMillis: Math.max(0, Date.now() - startedMillis),
         schedulerLagMillis: Math.max(0, Date.now() - Number(execution.scheduledAtMillis || Date.now())),
         responseBody: '',
         responseBytes: 0,
@@ -251,6 +273,9 @@ function runnerOptions(options) {
     abortController,
     diagnosisContext,
     onProgress,
+    performanceContext,
+    collectTransportTimings,
+    requestTimeoutMillis,
     resultWriter,
     retainSamples,
     ...rest
@@ -296,8 +321,8 @@ function requestForPerformanceStage(request, stage = {}) {
   return nextRequest;
 }
 
-function diagnosticSendRequestForStage(options = {}, stage = {}) {
-  const context = options.diagnosisContext;
+function performanceSendRequestForStage(options = {}, stage = {}) {
+  const context = options.performanceContext || options.diagnosisContext;
   if (!context) {
     return options.sendRequest;
   }
@@ -306,23 +331,32 @@ function diagnosticSendRequestForStage(options = {}, stage = {}) {
     const agent = stage.coldConnection === true ? false : context.agentFor(request, environment);
     return baseSendRequest(request, environment, {
       ...sendOptions,
-      collectTimings: true,
+      collectTimings: options.collectTransportTimings === true,
       forceNode: true,
+      timeoutMillis: options.requestTimeoutMillis,
       agent
     });
   };
 }
 
-function createDiagnosisRunContext(performanceTest) {
+function createPerformanceRunContext(performanceTest, plan = {}) {
+  const maxSockets = Math.max(1, Math.min(
+    integerAtLeast(plan.concurrency, 1, 1),
+    integerAtLeast(performanceTest.safetyLimits?.maxConcurrency, 1, 10)
+  ));
   const httpAgent = new http.Agent({
     keepAlive: true,
-    maxSockets: Math.max(1, integerAtLeast(performanceTest.safetyLimits?.maxConcurrency, 1, 10)),
-    maxFreeSockets: 16
+    keepAliveMsecs: 1000,
+    maxSockets,
+    maxTotalSockets: maxSockets,
+    maxFreeSockets: Math.min(16, maxSockets)
   });
   const httpsAgent = new https.Agent({
     keepAlive: true,
-    maxSockets: Math.max(1, integerAtLeast(performanceTest.safetyLimits?.maxConcurrency, 1, 10)),
-    maxFreeSockets: 16
+    keepAliveMsecs: 1000,
+    maxSockets,
+    maxTotalSockets: maxSockets,
+    maxFreeSockets: Math.min(16, maxSockets)
   });
   return {
     agentFor(request, environment) {
@@ -338,6 +372,14 @@ function createDiagnosisRunContext(performanceTest) {
       httpsAgent.destroy();
     }
   };
+}
+
+function normalizePerformanceRequestTimeoutMillis(value) {
+  const number = Number(value == null ? DEFAULT_PERFORMANCE_REQUEST_TIMEOUT_MILLIS : value);
+  if (!Number.isFinite(number) || number <= 0) {
+    return DEFAULT_PERFORMANCE_REQUEST_TIMEOUT_MILLIS;
+  }
+  return Math.max(1, Math.min(MAX_PERFORMANCE_REQUEST_TIMEOUT_MILLIS, Math.floor(number)));
 }
 
 function createPerformancePlan(performanceTest) {
@@ -451,33 +493,59 @@ function integerAtLeast(value, min, fallback) {
   return Number.isFinite(number) && number >= min ? Math.floor(number) : fallback;
 }
 
-function summarizeSamples(samples, wallClockMillis) {
-  const durations = samples
-    .map((sample) => Number(sample.durationMillis || 0))
-    .filter((duration) => Number.isFinite(duration))
-    .sort((left, right) => left - right);
+function createPerformanceSummaryTracker() {
+  const durations = [];
   const statusCodes = {};
   const errors = {};
-  for (const sample of samples) {
-    const statusCode = String(sample.statusCode || 0);
-    statusCodes[statusCode] = (statusCodes[statusCode] || 0) + 1;
-    if (sample.error) {
-      errors[sample.error] = (errors[sample.error] || 0) + 1;
-    }
-  }
-  const totalDuration = durations.reduce((sum, duration) => sum + duration, 0);
+  let completedRequests = 0;
+  let failedRequests = 0;
   return {
-    minDurationMillis: durations[0] || 0,
-    maxDurationMillis: durations.at(-1) || 0,
-    averageDurationMillis: durations.length ? totalDuration / durations.length : 0,
-    p50DurationMillis: percentile(durations, 0.5),
-    p90DurationMillis: percentile(durations, 0.9),
-    p95DurationMillis: percentile(durations, 0.95),
-    p99DurationMillis: percentile(durations, 0.99),
-    requestsPerSecond: wallClockMillis > 0 ? samples.length / (wallClockMillis / 1000) : 0,
-    statusCodes,
-    errors
+    get count() {
+      return completedRequests;
+    },
+    get failedRequests() {
+      return failedRequests;
+    },
+    record(sample = {}) {
+      completedRequests += 1;
+      if (sample.passed !== true) {
+        failedRequests += 1;
+      }
+      const duration = Number(sample.durationMillis || 0);
+      if (Number.isFinite(duration)) {
+        durations.push(duration);
+      }
+      const statusCode = String(sample.statusCode || 0);
+      statusCodes[statusCode] = (statusCodes[statusCode] || 0) + 1;
+      if (sample.error) {
+        errors[sample.error] = (errors[sample.error] || 0) + 1;
+      }
+    },
+    summarize(wallClockMillis) {
+      const sortedDurations = durations.slice().sort((left, right) => left - right);
+      const totalDuration = sortedDurations.reduce((sum, duration) => sum + duration, 0);
+      return {
+        minDurationMillis: sortedDurations[0] || 0,
+        maxDurationMillis: sortedDurations.at(-1) || 0,
+        averageDurationMillis: sortedDurations.length ? totalDuration / sortedDurations.length : 0,
+        p50DurationMillis: percentile(sortedDurations, 0.5),
+        p90DurationMillis: percentile(sortedDurations, 0.9),
+        p95DurationMillis: percentile(sortedDurations, 0.95),
+        p99DurationMillis: percentile(sortedDurations, 0.99),
+        requestsPerSecond: wallClockMillis > 0 ? completedRequests / (wallClockMillis / 1000) : 0,
+        statusCodes: { ...statusCodes },
+        errors: { ...errors }
+      };
+    }
   };
+}
+
+function summarizeSamples(samples, wallClockMillis) {
+  const tracker = createPerformanceSummaryTracker();
+  for (const sample of samples) {
+    tracker.record(sample);
+  }
+  return tracker.summarize(wallClockMillis);
 }
 
 function percentile(values, rank) {

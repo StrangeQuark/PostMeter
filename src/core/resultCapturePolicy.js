@@ -68,6 +68,7 @@
       next.scriptLogs = false;
       next.localVariables = false;
       next.responseHeaders = kind === 'performance' && context.diagnostic === true ? next.responseHeaders : false;
+      next.transportTimings = kind === 'performance' && context.diagnostic === true ? next.transportTimings : false;
       next.guardrailNotes.push('Very high-volume mode limited optional detail capture.');
     } else if (plannedRequests >= HIGH_VOLUME_REQUESTS) {
       if (next.responseBody === 'all') {

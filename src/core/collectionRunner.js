@@ -108,6 +108,7 @@ async function runCollection(collection, environment, options = {}) {
       scriptRunner: runScript,
       grpcInvoker: options.grpcInvoker || options.scriptOptions?.grpcInvoker,
       signal: options.signal,
+      timeoutMillis: options.timeoutMillis,
       scriptOptions: {
         ...(options.scriptOptions || {}),
         runRequest: createRunRequestBroker(depth + 1, inheritedIterationData),
@@ -191,6 +192,7 @@ async function runCollection(collection, environment, options = {}) {
           scriptRunner: runScript,
           grpcInvoker: options.grpcInvoker || options.scriptOptions?.grpcInvoker,
           signal: options.signal,
+          timeoutMillis: options.timeoutMillis,
           scriptOptions: options.scriptOptions,
           sandboxPackages: options.sandboxPackages || options.scriptOptions?.sandboxPackages || [],
           clientCertificates: collection?.certificates || [],

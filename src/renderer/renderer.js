@@ -6749,6 +6749,7 @@ function capturePolicyGuardrailState(prefix, policy) {
     scriptLogsForcedOff: highVolume,
     localVariablesForcedOff: highVolume,
     responseHeadersForcedOff: veryHighVolume && !(kind === 'performance' && context.diagnostic === true),
+    transportTimingsForcedOff: veryHighVolume && !(kind === 'performance' && context.diagnostic === true),
     responseBodyLimitedModes: veryHighVolume ? ['all', 'sampled'] : highVolume ? ['all'] : [],
     bodyPreviewCap: veryHighVolume ? 2048 : highVolume ? 4096 : 32768
   };
@@ -6838,7 +6839,10 @@ function renderCapturePolicyControls(prefix, policy, enabled) {
     disabled: state.responseHeadersForcedOff,
     title: state.responseHeadersForcedOff ? captureGuardrailTooltip(state, 'Response headers') : ''
   });
-  setControl('TimingsInput', normalized.transportTimings === true, 'checked');
+  setControl('TimingsInput', normalized.transportTimings === true, 'checked', {
+    disabled: state.transportTimingsForcedOff,
+    title: state.transportTimingsForcedOff ? captureGuardrailTooltip(state, 'Transport timings') : ''
+  });
   const bodyPreviewInput = $(`${prefix}CaptureBodyPreviewBytesInput`);
   if (bodyPreviewInput) {
     bodyPreviewInput.max = String(state.bodyPreviewCap);
@@ -6886,6 +6890,9 @@ function collectCapturePolicyFromControls(prefix, fallback = {}) {
   }
   if (state.responseHeadersForcedOff) {
     next.responseHeaders = state.preferred.responseHeaders === true;
+  }
+  if (state.transportTimingsForcedOff) {
+    next.transportTimings = state.preferred.transportTimings === true;
   }
   if (state.highVolume && Number(state.preferred.bodyPreviewBytes || 0) > state.bodyPreviewCap && bodyPreviewInput?.value === String(state.effective.bodyPreviewBytes)) {
     next.bodyPreviewBytes = state.preferred.bodyPreviewBytes;

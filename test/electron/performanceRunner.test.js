@@ -313,6 +313,143 @@ test('performance result streaming writes only outer performance samples with st
   assert.deepEqual(performanceRows.map((row) => row.item.iteration).sort((left, right) => left - right), [1, 2, 3]);
 });
 
+test('performance runs do not need retained samples to produce exact aggregate summaries', async () => {
+  const durations = [25, 5, 15, 35];
+  const performanceTest = performanceTestModel({
+    id: 'perf-streamed-summary',
+    name: 'Streamed Summary',
+    type: 'throughput',
+    request: {
+      id: 'request-streamed-summary',
+      name: 'Streamed Summary Request',
+      method: 'GET',
+      url: 'https://api.example.test/streamed-summary'
+    },
+    config: { iterations: 4, concurrency: 2 },
+    safetyLimits: { maxTotalRequests: 4, maxConcurrency: 2, maxDurationSeconds: 10 }
+  });
+
+  const result = await runPerformanceTest(performanceTest, { id: 'env', name: 'Env', variables: [] }, {
+    retainSamples: false,
+    sendRequest: async () => ({
+      ...response(),
+      durationMillis: durations.shift()
+    })
+  });
+
+  assert.equal(result.completedRequests, 4);
+  assert.equal(result.successfulRequests, 4);
+  assert.equal(result.samples.length, 0);
+  assert.equal(result.summary.minDurationMillis, 5);
+  assert.equal(result.summary.maxDurationMillis, 35);
+  assert.equal(result.summary.p50DurationMillis, 15);
+  assert.equal(result.summary.p95DurationMillis, 35);
+  assert.equal(result.summary.statusCodes['200'], 4);
+});
+
+test('performance requests use bounded node transport options', async () => {
+  const sendOptions = [];
+  const performanceTest = performanceTestModel({
+    id: 'perf-node-transport',
+    name: 'Node Transport',
+    type: 'throughput',
+    request: {
+      id: 'request-node-transport',
+      name: 'Node Transport Request',
+      method: 'GET',
+      url: 'https://api.example.test/node-transport'
+    },
+    config: { iterations: 2, concurrency: 2 },
+    safetyLimits: { maxTotalRequests: 2, maxConcurrency: 2, maxDurationSeconds: 10 },
+    capturePolicy: { transportTimings: false }
+  });
+
+  const result = await runPerformanceTest(performanceTest, null, {
+    requestTimeoutMillis: 1234,
+    sendRequest: async (_request, _environment, options = {}) => {
+      sendOptions.push(options);
+      return response();
+    }
+  });
+
+  assert.equal(result.completedRequests, 2);
+  assert.equal(sendOptions.length, 2);
+  for (const options of sendOptions) {
+    assert.equal(options.forceNode, true);
+    assert.equal(options.collectTimings, false);
+    assert.equal(options.timeoutMillis, 1234);
+    assert.ok(options.agent);
+    assert.equal(options.agent.options.keepAlive, true);
+    assert.equal(options.agent.maxSockets, 2);
+  }
+});
+
+test('performance transport diagnostics are captured only when the effective policy keeps timings', async () => {
+  const sendOptions = [];
+  const performanceTest = performanceTestModel({
+    id: 'perf-transport-diagnostics',
+    name: 'Transport Diagnostics',
+    type: 'throughput',
+    request: {
+      id: 'request-transport-diagnostics',
+      name: 'Transport Diagnostics Request',
+      method: 'GET',
+      url: 'https://api.example.test/transport-diagnostics'
+    },
+    config: { iterations: 1, concurrency: 1 },
+    safetyLimits: { maxTotalRequests: 1, maxConcurrency: 1, maxDurationSeconds: 10 },
+    capturePolicy: { transportTimings: true }
+  });
+
+  const result = await runPerformanceTest(performanceTest, null, {
+    sendRequest: async (_request, _environment, options = {}) => {
+      sendOptions.push(options);
+      return {
+        ...response(),
+        headers: { 'server-timing': ['app;dur=1'] },
+        timings: options.collectTimings === true ? { timeToFirstByteMillis: 3 } : undefined
+      };
+    }
+  });
+
+  assert.equal(sendOptions[0].collectTimings, true);
+  assert.equal(result.samples[0].timings.timeToFirstByteMillis, 3);
+  assert.deepEqual(result.samples[0].responseHeaders, { 'server-timing': ['app;dur=1'] });
+});
+
+test('performance request timeout fails stalled transports instead of hanging workers', async () => {
+  const server = await createHangingServer();
+  try {
+    const performanceTest = performanceTestModel({
+      id: 'perf-timeout',
+      name: 'Timeout Performance',
+      type: 'throughput',
+      request: {
+        id: 'request-timeout',
+        name: 'Timeout Request',
+        method: 'GET',
+        url: `${server.baseUrl}/hang`
+      },
+      config: { iterations: 2, concurrency: 2 },
+      safetyLimits: { maxTotalRequests: 2, maxConcurrency: 2, maxDurationSeconds: 10 }
+    });
+
+    const started = Date.now();
+    const result = await runPerformanceTest(performanceTest, null, {
+      requestTimeoutMillis: 50
+    });
+
+    assert.equal(result.completedRequests, 2);
+    assert.equal(result.successfulRequests, 0);
+    assert.equal(result.failedRequests, 2);
+    assert.equal(result.summary.statusCodes['0'], 2);
+    assert.equal(Object.values(result.summary.errors).reduce((sum, count) => sum + count, 0), 2);
+    assert.ok(Date.now() - started < 2500);
+  } finally {
+    await server.close();
+  }
+});
+
 test('performance result streaming stores SQLite samples without nested runner collisions', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-performance-store-'));
   const store = createRuntimeResultStore(path.join(temp, 'current.sqlite'));
@@ -769,6 +906,26 @@ async function createUnstableDiagnosticServer() {
   return {
     baseUrl: `http://127.0.0.1:${address.port}`,
     close: () => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
+  };
+}
+
+async function createHangingServer() {
+  const sockets = new Set();
+  const server = http.createServer(() => {});
+  server.on('connection', (socket) => {
+    sockets.add(socket);
+    socket.on('close', () => sockets.delete(socket));
+  });
+  await new Promise((resolve) => server.listen(0, 'localhost', resolve));
+  const address = server.address();
+  return {
+    baseUrl: `http://localhost:${address.port}`,
+    close: () => new Promise((resolve, reject) => {
+      for (const socket of sockets) {
+        socket.destroy();
+      }
+      server.close((error) => error ? reject(error) : resolve());
+    })
   };
 }
 
