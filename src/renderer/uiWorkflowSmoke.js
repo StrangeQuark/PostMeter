@@ -263,8 +263,16 @@
     assertUiSmoke($('runnerExecutionDetails').textContent.includes('script token exists'), 'Runner execution details did not render script test results.');
     assertUiSmoke($('runnerExecutionDetails').textContent.includes('scriptToken'), 'Runner execution details did not render environment variables.');
     assertUiSmoke($('runnerExecutionDetails').textContent.includes('requestToken'), 'Runner execution details did not render request variables.');
-    assertUiSmoke(!$('exportRunnerJsonButton').disabled, 'Runner JSON export button was not enabled after a run.');
-    assertUiSmoke(!$('exportRunnerCsvButton').disabled, 'Runner CSV export button was not enabled after a run.');
+    assertUiSmoke(!$('exportRunnerResultsButton').disabled, 'Runner Export Results button was not enabled after a run.');
+    $('exportRunnerResultsButton').click();
+    assertUiSmoke(!$('exportRunnerResultsMenu').hidden, 'Runner Export Results button should open the result format menu.');
+    assertUiSmoke(
+      Array.from($('exportRunnerResultsMenu').querySelectorAll('button')).map((button) => button.textContent.trim()).join('|') === 'JSON|CSV',
+      'Runner Export Results menu should offer JSON and CSV.'
+    );
+    assertUiSmoke(!$('exportRunnerJsonButton').disabled, 'Runner JSON export menu item was not enabled after a run.');
+    assertUiSmoke(!$('exportRunnerCsvButton').disabled, 'Runner CSV export menu item was not enabled after a run.');
+    $('exportRunnerResultsButton').click();
 
     selectSidebarPanel('performance');
     const performanceTest = newPerformanceTest();
@@ -329,7 +337,44 @@
       global
     );
     assertUiSmoke($('performanceExecutionDetails').textContent.includes('/diagnostic?api_key=ui-smoke'), 'Full Endpoint Diagnosis detail did not render the target URL.');
-    assertUiSmoke(!$('exportPerformanceResultCsvButton').disabled, 'Performance CSV export button was not enabled after Full Endpoint Diagnosis.');
+    assertUiSmoke(!$('exportPerformanceResultsButton').disabled, 'Performance Export Results button was not enabled after Full Endpoint Diagnosis.');
+    $('exportPerformanceResultsButton').click();
+    assertUiSmoke(!$('exportPerformanceResultsMenu').hidden, 'Performance Export Results button should open the result format menu.');
+    assertUiSmoke(
+      Array.from($('exportPerformanceResultsMenu').querySelectorAll('button')).map((button) => button.textContent.trim()).join('|') === 'JSON|CSV',
+      'Performance Export Results menu should offer JSON and CSV.'
+    );
+    assertUiSmoke(!$('exportPerformanceResultJsonButton').disabled, 'Performance JSON export menu item was not enabled after Full Endpoint Diagnosis.');
+    assertUiSmoke(!$('exportPerformanceResultCsvButton').disabled, 'Performance CSV export menu item was not enabled after Full Endpoint Diagnosis.');
+    $('exportPerformanceResultsButton').click();
+    const originalPerformanceExportResult = window.__postmeterExportPerformanceResult;
+    const performanceExportCalls = [];
+    try {
+      window.__postmeterExportPerformanceResult = async (result, format) => {
+        performanceExportCalls.push({ result, format });
+        return { cancelled: false, path: `/tmp/postmeter-performance-result.${format}` };
+      };
+      $('exportPerformanceResultsButton').click();
+      $('exportPerformanceResultJsonButton').click();
+      $('exportPerformanceResultsButton').click();
+      $('exportPerformanceResultCsvButton').click();
+      await waitForUiSmoke(
+        () => performanceExportCalls.length === 2,
+        'Performance result export buttons did not invoke both JSON and CSV exports.',
+        3000,
+        global
+      );
+      assertUiSmoke(
+        performanceExportCalls.map((call) => call.format).join('|') === 'json|csv',
+        `Performance result exports should run JSON then CSV. formats=${performanceExportCalls.map((call) => call.format).join('|')}`
+      );
+      assertUiSmoke(
+        performanceExportCalls.every((call) => call.result?.resultStoreId === diagnosisResult.resultStoreId),
+        'Performance result exports should send the last performance result payload.'
+      );
+    } finally {
+      window.__postmeterExportPerformanceResult = originalPerformanceExportResult;
+    }
   }
 
   function assertVariableHighlight(control, variableName, message, expectedStatus = '', expectedSource = '') {

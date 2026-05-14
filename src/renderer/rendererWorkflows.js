@@ -159,8 +159,16 @@
 
     function clearRunnerResultState() {
       state.lastRunnerResult = null;
-      element('exportRunnerJsonButton').disabled = true;
-      element('exportRunnerCsvButton').disabled = true;
+      setRunnerResultExportDisabled(true);
+    }
+
+    function setRunnerResultExportDisabled(disabled) {
+      for (const id of ['exportRunnerResultsButton', 'exportRunnerJsonButton', 'exportRunnerCsvButton']) {
+        const button = element(id);
+        if (button) {
+          button.disabled = disabled;
+        }
+      }
     }
 
     async function confirmAction(message) {
@@ -1208,8 +1216,7 @@
         applyRunnerScriptMutations(result, collection);
         state.lastRunnerResult = result;
         element('runnerResults').textContent = runFormatting.formatRunnerResult(result);
-        element('exportRunnerJsonButton').disabled = false;
-        element('exportRunnerCsvButton').disabled = false;
+        setRunnerResultExportDisabled(false);
         setStatus(result.cancelled ? 'Collection run cancelled.' : 'Collection run completed.');
       } catch (error) {
         const message = error.message || String(error);

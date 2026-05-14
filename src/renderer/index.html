@@ -683,8 +683,13 @@
               <button id="deleteRunnerButton" class="danger-button" type="button">Delete Runner</button>
               <button id="runCollectionButton" type="button" class="primary">Run</button>
               <button id="cancelRunnerButton" type="button" disabled>Cancel</button>
-              <button id="exportRunnerJsonButton" type="button" disabled>Export JSON</button>
-              <button id="exportRunnerCsvButton" type="button" disabled>Export CSV</button>
+              <div class="toolbar-group menu-group result-export-menu-group" aria-label="Runner result export">
+                <button id="exportRunnerResultsButton" class="menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false" disabled>Export Results</button>
+                <div id="exportRunnerResultsMenu" class="toolbar-menu" role="menu" aria-labelledby="exportRunnerResultsButton" hidden>
+                  <button id="exportRunnerJsonButton" type="button" role="menuitem" disabled>JSON</button>
+                  <button id="exportRunnerCsvButton" type="button" role="menuitem" disabled>CSV</button>
+                </div>
+              </div>
             </div>
           </div>
           <div class="runner-settings">
@@ -787,7 +792,13 @@
               <button id="importPerformanceRequestButton" type="button">Import Request</button>
               <button id="exportPerformanceTestButton" type="button">Export Test</button>
               <button id="performanceCaptureSettingsButton" type="button" aria-expanded="false" aria-controls="performanceCaptureSettingsPanel">Capture Settings</button>
-              <button id="exportPerformanceResultCsvButton" type="button">Export Result CSV</button>
+              <div class="toolbar-group menu-group result-export-menu-group" aria-label="Performance result export">
+                <button id="exportPerformanceResultsButton" class="menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false" disabled>Export Results</button>
+                <div id="exportPerformanceResultsMenu" class="toolbar-menu" role="menu" aria-labelledby="exportPerformanceResultsButton" hidden>
+                  <button id="exportPerformanceResultJsonButton" type="button" role="menuitem" disabled>JSON</button>
+                  <button id="exportPerformanceResultCsvButton" type="button" role="menuitem" disabled>CSV</button>
+                </div>
+              </div>
             </div>
           </div>
           <div class="performance-request-editor">

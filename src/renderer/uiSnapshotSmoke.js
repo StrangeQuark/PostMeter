@@ -163,6 +163,7 @@
         ]
       };
       renderRunnerExecutionResult(lastRunnerResult);
+      $('exportRunnerResultsButton').disabled = false;
       $('exportRunnerJsonButton').disabled = false;
       $('exportRunnerCsvButton').disabled = false;
     }, global);

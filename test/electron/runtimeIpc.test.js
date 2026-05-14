@@ -529,7 +529,9 @@ test('runtime IPC runs full endpoint diagnosis with SQLite paging detail and dia
   const events = [];
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-runtime-diagnosis-'));
   const resultStorePath = path.join(tempDir, 'current.sqlite');
-  const exportPath = path.join(tempDir, 'diagnosis-export.csv');
+  const csvExportPath = path.join(tempDir, 'diagnosis-export.csv');
+  const jsonExportPath = path.join(tempDir, 'diagnosis-export.json');
+  const exportPaths = [csvExportPath, jsonExportPath];
   const server = await createServer((request, response) => {
     response.setHeader('Content-Type', 'application/json');
     response.setHeader('Cache-Control', 'max-age=30');
@@ -560,7 +562,7 @@ test('runtime IPC runs full endpoint diagnosis with SQLite paging detail and dia
   let controller;
   try {
     controller = registerRuntimeIpc({
-      dialog: { showSaveDialog: async () => ({ filePath: exportPath, canceled: false }) },
+      dialog: { showSaveDialog: async () => ({ filePath: exportPaths.shift(), canceled: false }) },
       fileOperationResult: (result) => result,
       getMainWindow: () => null,
       getWorkspace: () => workspace,
@@ -635,12 +637,20 @@ test('runtime IPC runs full endpoint diagnosis with SQLite paging detail and dia
 
     const exported = await handlers.get('performance:exportResult')({}, result, 'csv');
     assert.equal(exported.cancelled, false);
-    const csv = await fs.readFile(exportPath, 'utf8');
+    const csv = await fs.readFile(csvExportPath, 'utf8');
     assert.match(csv, /diagnosticGroup,diagnostic,status,value,details/);
     assert.match(csv, /Response,Time to first byte,/);
     assert.match(csv, /phase,requests,concurrency,successfulResponses,failedResponses/);
     assert.match(csv, /index,iteration,phase,stageName,stageConcurrency/);
     assert.match(csv, /bodySha256/);
+
+    const exportedJson = await handlers.get('performance:exportResult')({}, result, 'json');
+    assert.equal(exportedJson.cancelled, false);
+    const json = JSON.parse(await fs.readFile(jsonExportPath, 'utf8'));
+    assert.equal(json.metadata.kind, 'performance');
+    assert.equal(json.result.resultStoreId, result.resultStoreId);
+    assert.equal(json.items.length, 44);
+    assert.ok(json.items.some((sample) => sample.bodySha256));
   } finally {
     controller?.closeResultStore?.();
     await server.close();

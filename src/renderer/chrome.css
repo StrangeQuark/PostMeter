@@ -89,23 +89,22 @@
   display: none;
 }
 
-.request-export-menu-group .toolbar-menu {
+.request-export-menu-group .toolbar-menu,
+.csv-variables-menu-group .toolbar-menu,
+.result-export-menu-group .toolbar-menu {
   right: 0;
   left: auto;
 }
 
-.csv-variables-menu-group .toolbar-menu {
-  right: 0;
-  left: auto;
-}
-
-.request-export-menu-group > .menu-trigger {
+.request-export-menu-group > .menu-trigger,
+.result-export-menu-group > .menu-trigger {
   min-height: 30px;
   border-color: var(--line);
   background: var(--surface);
 }
 
-.request-export-menu-group > .menu-trigger:hover:not(:disabled) {
+.request-export-menu-group > .menu-trigger:hover:not(:disabled),
+.result-export-menu-group > .menu-trigger:hover:not(:disabled) {
   border-color: var(--line-strong);
   background: var(--button-hover);
 }

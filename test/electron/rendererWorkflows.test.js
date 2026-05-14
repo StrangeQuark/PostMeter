@@ -2327,6 +2327,7 @@ test('renderer workflows recover collection-run start failures without leaving a
   assert.equal(doc.getElementById('runnerResults').textContent, 'runner backend unavailable');
   assert.equal(doc.getElementById('runCollectionButton').disabled, false);
   assert.equal(doc.getElementById('cancelRunnerButton').disabled, true);
+  assert.equal(doc.getElementById('exportRunnerResultsButton').disabled, true);
   assert.equal(doc.getElementById('exportRunnerJsonButton').disabled, true);
   assert.equal(doc.getElementById('exportRunnerCsvButton').disabled, true);
   assert.equal(state.activeRunnerId, null);
@@ -2580,6 +2581,7 @@ test('renderer workflows surface collection-run save failures without starting a
   state.activeRequestId = null;
   state.lastRunnerResult = { totalRequests: 4, passedRequests: 4, failedRequests: 0 };
   const doc = createDocument();
+  doc.getElementById('exportRunnerResultsButton').disabled = false;
   doc.getElementById('exportRunnerJsonButton').disabled = false;
   doc.getElementById('exportRunnerCsvButton').disabled = false;
   let runnerStarts = 0;
@@ -2616,6 +2618,7 @@ test('renderer workflows surface collection-run save failures without starting a
 
   assert.equal(runnerStarts, 0);
   assert.equal(doc.getElementById('runnerResults').textContent, 'disk full before runner');
+  assert.equal(doc.getElementById('exportRunnerResultsButton').disabled, true);
   assert.equal(doc.getElementById('exportRunnerJsonButton').disabled, true);
   assert.equal(doc.getElementById('exportRunnerCsvButton').disabled, true);
   assert.equal(state.activeRunnerId, null);

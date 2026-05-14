@@ -192,6 +192,7 @@
     bindClick(doc, 'runPerformanceTestButton', options.onRunPerformanceTest);
     bindClick(doc, 'cancelPerformanceTestButton', options.onCancelPerformanceTest);
     bindClick(doc, 'exportPerformanceTestButton', options.onExportPerformanceTest);
+    bindClick(doc, 'exportPerformanceResultJsonButton', options.onExportPerformanceResultJson);
     bindClick(doc, 'exportPerformanceResultCsvButton', options.onExportPerformanceResultCsv);
     bindClick(doc, 'importPerformanceRequestButton', options.onImportPerformanceRequest);
     bindClick(doc, 'addPerformanceParamButton', options.onAddPerformanceParam);
@@ -530,7 +531,9 @@
       ['exportMenuButton', 'exportMenu'],
       ['exportRequestPanelButton', 'exportRequestPanelMenu'],
       ['runnerCsvVariablesButton', 'runnerCsvVariablesMenu'],
-      ['performanceCsvVariablesButton', 'performanceCsvVariablesMenu']
+      ['performanceCsvVariablesButton', 'performanceCsvVariablesMenu'],
+      ['exportRunnerResultsButton', 'exportRunnerResultsMenu'],
+      ['exportPerformanceResultsButton', 'exportPerformanceResultsMenu']
     ]) {
       const button = getElement(doc, buttonId);
       const menu = getElement(doc, menuId);

@@ -858,6 +858,9 @@ test('renderer bootstrap binds performance creation import export run and config
     'runPerformanceTestButton',
     'cancelPerformanceTestButton',
     'exportPerformanceTestButton',
+    'exportPerformanceResultsButton',
+    'exportPerformanceResultsMenu',
+    'exportPerformanceResultJsonButton',
     'exportPerformanceResultCsvButton',
     'importPerformanceRequestButton',
     'calibratePerformanceButton',
@@ -909,10 +912,10 @@ test('renderer bootstrap binds performance creation import export run and config
           return performanceSafetyControls;
         }
         if (selector === '.toolbar-menu') {
-          return [elements.get('performanceCsvVariablesMenu')];
+          return [elements.get('performanceCsvVariablesMenu'), elements.get('exportPerformanceResultsMenu')];
         }
         if (selector === '.menu-trigger') {
-          return [elements.get('performanceCsvVariablesButton')];
+          return [elements.get('performanceCsvVariablesButton'), elements.get('exportPerformanceResultsButton')];
         }
         if (selector === '.tab' || selector === '.tab[data-tab-group="performance"]') {
           return [performanceTab];
@@ -931,6 +934,7 @@ test('renderer bootstrap binds performance creation import export run and config
     onDeletePerformanceTest: () => calls.push('delete'),
     onRunPerformanceTest: () => calls.push('run'),
     onCancelPerformanceTest: () => calls.push('cancel'),
+    onExportPerformanceResultJson: () => calls.push('export-result-json'),
     onExportPerformanceResultCsv: () => calls.push('export-result-csv'),
     onImportPerformanceRequest: () => calls.push('import-request'),
     onAddPerformanceParam: () => calls.push('add-param'),
@@ -962,6 +966,8 @@ test('renderer bootstrap binds performance creation import export run and config
     'runPerformanceTestButton',
     'cancelPerformanceTestButton',
     'exportPerformanceTestButton',
+    'exportPerformanceResultsButton',
+    'exportPerformanceResultJsonButton',
     'exportPerformanceResultCsvButton',
     'importPerformanceRequestButton',
     'addPerformanceParamButton',
@@ -996,7 +1002,7 @@ test('renderer bootstrap binds performance creation import export run and config
   elements.get('performanceDocsInput').dispatch('input');
   elements.get('performanceBinaryBodySourceInput').dispatch('input');
 
-  assert.deepEqual(calls.slice(0, 20), [
+  assert.deepEqual(calls.slice(0, 21), [
     'new',
     'new',
     'import-test',
@@ -1008,6 +1014,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'run',
     'cancel',
     'export-test',
+    'export-result-json',
     'export-result-csv',
     'import-request',
     'add-param',
@@ -1322,7 +1329,9 @@ test('renderer bootstrap binds request environment and runner import/export menu
     ['importRunnerButton', 'import-runner', 'onImportRunner'],
     ['exportEnvironmentButton', 'export-environment', 'onExportEnvironment'],
     ['exportPostmanEnvironmentButton', 'export-postman-environment', 'onExportPostmanEnvironment'],
-    ['exportRunnerDefinitionButton', 'export-runner', 'onExportRunnerDefinition']
+    ['exportRunnerDefinitionButton', 'export-runner', 'onExportRunnerDefinition'],
+    ['exportRunnerJsonButton', 'export-runner-json', 'onExportRunnerJson'],
+    ['exportRunnerCsvButton', 'export-runner-csv', 'onExportRunnerCsv']
   ];
   const elements = new Map(controls.map(([id]) => [id, createElement()]));
   const calls = [];

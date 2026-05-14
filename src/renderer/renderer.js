@@ -129,6 +129,7 @@ let lastRunnerResult = RENDERER_STATE_DEFAULTS.lastRunnerResult;
 let activePerformanceRunId = null;
 let activePerformanceCalibrationId = null;
 let lastPerformanceResult = null;
+let lastPerformanceResultTestId = '';
 let selectedRunnerExecutionIndex = 0;
 let selectedPerformanceResultIndex = 0;
 let runnerExecutionPage = 0;
@@ -689,7 +690,8 @@ function bindUi() {
     onRunPerformanceTest: () => { void runActivePerformanceTest(); },
     onCancelPerformanceTest: () => { void cancelPerformanceTestRun(); },
     onExportPerformanceTest: () => { void exportPerformanceTestFromPicker(); },
-    onExportPerformanceResultCsv: () => { void exportActivePerformanceResultCsv(); },
+    onExportPerformanceResultJson: () => { void exportActivePerformanceResult('json'); },
+    onExportPerformanceResultCsv: () => { void exportActivePerformanceResult('csv'); },
     onImportPerformanceRequest: () => { void promptAndImportPerformanceRequest(); },
     onAddPerformanceParam: () => addPerformancePair('queryParams'),
     onAddPerformanceHeader: () => addPerformancePair('headers'),
@@ -3717,6 +3719,7 @@ function applyLoadedWorkspace(loaded, options = {}) {
   lastResponse = null;
   lastRunnerResult = null;
   lastPerformanceResult = null;
+  lastPerformanceResultTestId = '';
   selectedRunnerExecutionIndex = 0;
   selectedPerformanceResultIndex = 0;
   runnerExecutionPage = 0;
@@ -3754,8 +3757,7 @@ function resetWorkspaceTransientUi() {
   displayTestResults(null);
   $('runCollectionButton').disabled = false;
   $('cancelRunnerButton').disabled = true;
-  $('exportRunnerJsonButton').disabled = true;
-  $('exportRunnerCsvButton').disabled = true;
+  setRunnerResultExportButtonsDisabled(true);
   resetOauthProgressPanel();
 }
 
@@ -7185,6 +7187,20 @@ function renderRunnerEditor() {
   renderCapturePolicyControls('runner', runner?.capturePolicy, Boolean(runner));
   $('addRunnerRequestButton').disabled = !runner;
   renderRunnerRequestList(runner);
+  syncRunnerResultExportButtons(runner);
+}
+
+function setRunnerResultExportButtonsDisabled(disabled) {
+  for (const id of ['exportRunnerResultsButton', 'exportRunnerJsonButton', 'exportRunnerCsvButton']) {
+    const button = $(id);
+    if (button) {
+      button.disabled = disabled;
+    }
+  }
+}
+
+function syncRunnerResultExportButtons(runner = activeRunner()) {
+  setRunnerResultExportButtonsDisabled(!runner || !lastRunnerResult || Boolean(activeRunnerId));
 }
 
 function renderPerformanceEditor() {
@@ -7207,9 +7223,6 @@ function renderPerformanceEditor() {
       button.disabled = !test;
     }
   }
-  if ($('exportPerformanceResultCsvButton')) {
-    $('exportPerformanceResultCsvButton').disabled = !test || !lastPerformanceResult || Boolean(activePerformanceRunId);
-  }
   renderCsvVariablesDropdown('performance', test?.csvVariables, Boolean(test));
   if ($('runPerformanceTestButton')) {
     $('runPerformanceTestButton').disabled = !test || Boolean(activePerformanceRunId);
@@ -7225,6 +7238,16 @@ function renderPerformanceEditor() {
   renderPerformanceMutationControls(test);
   renderCapturePolicyControls('performance', test?.capturePolicy, Boolean(test));
   renderPerformanceRequestEditor(test);
+  syncPerformanceResultExportButtons(test);
+}
+
+function syncPerformanceResultExportButtons(test = activePerformanceTest()) {
+  for (const id of ['exportPerformanceResultsButton', 'exportPerformanceResultJsonButton', 'exportPerformanceResultCsvButton']) {
+    const button = $(id);
+    if (button) {
+      button.disabled = !test || !isActivePerformanceResultForTest(test) || Boolean(activePerformanceRunId);
+    }
+  }
 }
 
 function renderPerformanceRequestEditor(test = activePerformanceTest()) {
@@ -8797,6 +8820,7 @@ async function runActivePerformanceTest() {
     workspaceId: activeWorkspaceId
   };
   lastPerformanceResult = null;
+  lastPerformanceResultTestId = '';
   selectedPerformanceResultIndex = 0;
   performanceExecutionPage = 0;
   performanceExecutionStatusFilter = 'all';
@@ -8821,6 +8845,7 @@ async function runActivePerformanceTest() {
     const message = error.message || String(error);
     if (isActivePerformanceContext(runContext) && activePerformanceRunId === runId) {
       lastPerformanceResult = null;
+      lastPerformanceResultTestId = '';
       renderPerformanceMessage(message);
       setStatus('Performance test failed.');
       notifyUser('Performance Test Failed', message);
@@ -8886,23 +8911,27 @@ async function exportPerformanceTestFromPicker() {
   return exportActivePerformanceTest(selectedTest);
 }
 
-async function exportActivePerformanceResultCsv() {
-  if (!lastPerformanceResult) {
-    return setStatus('Run a performance test before exporting result CSV.');
+async function exportActivePerformanceResult(format = 'json') {
+  const normalizedFormat = format === 'csv' ? 'csv' : 'json';
+  const label = normalizedFormat.toUpperCase();
+  const test = activePerformanceTest();
+  const resultToExport = isActivePerformanceResultForTest(test) ? lastPerformanceResult : null;
+  if (!resultToExport) {
+    return setStatus(`Run a performance test before exporting result ${label}.`);
   }
-  const performanceApi = window.postmeter?.performance;
-  if (!performanceApi?.exportResult) {
+  const exportResult = window.__postmeterExportPerformanceResult || window.postmeter?.performance?.exportResult;
+  if (!exportResult) {
     return setStatus('Performance result export is unavailable in this runtime.');
   }
   try {
-    const result = await performanceApi.exportResult(cloneJson(lastPerformanceResult), 'csv');
+    const result = await exportResult(cloneJson(resultToExport), normalizedFormat);
     if (result?.path) {
-      setStatus(`Performance result CSV exported to ${result.path}.`);
+      setStatus(`Performance result ${label} exported to ${result.path}.`);
     }
     return result;
   } catch (error) {
     const message = error.message || String(error);
-    setStatus(`Performance result CSV export failed: ${message}`);
+    setStatus(`Performance result ${label} export failed: ${message}`);
     notifyUser('Performance Result Export Failed', message);
     return null;
   }
@@ -8941,6 +8970,11 @@ async function importPerformanceTest() {
     tests.push(imported);
     activeRunnerRequestRunnerId = null;
     activePerformanceTestId = imported.id;
+    lastPerformanceResult = null;
+    lastPerformanceResultTestId = '';
+    selectedPerformanceResultIndex = 0;
+    performanceExecutionPage = 0;
+    performanceExecutionStatusFilter = 'all';
     activeSidebarPanel = 'performance';
     activeMainPanel = 'performance';
     ensureOpenPerformanceTabForActive({ dirty: true, createdUnsaved: true });
@@ -8978,8 +9012,14 @@ function isActivePerformanceContext(context) {
     && activeMainPanel === 'performance';
 }
 
+function isActivePerformanceResultForTest(test, result = lastPerformanceResult) {
+  const resultTestId = lastPerformanceResultTestId || result?.performanceTestId || '';
+  return Boolean(test?.id && result && resultTestId === test.id);
+}
+
 function applyPerformanceRunResult(result, runEnvironment, test) {
   lastPerformanceResult = result;
+  lastPerformanceResultTestId = test?.id || result?.performanceTestId || activePerformanceTestId || '';
   if (result?.environmentMutationAllowed === true && runEnvironment && (result.mutatedEnvironment || result.environment)) {
     for (const key of Object.keys(runEnvironment)) {
       delete runEnvironment[key];
@@ -10302,6 +10342,11 @@ function newPerformanceTest() {
   const test = newPerformanceTestObject(uniqueName('New Performance Test', workspace.performanceTests.map((existing) => existing.name)));
   workspace.performanceTests.push(test);
   activePerformanceTestId = test.id;
+  lastPerformanceResult = null;
+  lastPerformanceResultTestId = '';
+  selectedPerformanceResultIndex = 0;
+  performanceExecutionPage = 0;
+  performanceExecutionStatusFilter = 'all';
   activeSidebarPanel = 'performance';
   activeMainPanel = 'performance';
   ensureOpenPerformanceTabForActive({ dirty: true, createdUnsaved: true });
@@ -14506,8 +14551,7 @@ async function runActiveRunner() {
   selectedRunnerExecutionIndex = 0;
   runnerExecutionPage = 0;
   runnerExecutionStatusFilter = 'all';
-  $('exportRunnerJsonButton').disabled = true;
-  $('exportRunnerCsvButton').disabled = true;
+  setRunnerResultExportButtonsDisabled(true);
   try {
     activeRunnerId = runnerId;
     $('runCollectionButton').disabled = true;
@@ -14537,16 +14581,14 @@ async function runActiveRunner() {
     runnerExecutionPage = 0;
     runnerExecutionStatusFilter = 'all';
     await renderRunnerExecutionResult(result);
-    $('exportRunnerJsonButton').disabled = false;
-    $('exportRunnerCsvButton').disabled = false;
+    setRunnerResultExportButtonsDisabled(false);
     setStatus(result.cancelled ? 'Runner cancelled.' : 'Runner completed.');
   } catch (error) {
     const message = error.message || String(error);
     if (isActiveRunnerContext(runnerContext) && activeRunnerId === runnerId) {
       lastRunnerResult = null;
       renderRunnerExecutionMessage(message);
-      $('exportRunnerJsonButton').disabled = true;
-      $('exportRunnerCsvButton').disabled = true;
+      setRunnerResultExportButtonsDisabled(true);
       setStatus('Runner failed.');
       notifyUser('Runner Failed', message);
     }
