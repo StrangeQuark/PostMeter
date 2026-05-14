@@ -28,16 +28,72 @@ test('runtime IPC registers stable runner channels', async () => {
     'performance:calibrate',
     'performance:calibrate:cancel',
     'performance:cancel',
+    'performance:estimateResultStore',
     'performance:export',
     'performance:exportResult',
     'performance:import',
+    'performance:resultDetail',
+    'performance:resultPage',
     'performance:start',
     'runner:cancel',
+    'runner:estimateResultStore',
     'runner:export',
+    'runner:resultDetail',
+    'runner:resultPage',
     'runner:start'
   ]);
   assert.equal(await handlers.get('runner:cancel')(null, 'runner-id'), false);
   assert.equal(await handlers.get('performance:calibrate:cancel')(null, 'calibration-id'), false);
+});
+
+test('runtime IPC estimates temp result store size before runs', async () => {
+  const handlers = new Map();
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-runtime-estimate-'));
+  const resultStorePath = path.join(tempDir, 'current.sqlite');
+  try {
+    await fs.writeFile(resultStorePath, 'existing-result');
+    registerRuntimeIpc({
+      dialog: { showSaveDialog: async () => ({ canceled: true }) },
+      fileOperationResult: (result) => result,
+      getMainWindow: () => null,
+      getWorkspace: () => ({ cookies: [] }),
+      ipcMain: {
+        handle(channel, handler) {
+          handlers.set(channel, handler);
+        }
+      },
+      resultStorePath,
+      saveWorkspace: async (workspace) => workspace,
+      setWorkspace: () => {}
+    });
+
+    const runnerEstimate = await handlers.get('runner:estimateResultStore')({}, {
+      id: 'runner-estimate',
+      name: 'Runner Estimate',
+      environmentId: 'none',
+      requests: [
+        { id: 'request-a', name: 'A', method: 'GET', url: 'https://example.test/a', iterations: 2 },
+        { id: 'request-b', name: 'B', method: 'GET', url: 'https://example.test/b', iterations: 1 }
+      ]
+    }, { capturePolicy: { responseBody: 'none' } });
+    assert.equal(runnerEstimate.kind, 'runner');
+    assert.equal(runnerEstimate.plannedRequests, 3);
+    assert.ok(runnerEstimate.estimatedBytes > 0);
+    assert.ok(runnerEstimate.existingResultStoreBytes >= 'existing-result'.length);
+    assert.equal(typeof runnerEstimate.canContinue, 'boolean');
+
+    const performanceEstimate = await handlers.get('performance:estimateResultStore')({}, defaultPerformanceTest({
+      id: 'performance-estimate',
+      type: 'latency',
+      request: { id: 'request-1', name: 'Target', method: 'GET', url: 'https://example.test' },
+      config: { iterations: 5 },
+      safetyLimits: { maxTotalRequests: 5, maxConcurrency: 1, maxDurationSeconds: 60 }
+    }));
+    assert.equal(performanceEstimate.kind, 'performance');
+    assert.equal(performanceEstimate.plannedRequests, 5);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
 });
 
 test('runtime IPC imports renderer-selected performance test files without reopening native dialogs', async () => {
@@ -291,6 +347,102 @@ test('runtime IPC starts performance runs with progress, diagnostics, and allowe
   assert.deepEqual(events.map((event) => event.type), ['performance.start.completed']);
 });
 
+test('runtime IPC coalesces high-rate performance progress delivery', async () => {
+  const handlers = new Map();
+  const progressMessages = [];
+  const workspace = {
+    cookies: [],
+    globals: [],
+    settings: { sandbox: { fileBindings: [], packageCache: [], trustedCapabilities: {} } },
+    environments: []
+  };
+  registerRuntimeIpc({
+    dialog: { showSaveDialog: async () => ({ canceled: true }) },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => workspace,
+    getWorkspaceId: () => 'workspace-1',
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    },
+    mutateWorkspace: async (mutator) => {
+      await mutator(workspace);
+      return workspace;
+    },
+    recordDiagnosticEvent: async () => {},
+    runPerformanceTest: async (performanceTest, _environment, options) => {
+      for (let index = 1; index <= 20; index += 1) {
+        options.onProgress({
+          completedRequests: index,
+          totalRequests: 20,
+          activeRequests: 20 - index,
+          requestId: performanceTest.request.id,
+          requestName: performanceTest.request.name,
+          passed: true,
+          durationMillis: index
+        });
+      }
+      return {
+        id: 'perf-coalesced-result',
+        performanceTestId: performanceTest.id,
+        performanceTestName: performanceTest.name,
+        type: performanceTest.type,
+        environmentId: 'none',
+        environmentMutationAllowed: false,
+        totalRequests: 20,
+        completedRequests: 20,
+        successfulRequests: 20,
+        failedRequests: 0,
+        passed: true,
+        cancelled: false,
+        startedAt: '2026-05-06T00:00:00.000Z',
+        completedAt: '2026-05-06T00:00:01.000Z',
+        durationMillis: 1000,
+        config: performanceTest.config,
+        safetyLimits: performanceTest.safetyLimits,
+        summary: { requestsPerSecond: 20, statusCodes: { 200: 20 } },
+        samples: [{
+          iteration: 1,
+          requestId: performanceTest.request.id,
+          requestName: performanceTest.request.name,
+          startedAt: '2026-05-06T00:00:00.000Z',
+          statusCode: 200,
+          durationMillis: 1,
+          passed: true,
+          error: ''
+        }],
+        environment: { id: 'runtime', name: 'Runtime', variables: [] },
+        cookies: []
+      };
+    },
+    saveWorkspace: async (nextWorkspace) => nextWorkspace,
+    setWorkspace: () => {}
+  });
+
+  const performanceTest = defaultPerformanceTest({
+    id: 'perf-coalesced',
+    name: 'Coalesced',
+    type: 'throughput',
+    request: { id: 'request-1', name: 'Target', method: 'GET', url: 'https://example.test' },
+    config: { iterations: 20, concurrency: 5 },
+    safetyLimits: { maxTotalRequests: 20, maxConcurrency: 5, maxDurationSeconds: 60 }
+  });
+  await handlers.get('performance:start')({
+    sender: {
+      isDestroyed: () => false,
+      send(channel, payload) {
+        progressMessages.push({ channel, payload });
+      }
+    }
+  }, 'performance-coalesced-run', performanceTest, null);
+
+  assert.ok(progressMessages.length <= 2);
+  assert.equal(progressMessages[0].payload.progress.completedRequests, 1);
+  assert.equal(progressMessages.at(-1).payload.progress.completedRequests, 20);
+});
+
 test('runtime IPC keeps performance environment mutations temporary unless the result explicitly allows persistence', async () => {
   const handlers = new Map();
   const workspace = {
@@ -369,6 +521,214 @@ test('runtime IPC keeps performance environment mutations temporary unless the r
   assert.equal(result.environment.variables[0].value, 'temporary');
   assert.equal(result.mutatedEnvironment, undefined);
   assert.equal(workspace.environments[0].variables[0].value, 'base');
+});
+
+test('runtime IPC runs full endpoint diagnosis with SQLite paging detail and diagnostic CSV export', async () => {
+  const handlers = new Map();
+  const progressMessages = [];
+  const events = [];
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-runtime-diagnosis-'));
+  const resultStorePath = path.join(tempDir, 'current.sqlite');
+  const exportPath = path.join(tempDir, 'diagnosis-export.csv');
+  const server = await createServer((request, response) => {
+    response.setHeader('Content-Type', 'application/json');
+    response.setHeader('Cache-Control', 'max-age=30');
+    response.setHeader('ETag', '"runtime-diagnosis"');
+    response.setHeader('Server-Timing', 'app;dur=2');
+    response.setHeader('X-Request-ID', 'runtime-diagnosis-request');
+    response.setHeader('RateLimit-Limit', '100');
+    response.setHeader('RateLimit-Remaining', '99');
+    response.setHeader('Access-Control-Allow-Origin', '*');
+    response.setHeader('Strict-Transport-Security', 'max-age=31536000');
+    response.setHeader('Content-Security-Policy', "default-src 'none'");
+    response.setHeader('X-Content-Type-Options', 'nosniff');
+    if (request.method === 'OPTIONS') {
+      response.statusCode = 204;
+      response.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+      response.end();
+      return;
+    }
+    response.statusCode = 200;
+    response.end(JSON.stringify({ ok: true, method: request.method, url: request.url }));
+  });
+  const workspace = {
+    cookies: [],
+    globals: [],
+    settings: { sandbox: { fileBindings: [], packageCache: [], trustedCapabilities: {} } },
+    environments: []
+  };
+  let controller;
+  try {
+    controller = registerRuntimeIpc({
+      dialog: { showSaveDialog: async () => ({ filePath: exportPath, canceled: false }) },
+      fileOperationResult: (result) => result,
+      getMainWindow: () => null,
+      getWorkspace: () => workspace,
+      getWorkspaceId: () => 'workspace-diagnosis',
+      ipcMain: {
+        handle(channel, handler) {
+          handlers.set(channel, handler);
+        }
+      },
+      mutateWorkspace: async (mutator) => mutator(workspace),
+      recordDiagnosticEvent: async (event) => {
+        events.push(event);
+      },
+      resultStorePath,
+      saveWorkspace: async (nextWorkspace) => nextWorkspace,
+      setWorkspace: () => {}
+    });
+
+    const performanceTest = defaultPerformanceTest({
+      id: 'perf-runtime-diagnosis',
+      name: 'Runtime Diagnosis',
+      type: 'diagnosis',
+      request: {
+        id: 'request-runtime-diagnosis',
+        name: 'Runtime Diagnosis Endpoint',
+        method: 'GET',
+        url: `${server.baseUrl}/diagnostic?api_key=demo`
+      },
+      config: { diagnosisScope: 'quick', concurrency: 5, spikeMultiplier: 2 },
+      safetyLimits: { maxTotalRequests: 44, maxConcurrency: 10, maxDurationSeconds: 60 }
+    });
+
+    const estimate = await handlers.get('performance:estimateResultStore')({}, performanceTest);
+    assert.equal(estimate.kind, 'performance');
+    assert.equal(estimate.plannedRequests, 44);
+    assert.equal(estimate.canContinue, true);
+
+    const result = await handlers.get('performance:start')({
+      sender: {
+        isDestroyed: () => false,
+        send(channel, payload) {
+          progressMessages.push({ channel, payload });
+        }
+      }
+    }, 'performance-diagnosis-run', performanceTest, null);
+
+    assert.equal(result.storeBacked, true);
+    assert.equal(result.resultStoreId, 'performance-diagnosis-run');
+    assert.equal(result.type, 'diagnosis');
+    assert.equal(result.completedRequests, 44);
+    assert.equal(result.totalRequests, 44);
+    assert.equal(result.resultPage.totalAll, 44);
+    assert.equal(result.samples.length, 44);
+    assert.equal(result.summary.diagnosis.completedChecks, result.summary.diagnosis.requestedChecks);
+    assert.equal(progressMessages.at(-1).payload.progress.completedRequests, 44);
+    assert.deepEqual(events.map((event) => event.type), ['performance.start.completed']);
+
+    const page = await handlers.get('performance:resultPage')({}, result.resultStoreId, { offset: 5, limit: 7, status: 'all' });
+    assert.equal(page.totalAll, 44);
+    assert.equal(page.items.length, 7);
+    assert.deepEqual(page.items.map((item) => item.resultIndex), [5, 6, 7, 8, 9, 10, 11]);
+    const okPage = await handlers.get('performance:resultPage')({}, result.resultStoreId, { offset: 0, limit: 5, status: '200' });
+    assert.ok(okPage.total > 0);
+    assert.ok(okPage.items.every((item) => item.statusCode === 200));
+
+    const detail = await handlers.get('performance:resultDetail')({}, result.resultStoreId, 0);
+    assert.equal(detail.requestId, 'request-runtime-diagnosis');
+    assert.equal(detail.statusCode, 200);
+    assert.match(detail.requestUrl, /\/diagnostic\?api_key=demo/);
+    assert.ok(detail.responseHeaders?.['content-type']);
+    assert.ok(detail.timings && typeof detail.timings === 'object');
+
+    const exported = await handlers.get('performance:exportResult')({}, result, 'csv');
+    assert.equal(exported.cancelled, false);
+    const csv = await fs.readFile(exportPath, 'utf8');
+    assert.match(csv, /diagnosticGroup,diagnostic,status,value,details/);
+    assert.match(csv, /Response,Time to first byte,/);
+    assert.match(csv, /phase,requests,concurrency,successfulResponses,failedResponses/);
+    assert.match(csv, /index,iteration,phase,stageName,stageConcurrency/);
+    assert.match(csv, /bodySha256/);
+  } finally {
+    controller?.closeResultStore?.();
+    await server.close();
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('runtime IPC runs full endpoint diagnosis against live google.com through SQLite results', async () => {
+  const handlers = new Map();
+  const progressMessages = [];
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-runtime-google-diagnosis-'));
+  const resultStorePath = path.join(tempDir, 'current.sqlite');
+  const workspace = {
+    cookies: [],
+    globals: [],
+    settings: { sandbox: { fileBindings: [], packageCache: [], trustedCapabilities: {} } },
+    environments: []
+  };
+  let controller;
+  try {
+    controller = registerRuntimeIpc({
+      dialog: { showSaveDialog: async () => ({ canceled: true }) },
+      fileOperationResult: (result) => result,
+      getMainWindow: () => null,
+      getWorkspace: () => workspace,
+      getWorkspaceId: () => 'workspace-google-diagnosis',
+      ipcMain: {
+        handle(channel, handler) {
+          handlers.set(channel, handler);
+        }
+      },
+      mutateWorkspace: async (mutator) => mutator(workspace),
+      resultStorePath,
+      saveWorkspace: async (nextWorkspace) => nextWorkspace,
+      setWorkspace: () => {}
+    });
+
+    const performanceTest = defaultPerformanceTest({
+      id: 'perf-google-diagnosis',
+      name: 'Google Diagnosis',
+      type: 'diagnosis',
+      request: {
+        id: 'request-google-diagnosis',
+        name: 'Google',
+        method: 'GET',
+        url: 'https://google.com'
+      },
+      config: { diagnosisScope: 'quick', concurrency: 5, spikeMultiplier: 2 },
+      safetyLimits: { maxTotalRequests: 44, maxConcurrency: 10, maxDurationSeconds: 60 }
+    });
+
+    const estimate = await handlers.get('performance:estimateResultStore')({}, performanceTest);
+    assert.equal(estimate.plannedRequests, 44);
+    assert.equal(estimate.canContinue, true);
+
+    const result = await handlers.get('performance:start')({
+      sender: {
+        isDestroyed: () => false,
+        send(channel, payload) {
+          progressMessages.push({ channel, payload });
+        }
+      }
+    }, 'performance-google-diagnosis-run', performanceTest, null);
+
+    assert.equal(result.storeBacked, true);
+    assert.equal(result.completedRequests, 44);
+    assert.equal(result.totalRequests, 44);
+    assert.equal(result.resultPage.totalAll, 44);
+    assert.equal(result.summary.diagnosis.completedChecks, result.summary.diagnosis.requestedChecks);
+    assert.equal(result.summary.diagnosis.completedChecks, 76);
+    assert.ok(['high', 'medium', 'low'].includes(result.summary.diagnosis.confidence));
+    assert.equal(progressMessages.at(-1).payload.progress.completedRequests, 44);
+
+    const page = await handlers.get('performance:resultPage')({}, result.resultStoreId, { offset: 0, limit: 5, status: 'all' });
+    assert.equal(page.totalAll, 44);
+    assert.equal(page.items.length, 5);
+    assert.deepEqual(page.items.map((item) => item.resultIndex), [0, 1, 2, 3, 4]);
+    assert.ok(page.items.some((item) => Number(item.statusCode || 0) >= 200 && Number(item.statusCode || 0) < 400));
+
+    const detail = await handlers.get('performance:resultDetail')({}, result.resultStoreId, 0);
+    assert.equal(detail.requestId, 'request-google-diagnosis');
+    assert.ok(Number(detail.statusCode || 0) >= 200 && Number(detail.statusCode || 0) < 400);
+    assert.match(detail.finalUrl || detail.requestUrl, /^https:\/\/(www\.)?google\.com/);
+    assert.ok(detail.timings && typeof detail.timings === 'object');
+  } finally {
+    await controller?.cleanupResultStore?.();
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
 });
 
 test('runtime IPC emits structured diagnostic events for collection run outcomes', async () => {

@@ -115,7 +115,7 @@
     {
       "id": "workflow.collection-runner",
       "area": "Collection runner",
-      "target": "Workspace-owned desktop runners expose empty-pane creation, toolbar creation, collection/request import with multi-select, runner-owned request editing, idle, running, cancellation, export, pass/fail, pre-run save failure, dirty tab, environment mutation, row reorder/delete, split result details, and failed-operation states without writing partial result exports or mutating source collection requests.",
+      "target": "Workspace-owned desktop runners expose empty-pane creation, toolbar creation, collection/request import with multi-select, runner-owned request editing, idle, running, cancellation, capture settings, pre-run result-store size warnings, paged store-backed high-volume results up to one million expanded requests, export, pass/fail, pre-run save failure, dirty tab, environment mutation, row reorder/delete, split result details, and failed-operation states without writing partial result exports or mutating source collection requests.",
       "status": "implemented",
       "evidenceRefs": [
         "src/renderer/index.html",
@@ -123,7 +123,10 @@
         "src/renderer/requestTabState.js",
         "src/renderer/sessionPersistence.js",
         "src/renderer/rendererWorkflows.js",
-        "electron/runtimeIpc.js"
+        "electron/runtimeIpc.js",
+        "electron/main.js",
+        "src/core/runtimeResultStore.js",
+        "src/core/resultCapturePolicy.js"
       ],
       "tests": [
         "npm run test:ui:regression",
@@ -131,6 +134,7 @@
         "test/electron/requestTabState.test.js",
         "test/electron/rendererSessionPersistence.test.js",
         "test/electron/runtimeIpc.test.js",
+        "test/electron/runtimeResultStore.test.js",
         "test/electron/collectionRunner.test.js",
         "test/electron/rendererWorkflows.test.js"
       ],
@@ -249,13 +253,16 @@
     {
       "id": "workflow.performance",
       "area": "Performance",
-      "target": "The Performance section exposes local workspace-owned saved tests in the sidebar between Runners and History, empty-pane creation, New > Performance Test creation, import-request and manual request-entry paths, seven local modes with type-scoped input fields, dirty performance tabs, save/discard semantics, type-specific safety-cap rejection, cancellation, target-rate cancellable local calibration with phase progress, bounded probe-and-verification stages, local latency-knee rejection, and local result panes without claiming distributed/cloud execution.",
+      "target": "The Performance section exposes local workspace-owned saved tests in the sidebar between Runners and History, empty-pane creation, New > Performance Test creation, import-request and manual request-entry paths, eight local modes with type-scoped input fields including one-click Full Endpoint Diagnosis with Quick/Medium/Extended scopes, capture settings, pre-run result-store size warnings, dirty performance tabs, save/discard semantics, type-specific safety-cap rejection, cancellation, target-rate cancellable local calibration with phase progress, bounded probe-and-verification stages, local latency-knee rejection, store-backed paged high-volume results up to one million requests, UAT-ready diagnostic CSV export, and local result panes without claiming distributed/cloud execution.",
       "status": "implemented",
       "evidenceRefs": [
         "src/renderer/index.html",
         "src/renderer/renderer.js",
         "src/renderer/performanceTestModel.js",
         "src/core/performanceCalibration.js",
+        "src/core/runtimeResultStore.js",
+        "src/core/resultCapturePolicy.js",
+        "electron/main.js",
         "docs/ARCHITECTURE.md",
         "docs/TECH_SPECS.md"
       ],
@@ -264,6 +271,7 @@
         "test/electron/performanceFeatureCoverage.test.js",
         "test/electron/performanceRendererModel.test.js",
         "test/electron/rendererBootstrap.test.js",
+        "test/electron/runtimeResultStore.test.js",
         "test/electron/requestTabState.test.js",
         "npm run test:ui:regression",
         "npm run test:ui:snapshot"

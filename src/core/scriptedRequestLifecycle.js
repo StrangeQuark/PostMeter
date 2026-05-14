@@ -162,6 +162,7 @@ async function runHttpScriptedRequestLifecycle(state, options = {}) {
     }),
     {
       signal: options.signal,
+      timeoutMillis: options.timeoutMillis,
       cookieJar: state.cookies,
       clientCertificates: options.clientCertificates || options.scriptOptions?.clientCertificates || [],
       fileBindings: options.fileBindings || options.scriptOptions?.fileBindings || []

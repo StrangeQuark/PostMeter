@@ -20,6 +20,7 @@ const {
 } = require('../../src/core/performanceRunner');
 
 const EXPECTED_TYPES = Object.freeze([
+  'diagnosis',
   'latency',
   'throughput',
   'concurrency',
@@ -29,7 +30,7 @@ const EXPECTED_TYPES = Object.freeze([
   'ramp'
 ]);
 
-test('Performance model accepts the seven V1 types and rejects unsafe limits for each type', () => {
+test('Performance model accepts the eight V1 types and rejects unsafe limits for each type', () => {
   assert.deepEqual(PERFORMANCE_TEST_TYPES, EXPECTED_TYPES);
 
   for (const type of EXPECTED_TYPES) {
@@ -40,15 +41,20 @@ test('Performance model accepts the seven V1 types and rejects unsafe limits for
     assert.equal(candidate.type, type);
     assert.doesNotThrow(() => assertPerformanceTestPayload(candidate));
 
-    const unsafe = performanceTestModel({
-      ...candidate,
-      config: type === 'soak'
-        ? { ...candidate.config, durationSeconds: 2 }
-        : { ...candidate.config, iterations: 2 },
-      safetyLimits: type === 'soak'
-        ? { ...candidate.safetyLimits, maxDurationSeconds: 1 }
-        : { ...candidate.safetyLimits, maxTotalRequests: 1 }
-    });
+    const unsafe = type === 'diagnosis'
+      ? {
+          ...candidate,
+          safetyLimits: { ...candidate.safetyLimits, maxTotalRequests: 1000001 }
+        }
+      : performanceTestModel({
+          ...candidate,
+          config: type === 'soak'
+            ? { ...candidate.config, durationSeconds: 2 }
+            : { ...candidate.config, iterations: 2 },
+          safetyLimits: type === 'soak'
+            ? { ...candidate.safetyLimits, maxDurationSeconds: 1 }
+            : { ...candidate.safetyLimits, maxTotalRequests: 1 }
+        });
     assert.throws(
       () => assertPerformanceTestPayload(unsafe),
       type === 'soak' ? /maxDurationSeconds/ : /maxTotalRequests/
@@ -75,6 +81,9 @@ test('Performance model preserves independent settings for each V1 type', () => 
   });
 
   assert.equal(performanceTest.typeSettings.latency.config.iterations, 7);
+  assert.equal(performanceTest.typeSettings.diagnosis.config.iterations, 44);
+  assert.equal(performanceTest.typeSettings.diagnosis.config.diagnosisScope, 'quick');
+  assert.equal(performanceTest.typeSettings.diagnosis.safetyLimits.maxTotalRequests, 44);
   assert.equal(performanceTest.typeSettings.throughput.config.iterations, 13);
   assert.equal(performanceTest.typeSettings.concurrency.config.concurrency, 5);
   assert.equal(performanceTest.typeSettings.ramp.config.startConcurrency, 1);
@@ -105,6 +114,40 @@ test('Performance model preserves independent settings for each V1 type', () => 
       }
     }),
     /typeSettings\.latency\.config\.iterations exceeds safetyLimits\.maxTotalRequests/
+  );
+});
+
+test('Performance diagnosis scope controls planned samples and duration safety', () => {
+  const medium = performanceTestModel({
+    type: 'diagnosis',
+    request: { method: 'GET', url: 'https://example.test/diagnosis' },
+    config: { diagnosisScope: 'medium' },
+    safetyLimits: { maxTotalRequests: 10, maxConcurrency: 5, maxDurationSeconds: 60 }
+  });
+
+  assert.equal(medium.config.diagnosisScope, 'medium');
+  assert.equal(medium.config.iterations, 300);
+  assert.equal(medium.safetyLimits.maxTotalRequests, 300);
+  assert.equal(medium.safetyLimits.maxDurationSeconds, 300);
+  assert.doesNotThrow(() => assertPerformanceTestPayload(medium));
+
+  const extended = performanceTestModel({
+    type: 'diagnosis',
+    request: { method: 'GET', url: 'https://example.test/diagnosis' },
+    config: { diagnosisScope: 'extended' },
+    safetyLimits: { maxTotalRequests: 10, maxConcurrency: 5, maxDurationSeconds: 60 }
+  });
+
+  assert.equal(extended.config.iterations, 1000);
+  assert.equal(extended.safetyLimits.maxTotalRequests, 1000);
+  assert.equal(extended.safetyLimits.maxDurationSeconds, 900);
+  assert.doesNotThrow(() => assertPerformanceTestPayload(extended));
+  assert.throws(
+    () => assertPerformanceTestPayload({
+      ...extended,
+      config: { ...extended.config, diagnosisScope: 'overnight' }
+    }),
+    /diagnosisScope must be one of/
   );
 });
 
@@ -145,9 +188,9 @@ test('Performance safety validation uses type-specific effective request and con
       type: 'throughput',
       request: { method: 'GET', url: 'https://example.test/hard-cap' },
       config: { iterations: 1, concurrency: 1 },
-      safetyLimits: { maxTotalRequests: 1001, maxConcurrency: 10, maxDurationSeconds: 60 }
+      safetyLimits: { maxTotalRequests: 1000001, maxConcurrency: 10, maxDurationSeconds: 60 }
     }),
-    /safetyLimits\.maxTotalRequests cannot exceed 1000/
+    /safetyLimits\.maxTotalRequests cannot exceed 1000000/
   );
 
   assert.throws(

@@ -20,8 +20,8 @@ async function main() {
   const result = await spawnWithTimeout(electronPath, withCiNoSandboxArgs(['.'], env), {
     cwd: path.join(__dirname, '..', '..'),
     env,
-    timeoutMillis: 20_000,
-    timeoutMessage: 'Electron UI workflow smoke timed out after 20000 ms.'
+    timeoutMillis: 45_000,
+    timeoutMessage: 'Electron UI workflow smoke timed out after 45000 ms.'
   });
 
   await server.close();
@@ -36,6 +36,32 @@ async function createFixtureServer() {
     const chunks = [];
     for await (const chunk of request) {
       chunks.push(chunk);
+    }
+    if (String(request.url || '').startsWith('/diagnostic')) {
+      response.setHeader('Content-Type', 'application/json');
+      response.setHeader('Cache-Control', 'max-age=30');
+      response.setHeader('ETag', '"ui-diagnosis"');
+      response.setHeader('Server-Timing', 'app;dur=3');
+      response.setHeader('X-Request-ID', 'ui-diagnosis-request');
+      response.setHeader('RateLimit-Limit', '100');
+      response.setHeader('RateLimit-Remaining', '99');
+      response.setHeader('Access-Control-Allow-Origin', '*');
+      response.setHeader('Strict-Transport-Security', 'max-age=31536000');
+      response.setHeader('Content-Security-Policy', "default-src 'none'");
+      response.setHeader('X-Content-Type-Options', 'nosniff');
+      if (request.method === 'OPTIONS') {
+        response.statusCode = 204;
+        response.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+        response.end();
+        return;
+      }
+      response.end(JSON.stringify({
+        ok: true,
+        method: request.method,
+        url: request.url,
+        body: Buffer.concat(chunks).toString('utf8')
+      }));
+      return;
     }
     response.setHeader('Content-Type', 'application/json');
     response.setHeader('Set-Cookie', 'uiSession=smoke; Path=/; HttpOnly; SameSite=Lax');

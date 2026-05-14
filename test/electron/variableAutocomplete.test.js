@@ -58,6 +58,24 @@ test('variable autocomplete suggestions sort keys and filter by prefix before co
   ]);
 });
 
+test('variable autocomplete filters CSV and Postman variable suggestions by token syntax', () => {
+  const variables = [
+    { enabled: true, key: 'baseUrl', source: 'environment', value: 'https://api.example.test' },
+    { enabled: true, key: 'requestId', source: 'request', value: '123' },
+    { enabled: true, key: 'url', source: 'csv', value: 'https://csv.example.test' },
+    { enabled: true, key: 'userId', source: 'iteration', value: 'csv-user' }
+  ];
+
+  assert.deepEqual(buildVariableSuggestions(variables, '', { token: { open: '${' } }), [
+    { key: 'url', showValue: false },
+    { key: 'userId', showValue: false }
+  ]);
+  assert.deepEqual(buildVariableSuggestions(variables, '', { token: { open: '{{' } }), [
+    { key: 'baseUrl', value: 'https://api.example.test' },
+    { key: 'requestId', value: '123' }
+  ]);
+});
+
 test('variable autocomplete replaces the open token with the selected environment variable', () => {
   const token = findVariableToken('Authorization: Bearer {{tok', 27);
   assert.deepEqual(replaceVariableToken('Authorization: Bearer {{tok', token, 'token'), {
@@ -164,6 +182,62 @@ test('variable autocomplete connects the listbox to the active input and updates
   assert.equal(input.attributes['aria-controls'], undefined);
   assert.equal(input.attributes['aria-haspopup'], undefined);
   assert.equal(input.attributes['aria-expanded'], undefined);
+  autocomplete.destroy();
+});
+
+test('variable autocomplete renders CSV suggestions as key-only rows', () => {
+  const doc = createFakeDocument();
+  const input = doc.createElement('input');
+  input.id = 'urlInput';
+  input.tagName = 'INPUT';
+  input.type = 'text';
+  input.value = '${ur';
+  input.selectionStart = input.value.length;
+  input.selectionEnd = input.value.length;
+  doc.elements.set(input.id, input);
+
+  const autocomplete = createVariableAutocomplete({
+    doc,
+    windowObject: {
+      Event: class Event {
+        constructor(type) {
+          this.type = type;
+        }
+      },
+      getComputedStyle: () => ({
+        borderStyle: 'solid',
+        borderWidth: '1px',
+        boxSizing: 'border-box',
+        direction: 'ltr',
+        font: '12px sans-serif',
+        fontFamily: 'sans-serif',
+        fontSize: '12px',
+        fontStyle: 'normal',
+        fontVariant: 'normal',
+        fontWeight: '400',
+        letterSpacing: '0px',
+        lineHeight: '16px',
+        padding: '4px',
+        tabSize: '4',
+        textAlign: 'left',
+        textIndent: '0',
+        textTransform: 'none',
+        wordSpacing: '0'
+      }),
+      innerHeight: 720,
+      innerWidth: 1280
+    },
+    getVariables: () => [
+      { enabled: true, key: 'baseUrl', source: 'environment', value: 'https://api.example.test' },
+      { enabled: true, key: 'url', source: 'csv', value: 'https://csv.example.test' }
+    ]
+  });
+
+  assert.equal(autocomplete.refresh(input), true);
+  const option = doc.getElementById(MENU_ID).children[0];
+  assert.equal(option.children.length, 1);
+  assert.equal(option.children[0].textContent, 'url');
+  assert.equal(option.children.some((child) => child.className === 'variable-autocomplete-value'), false);
   autocomplete.destroy();
 });
 

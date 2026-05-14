@@ -10,7 +10,7 @@ PostMeter is a local-first desktop API client for building, sending, and testing
 - Run pre-request scripts, test scripts, and workspace-owned runners.
 - Use first-class desktop runners or the CI-friendly CLI runner.
 - Work with OAuth 2.0, HTTPS client certificates, cookies, and GitHub Releases update checks.
-- Save and run local Performance tests for latency, throughput, concurrency, stress, spike, soak, and ramp checks.
+- Save and run local Performance tests for full endpoint diagnosis, latency, throughput, concurrency, stress, spike, soak, and ramp checks.
 
 ## Quick Start
 
@@ -49,9 +49,15 @@ The CLI uses the same import and runner logic as the desktop app. It exits with 
 
 Runners let you save and replay a sequence of requests from the desktop app. They are useful for API workflows where one request sets up data for the next, such as authentication, setup, validation, and cleanup steps. Each runner row can repeat for a configured number of iterations without duplicating the same request in the queue.
 
+Runner results keep the same split execution/details view, but completed runs are now backed by one reusable local temp result database instead of a large in-memory result object. The Capture Settings panel lets you choose whether to retain response body previews, pre-request output, post-request output, script logs, and local variables. High-volume runs can plan up to 1,000,000 expanded requests; PostMeter estimates the temp SQLite file size before execution, warns when it would leave less than 1 GB of effective free space, blocks runs that exceed available space, keeps core metrics for every request, and automatically limits expensive captures such as all response bodies, logs, script outputs, and per-request variables when the run size would produce impractical artifacts. Those guardrails are reflected directly in the Capture Settings panel: forced-off checkboxes are shown unchecked, disabled, and explain the planned-request threshold on hover.
+
 ## Performance
 
-Performance tests are saved workspace items for checking how an endpoint behaves under local load. You can create a test from scratch or import a copy of a request from Collections, choose an environment, pick the performance mode that matches the question you are asking, run a local-machine calibration to estimate maximum sustained local RPS and a conservative planning cap, run the test, and review status-code, error, latency, and request-rate summaries.
+Performance tests are saved workspace items for checking how an endpoint behaves under local load. You can create a test from scratch or import a copy of a request from Collections, choose an environment, pick the performance mode that matches the question you are asking, run a local-machine calibration to estimate maximum sustained local RPS and a conservative planning cap, run the test, and review status-code, error, latency, request-rate, and endpoint-diagnosis summaries.
+
+The first mode, Full Endpoint Diagnosis, is a one-click local report for an endpoint. It offers Quick, Medium, and Extended scopes that automatically choose the request budget and raise the duration cap for deeper UAT evidence, then runs bounded preflight, HEAD/OPTIONS probe, warmup, baseline, throughput, spike, mini-soak, and recovery stages, captures transport timing and passive endpoint signals, scores local-client confidence, and exports a formatted CSV that Product Owners can use for UAT review.
+
+Performance runs use the same reusable temp result database and expose Capture Settings for response bodies, script output, local variables, response headers, and transport timings. High-volume Performance execution keeps exact aggregate latency/status/error metrics with streaming counters instead of retaining every per-request result object in memory, uses an explicit keep-alive Node HTTP transport with bounded per-request timeouts, and coalesces rapid progress updates so million-request local runs do not flood Electron IPC. CSV export is generated only when requested by streaming from the temp result store, so normal runs do not leave historical result files behind. PostMeter deletes the current temp result database and SQLite sidecars on app shutdown, which means unexported Runner/Performance results are intentionally session-local.
 
 The legacy Load Test panel has been removed. Distributed/cloud load execution, JMeter import/export/execution, and hosted load agents are not part of the current production claim.
 

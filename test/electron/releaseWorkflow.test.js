@@ -30,6 +30,7 @@ test('CI workflow runs the Electron UI and packaging validation suite', async ()
   assert.match(workflow, /xvfb-run -a npm run test:smoke/);
   assert.match(workflow, /xvfb-run -a npm run test:ui\b/);
   assert.match(workflow, /xvfb-run -a npm run test:ui:regression/);
+  assert.match(workflow, /xvfb-run -a npm run test:ui:typography/);
   assert.match(workflow, /xvfb-run -a npm run test:ui:oauth/);
   assert.match(workflow, /xvfb-run -a npm run test:ui:snapshot/);
   assert.match(workflow, /npm run pack:linux/);
@@ -82,6 +83,8 @@ test('release workflow builds unsigned artifacts for all tier-one desktop platfo
   assert.match(workflow, /xvfb-run -a npm run test:ui\b/);
   assert.match(workflow, /npm run test:ui:regression/);
   assert.match(workflow, /xvfb-run -a npm run test:ui:regression/);
+  assert.match(workflow, /npm run test:ui:typography/);
+  assert.match(workflow, /xvfb-run -a npm run test:ui:typography/);
   assert.match(workflow, /npm run test:ui:oauth/);
   assert.match(workflow, /xvfb-run -a npm run test:ui:oauth/);
   assert.match(workflow, /npm run test:ui:snapshot/);
@@ -152,6 +155,8 @@ test('native release validation workflow exercises release evidence without publ
   assert.match(workflow, /xvfb-run -a npm run test:ui\b/);
   assert.match(workflow, /npm run test:ui:regression/);
   assert.match(workflow, /xvfb-run -a npm run test:ui:regression/);
+  assert.match(workflow, /npm run test:ui:typography/);
+  assert.match(workflow, /xvfb-run -a npm run test:ui:typography/);
   assert.match(workflow, /npm run test:ui:oauth/);
   assert.match(workflow, /xvfb-run -a npm run test:ui:oauth/);
   assert.match(workflow, /npm run test:ui:snapshot/);
@@ -180,6 +185,7 @@ test('native release validation workflow exercises release evidence without publ
     'OAuth UI smoke',
     'UI workflow smoke',
     'UI regression smoke',
+    'UI typography smoke',
     'UI snapshot smoke'
   ]) {
     assert.equal(
@@ -210,6 +216,7 @@ test('release workflows keep Step 11 and Step 12 validators as executable YAML r
       /npm run release:gate/,
       /npm run test:ui\b/,
       /npm run test:ui:regression/,
+      /npm run test:ui:typography/,
       /npm run test:ui:oauth/,
       /npm run test:ui:snapshot/
     ]) {

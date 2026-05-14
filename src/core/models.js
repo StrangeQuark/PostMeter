@@ -11,6 +11,16 @@ const { normalizeCookies: normalizeCookieCollection } = require('./cookieModel')
 const { normalizeCsvVariableData } = require('./csvVariables');
 const { normalizeSandboxFileBindings } = require('./fileAttachmentBindings');
 const { normalizeDiagnosticsSettings } = require('./diagnosticsSettings');
+const { normalizeCapturePolicy } = require('./resultCapturePolicy');
+const {
+  DEFAULT_DIAGNOSIS_CONCURRENCY,
+  DEFAULT_DIAGNOSIS_SCOPE,
+  DEFAULT_DIAGNOSIS_SPIKE_MULTIPLIER,
+  DEFAULT_DIAGNOSIS_TOTAL_REQUESTS,
+  DIAGNOSIS_TYPE,
+  diagnosisScopeProfile,
+  normalizeDiagnosisScope
+} = require('./performanceDiagnosis');
 
 const CURRENT_SCHEMA_VERSION = 15;
 const MIN_SUPPORTED_SCHEMA_VERSION = 1;
@@ -19,24 +29,33 @@ const BODY_METHODS = new Set(BODY_METHOD_VALUES);
 const BODY_TYPES = Object.freeze(Object.fromEntries(BODY_TYPE_VALUES.map((type) => [type, type])));
 const DEFAULT_REQUEST_BODY_TYPE = 'NONE';
 const POSTMAN_METADATA_MAX_BYTES = 10 * 1024 * 1024;
-const DEFAULT_PERFORMANCE_TEST_TYPE = 'latency';
+const DEFAULT_PERFORMANCE_TEST_TYPE = 'diagnosis';
+const DEFAULT_INTERFACE_FONT = 'default';
+const DEFAULT_INTERFACE_FONT_SIZE = 13;
+const MIN_INTERFACE_FONT_SIZE = 11;
+const MAX_INTERFACE_FONT_SIZE = 18;
+const DEFAULT_EDITOR_FONT = 'default';
+const DEFAULT_EDITOR_FONT_SIZE = 12;
+const MIN_EDITOR_FONT_SIZE = 11;
+const MAX_EDITOR_FONT_SIZE = 20;
 const DEFAULT_PERFORMANCE_CONFIG = Object.freeze({
   iterations: 1,
   startConcurrency: 1,
   concurrency: 1,
   durationSeconds: 0,
   rampSteps: 1,
-  spikeMultiplier: 1
+  spikeMultiplier: 1,
+  diagnosisScope: DEFAULT_DIAGNOSIS_SCOPE
 });
 const DEFAULT_PERFORMANCE_SAFETY_LIMITS = Object.freeze({
   maxTotalRequests: 100,
   maxConcurrency: 10,
   maxDurationSeconds: 60
 });
-const MAX_PERFORMANCE_TOTAL_REQUESTS = 1000;
+const MAX_PERFORMANCE_TOTAL_REQUESTS = 1000000;
 const MAX_PERFORMANCE_CONCURRENCY = 25;
 const MAX_PERFORMANCE_DURATION_SECONDS = 60 * 60;
-const MAX_RUNNER_REQUEST_ITERATIONS = 1000;
+const MAX_RUNNER_REQUEST_ITERATIONS = 1000000;
 
 function newId() {
   return crypto.randomUUID();
@@ -115,6 +134,7 @@ function runnerModel({
   environmentId,
   allowEnvironmentMutation,
   stopOnFailure,
+  capturePolicy,
   csvVariables,
   requests
 } = {}) {
@@ -124,6 +144,7 @@ function runnerModel({
     environmentId: normalizeRunnerEnvironmentId(environmentId),
     allowEnvironmentMutation: allowEnvironmentMutation === true,
     stopOnFailure: stopOnFailure === true,
+    capturePolicy: normalizeCapturePolicy(capturePolicy, 'runner'),
     csvVariables: normalizeCsvVariableData(csvVariables),
     requests: Array.isArray(requests) ? requests.map(runnerRequestModel) : []
   };
@@ -149,6 +170,7 @@ function performanceTestModel({
   allowEnvironmentMutation,
   config,
   safetyLimits,
+  capturePolicy,
   typeSettings,
   csvVariables,
   resultsMetadata
@@ -171,6 +193,7 @@ function performanceTestModel({
     allowEnvironmentMutation: activeSettings.allowEnvironmentMutation,
     config: activeSettings.config,
     safetyLimits: activeSettings.safetyLimits,
+    capturePolicy: normalizeCapturePolicy(capturePolicy, 'performance', { diagnostic: normalizedType === DIAGNOSIS_TYPE }),
     typeSettings: normalizedTypeSettings,
     csvVariables: normalizeCsvVariableData(csvVariables),
     resultsMetadata: normalizePerformanceResultsMetadata(resultsMetadata)
@@ -206,6 +229,7 @@ function cloneRequestForPerformanceTest(request, source = {}, options = {}) {
     allowEnvironmentMutation: options.allowEnvironmentMutation,
     config: options.config,
     safetyLimits: options.safetyLimits,
+    capturePolicy: options.capturePolicy,
     typeSettings: options.typeSettings,
     resultsMetadata: options.resultsMetadata
   });
@@ -323,7 +347,21 @@ function workspaceModel({
 function normalizeSettings(settings) {
   return {
     appearance: {
-      theme: normalizeTheme(settings?.appearance?.theme)
+      theme: normalizeTheme(settings?.appearance?.theme),
+      interfaceFont: normalizeSchemaEnumValue('interfaceFontValues', settings?.appearance?.interfaceFont, DEFAULT_INTERFACE_FONT, { trim: true }),
+      interfaceFontSize: normalizeFontSize(
+        settings?.appearance?.interfaceFontSize,
+        DEFAULT_INTERFACE_FONT_SIZE,
+        MIN_INTERFACE_FONT_SIZE,
+        MAX_INTERFACE_FONT_SIZE
+      ),
+      editorFont: normalizeSchemaEnumValue('editorFontValues', settings?.appearance?.editorFont, DEFAULT_EDITOR_FONT, { trim: true }),
+      editorFontSize: normalizeFontSize(
+        settings?.appearance?.editorFontSize,
+        DEFAULT_EDITOR_FONT_SIZE,
+        MIN_EDITOR_FONT_SIZE,
+        MAX_EDITOR_FONT_SIZE
+      )
     },
     sandbox: {
       fileBindings: normalizeSandboxFileBindings(settings?.sandbox?.fileBindings),
@@ -499,6 +537,14 @@ function normalizeTheme(value) {
   return normalizeSchemaEnumValue('themeValues', value, 'system', { trim: true });
 }
 
+function normalizeFontSize(value, fallback, min, max) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, Math.round(numeric)));
+}
+
 function normalizePairs(pairs) {
   if (!Array.isArray(pairs)) {
     return [];
@@ -634,6 +680,9 @@ function normalizeRunnerRequestIterations(value) {
 }
 
 function normalizePerformanceType(value) {
+  if (String(value || '').trim().toLowerCase() === 'load') {
+    return 'latency';
+  }
   return normalizeSchemaEnumValue('performanceTestTypes', value, DEFAULT_PERFORMANCE_TEST_TYPE, { trim: true });
 }
 
@@ -641,13 +690,18 @@ function normalizePerformanceConfig(config, type = DEFAULT_PERFORMANCE_TEST_TYPE
   const input = config && typeof config === 'object' && !Array.isArray(config) ? config : {};
   const defaults = defaultPerformanceConfigForType(type);
   const minimumDurationSeconds = type === 'soak' ? 1 : 0;
+  const diagnosisScope = normalizeDiagnosisScope(input.diagnosisScope ?? defaults.diagnosisScope);
+  const diagnosisProfile = diagnosisScopeProfile(diagnosisScope);
   return {
-    iterations: boundedInteger(input.iterations, defaults.iterations, 1, MAX_PERFORMANCE_TOTAL_REQUESTS),
+    iterations: type === DIAGNOSIS_TYPE
+      ? diagnosisProfile.totalRequests
+      : boundedInteger(input.iterations, defaults.iterations, 1, MAX_PERFORMANCE_TOTAL_REQUESTS),
     startConcurrency: boundedInteger(input.startConcurrency, defaults.startConcurrency, 1, MAX_PERFORMANCE_CONCURRENCY),
     concurrency: boundedInteger(input.concurrency, defaults.concurrency, 1, MAX_PERFORMANCE_CONCURRENCY),
     durationSeconds: boundedInteger(input.durationSeconds, defaults.durationSeconds, minimumDurationSeconds, MAX_PERFORMANCE_DURATION_SECONDS),
     rampSteps: boundedInteger(input.rampSteps, defaults.rampSteps, 1, MAX_PERFORMANCE_TOTAL_REQUESTS),
-    spikeMultiplier: boundedInteger(input.spikeMultiplier, defaults.spikeMultiplier, 1, MAX_PERFORMANCE_CONCURRENCY)
+    spikeMultiplier: boundedInteger(input.spikeMultiplier, defaults.spikeMultiplier, 1, MAX_PERFORMANCE_CONCURRENCY),
+    diagnosisScope
   };
 }
 
@@ -667,11 +721,18 @@ function normalizePerformanceTypeSettings(typeSettings, activeType = DEFAULT_PER
 
 function normalizePerformanceTypeSetting(setting, type = DEFAULT_PERFORMANCE_TEST_TYPE) {
   const input = setting && typeof setting === 'object' && !Array.isArray(setting) ? setting : {};
+  const config = normalizePerformanceConfig(input.config, type);
+  const safetyLimits = normalizePerformanceSafetyLimits(input.safetyLimits);
+  if (type === DIAGNOSIS_TYPE) {
+    const profile = diagnosisScopeProfile(config.diagnosisScope);
+    safetyLimits.maxTotalRequests = profile.totalRequests;
+    safetyLimits.maxDurationSeconds = Math.max(safetyLimits.maxDurationSeconds, profile.maxDurationSeconds);
+  }
   return {
     environmentId: normalizeRunnerEnvironmentId(input.environmentId),
     allowEnvironmentMutation: input.allowEnvironmentMutation === true,
-    config: normalizePerformanceConfig(input.config, type),
-    safetyLimits: normalizePerformanceSafetyLimits(input.safetyLimits)
+    config,
+    safetyLimits
   };
 }
 
@@ -707,6 +768,12 @@ function mergePerformanceTypeSetting(base = {}, override = {}) {
 
 function defaultPerformanceConfigForType(type) {
   return {
+    diagnosis: {
+      ...DEFAULT_PERFORMANCE_CONFIG,
+      iterations: DEFAULT_DIAGNOSIS_TOTAL_REQUESTS,
+      concurrency: DEFAULT_DIAGNOSIS_CONCURRENCY,
+      spikeMultiplier: DEFAULT_DIAGNOSIS_SPIKE_MULTIPLIER
+    },
     latency: { ...DEFAULT_PERFORMANCE_CONFIG, iterations: 1 },
     throughput: { ...DEFAULT_PERFORMANCE_CONFIG, iterations: 10, concurrency: 1 },
     concurrency: { ...DEFAULT_PERFORMANCE_CONFIG, iterations: 10, concurrency: 5 },

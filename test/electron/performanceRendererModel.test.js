@@ -7,8 +7,9 @@ const {
   normalizePerformanceTest
 } = require('../../src/renderer/performanceTestModel');
 
-test('renderer performance model uses the same seven V1 types and defaults as the workspace model', () => {
+test('renderer performance model uses the same eight V1 types and defaults as the workspace model', () => {
   assert.deepEqual(PERFORMANCE_TEST_TYPES, [
+    'diagnosis',
     'latency',
     'throughput',
     'concurrency',
@@ -20,14 +21,18 @@ test('renderer performance model uses the same seven V1 types and defaults as th
 
   const created = newPerformanceTestObject('UI Test');
   assert.equal(created.name, 'UI Test');
-  assert.equal(created.type, 'latency');
+  assert.equal(created.type, 'diagnosis');
   assert.equal(created.source.sourceType, 'manual');
-  assert.equal(created.config.iterations, 1);
+  assert.equal(created.config.iterations, 44);
   assert.equal(created.config.startConcurrency, 1);
+  assert.equal(created.config.concurrency, 5);
+  assert.equal(created.config.diagnosisScope, 'quick');
+  assert.equal(created.typeSettings.diagnosis.config.iterations, 44);
+  assert.equal(created.typeSettings.diagnosis.safetyLimits.maxTotalRequests, 44);
   assert.equal(created.typeSettings.latency.config.iterations, 1);
   assert.equal(created.typeSettings.throughput.config.iterations, 10);
   assert.equal(created.typeSettings.stress.config.rampSteps, 5);
-  assert.equal(created.safetyLimits.maxTotalRequests, 100);
+  assert.equal(created.safetyLimits.maxTotalRequests, 44);
 });
 
 test('renderer performance normalization migrates old placeholder options without keeping legacy fields', () => {
@@ -79,10 +84,28 @@ test('renderer performance normalization keeps type pane settings independent', 
 
   assert.equal(normalized.typeSettings.latency.config.iterations, 7);
   assert.equal(normalized.typeSettings.throughput.config.iterations, 13);
+  assert.equal(normalized.typeSettings.diagnosis.config.diagnosisScope, 'quick');
+  assert.equal(normalized.typeSettings.diagnosis.safetyLimits.maxTotalRequests, 44);
   assert.equal(normalized.typeSettings.throughput.allowEnvironmentMutation, true);
   assert.equal(normalized.config.iterations, 13);
   assert.equal(normalized.config.concurrency, 3);
   assert.equal(normalized.environmentId, 'env-1');
+});
+
+test('renderer performance diagnosis scope adjusts samples and duration safety', () => {
+  const normalized = normalizePerformanceTest({
+    id: 'perf-diagnosis-scope',
+    name: 'Diagnosis Scope',
+    type: 'diagnosis',
+    request: { method: 'GET', url: 'https://example.test' },
+    config: { diagnosisScope: 'extended' },
+    safetyLimits: { maxTotalRequests: 1, maxConcurrency: 5, maxDurationSeconds: 60 }
+  });
+
+  assert.equal(normalized.config.diagnosisScope, 'extended');
+  assert.equal(normalized.config.iterations, 1000);
+  assert.equal(normalized.safetyLimits.maxTotalRequests, 1000);
+  assert.equal(normalized.safetyLimits.maxDurationSeconds, 900);
 });
 
 test('renderer performance import deep-copies request-owned data from collections', () => {

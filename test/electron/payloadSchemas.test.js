@@ -11,7 +11,8 @@ const {
   PAYLOAD_SCHEMA_VERSION,
   oneOf,
   payloadSchemas,
-  schemaEnum
+  schemaEnum,
+  TYPOGRAPHY_FONT_VALUES
 } = require('../../src/core/payloadSchemas');
 
 test('defines shared payload schema metadata for IPC and contributors', () => {
@@ -22,6 +23,14 @@ test('defines shared payload schema metadata for IPC and contributors', () => {
   assert.ok(AUTH_TYPE_VALUES.includes('oauth2'));
   assert.equal(payloadSchemas.fields.keyValue.value.limit, 'value');
   assert.equal(payloadSchemas.fields.appearance.theme.enum, 'themeValues');
+  assert.equal(payloadSchemas.fields.appearance.interfaceFont.enum, 'interfaceFontValues');
+  assert.equal(payloadSchemas.fields.appearance.interfaceFontSize.type, 'number');
+  assert.equal(payloadSchemas.fields.appearance.editorFont.enum, 'editorFontValues');
+  assert.equal(payloadSchemas.fields.appearance.editorFontSize.type, 'number');
+  assert.deepEqual(schemaEnum('interfaceFontValues'), TYPOGRAPHY_FONT_VALUES);
+  assert.deepEqual(schemaEnum('editorFontValues'), TYPOGRAPHY_FONT_VALUES);
+  assert.ok(schemaEnum('interfaceFontValues').includes('system-mono'));
+  assert.ok(schemaEnum('editorFontValues').includes('georgia'));
   assert.equal(payloadSchemas.fields.editorSettings.lineNumbers.type, 'boolean');
   assert.equal(payloadSchemas.fields.diagnosticsLogging.level.enum, 'diagnosticLogLevels');
   assert.equal(payloadSchemas.fields.requestResponseLoggingSettings.bodies.type, 'boolean');

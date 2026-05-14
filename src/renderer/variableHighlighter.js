@@ -429,12 +429,19 @@ function variableMatchesPostmanToken(variable) {
     if (!isInput(textbox) || !Number.isFinite(event.clientX)) {
       return null;
     }
+    const index = caretIndexFromClientXWithinText(textbox, event.clientX);
+    if (index == null) {
+      return null;
+    }
     const match = variableTokenMatchAtIndex(
       textbox.value || '',
-      caretIndexFromClientX(textbox, event.clientX),
+      index,
       { target: textbox }
     );
     if (!match || match.status !== 'valid') {
+      return null;
+    }
+    if (!clientXInsideTextRange(textbox, event.clientX, match.start, match.end)) {
       return null;
     }
     const variable = resolvedVariableForToken(match.name, {
@@ -872,14 +879,55 @@ function variableMatchesPostmanToken(variable) {
   }
 
   function caretIndexFromClientX(textbox, clientX) {
-    const value = String(textbox.value || '');
-    if (!value || !Number.isFinite(clientX)) {
+    if (!Number.isFinite(clientX)) {
       return 0;
+    }
+    const metrics = singleLineTextMetrics(textbox);
+    if (!metrics) {
+      return String(textbox.value || '').length;
+    }
+    return caretIndexFromTextOffset(textbox, metrics, textOffsetFromClientX(metrics, clientX));
+  }
+
+  function caretIndexFromClientXWithinText(textbox, clientX) {
+    const metrics = singleLineTextMetrics(textbox);
+    if (!metrics || !Number.isFinite(clientX)) {
+      return null;
+    }
+    if (clientX < metrics.contentAreaLeft || clientX > metrics.contentAreaRight) {
+      return null;
+    }
+    const offset = textOffsetFromClientX(metrics, clientX);
+    if (offset <= 0 || offset >= metrics.fullWidth) {
+      return null;
+    }
+    return caretIndexFromTextOffset(textbox, metrics, offset);
+  }
+
+  function clientXInsideTextRange(textbox, clientX, start, end) {
+    if (!Number.isInteger(start) || !Number.isInteger(end) || end <= start || !Number.isFinite(clientX)) {
+      return false;
+    }
+    const metrics = singleLineTextMetrics(textbox);
+    if (!metrics) {
+      return false;
+    }
+    const left = metrics.contentLeft + measureSingleLineText(textbox, metrics.value.slice(0, start), metrics.style) - metrics.scrollLeft;
+    const right = metrics.contentLeft + measureSingleLineText(textbox, metrics.value.slice(0, end), metrics.style) - metrics.scrollLeft;
+    const visibleLeft = Math.max(left, metrics.contentAreaLeft);
+    const visibleRight = Math.min(right, metrics.contentAreaRight);
+    return visibleRight > visibleLeft && clientX >= visibleLeft && clientX < visibleRight;
+  }
+
+  function singleLineTextMetrics(textbox) {
+    const value = String(textbox.value || '');
+    if (!value) {
+      return null;
     }
     const rect = textbox.getBoundingClientRect?.();
     const style = computedStyle(textbox);
     if (!rect || !style) {
-      return value.length;
+      return null;
     }
     const borderLeft = cssPixels(style.borderLeftWidth);
     const borderRight = cssPixels(style.borderRightWidth);
@@ -887,37 +935,53 @@ function variableMatchesPostmanToken(variable) {
     const paddingRight = cssPixels(style.paddingRight);
     const availableWidth = Math.max(0, rect.width - borderLeft - borderRight - paddingLeft - paddingRight);
     const fullWidth = measureSingleLineText(textbox, value, style);
-    let contentLeft = rect.left + borderLeft + paddingLeft;
+    const contentAreaLeft = rect.left + borderLeft + paddingLeft;
+    const contentAreaRight = rect.right - borderRight - paddingRight;
+    let contentLeft = contentAreaLeft;
     const align = String(style.textAlign || '').toLowerCase();
     if (align === 'center') {
       contentLeft += Math.max(0, (availableWidth - fullWidth) / 2);
     } else if (align === 'right' || align === 'end') {
       contentLeft += Math.max(0, availableWidth - fullWidth);
     }
+    return {
+      contentAreaLeft,
+      contentAreaRight,
+      contentLeft,
+      fullWidth,
+      scrollLeft: Number(textbox.scrollLeft) || 0,
+      style,
+      value
+    };
+  }
 
-    const offset = clientX - contentLeft + (Number(textbox.scrollLeft) || 0);
+  function textOffsetFromClientX(metrics, clientX) {
+    return clientX - metrics.contentLeft + metrics.scrollLeft;
+  }
+
+  function caretIndexFromTextOffset(textbox, metrics, offset) {
     if (offset <= 0) {
       return 0;
     }
-    if (offset >= fullWidth) {
-      return value.length;
+    if (offset >= metrics.fullWidth) {
+      return metrics.value.length;
     }
 
     let low = 0;
-    let high = value.length;
+    let high = metrics.value.length;
     while (low < high) {
       const mid = Math.floor((low + high + 1) / 2);
-      if (measureSingleLineText(textbox, value.slice(0, mid), style) <= offset) {
+      if (measureSingleLineText(textbox, metrics.value.slice(0, mid), metrics.style) <= offset) {
         low = mid;
       } else {
         high = mid - 1;
       }
     }
-    if (low >= value.length) {
-      return value.length;
+    if (low >= metrics.value.length) {
+      return metrics.value.length;
     }
-    const currentWidth = measureSingleLineText(textbox, value.slice(0, low), style);
-    const nextWidth = measureSingleLineText(textbox, value.slice(0, low + 1), style);
+    const currentWidth = measureSingleLineText(textbox, metrics.value.slice(0, low), metrics.style);
+    const nextWidth = measureSingleLineText(textbox, metrics.value.slice(0, low + 1), metrics.style);
     return offset > currentWidth + ((nextWidth - currentWidth) / 2) ? low + 1 : low;
   }
 
@@ -1089,6 +1153,24 @@ function variableMatchesPostmanToken(variable) {
     ]) {
       overlay.style[property] = style[property];
     }
+    alignSingleLineOverlay(textbox, overlay, style);
+  }
+
+  function alignSingleLineOverlay(textbox, overlay, style) {
+    if (!isInput(textbox)) {
+      return;
+    }
+    const rect = textbox.getBoundingClientRect?.();
+    const height = Number(rect?.height) || cssPixels(style.height);
+    const lineHeight = computedLineHeight(style);
+    if (!Number.isFinite(height) || height <= 0 || lineHeight <= 0) {
+      return;
+    }
+    const verticalSpace = Math.max(0, height - cssPixels(style.borderTopWidth) - cssPixels(style.borderBottomWidth));
+    const paddingTop = Math.max(0, (verticalSpace - lineHeight) / 2);
+    const paddingBottom = Math.max(0, verticalSpace - lineHeight - paddingTop);
+    overlay.style.paddingTop = `${paddingTop}px`;
+    overlay.style.paddingBottom = `${paddingBottom}px`;
   }
 
   function escapeHtml(value) {

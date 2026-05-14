@@ -27,7 +27,7 @@
 
 .modal h2 {
   margin: 0 0 8px;
-  font-size: 18px;
+  font-size: var(--ui-font-size-title);
 }
 
 .modal-title-row {
@@ -104,14 +104,14 @@
 
 .collection-pick-option small {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--ui-font-size-xs);
   margin-left: auto;
   text-align: right;
 }
 
 .folder-destination-option small {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--ui-font-size-xs);
   margin-left: auto;
 }
 
@@ -187,7 +187,7 @@
 .settings-section h3 {
   margin: 0;
   color: var(--text);
-  font-size: 16px;
+  font-size: var(--ui-font-size-xl);
 }
 
 .settings-card {
@@ -202,7 +202,7 @@
 
 .settings-card-title {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -210,8 +210,34 @@
 .settings-help {
   margin: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
   line-height: 1.4;
+}
+
+.settings-typography-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(96px, 120px) auto;
+  gap: 10px;
+  align-items: end;
+  min-width: 0;
+}
+
+.settings-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: var(--text);
+  font-size: var(--ui-font-size-sm);
+  font-weight: 700;
+}
+
+.settings-field select,
+.settings-field input {
+  width: 100%;
+}
+
+.settings-size-field input {
+  min-width: 0;
 }
 
 .settings-theme-options {
@@ -266,6 +292,10 @@
     grid-template-columns: 1fr;
   }
 
+  .settings-typography-grid {
+    grid-template-columns: 1fr;
+  }
+
   .settings-sidebar {
     grid-auto-flow: column;
     grid-auto-columns: max-content;
@@ -301,7 +331,7 @@
   margin-top: 2px;
   overflow: hidden;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
   font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -357,7 +387,7 @@
 
 .performance-calibration-progress-detail {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
 }
 
 .performance-calibration-summary {
@@ -376,14 +406,14 @@
 .performance-calibration-metric span {
   display: block;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
   font-weight: 700;
 }
 
 .performance-calibration-metric strong {
   display: block;
   margin-top: 3px;
-  font-size: 18px;
+  font-size: var(--ui-font-size-title);
 }
 
 .performance-calibration-stages {
@@ -403,7 +433,7 @@
   align-items: center;
   padding: 7px 9px;
   border-bottom: 1px solid var(--line);
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
 }
 
 .performance-calibration-stage.is-rejected {
@@ -424,7 +454,7 @@
 .performance-calibration-note {
   margin: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
 }
 
 .file-picker-modal {
@@ -452,7 +482,7 @@
 
 .csv-variables-modal h3 {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--ui-font-size-md);
   line-height: 1.3;
 }
 
@@ -486,7 +516,7 @@
 .csv-variables-source-copy strong {
   display: block;
   margin-bottom: 4px;
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
 }
 
 .csv-variables-source-actions {
@@ -507,7 +537,7 @@
   min-height: 26px;
   padding: 3px 9px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: var(--ui-font-size-xs);
   font-weight: 800;
 }
 
@@ -562,7 +592,7 @@
 .csv-variables-disclosure-header small {
   min-width: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--ui-font-size-xs);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -589,6 +619,7 @@
   min-height: 220px;
   resize: vertical;
   font-family: var(--mono);
+  font-size: var(--editor-font-size);
   line-height: 1.45;
   white-space: pre;
 }
@@ -599,7 +630,7 @@
 
 .csv-variables-file-status {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
   font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -628,7 +659,7 @@
 
 .csv-variables-inline-note {
   margin: 8px 0 0;
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
 }
 
 @media (max-width: 640px) {
@@ -654,6 +685,7 @@
   min-height: 280px;
   resize: vertical;
   font-family: var(--mono);
+  font-size: var(--editor-font-size);
   line-height: 1.45;
   white-space: pre;
 }
@@ -661,7 +693,7 @@
 .request-export-status {
   margin: 8px 0 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
   font-weight: 700;
 }
 
@@ -689,24 +721,24 @@
 
 .file-picker-dropzone strong {
   color: var(--text);
-  font-size: 15px;
+  font-size: calc(var(--ui-font-size) + 2px);
 }
 
 .file-picker-dropzone span {
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
 }
 
 .file-picker-error {
   margin: 10px 0 0;
   color: var(--danger);
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
   font-weight: 700;
 }
 
 .file-picker-selection {
   margin: 8px 0 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
   font-weight: 700;
 }
 
@@ -824,6 +856,11 @@
   text-align: left;
 }
 
+.variable-autocomplete-option.is-key-only {
+  align-content: center;
+  min-height: 30px;
+}
+
 .variable-autocomplete-option:hover,
 .variable-autocomplete-option.active {
   background: var(--surface-muted);
@@ -832,7 +869,7 @@
 .variable-autocomplete-key {
   color: var(--text);
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--editor-font-size);
   font-weight: 700;
 }
 
@@ -840,7 +877,7 @@
   overflow: hidden;
   color: var(--muted);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--editor-font-size-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -864,7 +901,7 @@
 
 .vault-prompt-details dt {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
   font-weight: 700;
 }
 
@@ -873,11 +910,11 @@
   margin: 0;
   overflow-wrap: anywhere;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--editor-font-size);
 }
 
 .vault-prompt-warning {
-  font-size: 13px;
+  font-size: var(--ui-font-size-md);
 }
 
 .vault-prompt-actions {

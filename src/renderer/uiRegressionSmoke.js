@@ -39,7 +39,7 @@
     await assertLargeWorkspaceBudgetSmoke();
     await assertEditorCollectionSmoke();
     await assertSidebarTreeDragSmoke();
-    assertCreationSemanticsSmoke();
+    await assertCreationSemanticsSmoke();
     await assertRequestTabCloseSmoke();
 
     newCollection();
@@ -62,7 +62,7 @@
     $('urlInput').value = '{{baseUrl}}/v1/users';
     dispatchInput($('urlInput'));
     await nextPaint();
-    const baseUrlToken = assertVariableHighlight(
+    let baseUrlToken = assertVariableHighlight(
       $('urlInput'),
       'baseUrl',
       'Request URL input should highlight environment variable tokens.',
@@ -94,6 +94,51 @@
     assertUiSmoke(
       document.querySelector('.variable-highlight-tooltip')?.textContent === 'https://hover.example.test',
       `Variable hover tooltip should contain only the value when hints are disabled. Tooltip: ${document.querySelector('.variable-highlight-tooltip')?.outerHTML || 'none'}`
+    );
+    $('urlInput').value = '{{baseUrl}}';
+    dispatchInput($('urlInput'));
+    await nextPaint();
+    baseUrlToken = assertVariableHighlight(
+      $('urlInput'),
+      'baseUrl',
+      'Request URL input should highlight a standalone environment variable token.',
+      'valid'
+    );
+    dispatchVariableTokenMouseEvent($('urlInput'), baseUrlToken, 'mousemove');
+    await waitForUiSmoke(
+      () => document.querySelector('.variable-highlight-tooltip')?.hidden === false,
+      'Variable hover tooltip should appear for a standalone URL variable token.',
+      2500,
+      global
+    );
+    dispatchTextboxMouseMove(
+      $('urlInput'),
+      $('urlInput').getBoundingClientRect().left + 2,
+      baseUrlToken.getBoundingClientRect().top + (baseUrlToken.getBoundingClientRect().height / 2)
+    );
+    await nextPaint();
+    assertUiSmoke(
+      document.querySelector('.variable-highlight-tooltip')?.hidden !== false,
+      'Variable hover tooltip should hide when moving left of a leading URL variable token.'
+    );
+    dispatchVariableTokenMouseEvent($('urlInput'), baseUrlToken, 'mousemove');
+    await waitForUiSmoke(
+      () => document.querySelector('.variable-highlight-tooltip')?.hidden === false,
+      'Variable hover tooltip should reappear for a standalone URL variable token.',
+      2500,
+      global
+    );
+    const urlRect = $('urlInput').getBoundingClientRect();
+    const baseUrlRect = baseUrlToken.getBoundingClientRect();
+    dispatchTextboxMouseMove(
+      $('urlInput'),
+      Math.min(urlRect.right - 4, baseUrlRect.right + 40),
+      baseUrlRect.top + (baseUrlRect.height / 2)
+    );
+    await nextPaint();
+    assertUiSmoke(
+      document.querySelector('.variable-highlight-tooltip')?.hidden !== false,
+      'Variable hover tooltip should hide when moving right of a trailing URL variable token.'
     );
     await setVariableTooltipHintsFromSettingsPanel(true);
     dispatchVariableTokenMouseEvent($('urlInput'), baseUrlToken, 'mousemove', { ctrlKey: true });
@@ -205,6 +250,7 @@
     await nextPaint();
     assertVariableHighlight($('authBearerTokenInput'), 'baseUrl', 'Bearer token fields should highlight environment variable tokens.');
     assertVariableHighlightUsesInputMetrics($('authBearerTokenInput'), 'baseUrl', 'Bearer token variable highlighting should not alter input text metrics.');
+    await assertSingleLineVariableTooltipEdges($('authBearerTokenInput'), 'baseUrl', 'Bearer token field');
     const generatedHeadersAfterBearerAuth = Array.from($('headersTable').querySelectorAll('[data-generated-header="true"] input[aria-label^="Auto-generated"]'))
       .map((input) => input.value);
     assertUiSmoke(generatedHeadersAfterBearerAuth.includes('Authorization'), 'Generated request headers should update when Auth tab enables Authorization.');
@@ -226,6 +272,7 @@
     dispatchInput(requestParamInputs[2]);
     await nextPaint();
     assertVariableHighlight(requestParamInputs[2], 'baseUrl', 'Request Params values should highlight environment variable tokens.');
+    await assertSingleLineVariableTooltipEdges(requestParamInputs[2], 'baseUrl', 'Request Params value field');
     requestParamInputs[2].value = 'car';
     dispatchInput(requestParamInputs[2]);
     assertUiSmoke($('urlInput').value.endsWith('/v1/users?taco=car'), 'Editing request params should update the request URL.');
@@ -233,7 +280,9 @@
     requestParamInputs[0].checked = false;
     dispatchChange(requestParamInputs[0]);
     assertUiSmoke(!$('urlInput').value.includes('taco=car'), 'Disabling a request param should remove it from the URL.');
-    $('paramsTable').querySelector('.kv-row button').click();
+    const requestParamRemoveButton = $('paramsTable').querySelector('.kv-row button');
+    assertUiSmoke(requestParamRemoveButton.classList.contains('danger-button'), 'Request param remove button should use danger styling.');
+    requestParamRemoveButton.click();
     assertUiSmoke($('paramsTable').querySelectorAll('.kv-row').length === 0, 'Removing a request param should delete the Params row.');
     assertUiSmoke(!activeRequest().queryParams.length, 'Removing a request param should delete it from the request model.');
     $('urlInput').value = 'https://api.example.test/v1/users?from=url&multi=one&multi=two';
@@ -241,6 +290,83 @@
     requestParamInputs = $('paramsTable').querySelectorAll('input');
     assertUiSmoke(requestParamInputs[1].value === 'from' && requestParamInputs[2].value === 'url', 'Editing the request URL should update the Params table.');
     assertUiSmoke(requestParamInputs[4].value === 'multi' && requestParamInputs[5].value === 'one', 'URL query parsing should keep repeated request params.');
+    assertUiSmoke($('exportRequestPanelButton')?.textContent === 'Export Request', 'Request editor should render an Export Request button.');
+    assertUiSmoke(!$('exportRequestPanelButton').disabled, 'Request editor should enable the request export button.');
+    $('exportRequestPanelButton').click();
+    assertUiSmoke(!$('exportRequestPanelMenu').hidden, 'Request editor Export Request button should open a format menu.');
+    assertUiSmoke(
+      Array.from($('exportRequestPanelMenu').querySelectorAll('button')).map((button) => button.textContent.trim()).join('|') === 'PostMeter|curl',
+      'Request editor Export Request menu should match the main Export > Request formats.'
+    );
+    {
+      const originalExportRequest = window.__postmeterExportRequest;
+      const originalExportRequestText = window.__postmeterExportRequestText;
+      const originalPostmeterRequestExportText = window.postmeter?.request?.exportRequestText;
+      let exportedRequest = null;
+      try {
+        window.__postmeterExportRequestText = null;
+        if (window.postmeter?.request) {
+          window.postmeter.request.exportRequestText = null;
+        }
+        window.__postmeterExportRequest = async (request, format) => {
+          exportedRequest = { request, format };
+          return { cancelled: true };
+        };
+        $('exportRequestPanelPostmeterButton').click();
+        await waitForUiSmoke(
+          () => exportedRequest || !$('requestExportModal').hidden,
+          'Request editor Export Request button should start the active request export.',
+          3000,
+          global
+        );
+        if (!exportedRequest) {
+          $('fileRequestExportButton').click();
+        }
+        await waitForUiSmoke(
+          () => exportedRequest?.request?.id === activeRequest()?.id,
+          'Request editor Export Request button should export the active request.',
+          3000,
+          global
+        );
+        assertUiSmoke(exportedRequest.format === 'postmeter', 'Request editor Export Request button should use the PostMeter request format.');
+        assertUiSmoke(exportedRequest.request.url.includes('from=url'), 'Request editor Export Request button should collect current URL edits before exporting.');
+        exportedRequest = null;
+        $('exportRequestPanelButton').click();
+        assertUiSmoke(!$('exportRequestPanelMenu').hidden, 'Request editor Export Request button should reopen the format menu.');
+        $('exportRequestPanelCurlButton').click();
+        await waitForUiSmoke(
+          () => exportedRequest || !$('requestExportModal').hidden || !$('confirmActionModal').hidden,
+          'Request editor Export Request curl menu item should start the active request export.',
+          3000,
+          global
+        );
+        if (!exportedRequest && !$('confirmActionModal').hidden) {
+          $('confirmActionButton').click();
+          await waitForUiSmoke(
+            () => exportedRequest || !$('requestExportModal').hidden,
+            'Request editor Export Request curl menu item should continue after confirming unsupported curl features.',
+            3000,
+            global
+          );
+        }
+        if (!exportedRequest && !$('requestExportModal').hidden) {
+          $('fileRequestExportButton').click();
+        }
+        await waitForUiSmoke(
+          () => exportedRequest?.request?.id === activeRequest()?.id,
+          'Request editor Export Request curl menu item should export the active request.',
+          3000,
+          global
+        );
+        assertUiSmoke(exportedRequest.format === 'curl', 'Request editor Export Request curl menu item should use the curl request format.');
+      } finally {
+        window.__postmeterExportRequest = originalExportRequest;
+        window.__postmeterExportRequestText = originalExportRequestText;
+        if (window.postmeter?.request) {
+          window.postmeter.request.exportRequestText = originalPostmeterRequestExportText;
+        }
+      }
+    }
     activateTab('request', 'cookies');
     assertUiSmoke($('requestCookieJarEnabledInput'), 'Cookie jar request toggle is missing.');
     $('addCookieButton').click();
@@ -248,6 +374,7 @@
     assertUiSmoke(cookieRow, 'Cookie editor did not create a row.');
     assertUiSmoke(cookieRow.querySelector('[aria-label^="Cookie"][aria-label$="name"]'), 'Cookie row name input should expose a contextual accessible label.');
     assertUiSmoke(cookieRow.querySelector('[aria-label^="Cookie"][aria-label*="SameSite"]'), 'Cookie SameSite control should expose a contextual accessible label.');
+    assertUiSmoke(cookieRow.querySelector('[aria-label^="Remove cookie"]')?.classList.contains('danger-button'), 'Cookie row remove button should use danger styling.');
     $('filterCookiesToRequestHostInput').checked = true;
     dispatchChange($('filterCookiesToRequestHostInput'));
     assertUiSmoke($('cookiesTable').querySelector('.cookie-row'), 'Cookie active-host filter hid the matching row.');
@@ -266,6 +393,7 @@
     assertUiSmoke(variableRow, 'Request variable editor did not create a row.');
     assertUiSmoke(variableRow.querySelector('[aria-label="Variable 1 enabled"]'), 'Request variable enabled control should expose a contextual accessible label.');
     assertUiSmoke(variableRow.querySelector('[aria-label="Variable 1"]'), 'Request variable key input should expose a contextual accessible label.');
+    assertUiSmoke(variableRow.querySelector('[aria-label^="Remove variable"]')?.classList.contains('danger-button'), 'Request variable remove button should use danger styling.');
     displayResponse({
       statusCode: 200,
       durationMillis: 1,
@@ -342,6 +470,29 @@
     assertUiSmoke($('exportRunnerJsonButton').disabled, 'Runner JSON export should be disabled before a run.');
     assertUiSmoke($('exportRunnerCsvButton').disabled, 'Runner CSV export should be disabled before a run.');
     assertUiSmoke($('runnerStopOnFailure'), 'Runner stop-on-failure control is missing.');
+    assertDestructiveButtonsUseDangerStyle();
+  }
+
+  function assertDestructiveButtonsUseDangerStyle() {
+    const destructiveButtons = Array.from(document.querySelectorAll('button')).filter((button) => {
+      const text = button.textContent.trim();
+      const ariaLabel = button.getAttribute('aria-label') || '';
+      return /^(Delete|Remove)\b/.test(text) || /^(Delete|Remove)\b/.test(ariaLabel);
+    });
+    const offenders = destructiveButtons.filter((button) => {
+      if (button.closest('#contextMenu')) {
+        return !button.classList.contains('danger');
+      }
+      return !button.classList.contains('danger-button');
+    });
+    assertUiSmoke(
+      offenders.length === 0,
+      `Delete/Remove buttons should use danger styling. Offenders: ${offenders.map((button) => {
+        const id = button.id ? `#${button.id}` : '';
+        const text = button.textContent.trim() || button.getAttribute('aria-label') || button.outerHTML;
+        return `${id}${text}`;
+      }).join(', ')}`
+    );
   }
 
   function assertConstrainedViewportSmoke() {
@@ -357,6 +508,7 @@
     assertUiSmoke(!$('settingsModal').hidden, 'Opening Settings should show the Settings modal.');
     assertSettingsSandboxHelpText();
     await assertThemePreferenceSettingSmoke();
+    await assertTypographySettingSmoke();
     await assertEditorLineNumbersSettingSmoke();
     await assertVariableTooltipHintsSettingSmoke();
     await assertSettingsPanelNavigationSmoke();
@@ -493,6 +645,110 @@
         global
       );
       await waitForStatusIncludes(statusText, `Settings Appearance theme control did not save ${theme}.`);
+    }
+  }
+
+  async function assertTypographySettingSmoke() {
+    $('settingsAppearanceButton').click();
+    await nextPaint();
+    assertUiSmoke($('interfaceFontSelect'), 'Interface font setting should exist.');
+    assertUiSmoke($('interfaceFontSizeInput'), 'Interface font size setting should exist.');
+    assertUiSmoke($('resetInterfaceTypographyButton'), 'Interface typography reset button should exist.');
+    assertUiSmoke($('editorFontSelect'), 'Editor font setting should exist.');
+    assertUiSmoke($('editorFontSizeInput'), 'Editor font size setting should exist.');
+    assertUiSmoke($('resetEditorTypographyButton'), 'Editor typography reset button should exist.');
+
+    $('interfaceFontSelect').value = 'system-mono';
+    $('interfaceFontSelect').dispatchEvent(new Event('change', { bubbles: true }));
+    await waitForUiSmoke(
+      () => workspace.settings.appearance.interfaceFont === 'system-mono'
+        && document.documentElement.style.getPropertyValue('--ui-font').includes('ui-monospace'),
+      'Interface font setting did not apply.',
+      3000,
+      global
+    );
+    $('interfaceFontSizeInput').value = '18';
+    $('interfaceFontSizeInput').dispatchEvent(new Event('change', { bubbles: true }));
+    await waitForUiSmoke(
+      () => workspace.settings.appearance.interfaceFont === 'system-mono'
+        && workspace.settings.appearance.interfaceFontSize === 18
+        && document.documentElement.style.getPropertyValue('--ui-font').includes('ui-monospace')
+        && document.documentElement.style.getPropertyValue('--ui-font-size') === '18px',
+      'Interface typography settings did not apply.',
+      3000,
+      global
+    );
+    assertSidebarTabRailFitsTypography();
+    await waitForStatusIncludes('Interface typography updated.', 'Interface typography settings should save.');
+
+    $('editorFontSelect').value = 'georgia';
+    $('editorFontSelect').dispatchEvent(new Event('change', { bubbles: true }));
+    await waitForUiSmoke(
+      () => workspace.settings.appearance.editorFont === 'georgia'
+        && document.documentElement.style.getPropertyValue('--editor-font').includes('Georgia'),
+      'Editor font setting did not apply.',
+      3000,
+      global
+    );
+    $('editorFontSizeInput').value = '17';
+    $('editorFontSizeInput').dispatchEvent(new Event('change', { bubbles: true }));
+    await waitForUiSmoke(
+      () => workspace.settings.appearance.editorFont === 'georgia'
+        && workspace.settings.appearance.editorFontSize === 17
+        && document.documentElement.style.getPropertyValue('--editor-font').includes('Georgia')
+        && document.documentElement.style.getPropertyValue('--editor-font-size') === '17px'
+        && getComputedStyle($('bodyInput')).fontSize === '17px',
+      'Editor typography settings did not apply.',
+      3000,
+      global
+    );
+    await waitForStatusIncludes('Editor typography updated.', 'Editor typography settings should save.');
+
+    $('resetInterfaceTypographyButton').click();
+    await waitForUiSmoke(
+      () => workspace.settings.appearance.interfaceFont === 'default'
+        && workspace.settings.appearance.interfaceFontSize === 13
+        && $('interfaceFontSelect').value === 'default'
+        && $('interfaceFontSizeInput').value === '13'
+        && document.documentElement.style.getPropertyValue('--ui-font-size') === '13px',
+      'Interface typography reset did not restore defaults.',
+      3000,
+      global
+    );
+    await waitForStatusIncludes('Interface typography reset to defaults.', 'Interface typography reset should save.');
+
+    $('resetEditorTypographyButton').click();
+    await waitForUiSmoke(
+      () => workspace.settings.appearance.editorFont === 'default'
+        && workspace.settings.appearance.editorFontSize === 12
+        && $('editorFontSelect').value === 'default'
+        && $('editorFontSizeInput').value === '12'
+        && document.documentElement.style.getPropertyValue('--editor-font-size') === '12px',
+      'Editor typography reset did not restore defaults.',
+      3000,
+      global
+    );
+    await waitForStatusIncludes('Editor typography reset to defaults.', 'Editor typography reset should save.');
+  }
+
+  function assertSidebarTabRailFitsTypography() {
+    const sidebar = document.querySelector('.sidebar');
+    const rail = document.querySelector('.sidebar-tabs');
+    assertUiSmoke(sidebar, 'Sidebar should exist when typography settings are changed.');
+    assertUiSmoke(rail, 'Sidebar rail should exist when typography settings are changed.');
+    assertUiSmoke(
+      rail.getBoundingClientRect().width >= 145,
+      'Sidebar rail should grow when the interface font size increases.'
+    );
+    assertUiSmoke(
+      sidebar.getBoundingClientRect().width >= 315,
+      'Sidebar should keep enough total width when the interface font size increases.'
+    );
+    for (const tab of document.querySelectorAll('.sidebar-tab')) {
+      assertUiSmoke(
+        tab.scrollWidth <= tab.clientWidth + 1,
+        `Sidebar tab "${tab.textContent.trim()}" should fit inside the rail at the large interface font size.`
+      );
     }
   }
 
@@ -971,6 +1227,94 @@
     }));
   }
 
+  function dispatchTextboxMouseMove(control, clientX, clientY) {
+    control.dispatchEvent(new MouseEvent('mousemove', {
+      bubbles: true,
+      cancelable: true,
+      clientX,
+      clientY
+    }));
+  }
+
+  async function assertSingleLineVariableTooltipEdges(control, variableName, label) {
+    assertUiSmoke(control && String(control.tagName || '').toUpperCase() === 'INPUT', `${label} should be a single-line input.`);
+    const originalValue = control.value;
+    const tokenValue = `{{${variableName}}}`;
+    const restoreGlobalVariable = ensureTooltipProbeVariable(control, variableName);
+    try {
+      control.value = tokenValue;
+      dispatchInput(control);
+      await nextPaint();
+      const token = assertVariableHighlight(
+        control,
+        variableName,
+        `${label} should highlight a standalone variable token.`,
+        'valid'
+      );
+      const tokenRect = token.getBoundingClientRect();
+      const controlRect = control.getBoundingClientRect();
+      const tokenY = tokenRect.top + (tokenRect.height / 2);
+      const leftProbeX = controlRect.left + 1;
+      const rightProbeX = Math.min(controlRect.right - 4, tokenRect.right + 40);
+      const hasLeftProbeSpace = leftProbeX < tokenRect.left - 0.5;
+      const hasRightProbeSpace = rightProbeX > tokenRect.right + 0.5;
+
+      if (hasLeftProbeSpace) {
+        dispatchVariableTokenMouseEvent(control, token, 'mousemove');
+        await waitForUiSmoke(
+          () => document.querySelector('.variable-highlight-tooltip')?.hidden === false,
+          `${label} variable tooltip should appear for a standalone token.`,
+          2500,
+          global
+        );
+        dispatchTextboxMouseMove(control, leftProbeX, tokenY);
+        await nextPaint();
+        assertUiSmoke(
+          document.querySelector('.variable-highlight-tooltip')?.hidden !== false,
+          `${label} variable tooltip should hide when moving left of a leading token.`
+        );
+      }
+
+      if (hasRightProbeSpace) {
+        dispatchVariableTokenMouseEvent(control, token, 'mousemove');
+        await waitForUiSmoke(
+          () => document.querySelector('.variable-highlight-tooltip')?.hidden === false,
+          `${label} variable tooltip should ${hasLeftProbeSpace ? 'reappear' : 'appear'} for a standalone token.`,
+          2500,
+          global
+        );
+        dispatchTextboxMouseMove(control, rightProbeX, tokenY);
+        await nextPaint();
+        assertUiSmoke(
+          document.querySelector('.variable-highlight-tooltip')?.hidden !== false,
+          `${label} variable tooltip should hide when moving right of a trailing token.`
+        );
+      }
+    } finally {
+      control.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true, cancelable: true }));
+      control.value = originalValue;
+      dispatchInput(control);
+      restoreGlobalVariable?.();
+      await nextPaint();
+    }
+  }
+
+  function ensureTooltipProbeVariable(control, variableName) {
+    if (VariableHighlighter.resolvedVariableForToken?.(variableName, { target: control })) {
+      return null;
+    }
+    const originalGlobals = structuredClone(workspace.globals || []);
+    workspace.globals = [
+      ...(workspace.globals || []).filter((variable) => String(variable?.key || '').trim() !== variableName),
+      { enabled: true, key: variableName, value: `${variableName}-tooltip-probe` }
+    ];
+    refreshVariableHighlights();
+    return () => {
+      workspace.globals = originalGlobals;
+      refreshVariableHighlights();
+    };
+  }
+
   function assertVariableHighlightUsesInputMetrics(control, variableName, message) {
     const wrapper = control.closest?.('.variable-highlight-editor') || control.closest?.('.code-editor');
     const token = wrapper?.querySelector?.(`[data-variable-name="${cssAttributeValue(variableName)}"]`);
@@ -1093,8 +1437,13 @@
     try {
       ensureSettings();
       workspace.settings.appearance.theme = 'system';
+      workspace.settings.appearance.interfaceFont = 'default';
+      workspace.settings.appearance.interfaceFontSize = 13;
+      workspace.settings.appearance.editorFont = 'default';
+      workspace.settings.appearance.editorFontSize = 12;
       workspace.settings.updates.includePrereleases = false;
       applyThemePreference('system');
+      applyTypographyPreferences();
       renderSettingsControls();
       window.__postmeterSaveWorkspaceSettings = async () => {
         throw new Error('mock settings save failure');
@@ -1105,6 +1454,22 @@
       assertUiSmoke(document.documentElement.dataset.theme === 'system', 'Failed theme save should roll back the applied theme.');
       assertUiSmoke($('themeSystemButton').getAttribute('aria-pressed') === 'true', 'Failed theme save should restore theme button state.');
       assertStatusIncludes('Theme save failed', 'Failed theme save should surface a user-visible status.');
+
+      $('interfaceFontSelect').value = 'system-mono';
+      $('interfaceFontSizeInput').value = '16';
+      await setInterfaceTypographyFromControls({ save: true });
+      assertUiSmoke(workspace.settings.appearance.interfaceFont === 'default', 'Failed interface font save should roll back the workspace setting.');
+      assertUiSmoke(workspace.settings.appearance.interfaceFontSize === 13, 'Failed interface font size save should roll back the workspace setting.');
+      assertUiSmoke(document.documentElement.style.getPropertyValue('--ui-font-size') === '13px', 'Failed interface typography save should roll back the applied font size.');
+      assertStatusIncludes('Interface typography save failed', 'Failed interface typography save should surface a user-visible status.');
+
+      $('editorFontSelect').value = 'georgia';
+      $('editorFontSizeInput').value = '17';
+      await setEditorTypographyFromControls({ save: true });
+      assertUiSmoke(workspace.settings.appearance.editorFont === 'default', 'Failed editor font save should roll back the workspace setting.');
+      assertUiSmoke(workspace.settings.appearance.editorFontSize === 12, 'Failed editor font size save should roll back the workspace setting.');
+      assertUiSmoke(document.documentElement.style.getPropertyValue('--editor-font-size') === '12px', 'Failed editor typography save should roll back the applied font size.');
+      assertStatusIncludes('Editor typography save failed', 'Failed editor typography save should surface a user-visible status.');
 
       await setIncludePrereleases(true, { save: true });
       assertUiSmoke(workspace.settings.updates.includePrereleases === false, 'Failed prerelease setting save should roll back the in-memory setting.');
@@ -1149,6 +1514,7 @@
       window.__postmeterSaveWorkspaceSettings = originalSaveSettings;
       workspace.settings = originalSettings;
       applyThemePreference(workspace.settings?.appearance?.theme || 'system');
+      applyTypographyPreferences();
       renderSettingsControls();
     }
   }
@@ -1222,6 +1588,7 @@
 
       selectSidebarPanel('workspaces');
       assertUiSmoke($('deleteWorkspacePanelButton').disabled, 'Workspace delete should be disabled when only one workspace exists.');
+      assertUiSmoke($('deleteWorkspacePanelButton').classList.contains('danger-button'), 'Workspace delete button should use danger styling.');
       const originalWorkspaceId = activeWorkspaceId;
       await newWorkspace();
       assertUiSmoke(activeSidebarPanel === 'workspaces', 'Creating a workspace should switch the sidebar to Workspaces.');
@@ -1399,9 +1766,13 @@
       renderWorkspacePanel();
       assertUiSmoke($('sandboxPackageMissingList').querySelector('[aria-label="Review sandbox package npm:sample-package@1.0.0"]'), 'Missing package review action should expose a package-specific accessible label.');
       assertUiSmoke($('sandboxPackageMissingList').querySelector('[aria-label="Fetch sandbox package npm:sample-package@1.0.0 for review"]'), 'Missing package fetch action should expose a package-specific accessible label.');
-      assertUiSmoke($('sandboxPackageCacheList').querySelector('[aria-label="Remove reviewed sandbox package npm:cached-package@1.0.0"]'), 'Cached package remove action should expose a package-specific accessible label.');
+      const cachedPackageRemoveButton = $('sandboxPackageCacheList').querySelector('[aria-label="Remove reviewed sandbox package npm:cached-package@1.0.0"]');
+      assertUiSmoke(cachedPackageRemoveButton, 'Cached package remove action should expose a package-specific accessible label.');
+      assertUiSmoke(cachedPackageRemoveButton.classList.contains('danger-button'), 'Cached package remove action should use danger styling.');
       assertUiSmoke($('sandboxFileBindingMissingList').querySelector('[aria-label="Bind imported file fixture-data.csv"]'), 'Missing file binding action should expose a file-specific accessible label.');
-      assertUiSmoke($('sandboxFileBindingList').querySelector('[aria-label="Remove imported file binding bound-data.csv"]'), 'Bound file remove action should expose a file-specific accessible label.');
+      const boundFileRemoveButton = $('sandboxFileBindingList').querySelector('[aria-label="Remove imported file binding bound-data.csv"]');
+      assertUiSmoke(boundFileRemoveButton, 'Bound file remove action should expose a file-specific accessible label.');
+      assertUiSmoke(boundFileRemoveButton.classList.contains('danger-button'), 'Bound file remove action should use danger styling.');
 
       window.__postmeterSaveWorkspaceSettings = async (settings) => ({ settings: structuredClone(settings) });
 
@@ -1519,7 +1890,9 @@
       lastVaultMetadata = { available: true, secrets: [{ key: 'api-token', updatedAt: '2026-01-01T00:00:00.000Z' }], audit: [] };
       lastVaultMetadataWorkspaceId = activeWorkspaceId || '';
       renderWorkspacePanel();
-      assertUiSmoke($('sandboxVaultList').querySelector('[aria-label="Remove vault secret api-token"]'), 'Vault secret remove action should expose a secret-specific accessible label.');
+      const vaultSecretRemoveButton = $('sandboxVaultList').querySelector('[aria-label="Remove vault secret api-token"]');
+      assertUiSmoke(vaultSecretRemoveButton, 'Vault secret remove action should expose a secret-specific accessible label.');
+      assertUiSmoke(vaultSecretRemoveButton.classList.contains('danger-button'), 'Vault secret remove action should use danger styling.');
 
       let vaultBoundKey = '';
       let vaultUnsetKey = '';
@@ -2877,6 +3250,32 @@
       assertUiSmoke($('runPerformanceTestButton').closest('.performance-request-line'), 'Performance Run action should live next to the request URL.');
       assertUiSmoke($('performanceMethodSelect').classList.contains('method-get'), 'Performance request method dropdown should use the same method color class as requests.');
       assertUiSmoke($('importPerformanceRequestButton').closest('.performance-actions'), 'Performance import request action should live with the performance pane actions.');
+      assertUiSmoke($('deletePerformanceTestButton').classList.contains('danger-button'), 'Performance delete button should use danger styling.');
+      assertUiSmoke(!document.getElementById('performanceUseCsvVariablesInput'), 'Performance editor should not render a separate Use CSV variables checkbox.');
+      assertUiSmoke($('performanceCsvVariablesButton').textContent.trim() === 'CSV Variables: On', 'Performance CSV button should show the enabled state.');
+      assertUiSmoke($('performanceCsvVariablesButton').classList.contains('csv-variables-active'), 'Performance CSV button should use the active color when enabled.');
+      $('performanceCsvVariablesButton').click();
+      assertUiSmoke(!$('performanceCsvVariablesMenu').hidden, 'Performance CSV button should open a dropdown menu.');
+      let performanceCsvMenuLabels = Array.from($('performanceCsvVariablesMenu').querySelectorAll('button')).map((button) => button.textContent.trim());
+      assertUiSmoke(performanceCsvMenuLabels.join('|') === 'Turn Off|Edit', `Performance CSV menu should expose toggle and edit actions. labels=${performanceCsvMenuLabels.join('|')}`);
+      $('performanceToggleCsvVariablesButton').click();
+      assertUiSmoke(performanceTest.csvVariables.enabled === false, 'Performance CSV toggle should turn CSV variables off.');
+      assertUiSmoke($('performanceCsvVariablesButton').textContent.trim() === 'CSV Variables: Off', 'Performance CSV button should show the disabled state.');
+      assertUiSmoke(!$('performanceCsvVariablesButton').classList.contains('csv-variables-active'), 'Performance CSV button should drop the active color when disabled.');
+      $('performanceCsvVariablesButton').click();
+      performanceCsvMenuLabels = Array.from($('performanceCsvVariablesMenu').querySelectorAll('button')).map((button) => button.textContent.trim());
+      assertUiSmoke(performanceCsvMenuLabels.join('|') === 'Turn On|Edit', `Performance CSV menu should update the toggle label when disabled. labels=${performanceCsvMenuLabels.join('|')}`);
+      $('performanceToggleCsvVariablesButton').click();
+      assertUiSmoke(performanceTest.csvVariables.enabled === true, 'Performance CSV toggle should turn CSV variables on.');
+      $('performanceCsvVariablesButton').click();
+      $('performanceEditCsvVariablesButton').click();
+      await waitForUiSmoke(() => !$('csvVariablesModal').hidden, 'Performance CSV edit action should open the CSV variables modal.', 3000, global);
+      $('cancelCsvVariablesModalButton').click();
+      await waitForUiSmoke(() => $('csvVariablesModal').hidden, 'Performance CSV edit cancellation should close the modal.', 3000, global);
+      assertUiSmoke(
+        !Array.from($('performanceMainPanel').querySelectorAll('button')).some((button) => button.textContent.trim() === 'Export Request'),
+        'Performance test editor should not include the request Export Request button.'
+      );
       assertUiSmoke($('cancelPerformanceTestButton').previousElementSibling === $('runPerformanceTestButton'), 'Performance Cancel action should sit immediately after Run.');
       assertUiSmoke($('cancelPerformanceTestButton').classList.contains('danger-button'), 'Performance Cancel action should use danger styling.');
       assertUiSmoke(
@@ -2887,6 +3286,7 @@
       dispatchInput($('performanceUrlInput'));
       await nextPaint();
       assertVariableHighlight($('performanceUrlInput'), 'perfHost', 'Performance URL input should highlight environment variable tokens.');
+      await assertSingleLineVariableTooltipEdges($('performanceUrlInput'), 'perfHost', 'Performance URL field');
       for (const [tabId, label] of [
         ['performanceRequestParamsTabButton', 'Params'],
         ['performanceRequestHeadersTabButton', 'Headers'],
@@ -2909,11 +3309,14 @@
       dispatchInput(performanceRowInputs[2]);
       await nextPaint();
       assertVariableHighlight(performanceRowInputs[2], 'perfToken', 'Performance Params values should highlight environment variable tokens.');
+      await assertSingleLineVariableTooltipEdges(performanceRowInputs[2], 'perfToken', 'Performance Params value field');
       performanceRowInputs[2].value = 'enabled';
       dispatchInput(performanceRowInputs[2]);
       assertUiSmoke($('performanceUrlInput').value.includes('?probe=enabled'), 'Editing performance request params should update the performance request URL.');
       assertUiSmoke(highlightedTextboxText($('performanceUrlInput')).includes('?probe=enabled'), 'Editing performance request params should refresh the visible performance request URL text.');
-      $('performanceParamsTable').querySelector('.kv-row button').click();
+      const performanceParamRemoveButton = $('performanceParamsTable').querySelector('.kv-row button');
+      assertUiSmoke(performanceParamRemoveButton.classList.contains('danger-button'), 'Performance request param remove button should use danger styling.');
+      performanceParamRemoveButton.click();
       assertUiSmoke($('performanceParamsTable').querySelectorAll('.kv-row').length === 0, 'Removing a performance request param should delete the Params row.');
       assertUiSmoke(!activePerformanceTest().request.queryParams.length, 'Removing a performance request param should delete it from the performance request model.');
       $('performanceUrlInput').value = 'https://performance.example.test/run?from=url';
@@ -2970,6 +3373,7 @@
       dispatchChange($('performanceBodyTypeSelect'));
       $('addPerformanceFormDataBodyRowButton').click();
       let performanceBodyRow = $('performanceFormDataBodyTable').querySelector('[data-body-form-data-row]');
+      assertUiSmoke(performanceBodyRow.querySelector('button')?.classList.contains('danger-button'), 'Performance form-data row remove button should use danger styling.');
       let performanceBodyControls = performanceBodyRow.querySelectorAll('select, input');
       performanceBodyControls[1].value = 'file';
       dispatchChange(performanceBodyControls[1]);
@@ -3005,6 +3409,7 @@
       await nextPaint();
       assertVariableHighlight($('performanceBinaryBodySourceInput'), 'perfHost', 'Performance binary file source fields should highlight environment variable tokens.');
       assertVariableHighlightUsesInputMetrics($('performanceBinaryBodySourceInput'), 'perfHost', 'Performance binary file source highlighting should not alter input text metrics.');
+      await assertSingleLineVariableTooltipEdges($('performanceBinaryBodySourceInput'), 'perfHost', 'Performance binary file source field');
       $('performanceBinaryBodySourceInput').value = 'fixtures/performance-upload.dat';
       dispatchInput($('performanceBinaryBodySourceInput'));
       collectPerformanceTestFromEditor();
@@ -3064,6 +3469,7 @@
       assertUiSmoke(performanceTest.request.variables.some((pair) => pair.key === 'perfLocal'), 'Performance request Variables tab should update the performance request copy.');
       $('performanceRequestParamsTabButton').click();
       for (const [tabId, type, label] of [
+        ['performanceDiagnosisTabButton', 'diagnosis', 'Full Endpoint Diagnosis'],
         ['performanceLatencyTabButton', 'latency', 'Latency'],
         ['performanceThroughputTabButton', 'throughput', 'RPS / Throughput'],
         ['performanceConcurrencyTabButton', 'concurrency', 'Concurrency'],
@@ -3388,10 +3794,16 @@
       assertUiSmoke($('saveEnvironmentButton')?.textContent === 'Save Environment', 'Environment editor should render a Save Environment button.');
       assertUiSmoke(!$('saveEnvironmentButton').disabled, 'Environment editor should enable the environment save button.');
       assertUiSmoke($('deleteEnvironmentButton')?.textContent === 'Delete Environment', 'Environment delete button should use the full Delete Environment label.');
+      assertUiSmoke($('deleteEnvironmentButton').classList.contains('danger-button'), 'Environment delete button should use danger styling.');
       assertUiSmoke(environmentTitle.getAttribute('aria-label') === 'Environment name', 'Environment title should expose an accessible name.');
       assertUiSmoke(getComputedStyle(environmentTitle).whiteSpace === 'nowrap', 'Environment title should stay on a single line.');
       const environmentHeader = $('environmentMainPanel').querySelector('.environment-main-header');
       const environmentActions = environmentHeader.querySelector('.environment-actions');
+      const environmentActionLabels = Array.from(environmentActions.querySelectorAll('button')).map((button) => button.textContent.trim());
+      assertUiSmoke(
+        environmentActionLabels.join('|') === 'Add Variable|Save Environment|Delete Environment',
+        `Environment editor header actions should order Add Variable before save and delete. labels=${environmentActionLabels.join('|')}`
+      );
       const titleWidth = environmentTitle.getBoundingClientRect().width;
       const expectedTitleWidth = environmentHeader.getBoundingClientRect().width - environmentActions.getBoundingClientRect().width - 36;
       assertUiSmoke(titleWidth >= expectedTitleWidth, 'Environment title editor should use nearly all available header width.');
@@ -3404,7 +3816,9 @@
       assertUiSmoke(environmentVariableRow.querySelector('[aria-label="Environment variable 1 enabled"]'), 'Environment variable enabled control should expose a contextual accessible label.');
       assertUiSmoke(environmentVariableRow.querySelector('[aria-label="Environment variable 1 name"]'), 'Environment variable name input should expose a contextual accessible label.');
       assertUiSmoke(environmentVariableRow.querySelector('[aria-label="Environment variable 1 value"]'), 'Environment variable value input should expose a contextual accessible label.');
-      assertUiSmoke(environmentVariableRow.querySelector('[aria-label^="Remove environment variable"]'), 'Environment variable remove button should expose a contextual accessible label.');
+      const environmentVariableRemoveButton = environmentVariableRow.querySelector('[aria-label^="Remove environment variable"]');
+      assertUiSmoke(environmentVariableRemoveButton, 'Environment variable remove button should expose a contextual accessible label.');
+      assertUiSmoke(environmentVariableRemoveButton.classList.contains('danger-button'), 'Environment variable remove button should use danger styling.');
       assertUiSmoke(!$('environmentsSidebarPanel').querySelector('#environmentMainTitle'), 'Environment editor controls should not render in the sidebar.');
       assertUiSmoke($('environmentsList').textContent.includes(environment.name), 'Environments panel did not render the new environment.');
       const environmentOpenTabCount = openEnvironmentTabs.length;
@@ -3490,6 +3904,28 @@
       assertUiSmoke(!$('runnerMainPanel').hidden, 'Creating a runner should show the runner editor.');
       assertUiSmoke($('runnerEnvironmentSelect'), 'Runner environment selector is missing.');
       assertUiSmoke($('runnerAllowEnvironmentMutation'), 'Runner environment mutation checkbox is missing.');
+      assertUiSmoke($('deleteRunnerButton').classList.contains('danger-button'), 'Runner delete button should use danger styling.');
+      assertUiSmoke(!document.getElementById('runnerUseCsvVariablesInput'), 'Runner editor should not render a separate Use CSV variables checkbox.');
+      assertUiSmoke($('runnerCsvVariablesButton').textContent.trim() === 'CSV Variables: On', 'Runner CSV button should show the enabled state.');
+      assertUiSmoke($('runnerCsvVariablesButton').classList.contains('csv-variables-active'), 'Runner CSV button should use the active color when enabled.');
+      $('runnerCsvVariablesButton').click();
+      assertUiSmoke(!$('runnerCsvVariablesMenu').hidden, 'Runner CSV button should open a dropdown menu.');
+      let runnerCsvMenuLabels = Array.from($('runnerCsvVariablesMenu').querySelectorAll('button')).map((button) => button.textContent.trim());
+      assertUiSmoke(runnerCsvMenuLabels.join('|') === 'Turn Off|Edit', `Runner CSV menu should expose toggle and edit actions. labels=${runnerCsvMenuLabels.join('|')}`);
+      $('runnerToggleCsvVariablesButton').click();
+      assertUiSmoke(runner.csvVariables.enabled === false, 'Runner CSV toggle should turn CSV variables off.');
+      assertUiSmoke($('runnerCsvVariablesButton').textContent.trim() === 'CSV Variables: Off', 'Runner CSV button should show the disabled state.');
+      assertUiSmoke(!$('runnerCsvVariablesButton').classList.contains('csv-variables-active'), 'Runner CSV button should drop the active color when disabled.');
+      $('runnerCsvVariablesButton').click();
+      runnerCsvMenuLabels = Array.from($('runnerCsvVariablesMenu').querySelectorAll('button')).map((button) => button.textContent.trim());
+      assertUiSmoke(runnerCsvMenuLabels.join('|') === 'Turn On|Edit', `Runner CSV menu should update the toggle label when disabled. labels=${runnerCsvMenuLabels.join('|')}`);
+      $('runnerToggleCsvVariablesButton').click();
+      assertUiSmoke(runner.csvVariables.enabled === true, 'Runner CSV toggle should turn CSV variables on.');
+      $('runnerCsvVariablesButton').click();
+      $('runnerEditCsvVariablesButton').click();
+      await waitForUiSmoke(() => !$('csvVariablesModal').hidden, 'Runner CSV edit action should open the CSV variables modal.', 3000, global);
+      $('cancelCsvVariablesModalButton').click();
+      await waitForUiSmoke(() => $('csvVariablesModal').hidden, 'Runner CSV edit cancellation should close the modal.', 3000, global);
       const runnerTreeButton = treeButtonByTarget('runner', runner.id);
       assertUiSmoke(runnerTreeButton, 'Runner sidebar should render the created runner row.');
       runnerTreeButton.dispatchEvent(new MouseEvent('contextmenu', {
@@ -3540,6 +3976,10 @@
       runnerLocalRow = runnerRows[0];
       assertUiSmoke(runnerLocalRow?.querySelector('.runner-row-iterations input')?.value === '2', 'Runner iteration edits should survive runner pane re-renders.');
       assertUiSmoke(runnerRows[1]?.querySelector('.runner-row-iterations input')?.value === '1', 'Runner iteration re-render should not copy the first row value to new rows.');
+      assertUiSmoke(
+        Array.from(runnerLocalRow?.querySelectorAll('button') || []).some((button) => button.textContent.trim() === 'Delete' && button.classList.contains('danger-button')),
+        'Runner request row delete button should use danger styling.'
+      );
       const runnerLocalEditButton = Array.from(runnerLocalRow?.querySelectorAll('button') || [])
         .find((button) => button.textContent.trim() === 'Edit');
       assertUiSmoke(runnerLocalEditButton, 'Runner request rows should expose an Edit button.');
@@ -3549,6 +3989,34 @@
       assertUiSmoke(activeRunnerRequestRunnerId === runner.id, 'Editing a runner request should bind the request editor to the runner.');
       assertUiSmoke(activeRequest()?.id === runnerLocalRequest.id, 'Editing a runner request should activate the runner-owned request.');
       assertUiSmoke(!$('requestEditorPanel').hidden, 'Runner request edit should show the standard request editor.');
+      runner.csvVariables = {
+        enabled: true,
+        schema: 'url,csvOnly',
+        values: 'https://csv.example.test,csv-value',
+        activeSource: 'inline'
+      };
+      runnerLocalRequest.variables = [{ enabled: true, key: 'runnerToken', value: 'runner-value' }];
+      if (activeRequest()) {
+        activeRequest().variables = [{ enabled: true, key: 'runnerToken', value: 'runner-value' }];
+      }
+      const runnerVariableAutocomplete = document.getElementById('variableAutocompleteMenu');
+      $('urlInput').focus();
+      $('urlInput').value = '${u';
+      $('urlInput').setSelectionRange($('urlInput').value.length, $('urlInput').value.length);
+      dispatchInput($('urlInput'));
+      await nextPaint();
+      assertUiSmoke(runnerVariableAutocomplete && !runnerVariableAutocomplete.hidden, 'Runner request CSV autocomplete did not open for ${ tokens.');
+      assertUiSmoke(runnerVariableAutocomplete.textContent.includes('url'), 'Runner request CSV autocomplete should list CSV variables for ${ tokens.');
+      assertUiSmoke(!runnerVariableAutocomplete.textContent.includes('runnerToken'), 'Runner request CSV autocomplete should not list request variables for ${ tokens.');
+      assertUiSmoke(!runnerVariableAutocomplete.textContent.includes('Empty value'), 'Runner request CSV autocomplete should omit placeholder values.');
+      assertUiSmoke(!runnerVariableAutocomplete.textContent.includes('https://csv.example.test'), 'Runner request CSV autocomplete should omit CSV row values.');
+      $('urlInput').value = '{{runner';
+      $('urlInput').setSelectionRange($('urlInput').value.length, $('urlInput').value.length);
+      dispatchInput($('urlInput'));
+      await nextPaint();
+      assertUiSmoke(runnerVariableAutocomplete && !runnerVariableAutocomplete.hidden, 'Runner request variable autocomplete did not open for {{ tokens.');
+      assertUiSmoke(runnerVariableAutocomplete.textContent.includes('runnerToken'), 'Runner request variable autocomplete should list request variables for {{ tokens.');
+      assertUiSmoke(!runnerVariableAutocomplete.textContent.includes('csvOnly'), 'Runner request variable autocomplete should not list CSV variables for {{ tokens.');
       $('urlInput').value = 'https://runner-local.example.test';
       dispatchInput($('urlInput'));
       activateTab('request', 'params');
@@ -3560,6 +4028,7 @@
       dispatchInput(runnerParamInputs[2]);
       await nextPaint();
       assertVariableHighlight(runnerParamInputs[2], 'runnerToken', 'Runner-owned request Params values should highlight environment variable tokens.');
+      await assertSingleLineVariableTooltipEdges(runnerParamInputs[2], 'runnerToken', 'Runner-owned request Params value field');
       runnerParamInputs[2].value = 'local';
       dispatchInput(runnerParamInputs[2]);
       assertUiSmoke($('urlInput').value === 'https://runner-local.example.test?runner=local', 'Runner request params should update the runner request URL.');
@@ -3572,6 +4041,7 @@
       dispatchChange($('bodyTypeSelect'));
       $('addFormDataBodyRowButton').click();
       const runnerBodyRow = $('formDataBodyTable').querySelector('[data-body-form-data-row]');
+      assertUiSmoke(runnerBodyRow.querySelector('button')?.classList.contains('danger-button'), 'Runner request form-data row remove button should use danger styling.');
       const runnerBodyControls = runnerBodyRow.querySelectorAll('select, input');
       runnerBodyControls[1].value = 'text';
       dispatchChange(runnerBodyControls[1]);
@@ -3602,6 +4072,70 @@
             exportedRunnerRequest = { request, format };
             return { cancelled: true };
           };
+          assertUiSmoke($('exportRequestPanelButton')?.textContent === 'Export Request', 'Runner-owned request editor should render an Export Request button.');
+          assertUiSmoke(!$('exportRequestPanelButton').disabled, 'Runner-owned request editor should enable the request export button.');
+          assertUiSmoke(
+            activeRequest()?.id === runnerLocalRequest.id && activeRunnerRequestRunnerId === runner.id,
+            `Runner-owned request editor should still be active before panel export. active=${activeRequest()?.id || 'none'} runner=${activeRunnerRequestRunnerId || 'none'}`
+          );
+          $('exportRequestPanelButton').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+          assertUiSmoke(!$('exportRequestPanelMenu').hidden, 'Runner-owned request editor Export Request button should open a format menu.');
+          assertUiSmoke(
+            Array.from($('exportRequestPanelMenu').querySelectorAll('button')).map((button) => button.textContent.trim()).join('|') === 'PostMeter|curl',
+            'Runner-owned request editor Export Request menu should match the main Export > Request formats.'
+          );
+          $('exportRequestPanelPostmeterButton').click();
+          await waitForUiSmoke(
+            () => exportedRunnerRequest || !$('requestExportModal').hidden,
+            'Runner-owned request editor Export Request button should start the active request export.',
+            3000,
+            global
+          );
+          if (!exportedRunnerRequest) {
+            $('fileRequestExportButton').click();
+          }
+          await waitForUiSmoke(
+            () => Boolean(exportedRunnerRequest),
+            'Runner-owned request editor Export Request button should export after confirming the request export preview.',
+            3000,
+            global
+          );
+          assertUiSmoke(
+            exportedRunnerRequest.request?.id === runnerLocalRequest.id,
+            `Runner-owned request editor Export Request button should export the runner-owned request. exported=${exportedRunnerRequest.request?.id || 'none'} expected=${runnerLocalRequest.id} active=${activeRequest()?.id || 'none'} runner=${activeRunnerRequestRunnerId || 'none'}`
+          );
+          assertUiSmoke(exportedRunnerRequest.format === 'postmeter', 'Runner-owned request editor Export Request button should use the PostMeter request format.');
+          assertUiSmoke(exportedRunnerRequest.request.url.includes('from=url'), 'Runner-owned request editor Export Request button should collect current runner request edits before exporting.');
+          exportedRunnerRequest = null;
+          $('exportRequestPanelButton').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+          assertUiSmoke(!$('exportRequestPanelMenu').hidden, 'Runner-owned request editor Export Request button should reopen the format menu.');
+          $('exportRequestPanelCurlButton').click();
+          await waitForUiSmoke(
+            () => exportedRunnerRequest || !$('requestExportModal').hidden || !$('confirmActionModal').hidden,
+            'Runner-owned request editor Export Request curl menu item should start the active request export.',
+            3000,
+            global
+          );
+          if (!exportedRunnerRequest && !$('confirmActionModal').hidden) {
+            $('confirmActionButton').click();
+            await waitForUiSmoke(
+              () => exportedRunnerRequest || !$('requestExportModal').hidden,
+              'Runner-owned request editor Export Request curl menu item should continue after confirming unsupported curl features.',
+              3000,
+              global
+            );
+          }
+          if (!exportedRunnerRequest && !$('requestExportModal').hidden) {
+            $('fileRequestExportButton').click();
+          }
+          await waitForUiSmoke(
+            () => exportedRunnerRequest?.request?.id === runnerLocalRequest.id,
+            'Runner-owned request editor Export Request curl menu item should export the runner-owned request.',
+            3000,
+            global
+          );
+          assertUiSmoke(exportedRunnerRequest.format === 'curl', 'Runner-owned request editor Export Request curl menu item should use the curl request format.');
+          exportedRunnerRequest = null;
           const runnerRequestTab = openRequestTabs.find((tab) => tab.runnerId === runner.id && tab.requestId === runnerLocalRequest.id);
           openOpenTabContextMenu(runnerRequestTab);
           const exportMenuItem = Array.from($('contextMenu').querySelectorAll('button'))
@@ -4034,7 +4568,7 @@
     }
   }
 
-  function assertCreationSemanticsSmoke() {
+  async function assertCreationSemanticsSmoke() {
     workspace.collections = [];
     activeEnvironmentId = 'none';
     clearActiveWorkspaceItem();
@@ -4062,6 +4596,8 @@
     assertUiSmoke(!document.getElementById('requestNameInput'), 'Request editor should not render a separate request name text box.');
     assertUiSmoke($('saveRequestButton')?.textContent === 'Save Request', 'Request editor should render a Save Request button.');
     assertUiSmoke(!$('saveRequestButton').disabled, 'Request editor should enable the request save button.');
+    assertUiSmoke($('exportRequestPanelButton')?.textContent === 'Export Request', 'Request editor should render an Export Request button next to Save Request.');
+    assertUiSmoke(!$('exportRequestPanelButton').disabled, 'Request editor should enable the request export button.');
     assertUiSmoke($('requestNameTitle').getAttribute('aria-label') === 'Request name', 'Request title should expose an accessible name.');
     assertUiSmoke(getComputedStyle($('requestNameTitle')).whiteSpace === 'nowrap', 'Request title should stay on a single line.');
     $('requestNameTitle').click();
@@ -4072,6 +4608,7 @@
     dispatchChange($('bodyTypeSelect'));
     $('addFormDataBodyRowButton').click();
     let formDataRow = $('formDataBodyTable').querySelector('[data-body-form-data-row]');
+    assertUiSmoke(formDataRow.querySelector('button')?.classList.contains('danger-button'), 'Request form-data row remove button should use danger styling.');
     let formDataControls = formDataRow.querySelectorAll('select, input');
     formDataControls[1].value = 'text';
     dispatchChange(formDataControls[1]);
@@ -4106,7 +4643,9 @@
     $('bodyTypeSelect').value = 'URLENCODED';
     dispatchChange($('bodyTypeSelect'));
     $('addUrlencodedBodyRowButton').click();
-    const urlencodedControls = $('urlencodedBodyTable').querySelector('[data-body-urlencoded-row]').querySelectorAll('input');
+    const urlencodedRow = $('urlencodedBodyTable').querySelector('[data-body-urlencoded-row]');
+    assertUiSmoke(urlencodedRow.querySelector('button')?.classList.contains('danger-button'), 'Request URL-encoded row remove button should use danger styling.');
+    const urlencodedControls = urlencodedRow.querySelectorAll('input');
     urlencodedControls[1].value = 'search';
     dispatchInput(urlencodedControls[1]);
     urlencodedControls[2].value = 'postmeter';
@@ -4116,17 +4655,18 @@
       draft.bodyType === 'URLENCODED' && draft.postmanBody?.urlencoded?.some((part) => part.key === 'search' && part.value === 'postmeter'),
       'Request Body dropdown should collect x-www-form-urlencoded rows.'
     );
-	    $('bodyTypeSelect').value = 'BINARY';
-	    dispatchChange($('bodyTypeSelect'));
-	    $('binaryBodySourceInput').click();
-	    assertUiSmoke(!$('fileSourceMenu').hidden, 'Clicking a binary file source field should open the local file source menu.');
-	    document.body.click();
-	    $('binaryBodySourceInput').value = '{{baseUrl}}';
-	    dispatchInput($('binaryBodySourceInput'));
-	    assertVariableHighlight($('binaryBodySourceInput'), 'baseUrl', 'Binary file source fields should highlight environment variable tokens.');
-	    assertVariableHighlightUsesInputMetrics($('binaryBodySourceInput'), 'baseUrl', 'Binary file source highlighting should not alter input text metrics.');
-	    $('binaryBodySourceInput').value = 'fixtures/binary.dat';
-	    dispatchInput($('binaryBodySourceInput'));
+    $('bodyTypeSelect').value = 'BINARY';
+    dispatchChange($('bodyTypeSelect'));
+    $('binaryBodySourceInput').click();
+    assertUiSmoke(!$('fileSourceMenu').hidden, 'Clicking a binary file source field should open the local file source menu.');
+    document.body.click();
+    $('binaryBodySourceInput').value = '{{baseUrl}}';
+    dispatchInput($('binaryBodySourceInput'));
+    assertVariableHighlight($('binaryBodySourceInput'), 'baseUrl', 'Binary file source fields should highlight environment variable tokens.');
+    assertVariableHighlightUsesInputMetrics($('binaryBodySourceInput'), 'baseUrl', 'Binary file source highlighting should not alter input text metrics.');
+    await assertSingleLineVariableTooltipEdges($('binaryBodySourceInput'), 'baseUrl', 'Binary file source field');
+    $('binaryBodySourceInput').value = 'fixtures/binary.dat';
+    dispatchInput($('binaryBodySourceInput'));
     collectRequestFromEditor();
     assertUiSmoke(
       draft.bodyType === 'BINARY'

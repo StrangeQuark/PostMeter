@@ -6,6 +6,7 @@ const test = require('node:test');
 const PROJECT_ROOT = path.join(__dirname, '..', '..');
 
 const PERFORMANCE_TYPES = Object.freeze([
+  'Full Endpoint Diagnosis',
   'Latency',
   'RPS / throughput',
   'Concurrency',
@@ -33,7 +34,7 @@ test('Performance implementation keeps focused model runtime renderer and releas
   }
 });
 
-test('Performance docs keep the seven local V1 types and positive/negative scenarios visible', async () => {
+test('Performance docs keep the eight local V1 types and positive/negative scenarios visible', async () => {
   const techSpecs = await readProjectFile('docs/TECH_SPECS.md');
   const compatibility = await readProjectFile('docs/COMPATIBILITY.md');
   const nextSteps = await readProjectFile('NEXT_STEPS.MD');
@@ -82,6 +83,7 @@ test('Performance docs track model, UI, import/export, safety, and environment g
 test('Performance UI keeps type-specific input fields scoped to applicable test types', async () => {
   const html = await readProjectFile('src/renderer/index.html');
   const performanceRequest = htmlPanel(html, 'performanceRequestSection', 'performanceSettingsResize');
+  const diagnosis = htmlPanel(html, 'diagnosisTab', 'latencyTab');
   const latency = htmlPanel(html, 'latencyTab', 'throughputTab');
   const throughput = htmlPanel(html, 'throughputTab', 'concurrencyTab');
   const concurrency = htmlPanel(html, 'concurrencyTab', 'stressTab');
@@ -100,6 +102,16 @@ test('Performance UI keeps type-specific input fields scoped to applicable test 
   assert.match(performanceRequest, /id="performanceAuthTypeSelect"/);
   assert.match(performanceRequest, /id="performanceRequestCookieJarEnabledInput"/);
   assert.doesNotMatch(performanceRequest, /performanceImportSource/);
+
+  assert.match(diagnosis, />Scope</);
+  assert.match(diagnosis, />Quick Test</);
+  assert.match(diagnosis, />Medium Test</);
+  assert.match(diagnosis, />Extended Test</);
+  assert.match(diagnosis, />Max Concurrency</);
+  assert.match(diagnosis, />Max Duration</);
+  assert.match(diagnosis, /data-performance-config="diagnosisScope"/);
+  assert.doesNotMatch(diagnosis, /data-performance-config="iterations"/);
+  assert.doesNotMatch(diagnosis, /data-performance-safety="maxTotalRequests"/);
 
   assert.match(latency, />Samples</);
   assert.doesNotMatch(latency, /data-performance-config="concurrency"/);

@@ -12,7 +12,21 @@
       continueWithoutRows: false
     })
   };
+  const CAPTURE_POLICY = global.PostMeterResultCapturePolicy || {
+    normalizeCapturePolicy: (value = {}) => ({
+      responseBody: value.responseBody || 'all',
+      bodyPreviewBytes: Number(value.bodyPreviewBytes || 32768),
+      maxBodyPreviews: Number(value.maxBodyPreviews || 1000),
+      preRequestOutput: value.preRequestOutput !== false,
+      postRequestOutput: value.postRequestOutput !== false,
+      scriptLogs: value.scriptLogs !== false,
+      localVariables: value.localVariables !== false,
+      responseHeaders: value.responseHeaders !== false,
+      transportTimings: value.transportTimings !== false
+    })
+  };
   const PERFORMANCE_TEST_TYPES = [
+    'diagnosis',
     'latency',
     'throughput',
     'concurrency',
@@ -23,6 +37,7 @@
   ];
 
   const PERFORMANCE_TEST_TYPE_LABELS = {
+    diagnosis: 'Full Endpoint Diagnosis',
     latency: 'Latency',
     throughput: 'RPS / throughput',
     concurrency: 'Concurrency',
@@ -31,15 +46,22 @@
     soak: 'Soak',
     ramp: 'Ramp'
   };
+  const DEFAULT_DIAGNOSIS_SCOPE = 'quick';
+  const DIAGNOSIS_SCOPE_PROFILES = {
+    quick: { totalRequests: 44, maxDurationSeconds: 60 },
+    medium: { totalRequests: 300, maxDurationSeconds: 300 },
+    extended: { totalRequests: 1000, maxDurationSeconds: 900 }
+  };
 
   const DEFAULT_PERFORMANCE_CONFIG = {
-    latency: { iterations: 1, startConcurrency: 1, concurrency: 1, durationSeconds: 0, rampSteps: 1, spikeMultiplier: 1 },
-    throughput: { iterations: 10, startConcurrency: 1, concurrency: 1, durationSeconds: 0, rampSteps: 1, spikeMultiplier: 1 },
-    concurrency: { iterations: 10, startConcurrency: 1, concurrency: 5, durationSeconds: 0, rampSteps: 1, spikeMultiplier: 1 },
-    stress: { iterations: 10, startConcurrency: 1, concurrency: 10, durationSeconds: 0, rampSteps: 5, spikeMultiplier: 1 },
-    spike: { iterations: 20, startConcurrency: 1, concurrency: 2, durationSeconds: 0, rampSteps: 1, spikeMultiplier: 3 },
-    soak: { iterations: 1, startConcurrency: 1, concurrency: 2, durationSeconds: 30, rampSteps: 1, spikeMultiplier: 1 },
-    ramp: { iterations: 10, startConcurrency: 1, concurrency: 10, durationSeconds: 0, rampSteps: 5, spikeMultiplier: 1 }
+    diagnosis: { iterations: 44, startConcurrency: 1, concurrency: 5, durationSeconds: 0, rampSteps: 1, spikeMultiplier: 2, diagnosisScope: DEFAULT_DIAGNOSIS_SCOPE },
+    latency: { iterations: 1, startConcurrency: 1, concurrency: 1, durationSeconds: 0, rampSteps: 1, spikeMultiplier: 1, diagnosisScope: DEFAULT_DIAGNOSIS_SCOPE },
+    throughput: { iterations: 10, startConcurrency: 1, concurrency: 1, durationSeconds: 0, rampSteps: 1, spikeMultiplier: 1, diagnosisScope: DEFAULT_DIAGNOSIS_SCOPE },
+    concurrency: { iterations: 10, startConcurrency: 1, concurrency: 5, durationSeconds: 0, rampSteps: 1, spikeMultiplier: 1, diagnosisScope: DEFAULT_DIAGNOSIS_SCOPE },
+    stress: { iterations: 10, startConcurrency: 1, concurrency: 10, durationSeconds: 0, rampSteps: 5, spikeMultiplier: 1, diagnosisScope: DEFAULT_DIAGNOSIS_SCOPE },
+    spike: { iterations: 20, startConcurrency: 1, concurrency: 2, durationSeconds: 0, rampSteps: 1, spikeMultiplier: 3, diagnosisScope: DEFAULT_DIAGNOSIS_SCOPE },
+    soak: { iterations: 1, startConcurrency: 1, concurrency: 2, durationSeconds: 30, rampSteps: 1, spikeMultiplier: 1, diagnosisScope: DEFAULT_DIAGNOSIS_SCOPE },
+    ramp: { iterations: 10, startConcurrency: 1, concurrency: 10, durationSeconds: 0, rampSteps: 5, spikeMultiplier: 1, diagnosisScope: DEFAULT_DIAGNOSIS_SCOPE }
   };
 
   const DEFAULT_SAFETY_LIMITS = {
@@ -48,7 +70,7 @@
     maxDurationSeconds: 60
   };
   const MAX_SAFETY_LIMITS = {
-    maxTotalRequests: 1000,
+    maxTotalRequests: 1000000,
     maxConcurrency: 25,
     maxDurationSeconds: 60 * 60
   };
@@ -70,13 +92,14 @@
     return normalizePerformanceTest({
       id: randomId(),
       name: String(name || 'New Performance Test'),
-      type: 'latency',
+      type: 'diagnosis',
       environmentId: 'none',
       allowEnvironmentMutation: false,
       request: normalizePerformanceRequest({ name: 'Performance Request' }),
       source: { sourceType: 'manual' },
-      config: DEFAULT_PERFORMANCE_CONFIG.latency,
+      config: DEFAULT_PERFORMANCE_CONFIG.diagnosis,
       safetyLimits: DEFAULT_SAFETY_LIMITS,
+      capturePolicy: CAPTURE_POLICY.normalizeCapturePolicy({}, 'performance'),
       typeSettings: defaultPerformanceTypeSettings(),
       csvVariables: CSV_VARIABLES.normalizeCsvVariableData(),
       resultsMetadata: {}
@@ -92,7 +115,7 @@
   function normalizePerformanceTest(test, workspace = {}) {
     test.id = String(test.id || randomId());
     test.name = String(test.name || 'Untitled Performance Test');
-    test.type = PERFORMANCE_TEST_TYPES.includes(test.type) ? test.type : 'latency';
+    test.type = normalizePerformanceType(test.type);
     const legacyEnvironmentId = test.environmentId == null
       ? undefined
       : normalizePerformanceEnvironmentId(test.environmentId, workspace);
@@ -113,6 +136,7 @@
     }, workspace);
     syncPerformanceActiveTypeSettings(test);
     test.csvVariables = CSV_VARIABLES.normalizeCsvVariableData(test.csvVariables);
+    test.capturePolicy = CAPTURE_POLICY.normalizeCapturePolicy(test.capturePolicy, 'performance', { diagnostic: test.type === 'diagnosis' });
     test.resultsMetadata = normalizePerformanceResultsMetadata(test.resultsMetadata);
     return test;
   }
@@ -193,24 +217,49 @@
     return normalized;
   }
 
-  function normalizePerformanceConfig(config = {}, type = 'latency') {
-    const defaults = DEFAULT_PERFORMANCE_CONFIG[type] || DEFAULT_PERFORMANCE_CONFIG.latency;
+  function normalizePerformanceConfig(config = {}, type = 'diagnosis') {
+    const defaults = DEFAULT_PERFORMANCE_CONFIG[type] || DEFAULT_PERFORMANCE_CONFIG.diagnosis;
     const minimumDurationSeconds = type === 'soak' ? 1 : 0;
+    const diagnosisScope = normalizeDiagnosisScope(config.diagnosisScope ?? defaults.diagnosisScope);
+    const diagnosisProfile = diagnosisProfileForScope(diagnosisScope);
     return {
-      iterations: clampInteger(config.iterations, 1, MAX_SAFETY_LIMITS.maxTotalRequests, defaults.iterations),
+      iterations: type === 'diagnosis'
+        ? diagnosisProfile.totalRequests
+        : clampInteger(config.iterations, 1, MAX_SAFETY_LIMITS.maxTotalRequests, defaults.iterations),
       startConcurrency: clampInteger(config.startConcurrency, 1, MAX_SAFETY_LIMITS.maxConcurrency, defaults.startConcurrency),
       concurrency: clampInteger(config.concurrency ?? config.virtualUsers, 1, MAX_SAFETY_LIMITS.maxConcurrency, defaults.concurrency),
       durationSeconds: clampInteger(config.durationSeconds, minimumDurationSeconds, MAX_SAFETY_LIMITS.maxDurationSeconds, defaults.durationSeconds),
       rampSteps: clampInteger(config.rampSteps ?? config.rampUpSeconds, 1, MAX_SAFETY_LIMITS.maxTotalRequests, defaults.rampSteps),
-      spikeMultiplier: clampInteger(config.spikeMultiplier, 1, MAX_SAFETY_LIMITS.maxConcurrency, defaults.spikeMultiplier)
+      spikeMultiplier: clampInteger(config.spikeMultiplier, 1, MAX_SAFETY_LIMITS.maxConcurrency, defaults.spikeMultiplier),
+      diagnosisScope
     };
+  }
+
+  function normalizeDiagnosisScope(value) {
+    const normalized = String(value || '').trim().toLowerCase();
+    return DIAGNOSIS_SCOPE_PROFILES[normalized] ? normalized : DEFAULT_DIAGNOSIS_SCOPE;
+  }
+
+  function diagnosisProfileForScope(value) {
+    return DIAGNOSIS_SCOPE_PROFILES[normalizeDiagnosisScope(value)];
+  }
+
+  function normalizePerformanceType(type) {
+    const normalized = String(type || '').trim().toLowerCase();
+    if (!normalized) {
+      return 'diagnosis';
+    }
+    if (normalized === 'load') {
+      return 'latency';
+    }
+    return PERFORMANCE_TEST_TYPES.includes(normalized) ? normalized : 'latency';
   }
 
   function defaultPerformanceTypeSettings() {
     return normalizePerformanceTypeSettings();
   }
 
-  function normalizePerformanceTypeSettings(typeSettings = {}, activeType = 'latency', activeSettings = {}, workspace = {}) {
+  function normalizePerformanceTypeSettings(typeSettings = {}, activeType = 'diagnosis', activeSettings = {}, workspace = {}) {
     const input = typeSettings && typeof typeSettings === 'object' && !Array.isArray(typeSettings) ? typeSettings : {};
     const hasTypeSettings = PERFORMANCE_TEST_TYPES.some((type) => input[type] && typeof input[type] === 'object' && !Array.isArray(input[type]));
     const settings = {};
@@ -224,13 +273,20 @@
     return settings;
   }
 
-  function normalizePerformanceTypeSetting(setting = {}, type = 'latency', workspace = {}) {
+  function normalizePerformanceTypeSetting(setting = {}, type = 'diagnosis', workspace = {}) {
     const input = setting && typeof setting === 'object' && !Array.isArray(setting) ? setting : {};
+    const config = normalizePerformanceConfig(input.config, type);
+    const safetyLimits = normalizePerformanceSafetyLimits(input.safetyLimits);
+    if (type === 'diagnosis') {
+      const profile = diagnosisProfileForScope(config.diagnosisScope);
+      safetyLimits.maxTotalRequests = profile.totalRequests;
+      safetyLimits.maxDurationSeconds = Math.max(safetyLimits.maxDurationSeconds, profile.maxDurationSeconds);
+    }
     return {
       environmentId: normalizePerformanceEnvironmentId(input.environmentId, workspace),
       allowEnvironmentMutation: input.allowEnvironmentMutation === true,
-      config: normalizePerformanceConfig(input.config, type),
-      safetyLimits: normalizePerformanceSafetyLimits(input.safetyLimits)
+      config,
+      safetyLimits
     };
   }
 
@@ -276,7 +332,7 @@
   }
 
   function syncPerformanceActiveTypeSettings(test) {
-    const type = PERFORMANCE_TEST_TYPES.includes(test?.type) ? test.type : 'latency';
+    const type = PERFORMANCE_TEST_TYPES.includes(test?.type) ? test.type : 'diagnosis';
     test.typeSettings = normalizePerformanceTypeSettings(test?.typeSettings, type, {}, {});
     const activeSettings = test.typeSettings[type] || normalizePerformanceTypeSetting({}, type);
     test.environmentId = activeSettings.environmentId;
@@ -313,7 +369,7 @@
   }
 
   function typeLabel(type) {
-    return PERFORMANCE_TEST_TYPE_LABELS[type] || PERFORMANCE_TEST_TYPE_LABELS.latency;
+    return PERFORMANCE_TEST_TYPE_LABELS[type] || PERFORMANCE_TEST_TYPE_LABELS.diagnosis;
   }
 
   function cloneJson(value) {
@@ -349,6 +405,7 @@
   const exported = {
     DEFAULT_PERFORMANCE_CONFIG,
     DEFAULT_SAFETY_LIMITS,
+    DIAGNOSIS_SCOPE_PROFILES,
     MAX_SAFETY_LIMITS,
     PERFORMANCE_TEST_TYPES,
     PERFORMANCE_TEST_TYPE_LABELS,

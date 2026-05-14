@@ -199,7 +199,7 @@ function buildProductionReadinessMatrix() {
       commands: ['npm run release:manifest', 'npm run release:validate'],
       evidenceRefs: ['src/core/updateChecker.js', 'scripts/writeReleaseManifest.js', 'package.json']
     }),
-    row('performance.local-v1', 'deferred-features', 'Local first-class saved Performance tests are implemented as workspace-owned performanceTests with local execution, IPC, diagnostics boundaries, safety caps, import/export validation, and seven-type coverage; distributed/cloud load execution remains deferred.', 'implemented', {
+    row('performance.local-v1', 'deferred-features', 'Local first-class saved Performance tests are implemented as workspace-owned performanceTests with local execution, IPC, diagnostics boundaries, safety caps, import/export validation, scoped one-click Full Endpoint Diagnosis, and eight-type coverage; distributed/cloud load execution remains deferred.', 'implemented', {
       releaseBlocking: false,
       commands: ['npm run ux:accessibility:validate', 'npm run workspace:durability:validate', 'npm run compatibility:non-postman:validate', 'npm run diagnostics:privacy:validate'],
       evidenceRefs: ['README.md', 'docs/TECH_SPECS.md', 'docs/ARCHITECTURE.md', 'docs/COMPATIBILITY.md', 'docs/RELEASE_READINESS.md', 'NEXT_STEPS.MD', 'src/core/performanceRunner.js', 'electron/runtimeIpc.js', 'src/renderer/renderer.js'],

@@ -721,7 +721,7 @@
   }
 
   function lineNumberWidth(text) {
-    return Math.max(2, String(lineCountForText(text)).length);
+    return Math.max(1, String(lineCountForText(text)).length);
   }
 
   function dispatchInput(textarea) {

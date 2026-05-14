@@ -9,6 +9,12 @@ const {
 } = require('../../src/renderer/rendererBootstrap');
 const { setContextMenuPeerCloser, showContextMenu } = require('../../src/renderer/contextMenu');
 
+function selectOptionValues(source, id) {
+  const match = source.match(new RegExp(`<select id="${id}">([\\s\\S]*?)</select>`));
+  assert.ok(match, `Expected ${id} select to exist.`);
+  return [...match[1].matchAll(/<option value="([^"]+)"/g)].map((optionMatch) => optionMatch[1]);
+}
+
 test('renderer bootstrap initializes theme and runs registered cleanup callbacks on unload', async () => {
   const documentListeners = new Map();
   const windowListeners = new Map();
@@ -92,6 +98,7 @@ test('renderer bootstrap closes toolbar menus and resets trigger aria state', ()
 test('renderer accessibility source keeps splitters body editor and pane save recovery wired', async () => {
   const root = path.join(__dirname, '..', '..');
   const indexSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'index.html'), 'utf8');
+  const themeSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'theme.css'), 'utf8');
   const chromeSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'chrome.css'), 'utf8');
   const editorPanelsSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'editorPanels.css'), 'utf8');
   const overlaysSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'overlays.css'), 'utf8');
@@ -113,15 +120,26 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(indexSource, /id="confirmFolderDestinationButton"[^>]+disabled/);
   assert.match(indexSource, /id="csvVariablesModal"/);
   assert.match(indexSource, /id="runnerCsvVariablesButton"/);
-  assert.match(indexSource, /id="runnerUseCsvVariablesInput"/);
+  assert.match(indexSource, /id="runnerToggleCsvVariablesButton"/);
+  assert.match(indexSource, /id="runnerEditCsvVariablesButton"/);
   assert.match(indexSource, /id="performanceCsvVariablesButton"/);
-  assert.match(indexSource, /id="performanceUseCsvVariablesInput"/);
+  assert.match(indexSource, /id="performanceToggleCsvVariablesButton"/);
+  assert.match(indexSource, /id="performanceEditCsvVariablesButton"/);
   assert.doesNotMatch(indexSource, /id="fileMenuButton"/);
   assert.doesNotMatch(indexSource, /id="fileMenu"/);
   assert.match(indexSource, /id="settingsModal"[^>]+settings-modal/);
   assert.match(indexSource, /id="settingsAppearanceButton"[^>]+data-settings-section="appearance"/);
   assert.match(indexSource, /id="settingsModalsButton"[^>]+data-settings-section="modals"/);
   assert.match(indexSource, /id="themeDarkButton"[^>]+data-theme-option="dark"/);
+  assert.match(indexSource, /id="interfaceFontSelect"/);
+  assert.match(indexSource, /id="interfaceFontSelect"[\s\S]*value="system-mono"/);
+  assert.match(indexSource, /id="interfaceFontSizeInput"[^>]+min="11"[^>]+max="18"/);
+  assert.match(indexSource, /id="resetInterfaceTypographyButton"/);
+  assert.match(indexSource, /id="editorFontSelect"/);
+  assert.match(indexSource, /id="editorFontSelect"[\s\S]*value="georgia"/);
+  assert.match(indexSource, /id="editorFontSizeInput"[^>]+min="11"[^>]+max="20"/);
+  assert.match(indexSource, /id="resetEditorTypographyButton"/);
+  assert.deepEqual(selectOptionValues(indexSource, 'interfaceFontSelect'), selectOptionValues(indexSource, 'editorFontSelect'));
   assert.match(indexSource, /id="showEditorLineNumbersInput"/);
   assert.match(indexSource, /id="saveOnForceCloseInput"/);
   assert.match(indexSource, /id="closeModalsOnBackdropClickInput"/);
@@ -131,6 +149,9 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(layoutSource, /aria-valuemin/);
   assert.match(layoutSource, /aria-valuemax/);
   assert.match(layoutSource, /aria-valuenow/);
+  assert.match(layoutSource, /sidebarMinimumWidthPixels/);
+  assert.match(themeSource, /--sidebar-rail-width:\s*clamp\(102px,\s*calc\(var\(--ui-font-size\) \* 8\.2\),\s*156px\)/);
+  assert.match(chromeSource, /grid-template-columns:\s*max\(var\(--sidebar-width\),\s*var\(--sidebar-min-width\)\)\s+6px\s+minmax\(0,\s*1fr\)/);
   assert.match(layoutSource, /event\.key === 'ArrowLeft'/);
   assert.match(layoutSource, /event\.key === 'ArrowRight'/);
   assert.match(bootstrapSource, /aria-orientation/);
@@ -141,7 +162,9 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(bootstrapSource, /activeRow !== submenuRow/);
   assert.match(bootstrapSource, /getSelectedExportItemId/);
   assert.match(bootstrapSource, /getSelectedFolderDestination/);
+  assert.match(bootstrapSource, /onToggleRunnerCsvVariables/);
   assert.match(bootstrapSource, /onEditRunnerCsvVariables/);
+  assert.match(bootstrapSource, /onTogglePerformanceCsvVariables/);
   assert.match(bootstrapSource, /onEditPerformanceCsvVariables/);
   assert.doesNotMatch(bootstrapSource, /'fileMenuButton', 'fileMenu'/);
   assert.doesNotMatch(bootstrapSource, /bindClick\(doc, 'openSettingsButton', options\.onOpenSettings\)/);
@@ -189,7 +212,10 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(chromeSource, /\.tree-badge\.entity-performance/);
   assert.doesNotMatch(overlaysSource, /--mono-font/);
   assert.match(overlaysSource, /csv-variables-modal textarea[\s\S]*font-family:\s*var\(--mono\)/);
+  assert.match(overlaysSource, /csv-variables-modal textarea[\s\S]*font-size:\s*var\(--editor-font-size\)/);
   assert.doesNotMatch(editorPanelsSource, /--mono-font/);
+  assert.match(editorPanelsSource, /\.code-editor\s*\{[\s\S]*font-family:\s*var\(--mono\)/);
+  assert.match(editorPanelsSource, /\.code-editor\s*\{[\s\S]*font-size:\s*var\(--editor-font-size\)/);
   assert.doesNotMatch(editorPanelsSource, /\.field\s+span\s*\{/);
   assert.match(editorPanelsSource, /\.field\s*>\s*span\s*\{/);
   const codeEditorTokenCss = editorPanelsSource.slice(
@@ -307,7 +333,13 @@ test('renderer bootstrap resolves text, confirmation, and notification modals', 
       getElementById(id) {
         return elements.get(id) || null;
       },
-      querySelectorAll() {
+      querySelectorAll(selector) {
+        if (selector === '.toolbar-menu') {
+          return [elements.get('exportRequestPanelMenu')];
+        }
+        if (selector === '.menu-trigger') {
+          return [elements.get('exportRequestPanelButton')];
+        }
         return [];
       },
       addEventListener() {}
@@ -332,7 +364,13 @@ test('renderer bootstrap binds CSV variable edit buttons and modal controls', ()
   const calls = [];
   const elements = new Map([
     ['runnerCsvVariablesButton', createElement()],
+    ['runnerCsvVariablesMenu', createElement()],
+    ['runnerToggleCsvVariablesButton', createElement()],
+    ['runnerEditCsvVariablesButton', createElement()],
     ['performanceCsvVariablesButton', createElement()],
+    ['performanceCsvVariablesMenu', createElement()],
+    ['performanceToggleCsvVariablesButton', createElement()],
+    ['performanceEditCsvVariablesButton', createElement()],
     ['closeCsvVariablesModalButton', createElement()],
     ['cancelCsvVariablesModalButton', createElement()],
     ['saveCsvVariablesModalButton', createElement()],
@@ -357,13 +395,21 @@ test('renderer bootstrap binds CSV variable edit buttons and modal controls', ()
       getElementById(id) {
         return elements.get(id) || null;
       },
-      querySelectorAll() {
+      querySelectorAll(selector) {
+        if (selector === '.toolbar-menu') {
+          return [elements.get('runnerCsvVariablesMenu'), elements.get('performanceCsvVariablesMenu')];
+        }
+        if (selector === '.menu-trigger') {
+          return [elements.get('runnerCsvVariablesButton'), elements.get('performanceCsvVariablesButton')];
+        }
         return [];
       },
       addEventListener() {}
     },
     windowObject: { addEventListener() {} },
+    onToggleRunnerCsvVariables: () => calls.push('runner-toggle-csv'),
     onEditRunnerCsvVariables: () => calls.push('runner-csv'),
+    onTogglePerformanceCsvVariables: () => calls.push('performance-toggle-csv'),
     onEditPerformanceCsvVariables: () => calls.push('performance-csv'),
     onResolveActiveModal: (value) => calls.push(`resolve:${value}`),
     onConfirmCsvVariablesModal: () => calls.push('save-csv'),
@@ -378,9 +424,15 @@ test('renderer bootstrap binds CSV variable edit buttons and modal controls', ()
     onCsvVariablesRowModeChange: (mode) => calls.push(`row-mode:${mode}`)
   });
 
+  elements.get('runnerCsvVariablesButton').dispatch('click');
+  assert.equal(elements.get('runnerCsvVariablesMenu').hidden, false);
+  elements.get('runnerToggleCsvVariablesButton').dispatch('click');
+  elements.get('runnerEditCsvVariablesButton').dispatch('click');
+  elements.get('performanceCsvVariablesButton').dispatch('click');
+  assert.equal(elements.get('performanceCsvVariablesMenu').hidden, false);
+  elements.get('performanceToggleCsvVariablesButton').dispatch('click');
+  elements.get('performanceEditCsvVariablesButton').dispatch('click');
   for (const id of [
-    'runnerCsvVariablesButton',
-    'performanceCsvVariablesButton',
     'closeCsvVariablesModalButton',
     'cancelCsvVariablesModalButton',
     'saveCsvVariablesModalButton',
@@ -401,7 +453,9 @@ test('renderer bootstrap binds CSV variable edit buttons and modal controls', ()
   elements.get('csvVariablesContinueWithoutRowsInput').dispatch('change');
 
   assert.deepEqual(calls, [
+    'runner-toggle-csv',
     'runner-csv',
+    'performance-toggle-csv',
     'performance-csv',
     'resolve:null',
     'resolve:null',
@@ -444,6 +498,12 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
   const elements = new Map([
     ['closeSettingsModalButton', createElement()],
     ['closeSettingsModalFooterButton', createElement()],
+    ['interfaceFontSelect', createElement({ tagName: 'SELECT' })],
+    ['interfaceFontSizeInput', createElement({ tagName: 'INPUT' })],
+    ['resetInterfaceTypographyButton', createElement()],
+    ['editorFontSelect', createElement({ tagName: 'SELECT' })],
+    ['editorFontSizeInput', createElement({ tagName: 'INPUT' })],
+    ['resetEditorTypographyButton', createElement()],
     ['showEditorLineNumbersInput', createElement({ tagName: 'INPUT' })],
     ['showVariableTooltipHintsInput', createElement({ tagName: 'INPUT' })],
     ['saveOnForceCloseInput', createElement({ tagName: 'INPUT' })],
@@ -475,6 +535,10 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
     windowObject: { addEventListener() {} },
     onSelectSettingsSection: (section) => calls.push(`section:${section}`),
     onSelectTheme: (theme) => calls.push(`theme:${theme}`),
+    onInterfaceTypographyChange: () => calls.push('interface-typography'),
+    onEditorTypographyChange: () => calls.push('editor-typography'),
+    onResetInterfaceTypography: () => calls.push('reset-interface-typography'),
+    onResetEditorTypography: () => calls.push('reset-editor-typography'),
     onShowEditorLineNumbersChange: () => calls.push('line-numbers'),
     onShowVariableTooltipHintsChange: () => calls.push('variable-tooltip-hints'),
     onSaveOnForceCloseChange: () => calls.push('save-on-force-close'),
@@ -486,6 +550,12 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
 
   settingsButtons.find((button) => button.dataset.settingsSection === 'tabs').dispatch('click');
   themeDarkButton.dispatch('click');
+  elements.get('interfaceFontSelect').dispatch('change');
+  elements.get('interfaceFontSizeInput').dispatch('change');
+  elements.get('resetInterfaceTypographyButton').dispatch('click');
+  elements.get('editorFontSelect').dispatch('change');
+  elements.get('editorFontSizeInput').dispatch('change');
+  elements.get('resetEditorTypographyButton').dispatch('click');
   elements.get('showEditorLineNumbersInput').dispatch('change');
   elements.get('showVariableTooltipHintsInput').dispatch('change');
   elements.get('saveOnForceCloseInput').dispatch('change');
@@ -504,6 +574,12 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
   assert.deepEqual(calls, [
     'section:tabs',
     'theme:dark',
+    'interface-typography',
+    'interface-typography',
+    'reset-interface-typography',
+    'editor-typography',
+    'editor-typography',
+    'reset-editor-typography',
     'line-numbers',
     'variable-tooltip-hints',
     'save-on-force-close',
@@ -663,12 +739,15 @@ test('renderer bootstrap binds performance creation import export run and config
     'importPerformanceTestButton',
     'exportPerformanceTestMenuButton',
     'performanceCsvVariablesButton',
-    'performanceUseCsvVariablesInput',
+    'performanceCsvVariablesMenu',
+    'performanceToggleCsvVariablesButton',
+    'performanceEditCsvVariablesButton',
     'savePerformanceTestButton',
     'deletePerformanceTestButton',
     'runPerformanceTestButton',
     'cancelPerformanceTestButton',
     'exportPerformanceTestButton',
+    'exportPerformanceResultCsvButton',
     'importPerformanceRequestButton',
     'calibratePerformanceButton',
     'closePerformanceCalibrationModalButton',
@@ -717,6 +796,12 @@ test('renderer bootstrap binds performance creation import export run and config
         if (selector === '[data-performance-safety]') {
           return performanceSafetyControls;
         }
+        if (selector === '.toolbar-menu') {
+          return [elements.get('performanceCsvVariablesMenu')];
+        }
+        if (selector === '.menu-trigger') {
+          return [elements.get('performanceCsvVariablesButton')];
+        }
         if (selector === '.tab' || selector === '.tab[data-tab-group="performance"]') {
           return [performanceTab];
         }
@@ -728,11 +813,13 @@ test('renderer bootstrap binds performance creation import export run and config
     onNewPerformanceTest: () => calls.push('new'),
     onImportPerformanceTest: () => calls.push('import-test'),
     onExportPerformanceTest: () => calls.push('export-test'),
+    onTogglePerformanceCsvVariables: () => calls.push('toggle-csv-performance'),
     onEditPerformanceCsvVariables: () => calls.push('csv-performance'),
     onSavePerformanceTest: () => calls.push('save'),
     onDeletePerformanceTest: () => calls.push('delete'),
     onRunPerformanceTest: () => calls.push('run'),
     onCancelPerformanceTest: () => calls.push('cancel'),
+    onExportPerformanceResultCsv: () => calls.push('export-result-csv'),
     onImportPerformanceRequest: () => calls.push('import-request'),
     onAddPerformanceParam: () => calls.push('add-param'),
     onAddPerformanceHeader: () => calls.push('add-header'),
@@ -755,11 +842,14 @@ test('renderer bootstrap binds performance creation import export run and config
     'importPerformanceTestButton',
     'exportPerformanceTestMenuButton',
     'performanceCsvVariablesButton',
+    'performanceToggleCsvVariablesButton',
+    'performanceEditCsvVariablesButton',
     'savePerformanceTestButton',
     'deletePerformanceTestButton',
     'runPerformanceTestButton',
     'cancelPerformanceTestButton',
     'exportPerformanceTestButton',
+    'exportPerformanceResultCsvButton',
     'importPerformanceRequestButton',
     'addPerformanceParamButton',
     'addPerformanceHeaderButton',
@@ -773,13 +863,13 @@ test('renderer bootstrap binds performance creation import export run and config
   ]) {
     elements.get(id).dispatch('click');
   }
-  elements.get('performanceUseCsvVariablesInput').dispatch('change');
   for (const control of [...performanceEnvironmentControls, ...performanceMutationControls]) {
     control.dispatch('change');
   }
   for (const control of [...performanceConfigControls, ...performanceSafetyControls]) {
     control.dispatch('input');
   }
+  performanceConfigControls[0].dispatch('change');
   performanceTab.dispatch('click');
   elements.get('performanceMethodSelect').dispatch('change');
   elements.get('performanceUrlInput').dispatch('input');
@@ -792,17 +882,19 @@ test('renderer bootstrap binds performance creation import export run and config
   elements.get('performanceDocsInput').dispatch('input');
   elements.get('performanceBinaryBodySourceInput').dispatch('input');
 
-  assert.deepEqual(calls.slice(0, 18), [
+  assert.deepEqual(calls.slice(0, 20), [
     'new',
     'new',
     'import-test',
     'export-test',
+    'toggle-csv-performance',
     'csv-performance',
     'save',
     'delete',
     'run',
     'cancel',
     'export-test',
+    'export-result-csv',
     'import-request',
     'add-param',
     'add-header',
@@ -963,6 +1055,10 @@ test('tree context menus close toolbar peers before opening', () => {
 test('renderer bootstrap binds pane save buttons', () => {
   const elements = new Map([
     ['saveRequestButton', createElement()],
+    ['exportRequestPanelButton', createElement()],
+    ['exportRequestPanelMenu', createElement()],
+    ['exportRequestPanelPostmeterButton', createElement()],
+    ['exportRequestPanelCurlButton', createElement()],
     ['saveEnvironmentButton', createElement()]
   ]);
   const calls = [];
@@ -979,13 +1075,22 @@ test('renderer bootstrap binds pane save buttons', () => {
     },
     windowObject: { addEventListener() {} },
     onSaveRequest: () => calls.push('request'),
+    onExportCurrentRequest: () => calls.push('request-export'),
+    onExportCurrentRequestCurl: () => calls.push('request-export-curl'),
     onSaveEnvironment: () => calls.push('environment')
   });
 
   elements.get('saveRequestButton').dispatch('click');
+  elements.get('exportRequestPanelButton').dispatch('click');
+  assert.equal(elements.get('exportRequestPanelMenu').hidden, false);
+  elements.get('exportRequestPanelPostmeterButton').dispatch('click');
+  elements.get('exportRequestPanelMenu').hidden = true;
+  elements.get('exportRequestPanelButton').dispatch('click');
+  assert.equal(elements.get('exportRequestPanelMenu').hidden, false);
+  elements.get('exportRequestPanelCurlButton').dispatch('click');
   elements.get('saveEnvironmentButton').dispatch('click');
 
-  assert.deepEqual(calls, ['request', 'environment']);
+  assert.deepEqual(calls, ['request', 'request-export', 'request-export-curl', 'environment']);
 });
 
 test('renderer bootstrap binds request environment and runner import/export menu actions', () => {
@@ -1266,7 +1371,8 @@ test('renderer exposes first-class runner UI and sends runner payloads through r
   assert.match(indexHtml, /id="addRunnerRequestButton"/);
   assert.match(indexHtml, /id="runnerCsvVariablesButton"/);
   assert.match(indexHtml, /id="runnerAllowEnvironmentMutation"/);
-  assert.match(indexHtml, /id="runnerUseCsvVariablesInput"/);
+  assert.match(indexHtml, /id="runnerToggleCsvVariablesButton"/);
+  assert.match(indexHtml, /id="runnerEditCsvVariablesButton"/);
   assert.match(indexHtml, /id="csvVariablesModal"/);
   assert.match(indexHtml, /id="csvVariablesFileSourceButton"/);
   assert.match(indexHtml, /id="csvVariablesInlineSourceButton"/);
@@ -1275,15 +1381,18 @@ test('renderer exposes first-class runner UI and sends runner payloads through r
   assert.match(indexHtml, /id="csvVariablesReuseFirstRowInput"/);
   assert.match(indexHtml, /id="csvVariablesLoopRowsInput"/);
   assert.match(indexHtml, /id="csvVariablesContinueWithoutRowsInput"/);
-  assert.match(indexHtml, /id="performanceUseCsvVariablesInput"/);
+  assert.match(indexHtml, /id="performanceToggleCsvVariablesButton"/);
+  assert.match(indexHtml, /id="performanceEditCsvVariablesButton"/);
+  assert.doesNotMatch(indexHtml, /id="runnerUseCsvVariablesInput"/);
+  assert.doesNotMatch(indexHtml, /id="performanceUseCsvVariablesInput"/);
   assert.doesNotMatch(indexHtml, /id="newRunnerButton"/);
   assert.match(indexHtml, /id="emptyCreateRunnerButton"[^>]*>New Runner<\/button>/);
   assert.match(bootstrapSource, /bindClick\(doc, 'newRunnerMenuButton', options\.onNewRunner\)/);
   assert.match(bootstrapSource, /bindClick\(doc, 'emptyCreateRunnerButton', options\.onNewRunner\)/);
-  assert.match(bootstrapSource, /bindClick\(doc, 'runnerCsvVariablesButton', options\.onEditRunnerCsvVariables\)/);
-  assert.match(bootstrapSource, /bindClick\(doc, 'performanceCsvVariablesButton', options\.onEditPerformanceCsvVariables\)/);
-  assert.match(bootstrapSource, /bindChange\(doc, 'runnerUseCsvVariablesInput', options\.onRunnerConfigChange\)/);
-  assert.match(bootstrapSource, /bindChange\(doc, 'performanceUseCsvVariablesInput', options\.onPerformanceConfigChange\)/);
+  assert.match(bootstrapSource, /bindClick\(doc, 'runnerToggleCsvVariablesButton', options\.onToggleRunnerCsvVariables\)/);
+  assert.match(bootstrapSource, /bindClick\(doc, 'runnerEditCsvVariablesButton', options\.onEditRunnerCsvVariables\)/);
+  assert.match(bootstrapSource, /bindClick\(doc, 'performanceToggleCsvVariablesButton', options\.onTogglePerformanceCsvVariables\)/);
+  assert.match(bootstrapSource, /bindClick\(doc, 'performanceEditCsvVariablesButton', options\.onEditPerformanceCsvVariables\)/);
   assert.match(bootstrapSource, /bindChange\(doc, 'csvVariablesReuseFirstRowInput'/);
   assert.match(bootstrapSource, /bindClick\(doc, 'confirmRunnerImportButton'/);
   assert.doesNotMatch(bootstrapSource, /newRunnerButton/);

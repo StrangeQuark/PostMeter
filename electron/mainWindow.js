@@ -18,6 +18,7 @@ const {
 
 const DEFAULT_SMOKE_ARTIFACT_TIMEOUT_MILLIS = 2_000;
 const UI_REGRESSION_SMOKE_TITLE_TIMEOUT_MILLIS = 30_000;
+const UI_TYPOGRAPHY_SMOKE_TITLE_TIMEOUT_MILLIS = 180_000;
 const UI_SMOKE_AUTH_SCHEME_NAMES = 'bearer|basic|digest|hawk|token|oauth|ntlm|negotiate|aws4-hmac-sha256|eg1-hmac-sha256';
 const UI_SMOKE_SIMPLE_AUTH_SCHEME_NAMES = 'bearer|basic|digest|hawk|token|oauth|ntlm|negotiate';
 const UI_SMOKE_AUTH_PARAMETER_PAIR_PATTERN = '[A-Za-z][A-Za-z0-9_-]*\\s*=\\s*(?:"[^"\\r\\n<>]*"|[^\\s,;\\[\\]\\\'"<>}&]+)';
@@ -100,6 +101,7 @@ function bindSmokeHooks(app, mainWindow, env) {
   const isUiWorkflowSmoke = env.POSTMETER_UI_WORKFLOW_SMOKE === '1';
   const isUiRegressionSmoke = env.POSTMETER_UI_REGRESSION_SMOKE === '1';
   const isUiSnapshotSmoke = env.POSTMETER_UI_SNAPSHOT_SMOKE === '1';
+  const isUiTypographySmoke = env.POSTMETER_UI_TYPOGRAPHY_SMOKE === '1';
   const isUiOauthSmoke = env.POSTMETER_UI_OAUTH_SMOKE === '1';
   if (env.POSTMETER_STARTUP_SMOKE === '1') {
     mainWindow.webContents.once('did-finish-load', () => {
@@ -132,6 +134,15 @@ function bindSmokeHooks(app, mainWindow, env) {
   }
   if (isUiSnapshotSmoke) {
     bindUiSnapshotSmoke(app, mainWindow, env);
+  }
+  if (isUiTypographySmoke) {
+    bindTitleSmoke(app, mainWindow, {
+      env,
+      prefix: 'PostMeter UI Typography:',
+      passTitle: 'PostMeter UI Typography:PASS',
+      timeoutMessage: 'PostMeter UI typography smoke timed out.',
+      timeoutMillis: UI_TYPOGRAPHY_SMOKE_TITLE_TIMEOUT_MILLIS
+    });
   }
   if (isUiOauthSmoke) {
     bindTitleSmoke(app, mainWindow, {
@@ -403,6 +414,9 @@ function requiredPreloadApiSurface() {
     ['runner', 'start'],
     ['runner', 'cancel'],
     ['runner', 'export'],
+    ['runner', 'estimateResultStore'],
+    ['runner', 'resultPage'],
+    ['runner', 'resultDetail'],
     ['runner', 'onProgress'],
     ['performance', 'start'],
     ['performance', 'cancel'],
@@ -411,6 +425,9 @@ function requiredPreloadApiSurface() {
     ['performance', 'importTest'],
     ['performance', 'exportTest'],
     ['performance', 'exportResult'],
+    ['performance', 'estimateResultStore'],
+    ['performance', 'resultPage'],
+    ['performance', 'resultDetail'],
     ['performance', 'onProgress']
   ];
 }
@@ -535,6 +552,10 @@ async function captureUiSmokeDomState(mainWindow) {
             snapshot: {
               enabled: searchParams.get('uiSnapshotSmoke') === '1',
               state: document.documentElement?.dataset?.uiSnapshotSmoke || ''
+            },
+            typography: {
+              enabled: searchParams.get('uiTypographySmoke') === '1',
+              state: document.documentElement?.dataset?.uiTypographySmoke || ''
             },
             oauth: {
               enabled: searchParams.get('uiOauthSmoke') === '1',
@@ -754,12 +775,14 @@ function loadQuery(env) {
   const isUiWorkflowSmoke = env.POSTMETER_UI_WORKFLOW_SMOKE === '1';
   const isUiRegressionSmoke = env.POSTMETER_UI_REGRESSION_SMOKE === '1';
   const isUiSnapshotSmoke = env.POSTMETER_UI_SNAPSHOT_SMOKE === '1';
+  const isUiTypographySmoke = env.POSTMETER_UI_TYPOGRAPHY_SMOKE === '1';
   const isUiOauthSmoke = env.POSTMETER_UI_OAUTH_SMOKE === '1';
-  return isUiWorkflowSmoke || isUiRegressionSmoke || isUiSnapshotSmoke || isUiOauthSmoke
+  return isUiWorkflowSmoke || isUiRegressionSmoke || isUiSnapshotSmoke || isUiTypographySmoke || isUiOauthSmoke
     ? {
         uiWorkflowSmoke: isUiWorkflowSmoke ? '1' : '',
         uiRegressionSmoke: isUiRegressionSmoke ? '1' : '',
         uiSnapshotSmoke: isUiSnapshotSmoke ? '1' : '',
+        uiTypographySmoke: isUiTypographySmoke ? '1' : '',
         uiOauthSmoke: isUiOauthSmoke ? '1' : '',
         uiWorkflowBaseUrl: env.POSTMETER_UI_WORKFLOW_BASE_URL || '',
         uiOauthBaseUrl: env.POSTMETER_UI_OAUTH_BASE_URL || ''

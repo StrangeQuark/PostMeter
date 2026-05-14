@@ -22,6 +22,7 @@
   min-height: 36px;
   padding: 8px 10px;
   font-family: var(--mono);
+  font-size: var(--editor-font-size);
 }
 
 #sendButton {
@@ -43,6 +44,7 @@
 
 .tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 2px;
   margin: 6px -10px 0;
   padding: 0 10px;
@@ -55,12 +57,15 @@
 }
 
 .tab {
+  min-width: 0;
   min-height: 34px;
   border: 0;
   border-radius: 0;
   background: transparent;
   color: var(--muted);
   font-weight: 700;
+  text-align: center;
+  white-space: normal;
 }
 
 .tab:hover:not(:disabled) {
@@ -171,12 +176,13 @@
   padding: 10px;
   border-radius: 6px;
   font-family: var(--mono);
+  font-size: var(--editor-font-size);
   line-height: 1.45;
   resize: none;
 }
 
-#bodyInput,
-#performanceBodyInput {
+#bodyRawPanel > .code-editor,
+#performanceBodyRawPanel > .code-editor {
   margin-top: 8px;
 }
 
@@ -266,8 +272,14 @@
 .code-editor {
   position: relative;
   width: 100%;
-  --code-editor-line-number-width: 2ch;
-  --code-editor-gutter-width: calc(var(--code-editor-line-number-width) + 8px);
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: var(--editor-font-size);
+  --code-editor-line-number-width: 1ch;
+  --code-editor-line-number-padding-inline: 8px;
+  --code-editor-gutter-width: calc(var(--code-editor-line-number-width) + (var(--code-editor-line-number-padding-inline) * 2));
 }
 
 .code-editor-highlight {
@@ -290,7 +302,10 @@
   display: block;
   font: inherit;
   letter-spacing: inherit;
-  min-width: 100%;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   tab-size: inherit;
   text-indent: inherit;
   text-transform: inherit;
@@ -306,6 +321,8 @@
   display: none;
   width: var(--code-editor-gutter-width);
   margin: 0;
+  padding-right: var(--code-editor-line-number-padding-inline);
+  padding-left: var(--code-editor-line-number-padding-inline);
   overflow: hidden;
   border-style: solid;
   border-color: var(--line) transparent var(--line) var(--line);
@@ -324,9 +341,11 @@
 
 .code-editor-line-numbers code {
   display: block;
+  box-sizing: border-box;
   font: inherit;
-  min-width: 100%;
-  padding-right: 4px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   transform-origin: 0 0;
 }
 
@@ -335,6 +354,7 @@ textarea.code-editor-input {
   position: relative;
   z-index: 1;
   width: 100%;
+  margin: 0;
   background: transparent !important;
   color: transparent !important;
   caret-color: var(--text);
@@ -344,8 +364,8 @@ textarea.code-editor-input {
 
 .code-editor.has-line-numbers .code-editor-highlight,
 .code-editor.has-line-numbers textarea.code-editor-input {
-  border-top-left-radius: 0;
-  border-bottom-left-radius: 0;
+  border-top-left-radius: 0 !important;
+  border-bottom-left-radius: 0 !important;
 }
 
 .code-editor.has-line-numbers .code-editor-highlight {
@@ -354,7 +374,7 @@ textarea.code-editor-input {
 }
 
 .code-editor.has-line-numbers textarea.code-editor-input {
-  width: calc(100% - var(--code-editor-gutter-width));
+  width: calc(100% - var(--code-editor-gutter-width)) !important;
   margin-left: var(--code-editor-gutter-width);
 }
 
@@ -521,7 +541,7 @@ textarea.code-editor-input.has-openable-variable-hover {
   background: var(--surface);
   box-shadow: var(--shadow);
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
   line-height: 1.4;
   overflow-wrap: anywhere;
   pointer-events: none;
@@ -543,10 +563,10 @@ textarea.code-editor-input.has-openable-variable-hover {
 
   .code-editor.has-line-numbers .code-editor-highlight,
   .code-editor.has-line-numbers textarea.code-editor-input {
-    width: 100%;
+    width: 100% !important;
     margin-left: 0;
-    border-top-left-radius: 6px;
-    border-bottom-left-radius: 6px;
+    border-top-left-radius: 6px !important;
+    border-bottom-left-radius: 6px !important;
   }
 
   .code-editor.has-line-numbers .code-editor-highlight {
@@ -580,10 +600,10 @@ textarea.code-editor-input.has-openable-variable-hover {
 
 :root[data-forced-colors="active"] .code-editor.has-line-numbers .code-editor-highlight,
 :root[data-forced-colors="active"] .code-editor.has-line-numbers textarea.code-editor-input {
-  width: 100%;
+  width: 100% !important;
   margin-left: 0;
-  border-top-left-radius: 6px;
-  border-bottom-left-radius: 6px;
+  border-top-left-radius: 6px !important;
+  border-bottom-left-radius: 6px !important;
 }
 
 :root[data-forced-colors="active"] .code-editor.has-line-numbers .code-editor-highlight {
@@ -616,7 +636,7 @@ textarea.code-editor-input.has-openable-variable-hover {
 .script-field textarea {
   min-height: 220px;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--editor-font-size);
   line-height: 1.45;
   resize: vertical;
 }
@@ -708,7 +728,7 @@ textarea.code-editor-input.has-openable-variable-hover {
   overflow: hidden;
   color: var(--muted);
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--editor-font-size);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -750,7 +770,7 @@ textarea.code-editor-input.has-openable-variable-hover {
 
 .script-results-header h3 {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--ui-font-size-md);
 }
 
 .script-results-title-row {
@@ -762,7 +782,7 @@ textarea.code-editor-input.has-openable-variable-hover {
 
 .script-results-count {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -772,7 +792,7 @@ textarea.code-editor-input.has-openable-variable-hover {
   align-items: center;
   gap: 5px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -781,7 +801,7 @@ textarea.code-editor-input.has-openable-variable-hover {
   width: 92px;
   min-height: 24px;
   padding: 2px 6px;
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
 }
 
 .test-result-list {
@@ -813,7 +833,7 @@ textarea.code-editor-input.has-openable-variable-hover {
   min-width: 58px;
   padding: 3px 6px;
   border-radius: 4px;
-  font-size: 11px;
+  font-size: var(--ui-font-size-xs);
   font-weight: 800;
   text-align: center;
 }
@@ -850,7 +870,7 @@ textarea.code-editor-input.has-openable-variable-hover {
   margin-top: 4px;
   color: var(--muted);
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--editor-font-size);
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
@@ -878,6 +898,7 @@ textarea.code-editor-input.has-openable-variable-hover {
   background: var(--surface-muted);
   color: var(--muted);
   font-family: var(--mono);
+  font-size: var(--editor-font-size);
   line-height: 1.45;
   white-space: pre-wrap;
 }
@@ -893,7 +914,7 @@ textarea.code-editor-input.has-openable-variable-hover {
   min-height: 260px;
   padding: 10px;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--editor-font-size);
   line-height: 1.45;
   resize: vertical;
 }
@@ -907,13 +928,18 @@ textarea.code-editor-input.has-openable-variable-hover {
 
 .muted-inline {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
   align-self: center;
 }
 
 .cookies-table {
   display: grid;
   gap: 8px;
+}
+
+#cookiesTab > .environment-actions,
+#performanceCookiesTab > .environment-actions {
+  margin-bottom: 8px;
 }
 
 .cookie-row {
@@ -925,7 +951,7 @@ textarea.code-editor-input.has-openable-variable-hover {
 
 .section-heading {
   margin: 14px 0 8px;
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
   color: var(--muted);
   text-transform: uppercase;
 }
@@ -997,7 +1023,7 @@ textarea.code-editor-input.has-openable-variable-hover {
 
 .oauth-progress-title {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--ui-font-size-sm);
   font-weight: 800;
 }
 

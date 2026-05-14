@@ -161,7 +161,8 @@ Known gaps:
 Status:
 
 - The legacy local Load Test panel, runtime, result formatting, and JMeter import/export path have been removed.
-- PostMeter supports local first-class saved Performance tests for seven explicit types: Latency, RPS / throughput, Concurrency, Stress, Spike, Soak, and Ramp.
+- PostMeter supports local first-class saved Performance tests for eight explicit types: Full Endpoint Diagnosis, Latency, RPS / throughput, Concurrency, Stress, Spike, Soak, and Ramp.
+- Full Endpoint Diagnosis is a one-click local endpoint report with Quick, Medium, and Extended scopes. The scope chooses the diagnostic request budget, automatically raises the duration cap for deeper runs, executes bounded preflight, HEAD/OPTIONS probe, warmup, baseline, throughput, spike, mini-soak, and recovery stages, then exports UAT-friendly CSV diagnostics for transport timings, endpoint behavior, passive security/configuration signals, and local-client confidence.
 - Performance request import is a deep-copy operation from Collections. Performance edits do not mutate collection requests.
 - Manual request entry creates the same local request-copy shape without source collection metadata.
 - Environment behavior is copy-vs-mutate: saved environments remain unchanged unless the Performance test explicitly allows environment mutation.

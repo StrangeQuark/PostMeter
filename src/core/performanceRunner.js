@@ -1,79 +1,157 @@
 const crypto = require('node:crypto');
+const http = require('node:http');
+const https = require('node:https');
+const { monitorEventLoopDelay } = require('node:perf_hooks');
 const { csvVariableIterationRows, runRunner } = require('./collectionRunner');
 const { csvVariablesEnabled } = require('./csvVariables');
+const { buildUrl, sendRequest } = require('./httpClient');
 const {
   performanceTestModel
 } = require('./models');
+const { normalizeCapturePolicy } = require('./resultCapturePolicy');
 const {
   assertPerformanceTestPayload
 } = require('./ipcValidation');
+const {
+  DIAGNOSIS_TYPE,
+  buildDiagnosisStages,
+  diagnosisEffectiveConcurrency,
+  diagnosisPlannedRequestCount,
+  summarizeEndpointDiagnosis
+} = require('./performanceDiagnosis');
+
+const DEFAULT_PERFORMANCE_REQUEST_TIMEOUT_MILLIS = 10000;
+const MAX_PERFORMANCE_REQUEST_TIMEOUT_MILLIS = 3 * 60 * 1000;
 
 async function runPerformanceTest(performanceTest, environment, options = {}) {
   const normalized = performanceTestModel(performanceTest);
   assertPerformanceTestPayload(normalized);
   const plan = createPerformancePlan(normalized);
+  const capturePolicy = normalizeCapturePolicy(normalized.capturePolicy, 'performance', {
+    diagnostic: normalized.type === DIAGNOSIS_TYPE,
+    plannedRequests: plan.totalRequests
+  });
   const startedAt = new Date().toISOString();
   const startedMillis = Date.now();
   const progress = typeof options.onProgress === 'function' ? options.onProgress : () => {};
   const samples = [];
+  const summaryTracker = createPerformanceSummaryTracker();
+  const diagnosisSummarySamples = normalized.type === DIAGNOSIS_TYPE ? [] : null;
+  const retainSamples = options.retainSamples !== false;
+  const resultWriter = typeof options.resultWriter?.recordPerformanceSample === 'function' ? options.resultWriter : null;
   const useCsvVariables = csvVariablesEnabled(normalized.csvVariables);
   const iterationRows = await csvVariableIterationRows(normalized.csvVariables, plan.totalRequests);
   let currentEnvironment = cloneJson(environment) || { id: 'runtime', name: 'Runtime', variables: [] };
   let currentCookies = Array.isArray(options.cookieJar) ? cloneJson(options.cookieJar) : [];
   let nextIteration = 0;
   let activeRequests = 0;
+  let maxActiveRequests = 0;
   const endsAtMillis = plan.durationMillis > 0 ? startedMillis + plan.durationMillis : 0;
+  const performanceContext = createPerformanceRunContext(normalized, plan);
+  const diagnosisContext = normalized.type === DIAGNOSIS_TYPE ? performanceContext : null;
+  const eventLoopMonitor = diagnosisContext ? monitorEventLoopDelay({ resolution: 20 }) : null;
+  const memoryStarted = diagnosisContext ? process.memoryUsage().heapUsed : 0;
+  const requestTimeoutMillis = normalizePerformanceRequestTimeoutMillis(options.requestTimeoutMillis);
+  const collectTransportTimings = normalized.type === DIAGNOSIS_TYPE || capturePolicy.transportTimings === true;
+  eventLoopMonitor?.enable();
 
-  for (const stage of plan.stages) {
-    if (options.signal?.aborted === true || (endsAtMillis > 0 && Date.now() >= endsAtMillis)) {
-      break;
-    }
-    let stageNextIteration = 0;
-    const workerCount = Math.min(stage.concurrency, stage.totalRequests);
-    const workers = Array.from({ length: workerCount }, async () => {
-      while (true) {
-        if (options.signal?.aborted === true) {
-          return;
-        }
-        if (endsAtMillis > 0 && Date.now() >= endsAtMillis) {
-          return;
-        }
-        const stageIteration = stageNextIteration;
-        stageNextIteration += 1;
-        if (stageIteration >= stage.totalRequests || nextIteration >= plan.totalRequests) {
-          return;
-        }
-        const iteration = nextIteration;
-        nextIteration += 1;
-        activeRequests += 1;
-        const sample = await executeIteration(normalized, currentEnvironment, currentCookies, iteration, {
-          ...options,
-          iterationData: useCsvVariables ? (iterationRows[iteration] || []) : (options.iterationData || [])
-        });
-        activeRequests -= 1;
-        samples.push(sample.publicSample);
-        if (sample.environment) {
-          currentEnvironment = sample.environment;
-        }
-        if (Array.isArray(sample.cookies)) {
-          currentCookies = sample.cookies;
-        }
-        progress({
-          completedRequests: samples.length,
-          totalRequests: plan.totalRequests,
-          activeRequests,
-          requestId: normalized.request.id,
-          requestName: normalized.request.name,
-          passed: sample.publicSample.passed === true,
-          durationMillis: sample.publicSample.durationMillis || 0
-        });
+  try {
+    for (const [stageIndex, stage] of plan.stages.entries()) {
+      if (options.signal?.aborted === true || (endsAtMillis > 0 && Date.now() >= endsAtMillis)) {
+        break;
       }
-    });
-    await Promise.all(workers);
+      let stageNextIteration = 0;
+      const workerCount = Math.min(stage.concurrency, stage.totalRequests);
+      const workers = Array.from({ length: workerCount }, async () => {
+        while (true) {
+          if (options.signal?.aborted === true) {
+            return;
+          }
+          if (endsAtMillis > 0 && Date.now() >= endsAtMillis) {
+            return;
+          }
+          const stageIteration = stageNextIteration;
+          stageNextIteration += 1;
+          if (stageIteration >= stage.totalRequests || nextIteration >= plan.totalRequests) {
+            return;
+          }
+          const iteration = nextIteration;
+          nextIteration += 1;
+          const scheduledAtMillis = Date.now();
+          activeRequests += 1;
+          maxActiveRequests = Math.max(maxActiveRequests, activeRequests);
+          const sample = await executeIteration(normalized, currentEnvironment, currentCookies, iteration, {
+            ...options,
+            collectTransportTimings,
+            diagnosisContext,
+            performanceContext,
+            requestTimeoutMillis,
+            iterationData: useCsvVariables ? (iterationRows[iteration] || []) : (options.iterationData || [])
+          }, {
+            stage,
+            stageIndex: stageIndex + 1,
+            scheduledAtMillis
+          });
+          activeRequests -= 1;
+          const sampleIndex = summaryTracker.count;
+          summaryTracker.record(sample.publicSample);
+          if (diagnosisSummarySamples) {
+            diagnosisSummarySamples.push(summarySampleForPerformance(sample.publicSample));
+          }
+          if (retainSamples) {
+            samples.push(sample.publicSample);
+          }
+          if (resultWriter) {
+            await resultWriter.recordPerformanceSample(sample.publicSample, {
+              index: sampleIndex,
+              totalRequests: plan.totalRequests
+            });
+          }
+          if (sample.environment) {
+            currentEnvironment = sample.environment;
+          }
+          if (Array.isArray(sample.cookies)) {
+            currentCookies = sample.cookies;
+          }
+          progress({
+            completedRequests: summaryTracker.count,
+            totalRequests: plan.totalRequests,
+            activeRequests,
+            phase: stage.phase || stage.name,
+            stageIndex: stageIndex + 1,
+            stageCount: plan.stages.length,
+            requestId: normalized.request.id,
+            requestName: normalized.request.name,
+            passed: sample.publicSample.passed === true,
+            durationMillis: sample.publicSample.durationMillis || 0
+          });
+        }
+      });
+      await Promise.all(workers);
+    }
+  } finally {
+    eventLoopMonitor?.disable();
+    performanceContext?.destroy?.();
   }
   const completedAt = new Date().toISOString();
-  const summary = summarizeSamples(samples, Date.now() - startedMillis);
-  const failedRequests = samples.filter((sample) => sample.passed !== true).length;
+  const summary = summaryTracker.summarize(Date.now() - startedMillis);
+  if (diagnosisContext) {
+    const summarySamples = diagnosisSummarySamples || [];
+    summary.diagnosis = summarizeEndpointDiagnosis(summarySamples, {
+      cancelled: options.signal?.aborted === true,
+      config: normalized.config,
+      csvVariablesEnabled: useCsvVariables,
+      eventLoopDelayMillis: eventLoopMonitor ? Math.round(eventLoopMonitor.percentile(95) / 1000000) : 0,
+      maxActiveRequests,
+      maxConcurrency: plan.concurrency,
+      memoryDeltaBytes: Math.max(0, process.memoryUsage().heapUsed - memoryStarted),
+      plannedRequests: plan.totalRequests,
+      request: normalized.request,
+      safetyLimited: summaryTracker.count < plan.totalRequests,
+      safetyLimits: normalized.safetyLimits
+    });
+  }
+  const failedRequests = summaryTracker.failedRequests;
   const result = {
     id: cryptoRandomId(),
     performanceTestId: normalized.id,
@@ -82,8 +160,8 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
     environmentId: normalized.environmentId,
     environmentMutationAllowed: normalized.allowEnvironmentMutation === true,
     totalRequests: plan.totalRequests,
-    completedRequests: samples.length,
-    successfulRequests: samples.length - failedRequests,
+    completedRequests: summaryTracker.count,
+    successfulRequests: summaryTracker.count - failedRequests,
     failedRequests,
     passed: failedRequests === 0 && options.signal?.aborted !== true,
     cancelled: options.signal?.aborted === true,
@@ -93,7 +171,7 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
     config: normalized.config,
     safetyLimits: normalized.safetyLimits,
     summary,
-    samples: samples.sort((left, right) => left.iteration - right.iteration),
+    samples: retainSamples ? samples.sort((left, right) => left.iteration - right.iteration) : [],
     environment: currentEnvironment,
     cookies: currentCookies
   };
@@ -103,21 +181,26 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
   return result;
 }
 
-async function executeIteration(performanceTest, environment, cookies, iteration, options) {
+async function executeIteration(performanceTest, environment, cookies, iteration, options, execution = {}) {
   const startedAt = new Date().toISOString();
+  const startedMillis = Date.now();
+  const stage = execution.stage || {};
+  const request = requestForPerformanceStage(performanceTest.request, stage);
   const runner = {
     id: `${performanceTest.id}:iteration:${iteration + 1}`,
     name: performanceTest.name,
     environmentId: performanceTest.environmentId,
     allowEnvironmentMutation: performanceTest.allowEnvironmentMutation,
     stopOnFailure: false,
-    requests: [cloneJson(performanceTest.request)]
+    requests: [request]
   };
   try {
     const result = await runRunner(runner, cloneJson(environment), {
       ...runnerOptions(options),
       allowEnvironmentMutation: performanceTest.allowEnvironmentMutation,
       cookieJar: cloneJson(cookies),
+      includeTransportDiagnostics: options.collectTransportTimings === true || performanceTest.type === DIAGNOSIS_TYPE,
+      sendRequest: performanceSendRequestForStage(options, stage),
       signal: options.signal
     });
     const requestResult = result.results?.[0] || {};
@@ -132,10 +215,18 @@ async function executeIteration(performanceTest, environment, cookies, iteration
         requestDisplayName: requestResult.requestDisplayName || performanceTest.request.name,
         requestMethod: requestResult.requestMethod || performanceTest.request.method || '',
         requestUrl: requestResult.requestUrl || performanceTest.request.url || '',
+        finalUrl: requestResult.finalUrl || requestResult.requestUrl || '',
+        phase: stage.phase || stage.name || performanceTest.type,
+        stageName: stage.name || performanceTest.type,
+        stageIndex: execution.stageIndex || 0,
+        stageConcurrency: stage.concurrency || 1,
         statusCode: Number(requestResult.statusCode || 0),
         durationMillis: Number(requestResult.durationMillis || 0),
+        schedulerLagMillis: Math.max(0, Date.now() - Number(execution.scheduledAtMillis || Date.now())),
         responseBody: requestResult.responseBody || '',
         responseBytes: Number(requestResult.responseBytes || 0),
+        responseHeaders: requestResult.responseHeaders || {},
+        timings: requestResult.timings || {},
         passed: requestResult.passed === true,
         error: requestResult.error || '',
         preRequestScriptResult: requestResult.preRequestScriptResult,
@@ -155,10 +246,18 @@ async function executeIteration(performanceTest, environment, cookies, iteration
         requestDisplayName: performanceTest.request.name,
         requestMethod: performanceTest.request.method || '',
         requestUrl: performanceTest.request.url || '',
+        finalUrl: '',
+        phase: stage.phase || stage.name || performanceTest.type,
+        stageName: stage.name || performanceTest.type,
+        stageIndex: execution.stageIndex || 0,
+        stageConcurrency: stage.concurrency || 1,
         statusCode: 0,
-        durationMillis: 0,
+        durationMillis: Math.max(0, Date.now() - startedMillis),
+        schedulerLagMillis: Math.max(0, Date.now() - Number(execution.scheduledAtMillis || Date.now())),
         responseBody: '',
         responseBytes: 0,
+        responseHeaders: {},
+        timings: {},
         passed: false,
         error: error.message || String(error),
         preRequestScriptResult: undefined,
@@ -172,16 +271,132 @@ async function executeIteration(performanceTest, environment, cookies, iteration
 function runnerOptions(options) {
   const {
     abortController,
+    diagnosisContext,
     onProgress,
+    performanceContext,
+    collectTransportTimings,
+    requestTimeoutMillis,
+    resultWriter,
+    retainSamples,
     ...rest
   } = options || {};
   return rest;
+}
+
+function summarySampleForPerformance(sample = {}) {
+  return {
+    iteration: sample.iteration,
+    startedAt: sample.startedAt,
+    requestId: sample.requestId,
+    requestName: sample.requestName,
+    requestDisplayName: sample.requestDisplayName,
+    requestMethod: sample.requestMethod,
+    requestUrl: sample.requestUrl,
+    finalUrl: sample.finalUrl,
+    phase: sample.phase,
+    stageName: sample.stageName,
+    stageIndex: sample.stageIndex,
+    stageConcurrency: sample.stageConcurrency,
+    statusCode: sample.statusCode,
+    durationMillis: sample.durationMillis,
+    schedulerLagMillis: sample.schedulerLagMillis,
+    responseBody: sample.responseBody,
+    responseBytes: sample.responseBytes,
+    responseHeaders: sample.responseHeaders,
+    timings: sample.timings,
+    passed: sample.passed,
+    error: sample.error
+  };
+}
+
+function requestForPerformanceStage(request, stage = {}) {
+  const nextRequest = cloneJson(request) || {};
+  if (stage.methodOverride) {
+    nextRequest.method = stage.methodOverride;
+    nextRequest.bodyType = 'NONE';
+    nextRequest.body = '';
+    nextRequest.postmanBody = {};
+    nextRequest.graphql = {};
+  }
+  return nextRequest;
+}
+
+function performanceSendRequestForStage(options = {}, stage = {}) {
+  const context = options.performanceContext || options.diagnosisContext;
+  if (!context) {
+    return options.sendRequest;
+  }
+  const baseSendRequest = options.sendRequest || sendRequest;
+  return async (request, environment, sendOptions = {}) => {
+    const agent = stage.coldConnection === true ? false : context.agentFor(request, environment);
+    return baseSendRequest(request, environment, {
+      ...sendOptions,
+      collectTimings: options.collectTransportTimings === true,
+      forceNode: true,
+      timeoutMillis: options.requestTimeoutMillis,
+      agent
+    });
+  };
+}
+
+function createPerformanceRunContext(performanceTest, plan = {}) {
+  const maxSockets = Math.max(1, Math.min(
+    integerAtLeast(plan.concurrency, 1, 1),
+    integerAtLeast(performanceTest.safetyLimits?.maxConcurrency, 1, 10)
+  ));
+  const httpAgent = new http.Agent({
+    keepAlive: true,
+    keepAliveMsecs: 1000,
+    maxSockets,
+    maxTotalSockets: maxSockets,
+    maxFreeSockets: Math.min(16, maxSockets)
+  });
+  const httpsAgent = new https.Agent({
+    keepAlive: true,
+    keepAliveMsecs: 1000,
+    maxSockets,
+    maxTotalSockets: maxSockets,
+    maxFreeSockets: Math.min(16, maxSockets)
+  });
+  return {
+    agentFor(request, environment) {
+      try {
+        const url = buildUrl(request, environment);
+        return url.protocol === 'https:' ? httpsAgent : httpAgent;
+      } catch {
+        return httpAgent;
+      }
+    },
+    destroy() {
+      httpAgent.destroy();
+      httpsAgent.destroy();
+    }
+  };
+}
+
+function normalizePerformanceRequestTimeoutMillis(value) {
+  const number = Number(value == null ? DEFAULT_PERFORMANCE_REQUEST_TIMEOUT_MILLIS : value);
+  if (!Number.isFinite(number) || number <= 0) {
+    return DEFAULT_PERFORMANCE_REQUEST_TIMEOUT_MILLIS;
+  }
+  return Math.max(1, Math.min(MAX_PERFORMANCE_REQUEST_TIMEOUT_MILLIS, Math.floor(number)));
 }
 
 function createPerformancePlan(performanceTest) {
   const type = performanceTest.type || 'latency';
   const config = performanceTest.config || {};
   const safetyLimits = performanceTest.safetyLimits || {};
+  if (type === DIAGNOSIS_TYPE) {
+    const stages = buildDiagnosisStages(config, safetyLimits);
+    const totalRequests = stages.reduce((total, stage) => total + stage.totalRequests, 0);
+    const maxDurationSeconds = integerAtLeast(safetyLimits.maxDurationSeconds, 0, 0);
+    return {
+      totalRequests,
+      concurrency: Math.min(totalRequests, diagnosisEffectiveConcurrency(config, safetyLimits)),
+      durationMillis: maxDurationSeconds > 0 ? maxDurationSeconds * 1000 : 0,
+      stages
+    };
+  }
   const totalRequests = Math.min(
     plannedRequestCount(type, config, safetyLimits),
     integerAtLeast(safetyLimits.maxTotalRequests, 1, 1)
@@ -204,6 +419,9 @@ function createPerformancePlan(performanceTest) {
 }
 
 function buildPerformanceStages(type, config, plan) {
+  if (type === DIAGNOSIS_TYPE) {
+    return buildDiagnosisStages(config, { maxTotalRequests: plan.totalRequests, maxConcurrency: plan.maxConcurrency });
+  }
   if (type === 'stress' || type === 'ramp') {
     return buildSteppedStages(config, plan);
   }
@@ -236,6 +454,9 @@ function buildSteppedStages(config, plan) {
 }
 
 function plannedRequestCount(type, config, safetyLimits) {
+  if (type === DIAGNOSIS_TYPE) {
+    return diagnosisPlannedRequestCount(config, safetyLimits);
+  }
   if (type === 'soak') {
     return integerAtLeast(safetyLimits.maxTotalRequests, 1, 1);
   }
@@ -249,6 +470,9 @@ function plannedRequestCount(type, config, safetyLimits) {
 }
 
 function plannedConcurrency(type, config) {
+  if (type === DIAGNOSIS_TYPE) {
+    return diagnosisEffectiveConcurrency(config, { maxConcurrency: 25 });
+  }
   if (type === 'latency') {
     return 1;
   }
@@ -269,33 +493,59 @@ function integerAtLeast(value, min, fallback) {
   return Number.isFinite(number) && number >= min ? Math.floor(number) : fallback;
 }
 
-function summarizeSamples(samples, wallClockMillis) {
-  const durations = samples
-    .map((sample) => Number(sample.durationMillis || 0))
-    .filter((duration) => Number.isFinite(duration))
-    .sort((left, right) => left - right);
+function createPerformanceSummaryTracker() {
+  const durations = [];
   const statusCodes = {};
   const errors = {};
-  for (const sample of samples) {
-    const statusCode = String(sample.statusCode || 0);
-    statusCodes[statusCode] = (statusCodes[statusCode] || 0) + 1;
-    if (sample.error) {
-      errors[sample.error] = (errors[sample.error] || 0) + 1;
-    }
-  }
-  const totalDuration = durations.reduce((sum, duration) => sum + duration, 0);
+  let completedRequests = 0;
+  let failedRequests = 0;
   return {
-    minDurationMillis: durations[0] || 0,
-    maxDurationMillis: durations.at(-1) || 0,
-    averageDurationMillis: durations.length ? totalDuration / durations.length : 0,
-    p50DurationMillis: percentile(durations, 0.5),
-    p90DurationMillis: percentile(durations, 0.9),
-    p95DurationMillis: percentile(durations, 0.95),
-    p99DurationMillis: percentile(durations, 0.99),
-    requestsPerSecond: wallClockMillis > 0 ? samples.length / (wallClockMillis / 1000) : 0,
-    statusCodes,
-    errors
+    get count() {
+      return completedRequests;
+    },
+    get failedRequests() {
+      return failedRequests;
+    },
+    record(sample = {}) {
+      completedRequests += 1;
+      if (sample.passed !== true) {
+        failedRequests += 1;
+      }
+      const duration = Number(sample.durationMillis || 0);
+      if (Number.isFinite(duration)) {
+        durations.push(duration);
+      }
+      const statusCode = String(sample.statusCode || 0);
+      statusCodes[statusCode] = (statusCodes[statusCode] || 0) + 1;
+      if (sample.error) {
+        errors[sample.error] = (errors[sample.error] || 0) + 1;
+      }
+    },
+    summarize(wallClockMillis) {
+      const sortedDurations = durations.slice().sort((left, right) => left - right);
+      const totalDuration = sortedDurations.reduce((sum, duration) => sum + duration, 0);
+      return {
+        minDurationMillis: sortedDurations[0] || 0,
+        maxDurationMillis: sortedDurations.at(-1) || 0,
+        averageDurationMillis: sortedDurations.length ? totalDuration / sortedDurations.length : 0,
+        p50DurationMillis: percentile(sortedDurations, 0.5),
+        p90DurationMillis: percentile(sortedDurations, 0.9),
+        p95DurationMillis: percentile(sortedDurations, 0.95),
+        p99DurationMillis: percentile(sortedDurations, 0.99),
+        requestsPerSecond: wallClockMillis > 0 ? completedRequests / (wallClockMillis / 1000) : 0,
+        statusCodes: { ...statusCodes },
+        errors: { ...errors }
+      };
+    }
   };
+}
+
+function summarizeSamples(samples, wallClockMillis) {
+  const tracker = createPerformanceSummaryTracker();
+  for (const sample of samples) {
+    tracker.record(sample);
+  }
+  return tracker.summarize(wallClockMillis);
 }
 
 function percentile(values, rank) {

@@ -47,8 +47,34 @@ const FILE_EXTENSION_CONTENT_TYPES = new Map(Object.entries({
 }));
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 const THEME_OPTIONS = ['system', 'light', 'dark'];
+const DEFAULT_INTERFACE_FONT = 'default';
+const DEFAULT_INTERFACE_FONT_SIZE = 13;
+const MIN_INTERFACE_FONT_SIZE = 11;
+const MAX_INTERFACE_FONT_SIZE = 18;
+const DEFAULT_EDITOR_FONT = 'default';
+const DEFAULT_EDITOR_FONT_SIZE = 12;
+const MIN_EDITOR_FONT_SIZE = 11;
+const MAX_EDITOR_FONT_SIZE = 20;
+const DEFAULT_INTERFACE_FONT_STACK = 'Inter, "Segoe UI", Arial, sans-serif';
+const DEFAULT_EDITOR_FONT_STACK = '"JetBrains Mono", "SFMono-Regular", Consolas, monospace';
+const TYPOGRAPHY_FONT_STACKS = Object.freeze({
+  system: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+  'segoe-ui': '"Segoe UI", Arial, sans-serif',
+  arial: 'Arial, Helvetica, sans-serif',
+  helvetica: 'Helvetica, Arial, sans-serif',
+  verdana: 'Verdana, Geneva, sans-serif',
+  tahoma: 'Tahoma, Geneva, sans-serif',
+  georgia: 'Georgia, "Times New Roman", serif',
+  'system-mono': 'ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace',
+  'jetbrains-mono': '"JetBrains Mono", "SFMono-Regular", Consolas, monospace',
+  'sf-mono': '"SFMono-Regular", "SF Mono", Menlo, monospace',
+  consolas: 'Consolas, "Liberation Mono", monospace',
+  menlo: 'Menlo, Monaco, Consolas, monospace',
+  monaco: 'Monaco, Menlo, Consolas, monospace',
+  'courier-new': '"Courier New", Courier, monospace'
+});
 const EXECUTION_RESULT_PAGE_SIZE = 100;
-const MAX_RUNNER_REQUEST_ITERATIONS = 1000;
+const MAX_RUNNER_REQUEST_ITERATIONS = 1000000;
 const POSTMETER_USER_AGENT = 'PostMeter/0.2.0';
 const BODY_METHOD_SET = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const AUTO_HEADER_PLACEHOLDER = '<calculated when request is sent>';
@@ -65,7 +91,7 @@ const TAB_PANEL_IDS = {
   folder: ['folderOverviewTab', 'folderAuthTab', 'folderScriptsTab', 'folderLevelVariablesTab'],
   results: ['responseTab', 'responseHeadersTab', 'responseCookiesTab', 'testResultsTab', 'visualizerTab'],
   performanceRequest: ['performanceParamsTab', 'performanceHeadersTab', 'performanceAuthTab', 'performanceCookiesTab', 'performanceBodyTab', 'performanceScriptsTab', 'performanceVariablesTab', 'performanceDocsTab'],
-  performance: ['latencyTab', 'throughputTab', 'concurrencyTab', 'stressTab', 'spikeTab', 'soakTab', 'rampTab'],
+  performance: ['diagnosisTab', 'latencyTab', 'throughputTab', 'concurrencyTab', 'stressTab', 'spikeTab', 'soakTab', 'rampTab'],
   performanceOutput: ['performanceOutputResultsTab', 'performanceOutputRequestsTab', 'performanceOutputGraphsTab']
 };
 
@@ -107,6 +133,8 @@ let runnerExecutionPage = 0;
 let performanceExecutionPage = 0;
 let runnerExecutionStatusFilter = 'all';
 let performanceExecutionStatusFilter = 'all';
+let runnerExecutionRenderToken = 0;
+let performanceExecutionRenderToken = 0;
 let lastResponse = RENDERER_STATE_DEFAULTS.lastResponse;
 let lastVaultMetadata = null;
 let lastVaultMetadataWorkspaceId = null;
@@ -153,6 +181,7 @@ const $ = (id) => document.getElementById(id);
 const {
   PERFORMANCE_TEST_TYPES: RENDERER_PERFORMANCE_TEST_TYPES,
   MAX_SAFETY_LIMITS: PERFORMANCE_MAX_SAFETY_LIMITS,
+  DIAGNOSIS_SCOPE_PROFILES,
   cloneRequestForPerformanceTest,
   newPerformanceTestObject,
   normalizePerformanceTest,
@@ -169,6 +198,11 @@ const {
   normalizeCsvVariableData,
   parseCsvVariableSchema
 } = PostMeterCsvVariables;
+const {
+  HIGH_VOLUME_REQUESTS: RESULT_CAPTURE_HIGH_VOLUME_REQUESTS,
+  VERY_HIGH_VOLUME_REQUESTS: RESULT_CAPTURE_VERY_HIGH_VOLUME_REQUESTS,
+  normalizeCapturePolicy: normalizeResultCapturePolicy
+} = PostMeterResultCapturePolicy;
 const {
   collectAuthFromEditor: collectRequestAuthFromEditor,
   renderAuthEditor: renderRequestAuthEditor,
@@ -475,6 +509,7 @@ initializeRenderer({
     queueUiWorkflowSmoke();
     queueUiRegressionSmoke();
     queueUiSnapshotSmoke();
+    queueUiTypographySmoke();
     queueUiOauthSmoke();
     markUiWorkflowStartupStep('after-smoke-queue');
   }
@@ -530,6 +565,8 @@ function bindUi() {
     onNewWorkspace: () => { void newWorkspace(); },
     onNewEnvironment: () => newEnvironment(),
     onSaveRequest: () => { void saveRequestFromPane(); },
+    onExportCurrentRequest: () => { void exportRequestFromPane('postmeter'); },
+    onExportCurrentRequestCurl: () => { void exportRequestFromPane('curl'); },
     onSaveCollection: () => { void saveCollectionFromPane(); },
     onSaveFolder: () => { void saveFolderFromPane(); },
     onSaveEnvironment: () => { void saveEnvironmentFromPane(); },
@@ -552,6 +589,10 @@ function bindUi() {
     onOpenSettings: () => { openSettingsModalSafely(); },
     onSelectSettingsSection: selectSettingsSection,
     onSelectTheme: (themeOption) => setThemePreference(themeOption, { save: true }),
+    onInterfaceTypographyChange: () => setInterfaceTypographyFromControls({ save: true }),
+    onEditorTypographyChange: () => setEditorTypographyFromControls({ save: true }),
+    onResetInterfaceTypography: () => resetInterfaceTypography({ save: true }),
+    onResetEditorTypography: () => resetEditorTypography({ save: true }),
     onSaveOnForceCloseChange: () => setSaveOnForceClose($('saveOnForceCloseInput')?.checked === true, { save: true }),
     onCloseModalsOnBackdropClickChange: () => setCloseModalsOnBackdropClick($('closeModalsOnBackdropClickInput')?.checked === true, { save: true }),
     onIncludePrereleasesChange: () => setIncludePrereleases($('includePrereleasesInput')?.checked === true, { save: true }),
@@ -590,14 +631,19 @@ function bindUi() {
     onCancelCollectionRun: cancelCollectionRun,
     onExportRunnerJson: () => exportRunnerResult('json'),
     onExportRunnerCsv: () => exportRunnerResult('csv'),
+    onToggleRunnerCsvVariables: toggleActiveRunnerCsvVariables,
+    onToggleRunnerCaptureSettings: () => toggleCaptureSettingsPanel('runner'),
     onSaveRunner: () => { void saveRunnerFromPane(); },
     onDeleteRunner: () => { void deleteRunner(); },
     onAddRunnerRequest: (event) => showAddRunnerRequestMenu(event),
+    onTogglePerformanceCsvVariables: toggleActivePerformanceCsvVariables,
+    onTogglePerformanceCaptureSettings: () => toggleCaptureSettingsPanel('performance'),
     onSavePerformanceTest: () => { void savePerformanceTestFromPane(); },
     onDeletePerformanceTest: () => { void deletePerformanceTest(); },
     onRunPerformanceTest: () => { void runActivePerformanceTest(); },
     onCancelPerformanceTest: () => { void cancelPerformanceTestRun(); },
     onExportPerformanceTest: () => { void exportPerformanceTestFromPicker(); },
+    onExportPerformanceResultCsv: () => { void exportActivePerformanceResultCsv(); },
     onImportPerformanceRequest: () => { void promptAndImportPerformanceRequest(); },
     onAddPerformanceParam: () => addPerformancePair('queryParams'),
     onAddPerformanceHeader: () => addPerformancePair('headers'),
@@ -1950,8 +1996,8 @@ function collectRunnerAndMarkDirty() {
   refreshVariableHighlights();
 }
 
-function collectPerformanceTestAndMarkDirty() {
-  collectPerformanceTestFromEditor();
+function collectPerformanceTestAndMarkDirty(event) {
+  collectPerformanceTestFromEditor(event?.target || null);
   markActivePerformanceDirty();
   refreshActivePerformanceGeneratedHeaderPreview();
   refreshVariableHighlights();
@@ -3823,7 +3869,7 @@ function variableHighlightEnvironmentForTarget(target) {
   }
   if (target?.closest?.('#performanceMainPanel')) {
     const test = activePerformanceTest();
-    const type = activePerformanceType() || test?.type || 'latency';
+    const type = activePerformanceType() || test?.type || 'diagnosis';
     const performanceEnvironment = environmentById(performanceTypeSettings(test, type).environmentId);
     if (performanceEnvironment) {
       return performanceEnvironment;
@@ -4147,6 +4193,7 @@ function renderToolbarState() {
 function renderSettings() {
   ensureSettings();
   applyThemePreference(workspace.settings.appearance.theme);
+  applyTypographyPreferences();
   applyEditorPreferences();
   renderSettingsControls();
 }
@@ -4206,6 +4253,7 @@ function selectSettingsSection(section) {
 function renderSettingsControls() {
   ensureSettings();
   renderThemeControl();
+  renderTypographyControls();
   if ($('saveOnForceCloseInput')) {
     $('saveOnForceCloseInput').checked = workspace.settings.tabs.saveOnForceClose === true;
   }
@@ -4240,7 +4288,7 @@ function ensureSettings() {
   workspace.runners = normalizeWorkspaceRunners(workspace.runners);
   workspace.settings ||= {};
   workspace.settings.updates ||= { includePrereleases: false };
-  workspace.settings.appearance ||= { theme: 'system' };
+  workspace.settings.appearance ||= {};
   workspace.settings.tabs ||= { saveOnForceClose: false };
   workspace.settings.tabs.saveOnForceClose = workspace.settings.tabs.saveOnForceClose === true;
   workspace.settings.modals ||= { closeOnBackdropClick: false };
@@ -4260,6 +4308,10 @@ function ensureSettings() {
     workspace.settings.sandbox.trustedCapabilities.vaultGrants
   );
   workspace.settings.appearance.theme = normalizeThemeOption(workspace.settings.appearance.theme);
+  workspace.settings.appearance.interfaceFont = normalizeInterfaceFontOption(workspace.settings.appearance.interfaceFont);
+  workspace.settings.appearance.interfaceFontSize = normalizeInterfaceFontSize(workspace.settings.appearance.interfaceFontSize);
+  workspace.settings.appearance.editorFont = normalizeEditorFontOption(workspace.settings.appearance.editorFont);
+  workspace.settings.appearance.editorFontSize = normalizeEditorFontSize(workspace.settings.appearance.editorFontSize);
   delete workspace.settings.loadTestPolicy;
 }
 
@@ -4575,6 +4627,38 @@ function normalizeThemeOption(value) {
   return THEME_OPTIONS.includes(theme) ? theme : 'system';
 }
 
+function normalizeInterfaceFontOption(value) {
+  return normalizeTypographyFontOption(value, DEFAULT_INTERFACE_FONT);
+}
+
+function normalizeEditorFontOption(value) {
+  return normalizeTypographyFontOption(value, DEFAULT_EDITOR_FONT);
+}
+
+function normalizeTypographyFontOption(value, fallback) {
+  const font = String(value || '').trim();
+  if (font === 'default' || Object.hasOwn(TYPOGRAPHY_FONT_STACKS, font)) {
+    return font;
+  }
+  return fallback;
+}
+
+function normalizeInterfaceFontSize(value) {
+  return normalizeFontSize(value, DEFAULT_INTERFACE_FONT_SIZE, MIN_INTERFACE_FONT_SIZE, MAX_INTERFACE_FONT_SIZE);
+}
+
+function normalizeEditorFontSize(value) {
+  return normalizeFontSize(value, DEFAULT_EDITOR_FONT_SIZE, MIN_EDITOR_FONT_SIZE, MAX_EDITOR_FONT_SIZE);
+}
+
+function normalizeFontSize(value, fallback, min, max) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, Math.round(numeric)));
+}
+
 function applyThemePreference(theme) {
   const normalizedTheme = normalizeThemeOption(theme);
   document.documentElement.dataset.theme = normalizedTheme;
@@ -4609,6 +4693,43 @@ function renderThemeControl() {
   }
 }
 
+function renderTypographyControls() {
+  const appearance = workspace.settings?.appearance || {};
+  const interfaceFont = normalizeInterfaceFontOption(appearance.interfaceFont);
+  const interfaceFontSize = normalizeInterfaceFontSize(appearance.interfaceFontSize);
+  const editorFont = normalizeEditorFontOption(appearance.editorFont);
+  const editorFontSize = normalizeEditorFontSize(appearance.editorFontSize);
+  if ($('interfaceFontSelect')) {
+    $('interfaceFontSelect').value = interfaceFont;
+  }
+  if ($('interfaceFontSizeInput')) {
+    $('interfaceFontSizeInput').value = String(interfaceFontSize);
+  }
+  if ($('editorFontSelect')) {
+    $('editorFontSelect').value = editorFont;
+  }
+  if ($('editorFontSizeInput')) {
+    $('editorFontSizeInput').value = String(editorFontSize);
+  }
+}
+
+function applyTypographyPreferences() {
+  ensureSettings();
+  const appearance = workspace.settings.appearance;
+  document.documentElement.style.setProperty('--ui-font', typographyFontStack(appearance.interfaceFont, DEFAULT_INTERFACE_FONT_STACK));
+  document.documentElement.style.setProperty('--ui-font-size', `${appearance.interfaceFontSize}px`);
+  document.documentElement.style.setProperty('--editor-font', typographyFontStack(appearance.editorFont, DEFAULT_EDITOR_FONT_STACK));
+  document.documentElement.style.setProperty('--editor-font-size', `${appearance.editorFontSize}px`);
+  CodeEditor.refreshCodeEditors?.(document);
+}
+
+function typographyFontStack(font, defaultStack) {
+  if (font === 'default') {
+    return defaultStack;
+  }
+  return TYPOGRAPHY_FONT_STACKS[font] || defaultStack;
+}
+
 async function setThemePreference(theme, options = {}) {
   ensureSettings();
   const previousSettings = cloneWorkspaceSettings();
@@ -4631,6 +4752,104 @@ async function setThemePreference(theme, options = {}) {
   }
   if (options.showStatus !== false) {
     setStatus(`Theme set to ${normalizedTheme}.`);
+  }
+  return true;
+}
+
+async function setInterfaceTypographyFromControls(options = {}) {
+  return setTypographyPreference({
+    interfaceFont: $('interfaceFontSelect')?.value,
+    interfaceFontSize: $('interfaceFontSizeInput')?.value
+  }, {
+    ...options,
+    statusMessage: 'Interface typography updated.',
+    failureMessage: 'Interface typography save failed',
+    failureTitle: 'Interface Typography Save Failed'
+  });
+}
+
+async function setEditorTypographyFromControls(options = {}) {
+  return setTypographyPreference({
+    editorFont: $('editorFontSelect')?.value,
+    editorFontSize: $('editorFontSizeInput')?.value
+  }, {
+    ...options,
+    statusMessage: 'Editor typography updated.',
+    failureMessage: 'Editor typography save failed',
+    failureTitle: 'Editor Typography Save Failed'
+  });
+}
+
+async function resetInterfaceTypography(options = {}) {
+  return setTypographyPreference({
+    interfaceFont: DEFAULT_INTERFACE_FONT,
+    interfaceFontSize: DEFAULT_INTERFACE_FONT_SIZE
+  }, {
+    ...options,
+    statusMessage: 'Interface typography reset to defaults.',
+    failureMessage: 'Interface typography reset failed',
+    failureTitle: 'Interface Typography Reset Failed'
+  });
+}
+
+async function resetEditorTypography(options = {}) {
+  return setTypographyPreference({
+    editorFont: DEFAULT_EDITOR_FONT,
+    editorFontSize: DEFAULT_EDITOR_FONT_SIZE
+  }, {
+    ...options,
+    statusMessage: 'Editor typography reset to defaults.',
+    failureMessage: 'Editor typography reset failed',
+    failureTitle: 'Editor Typography Reset Failed'
+  });
+}
+
+async function setTypographyPreference(patch, options = {}) {
+  ensureSettings();
+  const previousSettings = cloneWorkspaceSettings();
+  const nextAppearance = {
+    ...workspace.settings.appearance
+  };
+  if (Object.hasOwn(patch, 'interfaceFont')) {
+    nextAppearance.interfaceFont = normalizeInterfaceFontOption(patch.interfaceFont);
+  }
+  if (Object.hasOwn(patch, 'interfaceFontSize')) {
+    nextAppearance.interfaceFontSize = normalizeInterfaceFontSize(patch.interfaceFontSize);
+  }
+  if (Object.hasOwn(patch, 'editorFont')) {
+    nextAppearance.editorFont = normalizeEditorFontOption(patch.editorFont);
+  }
+  if (Object.hasOwn(patch, 'editorFontSize')) {
+    nextAppearance.editorFontSize = normalizeEditorFontSize(patch.editorFontSize);
+  }
+  const changed = [
+    'interfaceFont',
+    'interfaceFontSize',
+    'editorFont',
+    'editorFontSize'
+  ].some((key) => workspace.settings.appearance[key] !== nextAppearance[key]);
+  workspace.settings.appearance = nextAppearance;
+  applyTypographyPreferences();
+  renderSettingsControls();
+  if (!changed) {
+    return true;
+  }
+  if (options.save === true) {
+    const saved = await saveWorkspaceSettingsWithRollback(
+      previousSettings,
+      options.showStatus === false ? '' : options.statusMessage || 'Typography settings updated.',
+      options.failureMessage || 'Typography settings save failed',
+      options.failureTitle || 'Typography Settings Save Failed',
+      () => {
+        applyTypographyPreferences();
+        renderSettingsControls();
+      }
+    );
+    applyTypographyPreferences();
+    return saved;
+  }
+  if (options.showStatus !== false) {
+    setStatus(options.statusMessage || 'Typography settings updated.');
   }
   return true;
 }
@@ -4945,6 +5164,44 @@ async function editActivePerformanceCsvVariables() {
   markActivePerformanceDirty();
   renderPerformanceEditor();
   setStatus(csvVariablesConfigured(test.csvVariables) ? 'Performance CSV variables updated.' : 'Performance CSV variables cleared.');
+  return test.csvVariables;
+}
+
+function toggleActiveRunnerCsvVariables() {
+  const runner = activeRunner();
+  if (!runner) {
+    setStatus('Select a runner before changing CSV variables.');
+    return null;
+  }
+  collectRunnerFromEditor();
+  const enabled = normalizeCsvVariableData(runner.csvVariables).enabled !== false;
+  runner.csvVariables = normalizeCsvVariableData({
+    ...(runner.csvVariables || {}),
+    enabled: !enabled
+  });
+  markActiveRunnerDirty();
+  renderRunnerEditor();
+  refreshVariableHighlights();
+  setStatus(runner.csvVariables.enabled ? 'Runner CSV variables enabled.' : 'Runner CSV variables disabled.');
+  return runner.csvVariables;
+}
+
+function toggleActivePerformanceCsvVariables() {
+  const test = activePerformanceTest();
+  if (!test) {
+    setStatus('Select a performance test before changing CSV variables.');
+    return null;
+  }
+  collectPerformanceTestFromEditor();
+  const enabled = normalizeCsvVariableData(test.csvVariables).enabled !== false;
+  test.csvVariables = normalizeCsvVariableData({
+    ...(test.csvVariables || {}),
+    enabled: !enabled
+  });
+  markActivePerformanceDirty();
+  renderPerformanceEditor();
+  refreshVariableHighlights();
+  setStatus(test.csvVariables.enabled ? 'Performance CSV variables enabled.' : 'Performance CSV variables disabled.');
   return test.csvVariables;
 }
 
@@ -5339,10 +5596,62 @@ async function confirmActionModal(options = {}) {
   $('confirmActionModalMessage').textContent = String(options.message || 'Continue?');
   const confirmButton = $('confirmActionButton');
   confirmButton.textContent = String(options.confirmLabel || 'Continue');
+  confirmButton.disabled = options.disableConfirm === true;
   confirmButton.classList.toggle('danger-button', options.danger === true);
   confirmButton.classList.toggle('primary', options.danger !== true);
   $('cancelConfirmActionButton').textContent = String(options.cancelLabel || 'Cancel');
-  return await showModal('confirmActionModal', false) === true;
+  try {
+    return await showModal('confirmActionModal', false) === true;
+  } finally {
+    confirmButton.disabled = false;
+  }
+}
+
+async function confirmRuntimeResultStoreCapacity(kind, payload, config = {}) {
+  const api = kind === 'performance'
+    ? window.postmeter?.performance?.estimateResultStore
+    : window.postmeter?.runner?.estimateResultStore;
+  if (typeof api !== 'function') {
+    return true;
+  }
+  let estimate;
+  try {
+    estimate = kind === 'performance'
+      ? await api(payload)
+      : await api(payload, config);
+  } catch (error) {
+    const message = error.message || String(error);
+    return await confirmActionModal({
+      title: 'Storage Estimate Unavailable',
+      message: `PostMeter could not estimate the temporary result database size before starting this run.\n\n${message}\n\nContinue?`,
+      confirmLabel: 'Continue',
+      cancelLabel: 'Cancel'
+    });
+  }
+  if (!estimate?.shouldWarn) {
+    return true;
+  }
+  const cannotContinue = estimate.canContinue === false || estimate.exceedsAvailable === true;
+  const available = estimate.effectiveAvailableBytes == null ? 'unknown' : formatBytes(estimate.effectiveAvailableBytes);
+  const current = Number(estimate.existingResultStoreBytes || 0) > 0
+    ? `\nCurrent temp result file that will be replaced: ${formatBytes(estimate.existingResultStoreBytes)}.`
+    : '';
+  const margin = estimate.warningMarginBytes ? formatBytes(estimate.warningMarginBytes) : '1.00 GB';
+  const action = cannotContinue
+    ? 'Free disk space or reduce result capture settings before running this test.'
+    : 'The run can continue, but exporting or keeping all optional captures may consume most of the available disk space.';
+  return await confirmActionModal({
+    title: cannotContinue ? 'Insufficient Disk Space' : 'Large Result File Warning',
+    message: [
+      `PostMeter estimates this ${kind === 'performance' ? 'Performance' : 'Runner'} run will create a temporary SQLite result database of about ${formatBytes(estimate.estimatedBytes)}.`,
+      `Effective available space for the temp result file: ${available}.${current}`,
+      `PostMeter warns when the estimate is within ${margin} of available space.`,
+      action
+    ].filter(Boolean).join('\n\n'),
+    confirmLabel: 'Continue',
+    cancelLabel: 'Cancel',
+    disableConfirm: cannotContinue
+  });
 }
 
 function showNotificationModal(title, message) {
@@ -6015,6 +6324,28 @@ function renderWorkspacePanel() {
   }
 }
 
+function renderCsvVariablesDropdown(prefix, csvVariables, enabledForTarget) {
+  const trigger = $(`${prefix}CsvVariablesButton`);
+  const toggle = $(`${prefix}ToggleCsvVariablesButton`);
+  const edit = $(`${prefix}EditCsvVariablesButton`);
+  const normalized = normalizeCsvVariableData(csvVariables || {});
+  const enabled = enabledForTarget && normalized.enabled !== false;
+  const labelScope = prefix === 'runner' ? 'Runner' : 'Performance';
+  if (trigger) {
+    trigger.disabled = !enabledForTarget;
+    trigger.textContent = `CSV Variables: ${enabled ? 'On' : 'Off'}`;
+    trigger.classList.toggle('csv-variables-active', enabled);
+    trigger.setAttribute('aria-label', `${labelScope} CSV variables ${enabled ? 'on' : 'off'}`);
+  }
+  if (toggle) {
+    toggle.disabled = !enabledForTarget;
+    toggle.textContent = enabled ? 'Turn Off' : 'Turn On';
+  }
+  if (edit) {
+    edit.disabled = !enabledForTarget;
+  }
+}
+
 function renderRunnerEditor() {
   const runner = activeRunner();
   const title = $('runnerMainTitle');
@@ -6030,16 +6361,7 @@ function renderRunnerEditor() {
     title.setAttribute('aria-label', 'Runner name');
   }
   $('saveRunnerButton').disabled = !runner;
-  const runnerCsvButton = $('runnerCsvVariablesButton');
-  if (runnerCsvButton) {
-    runnerCsvButton.disabled = !runner;
-    runnerCsvButton.textContent = runner && csvVariablesConfigured(runner.csvVariables) ? 'CSV Variables *' : 'CSV Variables';
-  }
-  const runnerUseCsvInput = $('runnerUseCsvVariablesInput');
-  if (runnerUseCsvInput) {
-    runnerUseCsvInput.checked = runner?.csvVariables?.enabled !== false;
-    runnerUseCsvInput.disabled = !runner;
-  }
+  renderCsvVariablesDropdown('runner', runner?.csvVariables, Boolean(runner));
   $('deleteRunnerButton').disabled = !runner;
   $('runCollectionButton').disabled = !runner || activeRunnerId != null;
   $('cancelRunnerButton').disabled = !activeRunnerId;
@@ -6048,6 +6370,7 @@ function renderRunnerEditor() {
   $('runnerStopOnFailure').disabled = !runner;
   $('runnerAllowEnvironmentMutation').checked = runner?.allowEnvironmentMutation === true;
   $('runnerAllowEnvironmentMutation').disabled = !runner;
+  renderCapturePolicyControls('runner', runner?.capturePolicy, Boolean(runner));
   $('addRunnerRequestButton').disabled = !runner;
   renderRunnerRequestList(runner);
 }
@@ -6066,21 +6389,16 @@ function renderPerformanceEditor() {
     title.setAttribute('aria-disabled', test ? 'false' : 'true');
     title.setAttribute('aria-label', 'Performance test name');
   }
-  for (const id of ['performanceCsvVariablesButton', 'savePerformanceTestButton', 'deletePerformanceTestButton', 'runPerformanceTestButton', 'exportPerformanceTestButton', 'importPerformanceRequestButton']) {
+  for (const id of ['performanceCsvVariablesButton', 'performanceToggleCsvVariablesButton', 'performanceEditCsvVariablesButton', 'savePerformanceTestButton', 'deletePerformanceTestButton', 'runPerformanceTestButton', 'exportPerformanceTestButton', 'importPerformanceRequestButton']) {
     const button = $(id);
     if (button) {
       button.disabled = !test;
     }
   }
-  const performanceCsvButton = $('performanceCsvVariablesButton');
-  if (performanceCsvButton) {
-    performanceCsvButton.textContent = test && csvVariablesConfigured(test.csvVariables) ? 'CSV Variables *' : 'CSV Variables';
+  if ($('exportPerformanceResultCsvButton')) {
+    $('exportPerformanceResultCsvButton').disabled = !test || !lastPerformanceResult || Boolean(activePerformanceRunId);
   }
-  const performanceUseCsvInput = $('performanceUseCsvVariablesInput');
-  if (performanceUseCsvInput) {
-    performanceUseCsvInput.checked = test?.csvVariables?.enabled !== false;
-    performanceUseCsvInput.disabled = !test;
-  }
+  renderCsvVariablesDropdown('performance', test?.csvVariables, Boolean(test));
   if ($('runPerformanceTestButton')) {
     $('runPerformanceTestButton').disabled = !test || Boolean(activePerformanceRunId);
   }
@@ -6093,6 +6411,7 @@ function renderPerformanceEditor() {
   renderPerformanceConfigControls(test);
   renderPerformanceSafetyControls(test);
   renderPerformanceMutationControls(test);
+  renderCapturePolicyControls('performance', test?.capturePolicy, Boolean(test));
   renderPerformanceRequestEditor(test);
 }
 
@@ -6269,14 +6588,14 @@ function renderPerformanceCookieJarEditor() {
 }
 
 function performanceSelectedEnvironment(test = activePerformanceTest()) {
-  const environmentId = test?.environmentId || performanceTypeSettings(test, test?.type || 'latency')?.environmentId || 'none';
+  const environmentId = test?.environmentId || performanceTypeSettings(test, test?.type || 'diagnosis')?.environmentId || 'none';
   return environmentId && environmentId !== 'none'
     ? (workspace.environments || []).find((environment) => environment.id === environmentId) || null
     : null;
 }
 
 function renderPerformanceTypeTabs(test) {
-  const type = RENDERER_PERFORMANCE_TEST_TYPES.includes(test?.type) ? test.type : 'latency';
+  const type = RENDERER_PERFORMANCE_TEST_TYPES.includes(test?.type) ? test.type : 'diagnosis';
   for (const button of document.querySelectorAll('.tab[data-tab-group="performance"]')) {
     const isActive = button.dataset.tab === type;
     button.classList.toggle('active', isActive);
@@ -6329,6 +6648,7 @@ function renderPerformanceConfigControls(test) {
     setPerformancePanelControlValue(panel, 'config', 'durationSeconds', config.durationSeconds || 0);
     setPerformancePanelControlValue(panel, 'config', 'rampSteps', config.rampSteps || 1);
     setPerformancePanelControlValue(panel, 'config', 'spikeMultiplier', config.spikeMultiplier || 1);
+    setPerformancePanelControlValue(panel, 'config', 'diagnosisScope', normalizeDiagnosisScope(config.diagnosisScope));
   }
   setPerformanceControlsDisabled('config', !test);
 }
@@ -6352,6 +6672,249 @@ function renderPerformanceMutationControls(test) {
   }
 }
 
+function capturePolicyKind(prefix) {
+  return prefix === 'performance' ? 'performance' : 'runner';
+}
+
+function capturePolicyContext(prefix) {
+  const kind = capturePolicyKind(prefix);
+  if (kind === 'performance') {
+    const type = activePerformanceType() || activePerformanceTest()?.type || 'diagnosis';
+    return {
+      diagnostic: type === 'diagnosis',
+      plannedRequests: activePerformancePlannedRequestCount(type)
+    };
+  }
+  return {
+    diagnostic: false,
+    plannedRequests: activeRunnerPlannedRequestCount()
+  };
+}
+
+function activeRunnerPlannedRequestCount(runner = activeRunner()) {
+  if (!runner) {
+    return 0;
+  }
+  const requestList = $('runnerRequestList');
+  const rows = Array.from(requestList?.querySelectorAll('.runner-request-row[data-runner-request-index]') || []);
+  if (rows.length) {
+    const covered = new Set();
+    let total = 0;
+    for (const row of rows) {
+      const index = Number.parseInt(row.dataset.runnerRequestIndex || '', 10);
+      if (!Number.isInteger(index) || index < 0 || !runner.requests?.[index]) {
+        continue;
+      }
+      covered.add(index);
+      total += normalizeRunnerRequestIterations(row.querySelector('.runner-row-iterations input')?.value);
+    }
+    for (let index = 0; index < (runner.requests || []).length; index += 1) {
+      if (!covered.has(index)) {
+        total += normalizeRunnerRequestIterations(runner.requests[index]?.iterations);
+      }
+    }
+    return total;
+  }
+  return normalizeRunnerRequests(runner.requests || [])
+    .reduce((total, request) => total + normalizeRunnerRequestIterations(request.iterations), 0);
+}
+
+function activePerformancePlannedRequestCount(type = activePerformanceType()) {
+  const test = activePerformanceTest();
+  if (!test) {
+    return 0;
+  }
+  const effectiveType = RENDERER_PERFORMANCE_TEST_TYPES.includes(type) ? type : test.type || 'diagnosis';
+  const settings = performanceTypeSettings(test, effectiveType);
+  return performancePlannedRequestCount(effectiveType, settings.config || {}, settings.safetyLimits || {});
+}
+
+function capturePolicyGuardrailState(prefix, policy) {
+  const kind = capturePolicyKind(prefix);
+  const context = capturePolicyContext(prefix);
+  const preferred = normalizeResultCapturePolicy(policy || {}, kind, { diagnostic: context.diagnostic });
+  const effective = normalizeResultCapturePolicy(policy || {}, kind, context);
+  const plannedRequests = Math.max(0, Number(context.plannedRequests || 0));
+  const highVolume = plannedRequests >= RESULT_CAPTURE_HIGH_VOLUME_REQUESTS;
+  const veryHighVolume = plannedRequests >= RESULT_CAPTURE_VERY_HIGH_VOLUME_REQUESTS;
+  return {
+    kind,
+    context,
+    preferred,
+    effective,
+    highVolume,
+    veryHighVolume,
+    preRequestForcedOff: veryHighVolume,
+    postRequestForcedOff: veryHighVolume,
+    scriptLogsForcedOff: highVolume,
+    localVariablesForcedOff: highVolume,
+    responseHeadersForcedOff: veryHighVolume && !(kind === 'performance' && context.diagnostic === true),
+    transportTimingsForcedOff: veryHighVolume && !(kind === 'performance' && context.diagnostic === true),
+    responseBodyLimitedModes: veryHighVolume ? ['all', 'sampled'] : highVolume ? ['all'] : [],
+    bodyPreviewCap: veryHighVolume ? 2048 : highVolume ? 4096 : 32768
+  };
+}
+
+function formatRequestCount(value) {
+  const number = Math.max(0, Number(value || 0));
+  return Number.isFinite(number) ? Math.round(number).toLocaleString('en-US') : '0';
+}
+
+function captureGuardrailTooltip(state, label) {
+  const threshold = state.veryHighVolume ? RESULT_CAPTURE_VERY_HIGH_VOLUME_REQUESTS : RESULT_CAPTURE_HIGH_VOLUME_REQUESTS;
+  return `${label} is disabled for this high-volume run (${formatRequestCount(state.context.plannedRequests)} planned requests). PostMeter turns off heavy per-request captures at ${formatRequestCount(threshold)}+ requests to keep the temporary result database usable. Reduce the planned request count below ${formatRequestCount(threshold)} to re-enable it.`;
+}
+
+function setCaptureGuardrailTitle(element, title, className = 'capture-guardrail-disabled') {
+  if (!element) {
+    return;
+  }
+  const label = element.closest('label');
+  element.title = title || '';
+  if (label) {
+    label.title = title || '';
+    label.classList.toggle(className, Boolean(title));
+  }
+}
+
+function resetCaptureGuardrailState(element) {
+  if (!element) {
+    return;
+  }
+  setCaptureGuardrailTitle(element, '');
+  const label = element.closest('label');
+  label?.classList.remove('capture-guardrail-limited');
+}
+
+function applyResponseBodyOptionGuardrails(select, state) {
+  if (!select) {
+    return;
+  }
+  const limitedModes = new Set(state.responseBodyLimitedModes);
+  for (const option of select.options || []) {
+    const limited = limitedModes.has(option.value);
+    option.disabled = limited;
+    option.title = limited ? captureGuardrailTooltip(state, `${option.textContent || option.value} response body capture`) : '';
+  }
+  if (limitedModes.size) {
+    const title = captureGuardrailTooltip(state, 'Full response body capture');
+    setCaptureGuardrailTitle(select, title, 'capture-guardrail-limited');
+  }
+}
+
+function renderCapturePolicyControls(prefix, policy, enabled) {
+  const state = capturePolicyGuardrailState(prefix, policy);
+  const normalized = state.effective;
+  const setControl = (suffix, value, property = 'value', options = {}) => {
+    const element = $(`${prefix}Capture${suffix}`);
+    if (!element) {
+      return;
+    }
+    resetCaptureGuardrailState(element);
+    element[property] = value;
+    element.disabled = !enabled || options.disabled === true;
+    if (options.title) {
+      setCaptureGuardrailTitle(element, options.title);
+    }
+  };
+  setControl('ResponseBodySelect', normalized.responseBody || 'all');
+  setControl('BodyPreviewBytesInput', String(normalized.bodyPreviewBytes ?? 32768));
+  setControl('PreRequestInput', normalized.preRequestOutput === true, 'checked', {
+    disabled: state.preRequestForcedOff,
+    title: state.preRequestForcedOff ? captureGuardrailTooltip(state, 'Pre-request output') : ''
+  });
+  setControl('PostRequestInput', normalized.postRequestOutput === true, 'checked', {
+    disabled: state.postRequestForcedOff,
+    title: state.postRequestForcedOff ? captureGuardrailTooltip(state, 'Post-request output') : ''
+  });
+  setControl('ScriptLogsInput', normalized.scriptLogs === true, 'checked', {
+    disabled: state.scriptLogsForcedOff,
+    title: state.scriptLogsForcedOff ? captureGuardrailTooltip(state, 'Script logs') : ''
+  });
+  setControl('LocalVariablesInput', normalized.localVariables === true, 'checked', {
+    disabled: state.localVariablesForcedOff,
+    title: state.localVariablesForcedOff ? captureGuardrailTooltip(state, 'Local variables') : ''
+  });
+  setControl('HeadersInput', normalized.responseHeaders === true, 'checked', {
+    disabled: state.responseHeadersForcedOff,
+    title: state.responseHeadersForcedOff ? captureGuardrailTooltip(state, 'Response headers') : ''
+  });
+  setControl('TimingsInput', normalized.transportTimings === true, 'checked', {
+    disabled: state.transportTimingsForcedOff,
+    title: state.transportTimingsForcedOff ? captureGuardrailTooltip(state, 'Transport timings') : ''
+  });
+  const bodyPreviewInput = $(`${prefix}CaptureBodyPreviewBytesInput`);
+  if (bodyPreviewInput) {
+    bodyPreviewInput.max = String(state.bodyPreviewCap);
+    if (state.highVolume) {
+      setCaptureGuardrailTitle(
+        bodyPreviewInput,
+        `Preview bytes are capped at ${formatRequestCount(state.bodyPreviewCap)} for this high-volume run (${formatRequestCount(state.context.plannedRequests)} planned requests).`,
+        'capture-guardrail-limited'
+      );
+    }
+  }
+  applyResponseBodyOptionGuardrails($(`${prefix}CaptureResponseBodySelect`), state);
+  const button = $(`${prefix}CaptureSettingsButton`);
+  if (button) {
+    button.disabled = !enabled;
+  }
+}
+
+function collectCapturePolicyFromControls(prefix, fallback = {}) {
+  const state = capturePolicyGuardrailState(prefix, fallback);
+  const responseBodySelect = $(`${prefix}CaptureResponseBodySelect`);
+  const bodyPreviewInput = $(`${prefix}CaptureBodyPreviewBytesInput`);
+  const next = {
+    ...fallback,
+    responseBody: responseBodySelect?.value || fallback.responseBody,
+    bodyPreviewBytes: bodyPreviewInput?.value || fallback.bodyPreviewBytes,
+    preRequestOutput: $(`${prefix}CapturePreRequestInput`)?.checked === true,
+    postRequestOutput: $(`${prefix}CapturePostRequestInput`)?.checked === true,
+    scriptLogs: $(`${prefix}CaptureScriptLogsInput`)?.checked === true,
+    localVariables: $(`${prefix}CaptureLocalVariablesInput`)?.checked === true,
+    responseHeaders: $(`${prefix}CaptureHeadersInput`)?.checked ?? fallback.responseHeaders,
+    transportTimings: $(`${prefix}CaptureTimingsInput`)?.checked ?? fallback.transportTimings
+  };
+  if (state.preRequestForcedOff) {
+    next.preRequestOutput = state.preferred.preRequestOutput === true;
+  }
+  if (state.postRequestForcedOff) {
+    next.postRequestOutput = state.preferred.postRequestOutput === true;
+  }
+  if (state.scriptLogsForcedOff) {
+    next.scriptLogs = state.preferred.scriptLogs === true;
+  }
+  if (state.localVariablesForcedOff) {
+    next.localVariables = state.preferred.localVariables === true;
+  }
+  if (state.responseHeadersForcedOff) {
+    next.responseHeaders = state.preferred.responseHeaders === true;
+  }
+  if (state.transportTimingsForcedOff) {
+    next.transportTimings = state.preferred.transportTimings === true;
+  }
+  if (state.highVolume && Number(state.preferred.bodyPreviewBytes || 0) > state.bodyPreviewCap && bodyPreviewInput?.value === String(state.effective.bodyPreviewBytes)) {
+    next.bodyPreviewBytes = state.preferred.bodyPreviewBytes;
+  }
+  if (state.responseBodyLimitedModes.includes(state.preferred.responseBody)
+    && responseBodySelect?.value === state.effective.responseBody) {
+    next.responseBody = state.preferred.responseBody;
+  }
+  return normalizeResultCapturePolicy(next, state.kind, { diagnostic: state.context.diagnostic });
+}
+
+function toggleCaptureSettingsPanel(prefix) {
+  const panel = $(`${prefix}CaptureSettingsPanel`);
+  const button = $(`${prefix}CaptureSettingsButton`);
+  if (!panel || !button) {
+    return;
+  }
+  const hidden = panel.hidden !== false;
+  panel.hidden = !hidden;
+  button.setAttribute('aria-expanded', hidden ? 'true' : 'false');
+}
+
 function setPerformancePanelControlValue(panel, kind, name, value) {
   const attribute = kind === 'safety' ? 'data-performance-safety' : 'data-performance-config';
   for (const control of panel.querySelectorAll(`[${attribute}="${name}"]`)) {
@@ -6367,7 +6930,7 @@ function setPerformanceControlsDisabled(kind, disabled) {
 }
 
 function performanceTypeSettings(test, type) {
-  const normalizedType = RENDERER_PERFORMANCE_TEST_TYPES.includes(type) ? type : 'latency';
+  const normalizedType = RENDERER_PERFORMANCE_TEST_TYPES.includes(type) ? type : 'diagnosis';
   const typeSettings = ensurePerformanceTypeSettings(test);
   return typeSettings[normalizedType] || ensurePerformanceTypeSettings(null)[normalizedType];
 }
@@ -6496,10 +7059,13 @@ function runnerRequestRow(runner, request, index) {
   const updateIterations = (options = {}) => {
     const previous = normalizeRunnerRequestIterations(request.iterations);
     const next = normalizeRunnerRequestIterations(iterationsInput.value);
+    const raw = Number.parseInt(iterationsInput.value || '', 10);
     request.iterations = next;
-    if (options.commit === true) {
+    if (options.commit === true
+      || (Number.isFinite(raw) && (raw < 1 || raw > MAX_RUNNER_REQUEST_ITERATIONS))) {
       iterationsInput.value = String(next);
     }
+    renderCapturePolicyControls('runner', runner.capturePolicy, true);
     if (next !== previous) {
       markActiveRunnerDirty();
     }
@@ -6533,6 +7099,7 @@ function runnerRequestRow(runner, request, index) {
 
   const deleteButton = document.createElement('button');
   deleteButton.type = 'button';
+  deleteButton.className = 'danger-button';
   deleteButton.textContent = 'Delete';
   deleteButton.setAttribute('aria-label', `Delete ${request.name || 'request'} from runner`);
   deleteButton.addEventListener('click', () => deleteRunnerRequest(runner, index));
@@ -7144,6 +7711,15 @@ async function runActivePerformanceTest() {
   const runEnvironment = test.environmentId && test.environmentId !== 'none'
     ? (workspace.environments || []).find((environment) => environment.id === test.environmentId) || null
     : null;
+  let normalizedForRun;
+  try {
+    normalizedForRun = normalizePerformanceTest(cloneJson(test), workspace);
+  } catch (error) {
+    return setStatus(error.message || String(error));
+  }
+  if (!(await confirmRuntimeResultStoreCapacity('performance', normalizedForRun))) {
+    return setStatus('Performance test cancelled.');
+  }
   const runContext = {
     performanceTestId: test.id,
     workspaceId: activeWorkspaceId
@@ -7157,8 +7733,7 @@ async function runActivePerformanceTest() {
   renderPerformanceEditor();
   try {
     await saveWorkspace(false, { collectEditors: false });
-    const normalized = normalizePerformanceTest(cloneJson(test), workspace);
-    const result = await performanceApi.start(runId, normalized, cloneJson(runEnvironment));
+    const result = await performanceApi.start(runId, normalizedForRun, cloneJson(runEnvironment));
     if (!isActivePerformanceContext(runContext) || activePerformanceRunId !== runId) {
       return result;
     }
@@ -7166,7 +7741,7 @@ async function runActivePerformanceTest() {
     selectedPerformanceResultIndex = 0;
     performanceExecutionPage = 0;
     performanceExecutionStatusFilter = 'all';
-    renderPerformanceResult(result);
+    await renderPerformanceResult(result);
     await saveWorkspace(false, { collectEditors: false });
     setStatus(result.cancelled ? 'Performance test cancelled.' : 'Performance test completed.');
     return result;
@@ -7237,6 +7812,28 @@ async function exportPerformanceTestFromPicker() {
     return null;
   }
   return exportActivePerformanceTest(selectedTest);
+}
+
+async function exportActivePerformanceResultCsv() {
+  if (!lastPerformanceResult) {
+    return setStatus('Run a performance test before exporting result CSV.');
+  }
+  const performanceApi = window.postmeter?.performance;
+  if (!performanceApi?.exportResult) {
+    return setStatus('Performance result export is unavailable in this runtime.');
+  }
+  try {
+    const result = await performanceApi.exportResult(cloneJson(lastPerformanceResult), 'csv');
+    if (result?.path) {
+      setStatus(`Performance result CSV exported to ${result.path}.`);
+    }
+    return result;
+  } catch (error) {
+    const message = error.message || String(error);
+    setStatus(`Performance result CSV export failed: ${message}`);
+    notifyUser('Performance Result Export Failed', message);
+    return null;
+  }
 }
 
 async function importPerformanceTest() {
@@ -7373,6 +7970,9 @@ function renderPerformanceResult(result = lastPerformanceResult) {
     renderPerformanceMessage('No performance run yet.');
     return;
   }
+  if (result.storeBacked === true && window.postmeter?.performance?.resultPage) {
+    return renderStoredPerformanceResult(result);
+  }
   const samples = Array.isArray(result.samples) ? result.samples : [];
   performanceExecutionStatusFilter = renderExecutionStatusFilter({
     selectId: 'performanceExecutionStatusFilter',
@@ -7397,8 +7997,9 @@ function renderPerformanceResult(result = lastPerformanceResult) {
     `${result.failedRequests || 0} failed${result.cancelled ? ', cancelled' : ''}`,
     `RPS ${formatNumber(summary.requestsPerSecond)}`,
     `p95 ${formatNumber(summary.p95DurationMillis)} ms`,
+    summary.diagnosis ? `confidence ${summary.diagnosis.confidence || 'low'}` : '',
     `statuses ${statusCodes}`
-  ].join(' | ');
+  ].filter(Boolean).join(' | ');
   renderPerformanceRunDetails(result);
   performanceExecutionPage = executionPageForFilteredEntries(selectedPerformanceResultIndex, filteredSamples, performanceExecutionPage);
   const pageRange = executionPageRange(filteredSamples.length, performanceExecutionPage);
@@ -7429,6 +8030,88 @@ function renderPerformanceResult(result = lastPerformanceResult) {
     totalItems: filteredSamples.length
   });
   renderPerformanceExecutionDetails(result);
+}
+
+function renderStoredPerformanceResult(result = lastPerformanceResult) {
+  ensurePerformanceResultsStructure();
+  const pageInfo = result.resultPage || {};
+  const statusCounts = pageInfo.statusCounts || {};
+  performanceExecutionStatusFilter = renderExecutionStatusFilterFromCounts({
+    selectId: 'performanceExecutionStatusFilter',
+    counts: statusCounts,
+    selected: performanceExecutionStatusFilter,
+    onChange: (status) => {
+      performanceExecutionStatusFilter = status;
+      performanceExecutionPage = 0;
+      selectedPerformanceResultIndex = 0;
+      renderPerformanceResult(lastPerformanceResult);
+    }
+  });
+  const summary = result.summary || {};
+  const statusCodes = Object.entries(summary.statusCodes || statusCounts)
+    .map(([status, count]) => `${status}: ${count}`)
+    .join(', ') || 'none';
+  $('performanceResultsSummary').textContent = [
+    `${result.completedRequests || 0}/${result.totalRequests || 0} requests completed`,
+    `${result.successfulRequests || 0} successful`,
+    `${result.failedRequests || 0} failed${result.cancelled ? ', cancelled' : ''}`,
+    `RPS ${formatNumber(summary.requestsPerSecond)}`,
+    `p95 ${formatNumber(summary.p95DurationMillis)} ms`,
+    summary.diagnosis ? `confidence ${summary.diagnosis.confidence || 'low'}` : '',
+    result.detailCaptureTruncated ? 'detail capture truncated' : '',
+    `statuses ${statusCodes}`
+  ].filter(Boolean).join(' | ');
+  renderPerformanceRunDetails(result);
+  const totalAll = Number(pageInfo.totalAll ?? result.completedRequests ?? 0);
+  const filteredTotal = filteredCountFromStatusCounts(statusCounts, performanceExecutionStatusFilter, totalAll);
+  performanceExecutionPage = executionPageForIndex(performanceExecutionPage * EXECUTION_RESULT_PAGE_SIZE, filteredTotal, performanceExecutionPage);
+  const pageRange = executionPageRange(filteredTotal, performanceExecutionPage);
+  $('performanceExecutionSummary').textContent = filteredTotal
+    ? executionFilterSummaryText(pageRange, filteredTotal, totalAll, 'sample', performanceExecutionStatusFilter)
+    : 'No requests';
+  const list = $('performanceExecutionList');
+  list.textContent = '';
+  appendEmptyTestResult(list, 'Loading performance request results...');
+  clearStoredDetails('performance');
+  const token = ++performanceExecutionRenderToken;
+  return window.postmeter.performance.resultPage(result.resultStoreId || result.id, {
+    offset: pageRange.startIndex,
+    limit: EXECUTION_RESULT_PAGE_SIZE,
+    status: performanceExecutionStatusFilter
+  }).then((page) => {
+    if (token !== performanceExecutionRenderToken || lastPerformanceResult !== result) {
+      return;
+    }
+    const rows = Array.isArray(page?.items) ? page.items : [];
+    list.textContent = '';
+    if (!rows.length) {
+      appendEmptyTestResult(list, performanceExecutionStatusFilter === 'all'
+        ? 'No performance request results were recorded.'
+        : 'No performance request results match this status filter.');
+    } else {
+      if (!rows.some((item) => item.resultIndex === selectedPerformanceResultIndex)) {
+        selectedPerformanceResultIndex = Number(rows[0]?.resultIndex || 0);
+      }
+      rows.forEach((item) => list.append(performanceExecutionRow(item, Number(item.resultIndex || 0))));
+    }
+    renderExecutionPagination({
+      containerId: 'performanceExecutionPagination',
+      label: 'Performance request results',
+      onPageChange: (nextPage) => {
+        performanceExecutionPage = nextPage;
+        renderPerformanceResult(lastPerformanceResult);
+      },
+      page: performanceExecutionPage,
+      totalItems: Number(page?.total ?? filteredTotal)
+    });
+    return renderStoredPerformanceExecutionDetails(result);
+  }).catch((error) => {
+    if (token !== performanceExecutionRenderToken) {
+      return;
+    }
+    list.textContent = '';
+    appendEmptyTestResult(list, error.message || String(error));
+  });
 }
 
 function ensurePerformanceResultsStructure() {
@@ -7631,6 +8314,48 @@ function renderPerformanceExecutionDetails(result = lastPerformanceResult) {
   appendRunnerResponseBodyDetails(details, sample);
 }
 
+function renderStoredPerformanceExecutionDetails(result = lastPerformanceResult) {
+  const status = $('performanceExecutionDetailsStatus');
+  const details = $('performanceExecutionDetails');
+  if (!details || !status) {
+    return;
+  }
+  details.textContent = '';
+  status.textContent = 'Loading';
+  appendEmptyTestResult(details, 'Loading performance request details...');
+  const token = performanceExecutionRenderToken;
+  return window.postmeter.performance.resultDetail(result.resultStoreId || result.id, selectedPerformanceResultIndex)
+    .then((sample) => {
+      if (token !== performanceExecutionRenderToken || lastPerformanceResult !== result) {
+        return;
+      }
+      details.textContent = '';
+      if (!sample) {
+        status.textContent = 'No selection';
+        appendEmptyTestResult(details, 'Select a completed request to inspect its performance details.');
+        return;
+      }
+      status.textContent = runnerStatusLabel(sample);
+      const request = performanceRequestForExecutionItem(sample);
+      details.append(performanceExecutionOverview(sample, request));
+      if (sample.error) {
+        details.append(runnerDetailTextBlock('Error', sample.error, 'runner-detail-error'));
+      }
+      appendRunnerScriptResultDetails(details, 'Pre-request', sample.preRequestScriptResult);
+      appendRunnerScriptResultDetails(details, 'Post-request', sample.testScriptResult);
+      appendRunnerVariableDetails(details, 'Request variables', sample.localVariables || []);
+      appendRunnerVariableDetails(details, 'Environment variables', result?.environment?.variables || []);
+      appendRunnerResponseBodyDetails(details, sample);
+    }).catch((error) => {
+      if (token !== performanceExecutionRenderToken) {
+        return;
+      }
+      status.textContent = 'Error';
+      details.textContent = '';
+      appendEmptyTestResult(details, error.message || String(error));
+    });
+}
+
 function renderPerformanceRunDetails(result = lastPerformanceResult) {
   const details = $('performanceRunDetails');
   if (!details) {
@@ -7642,6 +8367,7 @@ function renderPerformanceRunDetails(result = lastPerformanceResult) {
     return;
   }
   appendPerformanceRunSummary(details, result);
+  appendPerformanceDiagnosisSummary(details, result);
   appendPerformanceErrorSummary(details, result);
 }
 
@@ -7690,6 +8416,47 @@ function appendPerformanceRunSummary(details, result = {}) {
     block.append(row);
   }
   details.append(block);
+}
+
+function appendPerformanceDiagnosisSummary(details, result = {}) {
+  const diagnosis = result.summary?.diagnosis;
+  if (!diagnosis) {
+    return;
+  }
+  const overview = runnerDetailBlock('Endpoint diagnosis');
+  for (const [key, value] of [
+    ['Confidence', `${diagnosis.confidence || 'low'} (${formatNumber(diagnosis.confidenceScore)} / 100)`],
+    ['Best observed RPS', formatNumber(diagnosis.bestObservedRequestsPerSecond)],
+    ['Stable RPS', formatNumber(diagnosis.stableRequestsPerSecond)],
+    ['Saturation point', diagnosis.saturationPoint || 'Not reached'],
+    ['Checks', `${diagnosis.completedChecks || 0}/${diagnosis.requestedChecks || 0}`],
+    ['Final URL', diagnosis.finalUrl || 'Not captured']
+  ]) {
+    const row = document.createElement('div');
+    row.className = 'runner-detail-variable';
+    const label = document.createElement('span');
+    label.textContent = key;
+    const text = document.createElement('span');
+    text.textContent = value;
+    row.append(label, text);
+    overview.append(row);
+  }
+  details.append(overview);
+
+  const checks = runnerDetailBlock('Diagnostic checks');
+  for (const check of diagnosis.checks || []) {
+    const row = document.createElement('div');
+    row.className = 'runner-detail-variable';
+    const label = document.createElement('span');
+    label.textContent = `${check.status || 'info'} | ${check.group || 'Diagnostics'}`;
+    const text = document.createElement('span');
+    text.textContent = [check.label || check.id || 'Check', check.value, check.details]
+      .filter(Boolean)
+      .join(' - ');
+    row.append(label, text);
+    checks.append(row);
+  }
+  details.append(checks);
 }
 
 function appendPerformanceErrorSummary(details, result = {}) {
@@ -7909,6 +8676,7 @@ function normalizeRunner(runner) {
   runner.environmentId = String(runner.environmentId || 'none') || 'none';
   runner.stopOnFailure = runner.stopOnFailure === true;
   runner.allowEnvironmentMutation = runner.allowEnvironmentMutation === true;
+  runner.capturePolicy = normalizeResultCapturePolicy(runner.capturePolicy || {}, 'runner');
   runner.csvVariables = normalizeCsvVariableData(runner.csvVariables);
   runner.requests = normalizeRunnerRequests(runner.requests);
   if (runner.environmentId !== 'none' && !(workspace.environments || []).some((environment) => environment.id === runner.environmentId)) {
@@ -8142,6 +8910,7 @@ function fileBindingRow(item) {
   text.append(title, document.createElement('br'), detail);
   const remove = document.createElement('button');
   remove.type = 'button';
+  remove.className = 'danger-button';
   remove.textContent = 'Remove';
   remove.setAttribute('aria-label', `Remove imported file binding ${binding.source || item.source}`);
   remove.addEventListener('click', () => {
@@ -8197,6 +8966,7 @@ function packageCacheRow(item) {
   text.append(title, document.createElement('br'), detail);
   const remove = document.createElement('button');
   remove.type = 'button';
+  remove.className = 'danger-button';
   remove.textContent = 'Remove';
   remove.setAttribute('aria-label', `Remove reviewed sandbox package ${item.specifier}`);
   remove.addEventListener('click', () => {
@@ -8252,6 +9022,9 @@ function vaultMetadataRow(titleText, detailText, options = {}) {
     const action = document.createElement('button');
     action.type = 'button';
     action.textContent = options.actionLabel;
+    if (/^(Delete|Remove)\b/.test(String(options.actionLabel))) {
+      action.classList.add('danger-button');
+    }
     if (options.actionAccessibleLabel) {
       action.setAttribute('aria-label', options.actionAccessibleLabel);
     }
@@ -10095,6 +10868,7 @@ function createBodyFormDataRow(prefix, row = {}) {
   value.value = row.value || '';
   const remove = document.createElement('button');
   remove.type = 'button';
+  remove.className = 'danger-button';
   remove.textContent = 'Remove';
   remove.addEventListener('click', () => {
     wrapper.remove();
@@ -10151,6 +10925,7 @@ function createBodyUrlencodedRow(prefix, row = {}) {
   value.value = row.value || '';
   const remove = document.createElement('button');
   remove.type = 'button';
+  remove.className = 'danger-button';
   remove.textContent = 'Remove';
   remove.addEventListener('click', () => {
     wrapper.remove();
@@ -10479,6 +11254,9 @@ function renderRequestEditor() {
   if (!request) {
     renderRequestTitle(null);
     $('saveRequestButton').disabled = true;
+    $('exportRequestPanelButton').disabled = true;
+    $('exportRequestPanelPostmeterButton').disabled = true;
+    $('exportRequestPanelCurlButton').disabled = true;
     $('methodSelect').value = 'GET';
     updateMethodSelectClass();
     $('urlInput').value = '';
@@ -10501,6 +11279,9 @@ function renderRequestEditor() {
   }
   ensureRequestQueryEditorMirror(request);
   $('saveRequestButton').disabled = false;
+  $('exportRequestPanelButton').disabled = false;
+  $('exportRequestPanelPostmeterButton').disabled = false;
+  $('exportRequestPanelCurlButton').disabled = false;
   $('addRequestVariableButton').disabled = false;
   renderRequestTitle(request);
   $('methodSelect').value = request.method;
@@ -11170,6 +11951,7 @@ function renderEnvironmentPairs(pairs) {
       renderVariablePreview();
     });
     const remove = document.createElement('button');
+    remove.className = 'danger-button';
     remove.textContent = 'Remove';
     remove.setAttribute('aria-label', `Remove environment variable ${variableLabel}`);
     remove.addEventListener('click', () => {
@@ -11584,6 +12366,9 @@ function renderRunnerExecutionProgress(progress = {}) {
 
 function renderRunnerExecutionResult(result = lastRunnerResult) {
   ensureRunnerResultsStructure();
+  if (result?.storeBacked === true && window.postmeter?.runner?.resultPage) {
+    return renderStoredRunnerExecutionResult(result);
+  }
   const results = Array.isArray(result?.results) ? result.results : [];
   runnerExecutionStatusFilter = renderExecutionStatusFilter({
     selectId: 'runnerExecutionStatusFilter',
@@ -11649,6 +12434,128 @@ function runnerHttpResponseCount(result, results) {
     return null;
   }
   return results.filter((item) => Number(item?.statusCode) > 0).length;
+}
+
+function renderStoredRunnerExecutionResult(result = lastRunnerResult) {
+  ensureRunnerResultsStructure();
+  const pageInfo = result.resultPage || {};
+  const statusCounts = pageInfo.statusCounts || {};
+  runnerExecutionStatusFilter = renderExecutionStatusFilterFromCounts({
+    selectId: 'runnerExecutionStatusFilter',
+    counts: statusCounts,
+    selected: runnerExecutionStatusFilter,
+    onChange: (status) => {
+      runnerExecutionStatusFilter = status;
+      runnerExecutionPage = 0;
+      selectedRunnerExecutionIndex = 0;
+      renderRunnerExecutionResult(lastRunnerResult);
+    }
+  });
+  const totalAll = Number(pageInfo.totalAll ?? result.totalRequests ?? result.completedRequests ?? 0);
+  const filteredTotal = filteredCountFromStatusCounts(statusCounts, runnerExecutionStatusFilter, totalAll);
+  const failedRequests = Number(result?.failedRequests ?? statusCounts.ERR ?? 0);
+  const httpResponses = runnerHttpResponseCount(result, []);
+  const cancelled = result?.cancelled === true ? ', cancelled' : '';
+  $('runnerResultsSummary').textContent = totalAll
+    ? [
+        `${totalAll} ${plural(totalAll, 'request', 'requests')} completed`,
+        httpResponses == null ? '' : `${httpResponses} HTTP ${plural(httpResponses, 'response', 'responses')}`,
+        `${failedRequests} failed${cancelled}`,
+        result.detailCaptureTruncated ? 'detail capture truncated' : ''
+      ].filter(Boolean).join(', ') + '.'
+    : 'No runner execution results were returned.';
+  runnerExecutionPage = executionPageForIndex(runnerExecutionPage * EXECUTION_RESULT_PAGE_SIZE, filteredTotal, runnerExecutionPage);
+  const pageRange = executionPageRange(filteredTotal, runnerExecutionPage);
+  $('runnerExecutionSummary').textContent = filteredTotal
+    ? executionFilterSummaryText(pageRange, filteredTotal, totalAll, 'result', runnerExecutionStatusFilter)
+    : 'No requests';
+  const list = $('runnerExecutionList');
+  list.textContent = '';
+  appendEmptyTestResult(list, 'Loading request results...');
+  clearStoredDetails('runner');
+  const token = ++runnerExecutionRenderToken;
+  return window.postmeter.runner.resultPage(result.resultStoreId || result.id, {
+    offset: pageRange.startIndex,
+    limit: EXECUTION_RESULT_PAGE_SIZE,
+    status: runnerExecutionStatusFilter
+  }).then((page) => {
+    if (token !== runnerExecutionRenderToken || lastRunnerResult !== result) {
+      return;
+    }
+    const rows = Array.isArray(page?.items) ? page.items : [];
+    list.textContent = '';
+    if (!rows.length) {
+      appendEmptyTestResult(list, runnerExecutionStatusFilter === 'all'
+        ? 'No request results were recorded.'
+        : 'No request results match this status filter.');
+    } else {
+      if (!rows.some((item) => item.resultIndex === selectedRunnerExecutionIndex)) {
+        selectedRunnerExecutionIndex = Number(rows[0]?.resultIndex || 0);
+      }
+      rows.forEach((item) => list.append(runnerExecutionRow(item, Number(item.resultIndex || 0))));
+    }
+    renderExecutionPagination({
+      containerId: 'runnerExecutionPagination',
+      label: 'Runner request results',
+      onPageChange: (nextPage) => {
+        runnerExecutionPage = nextPage;
+        renderRunnerExecutionResult(lastRunnerResult);
+      },
+      page: runnerExecutionPage,
+      totalItems: Number(page?.total ?? filteredTotal)
+    });
+    return renderStoredRunnerExecutionDetails(result);
+  }).catch((error) => {
+    if (token !== runnerExecutionRenderToken) {
+      return;
+    }
+    list.textContent = '';
+    appendEmptyTestResult(list, error.message || String(error));
+  });
+}
+
+function renderStoredRunnerExecutionDetails(result = lastRunnerResult) {
+  const status = $('runnerExecutionDetailsStatus');
+  const details = $('runnerExecutionDetails');
+  if (!details || !status) {
+    return;
+  }
+  details.textContent = '';
+  status.textContent = 'Loading';
+  appendEmptyTestResult(details, 'Loading request details...');
+  const token = runnerExecutionRenderToken;
+  return window.postmeter.runner.resultDetail(result.resultStoreId || result.id, selectedRunnerExecutionIndex)
+    .then((item) => {
+      if (token !== runnerExecutionRenderToken || lastRunnerResult !== result) {
+        return;
+      }
+      details.textContent = '';
+      if (!item) {
+        status.textContent = 'No selection';
+        appendEmptyTestResult(details, 'Select a completed request to inspect its execution details.');
+        return;
+      }
+      status.textContent = runnerStatusLabel(item);
+      const request = runnerRequestForExecutionItem(item);
+      details.append(runnerExecutionOverview(item, request));
+      if (item.error) {
+        details.append(runnerDetailTextBlock('Error', item.error, 'runner-detail-error'));
+      }
+      appendRunnerScriptResultDetails(details, 'Pre-request', item.preRequestScriptResult);
+      appendRunnerScriptResultDetails(details, 'Post-request', item.testScriptResult);
+      appendRunnerVariableDetails(details, 'Request variables', item.localVariables || []);
+      appendRunnerVariableDetails(details, 'Collection variables', result?.collectionVariables || []);
+      appendRunnerVariableDetails(details, 'Environment variables', result?.environment?.variables || []);
+      appendRunnerVariableDetails(details, 'Global variables', result?.globals || []);
+      appendRunnerResponseBodyDetails(details, item);
+    }).catch((error) => {
+      if (token !== runnerExecutionRenderToken) {
+        return;
+      }
+      status.textContent = 'Error';
+      details.textContent = '';
+      appendEmptyTestResult(details, error.message || String(error));
+    });
 }
 
 function executionPageForIndex(index, totalItems, fallbackPage = 0) {
@@ -11725,6 +12632,51 @@ function clearExecutionStatusFilter(selectId) {
   select.value = 'all';
   select.disabled = true;
   select.onchange = null;
+}
+
+function clearStoredDetails(kind) {
+  const prefix = kind === 'performance' ? 'performanceExecution' : 'runnerExecution';
+  const status = $(`${prefix}DetailsStatus`);
+  const details = $(`${prefix}Details`);
+  if (status) {
+    status.textContent = 'Loading';
+  }
+  if (details) {
+    details.textContent = '';
+    appendEmptyTestResult(details, 'Loading request details...');
+  }
+}
+
+function renderExecutionStatusFilterFromCounts({ selectId, counts, selected, onChange }) {
+  const select = $(selectId);
+  if (!select) {
+    return selected || 'all';
+  }
+  const entries = Object.entries(counts || {})
+    .filter(([, count]) => Number(count || 0) > 0)
+    .sort(([left], [right]) => compareExecutionStatusFilters(left, right));
+  const statuses = new Set(entries.map(([status]) => status));
+  const normalized = statuses.has(String(selected)) ? String(selected) : 'all';
+  select.textContent = '';
+  select.append(executionStatusOption('All', 'all'));
+  for (const [status, count] of entries) {
+    select.append(executionStatusOption(`${status} (${count})`, status));
+  }
+  select.disabled = entries.length === 0;
+  select.value = normalized;
+  select.onchange = () => {
+    if (typeof onChange === 'function') {
+      onChange(select.value || 'all');
+    }
+  };
+  return normalized;
+}
+
+function filteredCountFromStatusCounts(counts, statusFilter, totalAll) {
+  if (!statusFilter || statusFilter === 'all') {
+    return Number(totalAll || 0);
+  }
+  return Number(counts?.[statusFilter] || 0);
 }
 
 function renderExecutionStatusFilter({ selectId, items, selected, onChange }) {
@@ -12198,6 +13150,14 @@ async function runActiveRunner() {
   if (!runner.requests.length) {
     return setStatus('Add at least one request before running a runner.');
   }
+  const runnerRunConfig = {
+    stopOnFailure: runner.stopOnFailure === true,
+    allowEnvironmentMutation: runner.allowEnvironmentMutation === true,
+    capturePolicy: cloneJson(runner.capturePolicy || {})
+  };
+  if (!(await confirmRuntimeResultStoreCapacity('runner', cloneJson(runner), runnerRunConfig))) {
+    return setStatus('Runner cancelled.');
+  }
   const runnerId = crypto.randomUUID();
   const runnerContext = {
     runnerConfigId: runner.id,
@@ -12218,10 +13178,7 @@ async function runActiveRunner() {
     $('cancelRunnerButton').disabled = false;
     renderRunnerExecutionMessage('Starting runner...');
     const startRunner = window.__postmeterStartRunner || window.postmeter.runner.start;
-    const result = await startRunner(runnerId, cloneJson(runner), cloneJson(runnerEnvironment), {
-      stopOnFailure: runner.stopOnFailure === true,
-      allowEnvironmentMutation: runner.allowEnvironmentMutation === true
-    });
+    const result = await startRunner(runnerId, cloneJson(runner), cloneJson(runnerEnvironment), runnerRunConfig);
     if (activeRunnerId !== runnerId || !isActiveRunnerContext(runnerContext)) {
       return;
     }
@@ -12243,7 +13200,7 @@ async function runActiveRunner() {
     selectedRunnerExecutionIndex = 0;
     runnerExecutionPage = 0;
     runnerExecutionStatusFilter = 'all';
-    renderRunnerExecutionResult(result);
+    await renderRunnerExecutionResult(result);
     $('exportRunnerJsonButton').disabled = false;
     $('exportRunnerCsvButton').disabled = false;
     setStatus(result.cancelled ? 'Runner cancelled.' : 'Runner completed.');
@@ -12936,6 +13893,16 @@ async function exportRequestFromPicker(format = 'postmeter') {
     return null;
   }
   return exportRequest(selectedEntry.request, format);
+}
+
+async function exportRequestFromPane(format = 'postmeter') {
+  const request = activeRequest();
+  if (!request) {
+    setStatus('Select a request before exporting.');
+    return null;
+  }
+  collectRequestFromEditor();
+  return exportRequest(request, format);
 }
 
 async function promptForRequestExport(preferredEntry = null) {
@@ -14237,15 +15204,14 @@ function collectRunnerFromEditor() {
   runner.environmentId = $('runnerEnvironmentSelect')?.value || runner.environmentId || 'none';
   runner.stopOnFailure = $('runnerStopOnFailure')?.checked === true;
   runner.allowEnvironmentMutation = $('runnerAllowEnvironmentMutation')?.checked === true;
-  runner.csvVariables = normalizeCsvVariableData({
-    ...(runner.csvVariables || {}),
-    enabled: $('runnerUseCsvVariablesInput')?.checked !== false
-  });
+  runner.capturePolicy = collectCapturePolicyFromControls('runner', runner.capturePolicy || {});
+  runner.csvVariables = normalizeCsvVariableData(runner.csvVariables || {});
   const iterationsChanged = collectRunnerRequestIterationsFromEditor(runner);
   runner.requests = normalizeRunnerRequests(runner.requests);
   if (iterationsChanged) {
     markActiveRunnerDirty();
   }
+  renderCapturePolicyControls('runner', runner.capturePolicy, true);
   const title = $('runnerMainTitle');
   if (title && title.dataset.editing !== 'true') {
     title.textContent = runnerDisplayName(runner);
@@ -14253,20 +15219,18 @@ function collectRunnerFromEditor() {
   renderRunners();
 }
 
-function collectPerformanceTestFromEditor() {
+function collectPerformanceTestFromEditor(editedElement = null) {
   const test = activePerformanceTest();
   if (!test) {
     return;
   }
   test.name = performanceTitleInputValue() || 'Untitled Performance Test';
-  const type = activePerformanceType() || test.type || 'latency';
+  const type = activePerformanceType() || test.type || 'diagnosis';
   test.type = type;
-  collectPerformanceTypeSettingsFromPanel(test, type, activePerformanceTypePanel());
+  collectPerformanceTypeSettingsFromPanel(test, type, activePerformanceTypePanel(), editedElement);
   syncPerformanceActiveTypeSettings(test);
-  test.csvVariables = normalizeCsvVariableData({
-    ...(test.csvVariables || {}),
-    enabled: $('performanceUseCsvVariablesInput')?.checked !== false
-  });
+  test.csvVariables = normalizeCsvVariableData(test.csvVariables || {});
+  test.capturePolicy = collectCapturePolicyFromControls('performance', test.capturePolicy || {});
   test.request ||= {};
   test.request.id ||= crypto.randomUUID();
   test.request.name ||= 'Performance Request';
@@ -14294,6 +15258,7 @@ function collectPerformanceTestFromEditor() {
   test.request.headers = collectKeyValueRowsFromTable('performanceHeadersTable', test.request.headers);
   test.request.variables = collectKeyValueRowsFromTable('performanceRequestVariablesTable', test.request.variables);
   test.source ||= { sourceType: 'manual' };
+  renderCapturePolicyControls('performance', test.capturePolicy, true);
   const title = $('performanceMainTitle');
   if (title && title.dataset.editing !== 'true') {
     title.textContent = performanceTestDisplayName(test);
@@ -14332,11 +15297,12 @@ function collectKeyValueRowsFromTable(containerId, fallback = []) {
   });
 }
 
-function collectPerformanceTypeSettingsFromPanel(test, type, panel) {
+function collectPerformanceTypeSettingsFromPanel(test, type, panel, editedElement = null) {
   if (!test || !RENDERER_PERFORMANCE_TEST_TYPES.includes(type) || !panel) {
     return;
   }
   const previous = performanceTypeSettings(test, type);
+  clampPerformancePanelNumericInputs(type, panel, previous, editedElement || document.activeElement);
   const minimumDurationSeconds = type === 'soak' ? 1 : 0;
   const config = {
     iterations: clampPerformanceConfigInput('iterations', 1, PERFORMANCE_MAX_SAFETY_LIMITS.maxTotalRequests, previous.config?.iterations || 1, panel),
@@ -14344,13 +15310,24 @@ function collectPerformanceTypeSettingsFromPanel(test, type, panel) {
     concurrency: clampPerformanceConfigInput('concurrency', 1, PERFORMANCE_MAX_SAFETY_LIMITS.maxConcurrency, previous.config?.concurrency || 1, panel),
     durationSeconds: clampPerformanceConfigInput('durationSeconds', minimumDurationSeconds, PERFORMANCE_MAX_SAFETY_LIMITS.maxDurationSeconds, previous.config?.durationSeconds || minimumDurationSeconds, panel),
     rampSteps: clampPerformanceConfigInput('rampSteps', 1, PERFORMANCE_MAX_SAFETY_LIMITS.maxTotalRequests, previous.config?.rampSteps || 1, panel),
-    spikeMultiplier: clampPerformanceConfigInput('spikeMultiplier', 1, PERFORMANCE_MAX_SAFETY_LIMITS.maxConcurrency, previous.config?.spikeMultiplier || 1, panel)
+    spikeMultiplier: clampPerformanceConfigInput('spikeMultiplier', 1, PERFORMANCE_MAX_SAFETY_LIMITS.maxConcurrency, previous.config?.spikeMultiplier || 1, panel),
+    diagnosisScope: collectPerformanceDiagnosisScope(panel, previous.config?.diagnosisScope)
   };
+  if (type === 'diagnosis') {
+    const profile = diagnosisProfileForScope(config.diagnosisScope);
+    config.iterations = profile.totalRequests;
+  }
   const safetyLimits = {
     maxTotalRequests: clampPerformanceSafetyInput('maxTotalRequests', 1, PERFORMANCE_MAX_SAFETY_LIMITS.maxTotalRequests, previous.safetyLimits?.maxTotalRequests || 100, panel),
     maxConcurrency: clampPerformanceSafetyInput('maxConcurrency', 1, PERFORMANCE_MAX_SAFETY_LIMITS.maxConcurrency, previous.safetyLimits?.maxConcurrency || 10, panel),
     maxDurationSeconds: clampPerformanceSafetyInput('maxDurationSeconds', 1, PERFORMANCE_MAX_SAFETY_LIMITS.maxDurationSeconds, previous.safetyLimits?.maxDurationSeconds || 60, panel)
   };
+  if (type === 'diagnosis') {
+    const profile = diagnosisProfileForScope(config.diagnosisScope);
+    safetyLimits.maxTotalRequests = profile.totalRequests;
+    safetyLimits.maxDurationSeconds = Math.max(safetyLimits.maxDurationSeconds, profile.maxDurationSeconds);
+    setPerformancePanelControlValue(panel, 'safety', 'maxDurationSeconds', safetyLimits.maxDurationSeconds);
+  }
   if (!panel.querySelector('[data-performance-safety="maxTotalRequests"]')) {
     safetyLimits.maxTotalRequests = Math.max(
       safetyLimits.maxTotalRequests,
@@ -14372,6 +15349,9 @@ function collectPerformanceTypeSettingsFromPanel(test, type, panel) {
 }
 
 function performancePlannedRequestCount(type, config, safetyLimits) {
+  if (type === 'diagnosis') {
+    return diagnosisProfileForScope(config.diagnosisScope).totalRequests;
+  }
   if (type === 'soak') {
     return safetyLimits.maxTotalRequests || 1;
   }
@@ -14385,6 +15365,9 @@ function performancePlannedRequestCount(type, config, safetyLimits) {
 }
 
 function performanceEffectiveConcurrency(type, config) {
+  if (type === 'diagnosis') {
+    return Math.min(25, Math.max(config.concurrency || 5, (config.concurrency || 5) * (config.spikeMultiplier || 2)));
+  }
   if (type === 'latency') {
     return 1;
   }
@@ -14395,6 +15378,213 @@ function performanceEffectiveConcurrency(type, config) {
     return Math.max(config.startConcurrency || 1, config.concurrency || 1);
   }
   return config.concurrency || 1;
+}
+
+function performancePanelInput(panel, kind, name) {
+  const attribute = kind === 'safety' ? 'data-performance-safety' : 'data-performance-config';
+  return panel?.querySelector(`[${attribute}="${name}"]`) || null;
+}
+
+function activePerformancePanelField(panel, target = document.activeElement) {
+  const active = target || document.activeElement;
+  if (!active || !panel?.contains(active)) {
+    return { kind: '', name: '' };
+  }
+  if (active.dataset?.performanceConfig) {
+    return { kind: 'config', name: active.dataset.performanceConfig };
+  }
+  if (active.dataset?.performanceSafety) {
+    return { kind: 'safety', name: active.dataset.performanceSafety };
+  }
+  return { kind: '', name: '' };
+}
+
+function clampPerformancePanelInputElement(element, min, max, fallback) {
+  if (!element) {
+    return fallback;
+  }
+  const safeMin = Number.isFinite(Number(min)) ? Number(min) : 1;
+  const safeMax = Math.max(safeMin, Number.isFinite(Number(max)) ? Number(max) : safeMin);
+  element.min = String(safeMin);
+  element.max = String(safeMax);
+  const parsed = Number.parseInt(element.value || '', 10);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  const next = Math.max(safeMin, Math.min(safeMax, parsed));
+  if (String(next) !== element.value) {
+    element.value = String(next);
+  }
+  return next;
+}
+
+function setPerformancePanelInputMax(panel, kind, name, max) {
+  const element = performancePanelInput(panel, kind, name);
+  if (element) {
+    element.max = String(Math.max(1, Number(max || 1)));
+  }
+}
+
+function clampPerformanceConfigPanelInput(panel, name, min, max, fallback) {
+  return clampPerformancePanelInputElement(
+    performancePanelInput(panel, 'config', name),
+    min,
+    max,
+    fallback
+  );
+}
+
+function clampPerformanceSafetyPanelInput(panel, name, min, max, fallback) {
+  return clampPerformancePanelInputElement(
+    performancePanelInput(panel, 'safety', name),
+    min,
+    max,
+    fallback
+  );
+}
+
+function clampPerformancePanelNumericInputs(type, panel, previous = {}, editedElement = document.activeElement) {
+  if (!panel) {
+    return;
+  }
+  const edited = activePerformancePanelField(panel, editedElement);
+  const previousConfig = previous.config || {};
+  const previousSafety = previous.safetyLimits || {};
+  const minimumDurationSeconds = type === 'soak' ? 1 : 0;
+  const maxTotalRequests = clampPerformanceSafetyPanelInput(
+    panel,
+    'maxTotalRequests',
+    1,
+    PERFORMANCE_MAX_SAFETY_LIMITS.maxTotalRequests,
+    previousSafety.maxTotalRequests || 100
+  );
+  const maxConcurrency = clampPerformanceSafetyPanelInput(
+    panel,
+    'maxConcurrency',
+    1,
+    PERFORMANCE_MAX_SAFETY_LIMITS.maxConcurrency,
+    previousSafety.maxConcurrency || 10
+  );
+  const maxDurationSeconds = clampPerformanceSafetyPanelInput(
+    panel,
+    'maxDurationSeconds',
+    1,
+    PERFORMANCE_MAX_SAFETY_LIMITS.maxDurationSeconds,
+    previousSafety.maxDurationSeconds || 60
+  );
+  clampPerformanceConfigPanelInput(
+    panel,
+    'durationSeconds',
+    minimumDurationSeconds,
+    type === 'soak' ? maxDurationSeconds : PERFORMANCE_MAX_SAFETY_LIMITS.maxDurationSeconds,
+    previousConfig.durationSeconds || minimumDurationSeconds
+  );
+  let iterations = clampPerformanceConfigPanelInput(
+    panel,
+    'iterations',
+    1,
+    PERFORMANCE_MAX_SAFETY_LIMITS.maxTotalRequests,
+    previousConfig.iterations || 1
+  );
+  let rampSteps = clampPerformanceConfigPanelInput(
+    panel,
+    'rampSteps',
+    1,
+    PERFORMANCE_MAX_SAFETY_LIMITS.maxTotalRequests,
+    previousConfig.rampSteps || 1
+  );
+  let concurrency = clampPerformanceConfigPanelInput(
+    panel,
+    'concurrency',
+    1,
+    PERFORMANCE_MAX_SAFETY_LIMITS.maxConcurrency,
+    previousConfig.concurrency || 1
+  );
+  clampPerformanceConfigPanelInput(
+    panel,
+    'startConcurrency',
+    1,
+    maxConcurrency,
+    previousConfig.startConcurrency || 1
+  );
+  let spikeMultiplier = clampPerformanceConfigPanelInput(
+    panel,
+    'spikeMultiplier',
+    1,
+    PERFORMANCE_MAX_SAFETY_LIMITS.maxConcurrency,
+    previousConfig.spikeMultiplier || 1
+  );
+
+  if (type === 'throughput' || type === 'spike') {
+    iterations = clampPerformanceConfigPanelInput(panel, 'iterations', 1, maxTotalRequests, iterations);
+    if (type === 'throughput') {
+      clampPerformanceConfigPanelInput(panel, 'concurrency', 1, maxConcurrency, concurrency);
+    }
+  } else if (type === 'concurrency') {
+    if (edited.kind === 'config' && edited.name === 'concurrency') {
+      const maxUsers = Math.max(1, Math.floor(maxTotalRequests / Math.max(1, iterations)));
+      concurrency = clampPerformanceConfigPanelInput(panel, 'concurrency', 1, Math.min(maxConcurrency, maxUsers), concurrency);
+      setPerformancePanelInputMax(panel, 'config', 'iterations', Math.max(1, Math.floor(maxTotalRequests / Math.max(1, concurrency))));
+    } else {
+      concurrency = clampPerformanceConfigPanelInput(panel, 'concurrency', 1, Math.min(maxConcurrency, maxTotalRequests), concurrency);
+      iterations = clampPerformanceConfigPanelInput(panel, 'iterations', 1, Math.max(1, Math.floor(maxTotalRequests / Math.max(1, concurrency))), iterations);
+    }
+  } else if (type === 'stress' || type === 'ramp') {
+    if (edited.kind === 'config' && edited.name === 'rampSteps') {
+      const maxSteps = Math.max(1, Math.floor(maxTotalRequests / Math.max(1, iterations)));
+      rampSteps = clampPerformanceConfigPanelInput(panel, 'rampSteps', 1, maxSteps, rampSteps);
+      setPerformancePanelInputMax(panel, 'config', 'iterations', Math.max(1, Math.floor(maxTotalRequests / Math.max(1, rampSteps))));
+    } else {
+      rampSteps = clampPerformanceConfigPanelInput(panel, 'rampSteps', 1, maxTotalRequests, rampSteps);
+      iterations = clampPerformanceConfigPanelInput(panel, 'iterations', 1, Math.max(1, Math.floor(maxTotalRequests / Math.max(1, rampSteps))), iterations);
+    }
+    const startConcurrency = clampPerformanceConfigPanelInput(
+      panel,
+      'startConcurrency',
+      1,
+      maxConcurrency,
+      previousConfig.startConcurrency || 1
+    );
+    const peakConcurrency = clampPerformanceConfigPanelInput(panel, 'concurrency', 1, maxConcurrency, concurrency);
+    if (edited.kind === 'config' && edited.name === 'startConcurrency') {
+      clampPerformanceConfigPanelInput(panel, 'startConcurrency', 1, peakConcurrency, startConcurrency);
+    } else {
+      clampPerformanceConfigPanelInput(panel, 'concurrency', startConcurrency, maxConcurrency, peakConcurrency);
+    }
+  }
+
+  if (type === 'spike') {
+    concurrency = clampPerformanceConfigPanelInput(panel, 'concurrency', 1, maxConcurrency, concurrency);
+    if (edited.kind === 'config' && edited.name === 'concurrency') {
+      const maxBaseline = Math.max(1, Math.floor(maxConcurrency / Math.max(1, spikeMultiplier)));
+      concurrency = clampPerformanceConfigPanelInput(panel, 'concurrency', 1, maxBaseline, concurrency);
+      setPerformancePanelInputMax(panel, 'config', 'spikeMultiplier', Math.max(1, Math.floor(maxConcurrency / Math.max(1, concurrency))));
+    } else {
+      spikeMultiplier = clampPerformanceConfigPanelInput(
+        panel,
+        'spikeMultiplier',
+        1,
+        Math.max(1, Math.floor(maxConcurrency / Math.max(1, concurrency))),
+        spikeMultiplier
+      );
+    }
+  } else if (type === 'soak') {
+    clampPerformanceConfigPanelInput(panel, 'concurrency', 1, maxConcurrency, concurrency);
+  }
+}
+
+function normalizeDiagnosisScope(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return DIAGNOSIS_SCOPE_PROFILES?.[normalized] ? normalized : 'quick';
+}
+
+function diagnosisProfileForScope(value) {
+  return DIAGNOSIS_SCOPE_PROFILES[normalizeDiagnosisScope(value)];
+}
+
+function collectPerformanceDiagnosisScope(panel, fallback = 'quick') {
+  const value = panel?.querySelector('[data-performance-config="diagnosisScope"]')?.value;
+  return normalizeDiagnosisScope(value || fallback);
 }
 
 function activePerformanceType() {
@@ -14597,19 +15787,24 @@ function activateTab(groupName, tabName) {
       if (changed) {
         markActivePerformanceDirty();
       }
+      renderCapturePolicyControls('performance', test.capturePolicy, true);
     }
   }
   scheduleSessionSave();
 }
 
 function formatBytes(bytes) {
-  if (bytes < 1024) {
-    return `${bytes} B`;
+  const value = Math.max(0, Number(bytes || 0));
+  if (value < 1024) {
+    return `${value} B`;
   }
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
+  if (value < 1024 * 1024) {
+    return `${(value / 1024).toFixed(1)} KB`;
   }
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (value < 1024 * 1024 * 1024) {
+    return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+  }
+  return `${(value / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 function setStatus(message) {
@@ -14637,5 +15832,6 @@ function isAutomatedUiSmoke() {
   return params.get('uiWorkflowSmoke') === '1'
     || params.get('uiRegressionSmoke') === '1'
     || params.get('uiSnapshotSmoke') === '1'
+    || params.get('uiTypographySmoke') === '1'
     || params.get('uiOauthSmoke') === '1';
 }

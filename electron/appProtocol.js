@@ -9,6 +9,7 @@ const APP_RENDERER_QUERY_KEYS = new Set([
   'uiWorkflowSmoke',
   'uiRegressionSmoke',
   'uiSnapshotSmoke',
+  'uiTypographySmoke',
   'uiOauthSmoke',
   'uiWorkflowBaseUrl',
   'uiOauthBaseUrl'
@@ -18,6 +19,7 @@ const ALLOWED_CORE_ASSETS = new Set([
   '/src/core/cookieModel.js',
   '/src/core/csvVariables.js',
   '/src/core/payloadSchemas.js',
+  '/src/core/resultCapturePolicy.js',
   '/src/core/requestQueryModel.js'
 ]);
 

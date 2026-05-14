@@ -52,7 +52,8 @@ PostMeter must remain a standalone local desktop application. Do not add PostMet
 - Implemented the local Performance section.
   - `Performance` now lives between `Runners` and `History`, persists workspace-owned `workspace.performanceTests` under the current schema, and uses dirty-aware tabs, session restore, close/force-close behavior, and the 128-tab cap.
   - Users can create Performance tests from `New` or the empty Performance pane, import/export native Performance test files, import deep-copied collection requests, manually enter request details, choose an environment, configure safety limits, run/cancel tests, and review bounded result summaries.
-  - The seven V1 local types are `Latency`, `RPS / throughput`, `Concurrency`, `Stress`, `Spike`, `Soak`, and `Ramp`.
+  - The eight V1 local types are `Full Endpoint Diagnosis`, `Latency`, `RPS / throughput`, `Concurrency`, `Stress`, `Spike`, `Soak`, and `Ramp`.
+  - `Full Endpoint Diagnosis` is the first one-click type, supports Quick/Medium/Extended scopes for deeper UAT evidence, and records transport timing, endpoint behavior, passive security/configuration signals, local-client confidence, diagnostic phases, and UAT-ready CSV rows.
   - Tests cover model normalization, import/export validation, request-copy isolation, environment copy-vs-mutate behavior, safety-cap rejection, cancellation, IPC progress/mutation behavior, renderer wiring, sidebar ordering, and tab-limit behavior.
 - Implemented GraphQL body editing and execution.
   - Request, runner-owned request, and Performance request editors now expose a GraphQL body mode with query, variables, and operation-name fields.
@@ -111,6 +112,23 @@ These are production-readiness items that cannot be fully proven by local Linux 
 
 ## Deferred / Larger Follow-Ups
 
+- Implement a real local Load Engine for PostMeter's flagship Performance feature.
+  - Goal: replace the current single-main-process hot loop for high-volume safe Performance runs so 100k-1m request tests do not freeze the UI/main process, do not build unbounded JS heap pressure, and can produce trustworthy UAT evidence.
+  - Scope first: Performance Tests. Keep Runners sequential by default because request order, `setNextRequest`, CSV row sequencing, cookie propagation, stop-on-failure, and environment mutation are part of the runner contract. Add any runner parallelism only as an explicit opt-in mode with clear compatibility constraints and a visible fallback to sequential execution.
+  - HTTP-family support must include both `http://` and `https://` URL schemes. Treat `request.protocol = "http"` as the PostMeter request family, not as a cleartext-only scheme. Do not accidentally exclude HTTPS endpoints from worker execution.
+  - Architecture: main process validates the run, plans stages, coordinates worker processes, owns cancellation, coalesces progress, aggregates exact summary metrics, and remains the only SQLite writer. Child worker processes execute the hot request loops and send batched samples/progress back over IPC.
+  - Worker model: shard each Performance stage across worker processes, give each worker a bounded local concurrency share, create per-worker keep-alive `http.Agent`/`https.Agent` instances, cap sockets to the worker concurrency, and abort in-flight requests on cancellation before escalating to process termination.
+  - Result storage: keep one reusable temp SQLite result store per app session. Do not store run history. Each new run can overwrite the temp store, and PostMeter should delete the store and SQLite sidecar files on shutdown. CSV/JSON exports should stream from SQLite only when requested.
+  - IPC and memory: send result batches, not one IPC message per request. Avoid retaining per-request samples in memory when a store-backed run is active. Keep response capture policy enforcement before samples leave workers so large response bodies, script output, headers, and local variables do not cross IPC when disabled.
+  - Compatibility fallback: use the load engine only for safe local HTTP-family Performance requests. Fall back to the existing compatibility path for request scripts, CSV variables, environment mutation, response-cookie mutation, non-HTTP-family protocols, custom transports, gRPC/WebSocket/Socket.IO, and any request feature whose ordered semantics are not proven in workers.
+  - Metrics to capture: exact completed/success/failed counts, status-code distribution, error distribution, latency min/avg/p50/p90/p95/p99/max, achieved RPS, active request high-water mark, request timeout counts, worker event-loop delay, worker scheduler lag, worker RSS/heap, main-process summary timing, and a `clientSaturated` signal when local execution is likely under-reporting endpoint capacity.
+  - Safety and caps: raise the Performance concurrency cap to a reasonable local maximum after the load engine is in place. A target around 250 effective concurrent users is reasonable for local desktop execution, but the UI should still explain that endpoint accuracy depends on local CPU/network capacity and calibration. Keep the 1,000,000 planned-request cap unless a later calibration and storage pass proves a higher cap is safe.
+  - Pre-run safeguards: estimate result-store size from planned requests, capture settings, and request metadata. Warn when the estimate is within 1 GB of free disk space, and block continuation when the estimate exceeds available space. Keep high-volume capture guardrails, including forced opt-out of large detail fields at the configured threshold.
+  - Cancellation and failure behavior: cancellation must stop scheduling new work, abort active worker requests, flush already completed samples, commit/fail the result store deterministically, and return a clear cancelled result. Worker crashes should not hang the run; they should mark the run failed with diagnostic detail.
+  - Testing required before shipping: unit tests for planning, sharding, worker-count selection, fallback eligibility, cancellation, timeout behavior, result indexes, capture policy enforcement, and summary aggregation; runtime IPC tests proving SQLite-backed paging/detail/export; renderer/E2E tests proving high-concurrency Performance execution stays responsive and reports progress; live endpoint tests should be opt-in or carefully bounded, with any CI live test using a stable public endpoint only for small diagnostic coverage.
+  - Manual stress validation: run owned endpoint tests at 100k, 200k, 500k, and 1m requests with concurrency near the new cap; watch CPU, RSS, disk growth, result-store size, progress cadence, cancellation responsiveness, and export correctness. Preserve logs/evidence for regressions.
+  - Documentation updates needed: README feature summary, architecture docs, tech specs, compatibility notes, release-readiness matrix, and user-facing Performance docs/tooltips explaining local load limits, HTTPS support, worker fallback behavior, capture settings, result storage, and CSV export.
+- Format large integer inputs with comma separators in Runner and Performance panes. Native `type="number"` inputs do not display `1,000,000`, so this likely needs comma-aware text inputs plus shared parse/clamp helpers that preserve the existing 1m request caps and cross-field max-request validation.
 - Distributed/cloud load execution remains deferred until there is explicit product demand.
 - Team collaboration and shared remote workspaces.
 - Plugin system for custom auth, importers, reporters, and scripting extensions.
@@ -119,6 +137,7 @@ These are production-readiness items that cannot be fully proven by local Linux 
 - Direct first-party Postman account/provider integration for fetching team Package Library `@team/package` sources remains deferred. The current reviewed HTTPS source-URL workflow stays the supported path until a future provider-specific auth/import contract is approved.
 - Maintainer-provided real-world Postman collection corpora remain deferred until a sanitized folder of collections is available. When provided, add them as compatibility fixtures or external report inputs without copying third-party copyrighted content blindly.
 - A stricter Linux deny-by-default seccomp-BPF allowlist is optional future hardening. The maintainer has accepted the current Linux `bubblewrap` namespace isolation plus dangerous-syscall seccomp policy for the current public Linux OS-sandbox claim.
+- User-imported custom fonts for Settings > Appearance remain deferred. If revisited later, support importing and deleting local `.ttf`, `.otf`, `.woff`, and `.woff2` fonts from an app-controlled local font store, expose them in both Interface Text and Editor Text selectors, reset affected selections when a custom font is deleted, avoid storing raw local paths in exported workspace files, and add E2E coverage for import, selection, deletion, persistence, invalid files, and privacy behavior.
 
 ## Risks / Gaps Blocking Production Readiness
 
@@ -129,7 +148,7 @@ These are production-readiness items that cannot be fully proven by local Linux 
 - IPC validation uses shared schema metadata for common fields, update/external payloads, file-operation results, OAuth progress, runner config/progress, and result payloads, but some complex validators are still partly handwritten rather than fully generated.
 - Signing/notarization remains incomplete; unsigned GitHub Release artifact publishing is configured.
 - In-app update checks can open GitHub Releases, but PostMeter does not yet auto-download or auto-install updates.
-- The legacy Load Test implementation is removed; the seven-type local V1 Performance model is implemented and should continue receiving result-presentation and real-world workload hardening.
+- The legacy Load Test implementation is removed; the eight-type local V1 Performance model is implemented with scoped Full Endpoint Diagnosis profiles and should continue receiving result-presentation and real-world workload hardening.
 
 ## Next Iteration Starting Point
 

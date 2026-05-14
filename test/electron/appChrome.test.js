@@ -263,6 +263,7 @@ test('Electron IPC sender hardening trusts only the packaged renderer URL', asyn
 
   assert.equal(isTrustedRendererUrl(indexUrl), true);
   assert.equal(isTrustedRendererUrl(createAppRendererUrl({ uiSnapshotSmoke: '1' })), true);
+  assert.equal(isTrustedRendererUrl(createAppRendererUrl({ uiTypographySmoke: '1' })), true);
   assert.equal(isTrustedRendererUrl(createAppRendererUrl({ snapshot: '1' })), false);
   assert.equal(isTrustedRendererUrl('about:blank'), false);
 });
@@ -302,6 +303,7 @@ test('PostMeter app protocol only serves allowlisted renderer bundle assets', as
     'uiOauthSmoke',
     'uiRegressionSmoke',
     'uiSnapshotSmoke',
+    'uiTypographySmoke',
     'uiWorkflowBaseUrl',
     'uiWorkflowSmoke'
   ]);

@@ -49,9 +49,29 @@ const OAUTH_PROGRESS_STATUSES = [
   'failed'
 ];
 const COLLECTION_EXPORT_FORMATS = ['postmeter', 'postman', 'openapi', 'curl'];
-const PERFORMANCE_TEST_TYPES = ['latency', 'throughput', 'concurrency', 'stress', 'spike', 'soak', 'ramp'];
+const PERFORMANCE_TEST_TYPES = ['diagnosis', 'latency', 'throughput', 'concurrency', 'stress', 'spike', 'soak', 'ramp'];
+const PERFORMANCE_DIAGNOSIS_SCOPES = ['quick', 'medium', 'extended'];
 const PERFORMANCE_EXPORT_FORMATS = ['postmeter', 'json', 'csv'];
 const THEME_VALUES = ['system', 'light', 'dark'];
+const TYPOGRAPHY_FONT_VALUES = [
+  'default',
+  'system',
+  'segoe-ui',
+  'arial',
+  'helvetica',
+  'verdana',
+  'tahoma',
+  'georgia',
+  'system-mono',
+  'jetbrains-mono',
+  'sf-mono',
+  'consolas',
+  'menlo',
+  'monaco',
+  'courier-new'
+];
+const INTERFACE_FONT_VALUES = TYPOGRAPHY_FONT_VALUES;
+const EDITOR_FONT_VALUES = TYPOGRAPHY_FONT_VALUES;
 const DIAGNOSTIC_LOG_LEVELS = ['debug', 'info', 'warn', 'error'];
 const LIMITS = {
   collections: 500,
@@ -61,7 +81,7 @@ const LIMITS = {
   performanceTests: 500,
   environments: 500,
   history: 1000,
-  runnerIterations: 1000,
+  runnerIterations: 1000000,
   pairs: 1000,
   cookies: 2000,
   folderDepth: 20,
@@ -83,11 +103,14 @@ const SCHEMA_ENUMS = {
   bodyTypes: BODY_TYPE_VALUES,
   collectionExportFormats: COLLECTION_EXPORT_FORMATS,
   csvVariableSources: ['', 'file', 'inline'],
+  performanceDiagnosisScopes: PERFORMANCE_DIAGNOSIS_SCOPES,
   performanceExportFormats: PERFORMANCE_EXPORT_FORMATS,
   performanceTestTypes: PERFORMANCE_TEST_TYPES,
-    cookiePriorities: ['', 'Low', 'Medium', 'High'],
-    diagnosticLogLevels: DIAGNOSTIC_LOG_LEVELS,
+  cookiePriorities: ['', 'Low', 'Medium', 'High'],
+  diagnosticLogLevels: DIAGNOSTIC_LOG_LEVELS,
+  editorFontValues: EDITOR_FONT_VALUES,
   httpMethods: HTTP_METHODS,
+  interfaceFontValues: INTERFACE_FONT_VALUES,
   oauth2GrantTypes: OAUTH2_GRANT_TYPES,
   oauth2RedirectStrategies: OAUTH2_REDIRECT_STRATEGIES,
   oauth2TokenTypes: OAUTH2_TOKEN_TYPES,
@@ -100,7 +123,11 @@ const SCHEMA_ENUMS = {
 
 const FIELD_SCHEMAS = {
   appearance: {
-    theme: { type: 'string', limit: 'tiny', enum: 'themeValues', optional: true }
+    theme: { type: 'string', limit: 'tiny', enum: 'themeValues', optional: true },
+    interfaceFont: { type: 'string', limit: 'tiny', enum: 'interfaceFontValues', optional: true },
+    interfaceFontSize: { type: 'number', optional: true },
+    editorFont: { type: 'string', limit: 'tiny', enum: 'editorFontValues', optional: true },
+    editorFontSize: { type: 'number', optional: true }
   },
   editorSettings: {
     lineNumbers: { type: 'boolean', optional: true },
@@ -226,7 +253,8 @@ const FIELD_SCHEMAS = {
     concurrency: { type: 'number', optional: true },
     durationSeconds: { type: 'number', optional: true },
     rampSteps: { type: 'number', optional: true },
-    spikeMultiplier: { type: 'number', optional: true }
+    spikeMultiplier: { type: 'number', optional: true },
+    diagnosisScope: { type: 'string', limit: 'tiny', enum: 'performanceDiagnosisScopes', optional: true }
   },
   performanceSafetyLimits: {
     maxTotalRequests: { type: 'number', optional: true },
@@ -562,8 +590,10 @@ const exported = {
   BODY_METHODS,
   BODY_TYPE_VALUES,
   COLLECTION_EXPORT_FORMATS,
+  EDITOR_FONT_VALUES,
   FIELD_SCHEMAS,
   HTTP_METHODS,
+  INTERFACE_FONT_VALUES,
   LIMITS,
   OAUTH2_GRANT_TYPES,
   OAUTH2_REDIRECT_STRATEGIES,
@@ -572,9 +602,11 @@ const exported = {
   OAUTH_PROGRESS_TYPES,
   PAYLOAD_SCHEMA_VERSION,
   PERFORMANCE_EXPORT_FORMATS,
+  PERFORMANCE_DIAGNOSIS_SCOPES,
   PERFORMANCE_TEST_TYPES,
   SCHEMA_ENUMS,
   THEME_VALUES,
+  TYPOGRAPHY_FONT_VALUES,
   fieldLimit,
   hasSchemaEnumValue,
   normalizeSchemaEnumValue,

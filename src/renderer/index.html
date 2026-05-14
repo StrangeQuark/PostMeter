@@ -247,6 +247,13 @@
           <div id="requestNameTitle" class="request-main-title editable-title" tabindex="0" aria-label="Request name">Select a request</div>
           <div class="request-actions">
             <button id="saveRequestButton" type="button">Save Request</button>
+            <div class="toolbar-group menu-group request-export-menu-group" aria-label="Export request">
+              <button id="exportRequestPanelButton" class="menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false">Export Request</button>
+              <div id="exportRequestPanelMenu" class="toolbar-menu" role="menu" aria-labelledby="exportRequestPanelButton" hidden>
+                <button id="exportRequestPanelPostmeterButton" type="button" role="menuitem">PostMeter</button>
+                <button id="exportRequestPanelCurlButton" type="button" role="menuitem">curl</button>
+              </div>
+            </div>
           </div>
         </div>
         <div class="request-line">
@@ -583,9 +590,9 @@
             <div id="environmentMainTitle" class="environment-main-title editable-title" tabindex="0" aria-label="Environment name">Select an environment</div>
           </div>
           <div class="environment-actions">
+            <button id="addVariableButton" type="button">Add Variable</button>
             <button id="saveEnvironmentButton" type="button">Save Environment</button>
-            <button id="deleteEnvironmentButton">Delete Environment</button>
-            <button id="addVariableButton">Add Variable</button>
+            <button id="deleteEnvironmentButton" class="danger-button" type="button">Delete Environment</button>
           </div>
         </div>
         <div id="environmentTable" class="kv-table environment-table"></div>
@@ -609,7 +616,7 @@
           <div class="workspace-actions">
             <button id="switchWorkspacePanelButton" type="button">Switch to this Workspace</button>
             <button id="exportWorkspacePanelButton" type="button">Export Workspace</button>
-            <button id="deleteWorkspacePanelButton" type="button">Delete Workspace</button>
+            <button id="deleteWorkspacePanelButton" class="danger-button" type="button">Delete Workspace</button>
           </div>
         </div>
         <div id="workspaceSummary" class="workspace-summary workspace-main-summary"></div>
@@ -631,9 +638,15 @@
               <div id="runnerMainTitle" class="runner-main-title editable-title" tabindex="0" aria-label="Runner name">Select a runner</div>
             </div>
             <div class="runner-actions">
-              <button id="runnerCsvVariablesButton" type="button">CSV Variables</button>
+              <div class="toolbar-group menu-group csv-variables-menu-group" aria-label="Runner CSV variables">
+                <button id="runnerCsvVariablesButton" class="menu-trigger csv-variables-trigger" type="button" aria-haspopup="menu" aria-expanded="false">CSV Variables: Off</button>
+                <div id="runnerCsvVariablesMenu" class="toolbar-menu csv-variables-menu" role="menu" aria-labelledby="runnerCsvVariablesButton" hidden>
+                  <button id="runnerToggleCsvVariablesButton" type="button" role="menuitem">Turn On</button>
+                  <button id="runnerEditCsvVariablesButton" type="button" role="menuitem">Edit</button>
+                </div>
+              </div>
               <button id="saveRunnerButton" type="button">Save Runner</button>
-              <button id="deleteRunnerButton" type="button">Delete Runner</button>
+              <button id="deleteRunnerButton" class="danger-button" type="button">Delete Runner</button>
               <button id="runCollectionButton" type="button" class="primary">Run</button>
               <button id="cancelRunnerButton" type="button" disabled>Cancel</button>
               <button id="exportRunnerJsonButton" type="button" disabled>Export JSON</button>
@@ -653,10 +666,23 @@
               <input id="runnerAllowEnvironmentMutation" type="checkbox">
               <span>Allow runner to modify environment</span>
             </label>
-            <label class="checkbox-line">
-              <input id="runnerUseCsvVariablesInput" type="checkbox">
-              <span>Use CSV variables</span>
+            <button id="runnerCaptureSettingsButton" type="button" aria-expanded="false" aria-controls="runnerCaptureSettingsPanel">Capture Settings</button>
+          </div>
+          <div id="runnerCaptureSettingsPanel" class="capture-settings-panel" hidden>
+            <label class="field compact">
+              <span>Response Body</span>
+              <select id="runnerCaptureResponseBodySelect">
+                <option value="all">All</option>
+                <option value="failed">Failed only</option>
+                <option value="sampled">Sampled</option>
+                <option value="none">None</option>
+              </select>
             </label>
+            <label class="field compact-number-field"><span>Preview Bytes</span><input id="runnerCaptureBodyPreviewBytesInput" type="number" min="0" max="32768" step="1024"></label>
+            <label class="checkbox-line"><input id="runnerCapturePreRequestInput" type="checkbox"><span>Pre-request output</span></label>
+            <label class="checkbox-line"><input id="runnerCapturePostRequestInput" type="checkbox"><span>Post-request output</span></label>
+            <label class="checkbox-line"><input id="runnerCaptureScriptLogsInput" type="checkbox"><span>Script logs</span></label>
+            <label class="checkbox-line"><input id="runnerCaptureLocalVariablesInput" type="checkbox"><span>Local variables</span></label>
           </div>
           <div class="runner-request-actions">
             <button id="addRunnerRequestButton" type="button" aria-haspopup="menu" aria-expanded="false">Add Request</button>
@@ -715,18 +741,20 @@
               <div id="performanceMainTitle" class="performance-main-title editable-title" tabindex="0" aria-label="Performance test name">Select a performance test</div>
             </div>
             <div class="performance-actions">
-              <button id="performanceCsvVariablesButton" type="button">CSV Variables</button>
+              <div class="toolbar-group menu-group csv-variables-menu-group" aria-label="Performance CSV variables">
+                <button id="performanceCsvVariablesButton" class="menu-trigger csv-variables-trigger" type="button" aria-haspopup="menu" aria-expanded="false">CSV Variables: Off</button>
+                <div id="performanceCsvVariablesMenu" class="toolbar-menu csv-variables-menu" role="menu" aria-labelledby="performanceCsvVariablesButton" hidden>
+                  <button id="performanceToggleCsvVariablesButton" type="button" role="menuitem">Turn On</button>
+                  <button id="performanceEditCsvVariablesButton" type="button" role="menuitem">Edit</button>
+                </div>
+              </div>
               <button id="savePerformanceTestButton" type="button">Save Performance Test</button>
-              <button id="deletePerformanceTestButton" type="button">Delete Performance Test</button>
+              <button id="deletePerformanceTestButton" class="danger-button" type="button">Delete Performance Test</button>
               <button id="importPerformanceRequestButton" type="button">Import Request</button>
               <button id="exportPerformanceTestButton" type="button">Export Test</button>
+              <button id="performanceCaptureSettingsButton" type="button" aria-expanded="false" aria-controls="performanceCaptureSettingsPanel">Capture Settings</button>
+              <button id="exportPerformanceResultCsvButton" type="button">Export Result CSV</button>
             </div>
-          </div>
-          <div class="performance-settings">
-            <label class="checkbox-line">
-              <input id="performanceUseCsvVariablesInput" type="checkbox">
-              <span>Use CSV variables</span>
-            </label>
           </div>
           <div class="performance-request-editor">
             <div class="request-line performance-request-line">
@@ -1049,7 +1077,8 @@
         <div id="performanceSettingsResize" class="splitter horizontal performance-settings-resize" role="separator" aria-orientation="horizontal" tabindex="0"></div>
         <div id="performanceEditorSection" class="performance-editor-section">
           <div class="tabs performance-type-tabs" role="tablist" aria-label="Performance test types" data-tab-group="performance">
-            <button id="performanceLatencyTabButton" class="tab active" type="button" role="tab" data-tab-group="performance" data-tab="latency" aria-selected="true" aria-controls="latencyTab">Latency</button>
+            <button id="performanceDiagnosisTabButton" class="tab active" type="button" role="tab" data-tab-group="performance" data-tab="diagnosis" aria-selected="true" aria-controls="diagnosisTab">Full Endpoint Diagnosis</button>
+            <button id="performanceLatencyTabButton" class="tab" type="button" role="tab" data-tab-group="performance" data-tab="latency" aria-selected="false" aria-controls="latencyTab">Latency</button>
             <button id="performanceThroughputTabButton" class="tab" type="button" role="tab" data-tab-group="performance" data-tab="throughput" aria-selected="false" aria-controls="throughputTab">RPS / Throughput</button>
             <button id="performanceConcurrencyTabButton" class="tab" type="button" role="tab" data-tab-group="performance" data-tab="concurrency" aria-selected="false" aria-controls="concurrencyTab">Concurrency</button>
             <button id="performanceStressTabButton" class="tab" type="button" role="tab" data-tab-group="performance" data-tab="stress" aria-selected="false" aria-controls="stressTab">Stress</button>
@@ -1057,9 +1086,40 @@
             <button id="performanceSoakTabButton" class="tab" type="button" role="tab" data-tab-group="performance" data-tab="soak" aria-selected="false" aria-controls="soakTab">Soak</button>
             <button id="performanceRampTabButton" class="tab" type="button" role="tab" data-tab-group="performance" data-tab="ramp" aria-selected="false" aria-controls="rampTab">Ramp</button>
           </div>
-          <div id="latencyTab" class="tab-panel performance-type-panel active" role="tabpanel" aria-labelledby="performanceLatencyTabButton">
+          <div id="diagnosisTab" class="tab-panel performance-type-panel active" role="tabpanel" aria-labelledby="performanceDiagnosisTabButton">
             <div class="performance-type-grid">
-              <label class="field compact-number-field"><span>Samples</span><input data-performance-config="iterations" type="number" min="1" max="1000" step="1"></label>
+              <label class="field compact-number-field"><span>Scope</span><select data-performance-config="diagnosisScope">
+                <option value="quick">Quick Test</option>
+                <option value="medium">Medium Test</option>
+                <option value="extended">Extended Test</option>
+              </select></label>
+              <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
+              <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
+              <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
+              <label class="checkbox-line performance-mutation-option"><input data-performance-mutation type="checkbox"><span>Allow performance test to modify environment</span></label>
+            </div>
+          </div>
+          <div id="performanceCaptureSettingsPanel" class="capture-settings-panel" hidden>
+            <label class="field compact">
+              <span>Response Body</span>
+              <select id="performanceCaptureResponseBodySelect">
+                <option value="all">All</option>
+                <option value="failed">Failed only</option>
+                <option value="sampled">Sampled</option>
+                <option value="none">None</option>
+              </select>
+            </label>
+            <label class="field compact-number-field"><span>Preview Bytes</span><input id="performanceCaptureBodyPreviewBytesInput" type="number" min="0" max="32768" step="1024"></label>
+            <label class="checkbox-line"><input id="performanceCapturePreRequestInput" type="checkbox"><span>Pre-request output</span></label>
+            <label class="checkbox-line"><input id="performanceCapturePostRequestInput" type="checkbox"><span>Post-request output</span></label>
+            <label class="checkbox-line"><input id="performanceCaptureScriptLogsInput" type="checkbox"><span>Script logs</span></label>
+            <label class="checkbox-line"><input id="performanceCaptureLocalVariablesInput" type="checkbox"><span>Local variables</span></label>
+            <label class="checkbox-line"><input id="performanceCaptureHeadersInput" type="checkbox"><span>Response headers</span></label>
+            <label class="checkbox-line"><input id="performanceCaptureTimingsInput" type="checkbox"><span>Transport timings</span></label>
+          </div>
+          <div id="latencyTab" class="tab-panel performance-type-panel" role="tabpanel" aria-labelledby="performanceLatencyTabButton">
+            <div class="performance-type-grid">
+              <label class="field compact-number-field"><span>Samples</span><input data-performance-config="iterations" type="number" min="1" max="1000000" step="1"></label>
               <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
               <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
               <label class="checkbox-line performance-mutation-option"><input data-performance-mutation type="checkbox"><span>Allow performance test to modify environment</span></label>
@@ -1067,9 +1127,9 @@
           </div>
           <div id="throughputTab" class="tab-panel performance-type-panel" role="tabpanel" aria-labelledby="performanceThroughputTabButton">
             <div class="performance-type-grid">
-              <label class="field compact-number-field"><span>Requests</span><input data-performance-config="iterations" type="number" min="1" max="1000" step="1"></label>
+              <label class="field compact-number-field"><span>Requests</span><input data-performance-config="iterations" type="number" min="1" max="1000000" step="1"></label>
               <label class="field compact-number-field"><span>Concurrency</span><input data-performance-config="concurrency" type="number" min="1" max="25" step="1"></label>
-              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000000" step="1"></label>
               <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
               <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
               <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
@@ -1079,8 +1139,8 @@
           <div id="concurrencyTab" class="tab-panel performance-type-panel" role="tabpanel" aria-labelledby="performanceConcurrencyTabButton">
             <div class="performance-type-grid">
               <label class="field compact-number-field"><span>Virtual Users</span><input data-performance-config="concurrency" type="number" min="1" max="25" step="1"></label>
-              <label class="field compact-number-field"><span>Requests / User</span><input data-performance-config="iterations" type="number" min="1" max="1000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000" step="1"></label>
+              <label class="field compact-number-field"><span>Requests / User</span><input data-performance-config="iterations" type="number" min="1" max="1000000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000000" step="1"></label>
               <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
               <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
               <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
@@ -1091,9 +1151,9 @@
             <div class="performance-type-grid">
               <label class="field compact-number-field"><span>Start Users</span><input data-performance-config="startConcurrency" type="number" min="1" max="25" step="1"></label>
               <label class="field compact-number-field"><span>Peak Users</span><input data-performance-config="concurrency" type="number" min="1" max="25" step="1"></label>
-              <label class="field compact-number-field"><span>Steps</span><input data-performance-config="rampSteps" type="number" min="1" max="1000" step="1"></label>
-              <label class="field compact-number-field"><span>Requests / Step</span><input data-performance-config="iterations" type="number" min="1" max="1000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000" step="1"></label>
+              <label class="field compact-number-field"><span>Steps</span><input data-performance-config="rampSteps" type="number" min="1" max="1000000" step="1"></label>
+              <label class="field compact-number-field"><span>Requests / Step</span><input data-performance-config="iterations" type="number" min="1" max="1000000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000000" step="1"></label>
               <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
               <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
               <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
@@ -1104,8 +1164,8 @@
             <div class="performance-type-grid">
               <label class="field compact-number-field"><span>Baseline Users</span><input data-performance-config="concurrency" type="number" min="1" max="25" step="1"></label>
               <label class="field compact-number-field"><span>Spike Multiplier</span><input data-performance-config="spikeMultiplier" type="number" min="1" max="25" step="1"></label>
-              <label class="field compact-number-field"><span>Spike Requests</span><input data-performance-config="iterations" type="number" min="1" max="1000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000" step="1"></label>
+              <label class="field compact-number-field"><span>Spike Requests</span><input data-performance-config="iterations" type="number" min="1" max="1000000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000000" step="1"></label>
               <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
               <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
               <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
@@ -1116,7 +1176,7 @@
             <div class="performance-type-grid">
               <label class="field compact-number-field"><span>Duration (s)</span><input data-performance-config="durationSeconds" type="number" min="1" max="3600" step="1"></label>
               <label class="field compact-number-field"><span>Users</span><input data-performance-config="concurrency" type="number" min="1" max="25" step="1"></label>
-              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000000" step="1"></label>
               <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
               <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
               <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
@@ -1127,9 +1187,9 @@
             <div class="performance-type-grid">
               <label class="field compact-number-field"><span>Start Users</span><input data-performance-config="startConcurrency" type="number" min="1" max="25" step="1"></label>
               <label class="field compact-number-field"><span>Peak Users</span><input data-performance-config="concurrency" type="number" min="1" max="25" step="1"></label>
-              <label class="field compact-number-field"><span>Steps</span><input data-performance-config="rampSteps" type="number" min="1" max="1000" step="1"></label>
-              <label class="field compact-number-field"><span>Requests / Step</span><input data-performance-config="iterations" type="number" min="1" max="1000" step="1"></label>
-              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000" step="1"></label>
+              <label class="field compact-number-field"><span>Steps</span><input data-performance-config="rampSteps" type="number" min="1" max="1000000" step="1"></label>
+              <label class="field compact-number-field"><span>Requests / Step</span><input data-performance-config="iterations" type="number" min="1" max="1000000" step="1"></label>
+              <label class="field compact-number-field"><span>Max Requests</span><input data-performance-safety="maxTotalRequests" type="number" min="1" max="1000000" step="1"></label>
               <label class="field compact-number-field"><span>Max Concurrency</span><input data-performance-safety="maxConcurrency" type="number" min="1" max="25" step="1"></label>
               <label class="field compact-number-field"><span>Max Duration</span><input data-performance-safety="maxDurationSeconds" type="number" min="1" max="3600" step="1"></label>
               <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
@@ -1287,6 +1347,66 @@
                 <button id="themeSystemButton" type="button" data-theme-option="system" aria-pressed="true">System</button>
                 <button id="themeLightButton" type="button" data-theme-option="light" aria-pressed="false">Light</button>
                 <button id="themeDarkButton" type="button" data-theme-option="dark" aria-pressed="false">Dark</button>
+              </div>
+            </div>
+            <div class="settings-card">
+              <div class="settings-card-title">Interface Text</div>
+              <div class="settings-typography-grid">
+                <label class="settings-field">
+                  <span>Font</span>
+                  <select id="interfaceFontSelect">
+                    <option value="default">Default</option>
+                    <option value="system">System</option>
+                    <option value="segoe-ui">Segoe UI</option>
+                    <option value="arial">Arial</option>
+                    <option value="helvetica">Helvetica</option>
+                    <option value="verdana">Verdana</option>
+                    <option value="tahoma">Tahoma</option>
+                    <option value="georgia">Georgia</option>
+                    <option value="system-mono">System Mono</option>
+                    <option value="jetbrains-mono">JetBrains Mono</option>
+                    <option value="sf-mono">SF Mono</option>
+                    <option value="consolas">Consolas</option>
+                    <option value="menlo">Menlo</option>
+                    <option value="monaco">Monaco</option>
+                    <option value="courier-new">Courier New</option>
+                  </select>
+                </label>
+                <label class="settings-field settings-size-field">
+                  <span>Size</span>
+                  <input id="interfaceFontSizeInput" type="number" min="11" max="18" step="1" inputmode="numeric">
+                </label>
+                <button id="resetInterfaceTypographyButton" type="button">Reset to Default</button>
+              </div>
+            </div>
+            <div class="settings-card">
+              <div class="settings-card-title">Editor Text</div>
+              <div class="settings-typography-grid">
+                <label class="settings-field">
+                  <span>Font</span>
+                  <select id="editorFontSelect">
+                    <option value="default">Default</option>
+                    <option value="system">System</option>
+                    <option value="segoe-ui">Segoe UI</option>
+                    <option value="arial">Arial</option>
+                    <option value="helvetica">Helvetica</option>
+                    <option value="verdana">Verdana</option>
+                    <option value="tahoma">Tahoma</option>
+                    <option value="georgia">Georgia</option>
+                    <option value="system-mono">System Mono</option>
+                    <option value="jetbrains-mono">JetBrains Mono</option>
+                    <option value="sf-mono">SF Mono</option>
+                    <option value="consolas">Consolas</option>
+                    <option value="menlo">Menlo</option>
+                    <option value="monaco">Monaco</option>
+                    <option value="courier-new">Courier New</option>
+                  </select>
+                </label>
+                <label class="settings-field settings-size-field">
+                  <span>Size</span>
+                  <input id="editorFontSizeInput" type="number" min="11" max="20" step="1" inputmode="numeric">
+                </label>
+                <button id="resetEditorTypographyButton" type="button">Reset to Default</button>
               </div>
             </div>
             <div class="settings-card">
@@ -1753,6 +1873,7 @@
   <script src="layoutControls.js"></script>
   <script src="../core/payloadSchemas.js"></script>
   <script src="../core/csvVariables.js"></script>
+  <script src="../core/resultCapturePolicy.js"></script>
   <script src="../core/requestQueryModel.js"></script>
   <script src="../core/authModel.js"></script>
   <script src="../core/cookieModel.js"></script>
@@ -1776,6 +1897,7 @@
   <script src="uiWorkflowSmoke.js"></script>
   <script src="uiRegressionSmoke.js"></script>
   <script src="uiSnapshotSmoke.js"></script>
+  <script src="uiTypographySmoke.js"></script>
   <script src="uiOauthSmoke.js"></script>
   <script src="uiSmoke.js"></script>
 </body>

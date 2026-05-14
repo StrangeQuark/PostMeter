@@ -304,7 +304,7 @@
     {
       "id": "performance.local-v1",
       "area": "deferred-features",
-      "target": "Local first-class saved Performance tests are implemented as workspace-owned performanceTests with local execution, IPC, diagnostics boundaries, safety caps, import/export validation, and seven-type coverage; distributed/cloud load execution remains deferred.",
+      "target": "Local first-class saved Performance tests are implemented as workspace-owned performanceTests with local execution, IPC, diagnostics boundaries, safety caps, import/export validation, scoped one-click Full Endpoint Diagnosis, and eight-type coverage; distributed/cloud load execution remains deferred.",
       "status": "implemented",
       "releaseBlocking": false,
       "commands": [

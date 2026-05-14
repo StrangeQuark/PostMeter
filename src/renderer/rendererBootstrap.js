@@ -80,6 +80,7 @@
       ['uiWorkflowSmoke', 'PostMeter UI Workflow'],
       ['uiRegressionSmoke', 'PostMeter UI Regression'],
       ['uiSnapshotSmoke', 'PostMeter UI Snapshot'],
+      ['uiTypographySmoke', 'PostMeter UI Typography'],
       ['uiOauthSmoke', 'PostMeter UI OAuth']
     ]) {
       if (params.get(flag) === '1') {
@@ -147,6 +148,8 @@
     bindChange(doc, 'sendPostMeterTokenInput', options.onPostMeterTokenHeaderChange);
     bindChange(doc, 'showGeneratedHeadersInput', options.onShowGeneratedHeadersChange);
     bindClick(doc, 'saveRequestButton', options.onSaveRequest);
+    bindClick(doc, 'exportRequestPanelPostmeterButton', options.onExportCurrentRequest);
+    bindClick(doc, 'exportRequestPanelCurlButton', options.onExportCurrentRequestCurl);
     bindClick(doc, 'saveEnvironmentButton', options.onSaveEnvironment);
     bindClick(doc, 'deleteEnvironmentButton', options.onDeleteEnvironment);
     bindClick(doc, 'deleteWorkspacePanelButton', options.onDeleteWorkspace);
@@ -169,16 +172,21 @@
     bindClick(doc, 'cancelRunnerButton', options.onCancelCollectionRun);
     bindClick(doc, 'exportRunnerJsonButton', options.onExportRunnerJson);
     bindClick(doc, 'exportRunnerCsvButton', options.onExportRunnerCsv);
-    bindClick(doc, 'runnerCsvVariablesButton', options.onEditRunnerCsvVariables);
+    bindClick(doc, 'runnerToggleCsvVariablesButton', options.onToggleRunnerCsvVariables);
+    bindClick(doc, 'runnerEditCsvVariablesButton', options.onEditRunnerCsvVariables);
+    bindClick(doc, 'runnerCaptureSettingsButton', options.onToggleRunnerCaptureSettings);
     bindClick(doc, 'saveRunnerButton', options.onSaveRunner);
     bindClick(doc, 'deleteRunnerButton', options.onDeleteRunner);
     bindClick(doc, 'addRunnerRequestButton', options.onAddRunnerRequest);
-    bindClick(doc, 'performanceCsvVariablesButton', options.onEditPerformanceCsvVariables);
+    bindClick(doc, 'performanceToggleCsvVariablesButton', options.onTogglePerformanceCsvVariables);
+    bindClick(doc, 'performanceEditCsvVariablesButton', options.onEditPerformanceCsvVariables);
+    bindClick(doc, 'performanceCaptureSettingsButton', options.onTogglePerformanceCaptureSettings);
     bindClick(doc, 'savePerformanceTestButton', options.onSavePerformanceTest);
     bindClick(doc, 'deletePerformanceTestButton', options.onDeletePerformanceTest);
     bindClick(doc, 'runPerformanceTestButton', options.onRunPerformanceTest);
     bindClick(doc, 'cancelPerformanceTestButton', options.onCancelPerformanceTest);
     bindClick(doc, 'exportPerformanceTestButton', options.onExportPerformanceTest);
+    bindClick(doc, 'exportPerformanceResultCsvButton', options.onExportPerformanceResultCsv);
     bindClick(doc, 'importPerformanceRequestButton', options.onImportPerformanceRequest);
     bindClick(doc, 'addPerformanceParamButton', options.onAddPerformanceParam);
     bindClick(doc, 'addPerformanceHeaderButton', options.onAddPerformanceHeader);
@@ -211,12 +219,15 @@
     });
     bindChange(doc, 'runnerStopOnFailure', options.onRunnerConfigChange);
     bindChange(doc, 'runnerAllowEnvironmentMutation', options.onRunnerConfigChange);
-    bindChange(doc, 'runnerUseCsvVariablesInput', options.onRunnerConfigChange);
-    bindChange(doc, 'performanceUseCsvVariablesInput', options.onPerformanceConfigChange);
+    bindAll(doc, '#runnerCaptureSettingsPanel input, #runnerCaptureSettingsPanel select', 'change', options.onRunnerConfigChange);
+    bindAll(doc, '#runnerCaptureSettingsPanel input', 'input', options.onRunnerConfigChange);
     bindAll(doc, '[data-performance-environment]', 'change', options.onPerformanceConfigChange);
     bindAll(doc, '[data-performance-mutation]', 'change', options.onPerformanceConfigChange);
     bindAll(doc, '[data-performance-config]', 'input', options.onPerformanceConfigChange);
+    bindAll(doc, '[data-performance-config]', 'change', options.onPerformanceConfigChange);
     bindAll(doc, '[data-performance-safety]', 'input', options.onPerformanceConfigChange);
+    bindAll(doc, '#performanceCaptureSettingsPanel input, #performanceCaptureSettingsPanel select', 'change', options.onPerformanceConfigChange);
+    bindAll(doc, '#performanceCaptureSettingsPanel input', 'input', options.onPerformanceConfigChange);
     bindChange(doc, 'performanceMethodSelect', options.onPerformanceMethodChange || options.onPerformanceRequestChange);
     bindInput(doc, 'performanceUrlInput', options.onPerformanceUrlInput || options.onPerformanceRequestChange);
     bindChange(doc, 'performanceBodyTypeSelect', options.onPerformanceBodyTypeChange || options.onPerformanceRequestChange);
@@ -259,6 +270,12 @@
     bindChange(doc, 'includePrereleasesInput', options.onIncludePrereleasesChange);
     bindChange(doc, 'showEditorLineNumbersInput', options.onShowEditorLineNumbersChange);
     bindChange(doc, 'showVariableTooltipHintsInput', options.onShowVariableTooltipHintsChange);
+    bindChange(doc, 'interfaceFontSelect', options.onInterfaceTypographyChange);
+    bindChange(doc, 'interfaceFontSizeInput', options.onInterfaceTypographyChange);
+    bindClick(doc, 'resetInterfaceTypographyButton', options.onResetInterfaceTypography);
+    bindChange(doc, 'editorFontSelect', options.onEditorTypographyChange);
+    bindChange(doc, 'editorFontSizeInput', options.onEditorTypographyChange);
+    bindClick(doc, 'resetEditorTypographyButton', options.onResetEditorTypography);
     for (const id of [
       'diagnosticLoggingEnabledInput',
       'diagnosticLogLevelSelect',
@@ -485,7 +502,10 @@
     for (const [buttonId, menuId] of [
       ['newMenuButton', 'newMenu'],
       ['importMenuButton', 'importMenu'],
-      ['exportMenuButton', 'exportMenu']
+      ['exportMenuButton', 'exportMenu'],
+      ['exportRequestPanelButton', 'exportRequestPanelMenu'],
+      ['runnerCsvVariablesButton', 'runnerCsvVariablesMenu'],
+      ['performanceCsvVariablesButton', 'performanceCsvVariablesMenu']
     ]) {
       const button = getElement(doc, buttonId);
       const menu = getElement(doc, menuId);
