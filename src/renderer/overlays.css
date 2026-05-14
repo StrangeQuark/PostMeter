@@ -119,6 +119,36 @@
   width: min(680px, 100%);
 }
 
+.html-report-options-modal {
+  width: min(460px, 100%);
+}
+
+.html-report-options {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-muted);
+}
+
+.html-report-option {
+  align-items: flex-start;
+}
+
+.html-report-option input {
+  margin-top: 2px;
+}
+
+.html-report-option.is-disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.html-report-option.is-disabled span {
+  opacity: 0.72;
+}
+
 .settings-modal {
   width: min(940px, 100%);
   max-height: min(760px, calc(100vh - 48px));

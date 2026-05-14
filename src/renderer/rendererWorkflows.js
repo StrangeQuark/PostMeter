@@ -163,7 +163,7 @@
     }
 
     function setRunnerResultExportDisabled(disabled) {
-      for (const id of ['exportRunnerResultsButton', 'exportRunnerJsonButton', 'exportRunnerCsvButton']) {
+      for (const id of ['exportRunnerResultsButton', 'exportRunnerHtmlButton', 'exportRunnerJsonButton', 'exportRunnerCsvButton']) {
         const button = element(id);
         if (button) {
           button.disabled = disabled;
@@ -1252,12 +1252,16 @@
       }
     }
 
-    async function exportRunnerResult(format) {
+    async function exportRunnerResult(format, htmlReportOptions) {
       if (!state.lastRunnerResult) {
         return;
       }
       try {
-        const result = await windowObject.postmeter.runner.export(state.lastRunnerResult, format);
+        const exportRunner = windowObject.__postmeterExportRunnerResult || windowObject.postmeter?.runner?.export;
+        if (!exportRunner) {
+          return setStatus('Collection run export is unavailable in this runtime.');
+        }
+        const result = await exportRunner(state.lastRunnerResult, format, htmlReportOptions);
         if (!result.cancelled) {
           setStatus(`Collection run exported to ${result.path}.`);
         }

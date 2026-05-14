@@ -556,7 +556,7 @@
     {
       "id": "ipc.channel.performance-exportresult",
       "area": "IPC channel",
-      "target": "renderer-to-main channel `performance:exportResult`: Performance-result export validates bounded run output before writing JSON or CSV through a main-process save picker and streams store-backed exports from the current runtime result store.",
+      "target": "renderer-to-main channel `performance:exportResult`: Performance-result export validates bounded run output before writing JSON, CSV, or HTML through a main-process save picker and streams store-backed exports from the current runtime result store.",
       "status": "implemented",
       "evidenceRefs": [
         "electron/runtimeIpc.js",
@@ -564,13 +564,15 @@
         "electron/fileDialogs.js",
         "src/core/ipcValidation.js",
         "src/core/performanceFormats.js",
-        "src/core/runtimeResultStore.js"
+        "src/core/runtimeResultStore.js",
+        "src/core/resultHtmlReport.js"
       ],
       "tests": [
         "test/electron/runtimeIpc.test.js",
         "test/electron/ipcValidation.test.js",
         "test/electron/performanceRunner.test.js",
-        "test/electron/runtimeResultStore.test.js"
+        "test/electron/runtimeResultStore.test.js",
+        "test/electron/resultHtmlReport.test.js"
       ],
       "notes": ""
     },
@@ -786,19 +788,21 @@
     {
       "id": "ipc.channel.runner-export",
       "area": "IPC channel",
-      "target": "renderer-to-main channel `runner:export`: Collection-run export validates result/format payloads before a main-process save picker and streams store-backed CSV/JSON exports from the current runtime result store.",
+      "target": "renderer-to-main channel `runner:export`: Collection-run export validates result/format payloads before a main-process save picker and streams store-backed CSV/JSON/HTML exports from the current runtime result store.",
       "status": "implemented",
       "evidenceRefs": [
         "electron/runtimeIpc.js",
         "electron/preload.js",
         "electron/fileDialogs.js",
         "src/core/ipcValidation.js",
-        "src/core/runtimeResultStore.js"
+        "src/core/runtimeResultStore.js",
+        "src/core/resultHtmlReport.js"
       ],
       "tests": [
         "test/electron/runtimeIpc.test.js",
         "test/electron/ipcValidation.test.js",
-        "test/electron/runtimeResultStore.test.js"
+        "test/electron/runtimeResultStore.test.js",
+        "test/electron/resultHtmlReport.test.js"
       ],
       "notes": ""
     },

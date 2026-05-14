@@ -4,6 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { collectionRunResultToCsv, runCollection } = require('../src/core/collectionRunner');
 const { assertExportFormat } = require('../src/core/ipcValidation');
+const { resultHtmlReportToHtml } = require('../src/core/resultHtmlReport');
 const { setVariable } = require('../src/core/variableScope');
 const { WorkspaceStore, looksLikeNativeWorkspace, migrate, normalizeWorkspace } = require('../src/core/workspaceStore');
 
@@ -37,7 +38,11 @@ async function main(argv = process.argv.slice(2)) {
   if (args.report) {
     const format = args.format || reportFormatFromPath(args.report);
     assertExportFormat(format);
-    const content = format === 'csv' ? collectionRunResultToCsv(result) : JSON.stringify(result, null, 2);
+    const content = format === 'csv'
+      ? collectionRunResultToCsv(result)
+      : format === 'html'
+        ? await resultHtmlReportToHtml({ kind: 'runner', result })
+        : JSON.stringify(result, null, 2);
     await fs.mkdir(path.dirname(path.resolve(args.report)), { recursive: true });
     await fs.writeFile(args.report, content);
   }
@@ -214,7 +219,14 @@ function selectByIdOrName(items, selector, label) {
 }
 
 function reportFormatFromPath(reportPath) {
-  return path.extname(reportPath).toLowerCase() === '.csv' ? 'csv' : 'json';
+  const extension = path.extname(reportPath).toLowerCase();
+  if (extension === '.csv') {
+    return 'csv';
+  }
+  if (extension === '.html' || extension === '.htm') {
+    return 'html';
+  }
+  return 'json';
 }
 
 function printSummary(result) {
@@ -235,7 +247,7 @@ function printUsage(errorMessage) {
   if (errorMessage) {
     console.error(errorMessage);
   }
-  console.error('Usage: npm run cli -- run --file <workspace-or-collection> [--collection <id-or-name>] [--environment <id-or-name>] [--var key=value] [--collection-var key=value] [--report <path>] [--format json|csv] [--stop-on-failure] [--insecure|-k] [--cacert|--ssl-extra-ca-certs <pem>] [--client-cert-host <host>] [--client-cert-port <port>] [--client-cert|--ssl-client-cert <crt>] [--client-key|--ssl-client-key <key>] [--client-pfx <p12>] [--client-passphrase|--ssl-client-passphrase <value>]');
+  console.error('Usage: npm run cli -- run --file <workspace-or-collection> [--collection <id-or-name>] [--environment <id-or-name>] [--var key=value] [--collection-var key=value] [--report <path>] [--format json|csv|html] [--stop-on-failure] [--insecure|-k] [--cacert|--ssl-extra-ca-certs <pem>] [--client-cert-host <host>] [--client-cert-port <port>] [--client-cert|--ssl-client-cert <crt>] [--client-key|--ssl-client-key <key>] [--client-pfx <p12>] [--client-passphrase|--ssl-client-passphrase <value>]');
 }
 
 if (require.main === module) {

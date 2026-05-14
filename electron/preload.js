@@ -149,7 +149,7 @@ const postmeterApi = {
   runner: {
     start: (id, collection, environment, config) => ipcRenderer.invoke('runner:start', id, collection, environment, config),
     cancel: (id) => ipcRenderer.invoke('runner:cancel', id),
-    export: (result, format) => ipcRenderer.invoke('runner:export', result, format),
+    export: (result, format, htmlReportOptions) => ipcRenderer.invoke('runner:export', result, format, htmlReportOptions),
     estimateResultStore: (collection, config) => ipcRenderer.invoke('runner:estimateResultStore', collection, config),
     resultPage: (id, query) => ipcRenderer.invoke('runner:resultPage', id, query),
     resultDetail: (id, resultIndex) => ipcRenderer.invoke('runner:resultDetail', id, resultIndex),
@@ -168,7 +168,7 @@ const postmeterApi = {
     cancelCalibration: (id) => ipcRenderer.invoke('performance:calibrate:cancel', id),
     importTest: (filePath) => ipcRenderer.invoke('performance:import', optionalFilePath(filePath)),
     exportTest: (performanceTest, format) => ipcRenderer.invoke('performance:export', performanceTest, format),
-    exportResult: (result, format) => ipcRenderer.invoke('performance:exportResult', result, format),
+    exportResult: (result, format, htmlReportOptions) => ipcRenderer.invoke('performance:exportResult', result, format, htmlReportOptions),
     estimateResultStore: (performanceTest) => ipcRenderer.invoke('performance:estimateResultStore', performanceTest),
     resultPage: (id, query) => ipcRenderer.invoke('performance:resultPage', id, query),
     resultDetail: (id, resultIndex) => ipcRenderer.invoke('performance:resultDetail', id, resultIndex),

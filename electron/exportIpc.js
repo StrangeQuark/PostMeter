@@ -176,6 +176,9 @@ function exportDialogOptions(options = {}) {
       };
     case 'performance':
       assertPerformanceExportFormat(format);
+      if (format === 'csv' || format === 'html') {
+        throw new Error('Performance test definitions can only be exported as JSON.');
+      }
       return {
         title: 'Export Performance Test',
         defaultPath: `${name}.postmeter-performance.${performanceExportExtension(format)}`,
@@ -206,8 +209,8 @@ function assertCollectionExportFormat(format) {
 }
 
 function assertPerformanceExportFormat(format) {
-  if (!['postmeter', 'json', 'csv'].includes(String(format || ''))) {
-    throw new Error('Performance export format must be postmeter, json, or csv.');
+  if (!['postmeter', 'json', 'csv', 'html'].includes(String(format || ''))) {
+    throw new Error('Performance export format must be postmeter, json, csv, or html.');
   }
 }
 

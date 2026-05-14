@@ -51,7 +51,7 @@ const OAUTH_PROGRESS_STATUSES = [
 const COLLECTION_EXPORT_FORMATS = ['postmeter', 'postman', 'openapi', 'curl'];
 const PERFORMANCE_TEST_TYPES = ['diagnosis', 'latency', 'throughput', 'concurrency', 'stress', 'spike', 'soak', 'ramp'];
 const PERFORMANCE_DIAGNOSIS_SCOPES = ['quick', 'medium', 'extended'];
-const PERFORMANCE_EXPORT_FORMATS = ['postmeter', 'json', 'csv'];
+const PERFORMANCE_EXPORT_FORMATS = ['postmeter', 'json', 'csv', 'html'];
 const THEME_VALUES = ['system', 'light', 'dark'];
 const TYPOGRAPHY_FONT_VALUES = [
   'default',

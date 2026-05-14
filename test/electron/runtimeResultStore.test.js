@@ -212,6 +212,48 @@ test('runtime result store reuses one SQLite file and pages captured runner deta
     assert.match(csv, /failed-body-prev/);
     assert.match(csv, /capturePolicy/);
 
+    const htmlPath = path.join(temp, 'export.html');
+    await store.exportHtml(htmlPath, { kind: 'runner', result: { id: 'run-one', totalRequests: 2, failedRequests: 1, resultPage: page } });
+    const html = await fs.readFile(htmlPath, 'utf8');
+    assert.match(html, /<!doctype html>/i);
+    assert.match(html, /PostMeter Runner Results/);
+    assert.match(html, /Charts and Trends/);
+    assert.match(html, /Response Details/);
+    assert.match(html, /id="resultPageSizeSelect"/);
+    assert.match(html, /id="resultStatusFilterSelect"/);
+    assert.match(html, /View Details/);
+    assert.match(html, /id="responseDetailModal"/);
+    assert.doesNotMatch(html, /<section id="responses"/);
+    assert.match(html, /failed-body-prev/);
+    assert.match(html, /Body SHA-256/);
+
+    const compactHtmlPath = path.join(temp, 'export-compact.html');
+    await store.exportHtml(compactHtmlPath, {
+      kind: 'runner',
+      result: { id: 'run-one', totalRequests: 2, failedRequests: 1, resultPage: page },
+      includeRequestResults: false,
+      includeRequestDetails: false
+    });
+    const compactHtml = await fs.readFile(compactHtmlPath, 'utf8');
+    assert.match(compactHtml, /PostMeter Runner Results/);
+    assert.doesNotMatch(compactHtml, /Request Results/);
+    assert.doesNotMatch(compactHtml, /View Details/);
+    assert.doesNotMatch(compactHtml, /id="responseDetailModal"/);
+    assert.doesNotMatch(compactHtml, /failed-body-prev/);
+
+    const tableOnlyHtmlPath = path.join(temp, 'export-table-only.html');
+    await store.exportHtml(tableOnlyHtmlPath, {
+      kind: 'runner',
+      result: { id: 'run-one', totalRequests: 2, failedRequests: 1, resultPage: page },
+      includeRequestDetails: false
+    });
+    const tableOnlyHtml = await fs.readFile(tableOnlyHtmlPath, 'utf8');
+    assert.match(tableOnlyHtml, /Request Results/);
+    assert.match(tableOnlyHtml, /Failed/);
+    assert.doesNotMatch(tableOnlyHtml, /View Details/);
+    assert.doesNotMatch(tableOnlyHtml, /id="responseDetailModal"/);
+    assert.doesNotMatch(tableOnlyHtml, /failed-body-prev/);
+
     store.close();
     await store.reset();
     store.beginRun({ id: 'run-two', kind: 'runner', plannedRequests: 1, capturePolicy: {}, metadata: {} });

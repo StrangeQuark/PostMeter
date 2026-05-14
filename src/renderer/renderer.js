@@ -676,6 +676,7 @@ function bindUi() {
     onClearExpiredCookies: clearExpiredCookies,
     onRunCollection: runActiveCollection,
     onCancelCollectionRun: cancelCollectionRun,
+    onExportRunnerHtml: () => openHtmlReportOptionsModal('runner'),
     onExportRunnerJson: () => exportRunnerResult('json'),
     onExportRunnerCsv: () => exportRunnerResult('csv'),
     onToggleRunnerCsvVariables: toggleActiveRunnerCsvVariables,
@@ -690,6 +691,7 @@ function bindUi() {
     onRunPerformanceTest: () => { void runActivePerformanceTest(); },
     onCancelPerformanceTest: () => { void cancelPerformanceTestRun(); },
     onExportPerformanceTest: () => { void exportPerformanceTestFromPicker(); },
+    onExportPerformanceResultHtml: () => openHtmlReportOptionsModal('performance'),
     onExportPerformanceResultJson: () => { void exportActivePerformanceResult('json'); },
     onExportPerformanceResultCsv: () => { void exportActivePerformanceResult('csv'); },
     onImportPerformanceRequest: () => { void promptAndImportPerformanceRequest(); },
@@ -705,6 +707,10 @@ function bindUi() {
     onStartPkceFlow: startPkceFlow,
     onStartDeviceFlow: startDeviceFlow,
     onCancelOauthFlow: cancelOauthFlow,
+    onHtmlReportIncludeResultsChange: syncHtmlReportOptionsModal,
+    onHtmlReportIncludeDetailsChange: syncHtmlReportOptionsModal,
+    onCancelHtmlReportOptions: () => resolveActiveModal(null),
+    onConfirmHtmlReportOptions: confirmHtmlReportOptionsModal,
     onEnvironmentSelectChange: (environmentId) => {
       activeEnvironmentId = environmentId;
       renderEnvironments();
@@ -3568,6 +3574,7 @@ function focusInitialModalElement(modalId) {
     clientCertificateModal: 'clientCertificateNameInput',
     textInputModal: $('textInputModal')?.dataset?.valueControl || 'textInputModalInput',
     csvVariablesModal: 'csvVariablesSchemaInput',
+    htmlReportOptionsModal: 'htmlReportIncludeResultsInput',
     confirmActionModal: 'cancelConfirmActionButton',
     notificationModal: 'closeNotificationModalButton',
     performanceCalibrationModal: 'closePerformanceCalibrationModalButton',
@@ -7191,7 +7198,7 @@ function renderRunnerEditor() {
 }
 
 function setRunnerResultExportButtonsDisabled(disabled) {
-  for (const id of ['exportRunnerResultsButton', 'exportRunnerJsonButton', 'exportRunnerCsvButton']) {
+  for (const id of ['exportRunnerResultsButton', 'exportRunnerHtmlButton', 'exportRunnerJsonButton', 'exportRunnerCsvButton']) {
     const button = $(id);
     if (button) {
       button.disabled = disabled;
@@ -7242,7 +7249,7 @@ function renderPerformanceEditor() {
 }
 
 function syncPerformanceResultExportButtons(test = activePerformanceTest()) {
-  for (const id of ['exportPerformanceResultsButton', 'exportPerformanceResultJsonButton', 'exportPerformanceResultCsvButton']) {
+  for (const id of ['exportPerformanceResultsButton', 'exportPerformanceResultHtmlButton', 'exportPerformanceResultJsonButton', 'exportPerformanceResultCsvButton']) {
     const button = $(id);
     if (button) {
       button.disabled = !test || !isActivePerformanceResultForTest(test) || Boolean(activePerformanceRunId);
@@ -8911,8 +8918,8 @@ async function exportPerformanceTestFromPicker() {
   return exportActivePerformanceTest(selectedTest);
 }
 
-async function exportActivePerformanceResult(format = 'json') {
-  const normalizedFormat = format === 'csv' ? 'csv' : 'json';
+async function exportActivePerformanceResult(format = 'json', htmlReportOptions) {
+  const normalizedFormat = format === 'csv' ? 'csv' : format === 'html' ? 'html' : 'json';
   const label = normalizedFormat.toUpperCase();
   const test = activePerformanceTest();
   const resultToExport = isActivePerformanceResultForTest(test) ? lastPerformanceResult : null;
@@ -8924,7 +8931,7 @@ async function exportActivePerformanceResult(format = 'json') {
     return setStatus('Performance result export is unavailable in this runtime.');
   }
   try {
-    const result = await exportResult(cloneJson(resultToExport), normalizedFormat);
+    const result = await exportResult(cloneJson(resultToExport), normalizedFormat, htmlReportOptions);
     if (result?.path) {
       setStatus(`Performance result ${label} exported to ${result.path}.`);
     }
@@ -8935,6 +8942,51 @@ async function exportActivePerformanceResult(format = 'json') {
     notifyUser('Performance Result Export Failed', message);
     return null;
   }
+}
+
+function openHtmlReportOptionsModal(target) {
+  const normalizedTarget = target === 'performance' ? 'performance' : 'runner';
+  const includeResultsInput = $('htmlReportIncludeResultsInput');
+  const includeDetailsInput = $('htmlReportIncludeDetailsInput');
+  if (includeResultsInput) {
+    includeResultsInput.checked = true;
+  }
+  if (includeDetailsInput) {
+    includeDetailsInput.checked = true;
+  }
+  syncHtmlReportOptionsModal();
+  void showModal('htmlReportOptionsModal', null).then((options) => {
+    if (!options) {
+      return;
+    }
+    if (normalizedTarget === 'performance') {
+      void exportActivePerformanceResult('html', options);
+    } else {
+      void exportRunnerResult('html', options);
+    }
+  });
+}
+
+function syncHtmlReportOptionsModal() {
+  const includeResultsInput = $('htmlReportIncludeResultsInput');
+  const includeDetailsInput = $('htmlReportIncludeDetailsInput');
+  const detailsLabel = includeDetailsInput?.closest?.('.html-report-option');
+  const includeResults = includeResultsInput?.checked === true;
+  if (includeDetailsInput) {
+    if (!includeResults) {
+      includeDetailsInput.checked = false;
+    }
+    includeDetailsInput.disabled = !includeResults;
+  }
+  detailsLabel?.classList.toggle('is-disabled', !includeResults);
+}
+
+function confirmHtmlReportOptionsModal() {
+  const includeResults = $('htmlReportIncludeResultsInput')?.checked === true;
+  resolveActiveModal({
+    includeRequestResults: includeResults,
+    includeRequestDetails: includeResults && $('htmlReportIncludeDetailsInput')?.checked === true
+  });
 }
 
 async function importPerformanceTest() {
@@ -14611,8 +14663,8 @@ async function cancelCollectionRun() {
   return rendererWorkflows.cancelCollectionRun();
 }
 
-async function exportRunnerResult(format) {
-  return rendererWorkflows.exportRunnerResult(format);
+async function exportRunnerResult(format, htmlReportOptions) {
+  return rendererWorkflows.exportRunnerResult(format, htmlReportOptions);
 }
 
 async function startDeviceFlow() {

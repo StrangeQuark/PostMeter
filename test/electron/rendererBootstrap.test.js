@@ -860,6 +860,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'exportPerformanceTestButton',
     'exportPerformanceResultsButton',
     'exportPerformanceResultsMenu',
+    'exportPerformanceResultHtmlButton',
     'exportPerformanceResultJsonButton',
     'exportPerformanceResultCsvButton',
     'importPerformanceRequestButton',
@@ -934,6 +935,7 @@ test('renderer bootstrap binds performance creation import export run and config
     onDeletePerformanceTest: () => calls.push('delete'),
     onRunPerformanceTest: () => calls.push('run'),
     onCancelPerformanceTest: () => calls.push('cancel'),
+    onExportPerformanceResultHtml: () => calls.push('export-result-html'),
     onExportPerformanceResultJson: () => calls.push('export-result-json'),
     onExportPerformanceResultCsv: () => calls.push('export-result-csv'),
     onImportPerformanceRequest: () => calls.push('import-request'),
@@ -967,6 +969,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'cancelPerformanceTestButton',
     'exportPerformanceTestButton',
     'exportPerformanceResultsButton',
+    'exportPerformanceResultHtmlButton',
     'exportPerformanceResultJsonButton',
     'exportPerformanceResultCsvButton',
     'importPerformanceRequestButton',
@@ -1002,7 +1005,7 @@ test('renderer bootstrap binds performance creation import export run and config
   elements.get('performanceDocsInput').dispatch('input');
   elements.get('performanceBinaryBodySourceInput').dispatch('input');
 
-  assert.deepEqual(calls.slice(0, 21), [
+  assert.deepEqual(calls.slice(0, 22), [
     'new',
     'new',
     'import-test',
@@ -1014,6 +1017,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'run',
     'cancel',
     'export-test',
+    'export-result-html',
     'export-result-json',
     'export-result-csv',
     'import-request',
@@ -1330,6 +1334,7 @@ test('renderer bootstrap binds request environment and runner import/export menu
     ['exportEnvironmentButton', 'export-environment', 'onExportEnvironment'],
     ['exportPostmanEnvironmentButton', 'export-postman-environment', 'onExportPostmanEnvironment'],
     ['exportRunnerDefinitionButton', 'export-runner', 'onExportRunnerDefinition'],
+    ['exportRunnerHtmlButton', 'export-runner-html', 'onExportRunnerHtml'],
     ['exportRunnerJsonButton', 'export-runner-json', 'onExportRunnerJson'],
     ['exportRunnerCsvButton', 'export-runner-csv', 'onExportRunnerCsv']
   ];
@@ -1354,6 +1359,39 @@ test('renderer bootstrap binds request environment and runner import/export menu
   bindUi(options);
   for (const [id] of controls) {
     elements.get(id).dispatch('click');
+  }
+
+  assert.deepEqual(calls, controls.map(([, label]) => label));
+});
+
+test('renderer bootstrap binds HTML report option modal controls', () => {
+  const controls = [
+    ['htmlReportIncludeResultsInput', 'include-results', 'onHtmlReportIncludeResultsChange', 'change'],
+    ['htmlReportIncludeDetailsInput', 'include-details', 'onHtmlReportIncludeDetailsChange', 'change'],
+    ['cancelHtmlReportOptionsButton', 'cancel', 'onCancelHtmlReportOptions', 'click'],
+    ['confirmHtmlReportOptionsButton', 'confirm', 'onConfirmHtmlReportOptions', 'click']
+  ];
+  const elements = new Map(controls.map(([id]) => [id, createElement({ tagName: id.endsWith('Input') ? 'INPUT' : 'BUTTON' })]));
+  const calls = [];
+  const options = {
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} }
+  };
+  for (const [, label, optionName] of controls) {
+    options[optionName] = () => calls.push(label);
+  }
+
+  bindUi(options);
+  for (const [id, , , eventName] of controls) {
+    elements.get(id).dispatch(eventName);
   }
 
   assert.deepEqual(calls, controls.map(([, label]) => label));

@@ -475,11 +475,12 @@
     assertUiSmoke(regressionRunner, 'Regression runner was not created.');
     assertUiSmoke($('exportRunnerResultsButton').textContent.trim() === 'Export Results', 'Runner result export trigger should be labeled Export Results.');
     assertUiSmoke($('exportRunnerResultsButton').disabled, 'Runner result export should be disabled before a run.');
+    assertUiSmoke($('exportRunnerHtmlButton').disabled, 'Runner HTML report export menu item should be disabled before a run.');
     assertUiSmoke($('exportRunnerJsonButton').disabled, 'Runner JSON export menu item should be disabled before a run.');
     assertUiSmoke($('exportRunnerCsvButton').disabled, 'Runner CSV export menu item should be disabled before a run.');
     assertUiSmoke(
-      Array.from($('exportRunnerResultsMenu').querySelectorAll('button')).map((button) => button.textContent.trim()).join('|') === 'JSON|CSV',
-      'Runner result export menu should expose JSON and CSV.'
+      Array.from($('exportRunnerResultsMenu').querySelectorAll('button')).map((button) => button.textContent.trim()).join('|') === 'HTML Report|JSON|CSV',
+      'Runner result export menu should expose HTML Report, JSON, and CSV.'
     );
     assertUiSmoke($('runnerStopOnFailure'), 'Runner stop-on-failure control is missing.');
     assertDestructiveButtonsUseDangerStyle();
@@ -3698,11 +3699,12 @@
       assertUiSmoke($('performanceCsvVariablesButton').classList.contains('csv-variables-active'), 'Performance CSV button should use the active color when enabled.');
       assertUiSmoke($('exportPerformanceResultsButton').textContent.trim() === 'Export Results', 'Performance result export trigger should be labeled Export Results.');
       assertUiSmoke($('exportPerformanceResultsButton').disabled, 'Performance result export should be disabled before a run.');
+      assertUiSmoke($('exportPerformanceResultHtmlButton').disabled, 'Performance HTML report export menu item should be disabled before a run.');
       assertUiSmoke($('exportPerformanceResultJsonButton').disabled, 'Performance JSON export menu item should be disabled before a run.');
       assertUiSmoke($('exportPerformanceResultCsvButton').disabled, 'Performance CSV export menu item should be disabled before a run.');
       assertUiSmoke(
-        Array.from($('exportPerformanceResultsMenu').querySelectorAll('button')).map((button) => button.textContent.trim()).join('|') === 'JSON|CSV',
-        'Performance result export menu should expose JSON and CSV.'
+        Array.from($('exportPerformanceResultsMenu').querySelectorAll('button')).map((button) => button.textContent.trim()).join('|') === 'HTML Report|JSON|CSV',
+        'Performance result export menu should expose HTML Report, JSON, and CSV.'
       );
       $('performanceCsvVariablesButton').click();
       assertUiSmoke(!$('performanceCsvVariablesMenu').hidden, 'Performance CSV button should open a dropdown menu.');

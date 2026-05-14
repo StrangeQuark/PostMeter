@@ -531,7 +531,9 @@ test('runtime IPC runs full endpoint diagnosis with SQLite paging detail and dia
   const resultStorePath = path.join(tempDir, 'current.sqlite');
   const csvExportPath = path.join(tempDir, 'diagnosis-export.csv');
   const jsonExportPath = path.join(tempDir, 'diagnosis-export.json');
-  const exportPaths = [csvExportPath, jsonExportPath];
+  const htmlExportPath = path.join(tempDir, 'diagnosis-export.html');
+  const compactHtmlExportPath = path.join(tempDir, 'diagnosis-export-compact.html');
+  const exportPaths = [csvExportPath, jsonExportPath, htmlExportPath, compactHtmlExportPath];
   const server = await createServer((request, response) => {
     response.setHeader('Content-Type', 'application/json');
     response.setHeader('Cache-Control', 'max-age=30');
@@ -651,6 +653,40 @@ test('runtime IPC runs full endpoint diagnosis with SQLite paging detail and dia
     assert.equal(json.result.resultStoreId, result.resultStoreId);
     assert.equal(json.items.length, 44);
     assert.ok(json.items.some((sample) => sample.bodySha256));
+
+    const exportedHtml = await handlers.get('performance:exportResult')({}, result, 'html');
+    assert.equal(exportedHtml.cancelled, false);
+    const html = await fs.readFile(htmlExportPath, 'utf8');
+    assert.match(html, /<!doctype html>/i);
+    assert.match(html, /PostMeter Performance Results/);
+    assert.match(html, /Charts and Trends/);
+    assert.match(html, /Response Details/);
+    assert.match(html, /id="resultPageSizeSelect"/);
+    assert.match(html, /id="resultStatusFilterSelect"/);
+    assert.match(html, /View Details/);
+    assert.match(html, /id="responseDetailModal"/);
+    assert.doesNotMatch(html, /<section id="responses"/);
+    assert.doesNotMatch(html, /Appendix|Raw Run Data/);
+    assert.match(html, /Endpoint Diagnosis/);
+    assert.match(html, /Diagnostic Checks/);
+    assert.match(html, /Diagnosis phases/);
+    assert.match(html, /\/diagnostic\?api_key=demo/);
+    assert.match(html, /Body SHA-256/);
+
+    const compactHtmlExported = await handlers.get('performance:exportResult')({}, result, 'html', {
+      includeRequestResults: false,
+      includeRequestDetails: true
+    });
+    assert.equal(compactHtmlExported.cancelled, false);
+    const compactHtml = await fs.readFile(compactHtmlExportPath, 'utf8');
+    assert.match(compactHtml, /PostMeter Performance Results/);
+    assert.match(compactHtml, /Endpoint Diagnosis/);
+    assert.match(compactHtml, /Diagnostic Checks/);
+    assert.match(compactHtml, /Diagnosis phases/);
+    assert.doesNotMatch(compactHtml, /Request Results/);
+    assert.doesNotMatch(compactHtml, /View Details/);
+    assert.doesNotMatch(compactHtml, /id="responseDetailModal"/);
+    assert.match(compactHtml, /\/diagnostic\?api_key=demo/);
   } finally {
     controller?.closeResultStore?.();
     await server.close();
@@ -1105,8 +1141,10 @@ test('runtime IPC persists refreshed OAuth auth without returning or exporting r
   try {
     workspace.collections[0].requests[0].url = `${server.baseUrl}/resource`;
     workspace.collections[0].requests[0].auth.tokenUrl = `${server.baseUrl}/token`;
+    const runnerHtmlExportPath = path.join(tempDir, 'runner-result.html');
+    const runnerCompactHtmlExportPath = path.join(tempDir, 'runner-result-compact.html');
     const runnerExportPath = path.join(tempDir, 'runner-result.json');
-    const exportPaths = [runnerExportPath];
+    const exportPaths = [runnerHtmlExportPath, runnerCompactHtmlExportPath, runnerExportPath];
     registerRuntimeIpc({
       dialog: { showSaveDialog: async () => ({ filePath: exportPaths.shift(), canceled: false }) },
       fileOperationResult: (result) => result,
@@ -1136,6 +1174,34 @@ test('runtime IPC persists refreshed OAuth auth without returning or exporting r
     assert.equal(JSON.stringify(result).includes('rotated-runtime-refresh'), false);
     assert.equal(savedWorkspace.collections[0].requests[0].auth.accessToken, 'fresh-runtime-token');
     assert.equal(savedWorkspace.collections[0].requests[0].auth.refreshToken, 'rotated-runtime-refresh');
+
+    const exportedHtml = await handlers.get('runner:export')(null, result, 'html');
+    assert.equal(exportedHtml.cancelled, false);
+    const runnerHtmlExport = await fs.readFile(runnerHtmlExportPath, 'utf8');
+    assert.match(runnerHtmlExport, /<!doctype html>/i);
+    assert.match(runnerHtmlExport, /PostMeter Runner Results/);
+    assert.match(runnerHtmlExport, /Charts and Trends/);
+    assert.match(runnerHtmlExport, /Response Details/);
+    assert.match(runnerHtmlExport, /id="resultPageSizeSelect"/);
+    assert.match(runnerHtmlExport, /id="resultStatusFilterSelect"/);
+    assert.match(runnerHtmlExport, /View Details/);
+    assert.match(runnerHtmlExport, /id="responseDetailModal"/);
+    assert.doesNotMatch(runnerHtmlExport, /<section id="responses"/);
+    assert.doesNotMatch(runnerHtmlExport, /Appendix|Raw Run Data/);
+    assert.match(runnerHtmlExport, /OAuth Request|Runtime OAuth/);
+    assert.doesNotMatch(runnerHtmlExport, /fresh-runtime-token|rotated-runtime-refresh|stale-runtime-token|runtime-refresh/);
+
+    const exportedCompactHtml = await handlers.get('runner:export')(null, result, 'html', {
+      includeRequestResults: false,
+      includeRequestDetails: true
+    });
+    assert.equal(exportedCompactHtml.cancelled, false);
+    const runnerCompactHtmlExport = await fs.readFile(runnerCompactHtmlExportPath, 'utf8');
+    assert.match(runnerCompactHtmlExport, /PostMeter Runner Results/);
+    assert.doesNotMatch(runnerCompactHtmlExport, /Request Results/);
+    assert.doesNotMatch(runnerCompactHtmlExport, /View Details/);
+    assert.doesNotMatch(runnerCompactHtmlExport, /id="responseDetailModal"/);
+    assert.doesNotMatch(runnerCompactHtmlExport, /OAuth Request/);
 
     await handlers.get('runner:export')(null, {
       collectionId: 'collection-1',

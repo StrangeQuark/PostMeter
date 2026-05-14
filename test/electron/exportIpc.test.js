@@ -4,6 +4,7 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const { registerExportIpc } = require('../../electron/exportIpc');
+const { performanceTestModel } = require('../../src/core/models');
 
 test('picker-first export opens save dialogs from lightweight metadata', async () => {
   const handlers = new Map();
@@ -163,6 +164,28 @@ test('picker-first export rejects invalid export kinds and worker payloads', asy
       payload: { id: 'env-1', name: 'Local', variables: [] }
     }),
     /Environment export format must be postmeter or postman/
+  );
+  await assert.rejects(
+    () => handlers.get('file-export:choosePath')({}, {
+      kind: 'performance',
+      format: 'html',
+      name: 'Endpoint Diagnosis'
+    }),
+    /Performance test definitions can only be exported as JSON/
+  );
+  await assert.rejects(
+    () => handlers.get('file-export:prepare')({}, {
+      exportId: 'bad-performance-html-export',
+      kind: 'performance',
+      format: 'html',
+      payload: performanceTestModel({
+        id: 'perf-1',
+        name: 'Endpoint Diagnosis',
+        type: 'diagnosis',
+        request: { id: 'request-1', name: 'Target', method: 'GET', url: 'https://example.test' }
+      })
+    }),
+    /Performance test definitions can only be exported as JSON/
   );
 });
 

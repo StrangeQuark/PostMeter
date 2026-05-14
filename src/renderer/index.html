@@ -686,6 +686,7 @@
               <div class="toolbar-group menu-group result-export-menu-group" aria-label="Runner result export">
                 <button id="exportRunnerResultsButton" class="menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false" disabled>Export Results</button>
                 <div id="exportRunnerResultsMenu" class="toolbar-menu" role="menu" aria-labelledby="exportRunnerResultsButton" hidden>
+                  <button id="exportRunnerHtmlButton" type="button" role="menuitem" disabled>HTML Report</button>
                   <button id="exportRunnerJsonButton" type="button" role="menuitem" disabled>JSON</button>
                   <button id="exportRunnerCsvButton" type="button" role="menuitem" disabled>CSV</button>
                 </div>
@@ -795,6 +796,7 @@
               <div class="toolbar-group menu-group result-export-menu-group" aria-label="Performance result export">
                 <button id="exportPerformanceResultsButton" class="menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false" disabled>Export Results</button>
                 <div id="exportPerformanceResultsMenu" class="toolbar-menu" role="menu" aria-labelledby="exportPerformanceResultsButton" hidden>
+                  <button id="exportPerformanceResultHtmlButton" type="button" role="menuitem" disabled>HTML Report</button>
                   <button id="exportPerformanceResultJsonButton" type="button" role="menuitem" disabled>JSON</button>
                   <button id="exportPerformanceResultCsvButton" type="button" role="menuitem" disabled>CSV</button>
                 </div>
@@ -1720,6 +1722,25 @@
       <div class="modal-actions">
         <button id="cancelRunnerImportButton" type="button">Cancel</button>
         <button id="confirmRunnerImportButton" type="button" class="primary" disabled>Add</button>
+      </div>
+    </section>
+
+    <section id="htmlReportOptionsModal" class="modal html-report-options-modal" role="dialog" aria-modal="true" aria-labelledby="htmlReportOptionsTitle" aria-describedby="htmlReportOptionsMessage" hidden>
+      <h2 id="htmlReportOptionsTitle">Export HTML report</h2>
+      <p id="htmlReportOptionsMessage">Choose how much request-level data to include in the report.</p>
+      <div class="html-report-options">
+        <label class="checkbox-line html-report-option">
+          <input id="htmlReportIncludeResultsInput" type="checkbox" checked>
+          <span>Include Request Results section</span>
+        </label>
+        <label class="checkbox-line html-report-option">
+          <input id="htmlReportIncludeDetailsInput" type="checkbox" checked>
+          <span>Include Request Details for each response</span>
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button id="cancelHtmlReportOptionsButton" type="button">Cancel</button>
+        <button id="confirmHtmlReportOptionsButton" type="button" class="primary">Export</button>
       </div>
     </section>
 

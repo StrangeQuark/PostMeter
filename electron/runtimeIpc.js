@@ -18,6 +18,7 @@ const {
   runtimeResultStoreFiles
 } = require('../src/core/runtimeResultStore');
 const { normalizeCapturePolicy } = require('../src/core/resultCapturePolicy');
+const { resultHtmlReportToHtml } = require('../src/core/resultHtmlReport');
 const {
   performanceExportExtension,
   performanceExportFilters,
@@ -36,6 +37,7 @@ const {
   assertCollectionPayload,
   assertCollectionRunResultPayload,
   assertExportFormat,
+  assertHtmlReportOptionsPayload,
   assertOptionalEnvironmentPayload,
   assertPerformanceCalibrationResultPayload,
   assertPerformanceExportFormat,
@@ -51,6 +53,15 @@ const { resolveTlsSettingsSecrets } = require('../src/core/tlsSettings');
 
 const RESULT_STORE_WARNING_MARGIN_BYTES = 1024 * 1024 * 1024;
 const RUN_PROGRESS_MIN_INTERVAL_MILLIS = 250;
+
+function normalizeHtmlReportOptions(options = {}) {
+  assertHtmlReportOptionsPayload(options);
+  const includeRequestResults = options?.includeRequestResults !== false;
+  return {
+    includeRequestResults,
+    includeRequestDetails: includeRequestResults && options?.includeRequestDetails !== false
+  };
+}
 
 function registerRuntimeIpc(options = {}) {
   const {
@@ -255,11 +266,12 @@ function registerRuntimeIpc(options = {}) {
     return true;
   });
 
-  ipcMain.handle('runner:export', async (_event, result, format) => {
+  ipcMain.handle('runner:export', async (_event, result, format, htmlReportOptions = {}) => {
     const publicResult = publicCollectionRunResult(result);
     assertCollectionRunResultPayload(publicResult);
     assertExportFormat(format);
-    const extension = format === 'csv' ? 'csv' : 'json';
+    const normalizedHtmlReportOptions = format === 'html' ? normalizeHtmlReportOptions(htmlReportOptions) : {};
+    const extension = resultExportExtension(format);
     const saveResult = await dialog.showSaveDialog(getMainWindow(), {
       title: `Export Collection Run ${extension.toUpperCase()}`,
       defaultPath: `postmeter-collection-run.${extension}`,
@@ -276,12 +288,18 @@ function registerRuntimeIpc(options = {}) {
       assertCurrentStoreResult(publicResult, 'runner');
       if (format === 'csv') {
         await currentResultStore.exportCsv(filePath, { kind: 'runner', result: publicResult });
+      } else if (format === 'html') {
+        await currentResultStore.exportHtml(filePath, { kind: 'runner', result: publicResult, ...normalizedHtmlReportOptions });
       } else {
         await currentResultStore.exportJson(filePath, { kind: 'runner', result: publicResult });
       }
       return fileOperationResult({ cancelled: false, path: filePath });
     }
-    const content = format === 'csv' ? collectionRunResultToCsv(publicResult) : JSON.stringify(publicResult, null, 2);
+    const content = format === 'csv'
+      ? collectionRunResultToCsv(publicResult)
+      : format === 'html'
+        ? await resultHtmlReportToHtml({ kind: 'runner', result: publicResult, ...normalizedHtmlReportOptions })
+        : JSON.stringify(publicResult, null, 2);
     await writeTextFileAtomic(filePath, content, { prefix: 'postmeter-runner-export' });
     return fileOperationResult({ cancelled: false, path: filePath });
   });
@@ -513,7 +531,7 @@ function registerRuntimeIpc(options = {}) {
   ipcMain.handle('performance:export', async (_event, performanceTest, format = 'postmeter') => {
     assertPerformanceTestPayload(performanceTest);
     assertPerformanceExportFormat(format);
-    if (format === 'csv') {
+    if (format === 'csv' || format === 'html') {
       throw new Error('Performance test definitions can only be exported as JSON.');
     }
     const extension = performanceExportExtension(format);
@@ -530,10 +548,11 @@ function registerRuntimeIpc(options = {}) {
     return fileOperationResult({ cancelled: false, path: filePath });
   });
 
-  ipcMain.handle('performance:exportResult', async (_event, result, format = 'json') => {
+  ipcMain.handle('performance:exportResult', async (_event, result, format = 'json', htmlReportOptions = {}) => {
     const publicResult = publicPerformanceResult(result);
     assertPerformanceResultPayload(publicResult);
     assertPerformanceExportFormat(format);
+    const normalizedHtmlReportOptions = format === 'html' ? normalizeHtmlReportOptions(htmlReportOptions) : {};
     const extension = performanceExportExtension(format);
     const saveResult = await dialog.showSaveDialog(getMainWindow(), {
       title: `Export Performance Result ${extension.toUpperCase()}`,
@@ -548,12 +567,18 @@ function registerRuntimeIpc(options = {}) {
       assertCurrentStoreResult(publicResult, 'performance');
       if (format === 'csv') {
         await currentResultStore.exportCsv(filePath, { kind: 'performance', result: publicResult });
+      } else if (format === 'html') {
+        await currentResultStore.exportHtml(filePath, { kind: 'performance', result: publicResult, ...normalizedHtmlReportOptions });
       } else {
         await currentResultStore.exportJson(filePath, { kind: 'performance', result: publicResult });
       }
       return fileOperationResult({ cancelled: false, path: filePath });
     }
-    const content = format === 'csv' ? performanceResultToCsv(publicResult) : JSON.stringify(publicResult, null, 2);
+    const content = format === 'csv'
+      ? performanceResultToCsv(publicResult)
+      : format === 'html'
+        ? await resultHtmlReportToHtml({ kind: 'performance', result: publicResult, ...normalizedHtmlReportOptions })
+        : JSON.stringify(publicResult, null, 2);
     await writeTextFileAtomic(filePath, content, { prefix: 'postmeter-performance-result-export' });
     return fileOperationResult({ cancelled: false, path: filePath });
   });
@@ -745,6 +770,16 @@ function httpResponseCountFromStatusCounts(statusCounts = {}) {
   return Object.entries(statusCounts).reduce((total, [status, count]) => {
     return /^\d+$/.test(status) ? total + Number(count || 0) : total;
   }, 0);
+}
+
+function resultExportExtension(format) {
+  if (format === 'csv') {
+    return 'csv';
+  }
+  if (format === 'html') {
+    return 'html';
+  }
+  return 'json';
 }
 
 function estimatePerformancePlannedRequests(performanceTest = {}) {

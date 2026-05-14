@@ -267,12 +267,41 @@
     $('exportRunnerResultsButton').click();
     assertUiSmoke(!$('exportRunnerResultsMenu').hidden, 'Runner Export Results button should open the result format menu.');
     assertUiSmoke(
-      Array.from($('exportRunnerResultsMenu').querySelectorAll('button')).map((button) => button.textContent.trim()).join('|') === 'JSON|CSV',
-      'Runner Export Results menu should offer JSON and CSV.'
+      Array.from($('exportRunnerResultsMenu').querySelectorAll('button')).map((button) => button.textContent.trim()).join('|') === 'HTML Report|JSON|CSV',
+      'Runner Export Results menu should offer HTML Report, JSON, and CSV.'
     );
+    assertUiSmoke(!$('exportRunnerHtmlButton').disabled, 'Runner HTML report export menu item was not enabled after a run.');
     assertUiSmoke(!$('exportRunnerJsonButton').disabled, 'Runner JSON export menu item was not enabled after a run.');
     assertUiSmoke(!$('exportRunnerCsvButton').disabled, 'Runner CSV export menu item was not enabled after a run.');
-    $('exportRunnerResultsButton').click();
+    const originalRunnerExport = window.__postmeterExportRunnerResult;
+    const runnerExportCalls = [];
+    try {
+      window.__postmeterExportRunnerResult = async (result, format, htmlReportOptions) => {
+        runnerExportCalls.push({ result, format, htmlReportOptions });
+        return { cancelled: false, path: `/tmp/postmeter-runner-result.${format}` };
+      };
+      $('exportRunnerHtmlButton').click();
+      assertUiSmoke(!$('htmlReportOptionsModal').hidden, 'Runner HTML report export should open the report options modal.');
+      $('htmlReportIncludeResultsInput').checked = false;
+      dispatchChange($('htmlReportIncludeResultsInput'));
+      assertUiSmoke($('htmlReportIncludeDetailsInput').disabled, 'Runner HTML report details should be disabled when results are excluded.');
+      assertUiSmoke(!$('htmlReportIncludeDetailsInput').checked, 'Runner HTML report details should be unchecked when results are excluded.');
+      $('confirmHtmlReportOptionsButton').click();
+      await waitForUiSmoke(
+        () => runnerExportCalls.length === 1,
+        'Runner HTML report export did not invoke the export boundary with modal options.',
+        3000,
+        global
+      );
+      assertUiSmoke(runnerExportCalls[0].format === 'html', 'Runner HTML report export should use the HTML format.');
+      assertUiSmoke(
+        runnerExportCalls[0].htmlReportOptions?.includeRequestResults === false
+          && runnerExportCalls[0].htmlReportOptions?.includeRequestDetails === false,
+        'Runner HTML report export should force Request Details off when Request Results is excluded.'
+      );
+    } finally {
+      window.__postmeterExportRunnerResult = originalRunnerExport;
+    }
 
     selectSidebarPanel('performance');
     const performanceTest = newPerformanceTest();
@@ -341,32 +370,60 @@
     $('exportPerformanceResultsButton').click();
     assertUiSmoke(!$('exportPerformanceResultsMenu').hidden, 'Performance Export Results button should open the result format menu.');
     assertUiSmoke(
-      Array.from($('exportPerformanceResultsMenu').querySelectorAll('button')).map((button) => button.textContent.trim()).join('|') === 'JSON|CSV',
-      'Performance Export Results menu should offer JSON and CSV.'
+      Array.from($('exportPerformanceResultsMenu').querySelectorAll('button')).map((button) => button.textContent.trim()).join('|') === 'HTML Report|JSON|CSV',
+      'Performance Export Results menu should offer HTML Report, JSON, and CSV.'
     );
+    assertUiSmoke(!$('exportPerformanceResultHtmlButton').disabled, 'Performance HTML report export menu item was not enabled after Full Endpoint Diagnosis.');
     assertUiSmoke(!$('exportPerformanceResultJsonButton').disabled, 'Performance JSON export menu item was not enabled after Full Endpoint Diagnosis.');
     assertUiSmoke(!$('exportPerformanceResultCsvButton').disabled, 'Performance CSV export menu item was not enabled after Full Endpoint Diagnosis.');
     $('exportPerformanceResultsButton').click();
     const originalPerformanceExportResult = window.__postmeterExportPerformanceResult;
     const performanceExportCalls = [];
     try {
-      window.__postmeterExportPerformanceResult = async (result, format) => {
-        performanceExportCalls.push({ result, format });
+      window.__postmeterExportPerformanceResult = async (result, format, htmlReportOptions) => {
+        performanceExportCalls.push({ result, format, htmlReportOptions });
         return { cancelled: false, path: `/tmp/postmeter-performance-result.${format}` };
       };
+      $('exportPerformanceResultsButton').click();
+      $('exportPerformanceResultHtmlButton').click();
+      assertUiSmoke(!$('modalBackdrop').hidden, 'HTML report export options should open the modal backdrop.');
+      assertUiSmoke(!$('htmlReportOptionsModal').hidden, 'HTML report export options modal should open before exporting.');
+      assertUiSmoke($('htmlReportIncludeResultsInput').checked, 'HTML report should include Request Results by default.');
+      assertUiSmoke($('htmlReportIncludeDetailsInput').checked, 'HTML report should include Request Details by default.');
+      $('htmlReportIncludeResultsInput').checked = false;
+      dispatchChange($('htmlReportIncludeResultsInput'));
+      assertUiSmoke($('htmlReportIncludeDetailsInput').disabled, 'Request Details option should be disabled when Request Results is excluded.');
+      assertUiSmoke(!$('htmlReportIncludeDetailsInput').checked, 'Request Details option should be forced off when Request Results is excluded.');
+      $('htmlReportIncludeResultsInput').checked = true;
+      dispatchChange($('htmlReportIncludeResultsInput'));
+      assertUiSmoke(!$('htmlReportIncludeDetailsInput').disabled, 'Request Details option should re-enable when Request Results is included.');
+      $('htmlReportIncludeDetailsInput').checked = false;
+      dispatchChange($('htmlReportIncludeDetailsInput'));
+      $('confirmHtmlReportOptionsButton').click();
+      await waitForUiSmoke(
+        () => performanceExportCalls.length === 1 && performanceExportCalls[0].format === 'html',
+        'Performance HTML report export did not invoke the export boundary after confirming modal options.',
+        3000,
+        global
+      );
       $('exportPerformanceResultsButton').click();
       $('exportPerformanceResultJsonButton').click();
       $('exportPerformanceResultsButton').click();
       $('exportPerformanceResultCsvButton').click();
       await waitForUiSmoke(
-        () => performanceExportCalls.length === 2,
-        'Performance result export buttons did not invoke both JSON and CSV exports.',
+        () => performanceExportCalls.length === 3,
+        'Performance result export buttons did not invoke HTML, JSON, and CSV exports.',
         3000,
         global
       );
       assertUiSmoke(
-        performanceExportCalls.map((call) => call.format).join('|') === 'json|csv',
-        `Performance result exports should run JSON then CSV. formats=${performanceExportCalls.map((call) => call.format).join('|')}`
+        performanceExportCalls.map((call) => call.format).join('|') === 'html|json|csv',
+        `Performance result exports should run HTML then JSON then CSV. formats=${performanceExportCalls.map((call) => call.format).join('|')}`
+      );
+      assertUiSmoke(
+        performanceExportCalls[0].htmlReportOptions?.includeRequestResults === true
+          && performanceExportCalls[0].htmlReportOptions?.includeRequestDetails === false,
+        'HTML report export should pass the selected Request Results and Request Details options.'
       );
       assertUiSmoke(
         performanceExportCalls.every((call) => call.result?.resultStoreId === diagnosisResult.resultStoreId),

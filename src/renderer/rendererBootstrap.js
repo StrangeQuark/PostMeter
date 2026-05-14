@@ -176,6 +176,7 @@
     bindClick(doc, 'clearExpiredCookiesButton', options.onClearExpiredCookies);
     bindClick(doc, 'runCollectionButton', options.onRunCollection);
     bindClick(doc, 'cancelRunnerButton', options.onCancelCollectionRun);
+    bindClick(doc, 'exportRunnerHtmlButton', options.onExportRunnerHtml);
     bindClick(doc, 'exportRunnerJsonButton', options.onExportRunnerJson);
     bindClick(doc, 'exportRunnerCsvButton', options.onExportRunnerCsv);
     bindClick(doc, 'runnerToggleCsvVariablesButton', options.onToggleRunnerCsvVariables);
@@ -192,8 +193,13 @@
     bindClick(doc, 'runPerformanceTestButton', options.onRunPerformanceTest);
     bindClick(doc, 'cancelPerformanceTestButton', options.onCancelPerformanceTest);
     bindClick(doc, 'exportPerformanceTestButton', options.onExportPerformanceTest);
+    bindClick(doc, 'exportPerformanceResultHtmlButton', options.onExportPerformanceResultHtml);
     bindClick(doc, 'exportPerformanceResultJsonButton', options.onExportPerformanceResultJson);
     bindClick(doc, 'exportPerformanceResultCsvButton', options.onExportPerformanceResultCsv);
+    bindChange(doc, 'htmlReportIncludeResultsInput', options.onHtmlReportIncludeResultsChange);
+    bindChange(doc, 'htmlReportIncludeDetailsInput', options.onHtmlReportIncludeDetailsChange);
+    bindClick(doc, 'cancelHtmlReportOptionsButton', options.onCancelHtmlReportOptions);
+    bindClick(doc, 'confirmHtmlReportOptionsButton', options.onConfirmHtmlReportOptions);
     bindClick(doc, 'importPerformanceRequestButton', options.onImportPerformanceRequest);
     bindClick(doc, 'addPerformanceParamButton', options.onAddPerformanceParam);
     bindClick(doc, 'addPerformanceHeaderButton', options.onAddPerformanceHeader);

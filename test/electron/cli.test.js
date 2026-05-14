@@ -112,6 +112,28 @@ test('runs collections headlessly and writes reports', async () => {
     assert.equal(passingReport.results[0].testScriptResult.tests[0].name, 'script sees CLI variables');
     assert.equal(passingReport.environment.variables.find((item) => item.key === 'cliToken').value, 'from-cli');
 
+    const htmlReportPath = path.join(tempDir, 'passing-report.html');
+    const htmlRun = await runCli([
+      'run',
+      '--file',
+      passingWorkspacePath,
+      '--collection',
+      'CLI',
+      '--var',
+      'cliToken=from-cli',
+      '--collection-var',
+      `baseUrl=${server.baseUrl}`,
+      '--report',
+      htmlReportPath,
+      '--format',
+      'html'
+    ], tempDir);
+    assert.equal(htmlRun.code, 0, htmlRun.stderr);
+    const htmlReport = await fs.readFile(htmlReportPath, 'utf8');
+    assert.match(htmlReport, /PostMeter Runner Results/);
+    assert.match(htmlReport, /Charts and Trends/);
+    assert.match(htmlReport, /Response Details/);
+
     const failingWorkspacePath = path.join(tempDir, 'workspace-fail.json');
     const failingReportPath = path.join(tempDir, 'failing-report.csv');
     await fs.writeFile(failingWorkspacePath, JSON.stringify(workspace(server.baseUrl, 204), null, 2));

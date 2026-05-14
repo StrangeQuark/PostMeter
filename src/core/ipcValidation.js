@@ -1449,7 +1449,7 @@ function assertOAuthProgressPayload(value, field = 'progress') {
 
 function assertExportFormat(value, field = 'format') {
   try {
-    oneOf(value, ['json', 'csv'], field);
+    oneOf(value, ['json', 'csv', 'html'], field);
   } catch (error) {
     fail(error.message);
   }
@@ -1469,6 +1469,18 @@ function assertPerformanceExportFormat(value, field = 'format') {
   } catch (error) {
     fail(error.message);
   }
+}
+
+function assertHtmlReportOptionsPayload(value, field = 'htmlReportOptions') {
+  if (value == null) {
+    return;
+  }
+  assertAllowedObjectFields(value, field, [
+    'includeRequestResults',
+    'includeRequestDetails'
+  ]);
+  optionalBoolean(value.includeRequestResults, `${field}.includeRequestResults`);
+  optionalBoolean(value.includeRequestDetails, `${field}.includeRequestDetails`);
 }
 
 function assertRuntimeId(value, field = 'id') {
@@ -2002,6 +2014,7 @@ module.exports = {
   assertCollectionExportFormat,
   assertEnvironmentPayload,
   assertExportFormat,
+  assertHtmlReportOptionsPayload,
   assertOAuthProgressPayload,
   assertOptionalEnvironmentPayload,
   assertPerformanceCalibrationResultPayload,
