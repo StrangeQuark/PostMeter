@@ -3171,12 +3171,15 @@
     const originalActiveFolderId = activeFolderId;
     const originalActiveRequestId = activeRequestId;
     const originalActiveEnvironmentId = activeEnvironmentId;
+    const originalActiveRunnerConfigId = activeRunnerConfigId;
+    const originalActiveRunnerRequestRunnerId = activeRunnerRequestRunnerId;
     const originalActiveMainPanel = activeMainPanel;
     const originalActiveSidebarPanel = activeSidebarPanel;
     const originalOpenCollectionTabs = structuredClone(openCollectionTabs);
     const originalOpenRequestTabs = structuredClone(openRequestTabs);
     const originalOpenEnvironmentTabs = structuredClone(openEnvironmentTabs);
     const originalOpenWorkspaceTabs = structuredClone(openWorkspaceTabs);
+    const originalOpenRunnerTabs = structuredClone(openRunnerTabs);
     try {
       workspace.collections = [];
       clearActiveWorkspaceItem();
@@ -3215,6 +3218,97 @@
         'Collection delete should restore focus to a live tree item or stable sidebar tab.'
       );
       assertUiSmoke(document.activeElement?.isConnected, 'Collection delete focus target should still be connected.');
+
+      const generateNestedFolder = {
+        id: crypto.randomUUID(),
+        name: 'Focus Generated Nested Folder',
+        requests: [newRequestObject('Focus Generated Nested Request')],
+        folders: []
+      };
+      const generateFolder = {
+        id: crypto.randomUUID(),
+        name: 'Focus Generated Folder',
+        requests: [newRequestObject('Focus Generated Folder Request')],
+        folders: [generateNestedFolder]
+      };
+      const generateCollection = {
+        id: crypto.randomUUID(),
+        name: 'Focus Generated Collection',
+        requests: [newRequestObject('Focus Generated Root Request')],
+        folders: [generateFolder]
+      };
+      workspace.collections.push(generateCollection);
+      renderAll();
+      const generateCollectionButton = treeButtonByTarget('collection', generateCollection.id);
+      assertUiSmoke(generateCollectionButton, 'Tree focus smoke did not render the generate-runner collection.');
+      generateCollectionButton.focus();
+      openKeyboardContextMenu(generateCollectionButton);
+      let generateMenuLabels = Array.from($('contextMenu').querySelectorAll('button')).map((button) => button.textContent.trim());
+      assertUiSmoke(
+        generateMenuLabels.includes('Generate Runner')
+          && generateMenuLabels.indexOf('Generate Runner') < generateMenuLabels.indexOf('Delete'),
+        `Collection context menu should include Generate Runner above Delete. labels=${generateMenuLabels.join('|')}`
+      );
+      const runnerCountBeforeCollectionGenerate = ensureWorkspaceRunners().length;
+      activateContextMenuItem('Generate Runner');
+      await nextPaint();
+      const generatedCollectionRunner = activeRunner();
+      assertUiSmoke(
+        generatedCollectionRunner
+          && ensureWorkspaceRunners().length === runnerCountBeforeCollectionGenerate + 1
+          && generatedCollectionRunner.name.startsWith('Focus Generated Collection Runner'),
+        'Collection Generate Runner should create and activate a runner named from the collection.'
+      );
+      assertUiSmoke(
+        generatedCollectionRunner.requests.length === 3,
+        'Collection Generate Runner should import root, folder, and nested folder requests.'
+      );
+      assertUiSmoke(
+        generatedCollectionRunner.requests.some((request) => request.source?.collectionId === generateCollection.id
+          && request.source?.requestId === generateCollection.requests[0].id),
+        'Collection Generate Runner should preserve root request source metadata.'
+      );
+      assertUiSmoke(
+        generatedCollectionRunner.requests.some((request) => request.source?.folderId === generateNestedFolder.id
+          && request.source?.folderPath?.join(' / ') === `${generateFolder.name} / ${generateNestedFolder.name}`),
+        'Collection Generate Runner should preserve nested folder source metadata.'
+      );
+      assertUiSmoke(
+        activeSidebarPanel === 'runners' && activeMainPanel === 'runner',
+        'Collection Generate Runner should open the generated runner in the runner pane.'
+      );
+
+      selectSidebarPanel('collections');
+      const generateFolderButton = treeButtonByTarget('folder', generateFolder.id);
+      assertUiSmoke(generateFolderButton, 'Tree focus smoke did not render the generate-runner folder.');
+      generateFolderButton.focus();
+      openKeyboardContextMenu(generateFolderButton);
+      generateMenuLabels = Array.from($('contextMenu').querySelectorAll('button')).map((button) => button.textContent.trim());
+      assertUiSmoke(
+        generateMenuLabels.includes('Generate Runner')
+          && generateMenuLabels.indexOf('Generate Runner') < generateMenuLabels.indexOf('Delete'),
+        `Folder context menu should include Generate Runner above Delete. labels=${generateMenuLabels.join('|')}`
+      );
+      const runnerCountBeforeFolderGenerate = ensureWorkspaceRunners().length;
+      activateContextMenuItem('Generate Runner');
+      await nextPaint();
+      const generatedFolderRunner = activeRunner();
+      assertUiSmoke(
+        generatedFolderRunner
+          && ensureWorkspaceRunners().length === runnerCountBeforeFolderGenerate + 1
+          && generatedFolderRunner.name.startsWith('Focus Generated Folder Runner'),
+        'Folder Generate Runner should create and activate a runner named from the folder.'
+      );
+      assertUiSmoke(
+        generatedFolderRunner.requests.length === 2
+          && !generatedFolderRunner.requests.some((request) => request.source?.requestId === generateCollection.requests[0].id),
+        'Folder Generate Runner should import only that folder and nested folder requests.'
+      );
+      assertUiSmoke(
+        generatedFolderRunner.requests.every((request) => request.id !== request.source?.requestId),
+        'Generate Runner should clone requests instead of reusing collection request ids.'
+      );
+      selectSidebarPanel('collections');
 
       const requestCollection = newCollection();
       requestCollection.name = 'Request Focus Collection';
@@ -3261,12 +3355,15 @@
       activeFolderId = originalActiveFolderId;
       activeRequestId = originalActiveRequestId;
       activeEnvironmentId = originalActiveEnvironmentId;
+      activeRunnerConfigId = originalActiveRunnerConfigId;
+      activeRunnerRequestRunnerId = originalActiveRunnerRequestRunnerId;
       activeMainPanel = originalActiveMainPanel;
       activeSidebarPanel = originalActiveSidebarPanel;
       openCollectionTabs = originalOpenCollectionTabs;
       openRequestTabs = originalOpenRequestTabs;
       openEnvironmentTabs = originalOpenEnvironmentTabs;
       openWorkspaceTabs = originalOpenWorkspaceTabs;
+      openRunnerTabs = originalOpenRunnerTabs;
       renderAll();
     }
   }
@@ -4581,6 +4678,28 @@
         window.__postmeterStartRunner = originalRunnerStart;
         window.__postmeterSaveWorkspace = originalSaveWorkspaceForRunnerRun;
       }
+      const nestedSourceFolder = {
+        id: crypto.randomUUID(),
+        name: 'Runner Nested Folder',
+        requests: [
+          newRequestObject('Runner Nested Folder Request')
+        ],
+        folders: []
+      };
+      const sourceFolder = {
+        id: crypto.randomUUID(),
+        name: 'Runner Source Folder',
+        requests: [
+          newRequestObject('Runner Folder Request')
+        ],
+        folders: [nestedSourceFolder]
+      };
+      const emptySourceFolder = {
+        id: crypto.randomUUID(),
+        name: 'Runner Empty Folder',
+        requests: [],
+        folders: []
+      };
       const sourceCollection = {
         id: crypto.randomUUID(),
         name: 'Runner Source Collection',
@@ -4589,7 +4708,7 @@
           newRequestObject('Runner Source Request 2'),
           newRequestObject('Runner Source Request 3')
         ],
-        folders: []
+        folders: [sourceFolder, emptySourceFolder]
       };
       const secondSourceCollection = {
         id: crypto.randomUUID(),
@@ -4600,8 +4719,16 @@
         ],
         folders: []
       };
-      workspace.collections.push(sourceCollection, secondSourceCollection);
+      const emptySourceCollection = {
+        id: crypto.randomUUID(),
+        name: 'Runner Empty Source Collection',
+        requests: [],
+        folders: []
+      };
+      workspace.collections.push(sourceCollection, secondSourceCollection, emptySourceCollection);
       const source = sourceCollection.requests[0];
+      const sourceCollectionRequestCount = 5;
+      const sourceFolderRequestCount = 2;
       const clickRunnerImportControl = (control, options = {}) => {
         control.dispatchEvent(new MouseEvent('click', {
           bubbles: true,
@@ -4613,10 +4740,14 @@
       };
       const runnerImportCollection = (collectionId) => Array.from($('runnerImportList').querySelectorAll('[data-runner-import-type="collection"]'))
         .find((control) => control.dataset.collectionId === collectionId);
-      const runnerImportInput = (type, collectionId, requestId = '') => Array.from($('runnerImportList').querySelectorAll('input'))
+      const runnerImportFolder = (collectionId, folderId) => Array.from($('runnerImportList').querySelectorAll('[data-runner-import-type="folder"]'))
+        .find((control) => control.dataset.collectionId === collectionId
+          && control.dataset.folderId === folderId);
+      const runnerImportInput = (type, collectionId, requestId = '', folderId = '') => Array.from($('runnerImportList').querySelectorAll('input'))
         .find((input) => input.dataset.runnerImportType === type
           && input.dataset.collectionId === collectionId
-          && input.dataset.requestId === requestId);
+          && input.dataset.requestId === requestId
+          && input.dataset.folderId === folderId);
       $('addRunnerRequestButton').click();
       runnerAddLabels = Array.from($('contextMenu').querySelectorAll('button')).map((button) => button.textContent.trim());
       assertUiSmoke(runnerAddLabels.join('|') === 'New Request|Import', `Runner Add Request menu should stay simplified after collections exist. labels=${runnerAddLabels.join('|')}`);
@@ -4627,10 +4758,14 @@
       assertUiSmoke(!$('runnerImportList').textContent.includes(source.name), 'Runner Import modal should hide collection requests until the collection is expanded.');
       const collectionImportControl = runnerImportCollection(sourceCollection.id);
       assertUiSmoke(collectionImportControl, 'Runner Import modal should expose an expandable collection row.');
-      assertUiSmoke(!runnerImportInput('collection', sourceCollection.id), 'Runner Import modal should not make collection rows selectable import targets.');
+      assertUiSmoke(runnerImportInput('collection', sourceCollection.id), 'Runner Import modal should make collection rows selectable in runner mode.');
+      assertUiSmoke(runnerImportInput('collection', emptySourceCollection.id).disabled, 'Runner Import should disable empty collection checkboxes.');
       clickRunnerImportControl(collectionImportControl);
       const expandedRequestImportInput = runnerImportInput('request', sourceCollection.id, source.id);
+      const expandedFolderImportControl = runnerImportFolder(sourceCollection.id, sourceFolder.id);
       assertUiSmoke(expandedRequestImportInput, 'Runner Import modal should expose request options after expanding a collection.');
+      assertUiSmoke(expandedFolderImportControl, 'Runner Import modal should expose folder rows after expanding a collection.');
+      assertUiSmoke(!$('runnerImportList').textContent.includes(sourceFolder.requests[0].name), 'Runner Import modal should hide folder requests until the folder is expanded.');
       assertUiSmoke($('confirmRunnerImportButton').disabled, 'Expanding a runner import collection should not enable Add.');
       assertUiSmoke(Array.isArray(selectedRunnerImportTarget) && selectedRunnerImportTarget.length === 0, 'Expanding a runner import collection should not select the collection.');
       const secondCollectionImportControl = runnerImportCollection(secondSourceCollection.id);
@@ -4648,6 +4783,83 @@
       $('addRunnerRequestButton').click();
       activateContextMenuItem('Import');
       clickRunnerImportControl(runnerImportCollection(sourceCollection.id));
+      clickRunnerImportControl(runnerImportInput('collection', sourceCollection.id));
+      assertUiSmoke(
+        Array.isArray(selectedRunnerImportTarget)
+          && selectedRunnerImportTarget.length === sourceCollectionRequestCount
+          && selectedRunnerImportTarget.every((target) => target.type === 'request'),
+        'Checking a runner import collection should select every descendant request.'
+      );
+      clickRunnerImportControl(runnerImportFolder(sourceCollection.id, sourceFolder.id));
+      clickRunnerImportControl(runnerImportFolder(sourceCollection.id, nestedSourceFolder.id));
+      assertUiSmoke(
+        runnerImportInput('folder', sourceCollection.id, '', sourceFolder.id).checked
+          && runnerImportInput('folder', sourceCollection.id, '', nestedSourceFolder.id).checked,
+        'Checking a runner import collection should check expanded descendant folder rows.'
+      );
+      assertUiSmoke(
+        runnerImportInput('request', sourceCollection.id, nestedSourceFolder.requests[0].id, nestedSourceFolder.id).checked,
+        'Checking a runner import collection should check nested descendant request rows.'
+      );
+      clickRunnerImportControl(runnerImportInput('folder', sourceCollection.id, '', sourceFolder.id));
+      assertUiSmoke(
+        Array.isArray(selectedRunnerImportTarget)
+          && selectedRunnerImportTarget.length === sourceCollection.requests.length,
+        'Unchecking a runner import folder should deselect only that folder descendant requests.'
+      );
+      assertUiSmoke(
+        runnerImportInput('collection', sourceCollection.id).indeterminate === true,
+        'Unchecking a selected folder should make its parent collection checkbox indeterminate.'
+      );
+      clickRunnerImportControl(runnerImportInput('folder', sourceCollection.id, '', sourceFolder.id));
+      assertUiSmoke(
+        Array.isArray(selectedRunnerImportTarget)
+          && selectedRunnerImportTarget.length === sourceCollectionRequestCount,
+        'Rechecking an indeterminate folder should restore all descendant request selections.'
+      );
+      $('confirmRunnerImportButton').click();
+      await waitForUiSmoke(
+        () => runner.requests.length === requestCountBeforeCancel + sourceCollectionRequestCount,
+        'Checking a collection in Runner Import should clone every descendant request.',
+        3000,
+        global
+      );
+      const nestedImported = runner.requests.find((request) => request.source?.requestId === nestedSourceFolder.requests[0].id);
+      assertUiSmoke(
+        nestedImported?.source?.folderId === nestedSourceFolder.id
+          && nestedImported?.source?.folderPath?.join(' / ') === `${sourceFolder.name} / ${nestedSourceFolder.name}`,
+        'Collection import should preserve nested folder source metadata on cloned runner requests.'
+      );
+
+      $('addRunnerRequestButton').click();
+      activateContextMenuItem('Import');
+      clickRunnerImportControl(runnerImportCollection(sourceCollection.id));
+      clickRunnerImportControl(runnerImportFolder(sourceCollection.id, sourceFolder.id));
+      clickRunnerImportControl(runnerImportInput('folder', sourceCollection.id, '', sourceFolder.id));
+      assertUiSmoke(
+        Array.isArray(selectedRunnerImportTarget)
+          && selectedRunnerImportTarget.length === sourceFolderRequestCount,
+        'Checking a runner import folder should select all nested requests under that folder.'
+      );
+      const requestCountBeforeFolderImport = runner.requests.length;
+      $('confirmRunnerImportButton').click();
+      await waitForUiSmoke(
+        () => runner.requests.length === requestCountBeforeFolderImport + sourceFolderRequestCount,
+        'Checking a folder in Runner Import should clone all descendant folder requests.',
+        3000,
+        global
+      );
+
+      const requestCountBeforeStaleImport = runner.requests.length;
+      assertUiSmoke(
+        importRunnerSelections([{ type: 'folder', collectionId: sourceCollection.id, folderId: 'missing-folder' }]) === 0,
+        'Importing a stale runner folder target should report that no requests were imported.'
+      );
+      assertUiSmoke(runner.requests.length === requestCountBeforeStaleImport, 'Importing a stale runner folder target should not mutate the runner.');
+
+      $('addRunnerRequestButton').click();
+      activateContextMenuItem('Import');
+      clickRunnerImportControl(runnerImportCollection(sourceCollection.id));
       const requestImportInputAfterCancel = runnerImportInput('request', sourceCollection.id, source.id);
       const thirdRequestImportInputAfterCancel = runnerImportInput('request', sourceCollection.id, sourceCollection.requests[2].id);
       assertUiSmoke(requestImportInputAfterCancel && thirdRequestImportInputAfterCancel, 'Runner Import request options should be available after expanding the collection.');
@@ -4660,7 +4872,7 @@
         'Shift-clicking runner import requests should select the visible request range.'
       );
       $('confirmRunnerImportButton').click();
-      await waitForUiSmoke(() => runner.requests.length === requestCountBeforeCancel + 3, 'Adding selected requests from Runner Import should clone every selected request.', 3000, global);
+      await waitForUiSmoke(() => runner.requests.length === requestCountBeforeStaleImport + 3, 'Adding selected requests from Runner Import should clone every selected request.', 3000, global);
 
       $('addRunnerRequestButton').click();
       activateContextMenuItem('Import');
@@ -4694,6 +4906,38 @@
         imported.name = 'Mutated Runner Clone';
         assertUiSmoke(source.name !== 'Mutated Runner Clone', 'Imported runner request should not mutate the source collection request.');
       }
+      const performanceImportTest = newPerformanceTest();
+      $('importPerformanceRequestButton').click();
+      assertUiSmoke(!$('runnerImportModal').hidden, 'Performance Import Request should open the shared import tree modal.');
+      assertUiSmoke($('runnerImportTitle').textContent === 'Import request', 'Performance Import Request should use single-request modal copy.');
+      assertUiSmoke(!runnerImportInput('collection', sourceCollection.id), 'Performance Import Request should not expose collection selection checkboxes.');
+      clickRunnerImportControl(runnerImportCollection(sourceCollection.id));
+      assertUiSmoke(runnerImportFolder(sourceCollection.id, sourceFolder.id), 'Performance Import Request should expose folder rows for navigation.');
+      assertUiSmoke($('confirmRunnerImportButton').disabled, 'Expanding Performance import groups should not enable Import.');
+      clickRunnerImportControl(runnerImportFolder(sourceCollection.id, sourceFolder.id));
+      const performanceFolderRequestInput = runnerImportInput('request', sourceCollection.id, sourceFolder.requests[0].id, sourceFolder.id);
+      const performanceRootRequestInput = runnerImportInput('request', sourceCollection.id, source.id, '');
+      assertUiSmoke(performanceFolderRequestInput?.type === 'radio', 'Performance Import Request should use single-choice request controls.');
+      clickRunnerImportControl(performanceFolderRequestInput);
+      clickRunnerImportControl(performanceRootRequestInput);
+      assertUiSmoke(
+        Array.isArray(selectedRunnerImportTarget)
+          && selectedRunnerImportTarget.length === 1
+          && selectedRunnerImportTarget[0].requestId === source.id,
+        'Performance Import Request should keep only the most recently selected request.'
+      );
+      $('confirmRunnerImportButton').click();
+      await waitForUiSmoke(
+        () => performanceImportTest.source?.requestId === source.id,
+        'Performance Import Request should import only the selected request.',
+        3000,
+        global
+      );
+      activeRunnerRequestRunnerId = null;
+      activeRunnerConfigId = runner.id;
+      activeSidebarPanel = 'runners';
+      activeMainPanel = 'runner';
+      renderAll();
       lastRunnerResult = {
         collectionName: runner.name,
         totalRequests: 125,

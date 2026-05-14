@@ -151,8 +151,9 @@ let selectedExportCollectionId = RENDERER_STATE_DEFAULTS.selectedExportCollectio
 let selectedExportItemId = RENDERER_STATE_DEFAULTS.selectedExportItemId;
 let selectedFolderDestinationValue = '';
 let selectedRunnerImportTarget = [];
-let expandedRunnerImportCollectionIds = [];
+let expandedRunnerImportNodeKeys = [];
 let lastRunnerImportSelectionKey = '';
+let runnerImportSelectionMode = 'runner';
 let selectedRequestExportTarget = null;
 let expandedRequestExportCollectionIds = [];
 let selectedRequestImportFilePath = '';
@@ -7957,20 +7958,26 @@ function showAddRunnerRequestMenu(event) {
 }
 
 async function promptAndImportRunnerRequests() {
-  const target = await promptRunnerRequestImport();
+  const target = await promptRunnerRequestImport({ mode: 'runner' });
   if (!target) {
     return null;
   }
   return importRunnerSelection(target);
 }
 
-function promptRunnerRequestImport() {
+function promptRunnerRequestImport(options = {}) {
+  runnerImportSelectionMode = options.mode === 'performance' ? 'performance' : 'runner';
   selectedRunnerImportTarget = [];
-  expandedRunnerImportCollectionIds = [];
+  expandedRunnerImportNodeKeys = [];
   lastRunnerImportSelectionKey = '';
   const collections = workspace.collections || [];
+  const performanceMode = runnerImportSelectionMode === 'performance';
+  $('runnerImportTitle').textContent = performanceMode ? 'Import request' : 'Import requests';
+  $('confirmRunnerImportButton').textContent = performanceMode ? 'Import' : 'Add';
   $('runnerImportMessage').textContent = collections.length
-    ? 'Choose a collection to expand, then select one or more requests to add to this runner.'
+    ? performanceMode
+      ? 'Expand collections and folders, then select one request to use for this performance test.'
+      : 'Expand collections and folders, then select requests, folders, or collections to add to this runner.'
     : 'There are no collections to import from.';
   renderRunnerImportList(collections);
   return showModal('runnerImportModal', null);
@@ -7989,48 +7996,181 @@ function renderRunnerImportList(collections = workspace.collections || []) {
     return;
   }
   for (const collection of availableCollections) {
-    const entries = collectionRequestEntries(collection);
-    const expanded = expandedRunnerImportCollectionIds.includes(collection.id);
-    list.append(runnerImportOption({
-      type: 'collection',
-      collectionId: collection.id,
-      label: collection.name || 'Untitled Collection',
-      meta: `${entries.length} request${entries.length === 1 ? '' : 's'}`,
-      expanded
-    }));
-    if (!expanded) {
-      continue;
-    }
-    for (const entry of entries) {
-      const folderPath = entry.folderPath?.length ? `${entry.folderPath.join(' / ')} / ` : '';
-      list.append(runnerImportOption({
-        type: 'request',
-        collectionId: collection.id,
-        requestId: entry.request.id,
-        label: `${folderPath}${entry.request.name || 'Untitled Request'}`,
-        meta: `${entry.request.method || 'GET'} ${entry.request.url || ''}`.trim(),
-        checked: runnerImportTargetSelected({
-          type: 'request',
-          collectionId: collection.id,
-          requestId: entry.request.id
-        })
-      }));
-    }
+    appendRunnerImportCollectionNode(list, collection);
   }
 }
 
-function runnerImportOption(option) {
-  if (option.type === 'collection') {
-    return runnerImportCollectionOption(option);
+function appendRunnerImportCollectionNode(list, collection) {
+  const target = {
+    type: 'collection',
+    collectionId: collection?.id || ''
+  };
+  const entries = collectionRequestEntries(collection);
+  const expanded = runnerImportNodeExpanded(target);
+  list.append(runnerImportGroupOption({
+    ...target,
+    label: collection?.name || 'Untitled Collection',
+    meta: `${entries.length} request${entries.length === 1 ? '' : 's'}`,
+    depth: 0,
+    expanded,
+    hasChildren: runnerImportContainerHasChildren(collection),
+    requestTargets: entries.map(runnerImportTargetFromEntry)
+  }));
+  if (!expanded) {
+    return;
   }
+  for (const request of collection?.requests || []) {
+    list.append(runnerImportRequestOption({
+      type: 'request',
+      collectionId: collection?.id || '',
+      folderId: '',
+      requestId: request?.id || '',
+      label: request?.name || 'Untitled Request',
+      meta: `${request?.method || 'GET'} ${request?.url || ''}`.trim(),
+      depth: 1,
+      checked: runnerImportTargetSelected({
+        type: 'request',
+        collectionId: collection?.id || '',
+        requestId: request?.id || '',
+        folderId: ''
+      })
+    }));
+  }
+  for (const folder of collection?.folders || []) {
+    appendRunnerImportFolderNode(list, collection, folder, 1, []);
+  }
+}
+
+function appendRunnerImportFolderNode(list, collection, folder, depth, parentPath) {
+  const folderPath = [...parentPath, folder?.name || 'Untitled Folder'];
+  const entries = runnerImportFolderRequestEntries(collection, folder, parentPath);
+  const target = {
+    type: 'folder',
+    collectionId: collection?.id || '',
+    folderId: folder?.id || ''
+  };
+  const expanded = runnerImportNodeExpanded(target);
+  list.append(runnerImportGroupOption({
+    ...target,
+    label: folder?.name || 'Untitled Folder',
+    meta: `${entries.length} request${entries.length === 1 ? '' : 's'}`,
+    depth,
+    expanded,
+    hasChildren: runnerImportContainerHasChildren(folder),
+    requestTargets: entries.map(runnerImportTargetFromEntry)
+  }));
+  if (!expanded) {
+    return;
+  }
+  for (const request of folder?.requests || []) {
+    list.append(runnerImportRequestOption({
+      type: 'request',
+      collectionId: collection?.id || '',
+      folderId: folder?.id || '',
+      requestId: request?.id || '',
+      label: request?.name || 'Untitled Request',
+      meta: `${request?.method || 'GET'} ${request?.url || ''}`.trim(),
+      depth: depth + 1,
+      checked: runnerImportTargetSelected({
+        type: 'request',
+        collectionId: collection?.id || '',
+        folderId: folder?.id || '',
+        requestId: request?.id || ''
+      })
+    }));
+  }
+  for (const child of folder?.folders || []) {
+    appendRunnerImportFolderNode(list, collection, child, depth + 1, folderPath);
+  }
+}
+
+function runnerImportGroupOption(option) {
+  const row = document.createElement('div');
+  row.className = `collection-pick-option runner-import-option ${option.type}`;
+  row.dataset.runnerImportType = option.type;
+  row.dataset.collectionId = option.collectionId || '';
+  if (option.folderId) {
+    row.dataset.folderId = option.folderId;
+  }
+  row.style.setProperty('--runner-import-depth-offset', `${Math.max(0, option.depth || 0) * 22}px`);
+  row.setAttribute('aria-expanded', option.hasChildren ? (option.expanded ? 'true' : 'false') : 'false');
+  row.addEventListener('click', (event) => {
+    if (!option.hasChildren) {
+      return;
+    }
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLButtonElement) {
+      return;
+    }
+    toggleRunnerImportNodeExpansion(option);
+  });
+
+  const expander = document.createElement('button');
+  expander.type = 'button';
+  expander.className = 'runner-import-expander';
+  expander.textContent = option.hasChildren ? (option.expanded ? 'v' : '>') : '';
+  expander.disabled = !option.hasChildren;
+  expander.setAttribute('aria-label', `${option.expanded ? 'Collapse' : 'Expand'} ${option.label}`);
+  expander.setAttribute('aria-expanded', option.hasChildren ? (option.expanded ? 'true' : 'false') : 'false');
+  expander.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleRunnerImportNodeExpansion(option);
+  });
+  row.append(expander);
+
+  if (runnerImportSelectionMode === 'runner') {
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.name = 'runnerImportTarget';
+    input.dataset.runnerImportType = option.type;
+    input.dataset.collectionId = option.collectionId || '';
+    input.dataset.folderId = option.folderId || '';
+    input.dataset.requestId = '';
+    input.dataset.runnerImportKey = runnerImportTargetKey(option);
+    const selectionState = runnerImportSelectionState(option.requestTargets);
+    input.checked = selectionState === 'checked';
+    input.indeterminate = selectionState === 'mixed';
+    input.disabled = !option.requestTargets?.length;
+    input.setAttribute('aria-label', `Select ${option.label}`);
+    input.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setRunnerImportGroupChecked(option, selectionState !== 'checked');
+    });
+    input.addEventListener('change', () => {
+      setRunnerImportGroupChecked(option, input.checked);
+    });
+    row.append(input);
+  }
+
+  const text = document.createElement('span');
+  text.className = 'runner-import-label-text';
+  text.textContent = option.label;
+  if (option.meta) {
+    const meta = document.createElement('span');
+    meta.className = 'runner-import-meta';
+    meta.textContent = option.meta;
+    text.append(meta);
+  }
+  row.append(text);
+  return row;
+}
+
+function runnerImportRequestOption(option) {
   const label = document.createElement('label');
-  label.className = `collection-pick-option runner-import-option ${option.type}`;
+  label.className = 'collection-pick-option runner-import-option request';
+  label.dataset.runnerImportType = 'request';
+  label.dataset.collectionId = option.collectionId || '';
+  label.dataset.folderId = option.folderId || '';
+  label.dataset.requestId = option.requestId || '';
   label.dataset.runnerImportKey = runnerImportTargetKey(option);
+  label.style.setProperty('--runner-import-depth-offset', `${Math.max(0, option.depth || 0) * 22}px`);
   const input = document.createElement('input');
-  input.type = 'checkbox';
+  input.type = runnerImportSelectionMode === 'performance' ? 'radio' : 'checkbox';
   input.name = 'runnerImportTarget';
-  input.dataset.runnerImportType = option.type;
+  input.dataset.runnerImportType = 'request';
   input.dataset.collectionId = option.collectionId || '';
+  input.dataset.folderId = option.folderId || '';
   input.dataset.requestId = option.requestId || '';
   input.dataset.runnerImportKey = runnerImportTargetKey(option);
   input.checked = option.checked === true;
@@ -8048,11 +8188,17 @@ function runnerImportOption(option) {
       return;
     }
     event.preventDefault();
-    updateRunnerImportSelection(option, {
+    updateRunnerImportSelection({
+      type: 'request',
+      collectionId: option.collectionId,
+      folderId: option.folderId,
+      requestId: option.requestId
+    }, {
       shiftKey: event.shiftKey === true
     });
   });
   const text = document.createElement('span');
+  text.className = 'runner-import-label-text';
   text.textContent = option.label;
   if (option.meta) {
     const meta = document.createElement('span');
@@ -8062,29 +8208,6 @@ function runnerImportOption(option) {
   }
   label.append(input, text);
   return label;
-}
-
-function runnerImportCollectionOption(option) {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'collection-pick-option runner-import-option collection';
-  button.dataset.runnerImportType = 'collection';
-  button.dataset.collectionId = option.collectionId || '';
-  button.setAttribute('aria-expanded', option.expanded === true ? 'true' : 'false');
-  button.addEventListener('click', (event) => {
-    event.preventDefault();
-    toggleRunnerImportCollectionExpansion(option.collectionId);
-  });
-  const text = document.createElement('span');
-  text.textContent = option.label;
-  if (option.meta) {
-    const meta = document.createElement('span');
-    meta.className = 'runner-import-meta';
-    meta.textContent = option.meta;
-    text.append(meta);
-  }
-  button.append(text);
-  return button;
 }
 
 function selectedRunnerImportTargets() {
@@ -8108,21 +8231,28 @@ function setSelectedRunnerImportTargets(targets) {
     seen.add(key);
     uniqueTargets.push(normalized);
   }
-  selectedRunnerImportTarget = uniqueTargets;
-  $('confirmRunnerImportButton').disabled = !uniqueTargets.length;
+  const selectedTargets = runnerImportSelectionMode === 'performance'
+    ? uniqueTargets.slice(-1)
+    : uniqueTargets;
+  selectedRunnerImportTarget = selectedTargets;
+  $('confirmRunnerImportButton').disabled = !selectedTargets.length;
 }
 
 function normalizeRunnerImportTarget(target = {}) {
+  const type = target.type === 'collection' || target.type === 'folder' || target.type === 'request'
+    ? target.type
+    : 'request';
   return {
-    type: target.type === 'collection' ? 'collection' : 'request',
+    type,
     collectionId: target.collectionId || '',
-    requestId: target.type === 'collection' ? '' : target.requestId || ''
+    folderId: type === 'collection' ? '' : target.folderId || '',
+    requestId: type === 'request' ? target.requestId || '' : ''
   };
 }
 
 function runnerImportTargetKey(target = {}) {
   const normalized = normalizeRunnerImportTarget(target);
-  return `${normalized.type}:${normalized.collectionId}:${normalized.requestId}`;
+  return `${normalized.type}:${normalized.collectionId}:${normalized.folderId}:${normalized.requestId}`;
 }
 
 function runnerImportTargetSelected(target) {
@@ -8134,6 +8264,7 @@ function runnerImportTargetFromInput(input) {
   return {
     type: input.dataset.runnerImportType,
     collectionId: input.dataset.collectionId || '',
+    folderId: input.dataset.folderId || '',
     requestId: input.dataset.requestId || ''
   };
 }
@@ -8143,12 +8274,14 @@ function updateRunnerImportSelection(target, options = {}) {
   if (!normalized.collectionId) {
     return;
   }
-  if (normalized.type === 'collection') {
-    toggleRunnerImportCollectionExpansion(normalized.collectionId);
+  if (normalized.type !== 'request') {
+    toggleRunnerImportNodeExpansion(normalized);
     return;
   }
   let nextTargets = selectedRunnerImportTargets();
-  if (options.shiftKey && lastRunnerImportSelectionKey) {
+  if (runnerImportSelectionMode === 'performance') {
+    nextTargets = [normalized];
+  } else if (options.shiftKey && lastRunnerImportSelectionKey) {
     const visibleTargets = visibleRunnerImportTargets();
     const keys = visibleTargets.map(runnerImportTargetKey);
     const anchorIndex = keys.indexOf(lastRunnerImportSelectionKey);
@@ -8191,25 +8324,137 @@ function toggleRunnerImportTarget(targets, target) {
 }
 
 function visibleRunnerImportTargets() {
-  return Array.from($('runnerImportList').querySelectorAll('input[data-runner-import-key]'))
+  return Array.from($('runnerImportList').querySelectorAll('input[data-runner-import-key][data-runner-import-type="request"]'))
     .map(runnerImportTargetFromInput);
 }
 
 function expandRunnerImportCollection(collectionId) {
-  if (!collectionId || expandedRunnerImportCollectionIds.includes(collectionId)) {
-    return;
-  }
-  expandedRunnerImportCollectionIds = [...expandedRunnerImportCollectionIds, collectionId];
+  expandRunnerImportNode({ type: 'collection', collectionId });
 }
 
 function toggleRunnerImportCollectionExpansion(collectionId) {
-  if (!collectionId) {
+  toggleRunnerImportNodeExpansion({ type: 'collection', collectionId });
+}
+
+function runnerImportNodeKey(target = {}) {
+  const normalized = normalizeRunnerImportTarget(target);
+  return `${normalized.type}:${normalized.collectionId}:${normalized.folderId}`;
+}
+
+function runnerImportNodeExpanded(target = {}) {
+  return expandedRunnerImportNodeKeys.includes(runnerImportNodeKey(target));
+}
+
+function expandRunnerImportNode(target = {}) {
+  const key = runnerImportNodeKey(target);
+  if (!target?.collectionId || expandedRunnerImportNodeKeys.includes(key)) {
     return;
   }
-  expandedRunnerImportCollectionIds = expandedRunnerImportCollectionIds.includes(collectionId)
-    ? expandedRunnerImportCollectionIds.filter((id) => id !== collectionId)
-    : [...expandedRunnerImportCollectionIds, collectionId];
+  expandedRunnerImportNodeKeys = [...expandedRunnerImportNodeKeys, key];
+}
+
+function toggleRunnerImportNodeExpansion(target = {}) {
+  if (!target?.collectionId) {
+    return;
+  }
+  const key = runnerImportNodeKey(target);
+  expandedRunnerImportNodeKeys = expandedRunnerImportNodeKeys.includes(key)
+    ? expandedRunnerImportNodeKeys.filter((id) => id !== key)
+    : [...expandedRunnerImportNodeKeys, key];
   renderRunnerImportList();
+}
+
+function runnerImportSelectionState(targets = []) {
+  const requestTargets = Array.isArray(targets) ? targets.filter((target) => target?.type === 'request') : [];
+  if (!requestTargets.length) {
+    return 'unchecked';
+  }
+  const selectedKeys = new Set(selectedRunnerImportTargets().map(runnerImportTargetKey));
+  const selectedCount = requestTargets.filter((target) => selectedKeys.has(runnerImportTargetKey(target))).length;
+  if (selectedCount === requestTargets.length) {
+    return 'checked';
+  }
+  return selectedCount > 0 ? 'mixed' : 'unchecked';
+}
+
+function setRunnerImportGroupChecked(option = {}, checked) {
+  if (runnerImportSelectionMode !== 'runner') {
+    return;
+  }
+  const requestTargets = Array.isArray(option.requestTargets)
+    ? option.requestTargets.filter((target) => target?.type === 'request')
+    : runnerImportRequestTargetsForNode(option);
+  if (!requestTargets.length) {
+    return;
+  }
+  const descendantKeys = new Set(requestTargets.map(runnerImportTargetKey));
+  const nextTargets = selectedRunnerImportTargets()
+    .filter((selected) => !descendantKeys.has(runnerImportTargetKey(selected)));
+  if (checked) {
+    nextTargets.push(...requestTargets);
+  }
+  lastRunnerImportSelectionKey = requestTargets.length ? runnerImportTargetKey(requestTargets.at(-1)) : '';
+  setSelectedRunnerImportTargets(nextTargets);
+  renderRunnerImportList();
+}
+
+function runnerImportRequestTargetsForNode(target = {}) {
+  const normalized = normalizeRunnerImportTarget(target);
+  const collection = (workspace.collections || []).find((item) => item.id === normalized.collectionId);
+  if (!collection) {
+    return [];
+  }
+  if (normalized.type === 'request') {
+    return [normalized];
+  }
+  if (normalized.type === 'collection') {
+    return collectionRequestEntries(collection).map(runnerImportTargetFromEntry);
+  }
+  const folder = findRunnerImportFolder(collection, normalized.folderId);
+  return runnerImportFolderRequestEntries(collection, folder).map(runnerImportTargetFromEntry);
+}
+
+function runnerImportTargetFromEntry(entry = {}) {
+  return {
+    type: 'request',
+    collectionId: entry.collection?.id || '',
+    folderId: entry.folder?.id || '',
+    requestId: entry.request?.id || ''
+  };
+}
+
+function runnerImportFolderRequestEntries(collection, folder, parentPath = []) {
+  const entries = [];
+  if (!folder) {
+    return entries;
+  }
+  const folderPath = [...parentPath, folder.name || 'Untitled Folder'];
+  for (const request of folder.requests || []) {
+    entries.push({ collection, request, folder, folderPath });
+  }
+  for (const child of folder.folders || []) {
+    entries.push(...runnerImportFolderRequestEntries(collection, child, folderPath));
+  }
+  return entries;
+}
+
+function findRunnerImportFolder(collection, folderId) {
+  if (!folderId) {
+    return null;
+  }
+  const stack = [...(collection?.folders || [])];
+  while (stack.length) {
+    const folder = stack.shift();
+    if (folder?.id === folderId) {
+      return folder;
+    }
+    stack.unshift(...(folder?.folders || []));
+  }
+  return null;
+}
+
+function runnerImportContainerHasChildren(container) {
+  return Boolean(container?.requests?.length || container?.folders?.length);
 }
 
 function importRunnerSelection(target) {
@@ -8231,7 +8476,8 @@ function importRunnerSelections(targets) {
   }
   const entries = [];
   const seenRequests = new Set();
-  for (const target of targets.map(normalizeRunnerImportTarget)) {
+  const requestTargets = expandRunnerImportTargets(targets);
+  for (const target of requestTargets.map(normalizeRunnerImportTarget)) {
     if (target.type !== 'request' || !target.requestId) {
       continue;
     }
@@ -8240,9 +8486,10 @@ function importRunnerSelections(targets) {
       continue;
     }
     const collectionEntries = collectionRequestEntries(collection);
-    const selectedEntries = collectionEntries.filter((entry) => entry.request?.id === target.requestId);
+    const selectedEntries = collectionEntries.filter((entry) => entry.request?.id === target.requestId
+      && (!target.folderId || entry.folder?.id === target.folderId));
     for (const entry of selectedEntries) {
-      const requestKey = `${collection.id}:${entry.request?.id || ''}`;
+      const requestKey = `${collection.id}:${entry.folder?.id || 'root'}:${entry.request?.id || ''}`;
       if (!entry.request || seenRequests.has(requestKey)) {
         continue;
       }
@@ -8262,8 +8509,21 @@ function importRunnerSelections(targets) {
   return imported.length;
 }
 
+function expandRunnerImportTargets(targets = []) {
+  const expanded = [];
+  for (const target of Array.isArray(targets) ? targets : []) {
+    const normalized = normalizeRunnerImportTarget(target);
+    if (normalized.type === 'request') {
+      expanded.push(normalized);
+      continue;
+    }
+    expanded.push(...runnerImportRequestTargetsForNode(normalized));
+  }
+  return expanded;
+}
+
 async function promptAndImportPerformanceRequest() {
-  const target = await promptRunnerRequestImport();
+  const target = await promptRunnerRequestImport({ mode: 'performance' });
   if (!target) {
     return null;
   }
@@ -8277,7 +8537,8 @@ function importPerformanceRequestSelection(target) {
     return null;
   }
   const collection = (workspace.collections || []).find((item) => item.id === normalized.collectionId);
-  const entry = collectionRequestEntries(collection).find((candidate) => candidate.request?.id === normalized.requestId);
+  const entry = collectionRequestEntries(collection).find((candidate) => candidate.request?.id === normalized.requestId
+    && (!normalized.folderId || candidate.folder?.id === normalized.folderId));
   if (!entry?.request) {
     setStatus('No request was selected to import.');
     return null;
@@ -9376,6 +9637,42 @@ function importCollectionIntoRunner(collection) {
   return requests.length;
 }
 
+function generateRunnerFromCollection(collection) {
+  if (!collection) {
+    return null;
+  }
+  return generateRunnerFromRequestEntries(collection.name || 'Untitled Collection', collectionRequestEntries(collection));
+}
+
+function generateRunnerFromFolder(collection, folder) {
+  if (!collection || !folder) {
+    return null;
+  }
+  return generateRunnerFromRequestEntries(folder.name || 'Untitled Folder', runnerImportFolderRequestEntries(collection, folder));
+}
+
+function generateRunnerFromRequestEntries(sourceName, entries = []) {
+  if (!canOpenAdditionalRunnerTab()) {
+    return null;
+  }
+  ensureWorkspaceRunners();
+  collectActiveEditorState();
+  activeRunnerRequestRunnerId = null;
+  const baseName = `${String(sourceName || '').trim() || 'Generated'} Runner`;
+  const runner = newRunnerObject(uniqueName(baseName, workspace.runners.map((existing) => existing.name)));
+  runner.requests = (Array.isArray(entries) ? entries : [])
+    .filter((entry) => entry?.request)
+    .map((entry) => cloneRequestForRunner(entry.request, runnerRequestSourceFromEntry(entry)));
+  workspace.runners.push(runner);
+  activeRunnerConfigId = runner.id;
+  activeSidebarPanel = 'runners';
+  activeMainPanel = 'runner';
+  ensureOpenRunnerTabForActive({ dirty: true, createdUnsaved: true });
+  renderAll();
+  setStatus(`Generated runner: ${runnerDisplayName(runner)}.`);
+  return runner;
+}
+
 function collectionRequestEntries(collection) {
   const entries = [];
   for (const request of collection?.requests || []) {
@@ -10267,6 +10564,7 @@ function collectionNode(collection) {
       ['OpenAPI', () => exportCollection(collection, 'openapi')],
       ['curl', () => exportCollection(collection, 'curl')]
     ]],
+    ['Generate Runner', () => generateRunnerFromCollection(collection)],
     ['Delete', () => deleteCollection(collection), 'danger']
   ]);
   if (!collapsed) {
@@ -10315,6 +10613,7 @@ function folderNode(collection, folder) {
     ['Add Folder', () => newFolder(collection.id, folder.id)],
     ['Rename', () => renameFolder(folder)],
     ['Duplicate', () => { void duplicateFolder(folder); }],
+    ['Generate Runner', () => generateRunnerFromFolder(collection, folder)],
     ['Delete', () => deleteFolder(collection, folder), 'danger']
   ]);
   if (!collapsed) {

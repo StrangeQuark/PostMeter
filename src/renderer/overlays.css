@@ -425,11 +425,38 @@
   font-weight: 700;
 }
 
-.runner-import-option.request {
-  margin-left: 24px;
+.runner-import-option.folder {
+  font-weight: 600;
 }
 
-.runner-import-option span {
+.runner-import-option.request {
+  margin-left: 0;
+}
+
+.runner-import-option {
+  padding-left: calc(8px + var(--runner-import-depth-offset, 0px));
+}
+
+.runner-import-option .runner-import-expander {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.runner-import-option .runner-import-expander:disabled {
+  visibility: hidden;
+}
+
+.runner-import-option .runner-import-label-text {
+  flex: 1 1 auto;
   min-width: 0;
 }
 
