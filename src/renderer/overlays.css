@@ -240,6 +240,109 @@
   min-width: 0;
 }
 
+.settings-path-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.settings-card-actions,
+.settings-list-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.settings-list {
+  display: grid;
+  gap: 8px;
+}
+
+.client-certificate-modal {
+  width: min(720px, calc(100vw - 40px));
+}
+
+.client-certificate-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+
+.client-certificate-passphrase-field,
+.client-certificate-enabled-field {
+  grid-column: 1 / -1;
+}
+
+.client-certificate-passphrase-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.client-certificate-path-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.client-certificate-path-row input {
+  min-width: 0;
+  width: 100%;
+}
+
+.client-certificate-path-row button {
+  min-width: 76px;
+  white-space: nowrap;
+}
+
+.client-certificate-passphrase-row input {
+  min-width: 0;
+  width: 100%;
+}
+
+.client-certificate-passphrase-row button {
+  min-width: 64px;
+  white-space: nowrap;
+}
+
+.client-certificate-pfx-field[hidden],
+.client-certificate-pem-field[hidden] {
+  display: none;
+}
+
+.settings-list-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.settings-list-details {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.settings-list-details span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--ui-font-size-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .settings-theme-options {
   display: inline-flex;
   align-items: center;
@@ -293,6 +396,10 @@
   }
 
   .settings-typography-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .client-certificate-form {
     grid-template-columns: 1fr;
   }
 
@@ -726,6 +833,19 @@
 
 .file-picker-dropzone span {
   font-size: var(--ui-font-size-sm);
+}
+
+.file-picker-manual-field {
+  margin-top: 12px;
+}
+
+.file-picker-manual-field[hidden] {
+  display: none;
+}
+
+.file-picker-manual-field input {
+  min-width: 0;
+  width: 100%;
 }
 
 .file-picker-error {

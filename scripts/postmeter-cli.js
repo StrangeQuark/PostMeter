@@ -5,7 +5,7 @@ const path = require('node:path');
 const { collectionRunResultToCsv, runCollection } = require('../src/core/collectionRunner');
 const { assertExportFormat } = require('../src/core/ipcValidation');
 const { setVariable } = require('../src/core/variableScope');
-const { WorkspaceStore, looksLikeNativeWorkspace } = require('../src/core/workspaceStore');
+const { WorkspaceStore, looksLikeNativeWorkspace, migrate, normalizeWorkspace } = require('../src/core/workspaceStore');
 
 async function main(argv = process.argv.slice(2)) {
   const args = parseArgs(argv);
@@ -18,17 +18,19 @@ async function main(argv = process.argv.slice(2)) {
     return 2;
   }
 
-  const { collection, environment, globals } = await loadCollectionInput(args.file, {
+  const { collection, environment, globals, settings } = await loadCollectionInput(args.file, {
     collectionSelector: args.collection,
     environmentSelector: args.environment
   });
   const runEnvironment = applyCliVariables(collection, environment, args);
+  const tlsSettings = cliTlsSettings(args, settings);
 
   const result = await runCollection(collection, runEnvironment, {
     globals,
     scriptOptions: {
       requireNodePermission: cliShouldRequireNodePermission()
     },
+    tlsSettings,
     stopOnFailure: args.stopOnFailure === true
   });
 
@@ -54,6 +56,9 @@ function parseArgs(argv) {
     format: '',
     vars: [],
     collectionVars: [],
+    caCertificatePath: '',
+    clientCertificate: {},
+    insecure: false,
     stopOnFailure: false,
     help: false
   };
@@ -63,6 +68,22 @@ function parseArgs(argv) {
       args.help = true;
     } else if (token === '--stop-on-failure') {
       args.stopOnFailure = true;
+    } else if (token === '--insecure' || token === '-k') {
+      args.insecure = true;
+    } else if (token === '--cacert' || token === '--ssl-extra-ca-certs') {
+      args.caCertificatePath = requiredValue(argv, ++index, token);
+    } else if (token === '--client-cert-host') {
+      args.clientCertificate.host = requiredValue(argv, ++index, token);
+    } else if (token === '--client-cert-port') {
+      args.clientCertificate.port = requiredValue(argv, ++index, token);
+    } else if (token === '--client-cert' || token === '--ssl-client-cert') {
+      args.clientCertificate.certPath = requiredValue(argv, ++index, token);
+    } else if (token === '--client-key' || token === '--ssl-client-key') {
+      args.clientCertificate.keyPath = requiredValue(argv, ++index, token);
+    } else if (token === '--client-pfx') {
+      args.clientCertificate.pfxPath = requiredValue(argv, ++index, token);
+    } else if (token === '--client-passphrase' || token === '--ssl-client-passphrase') {
+      args.clientCertificate.passphrase = requiredValue(argv, ++index, token);
     } else if (token === '--file' || token === '-f') {
       args.file = requiredValue(argv, ++index, token);
     } else if (token === '--collection' || token === '-c') {
@@ -82,6 +103,36 @@ function parseArgs(argv) {
     }
   }
   return args;
+}
+
+function cliTlsSettings(args, workspaceSettings = {}) {
+  const base = workspaceSettings?.request && typeof workspaceSettings.request === 'object'
+    ? JSON.parse(JSON.stringify(workspaceSettings.request))
+    : {};
+  if (args.insecure === true) {
+    base.sslCertificateVerification = false;
+  }
+  if (args.caCertificatePath) {
+    base.caCertificatePath = args.caCertificatePath;
+  }
+  const cert = args.clientCertificate || {};
+  if (cert.certPath || cert.keyPath || cert.pfxPath) {
+    base.clientCertificates = [
+      ...(Array.isArray(base.clientCertificates) ? base.clientCertificates : []),
+      {
+        id: 'cli-client-certificate',
+        name: 'CLI Client Certificate',
+        enabled: true,
+        host: cert.host || '*',
+        port: cert.port || '',
+        certPath: cert.certPath || '',
+        keyPath: cert.keyPath || '',
+        pfxPath: cert.pfxPath || '',
+        passphrase: cert.passphrase || ''
+      }
+    ];
+  }
+  return { request: base };
 }
 
 function applyCliVariables(collection, environment, args) {
@@ -130,18 +181,20 @@ async function loadCollectionInput(filePath, options = {}) {
   }
 
   if (looksLikeNativeWorkspace(parsed)) {
-    const workspace = await store.importWorkspace(absolutePath);
+    migrate(parsed);
+    const workspace = normalizeWorkspace(parsed);
     const collection = selectByIdOrName(workspace.collections, options.collectionSelector, 'collection');
     const environment = options.environmentSelector
       ? selectByIdOrName(workspace.environments, options.environmentSelector, 'environment')
       : null;
-    return { collection, environment, globals: workspace.globals || [] };
+    return { collection, environment, globals: workspace.globals || [], settings: workspace.settings || workspace.localsettings || {} };
   }
 
   return {
     collection: await store.importCollection(absolutePath),
     environment: null,
-    globals: []
+    globals: [],
+    settings: {}
   };
 }
 
@@ -182,7 +235,7 @@ function printUsage(errorMessage) {
   if (errorMessage) {
     console.error(errorMessage);
   }
-  console.error('Usage: npm run cli -- run --file <workspace-or-collection> [--collection <id-or-name>] [--environment <id-or-name>] [--var key=value] [--collection-var key=value] [--report <path>] [--format json|csv] [--stop-on-failure]');
+  console.error('Usage: npm run cli -- run --file <workspace-or-collection> [--collection <id-or-name>] [--environment <id-or-name>] [--var key=value] [--collection-var key=value] [--report <path>] [--format json|csv] [--stop-on-failure] [--insecure|-k] [--cacert|--ssl-extra-ca-certs <pem>] [--client-cert-host <host>] [--client-cert-port <port>] [--client-cert|--ssl-client-cert <crt>] [--client-key|--ssl-client-key <key>] [--client-pfx <p12>] [--client-passphrase|--ssl-client-passphrase <value>]');
 }
 
 if (require.main === module) {
@@ -199,6 +252,7 @@ if (require.main === module) {
 module.exports = {
   loadCollectionInput,
   cliShouldRequireNodePermission,
+  cliTlsSettings,
   main,
   parseArgs,
   parseAssignment,

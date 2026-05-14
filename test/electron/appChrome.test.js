@@ -140,6 +140,8 @@ test('Electron shell keeps custom File/Edit/View/Help menus without the default 
   assert.match(rendererSource, /chooseImportFilePath\('performance'\)/);
   assert.match(rendererSource, /upsertLocalFileAttachmentBinding/);
   assert.match(indexSource, /id="filePickerDropZone"/);
+  assert.match(indexSource, /id="filePickerManualPathInput"/);
+  assert.match(rendererSource, /function useManualPathFromFilePicker\(\)/);
   assert.match(indexSource, /id="fileSourceMenu"/);
   assert.match(indexSource, /Choose File\.\.\./);
   assert.match(mainSource, /app\.whenReady\(\)\.then\(startApplication\)\.catch\(\(error\) => failStartup\(error\)\)/);

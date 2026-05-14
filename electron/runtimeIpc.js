@@ -47,6 +47,7 @@ const {
   assertRunnerPayload,
   assertRunnerProgressPayload
 } = require('../src/core/ipcValidation');
+const { resolveTlsSettingsSecrets } = require('../src/core/tlsSettings');
 
 const RESULT_STORE_WARNING_MARGIN_BYTES = 1024 * 1024 * 1024;
 const RUN_PROGRESS_MIN_INTERVAL_MILLIS = 250;
@@ -138,6 +139,8 @@ function registerRuntimeIpc(options = {}) {
       const baseGlobals = cloneJson(workspace.globals || []);
       const baseCookies = cloneJson(workspace.cookies || []);
       const baseLocalVariablesByRequestId = requestLocalVariablesById(collection);
+      const vaultStore = getVaultStore(workspaceId);
+      const tlsSettings = await resolveTlsSettingsSecrets(workspace.settings || {}, vaultStore);
       const runnerOptions = {
         abortController,
         signal: abortController.signal,
@@ -146,7 +149,9 @@ function registerRuntimeIpc(options = {}) {
         fileBindings: workspace.settings?.sandbox?.fileBindings || [],
         sandboxPackages: workspace.settings?.sandbox?.packageCache || [],
         trustedCapabilities: workspace.settings?.sandbox?.trustedCapabilities || {},
-        vault: getVaultStore(workspaceId),
+        includeTransportDiagnostics: true,
+        tlsSettings,
+        vault: vaultStore,
         vaultPrompt: getVaultPrompt(workspaceId),
         workspaceId,
         workspaceName: workspaceId,
@@ -329,6 +334,8 @@ function registerRuntimeIpc(options = {}) {
       const baseEnvironment = cloneJson(environment);
       const baseCookies = cloneJson(workspace.cookies || []);
       const plannedRequests = estimatePerformancePlannedRequests(performanceTest);
+      const vaultStore = getVaultStore(workspaceId);
+      const tlsSettings = await resolveTlsSettingsSecrets(workspace.settings || {}, vaultStore);
       currentResultStore?.close?.();
       currentResultStore = await prepareRuntimeResultStore({
         capturePolicy: performanceTest.capturePolicy,
@@ -348,7 +355,8 @@ function registerRuntimeIpc(options = {}) {
         fileBindings: workspace.settings?.sandbox?.fileBindings || [],
         sandboxPackages: workspace.settings?.sandbox?.packageCache || [],
         trustedCapabilities: workspace.settings?.sandbox?.trustedCapabilities || {},
-        vault: getVaultStore(workspaceId),
+        tlsSettings,
+        vault: vaultStore,
         vaultPrompt: getVaultPrompt(workspaceId),
         workspaceId,
         workspaceName: workspaceId,

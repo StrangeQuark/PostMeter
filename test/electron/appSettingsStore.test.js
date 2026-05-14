@@ -59,6 +59,16 @@ test('app settings store persists only app-wide settings and merges workspace-lo
       logging: { enabled: true, level: 'debug' },
       requestResponseLogging: { urls: true, headers: true }
     },
+    request: {
+      sslCertificateVerification: false,
+      caCertificatePath: '/tmp/workspace-ca.pem',
+      clientCertificates: [{
+        id: 'workspace-client-cert',
+        host: 'api.example.test',
+        certPath: '/tmp/client.crt',
+        keyPath: '/tmp/client.key'
+      }]
+    },
     sandbox: {
       fileBindings: [{ id: 'binding-1', source: 'upload.bin', localPath: '/tmp/upload.bin', mode: 'file' }],
       packageCache: [{
@@ -89,6 +99,7 @@ test('app settings store persists only app-wide settings and merges workspace-lo
   assert.equal(persisted.app.updates.includePrereleases, true);
   assert.equal(persisted.app.diagnostics.logging.level, 'debug');
   assert.equal(Object.hasOwn(persisted.app.diagnostics, 'requestResponseLogging'), false);
+  assert.equal(Object.hasOwn(persisted.app, 'request'), false);
   assert.equal(persisted.app.sandbox.trustedCapabilities.sendRequest, false);
   assert.equal(persisted.app.sandbox.trustedCapabilities.cookies, false);
   assert.equal(persisted.app.sandbox.trustedCapabilities.vault, true);
@@ -98,6 +109,16 @@ test('app settings store persists only app-wide settings and merges workspace-lo
 
   const workspaceASettings = store.settingsForWorkspace('Workspace A.json', {
     diagnostics: { requestResponseLogging: { urls: true, headers: true } },
+    request: {
+      sslCertificateVerification: false,
+      caCertificatePath: '/tmp/workspace-ca.pem',
+      clientCertificates: [{
+        id: 'workspace-client-cert',
+        host: 'api.example.test',
+        certPath: '/tmp/client.crt',
+        keyPath: '/tmp/client.key'
+      }]
+    },
     sandbox: {
       fileBindings: [{ id: 'binding-1', source: 'upload.bin', localPath: '/tmp/upload.bin', mode: 'file' }],
       packageCache: [{
@@ -115,6 +136,9 @@ test('app settings store persists only app-wide settings and merges workspace-lo
   assert.equal(workspaceASettings.editor.lineNumbers, false);
   assert.equal(workspaceASettings.editor.variableTooltipHints, false);
   assert.equal(workspaceASettings.diagnostics.requestResponseLogging.urls, true);
+  assert.equal(workspaceASettings.request.sslCertificateVerification, false);
+  assert.equal(workspaceASettings.request.caCertificatePath, '/tmp/workspace-ca.pem');
+  assert.equal(workspaceASettings.request.clientCertificates[0].id, 'workspace-client-cert');
   assert.equal(workspaceASettings.sandbox.trustedCapabilities.sendRequest, false);
   assert.equal(workspaceASettings.sandbox.fileBindings[0].source, 'upload.bin');
 
@@ -126,6 +150,9 @@ test('app settings store persists only app-wide settings and merges workspace-lo
   assert.equal(workspaceBSettings.editor.variableTooltipHints, false);
   assert.equal(workspaceBSettings.tabs.saveOnForceClose, true);
   assert.equal(workspaceBSettings.diagnostics.requestResponseLogging.urls, false);
+  assert.equal(workspaceBSettings.request.sslCertificateVerification, false);
+  assert.equal(workspaceBSettings.request.caCertificatePath, '');
+  assert.deepEqual(workspaceBSettings.request.clientCertificates, []);
   assert.equal(workspaceBSettings.sandbox.trustedCapabilities.sendRequest, false);
 });
 

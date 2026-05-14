@@ -117,6 +117,59 @@ test('settings script capabilities drive network, cookie, and vault access durin
   assert.equal(await vault.get('fromScript'), 'saved-by-script');
 });
 
+test('TLS settings are applied to main requests and brokered pm.sendRequest calls without script override', async () => {
+  const settings = normalizeSettings({
+    request: {
+      caCertificatePath: '/tmp/postmeter-ca.pem',
+      sslCertificateVerification: false,
+      clientCertificates: [{
+        id: 'managed-cert',
+        host: 'api.example.test',
+        certPath: '/tmp/client.crt',
+        keyPath: '/tmp/client.key'
+      }]
+    },
+    sandbox: {
+      trustedCapabilities: {
+        sendRequest: true
+      }
+    }
+  });
+  const observed = [];
+  const result = await runRequestWithScripts(
+    requestWithScript(`
+      pm.test('TLS settings apply to script requests', async function () {
+        await pm.sendRequest('https://api.example.test/nested');
+        try {
+          await pm.sendRequest({ url: 'https://api.example.test/blocked', strictSSL: false });
+        } catch (error) {
+          pm.environment.set('tlsOverrideDenied', String(error.message || error));
+        }
+      });
+    `),
+    emptyEnvironment(),
+    runtimeOptions(settings, {
+      tlsSettings: settings,
+      sendRequest: async (request, _environment, options = {}) => {
+        observed.push({
+          url: request.url,
+          tlsSettings: options.tlsSettings
+        });
+        return response(request.url.includes('/nested') ? 204 : 200, 'ok', request.url);
+      }
+    })
+  );
+
+  assert.equal(result.preRequestScriptResult.passed, true);
+  assert.deepEqual(observed.map((item) => item.url), [
+    'https://api.example.test/nested',
+    'https://api.example.test/main'
+  ]);
+  assert.equal(observed[0].tlsSettings.request.sslCertificateVerification, false);
+  assert.equal(observed[1].tlsSettings.request.clientCertificates[0].id, 'managed-cert');
+  assert.match(result.environment.variables.find((item) => item.key === 'tlsOverrideDenied')?.value || '', /cannot disable TLS certificate validation/);
+});
+
 test('disabled script settings fail closed without allowing the disabled broker operation', async () => {
   const cases = [
     {

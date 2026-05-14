@@ -334,8 +334,13 @@ test('renderer workflows render request send exceptions inline without blocking 
   state.activeRequestId = draftRequest.id;
   state.openRequestTabs = [{ key: 'draft:draft-1', requestId: draftRequest.id, draft: true, dirty: true }];
   state.draftRequests.set(draftRequest.id, draftRequest);
+  state.lastResponse = { requestId: draftRequest.id, statusCode: 200 };
   let notifications = 0;
   let status = '';
+  doc.getElementById('responseBody').value = '<html>old response</html>';
+  doc.getElementById('responseHeaders').value = 'x-old: yes';
+  doc.getElementById('responseCookies').value = 'old=true';
+  doc.getElementById('responseNetwork').value = 'old network';
 
   const workflows = createRendererWorkflows({
     state,
@@ -366,8 +371,126 @@ test('renderer workflows render request send exceptions inline without blocking 
 
   assert.equal(doc.getElementById('responseStatus').textContent, 'ERR');
   assert.equal(doc.getElementById('responseBody').value, 'network boom');
+  assert.equal(doc.getElementById('responseHeaders').value, '');
+  assert.equal(doc.getElementById('responseCookies').value, '');
+  assert.equal(doc.getElementById('responseNetwork').value, '');
+  assert.equal(state.lastResponse, null);
   assert.equal(notifications, 0);
   assert.equal(status, 'Request failed: network boom');
+});
+
+test('renderer workflows clear stale response data as soon as a send starts', async () => {
+  const state = createRendererState();
+  const request = {
+    id: 'request-1',
+    name: 'Get Widgets',
+    method: 'GET',
+    url: 'https://example.test/widgets',
+    scripts: { preRequest: '', tests: '' }
+  };
+  state.workspace = { collections: [], environments: [], history: [], settings: {} };
+  state.activeMainPanel = 'request';
+  state.activeRequestId = request.id;
+  state.lastResponse = { requestId: request.id, statusCode: 200 };
+  const doc = createDocument();
+  doc.getElementById('responseStatus').textContent = '200';
+  doc.getElementById('responseTime').textContent = '99 ms';
+  doc.getElementById('responseSize').textContent = '1 KB';
+  doc.getElementById('finalUrl').textContent = 'https://old.example.test';
+  doc.getElementById('responseBody').value = 'old body';
+  doc.getElementById('responseHeaders').value = 'x-old: yes';
+  doc.getElementById('responseCookies').value = 'old=true';
+  doc.getElementById('responseNetwork').value = 'old network';
+  let resolveSend;
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => request,
+    collectRequestFromEditor: () => {},
+    displayResponse: () => {},
+    doc,
+    runFormatting: createRunFormatting(),
+    setStatus: () => {},
+    windowObject: {
+      postmeter: {
+        request: {
+          validate: async () => [],
+          send: async () => new Promise((resolve) => {
+            resolveSend = resolve;
+          })
+        },
+        workspace: {
+          save: async (workspace) => workspace
+        }
+      }
+    }
+  });
+
+  const sendPromise = workflows.sendActiveRequest();
+  await flushMicrotasks();
+
+  assert.equal(state.lastResponse, null);
+  assert.equal(doc.getElementById('responseStatus').textContent, '-');
+  assert.equal(doc.getElementById('responseTime').textContent, '-');
+  assert.equal(doc.getElementById('responseSize').textContent, '-');
+  assert.equal(doc.getElementById('finalUrl').textContent, '-');
+  assert.equal(doc.getElementById('responseBody').value, '');
+  assert.equal(doc.getElementById('responseHeaders').value, '');
+  assert.equal(doc.getElementById('responseCookies').value, '');
+  assert.equal(doc.getElementById('responseNetwork').value, '');
+
+  resolveSend({ statusCode: 200, finalUrl: request.url, durationMillis: 1, headers: {}, body: '' });
+  await sendPromise;
+});
+
+test('renderer workflows format TLS send failures as visible SSL errors', async () => {
+  const state = createRendererState();
+  const request = {
+    id: 'request-1',
+    name: 'Self Signed',
+    method: 'GET',
+    url: 'https://self-signed.badssl.com/',
+    scripts: { preRequest: '', tests: '' }
+  };
+  state.workspace = { collections: [], environments: [], history: [], settings: {} };
+  state.activeMainPanel = 'request';
+  state.activeRequestId = request.id;
+  const doc = createDocument();
+  let status = '';
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => request,
+    collectRequestFromEditor: () => {},
+    doc,
+    runFormatting: createRunFormatting(),
+    setStatus: (value) => { status = value; },
+    windowObject: {
+      postmeter: {
+        request: {
+          validate: async () => [],
+          send: async () => {
+            const error = new Error("Error invoking remote method 'request:send': Error: self signed certificate; if the root CA is installed locally, try running [host] with --use-system-ca");
+            error.code = 'DEPTH_ZERO_SELF_SIGNED_CERT';
+            throw error;
+          }
+        },
+        workspace: {
+          save: async (workspace) => workspace
+        }
+      }
+    }
+  });
+
+  await workflows.sendActiveRequest();
+
+  assert.equal(doc.getElementById('responseStatus').textContent, 'ERR');
+  assert.match(doc.getElementById('responseBody').value, /^SSL Error: Self signed certificate\./);
+  assert.doesNotMatch(doc.getElementById('responseBody').value, /Error invoking remote method/);
+  assert.match(status, /^Request failed: SSL Error: Self signed certificate\./);
 });
 
 test('renderer workflows persist the workspace and clear dirty state for explicit full saves', async () => {
@@ -2329,6 +2452,8 @@ test('renderer workflows clear stale captured responses after a send failure', a
     scripts: { preRequest: '', tests: '' }
   };
   state.workspace = { collections: [], environments: [], history: [], settings: {} };
+  state.activeMainPanel = 'request';
+  state.activeRequestId = request.id;
   state.lastResponse = { requestId: 'request-1', statusCode: 200 };
   const doc = createDocument();
 

@@ -109,12 +109,14 @@ async function runCollection(collection, environment, options = {}) {
       grpcInvoker: options.grpcInvoker || options.scriptOptions?.grpcInvoker,
       signal: options.signal,
       timeoutMillis: options.timeoutMillis,
+      collectTimings: options.collectTimings === true || options.includeTransportDiagnostics === true,
       scriptOptions: {
         ...(options.scriptOptions || {}),
         runRequest: createRunRequestBroker(depth + 1, inheritedIterationData),
         grpcInvoker: options.grpcInvoker || options.scriptOptions?.grpcInvoker,
         sandboxPackages: options.sandboxPackages || options.scriptOptions?.sandboxPackages || [],
         clientCertificates: collection?.certificates || [],
+        tlsSettings: options.tlsSettings || options.scriptOptions?.tlsSettings || {},
         fileBindings: options.fileBindings || options.scriptOptions?.fileBindings || [],
         vault: options.vault || options.scriptOptions?.vault,
         vaultPrompt: options.vaultPrompt || options.scriptOptions?.vaultPrompt,
@@ -122,6 +124,7 @@ async function runCollection(collection, environment, options = {}) {
       },
       sandboxPackages: options.sandboxPackages || options.scriptOptions?.sandboxPackages || [],
       clientCertificates: collection?.certificates || [],
+      tlsSettings: options.tlsSettings || options.scriptOptions?.tlsSettings || {},
       fileBindings: options.fileBindings || options.scriptOptions?.fileBindings || [],
       vault: options.vault || options.scriptOptions?.vault,
       vaultPrompt: options.vaultPrompt || options.scriptOptions?.vaultPrompt,
@@ -193,9 +196,11 @@ async function runCollection(collection, environment, options = {}) {
           grpcInvoker: options.grpcInvoker || options.scriptOptions?.grpcInvoker,
           signal: options.signal,
           timeoutMillis: options.timeoutMillis,
+          collectTimings: options.collectTimings === true || options.includeTransportDiagnostics === true,
           scriptOptions: options.scriptOptions,
           sandboxPackages: options.sandboxPackages || options.scriptOptions?.sandboxPackages || [],
           clientCertificates: collection?.certificates || [],
+          tlsSettings: options.tlsSettings || options.scriptOptions?.tlsSettings || {},
           fileBindings: options.fileBindings || options.scriptOptions?.fileBindings || [],
           trustedCapabilities: options.trustedCapabilities || options.scriptOptions?.trustedCapabilities || {},
           vault: options.vault || options.scriptOptions?.vault,
@@ -355,10 +360,18 @@ function transportDiagnosticFields(response = {}, options = {}) {
   if (options.includeTransportDiagnostics !== true) {
     return {};
   }
+  const tls = response.tls || response.timings?.tls || {};
+  const timings = {
+    ...(response.timings || {})
+  };
+  if (tls && typeof tls === 'object' && Object.keys(tls).length) {
+    timings.tls = tls;
+  }
   return {
     finalUrl: response.finalUrl || response.url || '',
     responseHeaders: response.headers || {},
-    timings: response.timings || {}
+    timings,
+    tls
   };
 }
 

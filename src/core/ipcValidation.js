@@ -151,11 +151,13 @@ function assertRequestPayload(value, field = 'request') {
     auth: assertAuthPayload,
     scripts: assertScripts,
     cookieJar: assertRequestCookieJar,
-    autoHeaders: assertRequestAutoHeaders
+    autoHeaders: assertRequestAutoHeaders,
+    settings: assertRequestSettings
   }, {
     auth: { type: 'none' },
     cookieJar: {},
     autoHeaders: {},
+    settings: {},
     scripts: undefined
   });
   if (value.loadTestPolicy != null) {
@@ -206,6 +208,7 @@ function assertRunnerRequestPayload(value, field = 'request') {
     'autoHeaders',
     'scripts',
     'source',
+    'settings',
     'url',
     'variables',
     'websocket'
@@ -222,6 +225,20 @@ function assertRunnerRequestPayload(value, field = 'request') {
 function assertRequestAutoHeaders(value, field = 'autoHeaders') {
   assertSchemaFields('requestAutoHeaders', value || {}, field);
   assertNoUnexpectedFields('requestAutoHeaders', value || {}, field);
+}
+
+function assertRequestSettings(value, field = 'settings') {
+  object(value || {}, field);
+  assertAllowedObjectFields(value || {}, field, [
+    'sslCertificateVerification'
+  ]);
+  if (
+    value?.sslCertificateVerification != null
+    && typeof value.sslCertificateVerification !== 'boolean'
+    && !['inherit', 'enabled', 'disabled'].includes(String(value.sslCertificateVerification))
+  ) {
+    fail(`${field}.sslCertificateVerification is not supported.`);
+  }
 }
 
 function assertCsvVariablesPayload(value, field = 'csvVariables') {
@@ -502,6 +519,18 @@ function assertSettingsPayload(value, field) {
   if (value.modals != null) {
     assertSchemaFields('modalSettings', value.modals, `${field}.modals`);
     assertNoUnexpectedFields('modalSettings', value.modals, `${field}.modals`);
+  }
+  if (value.request != null) {
+    object(value.request, `${field}.request`);
+    assertAllowedObjectFields(value.request, `${field}.request`, [
+      'caCertificatePath',
+      'clientCertificates',
+      'sslCertificateVerification'
+    ]);
+    assertSchemaFields('tlsRequestSettings', value.request, `${field}.request`);
+    if (value.request.clientCertificates != null) {
+      assertCertificates(value.request.clientCertificates, `${field}.request.clientCertificates`);
+    }
   }
   if (value.diagnostics != null) {
     object(value.diagnostics, `${field}.diagnostics`);
@@ -922,6 +951,7 @@ function assertCollectionRunResultPayload(value, field = 'result') {
         'stageIndex',
         'stageName',
         'timings',
+        'tls',
         'testScriptResult'
       ]);
       if (result.preRequestScriptResult != null) {
@@ -946,6 +976,7 @@ function assertCollectionRunResultPayload(value, field = 'result') {
       optionalString(result.finalUrl, `${itemField}.finalUrl`, LIMITS.url);
       optionalJsonObject(result.responseHeaders, `${itemField}.responseHeaders`, LIMITS.body);
       optionalJsonObject(result.timings, `${itemField}.timings`, LIMITS.body);
+      optionalJsonObject(result.tls, `${itemField}.tls`, LIMITS.body);
     });
   }
   if (value.capturePolicy != null) {
@@ -1245,7 +1276,8 @@ function assertPerformanceSamplePayload(value, field) {
     'statusCode',
     'durationMillis',
     'testScriptResult',
-    'timings'
+    'timings',
+    'tls'
   ]);
   optionalNumber(value.iteration, `${field}.iteration`);
   optionalNumber(value.resultIndex, `${field}.resultIndex`);
@@ -1271,6 +1303,7 @@ function assertPerformanceSamplePayload(value, field) {
   optionalNumber(value.responseBytes, `${field}.responseBytes`);
   optionalJsonObject(value.responseHeaders, `${field}.responseHeaders`, LIMITS.body);
   optionalJsonObject(value.timings, `${field}.timings`, LIMITS.body);
+  optionalJsonObject(value.tls, `${field}.tls`, LIMITS.body);
   optionalBoolean(value.passed, `${field}.passed`);
   optionalString(value.error, `${field}.error`, LIMITS.value);
   if (value.preRequestScriptResult != null) {
@@ -1307,6 +1340,8 @@ function assertResponsePayload(value, field = 'response') {
     'preRequestScriptResult',
     'requestSent',
     'testScriptResult',
+    'timings',
+    'tls',
     'updatedCookies'
   ]);
   object(value.headers || {}, `${field}.headers`);
@@ -1346,6 +1381,8 @@ function assertResponsePayload(value, field = 'response') {
   if (value.error != null) {
     string(value.error, `${field}.error`, LIMITS.value);
   }
+  optionalJsonObject(value.timings, `${field}.timings`, LIMITS.body);
+  optionalJsonObject(value.tls, `${field}.tls`, LIMITS.body);
 }
 
 function assertWorkspaceLoadResultPayload(value, field = 'result') {

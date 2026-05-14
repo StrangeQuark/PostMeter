@@ -496,6 +496,8 @@ test('imports Postman collection certificates without request examples', () => {
     },
     certificate: [{
       name: 'mTLS cert',
+      host: '*.example.test',
+      port: '443',
       matches: ['https://mtls.example.test/*'],
       cert: { src: '/tmp/client.crt' },
       key: { src: '/tmp/client.key' },
@@ -517,11 +519,77 @@ test('imports Postman collection certificates without request examples', () => {
   });
 
   assert.equal(collection.certificates.length, 1);
+  assert.equal(collection.certificates[0].host, '*.example.test');
+  assert.equal(collection.certificates[0].port, '443');
   assert.equal(collection.certificates[0].certPath, '/tmp/client.crt');
   assert.equal(collection.requests[0].auth.type, 'clientCertificate');
   assert.equal(collection.requests[0].auth.certificateId, collection.certificates[0].id);
   assert.equal(collection.requests[0].auth.certPath, undefined);
   assert.equal(Object.hasOwn(collection.requests[0], 'examples'), false);
+  const exported = exportPostmanCollection(collection);
+  assert.equal(exported.certificate[0].host, '*.example.test');
+  assert.equal(exported.certificate[0].port, '443');
+});
+
+test('imports overlapping Postman collection certificates with runtime match precedence', () => {
+  const collection = importPostmanCollection({
+    info: {
+      name: 'Postman Certificate Precedence',
+      schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
+    },
+    certificate: [
+      {
+        name: 'Older certificate',
+        host: '*.example.test',
+        cert: { src: '/tmp/older-client.crt' },
+        key: { src: '/tmp/older-client.key' }
+      },
+      {
+        name: 'Newer certificate',
+        matches: ['https://api.example.test/*'],
+        cert: { src: '/tmp/newer-client.crt' },
+        key: { src: '/tmp/newer-client.key' }
+      }
+    ],
+    item: [{
+      name: 'mTLS Request',
+      request: {
+        method: 'GET',
+        url: 'https://api.example.test/widgets'
+      }
+    }]
+  });
+
+  assert.equal(collection.requests[0].auth.type, 'clientCertificate');
+  assert.equal(collection.requests[0].auth.certificateId, collection.certificates[1].id);
+});
+
+test('does not attach disabled Postman collection certificates to templated request URLs', () => {
+  const collection = importPostmanCollection({
+    info: {
+      name: 'Disabled Postman Certificate',
+      schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
+    },
+    certificate: [{
+      name: 'Disabled certificate',
+      enabled: false,
+      host: 'api.example.test',
+      matches: ['https://{{apiHost}}/*'],
+      cert: { src: '/tmp/disabled-client.crt' },
+      key: { src: '/tmp/disabled-client.key' }
+    }],
+    item: [{
+      name: 'Templated mTLS Request',
+      request: {
+        method: 'GET',
+        url: 'https://{{apiHost}}/widgets'
+      }
+    }]
+  });
+
+  assert.equal(collection.certificates.length, 1);
+  assert.equal(collection.certificates[0].enabled, false);
+  assert.equal(collection.requests[0].auth.type, 'none');
 });
 
 test('round-trips Postman PFX/P12 certificate references for gRPC requests', () => {

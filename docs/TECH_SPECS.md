@@ -31,6 +31,7 @@ The migration deliberately does not bridge Electron to the Java services. Core b
 - Clear request history from the History sidebar context menu after an irreversible-action confirmation.
 - Run collections headlessly through `npm run cli -- run ...` for CI usage with non-zero exits on failed requests or script tests.
 - Configure request auth helpers for Bearer token, Basic Auth, API key, Cookie, static OAuth 2.0 access-token injection, refresh-token renewal, client-credentials token retrieval, authorization-code PKCE, device-code flow, and HTTPS client certificates using PEM certificate/key pairs or PFX/P12 bundles with optional CA certificate paths.
+- Configure Postman-style TLS trust from Settings > Certificates and per-request Settings, including global SSL certificate verification, request-local verification overrides, custom PEM CA bundles from workspace-local certificate settings, managed HTTPS/gRPC client certificates matched by host and optional port, wildcard subdomain matching, and response Network diagnostics.
 - Persist workspace cookies in a local cookie jar, allow per-request cookie jar opt-in/out, capture response cookies when enabled, and validate common browser-parity edge cases.
 - Store workspace data as plain JSON without local encryption, redaction, or credential-specific export modes.
 - Send HTTP requests and display status, timing, size, final URL, headers, and formatted JSON bodies.
@@ -63,7 +64,7 @@ The Performance editor exposes only fields that map to the active type. Full End
 
 Full Endpoint Diagnosis captures DNS lookup, TCP connect, TLS handshake/protocol/cipher/certificate signals, redirects, request preparation, upload, time-to-first-byte, download/body read, total duration, response size, content length, compression, transfer encoding, status/error distributions, cold and warm latency, connection reuse, p50/p90/p95/p99, jitter, outliers, success/failure rate, best observed RPS, stable RPS, saturation point, recovery latency, status/size/content-type/header/body/fingerprint consistency, cache/rate-limit/server-timing/trace/set-cookie signals, redirect target stability, HTTPS/TLS/security-header/CORS/auth-challenge/sensitive-URL checks, event-loop delay, scheduler lag, local queue depth, timeout count, memory growth, safety-cap limits, client-saturation detection, confidence scoring, HEAD and OPTIONS probes, HTTP protocol visibility, DNS repeatability, payload-variation awareness, authenticated request awareness, retry-signal detection, and mini-soak stability. These are local desktop observations, not a distributed capacity guarantee.
 
-Runner and Performance Capture Settings expose response body preview mode, preview size, pre-request output, post-request output, script logs, and local variables. Performance also exposes response headers and transport timings. Small runs preserve the current result-detail experience by default. At 100,000 planned requests and above, PostMeter forces all-body capture down to failed-only previews, caps preview size, disables per-request logs and local variables, and records guardrail notes in the result. At 500,000 planned requests and above, the guardrails also force pre-request output and post-request output off, tighten body previews, and disable response headers and transport timings outside Performance diagnosis so million-request runs keep usable core metrics without creating multi-GB detail artifacts. The renderer uses the same planned-request guardrails before execution, so forced-off capture checkboxes render unchecked and disabled with hover text explaining the high-volume threshold; lowering the planned request count restores the user's saved capture preferences.
+Runner and Performance Capture Settings expose response body preview mode, preview size, pre-request output, post-request output, script logs, and local variables. Performance also exposes response headers and transport timings. Small runs preserve the current result-detail experience by default. At 100,000 planned requests and above, PostMeter forces all-body capture down to failed-only previews, caps preview size, disables per-request logs and local variables, and records guardrail notes in the result. At 500,000 planned requests and above, the guardrails also force pre-request output and post-request output off, tighten body previews, and disable response headers outside Performance diagnosis while keeping compact transport/TLS timings available for Performance runs. The renderer uses the same planned-request guardrails before execution, so forced-off capture checkboxes render unchecked and disabled with hover text explaining the high-volume threshold; lowering the planned request count restores the user's saved capture preferences.
 
 Store-backed run results are written to one reusable SQLite temp file at `userData/runtime/postmeter-current-results.sqlite`. Starting another Runner or Performance run replaces the previous temp store, and closing PostMeter deletes the current SQLite file plus SQLite sidecars so unexported run results do not persist between app sessions. Before execution, `runner:estimateResultStore` and `performance:estimateResultStore` calculate a rough file-size estimate from planned request count, normalized capture settings, request metadata length, and SQLite row/index overhead. The renderer warns when the estimate is within 1 GB of effective available space and disables Continue when the estimate exceeds effective available space. The renderer receives only a bounded summary plus the first result page, then requests additional pages or detail rows through `runner:resultPage`, `runner:resultDetail`, `performance:resultPage`, and `performance:resultDetail`. CSV/JSON exports are streamed from the current temp store only when requested; PostMeter does not keep background run history.
 
@@ -83,7 +84,7 @@ OAuth support in PostMeter is only for outbound API request authentication, matc
 - Main process: CommonJS Node modules under `electron/`
 - Renderer UI: static HTML/CSS/JavaScript under `src/renderer/`
 - Core services: CommonJS Node modules under `src/core/`
-- HTTP client: Node global `fetch` for normal requests; Node `http`/`https` transport for HTTPS client-certificate requests.
+- HTTP client: Node global `fetch` for normal requests; Node `http`/`https` transport for timing diagnostics, proxies, custom CA bundles, disabled SSL verification, and HTTPS client-certificate requests.
 - Persistence: JSON file via `node:fs/promises`
 - OpenAPI YAML parsing: `yaml`
 - XML parsing and XPath evaluation: `@xmldom/xmldom` and `xpath`
@@ -135,6 +136,7 @@ npm run test:ui:snapshot
 
 ```bash
 npm run cli -- run --file ./workspace.json --collection "Smoke" --report ./runner-report.json
+npm run cli -- run --file ./workspace.json --collection "mTLS Smoke" --ssl-extra-ca-certs ./ca.pem --client-cert-host api.example.test --ssl-client-cert ./client.crt --ssl-client-key ./client.key
 ```
 
 ### Packaging And Release
@@ -336,6 +338,9 @@ Root workspace fields:
 Runtime-hydrated settings fields:
 
 - `appearance.theme`
+- `request.sslCertificateVerification`
+- `request.caCertificatePath`
+- `request.clientCertificates`
 - `sandbox.trustedCapabilities.sendRequest`
 - `sandbox.trustedCapabilities.cookies`
 - `sandbox.trustedCapabilities.vault`
@@ -385,6 +390,7 @@ Request fields:
 - `docs`
 - `cookieJar`
 - `autoHeaders`
+- `settings`
 - Optional protocol and import/export fields for Postman parity: `protocol`, `methodPath`, `metadata`, `messages`, `postmanBody`, `protocolProfile`, `graphql`, `grpc`, `websocket`, and bounded `postman` compatibility metadata
 
 Request cookie jar fields:
@@ -396,6 +402,10 @@ Request auto-header fields:
 
 - `sendPostMeterToken`
 - `showGeneratedHeaders`
+
+Request TLS setting fields:
+
+- `sslCertificateVerification`: `inherit`, `enabled`, or `disabled`
 
 Auth fields vary by `auth.type`:
 
@@ -456,12 +466,16 @@ Collection certificate fields:
 
 - `id`
 - `name`
+- `enabled`
+- `host`
+- `port`
 - `matches`
 - `certPath`
 - `keyPath`
 - `pfxPath`
 - `caPath`
 - `passphrase`
+- `passphraseSecretKey`
 
 Request example fields:
 
@@ -538,7 +552,7 @@ Behavior:
 - Writes workspace, session, vault, and export files through collision-resistant same-directory temporary files, fsyncs file contents where supported, renames into place, and best-effort fsyncs the containing directory. Interrupted temporary files are ignored by workspace discovery.
 - Writes normalized workspace values directly to local JSON, excluding runtime `settings` and retaining non-portable `localsettings` only for managed workspace files.
 - Writes app-wide settings to `settings.json` using the same atomic JSON write path. The file uses `format: "postmeter.settings"` and `version: 1` rather than `schemaVersion`, so managed-workspace discovery does not treat it as a workspace.
-- Writes workspace-local diagnostics opt-ins, reviewed package metadata, imported file bindings, and vault grants to the managed workspace `localsettings` object, not to `settings.json`.
+- Writes workspace-local diagnostics opt-ins, TLS trust settings, managed client-certificate settings, reviewed package metadata, imported file bindings, and vault grants to the managed workspace `localsettings` object, not to `settings.json`.
 - Normalizes IDs, names, body types, methods, arrays, settings, collection variables, collection certificates, request variables, request docs, request cookie jar settings, workspace cookies, folders, environments, and history, while removing legacy request load-test compatibility fields.
 - Native workspace import adds another managed workspace without replacing, switching away from, or backing up the current one.
 - Targeted renderer saves for request, runner-owned request, and environment tabs send only the selected item payload, the current runtime settings, and any owned shared request-side state such as collection variables or cookie-jar values; targeted settings saves send only `workspace.settings`, which the main process validates, splits into app-wide settings plus workspace `localsettings`, and applies to the cached workspace.
@@ -601,7 +615,7 @@ Postman collection import supports:
 - Imported Postman HTTP requests enable cookie-jar sends and response-cookie storage by default so script-created and response-set cookies participate in later imported request sends.
 - Postman cookie metadata is preserved as explicit request metadata and used during desktop import promotion for domain, path, expiry, secure, httpOnly, SameSite, host-only, priority, partitioning, extension, and source values when present.
 - Postman request/item variables, represented as request-local variables, with raw variable metadata retained for Postman export.
-- Collection-level certificates from `certificate`, applied to matching requests only when doing so does not overwrite an explicit request auth helper.
+- Collection-level certificates from `certificate`, preserved for runtime host/path matching; matching requests without explicit auth also receive a client-certificate auth binding for UI clarity.
 - Bounded Postman compatibility metadata for protocol profiles, GraphQL/gRPC definitions, package references, visualizer assets, cookie allowlists, vault metadata, mock state configuration, certificates, auth inheritance, and file/binary body references.
 
 Postman collection export supports:
@@ -612,7 +626,7 @@ Postman collection export supports:
 Postman import limitations:
 
 - OAuth 2.0 import covers common token/client fields but not every Postman grant type or client-auth method.
-- Collection-level certificates are mapped into PostMeter's single request-auth model only when a matching request does not already have explicit auth.
+- Collection-level certificates are preserved for runtime matching. They are also mapped into PostMeter's request-auth model only when a matching request does not already have explicit auth.
 - Cookie import is best-effort when a source format only provides a raw `Cookie` header without expiry/domain metadata.
 - Raw URL query strings are split from the request URL; query params are imported from `url.query`.
 
@@ -640,7 +654,7 @@ Behavior:
 - Leaves unknown variables unchanged.
 - Applies to URLs, query parameter keys/values, header names/values, and body content before request execution.
 
-Password, token, cookie, OAuth, and certificate passphrase inputs are normal visible text fields. Workspace values are rendered, saved, and exported directly.
+Password, token, cookie, and OAuth inputs are normal visible text fields. Settings > Certificates passphrases are stored as vault references when the workspace vault can bind them; if vault binding is unavailable, the fallback plaintext passphrase stays in workspace-local settings rather than portable workspace exports.
 
 ## Auth Specifications
 
@@ -659,6 +673,7 @@ Implemented request-time auth:
 - OAuth 2.0 authorization-code PKCE: creates a S256 PKCE challenge, opens the authorization URL in the external browser, supports loopback redirects and `postmeter://oauth/callback` custom URI-scheme redirects, verifies callback state, exchanges the authorization code at the token endpoint, and persists returned token metadata.
 - OAuth 2.0 device code: posts `client_id` and optional `scope` to the device authorization URL, opens the verification URL in the external browser, displays the user code, polls the token endpoint with `urn:ietf:params:oauth:grant-type:device_code`, handles pending, denial, expiration, timeout, and cancellation states, refuses token-endpoint redirects, and persists returned token metadata.
 - HTTPS client certificate: loads certificate material in the main/core layer from local paths using regular-file, byte-capped descriptor reads, supports PEM certificate/key pairs and PFX/P12 bundles, normalizes PFX/P12 bundles into in-memory PEM certificate/key buffers with the reviewed `node-forge` PKCS#12 parser before transport, applies optional CA certificates and passphrases, and does not expose certificate contents to the renderer or scripts. Pre-request scripts may select configured certificate bindings by `certificateId`; script-injected direct certificate/key/PFX/CA paths or passphrases are ignored before the parent transport can read certificate files.
+- Disabled managed client-certificate bindings are ignored by automatic host matching, explicit request `certificateId` lookup, brokered `pm.sendRequest`, and gRPC invocation setup so toggling a certificate off fails closed across runtime surfaces.
 
 Auth values support environment substitution before use.
 

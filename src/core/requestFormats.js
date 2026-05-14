@@ -6,6 +6,8 @@ const {
 } = require('./curlFormats');
 const { regenerateRequestIds } = require('./importedCollectionIds');
 const { requestModel } = require('./models');
+const { findMatchingClientCertificate } = require('./tlsSettings');
+const { buildUrlWithQuery } = require('./collectionFormatUtils');
 
 const POSTMETER_REQUEST_FORMAT = 'postmeter.request';
 const POSTMETER_REQUEST_VERSION = 1;
@@ -40,6 +42,7 @@ function importRequestFromText(content) {
     if (!request) {
       throw new Error('curl import did not produce a request.');
     }
+    applySingleRequestCurlCertificate(request, collection.certificates);
     return regenerateImportedRequest(request);
   }
   let parsed;
@@ -94,6 +97,46 @@ function regenerateImportedRequest(request) {
   const normalized = requestModel(request);
   regenerateRequestIds(normalized);
   return normalized;
+}
+
+function applySingleRequestCurlCertificate(request, certificates = []) {
+  if (!Array.isArray(certificates) || certificates.length === 0 || request?.auth?.type === 'clientCertificate') {
+    return;
+  }
+  let certificate = null;
+  try {
+    certificate = findMatchingClientCertificate(certificates, new URL(buildUrlWithQuery(requestModel(request || {}))));
+  } catch {
+    certificate = certificates.find((candidate) => candidate?.enabled !== false) || null;
+  }
+  if (!certificate) {
+    return;
+  }
+  preserveBasicAuthAsHeader(request);
+  request.auth = {
+    type: 'clientCertificate',
+    certPath: certificate.certPath || '',
+    keyPath: certificate.keyPath || '',
+    pfxPath: certificate.pfxPath || '',
+    caPath: certificate.caPath || '',
+    passphrase: certificate.passphrase || ''
+  };
+}
+
+function preserveBasicAuthAsHeader(request) {
+  if (request?.auth?.type !== 'basic' || !request.auth.username) {
+    return;
+  }
+  if ((request.headers || []).some((header) => header.enabled !== false && String(header.key || '').toLowerCase() === 'authorization')) {
+    return;
+  }
+  request.headers ||= [];
+  const credential = `${request.auth.username}:${request.auth.password ?? ''}`;
+  request.headers.push({
+    enabled: true,
+    key: 'Authorization',
+    value: `Basic ${Buffer.from(credential, 'utf8').toString('base64')}`
+  });
 }
 
 module.exports = {

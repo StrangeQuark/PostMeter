@@ -60,6 +60,13 @@ test('capture policy keeps current defaults for small runs and applies high-volu
   }, 'performance', { plannedRequests: 500000, diagnostic: true });
   assert.equal(veryLargeDiagnosis.responseHeaders, true);
   assert.equal(veryLargeDiagnosis.transportTimings, true);
+
+  const veryLargePerformance = normalizeCapturePolicy({
+    responseHeaders: true,
+    transportTimings: true
+  }, 'performance', { plannedRequests: 500000, diagnostic: false });
+  assert.equal(veryLargePerformance.responseHeaders, false);
+  assert.equal(veryLargePerformance.transportTimings, true);
 });
 
 test('runtime result store estimates high-volume file size from capture settings', () => {
@@ -144,7 +151,7 @@ test('runtime result store reuses one SQLite file and pages captured runner deta
       id: 'run-one',
       kind: 'runner',
       plannedRequests: 3,
-      capturePolicy: { responseBody: 'failed', bodyPreviewBytes: 16 },
+      capturePolicy: { responseBody: 'failed', bodyPreviewBytes: 16, transportTimings: true },
       metadata: { runnerOwned: true }
     });
     store.recordRunnerResult({
@@ -156,6 +163,13 @@ test('runtime result store reuses one SQLite file and pages captured runner deta
       durationMillis: 10,
       responseBody: 'successful-body',
       responseBytes: 15,
+      timings: {
+        tlsHandshakeMillis: 12,
+        tls: {
+          verificationDisabled: true,
+          caCertificateConfigured: true
+        }
+      },
       passed: true,
       preRequestScriptResult: { passed: true, tests: [], logs: ['pre'] },
       testScriptResult: { passed: true, tests: [], logs: ['post'] },
@@ -182,6 +196,8 @@ test('runtime result store reuses one SQLite file and pages captured runner deta
     assert.equal(page.items[0].responseBody, undefined);
     assert.equal(page.items[1].responseBody, 'failed-body-prev');
     assert.equal(page.items[0].bodySha256.length, 64);
+    assert.equal(page.items[0].timings.tls.verificationDisabled, true);
+    assert.equal(page.items[0].timings.tls.caCertificateConfigured, true);
 
     const failedPage = store.page({ kind: 'runner', status: '500', limit: 10 });
     assert.equal(failedPage.total, 1);

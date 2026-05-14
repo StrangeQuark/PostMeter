@@ -27,6 +27,7 @@ const {
   normalizeVaultKey,
   normalizeVaultSecretValue
 } = require('./vaultStore');
+const { normalizeTlsSettings } = require('./tlsSettings');
 
 const PROTOCOL_VERSION = 1;
 const WORKER_SHUTDOWN_GRACE_MILLIS = 50;
@@ -873,8 +874,9 @@ async function runBrokeredSendRequest(state, payload) {
     recordSandboxDenial(state, 'script_send_request_disabled', 'pm.sendRequest');
     throw new Error('pm.sendRequest is disabled for this workspace.');
   }
+  const clientCertificates = brokerClientCertificates(state.options);
   const request = normalizePmSendRequest(payload.request, {
-    clientCertificates: state.options.clientCertificates || [],
+    clientCertificates,
     fileBindings: state.options.fileBindings || []
   });
   request.cookieJar = {
@@ -883,8 +885,10 @@ async function runBrokeredSendRequest(state, payload) {
   };
   const response = await (state.options.sendRequest || sendRequest)(request, runtimeEnvironmentForBroker(state), {
     cookieJar: request.cookieJar.enabled ? state.cookies : [],
+    clientCertificates,
     fileBindings: state.options.fileBindings || [],
     signal: state.options.signal,
+    tlsSettings: state.options.tlsSettings || {},
     timeoutMillis: request.timeoutMillis
   });
   if (request.cookieJar.enabled && Array.isArray(response.updatedCookies)) {
@@ -902,6 +906,13 @@ async function runBrokeredSendRequest(state, payload) {
     responseBytes: response.responseBytes || Buffer.byteLength(response.body || '', 'utf8'),
     finalUrl: response.finalUrl || request.url
   };
+}
+
+function brokerClientCertificates(options = {}) {
+  return [
+    ...(options.clientCertificates || []),
+    ...normalizeTlsSettings(options.tlsSettings || {}).clientCertificates
+  ];
 }
 
 async function runBrokeredExecutionRunRequest(state, payload) {
@@ -1740,7 +1751,7 @@ function normalizePmSendRequestClientCertificateAuth(source, options = {}) {
     }
     throw new Error('pm.sendRequest client certificate auth requires a configured certificate binding.');
   }
-  const certificate = (options.clientCertificates || []).find((candidate) => String(candidate?.id || '') === String(certificateId));
+  const certificate = (options.clientCertificates || []).find((candidate) => candidate?.enabled !== false && String(candidate?.id || '') === String(certificateId));
   if (!certificate) {
     throw new Error('pm.sendRequest client certificate binding is not available to this script execution.');
   }

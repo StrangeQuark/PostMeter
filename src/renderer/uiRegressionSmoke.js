@@ -48,6 +48,7 @@
     await assertTreeContextMenuModalFocusSmoke();
     newRequest();
     assertMethodColorSmoke();
+    await assertRequestSettingsTabSmoke();
     const variableLinkCollection = activeCollection();
     const variableLinkRequest = activeRequest();
     const variableLinkEnvironment = {
@@ -517,6 +518,7 @@
     await assertEditorLineNumbersSettingSmoke();
     await assertVariableTooltipHintsSettingSmoke();
     await assertSettingsPanelNavigationSmoke();
+    await assertCertificateSettingsPanelSmoke();
     await assertTabsModalsUpdatesSettingSmoke();
     await assertScriptCapabilitiesSettingSmoke();
     await assertDiagnosticsSettingsPanelSmoke();
@@ -550,6 +552,7 @@
       ['modals', 'Modals'],
       ['updates', 'Updates'],
       ['scripts', 'Scripts'],
+      ['certificates', 'Certificates'],
       ['vault', 'Vault'],
       ['packages', 'Packages'],
       ['files', 'Files'],
@@ -575,6 +578,268 @@
           `Settings ${otherHeading} panel should hide when ${heading} is active.`
         );
       }
+    }
+  }
+
+  async function assertCertificateSettingsPanelSmoke() {
+    const originalRequestSettings = structuredClone(workspace.settings.request);
+    try {
+      $('settingsCertificatesButton').click();
+      await nextPaint();
+      await clickSettingCheckboxAndWait(
+        $('sslCertificateVerificationInput'),
+        false,
+        () => workspace.settings.request.sslCertificateVerification === false,
+        'Certificate settings updated.',
+        'SSL certificate verification should disable from the Settings Certificates panel.'
+      );
+      await clickSettingCheckboxAndWait(
+        $('sslCertificateVerificationInput'),
+        true,
+        () => workspace.settings.request.sslCertificateVerification === true,
+        'Certificate settings updated.',
+        'SSL certificate verification should enable from the Settings Certificates panel.'
+      );
+
+      $('caCertificatePathInput').value = '/tmp/ui-ca.pem';
+      dispatchChange($('caCertificatePathInput'));
+      await waitForUiSmoke(
+        () => workspace.settings.request.caCertificatePath === '/tmp/ui-ca.pem',
+        'Settings Certificates CA path should save from the inline field.',
+        3000,
+        global
+      );
+      await waitForStatusIncludes('Certificate settings updated.', 'Settings Certificates CA path should surface a save status.');
+      $('clearCaCertificateButton').click();
+      await waitForUiSmoke(
+        () => workspace.settings.request.caCertificatePath === '' && $('caCertificatePathInput').value === '',
+        'Settings Certificates Clear CA should save an empty CA path.',
+        3000,
+        global
+      );
+      $('chooseCaCertificateButton').click();
+      await waitForUiSmoke(
+        () => !$('filePickerModal').hidden,
+        'Settings Certificates Choose CA should open the local file picker.',
+        3000,
+        global
+      );
+      assertUiSmoke($('filePickerManualPathInput') && !$('filePickerManualPathField').hidden, 'Certificate file picker should include a manual path field.');
+      $('filePickerManualPathInput').value = '/tmp/ui-ca-manual.pem';
+      dispatchInput($('filePickerManualPathInput'));
+      $('filePickerUsePathButton').click();
+      await waitForUiSmoke(
+        () => !$('settingsModal').hidden
+          && !$('settingsCertificatesSection').hidden
+          && $('filePickerModal').hidden
+          && workspace.settings.request.caCertificatePath === '/tmp/ui-ca-manual.pem'
+          && $('caCertificatePathInput').value === '/tmp/ui-ca-manual.pem',
+        'Settings Certificates Choose CA should accept a manual path from the file picker modal.',
+        3000,
+        global
+      );
+      $('clearCaCertificateButton').click();
+      await waitForUiSmoke(
+        () => workspace.settings.request.caCertificatePath === '' && $('caCertificatePathInput').value === '',
+        'Settings Certificates Clear CA should clear a manually chosen CA path.',
+        3000,
+        global
+      );
+      $('chooseCaCertificateButton').click();
+      await waitForUiSmoke(
+        () => !$('filePickerModal').hidden,
+        'Settings Certificates Choose CA should reopen the local file picker after manual path selection.',
+        3000,
+        global
+      );
+      $('filePickerCancelButton').click();
+      await waitForUiSmoke(
+        () => !$('settingsModal').hidden
+          && !$('settingsCertificatesSection').hidden
+          && $('filePickerModal').hidden
+          && $('textInputModal').hidden,
+        'Canceling Settings Certificates Choose CA should return without opening a manual path prompt.',
+        3000,
+        global
+      );
+      assertUiSmoke(workspace.settings.request.caCertificatePath === '', 'Canceling Settings Certificates Choose CA should not change the CA path.');
+
+      $('addClientCertificateButton').click();
+      await nextPaint();
+      assertUiSmoke(!$('clientCertificateModal').hidden, 'Add Certificate should open the client certificate form modal.');
+      $('cancelClientCertificateModalButton').click();
+      await waitForUiSmoke(
+        () => !$('settingsModal').hidden && !$('settingsCertificatesSection').hidden && $('clientCertificateModal').hidden,
+        'Client certificate Cancel should return to the Settings Certificates panel.',
+        3000,
+        global
+      );
+      $('addClientCertificateButton').click();
+      await nextPaint();
+      $('closeClientCertificateModalButton').click();
+      await waitForUiSmoke(
+        () => !$('settingsModal').hidden && !$('settingsCertificatesSection').hidden && $('clientCertificateModal').hidden,
+        'Client certificate Close should return to the Settings Certificates panel.',
+        3000,
+        global
+      );
+      $('addClientCertificateButton').click();
+      await nextPaint();
+      assertUiSmoke(!$('clientCertificateModal').hidden, 'Add Certificate should reopen the client certificate form modal.');
+      assertUiSmoke($('textInputModal').hidden, 'Add Certificate should not open the generic one-field text modal.');
+      for (const id of [
+        'clientCertificateNameInput',
+        'clientCertificateHostInput',
+        'clientCertificatePortInput',
+        'clientCertificateFormatSelect',
+        'clientCertificateCertPathInput',
+        'chooseClientCertificateCertPathButton',
+        'clientCertificateKeyPathInput',
+        'chooseClientCertificateKeyPathButton',
+        'clientCertificatePassphraseInput',
+        'toggleClientCertificatePassphraseButton',
+        'clientCertificateEnabledInput'
+      ]) {
+        assertUiSmoke($(id) && !$(id).hidden, `Client certificate modal should show ${id} in the same panel.`);
+      }
+      $('chooseClientCertificateCertPathButton').click();
+      await waitForUiSmoke(
+        () => !$('filePickerModal').hidden && $('clientCertificateModal').hidden,
+        'Client certificate CRT Choose should open the local file picker over the certificate form.',
+        3000,
+        global
+      );
+      $('filePickerManualPathInput').value = '/tmp/ui-client-picker.crt';
+      $('filePickerUsePathButton').click();
+      await waitForUiSmoke(
+        () => !$('clientCertificateModal').hidden
+          && $('filePickerModal').hidden
+          && $('clientCertificateCertPathInput').value === '/tmp/ui-client-picker.crt',
+        'Client certificate CRT picker should return to the form with the selected path.',
+        3000,
+        global
+      );
+      $('chooseClientCertificateKeyPathButton').click();
+      await waitForUiSmoke(
+        () => !$('filePickerModal').hidden && $('clientCertificateModal').hidden,
+        'Client certificate KEY Choose should open the local file picker over the certificate form.',
+        3000,
+        global
+      );
+      $('filePickerCancelButton').click();
+      await waitForUiSmoke(
+        () => !$('clientCertificateModal').hidden
+          && $('filePickerModal').hidden
+          && $('clientCertificateKeyPathInput').value === '',
+        'Canceling the client certificate KEY picker should return to the form without changing the path.',
+        3000,
+        global
+      );
+      $('chooseClientCertificateKeyPathButton').click();
+      await waitForUiSmoke(
+        () => !$('filePickerModal').hidden && $('clientCertificateModal').hidden,
+        'Client certificate KEY Choose should reopen the local file picker.',
+        3000,
+        global
+      );
+      $('filePickerManualPathInput').value = '/tmp/ui-client-picker.key';
+      $('filePickerUsePathButton').click();
+      await waitForUiSmoke(
+        () => !$('clientCertificateModal').hidden
+          && $('filePickerModal').hidden
+          && $('clientCertificateKeyPathInput').value === '/tmp/ui-client-picker.key',
+        'Client certificate KEY picker should return to the form with the selected path.',
+        3000,
+        global
+      );
+      assertUiSmoke($('clientCertificatePassphraseInput').type === 'password', 'Client certificate passphrase should be masked by default.');
+      $('clientCertificatePassphraseInput').value = 'ui-secret';
+      $('toggleClientCertificatePassphraseButton').click();
+      await nextPaint();
+      assertUiSmoke($('clientCertificatePassphraseInput').type === 'text', 'Client certificate passphrase Show button should reveal the value.');
+      assertUiSmoke($('clientCertificatePassphraseInput').value === 'ui-secret', 'Client certificate passphrase Show button should preserve the value.');
+      assertUiSmoke($('toggleClientCertificatePassphraseButton').textContent.trim() === 'Hide', 'Client certificate passphrase button should switch to Hide after revealing.');
+      assertUiSmoke($('toggleClientCertificatePassphraseButton').getAttribute('aria-pressed') === 'true', 'Client certificate passphrase button should expose pressed state after revealing.');
+      $('toggleClientCertificatePassphraseButton').click();
+      await nextPaint();
+      assertUiSmoke($('clientCertificatePassphraseInput').type === 'password', 'Client certificate passphrase Hide button should mask the value again.');
+      assertUiSmoke($('clientCertificatePassphraseInput').value === 'ui-secret', 'Client certificate passphrase Hide button should preserve the value.');
+      assertUiSmoke($('toggleClientCertificatePassphraseButton').textContent.trim() === 'Show', 'Client certificate passphrase button should switch back to Show after hiding.');
+      assertUiSmoke($('toggleClientCertificatePassphraseButton').getAttribute('aria-pressed') === 'false', 'Client certificate passphrase button should clear pressed state after hiding.');
+      assertUiSmoke(!$('clientCertificateCaPathInput'), 'Client certificate modal should not duplicate the workspace CA PEM file field.');
+      $('clientCertificateFormatSelect').value = 'pfx';
+      dispatchChange($('clientCertificateFormatSelect'));
+      await nextPaint();
+      assertUiSmoke(!$('clientCertificatePfxPathInput').closest('.client-certificate-pfx-field').hidden, 'PFX/P12 path should show when PFX format is selected.');
+      assertUiSmoke(!$('chooseClientCertificatePfxPathButton').hidden, 'PFX/P12 path should expose a Choose button when PFX format is selected.');
+      assertUiSmoke($('clientCertificateCertPathInput').closest('.client-certificate-pem-field').hidden, 'PEM certificate path should hide when PFX format is selected.');
+      $('chooseClientCertificatePfxPathButton').click();
+      await waitForUiSmoke(
+        () => !$('filePickerModal').hidden && $('clientCertificateModal').hidden,
+        'Client certificate PFX/P12 Choose should open the local file picker over the certificate form.',
+        3000,
+        global
+      );
+      $('filePickerManualPathInput').value = '/tmp/ui-client-picker.p12';
+      $('filePickerUsePathButton').click();
+      await waitForUiSmoke(
+        () => !$('clientCertificateModal').hidden
+          && $('filePickerModal').hidden
+          && $('clientCertificatePfxPathInput').value === '/tmp/ui-client-picker.p12',
+        'Client certificate PFX/P12 picker should return to the form with the selected path.',
+        3000,
+        global
+      );
+      $('clientCertificateFormatSelect').value = 'pem';
+      dispatchChange($('clientCertificateFormatSelect'));
+      await nextPaint();
+      $('clientCertificateNameInput').value = 'UI Client Certificate';
+      $('clientCertificateHostInput').value = 'api.example.test';
+      $('clientCertificatePortInput').value = '8443';
+      $('clientCertificateEnabledInput').checked = true;
+      $('saveClientCertificateModalButton').click();
+      await waitForUiSmoke(
+        () => !$('settingsModal').hidden && !$('settingsCertificatesSection').hidden && $('clientCertificateModal').hidden,
+        'Client certificate Save should return to the Settings Certificates panel.',
+        3000,
+        global
+      );
+      await waitForUiSmoke(
+        () => workspace.settings.request.clientCertificates.some((certificate) => (
+          certificate.name === 'UI Client Certificate'
+          && certificate.host === 'api.example.test'
+          && certificate.port === '8443'
+          && certificate.certPath === '/tmp/ui-client-picker.crt'
+          && certificate.keyPath === '/tmp/ui-client-picker.key'
+          && certificate.caPath === ''
+        )),
+        'Client certificate modal should save all fields from one panel.',
+        3000,
+        global
+      );
+      await waitForUiSmoke(
+        () => $('clientCertificateList').textContent.includes('UI Client Certificate')
+          && $('clientCertificateList').textContent.includes('api.example.test')
+          && $('clientCertificateList').textContent.includes(':8443'),
+        'Client certificate list should render the saved certificate summary.',
+        3000,
+        global
+      );
+      await waitForStatusIncludes('Client certificate added.', 'Client certificate modal should surface a save status.');
+
+      const disableButton = Array.from($('clientCertificateList').querySelectorAll('button'))
+        .find((button) => button.textContent.trim() === 'Disable');
+      assertUiSmoke(disableButton, 'Saved client certificate should expose a Disable button.');
+      disableButton.click();
+      await waitForUiSmoke(
+        () => workspace.settings.request.clientCertificates.some((certificate) => certificate.name === 'UI Client Certificate' && certificate.enabled === false),
+        'Client certificate Disable button should persist disabled state.',
+        3000,
+        global
+      );
+    } finally {
+      workspace.settings.request = originalRequestSettings;
+      renderTlsSettingsControls();
     }
   }
 
@@ -1128,6 +1393,52 @@
     assertUiSmoke($('responseBody').getAttribute('aria-label') === 'Response body', 'Response body textarea should have an accessible label.');
     assertUiSmoke($('responseHeaders').getAttribute('aria-label') === 'Response headers', 'Response headers textarea should have an accessible label.');
     assertUiSmoke($('responseCookies').getAttribute('aria-label') === 'Response cookies', 'Response cookies textarea should have an accessible label.');
+    activateTab('request', 'params');
+    activateTab('results', 'response');
+  }
+
+  async function assertRequestSettingsTabSmoke() {
+    activateTab('request', 'requestSettings');
+    await nextPaint();
+    assertUiSmoke($('requestSettingsTabButton').getAttribute('aria-selected') === 'true', 'Request Settings tab button should update aria-selected.');
+    assertUiSmoke($('requestSettingsTab').classList.contains('active'), 'Request Settings tab panel should become active.');
+    assertUiSmoke($('requestSettingsTab').getAttribute('aria-hidden') === 'false', 'Request Settings tab panel should update aria-hidden.');
+    const verification = $('requestSslCertificateVerificationInput');
+    const rect = verification?.getBoundingClientRect?.() || { width: 0, height: 0 };
+    assertUiSmoke(verification && rect.width > 0 && rect.height > 0, 'Request Settings SSL verification checkbox should be visible.');
+    assertUiSmoke(!$('requestCaCertificatePathInput'), 'Request Settings should not expose a request-local CA PEM override.');
+    assertUiSmoke(!$('chooseRequestCaCertificateButton'), 'Request Settings should not expose a request-local CA picker.');
+    assertUiSmoke(!$('clearRequestCaCertificateButton'), 'Request Settings should not expose request-local CA clearing.');
+    assertUiSmoke(verification.dataset.verificationValue === 'inherit', 'New requests should inherit workspace SSL verification until the request toggle changes.');
+
+    verification.checked = true;
+    dispatchChange(verification);
+    await waitForUiSmoke(
+      () => activeRequest()?.settings?.sslCertificateVerification === 'enabled',
+      'Request Settings SSL checkbox should enable verification on the active request.',
+      3000,
+      global
+    );
+    verification.checked = false;
+    dispatchChange(verification);
+    await waitForUiSmoke(
+      () => activeRequest()?.settings?.sslCertificateVerification === 'disabled',
+      'Request Settings SSL checkbox should disable verification on the active request.',
+      3000,
+      global
+    );
+    if (activeRequest()) {
+      activeRequest().settings = { sslCertificateVerification: 'inherit' };
+      renderRequestTlsSettings(activeRequest());
+    }
+
+    activateTab('results', 'responseNetwork');
+    await nextPaint();
+    assertUiSmoke($('resultsNetworkTabButton').getAttribute('aria-selected') === 'true', 'Results Network tab button should update aria-selected.');
+    assertUiSmoke($('responseNetworkTab').classList.contains('active'), 'Results Network tab panel should become active.');
+    assertUiSmoke($('responseNetworkTab').getAttribute('aria-hidden') === 'false', 'Results Network tab panel should update aria-hidden.');
+    assertUiSmoke($('responseNetwork').getBoundingClientRect().height > 0, 'Results Network diagnostics textarea should be visible.');
+
     activateTab('request', 'params');
     activateTab('results', 'response');
   }
@@ -2553,6 +2864,15 @@
     try {
       $('urlInput').value = 'https://api.example.test/failure';
       dispatchInput($('urlInput'));
+      $('responseStatus').textContent = '200';
+      $('responseTime').textContent = '123 ms';
+      $('responseSize').textContent = '1 KB';
+      $('finalUrl').textContent = 'https://api.example.test/old-success';
+      $('responseBody').value = '<html><body>stale success body</body></html>';
+      $('responseHeaders').value = 'x-stale: yes';
+      $('responseCookies').value = 'stale=true';
+      $('responseNetwork').value = 'old network diagnostics';
+      window.PostMeterCodeEditor?.setLanguage?.($('responseBody'), 'markup');
       window.__postmeterValidateRequest = async () => [];
       window.__postmeterSendRequest = async () => {
         throw new Error('mocked send failure');
@@ -2561,6 +2881,13 @@
       assertStatusIncludes('Request failed: mocked send failure', 'Failed send did not update status with an actionable error.');
       assertUiSmoke($('responseStatus').textContent === 'ERR', 'Failed send did not mark the response status as ERR.');
       assertUiSmoke($('responseBody').value.includes('mocked send failure'), 'Failed send did not show the error in the response body.');
+      assertUiSmoke(!$('responseBody').value.includes('stale success body'), 'Failed send left stale response body text in the response body.');
+      assertUiSmoke($('responseHeaders').value === '', 'Failed send did not clear stale response headers.');
+      assertUiSmoke($('responseCookies').value === '', 'Failed send did not clear stale response cookies.');
+      assertUiSmoke($('responseNetwork').value === '', 'Failed send did not clear stale network diagnostics.');
+      const highlightedBody = $('responseBody').closest('.code-editor')?.querySelector('.code-editor-highlight code')?.textContent || '';
+      assertUiSmoke(highlightedBody.includes('mocked send failure'), 'Failed send did not refresh the response body editor overlay.');
+      assertUiSmoke(!highlightedBody.includes('stale success body'), 'Failed send left stale response text in the response body editor overlay.');
     } finally {
       window.__postmeterValidateRequest = originalValidate;
       window.__postmeterSendRequest = originalSend;

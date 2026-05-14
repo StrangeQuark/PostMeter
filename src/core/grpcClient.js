@@ -16,6 +16,12 @@ const {
   extractPfxToPem,
   readRegularFileBounded
 } = require('./pfxCertificate');
+const {
+  findMatchingClientCertificate,
+  grpcRootCertificatesWithSystemRoots,
+  normalizeRequestTlsSettings,
+  normalizeTlsSettings
+} = require('./tlsSettings');
 
 const DEFAULT_GRPC_TIMEOUT_MILLIS = 3 * 60 * 1000;
 const MAX_GRPC_METADATA_PAIRS = 1000;
@@ -45,8 +51,8 @@ const GRPC_STATUS_NAMES = Object.freeze({
 async function invokeGrpcRequest(request = {}, environment = { variables: [] }, options = {}) {
   const started = performance.now();
   const invocation = await prepareGrpcInvocation(request, environment, options);
-  const credentials = await grpcCredentialsForRequest(invocation, environment, options);
-  const client = new invocation.Client(invocation.target, credentials, grpcClientOptions(invocation));
+  const credentialResult = await grpcCredentialsForRequest(invocation, environment, options);
+  const client = new invocation.Client(invocation.target, credentialResult.credentials, grpcClientOptions(invocation));
   let result;
   try {
     result = await invokeGrpcMethod(client, invocation, options);
@@ -55,7 +61,7 @@ async function invokeGrpcRequest(request = {}, environment = { variables: [] }, 
   }
   const durationMillis = Math.max(0, Math.round(performance.now() - started));
   return {
-    response: grpcResponseFromInvocation(result, invocation, durationMillis)
+    response: grpcResponseFromInvocation(result, invocation, durationMillis, credentialResult.tlsDiagnostics)
   };
 }
 
@@ -335,21 +341,70 @@ function clampGrpcMessageLimit(value) {
 
 async function grpcCredentialsForRequest(invocation, environment, options) {
   if (!invocation.secure) {
-    return grpc.credentials.createInsecure();
+    return {
+      credentials: grpc.credentials.createInsecure(),
+      tlsDiagnostics: null
+    };
   }
   const transportEnvironment = invocation.transportEnvironment || environment;
   const tlsConfig = invocation.grpcConfig.tls || {};
+  const settings = normalizeTlsSettings(options.tlsSettings || {});
+  const clientCertificates = [
+    ...(options.clientCertificates || []),
+    ...(settings.clientCertificates || [])
+  ];
+  const requestTlsSettings = normalizeRequestTlsSettings(invocation.request?.settings || {});
+  const effectiveSettings = {
+    ...settings,
+    sslCertificateVerification: requestTlsSettings.sslCertificateVerification === 'inherit'
+      ? settings.sslCertificateVerification
+      : requestTlsSettings.sslCertificateVerification !== 'disabled'
+  };
+  const rootCertParts = [];
+  const settingsCaPath = resolveEnvironmentValue(settings.caCertificatePath, transportEnvironment).trim();
+  const settingsRootCerts = await readOptionalPem(settingsCaPath, transportEnvironment, 'CA certificate');
+  if (settingsRootCerts) {
+    rootCertParts.push(settingsRootCerts);
+  }
   const rootCerts = await readOptionalPem(tlsConfig.caPath, transportEnvironment, 'CA certificate');
+  if (rootCerts) {
+    rootCertParts.push(rootCerts);
+  }
   const clientAuth = normalizeAuth(invocation.hasTrustedTransportConfig
     ? invocation.transportConfig.auth || {}
     : invocation.request.auth || {});
   if (clientAuth.type !== 'clientCertificate') {
-    return grpc.credentials.createSsl(rootCerts || undefined);
+    const matchedCertificate = findMatchingClientCertificate(
+      clientCertificates,
+      grpcUrlForTarget(invocation)
+    );
+    if (matchedCertificate) {
+      return {
+        credentials: await grpcCredentialsForClientCertificate({
+          type: 'clientCertificate',
+          caPath: matchedCertificate.caPath || '',
+          certPath: matchedCertificate.certPath || '',
+          keyPath: matchedCertificate.keyPath || '',
+          passphrase: matchedCertificate.passphrase || '',
+          pfxPath: matchedCertificate.pfxPath || ''
+        }, transportEnvironment, rootCertParts, effectiveSettings),
+        tlsDiagnostics: grpcTlsDiagnostics(effectiveSettings, rootCertParts, matchedCertificate, transportEnvironment)
+      };
+    }
+    return {
+      credentials: grpc.credentials.createSsl(
+        grpcRootCertificatesWithSystemRoots(rootCertParts) || undefined,
+        undefined,
+        undefined,
+        grpcVerifyOptions(effectiveSettings)
+      ),
+      tlsDiagnostics: grpcTlsDiagnostics(effectiveSettings, rootCertParts, null, transportEnvironment)
+    };
   }
 
   const certificateId = resolveEnvironmentValue(clientAuth.certificateId, transportEnvironment).trim();
   const certificateBinding = certificateId
-    ? (options.clientCertificates || []).find((item) => String(item?.id || '') === certificateId)
+    ? clientCertificates.find((item) => item?.enabled !== false && String(item?.id || '') === certificateId)
     : null;
   if (certificateId && !certificateBinding) {
     throw new Error('Configured gRPC client certificate binding was not found for this request.');
@@ -363,11 +418,22 @@ async function grpcCredentialsForRequest(invocation, environment, options) {
     passphrase: certificateBinding.passphrase || '',
     pfxPath: certificateBinding.pfxPath || ''
   } : clientAuth;
-  const ca = rootCerts || await readOptionalPem(auth.caPath, transportEnvironment, 'CA certificate');
+  return {
+    credentials: await grpcCredentialsForClientCertificate(auth, transportEnvironment, rootCertParts, effectiveSettings),
+    tlsDiagnostics: grpcTlsDiagnostics(effectiveSettings, rootCertParts, certificateBinding || auth, transportEnvironment, {
+      certificateId
+    })
+  };
+}
+
+async function grpcCredentialsForClientCertificate(auth, transportEnvironment, rootCertParts, settings) {
+  const ca = await readOptionalPem(auth.caPath, transportEnvironment, 'CA certificate');
+  const caParts = ca ? [...rootCertParts, ca] : rootCertParts;
+  const rootCerts = grpcRootCertificatesWithSystemRoots(caParts) || undefined;
   const pfxPath = resolveEnvironmentValue(String(auth.pfxPath || ''), transportEnvironment).trim();
   if (pfxPath) {
     const extracted = await extractPfxForGrpc(pfxPath, resolveEnvironmentValue(auth.passphrase, transportEnvironment));
-    return grpc.credentials.createSsl(ca || undefined, extracted.privateKey, extracted.certChain);
+    return grpc.credentials.createSsl(rootCerts, extracted.privateKey, extracted.certChain, grpcVerifyOptions(settings));
   }
 
   const certChain = await readRequiredPem(auth.certPath, transportEnvironment, 'PEM certificate');
@@ -376,7 +442,40 @@ async function grpcCredentialsForRequest(invocation, environment, options) {
     resolveEnvironmentValue(auth.passphrase, transportEnvironment),
     'gRPC PEM key'
   );
-  return grpc.credentials.createSsl(ca || undefined, privateKey, certChain);
+  return grpc.credentials.createSsl(rootCerts, privateKey, certChain, grpcVerifyOptions(settings));
+}
+
+function grpcVerifyOptions(settings) {
+  return settings.sslCertificateVerification === false
+    ? { rejectUnauthorized: false, checkServerIdentity: () => undefined }
+    : {};
+}
+
+function grpcTlsDiagnostics(settings, rootCertParts = [], certificate = null, environment, options = {}) {
+  const certificateId = options.certificateId || certificate?.id || '';
+  const hasCertificateMaterial = Boolean(
+    certificate
+    && (
+      certificateId
+      || String(certificate.certPath || '').trim()
+      || String(certificate.keyPath || '').trim()
+      || String(certificate.pfxPath || '').trim()
+    )
+  );
+  const certificateCaPath = certificate?.caPath
+    ? resolveEnvironmentValue(certificate.caPath, environment).trim()
+    : '';
+  return {
+    caCertificateConfigured: rootCertParts.length > 0 || Boolean(certificateCaPath),
+    clientCertificateConfigured: hasCertificateMaterial,
+    clientCertificateId: certificateId,
+    clientCertificateName: certificate?.name || '',
+    verificationDisabled: settings.sslCertificateVerification === false
+  };
+}
+
+function grpcUrlForTarget(invocation) {
+  return new URL(invocation.finalUrl || `grpcs://${invocation.target}`);
 }
 
 async function readOptionalPem(filePath, environment, label) {
@@ -691,7 +790,7 @@ function grpcCallOptions(options) {
   };
 }
 
-function grpcResponseFromInvocation(state, invocation, durationMillis) {
+function grpcResponseFromInvocation(state, invocation, durationMillis, tlsDiagnostics = null) {
   const errorCode = Number(state.error?.code);
   const statusCode = Number.isFinite(errorCode)
     ? errorCode
@@ -705,7 +804,7 @@ function grpcResponseFromInvocation(state, invocation, durationMillis) {
     reason
   );
   const body = grpcBodyFromMessages(state.messages);
-  return {
+  const response = {
     body,
     cancelled: statusCode === grpc.status.CANCELLED,
     code: statusCode,
@@ -727,6 +826,10 @@ function grpcResponseFromInvocation(state, invocation, durationMillis) {
     statusCode,
     trailers
   };
+  if (tlsDiagnostics && typeof tlsDiagnostics === 'object' && Object.keys(tlsDiagnostics).length) {
+    response.tls = tlsDiagnostics;
+  }
+  return response;
 }
 
 function grpcBodyFromMessages(messages) {

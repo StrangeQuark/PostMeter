@@ -847,6 +847,7 @@ function bindUiSnapshotSmoke(app, mainWindow, env) {
 }
 
 async function captureUiSnapshot(mainWindow, label, env) {
+  await waitForRendererSnapshotPaint(mainWindow);
   const image = await mainWindow.webContents.capturePage();
   const size = image.getSize();
   if (size.width < 800 || size.height < 600) {
@@ -860,6 +861,16 @@ async function captureUiSnapshot(mainWindow, label, env) {
     await fs.mkdir(snapshotDir, { recursive: true });
     await fs.writeFile(path.join(snapshotDir, `${label}.png`), image.toPNG());
   }
+}
+
+async function waitForRendererSnapshotPaint(mainWindow) {
+  if (mainWindow.webContents.isDestroyed()) {
+    return;
+  }
+  await mainWindow.webContents.executeJavaScript(
+    'new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))',
+    true
+  );
 }
 
 function nativeImageHasVariance(image) {

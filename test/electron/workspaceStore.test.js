@@ -60,6 +60,11 @@ test('creates a default current-schema workspace when no file exists', async () 
       }
     },
     editor: { lineNumbers: true, variableTooltipHints: true },
+    request: {
+      sslCertificateVerification: false,
+      caCertificatePath: '',
+      clientCertificates: []
+    },
     tabs: { saveOnForceClose: false },
     modals: { closeOnBackdropClick: false },
     updates: { includePrereleases: false }
@@ -942,6 +947,17 @@ test('workspace import ignores local settings from native files', async () => {
       }
     },
     localsettings: {
+      request: {
+        sslCertificateVerification: false,
+        caCertificatePath: '/tmp/imported-ca.pem',
+        clientCertificates: [{
+          id: 'imported-managed-cert',
+          host: 'api.example.test',
+          certPath: '/tmp/client.crt',
+          keyPath: '/tmp/client.key',
+          passphraseSecretKey: 'client-certificate:imported-managed-cert:passphrase'
+        }]
+      },
       diagnostics: {
         requestResponseLogging: {
           urls: true,
@@ -1000,6 +1016,11 @@ test('workspace import ignores local settings from native files', async () => {
     scriptConsole: false,
     payloadIdentifiers: false
   });
+  assert.deepEqual(imported.localsettings.request, {
+    sslCertificateVerification: false,
+    caCertificatePath: '',
+    clientCertificates: []
+  });
   assert.deepEqual(imported.localsettings.sandbox.fileBindings, []);
   assert.deepEqual(imported.localsettings.sandbox.packageCache, []);
   assert.deepEqual(imported.localsettings.sandbox.trustedCapabilities.vaultGrants, {
@@ -1008,6 +1029,53 @@ test('workspace import ignores local settings from native files', async () => {
     requests: [],
     deniedCollections: [],
     deniedRequests: []
+  });
+});
+
+test('workspace export strips workspace-local TLS trust settings', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-export-tls-localsettings-'));
+  const workspacePath = path.join(temp, 'workspace.json');
+  const exportPath = path.join(temp, 'export.json');
+  const store = new WorkspaceStore(workspacePath);
+  const saved = await store.save({
+    schemaVersion: CURRENT_SCHEMA_VERSION,
+    collections: [],
+    environments: [],
+    cookies: [],
+    history: [],
+    settings: {
+      request: {
+        sslCertificateVerification: false,
+        caCertificatePath: '/tmp/postmeter-ca.pem',
+        clientCertificates: [{
+          id: 'local-client-cert',
+          host: 'api.example.test',
+          certPath: '/tmp/client.crt',
+          keyPath: '/tmp/client.key',
+          passphraseSecretKey: 'client-certificate:local-client-cert:passphrase'
+        }]
+      }
+    }
+  });
+
+  const rawWorkspace = JSON.parse(await fs.readFile(workspacePath, 'utf8'));
+  assert.equal(rawWorkspace.localsettings.request.sslCertificateVerification, false);
+  assert.equal(rawWorkspace.localsettings.request.caCertificatePath, '/tmp/postmeter-ca.pem');
+  assert.equal(rawWorkspace.localsettings.request.clientCertificates[0].id, 'local-client-cert');
+
+  await store.exportWorkspace(saved, exportPath);
+  const exportedText = await fs.readFile(exportPath, 'utf8');
+  assert.equal(exportedText.includes('/tmp/postmeter-ca.pem'), false);
+  assert.equal(exportedText.includes('/tmp/client.crt'), false);
+  assert.equal(exportedText.includes('client-certificate:local-client-cert:passphrase'), false);
+  const exported = JSON.parse(exportedText);
+  assert.equal(Object.hasOwn(exported, 'localsettings'), false);
+
+  const imported = await store.importWorkspace(exportPath);
+  assert.deepEqual(imported.localsettings.request, {
+    sslCertificateVerification: false,
+    caCertificatePath: '',
+    clientCertificates: []
   });
 });
 

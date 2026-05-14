@@ -86,10 +86,10 @@ const {
 } = PostMeterRequestQueryModel;
 const RENDERER_STATE_DEFAULTS = PostMeterRendererState.createRendererState();
 const TAB_PANEL_IDS = {
-  request: ['paramsTab', 'headersTab', 'authTab', 'cookiesTab', 'bodyTab', 'scriptsTab', 'collectionVariablesTab', 'docsTab'],
+  request: ['paramsTab', 'headersTab', 'authTab', 'cookiesTab', 'bodyTab', 'scriptsTab', 'collectionVariablesTab', 'requestSettingsTab', 'docsTab'],
   collection: ['collectionOverviewTab', 'collectionAuthTab', 'collectionScriptsTab', 'collectionLevelVariablesTab'],
   folder: ['folderOverviewTab', 'folderAuthTab', 'folderScriptsTab', 'folderLevelVariablesTab'],
-  results: ['responseTab', 'responseHeadersTab', 'responseCookiesTab', 'testResultsTab', 'visualizerTab'],
+  results: ['responseTab', 'responseHeadersTab', 'responseCookiesTab', 'responseNetworkTab', 'testResultsTab', 'visualizerTab'],
   performanceRequest: ['performanceParamsTab', 'performanceHeadersTab', 'performanceAuthTab', 'performanceCookiesTab', 'performanceBodyTab', 'performanceScriptsTab', 'performanceVariablesTab', 'performanceDocsTab'],
   performance: ['diagnosisTab', 'latencyTab', 'throughputTab', 'concurrencyTab', 'stressTab', 'spikeTab', 'soakTab', 'rampTab'],
   performanceOutput: ['performanceOutputResultsTab', 'performanceOutputRequestsTab', 'performanceOutputGraphsTab']
@@ -143,6 +143,7 @@ let lastUserNotification = RENDERER_STATE_DEFAULTS.lastUserNotification;
 let activeModalId = RENDERER_STATE_DEFAULTS.activeModalId;
 let activeModalCancelValue = RENDERER_STATE_DEFAULTS.activeModalCancelValue;
 let activeModalResolver = RENDERER_STATE_DEFAULTS.activeModalResolver;
+let modalStack = [];
 let selectedDraftSaveCollectionId = RENDERER_STATE_DEFAULTS.selectedDraftSaveCollectionId;
 let selectedExportCollectionId = RENDERER_STATE_DEFAULTS.selectedExportCollectionId;
 let selectedExportItemId = RENDERER_STATE_DEFAULTS.selectedExportItemId;
@@ -448,6 +449,7 @@ const rendererWorkflows = createRendererWorkflows({
   renderCookieJarEditor,
   renderEnvironmentEditor,
   renderHistory,
+  refreshResponseEditors,
   renderRequestTabs,
   renderRequestVariablePairs,
   renderVariablePreview,
@@ -635,11 +637,16 @@ function bindUi() {
       const input = event?.currentTarget || $('showVariableTooltipHintsInput');
       return setVariableTooltipHints(input?.checked === true, { save: true });
     },
+    onTlsSettingsChange: () => { void setTlsSettingsFromInputs(); },
+    onChooseCaCertificate: () => { void chooseWorkspaceCaCertificate(); },
+    onClearCaCertificate: () => { void clearWorkspaceCaCertificate(); },
+    onAddClientCertificate: () => { void addClientCertificateFromPrompt(); },
     onSendRequest: sendActiveRequest,
     onAddParam: () => addPair('queryParams'),
     onAddHeader: () => addPair('headers'),
     onPostMeterTokenHeaderChange: () => setActiveRequestAutoHeaderOption('sendPostMeterToken', $('sendPostMeterTokenInput')?.checked === true),
     onShowGeneratedHeadersChange: () => setActiveRequestAutoHeaderOption('showGeneratedHeaders', $('showGeneratedHeadersInput')?.checked === true),
+    onRequestTlsSettingsChange: () => setActiveRequestTlsSettingsFromInputs(),
     onDeleteEnvironment: () => deleteEnvironment(),
     onDeleteWorkspace: () => { void deleteWorkspace(); },
     onSwitchWorkspace: () => { void switchWorkspace(selectedWorkspaceId || activeWorkspaceId, { focus: 'workspace' }); },
@@ -773,6 +780,12 @@ function bindUi() {
     onCancelActiveModal: cancelActiveModal,
     closeModalsOnBackdropClick: () => modalsCloseOnBackdropClick(),
     onResolveActiveModal: resolveActiveModal,
+    onConfirmClientCertificateModal: confirmClientCertificateModal,
+    onChooseClientCertificateCertPath: () => { void chooseClientCertificatePath('cert'); },
+    onChooseClientCertificateKeyPath: () => { void chooseClientCertificatePath('key'); },
+    onChooseClientCertificatePfxPath: () => { void chooseClientCertificatePath('pfx'); },
+    onClientCertificateFormatChange: updateClientCertificateModalFormat,
+    onToggleClientCertificatePassphraseVisibility: toggleClientCertificatePassphraseVisibility,
     onConfirmCsvVariablesModal: confirmCsvVariablesModal,
     onImportCsvVariablesFile: importCsvVariablesFile,
     onClearCsvVariablesFile: clearCsvVariablesFile,
@@ -2817,17 +2830,23 @@ function exportItemDisplayName(kind, item) {
 
 function showModal(modalId, cancelValue) {
   if (state.activeModalResolver) {
-    resolveActiveModal(state.activeModalCancelValue, { flushNotifications: false });
+    if (shouldStackModal(state.activeModalId, modalId)) {
+      modalStack.push({
+        modalId: state.activeModalId,
+        cancelValue: state.activeModalCancelValue,
+        resolver: state.activeModalResolver,
+        focusTarget: lastModalFocusTarget
+      });
+    } else {
+      resolveActiveModal(state.activeModalCancelValue, { flushNotifications: false });
+    }
   }
   const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   closeContextMenu();
   closeToolbarMenus();
   closeFileSourceMenu();
   lastModalFocusTarget = modalRestoreFocusTarget(previousFocus);
-  $('modalBackdrop').hidden = false;
-  for (const modal of $('modalBackdrop').querySelectorAll('.modal')) {
-    modal.hidden = modal.id !== modalId;
-  }
+  showOnlyModal(modalId);
   return new Promise((resolve) => {
     openModalState(state, modalId, resolve, cancelValue);
     focusInitialModalElement(modalId);
@@ -2836,17 +2855,48 @@ function showModal(modalId, cancelValue) {
 
 function resolveActiveModal(value, options = {}) {
   const resolver = resolveModalState(state);
+  if (resolver) {
+    resolver(value);
+  }
+  const parentModal = modalStack.pop();
+  if (parentModal) {
+    const childFocusTarget = lastModalFocusTarget;
+    showOnlyModal(parentModal.modalId);
+    openModalState(state, parentModal.modalId, parentModal.resolver, parentModal.cancelValue);
+    lastModalFocusTarget = parentModal.focusTarget;
+    restoreFocusTarget(childFocusTarget);
+  } else {
+    hideAllModals();
+    restoreModalFocus();
+  }
+  if (options.flushNotifications !== false) {
+    void flushNotificationModalQueue();
+  }
+}
+
+function showOnlyModal(modalId) {
+  $('modalBackdrop').hidden = false;
+  for (const modal of $('modalBackdrop').querySelectorAll('.modal')) {
+    modal.hidden = modal.id !== modalId;
+  }
+}
+
+function hideAllModals() {
   $('modalBackdrop').hidden = true;
   for (const modal of $('modalBackdrop').querySelectorAll('.modal')) {
     modal.hidden = true;
   }
-  if (resolver) {
-    resolver(value);
+}
+
+function restoreFocusTarget(target) {
+  if (isRestorableFocusTarget(target)) {
+    target.focus?.();
   }
-  restoreModalFocus();
-  if (options.flushNotifications !== false) {
-    void flushNotificationModalQueue();
-  }
+}
+
+function shouldStackModal(parentModalId, childModalId) {
+  return (parentModalId === 'settingsModal' && childModalId !== parentModalId)
+    || (parentModalId === 'clientCertificateModal' && childModalId === 'filePickerModal');
 }
 
 function cancelActiveModal() {
@@ -2863,6 +2913,8 @@ function canResolveLocalFilePaths() {
 function bindLocalFilePickerUi() {
   const fileInput = $('filePickerInput');
   const browseButton = $('filePickerBrowseButton');
+  const usePathButton = $('filePickerUsePathButton');
+  const manualPathInput = $('filePickerManualPathInput');
   const cancelButton = $('filePickerCancelButton');
   const closeButton = $('filePickerCloseButton');
   const dropZone = $('filePickerDropZone');
@@ -2871,6 +2923,14 @@ function bindLocalFilePickerUi() {
   browseButton?.addEventListener('click', (event) => {
     event.preventDefault();
     fileInput?.click?.();
+  });
+  usePathButton?.addEventListener('click', useManualPathFromFilePicker);
+  manualPathInput?.addEventListener('input', clearFilePickerError);
+  manualPathInput?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      useManualPathFromFilePicker();
+    }
   });
   cancelButton?.addEventListener('click', () => resolveActiveModal(null));
   closeButton?.addEventListener('click', () => resolveActiveModal(null));
@@ -2927,9 +2987,17 @@ function configureFilePickerModal(options = {}) {
   const fileInput = $('filePickerInput');
   fileInput.value = '';
   fileInput.accept = options.accept || '';
-  const error = $('filePickerError');
-  error.hidden = true;
-  error.textContent = '';
+  const manualPathField = $('filePickerManualPathField');
+  const manualPathInput = $('filePickerManualPathInput');
+  const allowManualPath = options.allowManualPath !== false;
+  if (manualPathField) {
+    manualPathField.hidden = !allowManualPath;
+  }
+  if (manualPathInput) {
+    manualPathInput.value = options.defaultPath || '';
+    manualPathInput.placeholder = options.manualPathPlaceholder || '/path/to/file';
+  }
+  clearFilePickerError();
   const dropZone = $('filePickerDropZone');
   dropZone.classList.remove('is-dragover');
   const title = dropZone.querySelector('strong');
@@ -2943,7 +3011,7 @@ function configureFilePickerModal(options = {}) {
 }
 
 async function showLocalFilePicker(options = {}) {
-  if (!canResolveLocalFilePaths()) {
+  if (!canResolveLocalFilePaths() && options.allowManualPath === false) {
     return null;
   }
   activeFilePickerOptions = options;
@@ -2960,12 +3028,33 @@ function resetFilePickerModal() {
     fileInput.value = '';
     fileInput.accept = '';
   }
-  $('filePickerDropZone')?.classList.remove('is-dragover');
-  const error = $('filePickerError');
-  if (error) {
-    error.hidden = true;
-    error.textContent = '';
+  const manualPathInput = $('filePickerManualPathInput');
+  if (manualPathInput) {
+    manualPathInput.value = '';
+    manualPathInput.placeholder = '/path/to/file';
   }
+  const manualPathField = $('filePickerManualPathField');
+  if (manualPathField) {
+    manualPathField.hidden = false;
+  }
+  $('filePickerDropZone')?.classList.remove('is-dragover');
+  clearFilePickerError();
+}
+
+function useManualPathFromFilePicker() {
+  const input = $('filePickerManualPathInput');
+  const filePath = String(input?.value || '').trim();
+  if (!filePath) {
+    renderFilePickerError(activeFilePickerOptions?.manualPathRequiredMessage || 'Enter a local file path or choose a file.');
+    input?.focus?.();
+    return;
+  }
+  resolveActiveModal({
+    name: fileNameFromLocalPath(filePath),
+    path: filePath,
+    picker: activeFilePickerOptions?.kind || 'file',
+    manualPath: true
+  });
 }
 
 async function selectLocalFileFromPicker(file) {
@@ -2974,7 +3063,7 @@ async function selectLocalFileFromPicker(file) {
   }
   const filePath = localPathForFile(file);
   if (!filePath) {
-    renderFilePickerError('PostMeter could not read a local path for that file. Use the native file picker fallback from the import action.');
+    renderFilePickerError('PostMeter could not read a local path for that file. Use the manual path field.');
     return;
   }
   resolveActiveModal({
@@ -2994,6 +3083,15 @@ function localPathForFile(file) {
     return '';
   }
   return typeof file?.path === 'string' ? file.path.trim() : '';
+}
+
+function clearFilePickerError() {
+  const error = $('filePickerError');
+  if (!error) {
+    return;
+  }
+  error.textContent = '';
+  error.hidden = true;
 }
 
 function renderFilePickerError(message) {
@@ -3429,6 +3527,7 @@ function focusInitialModalElement(modalId) {
     runnerImportModal: 'cancelRunnerImportButton',
     requestImportModal: 'requestImportTextInput',
     requestExportModal: 'copyRequestExportButton',
+    clientCertificateModal: 'clientCertificateNameInput',
     textInputModal: $('textInputModal')?.dataset?.valueControl || 'textInputModalInput',
     csvVariablesModal: 'csvVariablesSchemaInput',
     confirmActionModal: 'cancelConfirmActionButton',
@@ -4445,6 +4544,7 @@ function selectSettingsSection(section) {
     'modals',
     'updates',
     'scripts',
+    'certificates',
     'vault',
     'packages',
     'files',
@@ -4487,6 +4587,7 @@ function renderSettingsControls() {
   if ($('showVariableTooltipHintsInput')) {
     $('showVariableTooltipHintsInput').checked = workspace.settings.editor.variableTooltipHints !== false;
   }
+  renderTlsSettingsControls();
   if ($('trustedScriptSendRequestInput')) {
     $('trustedScriptSendRequestInput').checked = workspace.settings?.sandbox?.trustedCapabilities?.sendRequest === true;
   }
@@ -4515,6 +4616,7 @@ function ensureSettings() {
   workspace.settings.editor ||= { lineNumbers: true, variableTooltipHints: true };
   workspace.settings.editor.lineNumbers = workspace.settings.editor.lineNumbers !== false;
   workspace.settings.editor.variableTooltipHints = workspace.settings.editor.variableTooltipHints !== false;
+  workspace.settings.request = normalizeRendererTlsSettings(workspace.settings.request);
   workspace.settings.sandbox ||= { trustedCapabilities: { sendRequest: true, cookies: true, vault: true } };
   workspace.settings.sandbox.fileBindings = normalizeSandboxFileBindings(workspace.settings.sandbox.fileBindings);
   workspace.settings.sandbox.packageCache = normalizeSandboxPackageCache(workspace.settings.sandbox.packageCache);
@@ -4531,6 +4633,71 @@ function ensureSettings() {
   workspace.settings.appearance.editorFont = normalizeEditorFontOption(workspace.settings.appearance.editorFont);
   workspace.settings.appearance.editorFontSize = normalizeEditorFontSize(workspace.settings.appearance.editorFontSize);
   delete workspace.settings.loadTestPolicy;
+}
+
+function normalizeRendererTlsSettings(value = {}) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  return {
+    sslCertificateVerification: normalizeRendererGlobalSslVerification(source.sslCertificateVerification ?? source.sslVerification ?? source.strictSSL),
+    caCertificatePath: source.caCertificatePath == null ? '' : String(source.caCertificatePath).trim(),
+    clientCertificates: normalizeRendererClientCertificates(source.clientCertificates)
+  };
+}
+
+function normalizeRendererGlobalSslVerification(value) {
+  if (value === true) {
+    return true;
+  }
+  if (value === false) {
+    return false;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['enabled', 'enable', 'true', 'on', 'yes'].includes(normalized)) {
+      return true;
+    }
+    if (['disabled', 'disable', 'false', 'off', 'no'].includes(normalized)) {
+      return false;
+    }
+  }
+  return false;
+}
+
+function normalizeRendererClientCertificates(values) {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+  return values
+    .filter((item) => item && typeof item === 'object')
+    .slice(0, 1000)
+    .map((item, index) => ({
+      id: String(item.id || `client-certificate-${index + 1}`),
+      name: String(item.name || 'Client Certificate'),
+      enabled: item.enabled !== false,
+      host: String(item.host || '').trim(),
+      port: String(item.port || '').trim(),
+      matches: Array.isArray(item.matches) ? item.matches.map((match) => String(match || '').trim()).filter(Boolean) : [],
+      certPath: String(item.certPath || '').trim(),
+      keyPath: String(item.keyPath || '').trim(),
+      pfxPath: String(item.pfxPath || '').trim(),
+      caPath: String(item.caPath || '').trim(),
+      passphrase: String(item.passphrase || ''),
+      passphraseSecretKey: String(item.passphraseSecretKey || '').trim(),
+      createdAt: String(item.createdAt || ''),
+      updatedAt: String(item.updatedAt || '')
+    }));
+}
+
+function normalizeRendererRequestTlsSettings(value = {}) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  return {
+    sslCertificateVerification: normalizeRendererRequestSslVerification(source.sslCertificateVerification)
+  };
+}
+
+function normalizeRendererRequestSslVerification(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['inherit', 'enabled', 'disabled'].includes(normalized) ? normalized : 'inherit';
 }
 
 const RENDERER_DIAGNOSTIC_LOG_LEVELS = ['debug', 'info', 'warn', 'error'];
@@ -5266,6 +5433,394 @@ async function setTrustedScriptCapabilitiesFromInputs() {
     'Script sandbox capability update failed',
     'Sandbox Capability Save Failed'
   );
+}
+
+function renderTlsSettingsControls() {
+  ensureSettings();
+  const requestSettings = workspace.settings.request;
+  const verificationInput = $('sslCertificateVerificationInput');
+  if (verificationInput) {
+    verificationInput.checked = requestSettings.sslCertificateVerification !== false;
+  }
+  const caInput = $('caCertificatePathInput');
+  if (caInput && document.activeElement !== caInput) {
+    caInput.value = requestSettings.caCertificatePath || '';
+  }
+  renderClientCertificateList();
+}
+
+function renderClientCertificateList() {
+  const list = $('clientCertificateList');
+  if (!list) {
+    return;
+  }
+  const certificates = workspace.settings?.request?.clientCertificates || [];
+  list.textContent = '';
+  if (!certificates.length) {
+    appendEmptyTestResult(list, 'No client certificates configured.');
+    return;
+  }
+  certificates.forEach((certificate) => {
+    const row = document.createElement('div');
+    row.className = 'settings-list-row';
+    const details = document.createElement('div');
+    details.className = 'settings-list-details';
+    const name = document.createElement('strong');
+    name.textContent = certificate.name || 'Client Certificate';
+    const meta = document.createElement('span');
+    meta.textContent = [
+      certificate.enabled === false ? 'Disabled' : 'Enabled',
+      certificate.host || certificate.matches?.[0] || '*',
+      certificate.port ? `:${certificate.port}` : '',
+      certificate.pfxPath ? 'PFX/P12' : 'CRT/KEY'
+    ].filter(Boolean).join(' ');
+    details.append(name, meta);
+    const actions = document.createElement('div');
+    actions.className = 'settings-list-actions';
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.textContent = certificate.enabled === false ? 'Enable' : 'Disable';
+    toggle.addEventListener('click', () => { void toggleClientCertificate(certificate.id); });
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.textContent = 'Edit';
+    edit.addEventListener('click', () => { void editClientCertificateFromPrompt(certificate.id); });
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'danger-button';
+    remove.textContent = 'Remove';
+    remove.addEventListener('click', () => { void removeClientCertificate(certificate.id); });
+    actions.append(toggle, edit, remove);
+    row.append(details, actions);
+    list.append(row);
+  });
+}
+
+async function setTlsSettingsFromInputs() {
+  ensureSettings();
+  const previousSettings = cloneWorkspaceSettings();
+  workspace.settings.request.sslCertificateVerification = $('sslCertificateVerificationInput')?.checked !== false;
+  workspace.settings.request.caCertificatePath = $('caCertificatePathInput')?.value.trim() || '';
+  await saveWorkspaceSettingsWithRollback(
+    previousSettings,
+    'Certificate settings updated.',
+    'Certificate setting save failed',
+    'Certificate Settings Save Failed'
+  );
+}
+
+async function chooseWorkspaceCaCertificate() {
+  const selection = await chooseCertificateFile('Choose CA PEM file', '.pem,.crt,.cer');
+  if (!selection?.path) {
+    return;
+  }
+  $('caCertificatePathInput').value = selection.path;
+  await setTlsSettingsFromInputs();
+}
+
+async function clearWorkspaceCaCertificate() {
+  if ($('caCertificatePathInput')) {
+    $('caCertificatePathInput').value = '';
+  }
+  await setTlsSettingsFromInputs();
+}
+
+async function addClientCertificateFromPrompt() {
+  await upsertClientCertificateFromModal(null);
+}
+
+async function editClientCertificateFromPrompt(certificateId) {
+  const existing = workspace.settings?.request?.clientCertificates?.find((item) => item.id === certificateId) || null;
+  if (!existing) {
+    return;
+  }
+  await upsertClientCertificateFromModal(existing);
+}
+
+async function upsertClientCertificateFromModal(existing = null) {
+  ensureSettings();
+  const now = new Date().toISOString();
+  const certificateId = existing?.id || (crypto.randomUUID ? crypto.randomUUID() : `client-certificate-${Date.now()}`);
+  const values = await promptClientCertificateModal(existing, certificateId);
+  if (!values) {
+    return;
+  }
+  const previousSettings = cloneWorkspaceSettings();
+  const previousSecretKey = existing?.passphraseSecretKey || '';
+  let passphraseSecretKey = previousSecretKey;
+  let plainPassphrase = existing?.passphrase || '';
+  if (values.passphrase) {
+    passphraseSecretKey = await bindClientCertificatePassphrase(certificateId, values.passphrase);
+    plainPassphrase = passphraseSecretKey ? '' : values.passphrase;
+  }
+  const certificate = {
+    id: certificateId,
+    name: values.name || 'Client Certificate',
+    enabled: values.enabled !== false,
+    host: values.host,
+    port: values.port,
+    matches: [],
+    certPath: values.certPath,
+    keyPath: values.keyPath,
+    pfxPath: values.pfxPath,
+    caPath: existing?.caPath || '',
+    passphrase: plainPassphrase,
+    passphraseSecretKey,
+    createdAt: existing?.createdAt || now,
+    updatedAt: now
+  };
+  workspace.settings.request.clientCertificates = [
+    ...workspace.settings.request.clientCertificates.filter((item) => item.id !== certificate.id),
+    certificate
+  ];
+  const saved = await saveWorkspaceSettingsWithRollback(
+    previousSettings,
+    existing ? 'Client certificate updated.' : 'Client certificate added.',
+    'Client certificate save failed',
+    'Client Certificate Save Failed'
+  );
+  if (!saved && passphraseSecretKey && passphraseSecretKey !== previousSecretKey) {
+    await unsetClientCertificatePassphraseSecret(passphraseSecretKey);
+  }
+  if (saved && previousSecretKey && previousSecretKey !== passphraseSecretKey) {
+    await unsetClientCertificatePassphraseSecret(previousSecretKey);
+  }
+}
+
+async function promptClientCertificateModal(existing = null, certificateId = '') {
+  configureClientCertificateModal(existing, certificateId);
+  const result = await showModal('clientCertificateModal', null);
+  resetClientCertificateModal();
+  return result && typeof result === 'object' ? result : null;
+}
+
+function configureClientCertificateModal(existing = null, certificateId = '') {
+  $('clientCertificateModalTitle').textContent = existing ? 'Edit client certificate' : 'Add client certificate';
+  $('clientCertificateModalMessage').textContent = existing
+    ? 'Update the host match and local certificate files for this client certificate.'
+    : 'Configure the host match and local certificate files for HTTPS client authentication.';
+  $('clientCertificateNameInput').value = existing?.name || 'Client Certificate';
+  $('clientCertificateHostInput').value = existing?.host || existing?.matches?.[0] || '';
+  $('clientCertificatePortInput').value = existing?.port || '';
+  $('clientCertificateFormatSelect').value = existing?.pfxPath ? 'pfx' : 'pem';
+  $('clientCertificateCertPathInput').value = existing?.certPath || '';
+  $('clientCertificateKeyPathInput').value = existing?.keyPath || '';
+  $('clientCertificatePfxPathInput').value = existing?.pfxPath || '';
+  $('clientCertificatePassphraseInput').value = '';
+  $('clientCertificatePassphraseInput').placeholder = existing ? 'Leave blank to keep current passphrase' : 'Optional';
+  setClientCertificatePassphraseVisible(false);
+  $('clientCertificateEnabledInput').checked = existing?.enabled !== false;
+  $('clientCertificateModal').dataset.certificateId = certificateId || '';
+  renderClientCertificateModalError('');
+  updateClientCertificateModalFormat();
+}
+
+function resetClientCertificateModal() {
+  for (const id of [
+    'clientCertificateNameInput',
+    'clientCertificateHostInput',
+    'clientCertificatePortInput',
+    'clientCertificateCertPathInput',
+    'clientCertificateKeyPathInput',
+    'clientCertificatePfxPathInput',
+    'clientCertificatePassphraseInput'
+  ]) {
+    if ($(id)) {
+      $(id).value = '';
+    }
+  }
+  setClientCertificatePassphraseVisible(false);
+  renderClientCertificateModalError('');
+}
+
+function updateClientCertificateModalFormat() {
+  const usePfx = $('clientCertificateFormatSelect')?.value === 'pfx';
+  for (const element of document.querySelectorAll('.client-certificate-pem-field')) {
+    element.hidden = usePfx;
+  }
+  for (const element of document.querySelectorAll('.client-certificate-pfx-field')) {
+    element.hidden = !usePfx;
+  }
+}
+
+async function chooseClientCertificatePath(kind) {
+  const configs = {
+    cert: {
+      accept: '.crt,.cer,.pem',
+      inputId: 'clientCertificateCertPathInput',
+      title: 'Choose CRT file'
+    },
+    key: {
+      accept: '.key,.pem',
+      inputId: 'clientCertificateKeyPathInput',
+      title: 'Choose KEY file'
+    },
+    pfx: {
+      accept: '.pfx,.p12',
+      inputId: 'clientCertificatePfxPathInput',
+      title: 'Choose PFX/P12 file'
+    }
+  };
+  const config = configs[kind];
+  if (!config) {
+    return;
+  }
+  const selection = await chooseCertificateFile(config.title, config.accept);
+  if (!selection?.path) {
+    return;
+  }
+  const input = $(config.inputId);
+  if (input) {
+    input.value = selection.path;
+    input.focus?.();
+  }
+  renderClientCertificateModalError('');
+}
+
+function toggleClientCertificatePassphraseVisibility() {
+  const input = $('clientCertificatePassphraseInput');
+  setClientCertificatePassphraseVisible(input?.type === 'password');
+}
+
+function setClientCertificatePassphraseVisible(visible) {
+  const input = $('clientCertificatePassphraseInput');
+  const button = $('toggleClientCertificatePassphraseButton');
+  if (input) {
+    input.type = visible ? 'text' : 'password';
+  }
+  if (button) {
+    button.textContent = visible ? 'Hide' : 'Show';
+    button.setAttribute('aria-pressed', visible ? 'true' : 'false');
+    button.setAttribute('aria-label', `${visible ? 'Hide' : 'Show'} client certificate passphrase`);
+  }
+}
+
+function confirmClientCertificateModal() {
+  const values = collectClientCertificateModalValues();
+  if (!values.ok) {
+    renderClientCertificateModalError(values.error);
+    return;
+  }
+  resolveActiveModal(values.certificate);
+}
+
+function collectClientCertificateModalValues() {
+  const format = $('clientCertificateFormatSelect')?.value === 'pfx' ? 'pfx' : 'pem';
+  const name = String($('clientCertificateNameInput')?.value || '').trim() || 'Client Certificate';
+  const host = String($('clientCertificateHostInput')?.value || '').trim();
+  const port = String($('clientCertificatePortInput')?.value || '').trim();
+  const certPath = format === 'pem' ? String($('clientCertificateCertPathInput')?.value || '').trim() : '';
+  const keyPath = format === 'pem' ? String($('clientCertificateKeyPathInput')?.value || '').trim() : '';
+  const pfxPath = format === 'pfx' ? String($('clientCertificatePfxPathInput')?.value || '').trim() : '';
+  if (!host) {
+    return { ok: false, error: 'Host is required.' };
+  }
+  if (port && (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535)) {
+    return { ok: false, error: 'Port must be between 1 and 65535.' };
+  }
+  if (format === 'pem' && (!certPath || !keyPath)) {
+    return { ok: false, error: 'PEM certificate and key files are required.' };
+  }
+  if (format === 'pfx' && !pfxPath) {
+    return { ok: false, error: 'PFX/P12 file is required.' };
+  }
+  return {
+    ok: true,
+    certificate: {
+      name,
+      enabled: $('clientCertificateEnabledInput')?.checked !== false,
+      host,
+      port,
+      certPath,
+      keyPath,
+      pfxPath,
+      passphrase: String($('clientCertificatePassphraseInput')?.value || '')
+    }
+  };
+}
+
+function renderClientCertificateModalError(message) {
+  const error = $('clientCertificateModalError');
+  if (!error) {
+    return;
+  }
+  error.textContent = String(message || '');
+  error.hidden = !message;
+}
+
+async function chooseCertificateFile(title, accept) {
+  return showLocalFilePicker({
+    accept,
+    dropDetail: 'or choose a certificate file from this computer.',
+    dropTitle: 'Drop certificate file here',
+    kind: 'certificate',
+    message: 'Choose a local certificate file path.',
+    title
+  });
+}
+
+async function bindClientCertificatePassphrase(certificateId, passphrase) {
+  const suffix = crypto.randomUUID ? crypto.randomUUID() : Date.now();
+  const key = `client-certificate:${certificateId}:passphrase:${suffix}`;
+  if (window.postmeter?.vault?.bindSecret) {
+    try {
+      await window.postmeter.vault.bindSecret(key, passphrase);
+      return key;
+    } catch {
+      return '';
+    }
+  }
+  return '';
+}
+
+async function unsetClientCertificatePassphraseSecret(secretKey) {
+  if (secretKey && window.postmeter?.vault?.unsetSecret) {
+    await window.postmeter.vault.unsetSecret(secretKey).catch(() => {});
+  }
+}
+
+async function toggleClientCertificate(certificateId) {
+  ensureSettings();
+  const previousSettings = cloneWorkspaceSettings();
+  const certificate = workspace.settings.request.clientCertificates.find((item) => item.id === certificateId);
+  if (!certificate) {
+    return;
+  }
+  certificate.enabled = certificate.enabled === false;
+  certificate.updatedAt = new Date().toISOString();
+  await saveWorkspaceSettingsWithRollback(
+    previousSettings,
+    `Client certificate ${certificate.enabled ? 'enabled' : 'disabled'}.`,
+    'Client certificate update failed',
+    'Client Certificate Save Failed'
+  );
+}
+
+async function removeClientCertificate(certificateId) {
+  ensureSettings();
+  const certificate = workspace.settings.request.clientCertificates.find((item) => item.id === certificateId);
+  if (!certificate) {
+    return;
+  }
+  if (!(await confirmActionModal({
+    title: 'Remove client certificate?',
+    message: `Remove "${certificate.name || 'Client Certificate'}"?`,
+    confirmLabel: 'Remove Certificate',
+    danger: true
+  }))) {
+    return;
+  }
+  const previousSettings = cloneWorkspaceSettings();
+  workspace.settings.request.clientCertificates = workspace.settings.request.clientCertificates.filter((item) => item.id !== certificateId);
+  const saved = await saveWorkspaceSettingsWithRollback(
+    previousSettings,
+    'Client certificate removed.',
+    'Client certificate removal failed',
+    'Client Certificate Save Failed'
+  );
+  if (saved) {
+    await unsetClientCertificatePassphraseSecret(certificate.passphraseSecretKey);
+  }
 }
 
 async function setDiagnosticsSettingsFromInputs() {
@@ -6967,7 +7522,7 @@ function capturePolicyGuardrailState(prefix, policy) {
     scriptLogsForcedOff: highVolume,
     localVariablesForcedOff: highVolume,
     responseHeadersForcedOff: veryHighVolume && !(kind === 'performance' && context.diagnostic === true),
-    transportTimingsForcedOff: veryHighVolume && !(kind === 'performance' && context.diagnostic === true),
+    transportTimingsForcedOff: veryHighVolume && kind !== 'performance',
     responseBodyLimitedModes: veryHighVolume ? ['all', 'sampled'] : highVolume ? ['all'] : [],
     bodyPreviewCap: veryHighVolume ? 2048 : highVolume ? 4096 : 32768
   };
@@ -8525,6 +9080,7 @@ function renderPerformanceExecutionDetails(result = lastPerformanceResult) {
   if (sample.error) {
     details.append(runnerDetailTextBlock('Error', sample.error, 'runner-detail-error'));
   }
+  appendRunnerTransportDetails(details, sample);
   appendRunnerScriptResultDetails(details, 'Pre-request', sample.preRequestScriptResult);
   appendRunnerScriptResultDetails(details, 'Post-request', sample.testScriptResult);
   appendRunnerVariableDetails(details, 'Request variables', sample.localVariables || []);
@@ -8559,6 +9115,7 @@ function renderStoredPerformanceExecutionDetails(result = lastPerformanceResult)
       if (sample.error) {
         details.append(runnerDetailTextBlock('Error', sample.error, 'runner-detail-error'));
       }
+      appendRunnerTransportDetails(details, sample);
       appendRunnerScriptResultDetails(details, 'Pre-request', sample.preRequestScriptResult);
       appendRunnerScriptResultDetails(details, 'Post-request', sample.testScriptResult);
       appendRunnerVariableDetails(details, 'Request variables', sample.localVariables || []);
@@ -11490,6 +12047,7 @@ function renderRequestEditor() {
     renderRequestHeaderControls(null);
     $('requestCookieJarEnabledInput').checked = false;
     $('requestCookieJarStoreInput').checked = true;
+    renderRequestTlsSettings(null);
     $('addRequestVariableButton').disabled = true;
     renderAuthEditor({ type: 'none' });
     updateRequestEditorLanguages();
@@ -11521,6 +12079,7 @@ function renderRequestEditor() {
   renderHeaderPairs('headersTable', request);
   renderRequestVariablePairs(request.variables || []);
   renderCookieJarEditor();
+  renderRequestTlsSettings(request);
   renderAuthEditor(request.auth || { type: 'none' });
   updateRequestEditorLanguages();
   refreshVariableHighlights($('requestEditorPanel'));
@@ -11729,6 +12288,19 @@ function renderRequestHeaderControls(request) {
     showInputId: 'showGeneratedHeadersInput',
     labelId: 'showGeneratedHeadersLabel'
   });
+}
+
+function renderRequestTlsSettings(request) {
+  const settings = request ? normalizeRendererRequestTlsSettings(request.settings) : normalizeRendererRequestTlsSettings();
+  const verification = $('requestSslCertificateVerificationInput');
+  if (verification) {
+    const workspaceVerification = workspace.settings?.request?.sslCertificateVerification !== false;
+    verification.checked = settings.sslCertificateVerification === 'inherit'
+      ? workspaceVerification
+      : settings.sslCertificateVerification === 'enabled';
+    verification.dataset.verificationValue = settings.sslCertificateVerification;
+    verification.disabled = !request;
+  }
 }
 
 function renderPerformanceRequestHeaderControls(request) {
@@ -12265,12 +12837,23 @@ function displayResponse(response) {
   $('finalUrl').textContent = response.finalUrl;
   $('responseHeaders').value = formatResponseHeaders(response);
   $('responseCookies').value = formatResponseCookies(response);
+  if ($('responseNetwork')) {
+    $('responseNetwork').value = formatResponseNetwork(response);
+  }
   $('responseBody').value = PostMeterResponseFormatting.formatBody(response);
   CodeEditor.setLanguage?.($('responseHeaders'), 'headers');
   CodeEditor.setLanguage?.($('responseCookies'), 'headers');
+  CodeEditor.setLanguage?.($('responseNetwork'), 'text');
   CodeEditor.setLanguage?.($('responseBody'), responseBodyCodeLanguage(response, $('responseBody').value));
   displayTestResults(response);
   displayVisualizer(response.testScriptResult?.visualizer);
+}
+
+function refreshResponseEditors({ body, bodyLanguage = 'text', cookies, headers, network } = {}) {
+  CodeEditor.setLanguage?.(headers || $('responseHeaders'), 'headers');
+  CodeEditor.setLanguage?.(cookies || $('responseCookies'), 'headers');
+  CodeEditor.setLanguage?.(network || $('responseNetwork'), 'text');
+  CodeEditor.setLanguage?.(body || $('responseBody'), bodyLanguage);
 }
 
 function formatResponseHeaders(response) {
@@ -12284,6 +12867,63 @@ function formatResponseCookies(response) {
     .filter(([key]) => key.toLowerCase() === 'set-cookie')
     .flatMap(([, values]) => normalizeResponseHeaderValues(values))
     .join('\n');
+}
+
+function formatResponseNetwork(response) {
+  const lines = [];
+  if (response?.finalUrl) {
+    lines.push(`Final URL: ${response.finalUrl}`);
+  }
+  if (Number.isFinite(Number(response?.durationMillis))) {
+    lines.push(`Total duration: ${Number(response.durationMillis)} ms`);
+  }
+  const timings = response?.timings || {};
+  const timingRows = [
+    ['DNS lookup', timings.dnsLookupMillis],
+    ['TCP connect', timings.tcpConnectMillis],
+    ['TLS handshake', timings.tlsHandshakeMillis],
+    ['Upload', timings.uploadMillis],
+    ['Time to first byte', timings.timeToFirstByteMillis],
+    ['Download', timings.downloadMillis],
+    ['Redirects', timings.redirectCount]
+  ];
+  for (const [label, value] of timingRows) {
+    if (Number.isFinite(Number(value))) {
+      lines.push(`${label}: ${Number(value)}${label === 'Redirects' ? '' : ' ms'}`);
+    }
+  }
+  const tlsInfo = response?.tls || timings.tls || {};
+  if (Object.keys(tlsInfo).length) {
+    lines.push('');
+    lines.push('TLS');
+    lines.push(`Authorized: ${tlsInfo.authorized === true ? 'yes' : tlsInfo.authorized === false ? 'no' : 'not captured'}`);
+    if (tlsInfo.authorizationError) {
+      lines.push(`Authorization error: ${tlsInfo.authorizationError}`);
+    }
+    if (tlsInfo.verificationDisabled === true) {
+      lines.push('Verification: disabled by settings');
+    }
+    if (tlsInfo.caCertificateConfigured === true) {
+      lines.push('Custom CA: configured');
+    }
+    if (tlsInfo.clientCertificateConfigured === true) {
+      lines.push(`Client certificate: ${tlsInfo.clientCertificateName || tlsInfo.clientCertificateId || 'configured'}`);
+    }
+    if (tlsInfo.protocol) {
+      lines.push(`Protocol: ${tlsInfo.protocol}`);
+    }
+    if (tlsInfo.cipher?.name) {
+      lines.push(`Cipher: ${tlsInfo.cipher.name}`);
+    }
+    if (tlsInfo.certificate) {
+      lines.push(`Subject: ${tlsInfo.certificate.subject || ''}`);
+      lines.push(`Issuer: ${tlsInfo.certificate.issuer || ''}`);
+      lines.push(`Valid from: ${tlsInfo.certificate.validFrom || ''}`);
+      lines.push(`Valid to: ${tlsInfo.certificate.validTo || ''}`);
+      lines.push(`Fingerprint SHA-256: ${tlsInfo.certificate.fingerprint256 || ''}`);
+    }
+  }
+  return lines.filter((line) => line != null).join('\n') || 'No network diagnostics captured.';
 }
 
 function normalizeResponseHeaderValues(values) {
@@ -12765,6 +13405,7 @@ function renderStoredRunnerExecutionDetails(result = lastRunnerResult) {
       if (item.error) {
         details.append(runnerDetailTextBlock('Error', item.error, 'runner-detail-error'));
       }
+      appendRunnerTransportDetails(details, item);
       appendRunnerScriptResultDetails(details, 'Pre-request', item.preRequestScriptResult);
       appendRunnerScriptResultDetails(details, 'Post-request', item.testScriptResult);
       appendRunnerVariableDetails(details, 'Request variables', item.localVariables || []);
@@ -13126,6 +13767,7 @@ function renderRunnerExecutionDetails(result = lastRunnerResult) {
   if (item.error) {
     details.append(runnerDetailTextBlock('Error', item.error, 'runner-detail-error'));
   }
+  appendRunnerTransportDetails(details, item);
   appendRunnerScriptResultDetails(details, 'Pre-request', item.preRequestScriptResult);
   appendRunnerScriptResultDetails(details, 'Post-request', item.testScriptResult);
   appendRunnerVariableDetails(details, 'Request variables', item.localVariables || []);
@@ -13218,6 +13860,19 @@ function appendRunnerResponseBodyDetails(details, item = {}) {
     block.append(content);
   }
   details.append(block);
+}
+
+function appendRunnerTransportDetails(details, item = {}) {
+  const text = formatResponseNetwork({
+    durationMillis: item.durationMillis,
+    finalUrl: item.finalUrl || item.requestUrl || '',
+    timings: item.timings || {},
+    tls: item.tls || item.timings?.tls || {}
+  });
+  if (!text || text === 'No network diagnostics captured.') {
+    return;
+  }
+  details.append(runnerDetailTextBlock('Network', text));
 }
 
 function formatRunnerDetailResponseBody(body) {
@@ -14770,7 +15425,8 @@ function newRequestObject(name) {
     variables: [],
     docs: '',
     cookieJar: { enabled: false, storeResponses: true },
-    autoHeaders: { sendPostMeterToken: false, showGeneratedHeaders: false }
+    autoHeaders: { sendPostMeterToken: false, showGeneratedHeaders: false },
+    settings: { sslCertificateVerification: 'inherit' }
   };
 }
 
@@ -15253,6 +15909,29 @@ function collectRequestFromEditor() {
     sendPostMeterToken: $('sendPostMeterTokenInput')?.checked === true,
     showGeneratedHeaders: $('showGeneratedHeadersInput')?.checked === true
   };
+  request.settings = requestTlsSettingsFromInputs(request.settings);
+}
+
+function setActiveRequestTlsSettingsFromInputs() {
+  const request = activeRequest();
+  if (!request) {
+    return;
+  }
+  const input = $('requestSslCertificateVerificationInput');
+  request.settings = {
+    sslCertificateVerification: input?.checked === true ? 'enabled' : 'disabled'
+  };
+  if (input) {
+    input.dataset.verificationValue = request.settings.sslCertificateVerification;
+  }
+  markActiveRequestDirty();
+}
+
+function requestTlsSettingsFromInputs(existingSettings = {}) {
+  const input = $('requestSslCertificateVerificationInput');
+  const fallback = normalizeRendererRequestTlsSettings(existingSettings).sslCertificateVerification;
+  const value = normalizeRendererRequestSslVerification(input?.dataset?.verificationValue || fallback);
+  return { sslCertificateVerification: value };
 }
 
 function collectCollectionAndMarkDirty(options = {}) {

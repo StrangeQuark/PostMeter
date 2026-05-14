@@ -145,6 +145,10 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(indexSource, /src="markdownRenderer\.js"/);
   assert.match(indexSource, /id="docsPreview"[^>]+markdown-renderer/);
   assert.match(indexSource, /id="collectionDescriptionPreview"[^>]+markdown-renderer/);
+  assert.match(indexSource, /id="requestSettingsTab"[\s\S]*id="requestSslCertificateVerificationInput"/);
+  assert.doesNotMatch(indexSource, /id="requestCaCertificatePathInput"/);
+  assert.match(rendererSource, /request:\s*\[[^\]]*'requestSettingsTab'[^\]]*\]/);
+  assert.match(rendererSource, /results:\s*\[[^\]]*'responseNetworkTab'[^\]]*\]/);
   assert.match(indexSource, /id="saveOnForceCloseInput"/);
   assert.match(indexSource, /id="closeModalsOnBackdropClickInput"/);
   assert.match(indexSource, /id="includePrereleasesInput"/);
@@ -310,6 +314,35 @@ test('renderer bootstrap binds auth input and modal draft confirmation events', 
     'runner-1',
     '{"collectionId":"collection-2","folderId":"folder-1"}',
     { type: 'request', collectionId: 'collection-1', requestId: 'request-1' }
+  ]);
+});
+
+test('renderer bootstrap binds request-local TLS setting controls', () => {
+  const calls = [];
+  const elements = new Map([
+    ['requestSslCertificateVerificationInput', createElement({ tagName: 'INPUT' })],
+    ['contextMenu', createElement()],
+    ['modalBackdrop', createElement()]
+  ]);
+
+  bindUi({
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} },
+    onRequestTlsSettingsChange: () => calls.push('request-tls')
+  });
+
+  elements.get('requestSslCertificateVerificationInput').dispatch('change');
+
+  assert.deepEqual(calls, [
+    'request-tls'
   ]);
 });
 
@@ -487,6 +520,7 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
     'modals',
     'updates',
     'scripts',
+    'certificates',
     'vault',
     'packages',
     'files',
@@ -513,6 +547,19 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
     ['saveOnForceCloseInput', createElement({ tagName: 'INPUT' })],
     ['closeModalsOnBackdropClickInput', createElement({ tagName: 'INPUT' })],
     ['includePrereleasesInput', createElement({ tagName: 'INPUT' })],
+    ['sslCertificateVerificationInput', createElement({ tagName: 'INPUT' })],
+    ['caCertificatePathInput', createElement({ tagName: 'INPUT' })],
+    ['chooseCaCertificateButton', createElement()],
+    ['clearCaCertificateButton', createElement()],
+    ['addClientCertificateButton', createElement()],
+    ['closeClientCertificateModalButton', createElement()],
+    ['cancelClientCertificateModalButton', createElement()],
+    ['saveClientCertificateModalButton', createElement()],
+    ['chooseClientCertificateCertPathButton', createElement()],
+    ['chooseClientCertificateKeyPathButton', createElement()],
+    ['chooseClientCertificatePfxPathButton', createElement()],
+    ['toggleClientCertificatePassphraseButton', createElement()],
+    ['clientCertificateFormatSelect', createElement({ tagName: 'SELECT' })],
     ['trustedScriptSendRequestInput', createElement({ tagName: 'INPUT' })],
     ['trustedScriptCookiesInput', createElement({ tagName: 'INPUT' })],
     ['trustedScriptVaultInput', createElement({ tagName: 'INPUT' })],
@@ -548,6 +595,16 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
     onSaveOnForceCloseChange: () => calls.push('save-on-force-close'),
     onCloseModalsOnBackdropClickChange: () => calls.push('close-modals-on-backdrop'),
     onIncludePrereleasesChange: () => calls.push('include-prereleases'),
+    onTlsSettingsChange: () => calls.push('tls-settings'),
+    onChooseCaCertificate: () => calls.push('choose-ca'),
+    onClearCaCertificate: () => calls.push('clear-ca'),
+    onAddClientCertificate: () => calls.push('add-client-cert'),
+    onConfirmClientCertificateModal: () => calls.push('confirm-client-cert'),
+    onChooseClientCertificateCertPath: () => calls.push('choose-client-cert-crt'),
+    onChooseClientCertificateKeyPath: () => calls.push('choose-client-cert-key'),
+    onChooseClientCertificatePfxPath: () => calls.push('choose-client-cert-pfx'),
+    onClientCertificateFormatChange: () => calls.push('client-cert-format'),
+    onToggleClientCertificatePassphraseVisibility: () => calls.push('toggle-client-cert-passphrase'),
     onTrustedScriptCapabilityChange: () => calls.push('script-capability'),
     onResolveActiveModal: (value) => calls.push(`resolve:${value}`)
   });
@@ -565,10 +622,23 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
   elements.get('saveOnForceCloseInput').dispatch('change');
   settingsButtons.find((button) => button.dataset.settingsSection === 'modals').dispatch('click');
   elements.get('closeModalsOnBackdropClickInput').dispatch('change');
-  for (const section of ['updates', 'scripts', 'vault', 'packages', 'files', 'diagnostics', 'appearance']) {
+  for (const section of ['updates', 'scripts', 'certificates', 'vault', 'packages', 'files', 'diagnostics', 'appearance']) {
     settingsButtons.find((button) => button.dataset.settingsSection === section).dispatch('click');
   }
   elements.get('includePrereleasesInput').dispatch('change');
+  elements.get('sslCertificateVerificationInput').dispatch('change');
+  elements.get('caCertificatePathInput').dispatch('change');
+  elements.get('chooseCaCertificateButton').dispatch('click');
+  elements.get('clearCaCertificateButton').dispatch('click');
+  elements.get('addClientCertificateButton').dispatch('click');
+  elements.get('clientCertificateFormatSelect').dispatch('change');
+  elements.get('chooseClientCertificateCertPathButton').dispatch('click');
+  elements.get('chooseClientCertificateKeyPathButton').dispatch('click');
+  elements.get('chooseClientCertificatePfxPathButton').dispatch('click');
+  elements.get('toggleClientCertificatePassphraseButton').dispatch('click');
+  elements.get('saveClientCertificateModalButton').dispatch('click');
+  elements.get('cancelClientCertificateModalButton').dispatch('click');
+  elements.get('closeClientCertificateModalButton').dispatch('click');
   elements.get('trustedScriptSendRequestInput').dispatch('change');
   elements.get('trustedScriptCookiesInput').dispatch('change');
   elements.get('trustedScriptVaultInput').dispatch('change');
@@ -591,12 +661,26 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
     'close-modals-on-backdrop',
     'section:updates',
     'section:scripts',
+    'section:certificates',
     'section:vault',
     'section:packages',
     'section:files',
     'section:diagnostics',
     'section:appearance',
     'include-prereleases',
+    'tls-settings',
+    'tls-settings',
+    'choose-ca',
+    'clear-ca',
+    'add-client-cert',
+    'client-cert-format',
+    'choose-client-cert-crt',
+    'choose-client-cert-key',
+    'choose-client-cert-pfx',
+    'toggle-client-cert-passphrase',
+    'confirm-client-cert',
+    'resolve:null',
+    'resolve:null',
     'script-capability',
     'script-capability',
     'script-capability',
@@ -1389,6 +1473,47 @@ test('renderer clears and scopes vault metadata to the active workspace context'
   assert.match(rendererSource, /if \(\(activeWorkspaceId \|\| ''\) !== metadataWorkspaceId\) \{\s*return;\s*\}/);
   assert.match(rendererSource, /lastVaultMetadataWorkspaceId = metadataWorkspaceId/);
   assert.match(rendererSource, /lastVaultMetadataWorkspaceId !== \(activeWorkspaceId \|\| ''\)/);
+});
+
+test('renderer commits client-certificate passphrase secret changes only after settings saves', () => {
+  const rendererSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/renderer.js'), 'utf8');
+  assert.match(rendererSource, /const certificateId = existing\?\.id \|\| \(crypto\.randomUUID/);
+  assert.match(rendererSource, /let plainPassphrase = existing\?\.passphrase \|\| ''/);
+  assert.match(rendererSource, /passphraseSecretKey = await bindClientCertificatePassphrase\(certificateId, values\.passphrase\)/);
+  assert.match(rendererSource, /if \(!saved && passphraseSecretKey && passphraseSecretKey !== previousSecretKey\) \{\s*await unsetClientCertificatePassphraseSecret\(passphraseSecretKey\);/);
+  assert.match(rendererSource, /if \(saved && previousSecretKey && previousSecretKey !== passphraseSecretKey\) \{\s*await unsetClientCertificatePassphraseSecret\(previousSecretKey\);/);
+
+  const removeStart = rendererSource.indexOf('async function removeClientCertificate');
+  const removeSource = rendererSource.slice(removeStart, rendererSource.indexOf('async function setDiagnosticsSettingsFromInputs', removeStart));
+  assert.ok(removeSource.indexOf('const saved = await saveWorkspaceSettingsWithRollback') >= 0);
+  assert.ok(
+    removeSource.indexOf('const saved = await saveWorkspaceSettingsWithRollback') < removeSource.indexOf('await unsetClientCertificatePassphraseSecret(certificate.passphraseSecretKey)'),
+    'certificate removal should unset the vault secret only after the settings save succeeds'
+  );
+});
+
+test('renderer treats canceled certificate file pickers as cancellation', () => {
+  const rendererSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/renderer.js'), 'utf8');
+  const workspaceStart = rendererSource.indexOf('async function chooseWorkspaceCaCertificate');
+  const workspaceSource = rendererSource.slice(workspaceStart, rendererSource.indexOf('async function clearWorkspaceCaCertificate', workspaceStart));
+
+  assert.match(workspaceSource, /if \(!selection\?\.path\) \{\s*return;\s*\}/);
+  assert.doesNotMatch(workspaceSource, /promptTextInput/);
+  assert.doesNotMatch(rendererSource, /chooseActiveRequestCaCertificate/);
+  assert.doesNotMatch(rendererSource, /requestCaCertificatePathInput/);
+});
+
+test('renderer exposes Network response diagnostics for TLS results', () => {
+  const rendererSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/renderer.js'), 'utf8');
+  const workflowSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/rendererWorkflows.js'), 'utf8');
+  const indexHtml = fs.readFileSync(path.join(__dirname, '../../src/renderer/index.html'), 'utf8');
+
+  assert.match(indexHtml, /id="resultsNetworkTabButton"[\s\S]*aria-controls="responseNetworkTab"/);
+  assert.match(indexHtml, /id="responseNetwork"[^>]*aria-label="Network and TLS diagnostics"/);
+  assert.match(rendererSource, /\$\('responseNetwork'\)\.value = formatResponseNetwork\(response\)/);
+  assert.match(rendererSource, /function formatResponseNetwork\(response\)/);
+  assert.match(rendererSource, /appendRunnerTransportDetails\(details, item\)/);
+  assert.match(workflowSource, /\$\('responseNetwork'\)|element\('responseNetwork'\)/);
 });
 
 test('renderer supplies explicit collection export format handlers', () => {

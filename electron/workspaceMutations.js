@@ -505,7 +505,8 @@ function mergeWorkspaceSettingsForSave(currentSettings, nextSettings) {
     editor: mergeObject(current.editor, next.editor),
     tabs: mergeObject(current.tabs, next.tabs),
     modals: mergeObject(current.modals, next.modals),
-    updates: mergeObject(current.updates, next.updates)
+    updates: mergeObject(current.updates, next.updates),
+    request: mergeObject(current.request, next.request)
   };
 }
 

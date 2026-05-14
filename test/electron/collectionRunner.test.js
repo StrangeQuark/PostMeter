@@ -86,6 +86,51 @@ test('passes cookie jar through collection runs and returns updated cookies', as
   assert.equal(result.cookies[0].value, 'updated');
 });
 
+test('captures TLS policy diagnostics in collection runner transport details', async () => {
+  const collection = collectionModel({
+    name: 'TLS Diagnostics',
+    requests: [requestModel({
+      id: 'tls-request',
+      name: 'TLS Request',
+      method: 'GET',
+      url: 'https://api.example.test/tls'
+    })]
+  });
+  const observed = [];
+
+  const result = await runCollection(collection, null, {
+    includeTransportDiagnostics: true,
+    sendRequest: async (_request, _environment, options) => {
+      observed.push(options.collectTimings === true);
+      return {
+        ...response(200, '{}'),
+        headers: { 'content-type': ['application/json'], 'x-trace': ['yes'] },
+        timings: {
+          tlsHandshakeMillis: 12,
+          tls: {
+            protocol: 'TLSv1.3'
+          }
+        },
+        tls: {
+          protocol: 'TLSv1.3',
+          verificationDisabled: true,
+          caCertificateConfigured: true,
+          clientCertificateConfigured: true,
+          clientCertificateId: 'managed-cert'
+        }
+      };
+    }
+  });
+
+  assert.deepEqual(observed, [true]);
+  assert.equal(result.results[0].finalUrl, 'https://api.example.test');
+  assert.equal(result.results[0].responseHeaders['x-trace'][0], 'yes');
+  assert.equal(result.results[0].tls.verificationDisabled, true);
+  assert.equal(result.results[0].tls.clientCertificateId, 'managed-cert');
+  assert.equal(result.results[0].timings.tls.verificationDisabled, true);
+  assert.equal(result.results[0].timings.tls.protocol, 'TLSv1.3');
+});
+
 test('carries refreshed OAuth auth forward during collection runs', async () => {
   const oauthRequest = requestModel({
     id: 'oauth-request',

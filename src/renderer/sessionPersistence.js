@@ -3,8 +3,8 @@
   const DEFAULT_RESULTS_TAB = 'response';
   const SIDEBAR_PANELS = new Set(['collections', 'environments', 'workspaces', 'runners', 'performance', 'history']);
   const MAIN_PANELS = new Set(['request', 'environment', 'workspace', 'runner', 'performance']);
-  const REQUEST_TABS = new Set(['params', 'headers', 'auth', 'cookies', 'body', 'scripts', 'collectionVariables', 'docs']);
-  const RESULTS_TABS = new Set(['response', 'responseHeaders', 'responseCookies', 'testResults', 'visualizer']);
+  const REQUEST_TABS = new Set(['params', 'headers', 'auth', 'cookies', 'body', 'scripts', 'collectionVariables', 'requestSettings', 'docs']);
+  const RESULTS_TABS = new Set(['response', 'responseHeaders', 'responseCookies', 'responseNetwork', 'testResults', 'visualizer']);
 
   function buildRendererSession(options = {}) {
     const state = options.state || {};

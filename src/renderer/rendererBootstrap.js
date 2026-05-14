@@ -271,6 +271,7 @@
     bindChange(doc, 'requestCookieJarEnabledInput', options.onRequestCookieJarChange);
     bindChange(doc, 'requestCookieJarStoreInput', options.onRequestCookieJarChange);
     bindChange(doc, 'filterCookiesToRequestHostInput', options.onFilterCookiesChange);
+    bindChange(doc, 'requestSslCertificateVerificationInput', options.onRequestTlsSettingsChange);
     bindChange(doc, 'trustedScriptSendRequestInput', options.onTrustedScriptCapabilityChange);
     bindChange(doc, 'trustedScriptCookiesInput', options.onTrustedScriptCapabilityChange);
     bindChange(doc, 'trustedScriptVaultInput', options.onTrustedScriptCapabilityChange);
@@ -285,6 +286,11 @@
     bindChange(doc, 'editorFontSelect', options.onEditorTypographyChange);
     bindChange(doc, 'editorFontSizeInput', options.onEditorTypographyChange);
     bindClick(doc, 'resetEditorTypographyButton', options.onResetEditorTypography);
+    bindChange(doc, 'sslCertificateVerificationInput', options.onTlsSettingsChange);
+    bindChange(doc, 'caCertificatePathInput', options.onTlsSettingsChange);
+    bindClick(doc, 'chooseCaCertificateButton', options.onChooseCaCertificate);
+    bindClick(doc, 'clearCaCertificateButton', options.onClearCaCertificate);
+    bindClick(doc, 'addClientCertificateButton', options.onAddClientCertificate);
     for (const id of [
       'diagnosticLoggingEnabledInput',
       'diagnosticLogLevelSelect',
@@ -405,6 +411,14 @@
       const valueControlId = modal?.dataset?.valueControl || 'textInputModalInput';
       options.onResolveActiveModal?.(getElement(doc, valueControlId)?.value || '');
     });
+    bindClick(doc, 'closeClientCertificateModalButton', () => options.onResolveActiveModal?.(null));
+    bindClick(doc, 'cancelClientCertificateModalButton', () => options.onResolveActiveModal?.(null));
+    bindClick(doc, 'saveClientCertificateModalButton', options.onConfirmClientCertificateModal);
+    bindClick(doc, 'chooseClientCertificateCertPathButton', options.onChooseClientCertificateCertPath);
+    bindClick(doc, 'chooseClientCertificateKeyPathButton', options.onChooseClientCertificateKeyPath);
+    bindClick(doc, 'chooseClientCertificatePfxPathButton', options.onChooseClientCertificatePfxPath);
+    bindClick(doc, 'toggleClientCertificatePassphraseButton', options.onToggleClientCertificatePassphraseVisibility);
+    bindChange(doc, 'clientCertificateFormatSelect', options.onClientCertificateFormatChange);
     bindClick(doc, 'closeCsvVariablesModalButton', () => options.onResolveActiveModal?.(null));
     bindClick(doc, 'cancelCsvVariablesModalButton', () => options.onResolveActiveModal?.(null));
     bindClick(doc, 'saveCsvVariablesModalButton', options.onConfirmCsvVariablesModal);

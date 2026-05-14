@@ -1162,6 +1162,12 @@ textarea.code-editor-input.has-openable-variable-hover {
   max-width: 940px;
 }
 
+.request-settings-grid {
+  display: grid;
+  gap: 12px;
+  max-width: 940px;
+}
+
 .auth-section {
   display: none;
   grid-template-columns: repeat(2, minmax(220px, 1fr));

@@ -157,6 +157,10 @@ const FIELD_SCHEMAS = {
   modalSettings: {
     closeOnBackdropClick: { type: 'boolean', optional: true }
   },
+  tlsRequestSettings: {
+    sslCertificateVerification: { type: 'boolean', optional: true },
+    caCertificatePath: { type: 'string', limit: 'value', optional: true }
+  },
   keyValue: {
     enabled: { type: 'boolean', optional: true },
     key: { type: 'string', limit: 'key', optional: true },
@@ -406,11 +410,17 @@ const FIELD_SCHEMAS = {
   certificate: {
     id: { type: 'string', limit: 'name', optional: true },
     name: { type: 'string', limit: 'name', optional: true },
+    enabled: { type: 'boolean', optional: true },
+    host: { type: 'string', limit: 'host', optional: true },
+    port: { type: 'string', limit: 'short', optional: true },
     certPath: { type: 'string', limit: 'value', optional: true },
     keyPath: { type: 'string', limit: 'value', optional: true },
     pfxPath: { type: 'string', limit: 'value', optional: true },
     caPath: { type: 'string', limit: 'value', optional: true },
-    passphrase: { type: 'string', limit: 'value', optional: true }
+    passphrase: { type: 'string', limit: 'value', optional: true },
+    passphraseSecretKey: { type: 'string', limit: 'name', optional: true },
+    createdAt: { type: 'string', limit: 'name', optional: true },
+    updatedAt: { type: 'string', limit: 'name', optional: true }
   },
   auth: {
     type: { type: 'string', limit: 'short', enum: 'authTypes' },
@@ -514,9 +524,9 @@ const payloadSchemas = {
     request: {
       required: ['method', 'url'],
       arrays: ['queryParams', 'headers', 'variables', 'metadata', 'messages'],
-      nested: ['auth', 'scripts', 'cookieJar', 'autoHeaders']
+      nested: ['auth', 'scripts', 'cookieJar', 'autoHeaders', 'settings']
     },
-  workspace: {
+    workspace: {
       arrays: ['collections', 'environments', 'globals', 'cookies', 'runners', 'performanceTests', 'history'],
       nested: ['settings', 'localsettings']
     },
