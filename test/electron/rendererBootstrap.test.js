@@ -858,6 +858,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'runPerformanceTestButton',
     'cancelPerformanceTestButton',
     'exportPerformanceTestButton',
+    'performanceCaptureSettingsButton',
     'exportPerformanceResultsButton',
     'exportPerformanceResultsMenu',
     'exportPerformanceResultHtmlButton',
@@ -935,6 +936,7 @@ test('renderer bootstrap binds performance creation import export run and config
     onDeletePerformanceTest: () => calls.push('delete'),
     onRunPerformanceTest: () => calls.push('run'),
     onCancelPerformanceTest: () => calls.push('cancel'),
+    onTogglePerformanceCaptureSettings: () => calls.push('capture-settings'),
     onExportPerformanceResultHtml: () => calls.push('export-result-html'),
     onExportPerformanceResultJson: () => calls.push('export-result-json'),
     onExportPerformanceResultCsv: () => calls.push('export-result-csv'),
@@ -968,6 +970,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'runPerformanceTestButton',
     'cancelPerformanceTestButton',
     'exportPerformanceTestButton',
+    'performanceCaptureSettingsButton',
     'exportPerformanceResultsButton',
     'exportPerformanceResultHtmlButton',
     'exportPerformanceResultJsonButton',
@@ -1005,7 +1008,7 @@ test('renderer bootstrap binds performance creation import export run and config
   elements.get('performanceDocsInput').dispatch('input');
   elements.get('performanceBinaryBodySourceInput').dispatch('input');
 
-  assert.deepEqual(calls.slice(0, 22), [
+  assert.deepEqual(calls.slice(0, 23), [
     'new',
     'new',
     'import-test',
@@ -1017,6 +1020,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'run',
     'cancel',
     'export-test',
+    'capture-settings',
     'export-result-html',
     'export-result-json',
     'export-result-csv',
@@ -1336,7 +1340,8 @@ test('renderer bootstrap binds request environment and runner import/export menu
     ['exportRunnerDefinitionButton', 'export-runner', 'onExportRunnerDefinition'],
     ['exportRunnerHtmlButton', 'export-runner-html', 'onExportRunnerHtml'],
     ['exportRunnerJsonButton', 'export-runner-json', 'onExportRunnerJson'],
-    ['exportRunnerCsvButton', 'export-runner-csv', 'onExportRunnerCsv']
+    ['exportRunnerCsvButton', 'export-runner-csv', 'onExportRunnerCsv'],
+    ['runnerCaptureSettingsButton', 'runner-capture-settings', 'onToggleRunnerCaptureSettings']
   ];
   const elements = new Map(controls.map(([id]) => [id, createElement()]));
   const calls = [];

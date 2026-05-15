@@ -221,6 +221,9 @@
     assertUiSmoke(runner.requests.length > 0, 'Workflow runner did not import collection requests.');
     runner.requests[0].scripts.tests = "pm.environment.set('responseMethod', pm.response.json().method); pm.test('script token exists', function () { pm.expect(pm.environment.get('scriptToken')).to.equal('ui-script'); pm.response.to.have.status(200); });";
     $('runnerCaptureSettingsButton').click();
+    assertUiSmoke(!$('runnerCaptureSettingsPanel').hidden, 'Runner capture settings dropdown did not open.');
+    assertUiSmoke($('runnerCaptureSettingsButton').getAttribute('aria-expanded') === 'true', 'Runner capture settings button did not expose open state.');
+    assertUiSmoke($('runnerCaptureSettingsPanel').closest('.capture-settings-menu-group'), 'Runner capture settings should render inside a dropdown group.');
     const runnerIterationsInput = $('runnerRequestList').querySelector('.runner-row-iterations input');
     assertUiSmoke(runnerIterationsInput, 'Runner request iterations input did not render.');
     runnerIterationsInput.value = '1000000';
@@ -315,6 +318,10 @@
     assertUiSmoke(performanceTest, 'New performance test was not created.');
     assertUiSmoke(activeMainPanel === 'performance', 'Creating a performance test should switch the main pane to performance mode.');
     $('performanceCaptureSettingsButton').click();
+    assertUiSmoke($('runnerCaptureSettingsPanel').hidden, 'Opening performance capture settings should close the runner capture dropdown.');
+    assertUiSmoke(!$('performanceCaptureSettingsPanel').hidden, 'Performance capture settings dropdown did not open.');
+    assertUiSmoke($('performanceCaptureSettingsButton').getAttribute('aria-expanded') === 'true', 'Performance capture settings button did not expose open state.');
+    assertUiSmoke($('performanceCaptureSettingsPanel').closest('.capture-settings-menu-group'), 'Performance capture settings should render inside a dropdown group.');
     assertPerformanceNumericGuards();
     activateTab('performance', 'latency');
     const latencyIterationsInput = $('latencyTab').querySelector('[data-performance-config="iterations"]');

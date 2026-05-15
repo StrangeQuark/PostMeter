@@ -706,23 +706,25 @@
               <input id="runnerAllowEnvironmentMutation" type="checkbox">
               <span>Allow runner to modify environment</span>
             </label>
-            <button id="runnerCaptureSettingsButton" type="button" aria-expanded="false" aria-controls="runnerCaptureSettingsPanel">Capture Settings</button>
-          </div>
-          <div id="runnerCaptureSettingsPanel" class="capture-settings-panel" hidden>
-            <label class="field compact">
-              <span>Response Body</span>
-              <select id="runnerCaptureResponseBodySelect">
-                <option value="all">All</option>
-                <option value="failed">Failed only</option>
-                <option value="sampled">Sampled</option>
-                <option value="none">None</option>
-              </select>
-            </label>
-            <label class="field compact-number-field"><span>Preview Bytes</span><input id="runnerCaptureBodyPreviewBytesInput" type="number" min="0" max="32768" step="1024"></label>
-            <label class="checkbox-line"><input id="runnerCapturePreRequestInput" type="checkbox"><span>Pre-request output</span></label>
-            <label class="checkbox-line"><input id="runnerCapturePostRequestInput" type="checkbox"><span>Post-request output</span></label>
-            <label class="checkbox-line"><input id="runnerCaptureScriptLogsInput" type="checkbox"><span>Script logs</span></label>
-            <label class="checkbox-line"><input id="runnerCaptureLocalVariablesInput" type="checkbox"><span>Local variables</span></label>
+            <div class="capture-settings-menu-group">
+              <button id="runnerCaptureSettingsButton" class="capture-settings-trigger" type="button" aria-expanded="false" aria-controls="runnerCaptureSettingsPanel">Capture Settings</button>
+              <div id="runnerCaptureSettingsPanel" class="capture-settings-panel" role="group" aria-label="Runner capture settings" hidden>
+                <label class="field compact">
+                  <span>Response Body</span>
+                  <select id="runnerCaptureResponseBodySelect">
+                    <option value="all">All</option>
+                    <option value="failed">Failed only</option>
+                    <option value="sampled">Sampled</option>
+                    <option value="none">None</option>
+                  </select>
+                </label>
+                <label class="field compact-number-field"><span>Preview Bytes</span><input id="runnerCaptureBodyPreviewBytesInput" type="number" min="0" max="32768" step="1024"></label>
+                <label class="checkbox-line"><input id="runnerCapturePreRequestInput" type="checkbox"><span>Pre-request output</span></label>
+                <label class="checkbox-line"><input id="runnerCapturePostRequestInput" type="checkbox"><span>Post-request output</span></label>
+                <label class="checkbox-line"><input id="runnerCaptureScriptLogsInput" type="checkbox"><span>Script logs</span></label>
+                <label class="checkbox-line"><input id="runnerCaptureLocalVariablesInput" type="checkbox"><span>Local variables</span></label>
+              </div>
+            </div>
           </div>
           <div class="runner-request-actions">
             <button id="addRunnerRequestButton" type="button" aria-haspopup="menu" aria-expanded="false">Add Request</button>
@@ -792,7 +794,27 @@
               <button id="deletePerformanceTestButton" class="danger-button" type="button">Delete Performance Test</button>
               <button id="importPerformanceRequestButton" type="button">Import Request</button>
               <button id="exportPerformanceTestButton" type="button">Export Test</button>
-              <button id="performanceCaptureSettingsButton" type="button" aria-expanded="false" aria-controls="performanceCaptureSettingsPanel">Capture Settings</button>
+              <div class="capture-settings-menu-group">
+                <button id="performanceCaptureSettingsButton" class="capture-settings-trigger" type="button" aria-expanded="false" aria-controls="performanceCaptureSettingsPanel">Capture Settings</button>
+                <div id="performanceCaptureSettingsPanel" class="capture-settings-panel" role="group" aria-label="Performance capture settings" hidden>
+                  <label class="field compact">
+                    <span>Response Body</span>
+                    <select id="performanceCaptureResponseBodySelect">
+                      <option value="all">All</option>
+                      <option value="failed">Failed only</option>
+                      <option value="sampled">Sampled</option>
+                      <option value="none">None</option>
+                    </select>
+                  </label>
+                  <label class="field compact-number-field"><span>Preview Bytes</span><input id="performanceCaptureBodyPreviewBytesInput" type="number" min="0" max="32768" step="1024"></label>
+                  <label class="checkbox-line"><input id="performanceCapturePreRequestInput" type="checkbox"><span>Pre-request output</span></label>
+                  <label class="checkbox-line"><input id="performanceCapturePostRequestInput" type="checkbox"><span>Post-request output</span></label>
+                  <label class="checkbox-line"><input id="performanceCaptureScriptLogsInput" type="checkbox"><span>Script logs</span></label>
+                  <label class="checkbox-line"><input id="performanceCaptureLocalVariablesInput" type="checkbox"><span>Local variables</span></label>
+                  <label class="checkbox-line"><input id="performanceCaptureHeadersInput" type="checkbox"><span>Response headers</span></label>
+                  <label class="checkbox-line"><input id="performanceCaptureTimingsInput" type="checkbox"><span>Transport timings</span></label>
+                </div>
+              </div>
               <div class="toolbar-group menu-group result-export-menu-group" aria-label="Performance result export">
                 <button id="exportPerformanceResultsButton" class="menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false" disabled>Export Results</button>
                 <div id="exportPerformanceResultsMenu" class="toolbar-menu" role="menu" aria-labelledby="exportPerformanceResultsButton" hidden>
@@ -1146,24 +1168,6 @@
               <label class="field performance-environment-field"><span>Environment</span><select data-performance-environment></select></label>
               <label class="checkbox-line performance-mutation-option"><input data-performance-mutation type="checkbox"><span>Allow performance test to modify environment</span></label>
             </div>
-          </div>
-          <div id="performanceCaptureSettingsPanel" class="capture-settings-panel" hidden>
-            <label class="field compact">
-              <span>Response Body</span>
-              <select id="performanceCaptureResponseBodySelect">
-                <option value="all">All</option>
-                <option value="failed">Failed only</option>
-                <option value="sampled">Sampled</option>
-                <option value="none">None</option>
-              </select>
-            </label>
-            <label class="field compact-number-field"><span>Preview Bytes</span><input id="performanceCaptureBodyPreviewBytesInput" type="number" min="0" max="32768" step="1024"></label>
-            <label class="checkbox-line"><input id="performanceCapturePreRequestInput" type="checkbox"><span>Pre-request output</span></label>
-            <label class="checkbox-line"><input id="performanceCapturePostRequestInput" type="checkbox"><span>Post-request output</span></label>
-            <label class="checkbox-line"><input id="performanceCaptureScriptLogsInput" type="checkbox"><span>Script logs</span></label>
-            <label class="checkbox-line"><input id="performanceCaptureLocalVariablesInput" type="checkbox"><span>Local variables</span></label>
-            <label class="checkbox-line"><input id="performanceCaptureHeadersInput" type="checkbox"><span>Response headers</span></label>
-            <label class="checkbox-line"><input id="performanceCaptureTimingsInput" type="checkbox"><span>Transport timings</span></label>
           </div>
           <div id="latencyTab" class="tab-panel performance-type-panel" role="tabpanel" aria-labelledby="performanceLatencyTabButton">
             <div class="performance-type-grid">

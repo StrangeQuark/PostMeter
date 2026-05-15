@@ -491,6 +491,7 @@ initializeRenderer({
   onReady: async ({ registerCleanup }) => {
     markUiWorkflowStartupStep('ready-start');
     bindUi();
+    registerCleanup(bindCaptureSettingsDropdownDismissal());
     CodeEditor.enhanceCodeTextareas?.(document);
     registerCleanup(VariableHighlighter.install?.(document, {
       getVariables: variableHighlightVariablesForTarget,
@@ -684,12 +685,12 @@ function bindUi() {
     onExportRunnerJson: () => exportRunnerResult('json'),
     onExportRunnerCsv: () => exportRunnerResult('csv'),
     onToggleRunnerCsvVariables: toggleActiveRunnerCsvVariables,
-    onToggleRunnerCaptureSettings: () => toggleCaptureSettingsPanel('runner'),
+    onToggleRunnerCaptureSettings: (event) => toggleCaptureSettingsPanel('runner', event),
     onSaveRunner: () => { void saveRunnerFromPane(); },
     onDeleteRunner: () => { void deleteRunner(); },
     onAddRunnerRequest: (event) => showAddRunnerRequestMenu(event),
     onTogglePerformanceCsvVariables: toggleActivePerformanceCsvVariables,
-    onTogglePerformanceCaptureSettings: () => toggleCaptureSettingsPanel('performance'),
+    onTogglePerformanceCaptureSettings: (event) => toggleCaptureSettingsPanel('performance', event),
     onSavePerformanceTest: () => { void savePerformanceTestFromPane(); },
     onDeletePerformanceTest: () => { void deletePerformanceTest(); },
     onRunPerformanceTest: () => { void runActivePerformanceTest(); },
@@ -7656,6 +7657,58 @@ function applyResponseBodyOptionGuardrails(select, state) {
   }
 }
 
+function closeCaptureSettingsPanels(options = {}) {
+  const exceptPanel = options.exceptPanel || null;
+  for (const panel of document.querySelectorAll('.capture-settings-panel')) {
+    if (panel === exceptPanel) {
+      continue;
+    }
+    panel.hidden = true;
+    panel.style.left = '';
+    panel.style.top = '';
+    const button = panel.id ? document.querySelector(`[aria-controls="${cssEscapeAttributeValue(panel.id)}"]`) : null;
+    button?.setAttribute('aria-expanded', 'false');
+  }
+}
+
+function bindCaptureSettingsDropdownDismissal() {
+  const onDocumentClick = (event) => {
+    if (event.target?.closest?.('.capture-settings-menu-group')) {
+      return;
+    }
+    closeCaptureSettingsPanels();
+  };
+  const onKeyDown = (event) => {
+    if (event.key !== 'Escape') {
+      return;
+    }
+    const activePanel = event.target?.closest?.('.capture-settings-panel');
+    closeCaptureSettingsPanels();
+    if (activePanel?.id) {
+      document.querySelector(`[aria-controls="${cssEscapeAttributeValue(activePanel.id)}"]`)?.focus?.();
+    }
+  };
+  const closeAll = () => closeCaptureSettingsPanels();
+  const onScroll = (event) => {
+    if (event.target?.closest?.('.capture-settings-panel')) {
+      return;
+    }
+    closeAll();
+  };
+  document.addEventListener('click', onDocumentClick);
+  document.addEventListener('keydown', onKeyDown);
+  document.addEventListener('scroll', onScroll, true);
+  window.addEventListener('blur', closeAll);
+  window.addEventListener('resize', closeAll);
+  return () => {
+    document.removeEventListener('click', onDocumentClick);
+    document.removeEventListener('keydown', onKeyDown);
+    document.removeEventListener('scroll', onScroll, true);
+    window.removeEventListener('blur', closeAll);
+    window.removeEventListener('resize', closeAll);
+  };
+}
+
 function renderCapturePolicyControls(prefix, policy, enabled) {
   const state = capturePolicyGuardrailState(prefix, policy);
   const normalized = state.effective;
@@ -7713,6 +7766,9 @@ function renderCapturePolicyControls(prefix, policy, enabled) {
   if (button) {
     button.disabled = !enabled;
   }
+  if (!enabled) {
+    closeCaptureSettingsPanel(prefix);
+  }
 }
 
 function collectCapturePolicyFromControls(prefix, fallback = {}) {
@@ -7758,15 +7814,59 @@ function collectCapturePolicyFromControls(prefix, fallback = {}) {
   return normalizeResultCapturePolicy(next, state.kind, { diagnostic: state.context.diagnostic });
 }
 
-function toggleCaptureSettingsPanel(prefix) {
+function closeCaptureSettingsPanel(prefix) {
   const panel = $(`${prefix}CaptureSettingsPanel`);
   const button = $(`${prefix}CaptureSettingsButton`);
   if (!panel || !button) {
     return;
   }
-  const hidden = panel.hidden !== false;
-  panel.hidden = !hidden;
-  button.setAttribute('aria-expanded', hidden ? 'true' : 'false');
+  panel.hidden = true;
+  panel.style.left = '';
+  panel.style.top = '';
+  button.setAttribute('aria-expanded', 'false');
+}
+
+function positionCaptureSettingsPanel(prefix) {
+  const panel = $(`${prefix}CaptureSettingsPanel`);
+  const button = $(`${prefix}CaptureSettingsButton`);
+  if (!panel || !button || panel.hidden) {
+    return;
+  }
+  const margin = 12;
+  const gap = 6;
+  const buttonRect = button.getBoundingClientRect();
+  const viewportWidth = Number(window.innerWidth) || document.documentElement?.clientWidth || 1024;
+  const viewportHeight = Number(window.innerHeight) || document.documentElement?.clientHeight || 768;
+  const panelWidth = Math.min(panel.offsetWidth || 360, Math.max(0, viewportWidth - margin * 2));
+  const panelHeight = Math.min(panel.offsetHeight || 0, Math.max(0, viewportHeight - margin * 2));
+  const maxLeft = Math.max(margin, viewportWidth - panelWidth - margin);
+  const preferredLeft = prefix === 'runner' ? buttonRect.left : buttonRect.right - panelWidth;
+  const left = Math.min(Math.max(margin, preferredLeft), maxLeft);
+  const preferredTop = buttonRect.bottom + gap;
+  const maxTop = Math.max(margin, viewportHeight - panelHeight - margin);
+  const top = Math.min(Math.max(margin, preferredTop), maxTop);
+  panel.style.left = `${left}px`;
+  panel.style.top = `${top}px`;
+}
+
+function toggleCaptureSettingsPanel(prefix, event) {
+  event?.stopPropagation?.();
+  const panel = $(`${prefix}CaptureSettingsPanel`);
+  const button = $(`${prefix}CaptureSettingsButton`);
+  if (!panel || !button || button.disabled) {
+    return;
+  }
+  const shouldOpen = panel.hidden !== false;
+  closeToolbarMenus();
+  closeContextMenu();
+  closeFileSourceMenu();
+  closeCaptureSettingsPanels({ exceptPanel: shouldOpen ? panel : null });
+  panel.hidden = !shouldOpen;
+  button.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+  if (shouldOpen) {
+    positionCaptureSettingsPanel(prefix);
+    panel.querySelector('select, input, button, textarea')?.focus?.();
+  }
 }
 
 function setPerformancePanelControlValue(panel, kind, name, value) {

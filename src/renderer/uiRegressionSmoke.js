@@ -91,10 +91,11 @@
     );
     await setVariableTooltipHintsFromSettingsPanel(false);
     dispatchVariableTokenMouseEvent($('urlInput'), baseUrlToken, 'mousemove');
-    await nextPaint();
-    assertUiSmoke(
-      document.querySelector('.variable-highlight-tooltip')?.textContent === 'https://hover.example.test',
-      `Variable hover tooltip should contain only the value when hints are disabled. Tooltip: ${document.querySelector('.variable-highlight-tooltip')?.outerHTML || 'none'}`
+    await waitForUiSmoke(
+      () => document.querySelector('.variable-highlight-tooltip')?.textContent === 'https://hover.example.test',
+      `Variable hover tooltip should contain only the value when hints are disabled. Tooltip: ${document.querySelector('.variable-highlight-tooltip')?.outerHTML || 'none'}`,
+      2500,
+      global
     );
     $('urlInput').value = '{{baseUrl}}';
     dispatchInput($('urlInput'));
