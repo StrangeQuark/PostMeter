@@ -26,7 +26,7 @@ test('creates a default current-schema workspace when no file exists', async () 
       interfaceFont: 'default',
       interfaceFontSize: 13,
       editorFont: 'default',
-      editorFontSize: 12
+      editorFontSize: 13
     },
     diagnostics: {
       logging: {

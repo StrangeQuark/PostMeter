@@ -122,7 +122,7 @@
 
 .kv-row {
   display: grid;
-  grid-template-columns: 28px minmax(120px, 1fr) minmax(180px, 1.35fr) 74px;
+  grid-template-columns: 28px minmax(120px, 1fr) minmax(180px, 1.35fr) max-content;
   gap: 6px;
   align-items: center;
 }
@@ -224,14 +224,14 @@
 
 .body-form-data-row {
   display: grid;
-  grid-template-columns: 28px 112px minmax(120px, 1fr) minmax(160px, 1.25fr) 74px;
+  grid-template-columns: 28px 112px minmax(120px, 1fr) minmax(160px, 1.25fr) max-content;
   gap: 6px;
   align-items: center;
 }
 
 .body-urlencoded-row {
   display: grid;
-  grid-template-columns: 28px minmax(120px, 1fr) minmax(160px, 1.4fr) 74px;
+  grid-template-columns: 28px minmax(120px, 1fr) minmax(160px, 1.4fr) max-content;
   gap: 6px;
   align-items: center;
 }

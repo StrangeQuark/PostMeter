@@ -26,6 +26,7 @@ const MAX_SANDBOX_PACKAGE_DEPENDENCIES = 32;
 const MAX_SANDBOX_PACKAGE_PACKAGE_DEPENDENCIES = 64;
 const MAX_SANDBOX_PACKAGE_SOURCE_BYTES = 128 * 1024;
 const MAX_VAULT_GRANT_IDS = 1000;
+const TYPOGRAPHY_FONT_SIZE_VALUES = Object.freeze([10, 13, 16, 19]);
 const HARD_PERFORMANCE_LIMITS = Object.freeze({
   maxTotalRequests: 1000000,
   maxConcurrency: 25,
@@ -505,8 +506,8 @@ function assertSettingsPayload(value, field) {
   if (value.appearance != null) {
     assertSchemaFields('appearance', value.appearance, `${field}.appearance`);
     assertNoUnexpectedFields('appearance', value.appearance, `${field}.appearance`);
-    assertOptionalNumberInRange(value.appearance.interfaceFontSize, `${field}.appearance.interfaceFontSize`, 11, 18);
-    assertOptionalNumberInRange(value.appearance.editorFontSize, `${field}.appearance.editorFontSize`, 11, 20);
+    assertOptionalNumberInSet(value.appearance.interfaceFontSize, `${field}.appearance.interfaceFontSize`, TYPOGRAPHY_FONT_SIZE_VALUES);
+    assertOptionalNumberInSet(value.appearance.editorFontSize, `${field}.appearance.editorFontSize`, TYPOGRAPHY_FONT_SIZE_VALUES);
   }
   if (value.editor != null) {
     assertSchemaFields('editorSettings', value.editor, `${field}.editor`);
@@ -1987,6 +1988,17 @@ function assertOptionalNumberInRange(value, field, min, max) {
   const numeric = Number(value);
   if (numeric < min || numeric > max) {
     fail(`${field} must be between ${min} and ${max}.`);
+  }
+}
+
+function assertOptionalNumberInSet(value, field, allowedValues) {
+  if (value == null) {
+    return;
+  }
+  number(value, field);
+  const numeric = Number(value);
+  if (!Number.isInteger(numeric) || !allowedValues.includes(numeric)) {
+    fail(`${field} must be one of ${allowedValues.join(', ')}.`);
   }
 }
 

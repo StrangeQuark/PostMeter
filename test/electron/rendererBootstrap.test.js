@@ -135,11 +135,11 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(indexSource, /id="themeDarkButton"[^>]+data-theme-option="dark"/);
   assert.match(indexSource, /id="interfaceFontSelect"/);
   assert.match(indexSource, /id="interfaceFontSelect"[\s\S]*value="system-mono"/);
-  assert.match(indexSource, /id="interfaceFontSizeInput"[^>]+min="11"[^>]+max="18"/);
+  assert.deepEqual(selectOptionValues(indexSource, 'interfaceFontSizeInput'), ['10', '13', '16', '19']);
   assert.match(indexSource, /id="resetInterfaceTypographyButton"/);
   assert.match(indexSource, /id="editorFontSelect"/);
   assert.match(indexSource, /id="editorFontSelect"[\s\S]*value="georgia"/);
-  assert.match(indexSource, /id="editorFontSizeInput"[^>]+min="11"[^>]+max="20"/);
+  assert.deepEqual(selectOptionValues(indexSource, 'editorFontSizeInput'), ['10', '13', '16', '19']);
   assert.match(indexSource, /id="resetEditorTypographyButton"/);
   assert.deepEqual(selectOptionValues(indexSource, 'interfaceFontSelect'), selectOptionValues(indexSource, 'editorFontSelect'));
   assert.match(indexSource, /id="showEditorLineNumbersInput"/);
@@ -560,10 +560,10 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
     ['closeSettingsModalButton', createElement()],
     ['closeSettingsModalFooterButton', createElement()],
     ['interfaceFontSelect', createElement({ tagName: 'SELECT' })],
-    ['interfaceFontSizeInput', createElement({ tagName: 'INPUT' })],
+    ['interfaceFontSizeInput', createElement({ tagName: 'SELECT' })],
     ['resetInterfaceTypographyButton', createElement()],
     ['editorFontSelect', createElement({ tagName: 'SELECT' })],
-    ['editorFontSizeInput', createElement({ tagName: 'INPUT' })],
+    ['editorFontSizeInput', createElement({ tagName: 'SELECT' })],
     ['resetEditorTypographyButton', createElement()],
     ['showEditorLineNumbersInput', createElement({ tagName: 'INPUT' })],
     ['showVariableTooltipHintsInput', createElement({ tagName: 'INPUT' })],

@@ -1432,7 +1432,12 @@
                 </label>
                 <label class="settings-field settings-size-field">
                   <span>Size</span>
-                  <input id="interfaceFontSizeInput" type="number" min="11" max="18" step="1" inputmode="numeric">
+                  <select id="interfaceFontSizeInput">
+                    <option value="10">Small</option>
+                    <option value="13" selected>Medium</option>
+                    <option value="16">Large</option>
+                    <option value="19">X-Large</option>
+                  </select>
                 </label>
                 <button id="resetInterfaceTypographyButton" type="button">Reset to Default</button>
               </div>
@@ -1462,7 +1467,12 @@
                 </label>
                 <label class="settings-field settings-size-field">
                   <span>Size</span>
-                  <input id="editorFontSizeInput" type="number" min="11" max="20" step="1" inputmode="numeric">
+                  <select id="editorFontSizeInput">
+                    <option value="10">Small</option>
+                    <option value="13" selected>Medium</option>
+                    <option value="16">Large</option>
+                    <option value="19">X-Large</option>
+                  </select>
                 </label>
                 <button id="resetEditorTypographyButton" type="button">Reset to Default</button>
               </div>

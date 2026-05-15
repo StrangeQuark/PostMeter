@@ -34,14 +34,11 @@ const BODY_TYPES = Object.freeze(Object.fromEntries(BODY_TYPE_VALUES.map((type) 
 const DEFAULT_REQUEST_BODY_TYPE = 'NONE';
 const POSTMAN_METADATA_MAX_BYTES = 10 * 1024 * 1024;
 const DEFAULT_PERFORMANCE_TEST_TYPE = 'diagnosis';
+const TYPOGRAPHY_FONT_SIZE_OPTIONS = Object.freeze([10, 13, 16, 19]);
 const DEFAULT_INTERFACE_FONT = 'default';
 const DEFAULT_INTERFACE_FONT_SIZE = 13;
-const MIN_INTERFACE_FONT_SIZE = 11;
-const MAX_INTERFACE_FONT_SIZE = 18;
 const DEFAULT_EDITOR_FONT = 'default';
-const DEFAULT_EDITOR_FONT_SIZE = 12;
-const MIN_EDITOR_FONT_SIZE = 11;
-const MAX_EDITOR_FONT_SIZE = 20;
+const DEFAULT_EDITOR_FONT_SIZE = 13;
 const DEFAULT_PERFORMANCE_CONFIG = Object.freeze({
   iterations: 1,
   startConcurrency: 1,
@@ -357,16 +354,12 @@ function normalizeSettings(settings) {
       interfaceFont: normalizeSchemaEnumValue('interfaceFontValues', settings?.appearance?.interfaceFont, DEFAULT_INTERFACE_FONT, { trim: true }),
       interfaceFontSize: normalizeFontSize(
         settings?.appearance?.interfaceFontSize,
-        DEFAULT_INTERFACE_FONT_SIZE,
-        MIN_INTERFACE_FONT_SIZE,
-        MAX_INTERFACE_FONT_SIZE
+        DEFAULT_INTERFACE_FONT_SIZE
       ),
       editorFont: normalizeSchemaEnumValue('editorFontValues', settings?.appearance?.editorFont, DEFAULT_EDITOR_FONT, { trim: true }),
       editorFontSize: normalizeFontSize(
         settings?.appearance?.editorFontSize,
-        DEFAULT_EDITOR_FONT_SIZE,
-        MIN_EDITOR_FONT_SIZE,
-        MAX_EDITOR_FONT_SIZE
+        DEFAULT_EDITOR_FONT_SIZE
       )
     },
     sandbox: {
@@ -562,12 +555,9 @@ function normalizeTheme(value) {
   return normalizeSchemaEnumValue('themeValues', value, 'system', { trim: true });
 }
 
-function normalizeFontSize(value, fallback, min, max) {
+function normalizeFontSize(value, fallback) {
   const numeric = Number(value);
-  if (!Number.isFinite(numeric)) {
-    return fallback;
-  }
-  return Math.min(max, Math.max(min, Math.round(numeric)));
+  return TYPOGRAPHY_FONT_SIZE_OPTIONS.includes(numeric) ? numeric : fallback;
 }
 
 function normalizePairs(pairs) {

@@ -78,7 +78,7 @@ test('accepts structurally valid IPC payloads', () => {
     schemaVersion: 11,
     name: 'Workspace',
     settings: {
-      appearance: { theme: 'dark', interfaceFont: 'system', interfaceFontSize: 14, editorFont: 'system-mono', editorFontSize: 15 },
+      appearance: { theme: 'dark', interfaceFont: 'system', interfaceFontSize: 16, editorFont: 'system-mono', editorFontSize: 19 },
       editor: { lineNumbers: false, variableTooltipHints: false },
       tabs: { saveOnForceClose: true },
       sandbox: {
@@ -654,9 +654,9 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertWorkspaceSettingsSavePayload({ editor: { variableTooltipHints: 'yes' } }), /settings.editor.variableTooltipHints must be a boolean/);
   assert.throws(() => assertWorkspacePayload({ settings: { appearance: { theme: 'sepia' } }, collections: [], environments: [], history: [] }), /workspace.settings.appearance.theme must be one of/);
   assert.throws(() => assertWorkspacePayload({ settings: { appearance: { interfaceFont: 'papyrus' } }, collections: [], environments: [], history: [] }), /workspace.settings.appearance.interfaceFont must be one of/);
-  assert.throws(() => assertWorkspacePayload({ settings: { appearance: { interfaceFontSize: 99 } }, collections: [], environments: [], history: [] }), /workspace.settings.appearance.interfaceFontSize must be between 11 and 18/);
+  assert.throws(() => assertWorkspacePayload({ settings: { appearance: { interfaceFontSize: 99 } }, collections: [], environments: [], history: [] }), /workspace.settings.appearance.interfaceFontSize must be one of 10, 13, 16, 19/);
   assert.throws(() => assertWorkspacePayload({ settings: { appearance: { editorFont: 'comic-sans' } }, collections: [], environments: [], history: [] }), /workspace.settings.appearance.editorFont must be one of/);
-  assert.throws(() => assertWorkspacePayload({ settings: { appearance: { editorFontSize: 9 } }, collections: [], environments: [], history: [] }), /workspace.settings.appearance.editorFontSize must be between 11 and 20/);
+  assert.throws(() => assertWorkspacePayload({ settings: { appearance: { editorFontSize: 9 } }, collections: [], environments: [], history: [] }), /workspace.settings.appearance.editorFontSize must be one of 10, 13, 16, 19/);
   assert.throws(() => assertWorkspacePayload({ settings: { diagnostics: { requestResponseLogging: { bodies: 'yes' } } }, collections: [], environments: [], history: [] }), /workspace.settings.diagnostics.requestResponseLogging.bodies must be a boolean/);
   assert.throws(() => assertWorkspacePayload({ settings: { diagnostics: { logging: { level: 'trace' } } }, collections: [], environments: [], history: [] }), /workspace.settings.diagnostics.logging.level must be one of/);
   assert.throws(() => assertWorkspacePayload({ settings: { diagnostics: { uploadUrl: 'https://example.test' } }, collections: [], environments: [], history: [] }), /workspace.settings.diagnostics.uploadUrl is not allowed/);
@@ -716,7 +716,7 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertWorkspaceCollectionSaveResultPayload({ collection: { id: 'c1', variables: 'bad', requests: [], folders: [] } }), /result.collection.variables must be an array/);
   assert.throws(() => assertWorkspaceEnvironmentSavePayload({ environment: { id: 'e1', name: 'Env', variables: [] } }), /payload.environmentId must be a string/);
   assert.throws(() => assertWorkspaceSettingsSavePayload({ appearance: { theme: 'sepia' } }), /settings.appearance.theme must be one of/);
-  assert.throws(() => assertWorkspaceSettingsSavePayload({ appearance: { editorFontSize: 30 } }), /settings.appearance.editorFontSize must be between 11 and 20/);
+  assert.throws(() => assertWorkspaceSettingsSavePayload({ appearance: { editorFontSize: 30 } }), /settings.appearance.editorFontSize must be one of 10, 13, 16, 19/);
   assert.throws(() => assertWorkspaceSettingsSavePayload({ appearance: { unknown: true } }), /settings.appearance.unknown is not allowed/);
   assert.throws(() => assertWorkspaceSettingsSavePayload({ tabs: { saveOnForceClose: 'yes' } }), /settings.tabs.saveOnForceClose must be a boolean/);
   assert.throws(() => assertWorkspaceSettingsSavePayload({ modals: { closeOnBackdropClick: 'yes' } }), /settings.modals.closeOnBackdropClick must be a boolean/);

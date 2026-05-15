@@ -69,7 +69,7 @@
   --ui-font-size-title: calc(var(--ui-font-size) + 5px);
   --ui-font-size-hero: calc(var(--ui-font-size) + 7px);
   --editor-font: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
-  --editor-font-size: 12px;
+  --editor-font-size: 13px;
   --editor-font-size-sm: max(10px, calc(var(--editor-font-size) - 1px));
   --mono: var(--editor-font);
   --sidebar-rail-width: clamp(102px, calc(var(--ui-font-size) * 8.2), 156px);

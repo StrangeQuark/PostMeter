@@ -945,13 +945,13 @@
       3000,
       global
     );
-    $('interfaceFontSizeInput').value = '18';
+    $('interfaceFontSizeInput').value = '19';
     $('interfaceFontSizeInput').dispatchEvent(new Event('change', { bubbles: true }));
     await waitForUiSmoke(
       () => workspace.settings.appearance.interfaceFont === 'system-mono'
-        && workspace.settings.appearance.interfaceFontSize === 18
+        && workspace.settings.appearance.interfaceFontSize === 19
         && document.documentElement.style.getPropertyValue('--ui-font').includes('ui-monospace')
-        && document.documentElement.style.getPropertyValue('--ui-font-size') === '18px',
+        && document.documentElement.style.getPropertyValue('--ui-font-size') === '19px',
       'Interface typography settings did not apply.',
       3000,
       global
@@ -968,14 +968,14 @@
       3000,
       global
     );
-    $('editorFontSizeInput').value = '17';
+    $('editorFontSizeInput').value = '16';
     $('editorFontSizeInput').dispatchEvent(new Event('change', { bubbles: true }));
     await waitForUiSmoke(
       () => workspace.settings.appearance.editorFont === 'georgia'
-        && workspace.settings.appearance.editorFontSize === 17
+        && workspace.settings.appearance.editorFontSize === 16
         && document.documentElement.style.getPropertyValue('--editor-font').includes('Georgia')
-        && document.documentElement.style.getPropertyValue('--editor-font-size') === '17px'
-        && getComputedStyle($('bodyInput')).fontSize === '17px',
+        && document.documentElement.style.getPropertyValue('--editor-font-size') === '16px'
+        && getComputedStyle($('bodyInput')).fontSize === '16px',
       'Editor typography settings did not apply.',
       3000,
       global
@@ -998,10 +998,10 @@
     $('resetEditorTypographyButton').click();
     await waitForUiSmoke(
       () => workspace.settings.appearance.editorFont === 'default'
-        && workspace.settings.appearance.editorFontSize === 12
+        && workspace.settings.appearance.editorFontSize === 13
         && $('editorFontSelect').value === 'default'
-        && $('editorFontSizeInput').value === '12'
-        && document.documentElement.style.getPropertyValue('--editor-font-size') === '12px',
+        && $('editorFontSizeInput').value === '13'
+        && document.documentElement.style.getPropertyValue('--editor-font-size') === '13px',
       'Editor typography reset did not restore defaults.',
       3000,
       global
@@ -1771,7 +1771,7 @@
       workspace.settings.appearance.interfaceFont = 'default';
       workspace.settings.appearance.interfaceFontSize = 13;
       workspace.settings.appearance.editorFont = 'default';
-      workspace.settings.appearance.editorFontSize = 12;
+      workspace.settings.appearance.editorFontSize = 13;
       workspace.settings.updates.includePrereleases = false;
       applyThemePreference('system');
       applyTypographyPreferences();
@@ -1795,11 +1795,11 @@
       assertStatusIncludes('Interface typography save failed', 'Failed interface typography save should surface a user-visible status.');
 
       $('editorFontSelect').value = 'georgia';
-      $('editorFontSizeInput').value = '17';
+      $('editorFontSizeInput').value = '19';
       await setEditorTypographyFromControls({ save: true });
       assertUiSmoke(workspace.settings.appearance.editorFont === 'default', 'Failed editor font save should roll back the workspace setting.');
-      assertUiSmoke(workspace.settings.appearance.editorFontSize === 12, 'Failed editor font size save should roll back the workspace setting.');
-      assertUiSmoke(document.documentElement.style.getPropertyValue('--editor-font-size') === '12px', 'Failed editor typography save should roll back the applied font size.');
+      assertUiSmoke(workspace.settings.appearance.editorFontSize === 13, 'Failed editor font size save should roll back the workspace setting.');
+      assertUiSmoke(document.documentElement.style.getPropertyValue('--editor-font-size') === '13px', 'Failed editor typography save should roll back the applied font size.');
       assertStatusIncludes('Editor typography save failed', 'Failed editor typography save should surface a user-visible status.');
 
       await setIncludePrereleases(true, { save: true });

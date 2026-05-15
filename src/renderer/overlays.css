@@ -288,7 +288,8 @@
   width: 100%;
 }
 
-.settings-size-field input {
+.settings-size-field input,
+.settings-size-field select {
   min-width: 0;
 }
 

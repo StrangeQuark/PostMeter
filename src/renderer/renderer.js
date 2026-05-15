@@ -47,14 +47,11 @@ const FILE_EXTENSION_CONTENT_TYPES = new Map(Object.entries({
 }));
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 const THEME_OPTIONS = ['system', 'light', 'dark'];
+const TYPOGRAPHY_FONT_SIZE_OPTIONS = Object.freeze([10, 13, 16, 19]);
 const DEFAULT_INTERFACE_FONT = 'default';
 const DEFAULT_INTERFACE_FONT_SIZE = 13;
-const MIN_INTERFACE_FONT_SIZE = 11;
-const MAX_INTERFACE_FONT_SIZE = 18;
 const DEFAULT_EDITOR_FONT = 'default';
-const DEFAULT_EDITOR_FONT_SIZE = 12;
-const MIN_EDITOR_FONT_SIZE = 11;
-const MAX_EDITOR_FONT_SIZE = 20;
+const DEFAULT_EDITOR_FONT_SIZE = 13;
 const DEFAULT_INTERFACE_FONT_STACK = 'Inter, "Segoe UI", Arial, sans-serif';
 const DEFAULT_EDITOR_FONT_STACK = '"JetBrains Mono", "SFMono-Regular", Consolas, monospace';
 const TYPOGRAPHY_FONT_STACKS = Object.freeze({
@@ -5081,19 +5078,16 @@ function normalizeTypographyFontOption(value, fallback) {
 }
 
 function normalizeInterfaceFontSize(value) {
-  return normalizeFontSize(value, DEFAULT_INTERFACE_FONT_SIZE, MIN_INTERFACE_FONT_SIZE, MAX_INTERFACE_FONT_SIZE);
+  return normalizeFontSize(value, DEFAULT_INTERFACE_FONT_SIZE);
 }
 
 function normalizeEditorFontSize(value) {
-  return normalizeFontSize(value, DEFAULT_EDITOR_FONT_SIZE, MIN_EDITOR_FONT_SIZE, MAX_EDITOR_FONT_SIZE);
+  return normalizeFontSize(value, DEFAULT_EDITOR_FONT_SIZE);
 }
 
-function normalizeFontSize(value, fallback, min, max) {
+function normalizeFontSize(value, fallback) {
   const numeric = Number(value);
-  if (!Number.isFinite(numeric)) {
-    return fallback;
-  }
-  return Math.min(max, Math.max(min, Math.round(numeric)));
+  return TYPOGRAPHY_FONT_SIZE_OPTIONS.includes(numeric) ? numeric : fallback;
 }
 
 function applyThemePreference(theme) {
@@ -5157,7 +5151,7 @@ function applyTypographyPreferences() {
   document.documentElement.style.setProperty('--ui-font-size', `${appearance.interfaceFontSize}px`);
   document.documentElement.style.setProperty('--editor-font', typographyFontStack(appearance.editorFont, DEFAULT_EDITOR_FONT_STACK));
   document.documentElement.style.setProperty('--editor-font-size', `${appearance.editorFontSize}px`);
-  CodeEditor.refreshCodeEditors?.(document);
+  refreshVariableHighlights(document);
 }
 
 function typographyFontStack(font, defaultStack) {
