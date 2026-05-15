@@ -249,6 +249,9 @@ function workspaceLocalSettingsHasValues(settings = {}) {
   if ((local.sandbox?.fileBindings || []).length || (local.sandbox?.packageCache || []).length) {
     return true;
   }
+  if (local.request?.sslCertificateVerification === true || local.request?.caCertificatePath || (local.request?.clientCertificates || []).length) {
+    return true;
+  }
   const vaultGrants = local.sandbox?.trustedCapabilities?.vaultGrants || {};
   return vaultGrants.workspace === true
     || (vaultGrants.collections || []).length > 0

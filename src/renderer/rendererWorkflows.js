@@ -54,6 +54,37 @@
       return doc.getElementById(id);
     }
 
+    function refreshResponseEditors(optionsForRefresh = {}) {
+      if (typeof options.refreshResponseEditors === 'function') {
+        options.refreshResponseEditors({
+          body: element('responseBody'),
+          bodyLanguage: optionsForRefresh.bodyLanguage || 'text',
+          cookies: element('responseCookies'),
+          headers: element('responseHeaders'),
+          network: element('responseNetwork')
+        });
+      }
+    }
+
+    function clearResponseDetailsForSend() {
+      state.lastResponse = null;
+      element('responseStatus').textContent = '-';
+      element('responseTime').textContent = '-';
+      element('responseSize').textContent = '-';
+      element('finalUrl').textContent = '-';
+      element('responseHeaders').value = '';
+      element('responseCookies').value = '';
+      if (element('responseNetwork')) {
+        element('responseNetwork').value = '';
+      }
+      element('responseBody').value = '';
+      if (element('visualizerFrame')) {
+        element('visualizerFrame').srcdoc = '';
+      }
+      displayTestResults(null);
+      refreshResponseEditors({ bodyLanguage: 'text' });
+    }
+
     function clearFailedResponseDetails(message) {
       state.lastResponse = null;
       element('responseStatus').textContent = 'ERR';
@@ -62,17 +93,82 @@
       element('finalUrl').textContent = '-';
       element('responseHeaders').value = '';
       element('responseCookies').value = '';
+      if (element('responseNetwork')) {
+        element('responseNetwork').value = '';
+      }
       element('responseBody').value = message;
       if (element('visualizerFrame')) {
         element('visualizerFrame').srcdoc = '';
       }
       displayTestResults(null);
+      refreshResponseEditors({ bodyLanguage: 'text' });
+    }
+
+    function userFacingSendErrorMessage(error) {
+      const message = cleanSendErrorMessage(error?.message || String(error || 'Request failed.'));
+      const tlsMessage = tlsCertificateErrorMessage(error, message);
+      return tlsMessage || message || 'Request failed before a response was received.';
+    }
+
+    function cleanSendErrorMessage(message) {
+      return String(message || '')
+        .replace(/^Error invoking remote method '[^']+':\s*/i, '')
+        .replace(/^Error:\s*/i, '')
+        .trim();
+    }
+
+    function tlsCertificateErrorMessage(error, message) {
+      const code = String(error?.code || '').toUpperCase();
+      const lowerMessage = String(message || '').toLowerCase();
+      if (code === 'SELF_SIGNED_CERT_IN_CHAIN' || lowerMessage.includes('self signed certificate in certificate chain')) {
+        return [
+          'SSL Error: Self signed certificate in certificate chain.',
+          '',
+          'The server certificate chain includes an untrusted self-signed certificate. Add the issuing CA PEM in Settings > Certificates, or disable SSL certificate verification for this request if you intentionally trust this endpoint.'
+        ].join('\n');
+      }
+      if (code === 'DEPTH_ZERO_SELF_SIGNED_CERT' || lowerMessage.includes('self signed certificate')) {
+        return [
+          'SSL Error: Self signed certificate.',
+          '',
+          'The server certificate is not trusted by PostMeter. Add the issuing CA PEM in Settings > Certificates, or disable SSL certificate verification for this request if you intentionally trust this endpoint.'
+        ].join('\n');
+      }
+      if (code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' || lowerMessage.includes('unable to verify the first certificate')) {
+        return [
+          'SSL Error: Unable to verify the first certificate.',
+          '',
+          'PostMeter could not build a trusted certificate chain for this server. Add the issuing CA PEM in Settings > Certificates, or disable SSL certificate verification for this request if appropriate.'
+        ].join('\n');
+      }
+      if (code === 'CERT_HAS_EXPIRED' || lowerMessage.includes('certificate has expired')) {
+        return 'SSL Error: Certificate has expired.';
+      }
+      if (code === 'ERR_TLS_CERT_ALTNAME_INVALID' || lowerMessage.includes('hostname/ip does not match certificate')) {
+        return 'SSL Error: Hostname does not match the certificate.';
+      }
+      if (/certificate|tls|ssl/.test(lowerMessage) && /verify|valid|trust|chain|signed|issuer|hostname/.test(lowerMessage)) {
+        return `SSL Error: ${message}`;
+      }
+      return '';
+    }
+
+    function firstMessageLine(message) {
+      return String(message || '').split(/\r?\n/)[0] || 'Request failed before a response was received.';
     }
 
     function clearRunnerResultState() {
       state.lastRunnerResult = null;
-      element('exportRunnerJsonButton').disabled = true;
-      element('exportRunnerCsvButton').disabled = true;
+      setRunnerResultExportDisabled(true);
+    }
+
+    function setRunnerResultExportDisabled(disabled) {
+      for (const id of ['exportRunnerResultsButton', 'exportRunnerHtmlButton', 'exportRunnerJsonButton', 'exportRunnerCsvButton']) {
+        const button = element(id);
+        if (button) {
+          button.disabled = disabled;
+        }
+      }
     }
 
     async function confirmAction(message) {
@@ -1021,6 +1117,9 @@
       collectRequestFromEditor();
       const environment = activeEnvironment();
       const requestContext = createRequestContext(request, environment);
+      if (isActiveRequestContext(requestContext)) {
+        clearResponseDetailsForSend();
+      }
       try {
         const collection = activeCollection();
         const folders = activeFolderPath();
@@ -1075,11 +1174,11 @@
         }
         setStatus(skippedBeforeSend ? 'Request skipped.' : failedBeforeSend ? 'Request failed.' : 'Request completed.');
       } catch (error) {
-        const message = error.message || String(error);
-        if (isActiveWorkspaceContext(requestContext)) {
+        const message = userFacingSendErrorMessage(error);
+        if (isActiveRequestContext(requestContext)) {
           clearFailedResponseDetails(message);
         }
-        setStatus(`Request failed: ${message}`);
+        setStatus(`Request failed: ${firstMessageLine(message)}`);
       }
     }
 
@@ -1117,8 +1216,7 @@
         applyRunnerScriptMutations(result, collection);
         state.lastRunnerResult = result;
         element('runnerResults').textContent = runFormatting.formatRunnerResult(result);
-        element('exportRunnerJsonButton').disabled = false;
-        element('exportRunnerCsvButton').disabled = false;
+        setRunnerResultExportDisabled(false);
         setStatus(result.cancelled ? 'Collection run cancelled.' : 'Collection run completed.');
       } catch (error) {
         const message = error.message || String(error);
@@ -1154,12 +1252,16 @@
       }
     }
 
-    async function exportRunnerResult(format) {
+    async function exportRunnerResult(format, htmlReportOptions) {
       if (!state.lastRunnerResult) {
         return;
       }
       try {
-        const result = await windowObject.postmeter.runner.export(state.lastRunnerResult, format);
+        const exportRunner = windowObject.__postmeterExportRunnerResult || windowObject.postmeter?.runner?.export;
+        if (!exportRunner) {
+          return setStatus('Collection run export is unavailable in this runtime.');
+        }
+        const result = await exportRunner(state.lastRunnerResult, format, htmlReportOptions);
         if (!result.cancelled) {
           setStatus(`Collection run exported to ${result.path}.`);
         }

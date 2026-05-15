@@ -105,7 +105,7 @@ function prepareRunnerExport(runner, format) {
 function preparePerformanceExport(performanceTest, format) {
   assertPerformanceTestPayload(performanceTest);
   assertPerformanceExportFormat(format);
-  if (format === 'csv') {
+  if (format === 'csv' || format === 'html') {
     throw new Error('Performance test definitions can only be exported as JSON.');
   }
   return {

@@ -86,10 +86,10 @@ const {
 } = PostMeterRequestQueryModel;
 const RENDERER_STATE_DEFAULTS = PostMeterRendererState.createRendererState();
 const TAB_PANEL_IDS = {
-  request: ['paramsTab', 'headersTab', 'authTab', 'cookiesTab', 'bodyTab', 'scriptsTab', 'collectionVariablesTab', 'docsTab'],
+  request: ['paramsTab', 'headersTab', 'authTab', 'cookiesTab', 'bodyTab', 'scriptsTab', 'collectionVariablesTab', 'requestSettingsTab', 'docsTab'],
   collection: ['collectionOverviewTab', 'collectionAuthTab', 'collectionScriptsTab', 'collectionLevelVariablesTab'],
   folder: ['folderOverviewTab', 'folderAuthTab', 'folderScriptsTab', 'folderLevelVariablesTab'],
-  results: ['responseTab', 'responseHeadersTab', 'responseCookiesTab', 'testResultsTab', 'visualizerTab'],
+  results: ['responseTab', 'responseHeadersTab', 'responseCookiesTab', 'responseNetworkTab', 'testResultsTab', 'visualizerTab'],
   performanceRequest: ['performanceParamsTab', 'performanceHeadersTab', 'performanceAuthTab', 'performanceCookiesTab', 'performanceBodyTab', 'performanceScriptsTab', 'performanceVariablesTab', 'performanceDocsTab'],
   performance: ['diagnosisTab', 'latencyTab', 'throughputTab', 'concurrencyTab', 'stressTab', 'spikeTab', 'soakTab', 'rampTab'],
   performanceOutput: ['performanceOutputResultsTab', 'performanceOutputRequestsTab', 'performanceOutputGraphsTab']
@@ -117,6 +117,8 @@ let openEnvironmentTabs = RENDERER_STATE_DEFAULTS.openEnvironmentTabs;
 let openWorkspaceTabs = RENDERER_STATE_DEFAULTS.openWorkspaceTabs;
 let openRunnerTabs = RENDERER_STATE_DEFAULTS.openRunnerTabs;
 let openPerformanceTabs = RENDERER_STATE_DEFAULTS.openPerformanceTabs;
+let collapsedCollectionIds = RENDERER_STATE_DEFAULTS.collapsedCollectionIds;
+let collapsedFolderIds = RENDERER_STATE_DEFAULTS.collapsedFolderIds;
 let collectionDirtySnapshots = RENDERER_STATE_DEFAULTS.collectionDirtySnapshots;
 let collectionDirtyOwners = RENDERER_STATE_DEFAULTS.collectionDirtyOwners;
 let cookieJarDirtySnapshot = RENDERER_STATE_DEFAULTS.cookieJarDirtySnapshot;
@@ -127,6 +129,7 @@ let lastRunnerResult = RENDERER_STATE_DEFAULTS.lastRunnerResult;
 let activePerformanceRunId = null;
 let activePerformanceCalibrationId = null;
 let lastPerformanceResult = null;
+let lastPerformanceResultTestId = '';
 let selectedRunnerExecutionIndex = 0;
 let selectedPerformanceResultIndex = 0;
 let runnerExecutionPage = 0;
@@ -143,13 +146,15 @@ let lastUserNotification = RENDERER_STATE_DEFAULTS.lastUserNotification;
 let activeModalId = RENDERER_STATE_DEFAULTS.activeModalId;
 let activeModalCancelValue = RENDERER_STATE_DEFAULTS.activeModalCancelValue;
 let activeModalResolver = RENDERER_STATE_DEFAULTS.activeModalResolver;
+let modalStack = [];
 let selectedDraftSaveCollectionId = RENDERER_STATE_DEFAULTS.selectedDraftSaveCollectionId;
 let selectedExportCollectionId = RENDERER_STATE_DEFAULTS.selectedExportCollectionId;
 let selectedExportItemId = RENDERER_STATE_DEFAULTS.selectedExportItemId;
 let selectedFolderDestinationValue = '';
 let selectedRunnerImportTarget = [];
-let expandedRunnerImportCollectionIds = [];
+let expandedRunnerImportNodeKeys = [];
 let lastRunnerImportSelectionKey = '';
+let runnerImportSelectionMode = 'runner';
 let selectedRequestExportTarget = null;
 let expandedRequestExportCollectionIds = [];
 let selectedRequestImportFilePath = '';
@@ -204,6 +209,7 @@ const {
   normalizeCapturePolicy: normalizeResultCapturePolicy
 } = PostMeterResultCapturePolicy;
 const {
+  beautifyBodyText,
   collectAuthFromEditor: collectRequestAuthFromEditor,
   renderAuthEditor: renderRequestAuthEditor,
   renderCookieJarEditor: renderRequestCookieJarEditor,
@@ -227,7 +233,38 @@ const {
 const { createVaultPromptQueue } = PostMeterVaultPromptQueue;
 const { createVariableAutocomplete } = PostMeterVariableAutocomplete;
 const CodeEditor = window.PostMeterCodeEditor || {};
+const MarkdownRenderer = window.PostMeterMarkdownRenderer || {};
 const VariableHighlighter = window.PostMeterVariableHighlighter || {};
+const MARKDOWN_PANE_CONFIGS = Object.freeze({
+  collectionOverview: {
+    cancelButtonId: 'collectionDescriptionCancelButton',
+    editorShellId: 'collectionDescriptionEditorShell',
+    emptyText: 'No collection overview yet.',
+    inputId: 'collectionDescriptionInput',
+    previewId: 'collectionDescriptionPreview',
+    saveButtonId: 'collectionDescriptionSaveButton'
+  },
+  folderOverview: {
+    cancelButtonId: 'folderDescriptionCancelButton',
+    editorShellId: 'folderDescriptionEditorShell',
+    emptyText: 'No folder overview yet.',
+    inputId: 'folderDescriptionInput',
+    previewId: 'folderDescriptionPreview',
+    saveButtonId: 'folderDescriptionSaveButton'
+  },
+  requestDocs: {
+    cancelButtonId: 'docsCancelButton',
+    editorShellId: 'docsEditorShell',
+    emptyText: 'No request docs yet.',
+    inputId: 'docsInput',
+    previewId: 'docsPreview',
+    saveButtonId: 'docsSaveButton'
+  }
+});
+const markdownPaneStates = Object.fromEntries(Object.keys(MARKDOWN_PANE_CONFIGS).map((pane) => [pane, {
+  contextKey: '',
+  editing: false
+}]));
 const {
   activeCollectionTabKey: buildActiveCollectionTabKey,
   activeEnvironmentTabKey: buildActiveEnvironmentTabKey,
@@ -313,6 +350,10 @@ const state = {
   set openRunnerTabs(value) { openRunnerTabs = value; },
   get openPerformanceTabs() { return openPerformanceTabs; },
   set openPerformanceTabs(value) { openPerformanceTabs = value; },
+  get collapsedCollectionIds() { return collapsedCollectionIds; },
+  set collapsedCollectionIds(value) { collapsedCollectionIds = normalizeCollectionTreeCollapseSet(value); },
+  get collapsedFolderIds() { return collapsedFolderIds; },
+  set collapsedFolderIds(value) { collapsedFolderIds = normalizeCollectionTreeCollapseSet(value); },
   get collectionDirtySnapshots() { return collectionDirtySnapshots; },
   set collectionDirtySnapshots(value) { collectionDirtySnapshots = value; },
   get collectionDirtyOwners() { return collectionDirtyOwners; },
@@ -417,6 +458,7 @@ const rendererWorkflows = createRendererWorkflows({
   renderCookieJarEditor,
   renderEnvironmentEditor,
   renderHistory,
+  refreshResponseEditors,
   renderRequestTabs,
   renderRequestVariablePairs,
   renderVariablePreview,
@@ -604,11 +646,16 @@ function bindUi() {
       const input = event?.currentTarget || $('showVariableTooltipHintsInput');
       return setVariableTooltipHints(input?.checked === true, { save: true });
     },
+    onTlsSettingsChange: () => { void setTlsSettingsFromInputs(); },
+    onChooseCaCertificate: () => { void chooseWorkspaceCaCertificate(); },
+    onClearCaCertificate: () => { void clearWorkspaceCaCertificate(); },
+    onAddClientCertificate: () => { void addClientCertificateFromPrompt(); },
     onSendRequest: sendActiveRequest,
     onAddParam: () => addPair('queryParams'),
     onAddHeader: () => addPair('headers'),
     onPostMeterTokenHeaderChange: () => setActiveRequestAutoHeaderOption('sendPostMeterToken', $('sendPostMeterTokenInput')?.checked === true),
     onShowGeneratedHeadersChange: () => setActiveRequestAutoHeaderOption('showGeneratedHeaders', $('showGeneratedHeadersInput')?.checked === true),
+    onRequestTlsSettingsChange: () => setActiveRequestTlsSettingsFromInputs(),
     onDeleteEnvironment: () => deleteEnvironment(),
     onDeleteWorkspace: () => { void deleteWorkspace(); },
     onSwitchWorkspace: () => { void switchWorkspace(selectedWorkspaceId || activeWorkspaceId, { focus: 'workspace' }); },
@@ -629,6 +676,7 @@ function bindUi() {
     onClearExpiredCookies: clearExpiredCookies,
     onRunCollection: runActiveCollection,
     onCancelCollectionRun: cancelCollectionRun,
+    onExportRunnerHtml: () => openHtmlReportOptionsModal('runner'),
     onExportRunnerJson: () => exportRunnerResult('json'),
     onExportRunnerCsv: () => exportRunnerResult('csv'),
     onToggleRunnerCsvVariables: toggleActiveRunnerCsvVariables,
@@ -643,7 +691,9 @@ function bindUi() {
     onRunPerformanceTest: () => { void runActivePerformanceTest(); },
     onCancelPerformanceTest: () => { void cancelPerformanceTestRun(); },
     onExportPerformanceTest: () => { void exportPerformanceTestFromPicker(); },
-    onExportPerformanceResultCsv: () => { void exportActivePerformanceResultCsv(); },
+    onExportPerformanceResultHtml: () => openHtmlReportOptionsModal('performance'),
+    onExportPerformanceResultJson: () => { void exportActivePerformanceResult('json'); },
+    onExportPerformanceResultCsv: () => { void exportActivePerformanceResult('csv'); },
     onImportPerformanceRequest: () => { void promptAndImportPerformanceRequest(); },
     onAddPerformanceParam: () => addPerformancePair('queryParams'),
     onAddPerformanceHeader: () => addPerformancePair('headers'),
@@ -657,6 +707,10 @@ function bindUi() {
     onStartPkceFlow: startPkceFlow,
     onStartDeviceFlow: startDeviceFlow,
     onCancelOauthFlow: cancelOauthFlow,
+    onHtmlReportIncludeResultsChange: syncHtmlReportOptionsModal,
+    onHtmlReportIncludeDetailsChange: syncHtmlReportOptionsModal,
+    onCancelHtmlReportOptions: () => resolveActiveModal(null),
+    onConfirmHtmlReportOptions: confirmHtmlReportOptionsModal,
     onEnvironmentSelectChange: (environmentId) => {
       activeEnvironmentId = environmentId;
       renderEnvironments();
@@ -693,6 +747,7 @@ function bindUi() {
       updatePerformanceRequestBodyEditorLanguage();
       collectPerformanceTestAndMarkDirty();
     },
+    onBeautifyPerformanceBody: () => beautifyBodyEditor('performance'),
     onAddPerformanceFormDataBodyRow: () => addBodyFormDataRow('performance'),
     onAddPerformanceUrlencodedBodyRow: () => addBodyUrlencodedRow('performance'),
     onPerformanceAuthTypeChange: showPerformanceAuthSection,
@@ -700,9 +755,15 @@ function bindUi() {
     onCollectionAuthTypeChange: showCollectionAuthSection,
     onCollectionInput: collectCollectionAndMarkDirty,
     onCollectionAuthInput: collectCollectionAndMarkDirty,
+    onEditCollectionDescription: () => beginMarkdownPaneEdit('collectionOverview'),
+    onSaveCollectionDescription: () => saveMarkdownPaneEdit('collectionOverview'),
+    onCancelCollectionDescription: () => cancelMarkdownPaneEdit('collectionOverview'),
     onFolderAuthTypeChange: showFolderAuthSection,
     onFolderInput: collectFolderAndMarkDirty,
     onFolderAuthInput: collectFolderAndMarkDirty,
+    onEditFolderDescription: () => beginMarkdownPaneEdit('folderOverview'),
+    onSaveFolderDescription: () => saveMarkdownPaneEdit('folderOverview'),
+    onCancelFolderDescription: () => cancelMarkdownPaneEdit('folderOverview'),
     onPerformanceFilterCookiesChange: renderPerformanceCookieJarEditor,
     onMethodChange: () => {
       updateMethodSelectClass();
@@ -717,11 +778,15 @@ function bindUi() {
       updateRequestBodyEditorLanguage();
       collectRequestAndMarkDirty();
     },
+    onBeautifyBody: () => beautifyBodyEditor(''),
     onAddFormDataBodyRow: () => addBodyFormDataRow(''),
     onAddUrlencodedBodyRow: () => addBodyUrlencodedRow(''),
     onBodyInput: collectRequestAndMarkDirty,
     onPreRequestScriptInput: collectRequestAndMarkDirty,
     onTestScriptInput: collectRequestAndMarkDirty,
+    onEditRequestDocs: () => beginMarkdownPaneEdit('requestDocs'),
+    onSaveRequestDocs: () => saveMarkdownPaneEdit('requestDocs'),
+    onCancelRequestDocs: () => cancelMarkdownPaneEdit('requestDocs'),
     onRequestCookieJarChange: collectRequestAndMarkDirty,
     onFilterCookiesChange: renderCookieJarEditor,
     onTrustedScriptCapabilityChange: setTrustedScriptCapabilitiesFromInputs,
@@ -733,6 +798,12 @@ function bindUi() {
     onCancelActiveModal: cancelActiveModal,
     closeModalsOnBackdropClick: () => modalsCloseOnBackdropClick(),
     onResolveActiveModal: resolveActiveModal,
+    onConfirmClientCertificateModal: confirmClientCertificateModal,
+    onChooseClientCertificateCertPath: () => { void chooseClientCertificatePath('cert'); },
+    onChooseClientCertificateKeyPath: () => { void chooseClientCertificatePath('key'); },
+    onChooseClientCertificatePfxPath: () => { void chooseClientCertificatePath('pfx'); },
+    onClientCertificateFormatChange: updateClientCertificateModalFormat,
+    onToggleClientCertificatePassphraseVisibility: toggleClientCertificatePassphraseVisibility,
     onConfirmCsvVariablesModal: confirmCsvVariablesModal,
     onImportCsvVariablesFile: importCsvVariablesFile,
     onClearCsvVariablesFile: clearCsvVariablesFile,
@@ -1896,10 +1967,12 @@ function canOpenPerformanceTabFor(performanceTestId, options = {}) {
 
 function selectRequestTab(tab) {
   collectActiveEditorState();
+  revealOpenRequestTabInCollectionTree(tab);
   requestTabState.selectRequestTab(tab, { collect: false });
 }
 
 function selectRequestTabWithoutCollect(tab) {
+  revealOpenRequestTabInCollectionTree(tab);
   requestTabState.selectRequestTab(tab, { collect: false });
 }
 
@@ -1948,11 +2021,35 @@ function selectCollectionTabWithoutCollect(tab) {
 }
 
 function selectFolderTab(tab) {
+  revealOpenFolderTabInCollectionTree(tab);
   requestTabState.selectFolderTab(tab);
 }
 
 function selectFolderTabWithoutCollect(tab) {
+  revealOpenFolderTabInCollectionTree(tab);
   requestTabState.selectFolderTab(tab, { collect: false });
+}
+
+function revealOpenRequestTabInCollectionTree(tab) {
+  if (!tab || tab.draft === true || tab.runnerRequest === true || tab.runnerId) {
+    return false;
+  }
+  const collection = (workspace?.collections || []).find((item) => item.id === tab.collectionId);
+  const found = collection ? findRequest(collection, tab.requestId) : null;
+  if (!collection || !found?.request) {
+    return false;
+  }
+  expandCollectionTreePath(collection, found.folder?.id || null);
+  return true;
+}
+
+function revealOpenFolderTabInCollectionTree(tab) {
+  const collection = (workspace?.collections || []).find((item) => item.id === tab?.collectionId);
+  if (!collection || !tab?.folderId || !findFolder(collection, tab.folderId)) {
+    return false;
+  }
+  expandCollectionTreePath(collection, tab.folderId, { includeTargetFolder: false });
+  return true;
 }
 
 function markActiveRequestDirty() {
@@ -2777,17 +2874,23 @@ function exportItemDisplayName(kind, item) {
 
 function showModal(modalId, cancelValue) {
   if (state.activeModalResolver) {
-    resolveActiveModal(state.activeModalCancelValue, { flushNotifications: false });
+    if (shouldStackModal(state.activeModalId, modalId)) {
+      modalStack.push({
+        modalId: state.activeModalId,
+        cancelValue: state.activeModalCancelValue,
+        resolver: state.activeModalResolver,
+        focusTarget: lastModalFocusTarget
+      });
+    } else {
+      resolveActiveModal(state.activeModalCancelValue, { flushNotifications: false });
+    }
   }
   const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   closeContextMenu();
   closeToolbarMenus();
   closeFileSourceMenu();
   lastModalFocusTarget = modalRestoreFocusTarget(previousFocus);
-  $('modalBackdrop').hidden = false;
-  for (const modal of $('modalBackdrop').querySelectorAll('.modal')) {
-    modal.hidden = modal.id !== modalId;
-  }
+  showOnlyModal(modalId);
   return new Promise((resolve) => {
     openModalState(state, modalId, resolve, cancelValue);
     focusInitialModalElement(modalId);
@@ -2796,17 +2899,48 @@ function showModal(modalId, cancelValue) {
 
 function resolveActiveModal(value, options = {}) {
   const resolver = resolveModalState(state);
+  if (resolver) {
+    resolver(value);
+  }
+  const parentModal = modalStack.pop();
+  if (parentModal) {
+    const childFocusTarget = lastModalFocusTarget;
+    showOnlyModal(parentModal.modalId);
+    openModalState(state, parentModal.modalId, parentModal.resolver, parentModal.cancelValue);
+    lastModalFocusTarget = parentModal.focusTarget;
+    restoreFocusTarget(childFocusTarget);
+  } else {
+    hideAllModals();
+    restoreModalFocus();
+  }
+  if (options.flushNotifications !== false) {
+    void flushNotificationModalQueue();
+  }
+}
+
+function showOnlyModal(modalId) {
+  $('modalBackdrop').hidden = false;
+  for (const modal of $('modalBackdrop').querySelectorAll('.modal')) {
+    modal.hidden = modal.id !== modalId;
+  }
+}
+
+function hideAllModals() {
   $('modalBackdrop').hidden = true;
   for (const modal of $('modalBackdrop').querySelectorAll('.modal')) {
     modal.hidden = true;
   }
-  if (resolver) {
-    resolver(value);
+}
+
+function restoreFocusTarget(target) {
+  if (isRestorableFocusTarget(target)) {
+    target.focus?.();
   }
-  restoreModalFocus();
-  if (options.flushNotifications !== false) {
-    void flushNotificationModalQueue();
-  }
+}
+
+function shouldStackModal(parentModalId, childModalId) {
+  return (parentModalId === 'settingsModal' && childModalId !== parentModalId)
+    || (parentModalId === 'clientCertificateModal' && childModalId === 'filePickerModal');
 }
 
 function cancelActiveModal() {
@@ -2823,6 +2957,8 @@ function canResolveLocalFilePaths() {
 function bindLocalFilePickerUi() {
   const fileInput = $('filePickerInput');
   const browseButton = $('filePickerBrowseButton');
+  const usePathButton = $('filePickerUsePathButton');
+  const manualPathInput = $('filePickerManualPathInput');
   const cancelButton = $('filePickerCancelButton');
   const closeButton = $('filePickerCloseButton');
   const dropZone = $('filePickerDropZone');
@@ -2831,6 +2967,14 @@ function bindLocalFilePickerUi() {
   browseButton?.addEventListener('click', (event) => {
     event.preventDefault();
     fileInput?.click?.();
+  });
+  usePathButton?.addEventListener('click', useManualPathFromFilePicker);
+  manualPathInput?.addEventListener('input', clearFilePickerError);
+  manualPathInput?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      useManualPathFromFilePicker();
+    }
   });
   cancelButton?.addEventListener('click', () => resolveActiveModal(null));
   closeButton?.addEventListener('click', () => resolveActiveModal(null));
@@ -2887,9 +3031,17 @@ function configureFilePickerModal(options = {}) {
   const fileInput = $('filePickerInput');
   fileInput.value = '';
   fileInput.accept = options.accept || '';
-  const error = $('filePickerError');
-  error.hidden = true;
-  error.textContent = '';
+  const manualPathField = $('filePickerManualPathField');
+  const manualPathInput = $('filePickerManualPathInput');
+  const allowManualPath = options.allowManualPath !== false;
+  if (manualPathField) {
+    manualPathField.hidden = !allowManualPath;
+  }
+  if (manualPathInput) {
+    manualPathInput.value = options.defaultPath || '';
+    manualPathInput.placeholder = options.manualPathPlaceholder || '/path/to/file';
+  }
+  clearFilePickerError();
   const dropZone = $('filePickerDropZone');
   dropZone.classList.remove('is-dragover');
   const title = dropZone.querySelector('strong');
@@ -2903,7 +3055,7 @@ function configureFilePickerModal(options = {}) {
 }
 
 async function showLocalFilePicker(options = {}) {
-  if (!canResolveLocalFilePaths()) {
+  if (!canResolveLocalFilePaths() && options.allowManualPath === false) {
     return null;
   }
   activeFilePickerOptions = options;
@@ -2920,12 +3072,33 @@ function resetFilePickerModal() {
     fileInput.value = '';
     fileInput.accept = '';
   }
-  $('filePickerDropZone')?.classList.remove('is-dragover');
-  const error = $('filePickerError');
-  if (error) {
-    error.hidden = true;
-    error.textContent = '';
+  const manualPathInput = $('filePickerManualPathInput');
+  if (manualPathInput) {
+    manualPathInput.value = '';
+    manualPathInput.placeholder = '/path/to/file';
   }
+  const manualPathField = $('filePickerManualPathField');
+  if (manualPathField) {
+    manualPathField.hidden = false;
+  }
+  $('filePickerDropZone')?.classList.remove('is-dragover');
+  clearFilePickerError();
+}
+
+function useManualPathFromFilePicker() {
+  const input = $('filePickerManualPathInput');
+  const filePath = String(input?.value || '').trim();
+  if (!filePath) {
+    renderFilePickerError(activeFilePickerOptions?.manualPathRequiredMessage || 'Enter a local file path or choose a file.');
+    input?.focus?.();
+    return;
+  }
+  resolveActiveModal({
+    name: fileNameFromLocalPath(filePath),
+    path: filePath,
+    picker: activeFilePickerOptions?.kind || 'file',
+    manualPath: true
+  });
 }
 
 async function selectLocalFileFromPicker(file) {
@@ -2934,7 +3107,7 @@ async function selectLocalFileFromPicker(file) {
   }
   const filePath = localPathForFile(file);
   if (!filePath) {
-    renderFilePickerError('PostMeter could not read a local path for that file. Use the native file picker fallback from the import action.');
+    renderFilePickerError('PostMeter could not read a local path for that file. Use the manual path field.');
     return;
   }
   resolveActiveModal({
@@ -2954,6 +3127,15 @@ function localPathForFile(file) {
     return '';
   }
   return typeof file?.path === 'string' ? file.path.trim() : '';
+}
+
+function clearFilePickerError() {
+  const error = $('filePickerError');
+  if (!error) {
+    return;
+  }
+  error.textContent = '';
+  error.hidden = true;
 }
 
 function renderFilePickerError(message) {
@@ -3389,8 +3571,10 @@ function focusInitialModalElement(modalId) {
     runnerImportModal: 'cancelRunnerImportButton',
     requestImportModal: 'requestImportTextInput',
     requestExportModal: 'copyRequestExportButton',
+    clientCertificateModal: 'clientCertificateNameInput',
     textInputModal: $('textInputModal')?.dataset?.valueControl || 'textInputModalInput',
     csvVariablesModal: 'csvVariablesSchemaInput',
+    htmlReportOptionsModal: 'htmlReportIncludeResultsInput',
     confirmActionModal: 'cancelConfirmActionButton',
     notificationModal: 'closeNotificationModalButton',
     performanceCalibrationModal: 'closePerformanceCalibrationModalButton',
@@ -3542,6 +3726,7 @@ function applyLoadedWorkspace(loaded, options = {}) {
   lastResponse = null;
   lastRunnerResult = null;
   lastPerformanceResult = null;
+  lastPerformanceResultTestId = '';
   selectedRunnerExecutionIndex = 0;
   selectedPerformanceResultIndex = 0;
   runnerExecutionPage = 0;
@@ -3572,13 +3757,14 @@ function applyLoadedWorkspace(loaded, options = {}) {
 
 function resetWorkspaceTransientUi() {
   lastRenderedRequestEditorContextKey = '';
+  collapsedCollectionIds = new Set();
+  collapsedFolderIds = new Set();
   $('validationLabel').textContent = '';
   renderRunnerExecutionMessage('No runner run yet.');
   displayTestResults(null);
   $('runCollectionButton').disabled = false;
   $('cancelRunnerButton').disabled = true;
-  $('exportRunnerJsonButton').disabled = true;
-  $('exportRunnerCsvButton').disabled = true;
+  setRunnerResultExportButtonsDisabled(true);
   resetOauthProgressPanel();
 }
 
@@ -3770,6 +3956,184 @@ function refreshVariableHighlights(root = document) {
   VariableHighlighter.enhanceVariableTextboxes?.(root);
   VariableHighlighter.refreshVariableHighlights?.(root);
   CodeEditor.refreshCodeEditors?.(root);
+}
+
+function renderMarkdownPane(pane) {
+  const config = MARKDOWN_PANE_CONFIGS[pane];
+  const paneData = markdownPaneData(pane);
+  if (!config || !paneData) {
+    return;
+  }
+  const state = markdownPaneStates[pane];
+  if (!paneData.item || state.contextKey !== paneData.contextKey) {
+    state.contextKey = paneData.contextKey;
+    state.editing = false;
+  }
+
+  const value = paneData.value();
+  const saveButton = $(config.saveButtonId);
+  const cancelButton = $(config.cancelButtonId);
+  const actions = saveButton?.parentElement?.classList?.contains('markdown-pane-actions')
+    ? saveButton.parentElement
+    : cancelButton?.parentElement?.classList?.contains('markdown-pane-actions')
+      ? cancelButton.parentElement
+      : null;
+  const preview = $(config.previewId);
+  const editorShell = $(config.editorShellId);
+  const input = $(config.inputId);
+
+  if (actions) {
+    actions.hidden = !state.editing;
+  }
+  if (saveButton) {
+    saveButton.hidden = !state.editing;
+    saveButton.disabled = !paneData.item;
+  }
+  if (cancelButton) {
+    cancelButton.hidden = !state.editing;
+    cancelButton.disabled = !paneData.item;
+  }
+  if (preview) {
+    preview.hidden = state.editing;
+    preview.classList.toggle('is-editable', Boolean(paneData.item) && !state.editing);
+    preview.setAttribute('role', paneData.item ? 'button' : 'region');
+    preview.setAttribute('aria-disabled', paneData.item ? 'false' : 'true');
+    preview.setAttribute('title', paneData.item ? 'Click to edit' : '');
+    preview.tabIndex = paneData.item ? 0 : -1;
+    renderMarkdownPreview(preview, value, config.emptyText);
+  }
+  if (editorShell) {
+    editorShell.hidden = !state.editing;
+  }
+  if (input) {
+    const renderKey = `${paneData.contextKey}:${value}`;
+    if (!state.editing || input.dataset.markdownRenderKey !== renderKey) {
+      input.value = value;
+      input.dataset.markdownRenderKey = renderKey;
+    }
+    refreshCodeEditorIfTextarea(input);
+  }
+}
+
+function markdownPaneData(pane) {
+  if (pane === 'requestDocs') {
+    const request = activeRequest();
+    return {
+      contextKey: request ? `request:${request.id}` : 'request:none',
+      item: request,
+      markDirty: markActiveRequestDirty,
+      setValue(value) {
+        if (request) {
+          request.docs = value;
+        }
+      },
+      value() {
+        return request?.docs == null ? '' : String(request.docs);
+      }
+    };
+  }
+  if (pane === 'collectionOverview') {
+    const collection = activeCollection();
+    return {
+      contextKey: collection ? `collection:${collection.id}` : 'collection:none',
+      item: collection,
+      markDirty: markActiveCollectionTabDirty,
+      setValue(value) {
+        if (collection) {
+          collection.description = value;
+        }
+      },
+      value() {
+        return collection?.description == null ? '' : String(collection.description);
+      }
+    };
+  }
+  if (pane === 'folderOverview') {
+    const folder = activeFolder();
+    return {
+      contextKey: folder ? `folder:${folder.id}` : 'folder:none',
+      item: folder,
+      markDirty: markActiveFolderTabDirty,
+      setValue(value) {
+        if (folder) {
+          folder.description = value;
+        }
+      },
+      value() {
+        return folder?.description == null ? '' : String(folder.description);
+      }
+    };
+  }
+  return null;
+}
+
+function beginMarkdownPaneEdit(pane) {
+  const config = MARKDOWN_PANE_CONFIGS[pane];
+  const paneData = markdownPaneData(pane);
+  if (!config || !paneData?.item) {
+    return;
+  }
+  const state = markdownPaneStates[pane];
+  state.contextKey = paneData.contextKey;
+  state.editing = true;
+  const input = $(config.inputId);
+  if (input) {
+    input.dataset.markdownRenderKey = '';
+  }
+  renderMarkdownPane(pane);
+  focusMarkdownPaneInput(config.inputId);
+}
+
+function cancelMarkdownPaneEdit(pane) {
+  const config = MARKDOWN_PANE_CONFIGS[pane];
+  const state = markdownPaneStates[pane];
+  if (!config || !state) {
+    return;
+  }
+  state.editing = false;
+  const input = $(config.inputId);
+  if (input) {
+    input.dataset.markdownRenderKey = '';
+  }
+  renderMarkdownPane(pane);
+}
+
+function saveMarkdownPaneEdit(pane) {
+  const config = MARKDOWN_PANE_CONFIGS[pane];
+  const paneData = markdownPaneData(pane);
+  const state = markdownPaneStates[pane];
+  if (!config || !paneData?.item || !state) {
+    return;
+  }
+  const input = $(config.inputId);
+  paneData.setValue(input?.value || '');
+  paneData.markDirty();
+  state.editing = false;
+  if (input) {
+    input.dataset.markdownRenderKey = '';
+  }
+  renderMarkdownPane(pane);
+}
+
+function focusMarkdownPaneInput(inputId) {
+  const input = $(inputId);
+  if (!input) {
+    return;
+  }
+  input.focus();
+  const end = input.value.length;
+  input.setSelectionRange?.(end, end);
+}
+
+function renderMarkdownPreview(preview, value, emptyText) {
+  const source = String(value || '');
+  if (!source.trim()) {
+    preview.innerHTML = `<p class="markdown-empty">${escapeHtmlText(emptyText)}</p>`;
+    return;
+  }
+  preview.innerHTML = MarkdownRenderer.renderMarkdown
+    ? MarkdownRenderer.renderMarkdown(source)
+    : escapeHtmlText(source).replace(/\n/g, '<br>');
 }
 
 function variableHighlightVariablesForTarget(target) {
@@ -4227,6 +4591,7 @@ function selectSettingsSection(section) {
     'modals',
     'updates',
     'scripts',
+    'certificates',
     'vault',
     'packages',
     'files',
@@ -4269,6 +4634,7 @@ function renderSettingsControls() {
   if ($('showVariableTooltipHintsInput')) {
     $('showVariableTooltipHintsInput').checked = workspace.settings.editor.variableTooltipHints !== false;
   }
+  renderTlsSettingsControls();
   if ($('trustedScriptSendRequestInput')) {
     $('trustedScriptSendRequestInput').checked = workspace.settings?.sandbox?.trustedCapabilities?.sendRequest === true;
   }
@@ -4297,6 +4663,7 @@ function ensureSettings() {
   workspace.settings.editor ||= { lineNumbers: true, variableTooltipHints: true };
   workspace.settings.editor.lineNumbers = workspace.settings.editor.lineNumbers !== false;
   workspace.settings.editor.variableTooltipHints = workspace.settings.editor.variableTooltipHints !== false;
+  workspace.settings.request = normalizeRendererTlsSettings(workspace.settings.request);
   workspace.settings.sandbox ||= { trustedCapabilities: { sendRequest: true, cookies: true, vault: true } };
   workspace.settings.sandbox.fileBindings = normalizeSandboxFileBindings(workspace.settings.sandbox.fileBindings);
   workspace.settings.sandbox.packageCache = normalizeSandboxPackageCache(workspace.settings.sandbox.packageCache);
@@ -4313,6 +4680,71 @@ function ensureSettings() {
   workspace.settings.appearance.editorFont = normalizeEditorFontOption(workspace.settings.appearance.editorFont);
   workspace.settings.appearance.editorFontSize = normalizeEditorFontSize(workspace.settings.appearance.editorFontSize);
   delete workspace.settings.loadTestPolicy;
+}
+
+function normalizeRendererTlsSettings(value = {}) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  return {
+    sslCertificateVerification: normalizeRendererGlobalSslVerification(source.sslCertificateVerification ?? source.sslVerification ?? source.strictSSL),
+    caCertificatePath: source.caCertificatePath == null ? '' : String(source.caCertificatePath).trim(),
+    clientCertificates: normalizeRendererClientCertificates(source.clientCertificates)
+  };
+}
+
+function normalizeRendererGlobalSslVerification(value) {
+  if (value === true) {
+    return true;
+  }
+  if (value === false) {
+    return false;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['enabled', 'enable', 'true', 'on', 'yes'].includes(normalized)) {
+      return true;
+    }
+    if (['disabled', 'disable', 'false', 'off', 'no'].includes(normalized)) {
+      return false;
+    }
+  }
+  return false;
+}
+
+function normalizeRendererClientCertificates(values) {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+  return values
+    .filter((item) => item && typeof item === 'object')
+    .slice(0, 1000)
+    .map((item, index) => ({
+      id: String(item.id || `client-certificate-${index + 1}`),
+      name: String(item.name || 'Client Certificate'),
+      enabled: item.enabled !== false,
+      host: String(item.host || '').trim(),
+      port: String(item.port || '').trim(),
+      matches: Array.isArray(item.matches) ? item.matches.map((match) => String(match || '').trim()).filter(Boolean) : [],
+      certPath: String(item.certPath || '').trim(),
+      keyPath: String(item.keyPath || '').trim(),
+      pfxPath: String(item.pfxPath || '').trim(),
+      caPath: String(item.caPath || '').trim(),
+      passphrase: String(item.passphrase || ''),
+      passphraseSecretKey: String(item.passphraseSecretKey || '').trim(),
+      createdAt: String(item.createdAt || ''),
+      updatedAt: String(item.updatedAt || '')
+    }));
+}
+
+function normalizeRendererRequestTlsSettings(value = {}) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  return {
+    sslCertificateVerification: normalizeRendererRequestSslVerification(source.sslCertificateVerification)
+  };
+}
+
+function normalizeRendererRequestSslVerification(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['inherit', 'enabled', 'disabled'].includes(normalized) ? normalized : 'inherit';
 }
 
 const RENDERER_DIAGNOSTIC_LOG_LEVELS = ['debug', 'info', 'warn', 'error'];
@@ -5048,6 +5480,394 @@ async function setTrustedScriptCapabilitiesFromInputs() {
     'Script sandbox capability update failed',
     'Sandbox Capability Save Failed'
   );
+}
+
+function renderTlsSettingsControls() {
+  ensureSettings();
+  const requestSettings = workspace.settings.request;
+  const verificationInput = $('sslCertificateVerificationInput');
+  if (verificationInput) {
+    verificationInput.checked = requestSettings.sslCertificateVerification !== false;
+  }
+  const caInput = $('caCertificatePathInput');
+  if (caInput && document.activeElement !== caInput) {
+    caInput.value = requestSettings.caCertificatePath || '';
+  }
+  renderClientCertificateList();
+}
+
+function renderClientCertificateList() {
+  const list = $('clientCertificateList');
+  if (!list) {
+    return;
+  }
+  const certificates = workspace.settings?.request?.clientCertificates || [];
+  list.textContent = '';
+  if (!certificates.length) {
+    appendEmptyTestResult(list, 'No client certificates configured.');
+    return;
+  }
+  certificates.forEach((certificate) => {
+    const row = document.createElement('div');
+    row.className = 'settings-list-row';
+    const details = document.createElement('div');
+    details.className = 'settings-list-details';
+    const name = document.createElement('strong');
+    name.textContent = certificate.name || 'Client Certificate';
+    const meta = document.createElement('span');
+    meta.textContent = [
+      certificate.enabled === false ? 'Disabled' : 'Enabled',
+      certificate.host || certificate.matches?.[0] || '*',
+      certificate.port ? `:${certificate.port}` : '',
+      certificate.pfxPath ? 'PFX/P12' : 'CRT/KEY'
+    ].filter(Boolean).join(' ');
+    details.append(name, meta);
+    const actions = document.createElement('div');
+    actions.className = 'settings-list-actions';
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.textContent = certificate.enabled === false ? 'Enable' : 'Disable';
+    toggle.addEventListener('click', () => { void toggleClientCertificate(certificate.id); });
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.textContent = 'Edit';
+    edit.addEventListener('click', () => { void editClientCertificateFromPrompt(certificate.id); });
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'danger-button';
+    remove.textContent = 'Remove';
+    remove.addEventListener('click', () => { void removeClientCertificate(certificate.id); });
+    actions.append(toggle, edit, remove);
+    row.append(details, actions);
+    list.append(row);
+  });
+}
+
+async function setTlsSettingsFromInputs() {
+  ensureSettings();
+  const previousSettings = cloneWorkspaceSettings();
+  workspace.settings.request.sslCertificateVerification = $('sslCertificateVerificationInput')?.checked !== false;
+  workspace.settings.request.caCertificatePath = $('caCertificatePathInput')?.value.trim() || '';
+  await saveWorkspaceSettingsWithRollback(
+    previousSettings,
+    'Certificate settings updated.',
+    'Certificate setting save failed',
+    'Certificate Settings Save Failed'
+  );
+}
+
+async function chooseWorkspaceCaCertificate() {
+  const selection = await chooseCertificateFile('Choose CA PEM file', '.pem,.crt,.cer');
+  if (!selection?.path) {
+    return;
+  }
+  $('caCertificatePathInput').value = selection.path;
+  await setTlsSettingsFromInputs();
+}
+
+async function clearWorkspaceCaCertificate() {
+  if ($('caCertificatePathInput')) {
+    $('caCertificatePathInput').value = '';
+  }
+  await setTlsSettingsFromInputs();
+}
+
+async function addClientCertificateFromPrompt() {
+  await upsertClientCertificateFromModal(null);
+}
+
+async function editClientCertificateFromPrompt(certificateId) {
+  const existing = workspace.settings?.request?.clientCertificates?.find((item) => item.id === certificateId) || null;
+  if (!existing) {
+    return;
+  }
+  await upsertClientCertificateFromModal(existing);
+}
+
+async function upsertClientCertificateFromModal(existing = null) {
+  ensureSettings();
+  const now = new Date().toISOString();
+  const certificateId = existing?.id || (crypto.randomUUID ? crypto.randomUUID() : `client-certificate-${Date.now()}`);
+  const values = await promptClientCertificateModal(existing, certificateId);
+  if (!values) {
+    return;
+  }
+  const previousSettings = cloneWorkspaceSettings();
+  const previousSecretKey = existing?.passphraseSecretKey || '';
+  let passphraseSecretKey = previousSecretKey;
+  let plainPassphrase = existing?.passphrase || '';
+  if (values.passphrase) {
+    passphraseSecretKey = await bindClientCertificatePassphrase(certificateId, values.passphrase);
+    plainPassphrase = passphraseSecretKey ? '' : values.passphrase;
+  }
+  const certificate = {
+    id: certificateId,
+    name: values.name || 'Client Certificate',
+    enabled: values.enabled !== false,
+    host: values.host,
+    port: values.port,
+    matches: [],
+    certPath: values.certPath,
+    keyPath: values.keyPath,
+    pfxPath: values.pfxPath,
+    caPath: existing?.caPath || '',
+    passphrase: plainPassphrase,
+    passphraseSecretKey,
+    createdAt: existing?.createdAt || now,
+    updatedAt: now
+  };
+  workspace.settings.request.clientCertificates = [
+    ...workspace.settings.request.clientCertificates.filter((item) => item.id !== certificate.id),
+    certificate
+  ];
+  const saved = await saveWorkspaceSettingsWithRollback(
+    previousSettings,
+    existing ? 'Client certificate updated.' : 'Client certificate added.',
+    'Client certificate save failed',
+    'Client Certificate Save Failed'
+  );
+  if (!saved && passphraseSecretKey && passphraseSecretKey !== previousSecretKey) {
+    await unsetClientCertificatePassphraseSecret(passphraseSecretKey);
+  }
+  if (saved && previousSecretKey && previousSecretKey !== passphraseSecretKey) {
+    await unsetClientCertificatePassphraseSecret(previousSecretKey);
+  }
+}
+
+async function promptClientCertificateModal(existing = null, certificateId = '') {
+  configureClientCertificateModal(existing, certificateId);
+  const result = await showModal('clientCertificateModal', null);
+  resetClientCertificateModal();
+  return result && typeof result === 'object' ? result : null;
+}
+
+function configureClientCertificateModal(existing = null, certificateId = '') {
+  $('clientCertificateModalTitle').textContent = existing ? 'Edit client certificate' : 'Add client certificate';
+  $('clientCertificateModalMessage').textContent = existing
+    ? 'Update the host match and local certificate files for this client certificate.'
+    : 'Configure the host match and local certificate files for HTTPS client authentication.';
+  $('clientCertificateNameInput').value = existing?.name || 'Client Certificate';
+  $('clientCertificateHostInput').value = existing?.host || existing?.matches?.[0] || '';
+  $('clientCertificatePortInput').value = existing?.port || '';
+  $('clientCertificateFormatSelect').value = existing?.pfxPath ? 'pfx' : 'pem';
+  $('clientCertificateCertPathInput').value = existing?.certPath || '';
+  $('clientCertificateKeyPathInput').value = existing?.keyPath || '';
+  $('clientCertificatePfxPathInput').value = existing?.pfxPath || '';
+  $('clientCertificatePassphraseInput').value = '';
+  $('clientCertificatePassphraseInput').placeholder = existing ? 'Leave blank to keep current passphrase' : 'Optional';
+  setClientCertificatePassphraseVisible(false);
+  $('clientCertificateEnabledInput').checked = existing?.enabled !== false;
+  $('clientCertificateModal').dataset.certificateId = certificateId || '';
+  renderClientCertificateModalError('');
+  updateClientCertificateModalFormat();
+}
+
+function resetClientCertificateModal() {
+  for (const id of [
+    'clientCertificateNameInput',
+    'clientCertificateHostInput',
+    'clientCertificatePortInput',
+    'clientCertificateCertPathInput',
+    'clientCertificateKeyPathInput',
+    'clientCertificatePfxPathInput',
+    'clientCertificatePassphraseInput'
+  ]) {
+    if ($(id)) {
+      $(id).value = '';
+    }
+  }
+  setClientCertificatePassphraseVisible(false);
+  renderClientCertificateModalError('');
+}
+
+function updateClientCertificateModalFormat() {
+  const usePfx = $('clientCertificateFormatSelect')?.value === 'pfx';
+  for (const element of document.querySelectorAll('.client-certificate-pem-field')) {
+    element.hidden = usePfx;
+  }
+  for (const element of document.querySelectorAll('.client-certificate-pfx-field')) {
+    element.hidden = !usePfx;
+  }
+}
+
+async function chooseClientCertificatePath(kind) {
+  const configs = {
+    cert: {
+      accept: '.crt,.cer,.pem',
+      inputId: 'clientCertificateCertPathInput',
+      title: 'Choose CRT file'
+    },
+    key: {
+      accept: '.key,.pem',
+      inputId: 'clientCertificateKeyPathInput',
+      title: 'Choose KEY file'
+    },
+    pfx: {
+      accept: '.pfx,.p12',
+      inputId: 'clientCertificatePfxPathInput',
+      title: 'Choose PFX/P12 file'
+    }
+  };
+  const config = configs[kind];
+  if (!config) {
+    return;
+  }
+  const selection = await chooseCertificateFile(config.title, config.accept);
+  if (!selection?.path) {
+    return;
+  }
+  const input = $(config.inputId);
+  if (input) {
+    input.value = selection.path;
+    input.focus?.();
+  }
+  renderClientCertificateModalError('');
+}
+
+function toggleClientCertificatePassphraseVisibility() {
+  const input = $('clientCertificatePassphraseInput');
+  setClientCertificatePassphraseVisible(input?.type === 'password');
+}
+
+function setClientCertificatePassphraseVisible(visible) {
+  const input = $('clientCertificatePassphraseInput');
+  const button = $('toggleClientCertificatePassphraseButton');
+  if (input) {
+    input.type = visible ? 'text' : 'password';
+  }
+  if (button) {
+    button.textContent = visible ? 'Hide' : 'Show';
+    button.setAttribute('aria-pressed', visible ? 'true' : 'false');
+    button.setAttribute('aria-label', `${visible ? 'Hide' : 'Show'} client certificate passphrase`);
+  }
+}
+
+function confirmClientCertificateModal() {
+  const values = collectClientCertificateModalValues();
+  if (!values.ok) {
+    renderClientCertificateModalError(values.error);
+    return;
+  }
+  resolveActiveModal(values.certificate);
+}
+
+function collectClientCertificateModalValues() {
+  const format = $('clientCertificateFormatSelect')?.value === 'pfx' ? 'pfx' : 'pem';
+  const name = String($('clientCertificateNameInput')?.value || '').trim() || 'Client Certificate';
+  const host = String($('clientCertificateHostInput')?.value || '').trim();
+  const port = String($('clientCertificatePortInput')?.value || '').trim();
+  const certPath = format === 'pem' ? String($('clientCertificateCertPathInput')?.value || '').trim() : '';
+  const keyPath = format === 'pem' ? String($('clientCertificateKeyPathInput')?.value || '').trim() : '';
+  const pfxPath = format === 'pfx' ? String($('clientCertificatePfxPathInput')?.value || '').trim() : '';
+  if (!host) {
+    return { ok: false, error: 'Host is required.' };
+  }
+  if (port && (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535)) {
+    return { ok: false, error: 'Port must be between 1 and 65535.' };
+  }
+  if (format === 'pem' && (!certPath || !keyPath)) {
+    return { ok: false, error: 'PEM certificate and key files are required.' };
+  }
+  if (format === 'pfx' && !pfxPath) {
+    return { ok: false, error: 'PFX/P12 file is required.' };
+  }
+  return {
+    ok: true,
+    certificate: {
+      name,
+      enabled: $('clientCertificateEnabledInput')?.checked !== false,
+      host,
+      port,
+      certPath,
+      keyPath,
+      pfxPath,
+      passphrase: String($('clientCertificatePassphraseInput')?.value || '')
+    }
+  };
+}
+
+function renderClientCertificateModalError(message) {
+  const error = $('clientCertificateModalError');
+  if (!error) {
+    return;
+  }
+  error.textContent = String(message || '');
+  error.hidden = !message;
+}
+
+async function chooseCertificateFile(title, accept) {
+  return showLocalFilePicker({
+    accept,
+    dropDetail: 'or choose a certificate file from this computer.',
+    dropTitle: 'Drop certificate file here',
+    kind: 'certificate',
+    message: 'Choose a local certificate file path.',
+    title
+  });
+}
+
+async function bindClientCertificatePassphrase(certificateId, passphrase) {
+  const suffix = crypto.randomUUID ? crypto.randomUUID() : Date.now();
+  const key = `client-certificate:${certificateId}:passphrase:${suffix}`;
+  if (window.postmeter?.vault?.bindSecret) {
+    try {
+      await window.postmeter.vault.bindSecret(key, passphrase);
+      return key;
+    } catch {
+      return '';
+    }
+  }
+  return '';
+}
+
+async function unsetClientCertificatePassphraseSecret(secretKey) {
+  if (secretKey && window.postmeter?.vault?.unsetSecret) {
+    await window.postmeter.vault.unsetSecret(secretKey).catch(() => {});
+  }
+}
+
+async function toggleClientCertificate(certificateId) {
+  ensureSettings();
+  const previousSettings = cloneWorkspaceSettings();
+  const certificate = workspace.settings.request.clientCertificates.find((item) => item.id === certificateId);
+  if (!certificate) {
+    return;
+  }
+  certificate.enabled = certificate.enabled === false;
+  certificate.updatedAt = new Date().toISOString();
+  await saveWorkspaceSettingsWithRollback(
+    previousSettings,
+    `Client certificate ${certificate.enabled ? 'enabled' : 'disabled'}.`,
+    'Client certificate update failed',
+    'Client Certificate Save Failed'
+  );
+}
+
+async function removeClientCertificate(certificateId) {
+  ensureSettings();
+  const certificate = workspace.settings.request.clientCertificates.find((item) => item.id === certificateId);
+  if (!certificate) {
+    return;
+  }
+  if (!(await confirmActionModal({
+    title: 'Remove client certificate?',
+    message: `Remove "${certificate.name || 'Client Certificate'}"?`,
+    confirmLabel: 'Remove Certificate',
+    danger: true
+  }))) {
+    return;
+  }
+  const previousSettings = cloneWorkspaceSettings();
+  workspace.settings.request.clientCertificates = workspace.settings.request.clientCertificates.filter((item) => item.id !== certificateId);
+  const saved = await saveWorkspaceSettingsWithRollback(
+    previousSettings,
+    'Client certificate removed.',
+    'Client certificate removal failed',
+    'Client Certificate Save Failed'
+  );
+  if (saved) {
+    await unsetClientCertificatePassphraseSecret(certificate.passphraseSecretKey);
+  }
 }
 
 async function setDiagnosticsSettingsFromInputs() {
@@ -6083,6 +6903,7 @@ function selectFirstRequest(collection) {
 function renderCollections() {
   const root = $('collectionsTree');
   root.textContent = '';
+  pruneCollectionTreeCollapseState(state, workspace.collections || []);
   if (!workspace.collections.length) {
     const empty = document.createElement('div');
     empty.className = 'empty-state';
@@ -6373,6 +7194,20 @@ function renderRunnerEditor() {
   renderCapturePolicyControls('runner', runner?.capturePolicy, Boolean(runner));
   $('addRunnerRequestButton').disabled = !runner;
   renderRunnerRequestList(runner);
+  syncRunnerResultExportButtons(runner);
+}
+
+function setRunnerResultExportButtonsDisabled(disabled) {
+  for (const id of ['exportRunnerResultsButton', 'exportRunnerHtmlButton', 'exportRunnerJsonButton', 'exportRunnerCsvButton']) {
+    const button = $(id);
+    if (button) {
+      button.disabled = disabled;
+    }
+  }
+}
+
+function syncRunnerResultExportButtons(runner = activeRunner()) {
+  setRunnerResultExportButtonsDisabled(!runner || !lastRunnerResult || Boolean(activeRunnerId));
 }
 
 function renderPerformanceEditor() {
@@ -6395,9 +7230,6 @@ function renderPerformanceEditor() {
       button.disabled = !test;
     }
   }
-  if ($('exportPerformanceResultCsvButton')) {
-    $('exportPerformanceResultCsvButton').disabled = !test || !lastPerformanceResult || Boolean(activePerformanceRunId);
-  }
   renderCsvVariablesDropdown('performance', test?.csvVariables, Boolean(test));
   if ($('runPerformanceTestButton')) {
     $('runPerformanceTestButton').disabled = !test || Boolean(activePerformanceRunId);
@@ -6413,6 +7245,16 @@ function renderPerformanceEditor() {
   renderPerformanceMutationControls(test);
   renderCapturePolicyControls('performance', test?.capturePolicy, Boolean(test));
   renderPerformanceRequestEditor(test);
+  syncPerformanceResultExportButtons(test);
+}
+
+function syncPerformanceResultExportButtons(test = activePerformanceTest()) {
+  for (const id of ['exportPerformanceResultsButton', 'exportPerformanceResultHtmlButton', 'exportPerformanceResultJsonButton', 'exportPerformanceResultCsvButton']) {
+    const button = $(id);
+    if (button) {
+      button.disabled = !test || !isActivePerformanceResultForTest(test) || Boolean(activePerformanceRunId);
+    }
+  }
 }
 
 function renderPerformanceRequestEditor(test = activePerformanceTest()) {
@@ -6749,7 +7591,7 @@ function capturePolicyGuardrailState(prefix, policy) {
     scriptLogsForcedOff: highVolume,
     localVariablesForcedOff: highVolume,
     responseHeadersForcedOff: veryHighVolume && !(kind === 'performance' && context.diagnostic === true),
-    transportTimingsForcedOff: veryHighVolume && !(kind === 'performance' && context.diagnostic === true),
+    transportTimingsForcedOff: veryHighVolume && kind !== 'performance',
     responseBodyLimitedModes: veryHighVolume ? ['all', 'sampled'] : highVolume ? ['all'] : [],
     bodyPreviewCap: veryHighVolume ? 2048 : highVolume ? 4096 : 32768
   };
@@ -7146,20 +7988,26 @@ function showAddRunnerRequestMenu(event) {
 }
 
 async function promptAndImportRunnerRequests() {
-  const target = await promptRunnerRequestImport();
+  const target = await promptRunnerRequestImport({ mode: 'runner' });
   if (!target) {
     return null;
   }
   return importRunnerSelection(target);
 }
 
-function promptRunnerRequestImport() {
+function promptRunnerRequestImport(options = {}) {
+  runnerImportSelectionMode = options.mode === 'performance' ? 'performance' : 'runner';
   selectedRunnerImportTarget = [];
-  expandedRunnerImportCollectionIds = [];
+  expandedRunnerImportNodeKeys = [];
   lastRunnerImportSelectionKey = '';
   const collections = workspace.collections || [];
+  const performanceMode = runnerImportSelectionMode === 'performance';
+  $('runnerImportTitle').textContent = performanceMode ? 'Import request' : 'Import requests';
+  $('confirmRunnerImportButton').textContent = performanceMode ? 'Import' : 'Add';
   $('runnerImportMessage').textContent = collections.length
-    ? 'Choose a collection to expand, then select one or more requests to add to this runner.'
+    ? performanceMode
+      ? 'Expand collections and folders, then select one request to use for this performance test.'
+      : 'Expand collections and folders, then select requests, folders, or collections to add to this runner.'
     : 'There are no collections to import from.';
   renderRunnerImportList(collections);
   return showModal('runnerImportModal', null);
@@ -7178,48 +8026,181 @@ function renderRunnerImportList(collections = workspace.collections || []) {
     return;
   }
   for (const collection of availableCollections) {
-    const entries = collectionRequestEntries(collection);
-    const expanded = expandedRunnerImportCollectionIds.includes(collection.id);
-    list.append(runnerImportOption({
-      type: 'collection',
-      collectionId: collection.id,
-      label: collection.name || 'Untitled Collection',
-      meta: `${entries.length} request${entries.length === 1 ? '' : 's'}`,
-      expanded
-    }));
-    if (!expanded) {
-      continue;
-    }
-    for (const entry of entries) {
-      const folderPath = entry.folderPath?.length ? `${entry.folderPath.join(' / ')} / ` : '';
-      list.append(runnerImportOption({
-        type: 'request',
-        collectionId: collection.id,
-        requestId: entry.request.id,
-        label: `${folderPath}${entry.request.name || 'Untitled Request'}`,
-        meta: `${entry.request.method || 'GET'} ${entry.request.url || ''}`.trim(),
-        checked: runnerImportTargetSelected({
-          type: 'request',
-          collectionId: collection.id,
-          requestId: entry.request.id
-        })
-      }));
-    }
+    appendRunnerImportCollectionNode(list, collection);
   }
 }
 
-function runnerImportOption(option) {
-  if (option.type === 'collection') {
-    return runnerImportCollectionOption(option);
+function appendRunnerImportCollectionNode(list, collection) {
+  const target = {
+    type: 'collection',
+    collectionId: collection?.id || ''
+  };
+  const entries = collectionRequestEntries(collection);
+  const expanded = runnerImportNodeExpanded(target);
+  list.append(runnerImportGroupOption({
+    ...target,
+    label: collection?.name || 'Untitled Collection',
+    meta: `${entries.length} request${entries.length === 1 ? '' : 's'}`,
+    depth: 0,
+    expanded,
+    hasChildren: runnerImportContainerHasChildren(collection),
+    requestTargets: entries.map(runnerImportTargetFromEntry)
+  }));
+  if (!expanded) {
+    return;
   }
+  for (const request of collection?.requests || []) {
+    list.append(runnerImportRequestOption({
+      type: 'request',
+      collectionId: collection?.id || '',
+      folderId: '',
+      requestId: request?.id || '',
+      label: request?.name || 'Untitled Request',
+      meta: `${request?.method || 'GET'} ${request?.url || ''}`.trim(),
+      depth: 1,
+      checked: runnerImportTargetSelected({
+        type: 'request',
+        collectionId: collection?.id || '',
+        requestId: request?.id || '',
+        folderId: ''
+      })
+    }));
+  }
+  for (const folder of collection?.folders || []) {
+    appendRunnerImportFolderNode(list, collection, folder, 1, []);
+  }
+}
+
+function appendRunnerImportFolderNode(list, collection, folder, depth, parentPath) {
+  const folderPath = [...parentPath, folder?.name || 'Untitled Folder'];
+  const entries = runnerImportFolderRequestEntries(collection, folder, parentPath);
+  const target = {
+    type: 'folder',
+    collectionId: collection?.id || '',
+    folderId: folder?.id || ''
+  };
+  const expanded = runnerImportNodeExpanded(target);
+  list.append(runnerImportGroupOption({
+    ...target,
+    label: folder?.name || 'Untitled Folder',
+    meta: `${entries.length} request${entries.length === 1 ? '' : 's'}`,
+    depth,
+    expanded,
+    hasChildren: runnerImportContainerHasChildren(folder),
+    requestTargets: entries.map(runnerImportTargetFromEntry)
+  }));
+  if (!expanded) {
+    return;
+  }
+  for (const request of folder?.requests || []) {
+    list.append(runnerImportRequestOption({
+      type: 'request',
+      collectionId: collection?.id || '',
+      folderId: folder?.id || '',
+      requestId: request?.id || '',
+      label: request?.name || 'Untitled Request',
+      meta: `${request?.method || 'GET'} ${request?.url || ''}`.trim(),
+      depth: depth + 1,
+      checked: runnerImportTargetSelected({
+        type: 'request',
+        collectionId: collection?.id || '',
+        folderId: folder?.id || '',
+        requestId: request?.id || ''
+      })
+    }));
+  }
+  for (const child of folder?.folders || []) {
+    appendRunnerImportFolderNode(list, collection, child, depth + 1, folderPath);
+  }
+}
+
+function runnerImportGroupOption(option) {
+  const row = document.createElement('div');
+  row.className = `collection-pick-option runner-import-option ${option.type}`;
+  row.dataset.runnerImportType = option.type;
+  row.dataset.collectionId = option.collectionId || '';
+  if (option.folderId) {
+    row.dataset.folderId = option.folderId;
+  }
+  row.style.setProperty('--runner-import-depth-offset', `${Math.max(0, option.depth || 0) * 22}px`);
+  row.setAttribute('aria-expanded', option.hasChildren ? (option.expanded ? 'true' : 'false') : 'false');
+  row.addEventListener('click', (event) => {
+    if (!option.hasChildren) {
+      return;
+    }
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLButtonElement) {
+      return;
+    }
+    toggleRunnerImportNodeExpansion(option);
+  });
+
+  const expander = document.createElement('button');
+  expander.type = 'button';
+  expander.className = 'runner-import-expander';
+  expander.textContent = option.hasChildren ? (option.expanded ? 'v' : '>') : '';
+  expander.disabled = !option.hasChildren;
+  expander.setAttribute('aria-label', `${option.expanded ? 'Collapse' : 'Expand'} ${option.label}`);
+  expander.setAttribute('aria-expanded', option.hasChildren ? (option.expanded ? 'true' : 'false') : 'false');
+  expander.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleRunnerImportNodeExpansion(option);
+  });
+  row.append(expander);
+
+  if (runnerImportSelectionMode === 'runner') {
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.name = 'runnerImportTarget';
+    input.dataset.runnerImportType = option.type;
+    input.dataset.collectionId = option.collectionId || '';
+    input.dataset.folderId = option.folderId || '';
+    input.dataset.requestId = '';
+    input.dataset.runnerImportKey = runnerImportTargetKey(option);
+    const selectionState = runnerImportSelectionState(option.requestTargets);
+    input.checked = selectionState === 'checked';
+    input.indeterminate = selectionState === 'mixed';
+    input.disabled = !option.requestTargets?.length;
+    input.setAttribute('aria-label', `Select ${option.label}`);
+    input.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setRunnerImportGroupChecked(option, selectionState !== 'checked');
+    });
+    input.addEventListener('change', () => {
+      setRunnerImportGroupChecked(option, input.checked);
+    });
+    row.append(input);
+  }
+
+  const text = document.createElement('span');
+  text.className = 'runner-import-label-text';
+  text.textContent = option.label;
+  if (option.meta) {
+    const meta = document.createElement('span');
+    meta.className = 'runner-import-meta';
+    meta.textContent = option.meta;
+    text.append(meta);
+  }
+  row.append(text);
+  return row;
+}
+
+function runnerImportRequestOption(option) {
   const label = document.createElement('label');
-  label.className = `collection-pick-option runner-import-option ${option.type}`;
+  label.className = 'collection-pick-option runner-import-option request';
+  label.dataset.runnerImportType = 'request';
+  label.dataset.collectionId = option.collectionId || '';
+  label.dataset.folderId = option.folderId || '';
+  label.dataset.requestId = option.requestId || '';
   label.dataset.runnerImportKey = runnerImportTargetKey(option);
+  label.style.setProperty('--runner-import-depth-offset', `${Math.max(0, option.depth || 0) * 22}px`);
   const input = document.createElement('input');
-  input.type = 'checkbox';
+  input.type = runnerImportSelectionMode === 'performance' ? 'radio' : 'checkbox';
   input.name = 'runnerImportTarget';
-  input.dataset.runnerImportType = option.type;
+  input.dataset.runnerImportType = 'request';
   input.dataset.collectionId = option.collectionId || '';
+  input.dataset.folderId = option.folderId || '';
   input.dataset.requestId = option.requestId || '';
   input.dataset.runnerImportKey = runnerImportTargetKey(option);
   input.checked = option.checked === true;
@@ -7237,11 +8218,17 @@ function runnerImportOption(option) {
       return;
     }
     event.preventDefault();
-    updateRunnerImportSelection(option, {
+    updateRunnerImportSelection({
+      type: 'request',
+      collectionId: option.collectionId,
+      folderId: option.folderId,
+      requestId: option.requestId
+    }, {
       shiftKey: event.shiftKey === true
     });
   });
   const text = document.createElement('span');
+  text.className = 'runner-import-label-text';
   text.textContent = option.label;
   if (option.meta) {
     const meta = document.createElement('span');
@@ -7251,29 +8238,6 @@ function runnerImportOption(option) {
   }
   label.append(input, text);
   return label;
-}
-
-function runnerImportCollectionOption(option) {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'collection-pick-option runner-import-option collection';
-  button.dataset.runnerImportType = 'collection';
-  button.dataset.collectionId = option.collectionId || '';
-  button.setAttribute('aria-expanded', option.expanded === true ? 'true' : 'false');
-  button.addEventListener('click', (event) => {
-    event.preventDefault();
-    toggleRunnerImportCollectionExpansion(option.collectionId);
-  });
-  const text = document.createElement('span');
-  text.textContent = option.label;
-  if (option.meta) {
-    const meta = document.createElement('span');
-    meta.className = 'runner-import-meta';
-    meta.textContent = option.meta;
-    text.append(meta);
-  }
-  button.append(text);
-  return button;
 }
 
 function selectedRunnerImportTargets() {
@@ -7297,21 +8261,28 @@ function setSelectedRunnerImportTargets(targets) {
     seen.add(key);
     uniqueTargets.push(normalized);
   }
-  selectedRunnerImportTarget = uniqueTargets;
-  $('confirmRunnerImportButton').disabled = !uniqueTargets.length;
+  const selectedTargets = runnerImportSelectionMode === 'performance'
+    ? uniqueTargets.slice(-1)
+    : uniqueTargets;
+  selectedRunnerImportTarget = selectedTargets;
+  $('confirmRunnerImportButton').disabled = !selectedTargets.length;
 }
 
 function normalizeRunnerImportTarget(target = {}) {
+  const type = target.type === 'collection' || target.type === 'folder' || target.type === 'request'
+    ? target.type
+    : 'request';
   return {
-    type: target.type === 'collection' ? 'collection' : 'request',
+    type,
     collectionId: target.collectionId || '',
-    requestId: target.type === 'collection' ? '' : target.requestId || ''
+    folderId: type === 'collection' ? '' : target.folderId || '',
+    requestId: type === 'request' ? target.requestId || '' : ''
   };
 }
 
 function runnerImportTargetKey(target = {}) {
   const normalized = normalizeRunnerImportTarget(target);
-  return `${normalized.type}:${normalized.collectionId}:${normalized.requestId}`;
+  return `${normalized.type}:${normalized.collectionId}:${normalized.folderId}:${normalized.requestId}`;
 }
 
 function runnerImportTargetSelected(target) {
@@ -7323,6 +8294,7 @@ function runnerImportTargetFromInput(input) {
   return {
     type: input.dataset.runnerImportType,
     collectionId: input.dataset.collectionId || '',
+    folderId: input.dataset.folderId || '',
     requestId: input.dataset.requestId || ''
   };
 }
@@ -7332,12 +8304,14 @@ function updateRunnerImportSelection(target, options = {}) {
   if (!normalized.collectionId) {
     return;
   }
-  if (normalized.type === 'collection') {
-    toggleRunnerImportCollectionExpansion(normalized.collectionId);
+  if (normalized.type !== 'request') {
+    toggleRunnerImportNodeExpansion(normalized);
     return;
   }
   let nextTargets = selectedRunnerImportTargets();
-  if (options.shiftKey && lastRunnerImportSelectionKey) {
+  if (runnerImportSelectionMode === 'performance') {
+    nextTargets = [normalized];
+  } else if (options.shiftKey && lastRunnerImportSelectionKey) {
     const visibleTargets = visibleRunnerImportTargets();
     const keys = visibleTargets.map(runnerImportTargetKey);
     const anchorIndex = keys.indexOf(lastRunnerImportSelectionKey);
@@ -7380,25 +8354,137 @@ function toggleRunnerImportTarget(targets, target) {
 }
 
 function visibleRunnerImportTargets() {
-  return Array.from($('runnerImportList').querySelectorAll('input[data-runner-import-key]'))
+  return Array.from($('runnerImportList').querySelectorAll('input[data-runner-import-key][data-runner-import-type="request"]'))
     .map(runnerImportTargetFromInput);
 }
 
 function expandRunnerImportCollection(collectionId) {
-  if (!collectionId || expandedRunnerImportCollectionIds.includes(collectionId)) {
-    return;
-  }
-  expandedRunnerImportCollectionIds = [...expandedRunnerImportCollectionIds, collectionId];
+  expandRunnerImportNode({ type: 'collection', collectionId });
 }
 
 function toggleRunnerImportCollectionExpansion(collectionId) {
-  if (!collectionId) {
+  toggleRunnerImportNodeExpansion({ type: 'collection', collectionId });
+}
+
+function runnerImportNodeKey(target = {}) {
+  const normalized = normalizeRunnerImportTarget(target);
+  return `${normalized.type}:${normalized.collectionId}:${normalized.folderId}`;
+}
+
+function runnerImportNodeExpanded(target = {}) {
+  return expandedRunnerImportNodeKeys.includes(runnerImportNodeKey(target));
+}
+
+function expandRunnerImportNode(target = {}) {
+  const key = runnerImportNodeKey(target);
+  if (!target?.collectionId || expandedRunnerImportNodeKeys.includes(key)) {
     return;
   }
-  expandedRunnerImportCollectionIds = expandedRunnerImportCollectionIds.includes(collectionId)
-    ? expandedRunnerImportCollectionIds.filter((id) => id !== collectionId)
-    : [...expandedRunnerImportCollectionIds, collectionId];
+  expandedRunnerImportNodeKeys = [...expandedRunnerImportNodeKeys, key];
+}
+
+function toggleRunnerImportNodeExpansion(target = {}) {
+  if (!target?.collectionId) {
+    return;
+  }
+  const key = runnerImportNodeKey(target);
+  expandedRunnerImportNodeKeys = expandedRunnerImportNodeKeys.includes(key)
+    ? expandedRunnerImportNodeKeys.filter((id) => id !== key)
+    : [...expandedRunnerImportNodeKeys, key];
   renderRunnerImportList();
+}
+
+function runnerImportSelectionState(targets = []) {
+  const requestTargets = Array.isArray(targets) ? targets.filter((target) => target?.type === 'request') : [];
+  if (!requestTargets.length) {
+    return 'unchecked';
+  }
+  const selectedKeys = new Set(selectedRunnerImportTargets().map(runnerImportTargetKey));
+  const selectedCount = requestTargets.filter((target) => selectedKeys.has(runnerImportTargetKey(target))).length;
+  if (selectedCount === requestTargets.length) {
+    return 'checked';
+  }
+  return selectedCount > 0 ? 'mixed' : 'unchecked';
+}
+
+function setRunnerImportGroupChecked(option = {}, checked) {
+  if (runnerImportSelectionMode !== 'runner') {
+    return;
+  }
+  const requestTargets = Array.isArray(option.requestTargets)
+    ? option.requestTargets.filter((target) => target?.type === 'request')
+    : runnerImportRequestTargetsForNode(option);
+  if (!requestTargets.length) {
+    return;
+  }
+  const descendantKeys = new Set(requestTargets.map(runnerImportTargetKey));
+  const nextTargets = selectedRunnerImportTargets()
+    .filter((selected) => !descendantKeys.has(runnerImportTargetKey(selected)));
+  if (checked) {
+    nextTargets.push(...requestTargets);
+  }
+  lastRunnerImportSelectionKey = requestTargets.length ? runnerImportTargetKey(requestTargets.at(-1)) : '';
+  setSelectedRunnerImportTargets(nextTargets);
+  renderRunnerImportList();
+}
+
+function runnerImportRequestTargetsForNode(target = {}) {
+  const normalized = normalizeRunnerImportTarget(target);
+  const collection = (workspace.collections || []).find((item) => item.id === normalized.collectionId);
+  if (!collection) {
+    return [];
+  }
+  if (normalized.type === 'request') {
+    return [normalized];
+  }
+  if (normalized.type === 'collection') {
+    return collectionRequestEntries(collection).map(runnerImportTargetFromEntry);
+  }
+  const folder = findRunnerImportFolder(collection, normalized.folderId);
+  return runnerImportFolderRequestEntries(collection, folder).map(runnerImportTargetFromEntry);
+}
+
+function runnerImportTargetFromEntry(entry = {}) {
+  return {
+    type: 'request',
+    collectionId: entry.collection?.id || '',
+    folderId: entry.folder?.id || '',
+    requestId: entry.request?.id || ''
+  };
+}
+
+function runnerImportFolderRequestEntries(collection, folder, parentPath = []) {
+  const entries = [];
+  if (!folder) {
+    return entries;
+  }
+  const folderPath = [...parentPath, folder.name || 'Untitled Folder'];
+  for (const request of folder.requests || []) {
+    entries.push({ collection, request, folder, folderPath });
+  }
+  for (const child of folder.folders || []) {
+    entries.push(...runnerImportFolderRequestEntries(collection, child, folderPath));
+  }
+  return entries;
+}
+
+function findRunnerImportFolder(collection, folderId) {
+  if (!folderId) {
+    return null;
+  }
+  const stack = [...(collection?.folders || [])];
+  while (stack.length) {
+    const folder = stack.shift();
+    if (folder?.id === folderId) {
+      return folder;
+    }
+    stack.unshift(...(folder?.folders || []));
+  }
+  return null;
+}
+
+function runnerImportContainerHasChildren(container) {
+  return Boolean(container?.requests?.length || container?.folders?.length);
 }
 
 function importRunnerSelection(target) {
@@ -7420,7 +8506,8 @@ function importRunnerSelections(targets) {
   }
   const entries = [];
   const seenRequests = new Set();
-  for (const target of targets.map(normalizeRunnerImportTarget)) {
+  const requestTargets = expandRunnerImportTargets(targets);
+  for (const target of requestTargets.map(normalizeRunnerImportTarget)) {
     if (target.type !== 'request' || !target.requestId) {
       continue;
     }
@@ -7429,9 +8516,10 @@ function importRunnerSelections(targets) {
       continue;
     }
     const collectionEntries = collectionRequestEntries(collection);
-    const selectedEntries = collectionEntries.filter((entry) => entry.request?.id === target.requestId);
+    const selectedEntries = collectionEntries.filter((entry) => entry.request?.id === target.requestId
+      && (!target.folderId || entry.folder?.id === target.folderId));
     for (const entry of selectedEntries) {
-      const requestKey = `${collection.id}:${entry.request?.id || ''}`;
+      const requestKey = `${collection.id}:${entry.folder?.id || 'root'}:${entry.request?.id || ''}`;
       if (!entry.request || seenRequests.has(requestKey)) {
         continue;
       }
@@ -7451,8 +8539,21 @@ function importRunnerSelections(targets) {
   return imported.length;
 }
 
+function expandRunnerImportTargets(targets = []) {
+  const expanded = [];
+  for (const target of Array.isArray(targets) ? targets : []) {
+    const normalized = normalizeRunnerImportTarget(target);
+    if (normalized.type === 'request') {
+      expanded.push(normalized);
+      continue;
+    }
+    expanded.push(...runnerImportRequestTargetsForNode(normalized));
+  }
+  return expanded;
+}
+
 async function promptAndImportPerformanceRequest() {
-  const target = await promptRunnerRequestImport();
+  const target = await promptRunnerRequestImport({ mode: 'performance' });
   if (!target) {
     return null;
   }
@@ -7466,7 +8567,8 @@ function importPerformanceRequestSelection(target) {
     return null;
   }
   const collection = (workspace.collections || []).find((item) => item.id === normalized.collectionId);
-  const entry = collectionRequestEntries(collection).find((candidate) => candidate.request?.id === normalized.requestId);
+  const entry = collectionRequestEntries(collection).find((candidate) => candidate.request?.id === normalized.requestId
+    && (!normalized.folderId || candidate.folder?.id === normalized.folderId));
   if (!entry?.request) {
     setStatus('No request was selected to import.');
     return null;
@@ -7725,6 +8827,7 @@ async function runActivePerformanceTest() {
     workspaceId: activeWorkspaceId
   };
   lastPerformanceResult = null;
+  lastPerformanceResultTestId = '';
   selectedPerformanceResultIndex = 0;
   performanceExecutionPage = 0;
   performanceExecutionStatusFilter = 'all';
@@ -7749,6 +8852,7 @@ async function runActivePerformanceTest() {
     const message = error.message || String(error);
     if (isActivePerformanceContext(runContext) && activePerformanceRunId === runId) {
       lastPerformanceResult = null;
+      lastPerformanceResultTestId = '';
       renderPerformanceMessage(message);
       setStatus('Performance test failed.');
       notifyUser('Performance Test Failed', message);
@@ -7814,26 +8918,75 @@ async function exportPerformanceTestFromPicker() {
   return exportActivePerformanceTest(selectedTest);
 }
 
-async function exportActivePerformanceResultCsv() {
-  if (!lastPerformanceResult) {
-    return setStatus('Run a performance test before exporting result CSV.');
+async function exportActivePerformanceResult(format = 'json', htmlReportOptions) {
+  const normalizedFormat = format === 'csv' ? 'csv' : format === 'html' ? 'html' : 'json';
+  const label = normalizedFormat.toUpperCase();
+  const test = activePerformanceTest();
+  const resultToExport = isActivePerformanceResultForTest(test) ? lastPerformanceResult : null;
+  if (!resultToExport) {
+    return setStatus(`Run a performance test before exporting result ${label}.`);
   }
-  const performanceApi = window.postmeter?.performance;
-  if (!performanceApi?.exportResult) {
+  const exportResult = window.__postmeterExportPerformanceResult || window.postmeter?.performance?.exportResult;
+  if (!exportResult) {
     return setStatus('Performance result export is unavailable in this runtime.');
   }
   try {
-    const result = await performanceApi.exportResult(cloneJson(lastPerformanceResult), 'csv');
+    const result = await exportResult(cloneJson(resultToExport), normalizedFormat, htmlReportOptions);
     if (result?.path) {
-      setStatus(`Performance result CSV exported to ${result.path}.`);
+      setStatus(`Performance result ${label} exported to ${result.path}.`);
     }
     return result;
   } catch (error) {
     const message = error.message || String(error);
-    setStatus(`Performance result CSV export failed: ${message}`);
+    setStatus(`Performance result ${label} export failed: ${message}`);
     notifyUser('Performance Result Export Failed', message);
     return null;
   }
+}
+
+function openHtmlReportOptionsModal(target) {
+  const normalizedTarget = target === 'performance' ? 'performance' : 'runner';
+  const includeResultsInput = $('htmlReportIncludeResultsInput');
+  const includeDetailsInput = $('htmlReportIncludeDetailsInput');
+  if (includeResultsInput) {
+    includeResultsInput.checked = true;
+  }
+  if (includeDetailsInput) {
+    includeDetailsInput.checked = true;
+  }
+  syncHtmlReportOptionsModal();
+  void showModal('htmlReportOptionsModal', null).then((options) => {
+    if (!options) {
+      return;
+    }
+    if (normalizedTarget === 'performance') {
+      void exportActivePerformanceResult('html', options);
+    } else {
+      void exportRunnerResult('html', options);
+    }
+  });
+}
+
+function syncHtmlReportOptionsModal() {
+  const includeResultsInput = $('htmlReportIncludeResultsInput');
+  const includeDetailsInput = $('htmlReportIncludeDetailsInput');
+  const detailsLabel = includeDetailsInput?.closest?.('.html-report-option');
+  const includeResults = includeResultsInput?.checked === true;
+  if (includeDetailsInput) {
+    if (!includeResults) {
+      includeDetailsInput.checked = false;
+    }
+    includeDetailsInput.disabled = !includeResults;
+  }
+  detailsLabel?.classList.toggle('is-disabled', !includeResults);
+}
+
+function confirmHtmlReportOptionsModal() {
+  const includeResults = $('htmlReportIncludeResultsInput')?.checked === true;
+  resolveActiveModal({
+    includeRequestResults: includeResults,
+    includeRequestDetails: includeResults && $('htmlReportIncludeDetailsInput')?.checked === true
+  });
 }
 
 async function importPerformanceTest() {
@@ -7869,6 +9022,11 @@ async function importPerformanceTest() {
     tests.push(imported);
     activeRunnerRequestRunnerId = null;
     activePerformanceTestId = imported.id;
+    lastPerformanceResult = null;
+    lastPerformanceResultTestId = '';
+    selectedPerformanceResultIndex = 0;
+    performanceExecutionPage = 0;
+    performanceExecutionStatusFilter = 'all';
     activeSidebarPanel = 'performance';
     activeMainPanel = 'performance';
     ensureOpenPerformanceTabForActive({ dirty: true, createdUnsaved: true });
@@ -7906,8 +9064,14 @@ function isActivePerformanceContext(context) {
     && activeMainPanel === 'performance';
 }
 
+function isActivePerformanceResultForTest(test, result = lastPerformanceResult) {
+  const resultTestId = lastPerformanceResultTestId || result?.performanceTestId || '';
+  return Boolean(test?.id && result && resultTestId === test.id);
+}
+
 function applyPerformanceRunResult(result, runEnvironment, test) {
   lastPerformanceResult = result;
+  lastPerformanceResultTestId = test?.id || result?.performanceTestId || activePerformanceTestId || '';
   if (result?.environmentMutationAllowed === true && runEnvironment && (result.mutatedEnvironment || result.environment)) {
     for (const key of Object.keys(runEnvironment)) {
       delete runEnvironment[key];
@@ -8307,6 +9471,7 @@ function renderPerformanceExecutionDetails(result = lastPerformanceResult) {
   if (sample.error) {
     details.append(runnerDetailTextBlock('Error', sample.error, 'runner-detail-error'));
   }
+  appendRunnerTransportDetails(details, sample);
   appendRunnerScriptResultDetails(details, 'Pre-request', sample.preRequestScriptResult);
   appendRunnerScriptResultDetails(details, 'Post-request', sample.testScriptResult);
   appendRunnerVariableDetails(details, 'Request variables', sample.localVariables || []);
@@ -8341,6 +9506,7 @@ function renderStoredPerformanceExecutionDetails(result = lastPerformanceResult)
       if (sample.error) {
         details.append(runnerDetailTextBlock('Error', sample.error, 'runner-detail-error'));
       }
+      appendRunnerTransportDetails(details, sample);
       appendRunnerScriptResultDetails(details, 'Pre-request', sample.preRequestScriptResult);
       appendRunnerScriptResultDetails(details, 'Post-request', sample.testScriptResult);
       appendRunnerVariableDetails(details, 'Request variables', sample.localVariables || []);
@@ -8561,6 +9727,42 @@ function importCollectionIntoRunner(collection) {
   renderRunnerEditor();
   setStatus(`${requests.length} request${requests.length === 1 ? '' : 's'} imported into runner.`);
   return requests.length;
+}
+
+function generateRunnerFromCollection(collection) {
+  if (!collection) {
+    return null;
+  }
+  return generateRunnerFromRequestEntries(collection.name || 'Untitled Collection', collectionRequestEntries(collection));
+}
+
+function generateRunnerFromFolder(collection, folder) {
+  if (!collection || !folder) {
+    return null;
+  }
+  return generateRunnerFromRequestEntries(folder.name || 'Untitled Folder', runnerImportFolderRequestEntries(collection, folder));
+}
+
+function generateRunnerFromRequestEntries(sourceName, entries = []) {
+  if (!canOpenAdditionalRunnerTab()) {
+    return null;
+  }
+  ensureWorkspaceRunners();
+  collectActiveEditorState();
+  activeRunnerRequestRunnerId = null;
+  const baseName = `${String(sourceName || '').trim() || 'Generated'} Runner`;
+  const runner = newRunnerObject(uniqueName(baseName, workspace.runners.map((existing) => existing.name)));
+  runner.requests = (Array.isArray(entries) ? entries : [])
+    .filter((entry) => entry?.request)
+    .map((entry) => cloneRequestForRunner(entry.request, runnerRequestSourceFromEntry(entry)));
+  workspace.runners.push(runner);
+  activeRunnerConfigId = runner.id;
+  activeSidebarPanel = 'runners';
+  activeMainPanel = 'runner';
+  ensureOpenRunnerTabForActive({ dirty: true, createdUnsaved: true });
+  renderAll();
+  setStatus(`Generated runner: ${runnerDisplayName(runner)}.`);
+  return runner;
 }
 
 function collectionRequestEntries(collection) {
@@ -9192,6 +10394,11 @@ function newPerformanceTest() {
   const test = newPerformanceTestObject(uniqueName('New Performance Test', workspace.performanceTests.map((existing) => existing.name)));
   workspace.performanceTests.push(test);
   activePerformanceTestId = test.id;
+  lastPerformanceResult = null;
+  lastPerformanceResultTestId = '';
+  selectedPerformanceResultIndex = 0;
+  performanceExecutionPage = 0;
+  performanceExecutionStatusFilter = 'all';
   activeSidebarPanel = 'performance';
   activeMainPanel = 'performance';
   ensureOpenPerformanceTabForActive({ dirty: true, createdUnsaved: true });
@@ -9412,6 +10619,9 @@ function countWorkspaceFolders() {
 function collectionNode(collection) {
   const wrapper = document.createElement('div');
   wrapper.className = 'tree-node collection-node';
+  const hasChildren = collectionTreeItemHasChildren(collection);
+  const collapsed = hasChildren && isCollectionTreeItemCollapsed(state, 'collection', collection.id);
+  wrapper.classList.toggle('is-collapsed', collapsed);
   const button = treeButton(collection.name, collection.id === activeCollectionId && !activeRequestId, 'COL', {
     treeKind: 'collection',
     treeId: collection.id
@@ -9419,12 +10629,19 @@ function collectionNode(collection) {
   appendSidebarTreeRow(wrapper, button, {
     kind: 'collection',
     id: collection.id
+  }, {
+    expanded: !collapsed,
+    hasChildren,
+    label: collection.name || 'Untitled Collection',
+    onToggle: () => toggleCollectionTreeNode('collection', collection.id),
+    reserveDisclosure: true
   });
   button.addEventListener('click', () => {
     if (!canOpenCollectionTabFor(collection.id)) {
       return;
     }
     collectActiveEditorState();
+    setCollectionTreeItemCollapsed(state, 'collection', collection.id, false);
     activeRunnerRequestRunnerId = null;
     activeMainPanel = 'request';
     activeCollectionId = collection.id;
@@ -9444,15 +10661,21 @@ function collectionNode(collection) {
       ['OpenAPI', () => exportCollection(collection, 'openapi')],
       ['curl', () => exportCollection(collection, 'curl')]
     ]],
+    ['Generate Runner', () => generateRunnerFromCollection(collection)],
     ['Delete', () => deleteCollection(collection), 'danger']
   ]);
-  appendSidebarTreeRows(wrapper, sidebarTreeChildRows(collection, collection, null), { className: 'tree-folder' });
+  if (!collapsed) {
+    appendSidebarTreeRows(wrapper, sidebarTreeChildRows(collection, collection, null), { className: 'tree-folder' });
+  }
   return wrapper;
 }
 
 function folderNode(collection, folder) {
   const wrapper = document.createElement('div');
   wrapper.className = 'tree-node tree-folder folder-node';
+  const hasChildren = collectionTreeItemHasChildren(folder);
+  const collapsed = hasChildren && isCollectionTreeItemCollapsed(state, 'folder', folder.id);
+  wrapper.classList.toggle('is-collapsed', collapsed);
   const button = treeButton(folder.name, folder.id === activeFolderId && !activeRequestId, 'FOLD', {
     treeKind: 'folder',
     treeId: folder.id
@@ -9461,12 +10684,19 @@ function folderNode(collection, folder) {
     kind: 'folder',
     id: folder.id,
     collectionId: collection.id
+  }, {
+    expanded: !collapsed,
+    hasChildren,
+    label: folder.name || 'Untitled Folder',
+    onToggle: () => toggleCollectionTreeNode('folder', folder.id),
+    reserveDisclosure: true
   });
   button.addEventListener('click', () => {
     if (!canOpenFolderTabFor(collection.id, folder.id)) {
       return;
     }
     collectActiveEditorState();
+    setCollectionTreeItemCollapsed(state, 'folder', folder.id, false);
     activeRunnerRequestRunnerId = null;
     activeMainPanel = 'request';
     activeCollectionId = collection.id;
@@ -9480,9 +10710,12 @@ function folderNode(collection, folder) {
     ['Add Folder', () => newFolder(collection.id, folder.id)],
     ['Rename', () => renameFolder(folder)],
     ['Duplicate', () => { void duplicateFolder(folder); }],
+    ['Generate Runner', () => generateRunnerFromFolder(collection, folder)],
     ['Delete', () => deleteFolder(collection, folder), 'danger']
   ]);
-  appendSidebarTreeRows(wrapper, sidebarTreeChildRows(folder, collection, folder), { className: 'tree-folder' });
+  if (!collapsed) {
+    appendSidebarTreeRows(wrapper, sidebarTreeChildRows(folder, collection, folder), { className: 'tree-folder' });
+  }
   return wrapper;
 }
 
@@ -9498,6 +10731,8 @@ function requestNode(collection, folder, request) {
     id: request.id,
     collectionId: collection.id,
     folderId: folder?.id || ''
+  }, {
+    reserveDisclosure: true
   });
   button.addEventListener('click', () => {
     if (!canOpenRequestTabFor(collection.id, request.id)) {
@@ -9545,12 +10780,54 @@ function treeButton(text, active, kind, options = {}) {
   return button;
 }
 
-function appendSidebarTreeRow(wrapper, button, payload) {
+function appendSidebarTreeRow(wrapper, button, payload, options = {}) {
   button.__postmeterDropBars = {};
   attachSidebarTreeDrag(button, payload);
   wrapper.__postmeterTreePayload = payload;
   wrapper.__postmeterTreeButton = button;
-  wrapper.append(button);
+  wrapper.append(treeRow(button, payload, options));
+}
+
+function treeRow(button, payload, options = {}) {
+  const row = document.createElement('div');
+  const reserveDisclosure = options.reserveDisclosure === true || options.hasChildren === true;
+  row.className = `tree-row${reserveDisclosure ? '' : ' no-disclosure'}`;
+  if (options.hasChildren) {
+    row.append(treeDisclosureButton(payload, options));
+  } else if (reserveDisclosure) {
+    const spacer = document.createElement('span');
+    spacer.className = 'tree-disclosure-placeholder';
+    spacer.setAttribute('aria-hidden', 'true');
+    row.append(spacer);
+  }
+  row.append(button);
+  return row;
+}
+
+function treeDisclosureButton(payload, options = {}) {
+  const button = document.createElement('button');
+  const expanded = options.expanded !== false;
+  const label = String(options.label || titleCaseTreeKind(payload?.kind)).trim();
+  button.className = 'tree-disclosure';
+  button.type = 'button';
+  button.textContent = expanded ? 'v' : '>';
+  button.dataset.treeKind = payload?.kind || '';
+  button.dataset.treeId = payload?.id || '';
+  button.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+  button.setAttribute('aria-label', `${expanded ? 'Collapse' : 'Expand'} ${label}`);
+  button.addEventListener('click', (event) => {
+    event.stopPropagation();
+    options.onToggle?.();
+  });
+  return button;
+}
+
+function toggleCollectionTreeNode(kind, id) {
+  const target = treeFocusTarget(kind, id);
+  toggleCollectionTreeItemCollapsed(state, kind, id);
+  renderCollections();
+  restoreTreeFocus(target, activeCollectionTreeFocusTargets());
+  scheduleSessionSave();
 }
 
 function appendSidebarTreeRows(parent, rows, options = {}) {
@@ -10665,7 +11942,7 @@ function rawBodyEditorLanguage(format) {
     return normalized;
   }
   if (normalized === 'html' || normalized === 'xml') {
-    return 'markup';
+    return normalized;
   }
   return 'text';
 }
@@ -10768,14 +12045,59 @@ function updateBodyModePanels(prefix) {
   if (rawField) {
     rawField.hidden = mode !== 'RAW';
   }
+  const graphqlOperationField = bodyElement(prefix, 'graphqlOperationNameField');
+  if (graphqlOperationField) {
+    graphqlOperationField.hidden = mode !== 'GRAPHQL';
+  }
+  const beautifyButton = bodyElement(prefix, 'beautifyBodyButton');
+  if (beautifyButton) {
+    beautifyButton.hidden = mode !== 'RAW' && mode !== 'GRAPHQL';
+  }
 }
 
 function updateBodyEditorLanguage(prefix) {
   updateBodyModePanels(prefix);
   const format = bodyElement(prefix, 'bodyRawFormatSelect')?.value || 'text';
   CodeEditor.setLanguage?.(bodyElement(prefix, 'bodyInput'), rawBodyEditorLanguage(format));
-  CodeEditor.setLanguage?.(bodyElement(prefix, 'graphqlQueryInput'), 'text');
+  CodeEditor.setLanguage?.(bodyElement(prefix, 'graphqlQueryInput'), 'graphql');
   CodeEditor.setLanguage?.(bodyElement(prefix, 'graphqlVariablesInput'), 'json');
+}
+
+function beautifyBodyEditor(prefix) {
+  const mode = bodyElement(prefix, 'bodyTypeSelect')?.value || 'NONE';
+  let changed = false;
+  if (mode === 'RAW') {
+    const format = bodyElement(prefix, 'bodyRawFormatSelect')?.value || 'text';
+    changed = setBeautifiedTextareaValue(
+      bodyElement(prefix, 'bodyInput'),
+      (value) => beautifyBodyText(value, format)
+    ) || changed;
+  } else if (mode === 'GRAPHQL') {
+    changed = setBeautifiedTextareaValue(
+      bodyElement(prefix, 'graphqlQueryInput'),
+      (value) => beautifyBodyText(value, 'graphql')
+    ) || changed;
+    changed = setBeautifiedTextareaValue(
+      bodyElement(prefix, 'graphqlVariablesInput'),
+      (value) => beautifyBodyText(value, 'json')
+    ) || changed;
+  }
+  if (changed) {
+    collectBodyEditorAndMarkDirty(prefix);
+  }
+}
+
+function setBeautifiedTextareaValue(textarea, formatter) {
+  if (!textarea || typeof formatter !== 'function') {
+    return false;
+  }
+  const nextValue = formatter(textarea.value || '');
+  if (nextValue === textarea.value) {
+    return false;
+  }
+  textarea.value = nextValue;
+  refreshVariableHighlights(textarea.parentElement || textarea);
+  return true;
 }
 
 function formDataRowsForRequest(request) {
@@ -11264,6 +12586,7 @@ function renderRequestEditor() {
     $('preRequestScriptInput').value = '';
     $('testScriptInput').value = '';
     setValue('docsInput', '');
+    renderMarkdownPane('requestDocs');
     $('paramsTable').textContent = '';
     $('headersTable').textContent = '';
     $('requestVariablesTable').textContent = '';
@@ -11271,6 +12594,7 @@ function renderRequestEditor() {
     renderRequestHeaderControls(null);
     $('requestCookieJarEnabledInput').checked = false;
     $('requestCookieJarStoreInput').checked = true;
+    renderRequestTlsSettings(null);
     $('addRequestVariableButton').disabled = true;
     renderAuthEditor({ type: 'none' });
     updateRequestEditorLanguages();
@@ -11293,6 +12617,7 @@ function renderRequestEditor() {
   $('testScriptInput').value = request.scripts.tests || '';
   request.docs = request.docs == null ? '' : String(request.docs);
   setValue('docsInput', request.docs);
+  renderMarkdownPane('requestDocs');
   request.cookieJar ||= { enabled: false, storeResponses: true };
   ensureRequestAutoHeaders(request);
   $('requestCookieJarEnabledInput').checked = request.cookieJar.enabled === true;
@@ -11301,6 +12626,7 @@ function renderRequestEditor() {
   renderHeaderPairs('headersTable', request);
   renderRequestVariablePairs(request.variables || []);
   renderCookieJarEditor();
+  renderRequestTlsSettings(request);
   renderAuthEditor(request.auth || { type: 'none' });
   updateRequestEditorLanguages();
   refreshVariableHighlights($('requestEditorPanel'));
@@ -11319,6 +12645,7 @@ function renderCollectionEditor() {
   }
   if (!collection) {
     $('collectionDescriptionInput').value = '';
+    renderMarkdownPane('collectionOverview');
     $('collectionPreRequestScriptInput').value = '';
     $('collectionTestScriptInput').value = '';
     $('collectionVariablesTable').textContent = '';
@@ -11330,6 +12657,7 @@ function renderCollectionEditor() {
   collection.scripts ||= { preRequest: '', tests: '' };
   collection.variables ||= [];
   $('collectionDescriptionInput').value = collection.description || '';
+  renderMarkdownPane('collectionOverview');
   renderCollectionAuthEditor(collection.auth);
   $('collectionPreRequestScriptInput').value = collection.scripts.preRequest || '';
   $('collectionTestScriptInput').value = collection.scripts.tests || '';
@@ -11352,6 +12680,7 @@ function renderFolderEditor() {
   }
   if (!folder) {
     $('folderDescriptionInput').value = '';
+    renderMarkdownPane('folderOverview');
     $('folderPreRequestScriptInput').value = '';
     $('folderTestScriptInput').value = '';
     $('folderVariablesTable').textContent = '';
@@ -11363,6 +12692,7 @@ function renderFolderEditor() {
   folder.scripts ||= { preRequest: '', tests: '' };
   folder.variables ||= [];
   $('folderDescriptionInput').value = folder.description || '';
+  renderMarkdownPane('folderOverview');
   renderFolderAuthEditor(folder.auth);
   $('folderPreRequestScriptInput').value = folder.scripts.preRequest || '';
   $('folderTestScriptInput').value = folder.scripts.tests || '';
@@ -11505,6 +12835,19 @@ function renderRequestHeaderControls(request) {
     showInputId: 'showGeneratedHeadersInput',
     labelId: 'showGeneratedHeadersLabel'
   });
+}
+
+function renderRequestTlsSettings(request) {
+  const settings = request ? normalizeRendererRequestTlsSettings(request.settings) : normalizeRendererRequestTlsSettings();
+  const verification = $('requestSslCertificateVerificationInput');
+  if (verification) {
+    const workspaceVerification = workspace.settings?.request?.sslCertificateVerification !== false;
+    verification.checked = settings.sslCertificateVerification === 'inherit'
+      ? workspaceVerification
+      : settings.sslCertificateVerification === 'enabled';
+    verification.dataset.verificationValue = settings.sslCertificateVerification;
+    verification.disabled = !request;
+  }
 }
 
 function renderPerformanceRequestHeaderControls(request) {
@@ -12041,12 +13384,23 @@ function displayResponse(response) {
   $('finalUrl').textContent = response.finalUrl;
   $('responseHeaders').value = formatResponseHeaders(response);
   $('responseCookies').value = formatResponseCookies(response);
+  if ($('responseNetwork')) {
+    $('responseNetwork').value = formatResponseNetwork(response);
+  }
   $('responseBody').value = PostMeterResponseFormatting.formatBody(response);
   CodeEditor.setLanguage?.($('responseHeaders'), 'headers');
   CodeEditor.setLanguage?.($('responseCookies'), 'headers');
+  CodeEditor.setLanguage?.($('responseNetwork'), 'text');
   CodeEditor.setLanguage?.($('responseBody'), responseBodyCodeLanguage(response, $('responseBody').value));
   displayTestResults(response);
   displayVisualizer(response.testScriptResult?.visualizer);
+}
+
+function refreshResponseEditors({ body, bodyLanguage = 'text', cookies, headers, network } = {}) {
+  CodeEditor.setLanguage?.(headers || $('responseHeaders'), 'headers');
+  CodeEditor.setLanguage?.(cookies || $('responseCookies'), 'headers');
+  CodeEditor.setLanguage?.(network || $('responseNetwork'), 'text');
+  CodeEditor.setLanguage?.(body || $('responseBody'), bodyLanguage);
 }
 
 function formatResponseHeaders(response) {
@@ -12060,6 +13414,63 @@ function formatResponseCookies(response) {
     .filter(([key]) => key.toLowerCase() === 'set-cookie')
     .flatMap(([, values]) => normalizeResponseHeaderValues(values))
     .join('\n');
+}
+
+function formatResponseNetwork(response) {
+  const lines = [];
+  if (response?.finalUrl) {
+    lines.push(`Final URL: ${response.finalUrl}`);
+  }
+  if (Number.isFinite(Number(response?.durationMillis))) {
+    lines.push(`Total duration: ${Number(response.durationMillis)} ms`);
+  }
+  const timings = response?.timings || {};
+  const timingRows = [
+    ['DNS lookup', timings.dnsLookupMillis],
+    ['TCP connect', timings.tcpConnectMillis],
+    ['TLS handshake', timings.tlsHandshakeMillis],
+    ['Upload', timings.uploadMillis],
+    ['Time to first byte', timings.timeToFirstByteMillis],
+    ['Download', timings.downloadMillis],
+    ['Redirects', timings.redirectCount]
+  ];
+  for (const [label, value] of timingRows) {
+    if (Number.isFinite(Number(value))) {
+      lines.push(`${label}: ${Number(value)}${label === 'Redirects' ? '' : ' ms'}`);
+    }
+  }
+  const tlsInfo = response?.tls || timings.tls || {};
+  if (Object.keys(tlsInfo).length) {
+    lines.push('');
+    lines.push('TLS');
+    lines.push(`Authorized: ${tlsInfo.authorized === true ? 'yes' : tlsInfo.authorized === false ? 'no' : 'not captured'}`);
+    if (tlsInfo.authorizationError) {
+      lines.push(`Authorization error: ${tlsInfo.authorizationError}`);
+    }
+    if (tlsInfo.verificationDisabled === true) {
+      lines.push('Verification: disabled by settings');
+    }
+    if (tlsInfo.caCertificateConfigured === true) {
+      lines.push('Custom CA: configured');
+    }
+    if (tlsInfo.clientCertificateConfigured === true) {
+      lines.push(`Client certificate: ${tlsInfo.clientCertificateName || tlsInfo.clientCertificateId || 'configured'}`);
+    }
+    if (tlsInfo.protocol) {
+      lines.push(`Protocol: ${tlsInfo.protocol}`);
+    }
+    if (tlsInfo.cipher?.name) {
+      lines.push(`Cipher: ${tlsInfo.cipher.name}`);
+    }
+    if (tlsInfo.certificate) {
+      lines.push(`Subject: ${tlsInfo.certificate.subject || ''}`);
+      lines.push(`Issuer: ${tlsInfo.certificate.issuer || ''}`);
+      lines.push(`Valid from: ${tlsInfo.certificate.validFrom || ''}`);
+      lines.push(`Valid to: ${tlsInfo.certificate.validTo || ''}`);
+      lines.push(`Fingerprint SHA-256: ${tlsInfo.certificate.fingerprint256 || ''}`);
+    }
+  }
+  return lines.filter((line) => line != null).join('\n') || 'No network diagnostics captured.';
 }
 
 function normalizeResponseHeaderValues(values) {
@@ -12541,6 +13952,7 @@ function renderStoredRunnerExecutionDetails(result = lastRunnerResult) {
       if (item.error) {
         details.append(runnerDetailTextBlock('Error', item.error, 'runner-detail-error'));
       }
+      appendRunnerTransportDetails(details, item);
       appendRunnerScriptResultDetails(details, 'Pre-request', item.preRequestScriptResult);
       appendRunnerScriptResultDetails(details, 'Post-request', item.testScriptResult);
       appendRunnerVariableDetails(details, 'Request variables', item.localVariables || []);
@@ -12902,6 +14314,7 @@ function renderRunnerExecutionDetails(result = lastRunnerResult) {
   if (item.error) {
     details.append(runnerDetailTextBlock('Error', item.error, 'runner-detail-error'));
   }
+  appendRunnerTransportDetails(details, item);
   appendRunnerScriptResultDetails(details, 'Pre-request', item.preRequestScriptResult);
   appendRunnerScriptResultDetails(details, 'Post-request', item.testScriptResult);
   appendRunnerVariableDetails(details, 'Request variables', item.localVariables || []);
@@ -12994,6 +14407,19 @@ function appendRunnerResponseBodyDetails(details, item = {}) {
     block.append(content);
   }
   details.append(block);
+}
+
+function appendRunnerTransportDetails(details, item = {}) {
+  const text = formatResponseNetwork({
+    durationMillis: item.durationMillis,
+    finalUrl: item.finalUrl || item.requestUrl || '',
+    timings: item.timings || {},
+    tls: item.tls || item.timings?.tls || {}
+  });
+  if (!text || text === 'No network diagnostics captured.') {
+    return;
+  }
+  details.append(runnerDetailTextBlock('Network', text));
 }
 
 function formatRunnerDetailResponseBody(body) {
@@ -13120,6 +14546,13 @@ function escapeHtmlAttribute(value) {
     .replaceAll('>', '&gt;');
 }
 
+function escapeHtmlText(value) {
+  return String(value == null ? '' : value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+}
+
 function safeScriptJson(value) {
   try {
     return JSON.stringify(value)
@@ -13170,8 +14603,7 @@ async function runActiveRunner() {
   selectedRunnerExecutionIndex = 0;
   runnerExecutionPage = 0;
   runnerExecutionStatusFilter = 'all';
-  $('exportRunnerJsonButton').disabled = true;
-  $('exportRunnerCsvButton').disabled = true;
+  setRunnerResultExportButtonsDisabled(true);
   try {
     activeRunnerId = runnerId;
     $('runCollectionButton').disabled = true;
@@ -13201,16 +14633,14 @@ async function runActiveRunner() {
     runnerExecutionPage = 0;
     runnerExecutionStatusFilter = 'all';
     await renderRunnerExecutionResult(result);
-    $('exportRunnerJsonButton').disabled = false;
-    $('exportRunnerCsvButton').disabled = false;
+    setRunnerResultExportButtonsDisabled(false);
     setStatus(result.cancelled ? 'Runner cancelled.' : 'Runner completed.');
   } catch (error) {
     const message = error.message || String(error);
     if (isActiveRunnerContext(runnerContext) && activeRunnerId === runnerId) {
       lastRunnerResult = null;
       renderRunnerExecutionMessage(message);
-      $('exportRunnerJsonButton').disabled = true;
-      $('exportRunnerCsvButton').disabled = true;
+      setRunnerResultExportButtonsDisabled(true);
       setStatus('Runner failed.');
       notifyUser('Runner Failed', message);
     }
@@ -13233,8 +14663,8 @@ async function cancelCollectionRun() {
   return rendererWorkflows.cancelCollectionRun();
 }
 
-async function exportRunnerResult(format) {
-  return rendererWorkflows.exportRunnerResult(format);
+async function exportRunnerResult(format, htmlReportOptions) {
+  return rendererWorkflows.exportRunnerResult(format, htmlReportOptions);
 }
 
 async function startDeviceFlow() {
@@ -14483,6 +15913,7 @@ function newRequest(collectionId = activeCollectionId, folderId = activeFolderId
     collection.requests.push(request);
     activeFolderId = null;
   }
+  expandCollectionTreePath(collection, activeFolderId);
   activeCollectionId = collection.id;
   activeRequestId = request.id;
   ensureOpenRequestTabForActive({ dirty: true, createdUnsaved: true });
@@ -14516,6 +15947,7 @@ function newFolder(collectionId = activeCollectionId, parentFolderId = activeFol
   } else {
     collection.folders.push(folder);
   }
+  expandCollectionTreePath(collection, parent?.id || null);
   activeCollectionId = collection.id;
   activeFolderId = folder.id;
   activeRequestId = null;
@@ -14539,8 +15971,23 @@ function newRequestObject(name) {
     variables: [],
     docs: '',
     cookieJar: { enabled: false, storeResponses: true },
-    autoHeaders: { sendPostMeterToken: false, showGeneratedHeaders: false }
+    autoHeaders: { sendPostMeterToken: false, showGeneratedHeaders: false },
+    settings: { sslCertificateVerification: 'inherit' }
   };
+}
+
+function expandCollectionTreePath(collection, folderId = null, options = {}) {
+  if (!collection?.id) {
+    return;
+  }
+  setCollectionTreeItemCollapsed(state, 'collection', collection.id, false);
+  const folderPath = folderId ? findFolderPath(collection, folderId) : [];
+  const foldersToExpand = options.includeTargetFolder === false
+    ? folderPath.slice(0, -1)
+    : folderPath;
+  for (const folder of foldersToExpand) {
+    setCollectionTreeItemCollapsed(state, 'folder', folder.id, false);
+  }
 }
 
 function newEnvironment() {
@@ -15014,7 +16461,6 @@ function collectRequestFromEditor() {
     preRequest: $('preRequestScriptInput').value,
     tests: $('testScriptInput').value
   };
-  request.docs = $('docsInput')?.value || '';
   request.cookieJar = {
     enabled: $('requestCookieJarEnabledInput').checked,
     storeResponses: $('requestCookieJarStoreInput').checked
@@ -15023,6 +16469,29 @@ function collectRequestFromEditor() {
     sendPostMeterToken: $('sendPostMeterTokenInput')?.checked === true,
     showGeneratedHeaders: $('showGeneratedHeadersInput')?.checked === true
   };
+  request.settings = requestTlsSettingsFromInputs(request.settings);
+}
+
+function setActiveRequestTlsSettingsFromInputs() {
+  const request = activeRequest();
+  if (!request) {
+    return;
+  }
+  const input = $('requestSslCertificateVerificationInput');
+  request.settings = {
+    sslCertificateVerification: input?.checked === true ? 'enabled' : 'disabled'
+  };
+  if (input) {
+    input.dataset.verificationValue = request.settings.sslCertificateVerification;
+  }
+  markActiveRequestDirty();
+}
+
+function requestTlsSettingsFromInputs(existingSettings = {}) {
+  const input = $('requestSslCertificateVerificationInput');
+  const fallback = normalizeRendererRequestTlsSettings(existingSettings).sslCertificateVerification;
+  const value = normalizeRendererRequestSslVerification(input?.dataset?.verificationValue || fallback);
+  return { sslCertificateVerification: value };
 }
 
 function collectCollectionAndMarkDirty(options = {}) {
@@ -15053,7 +16522,6 @@ function collectCollectionFromEditor(options = {}) {
     collection.name = collectionTitleInputValue() || 'Untitled Collection';
   }
   collection.auth = collectCollectionAuthFromEditor();
-  collection.description = $('collectionDescriptionInput')?.value || '';
   collection.scripts = {
     ...(collection.scripts || {}),
     preRequest: $('collectionPreRequestScriptInput')?.value || '',
@@ -15074,7 +16542,6 @@ function collectFolderFromEditor(options = {}) {
     folder.name = folderTitleInputValue() || 'Untitled Folder';
   }
   folder.auth = collectFolderAuthFromEditor();
-  folder.description = $('folderDescriptionInput')?.value || '';
   folder.scripts = {
     ...(folder.scripts || {}),
     preRequest: $('folderPreRequestScriptInput')?.value || '',

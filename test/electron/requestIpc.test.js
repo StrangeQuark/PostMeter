@@ -159,6 +159,78 @@ test('request IPC passes effective folder scope to scripted request execution', 
   ]);
 });
 
+test('request IPC resolves TLS client-certificate passphrases from the workspace vault', async () => {
+  const handlers = new Map();
+  const request = requestModel({
+    id: 'request-1',
+    method: 'GET',
+    url: 'https://api.example.test'
+  });
+  const workspace = workspaceModel({
+    collections: [
+      collectionModel({
+        id: 'collection-1',
+        requests: [request]
+      })
+    ],
+    environments: [],
+    cookies: [],
+    history: [],
+    settings: {
+      request: {
+        clientCertificates: [{
+          id: 'managed-cert',
+          host: 'api.example.test',
+          certPath: '/tmp/client.crt',
+          keyPath: '/tmp/client.key',
+          passphraseSecretKey: 'client-certificate:managed-cert:passphrase'
+        }]
+      }
+    }
+  });
+  let capturedTlsSettings = null;
+
+  registerRequestIpc({
+    getWorkspace: () => workspace,
+    getWorkspaceId: () => 'workspace-1',
+    getVaultStore: () => ({
+      async get(key) {
+        return key === 'client-certificate:managed-cert:passphrase' ? 'vault-passphrase' : null;
+      }
+    }),
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      }
+    },
+    mutateWorkspace: async (mutator) => mutator(workspace),
+    runRequestWithScripts: async (_request, _environment, options) => {
+      capturedTlsSettings = options.tlsSettings;
+      return {
+        response: {
+          statusCode: 200,
+          headers: {},
+          body: 'ok',
+          durationMillis: 1,
+          responseBytes: 2,
+          finalUrl: 'https://api.example.test'
+        },
+        environment: null,
+        collectionVariables: [],
+        localVariables: [],
+        globals: []
+      };
+    },
+    saveWorkspace: async (nextWorkspace) => nextWorkspace,
+    setWorkspace: () => {}
+  });
+
+  await handlers.get('request:send')(null, request, null);
+
+  assert.equal(capturedTlsSettings.clientCertificates[0].id, 'managed-cert');
+  assert.equal(capturedTlsSettings.clientCertificates[0].passphrase, 'vault-passphrase');
+});
+
 test('request IPC reports refreshed auth persisted only when the workspace mutation applies', async () => {
   const handlers = new Map();
   const workspace = workspaceModel({

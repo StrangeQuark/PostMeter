@@ -290,6 +290,7 @@ test('imports and exports curl collections', async () => {
   assert.equal(collection.requests[0].variables.find((variable) => variable.key === 'curl.proxy').value, 'http://proxy.example.test:8080');
   assert.equal(collection.requests[0].variables.find((variable) => variable.key === 'curl.retry').value, '3');
   assert.equal(collection.requests[0].variables.find((variable) => variable.key === 'curl.cacert').value, '/tmp/ca.pem');
+  assert.equal(collection.requests[0].settings.caCertificatePath, undefined);
 
   const exportPath = path.join(dir, 'export.sh');
   await store.exportCollection(collection, exportPath, { format: 'curl' });
@@ -414,6 +415,7 @@ test('imports curl auth, redirect, compression, query, binary, and Windows-style
   assert.equal(binaryRequest.variables.find((variable) => variable.key === 'curl.followRedirects').value, 'true');
   assert.equal(binaryRequest.variables.find((variable) => variable.key === 'curl.compressed').value, 'true');
   assert.equal(binaryRequest.variables.find((variable) => variable.key === 'curl.insecure').value, 'true');
+  assert.equal(binaryRequest.settings.sslCertificateVerification, 'disabled');
   assert.equal(binaryRequest.variables.find((variable) => variable.key === 'curl.dataBinaryFile').value, 'payload.bin');
   const binaryExportPath = path.join(dir, 'binary-export.sh');
   await store.exportCollection(binaryCollection, binaryExportPath, { format: 'curl' });
@@ -432,9 +434,41 @@ test('imports curl auth, redirect, compression, query, binary, and Windows-style
   assert.equal(metadataRequest.body, '@./upload.bin');
   assert.equal(metadataRequest.variables.find((variable) => variable.key === 'curl.cert').value, '/tmp/client.pem');
   assert.equal(metadataRequest.variables.find((variable) => variable.key === 'curl.key').value, '/tmp/client.key');
+  assert.equal(metadataRequest.auth.type, 'clientCertificate');
+  assert.equal(metadataRequest.auth.certPath, '/tmp/client.pem');
+  assert.equal(metadataRequest.auth.keyPath, '/tmp/client.key');
   assert.equal(metadataRequest.variables.find((variable) => variable.key === 'curl.connect-timeout').value, '2');
   assert.equal(metadataRequest.variables.find((variable) => variable.key === 'curl.max-time').value, '5');
   assert.equal(metadataRequest.variables.find((variable) => variable.key === 'curl.uploadFile').value, './upload.bin');
+
+  const pfxPath = path.join(dir, 'pfx.sh');
+  await fs.writeFile(pfxPath, "curl --cert-type P12 --cert '/tmp/client.p12:secret' --cacert /tmp/ca.pem https://api.example.test/secure");
+  const pfxCollection = await store.importCollection(pfxPath);
+  const pfxRequest = pfxCollection.requests[0];
+  assert.equal(pfxRequest.auth.type, 'clientCertificate');
+  assert.equal(pfxRequest.auth.pfxPath, '/tmp/client.p12');
+  assert.equal(pfxRequest.auth.passphrase, 'secret');
+  assert.equal(pfxRequest.settings.caCertificatePath, undefined);
+  const pfxExportPath = path.join(dir, 'pfx-export.sh');
+  await store.exportCollection(pfxCollection, pfxExportPath, { format: 'curl' });
+  const pfxExported = await fs.readFile(pfxExportPath, 'utf8');
+  assert.match(pfxExported, /--cert-type P12 --cert '\/tmp\/client\.p12:secret'/);
+  assert.match(pfxExported, /--cacert '\/tmp\/ca\.pem'/);
+
+  const basicMtlsPath = path.join(dir, 'basic-mtls.sh');
+  await fs.writeFile(basicMtlsPath, "curl -u alice:secret --cert /tmp/client.pem --key /tmp/client.key https://api.example.test/secure");
+  const basicMtlsCollection = await store.importCollection(basicMtlsPath);
+  const basicMtlsRequest = basicMtlsCollection.requests[0];
+  assert.equal(basicMtlsRequest.auth.type, 'basic');
+  assert.equal(basicMtlsRequest.auth.username, 'alice');
+  assert.equal(basicMtlsCollection.certificates.length, 1);
+  assert.equal(basicMtlsCollection.certificates[0].certPath, '/tmp/client.pem');
+  assert.equal(basicMtlsCollection.certificates[0].keyPath, '/tmp/client.key');
+  const basicMtlsExportPath = path.join(dir, 'basic-mtls-export.sh');
+  await store.exportCollection(basicMtlsCollection, basicMtlsExportPath, { format: 'curl' });
+  const basicMtlsExported = await fs.readFile(basicMtlsExportPath, 'utf8');
+  assert.match(basicMtlsExported, /-u 'alice:secret'/);
+  assert.match(basicMtlsExported, /--cert '\/tmp\/client\.pem' --key '\/tmp\/client\.key'/);
 
   const formPath = path.join(dir, 'form.sh');
   await fs.writeFile(formPath, "curl -F 'file=@avatar.png' --form-string 'name=Ada' https://api.example.test/profile");

@@ -29,6 +29,377 @@
     return bodyType === 'RAW_JSON' ? 'json' : 'text';
   }
 
+  const BEAUTIFY_INDENT = '    ';
+  const BEAUTIFIABLE_FORMATS = new Set(['graphql', 'html', 'javascript', 'json', 'xml']);
+
+  function beautifyBodyText(value, format) {
+    const text = String(value ?? '');
+    if (!text.trim()) {
+      return text;
+    }
+    const normalized = normalizeBeautifyFormat(format);
+    if (!BEAUTIFIABLE_FORMATS.has(normalized)) {
+      return text;
+    }
+    if (normalized === 'json') {
+      return beautifyJsonText(text);
+    }
+    if (normalized === 'javascript') {
+      return beautifyJavaScriptText(text);
+    }
+    if (normalized === 'graphql') {
+      return beautifyGraphqlText(text);
+    }
+    return beautifyMarkupText(text);
+  }
+
+  function normalizeBeautifyFormat(format) {
+    const normalized = String(format || 'text').toLowerCase();
+    if (normalized === 'js') {
+      return 'javascript';
+    }
+    if (normalized === 'gql') {
+      return 'graphql';
+    }
+    return normalized;
+  }
+
+  function beautifyJsonText(text) {
+    try {
+      return JSON.stringify(JSON.parse(text), null, 4);
+    } catch {
+      return text;
+    }
+  }
+
+  function beautifyMarkupText(text) {
+    const trimmed = text.trim();
+    if (!trimmed.includes('<')) {
+      return text;
+    }
+    const tokens = trimmed.match(/<!\[CDATA\[[\s\S]*?\]\]>|<!--[\s\S]*?-->|<[^>]+>|[^<]+/g) || [];
+    const lines = [];
+    let indent = 0;
+    for (const token of tokens) {
+      const value = token.trim();
+      if (!value) {
+        continue;
+      }
+      if (/^<\//.test(value)) {
+        indent = Math.max(0, indent - 1);
+        lines.push(`${BEAUTIFY_INDENT.repeat(indent)}${value}`);
+        continue;
+      }
+      if (/^<!(?:--|doctype|\[cdata\[)/i.test(value) || /^<\?/.test(value) || /\/>$/.test(value)) {
+        lines.push(`${BEAUTIFY_INDENT.repeat(indent)}${value}`);
+        continue;
+      }
+      if (/^</.test(value)) {
+        lines.push(`${BEAUTIFY_INDENT.repeat(indent)}${value}`);
+        indent += 1;
+        continue;
+      }
+      for (const line of value.split(/\r?\n/).map((part) => part.trim()).filter(Boolean)) {
+        lines.push(`${BEAUTIFY_INDENT.repeat(indent)}${line}`);
+      }
+    }
+    return lines.length ? lines.join('\n') : text;
+  }
+
+  function beautifyJavaScriptText(text) {
+    const tokens = tokenizeJavaScript(text);
+    if (!tokens.some((token) => /[{}[\],;:=]/.test(token.value))) {
+      return text.trim();
+    }
+    const lines = [];
+    let current = '';
+    let indent = 0;
+    let previous = null;
+
+    const flush = () => {
+      const line = current.trim();
+      if (line) {
+        lines.push(`${BEAUTIFY_INDENT.repeat(indent)}${line}`);
+      }
+      current = '';
+    };
+    const append = (value, options = {}) => {
+      if (!current) {
+        current = value;
+        return;
+      }
+      if (
+        options.tight
+        || /\s$/.test(current)
+        || current.endsWith('(')
+        || current.endsWith('[')
+        || current.endsWith('.')
+        || /^[)\].,;:]/.test(value)
+      ) {
+        current += value;
+        return;
+      }
+      current += ` ${value}`;
+    };
+    const appendToPreviousLine = (value) => {
+      if (current.trim()) {
+        current = `${current.trimEnd()}${value}`;
+        flush();
+      } else if (lines.length) {
+        lines[lines.length - 1] = `${lines[lines.length - 1].trimEnd()}${value}`;
+      }
+    };
+
+    for (const token of tokens) {
+      const value = token.value;
+      if (value === '{' || value === '[') {
+        append(value, { tight: previous === '(' || previous === '[' });
+        flush();
+        indent += 1;
+      } else if (value === '}' || value === ']') {
+        flush();
+        indent = Math.max(0, indent - 1);
+        lines.push(`${BEAUTIFY_INDENT.repeat(indent)}${value}`);
+      } else if (value === ',') {
+        appendToPreviousLine(',');
+      } else if (value === ';') {
+        appendToPreviousLine(';');
+      } else if (value === ':') {
+        current = `${current.trimEnd()}: `;
+      } else if (isSpacedJavaScriptOperator(value)) {
+        current = `${current.trimEnd()} ${value} `;
+      } else if (value === '(') {
+        append(value, { tight: true });
+      } else if (value === ')') {
+        current = `${current.trimEnd()})`;
+      } else {
+        append(value);
+      }
+      previous = value;
+    }
+    flush();
+    return lines.length ? lines.join('\n') : text.trim();
+  }
+
+  function tokenizeJavaScript(text) {
+    const tokens = [];
+    let index = 0;
+    while (index < text.length) {
+      const char = text[index];
+      const next = text[index + 1];
+      if (/\s/.test(char)) {
+        index += 1;
+        continue;
+      }
+      if (char === '/' && next === '/') {
+        const end = text.indexOf('\n', index + 2);
+        const value = text.slice(index, end === -1 ? text.length : end);
+        tokens.push({ type: 'comment', value });
+        index += value.length;
+        continue;
+      }
+      if (char === '/' && next === '*') {
+        const end = text.indexOf('*/', index + 2);
+        const value = text.slice(index, end === -1 ? text.length : end + 2);
+        tokens.push({ type: 'comment', value });
+        index += value.length;
+        continue;
+      }
+      if (char === '"' || char === "'" || char === '`') {
+        const end = readQuotedText(text, index, char);
+        tokens.push({ type: 'string', value: text.slice(index, end) });
+        index = end;
+        continue;
+      }
+      const operator = readJavaScriptOperator(text, index);
+      if (operator) {
+        tokens.push({ type: 'operator', value: operator });
+        index += operator.length;
+        continue;
+      }
+      const word = text.slice(index).match(/^[^\s{}[\](),;:=+\-*/%&|!<>?.]+/);
+      if (word) {
+        tokens.push({ type: 'word', value: word[0] });
+        index += word[0].length;
+        continue;
+      }
+      tokens.push({ type: 'punctuation', value: char });
+      index += 1;
+    }
+    return tokens;
+  }
+
+  function readJavaScriptOperator(text, index) {
+    for (const operator of ['===', '!==', '=>', '>=', '<=', '&&', '||', '??', '+=', '-=', '*=', '/=', '%=', '==', '!=', '=', '+', '-', '*', '/', '%', '>', '<']) {
+      if (text.startsWith(operator, index)) {
+        return operator;
+      }
+    }
+    return '';
+  }
+
+  function isSpacedJavaScriptOperator(value) {
+    return ['===', '!==', '=>', '>=', '<=', '&&', '||', '??', '+=', '-=', '*=', '/=', '%=', '==', '!=', '=', '+', '-', '*', '/', '%', '>', '<'].includes(value);
+  }
+
+  function beautifyGraphqlText(text) {
+    const tokens = tokenizeGraphql(text);
+    if (!tokens.length) {
+      return text;
+    }
+    const lines = [];
+    let current = '';
+    let indent = 0;
+    let selectionDepth = 0;
+    let parenDepth = 0;
+    let previous = null;
+
+    const flush = () => {
+      const line = current.trim();
+      if (line) {
+        lines.push(`${BEAUTIFY_INDENT.repeat(indent)}${line}`);
+      }
+      current = '';
+    };
+    const append = (value, options = {}) => {
+      if (!current) {
+        current = value;
+        return;
+      }
+      if (
+        options.tight
+        || /\s$/.test(current)
+        || current.endsWith('(')
+        || current.endsWith('[')
+        || current.endsWith('@')
+        || value === ')'
+        || value === ']'
+        || value === '!'
+      ) {
+        current += value;
+        return;
+      }
+      current += ` ${value}`;
+    };
+
+    for (const token of tokens) {
+      const value = token.value;
+      if (token.type === 'comment') {
+        flush();
+        lines.push(`${BEAUTIFY_INDENT.repeat(indent)}${value}`);
+      } else if (value === '{') {
+        append('{');
+        flush();
+        indent += 1;
+        selectionDepth += 1;
+      } else if (value === '}') {
+        flush();
+        indent = Math.max(0, indent - 1);
+        selectionDepth = Math.max(0, selectionDepth - 1);
+        lines.push(`${BEAUTIFY_INDENT.repeat(indent)}}`);
+      } else if (value === '(' || value === '[') {
+        append(value, { tight: true });
+        parenDepth += 1;
+      } else if (value === ')' || value === ']') {
+        append(value, { tight: true });
+        parenDepth = Math.max(0, parenDepth - 1);
+      } else if (value === ':') {
+        current = `${current.trimEnd()}: `;
+      } else if (value === ',') {
+        current = `${current.trimEnd()}, `;
+      } else if (value === '!' || value === '@' || value === '...') {
+        append(value, { tight: true });
+      } else {
+        if (selectionDepth > 0 && parenDepth === 0 && current.trim() && !graphqlTokenStaysInline(previous)) {
+          flush();
+        }
+        append(value, { tight: previous === '@' || previous === '...' });
+      }
+      previous = value;
+    }
+    flush();
+    return lines.length ? lines.join('\n') : text;
+  }
+
+  function tokenizeGraphql(text) {
+    const tokens = [];
+    let index = 0;
+    while (index < text.length) {
+      const char = text[index];
+      if (/\s/.test(char)) {
+        index += 1;
+        continue;
+      }
+      if (char === '#') {
+        const end = text.indexOf('\n', index + 1);
+        const value = text.slice(index, end === -1 ? text.length : end).trim();
+        tokens.push({ type: 'comment', value });
+        index += value.length;
+        continue;
+      }
+      if (text.startsWith('"""', index)) {
+        const end = text.indexOf('"""', index + 3);
+        const tokenEnd = end === -1 ? text.length : end + 3;
+        tokens.push({ type: 'string', value: text.slice(index, tokenEnd) });
+        index = tokenEnd;
+        continue;
+      }
+      if (char === '"') {
+        const end = readQuotedText(text, index, char);
+        tokens.push({ type: 'string', value: text.slice(index, end) });
+        index = end;
+        continue;
+      }
+      if (text.startsWith('...', index)) {
+        tokens.push({ type: 'punctuation', value: '...' });
+        index += 3;
+        continue;
+      }
+      if (char === '$') {
+        const match = text.slice(index).match(/^\$[A-Za-z_][A-Za-z0-9_]*/);
+        if (match) {
+          tokens.push({ type: 'word', value: match[0] });
+          index += match[0].length;
+          continue;
+        }
+      }
+      const name = text.slice(index).match(/^[A-Za-z_][A-Za-z0-9_]*/);
+      if (name) {
+        tokens.push({ type: 'word', value: name[0] });
+        index += name[0].length;
+        continue;
+      }
+      const number = text.slice(index).match(/^-?(?:0|[1-9]\d*)(?:\.\d+)?/);
+      if (number) {
+        tokens.push({ type: 'number', value: number[0] });
+        index += number[0].length;
+        continue;
+      }
+      tokens.push({ type: 'punctuation', value: char });
+      index += 1;
+    }
+    return tokens;
+  }
+
+  function graphqlTokenStaysInline(previous) {
+    return ['{', '(', '[', ':', '@', '...', ',', '|'].includes(previous);
+  }
+
+  function readQuotedText(text, start, quote) {
+    let index = start + quote.length;
+    while (index < text.length) {
+      if (text[index] === '\\') {
+        index += 2;
+        continue;
+      }
+      if (text[index] === quote) {
+        return index + quote.length;
+      }
+      index += 1;
+    }
+    return text.length;
+  }
+
   function refreshVariableTextboxes(root) {
     global.PostMeterVariableHighlighter?.enhanceVariableTextboxes?.(root);
     global.PostMeterVariableHighlighter?.refreshVariableHighlights?.(root);
@@ -444,6 +815,7 @@
   }
 
   const exported = {
+    beautifyBodyText,
     bodyTypeCodeLanguage,
     buildVariablePreviewText,
     collectAuthFromEditor,

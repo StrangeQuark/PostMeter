@@ -135,6 +135,7 @@ test('sends requests with environment-resolved URL, query params, headers, and b
     assert.match(result.finalUrl, /\/echo\?q=alpha$/);
     assert.ok(result.durationMillis >= 0);
     assert.ok(result.responseBytes > 0);
+    assert.equal(result.tls, undefined);
   } finally {
     await server.close();
   }
@@ -753,6 +754,19 @@ test('loads PEM and PFX client certificate material from main-process paths', as
   assert.equal(bound.passphrase, 'bound-secret');
 
   await assert.rejects(
+    () => loadClientCertificateOptions({
+      type: 'clientCertificate',
+      certificateId: 'disabled-cert'
+    }, null, new URL('https://example.test'), [{
+      id: 'disabled-cert',
+      enabled: false,
+      certPath,
+      keyPath
+    }]),
+    /binding was not found/
+  );
+
+  await assert.rejects(
     () => loadClientCertificateOptions({ type: 'clientCertificate', certificateId: 'missing' }, null, new URL('https://example.test'), []),
     /binding was not found/
   );
@@ -836,12 +850,345 @@ test('sends HTTPS requests with PEM and PFX client certificates', async (t) => {
           certPath: fixtures.clientCertPath,
           keyPath: fixtures.clientKeyPath
         }
-      }, null)
+      }, null, {
+        tlsSettings: {
+          request: {
+            sslCertificateVerification: true
+          }
+        }
+      })
     );
   } finally {
     await server.close();
   }
 });
+
+test('applies SSL verification settings, custom CA bundles, and TLS response diagnostics', async (t) => {
+  const opensslPath = await findOpenSsl();
+  if (!opensslPath) {
+    t.skip('OpenSSL is required to generate TLS test certificates.');
+    return;
+  }
+
+  const fixtures = await createMtlsFixtures(opensslPath);
+  const server = await createTlsServer(fixtures);
+  const request = {
+    method: 'GET',
+    url: `${server.baseUrl}/tls`,
+    queryParams: [],
+    headers: [],
+    bodyType: 'NONE',
+    body: ''
+  };
+
+  try {
+    const defaultInsecureResult = await sendRequest(request, null, { collectTimings: true });
+    assert.equal(defaultInsecureResult.statusCode, 200);
+    assert.equal(defaultInsecureResult.tls.verificationDisabled, true);
+
+    await assert.rejects(() => sendRequest(request, null, {
+      tlsSettings: {
+        request: {
+          sslCertificateVerification: true
+        }
+      }
+    }));
+
+    const caResult = await sendRequest(request, null, {
+      collectTimings: true,
+      tlsSettings: {
+        request: {
+          caCertificatePath: fixtures.caCertPath,
+          sslCertificateVerification: true
+        }
+      }
+    });
+    assert.equal(caResult.statusCode, 200);
+    assert.equal(JSON.parse(caResult.body).ok, true);
+    assert.equal(caResult.tls.authorized, true);
+    assert.equal(caResult.tls.caCertificateConfigured, true);
+    assert.equal(Boolean(caResult.tls.certificate.fingerprint256), true);
+
+    const flatCaResult = await sendRequest(request, null, {
+      collectTimings: true,
+      tlsSettings: {
+        caCertificatePath: fixtures.caCertPath,
+        sslCertificateVerification: true
+      }
+    });
+    assert.equal(flatCaResult.statusCode, 200);
+    assert.equal(flatCaResult.tls.authorized, true);
+    assert.equal(flatCaResult.tls.caCertificateConfigured, true);
+
+    const requestEnabledOverride = await sendRequest({
+      ...request,
+      settings: { sslCertificateVerification: 'enabled' }
+    }, null, {
+      collectTimings: true,
+      tlsSettings: {
+        request: {
+          caCertificatePath: fixtures.caCertPath,
+          sslCertificateVerification: false
+        }
+      }
+    });
+    assert.equal(requestEnabledOverride.statusCode, 200);
+    assert.equal(requestEnabledOverride.tls.authorized, true);
+    assert.equal(requestEnabledOverride.tls.verificationDisabled, false);
+
+    const insecureResult = await sendRequest(request, null, {
+      collectTimings: true,
+      tlsSettings: {
+        request: {
+          sslCertificateVerification: false
+        }
+      }
+    });
+    assert.equal(insecureResult.statusCode, 200);
+    assert.equal(insecureResult.tls.verificationDisabled, true);
+
+    const requestDisabledOverride = await sendRequest({
+      ...request,
+      settings: { sslCertificateVerification: 'disabled' }
+    }, null, {
+      collectTimings: true,
+      tlsSettings: {
+        request: {
+          sslCertificateVerification: true
+        }
+      }
+    });
+    assert.equal(requestDisabledOverride.statusCode, 200);
+    assert.equal(requestDisabledOverride.tls.verificationDisabled, true);
+
+    await assert.rejects(() => sendRequest({
+      ...request,
+      settings: {
+        caCertificatePath: fixtures.caCertPath,
+        sslCertificateVerification: 'enabled'
+      }
+    }, null, {
+      tlsSettings: {
+        request: {
+          sslCertificateVerification: true
+        }
+      }
+    }));
+  } finally {
+    await server.close();
+  }
+});
+
+test('matches managed client certificates by HTTPS host and port', async (t) => {
+  const opensslPath = await findOpenSsl();
+  if (!opensslPath) {
+    t.skip('OpenSSL is required to generate mTLS test certificates.');
+    return;
+  }
+
+  const fixtures = await createMtlsFixtures(opensslPath);
+  const server = await createMtlsServer(fixtures);
+  const port = new URL(server.baseUrl).port;
+  const request = {
+    method: 'GET',
+    url: `${server.baseUrl}/managed-mtls`,
+    queryParams: [],
+    headers: [],
+    bodyType: 'NONE',
+    body: '',
+    auth: { type: 'none' }
+  };
+
+  try {
+    const result = await sendRequest(request, null, {
+      collectTimings: true,
+      tlsSettings: {
+        request: {
+          caCertificatePath: fixtures.caCertPath,
+          clientCertificates: [
+            {
+              id: 'older-duplicate',
+              name: 'Older Duplicate',
+              enabled: true,
+              host: '127.0.0.1',
+              port,
+              certPath: '/missing/older-client.crt',
+              keyPath: '/missing/older-client.key'
+            },
+            {
+              id: 'managed-cert',
+              name: 'Managed Cert',
+              enabled: true,
+              host: '127.0.0.1',
+              port,
+              certPath: fixtures.clientCertPath,
+              keyPath: fixtures.clientKeyPath
+            }
+          ]
+        }
+      }
+    });
+    assert.equal(result.statusCode, 200);
+    assert.equal(JSON.parse(result.body).clientCommonName, 'PostMeter Client');
+    assert.equal(result.tls.clientCertificateConfigured, true);
+    assert.equal(result.tls.clientCertificateId, 'managed-cert');
+
+    const basicAuthResult = await sendRequest({
+      ...request,
+      auth: {
+        type: 'basic',
+        username: 'alice',
+        password: 'secret'
+      }
+    }, null, {
+      collectTimings: true,
+      tlsSettings: {
+        request: {
+          caCertificatePath: fixtures.caCertPath,
+          clientCertificates: [{
+            id: 'basic-plus-mtls',
+            name: 'Basic Plus mTLS',
+            enabled: true,
+            host: '127.0.0.1',
+            port,
+            certPath: fixtures.clientCertPath,
+            keyPath: fixtures.clientKeyPath
+          }]
+        }
+      }
+    });
+    const basicAuthBody = JSON.parse(basicAuthResult.body);
+    assert.equal(basicAuthBody.clientCommonName, 'PostMeter Client');
+    assert.equal(basicAuthBody.authorization, `Basic ${Buffer.from('alice:secret', 'utf8').toString('base64')}`);
+    assert.equal(basicAuthResult.tls.clientCertificateId, 'basic-plus-mtls');
+
+    const explicitSettingsCertificate = await sendRequest({
+      ...request,
+      auth: {
+        type: 'clientCertificate',
+        certificateId: 'managed-cert'
+      }
+    }, null, {
+      collectTimings: true,
+      tlsSettings: {
+        request: {
+          caCertificatePath: fixtures.caCertPath,
+          clientCertificates: [{
+            id: 'managed-cert',
+            name: 'Managed Cert',
+            enabled: true,
+            host: '127.0.0.1',
+            port,
+            certPath: fixtures.clientCertPath,
+            keyPath: fixtures.clientKeyPath
+          }]
+        }
+      }
+    });
+    assert.equal(explicitSettingsCertificate.statusCode, 200);
+    assert.equal(JSON.parse(explicitSettingsCertificate.body).clientCommonName, 'PostMeter Client');
+    assert.equal(explicitSettingsCertificate.tls.clientCertificateId, 'managed-cert');
+    assert.equal(explicitSettingsCertificate.tls.clientCertificateName, 'Managed Cert');
+
+    await assert.rejects(() => sendRequest(request, null, {
+      tlsSettings: {
+        request: {
+          caCertificatePath: fixtures.caCertPath,
+          clientCertificates: [{
+            id: 'wrong-port',
+            enabled: true,
+            host: '127.0.0.1',
+            port: String(Number(port) + 1),
+            certPath: fixtures.clientCertPath,
+            keyPath: fixtures.clientKeyPath
+          }]
+        }
+      }
+    }));
+  } finally {
+    await server.close();
+  }
+});
+
+test('runs live TLS smoke coverage against public badssl endpoints', async () => {
+  const trusted = await sendRequest(liveTlsRequest('https://sha256.badssl.com/'), null, {
+    collectTimings: true,
+    tlsSettings: {
+      request: {
+        sslCertificateVerification: true
+      }
+    }
+  });
+  assert.equal(trusted.statusCode, 200);
+  assert.equal(trusted.tls.authorized, true);
+
+  await assertLiveTlsFailure(
+    liveTlsRequest('https://self-signed.badssl.com/'),
+    { tlsSettings: { request: { sslCertificateVerification: true } } },
+    /DEPTH_ZERO_SELF_SIGNED_CERT|self signed certificate/i
+  );
+
+  const selfSigned = await sendRequest(liveTlsRequest('https://self-signed.badssl.com/'), null, {
+    tlsSettings: {
+      request: {
+        sslCertificateVerification: false
+      }
+    }
+  });
+  assert.equal(selfSigned.statusCode, 200);
+  assert.equal(selfSigned.tls.verificationDisabled, true);
+
+  await assertLiveTlsFailure(
+    liveTlsRequest('https://self-signed.badssl.com/', { sslCertificateVerification: 'enabled' }),
+    { tlsSettings: { request: { sslCertificateVerification: false } } },
+    /DEPTH_ZERO_SELF_SIGNED_CERT|self signed certificate/i
+  );
+
+  const requestDisabledOverride = await sendRequest(
+    liveTlsRequest('https://self-signed.badssl.com/', { sslCertificateVerification: 'disabled' }),
+    null,
+    { tlsSettings: { request: { sslCertificateVerification: true } } }
+  );
+  assert.equal(requestDisabledOverride.statusCode, 200);
+  assert.equal(requestDisabledOverride.tls.verificationDisabled, true);
+
+  await assertLiveTlsFailure(
+    liveTlsRequest('https://expired.badssl.com/'),
+    { tlsSettings: { request: { sslCertificateVerification: true } } },
+    /CERT_HAS_EXPIRED|certificate has expired/i
+  );
+
+  await assertLiveTlsFailure(
+    liveTlsRequest('https://wrong.host.badssl.com/'),
+    { tlsSettings: { request: { sslCertificateVerification: true } } },
+    /ERR_TLS_CERT_ALTNAME_INVALID|hostname|does not match|altname/i
+  );
+});
+
+function liveTlsRequest(url, settings = undefined) {
+  const request = {
+    method: 'GET',
+    url,
+    queryParams: [],
+    headers: [],
+    bodyType: 'NONE',
+    body: ''
+  };
+  if (settings) {
+    request.settings = settings;
+  }
+  return request;
+}
+
+async function assertLiveTlsFailure(request, options, pattern) {
+  await assert.rejects(
+    () => sendRequest(request, null, { collectTimings: true, ...(options || {}) }),
+    (error) => {
+      assert.match(`${error?.code || ''} ${error?.message || error}`, pattern);
+      return true;
+    }
+  );
+}
 
 async function createServer(handler) {
   const server = http.createServer((request, response) => {
@@ -942,8 +1289,25 @@ async function createMtlsServer(fixtures) {
     const peer = request.socket.getPeerCertificate();
     response.end(JSON.stringify({
       authorized: request.client.authorized,
+      authorization: request.headers.authorization || '',
       clientCommonName: peer?.subject?.CN || ''
     }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  return {
+    baseUrl: `https://127.0.0.1:${address.port}`,
+    close: () => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
+  };
+}
+
+async function createTlsServer(fixtures) {
+  const server = https.createServer({
+    key: await fs.readFile(fixtures.serverKeyPath),
+    cert: await fs.readFile(fixtures.serverCertPath)
+  }, (_request, response) => {
+    response.setHeader('Content-Type', 'application/json');
+    response.end(JSON.stringify({ ok: true }));
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const address = server.address();

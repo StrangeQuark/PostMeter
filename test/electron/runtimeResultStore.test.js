@@ -60,6 +60,13 @@ test('capture policy keeps current defaults for small runs and applies high-volu
   }, 'performance', { plannedRequests: 500000, diagnostic: true });
   assert.equal(veryLargeDiagnosis.responseHeaders, true);
   assert.equal(veryLargeDiagnosis.transportTimings, true);
+
+  const veryLargePerformance = normalizeCapturePolicy({
+    responseHeaders: true,
+    transportTimings: true
+  }, 'performance', { plannedRequests: 500000, diagnostic: false });
+  assert.equal(veryLargePerformance.responseHeaders, false);
+  assert.equal(veryLargePerformance.transportTimings, true);
 });
 
 test('runtime result store estimates high-volume file size from capture settings', () => {
@@ -144,7 +151,7 @@ test('runtime result store reuses one SQLite file and pages captured runner deta
       id: 'run-one',
       kind: 'runner',
       plannedRequests: 3,
-      capturePolicy: { responseBody: 'failed', bodyPreviewBytes: 16 },
+      capturePolicy: { responseBody: 'failed', bodyPreviewBytes: 16, transportTimings: true },
       metadata: { runnerOwned: true }
     });
     store.recordRunnerResult({
@@ -156,6 +163,13 @@ test('runtime result store reuses one SQLite file and pages captured runner deta
       durationMillis: 10,
       responseBody: 'successful-body',
       responseBytes: 15,
+      timings: {
+        tlsHandshakeMillis: 12,
+        tls: {
+          verificationDisabled: true,
+          caCertificateConfigured: true
+        }
+      },
       passed: true,
       preRequestScriptResult: { passed: true, tests: [], logs: ['pre'] },
       testScriptResult: { passed: true, tests: [], logs: ['post'] },
@@ -182,6 +196,8 @@ test('runtime result store reuses one SQLite file and pages captured runner deta
     assert.equal(page.items[0].responseBody, undefined);
     assert.equal(page.items[1].responseBody, 'failed-body-prev');
     assert.equal(page.items[0].bodySha256.length, 64);
+    assert.equal(page.items[0].timings.tls.verificationDisabled, true);
+    assert.equal(page.items[0].timings.tls.caCertificateConfigured, true);
 
     const failedPage = store.page({ kind: 'runner', status: '500', limit: 10 });
     assert.equal(failedPage.total, 1);
@@ -195,6 +211,48 @@ test('runtime result store reuses one SQLite file and pages captured runner deta
     const csv = await fs.readFile(csvPath, 'utf8');
     assert.match(csv, /failed-body-prev/);
     assert.match(csv, /capturePolicy/);
+
+    const htmlPath = path.join(temp, 'export.html');
+    await store.exportHtml(htmlPath, { kind: 'runner', result: { id: 'run-one', totalRequests: 2, failedRequests: 1, resultPage: page } });
+    const html = await fs.readFile(htmlPath, 'utf8');
+    assert.match(html, /<!doctype html>/i);
+    assert.match(html, /PostMeter Runner Results/);
+    assert.match(html, /Charts and Trends/);
+    assert.match(html, /Response Details/);
+    assert.match(html, /id="resultPageSizeSelect"/);
+    assert.match(html, /id="resultStatusFilterSelect"/);
+    assert.match(html, /View Details/);
+    assert.match(html, /id="responseDetailModal"/);
+    assert.doesNotMatch(html, /<section id="responses"/);
+    assert.match(html, /failed-body-prev/);
+    assert.match(html, /Body SHA-256/);
+
+    const compactHtmlPath = path.join(temp, 'export-compact.html');
+    await store.exportHtml(compactHtmlPath, {
+      kind: 'runner',
+      result: { id: 'run-one', totalRequests: 2, failedRequests: 1, resultPage: page },
+      includeRequestResults: false,
+      includeRequestDetails: false
+    });
+    const compactHtml = await fs.readFile(compactHtmlPath, 'utf8');
+    assert.match(compactHtml, /PostMeter Runner Results/);
+    assert.doesNotMatch(compactHtml, /Request Results/);
+    assert.doesNotMatch(compactHtml, /View Details/);
+    assert.doesNotMatch(compactHtml, /id="responseDetailModal"/);
+    assert.doesNotMatch(compactHtml, /failed-body-prev/);
+
+    const tableOnlyHtmlPath = path.join(temp, 'export-table-only.html');
+    await store.exportHtml(tableOnlyHtmlPath, {
+      kind: 'runner',
+      result: { id: 'run-one', totalRequests: 2, failedRequests: 1, resultPage: page },
+      includeRequestDetails: false
+    });
+    const tableOnlyHtml = await fs.readFile(tableOnlyHtmlPath, 'utf8');
+    assert.match(tableOnlyHtml, /Request Results/);
+    assert.match(tableOnlyHtml, /Failed/);
+    assert.doesNotMatch(tableOnlyHtml, /View Details/);
+    assert.doesNotMatch(tableOnlyHtml, /id="responseDetailModal"/);
+    assert.doesNotMatch(tableOnlyHtml, /failed-body-prev/);
 
     store.close();
     await store.reset();

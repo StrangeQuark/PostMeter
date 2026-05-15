@@ -1,6 +1,7 @@
 const crypto = require('node:crypto');
 const { BODY_TYPES, collectionModel, folderModel, keyValue, requestModel } = require('./models');
 const { collectSandboxPackageReferencesFromCollection } = require('./sandboxPackageCache');
+const { clientCertificateMatchesUrl, findMatchingClientCertificate } = require('./tlsSettings');
 
 const POSTMAN_COLLECTION_SCHEMA = 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json';
 const INTERNAL_POSTMAN_VARIABLE_KEYS = new Set([
@@ -605,6 +606,9 @@ function importCertificates(certificates) {
       return {
         id: certificateId.modelId,
         name: certificate.name || 'Postman Client Certificate',
+        enabled: certificate.enabled !== false,
+        host: certificate.host || '',
+        port: certificate.port || '',
         matches: Array.isArray(certificate.matches) ? certificate.matches.map((value) => String(value || '')).filter(Boolean) : [],
         certPath: certificate.cert?.src || certificate.certPath || '',
         keyPath: certificate.key?.src || certificate.keyPath || '',
@@ -623,7 +627,7 @@ function applyCollectionCertificates(collection) {
     if (request.auth?.type && request.auth.type !== 'none') {
       return;
     }
-    const certificate = collection.certificates.find((candidate) => certificateMatchesRequest(candidate, request));
+    const certificate = matchingCollectionCertificate(collection.certificates, request);
     if (!certificate) {
       return;
     }
@@ -647,14 +651,37 @@ function applyCollectionCertificates(collection) {
 }
 
 function certificateMatchesRequest(certificate, request) {
-  if (!certificate?.matches?.length) {
+  if (!certificate || certificate.enabled === false) {
     return false;
   }
-  const url = request.url || '';
-  return certificate.matches.some((match) => {
-    const pattern = String(match || '').replace(/\*/g, '');
-    return pattern && url.includes(pattern);
-  });
+  const matches = Array.isArray(certificate.matches) ? certificate.matches : [];
+  const host = String(certificate.host || '').trim();
+  if (!matches.length && !host) {
+    return false;
+  }
+  try {
+    return clientCertificateMatchesUrl(certificate, new URL(request.url || ''));
+  } catch {
+    const url = request.url || '';
+    return [...matches, host].some((match) => {
+      const pattern = String(match || '').replace(/\*/g, '');
+      return pattern && url.includes(pattern);
+    });
+  }
+}
+
+function matchingCollectionCertificate(certificates, request) {
+  const values = Array.isArray(certificates) ? certificates : [];
+  try {
+    return findMatchingClientCertificate(values, new URL(request.url || ''));
+  } catch {
+    for (let index = values.length - 1; index >= 0; index -= 1) {
+      if (certificateMatchesRequest(values[index], request)) {
+        return values[index];
+      }
+    }
+    return null;
+  }
 }
 
 function importAuth(authNode, inheritedAuth = { type: 'none' }) {
@@ -1563,6 +1590,12 @@ function exportPostmanCertificates(certificates = [], rawCertificates = []) {
       name: certificate?.name || raw.name || 'Postman Client Certificate',
       matches: Array.isArray(certificate?.matches) ? certificate.matches.slice() : raw.matches || []
     };
+    if (certificate?.host) {
+      exported.host = certificate.host;
+    }
+    if (certificate?.port) {
+      exported.port = certificate.port;
+    }
     if (certificate?.certPath) {
       exported.cert = { ...(raw.cert || {}), src: certificate.certPath };
     }

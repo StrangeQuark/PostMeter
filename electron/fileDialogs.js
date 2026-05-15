@@ -57,7 +57,13 @@ function performanceImportFilters() {
 }
 
 function performanceExportExtension(format) {
-  return format === 'csv' ? 'csv' : 'json';
+  if (format === 'csv') {
+    return 'csv';
+  }
+  if (format === 'html') {
+    return 'html';
+  }
+  return 'json';
 }
 
 function performanceExportFilters(format) {

@@ -22,8 +22,11 @@ const {
   MAX_ATTACHMENT_BYTES,
   resolveFileAttachmentBinding
 } = require('./fileAttachmentBindings');
-const { extractPfxToPem, readRegularFileBounded } = require('./pfxCertificate');
 const { enabledQueryParams, urlQueryMatchesPairs } = require('./requestQueryModel');
+const {
+  loadClientCertificateOptions,
+  resolveHttpTlsPolicy
+} = require('./tlsSettings');
 
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 const MANAGED_HEADERS = new Set(['content-length']);
@@ -156,7 +159,10 @@ async function sendRequest(request, environment, options = {}) {
   }
 
   const started = performance.now();
-  const tlsOptions = await loadClientCertificateOptions(requestForSend.auth, environment, url, options.clientCertificates || []);
+  const tlsPolicy = await resolveHttpTlsPolicy(requestForSend, environment, url, {
+    clientCertificates: options.clientCertificates || [],
+    tlsSettings: options.tlsSettings || {}
+  });
   const proxyOptions = normalizeProxyConfig(requestForSend.proxy, environment);
   const response = await sendWithAuthRetries(requestForSend, environment, url, fetchOptions, {
     agent: options.agent,
@@ -165,7 +171,8 @@ async function sendRequest(request, environment, options = {}) {
     forceNode: options.forceNode,
     now: options.now,
     proxyOptions,
-    tlsOptions,
+    tlsOptions: tlsPolicy.tlsOptions,
+    tlsPolicy,
     cookieJarState
   });
   const responseBody = typeof response.text === 'function' ? await response.text() : response.body;
@@ -192,6 +199,12 @@ async function sendRequest(request, environment, options = {}) {
       requestPreparationMillis: Math.max(0, Math.round((response.timings?.transportStartedAt || performance.now()) - requestStarted))
     };
     delete result.timings.transportStartedAt;
+  }
+  if (response.timings?.tls || tlsPolicy.tlsDiagnostics) {
+    result.tls = {
+      ...(response.timings?.tls || {}),
+      ...(tlsPolicy.tlsDiagnostics || {})
+    };
   }
   return result;
 }
@@ -251,11 +264,12 @@ async function sendWithAuthRetries(request, environment, url, fetchOptions, opti
 }
 
 async function sendWithTransport(url, fetchOptions, options = {}) {
-  if (options.forceNode || options.tlsOptions || options.proxyOptions) {
+  if (options.forceNode || options.collectTimings || options.tlsOptions || options.proxyOptions) {
     return sendNodeRequest(url, fetchOptions, options.tlsOptions, 0, url.origin, {
       agent: options.agent,
       collectTimings: options.collectTimings,
       cookieJarState: options.cookieJarState,
+      hasClientCertificate: options.tlsPolicy?.hasClientCertificate === true,
       proxyOptions: options.proxyOptions
     });
   }
@@ -445,59 +459,6 @@ function stripCrossOriginRedirectHeaders(headers) {
   deleteHeader(headers, 'cookie');
 }
 
-async function loadClientCertificateOptions(auth = {}, environment, url, clientCertificates = []) {
-  const normalized = normalizeAuth(auth);
-  if (normalized.type !== 'clientCertificate') {
-    return null;
-  }
-  if (url.protocol !== 'https:') {
-    throw new Error('Client certificate auth requires an https URL.');
-  }
-  const certificateId = resolveEnvironmentValue(normalized.certificateId, environment).trim();
-  if (certificateId) {
-    const certificate = (clientCertificates || []).find((item) => String(item?.id || '') === certificateId);
-    if (!certificate) {
-      throw new Error('Configured client certificate binding was not found for this request.');
-    }
-    return loadClientCertificateOptions({
-      type: 'clientCertificate',
-      certPath: certificate.certPath || '',
-      keyPath: certificate.keyPath || '',
-      pfxPath: certificate.pfxPath || '',
-      caPath: certificate.caPath || '',
-      passphrase: certificate.passphrase || ''
-    }, environment, url, []);
-  }
-
-  const passphrase = resolveEnvironmentValue(normalized.passphrase, environment);
-  const caPath = resolveEnvironmentValue(normalized.caPath, environment).trim();
-  const ca = caPath ? await readCertificateFile(caPath, 'CA certificate') : undefined;
-  const pfxPath = resolveEnvironmentValue(normalized.pfxPath, environment).trim();
-  if (pfxPath) {
-    const extracted = await extractPfxToPem(pfxPath, passphrase, {
-      bundleLabel: 'client certificate PFX/P12 bundle'
-    });
-    return {
-      cert: extracted.certChain,
-      key: extracted.privateKey,
-      ca
-    };
-  }
-
-  const certPath = resolveEnvironmentValue(normalized.certPath, environment).trim();
-  const keyPath = resolveEnvironmentValue(normalized.keyPath, environment).trim();
-  return {
-    cert: await readCertificateFile(certPath, 'PEM certificate'),
-    key: await readCertificateFile(keyPath, 'PEM key'),
-    ca,
-    passphrase: passphrase || undefined
-  };
-}
-
-async function readCertificateFile(filePath, label) {
-  return readRegularFileBounded(filePath, `client certificate ${label}`);
-}
-
 async function sendNodeRequest(url, requestOptions, tlsOptions, redirectCount = 0, originalOrigin = url.origin, options = {}) {
   const response = await sendSingleNodeRequest(url, requestOptions, tlsOptions, options.proxyOptions, options.agent, {
     collectTimings: options.collectTimings
@@ -512,10 +473,10 @@ async function sendNodeRequest(url, requestOptions, tlsOptions, redirectCount = 
   }
 
   const redirectUrl = new URL(location, url);
-  if (tlsOptions && redirectUrl.protocol !== 'https:') {
+  if (options.hasClientCertificate === true && redirectUrl.protocol !== 'https:') {
     throw new Error('Client certificate redirects must stay on https URLs.');
   }
-  if (tlsOptions && redirectUrl.origin !== originalOrigin) {
+  if (options.hasClientCertificate === true && redirectUrl.origin !== originalOrigin) {
     throw new Error('Client certificate redirects must stay on the original origin.');
   }
   if (redirectUrl.protocol !== 'http:' && redirectUrl.protocol !== 'https:') {

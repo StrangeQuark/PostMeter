@@ -1120,6 +1120,31 @@ test('requires brokered client-certificate bindings for pm.sendRequest', async (
   assert.match(rejectedPfx.result.tests[0].error, /configured certificate binding/);
   assert.equal(calls, 0);
 
+  const disabledBinding = await runPostmanScriptIsolated(`
+    pm.test('disabled configured cert binding is rejected', async function () {
+      await pm.sendRequest({
+        url: 'https://api.example.test/mtls',
+        auth: { type: 'clientCertificate', certificateId: 'disabled-cert' }
+      });
+    });
+  `, {}, {
+    clientCertificates: [{
+      id: 'disabled-cert',
+      enabled: false,
+      certPath: '/configured/client.crt',
+      keyPath: '/configured/client.key'
+    }],
+    sendRequest: async () => {
+      calls++;
+      return { statusCode: 200, headers: {}, body: '', durationMillis: 0, responseBytes: 0 };
+    },
+    timeoutMillis: 500,
+    workerTimeoutMillis: 1000
+  });
+  assert.equal(disabledBinding.result.passed, false);
+  assert.match(disabledBinding.result.tests[0].error, /not available/);
+  assert.equal(calls, 0);
+
   const allowed = await runPostmanScriptIsolated(`
     pm.test('configured cert binding is brokered', async function () {
       const response = await pm.sendRequest({
@@ -1189,6 +1214,47 @@ test('requires brokered client-certificate bindings for pm.sendRequest', async (
 
   assert.equal(allowedPfx.result.passed, true);
   assert.equal(calls, 2);
+
+  const settingsBinding = await runPostmanScriptIsolated(`
+    pm.test('settings cert binding is brokered', async function () {
+      const response = await pm.sendRequest({
+        url: 'https://api.example.test/mtls',
+        auth: { type: 'clientCertificate', certificateId: 'settings-cert' }
+      });
+      pm.expect(response.code).to.equal(200);
+    });
+  `, {}, {
+    tlsSettings: {
+      request: {
+        clientCertificates: [{
+          id: 'settings-cert',
+          certPath: '/settings/client.crt',
+          keyPath: '/settings/client.key',
+          caPath: '/settings/ca.pem',
+          passphrase: 'settings-secret'
+        }]
+      }
+    },
+    sendRequest: async (request, _environment, options) => {
+      calls++;
+      assert.deepEqual(request.auth, {
+        type: 'clientCertificate',
+        certificateId: 'settings-cert',
+        certPath: '/settings/client.crt',
+        keyPath: '/settings/client.key',
+        pfxPath: '',
+        caPath: '/settings/ca.pem',
+        passphrase: 'settings-secret'
+      });
+      assert.equal(options.clientCertificates.some((certificate) => certificate.id === 'settings-cert'), true);
+      return { statusCode: 200, headers: {}, body: '', durationMillis: 0, responseBytes: 0 };
+    },
+    timeoutMillis: 500,
+    workerTimeoutMillis: 1000
+  });
+
+  assert.equal(settingsBinding.result.passed, true);
+  assert.equal(calls, 3);
 });
 
 test('requires user-granted file bindings for brokered pm.sendRequest bodies', async (t) => {

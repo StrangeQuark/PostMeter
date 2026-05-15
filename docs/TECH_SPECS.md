@@ -22,7 +22,7 @@ The migration deliberately does not bridge Electron to the Java services. Core b
 - Import/export native PostMeter runner definitions.
 - Import/export Postman Collection v2.1 JSON while preserving folder/request hierarchy order, variables and raw variable metadata, auth inheritance, HTTP/GraphQL/gRPC/local mock scripts, request docs, cookies and richer cookie metadata including newer priority/partitioning hints where present, supported GraphQL/gRPC protocol metadata, local mock/vault/visualizer/package binding metadata, file/binary body references, request/certificate IDs, and supported collection certificate metadata.
 - Import/export OpenAPI and curl collection formats for compatibility workflows, including OpenAPI JSON/YAML input, local `$ref` resolution for common objects, server variables, path/query/header/cookie parameters, Swagger 2.0 body/form-data import, binary body hints, OpenAPI security scheme import/export, request body examples, common curl auth/data/redirect/compression/cookie/file flags, request-name comments and unsupported-feature warnings in generated curl scripts, and preserved curl proxy/retry/client-TLS import metadata.
-- Run workspace-owned desktop runners locally, including per-row iterations up to 1,000,000 expanded requests, stop-on-failure, script-mutation propagation, runtime variable display, progress events, capture controls, temp-store-backed result paging, and JSON/CSV result export.
+- Run workspace-owned desktop runners locally, including per-row iterations up to 1,000,000 expanded requests, stop-on-failure, script-mutation propagation, runtime variable display, progress events, capture controls, temp-store-backed result paging, and JSON/CSV/HTML result export.
 - Manage runners from the dedicated left-sidebar Runners section, with runner-local request copies, runner request editing, runner request import from collections, row reorder/delete controls, runner import/export, duplication, and a split execution-results view.
 - Manage open request, environment, workspace, and runner tabs with dirty prompts, force-close actions, optional save-on-force-close behavior, hover/active close buttons, shrink-before-scroll tab sizing, and a 128-tab cap.
 - Edit request, environment, and workspace names inline; request/environment title edits save on Enter and remain dirty on blur, while workspace title edits save automatically.
@@ -31,6 +31,7 @@ The migration deliberately does not bridge Electron to the Java services. Core b
 - Clear request history from the History sidebar context menu after an irreversible-action confirmation.
 - Run collections headlessly through `npm run cli -- run ...` for CI usage with non-zero exits on failed requests or script tests.
 - Configure request auth helpers for Bearer token, Basic Auth, API key, Cookie, static OAuth 2.0 access-token injection, refresh-token renewal, client-credentials token retrieval, authorization-code PKCE, device-code flow, and HTTPS client certificates using PEM certificate/key pairs or PFX/P12 bundles with optional CA certificate paths.
+- Configure Postman-style TLS trust from Settings > Certificates and per-request Settings, including global SSL certificate verification, request-local verification overrides, custom PEM CA bundles from workspace-local certificate settings, managed HTTPS/gRPC client certificates matched by host and optional port, wildcard subdomain matching, and response Network diagnostics.
 - Persist workspace cookies in a local cookie jar, allow per-request cookie jar opt-in/out, capture response cookies when enabled, and validate common browser-parity edge cases.
 - Store workspace data as plain JSON without local encryption, redaction, or credential-specific export modes.
 - Send HTTP requests and display status, timing, size, final URL, headers, and formatted JSON bodies.
@@ -63,9 +64,9 @@ The Performance editor exposes only fields that map to the active type. Full End
 
 Full Endpoint Diagnosis captures DNS lookup, TCP connect, TLS handshake/protocol/cipher/certificate signals, redirects, request preparation, upload, time-to-first-byte, download/body read, total duration, response size, content length, compression, transfer encoding, status/error distributions, cold and warm latency, connection reuse, p50/p90/p95/p99, jitter, outliers, success/failure rate, best observed RPS, stable RPS, saturation point, recovery latency, status/size/content-type/header/body/fingerprint consistency, cache/rate-limit/server-timing/trace/set-cookie signals, redirect target stability, HTTPS/TLS/security-header/CORS/auth-challenge/sensitive-URL checks, event-loop delay, scheduler lag, local queue depth, timeout count, memory growth, safety-cap limits, client-saturation detection, confidence scoring, HEAD and OPTIONS probes, HTTP protocol visibility, DNS repeatability, payload-variation awareness, authenticated request awareness, retry-signal detection, and mini-soak stability. These are local desktop observations, not a distributed capacity guarantee.
 
-Runner and Performance Capture Settings expose response body preview mode, preview size, pre-request output, post-request output, script logs, and local variables. Performance also exposes response headers and transport timings. Small runs preserve the current result-detail experience by default. At 100,000 planned requests and above, PostMeter forces all-body capture down to failed-only previews, caps preview size, disables per-request logs and local variables, and records guardrail notes in the result. At 500,000 planned requests and above, the guardrails also force pre-request output and post-request output off, tighten body previews, and disable response headers and transport timings outside Performance diagnosis so million-request runs keep usable core metrics without creating multi-GB detail artifacts. The renderer uses the same planned-request guardrails before execution, so forced-off capture checkboxes render unchecked and disabled with hover text explaining the high-volume threshold; lowering the planned request count restores the user's saved capture preferences.
+Runner and Performance Capture Settings expose response body preview mode, preview size, pre-request output, post-request output, script logs, and local variables. Performance also exposes response headers and transport timings. Small runs preserve the current result-detail experience by default. At 100,000 planned requests and above, PostMeter forces all-body capture down to failed-only previews, caps preview size, disables per-request logs and local variables, and records guardrail notes in the result. At 500,000 planned requests and above, the guardrails also force pre-request output and post-request output off, tighten body previews, and disable response headers outside Performance diagnosis while keeping compact transport/TLS timings available for Performance runs. The renderer uses the same planned-request guardrails before execution, so forced-off capture checkboxes render unchecked and disabled with hover text explaining the high-volume threshold; lowering the planned request count restores the user's saved capture preferences.
 
-Store-backed run results are written to one reusable SQLite temp file at `userData/runtime/postmeter-current-results.sqlite`. Starting another Runner or Performance run replaces the previous temp store, and closing PostMeter deletes the current SQLite file plus SQLite sidecars so unexported run results do not persist between app sessions. Before execution, `runner:estimateResultStore` and `performance:estimateResultStore` calculate a rough file-size estimate from planned request count, normalized capture settings, request metadata length, and SQLite row/index overhead. The renderer warns when the estimate is within 1 GB of effective available space and disables Continue when the estimate exceeds effective available space. The renderer receives only a bounded summary plus the first result page, then requests additional pages or detail rows through `runner:resultPage`, `runner:resultDetail`, `performance:resultPage`, and `performance:resultDetail`. CSV/JSON exports are streamed from the current temp store only when requested; PostMeter does not keep background run history.
+Store-backed run results are written to one reusable SQLite temp file at `userData/runtime/postmeter-current-results.sqlite`. Starting another Runner or Performance run replaces the previous temp store, and closing PostMeter deletes the current SQLite file plus SQLite sidecars so unexported run results do not persist between app sessions. Before execution, `runner:estimateResultStore` and `performance:estimateResultStore` calculate a rough file-size estimate from planned request count, normalized capture settings, request metadata length, and SQLite row/index overhead. The renderer warns when the estimate is within 1 GB of effective available space and disables Continue when the estimate exceeds effective available space. The renderer receives only a bounded summary plus the first result page, then requests additional pages or detail rows through `runner:resultPage`, `runner:resultDetail`, `performance:resultPage`, and `performance:resultDetail`. CSV/JSON/HTML exports are streamed from the current temp store only when requested; PostMeter does not keep background run history. HTML reports are self-contained, omit raw JSON appendix and capture-policy metadata cards, include an optional paginated Request Results table with 10/25/50/100 row-size choices plus response-status filtering, and can include captured response details from per-row `View Details` buttons in an in-report modal instead of rendering a separate response-details section. Performance HTML reports include supported run-type data bundles, including Endpoint Diagnosis and Diagnostic Checks sections for Full Endpoint Diagnosis runs.
 
 Import/export validation keeps native Performance-test export separate from collection/request export. Native Performance-test export preserves the full saved configuration and request copy. Import validates schema and safety limits, rejects malformed or unsafe payloads, and never merges imported request copies into Collections.
 
@@ -83,7 +84,7 @@ OAuth support in PostMeter is only for outbound API request authentication, matc
 - Main process: CommonJS Node modules under `electron/`
 - Renderer UI: static HTML/CSS/JavaScript under `src/renderer/`
 - Core services: CommonJS Node modules under `src/core/`
-- HTTP client: Node global `fetch` for normal requests; Node `http`/`https` transport for HTTPS client-certificate requests.
+- HTTP client: Node global `fetch` for normal requests; Node `http`/`https` transport for timing diagnostics, proxies, custom CA bundles, disabled SSL verification, and HTTPS client-certificate requests.
 - Persistence: JSON file via `node:fs/promises`
 - OpenAPI YAML parsing: `yaml`
 - XML parsing and XPath evaluation: `@xmldom/xmldom` and `xpath`
@@ -135,6 +136,7 @@ npm run test:ui:snapshot
 
 ```bash
 npm run cli -- run --file ./workspace.json --collection "Smoke" --report ./runner-report.json
+npm run cli -- run --file ./workspace.json --collection "mTLS Smoke" --ssl-extra-ca-certs ./ca.pem --client-cert-host api.example.test --ssl-client-cert ./client.crt --ssl-client-key ./client.key
 ```
 
 ### Packaging And Release
@@ -247,7 +249,7 @@ Main process responsibilities:
 - Start and cancel OAuth 2.0 device-code polling.
 - Validate renderer-originated IPC sender identity and payloads before handing them to persistence, request execution, or collection-run behavior.
 - Persist normalized workspace data as plain JSON, keep app-wide preferences in `settings.json`, and keep workspace-local non-portable trust/privacy settings in managed workspace `localsettings`.
-- Export collection-run results to JSON or CSV.
+- Export Runner and Performance results to JSON, CSV, or a self-contained HTML report.
 - Persist request history after sends.
 - Check GitHub Releases for update metadata and open approved release URLs in the external browser. The Help menu owns update checks and the prerelease opt-in checkbox.
 - Own structured local diagnostics, bounded rotated diagnostic logs, and user-selected local diagnostic bundle export. The main process never uploads diagnostics and does not accept renderer-provided upload destinations.
@@ -292,9 +294,10 @@ window.postmeter.oauth.cancelDeviceFlow(id)
 window.postmeter.oauth.onProgress(callback)
 window.postmeter.runner.start(id, collection, environment, config)
 window.postmeter.runner.cancel(id)
-window.postmeter.runner.export(result, format)
+window.postmeter.runner.export(result, format, htmlReportOptions) // format: json, csv, html
 window.postmeter.runner.onProgress(callback)
 window.postmeter.performance.importTest(filePath?)
+window.postmeter.performance.exportResult(result, format, htmlReportOptions) // format: json, csv, html
 window.postmeter.files.pathForFile(file)
 ```
 
@@ -336,6 +339,9 @@ Root workspace fields:
 Runtime-hydrated settings fields:
 
 - `appearance.theme`
+- `request.sslCertificateVerification`
+- `request.caCertificatePath`
+- `request.clientCertificates`
 - `sandbox.trustedCapabilities.sendRequest`
 - `sandbox.trustedCapabilities.cookies`
 - `sandbox.trustedCapabilities.vault`
@@ -385,6 +391,7 @@ Request fields:
 - `docs`
 - `cookieJar`
 - `autoHeaders`
+- `settings`
 - Optional protocol and import/export fields for Postman parity: `protocol`, `methodPath`, `metadata`, `messages`, `postmanBody`, `protocolProfile`, `graphql`, `grpc`, `websocket`, and bounded `postman` compatibility metadata
 
 Request cookie jar fields:
@@ -396,6 +403,10 @@ Request auto-header fields:
 
 - `sendPostMeterToken`
 - `showGeneratedHeaders`
+
+Request TLS setting fields:
+
+- `sslCertificateVerification`: `inherit`, `enabled`, or `disabled`
 
 Auth fields vary by `auth.type`:
 
@@ -456,12 +467,16 @@ Collection certificate fields:
 
 - `id`
 - `name`
+- `enabled`
+- `host`
+- `port`
 - `matches`
 - `certPath`
 - `keyPath`
 - `pfxPath`
 - `caPath`
 - `passphrase`
+- `passphraseSecretKey`
 
 Request example fields:
 
@@ -538,7 +553,7 @@ Behavior:
 - Writes workspace, session, vault, and export files through collision-resistant same-directory temporary files, fsyncs file contents where supported, renames into place, and best-effort fsyncs the containing directory. Interrupted temporary files are ignored by workspace discovery.
 - Writes normalized workspace values directly to local JSON, excluding runtime `settings` and retaining non-portable `localsettings` only for managed workspace files.
 - Writes app-wide settings to `settings.json` using the same atomic JSON write path. The file uses `format: "postmeter.settings"` and `version: 1` rather than `schemaVersion`, so managed-workspace discovery does not treat it as a workspace.
-- Writes workspace-local diagnostics opt-ins, reviewed package metadata, imported file bindings, and vault grants to the managed workspace `localsettings` object, not to `settings.json`.
+- Writes workspace-local diagnostics opt-ins, TLS trust settings, managed client-certificate settings, reviewed package metadata, imported file bindings, and vault grants to the managed workspace `localsettings` object, not to `settings.json`.
 - Normalizes IDs, names, body types, methods, arrays, settings, collection variables, collection certificates, request variables, request docs, request cookie jar settings, workspace cookies, folders, environments, and history, while removing legacy request load-test compatibility fields.
 - Native workspace import adds another managed workspace without replacing, switching away from, or backing up the current one.
 - Targeted renderer saves for request, runner-owned request, and environment tabs send only the selected item payload, the current runtime settings, and any owned shared request-side state such as collection variables or cookie-jar values; targeted settings saves send only `workspace.settings`, which the main process validates, splits into app-wide settings plus workspace `localsettings`, and applies to the cached workspace.
@@ -601,7 +616,7 @@ Postman collection import supports:
 - Imported Postman HTTP requests enable cookie-jar sends and response-cookie storage by default so script-created and response-set cookies participate in later imported request sends.
 - Postman cookie metadata is preserved as explicit request metadata and used during desktop import promotion for domain, path, expiry, secure, httpOnly, SameSite, host-only, priority, partitioning, extension, and source values when present.
 - Postman request/item variables, represented as request-local variables, with raw variable metadata retained for Postman export.
-- Collection-level certificates from `certificate`, applied to matching requests only when doing so does not overwrite an explicit request auth helper.
+- Collection-level certificates from `certificate`, preserved for runtime host/path matching; matching requests without explicit auth also receive a client-certificate auth binding for UI clarity.
 - Bounded Postman compatibility metadata for protocol profiles, GraphQL/gRPC definitions, package references, visualizer assets, cookie allowlists, vault metadata, mock state configuration, certificates, auth inheritance, and file/binary body references.
 
 Postman collection export supports:
@@ -612,7 +627,7 @@ Postman collection export supports:
 Postman import limitations:
 
 - OAuth 2.0 import covers common token/client fields but not every Postman grant type or client-auth method.
-- Collection-level certificates are mapped into PostMeter's single request-auth model only when a matching request does not already have explicit auth.
+- Collection-level certificates are preserved for runtime matching. They are also mapped into PostMeter's request-auth model only when a matching request does not already have explicit auth.
 - Cookie import is best-effort when a source format only provides a raw `Cookie` header without expiry/domain metadata.
 - Raw URL query strings are split from the request URL; query params are imported from `url.query`.
 
@@ -640,7 +655,7 @@ Behavior:
 - Leaves unknown variables unchanged.
 - Applies to URLs, query parameter keys/values, header names/values, and body content before request execution.
 
-Password, token, cookie, OAuth, and certificate passphrase inputs are normal visible text fields. Workspace values are rendered, saved, and exported directly.
+Password, token, cookie, and OAuth inputs are normal visible text fields. Settings > Certificates passphrases are stored as vault references when the workspace vault can bind them; if vault binding is unavailable, the fallback plaintext passphrase stays in workspace-local settings rather than portable workspace exports.
 
 ## Auth Specifications
 
@@ -659,6 +674,7 @@ Implemented request-time auth:
 - OAuth 2.0 authorization-code PKCE: creates a S256 PKCE challenge, opens the authorization URL in the external browser, supports loopback redirects and `postmeter://oauth/callback` custom URI-scheme redirects, verifies callback state, exchanges the authorization code at the token endpoint, and persists returned token metadata.
 - OAuth 2.0 device code: posts `client_id` and optional `scope` to the device authorization URL, opens the verification URL in the external browser, displays the user code, polls the token endpoint with `urn:ietf:params:oauth:grant-type:device_code`, handles pending, denial, expiration, timeout, and cancellation states, refuses token-endpoint redirects, and persists returned token metadata.
 - HTTPS client certificate: loads certificate material in the main/core layer from local paths using regular-file, byte-capped descriptor reads, supports PEM certificate/key pairs and PFX/P12 bundles, normalizes PFX/P12 bundles into in-memory PEM certificate/key buffers with the reviewed `node-forge` PKCS#12 parser before transport, applies optional CA certificates and passphrases, and does not expose certificate contents to the renderer or scripts. Pre-request scripts may select configured certificate bindings by `certificateId`; script-injected direct certificate/key/PFX/CA paths or passphrases are ignored before the parent transport can read certificate files.
+- Disabled managed client-certificate bindings are ignored by automatic host matching, explicit request `certificateId` lookup, brokered `pm.sendRequest`, and gRPC invocation setup so toggling a certificate off fails closed across runtime surfaces.
 
 Auth values support environment substitution before use.
 
@@ -802,9 +818,9 @@ Runner behavior:
 - Caps a single runner run at 1,000,000 expanded request iterations. Core metrics are retained for every request, while high-volume guardrails automatically limit heavy optional captures.
 - Supports bounded `pm.execution.setNextRequest`, `pm.execution.skipRequest`, and `pm.execution.runRequest` against runner-local request IDs.
 - Reports per-request status, timing, pass/fail state, script results, and request errors.
-- Reports final runtime collection/environment variables plus per-request local variables in the desktop runner output and CSV export when those captures are enabled.
+- Reports final runtime collection/environment variables plus per-request local variables in the desktop runner output and result exports when those captures are enabled.
 - Returns the final cookie jar to the Electron main process so it can be saved with the workspace.
-- Exports runner results as JSON or CSV through desktop IPC. Store-backed exports stream from the temp result database only when the user requests an export.
+- Exports Runner and Performance results as JSON, CSV, or self-contained HTML reports through desktop IPC. Store-backed exports stream from the temp result database only when the user requests an export.
 
 Limitations:
 
@@ -882,7 +898,7 @@ The CLI entry point is `scripts/postmeter-cli.js`.
 Command:
 
 ```bash
-npm run cli -- run --file <workspace-or-collection> [--collection <id-or-name>] [--environment <id-or-name>] [--report <path>] [--format json|csv] [--stop-on-failure]
+npm run cli -- run --file <workspace-or-collection> [--collection <id-or-name>] [--environment <id-or-name>] [--report <path>] [--format json|csv|html] [--stop-on-failure]
 ```
 
 Behavior:
@@ -893,7 +909,7 @@ Behavior:
 - Selects no environment by default, or an environment by ID/name for native workspace inputs.
 - Accepts repeated `--var key=value` environment overrides and `--collection-var key=value` collection overrides for CI injection.
 - Runs request scripts, then exits with status `0` only when all executed requests pass.
-- Writes JSON or CSV reports when `--report` is provided.
+- Writes JSON, CSV, or self-contained HTML reports when `--report` is provided.
 
 Limitations:
 
@@ -1028,12 +1044,12 @@ Node tests cover:
 - Collection format import/export for Postman, OpenAPI, and curl, including Postman Collection v2.1 script/ID/order/metadata round-tripping, OpenAPI YAML/security import-export, OpenAPI local `$ref` resolution, OpenAPI server/path/cookie/binary metadata, Swagger 2.0 body/form-data import, request body examples, common curl auth/data/redirect/compression/file compatibility flags, and preserved curl proxy/retry/client-TLS import metadata.
 - Postman import for common inherited and request-level auth helpers, HTTP/GraphQL/gRPC scripts, protocol hook metadata, request docs, cookies, prefix-constrained cookie metadata, real-world `request.cookie` source-format fixture coverage, variables and raw variable metadata, request/certificate IDs, file/binary body references, binding metadata, and collection certificates.
 - Postman sandbox parity matrix validation, the HTTP-core, broad, dynamic-host-globals, runtime-limits, HttpOnly-cookies, sendRequest-advanced, and file-binding Newman-compatible differential fixtures, and the protocol hook fixture, including request mutation, environment mutation, collection-variable behavior asserted inside the script, package/assertion/timer/dynamic-variable/cookie coverage, `pm.info`, `pm.message`, `pm.sendRequest` callback/object-body/advanced-auth/file-binding behavior, GraphQL hooks, and gRPC streaming message hooks.
-- Collection-run sequencing, request-local variables, cookie jar propagation, script-mutation propagation, stop-on-failure, isolated request script execution, Node permission worker flags, minimal worker environments, bounded worker heap settings, bounded script console capture, explicit unsupported script API errors, and collection-run CSV export.
-- CLI collection execution with passing/failing exit codes and JSON/CSV report output.
+- Collection-run sequencing, request-local variables, cookie jar propagation, script-mutation propagation, stop-on-failure, isolated request script execution, Node permission worker flags, minimal worker environments, bounded worker heap settings, bounded script console capture, explicit unsupported script API errors, and collection-run CSV/JSON/HTML export.
+- CLI collection execution with passing/failing exit codes and JSON/CSV/HTML report output.
 - Release manifest generation, release artifact validation, release workflow metadata, CI workflow validation, and GitHub release update checks.
 - Workspace default creation, schema `2` through `14` migration, corrupt-file recovery, settings normalization, legacy load-test policy removal, native import, Postman folder/script import, and native/Postman/OpenAPI YAML format detection.
-- Electron UI workflow smoke coverage for create/edit/save/reload/send, context menus, pane resizing, collection variables, request variables, request docs, cookie jar capture, environment variables, Help-menu prerelease setting persistence, scripts, collection runner, runtime variable output, first-class runner tabs, runner import/edit/reorder/delete controls, runner export-control state, and the Performance sidebar/pane/tab placement.
-- Electron UI regression smoke coverage for toolbar dropdowns, Help-menu update state, import/export menu options/cancellation, invalid-request error rendering, XML/HTML response formatting, mocked OAuth flow completion/failure, cookie/request-docs/request-variable editor coverage, active-host cookie filtering, runner pre-run export state, runner empty-pane/sidebar behavior, tab context and tab-cap behavior, history clearing, sidebar drag/drop structural saves, insertion-bar feedback, and no app-account/login language.
+- Electron UI workflow smoke coverage for create/edit/save/reload/send, context menus, pane resizing, collection variables, request variables, request docs, cookie jar capture, environment variables, Help-menu prerelease setting persistence, scripts, collection runner, runtime variable output, first-class runner tabs, runner import/edit/reorder/delete controls, runner export-control state and result export dropdown formats, and the Performance sidebar/pane/tab placement.
+- Electron UI regression smoke coverage for toolbar dropdowns, Help-menu update state, import/export menu options/cancellation, invalid-request error rendering, XML/HTML response formatting, mocked OAuth flow completion/failure, cookie/request-docs/request-variable editor coverage, active-host cookie filtering, runner pre-run export state and result export formats, runner empty-pane/sidebar behavior, tab context and tab-cap behavior, history clearing, sidebar drag/drop structural saves, insertion-bar feedback, and no app-account/login language.
 - Electron UI typography smoke coverage for every built-in interface font and interface font-size pair, every built-in editor font and editor font-size pair, combined large-font stress pairs, request/editor/result tabs, collection/folder tabs, environment/workspace/runner/performance/history screens, every Settings section, sidebar fit, horizontal overflow, modal viewport fit, and visible sibling overlap.
 - Electron UI OAuth smoke coverage for mocked loopback PKCE success, custom-scheme callback success, wrong-state callback rejection without token persistence, token exchange failure, PKCE cancellation, device-code success, access denial, timeout, and cancellation.
 - Electron UI screenshot smoke coverage for request builder, context menu, cookies, auth/OAuth, response viewer, runner, and export menu states.

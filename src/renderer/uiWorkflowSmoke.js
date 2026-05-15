@@ -28,16 +28,23 @@
     assertUiSmoke($('requestTabBar').textContent.includes(collection.name), 'New collection did not open a collection tab.');
     const collectionOpenTab = openCollectionTabs.find((tab) => tab.collectionId === collection.id);
     assertUiSmoke(collectionOpenTab?.dirty === true, 'New collection tab should show unsaved changes.');
-    const descriptionEditor = $('collectionDescriptionInput').closest('.code-editor');
-    assertUiSmoke(descriptionEditor?.classList.contains('has-line-numbers'), 'Collection overview description should render as a line-numbered editor.');
-    assertUiSmoke(descriptionEditor.getBoundingClientRect().height > 220, 'Collection overview description editor should fill the collection pane.');
+    assertUiSmoke(!$('collectionDescriptionPreview').hidden, 'Collection overview should render Markdown preview by default.');
+    assertUiSmoke($('collectionDescriptionSaveButton').hidden && $('collectionDescriptionCancelButton').hidden, 'Collection overview should hide Save/Cancel before editing.');
+    assertUiSmoke($('collectionDescriptionPreview').getBoundingClientRect().height > 220, 'Collection overview Markdown preview should fill the collection pane.');
     assertUiSmoke(!document.querySelector('#collectionOverviewTab .field > span'), 'Collection overview should not reserve space for a description label.');
-    assertUiSmoke(descriptionEditor.getBoundingClientRect().top - $('collectionOverviewTab').getBoundingClientRect().top < 4, 'Collection overview editor should start at the top of the overview pane.');
-    const descriptionCode = descriptionEditor.querySelector('.code-editor-highlight code');
-    assertUiSmoke(
-      getComputedStyle(descriptionCode).fontFamily === getComputedStyle($('collectionDescriptionInput')).fontFamily,
-      'Collection overview highlighted text should use the same font metrics as the editable textarea.'
-    );
+    editMarkdownPane('collectionDescription', '## Smoke overview\n\n- Fast setup\n- **Markdown** docs\n\n```json\n{"collection": true}\n```');
+    assertUiSmoke(collection.description === '', 'Collection overview draft should not save before the pane Save button.');
+    $('collectionDescriptionCancelButton').click();
+    assertUiSmoke(collection.description === '', 'Collection overview Cancel should discard the Markdown draft.');
+    editMarkdownPane('collectionDescription', '## Smoke overview\n\n- Fast setup\n- **Markdown** docs\n\n```json\n{"collection": true}\n```');
+    $('collectionDescriptionSaveButton').click();
+    assertUiSmoke(collection.description.includes('## Smoke overview'), 'Collection overview Save should store Markdown source.');
+    assertMarkdownPreview('collectionDescriptionPreview', {
+      heading: 'Smoke overview',
+      strong: 'Markdown',
+      code: '{"collection": true}'
+    });
+    assertUiSmoke(!$('collectionDescriptionPreview').hidden && $('collectionDescriptionSaveButton').hidden, 'Collection overview should return to preview controls after Save.');
     collection.name = 'Smoke Collection';
     renderAll();
     activateTab('collection', 'collectionScripts');
@@ -68,6 +75,13 @@
     folderColorProbe.remove();
     assertUiSmoke(getComputedStyle(folderBadge).color === folderHighlightColor, 'Folder tree badge color should match folder variable highlighting.');
     assertUiSmoke(getComputedStyle(folderTabBadge).color === folderHighlightColor, 'Folder tab badge color should match folder variable highlighting.');
+    editMarkdownPane('folderDescription', '### Folder overview\n\n> Shared auth setup\n\nUse `folderToken`.');
+    $('folderDescriptionSaveButton').click();
+    assertUiSmoke(folder.description.includes('### Folder overview'), 'Folder overview Save should store Markdown source.');
+    assertMarkdownPreview('folderDescriptionPreview', {
+      heading: 'Folder overview',
+      code: 'folderToken'
+    });
 
     newRequest(collection.id, null);
     const request = activeRequest();
@@ -125,9 +139,17 @@
     $('bodyInput').value = '{"workflow":"smoke"}';
     dispatchInput($('bodyInput'));
     activateTab('request', 'docs');
-    $('docsInput').value = 'Smoke request docs';
-    dispatchInput($('docsInput'));
-    assertUiSmoke(activeRequest().docs === 'Smoke request docs', 'Docs field did not update the active request.');
+    assertUiSmoke(!$('docsPreview').hidden && $('docsSaveButton').hidden && $('docsCancelButton').hidden, 'Request docs should render Markdown preview before editing.');
+    editMarkdownPane('docs', '## Smoke request docs\n\n1. Send request\n2. Review **Markdown** output\n\n```http\nGET /echo\n```\n\n[Fixture](https://example.test)');
+    assertUiSmoke(activeRequest().docs === '', 'Request docs draft should not update the active request before pane Save.');
+    $('docsSaveButton').click();
+    assertUiSmoke(activeRequest().docs.includes('## Smoke request docs'), 'Docs Save should store Markdown source.');
+    assertMarkdownPreview('docsPreview', {
+      heading: 'Smoke request docs',
+      strong: 'Markdown',
+      code: 'GET /echo',
+      link: 'Fixture'
+    });
     activateTab('request', 'scripts');
     $('preRequestScriptInput').value = "pm.environment.set('scriptToken', 'ui-script');";
     dispatchInput($('preRequestScriptInput'));
@@ -241,8 +263,45 @@
     assertUiSmoke($('runnerExecutionDetails').textContent.includes('script token exists'), 'Runner execution details did not render script test results.');
     assertUiSmoke($('runnerExecutionDetails').textContent.includes('scriptToken'), 'Runner execution details did not render environment variables.');
     assertUiSmoke($('runnerExecutionDetails').textContent.includes('requestToken'), 'Runner execution details did not render request variables.');
-    assertUiSmoke(!$('exportRunnerJsonButton').disabled, 'Runner JSON export button was not enabled after a run.');
-    assertUiSmoke(!$('exportRunnerCsvButton').disabled, 'Runner CSV export button was not enabled after a run.');
+    assertUiSmoke(!$('exportRunnerResultsButton').disabled, 'Runner Export Results button was not enabled after a run.');
+    $('exportRunnerResultsButton').click();
+    assertUiSmoke(!$('exportRunnerResultsMenu').hidden, 'Runner Export Results button should open the result format menu.');
+    assertUiSmoke(
+      Array.from($('exportRunnerResultsMenu').querySelectorAll('button')).map((button) => button.textContent.trim()).join('|') === 'HTML Report|JSON|CSV',
+      'Runner Export Results menu should offer HTML Report, JSON, and CSV.'
+    );
+    assertUiSmoke(!$('exportRunnerHtmlButton').disabled, 'Runner HTML report export menu item was not enabled after a run.');
+    assertUiSmoke(!$('exportRunnerJsonButton').disabled, 'Runner JSON export menu item was not enabled after a run.');
+    assertUiSmoke(!$('exportRunnerCsvButton').disabled, 'Runner CSV export menu item was not enabled after a run.');
+    const originalRunnerExport = window.__postmeterExportRunnerResult;
+    const runnerExportCalls = [];
+    try {
+      window.__postmeterExportRunnerResult = async (result, format, htmlReportOptions) => {
+        runnerExportCalls.push({ result, format, htmlReportOptions });
+        return { cancelled: false, path: `/tmp/postmeter-runner-result.${format}` };
+      };
+      $('exportRunnerHtmlButton').click();
+      assertUiSmoke(!$('htmlReportOptionsModal').hidden, 'Runner HTML report export should open the report options modal.');
+      $('htmlReportIncludeResultsInput').checked = false;
+      dispatchChange($('htmlReportIncludeResultsInput'));
+      assertUiSmoke($('htmlReportIncludeDetailsInput').disabled, 'Runner HTML report details should be disabled when results are excluded.');
+      assertUiSmoke(!$('htmlReportIncludeDetailsInput').checked, 'Runner HTML report details should be unchecked when results are excluded.');
+      $('confirmHtmlReportOptionsButton').click();
+      await waitForUiSmoke(
+        () => runnerExportCalls.length === 1,
+        'Runner HTML report export did not invoke the export boundary with modal options.',
+        3000,
+        global
+      );
+      assertUiSmoke(runnerExportCalls[0].format === 'html', 'Runner HTML report export should use the HTML format.');
+      assertUiSmoke(
+        runnerExportCalls[0].htmlReportOptions?.includeRequestResults === false
+          && runnerExportCalls[0].htmlReportOptions?.includeRequestDetails === false,
+        'Runner HTML report export should force Request Details off when Request Results is excluded.'
+      );
+    } finally {
+      window.__postmeterExportRunnerResult = originalRunnerExport;
+    }
 
     selectSidebarPanel('performance');
     const performanceTest = newPerformanceTest();
@@ -307,7 +366,72 @@
       global
     );
     assertUiSmoke($('performanceExecutionDetails').textContent.includes('/diagnostic?api_key=ui-smoke'), 'Full Endpoint Diagnosis detail did not render the target URL.');
-    assertUiSmoke(!$('exportPerformanceResultCsvButton').disabled, 'Performance CSV export button was not enabled after Full Endpoint Diagnosis.');
+    assertUiSmoke(!$('exportPerformanceResultsButton').disabled, 'Performance Export Results button was not enabled after Full Endpoint Diagnosis.');
+    $('exportPerformanceResultsButton').click();
+    assertUiSmoke(!$('exportPerformanceResultsMenu').hidden, 'Performance Export Results button should open the result format menu.');
+    assertUiSmoke(
+      Array.from($('exportPerformanceResultsMenu').querySelectorAll('button')).map((button) => button.textContent.trim()).join('|') === 'HTML Report|JSON|CSV',
+      'Performance Export Results menu should offer HTML Report, JSON, and CSV.'
+    );
+    assertUiSmoke(!$('exportPerformanceResultHtmlButton').disabled, 'Performance HTML report export menu item was not enabled after Full Endpoint Diagnosis.');
+    assertUiSmoke(!$('exportPerformanceResultJsonButton').disabled, 'Performance JSON export menu item was not enabled after Full Endpoint Diagnosis.');
+    assertUiSmoke(!$('exportPerformanceResultCsvButton').disabled, 'Performance CSV export menu item was not enabled after Full Endpoint Diagnosis.');
+    $('exportPerformanceResultsButton').click();
+    const originalPerformanceExportResult = window.__postmeterExportPerformanceResult;
+    const performanceExportCalls = [];
+    try {
+      window.__postmeterExportPerformanceResult = async (result, format, htmlReportOptions) => {
+        performanceExportCalls.push({ result, format, htmlReportOptions });
+        return { cancelled: false, path: `/tmp/postmeter-performance-result.${format}` };
+      };
+      $('exportPerformanceResultsButton').click();
+      $('exportPerformanceResultHtmlButton').click();
+      assertUiSmoke(!$('modalBackdrop').hidden, 'HTML report export options should open the modal backdrop.');
+      assertUiSmoke(!$('htmlReportOptionsModal').hidden, 'HTML report export options modal should open before exporting.');
+      assertUiSmoke($('htmlReportIncludeResultsInput').checked, 'HTML report should include Request Results by default.');
+      assertUiSmoke($('htmlReportIncludeDetailsInput').checked, 'HTML report should include Request Details by default.');
+      $('htmlReportIncludeResultsInput').checked = false;
+      dispatchChange($('htmlReportIncludeResultsInput'));
+      assertUiSmoke($('htmlReportIncludeDetailsInput').disabled, 'Request Details option should be disabled when Request Results is excluded.');
+      assertUiSmoke(!$('htmlReportIncludeDetailsInput').checked, 'Request Details option should be forced off when Request Results is excluded.');
+      $('htmlReportIncludeResultsInput').checked = true;
+      dispatchChange($('htmlReportIncludeResultsInput'));
+      assertUiSmoke(!$('htmlReportIncludeDetailsInput').disabled, 'Request Details option should re-enable when Request Results is included.');
+      $('htmlReportIncludeDetailsInput').checked = false;
+      dispatchChange($('htmlReportIncludeDetailsInput'));
+      $('confirmHtmlReportOptionsButton').click();
+      await waitForUiSmoke(
+        () => performanceExportCalls.length === 1 && performanceExportCalls[0].format === 'html',
+        'Performance HTML report export did not invoke the export boundary after confirming modal options.',
+        3000,
+        global
+      );
+      $('exportPerformanceResultsButton').click();
+      $('exportPerformanceResultJsonButton').click();
+      $('exportPerformanceResultsButton').click();
+      $('exportPerformanceResultCsvButton').click();
+      await waitForUiSmoke(
+        () => performanceExportCalls.length === 3,
+        'Performance result export buttons did not invoke HTML, JSON, and CSV exports.',
+        3000,
+        global
+      );
+      assertUiSmoke(
+        performanceExportCalls.map((call) => call.format).join('|') === 'html|json|csv',
+        `Performance result exports should run HTML then JSON then CSV. formats=${performanceExportCalls.map((call) => call.format).join('|')}`
+      );
+      assertUiSmoke(
+        performanceExportCalls[0].htmlReportOptions?.includeRequestResults === true
+          && performanceExportCalls[0].htmlReportOptions?.includeRequestDetails === false,
+        'HTML report export should pass the selected Request Results and Request Details options.'
+      );
+      assertUiSmoke(
+        performanceExportCalls.every((call) => call.result?.resultStoreId === diagnosisResult.resultStoreId),
+        'Performance result exports should send the last performance result payload.'
+      );
+    } finally {
+      window.__postmeterExportPerformanceResult = originalPerformanceExportResult;
+    }
   }
 
   function assertVariableHighlight(control, variableName, message, expectedStatus = '', expectedSource = '') {
@@ -397,6 +521,38 @@
 
   function cssAttributeValue(value) {
     return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  }
+
+  function editMarkdownPane(prefix, value) {
+    $(`${prefix}Preview`).click();
+    assertUiSmoke(!$(`${prefix}SaveButton`).hidden && !$(`${prefix}CancelButton`).hidden, `${prefix} Save and Cancel buttons should appear while editing.`);
+    assertUiSmoke(!$(`${prefix}EditorShell`).hidden && $(`${prefix}Preview`).hidden, `${prefix} Markdown editor should replace the preview while editing.`);
+    const input = $(`${prefix}Input`);
+    const editor = input.closest('.code-editor');
+    assertUiSmoke(editor?.classList.contains('has-line-numbers'), `${prefix} Markdown source should use the normal line-numbered text editor.`);
+    input.value = value;
+    dispatchInput(input);
+  }
+
+  function assertMarkdownPreview(previewId, expected = {}) {
+    const preview = $(previewId);
+    assertUiSmoke(preview && !preview.hidden, `${previewId} Markdown preview should be visible.`);
+    if (expected.heading) {
+      assertUiSmoke(
+        Array.from(preview.querySelectorAll('h1,h2,h3,h4,h5,h6')).some((heading) => heading.textContent === expected.heading),
+        `${previewId} should render Markdown headings.`
+      );
+    }
+    if (expected.strong) {
+      assertUiSmoke(preview.querySelector('strong')?.textContent === expected.strong, `${previewId} should render Markdown strong text.`);
+    }
+    if (expected.code) {
+      assertUiSmoke(preview.querySelector('code')?.textContent.includes(expected.code), `${previewId} should render Markdown code.`);
+    }
+    if (expected.link) {
+      const link = preview.querySelector('a');
+      assertUiSmoke(link?.textContent === expected.link && link.getAttribute('rel') === 'noreferrer', `${previewId} should render safe Markdown links.`);
+    }
   }
 
   function assertHighClickPlacesCaret(control, label) {

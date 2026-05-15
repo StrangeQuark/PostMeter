@@ -135,12 +135,18 @@
     bindClick(doc, 'sendButton', options.onSendRequest);
     bindClick(doc, 'saveCollectionButton', options.onSaveCollection);
     bindClick(doc, 'addCollectionVariableButton', options.onAddCollectionVariable);
-    bindInput(doc, 'collectionDescriptionInput', options.onCollectionInput);
+    bindClick(doc, 'collectionDescriptionPreview', options.onEditCollectionDescription);
+    bindKey(doc, 'collectionDescriptionPreview', options.onEditCollectionDescription, ['Enter', ' ']);
+    bindClick(doc, 'collectionDescriptionSaveButton', options.onSaveCollectionDescription);
+    bindClick(doc, 'collectionDescriptionCancelButton', options.onCancelCollectionDescription);
     bindInput(doc, 'collectionPreRequestScriptInput', options.onCollectionInput);
     bindInput(doc, 'collectionTestScriptInput', options.onCollectionInput);
     bindClick(doc, 'saveFolderButton', options.onSaveFolder);
     bindClick(doc, 'addFolderVariableButton', options.onAddFolderVariable);
-    bindInput(doc, 'folderDescriptionInput', options.onFolderInput);
+    bindClick(doc, 'folderDescriptionPreview', options.onEditFolderDescription);
+    bindKey(doc, 'folderDescriptionPreview', options.onEditFolderDescription, ['Enter', ' ']);
+    bindClick(doc, 'folderDescriptionSaveButton', options.onSaveFolderDescription);
+    bindClick(doc, 'folderDescriptionCancelButton', options.onCancelFolderDescription);
     bindInput(doc, 'folderPreRequestScriptInput', options.onFolderInput);
     bindInput(doc, 'folderTestScriptInput', options.onFolderInput);
     bindClick(doc, 'addParamButton', options.onAddParam);
@@ -170,6 +176,7 @@
     bindClick(doc, 'clearExpiredCookiesButton', options.onClearExpiredCookies);
     bindClick(doc, 'runCollectionButton', options.onRunCollection);
     bindClick(doc, 'cancelRunnerButton', options.onCancelCollectionRun);
+    bindClick(doc, 'exportRunnerHtmlButton', options.onExportRunnerHtml);
     bindClick(doc, 'exportRunnerJsonButton', options.onExportRunnerJson);
     bindClick(doc, 'exportRunnerCsvButton', options.onExportRunnerCsv);
     bindClick(doc, 'runnerToggleCsvVariablesButton', options.onToggleRunnerCsvVariables);
@@ -186,7 +193,13 @@
     bindClick(doc, 'runPerformanceTestButton', options.onRunPerformanceTest);
     bindClick(doc, 'cancelPerformanceTestButton', options.onCancelPerformanceTest);
     bindClick(doc, 'exportPerformanceTestButton', options.onExportPerformanceTest);
+    bindClick(doc, 'exportPerformanceResultHtmlButton', options.onExportPerformanceResultHtml);
+    bindClick(doc, 'exportPerformanceResultJsonButton', options.onExportPerformanceResultJson);
     bindClick(doc, 'exportPerformanceResultCsvButton', options.onExportPerformanceResultCsv);
+    bindChange(doc, 'htmlReportIncludeResultsInput', options.onHtmlReportIncludeResultsChange);
+    bindChange(doc, 'htmlReportIncludeDetailsInput', options.onHtmlReportIncludeDetailsChange);
+    bindClick(doc, 'cancelHtmlReportOptionsButton', options.onCancelHtmlReportOptions);
+    bindClick(doc, 'confirmHtmlReportOptionsButton', options.onConfirmHtmlReportOptions);
     bindClick(doc, 'importPerformanceRequestButton', options.onImportPerformanceRequest);
     bindClick(doc, 'addPerformanceParamButton', options.onAddPerformanceParam);
     bindClick(doc, 'addPerformanceHeaderButton', options.onAddPerformanceHeader);
@@ -232,6 +245,7 @@
     bindInput(doc, 'performanceUrlInput', options.onPerformanceUrlInput || options.onPerformanceRequestChange);
     bindChange(doc, 'performanceBodyTypeSelect', options.onPerformanceBodyTypeChange || options.onPerformanceRequestChange);
     bindChange(doc, 'performanceBodyRawFormatSelect', options.onPerformanceBodyTypeChange || options.onPerformanceRequestChange);
+    bindClick(doc, 'performanceBeautifyBodyButton', options.onBeautifyPerformanceBody || options.onPerformanceRequestChange);
     bindInput(doc, 'performanceBodyInput', options.onPerformanceRequestChange);
     bindInput(doc, 'performanceGraphqlQueryInput', options.onPerformanceRequestChange);
     bindInput(doc, 'performanceGraphqlVariablesInput', options.onPerformanceRequestChange);
@@ -249,6 +263,7 @@
     bindInput(doc, 'urlInput', options.onUrlInput);
     bindChange(doc, 'bodyTypeSelect', options.onBodyTypeChange);
     bindChange(doc, 'bodyRawFormatSelect', options.onBodyTypeChange);
+    bindClick(doc, 'beautifyBodyButton', options.onBeautifyBody || options.onBodyInput);
     bindInput(doc, 'bodyInput', options.onBodyInput);
     bindInput(doc, 'graphqlQueryInput', options.onBodyInput);
     bindInput(doc, 'graphqlVariablesInput', options.onBodyInput);
@@ -258,10 +273,14 @@
     bindInput(doc, 'binaryBodySourceInput', options.onBodyInput);
     bindInput(doc, 'preRequestScriptInput', options.onPreRequestScriptInput);
     bindInput(doc, 'testScriptInput', options.onTestScriptInput);
-    bindInput(doc, 'docsInput', options.onDocsInput || options.onBodyInput);
+    bindClick(doc, 'docsPreview', options.onEditRequestDocs);
+    bindKey(doc, 'docsPreview', options.onEditRequestDocs, ['Enter', ' ']);
+    bindClick(doc, 'docsSaveButton', options.onSaveRequestDocs);
+    bindClick(doc, 'docsCancelButton', options.onCancelRequestDocs);
     bindChange(doc, 'requestCookieJarEnabledInput', options.onRequestCookieJarChange);
     bindChange(doc, 'requestCookieJarStoreInput', options.onRequestCookieJarChange);
     bindChange(doc, 'filterCookiesToRequestHostInput', options.onFilterCookiesChange);
+    bindChange(doc, 'requestSslCertificateVerificationInput', options.onRequestTlsSettingsChange);
     bindChange(doc, 'trustedScriptSendRequestInput', options.onTrustedScriptCapabilityChange);
     bindChange(doc, 'trustedScriptCookiesInput', options.onTrustedScriptCapabilityChange);
     bindChange(doc, 'trustedScriptVaultInput', options.onTrustedScriptCapabilityChange);
@@ -276,6 +295,11 @@
     bindChange(doc, 'editorFontSelect', options.onEditorTypographyChange);
     bindChange(doc, 'editorFontSizeInput', options.onEditorTypographyChange);
     bindClick(doc, 'resetEditorTypographyButton', options.onResetEditorTypography);
+    bindChange(doc, 'sslCertificateVerificationInput', options.onTlsSettingsChange);
+    bindChange(doc, 'caCertificatePathInput', options.onTlsSettingsChange);
+    bindClick(doc, 'chooseCaCertificateButton', options.onChooseCaCertificate);
+    bindClick(doc, 'clearCaCertificateButton', options.onClearCaCertificate);
+    bindClick(doc, 'addClientCertificateButton', options.onAddClientCertificate);
     for (const id of [
       'diagnosticLoggingEnabledInput',
       'diagnosticLogLevelSelect',
@@ -396,6 +420,14 @@
       const valueControlId = modal?.dataset?.valueControl || 'textInputModalInput';
       options.onResolveActiveModal?.(getElement(doc, valueControlId)?.value || '');
     });
+    bindClick(doc, 'closeClientCertificateModalButton', () => options.onResolveActiveModal?.(null));
+    bindClick(doc, 'cancelClientCertificateModalButton', () => options.onResolveActiveModal?.(null));
+    bindClick(doc, 'saveClientCertificateModalButton', options.onConfirmClientCertificateModal);
+    bindClick(doc, 'chooseClientCertificateCertPathButton', options.onChooseClientCertificateCertPath);
+    bindClick(doc, 'chooseClientCertificateKeyPathButton', options.onChooseClientCertificateKeyPath);
+    bindClick(doc, 'chooseClientCertificatePfxPathButton', options.onChooseClientCertificatePfxPath);
+    bindClick(doc, 'toggleClientCertificatePassphraseButton', options.onToggleClientCertificatePassphraseVisibility);
+    bindChange(doc, 'clientCertificateFormatSelect', options.onClientCertificateFormatChange);
     bindClick(doc, 'closeCsvVariablesModalButton', () => options.onResolveActiveModal?.(null));
     bindClick(doc, 'cancelCsvVariablesModalButton', () => options.onResolveActiveModal?.(null));
     bindClick(doc, 'saveCsvVariablesModalButton', options.onConfirmCsvVariablesModal);
@@ -505,7 +537,9 @@
       ['exportMenuButton', 'exportMenu'],
       ['exportRequestPanelButton', 'exportRequestPanelMenu'],
       ['runnerCsvVariablesButton', 'runnerCsvVariablesMenu'],
-      ['performanceCsvVariablesButton', 'performanceCsvVariablesMenu']
+      ['performanceCsvVariablesButton', 'performanceCsvVariablesMenu'],
+      ['exportRunnerResultsButton', 'exportRunnerResultsMenu'],
+      ['exportPerformanceResultsButton', 'exportPerformanceResultsMenu']
     ]) {
       const button = getElement(doc, buttonId);
       const menu = getElement(doc, menuId);
@@ -729,6 +763,20 @@
 
   function bindChange(doc, id, handler) {
     bindEvent(doc, id, 'change', handler);
+  }
+
+  function bindKey(doc, id, handler, keys = []) {
+    const element = getElement(doc, id);
+    if (!element || typeof handler !== 'function') {
+      return;
+    }
+    element.addEventListener('keydown', (event) => {
+      if (!keys.includes(event.key)) {
+        return;
+      }
+      event.preventDefault();
+      handler(event);
+    });
   }
 
   function bindAll(doc, selector, eventName, handler) {

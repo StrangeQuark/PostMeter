@@ -141,6 +141,7 @@
     "@grpc/proto-loader": "^0.8.0",
     "@xmldom/xmldom": "^0.9.10",
     "handlebars": "4.7.9",
+    "markdown-it": "^14.1.1",
     "node-forge": "^1.4.0",
     "node-html-parser": "^7.1.0",
     "psl": "^1.15.0",

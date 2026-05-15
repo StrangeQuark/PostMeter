@@ -6,6 +6,7 @@ const {
   applyCapturePolicyToResult,
   normalizeCapturePolicy
 } = require('./resultCapturePolicy');
+const { writeResultHtmlReport } = require('./resultHtmlReport');
 
 const RESULT_STORE_SCHEMA_VERSION = 1;
 const DEFAULT_RESULT_STORE_FILENAME = 'postmeter-current-results.sqlite';
@@ -372,6 +373,42 @@ class RuntimeResultStore {
     }
     await writeStreamLine(output, ']');
     await writeStreamLine(output, '}');
+    await endStream(output);
+  }
+
+  async exportHtml(filePath, options = {}) {
+    this.assertOpen();
+    const output = fs.createWriteStream(filePath, { encoding: 'utf8' });
+    const { kind = this.kind, result = {} } = options || {};
+    const normalizedKind = normalizeKind(kind || this.kind);
+    const metadata = this.metadata();
+    const store = this;
+    try {
+      await writeResultHtmlReport(output, {
+        kind: normalizedKind,
+        result,
+        metadata,
+        includeRequestResults: options.includeRequestResults,
+        includeRequestDetails: options.includeRequestDetails,
+        items: async function* items() {
+          const stmt = store.db.prepare('SELECT * FROM samples WHERE kind = ? ORDER BY result_index ASC LIMIT ? OFFSET ?');
+          let offset = 0;
+          while (true) {
+            const rows = stmt.all(normalizedKind, 1000, offset);
+            if (!rows.length) {
+              break;
+            }
+            for (const row of rows) {
+              yield rowToResult(row);
+            }
+            offset += rows.length;
+          }
+        }
+      });
+    } catch (error) {
+      output.destroy();
+      throw error;
+    }
     await endStream(output);
   }
 

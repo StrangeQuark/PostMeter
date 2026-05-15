@@ -163,9 +163,11 @@ async function runHttpScriptedRequestLifecycle(state, options = {}) {
     {
       signal: options.signal,
       timeoutMillis: options.timeoutMillis,
+      collectTimings: options.collectTimings === true,
       cookieJar: state.cookies,
       clientCertificates: options.clientCertificates || options.scriptOptions?.clientCertificates || [],
-      fileBindings: options.fileBindings || options.scriptOptions?.fileBindings || []
+      fileBindings: options.fileBindings || options.scriptOptions?.fileBindings || [],
+      tlsSettings: options.tlsSettings || options.scriptOptions?.tlsSettings || {}
     }
   );
   if (Array.isArray(response.updatedCookies)) {
@@ -288,6 +290,7 @@ async function runGrpcRequestLifecycle(state, options = {}) {
       signal: options.signal,
       cookieJar: state.cookies,
       clientCertificates: options.clientCertificates || options.scriptOptions?.clientCertificates || [],
+      tlsSettings: options.tlsSettings || options.scriptOptions?.tlsSettings || {},
       grpcProtoBaseDir: options.grpcProtoBaseDir || options.scriptOptions?.grpcProtoBaseDir,
       grpcProtoIncludeDirs: options.grpcProtoIncludeDirs || options.scriptOptions?.grpcProtoIncludeDirs || [],
       grpcTransportEnvironment,
@@ -397,6 +400,7 @@ function scriptOptionsForLifecycle(options = {}, overrides = {}) {
     runRequest: options.scriptOptions?.runRequest || options.runRequest,
     sandboxPackages: options.scriptOptions?.sandboxPackages || options.sandboxPackages || [],
     clientCertificates: options.scriptOptions?.clientCertificates || options.clientCertificates || [],
+    tlsSettings: options.scriptOptions?.tlsSettings || options.tlsSettings || {},
     sendRequest: options.scriptOptions?.sendRequest || send,
     signal: options.signal,
     trustedCapabilities: options.trustedCapabilities || options.scriptOptions?.trustedCapabilities || {},
@@ -694,6 +698,7 @@ function normalizeGrpcResponse(value = {}) {
   const messages = normalizeGrpcMessages(source.messages || source.message || source.data);
   const body = source.body == null ? grpcBodyFromMessages(messages) : responseBodyToString(source.body);
   const code = normalizeGrpcStatusCode(source.code ?? source.statusCode ?? source.status);
+  const tls = source.tls || value?.tls;
   return {
     body,
     cancelled: source.cancelled === true || value?.cancelled === true,
@@ -709,6 +714,7 @@ function normalizeGrpcResponse(value = {}) {
     responseTime: Number(source.responseTime ?? source.durationMillis ?? value?.durationMillis ?? 0) || 0,
     status: source.status == null ? (source.statusText || source.reason || '') : source.status,
     statusCode: code,
+    tls: tls && typeof tls === 'object' && !Array.isArray(tls) ? cloneJsonObject(tls) : undefined,
     trailers: normalizePairsForProtocol(source.trailers || source.trailer || value?.trailers),
     updatedCookies: Array.isArray(source.updatedCookies) ? cloneJson(source.updatedCookies) : undefined
   };

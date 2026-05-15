@@ -106,7 +106,7 @@
   }
 
   function assertContextMenuSmoke(options = {}, runtimeGlobal = global) {
-    const collectionButton = runtimeGlobal.document.querySelector('.collection-node > .tree-item');
+    const collectionButton = runtimeGlobal.document.querySelector('.collection-node > .tree-row > .tree-item');
     assertUiSmoke(collectionButton, 'Collection tree item was not rendered.');
     collectionButton.dispatchEvent(new MouseEvent('contextmenu', {
       bubbles: true,

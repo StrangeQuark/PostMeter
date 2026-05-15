@@ -16,6 +16,7 @@ const {
   assertResponsePayload,
   assertRequestPayload
 } = require('../src/core/ipcValidation');
+const { resolveTlsSettingsSecrets } = require('../src/core/tlsSettings');
 
 function registerRequestIpc(options = {}) {
   const {
@@ -55,8 +56,10 @@ function registerRequestIpc(options = {}) {
     const baseGlobals = cloneJson(workspaceSnapshot.globals || []);
     const baseCookies = cloneJson(workspaceSnapshot.cookies || []);
     const startedAt = Date.now();
-      try {
-        const { response: result, environment: nextEnvironment, collectionVariables, localVariables, globals } = await runRequest(request, environment, {
+    const vaultStore = getVaultStore(workspaceId);
+    try {
+      const tlsSettings = await resolveTlsSettingsSecrets(workspaceSnapshot.settings || {}, vaultStore);
+      const { response: result, environment: nextEnvironment, collectionVariables, localVariables, globals } = await runRequest(request, environment, {
         collectionId: requestContext?.collection?.id || '',
         collectionAuth: requestContext?.collection?.auth || { type: 'none' },
         collectionScripts: requestContext?.collection?.scripts || {},
@@ -67,10 +70,12 @@ function registerRequestIpc(options = {}) {
         globals: workspaceSnapshot.globals || [],
         cookieJar: workspaceSnapshot.cookies || [],
         clientCertificates: requestContext?.collection?.certificates || [],
+        collectTimings: true,
         fileBindings: workspaceSnapshot.settings?.sandbox?.fileBindings || [],
         sandboxPackages: workspaceSnapshot.settings?.sandbox?.packageCache || [],
         trustedCapabilities: workspaceSnapshot.settings?.sandbox?.trustedCapabilities || {},
-        vault: getVaultStore(workspaceId),
+        tlsSettings,
+        vault: vaultStore,
         vaultPrompt: getVaultPrompt(workspaceId),
         workspaceId,
         workspaceName: workspaceId,

@@ -3,7 +3,24 @@
     || (typeof require === 'function' ? require('./variableHighlighter') : null);
   const EDITOR_STATE = new WeakMap();
   const EDITOR_TEXTAREAS = new Set();
-  const PAIRING_LANGUAGES = new Set(['javascript', 'json']);
+  const PAIRING_LANGUAGES = new Set(['graphql', 'html', 'javascript', 'json', 'markup', 'xml']);
+  const MARKUP_LANGUAGES = new Set(['html', 'markup', 'xml']);
+  const HTML_VOID_ELEMENTS = new Set([
+    'area',
+    'base',
+    'br',
+    'col',
+    'embed',
+    'hr',
+    'img',
+    'input',
+    'link',
+    'meta',
+    'param',
+    'source',
+    'track',
+    'wbr'
+  ]);
   let lineNumbersEnabled = true;
   const JS_KEYWORDS = new Set([
     'async',
@@ -58,6 +75,33 @@
     },
     json: {
       '"': '"',
+      '(': ')',
+      '[': ']',
+      '{': '}'
+    },
+    graphql: {
+      '"': '"',
+      '(': ')',
+      '[': ']',
+      '{': '}'
+    },
+    html: {
+      '"': '"',
+      "'": "'",
+      '(': ')',
+      '[': ']',
+      '{': '}'
+    },
+    markup: {
+      '"': '"',
+      "'": "'",
+      '(': ')',
+      '[': ']',
+      '{': '}'
+    },
+    xml: {
+      '"': '"',
+      "'": "'",
       '(': ')',
       '[': ']',
       '{': '}'
@@ -250,13 +294,33 @@
       return unchanged(value, start, end);
     }
     if (key === 'Backspace') {
+      const markupDelete = deleteMarkupClosingTag(value, start, end, language);
+      if (markupDelete.handled) {
+        return markupDelete;
+      }
       return deleteEmptyPair(value, start, end, language);
     }
     if (key === 'Enter') {
+      const markupEnter = expandMarkupTagNewline(value, start, end, language);
+      if (markupEnter.handled) {
+        return markupEnter;
+      }
+      const blockCommentEnter = expandJavaScriptBlockCommentNewline(value, start, end, language);
+      if (blockCommentEnter.handled) {
+        return blockCommentEnter;
+      }
       return expandNewline(value, start, end, language);
     }
     if (key.length !== 1) {
       return unchanged(value, start, end);
+    }
+    const tagCompletion = completeMarkupTag(value, start, end, key, language);
+    if (tagCompletion.handled) {
+      return tagCompletion;
+    }
+    const blockCommentCompletion = completeJavaScriptBlockComment(value, start, end, key, language);
+    if (blockCommentCompletion.handled) {
+      return blockCommentCompletion;
     }
     return editPairCharacter(value, start, end, key, language);
   }
@@ -351,6 +415,119 @@
     return unchanged(value, start, end);
   }
 
+  function completeJavaScriptBlockComment(value, start, end, key, language) {
+    if (language !== 'javascript' || key !== '*' || start !== end || start === 0 || value[start - 1] !== '/') {
+      return unchanged(value, start, end);
+    }
+    if (value.slice(start, start + 2) === '*/') {
+      return handled(`${value.slice(0, start)}*${value.slice(end)}`, start + 1, start + 1);
+    }
+    return handled(`${value.slice(0, start)}**/${value.slice(end)}`, start + 1, start + 1);
+  }
+
+  function expandJavaScriptBlockCommentNewline(value, start, end, language) {
+    if (language !== 'javascript' || start !== end || value.slice(start - 2, start) !== '/*' || value.slice(start, start + 2) !== '*/') {
+      return unchanged(value, start, end);
+    }
+    const indent = lineIndentBefore(value, start - 2);
+    const insert = `\n${indent} * \n${indent} `;
+    const caret = start + indent.length + 4;
+    return handled(`${value.slice(0, start)}${insert}${value.slice(end)}`, caret, caret);
+  }
+
+  function completeMarkupTag(value, start, end, key, language) {
+    if (!MARKUP_LANGUAGES.has(language) || key !== '>' || start !== end) {
+      return unchanged(value, start, end);
+    }
+    const tag = openingMarkupTagBefore(value, start, language);
+    if (!tag) {
+      return unchanged(value, start, end);
+    }
+    const after = value.slice(end);
+    if (matchingClosingTagAt(after, tag.name, language)) {
+      return handled(`${value.slice(0, start)}>${after}`, start + 1, start + 1);
+    }
+    const closingTag = `</${tag.name}>`;
+    return handled(`${value.slice(0, start)}>${closingTag}${after}`, start + 1, start + 1);
+  }
+
+  function expandMarkupTagNewline(value, start, end, language) {
+    if (!MARKUP_LANGUAGES.has(language) || start !== end) {
+      return unchanged(value, start, end);
+    }
+    const tag = openingMarkupTagEndingAt(value, start);
+    if (!tag || !matchingClosingTagAt(value.slice(start), tag.name, language)) {
+      return unchanged(value, start, end);
+    }
+    const indent = lineIndentBefore(value, tag.start);
+    const insert = `\n${indent}\t\n${indent}`;
+    const caret = start + indent.length + 2;
+    return handled(`${value.slice(0, start)}${insert}${value.slice(end)}`, caret, caret);
+  }
+
+  function deleteMarkupClosingTag(value, start, end, language) {
+    if (!MARKUP_LANGUAGES.has(language) || start !== end || start === 0 || value[start - 1] !== '>') {
+      return unchanged(value, start, end);
+    }
+    const tag = openingMarkupTagEndingAt(value, start);
+    const closing = tag ? matchingClosingTagAt(value.slice(start), tag.name, language) : null;
+    if (!tag || !closing) {
+      return unchanged(value, start, end);
+    }
+    const nextValue = `${value.slice(0, start - 1)}${value.slice(start + closing.length)}`;
+    return handled(nextValue, start - 1, start - 1);
+  }
+
+  function openingMarkupTagBefore(value, position, language) {
+    const lastOpen = value.lastIndexOf('<', position - 1);
+    if (lastOpen < 0 || value.lastIndexOf('>', position - 1) > lastOpen) {
+      return null;
+    }
+    const source = value.slice(lastOpen, position);
+    if (!isCompletableOpeningMarkupTag(source)) {
+      return null;
+    }
+    const name = markupTagName(source);
+    if (!name || (language !== 'xml' && HTML_VOID_ELEMENTS.has(name.toLowerCase()))) {
+      return null;
+    }
+    return { name, source, start: lastOpen };
+  }
+
+  function openingMarkupTagEndingAt(value, position) {
+    const lastOpen = value.lastIndexOf('<', position - 1);
+    if (lastOpen < 0) {
+      return null;
+    }
+    const source = value.slice(lastOpen, position);
+    if (!source.endsWith('>') || !isCompletableOpeningMarkupTag(source.slice(0, -1))) {
+      return null;
+    }
+    const name = markupTagName(source);
+    return name ? { name, source, start: lastOpen } : null;
+  }
+
+  function isCompletableOpeningMarkupTag(source) {
+    return /^<[A-Za-z][\w:.-]*(?:\s[\s\S]*)?$/.test(source)
+      && !/^<\s*[!?/]/.test(source)
+      && !/\/\s*$/.test(source);
+  }
+
+  function markupTagName(source) {
+    return source.match(/^<([A-Za-z][\w:.-]*)/)?.[1] || '';
+  }
+
+  function matchingClosingTagAt(source, name, language) {
+    const match = source.match(/^<\/\s*([A-Za-z][\w:.-]*)\s*>/);
+    if (!match) {
+      return null;
+    }
+    const sameName = language === 'xml'
+      ? match[1] === name
+      : match[1].toLowerCase() === name.toLowerCase();
+    return sameName ? match[0] : null;
+  }
+
   function selectedLineRange(value, start, end) {
     const lineStart = value.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
     const selectionEnd = end > start && value[end - 1] === '\n' ? end - 1 : end;
@@ -433,7 +610,7 @@
     if (normalized === 'headers') {
       return highlightHeaders(text);
     }
-    if (normalized === 'markup') {
+    if (MARKUP_LANGUAGES.has(normalized)) {
       return highlightMarkup(text);
     }
     return escapeHtml(text);
@@ -634,10 +811,19 @@
     if (value === 'json') {
       return 'json';
     }
+    if (value === 'graphql' || value === 'gql') {
+      return 'graphql';
+    }
     if (value === 'headers' || value === 'http-headers') {
       return 'headers';
     }
-    if (value === 'html' || value === 'xml' || value === 'markup') {
+    if (value === 'html') {
+      return 'html';
+    }
+    if (value === 'xml') {
+      return 'xml';
+    }
+    if (value === 'markup') {
       return 'markup';
     }
     return 'text';

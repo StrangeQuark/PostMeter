@@ -17,13 +17,18 @@ test('exports and imports a single PostMeter request envelope', () => {
     bodyType: 'RAW_JSON',
     body: '{"name":"hammer"}',
     auth: { type: 'none' },
-    scripts: { preRequest: '', tests: '' }
+    scripts: { preRequest: '', tests: '' },
+    settings: {
+      sslCertificateVerification: 'enabled',
+      caCertificatePath: '/tmp/request-ca.pem'
+    }
   };
 
   const exported = exportRequestToJson(original);
   const parsed = JSON.parse(exported);
   assert.equal(parsed.format, 'postmeter.request');
   assert.equal(parsed.request.name, 'Create Widget');
+  assert.equal(parsed.request.settings.caCertificatePath, undefined);
 
   const imported = importRequestFromText(exported);
   assert.notEqual(imported.id, original.id);
@@ -31,6 +36,9 @@ test('exports and imports a single PostMeter request envelope', () => {
   assert.equal(imported.method, 'POST');
   assert.equal(imported.queryParams[0].key, 'trace');
   assert.equal(imported.body, '{"name":"hammer"}');
+  assert.deepEqual(imported.settings, {
+    sslCertificateVerification: 'enabled'
+  });
 });
 
 test('imports raw PostMeter request JSON and curl command text as single requests', () => {
@@ -49,6 +57,15 @@ test('imports raw PostMeter request JSON and curl command text as single request
   assert.equal(curlImported.url, 'https://api.example.test/health');
   assert.equal(curlImported.queryParams[0].key, 'ready');
   assert.equal(curlImported.headers[0].key, 'X-Test');
+
+  const mtlsBasicImported = importRequestFromText("curl -u alice:secret --cert /tmp/client.pem --key /tmp/client.key https://api.example.test/secure");
+  assert.equal(mtlsBasicImported.auth.type, 'clientCertificate');
+  assert.equal(mtlsBasicImported.auth.certPath, '/tmp/client.pem');
+  assert.equal(mtlsBasicImported.auth.keyPath, '/tmp/client.key');
+  assert.equal(
+    mtlsBasicImported.headers.find((header) => header.key === 'Authorization')?.value,
+    `Basic ${Buffer.from('alice:secret', 'utf8').toString('base64')}`
+  );
 });
 
 test('single request curl exports include warning comments for unsupported request behavior', () => {
@@ -65,14 +82,43 @@ test('single request curl exports include warning comments for unsupported reque
       tests: 'pm.test("ok", function () {});'
     },
     cookieJar: { enabled: true, storeResponses: true },
-    variables: [{ enabled: true, key: 'localValue', value: 'yes' }]
+    variables: [{ enabled: true, key: 'localValue', value: 'yes' }],
+    settings: {
+      sslCertificateVerification: 'disabled'
+    }
   }, 'curl');
 
   assert.match(exported, /^# Request: Scripted Request\n/);
   assert.match(exported, /WARNING: Pre-request scripts are not included/);
   assert.match(exported, /WARNING: Post-request scripts are not included/);
+  assert.match(exported, /WARNING: Request-local disabled SSL certificate verification is exported as curl -k/);
+  assert.doesNotMatch(exported, /Request-local CA certificate path/);
   assert.match(exported, /curl 'https:\/\/api\.example\.test\/widgets'/);
+  assert.match(exported, / -k/);
+  assert.doesNotMatch(exported, /--cacert '\/tmp\/custom-ca\.pem'/);
   assert.match(exported, /--data-raw '\{"ok":true\}'/);
+});
+
+test('single request curl exports direct client certificate auth', () => {
+  const exported = exportRequestByFormat({
+    name: 'mTLS Request',
+    method: 'GET',
+    url: 'https://api.example.test/secure',
+    headers: [],
+    bodyType: 'NONE',
+    body: '',
+    auth: {
+      type: 'clientCertificate',
+      certPath: '/tmp/client.crt',
+      keyPath: '/tmp/client.key',
+      caPath: '/tmp/ca.pem'
+    },
+    scripts: { preRequest: '', tests: '' }
+  }, 'curl');
+
+  assert.doesNotMatch(exported, /clientCertificate auth settings are not fully translated/);
+  assert.match(exported, /--cert '\/tmp\/client\.crt' --key '\/tmp\/client\.key'/);
+  assert.match(exported, /--cacert '\/tmp\/ca\.pem'/);
 });
 
 test('request import rejects unsupported content', () => {

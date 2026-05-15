@@ -256,6 +256,202 @@ test('uses PEM and PFX/P12 client certificates for live gRPC mTLS across unary a
   assert.equal(pemResult.response.code, 0);
   assert.equal(pemResult.response.messages[0].data.name, 'Ada');
 
+  const settingsCaResult = await invokeGrpcRequest({
+    ...baseRequest,
+    auth: {
+      type: 'clientCertificate',
+      certPath: certs.clientCertPath,
+      keyPath: certs.clientKeyPath
+    }
+  }, grpcEnvironment(), {
+    tlsSettings: {
+      request: {
+        caCertificatePath: certs.caPath,
+        sslCertificateVerification: true
+      }
+    }
+  });
+  assert.equal(settingsCaResult.response.code, 0);
+  assert.equal(settingsCaResult.response.messages[0].data.name, 'Ada');
+  assert.equal(settingsCaResult.response.tls.caCertificateConfigured, true);
+  assert.equal(settingsCaResult.response.tls.verificationDisabled, false);
+
+  const lifecycleSettingsCaResult = await runScriptedRequestLifecycle(
+    createScriptedRequestState({
+      ...baseRequest,
+      auth: {
+        type: 'clientCertificate',
+        certPath: certs.clientCertPath,
+        keyPath: certs.clientKeyPath
+      }
+    }, grpcEnvironment()),
+    {
+      tlsSettings: {
+        request: {
+          caCertificatePath: certs.caPath,
+          sslCertificateVerification: true
+        }
+      }
+    }
+  );
+  assert.equal(lifecycleSettingsCaResult.response.code, 0);
+  assert.equal(lifecycleSettingsCaResult.response.tls.caCertificateConfigured, true);
+
+  const flatSettingsCaResult = await invokeGrpcRequest({
+    ...baseRequest,
+    auth: {
+      type: 'clientCertificate',
+      certPath: certs.clientCertPath,
+      keyPath: certs.clientKeyPath
+    }
+  }, grpcEnvironment(), {
+    tlsSettings: {
+      caCertificatePath: certs.caPath,
+      sslCertificateVerification: true
+    }
+  });
+  assert.equal(flatSettingsCaResult.response.code, 0);
+  assert.equal(flatSettingsCaResult.response.messages[0].data.name, 'Ada');
+
+  const requestCaIgnoredResult = await invokeGrpcRequest({
+    ...baseRequest,
+    settings: {
+      caCertificatePath: certs.caPath,
+      sslCertificateVerification: 'enabled'
+    },
+    auth: {
+      type: 'clientCertificate',
+      certPath: certs.clientCertPath,
+      keyPath: certs.clientKeyPath
+    }
+  }, grpcEnvironment());
+  assert.notEqual(requestCaIgnoredResult.response.code, 0);
+
+  const managedCertResult = await invokeGrpcRequest({
+    ...baseRequest,
+    auth: { type: 'none' }
+  }, grpcEnvironment(), {
+    tlsSettings: {
+      request: {
+        caCertificatePath: certs.caPath,
+        clientCertificates: [{
+          id: 'managed-grpc-cert',
+          enabled: true,
+          host: '127.0.0.1',
+          port: String(fixture.port),
+          certPath: certs.clientCertPath,
+          keyPath: certs.clientKeyPath
+        }]
+      }
+    }
+  });
+  assert.equal(managedCertResult.response.code, 0);
+  assert.equal(managedCertResult.response.messages[0].data.name, 'Ada');
+  assert.equal(managedCertResult.response.tls.clientCertificateConfigured, true);
+  assert.equal(managedCertResult.response.tls.clientCertificateId, 'managed-grpc-cert');
+
+  const pathMatchedCertResult = await invokeGrpcRequest({
+    ...baseRequest,
+    auth: { type: 'none' }
+  }, grpcEnvironment(), {
+    tlsSettings: {
+      request: {
+        caCertificatePath: certs.caPath,
+        clientCertificates: [{
+          id: 'path-managed-grpc-cert',
+          enabled: true,
+          matches: [`grpcs://127.0.0.1:${fixture.port}/postmeter.grpc.UserService/GetUser`],
+          certPath: certs.clientCertPath,
+          keyPath: certs.clientKeyPath
+        }]
+      }
+    }
+  });
+  assert.equal(pathMatchedCertResult.response.code, 0);
+  assert.equal(pathMatchedCertResult.response.tls.clientCertificateId, 'path-managed-grpc-cert');
+
+  const explicitSettingsCertResult = await invokeGrpcRequest({
+    ...baseRequest,
+    auth: {
+      type: 'clientCertificate',
+      certificateId: 'managed-grpc-cert'
+    }
+  }, grpcEnvironment(), {
+    tlsSettings: {
+      request: {
+        caCertificatePath: certs.caPath,
+        clientCertificates: [{
+          id: 'managed-grpc-cert',
+          enabled: true,
+          host: '127.0.0.1',
+          port: String(fixture.port),
+          certPath: certs.clientCertPath,
+          keyPath: certs.clientKeyPath
+        }]
+      }
+    }
+  });
+  assert.equal(explicitSettingsCertResult.response.code, 0);
+  assert.equal(explicitSettingsCertResult.response.messages[0].data.name, 'Ada');
+  assert.equal(explicitSettingsCertResult.response.tls.clientCertificateConfigured, true);
+  assert.equal(explicitSettingsCertResult.response.tls.clientCertificateId, 'managed-grpc-cert');
+
+  await assert.rejects(
+    () => invokeGrpcRequest({
+      ...baseRequest,
+      auth: {
+        type: 'clientCertificate',
+        certificateId: 'disabled-grpc-cert'
+      }
+    }, grpcEnvironment(), {
+      tlsSettings: {
+        request: {
+          caCertificatePath: certs.caPath,
+          clientCertificates: [{
+            id: 'disabled-grpc-cert',
+            enabled: false,
+            host: '127.0.0.1',
+            port: String(fixture.port),
+            certPath: certs.clientCertPath,
+            keyPath: certs.clientKeyPath
+          }]
+        }
+      }
+    }),
+    /binding was not found/
+  );
+
+  const insecureVerificationResult = await invokeGrpcRequest({
+    ...baseRequest,
+    auth: {
+      type: 'clientCertificate',
+      certPath: certs.clientCertPath,
+      keyPath: certs.clientKeyPath
+    }
+  }, grpcEnvironment(), {
+    tlsSettings: {
+      request: {
+        sslCertificateVerification: false
+      }
+    }
+  });
+  assert.equal(insecureVerificationResult.response.code, 0);
+  assert.equal(insecureVerificationResult.response.tls.verificationDisabled, true);
+
+  const requestLocalInsecureResult = await invokeGrpcRequest({
+    ...baseRequest,
+    settings: {
+      sslCertificateVerification: 'disabled'
+    },
+    auth: {
+      type: 'clientCertificate',
+      certPath: certs.clientCertPath,
+      keyPath: certs.clientKeyPath
+    }
+  }, grpcEnvironment());
+  assert.equal(requestLocalInsecureResult.response.code, 0);
+  assert.equal(requestLocalInsecureResult.response.tls.verificationDisabled, true);
+
   const encryptedPemResult = await invokeGrpcRequest({
     ...baseRequest,
     auth: {
@@ -312,6 +508,7 @@ test('uses PEM and PFX/P12 client certificates for live gRPC mTLS across unary a
 
   const caMismatchResult = await invokeGrpcRequest({
     ...pfxRequest,
+    settings: { sslCertificateVerification: 'enabled' },
     auth: { ...pfxRequest.auth, caPath: certs.clientCertPath }
   }, grpcEnvironment());
   assert.notEqual(caMismatchResult.response.code, 0);

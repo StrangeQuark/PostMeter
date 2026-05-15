@@ -13,6 +13,10 @@ const { normalizeSandboxFileBindings } = require('./fileAttachmentBindings');
 const { normalizeDiagnosticsSettings } = require('./diagnosticsSettings');
 const { normalizeCapturePolicy } = require('./resultCapturePolicy');
 const {
+  normalizeRequestTlsSettings,
+  normalizeTlsSettings
+} = require('./tlsSettings');
+const {
   DEFAULT_DIAGNOSIS_CONCURRENCY,
   DEFAULT_DIAGNOSIS_SCOPE,
   DEFAULT_DIAGNOSIS_SPIKE_MULTIPLIER,
@@ -86,6 +90,7 @@ function requestModel({
   graphql,
   grpc,
   websocket,
+  settings,
   metadata,
   postman,
   messages,
@@ -115,7 +120,8 @@ function requestModel({
     protocolProfile: normalizeJsonObject(protocolProfile, 128 * 1024),
     graphql: normalizeJsonObject(graphql, 128 * 1024),
     grpc: normalizeJsonObject(grpc, 128 * 1024),
-    websocket: normalizeJsonObject(websocket, 128 * 1024)
+    websocket: normalizeJsonObject(websocket, 128 * 1024),
+    settings: normalizeRequestTlsSettings(settings)
   };
   addOptionalJsonObject(request, 'postman', postman, POSTMAN_METADATA_MAX_BYTES);
   return request;
@@ -386,7 +392,17 @@ function normalizeSettings(settings) {
     },
     updates: {
       includePrereleases: settings?.updates?.includePrereleases === true
-    }
+    },
+    request: normalizeTlsRequestSettings(settings?.request)
+  };
+}
+
+function normalizeTlsRequestSettings(settings = {}) {
+  const normalized = normalizeTlsSettings({ request: settings });
+  return {
+    sslCertificateVerification: normalized.sslCertificateVerification !== false,
+    caCertificatePath: normalized.caCertificatePath,
+    clientCertificates: normalized.clientCertificates
   };
 }
 
@@ -395,6 +411,11 @@ function normalizeWorkspaceLocalSettings(settings) {
   return {
     diagnostics: {
       requestResponseLogging: normalized.diagnostics.requestResponseLogging
+    },
+    request: {
+      caCertificatePath: normalized.request.caCertificatePath,
+      clientCertificates: normalized.request.clientCertificates,
+      sslCertificateVerification: normalized.request.sslCertificateVerification
     },
     sandbox: {
       fileBindings: normalized.sandbox.fileBindings,
@@ -414,6 +435,10 @@ function mergeSettingsWithWorkspaceLocalSettings(settings, localsettings) {
     diagnostics: {
       ...normalizedSettings.diagnostics,
       requestResponseLogging: normalizedLocalSettings.diagnostics.requestResponseLogging
+    },
+    request: {
+      ...normalizedSettings.request,
+      ...normalizedLocalSettings.request
     },
     sandbox: {
       ...normalizedSettings.sandbox,
@@ -838,7 +863,11 @@ function normalizeCertificates(certificates) {
         keyPath: certificate.keyPath == null ? '' : String(certificate.keyPath),
         pfxPath: certificate.pfxPath == null ? '' : String(certificate.pfxPath),
         caPath: certificate.caPath == null ? '' : String(certificate.caPath),
-        passphrase: certificate.passphrase == null ? '' : String(certificate.passphrase)
+        passphrase: certificate.passphrase == null ? '' : String(certificate.passphrase),
+        passphraseSecretKey: certificate.passphraseSecretKey == null ? '' : String(certificate.passphraseSecretKey),
+        enabled: certificate.enabled !== false,
+        host: certificate.host == null ? '' : String(certificate.host),
+        port: certificate.port == null ? '' : String(certificate.port)
       };
       addOptionalJsonObject(normalized, 'postman', certificate.postman, POSTMAN_METADATA_MAX_BYTES);
       return normalized;

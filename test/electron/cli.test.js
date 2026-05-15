@@ -5,11 +5,82 @@ const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const { cliShouldRequireNodePermission } = require('../../scripts/postmeter-cli');
+const { CURRENT_SCHEMA_VERSION } = require('../../src/core/models');
+const { cliShouldRequireNodePermission, cliTlsSettings, loadCollectionInput, parseArgs } = require('../../scripts/postmeter-cli');
 
 test('requires Node permission flags for CLI script workers on supported Node baselines', () => {
   const major = Number(String(process.versions.node || '').split('.')[0]);
   assert.equal(cliShouldRequireNodePermission(), Number.isFinite(major) && major >= 22);
+});
+
+test('parses CLI TLS verification and certificate flags', () => {
+  const args = parseArgs([
+    'run',
+    '--file', 'workspace.json',
+    '-k',
+    '--ssl-extra-ca-certs', '/tmp/ca.pem',
+    '--client-cert-host', '*.example.test',
+    '--client-cert-port', '8443',
+    '--ssl-client-cert', '/tmp/client.crt',
+    '--ssl-client-key', '/tmp/client.key',
+    '--ssl-client-passphrase', 'secret'
+  ]);
+  const settings = cliTlsSettings(args, {});
+  assert.equal(settings.request.sslCertificateVerification, false);
+  assert.equal(settings.request.caCertificatePath, '/tmp/ca.pem');
+  assert.equal(settings.request.clientCertificates[0].host, '*.example.test');
+  assert.equal(settings.request.clientCertificates[0].port, '8443');
+  assert.equal(settings.request.clientCertificates[0].passphrase, 'secret');
+});
+
+test('loads managed workspace TLS local settings for CLI runs', async () => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-cli-settings-'));
+  const workspacePath = path.join(tempDir, 'workspace.json');
+  await fs.writeFile(workspacePath, JSON.stringify({
+    schemaVersion: CURRENT_SCHEMA_VERSION,
+    collections: [{
+      id: 'collection-1',
+      name: 'CLI',
+      requests: [{
+        id: 'request-1',
+        name: 'Request',
+        method: 'GET',
+        url: 'https://example.test',
+        queryParams: [],
+        headers: [],
+        bodyType: 'NONE',
+        body: '',
+        auth: { type: 'none' },
+        scripts: { preRequest: '', tests: '' }
+      }],
+      folders: [],
+      variables: [],
+      certificates: []
+    }],
+    environments: [],
+    globals: [],
+    cookies: [],
+    history: [],
+    runners: [],
+    performanceTests: [],
+    localsettings: {
+      request: {
+        sslCertificateVerification: false,
+        caCertificatePath: '/tmp/ca.pem',
+        clientCertificates: [{
+          id: 'managed-cert',
+          host: 'api.example.test',
+          certPath: '/tmp/client.crt',
+          keyPath: '/tmp/client.key'
+        }]
+      }
+    }
+  }, null, 2));
+
+  const { settings } = await loadCollectionInput(workspacePath, { collectionSelector: 'CLI' });
+  assert.equal(settings.request.sslCertificateVerification, false);
+  assert.equal(settings.request.caCertificatePath, '/tmp/ca.pem');
+  assert.equal(settings.request.clientCertificates[0].id, 'managed-cert');
 });
 
 test('runs collections headlessly and writes reports', async () => {
@@ -40,6 +111,28 @@ test('runs collections headlessly and writes reports', async () => {
     assert.equal(passingReport.totalRequests, 1);
     assert.equal(passingReport.results[0].testScriptResult.tests[0].name, 'script sees CLI variables');
     assert.equal(passingReport.environment.variables.find((item) => item.key === 'cliToken').value, 'from-cli');
+
+    const htmlReportPath = path.join(tempDir, 'passing-report.html');
+    const htmlRun = await runCli([
+      'run',
+      '--file',
+      passingWorkspacePath,
+      '--collection',
+      'CLI',
+      '--var',
+      'cliToken=from-cli',
+      '--collection-var',
+      `baseUrl=${server.baseUrl}`,
+      '--report',
+      htmlReportPath,
+      '--format',
+      'html'
+    ], tempDir);
+    assert.equal(htmlRun.code, 0, htmlRun.stderr);
+    const htmlReport = await fs.readFile(htmlReportPath, 'utf8');
+    assert.match(htmlReport, /PostMeter Runner Results/);
+    assert.match(htmlReport, /Charts and Trends/);
+    assert.match(htmlReport, /Response Details/);
 
     const failingWorkspacePath = path.join(tempDir, 'workspace-fail.json');
     const failingReportPath = path.join(tempDir, 'failing-report.csv');

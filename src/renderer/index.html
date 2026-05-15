@@ -162,8 +162,15 @@
         </div>
 
         <div id="collectionOverviewTab" class="tab-panel active" role="tabpanel" aria-labelledby="collectionOverviewTabButton">
-          <div class="collection-overview-field">
-            <textarea id="collectionDescriptionInput" spellcheck="true" placeholder="What this collection is for" aria-label="Collection overview" data-code-editor data-code-language="text"></textarea>
+          <div class="markdown-pane collection-overview-field" data-markdown-pane="collectionOverview">
+            <div class="markdown-pane-actions">
+              <button id="collectionDescriptionSaveButton" class="primary" type="button" hidden>Save</button>
+              <button id="collectionDescriptionCancelButton" type="button" hidden>Cancel</button>
+            </div>
+            <div id="collectionDescriptionPreview" class="markdown-renderer markdown-body" tabindex="0" aria-label="Collection overview"></div>
+            <div id="collectionDescriptionEditorShell" class="markdown-editor-shell" hidden>
+              <textarea id="collectionDescriptionInput" spellcheck="true" placeholder="Use markdown to describe what this collection is for" aria-label="Collection overview Markdown source" data-code-editor data-code-language="markdown"></textarea>
+            </div>
           </div>
         </div>
 
@@ -211,8 +218,15 @@
         </div>
 
         <div id="folderOverviewTab" class="tab-panel active" role="tabpanel" aria-labelledby="folderOverviewTabButton">
-          <div class="collection-overview-field">
-            <textarea id="folderDescriptionInput" spellcheck="true" placeholder="What this folder is for" aria-label="Folder overview" data-code-editor data-code-language="text"></textarea>
+          <div class="markdown-pane collection-overview-field" data-markdown-pane="folderOverview">
+            <div class="markdown-pane-actions">
+              <button id="folderDescriptionSaveButton" class="primary" type="button" hidden>Save</button>
+              <button id="folderDescriptionCancelButton" type="button" hidden>Cancel</button>
+            </div>
+            <div id="folderDescriptionPreview" class="markdown-renderer markdown-body" tabindex="0" aria-label="Folder overview"></div>
+            <div id="folderDescriptionEditorShell" class="markdown-editor-shell" hidden>
+              <textarea id="folderDescriptionInput" spellcheck="true" placeholder="Use markdown to describe what this folder is for" aria-label="Folder overview Markdown source" data-code-editor data-code-language="markdown"></textarea>
+            </div>
           </div>
         </div>
 
@@ -279,6 +293,7 @@
           <button id="requestBodyTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="body" aria-selected="false" aria-controls="bodyTab">Body</button>
           <button id="requestScriptsTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="scripts" aria-selected="false" aria-controls="scriptsTab">Scripts</button>
           <button id="requestVariablesTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="collectionVariables" aria-selected="false" aria-controls="collectionVariablesTab">Variables</button>
+          <button id="requestSettingsTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="requestSettings" aria-selected="false" aria-controls="requestSettingsTab">Settings</button>
           <button id="requestDocsTabButton" class="tab" type="button" role="tab" data-tab-group="request" data-tab="docs" aria-selected="false" aria-controls="docsTab">Docs</button>
         </div>
 
@@ -491,6 +506,11 @@
                 <option value="xml">XML</option>
               </select>
             </label>
+            <label id="graphqlOperationNameField" class="field compact graphql-operation-field" hidden>
+              <span>Operation Name</span>
+              <input id="graphqlOperationNameInput" autocomplete="off" placeholder="GetUser">
+            </label>
+            <button id="beautifyBodyButton" class="body-beautify-button" type="button" hidden>Beautify</button>
           </div>
           <div id="bodyNonePanel" class="body-mode-panel empty-state">No request body</div>
           <div id="bodyRawPanel" class="body-mode-panel">
@@ -520,15 +540,11 @@
             <div class="graphql-body-grid">
               <label class="field graphql-query-field">
                 <span>Query</span>
-                <textarea id="graphqlQueryInput" spellcheck="false" placeholder="query GetUser { user { id name } }" aria-label="GraphQL query" data-code-editor data-code-language="text"></textarea>
+                <textarea id="graphqlQueryInput" spellcheck="false" placeholder="query GetUser { user { id name } }" aria-label="GraphQL query" data-code-editor data-code-language="graphql"></textarea>
               </label>
               <label class="field graphql-variables-field">
                 <span>Variables</span>
                 <textarea id="graphqlVariablesInput" spellcheck="false" placeholder="{&#10;  &quot;id&quot;: &quot;{{userId}}&quot;&#10;}" aria-label="GraphQL variables" data-code-editor data-code-language="json"></textarea>
-              </label>
-              <label class="field graphql-operation-field">
-                <span>Operation Name</span>
-                <input id="graphqlOperationNameInput" autocomplete="off" placeholder="GetUser">
               </label>
             </div>
           </div>
@@ -578,8 +594,26 @@
           <pre id="variablePreview" class="variable-preview">No variables</pre>
         </div>
 
+        <div id="requestSettingsTab" class="tab-panel" role="tabpanel" aria-labelledby="requestSettingsTabButton">
+          <div class="request-settings-grid">
+            <label class="settings-toggle">
+              <input id="requestSslCertificateVerificationInput" type="checkbox">
+              <span>Enable SSL certificate verification</span>
+            </label>
+          </div>
+        </div>
+
         <div id="docsTab" class="tab-panel" role="tabpanel" aria-labelledby="requestDocsTabButton">
-          <textarea id="docsInput" class="docs-input" spellcheck="false" placeholder="Request docs" aria-label="Request docs" data-code-editor data-code-language="text"></textarea>
+          <div class="markdown-pane" data-markdown-pane="requestDocs">
+            <div class="markdown-pane-actions">
+              <button id="docsSaveButton" class="primary" type="button" hidden>Save</button>
+              <button id="docsCancelButton" type="button" hidden>Cancel</button>
+            </div>
+            <div id="docsPreview" class="markdown-renderer markdown-body" tabindex="0" aria-label="Request docs"></div>
+            <div id="docsEditorShell" class="markdown-editor-shell" hidden>
+              <textarea id="docsInput" class="docs-input" spellcheck="false" placeholder="Use markdown to describe what this request is for" aria-label="Request docs Markdown source" data-code-editor data-code-language="markdown"></textarea>
+            </div>
+          </div>
         </div>
 
       </section>
@@ -649,8 +683,14 @@
               <button id="deleteRunnerButton" class="danger-button" type="button">Delete Runner</button>
               <button id="runCollectionButton" type="button" class="primary">Run</button>
               <button id="cancelRunnerButton" type="button" disabled>Cancel</button>
-              <button id="exportRunnerJsonButton" type="button" disabled>Export JSON</button>
-              <button id="exportRunnerCsvButton" type="button" disabled>Export CSV</button>
+              <div class="toolbar-group menu-group result-export-menu-group" aria-label="Runner result export">
+                <button id="exportRunnerResultsButton" class="menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false" disabled>Export Results</button>
+                <div id="exportRunnerResultsMenu" class="toolbar-menu" role="menu" aria-labelledby="exportRunnerResultsButton" hidden>
+                  <button id="exportRunnerHtmlButton" type="button" role="menuitem" disabled>HTML Report</button>
+                  <button id="exportRunnerJsonButton" type="button" role="menuitem" disabled>JSON</button>
+                  <button id="exportRunnerCsvButton" type="button" role="menuitem" disabled>CSV</button>
+                </div>
+              </div>
             </div>
           </div>
           <div class="runner-settings">
@@ -753,7 +793,14 @@
               <button id="importPerformanceRequestButton" type="button">Import Request</button>
               <button id="exportPerformanceTestButton" type="button">Export Test</button>
               <button id="performanceCaptureSettingsButton" type="button" aria-expanded="false" aria-controls="performanceCaptureSettingsPanel">Capture Settings</button>
-              <button id="exportPerformanceResultCsvButton" type="button">Export Result CSV</button>
+              <div class="toolbar-group menu-group result-export-menu-group" aria-label="Performance result export">
+                <button id="exportPerformanceResultsButton" class="menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false" disabled>Export Results</button>
+                <div id="exportPerformanceResultsMenu" class="toolbar-menu" role="menu" aria-labelledby="exportPerformanceResultsButton" hidden>
+                  <button id="exportPerformanceResultHtmlButton" type="button" role="menuitem" disabled>HTML Report</button>
+                  <button id="exportPerformanceResultJsonButton" type="button" role="menuitem" disabled>JSON</button>
+                  <button id="exportPerformanceResultCsvButton" type="button" role="menuitem" disabled>CSV</button>
+                </div>
+              </div>
             </div>
           </div>
           <div class="performance-request-editor">
@@ -1005,6 +1052,11 @@
                     <option value="xml">XML</option>
                   </select>
                 </label>
+                <label id="performanceGraphqlOperationNameField" class="field compact graphql-operation-field" hidden>
+                  <span>Operation Name</span>
+                  <input id="performanceGraphqlOperationNameInput" autocomplete="off" placeholder="GetUser">
+                </label>
+                <button id="performanceBeautifyBodyButton" class="body-beautify-button" type="button" hidden>Beautify</button>
               </div>
               <div id="performanceBodyNonePanel" class="body-mode-panel empty-state">No request body</div>
               <div id="performanceBodyRawPanel" class="body-mode-panel">
@@ -1034,15 +1086,11 @@
                 <div class="graphql-body-grid">
                   <label class="field graphql-query-field">
                     <span>Query</span>
-                    <textarea id="performanceGraphqlQueryInput" spellcheck="false" placeholder="query GetUser { user { id name } }" aria-label="Performance GraphQL query" data-code-editor data-code-language="text"></textarea>
+                    <textarea id="performanceGraphqlQueryInput" spellcheck="false" placeholder="query GetUser { user { id name } }" aria-label="Performance GraphQL query" data-code-editor data-code-language="graphql"></textarea>
                   </label>
                   <label class="field graphql-variables-field">
                     <span>Variables</span>
                     <textarea id="performanceGraphqlVariablesInput" spellcheck="false" placeholder="{&#10;  &quot;id&quot;: &quot;{{userId}}&quot;&#10;}" aria-label="Performance GraphQL variables" data-code-editor data-code-language="json"></textarea>
-                  </label>
-                  <label class="field graphql-operation-field">
-                    <span>Operation Name</span>
-                    <input id="performanceGraphqlOperationNameInput" autocomplete="off" placeholder="GetUser">
                   </label>
                 </div>
               </div>
@@ -1264,6 +1312,7 @@
           <button id="resultsResponseTabButton" class="tab active" type="button" role="tab" data-tab-group="results" data-tab="response" aria-selected="true" aria-controls="responseTab">Response</button>
           <button id="resultsHeadersTabButton" class="tab" type="button" role="tab" data-tab-group="results" data-tab="responseHeaders" aria-selected="false" aria-controls="responseHeadersTab">Headers</button>
           <button id="resultsCookiesTabButton" class="tab" type="button" role="tab" data-tab-group="results" data-tab="responseCookies" aria-selected="false" aria-controls="responseCookiesTab">Cookies</button>
+          <button id="resultsNetworkTabButton" class="tab" type="button" role="tab" data-tab-group="results" data-tab="responseNetwork" aria-selected="false" aria-controls="responseNetworkTab">Network</button>
           <button id="resultsTestResultsTabButton" class="tab" type="button" role="tab" data-tab-group="results" data-tab="testResults" aria-selected="false" aria-controls="testResultsTab">Test Results <span id="testResultsTabCount" class="tab-count" hidden></span></button>
           <button id="resultsVisualizerTabButton" class="tab" type="button" role="tab" data-tab-group="results" data-tab="visualizer" aria-selected="false" aria-controls="visualizerTab">Visualizer</button>
         </div>
@@ -1286,6 +1335,10 @@
 
         <div id="responseCookiesTab" class="tab-panel" role="tabpanel" aria-labelledby="resultsCookiesTabButton">
           <textarea id="responseCookies" readonly spellcheck="false" aria-label="Response cookies" data-code-editor data-code-language="headers"></textarea>
+        </div>
+
+        <div id="responseNetworkTab" class="tab-panel" role="tabpanel" aria-labelledby="resultsNetworkTabButton">
+          <textarea id="responseNetwork" readonly spellcheck="false" aria-label="Network and TLS diagnostics" data-code-editor data-code-language="text"></textarea>
         </div>
 
         <div id="testResultsTab" class="tab-panel" role="tabpanel" aria-labelledby="resultsTestResultsTabButton">
@@ -1333,6 +1386,7 @@
           <button id="settingsModalsButton" class="settings-nav-button" type="button" role="tab" data-settings-section="modals" aria-selected="false" aria-controls="settingsModalsSection">Modals</button>
           <button id="settingsUpdatesButton" class="settings-nav-button" type="button" role="tab" data-settings-section="updates" aria-selected="false" aria-controls="settingsUpdatesSection">Updates</button>
           <button id="settingsScriptsButton" class="settings-nav-button" type="button" role="tab" data-settings-section="scripts" aria-selected="false" aria-controls="settingsScriptsSection">Scripts</button>
+          <button id="settingsCertificatesButton" class="settings-nav-button" type="button" role="tab" data-settings-section="certificates" aria-selected="false" aria-controls="settingsCertificatesSection">Certificates</button>
           <button id="settingsVaultButton" class="settings-nav-button" type="button" role="tab" data-settings-section="vault" aria-selected="false" aria-controls="settingsVaultSection">Vault</button>
           <button id="settingsPackagesButton" class="settings-nav-button" type="button" role="tab" data-settings-section="packages" aria-selected="false" aria-controls="settingsPackagesSection">Packages</button>
           <button id="settingsFilesButton" class="settings-nav-button" type="button" role="tab" data-settings-section="files" aria-selected="false" aria-controls="settingsFilesSection">Files</button>
@@ -1419,6 +1473,32 @@
                 <input id="showVariableTooltipHintsInput" type="checkbox">
                 <span>Show variable tooltip shortcut hints</span>
               </label>
+            </div>
+          </section>
+
+          <section id="settingsCertificatesSection" class="settings-section" role="tabpanel" aria-labelledby="settingsCertificatesButton" hidden>
+            <h3>Certificates</h3>
+            <div class="settings-card">
+              <div class="settings-card-title">Server Certificates</div>
+              <label class="settings-toggle">
+                <input id="sslCertificateVerificationInput" type="checkbox">
+                <span>SSL certificate verification</span>
+              </label>
+              <label class="settings-field">
+                <span>CA PEM file</span>
+                <div class="settings-path-row">
+                  <input id="caCertificatePathInput" autocomplete="off" placeholder="/path/to/ca.pem">
+                  <button id="chooseCaCertificateButton" type="button">Choose</button>
+                  <button id="clearCaCertificateButton" type="button">Clear</button>
+                </div>
+              </label>
+            </div>
+            <div class="settings-card">
+              <div class="settings-card-title">Client Certificates</div>
+              <div class="settings-card-actions">
+                <button id="addClientCertificateButton" type="button">Add Certificate</button>
+              </div>
+              <div id="clientCertificateList" class="settings-list"></div>
             </div>
           </section>
 
@@ -1637,11 +1717,30 @@
 
     <section id="runnerImportModal" class="modal runner-import-modal" role="dialog" aria-modal="true" aria-labelledby="runnerImportTitle" aria-describedby="runnerImportMessage" hidden>
       <h2 id="runnerImportTitle">Import requests</h2>
-      <p id="runnerImportMessage">Choose a collection to expand, then select one or more requests to add to this runner.</p>
-      <div id="runnerImportList" class="collection-pick-list runner-import-list" role="group" aria-label="Collections and requests"></div>
+      <p id="runnerImportMessage">Expand collections and folders, then select requests to import.</p>
+      <div id="runnerImportList" class="collection-pick-list runner-import-list" role="group" aria-label="Collections, folders, and requests"></div>
       <div class="modal-actions">
         <button id="cancelRunnerImportButton" type="button">Cancel</button>
         <button id="confirmRunnerImportButton" type="button" class="primary" disabled>Add</button>
+      </div>
+    </section>
+
+    <section id="htmlReportOptionsModal" class="modal html-report-options-modal" role="dialog" aria-modal="true" aria-labelledby="htmlReportOptionsTitle" aria-describedby="htmlReportOptionsMessage" hidden>
+      <h2 id="htmlReportOptionsTitle">Export HTML report</h2>
+      <p id="htmlReportOptionsMessage">Choose how much request-level data to include in the report.</p>
+      <div class="html-report-options">
+        <label class="checkbox-line html-report-option">
+          <input id="htmlReportIncludeResultsInput" type="checkbox" checked>
+          <span>Include Request Results section</span>
+        </label>
+        <label class="checkbox-line html-report-option">
+          <input id="htmlReportIncludeDetailsInput" type="checkbox" checked>
+          <span>Include Request Details for each response</span>
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button id="cancelHtmlReportOptionsButton" type="button">Cancel</button>
+        <button id="confirmHtmlReportOptionsButton" type="button" class="primary">Export</button>
       </div>
     </section>
 
@@ -1698,6 +1797,72 @@
       <div class="modal-actions">
         <button id="cancelTextInputModalButton" type="button">Cancel</button>
         <button id="confirmTextInputModalButton" type="button" class="primary">Continue</button>
+      </div>
+    </section>
+
+    <section id="clientCertificateModal" class="modal client-certificate-modal" role="dialog" aria-modal="true" aria-labelledby="clientCertificateModalTitle" aria-describedby="clientCertificateModalMessage" hidden>
+      <div class="modal-title-row">
+        <h2 id="clientCertificateModalTitle">Add client certificate</h2>
+        <button id="closeClientCertificateModalButton" type="button" class="modal-close-button" aria-label="Close client certificate editor">X</button>
+      </div>
+      <p id="clientCertificateModalMessage">Configure the host match and local certificate files for HTTPS client authentication.</p>
+      <div class="client-certificate-form">
+        <label class="field">
+          <span>Name</span>
+          <input id="clientCertificateNameInput" autocomplete="off">
+        </label>
+        <label class="field">
+          <span>Host</span>
+          <input id="clientCertificateHostInput" autocomplete="off" placeholder="api.example.com or *.example.com">
+        </label>
+        <label class="field">
+          <span>Port</span>
+          <input id="clientCertificatePortInput" autocomplete="off" inputmode="numeric" placeholder="443">
+        </label>
+        <label class="field">
+          <span>Format</span>
+          <select id="clientCertificateFormatSelect">
+            <option value="pem">PEM certificate and key</option>
+            <option value="pfx">PFX/P12 bundle</option>
+          </select>
+        </label>
+        <div class="field client-certificate-pem-field">
+          <span>CRT file</span>
+          <div class="client-certificate-path-row">
+            <input id="clientCertificateCertPathInput" autocomplete="off" placeholder="/path/to/client.crt">
+            <button id="chooseClientCertificateCertPathButton" type="button" aria-controls="clientCertificateCertPathInput" aria-label="Choose CRT file">Choose</button>
+          </div>
+        </div>
+        <div class="field client-certificate-pem-field">
+          <span>KEY file</span>
+          <div class="client-certificate-path-row">
+            <input id="clientCertificateKeyPathInput" autocomplete="off" placeholder="/path/to/client.key">
+            <button id="chooseClientCertificateKeyPathButton" type="button" aria-controls="clientCertificateKeyPathInput" aria-label="Choose KEY file">Choose</button>
+          </div>
+        </div>
+        <div class="field client-certificate-pfx-field">
+          <span>PFX/P12 file</span>
+          <div class="client-certificate-path-row">
+            <input id="clientCertificatePfxPathInput" autocomplete="off" placeholder="/path/to/client.p12">
+            <button id="chooseClientCertificatePfxPathButton" type="button" aria-controls="clientCertificatePfxPathInput" aria-label="Choose PFX or P12 file">Choose</button>
+          </div>
+        </div>
+        <div class="field client-certificate-passphrase-field">
+          <span>Passphrase</span>
+          <div class="client-certificate-passphrase-row">
+            <input id="clientCertificatePassphraseInput" type="password" autocomplete="new-password">
+            <button id="toggleClientCertificatePassphraseButton" type="button" aria-controls="clientCertificatePassphraseInput" aria-pressed="false" aria-label="Show client certificate passphrase">Show</button>
+          </div>
+        </div>
+        <label class="checkbox-line client-certificate-enabled-field">
+          <input id="clientCertificateEnabledInput" type="checkbox">
+          <span>Enable certificate</span>
+        </label>
+      </div>
+      <p id="clientCertificateModalError" class="file-picker-error" role="alert" hidden></p>
+      <div class="modal-actions">
+        <button id="cancelClientCertificateModalButton" type="button">Cancel</button>
+        <button id="saveClientCertificateModalButton" type="button" class="primary">Save Certificate</button>
       </div>
     </section>
 
@@ -1819,10 +1984,15 @@
         <strong>Drop file here</strong>
         <span>or choose a file from this computer.</span>
       </div>
+      <label id="filePickerManualPathField" class="field file-picker-manual-field">
+        <span>Manual path</span>
+        <input id="filePickerManualPathInput" autocomplete="off" spellcheck="false" placeholder="/path/to/file">
+      </label>
       <p id="filePickerError" class="file-picker-error" role="alert" hidden></p>
       <input id="filePickerInput" type="file" hidden>
       <div class="modal-actions">
         <button id="filePickerCancelButton" type="button">Cancel</button>
+        <button id="filePickerUsePathButton" type="button">Use Path</button>
         <button id="filePickerBrowseButton" type="button" class="primary">Choose File</button>
       </div>
     </section>
@@ -1892,6 +2062,8 @@
   <script src="vaultPromptQueue.js"></script>
   <script src="rendererWorkflows.js"></script>
   <script src="runResultFormatting.js"></script>
+  <script src="vendor/markdown-it.min.js"></script>
+  <script src="markdownRenderer.js"></script>
   <script src="renderer.js"></script>
   <script src="uiSmokeCommon.js"></script>
   <script src="uiWorkflowSmoke.js"></script>

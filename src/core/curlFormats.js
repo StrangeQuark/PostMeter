@@ -1,5 +1,6 @@
 const { BODY_TYPES, collectionModel, keyValue, requestModel } = require('./models');
 const { normalizeAuth } = require('./authModel');
+const { findMatchingClientCertificate } = require('./tlsSettings');
 const {
   buildUrlWithQuery,
   flattenCollectionRequests,
@@ -143,8 +144,10 @@ function importCurlCommand(text) {
   for (const part of deferredQueryParts) {
     appendCurlQueryPart(request, part);
   }
+  applyCurlTlsMetadata(request);
+  const certificates = curlClientCertificatesFromMetadata(request);
   request.name = curlRequestName(request);
-  return collectionModel({ name: 'Imported curl Collection', requests: [request], folders: [] });
+  return collectionModel({ name: 'Imported curl Collection', requests: [request], folders: [], certificates });
 }
 
 function looksLikeCurlContent(text) {
@@ -214,6 +217,7 @@ function isCurlMetadataFlag(token) {
     || token === '--retry'
     || token === '--cacert'
     || token === '--cert'
+    || token === '--cert-type'
     || token === '--key'
     || token === '--connect-timeout'
     || token === '--max-time';
@@ -224,6 +228,7 @@ function isAttachedCurlMetadataFlag(token) {
     || token.startsWith('--retry=')
     || token.startsWith('--cacert=')
     || token.startsWith('--cert=')
+    || token.startsWith('--cert-type=')
     || token.startsWith('--key=')
     || token.startsWith('--connect-timeout=')
     || token.startsWith('--max-time=');
@@ -274,8 +279,11 @@ function curlRequestName(request) {
 
 function exportCurlCollection(collection) {
   const lines = [`# Collection: ${sanitizeShellComment(collection?.name || 'Untitled Collection')}`];
+  const certificates = collection?.certificates || [];
   for (const { request } of flattenCollectionRequests(collection)) {
-    lines.push('', exportCurlRequest(request));
+    lines.push('', exportCurlRequest(request, {
+      clientCertificateAuth: clientCertificateAuthForCurlRequest(request, certificates)
+    }));
   }
   return lines.join('\n');
 }
@@ -288,7 +296,7 @@ function exportCurlRequest(request, options = {}) {
   for (const exclusion of curlExportExclusions(request)) {
     lines.push(`# WARNING: ${sanitizeShellComment(exclusion)}`);
   }
-  lines.push(requestToCurl(requestModel(request || {})));
+  lines.push(requestToCurl(requestModel(request || {}), options));
   return lines.join('\n');
 }
 
@@ -302,8 +310,16 @@ function curlExportExclusions(request = {}) {
     exclusions.push('Post-request scripts are not included in curl exports.');
   }
   const auth = normalizeAuth(request.auth || {});
-  if (auth.type && !['none', 'basic'].includes(auth.type)) {
+  if (
+    auth.type
+    && !['none', 'basic'].includes(auth.type)
+    && !clientCertificateAuthIsCurlExportable(auth)
+  ) {
     exclusions.push(`${auth.type} auth settings are not fully translated to curl.`);
+  }
+  const requestSettings = request.settings || {};
+  if (requestSettings.sslCertificateVerification === 'disabled') {
+    exclusions.push('Request-local disabled SSL certificate verification is exported as curl -k.');
   }
   if (request.cookieJar?.enabled) {
     exclusions.push('Cookie jar behavior is not included in curl exports.');
@@ -332,14 +348,20 @@ function addCurlHeader(request, value) {
   request.headers.push(keyValue(value.slice(0, separator).trim(), value.slice(separator + 1).trim()));
 }
 
-function requestToCurl(request) {
+function requestToCurl(request, options = {}) {
   const parts = ['curl', shellQuote(buildUrlWithQuery(request))];
   const auth = normalizeAuth(request.auth || {});
+  const clientCertificateAuth = normalizeAuth(
+    options.clientCertificateAuth || (auth.type === 'clientCertificate' ? auth : {})
+  );
   if (request.method && request.method !== 'GET') {
     parts.push('-X', shellQuote(request.method));
   }
   if (auth.type === 'basic' && auth.username) {
     parts.push('-u', shellQuote(`${auth.username}:${auth.password ?? ''}`));
+  }
+  if (clientCertificateAuth.type === 'clientCertificate') {
+    appendCurlClientCertificateAuth(parts, clientCertificateAuth);
   }
   if (requestVariableValue(request, 'curl.followRedirects') === 'true') {
     parts.push('-L');
@@ -347,7 +369,7 @@ function requestToCurl(request) {
   if (requestVariableValue(request, 'curl.compressed') === 'true') {
     parts.push('--compressed');
   }
-  if (requestVariableValue(request, 'curl.insecure') === 'true') {
+  if (requestVariableValue(request, 'curl.insecure') === 'true' || request.settings?.sslCertificateVerification === 'disabled') {
     parts.push('-k');
   }
   for (const header of request.headers || []) {
@@ -361,6 +383,127 @@ function requestToCurl(request) {
     parts.push(dataFlag, shellQuote(request.body));
   }
   return parts.join(' ');
+}
+
+function applyCurlTlsMetadata(request) {
+  request.settings ||= { sslCertificateVerification: 'inherit' };
+  if (requestVariableValue(request, 'curl.insecure') === 'true') {
+    request.settings.sslCertificateVerification = 'disabled';
+  }
+  const caPath = requestVariableValue(request, 'curl.cacert');
+  const cert = splitCurlCertificateValue(requestVariableValue(request, 'curl.cert'));
+  const certPath = cert.path;
+  const keyPath = requestVariableValue(request, 'curl.key');
+  const certType = requestVariableValue(request, 'curl.cert-type').toLowerCase();
+  if (certPath && keyPath && normalizeAuth(request.auth || {}).type === 'none') {
+    request.auth = {
+      type: 'clientCertificate',
+      certPath,
+      keyPath,
+      caPath: caPath || '',
+      pfxPath: '',
+      passphrase: cert.passphrase
+    };
+  } else if (certPath && ['p12', 'pfx', 'pkcs12'].includes(certType) && normalizeAuth(request.auth || {}).type === 'none') {
+    request.auth = {
+      type: 'clientCertificate',
+      certPath: '',
+      keyPath: '',
+      caPath: caPath || '',
+      pfxPath: certPath,
+      passphrase: cert.passphrase
+    };
+  }
+}
+
+function curlClientCertificatesFromMetadata(request) {
+  const cert = splitCurlCertificateValue(requestVariableValue(request, 'curl.cert'));
+  const certPath = cert.path;
+  const keyPath = requestVariableValue(request, 'curl.key');
+  const certType = requestVariableValue(request, 'curl.cert-type').toLowerCase();
+  if (!certPath) {
+    return [];
+  }
+  const certificate = {
+    name: 'curl client certificate',
+    enabled: true,
+    matches: [curlClientCertificateMatch(request)],
+    certPath: '',
+    keyPath: '',
+    pfxPath: '',
+    caPath: requestVariableValue(request, 'curl.cacert'),
+    passphrase: cert.passphrase
+  };
+  if (keyPath) {
+    certificate.certPath = certPath;
+    certificate.keyPath = keyPath;
+  } else if (['p12', 'pfx', 'pkcs12'].includes(certType)) {
+    certificate.pfxPath = certPath;
+  } else {
+    return [];
+  }
+  return [certificate];
+}
+
+function curlClientCertificateMatch(request) {
+  try {
+    const url = new URL(request.url || '');
+    return `${url.protocol}//${url.host}${url.pathname || '/'}`;
+  } catch {
+    return request.url || '';
+  }
+}
+
+function clientCertificateAuthForCurlRequest(request, certificates) {
+  const auth = normalizeAuth(request?.auth || {});
+  if (auth.type === 'clientCertificate') {
+    return null;
+  }
+  try {
+    const certificate = findMatchingClientCertificate(certificates, new URL(buildUrlWithQuery(requestModel(request || {}))));
+    if (!certificate) {
+      return null;
+    }
+    return {
+      type: 'clientCertificate',
+      certPath: certificate.certPath || '',
+      keyPath: certificate.keyPath || '',
+      pfxPath: certificate.pfxPath || '',
+      caPath: certificate.caPath || '',
+      passphrase: certificate.passphrase || ''
+    };
+  } catch {
+    return null;
+  }
+}
+
+function clientCertificateAuthIsCurlExportable(auth) {
+  return auth.type === 'clientCertificate'
+    && (Boolean(auth.pfxPath) || Boolean(auth.certPath && auth.keyPath));
+}
+
+function appendCurlClientCertificateAuth(parts, auth) {
+  if (auth.pfxPath) {
+    parts.push('--cert-type', 'P12');
+    parts.push('--cert', shellQuote(auth.passphrase ? `${auth.pfxPath}:${auth.passphrase}` : auth.pfxPath));
+  } else if (auth.certPath && auth.keyPath) {
+    parts.push('--cert', shellQuote(auth.certPath), '--key', shellQuote(auth.keyPath));
+  }
+  if (auth.caPath) {
+    parts.push('--cacert', shellQuote(auth.caPath));
+  }
+}
+
+function splitCurlCertificateValue(value) {
+  const text = String(value || '');
+  const separator = text.lastIndexOf(':');
+  if (separator > 1 && separator < text.length - 1 && !/^[A-Za-z]:[\\/]/.test(text)) {
+    return {
+      path: text.slice(0, separator),
+      passphrase: text.slice(separator + 1)
+    };
+  }
+  return { path: text, passphrase: '' };
 }
 
 function requestVariableValue(request, key) {

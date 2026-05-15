@@ -48,6 +48,7 @@
     await assertTreeContextMenuModalFocusSmoke();
     newRequest();
     assertMethodColorSmoke();
+    await assertRequestSettingsTabSmoke();
     const variableLinkCollection = activeCollection();
     const variableLinkRequest = activeRequest();
     const variableLinkEnvironment = {
@@ -385,8 +386,13 @@
     $('filterCookiesToRequestHostInput').checked = false;
     dispatchChange($('filterCookiesToRequestHostInput'));
     activateTab('request', 'docs');
-    assertUiSmoke($('docsInput').getAttribute('aria-label') === 'Request docs', 'Docs textarea should expose an accessible label.');
-    assertUiSmoke($('docsInput').closest('.code-editor'), 'Docs textarea should be wrapped by the line-number editor.');
+    assertUiSmoke($('docsPreview').getAttribute('aria-label') === 'Request docs', 'Docs Markdown preview should expose an accessible label.');
+    assertUiSmoke($('docsPreview').getAttribute('role') === 'button' && $('docsSaveButton').hidden && $('docsCancelButton').hidden, 'Docs preview should be the edit trigger and hide Save/Cancel before editing.');
+    $('docsPreview').dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Enter' }));
+    assertUiSmoke($('docsInput').getAttribute('aria-label') === 'Request docs Markdown source', 'Docs textarea should expose an accessible Markdown source label.');
+    assertUiSmoke($('docsInput').closest('.code-editor'), 'Docs textarea should be wrapped by the line-number editor while editing.');
+    $('docsCancelButton').click();
+    assertUiSmoke(!$('docsPreview').hidden && $('docsSaveButton').hidden && $('docsCancelButton').hidden, 'Docs Cancel should return to Markdown preview.');
     activateTab('request', 'collectionVariables');
     $('addRequestVariableButton').click();
     const variableRow = $('requestVariablesTable').querySelector('.kv-row');
@@ -467,8 +473,15 @@
     selectSidebarPanel('runners');
     const regressionRunner = newRunner();
     assertUiSmoke(regressionRunner, 'Regression runner was not created.');
-    assertUiSmoke($('exportRunnerJsonButton').disabled, 'Runner JSON export should be disabled before a run.');
-    assertUiSmoke($('exportRunnerCsvButton').disabled, 'Runner CSV export should be disabled before a run.');
+    assertUiSmoke($('exportRunnerResultsButton').textContent.trim() === 'Export Results', 'Runner result export trigger should be labeled Export Results.');
+    assertUiSmoke($('exportRunnerResultsButton').disabled, 'Runner result export should be disabled before a run.');
+    assertUiSmoke($('exportRunnerHtmlButton').disabled, 'Runner HTML report export menu item should be disabled before a run.');
+    assertUiSmoke($('exportRunnerJsonButton').disabled, 'Runner JSON export menu item should be disabled before a run.');
+    assertUiSmoke($('exportRunnerCsvButton').disabled, 'Runner CSV export menu item should be disabled before a run.');
+    assertUiSmoke(
+      Array.from($('exportRunnerResultsMenu').querySelectorAll('button')).map((button) => button.textContent.trim()).join('|') === 'HTML Report|JSON|CSV',
+      'Runner result export menu should expose HTML Report, JSON, and CSV.'
+    );
     assertUiSmoke($('runnerStopOnFailure'), 'Runner stop-on-failure control is missing.');
     assertDestructiveButtonsUseDangerStyle();
   }
@@ -512,6 +525,7 @@
     await assertEditorLineNumbersSettingSmoke();
     await assertVariableTooltipHintsSettingSmoke();
     await assertSettingsPanelNavigationSmoke();
+    await assertCertificateSettingsPanelSmoke();
     await assertTabsModalsUpdatesSettingSmoke();
     await assertScriptCapabilitiesSettingSmoke();
     await assertDiagnosticsSettingsPanelSmoke();
@@ -545,6 +559,7 @@
       ['modals', 'Modals'],
       ['updates', 'Updates'],
       ['scripts', 'Scripts'],
+      ['certificates', 'Certificates'],
       ['vault', 'Vault'],
       ['packages', 'Packages'],
       ['files', 'Files'],
@@ -570,6 +585,268 @@
           `Settings ${otherHeading} panel should hide when ${heading} is active.`
         );
       }
+    }
+  }
+
+  async function assertCertificateSettingsPanelSmoke() {
+    const originalRequestSettings = structuredClone(workspace.settings.request);
+    try {
+      $('settingsCertificatesButton').click();
+      await nextPaint();
+      await clickSettingCheckboxAndWait(
+        $('sslCertificateVerificationInput'),
+        false,
+        () => workspace.settings.request.sslCertificateVerification === false,
+        'Certificate settings updated.',
+        'SSL certificate verification should disable from the Settings Certificates panel.'
+      );
+      await clickSettingCheckboxAndWait(
+        $('sslCertificateVerificationInput'),
+        true,
+        () => workspace.settings.request.sslCertificateVerification === true,
+        'Certificate settings updated.',
+        'SSL certificate verification should enable from the Settings Certificates panel.'
+      );
+
+      $('caCertificatePathInput').value = '/tmp/ui-ca.pem';
+      dispatchChange($('caCertificatePathInput'));
+      await waitForUiSmoke(
+        () => workspace.settings.request.caCertificatePath === '/tmp/ui-ca.pem',
+        'Settings Certificates CA path should save from the inline field.',
+        3000,
+        global
+      );
+      await waitForStatusIncludes('Certificate settings updated.', 'Settings Certificates CA path should surface a save status.');
+      $('clearCaCertificateButton').click();
+      await waitForUiSmoke(
+        () => workspace.settings.request.caCertificatePath === '' && $('caCertificatePathInput').value === '',
+        'Settings Certificates Clear CA should save an empty CA path.',
+        3000,
+        global
+      );
+      $('chooseCaCertificateButton').click();
+      await waitForUiSmoke(
+        () => !$('filePickerModal').hidden,
+        'Settings Certificates Choose CA should open the local file picker.',
+        3000,
+        global
+      );
+      assertUiSmoke($('filePickerManualPathInput') && !$('filePickerManualPathField').hidden, 'Certificate file picker should include a manual path field.');
+      $('filePickerManualPathInput').value = '/tmp/ui-ca-manual.pem';
+      dispatchInput($('filePickerManualPathInput'));
+      $('filePickerUsePathButton').click();
+      await waitForUiSmoke(
+        () => !$('settingsModal').hidden
+          && !$('settingsCertificatesSection').hidden
+          && $('filePickerModal').hidden
+          && workspace.settings.request.caCertificatePath === '/tmp/ui-ca-manual.pem'
+          && $('caCertificatePathInput').value === '/tmp/ui-ca-manual.pem',
+        'Settings Certificates Choose CA should accept a manual path from the file picker modal.',
+        3000,
+        global
+      );
+      $('clearCaCertificateButton').click();
+      await waitForUiSmoke(
+        () => workspace.settings.request.caCertificatePath === '' && $('caCertificatePathInput').value === '',
+        'Settings Certificates Clear CA should clear a manually chosen CA path.',
+        3000,
+        global
+      );
+      $('chooseCaCertificateButton').click();
+      await waitForUiSmoke(
+        () => !$('filePickerModal').hidden,
+        'Settings Certificates Choose CA should reopen the local file picker after manual path selection.',
+        3000,
+        global
+      );
+      $('filePickerCancelButton').click();
+      await waitForUiSmoke(
+        () => !$('settingsModal').hidden
+          && !$('settingsCertificatesSection').hidden
+          && $('filePickerModal').hidden
+          && $('textInputModal').hidden,
+        'Canceling Settings Certificates Choose CA should return without opening a manual path prompt.',
+        3000,
+        global
+      );
+      assertUiSmoke(workspace.settings.request.caCertificatePath === '', 'Canceling Settings Certificates Choose CA should not change the CA path.');
+
+      $('addClientCertificateButton').click();
+      await nextPaint();
+      assertUiSmoke(!$('clientCertificateModal').hidden, 'Add Certificate should open the client certificate form modal.');
+      $('cancelClientCertificateModalButton').click();
+      await waitForUiSmoke(
+        () => !$('settingsModal').hidden && !$('settingsCertificatesSection').hidden && $('clientCertificateModal').hidden,
+        'Client certificate Cancel should return to the Settings Certificates panel.',
+        3000,
+        global
+      );
+      $('addClientCertificateButton').click();
+      await nextPaint();
+      $('closeClientCertificateModalButton').click();
+      await waitForUiSmoke(
+        () => !$('settingsModal').hidden && !$('settingsCertificatesSection').hidden && $('clientCertificateModal').hidden,
+        'Client certificate Close should return to the Settings Certificates panel.',
+        3000,
+        global
+      );
+      $('addClientCertificateButton').click();
+      await nextPaint();
+      assertUiSmoke(!$('clientCertificateModal').hidden, 'Add Certificate should reopen the client certificate form modal.');
+      assertUiSmoke($('textInputModal').hidden, 'Add Certificate should not open the generic one-field text modal.');
+      for (const id of [
+        'clientCertificateNameInput',
+        'clientCertificateHostInput',
+        'clientCertificatePortInput',
+        'clientCertificateFormatSelect',
+        'clientCertificateCertPathInput',
+        'chooseClientCertificateCertPathButton',
+        'clientCertificateKeyPathInput',
+        'chooseClientCertificateKeyPathButton',
+        'clientCertificatePassphraseInput',
+        'toggleClientCertificatePassphraseButton',
+        'clientCertificateEnabledInput'
+      ]) {
+        assertUiSmoke($(id) && !$(id).hidden, `Client certificate modal should show ${id} in the same panel.`);
+      }
+      $('chooseClientCertificateCertPathButton').click();
+      await waitForUiSmoke(
+        () => !$('filePickerModal').hidden && $('clientCertificateModal').hidden,
+        'Client certificate CRT Choose should open the local file picker over the certificate form.',
+        3000,
+        global
+      );
+      $('filePickerManualPathInput').value = '/tmp/ui-client-picker.crt';
+      $('filePickerUsePathButton').click();
+      await waitForUiSmoke(
+        () => !$('clientCertificateModal').hidden
+          && $('filePickerModal').hidden
+          && $('clientCertificateCertPathInput').value === '/tmp/ui-client-picker.crt',
+        'Client certificate CRT picker should return to the form with the selected path.',
+        3000,
+        global
+      );
+      $('chooseClientCertificateKeyPathButton').click();
+      await waitForUiSmoke(
+        () => !$('filePickerModal').hidden && $('clientCertificateModal').hidden,
+        'Client certificate KEY Choose should open the local file picker over the certificate form.',
+        3000,
+        global
+      );
+      $('filePickerCancelButton').click();
+      await waitForUiSmoke(
+        () => !$('clientCertificateModal').hidden
+          && $('filePickerModal').hidden
+          && $('clientCertificateKeyPathInput').value === '',
+        'Canceling the client certificate KEY picker should return to the form without changing the path.',
+        3000,
+        global
+      );
+      $('chooseClientCertificateKeyPathButton').click();
+      await waitForUiSmoke(
+        () => !$('filePickerModal').hidden && $('clientCertificateModal').hidden,
+        'Client certificate KEY Choose should reopen the local file picker.',
+        3000,
+        global
+      );
+      $('filePickerManualPathInput').value = '/tmp/ui-client-picker.key';
+      $('filePickerUsePathButton').click();
+      await waitForUiSmoke(
+        () => !$('clientCertificateModal').hidden
+          && $('filePickerModal').hidden
+          && $('clientCertificateKeyPathInput').value === '/tmp/ui-client-picker.key',
+        'Client certificate KEY picker should return to the form with the selected path.',
+        3000,
+        global
+      );
+      assertUiSmoke($('clientCertificatePassphraseInput').type === 'password', 'Client certificate passphrase should be masked by default.');
+      $('clientCertificatePassphraseInput').value = 'ui-secret';
+      $('toggleClientCertificatePassphraseButton').click();
+      await nextPaint();
+      assertUiSmoke($('clientCertificatePassphraseInput').type === 'text', 'Client certificate passphrase Show button should reveal the value.');
+      assertUiSmoke($('clientCertificatePassphraseInput').value === 'ui-secret', 'Client certificate passphrase Show button should preserve the value.');
+      assertUiSmoke($('toggleClientCertificatePassphraseButton').textContent.trim() === 'Hide', 'Client certificate passphrase button should switch to Hide after revealing.');
+      assertUiSmoke($('toggleClientCertificatePassphraseButton').getAttribute('aria-pressed') === 'true', 'Client certificate passphrase button should expose pressed state after revealing.');
+      $('toggleClientCertificatePassphraseButton').click();
+      await nextPaint();
+      assertUiSmoke($('clientCertificatePassphraseInput').type === 'password', 'Client certificate passphrase Hide button should mask the value again.');
+      assertUiSmoke($('clientCertificatePassphraseInput').value === 'ui-secret', 'Client certificate passphrase Hide button should preserve the value.');
+      assertUiSmoke($('toggleClientCertificatePassphraseButton').textContent.trim() === 'Show', 'Client certificate passphrase button should switch back to Show after hiding.');
+      assertUiSmoke($('toggleClientCertificatePassphraseButton').getAttribute('aria-pressed') === 'false', 'Client certificate passphrase button should clear pressed state after hiding.');
+      assertUiSmoke(!$('clientCertificateCaPathInput'), 'Client certificate modal should not duplicate the workspace CA PEM file field.');
+      $('clientCertificateFormatSelect').value = 'pfx';
+      dispatchChange($('clientCertificateFormatSelect'));
+      await nextPaint();
+      assertUiSmoke(!$('clientCertificatePfxPathInput').closest('.client-certificate-pfx-field').hidden, 'PFX/P12 path should show when PFX format is selected.');
+      assertUiSmoke(!$('chooseClientCertificatePfxPathButton').hidden, 'PFX/P12 path should expose a Choose button when PFX format is selected.');
+      assertUiSmoke($('clientCertificateCertPathInput').closest('.client-certificate-pem-field').hidden, 'PEM certificate path should hide when PFX format is selected.');
+      $('chooseClientCertificatePfxPathButton').click();
+      await waitForUiSmoke(
+        () => !$('filePickerModal').hidden && $('clientCertificateModal').hidden,
+        'Client certificate PFX/P12 Choose should open the local file picker over the certificate form.',
+        3000,
+        global
+      );
+      $('filePickerManualPathInput').value = '/tmp/ui-client-picker.p12';
+      $('filePickerUsePathButton').click();
+      await waitForUiSmoke(
+        () => !$('clientCertificateModal').hidden
+          && $('filePickerModal').hidden
+          && $('clientCertificatePfxPathInput').value === '/tmp/ui-client-picker.p12',
+        'Client certificate PFX/P12 picker should return to the form with the selected path.',
+        3000,
+        global
+      );
+      $('clientCertificateFormatSelect').value = 'pem';
+      dispatchChange($('clientCertificateFormatSelect'));
+      await nextPaint();
+      $('clientCertificateNameInput').value = 'UI Client Certificate';
+      $('clientCertificateHostInput').value = 'api.example.test';
+      $('clientCertificatePortInput').value = '8443';
+      $('clientCertificateEnabledInput').checked = true;
+      $('saveClientCertificateModalButton').click();
+      await waitForUiSmoke(
+        () => !$('settingsModal').hidden && !$('settingsCertificatesSection').hidden && $('clientCertificateModal').hidden,
+        'Client certificate Save should return to the Settings Certificates panel.',
+        3000,
+        global
+      );
+      await waitForUiSmoke(
+        () => workspace.settings.request.clientCertificates.some((certificate) => (
+          certificate.name === 'UI Client Certificate'
+          && certificate.host === 'api.example.test'
+          && certificate.port === '8443'
+          && certificate.certPath === '/tmp/ui-client-picker.crt'
+          && certificate.keyPath === '/tmp/ui-client-picker.key'
+          && certificate.caPath === ''
+        )),
+        'Client certificate modal should save all fields from one panel.',
+        3000,
+        global
+      );
+      await waitForUiSmoke(
+        () => $('clientCertificateList').textContent.includes('UI Client Certificate')
+          && $('clientCertificateList').textContent.includes('api.example.test')
+          && $('clientCertificateList').textContent.includes(':8443'),
+        'Client certificate list should render the saved certificate summary.',
+        3000,
+        global
+      );
+      await waitForStatusIncludes('Client certificate added.', 'Client certificate modal should surface a save status.');
+
+      const disableButton = Array.from($('clientCertificateList').querySelectorAll('button'))
+        .find((button) => button.textContent.trim() === 'Disable');
+      assertUiSmoke(disableButton, 'Saved client certificate should expose a Disable button.');
+      disableButton.click();
+      await waitForUiSmoke(
+        () => workspace.settings.request.clientCertificates.some((certificate) => certificate.name === 'UI Client Certificate' && certificate.enabled === false),
+        'Client certificate Disable button should persist disabled state.',
+        3000,
+        global
+      );
+    } finally {
+      workspace.settings.request = originalRequestSettings;
+      renderTlsSettingsControls();
     }
   }
 
@@ -963,6 +1240,10 @@
   async function assertEditorLineNumbersSettingSmoke() {
     const checkbox = $('showEditorLineNumbersInput');
     const editor = $('bodyInput')?.closest?.('.code-editor');
+    activateTab('request', 'docs');
+    if ($('docsEditorShell').hidden) {
+      $('docsPreview').click();
+    }
     const docsEditor = $('docsInput')?.closest?.('.code-editor');
     assertUiSmoke(checkbox, 'Editor line number setting checkbox should exist.');
     assertUiSmoke(editor, 'Request body editor should exist before toggling editor line numbers.');
@@ -1004,6 +1285,9 @@
     assertUiSmoke(checkbox.checked === true, 'Editor line number setting checkbox should stay checked after settings are saved.');
     assertUiSmoke(editor.classList.contains('has-line-numbers'), 'Code editors should restore line numbers when the setting is checked again.');
     assertUiSmoke(docsEditor.classList.contains('has-line-numbers'), 'Docs editor should restore line numbers when the setting is checked again.');
+    if (!$('docsCancelButton').hidden) {
+      $('docsCancelButton').click();
+    }
   }
 
   async function assertVariableTooltipHintsSettingSmoke() {
@@ -1116,6 +1400,52 @@
     assertUiSmoke($('responseBody').getAttribute('aria-label') === 'Response body', 'Response body textarea should have an accessible label.');
     assertUiSmoke($('responseHeaders').getAttribute('aria-label') === 'Response headers', 'Response headers textarea should have an accessible label.');
     assertUiSmoke($('responseCookies').getAttribute('aria-label') === 'Response cookies', 'Response cookies textarea should have an accessible label.');
+    activateTab('request', 'params');
+    activateTab('results', 'response');
+  }
+
+  async function assertRequestSettingsTabSmoke() {
+    activateTab('request', 'requestSettings');
+    await nextPaint();
+    assertUiSmoke($('requestSettingsTabButton').getAttribute('aria-selected') === 'true', 'Request Settings tab button should update aria-selected.');
+    assertUiSmoke($('requestSettingsTab').classList.contains('active'), 'Request Settings tab panel should become active.');
+    assertUiSmoke($('requestSettingsTab').getAttribute('aria-hidden') === 'false', 'Request Settings tab panel should update aria-hidden.');
+    const verification = $('requestSslCertificateVerificationInput');
+    const rect = verification?.getBoundingClientRect?.() || { width: 0, height: 0 };
+    assertUiSmoke(verification && rect.width > 0 && rect.height > 0, 'Request Settings SSL verification checkbox should be visible.');
+    assertUiSmoke(!$('requestCaCertificatePathInput'), 'Request Settings should not expose a request-local CA PEM override.');
+    assertUiSmoke(!$('chooseRequestCaCertificateButton'), 'Request Settings should not expose a request-local CA picker.');
+    assertUiSmoke(!$('clearRequestCaCertificateButton'), 'Request Settings should not expose request-local CA clearing.');
+    assertUiSmoke(verification.dataset.verificationValue === 'inherit', 'New requests should inherit workspace SSL verification until the request toggle changes.');
+
+    verification.checked = true;
+    dispatchChange(verification);
+    await waitForUiSmoke(
+      () => activeRequest()?.settings?.sslCertificateVerification === 'enabled',
+      'Request Settings SSL checkbox should enable verification on the active request.',
+      3000,
+      global
+    );
+    verification.checked = false;
+    dispatchChange(verification);
+    await waitForUiSmoke(
+      () => activeRequest()?.settings?.sslCertificateVerification === 'disabled',
+      'Request Settings SSL checkbox should disable verification on the active request.',
+      3000,
+      global
+    );
+    if (activeRequest()) {
+      activeRequest().settings = { sslCertificateVerification: 'inherit' };
+      renderRequestTlsSettings(activeRequest());
+    }
+
+    activateTab('results', 'responseNetwork');
+    await nextPaint();
+    assertUiSmoke($('resultsNetworkTabButton').getAttribute('aria-selected') === 'true', 'Results Network tab button should update aria-selected.');
+    assertUiSmoke($('responseNetworkTab').classList.contains('active'), 'Results Network tab panel should become active.');
+    assertUiSmoke($('responseNetworkTab').getAttribute('aria-hidden') === 'false', 'Results Network tab panel should update aria-hidden.');
+    assertUiSmoke($('responseNetwork').getBoundingClientRect().height > 0, 'Results Network diagnostics textarea should be visible.');
+
     activateTab('request', 'params');
     activateTab('results', 'response');
   }
@@ -2541,6 +2871,15 @@
     try {
       $('urlInput').value = 'https://api.example.test/failure';
       dispatchInput($('urlInput'));
+      $('responseStatus').textContent = '200';
+      $('responseTime').textContent = '123 ms';
+      $('responseSize').textContent = '1 KB';
+      $('finalUrl').textContent = 'https://api.example.test/old-success';
+      $('responseBody').value = '<html><body>stale success body</body></html>';
+      $('responseHeaders').value = 'x-stale: yes';
+      $('responseCookies').value = 'stale=true';
+      $('responseNetwork').value = 'old network diagnostics';
+      window.PostMeterCodeEditor?.setLanguage?.($('responseBody'), 'markup');
       window.__postmeterValidateRequest = async () => [];
       window.__postmeterSendRequest = async () => {
         throw new Error('mocked send failure');
@@ -2549,6 +2888,13 @@
       assertStatusIncludes('Request failed: mocked send failure', 'Failed send did not update status with an actionable error.');
       assertUiSmoke($('responseStatus').textContent === 'ERR', 'Failed send did not mark the response status as ERR.');
       assertUiSmoke($('responseBody').value.includes('mocked send failure'), 'Failed send did not show the error in the response body.');
+      assertUiSmoke(!$('responseBody').value.includes('stale success body'), 'Failed send left stale response body text in the response body.');
+      assertUiSmoke($('responseHeaders').value === '', 'Failed send did not clear stale response headers.');
+      assertUiSmoke($('responseCookies').value === '', 'Failed send did not clear stale response cookies.');
+      assertUiSmoke($('responseNetwork').value === '', 'Failed send did not clear stale network diagnostics.');
+      const highlightedBody = $('responseBody').closest('.code-editor')?.querySelector('.code-editor-highlight code')?.textContent || '';
+      assertUiSmoke(highlightedBody.includes('mocked send failure'), 'Failed send did not refresh the response body editor overlay.');
+      assertUiSmoke(!highlightedBody.includes('stale success body'), 'Failed send left stale response text in the response body editor overlay.');
     } finally {
       window.__postmeterValidateRequest = originalValidate;
       window.__postmeterSendRequest = originalSend;
@@ -2832,12 +3178,15 @@
     const originalActiveFolderId = activeFolderId;
     const originalActiveRequestId = activeRequestId;
     const originalActiveEnvironmentId = activeEnvironmentId;
+    const originalActiveRunnerConfigId = activeRunnerConfigId;
+    const originalActiveRunnerRequestRunnerId = activeRunnerRequestRunnerId;
     const originalActiveMainPanel = activeMainPanel;
     const originalActiveSidebarPanel = activeSidebarPanel;
     const originalOpenCollectionTabs = structuredClone(openCollectionTabs);
     const originalOpenRequestTabs = structuredClone(openRequestTabs);
     const originalOpenEnvironmentTabs = structuredClone(openEnvironmentTabs);
     const originalOpenWorkspaceTabs = structuredClone(openWorkspaceTabs);
+    const originalOpenRunnerTabs = structuredClone(openRunnerTabs);
     try {
       workspace.collections = [];
       clearActiveWorkspaceItem();
@@ -2876,6 +3225,97 @@
         'Collection delete should restore focus to a live tree item or stable sidebar tab.'
       );
       assertUiSmoke(document.activeElement?.isConnected, 'Collection delete focus target should still be connected.');
+
+      const generateNestedFolder = {
+        id: crypto.randomUUID(),
+        name: 'Focus Generated Nested Folder',
+        requests: [newRequestObject('Focus Generated Nested Request')],
+        folders: []
+      };
+      const generateFolder = {
+        id: crypto.randomUUID(),
+        name: 'Focus Generated Folder',
+        requests: [newRequestObject('Focus Generated Folder Request')],
+        folders: [generateNestedFolder]
+      };
+      const generateCollection = {
+        id: crypto.randomUUID(),
+        name: 'Focus Generated Collection',
+        requests: [newRequestObject('Focus Generated Root Request')],
+        folders: [generateFolder]
+      };
+      workspace.collections.push(generateCollection);
+      renderAll();
+      const generateCollectionButton = treeButtonByTarget('collection', generateCollection.id);
+      assertUiSmoke(generateCollectionButton, 'Tree focus smoke did not render the generate-runner collection.');
+      generateCollectionButton.focus();
+      openKeyboardContextMenu(generateCollectionButton);
+      let generateMenuLabels = Array.from($('contextMenu').querySelectorAll('button')).map((button) => button.textContent.trim());
+      assertUiSmoke(
+        generateMenuLabels.includes('Generate Runner')
+          && generateMenuLabels.indexOf('Generate Runner') < generateMenuLabels.indexOf('Delete'),
+        `Collection context menu should include Generate Runner above Delete. labels=${generateMenuLabels.join('|')}`
+      );
+      const runnerCountBeforeCollectionGenerate = ensureWorkspaceRunners().length;
+      activateContextMenuItem('Generate Runner');
+      await nextPaint();
+      const generatedCollectionRunner = activeRunner();
+      assertUiSmoke(
+        generatedCollectionRunner
+          && ensureWorkspaceRunners().length === runnerCountBeforeCollectionGenerate + 1
+          && generatedCollectionRunner.name.startsWith('Focus Generated Collection Runner'),
+        'Collection Generate Runner should create and activate a runner named from the collection.'
+      );
+      assertUiSmoke(
+        generatedCollectionRunner.requests.length === 3,
+        'Collection Generate Runner should import root, folder, and nested folder requests.'
+      );
+      assertUiSmoke(
+        generatedCollectionRunner.requests.some((request) => request.source?.collectionId === generateCollection.id
+          && request.source?.requestId === generateCollection.requests[0].id),
+        'Collection Generate Runner should preserve root request source metadata.'
+      );
+      assertUiSmoke(
+        generatedCollectionRunner.requests.some((request) => request.source?.folderId === generateNestedFolder.id
+          && request.source?.folderPath?.join(' / ') === `${generateFolder.name} / ${generateNestedFolder.name}`),
+        'Collection Generate Runner should preserve nested folder source metadata.'
+      );
+      assertUiSmoke(
+        activeSidebarPanel === 'runners' && activeMainPanel === 'runner',
+        'Collection Generate Runner should open the generated runner in the runner pane.'
+      );
+
+      selectSidebarPanel('collections');
+      const generateFolderButton = treeButtonByTarget('folder', generateFolder.id);
+      assertUiSmoke(generateFolderButton, 'Tree focus smoke did not render the generate-runner folder.');
+      generateFolderButton.focus();
+      openKeyboardContextMenu(generateFolderButton);
+      generateMenuLabels = Array.from($('contextMenu').querySelectorAll('button')).map((button) => button.textContent.trim());
+      assertUiSmoke(
+        generateMenuLabels.includes('Generate Runner')
+          && generateMenuLabels.indexOf('Generate Runner') < generateMenuLabels.indexOf('Delete'),
+        `Folder context menu should include Generate Runner above Delete. labels=${generateMenuLabels.join('|')}`
+      );
+      const runnerCountBeforeFolderGenerate = ensureWorkspaceRunners().length;
+      activateContextMenuItem('Generate Runner');
+      await nextPaint();
+      const generatedFolderRunner = activeRunner();
+      assertUiSmoke(
+        generatedFolderRunner
+          && ensureWorkspaceRunners().length === runnerCountBeforeFolderGenerate + 1
+          && generatedFolderRunner.name.startsWith('Focus Generated Folder Runner'),
+        'Folder Generate Runner should create and activate a runner named from the folder.'
+      );
+      assertUiSmoke(
+        generatedFolderRunner.requests.length === 2
+          && !generatedFolderRunner.requests.some((request) => request.source?.requestId === generateCollection.requests[0].id),
+        'Folder Generate Runner should import only that folder and nested folder requests.'
+      );
+      assertUiSmoke(
+        generatedFolderRunner.requests.every((request) => request.id !== request.source?.requestId),
+        'Generate Runner should clone requests instead of reusing collection request ids.'
+      );
+      selectSidebarPanel('collections');
 
       const requestCollection = newCollection();
       requestCollection.name = 'Request Focus Collection';
@@ -2922,12 +3362,15 @@
       activeFolderId = originalActiveFolderId;
       activeRequestId = originalActiveRequestId;
       activeEnvironmentId = originalActiveEnvironmentId;
+      activeRunnerConfigId = originalActiveRunnerConfigId;
+      activeRunnerRequestRunnerId = originalActiveRunnerRequestRunnerId;
       activeMainPanel = originalActiveMainPanel;
       activeSidebarPanel = originalActiveSidebarPanel;
       openCollectionTabs = originalOpenCollectionTabs;
       openRequestTabs = originalOpenRequestTabs;
       openEnvironmentTabs = originalOpenEnvironmentTabs;
       openWorkspaceTabs = originalOpenWorkspaceTabs;
+      openRunnerTabs = originalOpenRunnerTabs;
       renderAll();
     }
   }
@@ -3254,6 +3697,15 @@
       assertUiSmoke(!document.getElementById('performanceUseCsvVariablesInput'), 'Performance editor should not render a separate Use CSV variables checkbox.');
       assertUiSmoke($('performanceCsvVariablesButton').textContent.trim() === 'CSV Variables: On', 'Performance CSV button should show the enabled state.');
       assertUiSmoke($('performanceCsvVariablesButton').classList.contains('csv-variables-active'), 'Performance CSV button should use the active color when enabled.');
+      assertUiSmoke($('exportPerformanceResultsButton').textContent.trim() === 'Export Results', 'Performance result export trigger should be labeled Export Results.');
+      assertUiSmoke($('exportPerformanceResultsButton').disabled, 'Performance result export should be disabled before a run.');
+      assertUiSmoke($('exportPerformanceResultHtmlButton').disabled, 'Performance HTML report export menu item should be disabled before a run.');
+      assertUiSmoke($('exportPerformanceResultJsonButton').disabled, 'Performance JSON export menu item should be disabled before a run.');
+      assertUiSmoke($('exportPerformanceResultCsvButton').disabled, 'Performance CSV export menu item should be disabled before a run.');
+      assertUiSmoke(
+        Array.from($('exportPerformanceResultsMenu').querySelectorAll('button')).map((button) => button.textContent.trim()).join('|') === 'HTML Report|JSON|CSV',
+        'Performance result export menu should expose HTML Report, JSON, and CSV.'
+      );
       $('performanceCsvVariablesButton').click();
       assertUiSmoke(!$('performanceCsvVariablesMenu').hidden, 'Performance CSV button should open a dropdown menu.');
       let performanceCsvMenuLabels = Array.from($('performanceCsvVariablesMenu').querySelectorAll('button')).map((button) => button.textContent.trim());
@@ -4242,6 +4694,28 @@
         window.__postmeterStartRunner = originalRunnerStart;
         window.__postmeterSaveWorkspace = originalSaveWorkspaceForRunnerRun;
       }
+      const nestedSourceFolder = {
+        id: crypto.randomUUID(),
+        name: 'Runner Nested Folder',
+        requests: [
+          newRequestObject('Runner Nested Folder Request')
+        ],
+        folders: []
+      };
+      const sourceFolder = {
+        id: crypto.randomUUID(),
+        name: 'Runner Source Folder',
+        requests: [
+          newRequestObject('Runner Folder Request')
+        ],
+        folders: [nestedSourceFolder]
+      };
+      const emptySourceFolder = {
+        id: crypto.randomUUID(),
+        name: 'Runner Empty Folder',
+        requests: [],
+        folders: []
+      };
       const sourceCollection = {
         id: crypto.randomUUID(),
         name: 'Runner Source Collection',
@@ -4250,7 +4724,7 @@
           newRequestObject('Runner Source Request 2'),
           newRequestObject('Runner Source Request 3')
         ],
-        folders: []
+        folders: [sourceFolder, emptySourceFolder]
       };
       const secondSourceCollection = {
         id: crypto.randomUUID(),
@@ -4261,8 +4735,16 @@
         ],
         folders: []
       };
-      workspace.collections.push(sourceCollection, secondSourceCollection);
+      const emptySourceCollection = {
+        id: crypto.randomUUID(),
+        name: 'Runner Empty Source Collection',
+        requests: [],
+        folders: []
+      };
+      workspace.collections.push(sourceCollection, secondSourceCollection, emptySourceCollection);
       const source = sourceCollection.requests[0];
+      const sourceCollectionRequestCount = 5;
+      const sourceFolderRequestCount = 2;
       const clickRunnerImportControl = (control, options = {}) => {
         control.dispatchEvent(new MouseEvent('click', {
           bubbles: true,
@@ -4274,10 +4756,14 @@
       };
       const runnerImportCollection = (collectionId) => Array.from($('runnerImportList').querySelectorAll('[data-runner-import-type="collection"]'))
         .find((control) => control.dataset.collectionId === collectionId);
-      const runnerImportInput = (type, collectionId, requestId = '') => Array.from($('runnerImportList').querySelectorAll('input'))
+      const runnerImportFolder = (collectionId, folderId) => Array.from($('runnerImportList').querySelectorAll('[data-runner-import-type="folder"]'))
+        .find((control) => control.dataset.collectionId === collectionId
+          && control.dataset.folderId === folderId);
+      const runnerImportInput = (type, collectionId, requestId = '', folderId = '') => Array.from($('runnerImportList').querySelectorAll('input'))
         .find((input) => input.dataset.runnerImportType === type
           && input.dataset.collectionId === collectionId
-          && input.dataset.requestId === requestId);
+          && input.dataset.requestId === requestId
+          && input.dataset.folderId === folderId);
       $('addRunnerRequestButton').click();
       runnerAddLabels = Array.from($('contextMenu').querySelectorAll('button')).map((button) => button.textContent.trim());
       assertUiSmoke(runnerAddLabels.join('|') === 'New Request|Import', `Runner Add Request menu should stay simplified after collections exist. labels=${runnerAddLabels.join('|')}`);
@@ -4288,10 +4774,14 @@
       assertUiSmoke(!$('runnerImportList').textContent.includes(source.name), 'Runner Import modal should hide collection requests until the collection is expanded.');
       const collectionImportControl = runnerImportCollection(sourceCollection.id);
       assertUiSmoke(collectionImportControl, 'Runner Import modal should expose an expandable collection row.');
-      assertUiSmoke(!runnerImportInput('collection', sourceCollection.id), 'Runner Import modal should not make collection rows selectable import targets.');
+      assertUiSmoke(runnerImportInput('collection', sourceCollection.id), 'Runner Import modal should make collection rows selectable in runner mode.');
+      assertUiSmoke(runnerImportInput('collection', emptySourceCollection.id).disabled, 'Runner Import should disable empty collection checkboxes.');
       clickRunnerImportControl(collectionImportControl);
       const expandedRequestImportInput = runnerImportInput('request', sourceCollection.id, source.id);
+      const expandedFolderImportControl = runnerImportFolder(sourceCollection.id, sourceFolder.id);
       assertUiSmoke(expandedRequestImportInput, 'Runner Import modal should expose request options after expanding a collection.');
+      assertUiSmoke(expandedFolderImportControl, 'Runner Import modal should expose folder rows after expanding a collection.');
+      assertUiSmoke(!$('runnerImportList').textContent.includes(sourceFolder.requests[0].name), 'Runner Import modal should hide folder requests until the folder is expanded.');
       assertUiSmoke($('confirmRunnerImportButton').disabled, 'Expanding a runner import collection should not enable Add.');
       assertUiSmoke(Array.isArray(selectedRunnerImportTarget) && selectedRunnerImportTarget.length === 0, 'Expanding a runner import collection should not select the collection.');
       const secondCollectionImportControl = runnerImportCollection(secondSourceCollection.id);
@@ -4309,6 +4799,83 @@
       $('addRunnerRequestButton').click();
       activateContextMenuItem('Import');
       clickRunnerImportControl(runnerImportCollection(sourceCollection.id));
+      clickRunnerImportControl(runnerImportInput('collection', sourceCollection.id));
+      assertUiSmoke(
+        Array.isArray(selectedRunnerImportTarget)
+          && selectedRunnerImportTarget.length === sourceCollectionRequestCount
+          && selectedRunnerImportTarget.every((target) => target.type === 'request'),
+        'Checking a runner import collection should select every descendant request.'
+      );
+      clickRunnerImportControl(runnerImportFolder(sourceCollection.id, sourceFolder.id));
+      clickRunnerImportControl(runnerImportFolder(sourceCollection.id, nestedSourceFolder.id));
+      assertUiSmoke(
+        runnerImportInput('folder', sourceCollection.id, '', sourceFolder.id).checked
+          && runnerImportInput('folder', sourceCollection.id, '', nestedSourceFolder.id).checked,
+        'Checking a runner import collection should check expanded descendant folder rows.'
+      );
+      assertUiSmoke(
+        runnerImportInput('request', sourceCollection.id, nestedSourceFolder.requests[0].id, nestedSourceFolder.id).checked,
+        'Checking a runner import collection should check nested descendant request rows.'
+      );
+      clickRunnerImportControl(runnerImportInput('folder', sourceCollection.id, '', sourceFolder.id));
+      assertUiSmoke(
+        Array.isArray(selectedRunnerImportTarget)
+          && selectedRunnerImportTarget.length === sourceCollection.requests.length,
+        'Unchecking a runner import folder should deselect only that folder descendant requests.'
+      );
+      assertUiSmoke(
+        runnerImportInput('collection', sourceCollection.id).indeterminate === true,
+        'Unchecking a selected folder should make its parent collection checkbox indeterminate.'
+      );
+      clickRunnerImportControl(runnerImportInput('folder', sourceCollection.id, '', sourceFolder.id));
+      assertUiSmoke(
+        Array.isArray(selectedRunnerImportTarget)
+          && selectedRunnerImportTarget.length === sourceCollectionRequestCount,
+        'Rechecking an indeterminate folder should restore all descendant request selections.'
+      );
+      $('confirmRunnerImportButton').click();
+      await waitForUiSmoke(
+        () => runner.requests.length === requestCountBeforeCancel + sourceCollectionRequestCount,
+        'Checking a collection in Runner Import should clone every descendant request.',
+        3000,
+        global
+      );
+      const nestedImported = runner.requests.find((request) => request.source?.requestId === nestedSourceFolder.requests[0].id);
+      assertUiSmoke(
+        nestedImported?.source?.folderId === nestedSourceFolder.id
+          && nestedImported?.source?.folderPath?.join(' / ') === `${sourceFolder.name} / ${nestedSourceFolder.name}`,
+        'Collection import should preserve nested folder source metadata on cloned runner requests.'
+      );
+
+      $('addRunnerRequestButton').click();
+      activateContextMenuItem('Import');
+      clickRunnerImportControl(runnerImportCollection(sourceCollection.id));
+      clickRunnerImportControl(runnerImportFolder(sourceCollection.id, sourceFolder.id));
+      clickRunnerImportControl(runnerImportInput('folder', sourceCollection.id, '', sourceFolder.id));
+      assertUiSmoke(
+        Array.isArray(selectedRunnerImportTarget)
+          && selectedRunnerImportTarget.length === sourceFolderRequestCount,
+        'Checking a runner import folder should select all nested requests under that folder.'
+      );
+      const requestCountBeforeFolderImport = runner.requests.length;
+      $('confirmRunnerImportButton').click();
+      await waitForUiSmoke(
+        () => runner.requests.length === requestCountBeforeFolderImport + sourceFolderRequestCount,
+        'Checking a folder in Runner Import should clone all descendant folder requests.',
+        3000,
+        global
+      );
+
+      const requestCountBeforeStaleImport = runner.requests.length;
+      assertUiSmoke(
+        importRunnerSelections([{ type: 'folder', collectionId: sourceCollection.id, folderId: 'missing-folder' }]) === 0,
+        'Importing a stale runner folder target should report that no requests were imported.'
+      );
+      assertUiSmoke(runner.requests.length === requestCountBeforeStaleImport, 'Importing a stale runner folder target should not mutate the runner.');
+
+      $('addRunnerRequestButton').click();
+      activateContextMenuItem('Import');
+      clickRunnerImportControl(runnerImportCollection(sourceCollection.id));
       const requestImportInputAfterCancel = runnerImportInput('request', sourceCollection.id, source.id);
       const thirdRequestImportInputAfterCancel = runnerImportInput('request', sourceCollection.id, sourceCollection.requests[2].id);
       assertUiSmoke(requestImportInputAfterCancel && thirdRequestImportInputAfterCancel, 'Runner Import request options should be available after expanding the collection.');
@@ -4321,7 +4888,7 @@
         'Shift-clicking runner import requests should select the visible request range.'
       );
       $('confirmRunnerImportButton').click();
-      await waitForUiSmoke(() => runner.requests.length === requestCountBeforeCancel + 3, 'Adding selected requests from Runner Import should clone every selected request.', 3000, global);
+      await waitForUiSmoke(() => runner.requests.length === requestCountBeforeStaleImport + 3, 'Adding selected requests from Runner Import should clone every selected request.', 3000, global);
 
       $('addRunnerRequestButton').click();
       activateContextMenuItem('Import');
@@ -4355,6 +4922,38 @@
         imported.name = 'Mutated Runner Clone';
         assertUiSmoke(source.name !== 'Mutated Runner Clone', 'Imported runner request should not mutate the source collection request.');
       }
+      const performanceImportTest = newPerformanceTest();
+      $('importPerformanceRequestButton').click();
+      assertUiSmoke(!$('runnerImportModal').hidden, 'Performance Import Request should open the shared import tree modal.');
+      assertUiSmoke($('runnerImportTitle').textContent === 'Import request', 'Performance Import Request should use single-request modal copy.');
+      assertUiSmoke(!runnerImportInput('collection', sourceCollection.id), 'Performance Import Request should not expose collection selection checkboxes.');
+      clickRunnerImportControl(runnerImportCollection(sourceCollection.id));
+      assertUiSmoke(runnerImportFolder(sourceCollection.id, sourceFolder.id), 'Performance Import Request should expose folder rows for navigation.');
+      assertUiSmoke($('confirmRunnerImportButton').disabled, 'Expanding Performance import groups should not enable Import.');
+      clickRunnerImportControl(runnerImportFolder(sourceCollection.id, sourceFolder.id));
+      const performanceFolderRequestInput = runnerImportInput('request', sourceCollection.id, sourceFolder.requests[0].id, sourceFolder.id);
+      const performanceRootRequestInput = runnerImportInput('request', sourceCollection.id, source.id, '');
+      assertUiSmoke(performanceFolderRequestInput?.type === 'radio', 'Performance Import Request should use single-choice request controls.');
+      clickRunnerImportControl(performanceFolderRequestInput);
+      clickRunnerImportControl(performanceRootRequestInput);
+      assertUiSmoke(
+        Array.isArray(selectedRunnerImportTarget)
+          && selectedRunnerImportTarget.length === 1
+          && selectedRunnerImportTarget[0].requestId === source.id,
+        'Performance Import Request should keep only the most recently selected request.'
+      );
+      $('confirmRunnerImportButton').click();
+      await waitForUiSmoke(
+        () => performanceImportTest.source?.requestId === source.id,
+        'Performance Import Request should import only the selected request.',
+        3000,
+        global
+      );
+      activeRunnerRequestRunnerId = null;
+      activeRunnerConfigId = runner.id;
+      activeSidebarPanel = 'runners';
+      activeMainPanel = 'runner';
+      renderAll();
       lastRunnerResult = {
         collectionName: runner.name,
         totalRequests: 125,
@@ -4604,6 +5203,15 @@
     assertUiSmoke($('requestNameTitle').getAttribute('contenteditable') === 'plaintext-only', 'Clicking the request title should make it editable inline.');
     editRequestTitle('Draft Request');
     activateTab('request', 'body');
+    $('bodyTypeSelect').value = 'RAW';
+    dispatchChange($('bodyTypeSelect'));
+    $('bodyRawFormatSelect').value = 'json';
+    dispatchChange($('bodyRawFormatSelect'));
+    assertUiSmoke(!$('beautifyBodyButton').hidden, 'Raw body mode should show the Beautify button.');
+    $('bodyInput').value = '{"test":"object"}';
+    dispatchInput($('bodyInput'));
+    $('beautifyBodyButton').click();
+    assertUiSmoke($('bodyInput').value === '{\n    "test": "object"\n}', 'Raw JSON Beautify should format compact JSON bodies.');
     $('bodyTypeSelect').value = 'FORM_DATA';
     dispatchChange($('bodyTypeSelect'));
     $('addFormDataBodyRowButton').click();
@@ -4676,10 +5284,18 @@
     );
     $('bodyTypeSelect').value = 'GRAPHQL';
     dispatchChange($('bodyTypeSelect'));
-    $('graphqlQueryInput').value = 'query User($id: ID!) { user(id: $id) { name } }';
+    assertUiSmoke(!$('graphqlOperationNameField').hidden, 'GraphQL body mode should move Operation Name into the top controls row.');
+    assertUiSmoke(!$('beautifyBodyButton').hidden, 'GraphQL body mode should show the Beautify button.');
+    $('graphqlQueryInput').value = 'query User($id: ID!) { user(id: $id) { id name } }';
     dispatchInput($('graphqlQueryInput'));
     $('graphqlVariablesInput').value = '{"id":"{{localToken}}"}';
     dispatchInput($('graphqlVariablesInput'));
+    $('beautifyBodyButton').click();
+    assertUiSmoke(
+      $('graphqlQueryInput').value.includes('\n    user(id: $id) {\n        id\n        name\n    }\n'),
+      'GraphQL Beautify should format the query selection tree.'
+    );
+    assertUiSmoke($('graphqlVariablesInput').value.includes('\n    "id": "{{localToken}}"\n'), 'GraphQL Beautify should format JSON variables.');
     $('graphqlOperationNameInput').value = 'User';
     dispatchInput($('graphqlOperationNameInput'));
     collectRequestFromEditor();
@@ -4692,7 +5308,8 @@
       'Request Body dropdown should collect GraphQL query, variables, and operation name.'
     );
     const postmanGraphqlBody = JSON.parse(draft.body);
-    assertUiSmoke(postmanGraphqlBody.variables === '{"id":"{{localToken}}"}', 'Request GraphQL body JSON should preserve variables text for Postman round-tripping.');
+    assertUiSmoke(postmanGraphqlBody.variables.includes('\n    "id": "{{localToken}}"\n'), 'Request GraphQL body JSON should preserve beautified variables text for Postman round-tripping.');
+    assertUiSmoke(JSON.parse(postmanGraphqlBody.variables).id === '{{localToken}}', 'Request GraphQL beautified variables should remain valid JSON.');
     assertUiSmoke(draft.name === 'Draft Request', 'Draft request should be editable before being saved anywhere.');
 
     const collection = newCollection();

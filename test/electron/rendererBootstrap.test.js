@@ -107,8 +107,10 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   const rendererSource = await fs.promises.readFile(path.join(root, 'src', 'renderer', 'renderer.js'), 'utf8');
 
   assert.match(indexSource, /id="bodyInput"[^>]+aria-label="Request body"/);
-  assert.match(indexSource, /id="graphqlQueryInput"[^>]+aria-label="GraphQL query"/);
-  assert.match(indexSource, /id="performanceGraphqlQueryInput"[^>]+aria-label="Performance GraphQL query"/);
+  assert.match(indexSource, /id="graphqlOperationNameField"[\s\S]*id="graphqlOperationNameInput"[\s\S]*id="beautifyBodyButton"/);
+  assert.match(indexSource, /id="graphqlQueryInput"[^>]+aria-label="GraphQL query"[^>]+data-code-language="graphql"/);
+  assert.match(indexSource, /id="performanceGraphqlOperationNameField"[\s\S]*id="performanceGraphqlOperationNameInput"[\s\S]*id="performanceBeautifyBodyButton"/);
+  assert.match(indexSource, /id="performanceGraphqlQueryInput"[^>]+aria-label="Performance GraphQL query"[^>]+data-code-language="graphql"/);
   assert.match(indexSource, /id="exportItemModal"/);
   assert.match(indexSource, /id="exportItemList"[^>]+role="radiogroup"/);
   assert.match(indexSource, /id="confirmExportItemButton"[^>]+disabled/);
@@ -141,6 +143,14 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(indexSource, /id="resetEditorTypographyButton"/);
   assert.deepEqual(selectOptionValues(indexSource, 'interfaceFontSelect'), selectOptionValues(indexSource, 'editorFontSelect'));
   assert.match(indexSource, /id="showEditorLineNumbersInput"/);
+  assert.match(indexSource, /src="vendor\/markdown-it\.min\.js"/);
+  assert.match(indexSource, /src="markdownRenderer\.js"/);
+  assert.match(indexSource, /id="docsPreview"[^>]+markdown-renderer/);
+  assert.match(indexSource, /id="collectionDescriptionPreview"[^>]+markdown-renderer/);
+  assert.match(indexSource, /id="requestSettingsTab"[\s\S]*id="requestSslCertificateVerificationInput"/);
+  assert.doesNotMatch(indexSource, /id="requestCaCertificatePathInput"/);
+  assert.match(rendererSource, /request:\s*\[[^\]]*'requestSettingsTab'[^\]]*\]/);
+  assert.match(rendererSource, /results:\s*\[[^\]]*'responseNetworkTab'[^\]]*\]/);
   assert.match(indexSource, /id="saveOnForceCloseInput"/);
   assert.match(indexSource, /id="closeModalsOnBackdropClickInput"/);
   assert.match(indexSource, /id="includePrereleasesInput"/);
@@ -166,6 +176,13 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(bootstrapSource, /onEditRunnerCsvVariables/);
   assert.match(bootstrapSource, /onTogglePerformanceCsvVariables/);
   assert.match(bootstrapSource, /onEditPerformanceCsvVariables/);
+  assert.match(bootstrapSource, /bindClick\(doc, 'beautifyBodyButton', options\.onBeautifyBody/);
+  assert.match(bootstrapSource, /bindClick\(doc, 'performanceBeautifyBodyButton', options\.onBeautifyPerformanceBody/);
+  assert.match(rendererSource, /CodeEditor\.setLanguage\?\.\(bodyElement\(prefix, 'graphqlQueryInput'\), 'graphql'\)/);
+  assert.match(rendererSource, /if \(normalized === 'html' \|\| normalized === 'xml'\) \{\s*return normalized;\s*\}/);
+  assert.match(rendererSource, /function beautifyBodyEditor\(prefix\)/);
+  assert.match(editorPanelsSource, /\.body-editor-controls \.graphql-operation-field/);
+  assert.match(editorPanelsSource, /\.body-beautify-button/);
   assert.doesNotMatch(bootstrapSource, /'fileMenuButton', 'fileMenu'/);
   assert.doesNotMatch(bootstrapSource, /bindClick\(doc, 'openSettingsButton', options\.onOpenSettings\)/);
   assert.match(bootstrapSource, /data-settings-section/);
@@ -210,6 +227,20 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(chromeSource, /\.request-tab-method\.entity-runner/);
   assert.match(chromeSource, /\.tree-badge\.entity-collection/);
   assert.match(chromeSource, /\.tree-badge\.entity-performance/);
+  assert.match(chromeSource, /\.tree-row\s*\{/);
+  assert.match(chromeSource, /\.tree-disclosure\s*,\s*\.tree-disclosure-placeholder/);
+  assert.match(rendererSource, /function treeDisclosureButton\(payload, options = \{\}\)/);
+  assert.match(rendererSource, /button\.setAttribute\('aria-expanded'/);
+  assert.match(rendererSource, /function toggleCollectionTreeNode\(kind, id\)/);
+  assert.match(rendererSource, /function expandCollectionTreePath\(collection, folderId = null, options = \{\}\)/);
+  assert.match(rendererSource, /function revealOpenRequestTabInCollectionTree\(tab\)/);
+  assert.match(rendererSource, /expandCollectionTreePath\(collection, found\.folder\?\.id \|\| null\)/);
+  assert.match(rendererSource, /function revealOpenFolderTabInCollectionTree\(tab\)/);
+  assert.match(rendererSource, /expandCollectionTreePath\(collection, tab\.folderId, \{ includeTargetFolder: false \}\)/);
+  assert.match(rendererSource, /setCollectionTreeItemCollapsed\(state, 'collection', collection\.id, false\);\s*activeRunnerRequestRunnerId = null;/);
+  assert.match(rendererSource, /setCollectionTreeItemCollapsed\(state, 'folder', folder\.id, false\);\s*activeRunnerRequestRunnerId = null;/);
+  assert.match(rendererSource, /if \(!collapsed\) \{\s*appendSidebarTreeRows\(wrapper, sidebarTreeChildRows\(collection, collection, null\)/);
+  assert.match(rendererSource, /if \(!collapsed\) \{\s*appendSidebarTreeRows\(wrapper, sidebarTreeChildRows\(folder, collection, folder\)/);
   assert.doesNotMatch(overlaysSource, /--mono-font/);
   assert.match(overlaysSource, /csv-variables-modal textarea[\s\S]*font-family:\s*var\(--mono\)/);
   assert.match(overlaysSource, /csv-variables-modal textarea[\s\S]*font-size:\s*var\(--editor-font-size\)/);
@@ -306,6 +337,35 @@ test('renderer bootstrap binds auth input and modal draft confirmation events', 
     'runner-1',
     '{"collectionId":"collection-2","folderId":"folder-1"}',
     { type: 'request', collectionId: 'collection-1', requestId: 'request-1' }
+  ]);
+});
+
+test('renderer bootstrap binds request-local TLS setting controls', () => {
+  const calls = [];
+  const elements = new Map([
+    ['requestSslCertificateVerificationInput', createElement({ tagName: 'INPUT' })],
+    ['contextMenu', createElement()],
+    ['modalBackdrop', createElement()]
+  ]);
+
+  bindUi({
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} },
+    onRequestTlsSettingsChange: () => calls.push('request-tls')
+  });
+
+  elements.get('requestSslCertificateVerificationInput').dispatch('change');
+
+  assert.deepEqual(calls, [
+    'request-tls'
   ]);
 });
 
@@ -483,6 +543,7 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
     'modals',
     'updates',
     'scripts',
+    'certificates',
     'vault',
     'packages',
     'files',
@@ -509,6 +570,19 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
     ['saveOnForceCloseInput', createElement({ tagName: 'INPUT' })],
     ['closeModalsOnBackdropClickInput', createElement({ tagName: 'INPUT' })],
     ['includePrereleasesInput', createElement({ tagName: 'INPUT' })],
+    ['sslCertificateVerificationInput', createElement({ tagName: 'INPUT' })],
+    ['caCertificatePathInput', createElement({ tagName: 'INPUT' })],
+    ['chooseCaCertificateButton', createElement()],
+    ['clearCaCertificateButton', createElement()],
+    ['addClientCertificateButton', createElement()],
+    ['closeClientCertificateModalButton', createElement()],
+    ['cancelClientCertificateModalButton', createElement()],
+    ['saveClientCertificateModalButton', createElement()],
+    ['chooseClientCertificateCertPathButton', createElement()],
+    ['chooseClientCertificateKeyPathButton', createElement()],
+    ['chooseClientCertificatePfxPathButton', createElement()],
+    ['toggleClientCertificatePassphraseButton', createElement()],
+    ['clientCertificateFormatSelect', createElement({ tagName: 'SELECT' })],
     ['trustedScriptSendRequestInput', createElement({ tagName: 'INPUT' })],
     ['trustedScriptCookiesInput', createElement({ tagName: 'INPUT' })],
     ['trustedScriptVaultInput', createElement({ tagName: 'INPUT' })],
@@ -544,6 +618,16 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
     onSaveOnForceCloseChange: () => calls.push('save-on-force-close'),
     onCloseModalsOnBackdropClickChange: () => calls.push('close-modals-on-backdrop'),
     onIncludePrereleasesChange: () => calls.push('include-prereleases'),
+    onTlsSettingsChange: () => calls.push('tls-settings'),
+    onChooseCaCertificate: () => calls.push('choose-ca'),
+    onClearCaCertificate: () => calls.push('clear-ca'),
+    onAddClientCertificate: () => calls.push('add-client-cert'),
+    onConfirmClientCertificateModal: () => calls.push('confirm-client-cert'),
+    onChooseClientCertificateCertPath: () => calls.push('choose-client-cert-crt'),
+    onChooseClientCertificateKeyPath: () => calls.push('choose-client-cert-key'),
+    onChooseClientCertificatePfxPath: () => calls.push('choose-client-cert-pfx'),
+    onClientCertificateFormatChange: () => calls.push('client-cert-format'),
+    onToggleClientCertificatePassphraseVisibility: () => calls.push('toggle-client-cert-passphrase'),
     onTrustedScriptCapabilityChange: () => calls.push('script-capability'),
     onResolveActiveModal: (value) => calls.push(`resolve:${value}`)
   });
@@ -561,10 +645,23 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
   elements.get('saveOnForceCloseInput').dispatch('change');
   settingsButtons.find((button) => button.dataset.settingsSection === 'modals').dispatch('click');
   elements.get('closeModalsOnBackdropClickInput').dispatch('change');
-  for (const section of ['updates', 'scripts', 'vault', 'packages', 'files', 'diagnostics', 'appearance']) {
+  for (const section of ['updates', 'scripts', 'certificates', 'vault', 'packages', 'files', 'diagnostics', 'appearance']) {
     settingsButtons.find((button) => button.dataset.settingsSection === section).dispatch('click');
   }
   elements.get('includePrereleasesInput').dispatch('change');
+  elements.get('sslCertificateVerificationInput').dispatch('change');
+  elements.get('caCertificatePathInput').dispatch('change');
+  elements.get('chooseCaCertificateButton').dispatch('click');
+  elements.get('clearCaCertificateButton').dispatch('click');
+  elements.get('addClientCertificateButton').dispatch('click');
+  elements.get('clientCertificateFormatSelect').dispatch('change');
+  elements.get('chooseClientCertificateCertPathButton').dispatch('click');
+  elements.get('chooseClientCertificateKeyPathButton').dispatch('click');
+  elements.get('chooseClientCertificatePfxPathButton').dispatch('click');
+  elements.get('toggleClientCertificatePassphraseButton').dispatch('click');
+  elements.get('saveClientCertificateModalButton').dispatch('click');
+  elements.get('cancelClientCertificateModalButton').dispatch('click');
+  elements.get('closeClientCertificateModalButton').dispatch('click');
   elements.get('trustedScriptSendRequestInput').dispatch('change');
   elements.get('trustedScriptCookiesInput').dispatch('change');
   elements.get('trustedScriptVaultInput').dispatch('change');
@@ -587,12 +684,26 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
     'close-modals-on-backdrop',
     'section:updates',
     'section:scripts',
+    'section:certificates',
     'section:vault',
     'section:packages',
     'section:files',
     'section:diagnostics',
     'section:appearance',
     'include-prereleases',
+    'tls-settings',
+    'tls-settings',
+    'choose-ca',
+    'clear-ca',
+    'add-client-cert',
+    'client-cert-format',
+    'choose-client-cert-crt',
+    'choose-client-cert-key',
+    'choose-client-cert-pfx',
+    'toggle-client-cert-passphrase',
+    'confirm-client-cert',
+    'resolve:null',
+    'resolve:null',
     'script-capability',
     'script-capability',
     'script-capability',
@@ -747,6 +858,10 @@ test('renderer bootstrap binds performance creation import export run and config
     'runPerformanceTestButton',
     'cancelPerformanceTestButton',
     'exportPerformanceTestButton',
+    'exportPerformanceResultsButton',
+    'exportPerformanceResultsMenu',
+    'exportPerformanceResultHtmlButton',
+    'exportPerformanceResultJsonButton',
     'exportPerformanceResultCsvButton',
     'importPerformanceRequestButton',
     'calibratePerformanceButton',
@@ -760,6 +875,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'performanceUrlInput',
     'performanceBodyTypeSelect',
     'performanceBodyRawFormatSelect',
+    'performanceBeautifyBodyButton',
     'performanceBodyInput',
     'performanceGraphqlQueryInput',
     'performanceGraphqlVariablesInput',
@@ -797,10 +913,10 @@ test('renderer bootstrap binds performance creation import export run and config
           return performanceSafetyControls;
         }
         if (selector === '.toolbar-menu') {
-          return [elements.get('performanceCsvVariablesMenu')];
+          return [elements.get('performanceCsvVariablesMenu'), elements.get('exportPerformanceResultsMenu')];
         }
         if (selector === '.menu-trigger') {
-          return [elements.get('performanceCsvVariablesButton')];
+          return [elements.get('performanceCsvVariablesButton'), elements.get('exportPerformanceResultsButton')];
         }
         if (selector === '.tab' || selector === '.tab[data-tab-group="performance"]') {
           return [performanceTab];
@@ -819,6 +935,8 @@ test('renderer bootstrap binds performance creation import export run and config
     onDeletePerformanceTest: () => calls.push('delete'),
     onRunPerformanceTest: () => calls.push('run'),
     onCancelPerformanceTest: () => calls.push('cancel'),
+    onExportPerformanceResultHtml: () => calls.push('export-result-html'),
+    onExportPerformanceResultJson: () => calls.push('export-result-json'),
     onExportPerformanceResultCsv: () => calls.push('export-result-csv'),
     onImportPerformanceRequest: () => calls.push('import-request'),
     onAddPerformanceParam: () => calls.push('add-param'),
@@ -831,6 +949,7 @@ test('renderer bootstrap binds performance creation import export run and config
     onPerformanceConfigChange: () => calls.push('config'),
     onPerformanceRequestChange: () => calls.push('request'),
     onPerformanceBodyTypeChange: () => calls.push('body-type'),
+    onBeautifyPerformanceBody: () => calls.push('beautify-performance'),
     onAddPerformanceFormDataBodyRow: () => calls.push('add-form-data'),
     onAddPerformanceUrlencodedBodyRow: () => calls.push('add-urlencoded'),
     onActivateTab: (group, tab) => calls.push(`${group}:${tab}`)
@@ -849,6 +968,9 @@ test('renderer bootstrap binds performance creation import export run and config
     'runPerformanceTestButton',
     'cancelPerformanceTestButton',
     'exportPerformanceTestButton',
+    'exportPerformanceResultsButton',
+    'exportPerformanceResultHtmlButton',
+    'exportPerformanceResultJsonButton',
     'exportPerformanceResultCsvButton',
     'importPerformanceRequestButton',
     'addPerformanceParamButton',
@@ -858,6 +980,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'clearExpiredPerformanceCookiesButton',
     'calibratePerformanceButton',
     'closePerformanceCalibrationModalButton',
+    'performanceBeautifyBodyButton',
     'addPerformanceFormDataBodyRowButton',
     'addPerformanceUrlencodedBodyRowButton'
   ]) {
@@ -882,7 +1005,7 @@ test('renderer bootstrap binds performance creation import export run and config
   elements.get('performanceDocsInput').dispatch('input');
   elements.get('performanceBinaryBodySourceInput').dispatch('input');
 
-  assert.deepEqual(calls.slice(0, 20), [
+  assert.deepEqual(calls.slice(0, 22), [
     'new',
     'new',
     'import-test',
@@ -894,6 +1017,8 @@ test('renderer bootstrap binds performance creation import export run and config
     'run',
     'cancel',
     'export-test',
+    'export-result-html',
+    'export-result-json',
     'export-result-csv',
     'import-request',
     'add-param',
@@ -905,11 +1030,70 @@ test('renderer bootstrap binds performance creation import export run and config
     'close-calibration'
   ]);
   assert.equal(calls.filter((call) => call === 'config').length, 11);
+  assert.ok(calls.includes('beautify-performance'));
   assert.ok(calls.includes('add-form-data'));
   assert.ok(calls.includes('add-urlencoded'));
   assert.equal(calls.filter((call) => call === 'request').length, 8);
   assert.equal(calls.filter((call) => call === 'body-type').length, 2);
   assert.ok(calls.includes('performance:spike'));
+});
+
+test('renderer bootstrap binds request body format and beautify controls', () => {
+  const calls = [];
+  const elements = new Map([
+    ['bodyTypeSelect', createElement({ tagName: 'SELECT' })],
+    ['bodyRawFormatSelect', createElement({ tagName: 'SELECT' })],
+    ['beautifyBodyButton', createElement()],
+    ['bodyInput', createElement({ tagName: 'TEXTAREA' })],
+    ['graphqlQueryInput', createElement({ tagName: 'TEXTAREA' })],
+    ['graphqlVariablesInput', createElement({ tagName: 'TEXTAREA' })],
+    ['graphqlOperationNameInput', createElement({ tagName: 'INPUT' })],
+    ['addFormDataBodyRowButton', createElement()],
+    ['addUrlencodedBodyRowButton', createElement()],
+    ['binaryBodySourceInput', createElement({ tagName: 'INPUT' })]
+  ]);
+
+  bindUi({
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} },
+    onBodyTypeChange: () => calls.push('body-type'),
+    onBeautifyBody: () => calls.push('beautify'),
+    onBodyInput: () => calls.push('body-input'),
+    onAddFormDataBodyRow: () => calls.push('form-data'),
+    onAddUrlencodedBodyRow: () => calls.push('urlencoded')
+  });
+
+  elements.get('bodyTypeSelect').dispatch('change');
+  elements.get('bodyRawFormatSelect').dispatch('change');
+  elements.get('beautifyBodyButton').dispatch('click');
+  elements.get('bodyInput').dispatch('input');
+  elements.get('graphqlQueryInput').dispatch('input');
+  elements.get('graphqlVariablesInput').dispatch('input');
+  elements.get('graphqlOperationNameInput').dispatch('input');
+  elements.get('addFormDataBodyRowButton').dispatch('click');
+  elements.get('addUrlencodedBodyRowButton').dispatch('click');
+  elements.get('binaryBodySourceInput').dispatch('input');
+
+  assert.deepEqual(calls, [
+    'body-type',
+    'body-type',
+    'beautify',
+    'body-input',
+    'body-input',
+    'body-input',
+    'body-input',
+    'form-data',
+    'urlencoded',
+    'body-input'
+  ]);
 });
 
 test('renderer bootstrap closes open toolbar menus on Tab without native dialogs', () => {
@@ -1052,16 +1236,26 @@ test('tree context menus close toolbar peers before opening', () => {
   }
 });
 
-test('renderer bootstrap binds pane save buttons', () => {
+test('renderer bootstrap binds markdown pane preview and save buttons', () => {
   const elements = new Map([
     ['saveRequestButton', createElement()],
+    ['docsPreview', createElement({ tagName: 'DIV' })],
+    ['docsSaveButton', createElement()],
+    ['docsCancelButton', createElement()],
     ['exportRequestPanelButton', createElement()],
     ['exportRequestPanelMenu', createElement()],
     ['exportRequestPanelPostmeterButton', createElement()],
     ['exportRequestPanelCurlButton', createElement()],
+    ['collectionDescriptionPreview', createElement({ tagName: 'DIV' })],
+    ['collectionDescriptionSaveButton', createElement()],
+    ['collectionDescriptionCancelButton', createElement()],
+    ['folderDescriptionPreview', createElement({ tagName: 'DIV' })],
+    ['folderDescriptionSaveButton', createElement()],
+    ['folderDescriptionCancelButton', createElement()],
     ['saveEnvironmentButton', createElement()]
   ]);
   const calls = [];
+  let previewKeyPrevented = false;
 
   bindUi({
     doc: {
@@ -1075,12 +1269,24 @@ test('renderer bootstrap binds pane save buttons', () => {
     },
     windowObject: { addEventListener() {} },
     onSaveRequest: () => calls.push('request'),
+    onEditRequestDocs: () => calls.push('docs-edit'),
+    onSaveRequestDocs: () => calls.push('docs-save'),
+    onCancelRequestDocs: () => calls.push('docs-cancel'),
     onExportCurrentRequest: () => calls.push('request-export'),
     onExportCurrentRequestCurl: () => calls.push('request-export-curl'),
+    onEditCollectionDescription: () => calls.push('collection-description-edit'),
+    onSaveCollectionDescription: () => calls.push('collection-description-save'),
+    onCancelCollectionDescription: () => calls.push('collection-description-cancel'),
+    onEditFolderDescription: () => calls.push('folder-description-edit'),
+    onSaveFolderDescription: () => calls.push('folder-description-save'),
+    onCancelFolderDescription: () => calls.push('folder-description-cancel'),
     onSaveEnvironment: () => calls.push('environment')
   });
 
   elements.get('saveRequestButton').dispatch('click');
+  elements.get('docsPreview').dispatch('click');
+  elements.get('docsSaveButton').dispatch('click');
+  elements.get('docsCancelButton').dispatch('click');
   elements.get('exportRequestPanelButton').dispatch('click');
   assert.equal(elements.get('exportRequestPanelMenu').hidden, false);
   elements.get('exportRequestPanelPostmeterButton').dispatch('click');
@@ -1088,9 +1294,36 @@ test('renderer bootstrap binds pane save buttons', () => {
   elements.get('exportRequestPanelButton').dispatch('click');
   assert.equal(elements.get('exportRequestPanelMenu').hidden, false);
   elements.get('exportRequestPanelCurlButton').dispatch('click');
+  elements.get('collectionDescriptionPreview').dispatch('keydown', {
+    key: 'Enter',
+    preventDefault() {
+      previewKeyPrevented = true;
+    }
+  });
+  elements.get('collectionDescriptionSaveButton').dispatch('click');
+  elements.get('collectionDescriptionCancelButton').dispatch('click');
+  elements.get('folderDescriptionPreview').dispatch('click');
+  elements.get('folderDescriptionSaveButton').dispatch('click');
+  elements.get('folderDescriptionCancelButton').dispatch('click');
   elements.get('saveEnvironmentButton').dispatch('click');
 
-  assert.deepEqual(calls, ['request', 'request-export', 'request-export-curl', 'environment']);
+  assert.equal(previewKeyPrevented, true);
+
+  assert.deepEqual(calls, [
+    'request',
+    'docs-edit',
+    'docs-save',
+    'docs-cancel',
+    'request-export',
+    'request-export-curl',
+    'collection-description-edit',
+    'collection-description-save',
+    'collection-description-cancel',
+    'folder-description-edit',
+    'folder-description-save',
+    'folder-description-cancel',
+    'environment'
+  ]);
 });
 
 test('renderer bootstrap binds request environment and runner import/export menu actions', () => {
@@ -1100,7 +1333,10 @@ test('renderer bootstrap binds request environment and runner import/export menu
     ['importRunnerButton', 'import-runner', 'onImportRunner'],
     ['exportEnvironmentButton', 'export-environment', 'onExportEnvironment'],
     ['exportPostmanEnvironmentButton', 'export-postman-environment', 'onExportPostmanEnvironment'],
-    ['exportRunnerDefinitionButton', 'export-runner', 'onExportRunnerDefinition']
+    ['exportRunnerDefinitionButton', 'export-runner', 'onExportRunnerDefinition'],
+    ['exportRunnerHtmlButton', 'export-runner-html', 'onExportRunnerHtml'],
+    ['exportRunnerJsonButton', 'export-runner-json', 'onExportRunnerJson'],
+    ['exportRunnerCsvButton', 'export-runner-csv', 'onExportRunnerCsv']
   ];
   const elements = new Map(controls.map(([id]) => [id, createElement()]));
   const calls = [];
@@ -1123,6 +1359,39 @@ test('renderer bootstrap binds request environment and runner import/export menu
   bindUi(options);
   for (const [id] of controls) {
     elements.get(id).dispatch('click');
+  }
+
+  assert.deepEqual(calls, controls.map(([, label]) => label));
+});
+
+test('renderer bootstrap binds HTML report option modal controls', () => {
+  const controls = [
+    ['htmlReportIncludeResultsInput', 'include-results', 'onHtmlReportIncludeResultsChange', 'change'],
+    ['htmlReportIncludeDetailsInput', 'include-details', 'onHtmlReportIncludeDetailsChange', 'change'],
+    ['cancelHtmlReportOptionsButton', 'cancel', 'onCancelHtmlReportOptions', 'click'],
+    ['confirmHtmlReportOptionsButton', 'confirm', 'onConfirmHtmlReportOptions', 'click']
+  ];
+  const elements = new Map(controls.map(([id]) => [id, createElement({ tagName: id.endsWith('Input') ? 'INPUT' : 'BUTTON' })]));
+  const calls = [];
+  const options = {
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} }
+  };
+  for (const [, label, optionName] of controls) {
+    options[optionName] = () => calls.push(label);
+  }
+
+  bindUi(options);
+  for (const [id, , , eventName] of controls) {
+    elements.get(id).dispatch(eventName);
   }
 
   assert.deepEqual(calls, controls.map(([, label]) => label));
@@ -1338,6 +1607,47 @@ test('renderer clears and scopes vault metadata to the active workspace context'
   assert.match(rendererSource, /lastVaultMetadataWorkspaceId !== \(activeWorkspaceId \|\| ''\)/);
 });
 
+test('renderer commits client-certificate passphrase secret changes only after settings saves', () => {
+  const rendererSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/renderer.js'), 'utf8');
+  assert.match(rendererSource, /const certificateId = existing\?\.id \|\| \(crypto\.randomUUID/);
+  assert.match(rendererSource, /let plainPassphrase = existing\?\.passphrase \|\| ''/);
+  assert.match(rendererSource, /passphraseSecretKey = await bindClientCertificatePassphrase\(certificateId, values\.passphrase\)/);
+  assert.match(rendererSource, /if \(!saved && passphraseSecretKey && passphraseSecretKey !== previousSecretKey\) \{\s*await unsetClientCertificatePassphraseSecret\(passphraseSecretKey\);/);
+  assert.match(rendererSource, /if \(saved && previousSecretKey && previousSecretKey !== passphraseSecretKey\) \{\s*await unsetClientCertificatePassphraseSecret\(previousSecretKey\);/);
+
+  const removeStart = rendererSource.indexOf('async function removeClientCertificate');
+  const removeSource = rendererSource.slice(removeStart, rendererSource.indexOf('async function setDiagnosticsSettingsFromInputs', removeStart));
+  assert.ok(removeSource.indexOf('const saved = await saveWorkspaceSettingsWithRollback') >= 0);
+  assert.ok(
+    removeSource.indexOf('const saved = await saveWorkspaceSettingsWithRollback') < removeSource.indexOf('await unsetClientCertificatePassphraseSecret(certificate.passphraseSecretKey)'),
+    'certificate removal should unset the vault secret only after the settings save succeeds'
+  );
+});
+
+test('renderer treats canceled certificate file pickers as cancellation', () => {
+  const rendererSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/renderer.js'), 'utf8');
+  const workspaceStart = rendererSource.indexOf('async function chooseWorkspaceCaCertificate');
+  const workspaceSource = rendererSource.slice(workspaceStart, rendererSource.indexOf('async function clearWorkspaceCaCertificate', workspaceStart));
+
+  assert.match(workspaceSource, /if \(!selection\?\.path\) \{\s*return;\s*\}/);
+  assert.doesNotMatch(workspaceSource, /promptTextInput/);
+  assert.doesNotMatch(rendererSource, /chooseActiveRequestCaCertificate/);
+  assert.doesNotMatch(rendererSource, /requestCaCertificatePathInput/);
+});
+
+test('renderer exposes Network response diagnostics for TLS results', () => {
+  const rendererSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/renderer.js'), 'utf8');
+  const workflowSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/rendererWorkflows.js'), 'utf8');
+  const indexHtml = fs.readFileSync(path.join(__dirname, '../../src/renderer/index.html'), 'utf8');
+
+  assert.match(indexHtml, /id="resultsNetworkTabButton"[\s\S]*aria-controls="responseNetworkTab"/);
+  assert.match(indexHtml, /id="responseNetwork"[^>]*aria-label="Network and TLS diagnostics"/);
+  assert.match(rendererSource, /\$\('responseNetwork'\)\.value = formatResponseNetwork\(response\)/);
+  assert.match(rendererSource, /function formatResponseNetwork\(response\)/);
+  assert.match(rendererSource, /appendRunnerTransportDetails\(details, item\)/);
+  assert.match(workflowSource, /\$\('responseNetwork'\)|element\('responseNetwork'\)/);
+});
+
 test('renderer supplies explicit collection export format handlers', () => {
   const rendererSource = fs.readFileSync(path.join(__dirname, '../../src/renderer/renderer.js'), 'utf8');
   for (const [optionName, format] of [
@@ -1460,7 +1770,7 @@ function createElement({ tagName = 'BUTTON', value = '' } = {}) {
       for (const handler of listeners.get(name) || []) {
         handler({
           stopPropagation() {},
-          preventDefault() {},
+          preventDefault: event.preventDefault || (() => {}),
           target: this,
           currentTarget: this,
           key: event.key

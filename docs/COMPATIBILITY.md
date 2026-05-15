@@ -18,7 +18,7 @@ Supported:
 - Environment import/export, including native PostMeter environment JSON and Postman environment JSON import/export.
 - Runner definition import/export for workspace-owned desktop runners.
 - Native Performance-test import/export preserving each saved test's request copy, source metadata, selected environment ID, environment mutation policy, execution policy, safety limits, result-retention metadata, and export metadata.
-- Collections, folders, requests, request docs, scripts, auth metadata, environments, globals, history, cookies, variables, certificates, mock scripts, visualizer binding metadata, GraphQL/gRPC/protocol metadata, and file-binding metadata. Local app preferences are kept in `settings.json`; workspace-local sandbox/package/vault/diagnostics settings are kept in managed workspace `localsettings` and are not included in native workspace exports.
+- Collections, folders, requests, request docs, scripts, auth metadata, environments, globals, history, cookies, variables, certificates, mock scripts, visualizer binding metadata, GraphQL/gRPC/protocol metadata, and file-binding metadata. Local app preferences are kept in `settings.json`; workspace-local sandbox/package/vault/diagnostics/TLS trust settings are kept in managed workspace `localsettings` and are not included in native workspace exports.
 
 Planned:
 
@@ -50,8 +50,9 @@ Supported on import:
 - Raw Postman `request.cookie` objects are preserved for source-format export, including duplicate names across paths/domains, disabled cookies, unknown/vendor fields, original expiry field variants, host-only flags, SameSite/Priority/Partitioned attributes, extensions, and prefix cookie names.
 - The runtime cookie jar applies IDNA hostname normalization, public-suffix rejection for response `Domain` attributes, host/path/secure matching, case-sensitive cookie names, default path derivation, expiry and deletion handling, browser-style path-length then creation-order header sorting, Secure requirements for `SameSite=None` and `Partitioned`, and response-cookie storage across followed redirect hops.
 - Request/item variables as request-local variables.
-- Collection-level certificates where host/path matching can be represented safely and does not overwrite explicit request auth.
+- Collection-level certificates with host/path matching and host/port metadata for Postman-style client-certificate matching. Matching requests without explicit auth also get a request auth binding for UI clarity, while requests with their own auth still use collection certificates through runtime matching.
 - Protocol profiles, GraphQL/gRPC definitions, auth inheritance metadata, package references, cookie allowlists, vault metadata, visualizer assets, mock state metadata, file/binary body references, request docs, and certificates are preserved in bounded Postman compatibility metadata for round-trip export and binding workflows.
+- Postman-style TLS behavior is supported at runtime: global SSL certificate verification, request-local verification overrides, workspace-local custom PEM CA bundles, managed HTTPS client certificates matched by host and optional port with wildcard subdomain support, and Network response diagnostics for TLS protocol, cipher, peer certificate, authorization, custom CA use, verification disablement, and matched client-certificate binding.
 
 Supported on export:
 
@@ -63,7 +64,7 @@ Known gaps:
 - OAuth 2.0 auth import maps common token/client fields, but not every Postman grant/client-auth option.
 - Postman response examples from `item.response` are not imported into requests.
 - Cookie jar import is best-effort when cookie metadata is only available as a request header. Disabled imported Postman cookies are preserved for Postman export but are not promoted to active Cookie headers or the local cookie jar, and unknown raw cookie fields are preserved for export rather than interpreted by PostMeter's jar model.
-- Collection certificates are imported into PostMeter's single request-auth model only where safe.
+- Collection certificates are preserved for runtime matching; they are also imported into PostMeter's request-auth model only where that does not overwrite explicit request auth.
 - The default script import profile is claim-gated for Postman sandbox parity by `npm run postman:parity:claim`; stricter local Settings choices can still disable brokered capabilities for locked-down environments.
 
 ## OpenAPI
@@ -91,7 +92,7 @@ Supported:
 
 - Common curl command import for URL, method, headers, data flags, cookies, multipart-ish form flags, and proxy/retry/TLS metadata.
 - Basic-auth flags, user-agent/referer headers, repeated headers, redirect/compressed/insecure flags, `--url-query`, `-G` query-data mode, repeated data flags, and binary/file upload intent are imported where representable.
-- Standalone request export and collection export to readable curl commands, including copyable request previews, PostMeter basic auth, and preserved redirect/compressed/insecure/binary metadata when present.
+- Standalone request export and collection export to readable curl commands, including copyable request previews, PostMeter basic auth, request-local `-k`/`--cacert` TLS settings where representable, and preserved redirect/compressed/insecure/binary metadata when present.
 - Generated collection curl scripts include the PostMeter collection name, per-request comments, and warning comments when scripts or other PostMeter-only request behavior cannot be represented in curl.
 
 Known gaps:

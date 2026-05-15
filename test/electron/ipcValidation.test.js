@@ -6,10 +6,12 @@ const {
   assertCollectionRunResultPayload,
   assertExternalUrlPayload,
   assertExportFormat,
+  assertHtmlReportOptionsPayload,
   assertFileOperationResultPayload,
   assertOAuthProgressPayload,
   assertOptionalEnvironmentPayload,
   assertPerformanceCalibrationResultPayload,
+  assertPerformanceExportFormat,
   assertPerformanceProgressPayload,
   assertPerformanceResultPayload,
   assertPerformanceTestPayload,
@@ -57,6 +59,7 @@ test('accepts structurally valid IPC payloads', () => {
     docs: 'Request docs',
     cookieJar: { enabled: true, storeResponses: true },
     autoHeaders: { sendPostMeterToken: true, showGeneratedHeaders: true },
+    settings: { sslCertificateVerification: false },
     auth: { type: 'bearer', token: 'secret' }
   }));
   assert.doesNotThrow(() => assertCollectionPayload({
@@ -170,9 +173,12 @@ test('accepts structurally valid IPC payloads', () => {
       requestDisplayName: 'Resolved Request',
       requestMethod: 'GET',
       requestUrl: 'https://example.test/resolved',
+      finalUrl: 'https://example.test/resolved',
       passed: true,
       responseBody: '{"ok":true}',
       responseBytes: 11,
+      timings: { tlsHandshakeMillis: 12, tls: { verificationDisabled: true } },
+      tls: { verificationDisabled: true, caCertificateConfigured: true },
       preRequestScriptResult: { passed: true, tests: [], logs: [] },
       testScriptResult: { passed: true, tests: [{ name: 'ok', passed: true }], logs: ['done'], visualizer: { html: '<h1>ok</h1>', template: '<h1>{{value}}</h1>' } },
       localVariables: [{ enabled: true, key: 'local', value: 'value' }]
@@ -613,6 +619,12 @@ test('accepts structurally valid IPC payloads', () => {
     expiresAt: new Date(60000).toISOString()
   }));
   assert.doesNotThrow(() => assertExportFormat('json'));
+  assert.doesNotThrow(() => assertExportFormat('html'));
+  assert.doesNotThrow(() => assertPerformanceExportFormat('html'));
+  assert.doesNotThrow(() => assertHtmlReportOptionsPayload({
+    includeRequestResults: false,
+    includeRequestDetails: false
+  }));
   assert.doesNotThrow(() => assertUpdateCheckOptionsPayload({ includePrereleases: true }));
   assert.doesNotThrow(() => assertExternalUrlPayload('https://github.com/StrangeQuark/PostMeter/releases'));
 });
@@ -628,6 +640,7 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', examples: [] }), /request.examples is no longer supported/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', cookieJar: { enabled: 'yes' } }), /request.cookieJar.enabled must be a boolean/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', autoHeaders: { sendPostMeterToken: 'yes' } }), /request.autoHeaders.sendPostMeterToken must be a boolean/);
+  assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', settings: { caCertificatePath: '/tmp/request-ca.pem' } }), /request.settings.caCertificatePath is not allowed/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', loadTestPolicy: { hostPolicies: [{ host: 42 }] } }), /request.loadTestPolicy is no longer supported/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', auth: { type: 'oauth2', grantType: 'password' } }), /request.auth.grantType must be one of/);
   assert.throws(() => assertRequestPayload({ method: 'GET', queryParams: [], headers: [], bodyType: 'NONE', auth: { type: 'apiKey', location: 'body' } }), /request.auth.location must be one of/);
@@ -719,7 +732,10 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertWorkspaceFolderSavePayload({ collectionId: 'c1', folderId: 'f1', folder: { id: 'f1', name: 'Folder', variables: [{ enabled: true, key: 'x', value: [] }] } }), /payload\.folder\.variables\[0\]\.value must be a string/);
   assert.throws(() => assertRuntimeId({ bad: true }), /id must be a string/);
   assert.throws(() => assertExportFormat('xml'), /format must be one of/);
+  assert.throws(() => assertHtmlReportOptionsPayload({ includeRequestResults: 'no' }), /includeRequestResults must be a boolean/);
+  assert.throws(() => assertHtmlReportOptionsPayload({ includeRequestResults: true, rawJson: true }), /rawJson is not allowed/);
   assert.throws(() => assertCollectionExportFormat('bad'), /format must be one of/);
+  assert.throws(() => assertPerformanceExportFormat('xml'), /format must be one of/);
 });
 
 test('request and workspace IPC validators follow shared entity schema arrays', () => {

@@ -1477,6 +1477,18 @@ test('workspace IPC saves only workspace settings through targeted settings save
       requestResponseLogging: { urls: true }
     },
     editor: { lineNumbers: false, variableTooltipHints: false },
+    request: {
+      sslCertificateVerification: false,
+      caCertificatePath: '/tmp/settings-ca.pem',
+      clientCertificates: [{
+        id: 'settings-cert',
+        name: 'Settings Cert',
+        enabled: true,
+        host: 'api.example.test',
+        certPath: '/tmp/client.crt',
+        keyPath: '/tmp/client.key'
+      }]
+    },
     updates: { includePrereleases: true }
   });
 
@@ -1486,11 +1498,16 @@ test('workspace IPC saves only workspace settings through targeted settings save
   assert.equal(savedSettings.diagnostics.requestResponseLogging.bodies, false);
   assert.equal(savedSettings.editor.lineNumbers, false);
   assert.equal(savedSettings.editor.variableTooltipHints, false);
+  assert.equal(savedSettings.request.sslCertificateVerification, false);
+  assert.equal(savedSettings.request.caCertificatePath, '/tmp/settings-ca.pem');
+  assert.equal(savedSettings.request.clientCertificates[0].id, 'settings-cert');
   assert.equal(savedSettings.updates.includePrereleases, true);
   assert.equal(appliedWorkspace.collections[0].id, 'collection-1');
   assert.equal(appliedWorkspace.environments[0].id, 'environment-1');
   assert.deepEqual(appliedWorkspace.localsettings, savedLocalSettings);
   assert.equal(appliedWorkspace.localsettings.diagnostics.requestResponseLogging.urls, true);
+  assert.equal(appliedWorkspace.localsettings.request.sslCertificateVerification, false);
+  assert.equal(appliedWorkspace.localsettings.request.caCertificatePath, '/tmp/settings-ca.pem');
   assert.equal(saveCalls, 1);
   assert.equal(refreshCalls, 1);
   assert.deepEqual(result, {
