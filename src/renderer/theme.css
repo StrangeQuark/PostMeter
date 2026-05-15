@@ -50,6 +50,12 @@
   --modal-shadow: 0 18px 45px rgb(17 24 39 / 18%);
   --pre-bg: #222222;
   --pre-text: #f2f2ef;
+  --graph-plot: #ffffff;
+  --graph-grid: #d9d9d4;
+  --graph-axis: #a9aba5;
+  --graph-label: #626a73;
+  --graph-title: #1f2328;
+  --graph-marker-stroke: #ffffff;
   --shadow: 0 14px 34px rgba(31, 35, 40, 0.16);
   --ui-font: Inter, "Segoe UI", Arial, sans-serif;
   --ui-font-size: 13px;
@@ -127,6 +133,12 @@
   --modal-shadow: 0 18px 45px rgb(0 0 0 / 52%);
   --pre-bg: #0c0d0e;
   --pre-text: #efede7;
+  --graph-plot: #050607;
+  --graph-grid: #30363d;
+  --graph-axis: #59616a;
+  --graph-label: #aab6c6;
+  --graph-title: #e3e8ef;
+  --graph-marker-stroke: #050607;
   --shadow: 0 14px 34px rgb(0 0 0 / 45%);
 }
 
@@ -183,6 +195,12 @@
     --modal-shadow: 0 18px 45px rgb(0 0 0 / 52%);
     --pre-bg: #0c0d0e;
     --pre-text: #efede7;
+    --graph-plot: #050607;
+    --graph-grid: #30363d;
+    --graph-axis: #59616a;
+    --graph-label: #aab6c6;
+    --graph-title: #e3e8ef;
+    --graph-marker-stroke: #050607;
     --shadow: 0 14px 34px rgb(0 0 0 / 45%);
   }
 }
@@ -228,6 +246,12 @@
     --modal-shadow: none;
     --pre-bg: Canvas;
     --pre-text: CanvasText;
+    --graph-plot: Canvas;
+    --graph-grid: ButtonBorder;
+    --graph-axis: ButtonText;
+    --graph-label: CanvasText;
+    --graph-title: CanvasText;
+    --graph-marker-stroke: Canvas;
     --shadow: none;
   }
 

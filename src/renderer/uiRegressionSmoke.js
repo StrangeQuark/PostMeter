@@ -3510,6 +3510,11 @@
     const originalSelectedWorkspaceId = selectedWorkspaceId;
     const originalSidebarPanel = activeSidebarPanel;
     const originalMainPanel = activeMainPanel;
+    const originalLastPerformanceResult = lastPerformanceResult;
+    const originalLastPerformanceResultTestId = lastPerformanceResultTestId;
+    const originalSelectedPerformanceResultIndex = selectedPerformanceResultIndex;
+    const originalPerformanceExecutionStatusFilter = performanceExecutionStatusFilter;
+    const originalPerformanceExecutionPage = performanceExecutionPage;
     const originalCollectionTabs = structuredClone(openCollectionTabs);
     const originalRequestTabs = structuredClone(openRequestTabs);
     const originalEnvironmentTabs = structuredClone(openEnvironmentTabs);
@@ -3969,8 +3974,9 @@
       );
       assertUiSmoke($('performanceOutputResultsTabButton')?.textContent === 'Results', 'Performance output should expose a Results tab.');
       assertUiSmoke($('performanceOutputRequestsTabButton')?.textContent === 'Requests', 'Performance output should expose a Requests tab.');
-      assertUiSmoke($('performanceOutputGraphsTabButton')?.textContent === 'Graphs', 'Performance output should expose a Graphs tab placeholder.');
+      assertUiSmoke($('performanceOutputGraphsTabButton')?.textContent === 'Graphs', 'Performance output should expose a Graphs tab.');
       lastPerformanceResult = {
+        type: 'latency',
         completedRequests: 1000,
         totalRequests: 1000,
         successfulRequests: 799,
@@ -4078,8 +4084,129 @@
       assertUiSmoke(performanceLastPageRows[0].textContent.includes('#901'), 'Performance last page should start at sample 901.');
       $('performanceExecutionPagination').querySelector('[data-execution-page-action="first"]').click();
       $('performanceOutputGraphsTabButton').click();
-      assertUiSmoke($('performanceOutputGraphsTab').classList.contains('active'), 'Performance Graphs tab should switch to its placeholder panel.');
-      assertUiSmoke($('performanceOutputGraphsTab').textContent.includes('No graphs yet.'), 'Performance Graphs placeholder should render.');
+      assertUiSmoke($('performanceOutputGraphsTab').classList.contains('active'), 'Performance Graphs tab should switch to the visualizations panel.');
+      await waitForUiSmoke(
+        () => $('performanceOutputGraphsTab').querySelectorAll('.performance-chart-card').length === 3,
+        'Performance Graphs tab should render the focused latency graph set.',
+        3000,
+        global
+      );
+      assertUiSmoke(
+        $('performanceOutputGraphsTab').querySelectorAll('.performance-chart-card').length === 3,
+        'Performance Graphs tab should render the focused latency graph set.'
+      );
+      assertUiSmoke(
+        $('performanceOutputGraphsTab').querySelectorAll('.performance-graph-selector-button').length === 3,
+        'Performance Graphs tab should render graph selector buttons.'
+      );
+      assertUiSmoke($('performanceOutputGraphsTab').textContent.includes('Latency Test'), 'Performance Graphs should render latency-specific charts for latency runs.');
+      assertUiSmoke($('performanceOutputGraphsTab').textContent.includes('Codes over time'), 'Performance Graphs should include the response-code timeline graph.');
+      assertUiSmoke($('performanceOutputGraphsTab').querySelector('[data-performance-chart="latency-trend"] svg'), 'Performance Graphs should render SVG trend charts.');
+      const codesButton = $('performanceOutputGraphsTab').querySelector('[data-performance-graph-select="codes-over-time"]');
+      assertUiSmoke(codesButton, 'Performance Graphs should expose the codes-over-time selector.');
+      codesButton.click();
+      assertUiSmoke(codesButton.getAttribute('aria-selected') === 'true', 'Performance Graphs selector should mark the selected graph.');
+      assertUiSmoke($('performanceOutputGraphsTab').querySelector('[data-performance-chart="codes-over-time"] svg'), 'Performance Graphs should render the codes-over-time SVG graph.');
+      assertUiSmoke(!$('performanceOutputGraphsTab').querySelector('[data-performance-chart="codes-over-time"]').hidden, 'Selected Performance graph should be visible.');
+      const performanceCodesLegendText = $('performanceOutputGraphsTab').querySelector('[data-performance-chart="codes-over-time"] .performance-chart-legend')?.textContent || '';
+      assertUiSmoke(performanceCodesLegendText.includes('200 (799)'), 'Codes over time legend should include total 200 response count.');
+      assertUiSmoke(performanceCodesLegendText.includes('ERR (1)'), 'Codes over time legend should include transport error count.');
+      const codesAxisLabels = Array.from($('performanceOutputGraphsTab').querySelectorAll('[data-performance-chart="codes-over-time"] .performance-svg-label')).map((label) => label.textContent.trim());
+      assertUiSmoke(codesAxisLabels.includes('600'), 'Codes over time graph should use a fixed 0-600 status-code axis.');
+      if (window.matchMedia?.('(forced-colors: active)')?.matches !== true) {
+        const previousTheme = document.documentElement.dataset.theme || 'system';
+        applyThemePreference('light');
+        await nextPaint();
+        const lightGraphPlot = getComputedStyle(document.documentElement).getPropertyValue('--graph-plot').trim();
+        applyThemePreference('dark');
+        await nextPaint();
+        const darkGraphPlot = getComputedStyle(document.documentElement).getPropertyValue('--graph-plot').trim();
+        applyThemePreference(previousTheme);
+        await nextPaint();
+        assertUiSmoke(lightGraphPlot !== darkGraphPlot, 'Performance graph plot color should change between light and dark themes.');
+      }
+
+      const expandedGraphOffsets = performanceGraphPageOffsets(1000, PERFORMANCE_GRAPH_PAGE_LIMIT, PERFORMANCE_GRAPH_SAMPLE_LIMIT);
+      assertUiSmoke(expandedGraphOffsets.includes(800), 'Store-backed graph sampling should include pages beyond the first result page.');
+      const storedGraphSamples = Array.from({ length: 1000 }, (_value, index) => {
+        const stage = Math.floor(index / 100) + 1;
+        const isError = index === 850;
+        const isHttpFailure = index === 851;
+        return {
+          resultIndex: index,
+          iteration: index + 1,
+          phase: `Stage ${stage}`,
+          stageName: `Stage ${stage}`,
+          stageIndex: stage,
+          stageConcurrency: stage,
+          startedAt: new Date(Date.UTC(2026, 0, 1, 0, 0, index)).toISOString(),
+          statusCode: isError ? 0 : isHttpFailure ? 429 : 200,
+          passed: !isError,
+          error: isError ? 'redirect loop' : '',
+          durationMillis: isError ? 0 : 20 + stage,
+          responseBytes: isError ? 0 : 256
+        };
+      });
+      const storedGraphData = performanceGraphData({
+        type: 'stress',
+        summary: { statusCodes: { 200: 998, 429: 1, 0: 1 } },
+        resultPage: { statusCounts: { 200: 998, 429: 1, ERR: 1 } }
+      }, storedGraphSamples);
+      const storedCodeTimeline = performanceCodeTimelineData(storedGraphData.samples, storedGraphData.statusCounts);
+      assertUiSmoke(
+        storedCodeTimeline.series.some((series) => series.status === 'ERR' && series.label === 'ERR (1)'),
+        'Codes over time data should include ERR response series and count.'
+      );
+      assertUiSmoke(
+        storedCodeTimeline.series.some((series) => series.status === '429' && series.label === '429 (1)'),
+        'Codes over time data should include HTTP failure status series and count.'
+      );
+      const denseStressSamples = Array.from({ length: 5000 }, (_value, index) => ({
+        resultIndex: index,
+        iteration: index + 1,
+        phase: 'stress',
+        stageName: 'Stress',
+        stageIndex: 1,
+        stageConcurrency: 10,
+        startedAt: new Date(Date.UTC(2026, 0, 1, 0, 0, 0, Math.floor((index / 4999) * 3000))).toISOString(),
+        statusCode: 200,
+        passed: true,
+        durationMillis: 1,
+        responseBytes: 128
+      }));
+      const denseStressData = performanceGraphData({
+        type: 'stress',
+        completedRequests: 5000,
+        successfulRequests: 5000,
+        failedRequests: 0,
+        summary: { statusCodes: { 200: 5000 } }
+      }, denseStressSamples);
+      const denseCodeTimeline = performanceCodeTimelineData(denseStressData.samples, denseStressData.statusCounts);
+      assertUiSmoke(
+        denseCodeTimeline.points.length >= 3 && denseCodeTimeline.points.length < 200,
+        'Stress Codes over time should aggregate dense short runs into visible time buckets.'
+      );
+      const denseCodesCard = performanceCodesOverTimeGraph(denseStressData);
+      assertUiSmoke(
+        denseCodesCard.querySelectorAll('.performance-svg-line-point.line-code-200').length >= 3,
+        'Stress Codes over time should render visible dots for dense short runs.'
+      );
+      const storedFailedChunk = storedGraphData.chunks.find((chunk) => chunk.failed > 0);
+      assertUiSmoke(
+        storedFailedChunk && storedFailedChunk.failedRequestsPerSecond > 0 && storedFailedChunk.successfulRequestsPerSecond >= 0,
+        'Performance RPS graph data should split failed and successful request rates.'
+      );
+      const storedRpsCard = performanceRpsTrendChart(storedGraphData);
+      assertUiSmoke(
+        storedRpsCard.querySelector('.performance-chart-legend')?.textContent.includes('Successful')
+          && storedRpsCard.querySelector('.performance-chart-legend')?.textContent.includes('Failed'),
+        'Performance RPS graph should expose separate success and failure series.'
+      );
+      const storedSaturationCard = performanceSaturationCurveChart(storedGraphData);
+      assertUiSmoke(
+        storedSaturationCard.querySelector('polyline.performance-svg-line'),
+        'Saturation curve should connect ordered concurrency points with a line.'
+      );
       $('performanceOutputResultsTabButton').click();
       const performancePanelRect = $('performanceMainPanel').getBoundingClientRect();
       const performanceRequestRect = $('performanceRequestSection').getBoundingClientRect();
@@ -5153,6 +5280,11 @@
       selectedWorkspaceId = originalSelectedWorkspaceId;
       activeSidebarPanel = originalSidebarPanel;
       activeMainPanel = originalMainPanel;
+      lastPerformanceResult = originalLastPerformanceResult;
+      lastPerformanceResultTestId = originalLastPerformanceResultTestId;
+      selectedPerformanceResultIndex = originalSelectedPerformanceResultIndex;
+      performanceExecutionStatusFilter = originalPerformanceExecutionStatusFilter;
+      performanceExecutionPage = originalPerformanceExecutionPage;
       openCollectionTabs = originalCollectionTabs;
       openRequestTabs = originalRequestTabs;
       openEnvironmentTabs = originalEnvironmentTabs;

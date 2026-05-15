@@ -58,6 +58,7 @@ function normalizeHtmlReportOptions(options = {}) {
   assertHtmlReportOptionsPayload(options);
   const includeRequestResults = options?.includeRequestResults !== false;
   return {
+    theme: options?.theme === 'dark' ? 'dark' : 'light',
     includeRequestResults,
     includeRequestDetails: includeRequestResults && options?.includeRequestDetails !== false
   };

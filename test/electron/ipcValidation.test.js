@@ -622,6 +622,7 @@ test('accepts structurally valid IPC payloads', () => {
   assert.doesNotThrow(() => assertExportFormat('html'));
   assert.doesNotThrow(() => assertPerformanceExportFormat('html'));
   assert.doesNotThrow(() => assertHtmlReportOptionsPayload({
+    theme: 'dark',
     includeRequestResults: false,
     includeRequestDetails: false
   }));
@@ -733,6 +734,7 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertRuntimeId({ bad: true }), /id must be a string/);
   assert.throws(() => assertExportFormat('xml'), /format must be one of/);
   assert.throws(() => assertHtmlReportOptionsPayload({ includeRequestResults: 'no' }), /includeRequestResults must be a boolean/);
+  assert.throws(() => assertHtmlReportOptionsPayload({ theme: 'system' }), /htmlReportOptions\.theme must be one of: light, dark/);
   assert.throws(() => assertHtmlReportOptionsPayload({ includeRequestResults: true, rawJson: true }), /rawJson is not allowed/);
   assert.throws(() => assertCollectionExportFormat('bad'), /format must be one of/);
   assert.throws(() => assertPerformanceExportFormat('xml'), /format must be one of/);

@@ -669,20 +669,30 @@ test('runtime IPC runs full endpoint diagnosis with SQLite paging detail and dia
     assert.doesNotMatch(html, /Appendix|Raw Run Data/);
     assert.match(html, /Endpoint Diagnosis/);
     assert.match(html, /Diagnostic Checks/);
-    assert.match(html, /Diagnosis phases/);
+    assert.match(html, /Latency by diagnostic phase/);
+    assert.match(html, /Throughput by diagnostic phase/);
+    assert.match(html, /Codes over time/);
+    assert.match(html, /Pass \/ fail/);
+    assert.match(html, /Status distribution/);
+    assert.match(html, /data-report-chart-tab="overview"/);
     assert.match(html, /\/diagnostic\?api_key=demo/);
     assert.match(html, /Body SHA-256/);
 
     const compactHtmlExported = await handlers.get('performance:exportResult')({}, result, 'html', {
+      theme: 'dark',
       includeRequestResults: false,
       includeRequestDetails: true
     });
     assert.equal(compactHtmlExported.cancelled, false);
     const compactHtml = await fs.readFile(compactHtmlExportPath, 'utf8');
     assert.match(compactHtml, /PostMeter Performance Results/);
+    assert.match(compactHtml, /<html lang="en" data-theme="dark">/);
     assert.match(compactHtml, /Endpoint Diagnosis/);
     assert.match(compactHtml, /Diagnostic Checks/);
-    assert.match(compactHtml, /Diagnosis phases/);
+    assert.match(compactHtml, /Charts and Trends/);
+    assert.match(compactHtml, /data-report-chart-tab="overview"/);
+    assert.match(compactHtml, /Latency by diagnostic phase/);
+    assert.match(compactHtml, /Codes over time/);
     assert.doesNotMatch(compactHtml, /Request Results/);
     assert.doesNotMatch(compactHtml, /View Details/);
     assert.doesNotMatch(compactHtml, /id="responseDetailModal"/);
@@ -1192,12 +1202,14 @@ test('runtime IPC persists refreshed OAuth auth without returning or exporting r
     assert.doesNotMatch(runnerHtmlExport, /fresh-runtime-token|rotated-runtime-refresh|stale-runtime-token|runtime-refresh/);
 
     const exportedCompactHtml = await handlers.get('runner:export')(null, result, 'html', {
+      theme: 'dark',
       includeRequestResults: false,
       includeRequestDetails: true
     });
     assert.equal(exportedCompactHtml.cancelled, false);
     const runnerCompactHtmlExport = await fs.readFile(runnerCompactHtmlExportPath, 'utf8');
     assert.match(runnerCompactHtmlExport, /PostMeter Runner Results/);
+    assert.match(runnerCompactHtmlExport, /<html lang="en" data-theme="dark">/);
     assert.doesNotMatch(runnerCompactHtmlExport, /Request Results/);
     assert.doesNotMatch(runnerCompactHtmlExport, /View Details/);
     assert.doesNotMatch(runnerCompactHtmlExport, /id="responseDetailModal"/);

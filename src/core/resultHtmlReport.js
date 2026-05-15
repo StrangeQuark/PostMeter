@@ -1,5 +1,7 @@
 const { once } = require('node:events');
 
+const PERFORMANCE_REPORT_GRAPH_SAMPLE_LIMIT = 1000;
+
 async function resultHtmlReportToHtml(options = {}) {
   const chunks = [];
   await writeResultHtmlReport({
@@ -24,7 +26,7 @@ async function writeResultHtmlReport(output, options = {}) {
   const performanceSections = performanceReportSections(kind, result);
 
   await writeLine(output, '<!doctype html>');
-  await writeLine(output, '<html lang="en">');
+  await writeLine(output, `<html lang="en" data-theme="${escapeHtml(reportOptions.theme)}">`);
   await writeLine(output, '<head>');
   await writeLine(output, '<meta charset="utf-8">');
   await writeLine(output, '<meta name="viewport" content="width=device-width, initial-scale=1">');
@@ -35,7 +37,7 @@ async function writeResultHtmlReport(output, options = {}) {
   await writeLine(output, '</head>');
   await writeLine(output, '<body>');
   await writeLine(output, '<main class="report-shell">');
-  await writeHero(output, { kind, result, metadata, title, exportedAt });
+  await writeHero(output, { kind, result, metadata, title, exportedAt, passFail });
   await writeLine(output, '<nav class="report-nav" aria-label="Report sections">');
   const navItems = [
     ['#overview', 'Overview'],
@@ -55,7 +57,7 @@ async function writeResultHtmlReport(output, options = {}) {
   }
   await writeLine(output, '</nav>');
   await writeOverview(output, { kind, result, metadata, statusCounts, passFail });
-  await writeCharts(output, { kind, result, statusCounts, passFail });
+  await writeCharts(output, { kind, result, statusCounts, passFail, itemSource });
   if (reportOptions.includeRequestResults) {
     await writeResultsTable(output, { itemSource, includeRequestDetails: reportOptions.includeRequestDetails, statusCounts });
   }
@@ -72,7 +74,7 @@ async function writeResultHtmlReport(output, options = {}) {
   if (reportOptions.includeRequestResults && reportOptions.includeRequestDetails) {
     await writeResponseDetailModal(output);
   }
-  const scripts = reportScripts(reportOptions);
+  const scripts = reportScripts({ ...reportOptions, includeChartTabs: kind === 'performance' });
   if (scripts) {
     await writeLine(output, '<script>');
     await writeLine(output, scripts);
@@ -82,9 +84,10 @@ async function writeResultHtmlReport(output, options = {}) {
   await writeLine(output, '</html>');
 }
 
-async function writeHero(output, { kind, result, metadata, title, exportedAt }) {
+async function writeHero(output, { kind, result, metadata, title, exportedAt, passFail }) {
   const label = kind === 'performance' ? 'Performance Results' : 'Runner Results';
   const runId = result.resultStoreId || result.id || metadata.runId || '';
+  const passed = result.cancelled === true ? false : passFail?.failed === 0;
   await writeLine(output, '<header class="report-hero">');
   await writeLine(output, '<div>');
   await writeLine(output, `<p class="eyebrow">PostMeter ${escapeHtml(label)}</p>`);
@@ -99,8 +102,8 @@ async function writeHero(output, { kind, result, metadata, title, exportedAt }) 
   }
   await writeLine(output, '</div>');
   await writeLine(output, '</div>');
-  await writeLine(output, `<div class="hero-result ${result.passed === true ? 'is-pass' : 'is-fail'}">`);
-  await writeLine(output, `<span>${result.cancelled === true ? 'Cancelled' : result.passed === true ? 'Passed' : 'Needs Review'}</span>`);
+  await writeLine(output, `<div class="hero-result ${passed ? 'is-pass' : 'is-fail'}">`);
+  await writeLine(output, `<span>${result.cancelled === true ? 'Cancelled' : passed ? 'Passed' : 'Needs Review'}</span>`);
   await writeLine(output, '</div>');
   await writeLine(output, '</header>');
 }
@@ -141,14 +144,66 @@ async function writeOverview(output, { kind, result, metadata, statusCounts, pas
   await writeLine(output, '</section>');
 }
 
-async function writeCharts(output, { kind, result, statusCounts, passFail }) {
-  const passDegrees = passFail.total > 0 ? Math.round((passFail.passed / passFail.total) * 360) : 0;
+async function writeCharts(output, { kind, result, statusCounts, passFail, itemSource }) {
+  if (kind === 'performance') {
+    await writePerformanceCharts(output, { result, statusCounts, passFail, itemSource });
+    return;
+  }
   await writeLine(output, '<section id="charts" class="report-section">');
   await writeLine(output, '<div class="section-heading">');
   await writeLine(output, '<p class="eyebrow">Visual Summary</p>');
   await writeLine(output, '<h2>Charts and Trends</h2>');
   await writeLine(output, '<p>Run-level visual summaries for outcomes, status codes, latency, and diagnostic phases.</p>');
   await writeLine(output, '</div>');
+  await writeChartsOverviewContent(output, { result, statusCounts, passFail });
+  await writeLine(output, '</section>');
+}
+
+async function writePerformanceCharts(output, { result, statusCounts, passFail, itemSource }) {
+  const samples = await collectPerformanceReportGraphSamples(result, itemSource);
+  const data = performanceReportGraphData(result, samples);
+  const cards = performanceReportGraphCards(data);
+  const panels = [
+    { id: 'overview', title: 'Overview' },
+    ...cards.map((card, index) => ({
+      id: `graph-${index + 1}-${slugifyId(card.title)}`,
+      title: card.title,
+      card
+    }))
+  ];
+  await writeLine(output, '<section id="charts" class="report-section" data-report-chart-group>');
+  await writeLine(output, '<div class="section-heading">');
+  await writeLine(output, '<p class="eyebrow">Visual Summary</p>');
+  await writeLine(output, '<h2>Charts and Trends</h2>');
+  await writeLine(output, '<p>Run-level visual summaries for outcomes, status codes, latency, and diagnostic phases.</p>');
+  await writeLine(output, '</div>');
+  await writeLine(output, '<div class="chart-selector" role="tablist" aria-label="Charts and trends views">');
+  for (const [index, panel] of panels.entries()) {
+    await writeLine(output, `<button type="button" class="chart-selector-button${index === 0 ? ' is-active' : ''}" data-report-chart-tab="${escapeHtml(panel.id)}" role="tab" aria-selected="${index === 0 ? 'true' : 'false'}">${escapeHtml(panel.title)}</button>`);
+  }
+  await writeLine(output, '</div>');
+  await writeLine(output, '<div class="report-chart-panels">');
+  for (const [index, panel] of panels.entries()) {
+    await writeLine(output, `<div class="report-chart-panel" data-report-chart-panel="${escapeHtml(panel.id)}"${index === 0 ? '' : ' hidden'}>`);
+    if (panel.card) {
+      await writePerformanceGraphCard(output, panel.card);
+    } else {
+      await writeChartsOverviewContent(output, {
+        result,
+        statusCounts,
+        passFail,
+        phases: data.type === 'diagnosis' ? data.phases : [],
+        phaseTitle: 'Diagnosis phases'
+      });
+    }
+    await writeLine(output, '</div>');
+  }
+  await writeLine(output, '</div>');
+  await writeLine(output, '</section>');
+}
+
+async function writeChartsOverviewContent(output, { result, statusCounts, passFail, phases = [], phaseTitle = 'Diagnosis phases' }) {
+  const passDegrees = passFail.total > 0 ? Math.round((passFail.passed / passFail.total) * 360) : 0;
   await writeLine(output, '<div class="chart-grid">');
   await writeLine(output, '<article class="chart-card chart-card-compact">');
   await writeLine(output, '<h3>Pass / fail</h3>');
@@ -163,14 +218,34 @@ async function writeCharts(output, { kind, result, statusCounts, passFail }) {
   await writeLine(output, '<h3>Latency profile</h3>');
   await writeLatencyProfile(output, result);
   await writeLine(output, '</article>');
-  if (kind === 'performance' && result.summary?.diagnosis?.phases?.length) {
+  if (Array.isArray(phases) && phases.length) {
     await writeLine(output, '<article class="chart-card chart-card-wide">');
-    await writeLine(output, '<h3>Diagnosis phases</h3>');
-    await writeDiagnosisPhases(output, result.summary.diagnosis.phases);
+    await writeLine(output, `<h3>${escapeHtml(phaseTitle)}</h3>`);
+    await writeDiagnosisPhases(output, phases);
     await writeLine(output, '</article>');
   }
   await writeLine(output, '</div>');
-  await writeLine(output, '</section>');
+}
+
+async function writePerformanceGraphCard(output, card) {
+  await writeLine(output, '<article class="chart-card graph-card chart-card-wide">');
+  await writeLine(output, `<h3>${escapeHtml(card.title)}</h3>`);
+  if (card.meta) {
+    await writeLine(output, `<p class="graph-meta">${escapeHtml(card.meta)}</p>`);
+  }
+  if (card.svg) {
+    await writeLine(output, card.svg);
+  } else {
+    await writeLine(output, `<div class="empty-panel">${escapeHtml(card.empty || 'No graph data was captured for this run.')}</div>`);
+  }
+  if (Array.isArray(card.legend) && card.legend.length) {
+    await writeLine(output, '<div class="legend-row graph-legend">');
+    for (const item of card.legend) {
+      await writeLine(output, `<span><i class="${escapeHtml(item.className)}"></i>${escapeHtml(item.label)}</span>`);
+    }
+    await writeLine(output, '</div>');
+  }
+  await writeLine(output, '</article>');
 }
 
 async function writeResultsTable(output, { itemSource, includeRequestDetails, statusCounts }) {
@@ -390,18 +465,885 @@ async function writeLatencyProfile(output, result) {
   await writeLine(output, '</div>');
 }
 
-async function writeDiagnosisPhases(output, phases) {
+async function writeDiagnosisPhases(output, phases = []) {
   const maxRps = Math.max(1, ...phases.map((phase) => Number(phase.requestsPerSecond || 0)));
   await writeLine(output, '<div class="phase-list">');
   for (const phase of phases) {
-    const width = Math.max(2, Math.round((Number(phase.requestsPerSecond || 0) / maxRps) * 100));
+    const rps = Number(phase.requestsPerSecond || 0);
+    const width = Math.max(2, Math.round((rps / maxRps) * 100));
     await writeLine(output, '<div class="phase-row">');
-    await writeLine(output, `<span>${escapeHtml(phase.phase || 'phase')}</span>`);
+    await writeLine(output, `<span>${escapeHtml(phase.phase || phase.name || 'phase')}</span>`);
     await writeLine(output, `<div class="bar-track"><div class="bar-fill info" style="width:${width}%"></div></div>`);
-    await writeLine(output, `<strong>${escapeHtml(formatDecimal(phase.requestsPerSecond))} rps</strong>`);
+    await writeLine(output, `<strong>${escapeHtml(formatDecimal(rps))} rps</strong>`);
     await writeLine(output, '</div>');
   }
   await writeLine(output, '</div>');
+}
+
+async function collectPerformanceReportGraphSamples(result = {}, itemSource) {
+  const inlineSamples = performanceReportSamples(result);
+  if (typeof itemSource !== 'function') {
+    return inlineSamples;
+  }
+  const total = Math.max(0, Math.floor(Number(
+    result.resultPage?.totalAll
+    ?? result.completedRequests
+    ?? result.totalRequests
+    ?? inlineSamples.length
+  )));
+  if (inlineSamples.length && result.storeBacked !== true && total <= inlineSamples.length) {
+    return inlineSamples;
+  }
+  const targetIndexes = total > PERFORMANCE_REPORT_GRAPH_SAMPLE_LIMIT
+    ? new Set(Array.from({ length: PERFORMANCE_REPORT_GRAPH_SAMPLE_LIMIT }, (_value, index) => Math.round(((total - 1) * index) / (PERFORMANCE_REPORT_GRAPH_SAMPLE_LIMIT - 1))))
+    : null;
+  const shouldScanForFailures = Object.entries(performanceReportGraphStatusCounts(result, inlineSamples))
+    .some(([status, count]) => Number(count || 0) > 0 && (status === 'ERR' || Number(status) >= 400));
+  const samplesByIndex = new Map();
+  let failureSamples = 0;
+  const failureSampleLimit = Math.floor(PERFORMANCE_REPORT_GRAPH_SAMPLE_LIMIT / 2);
+  let ordinal = 0;
+  for await (const item of itemSource()) {
+    const itemIndex = Number(item.resultIndex ?? item.iteration ?? ordinal);
+    const normalizedIndex = Number.isFinite(itemIndex) ? itemIndex : ordinal;
+    const targetSample = !targetIndexes || targetIndexes.has(normalizedIndex) || targetIndexes.has(ordinal);
+    const failedSample = reportSampleFailed(item) && failureSamples < failureSampleLimit;
+    if (targetSample || failedSample) {
+      samplesByIndex.set(normalizedIndex, item);
+      if (failedSample) {
+        failureSamples += 1;
+      }
+    }
+    ordinal += 1;
+    if (targetIndexes && !shouldScanForFailures && samplesByIndex.size >= targetIndexes.size) {
+      break;
+    }
+    if (!targetIndexes && total <= 0 && samplesByIndex.size >= PERFORMANCE_REPORT_GRAPH_SAMPLE_LIMIT) {
+      break;
+    }
+  }
+  const samples = Array.from(samplesByIndex.values());
+  return samples.length ? performanceReportSortSamples(samples) : inlineSamples;
+}
+
+function performanceReportGraphData(result = {}, sampleOverride = null) {
+  const samples = Array.isArray(sampleOverride) ? performanceReportSortSamples(sampleOverride) : performanceReportSamples(result);
+  const chunks = performanceReportChunks(samples, 36);
+  const type = String(result.type || 'performance');
+  return {
+    type,
+    samples,
+    statusCounts: performanceReportGraphStatusCounts(result, samples),
+    chunks,
+    phases: performanceReportPhases(result, samples, type)
+  };
+}
+
+function performanceReportSamples(result = {}) {
+  const source = Array.isArray(result.samples) && result.samples.length
+    ? result.samples
+    : Array.isArray(result.resultPage?.items)
+      ? result.resultPage.items
+      : [];
+  return performanceReportSortSamples(source);
+}
+
+function performanceReportSortSamples(samples = []) {
+  return (Array.isArray(samples) ? samples : []).slice().sort((left, right) => Number(left.resultIndex ?? left.iteration ?? 0) - Number(right.resultIndex ?? right.iteration ?? 0));
+}
+
+function performanceReportGraphStatusCounts(result = {}, samples = []) {
+  const aggregateCounts = {};
+  let hasAggregateCounts = false;
+  for (const source of [result.resultPage?.statusCounts, result.summary?.statusCodes]) {
+    if (!source || typeof source !== 'object' || Array.isArray(source)) {
+      continue;
+    }
+    let sourceHasCounts = false;
+    for (const [status, count] of Object.entries(source)) {
+      const normalizedStatus = normalizeGraphStatusLabel(status);
+      if (!normalizedStatus || normalizedStatus === '-') {
+        continue;
+      }
+      const numericCount = Number(count || 0);
+      if (!Number.isFinite(numericCount) || numericCount <= 0) {
+        continue;
+      }
+      hasAggregateCounts = true;
+      sourceHasCounts = true;
+      aggregateCounts[normalizedStatus] = (aggregateCounts[normalizedStatus] || 0) + numericCount;
+    }
+    if (sourceHasCounts) {
+      break;
+    }
+  }
+  const sampleCounts = {};
+  for (const sample of samples || []) {
+    const status = graphStatusLabel(sample);
+    if (!status || status === '-') {
+      continue;
+    }
+    sampleCounts[status] = (sampleCounts[status] || 0) + 1;
+  }
+  if (!hasAggregateCounts) {
+    return sampleCounts;
+  }
+  for (const [status, count] of Object.entries(sampleCounts)) {
+    if (!aggregateCounts[status]) {
+      aggregateCounts[status] = count;
+    }
+  }
+  return aggregateCounts;
+}
+
+function normalizeGraphStatusLabel(status) {
+  const text = String(status ?? '').trim();
+  if (!text || text === '-' || text === '0' || text.toUpperCase() === 'ERR') {
+    return text && text !== '-' ? 'ERR' : text || '';
+  }
+  return text;
+}
+
+function graphStatusLabel(item = {}) {
+  return normalizeGraphStatusLabel(statusLabel(item));
+}
+
+function reportSampleFailed(item = {}) {
+  if (item.error) {
+    return true;
+  }
+  const statusCode = Number(item.statusCode);
+  if (Number.isFinite(statusCode)) {
+    return item.passed !== true || (!reportHttpStatusSuccessful(statusCode) && !reportUnsupportedMethodProbe(item, statusCode));
+  }
+  return item.passed !== true;
+}
+
+function reportHttpStatusSuccessful(statusCode) {
+  const code = Number(statusCode || 0);
+  return Number.isInteger(code) && code >= 200 && code < 400;
+}
+
+function reportUnsupportedMethodProbe(item = {}, statusCode = Number(item.statusCode || 0)) {
+  const code = Number(statusCode || 0);
+  return (item.phase === 'head-probe' || item.phase === 'options-probe')
+    && (code === 405 || code === 501);
+}
+
+function graphSampleTimestampMillis(item = {}, index = 0) {
+  const completed = Date.parse(item.completedAt || '');
+  if (Number.isFinite(completed)) {
+    return completed;
+  }
+  const started = Date.parse(item.startedAt || '');
+  if (Number.isFinite(started)) {
+    const duration = Number(item.durationMillis || 0);
+    return started + (Number.isFinite(duration) ? Math.max(0, duration) : 0);
+  }
+  return index * 1000;
+}
+
+function performanceReportChunks(samples = [], maxChunks = 36) {
+  if (!samples.length) {
+    return [];
+  }
+  const size = Math.max(1, Math.ceil(samples.length / maxChunks));
+  const chunks = [];
+  for (let index = 0; index < samples.length; index += size) {
+    const items = samples.slice(index, index + size);
+    const durations = items.map((item) => Number(item.durationMillis)).filter((value) => Number.isFinite(value) && value >= 0);
+    const failed = items.filter(reportSampleFailed).length;
+    const elapsedMillis = durations.reduce((sum, value) => sum + value, 0) || items.length;
+    const elapsedSeconds = Math.max(0.001, elapsedMillis / 1000);
+    chunks.push({
+      label: `${index + 1}-${index + items.length}`,
+      count: items.length,
+      failed,
+      successful: items.length - failed,
+      averageDurationMillis: averageReportNumber(durations),
+      p95DurationMillis: percentileReportNumber(durations, 0.95),
+      errorRate: items.length ? (failed / items.length) * 100 : 0,
+      requestsPerSecond: items.length / (elapsedMillis / 1000),
+      successfulRequestsPerSecond: (items.length - failed) / elapsedSeconds,
+      failedRequestsPerSecond: failed / elapsedSeconds,
+      averageResponseBytes: averageReportNumber(items.map((item) => Number(item.responseBytes)).filter((value) => Number.isFinite(value) && value >= 0)),
+      concurrency: Math.max(1, ...items.map((item) => Number(item.stageConcurrency || 1)).filter(Number.isFinite))
+    });
+  }
+  return chunks;
+}
+
+function performanceReportPhases(result = {}, samples = [], type = 'performance') {
+  const diagnosisPhases = result.summary?.diagnosis?.phases;
+  if (Array.isArray(diagnosisPhases) && diagnosisPhases.length) {
+    return diagnosisPhases.map((phase, index) => ({
+      name: phase.phase || phase.name || `phase-${index + 1}`,
+      stageIndex: index + 1,
+      requests: Number(phase.requests || 0),
+      concurrency: Number(phase.concurrency || 0),
+      successful: Number(phase.successfulResponses || 0),
+      failed: Number(phase.failedResponses || 0),
+      averageDurationMillis: Number(phase.averageDurationMillis || 0),
+      p95DurationMillis: Number(phase.p95DurationMillis || 0),
+      requestsPerSecond: Number(phase.requestsPerSecond || 0),
+      errorRate: Number(phase.requests || 0) > 0 ? (Number(phase.failedResponses || 0) / Number(phase.requests || 1)) * 100 : 0
+    }));
+  }
+  const groups = new Map();
+  for (const sample of samples) {
+    const key = sample.phase || sample.stageName || type || 'run';
+    if (!groups.has(key)) {
+      groups.set(key, {
+        name: key,
+        stageIndex: Number(sample.stageIndex || 0),
+        requests: 0,
+        successful: 0,
+        failed: 0,
+        concurrency: Number(sample.stageConcurrency || 0),
+        durations: []
+      });
+    }
+    const group = groups.get(key);
+    if (!group.stageIndex || Number(sample.stageIndex || 0) < group.stageIndex) {
+      group.stageIndex = Number(sample.stageIndex || 0);
+    }
+    group.requests += 1;
+    group.concurrency = Math.max(group.concurrency, Number(sample.stageConcurrency || 0));
+    if (reportSampleFailed(sample)) {
+      group.failed += 1;
+    } else {
+      group.successful += 1;
+    }
+    const duration = Number(sample.durationMillis);
+    if (Number.isFinite(duration) && duration >= 0) {
+      group.durations.push(duration);
+    }
+  }
+  return Array.from(groups.values()).map((group) => {
+    const elapsedMillis = group.durations.reduce((sum, value) => sum + value, 0) || group.requests;
+    return {
+      name: group.name,
+      stageIndex: group.stageIndex || 0,
+      requests: group.requests,
+      concurrency: group.concurrency || 1,
+      successful: group.successful,
+      failed: group.failed,
+      averageDurationMillis: averageReportNumber(group.durations),
+      p95DurationMillis: percentileReportNumber(group.durations, 0.95),
+      requestsPerSecond: group.requests / (Math.max(1, elapsedMillis) / 1000),
+      errorRate: group.requests > 0 ? (group.failed / group.requests) * 100 : 0
+    };
+  });
+}
+
+function performanceReportGraphCards(data) {
+  if (data.type === 'diagnosis') {
+    return [
+      reportSaturationGraph(data),
+      reportPhaseMetricGraph(data, 'Latency by diagnostic phase', 'p95DurationMillis', ' ms', 'P95'),
+      reportPhaseMetricGraph(data, 'Throughput by diagnostic phase', 'requestsPerSecond', ' rps', 'RPS'),
+      reportCodesOverTimeGraph(data),
+      reportTransportTimingGraph(data)
+    ];
+  }
+  if (data.type === 'throughput') {
+    return [
+      reportRpsGraph(data),
+      reportLatencyGraph(data),
+      reportCodesOverTimeGraph(data),
+      reportLatencyThroughputGraph(data),
+      reportErrorRateGraph(data)
+    ];
+  }
+  if (data.type === 'concurrency') {
+    return [
+      reportLatencyGraph(data, 'Latency over time'),
+      reportRpsGraph(data, 'Requests per second over time'),
+      reportCodesOverTimeGraph(data),
+      reportErrorRateGraph(data, 'Error rate over time')
+    ];
+  }
+  if (data.type === 'stress') {
+    return [
+      reportLatencyGraph(data),
+      reportRpsGraph(data),
+      reportCodesOverTimeGraph(data),
+      reportErrorRateGraph(data),
+      reportSaturationGraph(data)
+    ];
+  }
+  if (data.type === 'spike') {
+    return [
+      reportLatencyGraph(data, 'Spike latency over time'),
+      reportRpsGraph(data, 'Spike throughput over time'),
+      reportCodesOverTimeGraph(data),
+      reportErrorRateGraph(data, 'Spike error rate over time'),
+      reportLatencyGraph(data, 'Recovery latency over time')
+    ];
+  }
+  if (data.type === 'soak') {
+    return [
+      reportLatencyGraph(data, 'Soak latency trend'),
+      reportRpsGraph(data, 'Throughput stability'),
+      reportCodesOverTimeGraph(data),
+      reportErrorRateGraph(data, 'Soak error rate trend'),
+      reportResponseSizeGraph(data)
+    ];
+  }
+  if (data.type === 'ramp') {
+    return [
+      reportPhaseMetricGraph(data, 'Latency by ramp step', 'p95DurationMillis', ' ms', 'P95'),
+      reportPhaseMetricGraph(data, 'Throughput by ramp step', 'requestsPerSecond', ' rps', 'RPS'),
+      reportCodesOverTimeGraph(data),
+      reportSaturationGraph(data),
+      reportPhaseMetricGraph(data, 'Error rate by ramp step', 'errorRate', '%', 'Error rate')
+    ];
+  }
+  return [
+    reportLatencyGraph(data),
+    reportCodesOverTimeGraph(data),
+    reportLatencySamplesGraph(data)
+  ];
+}
+
+function reportLatencyGraph(data, title = 'Latency over time') {
+  if (!data.chunks.length) {
+    return reportEmptyGraph(title, 'No request samples were captured.');
+  }
+  return {
+    title,
+    meta: `${data.chunks.length} buckets`,
+    svg: reportLineSvg(data.chunks, [
+      { key: 'averageDurationMillis', className: 'line-info' },
+      { key: 'p95DurationMillis', className: 'line-warning' }
+    ], { valueSuffix: ' ms', xLabel: 'Sample bucket', yLabel: 'Latency (ms)' }),
+    legend: reportLegend(['Average', 'P95'])
+  };
+}
+
+function reportRpsGraph(data, title = 'Requests per second over time') {
+  if (!data.chunks.length) {
+    return reportEmptyGraph(title, 'No request samples were captured.');
+  }
+  return {
+    title,
+    svg: reportLineSvg(data.chunks, [
+      { key: 'successfulRequestsPerSecond', className: 'line-success' },
+      { key: 'failedRequestsPerSecond', className: 'line-danger' }
+    ], { valueSuffix: ' rps', xLabel: 'Sample bucket', yLabel: 'Requests/sec' }),
+    legend: reportLegend([
+      { label: 'Successful', className: 'line-success' },
+      { label: 'Failed', className: 'line-danger' }
+    ])
+  };
+}
+
+function reportCodesOverTimeGraph(data) {
+  const timeline = reportCodeTimelineData(data.samples, data.statusCounts);
+  if (!timeline.points.length) {
+    return reportEmptyGraph('Codes over time', 'No response status codes were captured.');
+  }
+  return {
+    title: 'Codes over time',
+    svg: reportLineSvg(timeline.points, timeline.series, { showPoints: true, fixedMax: 600, xLabel: 'Elapsed time', yLabel: 'Status code' }),
+    legend: reportLegend(timeline.series)
+  };
+}
+
+function reportErrorRateGraph(data, title = 'Error rate over time') {
+  if (!data.chunks.length) {
+    return reportEmptyGraph(title, 'No request samples were captured.');
+  }
+  return {
+    title,
+    svg: reportLineSvg(data.chunks, [{ key: 'errorRate', className: 'line-danger' }], { fixedMax: 100, valueSuffix: '%', xLabel: 'Sample bucket', yLabel: 'Error rate (%)' }),
+    legend: reportLegend(['Error rate'])
+  };
+}
+
+function reportLatencyThroughputGraph(data) {
+  if (!data.chunks.length) {
+    return reportEmptyGraph('Latency vs throughput', 'No request samples were captured.');
+  }
+  return {
+    title: 'Latency vs throughput',
+    svg: reportScatterSvg(data.chunks.map((chunk) => ({
+      x: chunk.requestsPerSecond,
+      y: chunk.p95DurationMillis || chunk.averageDurationMillis
+    })), { xLabel: 'RPS', yLabel: 'Latency ms' })
+  };
+}
+
+function reportPhaseMetricGraph(data, title, metric, suffix = '', label = '') {
+  const phases = data.phases.length ? data.phases : data.chunks;
+  if (!phases.length) {
+    return reportEmptyGraph(title, 'No phase data was captured.');
+  }
+  return {
+    title,
+    meta: `${phases.length} phases`,
+    svg: reportLineSvg(phases, [{ key: metric, className: metric === 'errorRate' ? 'line-danger' : metric === 'requestsPerSecond' ? 'line-success' : 'line-warning' }], {
+      fixedMax: metric === 'errorRate' ? 100 : 0,
+      valueSuffix: suffix,
+      showPoints: true,
+      xLabel: 'Phase',
+      yLabel: label || title
+    }),
+    legend: reportLegend([label || metric])
+  };
+}
+
+function reportSaturationGraph(data) {
+  const phases = (data.phases.length ? data.phases : data.chunks)
+    .filter((phase) => Number(phase.concurrency) > 0)
+    .sort((left, right) => Number(left.concurrency || 0) - Number(right.concurrency || 0)
+      || Number(left.stageIndex || 0) - Number(right.stageIndex || 0));
+  if (!phases.length) {
+    return reportEmptyGraph('Saturation curve', 'No concurrency phase data was captured.');
+  }
+  return {
+    title: 'Saturation curve',
+    svg: reportScatterSvg(phases.map((phase) => ({
+      x: Number(phase.concurrency || 1),
+      y: Number(phase.p95DurationMillis || phase.averageDurationMillis || 0)
+    })), { xLabel: 'Concurrency', yLabel: 'Latency ms', connectLine: true, sortByX: true, lineClassName: 'line-info' })
+  };
+}
+
+function reportTransportTimingGraph(data) {
+  const chunks = performanceReportTimingChunks(data.samples, 36);
+  if (!chunks.length) {
+    return reportEmptyGraph('Transport timing over time', 'No transport timing data was captured.');
+  }
+  return {
+    title: 'Transport timing over time',
+    meta: `${chunks.length} buckets`,
+    svg: reportLineSvg(chunks, [
+      { key: 'timeToFirstByteMillis', className: 'line-info' },
+      { key: 'tlsHandshakeMillis', className: 'line-warning' },
+      { key: 'downloadMillis', className: 'line-success' }
+    ], { valueSuffix: ' ms', xLabel: 'Sample bucket', yLabel: 'Timing (ms)' }),
+    legend: reportLegend(['TTFB', 'TLS', 'Download'])
+  };
+}
+
+function reportResponseSizeGraph(data) {
+  const chunks = data.chunks.filter((chunk) => Number(chunk.averageResponseBytes) > 0);
+  if (!chunks.length) {
+    return reportEmptyGraph('Response size over time', 'No response size data was captured.');
+  }
+  return {
+    title: 'Response size over time',
+    svg: reportLineSvg(chunks, [{ key: 'averageResponseBytes', className: 'line-info' }], { valueSuffix: ' B', xLabel: 'Sample bucket', yLabel: 'Response size (bytes)' }),
+    legend: reportLegend(['Average bytes'])
+  };
+}
+
+function reportLatencySamplesGraph(data) {
+  if (!data.samples.length) {
+    return reportEmptyGraph('Latency samples', 'No request samples were captured.');
+  }
+  return {
+    title: 'Latency samples',
+    meta: `${data.samples.length} responses`,
+    svg: reportScatterSvg(data.samples.map((sample, index) => ({
+      x: index + 1,
+      y: Number(sample.durationMillis || 0),
+      danger: reportSampleFailed(sample)
+    })), { xLabel: 'Time', yLabel: 'Latency ms' })
+  };
+}
+
+function performanceReportTimingChunks(samples = [], maxChunks = 36) {
+  const timedSamples = samples.filter((sample) => sample.timings && Object.keys(sample.timings).length);
+  if (!timedSamples.length) {
+    return [];
+  }
+  const size = Math.max(1, Math.ceil(timedSamples.length / maxChunks));
+  const chunks = [];
+  for (let index = 0; index < timedSamples.length; index += size) {
+    const items = timedSamples.slice(index, index + size);
+    chunks.push({
+      label: `${index + 1}-${index + items.length}`,
+      timeToFirstByteMillis: averageReportNumber(items.map((item) => Number(item.timings?.timeToFirstByteMillis)).filter((value) => Number.isFinite(value) && value > 0)),
+      tlsHandshakeMillis: averageReportNumber(items.map((item) => Number(item.timings?.tlsHandshakeMillis)).filter((value) => Number.isFinite(value) && value > 0)),
+      downloadMillis: averageReportNumber(items.map((item) => Number(item.timings?.downloadMillis)).filter((value) => Number.isFinite(value) && value > 0))
+    });
+  }
+  return chunks;
+}
+
+function reportCodeTimelineData(samples = [], statusCounts = {}) {
+  const sampleCounts = {};
+  const timedSamples = samples.map((sample, index) => {
+    const status = graphStatusLabel(sample);
+    if (status && status !== '-') {
+      sampleCounts[status] = (sampleCounts[status] || 0) + 1;
+    }
+    return {
+      index,
+      status,
+      timestampMillis: graphSampleTimestampMillis(sample, index)
+    };
+  }).filter((item) => item.status && item.status !== '-' && Number.isFinite(item.timestampMillis));
+  if (!timedSamples.length) {
+    return { points: [], series: [], bucketMillis: 0 };
+  }
+  timedSamples.sort((left, right) => left.timestampMillis - right.timestampMillis || left.index - right.index);
+  const startMillis = Math.min(...timedSamples.map((item) => item.timestampMillis));
+  const endMillis = Math.max(...timedSamples.map((item) => item.timestampMillis));
+  const spanMillis = Math.max(0, endMillis - startMillis);
+  const bucketMillis = reportBucketMillis(spanMillis, 160);
+  const statuses = Array.from(new Set([
+    ...Object.keys(statusCounts || {}).map(normalizeGraphStatusLabel).filter(Boolean),
+    ...timedSamples.map((item) => item.status)
+  ])).sort(reportStatusSort);
+  const series = statuses.map((status, index) => ({
+    key: `code_${slugifyId(status)}`,
+    status,
+    label: `${status} (${formatInteger(statusCounts?.[status] || sampleCounts[status] || 0)})`,
+    className: reportStatusLineClass(status, index)
+  }));
+  const keyByStatus = new Map(series.map((item) => [item.status, item.key]));
+  const pointByBucket = new Map();
+  for (const item of timedSamples) {
+    const elapsedMillis = Math.max(0, item.timestampMillis - startMillis);
+    const bucketIndex = bucketMillis > 0 ? Math.floor(elapsedMillis / bucketMillis) : 0;
+    if (!pointByBucket.has(bucketIndex)) {
+      const bucketElapsedMillis = bucketIndex * Math.max(1, bucketMillis);
+      const point = {
+        label: formatReportElapsedLabel(bucketElapsedMillis)
+      };
+      for (const seriesItem of series) {
+        point[seriesItem.key] = null;
+      }
+      pointByBucket.set(bucketIndex, point);
+    }
+    const point = pointByBucket.get(bucketIndex);
+    const key = keyByStatus.get(item.status);
+    if (key) {
+      point[key] = reportStatusGraphValue(item.status);
+    }
+  }
+  const points = Array.from(pointByBucket.entries())
+    .sort((left, right) => left[0] - right[0])
+    .map(([, point]) => point);
+  return { points, series, bucketMillis };
+}
+
+function reportStatusGraphValue(status) {
+  if (String(status).toUpperCase() === 'ERR') {
+    return 0;
+  }
+  const code = Number(status);
+  return Number.isFinite(code) ? code : 0;
+}
+
+function reportBucketMillis(spanMillis, maxBuckets = 160) {
+  const candidates = [1000, 2000, 5000, 10000, 15000, 30000, 60000, 120000, 300000, 600000];
+  return candidates.find((candidate) => Math.max(1, Math.floor(spanMillis / candidate) + 1) <= maxBuckets) || candidates.at(-1);
+}
+
+function reportStatusSort(left, right) {
+  const leftNumber = Number(left);
+  const rightNumber = Number(right);
+  if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
+    return leftNumber - rightNumber;
+  }
+  if (Number.isFinite(leftNumber)) {
+    return -1;
+  }
+  if (Number.isFinite(rightNumber)) {
+    return 1;
+  }
+  return String(left).localeCompare(String(right));
+}
+
+function reportStatusLineClass(status, index = 0) {
+  const code = Number(status);
+  if (code === 200) {
+    return 'line-code-200';
+  }
+  if (code >= 500) {
+    return 'line-danger';
+  }
+  if (code >= 400) {
+    return 'line-warning';
+  }
+  if (code >= 300) {
+    return 'line-purple';
+  }
+  if (code >= 200) {
+    return 'line-success';
+  }
+  if (String(status).toUpperCase() === 'ERR') {
+    return 'line-danger';
+  }
+  return ['line-info', 'line-warning', 'line-success', 'line-danger', 'line-purple', 'line-teal'][index % 6];
+}
+
+function formatReportElapsedLabel(milliseconds) {
+  const totalSeconds = Math.max(0, Math.round(Number(milliseconds || 0) / 1000));
+  if (totalSeconds < 60) {
+    return `${totalSeconds}s`;
+  }
+  const seconds = totalSeconds % 60;
+  const minutes = Math.floor(totalSeconds / 60) % 60;
+  const hours = Math.floor(totalSeconds / 3600);
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  }
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+function formatReportGranularity(milliseconds) {
+  const seconds = Math.max(1, Math.round(Number(milliseconds || 1000) / 1000));
+  if (seconds < 60) {
+    return `${seconds} sec`;
+  }
+  return `${formatDecimal(seconds / 60)} min`;
+}
+
+function reportEmptyGraph(title, empty) {
+  return { title, empty };
+}
+
+function reportLegend(labels) {
+  const classes = ['legend-info', 'legend-warning', 'legend-pass', 'legend-fail'];
+  return labels.map((item, index) => {
+    if (item && typeof item === 'object') {
+      return { label: item.label || item.key || `Series ${index + 1}`, className: reportLegendClass(item.className, index) };
+    }
+    return { label: item, className: classes[index] || 'legend-info' };
+  });
+}
+
+function reportLegendClass(className, index = 0) {
+  const mapped = {
+    'line-info': 'legend-info',
+    'line-warning': 'legend-warning',
+    'line-danger': 'legend-fail',
+    'line-success': 'legend-pass',
+    'line-code-200': 'legend-code-200',
+    'line-purple': 'legend-purple',
+    'line-teal': 'legend-teal',
+    'line-muted': 'legend-muted'
+  };
+  return mapped[className] || ['legend-info', 'legend-warning', 'legend-pass', 'legend-fail'][index % 4];
+}
+
+function reportLineSvg(points = [], series = [], options = {}) {
+  const width = 900;
+  const height = 380;
+  const padding = { top: 28, right: 34, bottom: 62, left: 76 };
+  const innerWidth = width - padding.left - padding.right;
+  const innerHeight = height - padding.top - padding.bottom;
+  const values = [];
+  for (const point of points) {
+    for (const line of series) {
+      const value = reportLineValue(point, line);
+      if (value != null) {
+        values.push(value);
+      }
+    }
+  }
+  const finiteValues = values.filter(Number.isFinite);
+  const min = options.minValue == null ? 0 : Math.min(Number(options.minValue) || 0, ...finiteValues);
+  const rawMax = Math.max(min + 1, Number(options.fixedMax || 0), ...finiteValues);
+  const max = Number(options.fixedMax || 0) > 0 ? rawMax : reportNiceMax(rawMax);
+  const span = Math.max(1, max - min);
+  const xFor = (index) => padding.left + (points.length <= 1 ? innerWidth / 2 : (index / (points.length - 1)) * innerWidth);
+  const yFor = (value) => padding.top + innerHeight - (((Number(value || 0) - min) / span) * innerHeight);
+  const lines = reportLineGridElements(points, { width, height, padding, min, max, xFor, yFor, valueSuffix: options.valueSuffix || '' });
+  for (const line of series) {
+    const plotted = points.map((point, index) => ({
+      x: xFor(index),
+      y: reportLineValue(point, line) == null ? null : yFor(reportLineValue(point, line)),
+      value: reportLineValue(point, line),
+      label: point.label || String(index + 1)
+    }));
+    for (const segment of reportLineSegments(plotted)) {
+      if (segment.length <= 1) {
+        continue;
+      }
+      lines.push(`<polyline points="${segment.map((point) => `${formatSvgNumber(point.x)},${formatSvgNumber(point.y)}`).join(' ')}" class="report-svg-line ${escapeHtml(line.className || 'line-info')}"></polyline>`);
+    }
+    if (options.showPoints === true || plotted.length <= 120) {
+      for (const point of plotted.filter((item) => item.value != null)) {
+        lines.push(`<circle cx="${formatSvgNumber(point.x)}" cy="${formatSvgNumber(point.y)}" r="3.5" class="report-svg-line-point ${escapeHtml(line.className || 'line-info')}"><title>${escapeHtml(`${line.label || line.key} at ${point.label}: ${reportGraphValueLabel(point.value, options.valueSuffix || '')}`)}</title></circle>`);
+      }
+    }
+  }
+  lines.push(reportAxisTitleElements(width, height, padding, options.xLabel || '', options.yLabel || ''));
+  return `<svg class="report-line-chart" viewBox="0 0 ${width} ${height}" role="img" preserveAspectRatio="none">${lines.join('')}</svg>`;
+}
+
+function reportLineGridElements(points, options) {
+  const { width, height, padding, min, max, xFor, yFor, valueSuffix } = options;
+  const innerWidth = width - padding.left - padding.right;
+  const innerHeight = height - padding.top - padding.bottom;
+  const elements = [
+    `<rect x="${padding.left}" y="${padding.top}" width="${innerWidth}" height="${innerHeight}" class="report-svg-plot"></rect>`
+  ];
+  const horizontalTicks = 5;
+  for (let index = 0; index <= horizontalTicks; index += 1) {
+    const value = min + ((max - min) * (index / horizontalTicks));
+    const y = yFor(value);
+    elements.push(`<line x1="${padding.left}" y1="${formatSvgNumber(y)}" x2="${width - padding.right}" y2="${formatSvgNumber(y)}" class="report-svg-grid-line"></line>`);
+    elements.push(`<text x="${padding.left - 10}" y="${formatSvgNumber(y + 4)}" text-anchor="end" class="report-svg-label">${escapeHtml(reportGraphValueLabel(value, valueSuffix))}</text>`);
+  }
+  for (const index of reportTickIndexes(points.length, 8)) {
+    const x = xFor(index);
+    elements.push(`<line x1="${formatSvgNumber(x)}" y1="${padding.top}" x2="${formatSvgNumber(x)}" y2="${padding.top + innerHeight}" class="report-svg-grid-line"></line>`);
+    elements.push(`<text x="${formatSvgNumber(x)}" y="${height - padding.bottom + 22}" text-anchor="middle" class="report-svg-label">${escapeHtml(points[index]?.label || String(index + 1))}</text>`);
+  }
+  elements.push(`<line x1="${padding.left}" y1="${padding.top + innerHeight}" x2="${width - padding.right}" y2="${padding.top + innerHeight}" class="report-svg-axis"></line>`);
+  elements.push(`<line x1="${padding.left}" y1="${padding.top}" x2="${padding.left}" y2="${padding.top + innerHeight}" class="report-svg-axis"></line>`);
+  return elements;
+}
+
+function reportLineValue(point = {}, line = {}) {
+  const raw = point[line.key];
+  if (raw == null || raw === '') {
+    return null;
+  }
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
+function reportLineSegments(points = []) {
+  const segments = [];
+  let current = [];
+  for (const point of points) {
+    if (point.value == null || point.y == null) {
+      if (current.length) {
+        segments.push(current);
+        current = [];
+      }
+      continue;
+    }
+    current.push(point);
+  }
+  if (current.length) {
+    segments.push(current);
+  }
+  return segments;
+}
+
+function reportScatterSvg(points = [], options = {}) {
+  const width = 900;
+  const height = 380;
+  const padding = { top: 28, right: 34, bottom: 62, left: 76 };
+  const innerWidth = width - padding.left - padding.right;
+  const innerHeight = height - padding.top - padding.bottom;
+  const maxX = reportNiceMax(Math.max(1, ...points.map((point) => Number(point.x || 0))));
+  const maxY = reportNiceMax(Math.max(1, ...points.map((point) => Number(point.y || 0))));
+  const xFor = (value) => padding.left + (Number(value || 0) / maxX) * innerWidth;
+  const yFor = (value) => padding.top + innerHeight - ((Number(value || 0) / maxY) * innerHeight);
+  const elements = reportScatterGridElements({ width, height, padding, maxX, maxY, xFor, yFor });
+  const linePoints = options.sortByX === true
+    ? points.slice().sort((left, right) => Number(left.x || 0) - Number(right.x || 0))
+    : points;
+  if (options.connectLine === true && linePoints.length > 1) {
+    elements.push(`<polyline points="${linePoints.map((point) => `${formatSvgNumber(xFor(point.x))},${formatSvgNumber(yFor(point.y))}`).join(' ')}" class="report-svg-line ${escapeHtml(options.lineClassName || 'line-info')}"></polyline>`);
+  }
+  for (const point of points) {
+    elements.push(`<circle cx="${formatSvgNumber(xFor(point.x))}" cy="${formatSvgNumber(yFor(point.y))}" r="5" class="report-svg-point ${point.danger ? 'is-danger' : 'is-info'}"><title>${escapeHtml(point.label || 'Sample')}: ${escapeHtml(reportGraphValueLabel(point.y, ''))}</title></circle>`);
+  }
+  elements.push(reportAxisTitleElements(width, height, padding, options.xLabel || '', options.yLabel || ''));
+  return `<svg class="report-scatter-chart" viewBox="0 0 ${width} ${height}" role="img" preserveAspectRatio="none">${elements.join('')}</svg>`;
+}
+
+function reportScatterGridElements(options) {
+  const { width, height, padding, maxX, maxY, xFor, yFor } = options;
+  const innerWidth = width - padding.left - padding.right;
+  const innerHeight = height - padding.top - padding.bottom;
+  const elements = [
+    `<rect x="${padding.left}" y="${padding.top}" width="${innerWidth}" height="${innerHeight}" class="report-svg-plot"></rect>`
+  ];
+  const ticks = 5;
+  for (let index = 0; index <= ticks; index += 1) {
+    const yValue = maxY * (index / ticks);
+    const y = yFor(yValue);
+    elements.push(`<line x1="${padding.left}" y1="${formatSvgNumber(y)}" x2="${width - padding.right}" y2="${formatSvgNumber(y)}" class="report-svg-grid-line"></line>`);
+    elements.push(`<text x="${padding.left - 10}" y="${formatSvgNumber(y + 4)}" text-anchor="end" class="report-svg-label">${escapeHtml(reportGraphValueLabel(yValue, ''))}</text>`);
+    const xValue = maxX * (index / ticks);
+    const x = xFor(xValue);
+    elements.push(`<line x1="${formatSvgNumber(x)}" y1="${padding.top}" x2="${formatSvgNumber(x)}" y2="${padding.top + innerHeight}" class="report-svg-grid-line"></line>`);
+    elements.push(`<text x="${formatSvgNumber(x)}" y="${height - padding.bottom + 22}" text-anchor="middle" class="report-svg-label">${escapeHtml(reportGraphValueLabel(xValue, ''))}</text>`);
+  }
+  elements.push(`<line x1="${padding.left}" y1="${padding.top + innerHeight}" x2="${width - padding.right}" y2="${padding.top + innerHeight}" class="report-svg-axis"></line>`);
+  elements.push(`<line x1="${padding.left}" y1="${padding.top}" x2="${padding.left}" y2="${padding.top + innerHeight}" class="report-svg-axis"></line>`);
+  return elements;
+}
+
+function reportAxisTitleElements(width, height, padding, xLabel = '', yLabel = '') {
+  const elements = [];
+  if (xLabel) {
+    elements.push(`<text x="${formatSvgNumber(padding.left + ((width - padding.left - padding.right) / 2))}" y="${height - 12}" text-anchor="middle" class="report-svg-axis-title">${escapeHtml(xLabel)}</text>`);
+  }
+  if (yLabel) {
+    const y = padding.top + ((height - padding.top - padding.bottom) / 2);
+    elements.push(`<text x="18" y="${formatSvgNumber(y)}" transform="rotate(-90 18 ${formatSvgNumber(y)})" text-anchor="middle" class="report-svg-axis-title">${escapeHtml(yLabel)}</text>`);
+  }
+  return elements.join('');
+}
+
+function reportTickIndexes(length, maxTicks) {
+  if (length <= 0) {
+    return [];
+  }
+  if (length === 1) {
+    return [0];
+  }
+  const count = Math.min(length, maxTicks);
+  const indexes = new Set();
+  for (let index = 0; index < count; index += 1) {
+    indexes.add(Math.round((index / (count - 1)) * (length - 1)));
+  }
+  return Array.from(indexes).sort((left, right) => left - right);
+}
+
+function reportNiceMax(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) {
+    return 1;
+  }
+  const exponent = 10 ** Math.floor(Math.log10(number));
+  const fraction = number / exponent;
+  const niceFraction = fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10;
+  return niceFraction * exponent;
+}
+
+function reportGraphValueLabel(value, suffix = '') {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    return `0${suffix}`;
+  }
+  const formatted = Math.abs(number) >= 100 ? String(Math.round(number)) : formatDecimal(number);
+  return `${formatted}${suffix}`;
+}
+
+function averageReportNumber(values = []) {
+  const numbers = values.map(Number).filter(Number.isFinite);
+  if (!numbers.length) {
+    return 0;
+  }
+  return numbers.reduce((sum, value) => sum + value, 0) / numbers.length;
+}
+
+function percentileReportNumber(values = [], rank = 0.5) {
+  const numbers = values.map(Number).filter(Number.isFinite).sort((left, right) => left - right);
+  if (!numbers.length) {
+    return 0;
+  }
+  const index = Math.min(numbers.length - 1, Math.max(0, Math.ceil(numbers.length * rank) - 1));
+  return numbers[index];
+}
+
+function formatSvgNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toFixed(2) : '0';
 }
 
 async function writePerformanceSummarySection(output, section) {
@@ -618,9 +1560,14 @@ function titleCaseWords(value) {
 function normalizeReportOptions(options = {}) {
   const includeRequestResults = options.includeRequestResults !== false;
   return {
+    theme: normalizeReportTheme(options.theme),
     includeRequestResults,
     includeRequestDetails: includeRequestResults && options.includeRequestDetails !== false
   };
+}
+
+function normalizeReportTheme(theme) {
+  return theme === 'dark' ? 'dark' : 'light';
 }
 
 function itemDetailRows(item) {
@@ -667,23 +1614,75 @@ function itemSourceFactory(kind, result, items) {
 }
 
 function statusCountsForReport(result) {
-  const counts = {
-    ...(result.resultPage?.statusCounts || {}),
-    ...(result.summary?.statusCodes || {})
-  };
-  if (Object.keys(counts).length) {
-    return counts;
+  const counts = {};
+  let hasAggregateCounts = false;
+  for (const source of [result.resultPage?.statusCounts, result.summary?.statusCodes]) {
+    if (!source || typeof source !== 'object' || Array.isArray(source)) {
+      continue;
+    }
+    let sourceHasCounts = false;
+    for (const [status, count] of Object.entries(source)) {
+      const normalizedStatus = normalizeGraphStatusLabel(status);
+      if (!normalizedStatus || normalizedStatus === '-') {
+        continue;
+      }
+      const numericCount = Number(count || 0);
+      if (!Number.isFinite(numericCount) || numericCount <= 0) {
+        continue;
+      }
+      hasAggregateCounts = true;
+      sourceHasCounts = true;
+      counts[normalizedStatus] = (counts[normalizedStatus] || 0) + numericCount;
+    }
+    if (sourceHasCounts) {
+      break;
+    }
   }
   const items = Array.isArray(result.samples) ? result.samples : Array.isArray(result.results) ? result.results : [];
   for (const item of items) {
     const status = statusLabel(item);
-    counts[status] = (counts[status] || 0) + 1;
+    if (!hasAggregateCounts || !counts[status]) {
+      counts[status] = (counts[status] || 0) + 1;
+    }
   }
   return counts;
 }
 
 function passFailCounts(kind, result, statusCounts) {
   const total = Number(result.completedRequests ?? result.totalRequests ?? statusTotal(statusCounts) ?? 0);
+  if (kind === 'performance') {
+    const samples = performanceReportSamples(result);
+    if (samples.length && (!total || samples.length >= total)) {
+      const failed = samples.filter(reportSampleFailed).length;
+      const effectiveTotal = total || samples.length;
+      return {
+        total: effectiveTotal,
+        passed: Math.max(0, effectiveTotal - failed),
+        failed
+      };
+    }
+    const countedTotal = statusTotal(statusCounts);
+    if (countedTotal > 0 && (!total || countedTotal >= total)) {
+      const passed = successCount(statusCounts, {
+        includeUnsupportedMethodProbeStatuses: String(result.type || '') === 'diagnosis'
+      });
+      const effectiveTotal = total || countedTotal;
+      return {
+        total: effectiveTotal,
+        passed,
+        failed: Math.max(0, effectiveTotal - passed)
+      };
+    }
+    if (String(result.type || '') === 'diagnosis' && (result.successfulRequests != null || result.failedRequests != null)) {
+      const passed = Math.max(0, Number(result.successfulRequests || 0));
+      const failed = Math.max(0, Number(result.failedRequests || 0));
+      return {
+        total: total || passed + failed,
+        passed,
+        failed
+      };
+    }
+  }
   const passed = Number(
     kind === 'performance'
       ? result.successfulRequests ?? successCount(statusCounts)
@@ -693,10 +1692,13 @@ function passFailCounts(kind, result, statusCounts) {
   return { total, passed, failed };
 }
 
-function successCount(statusCounts) {
+function successCount(statusCounts, options = {}) {
   return Object.entries(statusCounts || {}).reduce((total, [status, count]) => {
     const code = Number(status);
-    return code >= 200 && code < 400 ? total + Number(count || 0) : total;
+    return (code >= 200 && code < 400)
+      || (options.includeUnsupportedMethodProbeStatuses === true && (code === 405 || code === 501))
+      ? total + Number(count || 0)
+      : total;
   }, 0);
 }
 
@@ -705,8 +1707,9 @@ function statusTotal(statusCounts) {
 }
 
 function statusLabel(item = {}) {
-  if (item.statusCode) {
-    return String(item.statusCode);
+  const statusCode = Number(item.statusCode);
+  if (Number.isFinite(statusCode)) {
+    return statusCode > 0 ? String(statusCode) : 'ERR';
   }
   return item.error ? 'ERR' : item.passed === true ? 'PASS' : 'ERR';
 }
@@ -845,13 +1848,87 @@ async function writeText(output, text) {
 function reportScripts(options = {}) {
   const includeRequestResults = options.includeRequestResults !== false;
   const includeRequestDetails = includeRequestResults && options.includeRequestDetails !== false;
-  if (!includeRequestResults) {
-    return '';
-  }
+  const includeChartTabs = options.includeChartTabs === true;
   return `
 (function () {
   'use strict';
 
+  var reportWindow = typeof window !== 'undefined' ? window : null;
+  var reportNav = document.querySelector ? document.querySelector('.report-nav') : null;
+  var reduceMotion = reportWindow && reportWindow.matchMedia && reportWindow.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function reportNavOffset() {
+    return (reportNav ? Math.ceil(reportNav.getBoundingClientRect().height) : 0) + 18;
+  }
+
+  function scrollToReportSection(target, options) {
+    if (!target) {
+      return;
+    }
+    if (!reportWindow || typeof reportWindow.scrollTo !== 'function') {
+      return;
+    }
+    var top = target.getBoundingClientRect().top + reportWindow.pageYOffset - reportNavOffset();
+    reportWindow.scrollTo({
+      top: Math.max(0, top),
+      behavior: options && options.smooth && !reduceMotion ? 'smooth' : 'auto'
+    });
+  }
+
+  if (reportNav) {
+    Array.prototype.forEach.call(reportNav.querySelectorAll('a[href^="#"]'), function (link) {
+      link.addEventListener('click', function (event) {
+        var id = decodeURIComponent(link.getAttribute('href').slice(1));
+        var target = document.getElementById(id);
+        if (!target) {
+          return;
+        }
+        event.preventDefault();
+        if (reportWindow.history && reportWindow.history.pushState) {
+          reportWindow.history.pushState(null, '', '#' + encodeURIComponent(id));
+        } else {
+          reportWindow.location.hash = id;
+        }
+        scrollToReportSection(target, { smooth: true });
+      });
+    });
+
+    if (reportWindow && reportWindow.location && reportWindow.location.hash) {
+      var initialTarget = document.getElementById(decodeURIComponent(reportWindow.location.hash.slice(1)));
+      if (initialTarget) {
+        var scheduleScroll = reportWindow.requestAnimationFrame
+          ? reportWindow.requestAnimationFrame.bind(reportWindow)
+          : reportWindow.setTimeout.bind(reportWindow);
+        scheduleScroll(function () {
+          scrollToReportSection(initialTarget, { smooth: false });
+        });
+      }
+    }
+  }
+
+${includeChartTabs ? `
+  var chartGroups = Array.prototype.slice.call(document.querySelectorAll('[data-report-chart-group]'));
+
+  chartGroups.forEach(function (group) {
+    var tabs = Array.prototype.slice.call(group.querySelectorAll('[data-report-chart-tab]'));
+    var panels = Array.prototype.slice.call(group.querySelectorAll('[data-report-chart-panel]'));
+    tabs.forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        var key = tab.getAttribute('data-report-chart-tab');
+        tabs.forEach(function (item) {
+          var selected = item === tab;
+          item.classList.toggle('is-active', selected);
+          item.setAttribute('aria-selected', selected ? 'true' : 'false');
+        });
+        panels.forEach(function (panel) {
+          panel.hidden = panel.getAttribute('data-report-chart-panel') !== key;
+        });
+      });
+    });
+  });
+` : ''}
+
+${includeRequestResults ? `
   var rows = Array.prototype.slice.call(document.querySelectorAll('[data-result-row]'));
   var pageSizeSelect = document.getElementById('resultPageSizeSelect');
   var statusFilterSelect = document.getElementById('resultStatusFilterSelect');
@@ -1028,6 +2105,7 @@ ${includeRequestDetails ? `
 ` : ''}
   ensureStatusOptions();
   renderResultsPage();
+` : ''}
 }());
 `;
 }
@@ -1052,11 +2130,66 @@ function reportStyles() {
   --amber: #b26a00;
   --amber-soft: #fff1d6;
   --purple: #7655bd;
+  --graph-plot: #ffffff;
+  --graph-grid: #d9e2ef;
+  --graph-axis: #9fb0c4;
+  --graph-label: #607089;
+  --graph-title: #162033;
+  --graph-marker-stroke: #ffffff;
+  --highlight-text: #000000;
+  --selection-bg: #b9d7ff;
+  --hero-chip-bg: rgba(255, 255, 255, 0.78);
+  --nav-bg: rgba(255, 255, 255, 0.92);
+  --section-shadow: 0 10px 30px rgba(27, 39, 64, 0.06);
+  --bar-track: #e8eef6;
+  --status-muted-bg: #eef2f7;
+  --pre-bg: #f6f9fd;
+  --pre-text: #10233f;
+  --modal-backdrop: rgba(22, 32, 51, 0.52);
+  --modal-shadow: 0 24px 80px rgba(15, 23, 42, 0.34);
   --shadow: 0 18px 45px rgba(27, 39, 64, 0.12);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #101112;
+  --surface: #181a1c;
+  --surface-soft: #222426;
+  --ink: #f3f1ec;
+  --muted: #adb4bc;
+  --line: #34383c;
+  --line-strong: #4a5056;
+  --blue: #78b7ff;
+  --blue-soft: #16304f;
+  --green: #66d08a;
+  --green-soft: #163823;
+  --red: #ff7b72;
+  --red-soft: #3d1f1d;
+  --amber: #f4b740;
+  --amber-soft: #3a2b12;
+  --purple: #c49cff;
+  --graph-plot: #050607;
+  --graph-grid: #30363d;
+  --graph-axis: #59616a;
+  --graph-label: #aab6c6;
+  --graph-title: #e3e8ef;
+  --graph-marker-stroke: #050607;
+  --highlight-text: #ffffff;
+  --selection-bg: #0f4fa8;
+  --hero-chip-bg: rgba(34, 36, 38, 0.88);
+  --nav-bg: rgba(24, 26, 28, 0.94);
+  --section-shadow: 0 10px 30px rgb(0 0 0 / 28%);
+  --bar-track: #2b323a;
+  --status-muted-bg: #252b32;
+  --pre-bg: #0c1117;
+  --pre-text: #dbe7f3;
+  --modal-backdrop: rgba(4, 8, 14, 0.74);
+  --modal-shadow: 0 24px 80px rgb(0 0 0 / 68%);
+  --shadow: 0 18px 45px rgb(0 0 0 / 52%);
+}
 * { box-sizing: border-box; }
 html { background: var(--bg); color: var(--ink); }
+::selection { background: var(--selection-bg); color: var(--highlight-text); }
 body { margin: 0; font-size: 14px; line-height: 1.5; }
 body.modal-open { overflow: hidden; }
 a { color: var(--blue); text-decoration: none; }
@@ -1081,7 +2214,7 @@ h1, h2, h3 { margin: 0; line-height: 1.15; }
 h1 { font-size: clamp(30px, 4vw, 48px); letter-spacing: 0; }
 h2 { font-size: 24px; }
 h3 { font-size: 17px; }
-.hero-meta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; color: var(--muted); }
+.hero-meta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; color: var(--highlight-text); }
 .hero-meta span, .warning-chip {
   display: inline-flex;
   align-items: center;
@@ -1089,7 +2222,7 @@ h3 { font-size: 17px; }
   padding: 4px 10px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.78);
+  background: var(--hero-chip-bg);
 }
 .warning-chip { color: var(--amber); border-color: #ebc47b; background: var(--amber-soft); }
 .hero-result {
@@ -1105,7 +2238,7 @@ h3 { font-size: 17px; }
   text-align: center;
   box-shadow: inset 0 0 0 1px var(--line);
 }
-.hero-result.is-pass { border-color: var(--green-soft); color: var(--green); }
+.hero-result.is-pass { border-color: var(--green); color: var(--green); }
 .report-nav {
   position: sticky;
   top: 0;
@@ -1116,23 +2249,24 @@ h3 { font-size: 17px; }
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--nav-bg);
   backdrop-filter: blur(10px);
 }
 .report-nav a {
   padding: 8px 12px;
   border-radius: 6px;
-  color: var(--muted);
+  color: var(--highlight-text);
   font-weight: 700;
 }
-.report-nav a:hover { background: var(--blue-soft); color: var(--blue); text-decoration: none; }
+.report-nav a:hover { background: var(--blue-soft); color: var(--highlight-text); text-decoration: none; }
 .report-section {
+  scroll-margin-top: 82px;
   margin-top: 18px;
   padding: 28px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
-  box-shadow: 0 10px 30px rgba(27, 39, 64, 0.06);
+  box-shadow: var(--section-shadow);
 }
 .section-heading { max-width: 760px; margin-bottom: 20px; }
 .section-heading p:not(.eyebrow) { margin: 8px 0 0; color: var(--muted); }
@@ -1145,19 +2279,92 @@ h3 { font-size: 17px; }
 }
 .metric-card span, .info-row span, .mini-metrics span { display: block; color: var(--muted); font-size: 12px; font-weight: 800; text-transform: uppercase; }
 .metric-card strong { display: block; margin-top: 8px; font-size: 24px; }
-.info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; margin-top: 18px; }
-.info-row { padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); overflow-wrap: anywhere; }
-.info-row strong { display: block; margin-top: 4px; font-weight: 700; }
-.chart-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-.chart-card {
+	.info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; margin-top: 18px; }
+	.info-row { padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); overflow-wrap: anywhere; }
+	.info-row strong { display: block; margin-top: 4px; font-weight: 700; }
+	.chart-selector {
+	  display: flex;
+	  flex-wrap: wrap;
+	  gap: 8px;
+	  margin: -4px 0 16px;
+	  padding: 8px;
+	  border: 1px solid var(--line);
+	  border-radius: 8px;
+	  background: var(--surface-soft);
+	}
+	.chart-selector-button {
+	  appearance: none;
+	  min-height: 34px;
+	  padding: 7px 12px;
+	  border: 1px solid var(--line);
+	  border-radius: 6px;
+	  background: var(--surface);
+	  color: var(--muted);
+	  font: inherit;
+	  font-size: 12px;
+	  font-weight: 800;
+	  cursor: pointer;
+	}
+	.chart-selector-button:hover,
+	.chart-selector-button.is-active {
+	  border-color: var(--blue);
+	  background: var(--blue-soft);
+	  color: var(--highlight-text);
+	}
+	.report-chart-panel[hidden] { display: none; }
+	.chart-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+	.chart-card {
   min-height: 230px;
   padding: 18px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: linear-gradient(180deg, var(--surface), var(--surface-soft));
-}
-.chart-card-wide { grid-column: 1 / -1; }
+	}
+	.chart-card-wide { grid-column: 1 / -1; }
+	.graph-card { display: grid; align-content: start; gap: 10px; }
+.graph-meta { margin: -2px 0 0; color: var(--muted); font-size: 12px; font-weight: 800; text-transform: uppercase; }
 .chart-card-compact { display: grid; justify-items: center; gap: 12px; }
+.report-line-chart, .report-scatter-chart {
+  display: block;
+  width: 100%;
+  min-height: 390px;
+  height: min(52vh, 470px);
+}
+.report-svg-plot { fill: var(--graph-plot); stroke: var(--graph-axis); stroke-width: 1; }
+.report-svg-grid-line { stroke: var(--graph-grid); stroke-width: 1; opacity: 0.85; }
+.report-svg-axis { stroke: var(--graph-axis); stroke-width: 1.5; }
+.report-svg-label { fill: var(--graph-label); font-size: 11px; font-weight: 800; }
+.report-svg-axis-title { fill: var(--graph-title); font-size: 12px; font-weight: 900; letter-spacing: 0; }
+.report-svg-line { fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.report-svg-line.line-info { stroke: var(--blue); }
+.report-svg-line.line-warning { stroke: var(--amber); }
+.report-svg-line.line-danger { stroke: var(--red); }
+.report-svg-line.line-success { stroke: var(--green); }
+.report-svg-line.line-code-200 { stroke: #f3b313; }
+.report-svg-line.line-purple { stroke: #8b5cf6; }
+.report-svg-line.line-teal { stroke: #0ea5e9; }
+.report-svg-line.line-muted { stroke: var(--muted); }
+.report-svg-line-point,
+.report-svg-point { stroke: var(--graph-marker-stroke); stroke-width: 1.5; }
+.report-svg-line-point.line-info,
+.report-svg-point.line-info { fill: var(--blue); }
+.report-svg-line-point.line-warning,
+.report-svg-point.line-warning { fill: var(--amber); }
+.report-svg-line-point.line-danger,
+.report-svg-point.line-danger { fill: var(--red); }
+.report-svg-line-point.line-success,
+.report-svg-point.line-success { fill: var(--green); }
+.report-svg-line-point.line-code-200,
+.report-svg-point.line-code-200 { fill: #f3b313; }
+.report-svg-line-point.line-purple,
+.report-svg-point.line-purple { fill: #8b5cf6; }
+.report-svg-line-point.line-teal,
+.report-svg-point.line-teal { fill: #0ea5e9; }
+.report-svg-line-point.line-muted,
+.report-svg-point.line-muted { fill: var(--muted); }
+.report-svg-point.is-info { fill: #6bb6ff; }
+.report-svg-point.is-danger { fill: var(--red); }
+.graph-legend { justify-content: center; }
 .donut {
   display: grid;
   place-items: center;
@@ -1180,10 +2387,15 @@ h3 { font-size: 17px; }
 .legend-row i { display: inline-block; width: 10px; height: 10px; margin-right: 5px; border-radius: 50%; }
 .legend-pass { background: var(--green); }
 .legend-fail { background: var(--red); }
-.bar-list, .phase-list { display: grid; gap: 10px; margin-top: 16px; }
-.bar-row, .phase-row { display: grid; grid-template-columns: 70px 1fr 72px; gap: 10px; align-items: center; color: var(--muted); }
-.phase-row { grid-template-columns: 160px 1fr 90px; }
-.bar-track { height: 12px; overflow: hidden; border-radius: 999px; background: #e8eef6; }
+.legend-info { background: var(--blue); }
+.legend-warning { background: var(--amber); }
+.legend-code-200 { background: #f3b313; }
+.legend-purple { background: #8b5cf6; }
+.legend-teal { background: #0ea5e9; }
+.legend-muted { background: var(--muted); }
+.bar-list { display: grid; gap: 10px; margin-top: 16px; }
+.bar-row { display: grid; grid-template-columns: 70px 1fr 72px; gap: 10px; align-items: center; color: var(--muted); }
+.bar-track { height: 12px; overflow: hidden; border-radius: 999px; background: var(--bar-track); }
 .bar-fill { height: 100%; border-radius: inherit; background: var(--muted); }
 .bar-fill.status-success, .status-success { background: var(--green); color: white; }
 .bar-fill.status-info, .status-info { background: var(--blue); color: white; }
@@ -1302,7 +2514,7 @@ h3 { font-size: 17px; }
 }
 .pill.pass { background: var(--green-soft); color: var(--green); }
 .pill.fail { background: var(--red-soft); color: var(--red); }
-.status-muted { background: #eef2f7; color: var(--muted); }
+.status-muted { background: var(--status-muted-bg); color: var(--muted); }
 .response-card {
   margin-top: 14px;
   padding: 20px;
@@ -1327,8 +2539,8 @@ pre {
   padding: 14px;
   overflow: auto;
   border-top: 1px solid var(--line);
-  color: #10233f;
-  background: #f6f9fd;
+  color: var(--pre-text);
+  background: var(--pre-bg);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 12px;
   line-height: 1.55;
@@ -1356,7 +2568,7 @@ pre {
   display: grid;
   place-items: center;
   padding: 22px;
-  background: rgba(22, 32, 51, 0.52);
+  background: var(--modal-backdrop);
 }
 .modal-backdrop[hidden] { display: none; }
 .response-modal-panel {
@@ -1366,7 +2578,7 @@ pre {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
-  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.34);
+  box-shadow: var(--modal-shadow);
 }
 .response-modal-header {
   display: flex;
@@ -1396,7 +2608,7 @@ pre {
   .diagnostic-check { grid-template-columns: 1fr; }
   .diagnostic-check-result { justify-items: start; text-align: left; }
   .chart-grid { grid-template-columns: 1fr; }
-  .phase-row, .bar-row { grid-template-columns: 1fr; }
+  .bar-row { grid-template-columns: 1fr; }
   .modal-backdrop { padding: 10px; }
   .response-modal-panel { max-height: 94vh; }
   .response-modal-header { display: block; }
@@ -1406,7 +2618,7 @@ pre {
   html { background: white; }
   body.modal-open { overflow: visible; }
   .report-shell { width: auto; margin: 0; }
-  .report-nav, .results-controls, .detail-button, .modal-backdrop, #responseDetailTemplates { display: none; }
+	  .report-nav, .chart-selector, .results-controls, .detail-button, .modal-backdrop, #responseDetailTemplates { display: none; }
   .result-row[hidden] { display: table-row !important; }
   .report-section, .report-hero { break-inside: avoid; box-shadow: none; }
 }

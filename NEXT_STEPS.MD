@@ -31,40 +31,6 @@ Helpful, non-blocking input:
 
 PostMeter must remain a standalone local desktop application. Do not add PostMeter user account creation, app login, required cloud sign-in, or any account gate for core usage. OAuth work is strictly for authenticating outbound API requests, not for authenticating users into PostMeter.
 
-## Recently Completed
-
-- Moved runners into a dedicated workspace-owned section.
-  - The left sidebar now includes `Runners` between `Workspaces` and `History`; the request result-panel Runner tab has been removed.
-  - Workspaces persist first-class `workspace.runners` data under the current workspace schema, with runner-owned request copies, selected environment IDs, stop-on-failure, and environment-mutation policy.
-  - Runner tabs participate in the same open-tab, dirty-close, force-close, 128-tab-limit, and session restore model as requests, environments, and workspaces.
-  - Runners can be created from `New` > `Runner` or the empty Runners pane, runner requests can be added as local copies or imported from expandable collection/request selections, and Shift+click/Ctrl+click can import multiple selections.
-  - Runner-owned requests open in normal request editor tabs through row `Edit`, save only that runner request copy, and can be reordered/deleted without mutating source collection requests.
-  - Runner execution results now use a split status/detail pane while keeping the request list scrollable independently.
-  - Runner execution now accepts runner payloads directly, preserves runner-local request order/IDs, supports the existing script/cookie/vault/package lifecycle, and only writes environment mutations back when `allowEnvironmentMutation` is enabled.
-  - Tests cover runner model normalization, migration, IPC validation/runtime mutation policy, session persistence, tab cap enforcement, dirty runner tab save/discard failure paths, and first-class renderer wiring.
-- Refined desktop tab and sidebar interactions.
-  - Request, environment, and workspace names are inline-editable; request/environment title edits save on Enter and stay dirty on blur, while workspace title edits save automatically.
-  - Pane-local save actions replaced the old top-toolbar Save button for requests and environments, and app/workspace-local preferences continue through targeted settings saves.
-  - Open tabs shrink before scrolling, expose hover/active close buttons, support tab right-click close/force-close actions, and enforce the 128-tab cap across requests, environments, workspaces, runners, and performance tests.
-  - Sidebar collections, folders, requests, environments, workspaces, runners, and performance tests are draggable; structural drag/drop saves only the membership/order change and leaves dirty editor drafts dirty.
-  - Drag placement feedback is a single highlighted insertion bar per gap.
-  - The History sidebar tab has a `Clear History` context action with an irreversible-action confirmation.
-- Implemented the local Performance section.
-  - `Performance` now lives between `Runners` and `History`, persists workspace-owned `workspace.performanceTests` under the current schema, and uses dirty-aware tabs, session restore, close/force-close behavior, and the 128-tab cap.
-  - Users can create Performance tests from `New` or the empty Performance pane, import/export native Performance test files, import deep-copied collection requests, manually enter request details, choose an environment, configure safety limits, run/cancel tests, and review bounded result summaries.
-  - The eight V1 local types are `Full Endpoint Diagnosis`, `Latency`, `RPS / throughput`, `Concurrency`, `Stress`, `Spike`, `Soak`, and `Ramp`.
-  - `Full Endpoint Diagnosis` is the first one-click type, supports Quick/Medium/Extended scopes for deeper UAT evidence, and records transport timing, endpoint behavior, passive security/configuration signals, local-client confidence, diagnostic phases, and UAT-ready CSV rows.
-  - Tests cover model normalization, import/export validation, request-copy isolation, environment copy-vs-mutate behavior, safety-cap rejection, cancellation, IPC progress/mutation behavior, renderer wiring, sidebar ordering, and tab-limit behavior.
-- Implemented GraphQL body editing and execution.
-  - Request, runner-owned request, and Performance request editors now expose a GraphQL body mode with query, variables, and operation-name fields.
-  - GraphQL bodies persist/export as Postman-compatible `postmanBody.mode = "graphql"` metadata, execute as `application/json`, and support environment substitution in query, variables, and operation name.
-  - Focused HTTP, import/export, Performance, bootstrap, and UI smoke coverage now exercises GraphQL editing, execution materialization, and round-tripping.
-- Added the first Settings surface.
-  - The main toolbar now exposes `File` > `Settings`, and the native app File menu includes `Settings...`.
-  - The old top-toolbar theme segmented control moved into Settings > Appearance.
-  - Tab force-close behavior, prerelease update checks, script sandbox capabilities, vault/package/file binding controls, and diagnostics/privacy controls now live in categorized Settings panes instead of crowding workspace details.
-  - Settings > Modals now controls whether clicking outside a modal closes it. The default remains disabled, so users must use explicit modal actions such as `Close`, `Cancel`, or confirmation buttons unless they opt in.
-
 ## Highest Priority Steps
 
 1. Expand automated test coverage and UI snapshot coverage.
@@ -129,14 +95,8 @@ These are production-readiness items that cannot be fully proven by local Linux 
   - Manual stress validation: run owned endpoint tests at 100k, 200k, 500k, and 1m requests with concurrency near the new cap; watch CPU, RSS, disk growth, result-store size, progress cadence, cancellation responsiveness, and export correctness. Preserve logs/evidence for regressions.
   - Documentation updates needed: README feature summary, architecture docs, tech specs, compatibility notes, release-readiness matrix, and user-facing Performance docs/tooltips explaining local load limits, HTTPS support, worker fallback behavior, capture settings, result storage, and CSV export.
 - Format large integer inputs with comma separators in Runner and Performance panes. Native `type="number"` inputs do not display `1,000,000`, so this likely needs comma-aware text inputs plus shared parse/clamp helpers that preserve the existing 1m request caps and cross-field max-request validation.
-- Distributed/cloud load execution remains deferred until there is explicit product demand.
-- Team collaboration and shared remote workspaces.
-- Plugin system for custom auth, importers, reporters, and scripting extensions.
 - True auto-download/auto-install updates beyond opening GitHub Releases.
-- Advanced local automation / unsafe script mode is deferred and should not be part of the v1.0.0 release scope. If revisited later, consider a plugin system or settings panel that can grant selected local capabilities or disable sandboxing entirely for users who intentionally want scripts to modify local files. The maintainer has not chosen between those two models yet; any future design must treat this as dangerous, off by default, and visibly separate from the default safe sandbox.
 - Direct first-party Postman account/provider integration for fetching team Package Library `@team/package` sources remains deferred. The current reviewed HTTPS source-URL workflow stays the supported path until a future provider-specific auth/import contract is approved.
-- Maintainer-provided real-world Postman collection corpora remain deferred until a sanitized folder of collections is available. When provided, add them as compatibility fixtures or external report inputs without copying third-party copyrighted content blindly.
-- A stricter Linux deny-by-default seccomp-BPF allowlist is optional future hardening. The maintainer has accepted the current Linux `bubblewrap` namespace isolation plus dangerous-syscall seccomp policy for the current public Linux OS-sandbox claim.
 - User-imported custom fonts for Settings > Appearance remain deferred. If revisited later, support importing and deleting local `.ttf`, `.otf`, `.woff`, and `.woff2` fonts from an app-controlled local font store, expose them in both Interface Text and Editor Text selectors, reset affected selections when a custom font is deleted, avoid storing raw local paths in exported workspace files, and add E2E coverage for import, selection, deletion, persistence, invalid files, and privacy behavior.
 
 ## Risks / Gaps Blocking Production Readiness
