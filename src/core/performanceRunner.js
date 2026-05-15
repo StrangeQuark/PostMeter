@@ -204,6 +204,7 @@ async function executeIteration(performanceTest, environment, cookies, iteration
       signal: options.signal
     });
     const requestResult = result.results?.[0] || {};
+    const statusCode = Number(requestResult.statusCode || 0);
     return {
       environment: result.environment,
       cookies: result.cookies,
@@ -220,14 +221,14 @@ async function executeIteration(performanceTest, environment, cookies, iteration
         stageName: stage.name || performanceTest.type,
         stageIndex: execution.stageIndex || 0,
         stageConcurrency: stage.concurrency || 1,
-        statusCode: Number(requestResult.statusCode || 0),
+        statusCode,
         durationMillis: Number(requestResult.durationMillis || 0),
         schedulerLagMillis: Math.max(0, Date.now() - Number(execution.scheduledAtMillis || Date.now())),
         responseBody: requestResult.responseBody || '',
         responseBytes: Number(requestResult.responseBytes || 0),
         responseHeaders: requestResult.responseHeaders || {},
         timings: requestResult.timings || {},
-        passed: requestResult.passed === true,
+        passed: performanceSamplePassed(requestResult, statusCode, performanceTest, stage),
         error: requestResult.error || '',
         preRequestScriptResult: requestResult.preRequestScriptResult,
         testScriptResult: requestResult.testScriptResult,
@@ -266,6 +267,23 @@ async function executeIteration(performanceTest, environment, cookies, iteration
       }
     };
   }
+}
+
+function performanceSamplePassed(requestResult = {}, statusCode = Number(requestResult.statusCode || 0), performanceTest = {}, stage = {}) {
+  return requestResult.passed === true
+    && (isPerformanceHttpSuccess(statusCode) || isUnsupportedDiagnosisMethodProbe(statusCode, performanceTest, stage));
+}
+
+function isPerformanceHttpSuccess(statusCode) {
+  const code = Number(statusCode || 0);
+  return Number.isInteger(code) && code >= 200 && code < 400;
+}
+
+function isUnsupportedDiagnosisMethodProbe(statusCode, performanceTest = {}, stage = {}) {
+  const code = Number(statusCode || 0);
+  return performanceTest.type === DIAGNOSIS_TYPE
+    && (stage.phase === 'head-probe' || stage.phase === 'options-probe')
+    && (code === 405 || code === 501);
 }
 
 function runnerOptions(options) {
@@ -348,14 +366,12 @@ function createPerformanceRunContext(performanceTest, plan = {}) {
     keepAlive: true,
     keepAliveMsecs: 1000,
     maxSockets,
-    maxTotalSockets: maxSockets,
     maxFreeSockets: Math.min(16, maxSockets)
   });
   const httpsAgent = new https.Agent({
     keepAlive: true,
     keepAliveMsecs: 1000,
     maxSockets,
-    maxTotalSockets: maxSockets,
     maxFreeSockets: Math.min(16, maxSockets)
   });
   return {

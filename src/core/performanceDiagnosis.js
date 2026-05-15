@@ -473,8 +473,8 @@ function summarizePhases(samples) {
       phase,
       requests: items.length,
       concurrency: Math.max(1, ...items.map((sample) => Number(sample.stageConcurrency || 1))),
-      successfulResponses: items.filter((sample) => isHttpSuccess(sample.statusCode)).length,
-      failedResponses: items.filter((sample) => !isHttpSuccess(sample.statusCode)).length,
+      successfulResponses: items.filter(isDiagnosisPhaseSuccess).length,
+      failedResponses: items.filter((sample) => !isDiagnosisPhaseSuccess(sample)).length,
       averageDurationMillis: average(durations),
       p95DurationMillis: percentile(durations, 0.95),
       requestsPerSecond: items.length / (wallClockMillis / 1000)
@@ -581,6 +581,16 @@ function statusForProbe(sample) {
     return 'not_available';
   }
   return statusCode >= 400 ? 'warn' : 'not_available';
+}
+
+function isDiagnosisPhaseSuccess(sample = {}) {
+  return isHttpSuccess(sample.statusCode) || isUnsupportedMethodProbe(sample);
+}
+
+function isUnsupportedMethodProbe(sample = {}) {
+  const statusCode = Number(sample?.statusCode || 0);
+  return (sample.phase === 'head-probe' || sample.phase === 'options-probe')
+    && (statusCode === 405 || statusCode === 501);
 }
 
 function statusLabel(statusCode) {

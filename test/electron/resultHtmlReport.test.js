@@ -54,6 +54,7 @@ test('result HTML report renders polished runner sections and escapes response d
 
   assert.equal(sourceCalls, 2);
   assert.match(html, /<!doctype html>/i);
+  assert.match(html, /<html lang="en" data-theme="light">/);
   assert.match(html, /PostMeter Runner Results/);
   assert.match(html, /Smoke Collection/);
   assert.match(html, /Overview/);
@@ -93,11 +94,12 @@ test('result HTML report renders performance-specific visual and diagnostic data
       performanceTestName: 'Endpoint Diagnosis',
       type: 'diagnosis',
       completedRequests: 3,
-      successfulRequests: 2,
-      failedRequests: 1,
+      successfulRequests: 1,
+      failedRequests: 2,
       passed: false,
       summary: {
         requestsPerSecond: 12.5,
+        statusCodes: { 200: 1, 500: 1, 0: 1 },
         averageDurationMillis: 40,
         p95DurationMillis: 80,
         p99DurationMillis: 95,
@@ -111,7 +113,7 @@ test('result HTML report renders performance-specific visual and diagnostic data
           bestObservedRequestsPerSecond: 12.5,
           stableRequestsPerSecond: 8,
           saturationPoint: 'not observed',
-          successRate: 0.66,
+          successRate: 0.33,
           targetUrl: 'https://example.test/diagnostic',
           finalUrl: 'https://example.test/diagnostic',
           checks: [
@@ -120,25 +122,54 @@ test('result HTML report renders performance-specific visual and diagnostic data
           ],
           phases: [
             { phase: 'baseline', requests: 1, concurrency: 1, successfulResponses: 1, failedResponses: 0, averageDurationMillis: 40, p95DurationMillis: 40, requestsPerSecond: 8 },
-            { phase: 'ramp', requests: 2, concurrency: 2, successfulResponses: 1, failedResponses: 1, averageDurationMillis: 60, p95DurationMillis: 80, requestsPerSecond: 12.5 }
+            { phase: 'ramp', requests: 2, concurrency: 2, successfulResponses: 0, failedResponses: 2, averageDurationMillis: 60, p95DurationMillis: 80, requestsPerSecond: 12.5 }
           ]
         }
       },
-      samples: [{
-        resultIndex: 0,
-        phase: 'baseline',
-        stageName: 'Warmup',
-        requestName: 'Diagnostic request',
-        requestMethod: 'GET',
-        requestUrl: 'https://example.test/diagnostic',
-        statusCode: 200,
-        durationMillis: 40,
-        passed: true
-      }]
+      samples: [
+        {
+          resultIndex: 0,
+          phase: 'baseline',
+          stageName: 'Warmup',
+          requestName: 'Diagnostic request',
+          requestMethod: 'GET',
+          requestUrl: 'https://example.test/diagnostic',
+          startedAt: '2026-01-01T00:00:00.000Z',
+          statusCode: 200,
+          durationMillis: 40,
+          passed: true
+        },
+        {
+          resultIndex: 1,
+          phase: 'ramp',
+          stageName: 'Ramp',
+          requestName: 'Diagnostic request',
+          requestMethod: 'GET',
+          requestUrl: 'https://example.test/diagnostic',
+          startedAt: '2026-01-01T00:00:01.000Z',
+          statusCode: 500,
+          durationMillis: 80,
+          passed: false
+        },
+        {
+          resultIndex: 2,
+          phase: 'ramp',
+          stageName: 'Ramp',
+          requestName: 'Diagnostic request',
+          requestMethod: 'GET',
+          requestUrl: 'https://example.test/diagnostic',
+          startedAt: '2026-01-01T00:00:02.000Z',
+          statusCode: 0,
+          durationMillis: 0,
+          passed: false,
+          error: 'Request exceeded redirects.'
+        }
+      ]
     }
   });
 
   assert.match(html, /PostMeter Performance Results/);
+  assert.match(html, /<html lang="en" data-theme="light">/);
   assert.match(html, /Endpoint Diagnosis/);
   assert.match(html, /href="#endpoint-diagnosis"/);
   assert.match(html, /href="#diagnostic-checks"/);
@@ -148,11 +179,148 @@ test('result HTML report renders performance-specific visual and diagnostic data
   assert.match(html, /Stable RPS/);
   assert.match(html, /DNS lookup time/);
   assert.match(html, /Missing HTTPS/);
+  assert.match(html, /Charts and Trends/);
+  assert.match(html, /data-report-chart-tab="overview"/);
+  assert.match(html, /data-report-chart-panel="overview"/);
+  assert.match(html, /Pass \/ fail/);
+  assert.match(html, /Status distribution/);
+  assert.match(html, /Latency profile/);
   assert.match(html, /Diagnosis phases/);
+  assert.match(html, /Latency by diagnostic phase/);
+  assert.match(html, /Throughput by diagnostic phase/);
+  assert.match(html, /Codes over time/);
+  assert.match(html, /data-report-chart-tab="graph-[0-9]+-latency-by-diagnostic-phase"/);
+  assert.match(html, /200 \(1\)/);
+  assert.match(html, /500 \(1\)/);
+  assert.match(html, /ERR \(1\)/);
+  assert.match(html, />600<\/text>/);
+  assert.match(html, /class="report-svg-plot"/);
+  assert.match(html, /class="report-svg-grid-line"/);
+  assert.match(html, /class="report-svg-axis-title"/);
+  assert.match(html, /class="report-svg-line-point line-code-200"/);
+  assert.match(html, /Phase/);
+  assert.match(html, /Elapsed time/);
   assert.match(html, /12\.5 rps/);
   assert.match(html, /Diagnostic request/);
   assert.match(html, /Warmup/);
   assert.doesNotMatch(html, /Diagnosis confidence/);
+});
+
+test('performance HTML report derives failures from HTTP status classes and splits RPS by outcome', async () => {
+  const html = await resultHtmlReportToHtml({
+    kind: 'performance',
+    includeRequestResults: false,
+    result: {
+      performanceTestName: 'Throughput Failure Report',
+      type: 'throughput',
+      completedRequests: 3,
+      successfulRequests: 3,
+      failedRequests: 0,
+      passed: true,
+      summary: {
+        statusCodes: { 200: 1, 429: 2 },
+        requestsPerSecond: 10,
+        averageDurationMillis: 100,
+        p95DurationMillis: 120
+      },
+      samples: [
+        { resultIndex: 0, startedAt: '2026-01-01T00:00:00.000Z', statusCode: 200, durationMillis: 100, passed: true },
+        { resultIndex: 1, startedAt: '2026-01-01T00:00:01.000Z', statusCode: 429, durationMillis: 100, passed: true },
+        { resultIndex: 2, startedAt: '2026-01-01T00:00:02.000Z', statusCode: 429, durationMillis: 100, passed: true }
+      ]
+    }
+  });
+
+  assert.match(html, /Needs Review/);
+  assert.match(html, /<span>Successful<\/span>\n<strong>1<\/strong>/);
+  assert.match(html, /<span>Failed<\/span>\n<strong>2<\/strong>/);
+  assert.match(html, /data-report-chart-tab="overview"/);
+  assert.match(html, /data-report-chart-tab="graph-1-requests-per-second-over-time"/);
+  assert.match(html, /Successful/);
+  assert.match(html, /Failed/);
+  assert.match(html, /429 \(2\)/);
+  assert.match(html, />600<\/text>/);
+});
+
+test('performance HTML report treats unsupported diagnosis method probes as diagnostic-only', async () => {
+  const html = await resultHtmlReportToHtml({
+    kind: 'performance',
+    includeRequestResults: false,
+    result: {
+      performanceTestName: 'Unsupported Options Diagnosis',
+      type: 'diagnosis',
+      completedRequests: 2,
+      successfulRequests: 2,
+      failedRequests: 0,
+      passed: true,
+      summary: {
+        statusCodes: { 200: 1, 405: 1 },
+        requestsPerSecond: 2,
+        averageDurationMillis: 10,
+        p95DurationMillis: 12,
+        diagnosis: {
+          confidence: 'high',
+          confidenceScore: 96,
+          completedChecks: 1,
+          requestedChecks: 1,
+          checks: [
+            { group: 'HTTP', label: 'OPTIONS probe', status: 'not_available', value: 'HTTP 405' }
+          ],
+          phases: [
+            { phase: 'baseline', requests: 1, concurrency: 1, successfulResponses: 1, failedResponses: 0, averageDurationMillis: 10, p95DurationMillis: 10, requestsPerSecond: 1 },
+            { phase: 'options-probe', requests: 1, concurrency: 1, successfulResponses: 1, failedResponses: 0, averageDurationMillis: 12, p95DurationMillis: 12, requestsPerSecond: 1 }
+          ]
+        }
+      },
+      samples: [
+        { resultIndex: 0, phase: 'baseline', startedAt: '2026-01-01T00:00:00.000Z', statusCode: 200, durationMillis: 10, passed: true },
+        { resultIndex: 1, phase: 'options-probe', startedAt: '2026-01-01T00:00:01.000Z', statusCode: 405, durationMillis: 12, passed: true }
+      ]
+    }
+  });
+
+  assert.match(html, /Passed/);
+  assert.match(html, /<span>Successful<\/span>\n<strong>2<\/strong>/);
+  assert.match(html, /<span>Failed<\/span>\n<strong>0<\/strong>/);
+  assert.match(html, /405 \(1\)/);
+  assert.doesNotMatch(html, /Needs Review/);
+});
+
+test('result HTML report supports explicit dark theme exports', async () => {
+  const html = await resultHtmlReportToHtml({
+    kind: 'runner',
+    theme: 'dark',
+    result: {
+      collectionName: 'Dark Report',
+      totalRequests: 1,
+      passedRequests: 1,
+      failedRequests: 0,
+      passed: true,
+      resultPage: { statusCounts: { 200: 1 } }
+    },
+    items: async function* items() {
+      yield { resultIndex: 0, requestName: 'Dark request', statusCode: 200, durationMillis: 12, passed: true };
+    }
+  });
+
+  assert.match(html, /<html lang="en" data-theme="dark">/);
+  assert.match(html, /:root\[data-theme="dark"\]/);
+  assert.match(html, /--graph-plot: #050607/);
+  assert.match(html, /--nav-bg: rgba\(24, 26, 28, 0\.94\)/);
+  assert.match(html, /--hero-chip-bg: rgba\(34, 36, 38, 0\.88\)/);
+  assert.match(html, /--bar-track: #2b323a/);
+  assert.match(html, /--pre-bg: #0c1117/);
+  assert.match(html, /--highlight-text: #ffffff/);
+  assert.match(html, /::selection \{ background: var\(--selection-bg\); color: var\(--highlight-text\); \}/);
+  assert.match(html, /\.hero-result\.is-pass \{ border-color: var\(--green\); color: var\(--green\); \}/);
+  assert.match(html, /\.hero-meta \{[\s\S]*color: var\(--highlight-text\);/);
+  assert.match(html, /\.report-nav \{[\s\S]*background: var\(--nav-bg\)/);
+  assert.match(html, /\.report-nav a \{[\s\S]*color: var\(--highlight-text\);/);
+  assert.match(html, /\.report-nav a:hover \{ background: var\(--blue-soft\); color: var\(--highlight-text\); text-decoration: none; \}/);
+  assert.match(html, /\.chart-selector-button:hover,[\s\S]*\.chart-selector-button\.is-active \{[\s\S]*color: var\(--highlight-text\);/);
+  assert.match(html, /\.bar-track \{[\s\S]*background: var\(--bar-track\)/);
+  assert.match(html, /pre \{[\s\S]*color: var\(--pre-text\);[\s\S]*background: var\(--pre-bg\)/);
+  assert.match(html, /Dark Report/);
 });
 
 test('result HTML report can omit request results and details for compact reports', async () => {
@@ -186,6 +354,92 @@ test('result HTML report can omit request results and details for compact report
   assert.doesNotMatch(html, /Should not stream/);
 });
 
+test('result HTML report navigation smooth-scrolls with sticky nav offset', async () => {
+  const html = await resultHtmlReportToHtml({
+    kind: 'runner',
+    includeRequestResults: false,
+    result: {
+      collectionName: 'Navigation Runner',
+      totalRequests: 1,
+      passedRequests: 1,
+      failedRequests: 0,
+      passed: true
+    }
+  });
+  const script = html.match(/<script>\n([\s\S]*?)<\/script>/)?.[1];
+  assert.ok(script, 'Expected report navigation script to be present.');
+  assert.match(html, /\.report-section \{[\s\S]*scroll-margin-top: 82px;/);
+
+  const listeners = new Map();
+  const scrollCalls = [];
+  const historyCalls = [];
+  let prevented = false;
+  const link = {
+    addEventListener(name, handler) {
+      listeners.set(name, handler);
+    },
+    getAttribute(name) {
+      return name === 'href' ? '#charts' : '';
+    }
+  };
+  const nav = {
+    getBoundingClientRect() {
+      return { height: 56 };
+    },
+    querySelectorAll(selector) {
+      return selector === 'a[href^="#"]' ? [link] : [];
+    }
+  };
+  const target = {
+    getBoundingClientRect() {
+      return { top: 320 };
+    }
+  };
+
+  vm.runInNewContext(script, {
+    document: {
+      querySelector(selector) {
+        return selector === '.report-nav' ? nav : null;
+      },
+      getElementById(id) {
+        return id === 'charts' ? target : null;
+      }
+    },
+    window: {
+      pageYOffset: 100,
+      location: { hash: '' },
+      history: {
+        pushState(...args) {
+          historyCalls.push(args);
+        }
+      },
+      matchMedia() {
+        return { matches: false };
+      },
+      requestAnimationFrame(callback) {
+        callback();
+      },
+      setTimeout(callback) {
+        callback();
+      },
+      scrollTo(options) {
+        scrollCalls.push(options);
+      }
+    }
+  });
+
+  listeners.get('click')({
+    preventDefault() {
+      prevented = true;
+    }
+  });
+
+  assert.equal(prevented, true);
+  assert.deepEqual(historyCalls[0], [null, '', '#charts']);
+  assert.equal(scrollCalls[0].top, 346);
+  assert.equal(scrollCalls[0].behavior, 'smooth');
+});
+
 test('result HTML report can include request results without response detail payloads', async () => {
   let sourceCalls = 0;
   const html = await resultHtmlReportToHtml({
@@ -211,7 +465,7 @@ test('result HTML report can include request results without response detail pay
     }
   });
 
-  assert.equal(sourceCalls, 1);
+  assert.equal(sourceCalls, 2);
   assert.match(html, /Request Results/);
   assert.match(html, /Listed request/);
   assert.match(html, /id="resultPageSizeSelect"/);

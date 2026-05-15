@@ -204,9 +204,51 @@ test('full endpoint diagnosis survives unstable HTTP behavior and still reports 
     assert.equal(result.samples.some((sample) => sample.phase === 'head-probe' && sample.statusCode === 405), true);
     assert.equal(result.samples.some((sample) => sample.phase === 'options-probe' && sample.statusCode === 204), true);
     assert.equal(Object.hasOwn(result.summary.statusCodes, '503'), true);
+    const failedByStatus = result.samples.filter((sample) => (
+      (Number(sample.statusCode || 0) >= 400 || Number(sample.statusCode || 0) <= 0 || sample.error)
+      && !isUnsupportedDiagnosisProbe(sample)
+    )).length;
+    assert.equal(result.failedRequests, failedByStatus);
+    assert.equal(result.successfulRequests, result.completedRequests - failedByStatus);
     assert.equal(findDiagnosisCheck(diagnosis, 'http_status_distribution').status, 'fail');
     assert.equal(findDiagnosisCheck(diagnosis, 'sensitive_data_in_url').status, 'warn');
     assert.ok(['high', 'medium', 'low'].includes(diagnosis.confidence));
+  } finally {
+    await server.close();
+  }
+});
+
+test('full endpoint diagnosis treats unsupported OPTIONS probes as diagnostic-only samples', async () => {
+  const server = await createOptionsUnsupportedDiagnosticServer();
+  try {
+    const performanceTest = performanceTestModel({
+      id: 'perf-diagnosis-options-unsupported',
+      name: 'Unsupported Options Diagnosis',
+      type: 'diagnosis',
+      request: {
+        id: 'request-diagnosis-options-unsupported',
+        name: 'Unsupported Options Endpoint',
+        method: 'GET',
+        url: `${server.baseUrl}/unsupported-options`
+      },
+      safetyLimits: { maxTotalRequests: 12, maxConcurrency: 4, maxDurationSeconds: 10 }
+    });
+
+    const result = await runPerformanceTest(performanceTest, null);
+    const diagnosis = result.summary.diagnosis;
+    const optionsSample = result.samples.find((sample) => sample.phase === 'options-probe');
+    const optionsPhase = diagnosis.phases.find((phase) => phase.phase === 'options-probe');
+
+    assert.equal(result.completedRequests, 44);
+    assert.equal(result.successfulRequests, 44);
+    assert.equal(result.failedRequests, 0);
+    assert.equal(result.passed, true);
+    assert.equal(optionsSample.statusCode, 405);
+    assert.equal(optionsSample.passed, true);
+    assert.equal(optionsPhase.successfulResponses, 1);
+    assert.equal(optionsPhase.failedResponses, 0);
+    assert.equal(findDiagnosisCheck(diagnosis, 'options_probe').status, 'not_available');
+    assert.equal(findDiagnosisCheck(diagnosis, 'http_status_distribution').status, 'pass');
   } finally {
     await server.close();
   }
@@ -274,6 +316,39 @@ test('runs bounded performance iterations through the request lifecycle and aggr
   assert.equal(result.summary.p95DurationMillis, 12);
   assert.equal(result.summary.statusCodes['200'], 3);
   assert.deepEqual(progress.map((event) => event.completedRequests), [1, 2, 3]);
+});
+
+test('counts HTTP 4xx and 5xx performance responses as failed samples', async () => {
+  const statuses = [200, 429, 500];
+  const performanceTest = performanceTestModel({
+    id: 'perf-http-failures',
+    name: 'HTTP Failure Accounting',
+    type: 'latency',
+    request: {
+      id: 'request-http-failures',
+      name: 'HTTP Failure Request',
+      method: 'GET',
+      url: 'https://api.example.test/failures'
+    },
+    config: { iterations: statuses.length, concurrency: 1 },
+    safetyLimits: { maxTotalRequests: statuses.length, maxConcurrency: 1, maxDurationSeconds: 10 }
+  });
+  let index = 0;
+
+  const result = await runPerformanceTest(performanceTest, null, {
+    sendRequest: async () => ({
+      ...response(),
+      statusCode: statuses[index++],
+      body: '{}'
+    })
+  });
+
+  assert.equal(result.completedRequests, 3);
+  assert.equal(result.successfulRequests, 1);
+  assert.equal(result.failedRequests, 2);
+  assert.equal(result.passed, false);
+  assert.deepEqual(result.samples.map((sample) => sample.passed), [true, false, false]);
+  assert.deepEqual(result.summary.statusCodes, { 200: 1, 429: 1, 500: 1 });
 });
 
 test('performance result streaming writes only outer performance samples with stable indexes', async () => {
@@ -381,6 +456,49 @@ test('performance requests use bounded node transport options', async () => {
     assert.ok(options.agent);
     assert.equal(options.agent.options.keepAlive, true);
     assert.equal(options.agent.maxSockets, 2);
+    assert.equal(options.agent.maxTotalSockets, Infinity);
+  }
+});
+
+test('performance node transport follows redirects across origins when concurrency is capped at one', async () => {
+  const targetServer = await createRedirectTargetServer();
+  const redirectServer = await createRedirectServer(`${targetServer.baseUrl}/final`);
+  try {
+    const progress = [];
+    const performanceTest = performanceTestModel({
+      id: 'perf-cross-origin-redirect',
+      name: 'Cross-Origin Redirect',
+      type: 'latency',
+      request: {
+        id: 'request-cross-origin-redirect',
+        name: 'Cross-Origin Redirect Request',
+        method: 'GET',
+        url: `${redirectServer.baseUrl}/start`
+      },
+      config: { iterations: 1, concurrency: 1 },
+      safetyLimits: { maxTotalRequests: 1, maxConcurrency: 1, maxDurationSeconds: 10 }
+    });
+
+    const result = await Promise.race([
+      runPerformanceTest(performanceTest, null, {
+        onProgress: (event) => progress.push(event),
+        requestTimeoutMillis: 500
+      }),
+      new Promise((_, reject) => setTimeout(
+        () => reject(new Error('Timed out waiting for redirected performance request.')),
+        2500
+      ))
+    ]);
+
+    assert.equal(result.completedRequests, 1);
+    assert.equal(result.successfulRequests, 1);
+    assert.equal(result.failedRequests, 0);
+    assert.equal(result.samples[0].statusCode, 200);
+    assert.equal(result.samples[0].finalUrl, `${targetServer.baseUrl}/final`);
+    assert.deepEqual(progress.map((event) => event.completedRequests), [1]);
+  } finally {
+    await redirectServer.close();
+    await targetServer.close();
   }
 });
 
@@ -909,6 +1027,78 @@ async function createUnstableDiagnosticServer() {
   };
 }
 
+async function createOptionsUnsupportedDiagnosticServer() {
+  const server = http.createServer((request, response) => {
+    response.setHeader('Content-Type', 'application/json');
+    response.setHeader('Cache-Control', 'max-age=60');
+    response.setHeader('ETag', '"options-unsupported-test"');
+    response.setHeader('Server-Timing', 'app;dur=3');
+    response.setHeader('X-Request-ID', 'options-unsupported-request');
+    response.setHeader('RateLimit-Limit', '100');
+    response.setHeader('RateLimit-Remaining', '99');
+    response.setHeader('Strict-Transport-Security', 'max-age=31536000');
+    response.setHeader('Content-Security-Policy', "default-src 'none'");
+    response.setHeader('X-Content-Type-Options', 'nosniff');
+    if (request.method === 'HEAD') {
+      response.statusCode = 200;
+      response.end();
+      return;
+    }
+    if (request.method === 'OPTIONS') {
+      response.statusCode = 405;
+      response.setHeader('Allow', 'GET, HEAD');
+      response.end();
+      return;
+    }
+    response.statusCode = 200;
+    response.end(JSON.stringify({ ok: true, method: request.method }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    close: () => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
+  };
+}
+
+async function createRedirectServer(location) {
+  const sockets = new Set();
+  const server = http.createServer((_request, response) => {
+    response.statusCode = 301;
+    response.setHeader('Location', location);
+    response.end('redirect');
+  });
+  server.on('connection', (socket) => {
+    sockets.add(socket);
+    socket.on('close', () => sockets.delete(socket));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    close: () => closeServer(server, sockets)
+  };
+}
+
+async function createRedirectTargetServer() {
+  const sockets = new Set();
+  const server = http.createServer((_request, response) => {
+    response.setHeader('Content-Type', 'application/json');
+    response.statusCode = 200;
+    response.end(JSON.stringify({ ok: true }));
+  });
+  server.on('connection', (socket) => {
+    sockets.add(socket);
+    socket.on('close', () => sockets.delete(socket));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    close: () => closeServer(server, sockets)
+  };
+}
+
 async function createHangingServer() {
   const sockets = new Set();
   const server = http.createServer(() => {});
@@ -920,13 +1110,17 @@ async function createHangingServer() {
   const address = server.address();
   return {
     baseUrl: `http://localhost:${address.port}`,
-    close: () => new Promise((resolve, reject) => {
-      for (const socket of sockets) {
-        socket.destroy();
-      }
-      server.close((error) => error ? reject(error) : resolve());
-    })
+    close: () => closeServer(server, sockets)
   };
+}
+
+function closeServer(server, sockets = new Set()) {
+  return new Promise((resolve, reject) => {
+    for (const socket of sockets) {
+      socket.destroy();
+    }
+    server.close((error) => error ? reject(error) : resolve());
+  });
 }
 
 async function closedLocalUrl(pathname = '/') {
@@ -939,4 +1133,10 @@ async function closedLocalUrl(pathname = '/') {
 
 function findDiagnosisCheck(diagnosis, id) {
   return diagnosis.checks.find((check) => check.id === id) || {};
+}
+
+function isUnsupportedDiagnosisProbe(sample = {}) {
+  const statusCode = Number(sample.statusCode || 0);
+  return (sample.phase === 'head-probe' || sample.phase === 'options-probe')
+    && (statusCode === 405 || statusCode === 501);
 }

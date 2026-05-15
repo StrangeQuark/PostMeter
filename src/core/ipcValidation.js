@@ -1477,10 +1477,18 @@ function assertHtmlReportOptionsPayload(value, field = 'htmlReportOptions') {
   }
   assertAllowedObjectFields(value, field, [
     'includeRequestResults',
-    'includeRequestDetails'
+    'includeRequestDetails',
+    'theme'
   ]);
   optionalBoolean(value.includeRequestResults, `${field}.includeRequestResults`);
   optionalBoolean(value.includeRequestDetails, `${field}.includeRequestDetails`);
+  if (value.theme != null) {
+    try {
+      oneOf(value.theme, ['light', 'dark'], `${field}.theme`);
+    } catch (error) {
+      fail(error.message);
+    }
+  }
 }
 
 function assertRuntimeId(value, field = 'id') {

@@ -388,6 +388,7 @@ class RuntimeResultStore {
         kind: normalizedKind,
         result,
         metadata,
+        theme: options.theme,
         includeRequestResults: options.includeRequestResults,
         includeRequestDetails: options.includeRequestDetails,
         items: async function* items() {

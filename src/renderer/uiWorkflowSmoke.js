@@ -282,6 +282,12 @@
       };
       $('exportRunnerHtmlButton').click();
       assertUiSmoke(!$('htmlReportOptionsModal').hidden, 'Runner HTML report export should open the report options modal.');
+      const runnerExpectedTheme = currentResolvedThemeMode();
+      assertUiSmoke(
+        (runnerExpectedTheme === 'dark' && $('htmlReportThemeDarkInput').checked)
+          || (runnerExpectedTheme === 'light' && $('htmlReportThemeLightInput').checked),
+        'Runner HTML report theme should default to the current PostMeter theme.'
+      );
       $('htmlReportIncludeResultsInput').checked = false;
       dispatchChange($('htmlReportIncludeResultsInput'));
       assertUiSmoke($('htmlReportIncludeDetailsInput').disabled, 'Runner HTML report details should be disabled when results are excluded.');
@@ -296,7 +302,8 @@
       assertUiSmoke(runnerExportCalls[0].format === 'html', 'Runner HTML report export should use the HTML format.');
       assertUiSmoke(
         runnerExportCalls[0].htmlReportOptions?.includeRequestResults === false
-          && runnerExportCalls[0].htmlReportOptions?.includeRequestDetails === false,
+          && runnerExportCalls[0].htmlReportOptions?.includeRequestDetails === false
+          && runnerExportCalls[0].htmlReportOptions?.theme === runnerExpectedTheme,
         'Runner HTML report export should force Request Details off when Request Results is excluded.'
       );
     } finally {
@@ -345,6 +352,16 @@
     assertUiSmoke($('performanceRunDetails').textContent.includes('Endpoint diagnosis'), 'Full Endpoint Diagnosis summary block did not render.');
     assertUiSmoke($('performanceRunDetails').textContent.includes('Diagnostic checks'), 'Full Endpoint Diagnosis checks did not render.');
     assertUiSmoke($('performanceRunDetails').textContent.includes('Time to first byte'), 'Full Endpoint Diagnosis timing checks did not render.');
+    activateTab('performanceOutput', 'performanceOutputGraphs');
+    await waitForUiSmoke(
+      () => $('performanceOutputGraphsTab').textContent.includes('Endpoint Diagnosis'),
+      'Full Endpoint Diagnosis graphs did not render the diagnosis section.',
+      5000,
+      global
+    );
+    assertUiSmoke($('performanceOutputGraphsTab').textContent.includes('Latency by diagnostic phase'), 'Full Endpoint Diagnosis graphs did not render the diagnostic phase latency graph.');
+    assertUiSmoke($('performanceOutputGraphsTab').textContent.includes('Codes over time'), 'Full Endpoint Diagnosis graphs did not render the response-code timeline graph.');
+    assertUiSmoke($('performanceOutputGraphsTab').querySelector('[data-performance-chart="saturation-curve"] svg'), 'Full Endpoint Diagnosis graphs did not render the saturation curve.');
     activateTab('performanceOutput', 'performanceOutputRequests');
     await waitForUiSmoke(
       () => $('performanceExecutionList').querySelectorAll('.runner-execution-row').length > 0,
@@ -367,6 +384,8 @@
     );
     assertUiSmoke($('performanceExecutionDetails').textContent.includes('/diagnostic?api_key=ui-smoke'), 'Full Endpoint Diagnosis detail did not render the target URL.');
     assertUiSmoke(!$('exportPerformanceResultsButton').disabled, 'Performance Export Results button was not enabled after Full Endpoint Diagnosis.');
+
+    activateTab('performance', 'diagnosis');
     $('exportPerformanceResultsButton').click();
     assertUiSmoke(!$('exportPerformanceResultsMenu').hidden, 'Performance Export Results button should open the result format menu.');
     assertUiSmoke(
@@ -390,6 +409,14 @@
       assertUiSmoke(!$('htmlReportOptionsModal').hidden, 'HTML report export options modal should open before exporting.');
       assertUiSmoke($('htmlReportIncludeResultsInput').checked, 'HTML report should include Request Results by default.');
       assertUiSmoke($('htmlReportIncludeDetailsInput').checked, 'HTML report should include Request Details by default.');
+      const performanceExpectedTheme = currentResolvedThemeMode();
+      assertUiSmoke(
+        (performanceExpectedTheme === 'dark' && $('htmlReportThemeDarkInput').checked)
+          || (performanceExpectedTheme === 'light' && $('htmlReportThemeLightInput').checked),
+        'Performance HTML report theme should default to the current PostMeter theme.'
+      );
+      const selectedPerformanceExportTheme = performanceExpectedTheme === 'dark' ? 'light' : 'dark';
+      $(selectedPerformanceExportTheme === 'dark' ? 'htmlReportThemeDarkInput' : 'htmlReportThemeLightInput').click();
       $('htmlReportIncludeResultsInput').checked = false;
       dispatchChange($('htmlReportIncludeResultsInput'));
       assertUiSmoke($('htmlReportIncludeDetailsInput').disabled, 'Request Details option should be disabled when Request Results is excluded.');
@@ -422,8 +449,9 @@
       );
       assertUiSmoke(
         performanceExportCalls[0].htmlReportOptions?.includeRequestResults === true
-          && performanceExportCalls[0].htmlReportOptions?.includeRequestDetails === false,
-        'HTML report export should pass the selected Request Results and Request Details options.'
+          && performanceExportCalls[0].htmlReportOptions?.includeRequestDetails === false
+          && performanceExportCalls[0].htmlReportOptions?.theme === selectedPerformanceExportTheme,
+        'HTML report export should pass the selected theme, Request Results, and Request Details options.'
       );
       assertUiSmoke(
         performanceExportCalls.every((call) => call.result?.resultStoreId === diagnosisResult.resultStoreId),
@@ -432,6 +460,47 @@
     } finally {
       window.__postmeterExportPerformanceResult = originalPerformanceExportResult;
     }
+
+    activateTab('performance', 'latency');
+    $('performanceUrlInput').value = `${baseUrl}/latency`;
+    dispatchInput($('performanceUrlInput'));
+    const latencySamplesInput = $('latencyTab').querySelector('[data-performance-config="iterations"]');
+    latencySamplesInput.value = '4';
+    dispatchInput(latencySamplesInput);
+    const latencyResult = await runActivePerformanceTest();
+    assertUiSmoke(latencyResult?.type === 'latency', 'Latency test did not complete with a latency result.');
+    assertUiSmoke(latencyResult.completedRequests === 4, `Latency test should complete 4 samples, saw ${latencyResult?.completedRequests}.`);
+    assertUiSmoke($('performanceResultsSummary').textContent.includes('4/4 requests completed'), 'Latency result summary did not render completed request count.');
+    activateTab('performanceOutput', 'performanceOutputGraphs');
+    await waitForUiSmoke(
+      () => $('performanceOutputGraphsTab').textContent.includes('Latency Test'),
+      'Latency graphs did not render the latency chart section.',
+      5000,
+      global
+    );
+    assertUiSmoke($('performanceOutputGraphsTab').textContent.includes('Codes over time'), 'Latency graphs did not render the response-code timeline graph.');
+
+    activateTab('performance', 'throughput');
+    $('performanceUrlInput').value = `${baseUrl}/throughput`;
+    dispatchInput($('performanceUrlInput'));
+    const throughputRequestsInput = $('throughputTab').querySelector('[data-performance-config="iterations"]');
+    const throughputConcurrencyInput = $('throughputTab').querySelector('[data-performance-config="concurrency"]');
+    throughputRequestsInput.value = '6';
+    throughputConcurrencyInput.value = '2';
+    dispatchInput(throughputRequestsInput);
+    dispatchInput(throughputConcurrencyInput);
+    const throughputResult = await runActivePerformanceTest();
+    assertUiSmoke(throughputResult?.type === 'throughput', 'RPS / Throughput test did not complete with a throughput result.');
+    assertUiSmoke(throughputResult.completedRequests === 6, `RPS / Throughput test should complete 6 requests, saw ${throughputResult?.completedRequests}.`);
+    assertUiSmoke($('performanceResultsSummary').textContent.includes('6/6 requests completed'), 'RPS / Throughput result summary did not render completed request count.');
+    activateTab('performanceOutput', 'performanceOutputGraphs');
+    await waitForUiSmoke(
+      () => $('performanceOutputGraphsTab').textContent.includes('Throughput Test'),
+      'RPS / Throughput graphs did not render the throughput chart section.',
+      5000,
+      global
+    );
+    assertUiSmoke($('performanceOutputGraphsTab').textContent.includes('Codes over time'), 'RPS / Throughput graphs did not render the response-code timeline graph.');
   }
 
   function assertVariableHighlight(control, variableName, message, expectedStatus = '', expectedSource = '') {
