@@ -7,8 +7,11 @@ const YAML = require('yaml');
 test('CI workflow runs the Electron UI and packaging validation suite', async () => {
   const root = path.join(__dirname, '..', '..');
   const workflow = await fs.readFile(path.join(root, '.github', 'workflows', 'ci.yml'), 'utf8');
-  assertValidationLogUploadsFailClosed(YAML.parse(workflow), 'ci.yml');
+  const workflowDocument = YAML.parse(workflow);
+  assertValidationLogUploadsFailClosed(workflowDocument, 'ci.yml');
 
+  assertWorkflowRunsOnlyOnMainPullRequests(workflowDocument, 'ci.yml');
+  assertNoPlatformSpecificSkippedSteps(workflowDocument, 'ci.yml');
   assert.match(workflow, /node-version:\s*22/);
   assert.match(workflow, /npm ci/);
   assert.match(workflow, /apt-get install -y bubblewrap/);
@@ -34,12 +37,14 @@ test('CI workflow runs the Electron UI and packaging validation suite', async ()
   assert.match(workflow, /xvfb-run -a npm run test:ui:oauth/);
   assert.match(workflow, /xvfb-run -a npm run test:ui:snapshot/);
   assert.match(workflow, /npm run pack:linux/);
-  assert.match(workflow, /POSTMETER_CI_ELECTRON_NO_SANDBOX:\s*"1"/);
+  assert.match(workflow, /ci_no_sandbox:\s*"1"/);
+  assert.match(workflow, /POSTMETER_CI_ELECTRON_NO_SANDBOX:\s*\$\{\{ matrix\.ci_no_sandbox \}\}/);
   assert.match(workflow, /xvfb-run -a npm run sandbox:validate:packaged/);
   assert.match(workflow, /POSTMETER_VALIDATION_ARTIFACT_DIR:\s*validation-artifacts\/linux/);
   assert.match(workflow, /name:\s*Native packaged smoke/);
   assert.match(workflow, /platform:\s*linux/);
-  assert.match(workflow, /Build Windows sandbox helper/);
+  assert.match(workflow, /Prepare native helpers/);
+  assert.match(workflow, /npm run native:windows-sandbox:build/);
   assert.match(workflow, /Source-tree sandbox runtime validation/);
   assert.match(workflow, /npm run sandbox:validate/);
   assert.match(workflow, /npm run sandbox:platform:validate/);
@@ -59,7 +64,9 @@ test('CI workflow runs the Electron UI and packaging validation suite', async ()
 test('release workflow builds unsigned artifacts for all tier-one desktop platforms', async () => {
   const root = path.join(__dirname, '..', '..');
   const workflow = await fs.readFile(path.join(root, '.github', 'workflows', 'release.yml'), 'utf8');
-  assertValidationLogUploadsFailClosed(YAML.parse(workflow), 'release.yml');
+  const workflowDocument = YAML.parse(workflow);
+  assertValidationLogUploadsFailClosed(workflowDocument, 'release.yml');
+  assertNoPlatformSpecificSkippedSteps(workflowDocument, 'release.yml');
 
   assert.match(workflow, /tags:\s*\n\s*-\s+"v\*"/);
   assert.match(workflow, /platform:\s*linux/);
@@ -104,10 +111,10 @@ test('release workflow builds unsigned artifacts for all tier-one desktop platfo
   assert.match(workflow, /CSC_IDENTITY_AUTO_DISCOVERY:\s*"false"/);
   assert.match(workflow, /npm run sandbox:validate:packaged/);
   assert.match(workflow, /xvfb-run -a npm run sandbox:validate:packaged/);
-  assert.match(workflow, /POSTMETER_CI_ELECTRON_NO_SANDBOX:\s*"1"/);
-  assert.match(workflow, /Validate Windows protocol registration/);
+  assert.match(workflow, /ci_no_sandbox:\s*"1"/);
+  assert.match(workflow, /POSTMETER_CI_ELECTRON_NO_SANDBOX:\s*\$\{\{ matrix\.ci_no_sandbox \}\}/);
+  assert.match(workflow, /Protocol registration validation/);
   assert.match(workflow, /npm run release:validate:win-protocol/);
-  assert.match(workflow, /Validate macOS protocol registration/);
   assert.match(workflow, /npm run release:validate:mac-protocol/);
   assert.match(workflow, /POSTMETER_VALIDATION_ARTIFACT_DIR:\s*validation-artifacts\/\$\{\{ matrix\.platform \}\}/);
   assert.match(workflow, /Upload validation logs/);
@@ -134,7 +141,7 @@ test('native release validation workflow exercises release evidence without publ
   assertValidationLogUploadsFailClosed(workflowDocument, 'release-validation.yml');
 
   assert.match(workflow, /workflow_dispatch:/);
-  assert.match(workflow, /push:\s*\n\s*branches:\s*\n\s*-\s*main/);
+  assertWorkflowRunsOnlyOnMainPullRequests(workflowDocument, 'release-validation.yml', { workflowDispatch: true });
   assert.match(workflow, /contents:\s*read/);
   assert.match(workflow, /platform:\s*linux/);
   assert.match(workflow, /platform:\s*windows/);
@@ -170,7 +177,8 @@ test('native release validation workflow exercises release evidence without publ
   assert.match(workflow, /npm run release:validate:packaged-smoke/);
   assert.match(workflow, /npm run sandbox:validate:packaged/);
   assert.match(workflow, /xvfb-run -a npm run sandbox:validate:packaged/);
-  assert.match(workflow, /POSTMETER_CI_ELECTRON_NO_SANDBOX:\s*"1"/);
+  assert.match(workflow, /ci_no_sandbox:\s*"1"/);
+  assert.match(workflow, /POSTMETER_CI_ELECTRON_NO_SANDBOX:\s*\$\{\{ matrix\.ci_no_sandbox \}\}/);
   assert.match(workflow, /npm run release:validate:win-protocol/);
   assert.match(workflow, /npm run release:validate:mac-protocol/);
   assert.match(workflow, /POSTMETER_VALIDATION_ARTIFACT_DIR:\s*validation-artifacts\/\$\{\{ matrix\.platform \}\}/);
@@ -180,21 +188,9 @@ test('native release validation workflow exercises release evidence without publ
   assert.match(workflow, /actions\/upload-artifact@v4/);
   assert.match(workflow, /actions\/download-artifact@v4/);
   assert.match(workflow, /if-no-files-found:\s*error/);
-  for (const stepName of [
-    'Startup smoke',
-    'OAuth UI smoke',
-    'UI workflow smoke',
-    'UI regression smoke',
-    'UI typography smoke',
-    'UI snapshot smoke'
-  ]) {
-    assert.equal(
-      findWorkflowStep(workflowDocument, stepName)?.if,
-      "matrix.platform == 'macos'",
-      `${stepName} must not run source renderer smoke on Windows release-validation runners`
-    );
-  }
-  assert.equal(findWorkflowStep(workflowDocument, 'Packaged app startup smoke')?.if, "matrix.platform != 'linux'");
+  assert.match(workflow, /Source UI smoke suite/);
+  assert.match(workflow, /Protocol registration validation/);
+  assertNoPlatformSpecificSkippedSteps(workflowDocument, 'release-validation.yml');
   assert.doesNotMatch(workflow, /release\/\*\.msi/);
   assert.doesNotMatch(workflow, /release\/\*\.rpm/);
   assert.doesNotMatch(workflow, /gh release create/);
@@ -252,20 +248,72 @@ test('sandbox validation scripts are timeout bounded instead of using unbounded 
 });
 
 function assertWorkflowHasRunStep(workflow, pattern, workflowName) {
-  const runSteps = Object.values(workflow?.jobs || {})
+  const jobs = Object.values(workflow?.jobs || {});
+  const runSteps = jobs
     .flatMap((job) => Array.isArray(job?.steps) ? job.steps : [])
     .map((step) => step?.run)
     .filter((run) => typeof run === 'string');
+  const matrixCommands = jobs
+    .flatMap((job) => Array.isArray(job?.strategy?.matrix?.include) ? job.strategy.matrix.include : [])
+    .flatMap((entry) => Object.entries(entry || {})
+      .filter(([key, value]) => key.endsWith('command') && typeof value === 'string')
+      .map(([, value]) => value));
   assert.ok(
-    runSteps.some((run) => pattern.test(run)),
+    [...runSteps, ...matrixCommands].some((run) => pattern.test(run)),
     `${workflowName} is missing executable run step ${pattern}`
   );
 }
 
-function findWorkflowStep(workflow, stepName) {
-  return Object.values(workflow?.jobs || {})
+function assertWorkflowRunsOnlyOnMainPullRequests(workflow, workflowName, options = {}) {
+  const triggers = workflow?.on || {};
+  const expectedTriggers = options.workflowDispatch ? ['pull_request', 'workflow_dispatch'] : ['pull_request'];
+  assert.deepEqual(
+    Object.keys(triggers).sort(),
+    expectedTriggers.sort(),
+    `${workflowName} must only run from pull requests${options.workflowDispatch ? ' and manual dispatch' : ''}`
+  );
+  assert.equal(triggers.push, undefined, `${workflowName} must not run on push or merge to main`);
+  assert.deepEqual(triggers.pull_request?.branches, ['main'], `${workflowName} must only validate PRs targeting main`);
+  assert.deepEqual(triggers.pull_request?.types, [
+    'opened',
+    'synchronize',
+    'reopened',
+    'ready_for_review'
+  ], `${workflowName} must not run on closed or merged pull request events`);
+}
+
+function assertNoPlatformSpecificSkippedSteps(workflow, workflowName) {
+  const steps = Object.values(workflow?.jobs || {})
     .flatMap((job) => Array.isArray(job?.steps) ? job.steps : [])
-    .find((step) => step?.name === stepName);
+    .filter(Boolean);
+  const stepNames = steps.map((step) => String(step.name || ''));
+  for (const hiddenPlatformStep of [
+    'Install Linux sandbox backend',
+    'Build Windows sandbox helper',
+    'Linux startup smoke',
+    'OAuth Linux UI smoke',
+    'Linux UI workflow smoke',
+    'Linux UI regression smoke',
+    'Linux UI typography smoke',
+    'Linux UI snapshot smoke',
+    'Packaged Linux app startup smoke',
+    'Packaged Linux sandbox validation',
+    'Validate Windows protocol registration',
+    'Validate macOS protocol registration'
+  ]) {
+    assert.equal(
+      stepNames.includes(hiddenPlatformStep),
+      false,
+      `${workflowName} should not expose skipped platform-specific step "${hiddenPlatformStep}"`
+    );
+  }
+  for (const step of steps) {
+    assert.doesNotMatch(
+      String(step.if || ''),
+      /matrix\.platform\s*(?:==|!=)/,
+      `${workflowName} step "${step.name}" should use matrix-provided commands instead of skipped platform-specific steps`
+    );
+  }
 }
 
 function assertValidationLogUploadsFailClosed(workflow, workflowName) {

@@ -19,12 +19,50 @@ jobs:
           - platform: linux
             runner: ubuntu-latest
             command: npm run dist:linux
+            install_dependencies_command: sudo apt-get update && sudo apt-get install -y bubblewrap
+            prepare_native_helpers_command: echo "No native helper build required for linux."
+            source_smoke_command: |
+              xvfb-run -a npm run test:smoke
+              xvfb-run -a npm run test:ui:oauth
+              xvfb-run -a npm run test:ui
+              xvfb-run -a npm run test:ui:regression
+              xvfb-run -a npm run test:ui:typography
+              xvfb-run -a npm run test:ui:snapshot
+            packaged_smoke_command: xvfb-run -a npm run release:validate:packaged-smoke
+            packaged_sandbox_command: xvfb-run -a npm run sandbox:validate:packaged
+            protocol_command: echo "No protocol registration validation required for linux."
+            ci_no_sandbox: "1"
+            allow_os_skip: "1"
           - platform: windows
             runner: windows-latest
             command: npm run dist:win
+            install_dependencies_command: echo "No Linux sandbox backend required for windows."
+            prepare_native_helpers_command: npm run native:windows-sandbox:build
+            source_smoke_command: |
+              npm run test:smoke
+              npm run test:ui:oauth
+              npm run test:ui
+              npm run test:ui:regression
+              npm run test:ui:typography
+              npm run test:ui:snapshot
+            packaged_smoke_command: npm run release:validate:packaged-smoke
+            packaged_sandbox_command: npm run sandbox:validate:packaged
+            protocol_command: npm run release:validate:win-protocol
           - platform: macos
             runner: macos-latest
             command: npm run dist:mac
+            install_dependencies_command: echo "No Linux sandbox backend required for macos."
+            prepare_native_helpers_command: echo "No native helper build required for macos."
+            source_smoke_command: |
+              npm run test:smoke
+              npm run test:ui:oauth
+              npm run test:ui
+              npm run test:ui:regression
+              npm run test:ui:typography
+              npm run test:ui:snapshot
+            packaged_smoke_command: npm run release:validate:packaged-smoke
+            packaged_sandbox_command: npm run sandbox:validate:packaged
+            protocol_command: npm run release:validate:mac-protocol
 
     steps:
       - name: Checkout
@@ -36,12 +74,14 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Install Linux sandbox backend
-        if: matrix.platform == 'linux'
-        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+      - name: Install platform dependencies
+        run: ${{ matrix.install_dependencies_command }}
 
       - name: Install
         run: npm ci
+
+      - name: Prepare native helpers
+        run: ${{ matrix.prepare_native_helpers_command }}
 
       - name: Unit tests
         run: npm test
@@ -52,7 +92,7 @@ jobs:
       - name: Sandbox runtime validation
         run: npm run sandbox:validate
         env:
-          POSTMETER_ALLOW_OS_SANDBOX_VALIDATION_SKIP: ${{ matrix.platform == 'linux' && '1' || '' }}
+          POSTMETER_ALLOW_OS_SANDBOX_VALIDATION_SKIP: ${{ matrix.allow_os_skip }}
 
       - name: OS sandbox platform matrix validation
         run: npm run sandbox:platform:validate
@@ -72,83 +112,11 @@ jobs:
       - name: Mock OAuth provider certification
         run: npm run oauth:certify:mock
 
-      - name: Startup smoke
-        if: matrix.platform != 'linux'
-        run: npm run test:smoke
+      - name: Source UI smoke suite
+        run: ${{ matrix.source_smoke_command }}
         env:
-          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/startup-smoke
-
-      - name: Linux startup smoke
-        if: matrix.platform == 'linux'
-        run: xvfb-run -a npm run test:smoke
-        env:
-          POSTMETER_CI_ELECTRON_NO_SANDBOX: "1"
-          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/startup-smoke
-
-      - name: OAuth UI smoke
-        if: matrix.platform != 'linux'
-        run: npm run test:ui:oauth
-        env:
-          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-oauth
-
-      - name: OAuth Linux UI smoke
-        if: matrix.platform == 'linux'
-        run: xvfb-run -a npm run test:ui:oauth
-        env:
-          POSTMETER_CI_ELECTRON_NO_SANDBOX: "1"
-          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-oauth
-
-      - name: UI workflow smoke
-        if: matrix.platform != 'linux'
-        run: npm run test:ui
-        env:
-          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-workflow
-
-      - name: Linux UI workflow smoke
-        if: matrix.platform == 'linux'
-        run: xvfb-run -a npm run test:ui
-        env:
-          POSTMETER_CI_ELECTRON_NO_SANDBOX: "1"
-          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-workflow
-
-      - name: UI regression smoke
-        if: matrix.platform != 'linux'
-        run: npm run test:ui:regression
-        env:
-          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-regression
-
-      - name: Linux UI regression smoke
-        if: matrix.platform == 'linux'
-        run: xvfb-run -a npm run test:ui:regression
-        env:
-          POSTMETER_CI_ELECTRON_NO_SANDBOX: "1"
-          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-regression
-
-      - name: UI typography smoke
-        if: matrix.platform != 'linux'
-        run: npm run test:ui:typography
-        env:
-          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-typography
-
-      - name: Linux UI typography smoke
-        if: matrix.platform == 'linux'
-        run: xvfb-run -a npm run test:ui:typography
-        env:
-          POSTMETER_CI_ELECTRON_NO_SANDBOX: "1"
-          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-typography
-
-      - name: UI snapshot smoke
-        if: matrix.platform != 'linux'
-        run: npm run test:ui:snapshot
-        env:
-          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-snapshot
-
-      - name: Linux UI snapshot smoke
-        if: matrix.platform == 'linux'
-        run: xvfb-run -a npm run test:ui:snapshot
-        env:
-          POSTMETER_CI_ELECTRON_NO_SANDBOX: "1"
-          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/ui-snapshot
+          POSTMETER_CI_ELECTRON_NO_SANDBOX: ${{ matrix.ci_no_sandbox }}
+          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/source-ui-smoke
 
       - name: Production readiness matrix validation
         run: npm run production:readiness:validate
@@ -180,39 +148,19 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
       - name: Packaged app startup smoke
-        if: matrix.platform != 'linux'
-        run: npm run release:validate:packaged-smoke
+        run: ${{ matrix.packaged_smoke_command }}
         env:
-          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/${{ matrix.platform }}
-
-      - name: Packaged Linux app startup smoke
-        if: matrix.platform == 'linux'
-        run: xvfb-run -a npm run release:validate:packaged-smoke
-        env:
-          POSTMETER_CI_ELECTRON_NO_SANDBOX: "1"
+          POSTMETER_CI_ELECTRON_NO_SANDBOX: ${{ matrix.ci_no_sandbox }}
           POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/${{ matrix.platform }}
 
       - name: Packaged sandbox validation
-        if: matrix.platform != 'linux'
-        run: npm run sandbox:validate:packaged
-
-      - name: Packaged Linux sandbox validation
-        if: matrix.platform == 'linux'
-        run: xvfb-run -a npm run sandbox:validate:packaged
+        run: ${{ matrix.packaged_sandbox_command }}
         env:
-          POSTMETER_CI_ELECTRON_NO_SANDBOX: "1"
-          POSTMETER_ALLOW_OS_SANDBOX_VALIDATION_SKIP: "1"
+          POSTMETER_CI_ELECTRON_NO_SANDBOX: ${{ matrix.ci_no_sandbox }}
+          POSTMETER_ALLOW_OS_SANDBOX_VALIDATION_SKIP: ${{ matrix.allow_os_skip }}
 
-      - name: Validate Windows protocol registration
-        if: matrix.platform == 'windows'
-        shell: pwsh
-        run: npm run release:validate:win-protocol
-        env:
-          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/${{ matrix.platform }}
-
-      - name: Validate macOS protocol registration
-        if: matrix.platform == 'macos'
-        run: npm run release:validate:mac-protocol
+      - name: Protocol registration validation
+        run: ${{ matrix.protocol_command }}
         env:
           POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/${{ matrix.platform }}
 

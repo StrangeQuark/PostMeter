@@ -142,7 +142,7 @@ requireWorkflow('CI workflow', ciWorkflow, [
   /npm run sandbox:platform:validate/,
   /npm run pack:linux/,
   /platform:\s*linux/,
-  /Build Windows sandbox helper/,
+  /Prepare native helpers/,
   /Source-tree sandbox runtime validation/,
   /POSTMETER_ALLOW_OS_SANDBOX_VALIDATION_SKIP:\s*\$\{\{ matrix\.allow_os_skip \}\}/,
   /npm run dist:linux/,
@@ -160,7 +160,8 @@ requireWorkflow('CI workflow', ciWorkflow, [
 
 requireWorkflow('Release workflow', releaseWorkflow, [
   /platform:\s*linux/,
-  /POSTMETER_CI_ELECTRON_NO_SANDBOX:\s*"1"/,
+  /ci_no_sandbox:\s*"1"/,
+  /POSTMETER_CI_ELECTRON_NO_SANDBOX:\s*\$\{\{ matrix\.ci_no_sandbox \}\}/,
   /platform:\s*windows/,
   /platform:\s*macos/,
   /npm run sandbox:validate/,
@@ -205,7 +206,8 @@ requireWorkflow('Manual native release validation workflow', releaseValidationWo
   /workflow_dispatch:/,
   /contents:\s*read/,
   /platform:\s*linux/,
-  /POSTMETER_CI_ELECTRON_NO_SANDBOX:\s*"1"/,
+  /ci_no_sandbox:\s*"1"/,
+  /POSTMETER_CI_ELECTRON_NO_SANDBOX:\s*\$\{\{ matrix\.ci_no_sandbox \}\}/,
   /platform:\s*windows/,
   /platform:\s*macos/,
   /npm run sandbox:validate/,
@@ -419,10 +421,17 @@ function requireWorkflowRunSteps(label, workflowDocument, patterns) {
 }
 
 function workflowRunSteps(workflowDocument) {
-  return Object.values(workflowDocument?.jobs || {})
+  const jobs = Object.values(workflowDocument?.jobs || {});
+  const stepRuns = jobs
     .flatMap((job) => Array.isArray(job?.steps) ? job.steps : [])
     .map((step) => step?.run)
     .filter((run) => typeof run === 'string');
+  const matrixCommands = jobs
+    .flatMap((job) => Array.isArray(job?.strategy?.matrix?.include) ? job.strategy.matrix.include : [])
+    .flatMap((entry) => Object.entries(entry || {})
+      .filter(([key, value]) => key.endsWith('command') && typeof value === 'string')
+      .map(([, value]) => value));
+  return [...stepRuns, ...matrixCommands];
 }
 
 function workflowSteps(workflowDocument) {

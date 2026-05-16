@@ -1,8 +1,14 @@
 name: CI
 
 on:
-  push:
   pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
 
 jobs:
   node:
@@ -19,7 +25,7 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Install Linux sandbox backend
+      - name: Install sandbox backend
         run: sudo apt-get update && sudo apt-get install -y bubblewrap
 
       - name: Install
@@ -140,18 +146,27 @@ jobs:
           - platform: windows
             runner: windows-latest
             command: npm run dist:win
+            install_dependencies_command: echo "No Linux sandbox backend required for windows."
+            prepare_native_helpers_command: npm run native:windows-sandbox:build
             smoke_command: npm run release:validate:packaged-smoke
             sandbox_command: npm run sandbox:validate:packaged
+            protocol_command: npm run release:validate:win-protocol
           - platform: macos
             runner: macos-latest
             command: npm run dist:mac
+            install_dependencies_command: echo "No Linux sandbox backend required for macos."
+            prepare_native_helpers_command: echo "No native helper build required for macos."
             smoke_command: npm run release:validate:packaged-smoke
             sandbox_command: npm run sandbox:validate:packaged
+            protocol_command: npm run release:validate:mac-protocol
           - platform: linux
             runner: ubuntu-latest
             command: npm run dist:linux
+            install_dependencies_command: sudo apt-get update && sudo apt-get install -y bubblewrap
+            prepare_native_helpers_command: echo "No native helper build required for linux."
             smoke_command: xvfb-run -a npm run release:validate:packaged-smoke
             sandbox_command: xvfb-run -a npm run sandbox:validate:packaged
+            protocol_command: echo "No protocol registration validation required for linux."
             ci_no_sandbox: "1"
             allow_os_skip: "1"
     steps:
@@ -164,16 +179,14 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Install Linux sandbox backend
-        if: matrix.platform == 'linux'
-        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+      - name: Install platform dependencies
+        run: ${{ matrix.install_dependencies_command }}
 
       - name: Install
         run: npm ci
 
-      - name: Build Windows sandbox helper
-        if: matrix.platform == 'windows'
-        run: npm run native:windows-sandbox:build
+      - name: Prepare native helpers
+        run: ${{ matrix.prepare_native_helpers_command }}
 
       - name: Source-tree sandbox runtime validation
         run: npm run sandbox:validate
@@ -203,16 +216,8 @@ jobs:
           POSTMETER_ALLOW_OS_SANDBOX_VALIDATION_SKIP: ${{ matrix.allow_os_skip }}
           POSTMETER_CI_ELECTRON_NO_SANDBOX: ${{ matrix.ci_no_sandbox }}
 
-      - name: Validate Windows protocol registration
-        if: matrix.platform == 'windows'
-        shell: pwsh
-        run: npm run release:validate:win-protocol
-        env:
-          POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/${{ matrix.platform }}
-
-      - name: Validate macOS protocol registration
-        if: matrix.platform == 'macos'
-        run: npm run release:validate:mac-protocol
+      - name: Protocol registration validation
+        run: ${{ matrix.protocol_command }}
         env:
           POSTMETER_VALIDATION_ARTIFACT_DIR: validation-artifacts/${{ matrix.platform }}
 
