@@ -33,6 +33,7 @@ test('renderer performance model uses the same eight V1 types and defaults as th
   assert.equal(created.authRefresh.request.name, 'Refresh Auth');
   assert.equal(created.authRefresh.refreshTokenRequest.id, 'auth-refresh-token-request');
   assert.equal(created.authRefresh.refreshTokenRequest.name, 'Refresh Token');
+  assert.equal(created.csvVariables.enabled, false);
   assert.equal(created.config.iterations, 44);
   assert.equal(created.config.startConcurrency, 1);
   assert.equal(created.config.concurrency, 5);
@@ -43,6 +44,29 @@ test('renderer performance model uses the same eight V1 types and defaults as th
   assert.equal(created.typeSettings.throughput.config.iterations, 10);
   assert.equal(created.typeSettings.stress.config.rampSteps, 5);
   assert.equal(created.safetyLimits.maxTotalRequests, 44);
+});
+
+test('renderer performance normalization defaults CSV variables off but preserves legacy configured CSV data', () => {
+  assert.equal(normalizePerformanceTest({}).csvVariables.enabled, false);
+  assert.equal(normalizePerformanceTest({ csvVariables: {} }).csvVariables.enabled, false);
+  assert.equal(normalizePerformanceTest({ csvVariables: { schema: 'name', values: 'alice' } }).csvVariables.enabled, true);
+});
+
+test('renderer performance normalization preserves original auth for auto-refreshing request auth', () => {
+  const normalized = normalizePerformanceTest({
+    request: {
+      method: 'GET',
+      url: 'https://example.test',
+      auth: { type: 'autoRefresh' },
+      refreshingAuthOriginalAuth: { type: 'bearer', token: '{{ACCESS_TOKEN}}' }
+    }
+  });
+
+  assert.deepEqual(normalized.request.auth, { type: 'autoRefresh' });
+  assert.deepEqual(normalized.request.refreshingAuthOriginalAuth, {
+    type: 'bearer',
+    token: '{{ACCESS_TOKEN}}'
+  });
 });
 
 test('renderer performance normalization migrates old placeholder options without keeping legacy fields', () => {

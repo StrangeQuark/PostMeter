@@ -1106,7 +1106,7 @@ h2 {
 .capture-settings-panel.auth-refresh-panel {
   grid-template-columns: minmax(0, 1fr);
   width: min(560px, calc(100vw - 32px));
-  max-height: min(560px, calc(100vh - 24px));
+  max-height: calc(100vh - 24px);
   align-items: stretch;
 }
 
@@ -1717,6 +1717,10 @@ h2 {
   background: var(--surface-muted);
 }
 
+.runner-request-row.has-refresh-auth-toggle {
+  grid-template-columns: 34px 62px minmax(110px, 0.8fr) minmax(150px, 1.2fr) minmax(158px, auto) 92px auto auto auto auto;
+}
+
 .runner-request-row.is-dragging {
   opacity: 0.6;
 }
@@ -1772,6 +1776,21 @@ h2 {
   color: var(--muted);
   font-size: var(--ui-font-size-xs);
   font-weight: 700;
+}
+
+.runner-row-refresh-auth {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--ui-font-size-xs);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.runner-row-refresh-auth input {
+  margin: 0;
 }
 
 .runner-row-iterations input {

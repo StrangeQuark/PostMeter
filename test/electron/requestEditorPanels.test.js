@@ -4,7 +4,8 @@ const {
   beautifyBodyText,
   bodyTypeCodeLanguage,
   buildVariablePreviewText,
-  collectAuthFromEditor
+  collectAuthFromEditor,
+  syncRefreshingAuthSelectOptions
 } = require('../../src/renderer/requestEditorPanels');
 
 test('request editor panels choose code editor language from body type', () => {
@@ -168,6 +169,83 @@ test('request editor panels read auth editor inputs through the shared auth mode
   });
 });
 
+test('request editor panels collect auto refresh auth type', () => {
+  const fakeDoc = {
+    getElementById(id) {
+      return { value: id === 'authTypeSelect' ? 'autoRefresh' : '' };
+    }
+  };
+
+  assert.deepEqual(collectAuthFromEditor({ doc: fakeDoc }), { type: 'autoRefresh' });
+});
+
+test('request editor panels collect auto refresh refresh-token auth type', () => {
+  const fakeDoc = {
+    getElementById(id) {
+      return { value: id === 'authTypeSelect' ? 'autoRefreshRefreshToken' : '' };
+    }
+  };
+
+  assert.deepEqual(collectAuthFromEditor({ doc: fakeDoc }), { type: 'autoRefreshRefreshToken' });
+});
+
+test('request editor panels inserts dynamic refreshing auth select options only when available', () => {
+  const select = fakeSelect('none');
+
+  syncRefreshingAuthSelectOptions(select, {
+    accessTokenAvailable: true,
+    refreshTokenAvailable: true
+  });
+
+  const accessOption = select.querySelector('option[value="autoRefresh"]');
+  const refreshOption = select.querySelector('option[value="autoRefreshRefreshToken"]');
+  assert.equal(accessOption.textContent, 'Use Refreshing Access Token');
+  assert.equal(accessOption.hidden, false);
+  assert.equal(accessOption.disabled, false);
+  assert.equal(refreshOption.textContent, 'Refreshing Auth Refresh Token');
+  assert.equal(refreshOption.hidden, false);
+  assert.equal(refreshOption.disabled, false);
+
+  select.value = 'autoRefreshRefreshToken';
+  syncRefreshingAuthSelectOptions(select, {
+    accessTokenAvailable: true,
+    refreshTokenAvailable: false
+  });
+
+  assert.equal(select.value, 'none');
+  assert.equal(refreshOption.hidden, true);
+  assert.equal(refreshOption.disabled, true);
+});
+
+test('request editor panels keep dynamic refreshing auth selections when available', () => {
+  const select = fakeSelect('autoRefresh');
+
+  syncRefreshingAuthSelectOptions(select, {
+    accessTokenAvailable: true,
+    refreshTokenAvailable: false
+  });
+
+  assert.equal(select.value, 'autoRefresh');
+  select.value = 'autoRefreshRefreshToken';
+  syncRefreshingAuthSelectOptions(select, {
+    accessTokenAvailable: false,
+    refreshTokenAvailable: true
+  });
+
+  assert.equal(select.value, 'autoRefreshRefreshToken');
+});
+
+test('request editor panels clear dynamic refreshing auth selections when options are unavailable', () => {
+  const select = fakeSelect('autoRefresh');
+
+  syncRefreshingAuthSelectOptions(select, {
+    accessTokenAvailable: false,
+    refreshTokenAvailable: false
+  });
+
+  assert.equal(select.value, 'none');
+});
+
 test('request editor panels can read prefixed auth editor inputs for performance requests', () => {
   const values = new Map([
     ['performanceAuthTypeSelect', { value: 'apiKey' }],
@@ -213,3 +291,40 @@ test('request editor panels can read prefixed auth editor inputs for performance
     value: 'abc123'
   });
 });
+
+function fakeSelect(initialValue = 'none') {
+  const select = {
+    value: initialValue,
+    options: [],
+    ownerDocument: {
+      createElement(tagName) {
+        return {
+          tagName: String(tagName || '').toUpperCase(),
+          value: '',
+          textContent: '',
+          dataset: {},
+          hidden: false,
+          disabled: false
+        };
+      }
+    },
+    append(option) {
+      this.options.push(option);
+    },
+    querySelector(selector) {
+      const match = String(selector || '').match(/option\[value="([^"]+)"\]/);
+      if (!match) {
+        return null;
+      }
+      return this.options.find((option) => option.value === match[1]) || null;
+    }
+  };
+  select.options.push({
+    value: 'none',
+    textContent: 'None',
+    dataset: {},
+    hidden: false,
+    disabled: false
+  });
+  return select;
+}

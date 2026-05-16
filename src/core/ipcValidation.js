@@ -210,6 +210,7 @@ function assertRunnerRequestPayload(value, field = 'request') {
     'protocol',
     'protocolProfile',
     'queryParams',
+    'refreshingAuthOriginalAuth',
     'autoHeaders',
     'scripts',
     'source',
@@ -224,6 +225,9 @@ function assertRunnerRequestPayload(value, field = 'request') {
   }
   if (value.source != null) {
     assertRunnerRequestSourcePayload(value.source, `${field}.source`);
+  }
+  if (value.refreshingAuthOriginalAuth != null) {
+    assertAuthPayload(value.refreshingAuthOriginalAuth, `${field}.refreshingAuthOriginalAuth`);
   }
 }
 

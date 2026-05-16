@@ -6,6 +6,7 @@ const {
   jwtExpiresAtMillis,
   missingRefreshPathMessage,
   normalizeAuthRefreshConfig,
+  requestWithAutoRefreshAuth,
   refreshExpiresAtMillis
 } = require('../../src/core/authRefresh');
 
@@ -110,6 +111,49 @@ test('refresh manager runs refresh-token request before access-token request whe
   assert.equal(result.stats.refreshCount, 1);
 });
 
+test('refresh manager can inject refreshed refresh tokens into the access-token auth request', async () => {
+  const sends = [];
+  const manager = createAuthRefreshManager({
+    enabled: true,
+    mode: 'interval',
+    authType: 'bearer',
+    refreshBeforeRun: true,
+    outputs: [
+      { slot: 'refreshToken', source: 'body', path: 'refresh_token', variable: '' },
+      { slot: 'accessToken', source: 'body', path: 'access_token', variable: '' }
+    ],
+    refreshTokenRequest: {
+      id: 'refresh-token-request',
+      name: 'Rotate Refresh Token',
+      method: 'POST',
+      url: 'https://auth.example.test/refresh-token'
+    },
+    request: {
+      id: 'access-token-request',
+      name: 'Get Access Token',
+      method: 'POST',
+      url: 'https://auth.example.test/access-token',
+      auth: { type: 'autoRefreshRefreshToken' }
+    }
+  }, {
+    sendRequest: async (request) => {
+      sends.push({ id: request.id, auth: request.auth });
+      if (request.id === 'refresh-token-request') {
+        return response(200, { refresh_token: 'refresh-2' });
+      }
+      return response(200, { access_token: 'access-2' });
+    }
+  });
+
+  const result = await manager.beforeRun({ environment: { id: 'env', name: 'Env', variables: [] } });
+
+  assert.deepEqual(sends, [
+    { id: 'refresh-token-request', auth: { type: 'none' } },
+    { id: 'access-token-request', auth: { type: 'bearer', token: 'refresh-2' } }
+  ]);
+  assert.deepEqual(result.autoRefreshAuth, { type: 'bearer', token: 'access-2' });
+});
+
 test('refresh manager saves typed outputs from body headers and cookies', async () => {
   const environment = { id: 'env', name: 'Env', variables: [] };
   const manager = createAuthRefreshManager({
@@ -144,6 +188,49 @@ test('refresh manager saves typed outputs from body headers and cookies', async 
   assert.equal(variable(environment, 'AWS_SECRET_ACCESS_KEY'), 'secret-refreshed');
   assert.equal(variable(environment, 'CSRF_TOKEN'), 'csrf-refreshed');
   assert.equal(variable(environment, 'SESSION_COOKIE'), 'cookie-refreshed');
+});
+
+test('refresh manager exposes bearer and cookie values for automatic auth injection without variables', async () => {
+  const bearerManager = createAuthRefreshManager({
+    enabled: true,
+    authType: 'bearer',
+    mode: 'interval',
+    refreshBeforeRun: true,
+    outputs: [{ slot: 'accessToken', source: 'body', path: 'jwtToken', variable: '' }],
+    request: { method: 'POST', url: 'https://auth.example.test/token' }
+  }, {
+    sendRequest: async () => response(200, { jwtToken: 'bearer-auto-token' })
+  });
+  const bearerSnapshot = await bearerManager.beforeRun({ environment: { id: 'env', name: 'Env', variables: [] } });
+
+  assert.deepEqual(bearerSnapshot.autoRefreshAuth, { type: 'bearer', token: 'bearer-auto-token' });
+  assert.deepEqual(requestWithAutoRefreshAuth(
+    { id: 'resource', auth: { type: 'autoRefresh' } },
+    { enabled: true, authType: 'bearer' },
+    bearerSnapshot.autoRefreshAuth
+  ).auth, { type: 'bearer', token: 'bearer-auto-token' });
+
+  const cookieManager = createAuthRefreshManager({
+    enabled: true,
+    authType: 'cookie',
+    mode: 'interval',
+    refreshBeforeRun: true,
+    outputs: [{ slot: 'cookie', source: 'cookie', path: 'sid', variable: '' }],
+    request: { method: 'POST', url: 'https://auth.example.test/session' }
+  }, {
+    sendRequest: async () => ({
+      ...response(200, {}),
+      updatedCookies: [{ enabled: true, name: 'sid', value: 'cookie-auto-token', domain: 'example.test', path: '/' }]
+    })
+  });
+  const cookieSnapshot = await cookieManager.beforeRun({ environment: { id: 'env', name: 'Env', variables: [] }, cookies: [] });
+
+  assert.deepEqual(cookieSnapshot.autoRefreshAuth, { type: 'cookie', value: 'sid=cookie-auto-token' });
+  assert.deepEqual(requestWithAutoRefreshAuth(
+    { id: 'resource', auth: { type: 'cookie', value: 'sid=stale' } },
+    { enabled: true, authType: 'cookie' },
+    cookieSnapshot.autoRefreshAuth
+  ).auth, { type: 'cookie', value: 'sid=cookie-auto-token' });
 });
 
 test('extracts nested refresh response fields and JWT expiration', () => {
@@ -321,7 +408,7 @@ test('refresh manager can continue after refresh failure when configured', async
   assert.equal(manager.stats().lastError, 'provider unavailable');
 });
 
-test('missing refresh path errors include response context without leaking tokens', async () => {
+test('missing refresh path errors list response keys without leaking response values', async () => {
   const message = missingRefreshPathMessage('jwtToken', {
     statusCode: 401,
     body: JSON.stringify({
@@ -337,10 +424,17 @@ test('missing refresh path errors include response context without leaking token
     nested: { ignored: true }
   });
 
-  assert.match(message, /did not include "jwtToken"/);
-  assert.match(message, /Status 401/);
-  assert.match(message, /Response keys: error, accessToken, refresh_token, nested/);
-  assert.match(message, /missing_refresh_cookie/);
+  assert.equal(message, [
+    'Auth refresh response did not include "jwtToken".',
+    '',
+    'Response keys:',
+    'error',
+    'accessToken',
+    'refresh_token',
+    'nested'
+  ].join('\n'));
+  assert.doesNotMatch(message, /Status 401/);
+  assert.doesNotMatch(message, /missing_refresh_cookie/);
   assert.doesNotMatch(message, /secret-access/);
   assert.doesNotMatch(message, /secret-refresh/);
 });

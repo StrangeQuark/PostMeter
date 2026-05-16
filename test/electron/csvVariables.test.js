@@ -6,6 +6,7 @@ const {
   csvVariablesEnabled,
   csvVariablesToIterationRows,
   normalizeCsvVariableData,
+  normalizeCsvVariableDataDefaultOff,
   parseCsvRecords,
   parseCsvVariableSchema
 } = require('../../src/core/csvVariables');
@@ -144,4 +145,12 @@ test('normalizes CSV variable definitions and exposes configured names', () => {
   assert.equal(csvVariablesEnabled(normalized), false);
   assert.deepEqual(csvVariableNames(normalized), ['name', 'url']);
   assert.equal(csvVariablesEnabled({ schema: 'name', values: '', filePath: '' }), false);
+});
+
+test('default-off CSV normalization disables empty definitions without disabling legacy configured data', () => {
+  assert.equal(normalizeCsvVariableData().enabled, true);
+  assert.equal(normalizeCsvVariableDataDefaultOff().enabled, false);
+  assert.equal(normalizeCsvVariableDataDefaultOff({}).enabled, false);
+  assert.equal(normalizeCsvVariableDataDefaultOff({ schema: 'name', values: 'alice' }).enabled, true);
+  assert.equal(normalizeCsvVariableDataDefaultOff({ enabled: false, schema: 'name', values: 'alice' }).enabled, false);
 });

@@ -8,7 +8,7 @@ const {
 } = require('./payloadSchemas');
 const { normalizePersistedAuth } = require('./authModel');
 const { normalizeCookies: normalizeCookieCollection } = require('./cookieModel');
-const { normalizeCsvVariableData } = require('./csvVariables');
+const { normalizeCsvVariableDataDefaultOff } = require('./csvVariables');
 const { normalizeSandboxFileBindings } = require('./fileAttachmentBindings');
 const { normalizeDiagnosticsSettings } = require('./diagnosticsSettings');
 const { normalizeCapturePolicy } = require('./resultCapturePolicy');
@@ -114,7 +114,8 @@ function requestModel({
   metadata,
   postman,
   messages,
-  methodPath
+  methodPath,
+  refreshingAuthOriginalAuth
 } = {}) {
   const normalizedMethod = normalizeMethod(method);
   const request = {
@@ -143,6 +144,9 @@ function requestModel({
     websocket: normalizeJsonObject(websocket, 128 * 1024),
     settings: normalizeRequestTlsSettings(settings)
   };
+  if (request.auth?.type === 'autoRefresh' && refreshingAuthOriginalAuth && typeof refreshingAuthOriginalAuth === 'object') {
+    request.refreshingAuthOriginalAuth = normalizeRefreshingAuthOriginalAuth(refreshingAuthOriginalAuth);
+  }
   addOptionalJsonObject(request, 'postman', postman, POSTMAN_METADATA_MAX_BYTES);
   return request;
 }
@@ -173,7 +177,7 @@ function runnerModel({
     stopOnFailure: stopOnFailure === true,
     capturePolicy: normalizeCapturePolicy(capturePolicy, 'runner'),
     authRefresh: normalizeAuthRefreshConfig(authRefresh),
-    csvVariables: normalizeCsvVariableData(csvVariables),
+    csvVariables: normalizeCsvVariableDataDefaultOff(csvVariables),
     requests: Array.isArray(requests) ? requests.map(runnerRequestModel) : []
   };
 }
@@ -184,6 +188,17 @@ function runnerRequestModel(request = {}) {
   const source = normalizeRunnerRequestSource(request.source);
   if (Object.keys(source).length) {
     normalized.source = source;
+  }
+  if (normalized.auth?.type === 'autoRefresh' && request.refreshingAuthOriginalAuth && typeof request.refreshingAuthOriginalAuth === 'object') {
+    normalized.refreshingAuthOriginalAuth = normalizeRefreshingAuthOriginalAuth(request.refreshingAuthOriginalAuth);
+  }
+  return normalized;
+}
+
+function normalizeRefreshingAuthOriginalAuth(auth = {}) {
+  const normalized = normalizePersistedAuth(auth);
+  if (normalized.type === 'autoRefresh' || normalized.type === 'autoRefreshRefreshToken') {
+    return { type: 'none' };
   }
   return normalized;
 }
@@ -225,7 +240,7 @@ function performanceTestModel({
     capturePolicy: normalizeCapturePolicy(capturePolicy, 'performance', { diagnostic: normalizedType === DIAGNOSIS_TYPE }),
     authRefresh: normalizeAuthRefreshConfig(authRefresh),
     typeSettings: normalizedTypeSettings,
-    csvVariables: normalizeCsvVariableData(csvVariables),
+    csvVariables: normalizeCsvVariableDataDefaultOff(csvVariables),
     resultsMetadata: normalizePerformanceResultsMetadata(resultsMetadata)
   };
 }
@@ -320,7 +335,7 @@ function normalizeAuthRefreshOutputs(outputs, fallbackConfig = DEFAULT_AUTH_REFR
   const seen = new Set();
   for (const output of source.slice(0, 20)) {
     const item = normalizeAuthRefreshOutput(output);
-    if (!item.variable || !item.path) {
+    if (!item.path) {
       continue;
     }
     const key = `${item.slot}:${item.source}:${item.path}:${item.variable}`;
