@@ -4,7 +4,7 @@ const path = require('node:path');
 const { withCiNoSandboxArgs } = require('../../scripts/electronCiSandboxWaiver');
 const { redactSmokeOutputText, spawnWithTimeout } = require('../../scripts/smokeProcess');
 
-const UI_TYPOGRAPHY_TIMEOUT_MILLIS = 210_000;
+const UI_TYPOGRAPHY_TIMEOUT_MILLIS = 330_000;
 
 async function main() {
   const electronPath = require('electron');

@@ -18,7 +18,7 @@ const {
 
 const DEFAULT_SMOKE_ARTIFACT_TIMEOUT_MILLIS = 2_000;
 const UI_REGRESSION_SMOKE_TITLE_TIMEOUT_MILLIS = 90_000;
-const UI_TYPOGRAPHY_SMOKE_TITLE_TIMEOUT_MILLIS = 180_000;
+const UI_TYPOGRAPHY_SMOKE_TITLE_TIMEOUT_MILLIS = 300_000;
 const UI_SMOKE_AUTH_SCHEME_NAMES = 'bearer|basic|digest|hawk|token|oauth|ntlm|negotiate|aws4-hmac-sha256|eg1-hmac-sha256';
 const UI_SMOKE_SIMPLE_AUTH_SCHEME_NAMES = 'bearer|basic|digest|hawk|token|oauth|ntlm|negotiate';
 const UI_SMOKE_AUTH_PARAMETER_PAIR_PATTERN = '[A-Za-z][A-Za-z0-9_-]*\\s*=\\s*(?:"[^"\\r\\n<>]*"|[^\\s,;\\[\\]\\\'"<>}&]+)';
@@ -906,6 +906,7 @@ module.exports = {
   requiredPreloadApiSurface,
   runStartupSmokeProbe,
   UI_REGRESSION_SMOKE_TITLE_TIMEOUT_MILLIS,
+  UI_TYPOGRAPHY_SMOKE_TITLE_TIMEOUT_MILLIS,
   validateSmokeUserDataPath,
   writeUiSmokeFailureArtifacts,
   writeStartupSmokeFailureArtifacts

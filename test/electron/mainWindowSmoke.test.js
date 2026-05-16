@@ -13,6 +13,7 @@ const {
   redactUiSmokeText,
   runStartupSmokeProbe,
   UI_REGRESSION_SMOKE_TITLE_TIMEOUT_MILLIS,
+  UI_TYPOGRAPHY_SMOKE_TITLE_TIMEOUT_MILLIS,
   validateSmokeUserDataPath,
   writeStartupSmokeFailureArtifacts,
   writeUiSmokeFailureArtifacts
@@ -100,6 +101,10 @@ test('packaged startup smoke writes failure logs and screenshots when configured
 
 test('UI regression smoke title watcher has enough CI headroom', () => {
   assert.equal(UI_REGRESSION_SMOKE_TITLE_TIMEOUT_MILLIS, 90_000);
+});
+
+test('UI typography smoke title watcher has enough CI headroom', () => {
+  assert.equal(UI_TYPOGRAPHY_SMOKE_TITLE_TIMEOUT_MILLIS, 300_000);
 });
 
 test('startup smoke load-failure hooks fail fast with redacted artifacts before renderer load', async () => {
