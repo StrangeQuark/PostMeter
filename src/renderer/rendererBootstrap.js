@@ -182,26 +182,32 @@
     bindClick(doc, 'runnerToggleCsvVariablesButton', options.onToggleRunnerCsvVariables);
     bindClick(doc, 'runnerEditCsvVariablesButton', options.onEditRunnerCsvVariables);
     bindClick(doc, 'runnerCaptureSettingsButton', options.onToggleRunnerCaptureSettings);
-    bindClick(doc, 'runnerAuthRefreshButton', options.onToggleRunnerAuthRefresh);
+    bindClick(doc, 'runnerToggleAuthRefreshButton', options.onToggleRunnerAuthRefresh);
+    bindClick(doc, 'runnerEditAuthRefreshButton', options.onEditRunnerAuthRefresh);
     bindClick(doc, 'runnerAuthRefreshOpenRequestButton', options.onOpenRunnerAuthRefreshRequest);
     bindClick(doc, 'runnerAuthRefreshNewRequestButton', options.onNewRunnerAuthRefreshRequest);
     bindClick(doc, 'runnerAuthRefreshImportButton', options.onImportRunnerAuthRefreshRequest);
+    bindClick(doc, 'runnerAuthRefreshRemoveRequestButton', options.onRemoveRunnerAuthRefreshRequest);
     bindClick(doc, 'runnerAuthRefreshTokenOpenRequestButton', options.onOpenRunnerAuthRefreshTokenRequest);
     bindClick(doc, 'runnerAuthRefreshTokenNewRequestButton', options.onNewRunnerAuthRefreshTokenRequest);
     bindClick(doc, 'runnerAuthRefreshTokenImportButton', options.onImportRunnerAuthRefreshTokenRequest);
+    bindClick(doc, 'runnerAuthRefreshTokenRemoveRequestButton', options.onRemoveRunnerAuthRefreshTokenRequest);
     bindClick(doc, 'saveRunnerButton', options.onSaveRunner);
     bindClick(doc, 'deleteRunnerButton', options.onDeleteRunner);
     bindClick(doc, 'addRunnerRequestButton', options.onAddRunnerRequest);
     bindClick(doc, 'performanceToggleCsvVariablesButton', options.onTogglePerformanceCsvVariables);
     bindClick(doc, 'performanceEditCsvVariablesButton', options.onEditPerformanceCsvVariables);
     bindClick(doc, 'performanceCaptureSettingsButton', options.onTogglePerformanceCaptureSettings);
-    bindClick(doc, 'performanceAuthRefreshButton', options.onTogglePerformanceAuthRefresh);
+    bindClick(doc, 'performanceToggleAuthRefreshButton', options.onTogglePerformanceAuthRefresh);
+    bindClick(doc, 'performanceEditAuthRefreshButton', options.onEditPerformanceAuthRefresh);
     bindClick(doc, 'performanceAuthRefreshOpenRequestButton', options.onOpenPerformanceAuthRefreshRequest);
     bindClick(doc, 'performanceAuthRefreshNewRequestButton', options.onNewPerformanceAuthRefreshRequest);
     bindClick(doc, 'performanceAuthRefreshImportButton', options.onImportPerformanceAuthRefreshRequest);
+    bindClick(doc, 'performanceAuthRefreshRemoveRequestButton', options.onRemovePerformanceAuthRefreshRequest);
     bindClick(doc, 'performanceAuthRefreshTokenOpenRequestButton', options.onOpenPerformanceAuthRefreshTokenRequest);
     bindClick(doc, 'performanceAuthRefreshTokenNewRequestButton', options.onNewPerformanceAuthRefreshTokenRequest);
     bindClick(doc, 'performanceAuthRefreshTokenImportButton', options.onImportPerformanceAuthRefreshTokenRequest);
+    bindClick(doc, 'performanceAuthRefreshTokenRemoveRequestButton', options.onRemovePerformanceAuthRefreshTokenRequest);
     bindClick(doc, 'savePerformanceTestButton', options.onSavePerformanceTest);
     bindClick(doc, 'deletePerformanceTestButton', options.onDeletePerformanceTest);
     bindClick(doc, 'runPerformanceTestButton', options.onRunPerformanceTest);
@@ -561,6 +567,12 @@
       ['exportRequestPanelButton', 'exportRequestPanelMenu'],
       ['runnerCsvVariablesButton', 'runnerCsvVariablesMenu'],
       ['performanceCsvVariablesButton', 'performanceCsvVariablesMenu'],
+      ['runnerAuthRefreshButton', 'runnerAuthRefreshMenu'],
+      ['performanceAuthRefreshButton', 'performanceAuthRefreshMenu'],
+      ['runnerAuthRefreshManageRequestButton', 'runnerAuthRefreshManageRequestMenu'],
+      ['runnerAuthRefreshTokenManageRequestButton', 'runnerAuthRefreshTokenManageRequestMenu'],
+      ['performanceAuthRefreshManageRequestButton', 'performanceAuthRefreshManageRequestMenu'],
+      ['performanceAuthRefreshTokenManageRequestButton', 'performanceAuthRefreshTokenManageRequestMenu'],
       ['exportRunnerResultsButton', 'exportRunnerResultsMenu'],
       ['exportPerformanceResultsButton', 'exportPerformanceResultsMenu']
     ]) {
@@ -741,6 +753,9 @@
     }
     options.onCloseContextMenu?.();
     options.onCloseFileSourceMenu?.();
+    if (!menu.closest?.('.capture-settings-panel')) {
+      options.onCloseCaptureSettingsPanels?.();
+    }
     closeToolbarMenus(doc);
     menu.hidden = false;
     button.setAttribute('aria-expanded', 'true');

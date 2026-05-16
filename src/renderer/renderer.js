@@ -823,25 +823,31 @@ function bindUi() {
     onExportRunnerCsv: () => exportRunnerResult('csv'),
     onToggleRunnerCsvVariables: toggleActiveRunnerCsvVariables,
     onToggleRunnerCaptureSettings: (event) => toggleCaptureSettingsPanel('runner', event),
-    onToggleRunnerAuthRefresh: (event) => toggleAuthRefreshPanel('runner', event),
+    onToggleRunnerAuthRefresh: toggleActiveRunnerAuthRefresh,
+    onEditRunnerAuthRefresh: (event) => toggleAuthRefreshPanel('runner', event),
     onOpenRunnerAuthRefreshRequest: () => openExistingAuthRefreshRequest('runner'),
     onNewRunnerAuthRefreshRequest: () => openNewAuthRefreshRequest('runner'),
     onImportRunnerAuthRefreshRequest: () => { void promptAndImportAuthRefreshRequest('runner'); },
+    onRemoveRunnerAuthRefreshRequest: () => removeAuthRefreshRequest('runner'),
     onOpenRunnerAuthRefreshTokenRequest: () => openExistingAuthRefreshRequest('runner', 'refreshToken'),
     onNewRunnerAuthRefreshTokenRequest: () => openNewAuthRefreshRequest('runner', 'refreshToken'),
     onImportRunnerAuthRefreshTokenRequest: () => { void promptAndImportAuthRefreshRequest('runner', 'refreshToken'); },
+    onRemoveRunnerAuthRefreshTokenRequest: () => removeAuthRefreshRequest('runner', 'refreshToken'),
     onSaveRunner: () => { void saveRunnerFromPane(); },
     onDeleteRunner: () => { void deleteRunner(); },
     onAddRunnerRequest: (event) => showAddRunnerRequestMenu(event),
     onTogglePerformanceCsvVariables: toggleActivePerformanceCsvVariables,
     onTogglePerformanceCaptureSettings: (event) => toggleCaptureSettingsPanel('performance', event),
-    onTogglePerformanceAuthRefresh: (event) => toggleAuthRefreshPanel('performance', event),
+    onTogglePerformanceAuthRefresh: toggleActivePerformanceAuthRefresh,
+    onEditPerformanceAuthRefresh: (event) => toggleAuthRefreshPanel('performance', event),
     onOpenPerformanceAuthRefreshRequest: () => openExistingAuthRefreshRequest('performance'),
     onNewPerformanceAuthRefreshRequest: () => openNewAuthRefreshRequest('performance'),
     onImportPerformanceAuthRefreshRequest: () => { void promptAndImportAuthRefreshRequest('performance'); },
+    onRemovePerformanceAuthRefreshRequest: () => removeAuthRefreshRequest('performance'),
     onOpenPerformanceAuthRefreshTokenRequest: () => openExistingAuthRefreshRequest('performance', 'refreshToken'),
     onNewPerformanceAuthRefreshTokenRequest: () => openNewAuthRefreshRequest('performance', 'refreshToken'),
     onImportPerformanceAuthRefreshTokenRequest: () => { void promptAndImportAuthRefreshRequest('performance', 'refreshToken'); },
+    onRemovePerformanceAuthRefreshTokenRequest: () => removeAuthRefreshRequest('performance', 'refreshToken'),
     onSavePerformanceTest: () => { void savePerformanceTestFromPane(); },
     onDeletePerformanceTest: () => { void deletePerformanceTest(); },
     onRunPerformanceTest: () => { void runActivePerformanceTest(); },
@@ -979,6 +985,7 @@ function bindUi() {
     getSelectedRunnerImportTarget: () => selectedRunnerImportTarget,
     onCloseContextMenu: closeContextMenu,
     onCloseFileSourceMenu: closeFileSourceMenu,
+    onCloseCaptureSettingsPanels: closeCaptureSettingsPanels,
     onInitResizablePanes: initResizablePanes
   });
   bindRequestTitleEditor();
@@ -6538,6 +6545,51 @@ function toggleActivePerformanceCsvVariables() {
   return test.csvVariables;
 }
 
+function toggleActiveRunnerAuthRefresh() {
+  const runner = activeRunner();
+  if (!runner) {
+    setStatus('Select a runner before changing refreshing auth.');
+    return null;
+  }
+  collectRunnerFromEditor();
+  const existing = normalizeAuthRefreshConfig(runner.authRefresh || {});
+  runner.authRefresh = normalizeAuthRefreshConfig({
+    ...existing,
+    enabled: existing.enabled !== true
+  });
+  const refreshTokenAuthAutoSelected = autoSelectRefreshingAuthRefreshTokenForAccessRequest('runner', runner);
+  markActiveRunnerDirty();
+  renderRunnerEditor();
+  refreshVariableHighlights();
+  if (refreshTokenAuthAutoSelected) {
+    renderRequestEditor();
+  }
+  setStatus(runner.authRefresh.enabled ? 'Runner refreshing auth enabled.' : 'Runner refreshing auth disabled.');
+  return runner.authRefresh;
+}
+
+function toggleActivePerformanceAuthRefresh() {
+  const test = activePerformanceTest();
+  if (!test) {
+    setStatus('Select a performance test before changing refreshing auth.');
+    return null;
+  }
+  collectPerformanceTestFromEditor();
+  const previousAuthRefresh = normalizeAuthRefreshConfig(test.authRefresh || {});
+  test.authRefresh = normalizeAuthRefreshConfig({
+    ...previousAuthRefresh,
+    enabled: previousAuthRefresh.enabled !== true
+  });
+  autoSelectRefreshingAuthRefreshTokenForAccessRequest('performance', test);
+  autoSelectRefreshingAuthAccessTokenForOwner('performance', test, previousAuthRefresh, test.authRefresh);
+  syncPerformanceRefreshingAuthAccessToken(test, test.authRefresh);
+  markActivePerformanceDirty();
+  renderPerformanceEditor();
+  refreshVariableHighlights();
+  setStatus(test.authRefresh.enabled ? 'Performance refreshing auth enabled.' : 'Performance refreshing auth disabled.');
+  return test.authRefresh;
+}
+
 async function promptCsvVariables(options = {}) {
   configureCsvVariablesModal(options);
   const result = await showModal('csvVariablesModal', null);
@@ -8420,7 +8472,6 @@ function renderAuthRefreshControls(prefix, authRefresh, enabled) {
   const normalized = normalizeAuthRefreshConfig(authRefresh || {});
   const authType = normalizeAuthRefreshUiType(normalized.authType);
   setValue(`${prefix}AuthRefreshTypeSelect`, authType);
-  setChecked(`${prefix}AuthRefreshEnabledInput`, normalized.enabled === true);
   const accessTokenOutput = authRefreshOutputForSlot(normalized, 'accessToken', {
     source: 'body',
     path: normalized.accessTokenPath,
@@ -8467,6 +8518,15 @@ function renderAuthRefreshControls(prefix, authRefresh, enabled) {
     button.textContent = `Refreshing Auth: ${active ? 'On' : 'Off'}`;
     button.classList.toggle('auth-refresh-active', active);
   }
+  const toggleButton = $(`${prefix}ToggleAuthRefreshButton`);
+  if (toggleButton) {
+    toggleButton.disabled = !enabled;
+    toggleButton.textContent = normalized.enabled === true ? 'Turn Off' : 'Turn On';
+  }
+  const editButton = $(`${prefix}EditAuthRefreshButton`);
+  if (editButton) {
+    editButton.disabled = !enabled;
+  }
   for (const control of document.querySelectorAll(`#${prefix}AuthRefreshPanel input, #${prefix}AuthRefreshPanel select, #${prefix}AuthRefreshPanel textarea`)) {
     control.disabled = !enabled;
   }
@@ -8479,9 +8539,17 @@ function renderAuthRefreshControls(prefix, authRefresh, enabled) {
   if (openButton) {
     openButton.disabled = !enabled || !authRefreshRequestConfigured(authRefresh?.request);
   }
+  const removeButton = $(`${prefix}AuthRefreshRemoveRequestButton`);
+  if (removeButton) {
+    removeButton.disabled = !enabled || !authRefreshRequestConfigured(authRefresh?.request);
+  }
   const refreshTokenOpenButton = $(`${prefix}AuthRefreshTokenOpenRequestButton`);
   if (refreshTokenOpenButton) {
     refreshTokenOpenButton.disabled = !enabled || !authRefreshRequestConfigured(authRefresh?.refreshTokenRequest);
+  }
+  const refreshTokenRemoveButton = $(`${prefix}AuthRefreshTokenRemoveRequestButton`);
+  if (refreshTokenRemoveButton) {
+    refreshTokenRemoveButton.disabled = !enabled || !authRefreshRequestConfigured(authRefresh?.refreshTokenRequest);
   }
   syncVisibleRefreshingAuthTypeOptionsForOwner(prefix, normalized);
   positionVisibleAuthRefreshPanel(prefix);
@@ -8545,13 +8613,21 @@ function positionVisibleAuthRefreshPanel(prefix) {
 
 function syncAuthRefreshButton(prefix, authRefresh, enabled = true) {
   const button = $(`${prefix}AuthRefreshButton`);
-  if (!button) {
-    return;
-  }
   const active = enabled && authRefresh?.enabled === true;
-  button.textContent = `Refreshing Auth: ${active ? 'On' : 'Off'}`;
-  button.classList.toggle('auth-refresh-active', active);
-  button.disabled = !enabled;
+  if (button) {
+    button.textContent = `Refreshing Auth: ${active ? 'On' : 'Off'}`;
+    button.classList.toggle('auth-refresh-active', active);
+    button.disabled = !enabled;
+  }
+  const toggleButton = $(`${prefix}ToggleAuthRefreshButton`);
+  if (toggleButton) {
+    toggleButton.disabled = !enabled;
+    toggleButton.textContent = authRefresh?.enabled === true ? 'Turn Off' : 'Turn On';
+  }
+  const editButton = $(`${prefix}EditAuthRefreshButton`);
+  if (editButton) {
+    editButton.disabled = !enabled;
+  }
 }
 
 function collectAuthRefreshFromControls(prefix, fallback = {}) {
@@ -8561,7 +8637,7 @@ function collectAuthRefreshFromControls(prefix, fallback = {}) {
   const primaryOutput = authRefreshPrimaryOutput(authType, outputs);
   const next = normalizeAuthRefreshConfig({
     ...existing,
-    enabled: $(`${prefix}AuthRefreshEnabledInput`)?.checked === true,
+    enabled: existing.enabled === true,
     mode: 'interval',
     authType,
     targetScope: 'environment',
@@ -9671,6 +9747,62 @@ function openExistingAuthRefreshRequest(ownerType, requestKind = 'access') {
     return null;
   }
   return openAuthRefreshRequest(ownerType, owner, `Opened ${authRefreshRequestLabel(requestKind).toLowerCase()} for editing.`, requestKind);
+}
+
+function removeAuthRefreshRequest(ownerType, requestKind = 'access') {
+  const owner = activeAuthRefreshOwnerForType(ownerType);
+  if (!owner) {
+    return false;
+  }
+  collectActiveEditorState();
+  const property = authRefreshRequestProperty(requestKind);
+  const request = owner.authRefresh?.[property] || null;
+  if (!authRefreshRequestConfigured(request)) {
+    renderAuthRefreshControls(ownerType, owner.authRefresh, true);
+    setStatus(`No ${authRefreshRequestLabel(requestKind).toLowerCase()} selected.`);
+    return false;
+  }
+  const requestId = String(request.id || '').trim();
+  owner.authRefresh = normalizeAuthRefreshConfig({
+    ...(owner.authRefresh || {}),
+    [property]: {}
+  });
+  if (requestKind === 'refreshToken' && owner.authRefresh.request?.auth?.type === AUTO_REFRESH_REFRESH_TOKEN_AUTH_TYPE) {
+    owner.authRefresh.request.auth = { type: 'none' };
+  }
+  markAuthRefreshOwnerDirty(ownerType);
+  removeOpenAuthRefreshRequestTab(ownerType, owner.id, requestId);
+  const wasActiveRequest = activeAuthRefreshRequestOwnerType === ownerType
+    && activeAuthRefreshRequestOwnerId === owner.id
+    && activeRequestId === requestId;
+  if (wasActiveRequest) {
+    activeCollectionId = null;
+    activeFolderId = null;
+    activeRequestId = null;
+    activeRunnerRequestRunnerId = null;
+    activeAuthRefreshRequestOwnerType = '';
+    activeAuthRefreshRequestOwnerId = null;
+    if (ownerType === 'runner') {
+      activeRunnerConfigId = owner.id;
+      activeSidebarPanel = 'runners';
+      activeMainPanel = 'runner';
+    } else {
+      activePerformanceTestId = owner.id;
+      activeSidebarPanel = 'performance';
+      activeMainPanel = 'performance';
+    }
+  }
+  closeToolbarMenus();
+  renderAll();
+  setStatus(`${authRefreshRequestLabel(requestKind)} removed.`);
+  return true;
+}
+
+function removeOpenAuthRefreshRequestTab(ownerType, ownerId, requestId) {
+  if (!ownerType || !ownerId || !requestId) {
+    return;
+  }
+  removeOpenRequestTab(`auth-request:${ownerType}:${ownerId}:${requestId}`);
 }
 
 function autoSelectRefreshingAuthRefreshTokenForAccessRequest(ownerType, owner) {

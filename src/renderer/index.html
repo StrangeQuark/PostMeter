@@ -725,24 +725,30 @@
                 <label class="checkbox-line"><input id="runnerCaptureLocalVariablesInput" type="checkbox"><span>Local variables</span></label>
               </div>
             </div>
-            <div class="capture-settings-menu-group">
-              <button id="runnerAuthRefreshButton" class="capture-settings-trigger" type="button" aria-expanded="false" aria-controls="runnerAuthRefreshPanel">Refreshing Auth: Off</button>
+            <div class="capture-settings-menu-group toolbar-group menu-group auth-refresh-menu-group" aria-label="Runner refreshing auth">
+              <button id="runnerAuthRefreshButton" class="menu-trigger auth-refresh-trigger" type="button" aria-haspopup="menu" aria-expanded="false">Refreshing Auth: Off</button>
+              <div id="runnerAuthRefreshMenu" class="toolbar-menu auth-refresh-menu" role="menu" aria-labelledby="runnerAuthRefreshButton" hidden>
+                <button id="runnerToggleAuthRefreshButton" type="button" role="menuitem">Turn On</button>
+                <button id="runnerEditAuthRefreshButton" type="button" role="menuitem">Edit</button>
+              </div>
               <div id="runnerAuthRefreshPanel" class="capture-settings-panel auth-refresh-panel" role="group" aria-label="Runner refreshing auth settings" hidden>
                 <label class="field compact auth-refresh-full"><span>Auth Used By Requests</span><select id="runnerAuthRefreshTypeSelect"><option value="bearer">Bearer / JWT</option><option value="oauth2">OAuth 2</option><option value="apiKey">API Key</option><option value="cookie">Cookie</option><option value="aws">AWS Temporary Credentials</option><option value="custom">Custom Header</option></select></label>
                 <datalist id="runnerAuthRefreshVariableList"></datalist>
-                <div class="auth-refresh-intro">
-                  <label class="checkbox-line"><input id="runnerAuthRefreshEnabledInput" type="checkbox"><span>Refresh auth during run</span></label>
-                  <p id="runnerAuthRefreshHelpText">The auth request uses this runner's selected Environment, saves refreshed values to variables, and repeats on the interval below.</p>
-                </div>
                 <div class="auth-refresh-request-card">
                   <div class="auth-refresh-request-copy">
                     <span>Auth request</span>
                     <strong id="runnerAuthRefreshRequestSummary" class="auth-refresh-request-summary">No auth request selected</strong>
                   </div>
                   <div class="auth-refresh-request-actions">
-                    <button id="runnerAuthRefreshOpenRequestButton" type="button">Open</button>
-                    <button id="runnerAuthRefreshNewRequestButton" type="button">New Request</button>
-                    <button id="runnerAuthRefreshImportButton" type="button">Import</button>
+                    <div class="toolbar-group menu-group auth-refresh-manage-menu-group" aria-label="Manage auth request">
+                      <button id="runnerAuthRefreshManageRequestButton" class="menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false">Manage</button>
+                      <div id="runnerAuthRefreshManageRequestMenu" class="toolbar-menu auth-refresh-manage-menu" role="menu" aria-labelledby="runnerAuthRefreshManageRequestButton" hidden>
+                        <button id="runnerAuthRefreshOpenRequestButton" type="button" role="menuitem">Open</button>
+                        <button id="runnerAuthRefreshNewRequestButton" type="button" role="menuitem">New Request</button>
+                        <button id="runnerAuthRefreshImportButton" type="button" role="menuitem">Import</button>
+                        <button id="runnerAuthRefreshRemoveRequestButton" class="danger-button" type="button" role="menuitem">Remove</button>
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <div class="auth-refresh-type-panel" data-auth-refresh-types="bearer oauth2">
@@ -790,9 +796,15 @@
                       <strong id="runnerAuthRefreshTokenRequestSummary" class="auth-refresh-request-summary">No refresh token request selected</strong>
                     </div>
                     <div class="auth-refresh-request-actions">
-                      <button id="runnerAuthRefreshTokenOpenRequestButton" type="button">Open</button>
-                      <button id="runnerAuthRefreshTokenNewRequestButton" type="button">New Request</button>
-                      <button id="runnerAuthRefreshTokenImportButton" type="button">Import</button>
+                      <div class="toolbar-group menu-group auth-refresh-manage-menu-group" aria-label="Manage refresh token request">
+                        <button id="runnerAuthRefreshTokenManageRequestButton" class="menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false">Manage</button>
+                        <div id="runnerAuthRefreshTokenManageRequestMenu" class="toolbar-menu auth-refresh-manage-menu" role="menu" aria-labelledby="runnerAuthRefreshTokenManageRequestButton" hidden>
+                          <button id="runnerAuthRefreshTokenOpenRequestButton" type="button" role="menuitem">Open</button>
+                          <button id="runnerAuthRefreshTokenNewRequestButton" type="button" role="menuitem">New Request</button>
+                          <button id="runnerAuthRefreshTokenImportButton" type="button" role="menuitem">Import</button>
+                          <button id="runnerAuthRefreshTokenRemoveRequestButton" class="danger-button" type="button" role="menuitem">Remove</button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                   <div class="auth-refresh-field-grid">
@@ -902,24 +914,30 @@
                   <label class="checkbox-line"><input id="performanceCaptureTimingsInput" type="checkbox"><span>Transport timings</span></label>
                 </div>
               </div>
-              <div class="capture-settings-menu-group">
-                <button id="performanceAuthRefreshButton" class="capture-settings-trigger" type="button" aria-expanded="false" aria-controls="performanceAuthRefreshPanel">Refreshing Auth: Off</button>
+              <div class="capture-settings-menu-group toolbar-group menu-group auth-refresh-menu-group" aria-label="Performance refreshing auth">
+                <button id="performanceAuthRefreshButton" class="menu-trigger auth-refresh-trigger" type="button" aria-haspopup="menu" aria-expanded="false">Refreshing Auth: Off</button>
+                <div id="performanceAuthRefreshMenu" class="toolbar-menu auth-refresh-menu" role="menu" aria-labelledby="performanceAuthRefreshButton" hidden>
+                  <button id="performanceToggleAuthRefreshButton" type="button" role="menuitem">Turn On</button>
+                  <button id="performanceEditAuthRefreshButton" type="button" role="menuitem">Edit</button>
+                </div>
                 <div id="performanceAuthRefreshPanel" class="capture-settings-panel auth-refresh-panel" role="group" aria-label="Performance refreshing auth settings" hidden>
                   <label class="field compact auth-refresh-full"><span>Auth Used By Requests</span><select id="performanceAuthRefreshTypeSelect"><option value="bearer">Bearer / JWT</option><option value="oauth2">OAuth 2</option><option value="apiKey">API Key</option><option value="cookie">Cookie</option><option value="aws">AWS Temporary Credentials</option><option value="custom">Custom Header</option></select></label>
                   <datalist id="performanceAuthRefreshVariableList"></datalist>
-                  <div class="auth-refresh-intro">
-                    <label class="checkbox-line"><input id="performanceAuthRefreshEnabledInput" type="checkbox"><span>Refresh auth during run</span></label>
-                    <p id="performanceAuthRefreshHelpText">The auth request uses this performance test's selected Environment, saves refreshed values to variables, and repeats on the interval below.</p>
-                  </div>
                   <div class="auth-refresh-request-card">
                     <div class="auth-refresh-request-copy">
                       <span>Auth request</span>
                       <strong id="performanceAuthRefreshRequestSummary" class="auth-refresh-request-summary">No auth request selected</strong>
                     </div>
                     <div class="auth-refresh-request-actions">
-                      <button id="performanceAuthRefreshOpenRequestButton" type="button">Open</button>
-                      <button id="performanceAuthRefreshNewRequestButton" type="button">New Request</button>
-                      <button id="performanceAuthRefreshImportButton" type="button">Import</button>
+                      <div class="toolbar-group menu-group auth-refresh-manage-menu-group" aria-label="Manage auth request">
+                        <button id="performanceAuthRefreshManageRequestButton" class="menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false">Manage</button>
+                        <div id="performanceAuthRefreshManageRequestMenu" class="toolbar-menu auth-refresh-manage-menu" role="menu" aria-labelledby="performanceAuthRefreshManageRequestButton" hidden>
+                          <button id="performanceAuthRefreshOpenRequestButton" type="button" role="menuitem">Open</button>
+                          <button id="performanceAuthRefreshNewRequestButton" type="button" role="menuitem">New Request</button>
+                          <button id="performanceAuthRefreshImportButton" type="button" role="menuitem">Import</button>
+                          <button id="performanceAuthRefreshRemoveRequestButton" class="danger-button" type="button" role="menuitem">Remove</button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                   <div class="auth-refresh-type-panel" data-auth-refresh-types="bearer oauth2">
@@ -967,9 +985,15 @@
                         <strong id="performanceAuthRefreshTokenRequestSummary" class="auth-refresh-request-summary">No refresh token request selected</strong>
                       </div>
                       <div class="auth-refresh-request-actions">
-                        <button id="performanceAuthRefreshTokenOpenRequestButton" type="button">Open</button>
-                        <button id="performanceAuthRefreshTokenNewRequestButton" type="button">New Request</button>
-                        <button id="performanceAuthRefreshTokenImportButton" type="button">Import</button>
+                        <div class="toolbar-group menu-group auth-refresh-manage-menu-group" aria-label="Manage refresh token request">
+                          <button id="performanceAuthRefreshTokenManageRequestButton" class="menu-trigger" type="button" aria-haspopup="menu" aria-expanded="false">Manage</button>
+                          <div id="performanceAuthRefreshTokenManageRequestMenu" class="toolbar-menu auth-refresh-manage-menu" role="menu" aria-labelledby="performanceAuthRefreshTokenManageRequestButton" hidden>
+                            <button id="performanceAuthRefreshTokenOpenRequestButton" type="button" role="menuitem">Open</button>
+                            <button id="performanceAuthRefreshTokenNewRequestButton" type="button" role="menuitem">New Request</button>
+                            <button id="performanceAuthRefreshTokenImportButton" type="button" role="menuitem">Import</button>
+                            <button id="performanceAuthRefreshTokenRemoveRequestButton" class="danger-button" type="button" role="menuitem">Remove</button>
+                          </div>
+                        </div>
                       </div>
                     </div>
                     <div class="auth-refresh-field-grid">

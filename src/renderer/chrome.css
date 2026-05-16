@@ -115,33 +115,30 @@
   background: var(--surface);
 }
 
-.csv-variables-menu-group > .menu-trigger:hover:not(:disabled) {
+.csv-variables-menu-group > .menu-trigger:hover:not(:disabled),
+.auth-refresh-menu-group > .menu-trigger:hover:not(:disabled) {
   border-color: var(--line-strong);
   background: var(--button-hover);
 }
 
-.csv-variables-menu-group > .csv-variables-trigger.csv-variables-active {
+.csv-variables-menu-group > .csv-variables-trigger.csv-variables-active,
+.auth-refresh-menu-group > .auth-refresh-trigger.auth-refresh-active {
   border-color: var(--green);
   background: color-mix(in srgb, var(--green) 18%, var(--surface));
   color: var(--green);
   font-weight: 700;
 }
 
-.csv-variables-menu-group > .csv-variables-trigger.csv-variables-active:hover:not(:disabled) {
+.csv-variables-menu-group > .csv-variables-trigger.csv-variables-active:hover:not(:disabled),
+.auth-refresh-menu-group > .auth-refresh-trigger.auth-refresh-active:hover:not(:disabled) {
   border-color: var(--green);
   background: color-mix(in srgb, var(--green) 26%, var(--surface));
 }
 
-.capture-settings-menu-group > .capture-settings-trigger.auth-refresh-active {
-  border-color: var(--green);
-  background: color-mix(in srgb, var(--green) 18%, var(--surface));
-  color: var(--green);
-  font-weight: 700;
-}
-
-.capture-settings-menu-group > .capture-settings-trigger.auth-refresh-active:hover:not(:disabled) {
-  border-color: var(--green);
-  background: color-mix(in srgb, var(--green) 26%, var(--surface));
+.auth-refresh-menu-group > .menu-trigger {
+  min-height: 30px;
+  border-color: var(--line);
+  background: var(--surface);
 }
 
 .toolbar-menu button {
@@ -1161,6 +1158,11 @@ h2 {
   justify-content: flex-end;
 }
 
+.auth-refresh-manage-menu-group .toolbar-menu {
+  right: 0;
+  left: auto;
+}
+
 .auth-refresh-request-summary {
   min-width: 0;
   overflow: hidden;
@@ -1183,6 +1185,11 @@ h2 {
   min-width: 0;
 }
 
+.auth-refresh-request-card ~ .auth-refresh-type-panel,
+.auth-refresh-refresh-token .auth-refresh-request-card + .auth-refresh-field-grid {
+  margin-top: 10px;
+}
+
 .auth-refresh-panel-note {
   margin: 0;
   color: var(--muted);
@@ -1200,6 +1207,7 @@ h2 {
   padding-top: 2px;
 }
 
+.auth-refresh-refresh-token summary,
 .auth-refresh-advanced summary {
   color: var(--muted);
   cursor: pointer;
@@ -1207,6 +1215,7 @@ h2 {
   font-weight: 700;
 }
 
+.auth-refresh-refresh-token p,
 .auth-refresh-advanced p {
   margin: 8px 0 0;
   color: var(--muted);
