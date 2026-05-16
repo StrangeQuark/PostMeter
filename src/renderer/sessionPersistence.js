@@ -21,6 +21,8 @@
       activeCollectionId: normalizeId(state.activeCollectionId),
       activeFolderId: normalizeId(state.activeFolderId),
       activeRequestId: normalizeId(state.activeRequestId),
+      activeAuthRefreshRequestOwnerType: normalizeAuthRefreshOwnerType(state.activeAuthRefreshRequestOwnerType),
+      activeAuthRefreshRequestOwnerId: normalizeId(state.activeAuthRefreshRequestOwnerId),
       activeRunnerRequestRunnerId: normalizeId(state.activeRunnerRequestRunnerId),
       activeRunnerConfigId: normalizeId(state.activeRunnerConfigId),
       activePerformanceTestId: normalizeId(state.activePerformanceTestId),
@@ -110,6 +112,8 @@
     state.activeCollectionId = null;
     state.activeFolderId = null;
     state.activeRequestId = null;
+    state.activeAuthRefreshRequestOwnerType = '';
+    state.activeAuthRefreshRequestOwnerId = null;
     state.activeRunnerRequestRunnerId = null;
     state.activeRunnerConfigId = null;
     state.activePerformanceTestId = null;
@@ -154,38 +158,53 @@
       state.activePerformanceTestId = session.activePerformanceTestId;
     }
 
-    const activeRunnerRequestTab = (state.openRequestTabs || []).find((tab) => (
-      tab.runnerRequest === true
-      && tab.runnerId === session.activeRunnerRequestRunnerId
-      && tab.requestId === session.activeRequestId
-    ));
-    if (activeRunnerRequestTab && findRunnerRequest(state, session.activeRunnerRequestRunnerId, session.activeRequestId)) {
+    if (findActiveAuthRefreshRequestTab(state, session)) {
       state.activeCollectionId = null;
       state.activeFolderId = null;
       state.activeRequestId = session.activeRequestId;
-      state.activeRunnerRequestRunnerId = session.activeRunnerRequestRunnerId;
-      state.activeRunnerConfigId = session.activeRunnerRequestRunnerId;
+      state.activeRunnerRequestRunnerId = null;
+      state.activeAuthRefreshRequestOwnerType = session.activeAuthRefreshRequestOwnerType;
+      state.activeAuthRefreshRequestOwnerId = session.activeAuthRefreshRequestOwnerId;
+      if (session.activeAuthRefreshRequestOwnerType === 'runner') {
+        state.activeRunnerConfigId = session.activeAuthRefreshRequestOwnerId;
+      } else if (session.activeAuthRefreshRequestOwnerType === 'performance') {
+        state.activePerformanceTestId = session.activeAuthRefreshRequestOwnerId;
+      }
     } else {
-      const activeDraftTab = (state.openRequestTabs || []).find((tab) => tab.draft === true && tab.requestId === session.activeRequestId);
-      if (activeDraftTab && state.draftRequests.has(session.activeRequestId)) {
-      state.activeCollectionId = null;
-      state.activeFolderId = null;
-      state.activeRequestId = session.activeRequestId;
-      } else {
-      const activeSavedTab = (state.openRequestTabs || []).find((tab) => (
-        tab.draft !== true
-        && tab.runnerRequest !== true
-        && tab.collectionId === session.activeCollectionId
+      const activeRunnerRequestTab = (state.openRequestTabs || []).find((tab) => (
+        tab.runnerRequest === true
+        && tab.runnerId === session.activeRunnerRequestRunnerId
         && tab.requestId === session.activeRequestId
       ));
-      const restoredRequest = activeSavedTab
-        ? findSavedRequest(state, session.activeCollectionId, session.activeRequestId, findRequest)
-        : null;
-      if (restoredRequest) {
-        state.activeCollectionId = session.activeCollectionId;
-        state.activeFolderId = restoredRequest.folder?.id || null;
-        state.activeRequestId = restoredRequest.request.id;
-      }
+      if (activeRunnerRequestTab && findRunnerRequest(state, session.activeRunnerRequestRunnerId, session.activeRequestId)) {
+        state.activeCollectionId = null;
+        state.activeFolderId = null;
+        state.activeRequestId = session.activeRequestId;
+        state.activeRunnerRequestRunnerId = session.activeRunnerRequestRunnerId;
+        state.activeRunnerConfigId = session.activeRunnerRequestRunnerId;
+      } else {
+        const activeDraftTab = (state.openRequestTabs || []).find((tab) => tab.draft === true && tab.requestId === session.activeRequestId);
+        if (activeDraftTab && state.draftRequests.has(session.activeRequestId)) {
+          state.activeCollectionId = null;
+          state.activeFolderId = null;
+          state.activeRequestId = session.activeRequestId;
+        } else {
+          const activeSavedTab = (state.openRequestTabs || []).find((tab) => (
+            tab.draft !== true
+            && tab.runnerRequest !== true
+            && tab.authRefreshRequest !== true
+            && tab.collectionId === session.activeCollectionId
+            && tab.requestId === session.activeRequestId
+          ));
+          const restoredRequest = activeSavedTab
+            ? findSavedRequest(state, session.activeCollectionId, session.activeRequestId, findRequest)
+            : null;
+          if (restoredRequest) {
+            state.activeCollectionId = session.activeCollectionId;
+            state.activeFolderId = restoredRequest.folder?.id || null;
+            state.activeRequestId = restoredRequest.request.id;
+          }
+        }
       }
     }
 
@@ -194,6 +213,8 @@
       state.activeFolderId = folderExists(state, session.activeCollectionId, session.activeFolderId, findFolder)
         ? session.activeFolderId
         : null;
+      state.activeAuthRefreshRequestOwnerType = '';
+      state.activeAuthRefreshRequestOwnerId = null;
       state.activeRunnerRequestRunnerId = null;
     }
 
@@ -214,17 +235,23 @@
     if (!tab?.requestId) {
       return null;
     }
+    const authRefreshRequest = tab.authRefreshRequest === true;
     const runnerRequest = tab.runnerRequest === true;
     return {
-      key: normalizeString(tab.key) || (runnerRequest
+      key: normalizeString(tab.key) || (authRefreshRequest
+        ? `auth-request:${tab.authRefreshOwnerType}:${tab.authRefreshOwnerId}:${tab.requestId}`
+        : runnerRequest
         ? `runner-request:${tab.runnerId}:${tab.requestId}`
         : tab.draft ? `draft:${tab.requestId}` : `request:${tab.collectionId}:${tab.requestId}`),
-      collectionId: tab.draft || runnerRequest ? '' : normalizeId(tab.collectionId),
+      collectionId: tab.draft || runnerRequest || authRefreshRequest ? '' : normalizeId(tab.collectionId),
       runnerId: runnerRequest ? normalizeId(tab.runnerId) : '',
+      authRefreshOwnerType: authRefreshRequest ? normalizeAuthRefreshOwnerType(tab.authRefreshOwnerType) : '',
+      authRefreshOwnerId: authRefreshRequest ? normalizeId(tab.authRefreshOwnerId) : '',
       requestId: normalizeId(tab.requestId),
       folderId: normalizeId(tab.folderId),
       draft: tab.draft === true,
       runnerRequest,
+      authRefreshRequest,
       dirty: tab.dirty === true,
       createdUnsaved: tab.createdUnsaved === true,
       snapshot: typeof tab.snapshot === 'string' ? tab.snapshot : '',
@@ -350,6 +377,13 @@
   function restoreRequestStates(state, tabs, helpers) {
     for (const tab of tabs) {
       if (tab.draft || !tab.currentState) {
+        continue;
+      }
+      if (tab.authRefreshRequest === true) {
+        const request = findAuthRefreshRequest(state, tab.authRefreshOwnerType, tab.authRefreshOwnerId, tab.requestId);
+        if ((tab.dirty === true || tab.createdUnsaved === true) && request) {
+          replaceObject(request, cloneJson(tab.currentState));
+        }
         continue;
       }
       if (tab.runnerRequest === true) {
@@ -499,6 +533,9 @@
     if (tab.draft === true) {
       return state.draftRequests.has(tab.requestId);
     }
+    if (tab.authRefreshRequest === true) {
+      return Boolean(findAuthRefreshRequest(state, tab.authRefreshOwnerType, tab.authRefreshOwnerId, tab.requestId));
+    }
     if (tab.runnerRequest === true) {
       return Boolean(findRunnerRequest(state, tab.runnerId, tab.requestId));
     }
@@ -538,6 +575,36 @@
   function findRunnerRequest(state, runnerId, requestId) {
     const runner = runnerForTab(state, { runnerId });
     return (runner?.requests || []).find((request) => request.id === requestId) || null;
+  }
+
+  function findAuthRefreshRequest(state, ownerType, ownerId, requestId) {
+    const owner = ownerType === 'runner'
+      ? state.workspace?.runners?.find((runner) => runner.id === ownerId)
+      : ownerType === 'performance'
+        ? state.workspace?.performanceTests?.find((test) => test.id === ownerId)
+        : null;
+    if (owner?.authRefresh?.request?.id === requestId) {
+      return owner.authRefresh.request;
+    }
+    if (owner?.authRefresh?.refreshTokenRequest?.id === requestId) {
+      return owner.authRefresh.refreshTokenRequest;
+    }
+    return null;
+  }
+
+  function findActiveAuthRefreshRequestTab(state, session) {
+    const tab = (state.openRequestTabs || []).find((candidate) => (
+      candidate.authRefreshRequest === true
+      && candidate.authRefreshOwnerType === session.activeAuthRefreshRequestOwnerType
+      && candidate.authRefreshOwnerId === session.activeAuthRefreshRequestOwnerId
+      && candidate.requestId === session.activeRequestId
+    ));
+    return tab && findAuthRefreshRequest(
+      state,
+      session.activeAuthRefreshRequestOwnerType,
+      session.activeAuthRefreshRequestOwnerId,
+      session.activeRequestId
+    ) ? tab : null;
   }
 
   function findSavedRequest(state, collectionId, requestId, findRequest) {
@@ -580,6 +647,14 @@
     if (panel !== 'request') {
       return false;
     }
+    if (state.activeAuthRefreshRequestOwnerType && state.activeAuthRefreshRequestOwnerId) {
+      return Boolean(findAuthRefreshRequest(
+        state,
+        state.activeAuthRefreshRequestOwnerType,
+        state.activeAuthRefreshRequestOwnerId,
+        state.activeRequestId
+      ));
+    }
     if (state.activeRunnerRequestRunnerId) {
       return Boolean(findRunnerRequest(state, state.activeRunnerRequestRunnerId, state.activeRequestId));
     }
@@ -620,9 +695,12 @@
       collectionId: tab.collectionId || null,
       folderId: tab.folderId || null,
       runnerId: tab.runnerId || null,
+      authRefreshOwnerType: tab.authRefreshOwnerType || '',
+      authRefreshOwnerId: tab.authRefreshOwnerId || null,
       requestId: tab.requestId,
       draft: tab.draft === true,
       runnerRequest: tab.runnerRequest === true,
+      authRefreshRequest: tab.authRefreshRequest === true,
       dirty: tab.dirty === true,
       createdUnsaved: tab.createdUnsaved === true,
       snapshot: typeof tab.snapshot === 'string' ? tab.snapshot : ''
@@ -697,6 +775,8 @@
       activeCollectionId: normalizeId(session.activeCollectionId),
       activeFolderId: normalizeId(session.activeFolderId),
       activeRequestId: normalizeId(session.activeRequestId),
+      activeAuthRefreshRequestOwnerType: normalizeAuthRefreshOwnerType(session.activeAuthRefreshRequestOwnerType),
+      activeAuthRefreshRequestOwnerId: normalizeId(session.activeAuthRefreshRequestOwnerId),
       activeRunnerRequestRunnerId: normalizeId(session.activeRunnerRequestRunnerId),
       activeRunnerConfigId: normalizeId(session.activeRunnerConfigId),
       activePerformanceTestId: normalizeId(session.activePerformanceTestId),
@@ -826,6 +906,11 @@
 
   function normalizeEnvironmentId(value) {
     return normalizeId(value) || 'none';
+  }
+
+  function normalizeAuthRefreshOwnerType(value) {
+    const normalized = normalizeId(value);
+    return normalized === 'runner' || normalized === 'performance' ? normalized : '';
   }
 
   function normalizeString(value) {

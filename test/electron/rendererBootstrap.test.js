@@ -124,6 +124,19 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(indexSource, /id="runnerCsvVariablesButton"/);
   assert.match(indexSource, /id="runnerToggleCsvVariablesButton"/);
   assert.match(indexSource, /id="runnerEditCsvVariablesButton"/);
+  assert.match(indexSource, /id="runnerAuthRefreshOpenRequestButton"[^>]*>Open<\/button>/);
+  assert.match(indexSource, /id="runnerAuthRefreshTokenOpenRequestButton"[^>]*>Open<\/button>/);
+  assert.match(indexSource, /Refresh token request/);
+  assert.match(indexSource, /id="runnerAuthRefreshTypeSelect"[\s\S]*Bearer \/ JWT[\s\S]*AWS Temporary Credentials/);
+  assert.match(indexSource, /id="performanceAuthRefreshTypeSelect"[\s\S]*API Key[\s\S]*Custom Header/);
+  assert.match(indexSource, /Save Access Token To/);
+  assert.match(indexSource, /Save API Key To/);
+  assert.match(indexSource, /Save Session Token To/);
+  assert.match(indexSource, /Access Token Response Path/);
+  assert.match(indexSource, /Refresh Every \(s\)/);
+  assert.doesNotMatch(indexSource, /AuthRefreshMode/);
+  assert.doesNotMatch(indexSource, /AuthRefreshTarget/);
+  assert.doesNotMatch(indexSource, /Expires At Variable/);
   assert.match(indexSource, /id="performanceCsvVariablesButton"/);
   assert.match(indexSource, /id="performanceToggleCsvVariablesButton"/);
   assert.match(indexSource, /id="performanceEditCsvVariablesButton"/);
@@ -261,6 +274,7 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(rendererSource, /Switch to this workspace before exporting local diagnostics/);
   assert.match(rendererSource, /Saving diagnostics privacy settings before export/);
   assert.match(rendererSource, /function requestTabMethodText\(request, tab = {}\)/);
+  assert.match(rendererSource, /`AUTH - \$\{method\}`/);
   assert.match(rendererSource, /`RUN - \$\{method\}`/);
   assert.match(rendererSource, /col: 'entity-collection'/);
   assert.match(rendererSource, /methodClassName: \(\) => tagClassName\('ENV'\)/);
@@ -859,6 +873,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'cancelPerformanceTestButton',
     'exportPerformanceTestButton',
     'performanceCaptureSettingsButton',
+    'performanceAuthRefreshButton',
     'exportPerformanceResultsButton',
     'exportPerformanceResultsMenu',
     'exportPerformanceResultHtmlButton',
@@ -937,6 +952,7 @@ test('renderer bootstrap binds performance creation import export run and config
     onRunPerformanceTest: () => calls.push('run'),
     onCancelPerformanceTest: () => calls.push('cancel'),
     onTogglePerformanceCaptureSettings: () => calls.push('capture-settings'),
+    onTogglePerformanceAuthRefresh: () => calls.push('auth-refresh'),
     onExportPerformanceResultHtml: () => calls.push('export-result-html'),
     onExportPerformanceResultJson: () => calls.push('export-result-json'),
     onExportPerformanceResultCsv: () => calls.push('export-result-csv'),
@@ -971,6 +987,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'cancelPerformanceTestButton',
     'exportPerformanceTestButton',
     'performanceCaptureSettingsButton',
+    'performanceAuthRefreshButton',
     'exportPerformanceResultsButton',
     'exportPerformanceResultHtmlButton',
     'exportPerformanceResultJsonButton',
@@ -1008,7 +1025,7 @@ test('renderer bootstrap binds performance creation import export run and config
   elements.get('performanceDocsInput').dispatch('input');
   elements.get('performanceBinaryBodySourceInput').dispatch('input');
 
-  assert.deepEqual(calls.slice(0, 23), [
+  assert.deepEqual(calls.slice(0, 24), [
     'new',
     'new',
     'import-test',
@@ -1021,6 +1038,7 @@ test('renderer bootstrap binds performance creation import export run and config
     'cancel',
     'export-test',
     'capture-settings',
+    'auth-refresh',
     'export-result-html',
     'export-result-json',
     'export-result-csv',
@@ -1341,7 +1359,21 @@ test('renderer bootstrap binds request environment and runner import/export menu
     ['exportRunnerHtmlButton', 'export-runner-html', 'onExportRunnerHtml'],
     ['exportRunnerJsonButton', 'export-runner-json', 'onExportRunnerJson'],
     ['exportRunnerCsvButton', 'export-runner-csv', 'onExportRunnerCsv'],
-    ['runnerCaptureSettingsButton', 'runner-capture-settings', 'onToggleRunnerCaptureSettings']
+    ['runnerCaptureSettingsButton', 'runner-capture-settings', 'onToggleRunnerCaptureSettings'],
+    ['runnerAuthRefreshButton', 'runner-auth-refresh', 'onToggleRunnerAuthRefresh'],
+    ['runnerAuthRefreshOpenRequestButton', 'runner-auth-open-request', 'onOpenRunnerAuthRefreshRequest'],
+    ['runnerAuthRefreshNewRequestButton', 'runner-auth-new-request', 'onNewRunnerAuthRefreshRequest'],
+    ['runnerAuthRefreshImportButton', 'runner-auth-import', 'onImportRunnerAuthRefreshRequest'],
+    ['runnerAuthRefreshTokenOpenRequestButton', 'runner-auth-refresh-token-open-request', 'onOpenRunnerAuthRefreshTokenRequest'],
+    ['runnerAuthRefreshTokenNewRequestButton', 'runner-auth-refresh-token-new-request', 'onNewRunnerAuthRefreshTokenRequest'],
+    ['runnerAuthRefreshTokenImportButton', 'runner-auth-refresh-token-import', 'onImportRunnerAuthRefreshTokenRequest'],
+    ['performanceAuthRefreshButton', 'performance-auth-refresh', 'onTogglePerformanceAuthRefresh'],
+    ['performanceAuthRefreshOpenRequestButton', 'performance-auth-open-request', 'onOpenPerformanceAuthRefreshRequest'],
+    ['performanceAuthRefreshNewRequestButton', 'performance-auth-new-request', 'onNewPerformanceAuthRefreshRequest'],
+    ['performanceAuthRefreshImportButton', 'performance-auth-import', 'onImportPerformanceAuthRefreshRequest'],
+    ['performanceAuthRefreshTokenOpenRequestButton', 'performance-auth-refresh-token-open-request', 'onOpenPerformanceAuthRefreshTokenRequest'],
+    ['performanceAuthRefreshTokenNewRequestButton', 'performance-auth-refresh-token-new-request', 'onNewPerformanceAuthRefreshTokenRequest'],
+    ['performanceAuthRefreshTokenImportButton', 'performance-auth-refresh-token-import', 'onImportPerformanceAuthRefreshTokenRequest']
   ];
   const elements = new Map(controls.map(([id]) => [id, createElement()]));
   const calls = [];

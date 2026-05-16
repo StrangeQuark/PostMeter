@@ -7,6 +7,7 @@ const test = require('node:test');
 const { resolveEnvironmentValue } = require('../../src/core/environmentResolver');
 const { performanceTestModel } = require('../../src/core/models');
 const { assertPerformanceTestPayload } = require('../../src/core/ipcValidation');
+const { AUTH_TYPE_VALUES } = require('../../src/core/payloadSchemas');
 const { createPerformancePlan, runPerformanceTest } = require('../../src/core/performanceRunner');
 const { createRuntimeResultStore } = require('../../src/core/runtimeResultStore');
 
@@ -39,6 +40,315 @@ test('runs a positive bounded execution for each V1 performance type', async () 
     assert.equal(result.failedRequests, 0);
     assert.equal(result.summary.statusCodes['200'], expectedRequests);
   }
+});
+
+test('performance auth refresh is shared across concurrent workers', async () => {
+  const performanceTest = performanceTestModel({
+    id: 'perf-refresh',
+    name: 'Refresh Performance',
+    type: 'throughput',
+    request: {
+      id: 'request-refresh',
+      name: 'Refresh Request',
+      method: 'GET',
+      url: 'https://api.example.test/resource',
+      headers: [{ enabled: true, key: 'Authorization', value: 'Bearer {{ACCESS_TOKEN}}' }]
+    },
+    config: { iterations: 6, concurrency: 3, durationSeconds: 0, rampSteps: 1, spikeMultiplier: 1 },
+    safetyLimits: { maxTotalRequests: 6, maxConcurrency: 3, maxDurationSeconds: 10 },
+    authRefresh: {
+      enabled: true,
+      mode: 'interval',
+      targetScope: 'environment',
+      accessTokenVariable: 'ACCESS_TOKEN',
+      refreshBeforeRun: false,
+      request: {
+        id: 'refresh-auth',
+        name: 'Refresh Auth',
+        method: 'POST',
+        url: 'https://auth.example.test/token'
+      }
+    }
+  });
+  let refreshCalls = 0;
+  const observedTokens = [];
+
+  const result = await runPerformanceTest(performanceTest, { id: 'env', name: 'Env', variables: [] }, {
+    sendRequest: async (request, environment) => {
+      if (request.id === 'refresh-auth') {
+        refreshCalls += 1;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return response(200, '{"access_token":"perf-token","expires_in":600}');
+      }
+      observedTokens.push(resolveEnvironmentValue('{{ACCESS_TOKEN}}', environment));
+      return response();
+    }
+  });
+
+  assert.equal(result.completedRequests, 6);
+  assert.equal(result.failedRequests, 0);
+  assert.equal(refreshCalls, 1);
+  assert.deepEqual(observedTokens, Array.from({ length: 6 }, () => 'perf-token'));
+  assert.equal(result.environment.variables.find((item) => item.key === 'ACCESS_TOKEN').value, 'perf-token');
+  assert.equal(result.authRefresh.refreshCount, 1);
+});
+
+test('performance auth refresh can rotate refresh tokens with a separate request before getting access tokens', async () => {
+  const performanceTest = performanceTestModel({
+    id: 'perf-refresh-token-request',
+    name: 'Refresh Token Request Performance',
+    type: 'throughput',
+    request: {
+      id: 'resource',
+      name: 'Resource',
+      method: 'GET',
+      url: 'https://api.example.test/resource',
+      headers: [{ enabled: true, key: 'Authorization', value: 'Bearer {{ACCESS_TOKEN}}' }]
+    },
+    config: { iterations: 2, concurrency: 2, durationSeconds: 0, rampSteps: 1, spikeMultiplier: 1 },
+    safetyLimits: { maxTotalRequests: 2, maxConcurrency: 2, maxDurationSeconds: 10 },
+    authRefresh: {
+      enabled: true,
+      mode: 'interval',
+      targetScope: 'environment',
+      accessTokenVariable: 'ACCESS_TOKEN',
+      refreshTokenVariable: 'REFRESH_TOKEN',
+      refreshBeforeRun: true,
+      outputs: [
+        { slot: 'accessToken', source: 'body', path: 'access_token', variable: 'ACCESS_TOKEN' },
+        { slot: 'refreshToken', source: 'body', path: 'refresh_token', variable: 'REFRESH_TOKEN' }
+      ],
+      refreshTokenRequest: {
+        id: 'rotate-refresh-token',
+        name: 'Rotate Refresh Token',
+        method: 'POST',
+        url: 'https://auth.example.test/refresh-token'
+      },
+      request: {
+        id: 'get-access-token',
+        name: 'Get Access Token',
+        method: 'POST',
+        url: 'https://auth.example.test/access'
+      }
+    }
+  });
+  const sends = [];
+
+  const result = await runPerformanceTest(performanceTest, {
+    id: 'env',
+    name: 'Env',
+    variables: [{ enabled: true, key: 'REFRESH_TOKEN', value: 'refresh-1' }]
+  }, {
+    sendRequest: async (request, environment) => {
+      sends.push({
+        id: request.id,
+        accessToken: (environment.variables || []).find((item) => item.key === 'ACCESS_TOKEN')?.value || '',
+        refreshToken: (environment.variables || []).find((item) => item.key === 'REFRESH_TOKEN')?.value || ''
+      });
+      if (request.id === 'rotate-refresh-token') {
+        return response(200, JSON.stringify({ refresh_token: 'refresh-2' }));
+      }
+      if (request.id === 'get-access-token') {
+        return response(200, JSON.stringify({ access_token: 'access-2', expires_in: 600 }));
+      }
+      return response();
+    }
+  });
+
+  assert.equal(result.completedRequests, 2);
+  assert.equal(result.failedRequests, 0);
+  assert.deepEqual(sends, [
+    { id: 'rotate-refresh-token', accessToken: '', refreshToken: 'refresh-1' },
+    { id: 'get-access-token', accessToken: '', refreshToken: 'refresh-2' },
+    { id: 'resource', accessToken: 'access-2', refreshToken: 'refresh-2' },
+    { id: 'resource', accessToken: 'access-2', refreshToken: 'refresh-2' }
+  ]);
+  assert.equal(result.environment.variables.find((item) => item.key === 'REFRESH_TOKEN').value, 'refresh-2');
+  assert.equal(result.environment.variables.find((item) => item.key === 'ACCESS_TOKEN').value, 'access-2');
+  assert.equal(result.authRefresh.refreshCount, 1);
+});
+
+test('performance auth refresh executes refresh requests with every supported auth type', async () => {
+  for (const type of AUTH_TYPE_VALUES) {
+    const performanceTest = performanceTestModel({
+      id: `perf-refresh-auth-${type}`,
+      name: `Refresh Performance ${type}`,
+      type: 'throughput',
+      request: {
+        id: `request-${type}`,
+        name: `${type} Request`,
+        method: 'GET',
+        url: 'https://api.example.test/resource',
+        headers: [{ enabled: true, key: 'Authorization', value: 'Bearer {{ACCESS_TOKEN}}' }]
+      },
+      config: { iterations: 1, concurrency: 1, durationSeconds: 0, rampSteps: 1, spikeMultiplier: 1 },
+      safetyLimits: { maxTotalRequests: 1, maxConcurrency: 1, maxDurationSeconds: 10 },
+      authRefresh: {
+        enabled: true,
+        mode: 'lifetime',
+        targetScope: 'environment',
+        accessTokenVariable: 'ACCESS_TOKEN',
+        refreshBeforeRun: true,
+        request: {
+          id: `refresh-auth-${type}`,
+          name: `${type} Refresh Auth`,
+          method: 'POST',
+          url: 'https://auth.example.test/token',
+          auth: authForType(type)
+        }
+      }
+    });
+    const observedRefreshAuthTypes = [];
+    const observedResourceTokens = [];
+
+    const result = await runPerformanceTest(performanceTest, { id: 'env', name: 'Env', variables: [] }, {
+      sendRequest: async (request, environment) => {
+        if (request.id === `refresh-auth-${type}`) {
+          observedRefreshAuthTypes.push(request.auth?.type || 'none');
+          assert.equal((environment.variables || []).some((variable) => variable.key === 'ACCESS_TOKEN'), false, type);
+          return response(200, JSON.stringify({ access_token: `perf-${type}`, expires_in: 600 }));
+        }
+        observedResourceTokens.push(resolveEnvironmentValue('{{ACCESS_TOKEN}}', environment));
+        return response();
+      }
+    });
+
+    assert.equal(result.completedRequests, 1, `${type} should run one performance request`);
+    assert.equal(result.failedRequests, 0, `${type} should not fail`);
+    assert.deepEqual(observedRefreshAuthTypes, [type], `${type} refresh request auth should be preserved`);
+    assert.deepEqual(observedResourceTokens, [`perf-${type}`], `${type} should refresh before performance request`);
+    assert.equal(result.authRefresh.refreshCount, 1, `${type} should refresh once`);
+  }
+});
+
+test('performance auth refresh can use cookie-backed auth requests with custom token paths', async () => {
+  const server = await createCookieBackedAuthServer();
+  try {
+    const performanceTest = performanceTestModel({
+      id: 'perf-cookie-refresh',
+      name: 'Cookie Refresh Performance',
+      type: 'throughput',
+      request: {
+        id: 'protected-resource',
+        name: 'Protected Resource',
+        method: 'GET',
+        url: `${server.baseUrl}/api/auth/user/search-users?query=test@t.com`,
+        auth: { type: 'bearer', token: '{{ACCESS_TOKEN}}' }
+      },
+      config: { iterations: 1, concurrency: 1, durationSeconds: 0, rampSteps: 1, spikeMultiplier: 1 },
+      safetyLimits: { maxTotalRequests: 1, maxConcurrency: 1, maxDurationSeconds: 10 },
+      authRefresh: {
+        enabled: true,
+        mode: 'interval',
+        targetScope: 'environment',
+        accessTokenVariable: 'ACCESS_TOKEN',
+        refreshTokenVariable: '',
+        accessTokenPath: 'jwtToken',
+        refreshTokenPath: '',
+        refreshBeforeRun: true,
+        request: {
+          id: 'refresh-auth',
+          name: 'Access',
+          method: 'GET',
+          url: `${server.baseUrl}/api/auth/access`,
+          cookieJar: { enabled: true, storeResponses: true }
+        }
+      }
+    });
+
+    const result = await runPerformanceTest(performanceTest, { id: 'env', name: 'Env', variables: [] }, {
+      cookieJar: [{
+        enabled: true,
+        name: 'refresh_token',
+        value: 'refresh-ok',
+        domain: 'localhost',
+        path: '/',
+        hostOnly: true
+      }],
+      requestTimeoutMillis: 500
+    });
+
+    assert.equal(result.passed, true);
+    assert.equal(result.completedRequests, 1);
+    assert.equal(result.samples[0].statusCode, 200);
+    assert.equal(result.authRefresh.refreshCount, 1);
+    assert.equal(result.environment.variables.find((item) => item.key === 'ACCESS_TOKEN').value, 'fresh-cookie-access');
+    assert.equal(server.accessRequests(), 1);
+    assert.equal(server.resourceRequests(), 1);
+  } finally {
+    await server.close();
+  }
+});
+
+test('performance auth refresh saves multiple typed outputs for temporary AWS credentials', async () => {
+  const performanceTest = performanceTestModel({
+    id: 'perf-refresh-aws-outputs',
+    name: 'Performance Refresh AWS Outputs',
+    type: 'throughput',
+    request: {
+      id: 'aws-resource',
+      name: 'AWS Resource',
+      method: 'GET',
+      url: 'https://api.example.test/resource',
+      auth: {
+        type: 'aws',
+        accessKey: '{{AWS_ACCESS_KEY_ID}}',
+        secretKey: '{{AWS_SECRET_ACCESS_KEY}}',
+        sessionToken: '{{AWS_SESSION_TOKEN}}',
+        region: 'us-east-1',
+        service: 'execute-api'
+      }
+    },
+    config: { iterations: 1, concurrency: 1, durationSeconds: 0, rampSteps: 1, spikeMultiplier: 1 },
+    safetyLimits: { maxTotalRequests: 1, maxConcurrency: 1, maxDurationSeconds: 10 },
+    authRefresh: {
+      enabled: true,
+      mode: 'interval',
+      authType: 'aws',
+      targetScope: 'environment',
+      accessTokenVariable: 'AWS_ACCESS_KEY_ID',
+      refreshBeforeRun: true,
+      outputs: [
+        { slot: 'awsAccessKey', source: 'body', path: 'credentials.accessKeyId', variable: 'AWS_ACCESS_KEY_ID' },
+        { slot: 'awsSecretKey', source: 'body', path: 'credentials.secretAccessKey', variable: 'AWS_SECRET_ACCESS_KEY' },
+        { slot: 'awsSessionToken', source: 'body', path: 'credentials.sessionToken', variable: 'AWS_SESSION_TOKEN' }
+      ],
+      request: {
+        id: 'refresh-aws',
+        name: 'Refresh AWS',
+        method: 'POST',
+        url: 'https://auth.example.test/aws'
+      }
+    }
+  });
+  const observed = [];
+  const result = await runPerformanceTest(performanceTest, { id: 'env', name: 'Env', variables: [] }, {
+    sendRequest: async (request, environment) => {
+      if (request.id === 'refresh-aws') {
+        return response(200, JSON.stringify({
+          credentials: {
+            accessKeyId: 'AKIA_PERF',
+            secretAccessKey: 'secret-perf',
+            sessionToken: 'session-perf'
+          }
+        }));
+      }
+      observed.push({
+        accessKey: resolveEnvironmentValue(request.auth.accessKey, environment),
+        secretKey: resolveEnvironmentValue(request.auth.secretKey, environment),
+        sessionToken: resolveEnvironmentValue(request.auth.sessionToken, environment)
+      });
+      return response(200, '{}');
+    }
+  });
+
+  assert.equal(result.passed, true);
+  assert.deepEqual(observed, [{
+    accessKey: 'AKIA_PERF',
+    secretKey: 'secret-perf',
+    sessionToken: 'session-perf'
+  }]);
+  assert.equal(result.environment.variables.find((item) => item.key === 'AWS_SESSION_TOKEN').value, 'session-perf');
 });
 
 test('creates type-specific bounded plans and rejects unsafe effective concurrency', () => {
@@ -932,15 +1242,52 @@ test('rejects performance execution that exceeds safety caps', async () => {
   );
 });
 
-function response() {
+function response(statusCode = 200, body = '{}') {
   return {
-    statusCode: 200,
+    statusCode,
     headers: {},
-    body: '{}',
+    body,
     durationMillis: 1,
-    responseBytes: 2,
+    responseBytes: Buffer.byteLength(body),
     finalUrl: 'https://api.example.test'
   };
+}
+
+function authForType(type) {
+  switch (type) {
+    case 'none':
+      return { type: 'none' };
+    case 'bearer':
+      return { type, token: '{{ACCESS_TOKEN}}' };
+    case 'basic':
+      return { type, username: 'perf-user', password: '{{ACCESS_TOKEN}}' };
+    case 'apiKey':
+      return { type, location: 'header', key: 'X-API-Key', value: '{{ACCESS_TOKEN}}' };
+    case 'cookie':
+      return { type, value: 'sid={{ACCESS_TOKEN}}' };
+    case 'oauth2':
+      return { type, accessToken: '{{ACCESS_TOKEN}}', tokenType: 'Bearer' };
+    case 'clientCertificate':
+      return { type, certificateId: 'cert-1' };
+    case 'digest':
+      return { type, username: 'perf-user', password: '{{ACCESS_TOKEN}}' };
+    case 'hawk':
+      return { type, authId: 'hawk-id', authKey: '{{ACCESS_TOKEN}}', nonce: 'nonce', algorithm: 'sha256' };
+    case 'aws':
+      return { type, accessKey: 'AKIDEXAMPLE', secretKey: '{{ACCESS_TOKEN}}', region: 'us-east-1', service: 'execute-api' };
+    case 'oauth1':
+      return { type, consumerKey: 'consumer', consumerSecret: '{{ACCESS_TOKEN}}', token: 'token', tokenSecret: 'token-secret' };
+    case 'ntlm':
+      return { type, username: 'perf-user', password: '{{ACCESS_TOKEN}}', domain: 'POSTMETER', workstation: 'WORKSTATION' };
+    case 'akamaiEdgeGrid':
+      return { type, accessToken: '{{ACCESS_TOKEN}}', clientToken: 'client', clientSecret: 'secret', nonce: 'nonce' };
+    case 'jwtBearer':
+      return { type, algorithm: 'HS256', secret: '{{ACCESS_TOKEN}}', issuer: 'issuer', audience: 'audience' };
+    case 'asap':
+      return { type, algorithm: 'HS256', secret: '{{ACCESS_TOKEN}}', issuer: 'issuer', audience: 'audience' };
+    default:
+      throw new Error(`Unhandled auth type in performance refresh matrix: ${type}`);
+  }
 }
 
 async function createDiagnosticServer() {
@@ -1111,6 +1458,58 @@ async function createHangingServer() {
   return {
     baseUrl: `http://localhost:${address.port}`,
     close: () => closeServer(server, sockets)
+  };
+}
+
+async function createCookieBackedAuthServer() {
+  let accessRequests = 0;
+  let resourceRequests = 0;
+  const sockets = new Set();
+  const server = http.createServer((request, response) => {
+    if (request.url.startsWith('/api/auth/access')) {
+      accessRequests += 1;
+      response.setHeader('Content-Type', 'application/json');
+      if (!String(request.headers.cookie || '').includes('refresh_token=refresh-ok')) {
+        response.statusCode = 401;
+        response.end(JSON.stringify({ error: 'missing_refresh_cookie' }));
+        return;
+      }
+      response.statusCode = 200;
+      response.setHeader('Set-Cookie', 'access_token=fresh-cookie-access; Path=/; HttpOnly');
+      response.end(JSON.stringify({
+        timestamp: '15-05-2026 06:22:26',
+        jwtToken: 'fresh-cookie-access'
+      }));
+      return;
+    }
+
+    if (request.url.startsWith('/api/auth/user/search-users')) {
+      resourceRequests += 1;
+      response.setHeader('Content-Type', 'application/json');
+      if (request.headers.authorization !== 'Bearer fresh-cookie-access') {
+        response.statusCode = 401;
+        response.end(JSON.stringify({ error: 'missing_access_token' }));
+        return;
+      }
+      response.statusCode = 200;
+      response.end(JSON.stringify({ ok: true }));
+      return;
+    }
+
+    response.statusCode = 404;
+    response.end(JSON.stringify({ error: 'not_found' }));
+  });
+  server.on('connection', (socket) => {
+    sockets.add(socket);
+    socket.on('close', () => sockets.delete(socket));
+  });
+  await new Promise((resolve) => server.listen(0, 'localhost', resolve));
+  const address = server.address();
+  return {
+    accessRequests: () => accessRequests,
+    baseUrl: `http://localhost:${address.port}`,
+    close: () => closeServer(server, sockets),
+    resourceRequests: () => resourceRequests
   };
 }
 

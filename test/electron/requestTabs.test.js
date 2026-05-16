@@ -101,17 +101,19 @@ test('opened request tabs apply group-provided label and color classes', () => {
     groups: [{
       tabs: [
         { key: 'request:collection-1:first', dirty: false },
-        { key: 'runner-request:runner-1:first', dirty: false, runnerRequest: true, runnerId: 'runner-1' }
+        { key: 'runner-request:runner-1:first', dirty: false, runnerRequest: true, runnerId: 'runner-1' },
+        { key: 'auth-request:runner:runner-1:first', dirty: false, authRefreshRequest: true, authRefreshOwnerType: 'runner', authRefreshOwnerId: 'runner-1' },
+        { key: 'auth-request:performance:perf-1:first', dirty: false, authRefreshRequest: true, authRefreshOwnerType: 'performance', authRefreshOwnerId: 'perf-1' }
       ],
       resolve: (tab) => ({
         id: tab.key,
-        name: tab.runnerRequest ? 'Runner Request' : 'Collection Request',
-        method: tab.runnerRequest ? 'PATCH' : 'POST'
+        name: tab.authRefreshRequest ? 'Auth Request' : tab.runnerRequest ? 'Runner Request' : 'Collection Request',
+        method: tab.authRefreshRequest && tab.authRefreshOwnerType === 'performance' ? 'DELETE' : tab.authRefreshRequest ? 'GET' : tab.runnerRequest ? 'PATCH' : 'POST'
       }),
       isActive: () => false,
       buttonClassName: 'request-tab-button',
-      methodText: (request, tab) => (tab.runnerRequest ? `RUN - ${request.method}` : request.method),
-      methodClassName: (request, tab) => (tab.runnerRequest ? 'entity-runner' : `method-${request.method.toLowerCase()}`),
+      methodText: (request, tab) => (tab.authRefreshRequest ? `AUTH - ${request.method}` : tab.runnerRequest ? `RUN - ${request.method}` : request.method),
+      methodClassName: (request, tab) => (tab.authRefreshRequest ? (tab.authRefreshOwnerType === 'performance' ? 'entity-performance' : 'entity-runner') : tab.runnerRequest ? 'entity-runner' : `method-${request.method.toLowerCase()}`),
       title: (request) => request.name,
       closeTitle: () => 'Close request',
       closeAriaLabel: (request) => `Close ${request.name}`,
@@ -126,6 +128,10 @@ test('opened request tabs apply group-provided label and color classes', () => {
   assert.equal(methodLabels[0].className.includes('method-post'), true);
   assert.equal(methodLabels[1].textContent, 'RUN - PATCH');
   assert.equal(methodLabels[1].className.includes('entity-runner'), true);
+  assert.equal(methodLabels[2].textContent, 'AUTH - GET');
+  assert.equal(methodLabels[2].className.includes('entity-runner'), true);
+  assert.equal(methodLabels[3].textContent, 'AUTH - DELETE');
+  assert.equal(methodLabels[3].className.includes('entity-performance'), true);
 });
 
 function createFakeDocument(ids = []) {

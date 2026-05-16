@@ -1,5 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
+const { AUTH_TYPE_VALUES } = require('../../src/core/payloadSchemas');
 const { createRendererState } = require('../../src/renderer/rendererState');
 const { createRendererWorkflows } = require('../../src/renderer/rendererWorkflows');
 
@@ -636,6 +637,84 @@ test('renderer workflows only persist the active request tab on a normal save', 
   assert.equal(renders, 1);
 });
 
+test('renderer workflows include cookie jar edits when saving auth refresh request tabs', async () => {
+  const state = createRendererState();
+  const savedAuthRequest = { id: 'auth-request-1', name: 'Saved Auth', method: 'GET', url: 'https://auth.example.test/access' };
+  const liveAuthRequest = { ...savedAuthRequest, name: 'Edited Auth' };
+  state.workspace = {
+    collections: [],
+    environments: [],
+    performanceTests: [
+      {
+        id: 'performance-1',
+        name: 'Performance',
+        request: { id: 'request-1', method: 'GET', url: 'https://api.example.test' },
+        authRefresh: { request: liveAuthRequest }
+      }
+    ],
+    cookies: [{ enabled: true, name: 'refresh_token', value: 'edited', domain: 'example.test', path: '/' }],
+    settings: {}
+  };
+  state.activeMainPanel = 'request';
+  state.activeRequestId = 'auth-request-1';
+  state.activeAuthRefreshRequestOwnerType = 'performance';
+  state.activeAuthRefreshRequestOwnerId = 'performance-1';
+  state.openRequestTabs = [
+    {
+      key: 'auth-request:performance:performance-1:auth-request-1',
+      requestId: 'auth-request-1',
+      authRefreshRequest: true,
+      authRefreshOwnerType: 'performance',
+      authRefreshOwnerId: 'performance-1',
+      dirty: true,
+      createdUnsaved: false,
+      snapshot: JSON.stringify(savedAuthRequest)
+    }
+  ];
+  state.cookieJarDirtySnapshot = JSON.stringify([{ enabled: true, name: 'refresh_token', value: 'saved', domain: 'example.test', path: '/' }]);
+  state.cookieJarDirtyOwner = 'auth-request:performance:performance-1:auth-request-1';
+  let saveRequestPayload = null;
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => liveAuthRequest,
+    collectEnvironmentFromEditor: () => {},
+    collectRequestFromEditor: () => {},
+    collectSettingsFromEditor: () => {},
+    doc: createDocument(),
+    renderAll: () => {},
+    runFormatting: createRunFormatting(),
+    windowObject: {
+      postmeter: {
+        workspace: {
+          saveRequest: async (payload) => {
+            saveRequestPayload = structuredClone(payload);
+            return {
+              request: { ...payload.request, name: 'Edited Auth Saved' },
+              cookies: payload.cookies
+            };
+          }
+        }
+      }
+    }
+  });
+
+  const result = await workflows.persistWorkspace(false);
+
+  assert.equal(result, true);
+  assert.equal(saveRequestPayload.authRefreshOwnerType, 'performance');
+  assert.equal(saveRequestPayload.performanceTestId, 'performance-1');
+  assert.equal(saveRequestPayload.request.name, 'Edited Auth');
+  assert.equal(saveRequestPayload.cookies[0].value, 'edited');
+  assert.equal(state.workspace.performanceTests[0].authRefresh.request.name, 'Edited Auth Saved');
+  assert.equal(state.workspace.cookies[0].value, 'edited');
+  assert.equal(state.openRequestTabs[0].dirty, false);
+  assert.equal(state.cookieJarDirtySnapshot, null);
+  assert.equal(state.cookieJarDirtyOwner, '');
+});
+
 test('renderer workflows persist collection edits with a targeted collection save', async () => {
   const state = createRendererState();
   const collection = {
@@ -896,6 +975,353 @@ test('renderer workflows persist runner-owned request edits with a targeted requ
   assert.equal(runnerRequest.url, 'https://saved-runner.example.test');
   assert.equal(state.openRequestTabs[0].dirty, false);
   assert.equal(state.openRequestTabs[0].snapshot, JSON.stringify(runnerRequest));
+});
+
+test('renderer workflows persist runner auth refresh request edits with a targeted request save', async () => {
+  const state = createRendererState();
+  const collectionSourceRequest = { id: 'collection-auth-source', name: 'Collection Auth', method: 'POST', url: 'https://source.example.test/token' };
+  const authRequest = { id: 'auth-request-1', name: 'Refresh Auth', method: 'POST', url: 'https://auth.example.test/token' };
+  state.workspace = {
+    collections: [{ id: 'collection-1', name: 'Collection', requests: [collectionSourceRequest], folders: [] }],
+    environments: [],
+    runners: [
+      {
+        id: 'runner-1',
+        name: 'Runner',
+        environmentId: 'none',
+        authRefresh: {
+          enabled: true,
+          request: authRequest
+        },
+        requests: [{ id: 'runner-request-1', name: 'Runner Request', method: 'GET', url: 'https://runner.example.test' }]
+      }
+    ],
+    settings: {}
+  };
+  state.activeMainPanel = 'request';
+  state.activeRunnerConfigId = 'runner-1';
+  state.activeAuthRefreshRequestOwnerType = 'runner';
+  state.activeAuthRefreshRequestOwnerId = 'runner-1';
+  state.activeRequestId = authRequest.id;
+  state.openRequestTabs = [
+    {
+      key: 'auth-request:runner:runner-1:auth-request-1',
+      requestId: authRequest.id,
+      authRefreshRequest: true,
+      authRefreshOwnerType: 'runner',
+      authRefreshOwnerId: 'runner-1',
+      dirty: true,
+      snapshot: JSON.stringify({ ...authRequest, url: 'https://saved-auth.example.test/token' })
+    }
+  ];
+  let fullSaveCalls = 0;
+  const saveRequestPayloads = [];
+  let draftPrompts = 0;
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => authRequest,
+    collectEnvironmentFromEditor: () => {},
+    collectRequestFromEditor: () => {
+      authRequest.url = 'https://edited-auth.example.test/token';
+    },
+    collectSettingsFromEditor: () => {},
+    doc: createDocument(),
+    runFormatting: createRunFormatting(),
+    saveDraftRequestWithPrompt: async () => {
+      draftPrompts += 1;
+      return null;
+    },
+    windowObject: {
+      postmeter: {
+        workspace: {
+          save: async (workspace) => {
+            fullSaveCalls += 1;
+            return workspace;
+          },
+          saveRequest: async (payload) => {
+            saveRequestPayloads.push(JSON.parse(JSON.stringify(payload)));
+            return { request: { ...payload.request, url: 'https://saved-auth.example.test/token' } };
+          }
+        }
+      }
+    }
+  });
+
+  const result = await workflows.saveWorkspace(true, { promptForDraft: true });
+
+  assert.equal(result, true);
+  assert.equal(fullSaveCalls, 0);
+  assert.equal(saveRequestPayloads.length, 1);
+  assert.equal(saveRequestPayloads[0].authRefreshOwnerType, 'runner');
+  assert.equal(saveRequestPayloads[0].runnerId, 'runner-1');
+  assert.equal(saveRequestPayloads[0].requestId, 'auth-request-1');
+  assert.equal(saveRequestPayloads[0].request.url, 'https://edited-auth.example.test/token');
+  assert.equal(saveRequestPayloads[0].runnerShell.requests[0].url, 'https://runner.example.test');
+  assert.equal(draftPrompts, 0);
+  assert.equal(authRequest.url, 'https://saved-auth.example.test/token');
+  assert.equal(collectionSourceRequest.url, 'https://source.example.test/token');
+  assert.equal(state.workspace.runners[0].requests[0].url, 'https://runner.example.test');
+  assert.equal(state.openRequestTabs[0].dirty, false);
+  assert.equal(state.openRequestTabs[0].snapshot, JSON.stringify(authRequest));
+});
+
+test('renderer workflows persist runner refresh-token request edits with a targeted request save', async () => {
+  const state = createRendererState();
+  const authRequest = { id: 'auth-request-1', name: 'Refresh Auth', method: 'POST', url: 'https://auth.example.test/token' };
+  const refreshTokenRequest = { id: 'refresh-token-request-1', name: 'Refresh Token', method: 'POST', url: 'https://auth.example.test/refresh-token' };
+  state.workspace = {
+    collections: [],
+    environments: [],
+    runners: [{
+      id: 'runner-1',
+      name: 'Runner',
+      environmentId: 'none',
+      authRefresh: {
+        enabled: true,
+        request: authRequest,
+        refreshTokenRequest
+      },
+      requests: []
+    }],
+    settings: {}
+  };
+  state.activeMainPanel = 'request';
+  state.activeRunnerConfigId = 'runner-1';
+  state.activeAuthRefreshRequestOwnerType = 'runner';
+  state.activeAuthRefreshRequestOwnerId = 'runner-1';
+  state.activeRequestId = refreshTokenRequest.id;
+  state.openRequestTabs = [{
+    key: 'auth-request:runner:runner-1:refresh-token-request-1',
+    requestId: refreshTokenRequest.id,
+    authRefreshRequest: true,
+    authRefreshOwnerType: 'runner',
+    authRefreshOwnerId: 'runner-1',
+    dirty: true,
+    snapshot: JSON.stringify({ ...refreshTokenRequest, url: 'https://saved-auth.example.test/refresh-token' })
+  }];
+  const saveRequestPayloads = [];
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => refreshTokenRequest,
+    collectEnvironmentFromEditor: () => {},
+    collectRequestFromEditor: () => {
+      refreshTokenRequest.method = 'PATCH';
+      refreshTokenRequest.url = 'https://edited-auth.example.test/refresh-token';
+    },
+    collectSettingsFromEditor: () => {},
+    doc: createDocument(),
+    runFormatting: createRunFormatting(),
+    windowObject: {
+      postmeter: {
+        workspace: {
+          saveRequest: async (payload) => {
+            saveRequestPayloads.push(JSON.parse(JSON.stringify(payload)));
+            return { request: { ...payload.request, url: 'https://saved-auth.example.test/refresh-token' } };
+          }
+        }
+      }
+    }
+  });
+
+  const result = await workflows.saveWorkspace(true, { promptForDraft: true });
+
+  assert.equal(result, true);
+  assert.equal(saveRequestPayloads.length, 1);
+  assert.equal(saveRequestPayloads[0].authRefreshOwnerType, 'runner');
+  assert.equal(saveRequestPayloads[0].requestId, 'refresh-token-request-1');
+  assert.equal(saveRequestPayloads[0].request.method, 'PATCH');
+  assert.equal(saveRequestPayloads[0].runnerShell.authRefresh.request.url, 'https://auth.example.test/token');
+  assert.equal(authRequest.url, 'https://auth.example.test/token');
+  assert.equal(refreshTokenRequest.url, 'https://saved-auth.example.test/refresh-token');
+  assert.equal(state.openRequestTabs[0].dirty, false);
+  assert.equal(state.openRequestTabs[0].snapshot, JSON.stringify(refreshTokenRequest));
+});
+
+test('renderer workflows persist performance auth refresh request edits with a targeted request save', async () => {
+  const state = createRendererState();
+  const performanceRequest = { id: 'performance-request-1', name: 'Performance Request', method: 'GET', url: 'https://api.example.test' };
+  const authRequest = { id: 'auth-request-1', name: 'Refresh Auth', method: 'POST', url: 'https://auth.example.test/token' };
+  state.workspace = {
+    collections: [],
+    environments: [],
+    performanceTests: [
+      {
+        id: 'performance-1',
+        name: 'Performance',
+        request: performanceRequest,
+        authRefresh: {
+          enabled: true,
+          request: authRequest
+        }
+      }
+    ],
+    settings: {}
+  };
+  state.activeMainPanel = 'request';
+  state.activePerformanceTestId = 'performance-1';
+  state.activeAuthRefreshRequestOwnerType = 'performance';
+  state.activeAuthRefreshRequestOwnerId = 'performance-1';
+  state.activeRequestId = authRequest.id;
+  state.openRequestTabs = [
+    {
+      key: 'auth-request:performance:performance-1:auth-request-1',
+      requestId: authRequest.id,
+      authRefreshRequest: true,
+      authRefreshOwnerType: 'performance',
+      authRefreshOwnerId: 'performance-1',
+      dirty: true,
+      snapshot: JSON.stringify({ ...authRequest, url: 'https://saved-auth.example.test/token' })
+    }
+  ];
+  let fullSaveCalls = 0;
+  const saveRequestPayloads = [];
+
+  const workflows = createRendererWorkflows({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => authRequest,
+    collectEnvironmentFromEditor: () => {},
+    collectRequestFromEditor: () => {
+      authRequest.method = 'PATCH';
+      authRequest.url = 'https://edited-auth.example.test/token';
+    },
+    collectSettingsFromEditor: () => {},
+    doc: createDocument(),
+    runFormatting: createRunFormatting(),
+    windowObject: {
+      postmeter: {
+        workspace: {
+          save: async (workspace) => {
+            fullSaveCalls += 1;
+            return workspace;
+          },
+          saveRequest: async (payload) => {
+            saveRequestPayloads.push(JSON.parse(JSON.stringify(payload)));
+            return { request: { ...payload.request, url: 'https://saved-auth.example.test/token' } };
+          }
+        }
+      }
+    }
+  });
+
+  const result = await workflows.saveWorkspace(true, { promptForDraft: true });
+
+  assert.equal(result, true);
+  assert.equal(fullSaveCalls, 0);
+  assert.equal(saveRequestPayloads.length, 1);
+  assert.equal(saveRequestPayloads[0].authRefreshOwnerType, 'performance');
+  assert.equal(saveRequestPayloads[0].performanceTestId, 'performance-1');
+  assert.equal(saveRequestPayloads[0].request.method, 'PATCH');
+  assert.equal(saveRequestPayloads[0].request.url, 'https://edited-auth.example.test/token');
+  assert.equal(saveRequestPayloads[0].performanceShell.request.url, 'https://api.example.test');
+  assert.equal(authRequest.url, 'https://saved-auth.example.test/token');
+  assert.equal(performanceRequest.url, 'https://api.example.test');
+  assert.equal(state.openRequestTabs[0].dirty, false);
+  assert.equal(state.openRequestTabs[0].snapshot, JSON.stringify(authRequest));
+});
+
+test('renderer workflows sends auth refresh request tabs like normal requests for every auth type', async () => {
+  for (const authType of AUTH_TYPE_VALUES) {
+    const state = createRendererState();
+    const authRequest = {
+      id: `auth-request-${authType}`,
+      name: `Refresh Auth ${authType}`,
+      method: 'POST',
+      url: `https://${authType}.example.test/token`,
+      auth: { type: authType },
+      scripts: { preRequest: '', tests: '' }
+    };
+    state.workspace = {
+      collections: [],
+      environments: [],
+      history: [],
+      runners: [
+        {
+          id: 'runner-1',
+          name: 'Runner',
+          authRefresh: { request: authRequest },
+          requests: []
+        }
+      ],
+      settings: {}
+    };
+    state.activeMainPanel = 'request';
+    state.activeRunnerConfigId = 'runner-1';
+    state.activeAuthRefreshRequestOwnerType = 'runner';
+    state.activeAuthRefreshRequestOwnerId = 'runner-1';
+    state.activeRequestId = authRequest.id;
+    state.openRequestTabs = [
+      {
+        key: `auth-request:runner:runner-1:${authRequest.id}`,
+        requestId: authRequest.id,
+        authRefreshRequest: true,
+        authRefreshOwnerType: 'runner',
+        authRefreshOwnerId: 'runner-1',
+        dirty: true,
+        snapshot: JSON.stringify(authRequest)
+      }
+    ];
+    let fullSaveCalls = 0;
+    let targetedSaveCalls = 0;
+    let sendCalls = 0;
+
+    const workflows = createRendererWorkflows({
+      state,
+      activeCollection: () => null,
+      activeEnvironment: () => null,
+      activeRequest: () => authRequest,
+      collectRequestFromEditor: () => {
+        authRequest.headers = [{ enabled: true, key: 'X-Edited', value: authType }];
+      },
+      displayResponse: () => {},
+      doc: createDocument(),
+      renderHistory: () => {},
+      runFormatting: createRunFormatting(),
+      windowObject: {
+        postmeter: {
+          request: {
+            validate: async () => [],
+            send: async (request) => {
+              sendCalls += 1;
+              assert.equal(request.id, authRequest.id);
+              assert.equal(request.auth.type, authType);
+              assert.equal(request.headers[0].value, authType);
+              return {
+                statusCode: 200,
+                finalUrl: request.url,
+                durationMillis: 12
+              };
+            }
+          },
+          workspace: {
+            save: async (workspace) => {
+              fullSaveCalls += 1;
+              return workspace;
+            },
+            saveRequest: async (payload) => {
+              targetedSaveCalls += 1;
+              return { request: payload.request };
+            }
+          }
+        }
+      }
+    });
+
+    await workflows.sendActiveRequest();
+
+    assert.equal(sendCalls, 1, authType);
+    assert.equal(fullSaveCalls, 0, authType);
+    assert.equal(targetedSaveCalls, 0, authType);
+    assert.equal(state.workspace.history[0].method, 'POST', authType);
+    assert.equal(state.openRequestTabs[0].dirty, true, authType);
+  }
 });
 
 test('renderer workflows send runner-owned requests without saving runner edits', async () => {

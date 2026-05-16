@@ -18,6 +18,21 @@ test('normalizes workspace-owned runners with request clones and none environmen
     environmentId: '',
     allowEnvironmentMutation: true,
     stopOnFailure: true,
+    authRefresh: {
+      enabled: true,
+      mode: 'lifetime',
+      accessTokenVariable: 'ACCESS_TOKEN',
+      request: {
+        name: 'Refresh Auth',
+        method: 'POST',
+        url: 'https://auth.example.test/token'
+      },
+      refreshTokenRequest: {
+        name: 'Rotate Refresh',
+        method: 'PUT',
+        url: 'https://auth.example.test/refresh-token'
+      }
+    },
     requests: [{
       id: 'runner-request-1',
       name: 'Request',
@@ -38,6 +53,12 @@ test('normalizes workspace-owned runners with request clones and none environmen
   assert.equal(runner.environmentId, 'none');
   assert.equal(runner.allowEnvironmentMutation, true);
   assert.equal(runner.stopOnFailure, true);
+  assert.equal(runner.authRefresh.enabled, true);
+  assert.equal(runner.authRefresh.mode, 'lifetime');
+  assert.equal(runner.authRefresh.request.url, 'https://auth.example.test/token');
+  assert.equal(runner.authRefresh.refreshTokenRequest.name, 'Rotate Refresh');
+  assert.equal(runner.authRefresh.refreshTokenRequest.method, 'PUT');
+  assert.equal(runner.authRefresh.refreshTokenRequest.url, 'https://auth.example.test/refresh-token');
   assert.equal(runner.requests[0].id, 'runner-request-1');
   assert.equal(runner.requests[0].iterations, 5);
   assert.equal(runner.requests[0].source.requestId, 'source-request');

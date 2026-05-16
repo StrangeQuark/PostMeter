@@ -269,6 +269,9 @@
       if (!state?.activeRequestId) {
         return '';
       }
+      if (!state.activeCollectionId && !state.activeRunnerRequestRunnerId && state.activeAuthRefreshRequestOwnerType && state.activeAuthRefreshRequestOwnerId) {
+        return `auth-request:${state.activeAuthRefreshRequestOwnerType}:${state.activeAuthRefreshRequestOwnerId}:${state.activeRequestId}`;
+      }
       if (state.activeRunnerRequestRunnerId) {
         return `runner-request:${state.activeRunnerRequestRunnerId}:${state.activeRequestId}`;
       }
@@ -287,6 +290,8 @@
       return {
         workspaceId: state.activeWorkspaceId,
         collectionId: state.activeCollectionId || null,
+        authRefreshOwnerType: state.activeAuthRefreshRequestOwnerType || '',
+        authRefreshOwnerId: state.activeAuthRefreshRequestOwnerId || null,
         runnerId: state.activeRunnerRequestRunnerId || null,
         requestId: request?.id || null,
         environmentId: environment?.id || null
@@ -309,6 +314,20 @@
       return (state.workspace?.runners || []).find((runner) => runner.id === runnerId) || null;
     }
 
+    function findWorkspacePerformanceTest(performanceTestId) {
+      return (state.workspace?.performanceTests || []).find((test) => test.id === performanceTestId) || null;
+    }
+
+    function findAuthRefreshOwner(ownerType, ownerId) {
+      if (ownerType === 'runner') {
+        return findWorkspaceRunner(ownerId);
+      }
+      if (ownerType === 'performance') {
+        return findWorkspacePerformanceTest(ownerId);
+      }
+      return null;
+    }
+
     function findContextRequest(context) {
       if (!context?.requestId || !isActiveWorkspaceContext(context)) {
         return null;
@@ -316,6 +335,10 @@
       if (context.runnerId) {
         const runner = findWorkspaceRunner(context.runnerId);
         return (runner?.requests || []).find((request) => request.id === context.requestId) || null;
+      }
+      if (context.authRefreshOwnerType && context.authRefreshOwnerId) {
+        const owner = findAuthRefreshOwner(context.authRefreshOwnerType, context.authRefreshOwnerId);
+        return authRefreshOwnedRequest(owner?.authRefresh, context.requestId);
       }
       if (!context.collectionId) {
         return state.draftRequests?.get(context.requestId) || null;
@@ -339,6 +362,9 @@
       }
       if (context.runnerId) {
         return `runner-request:${context.runnerId}:${context.requestId}`;
+      }
+      if (context.authRefreshOwnerType && context.authRefreshOwnerId) {
+        return `auth-request:${context.authRefreshOwnerType}:${context.authRefreshOwnerId}:${context.requestId}`;
       }
       return context.collectionId
         ? `request:${context.collectionId}:${context.requestId}`
@@ -512,10 +538,33 @@
         const runner = (workspaceValue.runners || []).find((item) => item.id === tab.runnerId);
         return (runner?.requests || []).find((request) => request.id === tab.requestId) || null;
       }
+      if (tab.authRefreshRequest === true) {
+        if (tab.authRefreshOwnerType === 'runner') {
+          const runner = (workspaceValue.runners || []).find((item) => item.id === tab.authRefreshOwnerId);
+          return authRefreshOwnedRequest(runner?.authRefresh, tab.requestId);
+        }
+        if (tab.authRefreshOwnerType === 'performance') {
+          const test = (workspaceValue.performanceTests || []).find((item) => item.id === tab.authRefreshOwnerId);
+          return authRefreshOwnedRequest(test?.authRefresh, tab.requestId);
+        }
+      }
       if (!tab.collectionId) {
         return null;
       }
       return findRequestLocationInWorkspace(workspaceValue, tab.collectionId, tab.requestId)?.request || null;
+    }
+
+    function authRefreshOwnedRequest(authRefresh, requestId) {
+      if (!authRefresh || !requestId) {
+        return null;
+      }
+      if (authRefresh.request?.id === requestId) {
+        return authRefresh.request;
+      }
+      if (authRefresh.refreshTokenRequest?.id === requestId) {
+        return authRefresh.refreshTokenRequest;
+      }
+      return null;
     }
 
     function findEnvironmentIndexInWorkspace(workspaceValue, environmentId) {
@@ -640,6 +689,9 @@
     }
 
     function buildRequestSavePayload(requestTab) {
+      if (requestTab?.authRefreshRequest === true) {
+        return buildAuthRefreshRequestSavePayload(requestTab);
+      }
       if (requestTab?.runnerRequest === true || requestTab?.runnerId) {
         return buildRunnerRequestSavePayload(requestTab);
       }
@@ -673,6 +725,42 @@
       }
       if (state.cookieJarDirtyOwner === requestTab.key) {
         payload.cookies = cloneValueArray(state.workspace?.cookies);
+      }
+      return payload;
+    }
+
+    function buildAuthRefreshRequestSavePayload(requestTab) {
+      const ownerType = requestTab?.authRefreshOwnerType || '';
+      const ownerId = requestTab?.authRefreshOwnerId || '';
+      const owner = findAuthRefreshOwner(ownerType, ownerId);
+      const request = requestForTabInWorkspace(state.workspace, requestTab);
+      if (!owner || !request) {
+        throw new Error('The selected auth refresh request could not be found for saving.');
+      }
+      const payload = {
+        authRefreshOwnerType: ownerType,
+        requestId: requestTab.requestId,
+        request,
+        authRefresh: cloneJson(owner.authRefresh || {}, {}),
+        settings: cloneJson(state.workspace?.settings, {})
+      };
+      if (state.cookieJarDirtyOwner === requestTab.key) {
+        payload.cookies = cloneValueArray(state.workspace?.cookies);
+      }
+      if (ownerType === 'runner') {
+        payload.runnerId = ownerId;
+        payload.runnerShell = {
+          id: owner.id,
+          name: owner.name,
+          environmentId: owner.environmentId || 'none',
+          stopOnFailure: owner.stopOnFailure === true,
+          allowEnvironmentMutation: owner.allowEnvironmentMutation === true,
+          authRefresh: cloneJson(owner.authRefresh || {}, {}),
+          requests: cloneJson(owner.requests || [], [])
+        };
+      } else if (ownerType === 'performance') {
+        payload.performanceTestId = ownerId;
+        payload.performanceShell = cloneJson(owner, {});
       }
       return payload;
     }
@@ -897,6 +985,8 @@
         context?.requestId
         && isActiveWorkspaceContext(context)
         && state.activeRequestId === context.requestId
+        && (state.activeAuthRefreshRequestOwnerType || '') === (context.authRefreshOwnerType || '')
+        && (state.activeAuthRefreshRequestOwnerId || null) === (context.authRefreshOwnerId || null)
         && (state.activeRunnerRequestRunnerId || null) === (context.runnerId || null)
         && (state.activeCollectionId || null) === (context.collectionId || null)
       );
@@ -1442,6 +1532,7 @@
         && state.activeMainPanel === 'request'
         && !state.activeCollectionId
         && !state.activeRunnerRequestRunnerId
+        && !state.activeAuthRefreshRequestOwnerType
         && state.activeRequestId
       ) {
         const request = activeRequest();

@@ -10,6 +10,8 @@
       activeCollectionId: null,
       activeFolderId: null,
       activeRequestId: null,
+      activeAuthRefreshRequestOwnerType: '',
+      activeAuthRefreshRequestOwnerId: null,
       activeRunnerRequestRunnerId: null,
       activeRunnerConfigId: null,
       activePerformanceTestId: null,
@@ -50,6 +52,9 @@
   function activeRequestTabKey(state) {
     if (!state?.activeRequestId) {
       return '';
+    }
+    if (!state.activeCollectionId && !state.activeRunnerRequestRunnerId && state.activeAuthRefreshRequestOwnerType && state.activeAuthRefreshRequestOwnerId) {
+      return `auth-request:${state.activeAuthRefreshRequestOwnerType}:${state.activeAuthRefreshRequestOwnerId}:${state.activeRequestId}`;
     }
     if (state.activeRunnerRequestRunnerId) {
       return `runner-request:${state.activeRunnerRequestRunnerId}:${state.activeRequestId}`;
@@ -267,6 +272,8 @@
     state.openWorkspaceTabs = [];
     state.openRunnerTabs = [];
     state.openPerformanceTabs = [];
+    state.activeAuthRefreshRequestOwnerType = '';
+    state.activeAuthRefreshRequestOwnerId = null;
     if (options.clearDrafts !== false) {
       state.draftRequests = new Map();
     }

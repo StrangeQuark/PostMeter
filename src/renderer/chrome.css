@@ -1091,6 +1091,138 @@ h2 {
   min-width: 0;
 }
 
+.capture-settings-panel.auth-refresh-panel {
+  grid-template-columns: minmax(0, 1fr);
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(560px, calc(100vh - 24px));
+  align-items: stretch;
+}
+
+.auth-refresh-panel .auth-refresh-full {
+  grid-column: 1 / -1;
+}
+
+.auth-refresh-intro {
+  display: grid;
+  gap: 6px;
+}
+
+.auth-refresh-intro p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.auth-refresh-request-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-muted);
+}
+
+.auth-refresh-request-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.auth-refresh-request-copy > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.auth-refresh-request-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.auth-refresh-request-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.auth-refresh-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+  min-width: 0;
+}
+
+.auth-refresh-type-panel {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.auth-refresh-panel-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.auth-refresh-before-run {
+  align-self: end;
+  min-height: 30px;
+}
+
+.auth-refresh-advanced {
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.auth-refresh-advanced summary {
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.auth-refresh-advanced p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.auth-refresh-advanced .auth-refresh-field-grid {
+  margin-top: 10px;
+}
+
+.auth-refresh-panel textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+@media (max-width: 640px) {
+  .auth-refresh-request-card {
+    display: grid;
+  }
+
+  .auth-refresh-request-actions {
+    justify-content: flex-start;
+  }
+
+  .auth-refresh-field-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .capture-settings-panel .capture-guardrail-disabled {
   color: var(--muted);
   cursor: not-allowed;

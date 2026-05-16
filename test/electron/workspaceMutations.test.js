@@ -8,6 +8,7 @@ const {
   applyRequestSaveToWorkspace,
   applyWorkspaceSettingsSaveToWorkspace,
   applyScriptVariableMutationsToWorkspace,
+  findWorkspaceAuthRefreshRequestContext,
   findWorkspaceRequestContext,
   findWorkspaceRunnerRequestContext,
   mergeCookieJarByDelta,
@@ -46,6 +47,33 @@ test('finds runner-owned requests without matching collection requests', () => {
   assert.equal(context.runner.id, 'runner-1');
   assert.equal(context.request.name, 'Runner Request');
   assert.equal(findWorkspaceRunnerRequestContext(workspace, 'runner-1', 'missing'), null);
+});
+
+test('finds runner and performance auth refresh requests by owner', () => {
+  const runnerAuthRequest = requestModel({ id: 'runner-auth-request', name: 'Runner Auth' });
+  const performanceAuthRequest = requestModel({ id: 'performance-auth-request', name: 'Performance Auth' });
+  const workspace = workspaceModel({
+    collections: [collectionModel({ id: 'c1', requests: [requestModel({ id: 'runner-auth-request', name: 'Collection Copy' })] })],
+    runners: [runnerModel({
+      id: 'runner-1',
+      authRefresh: { request: runnerAuthRequest },
+      requests: []
+    })],
+    performanceTests: [{
+      id: 'performance-1',
+      name: 'Performance',
+      authRefresh: { request: performanceAuthRequest }
+    }]
+  });
+
+  const runnerContext = findWorkspaceAuthRefreshRequestContext(workspace, 'runner', 'runner-1', 'runner-auth-request');
+  const performanceContext = findWorkspaceAuthRefreshRequestContext(workspace, 'performance', 'performance-1', 'performance-auth-request');
+
+  assert.equal(runnerContext.owner.id, 'runner-1');
+  assert.equal(runnerContext.request.name, 'Runner Auth');
+  assert.equal(performanceContext.owner.id, 'performance-1');
+  assert.equal(performanceContext.request.name, 'Performance Auth');
+  assert.equal(findWorkspaceAuthRefreshRequestContext(workspace, 'runner', 'runner-1', 'missing'), null);
 });
 
 test('applies single request script variable mutations to active workspace scopes', () => {
@@ -288,6 +316,157 @@ test('applies runner request saves without replacing other runner data', () => {
   assert.equal(savedWorkspace.runners[0].requests[0].url, 'https://saved.example.test');
   assert.equal(savedWorkspace.runners[0].requests[1].url, 'https://untouched.example.test');
   assert.equal(savedWorkspace.settings.updates.includePrereleases, true);
+});
+
+test('applies runner auth refresh request saves without touching collection import sources or runner requests', () => {
+  const workspace = workspaceModel({
+    collections: [collectionModel({
+      id: 'collection-1',
+      requests: [requestModel({ id: 'source-request', name: 'Source Auth', method: 'POST', url: 'https://source.example.test/token' })],
+      folders: []
+    })],
+    runners: [
+      runnerModel({
+        id: 'runner-1',
+        name: 'Persisted Runner',
+        authRefresh: {
+          request: requestModel({ id: 'auth-request-1', name: 'Refresh Auth', method: 'POST', url: 'https://old-auth.example.test/token' })
+        },
+        requests: [requestModel({ id: 'runner-request-1', name: 'Runner Request', url: 'https://runner.example.test' })]
+      })
+    ],
+    settings: { updates: { includePrereleases: false } }
+  });
+
+  const savedWorkspace = applyRequestSaveToWorkspace(workspace, {
+    authRefreshOwnerType: 'runner',
+    runnerId: 'runner-1',
+    requestId: 'auth-request-1',
+    request: requestModel({ id: 'auth-request-1', name: 'Refresh Auth Edited', method: 'PATCH', url: 'https://new-auth.example.test/token' }),
+    cookies: [{ enabled: true, name: 'refresh_token', value: 'saved', domain: 'example.test', path: '/' }],
+    runnerShell: {
+      id: 'runner-1',
+      name: 'Unsaved Runner Name',
+      authRefresh: {
+        request: requestModel({ id: 'auth-request-1', name: 'Renderer Auth', url: 'https://renderer-auth.example.test/token' })
+      },
+      requests: []
+    },
+    settings: { updates: { includePrereleases: true } }
+  });
+
+  assert.equal(workspace.runners[0].authRefresh.request.url, 'https://old-auth.example.test/token');
+  assert.equal(savedWorkspace.collections[0].requests[0].url, 'https://source.example.test/token');
+  assert.equal(savedWorkspace.runners[0].name, 'Persisted Runner');
+  assert.equal(savedWorkspace.runners[0].authRefresh.request.method, 'PATCH');
+  assert.equal(savedWorkspace.runners[0].authRefresh.request.url, 'https://new-auth.example.test/token');
+  assert.equal(savedWorkspace.runners[0].requests[0].url, 'https://runner.example.test');
+  assert.equal(savedWorkspace.cookies[0].value, 'saved');
+  assert.equal(savedWorkspace.settings.updates.includePrereleases, true);
+});
+
+test('applies runner refresh-token request saves to the refresh-token request slot', () => {
+  const workspace = workspaceModel({
+    runners: [
+      runnerModel({
+        id: 'runner-1',
+        name: 'Persisted Runner',
+        authRefresh: {
+          request: requestModel({ id: 'auth-request-1', name: 'Refresh Auth', method: 'POST', url: 'https://auth.example.test/token' }),
+          refreshTokenRequest: requestModel({ id: 'refresh-token-request-1', name: 'Rotate Refresh', method: 'POST', url: 'https://old-auth.example.test/refresh-token' })
+        },
+        requests: []
+      })
+    ]
+  });
+
+  const savedWorkspace = applyRequestSaveToWorkspace(workspace, {
+    authRefreshOwnerType: 'runner',
+    runnerId: 'runner-1',
+    requestId: 'refresh-token-request-1',
+    request: requestModel({ id: 'refresh-token-request-1', name: 'Rotate Refresh Edited', method: 'PATCH', url: 'https://new-auth.example.test/refresh-token' }),
+    authRefresh: workspace.runners[0].authRefresh,
+    runnerShell: {
+      id: 'runner-1',
+      name: 'Renderer Runner',
+      authRefresh: workspace.runners[0].authRefresh,
+      requests: []
+    }
+  });
+
+  assert.equal(savedWorkspace.runners[0].authRefresh.request.url, 'https://auth.example.test/token');
+  assert.equal(savedWorkspace.runners[0].authRefresh.refreshTokenRequest.method, 'PATCH');
+  assert.equal(savedWorkspace.runners[0].authRefresh.refreshTokenRequest.url, 'https://new-auth.example.test/refresh-token');
+});
+
+test('applies performance auth refresh request saves without replacing performance request data', () => {
+  const workspace = workspaceModel({
+    performanceTests: [
+      {
+        id: 'performance-1',
+        name: 'Persisted Performance',
+        request: requestModel({ id: 'performance-request-1', name: 'Load Request', url: 'https://api.example.test' }),
+        authRefresh: {
+          request: requestModel({ id: 'auth-request-1', name: 'Refresh Auth', method: 'POST', url: 'https://old-auth.example.test/token' })
+        }
+      }
+    ],
+    settings: { updates: { includePrereleases: false } }
+  });
+
+  const savedWorkspace = applyRequestSaveToWorkspace(workspace, {
+    authRefreshOwnerType: 'performance',
+    performanceTestId: 'performance-1',
+    requestId: 'auth-request-1',
+    request: requestModel({ id: 'auth-request-1', name: 'Refresh Auth Edited', method: 'PUT', url: 'https://new-auth.example.test/token' }),
+    cookies: [{ enabled: true, name: 'refresh_token', value: 'saved', domain: 'example.test', path: '/' }],
+    performanceShell: {
+      id: 'performance-1',
+      name: 'Unsaved Performance Name',
+      request: requestModel({ id: 'performance-request-1', name: 'Unsaved Load Request', url: 'https://unsaved-api.example.test' }),
+      authRefresh: {
+        request: requestModel({ id: 'auth-request-1', name: 'Renderer Auth', url: 'https://renderer-auth.example.test/token' })
+      }
+    },
+    settings: { updates: { includePrereleases: true } }
+  });
+
+  assert.equal(workspace.performanceTests[0].authRefresh.request.url, 'https://old-auth.example.test/token');
+  assert.equal(savedWorkspace.performanceTests[0].name, 'Persisted Performance');
+  assert.equal(savedWorkspace.performanceTests[0].request.url, 'https://api.example.test');
+  assert.equal(savedWorkspace.performanceTests[0].authRefresh.request.method, 'PUT');
+  assert.equal(savedWorkspace.performanceTests[0].authRefresh.request.url, 'https://new-auth.example.test/token');
+  assert.equal(savedWorkspace.cookies[0].value, 'saved');
+  assert.equal(savedWorkspace.settings.updates.includePrereleases, true);
+});
+
+test('applies performance refresh-token request saves to the refresh-token request slot', () => {
+  const workspace = workspaceModel({
+    performanceTests: [
+      {
+        id: 'performance-1',
+        name: 'Persisted Performance',
+        request: requestModel({ id: 'performance-request-1', name: 'Load Request', url: 'https://api.example.test' }),
+        authRefresh: {
+          request: requestModel({ id: 'auth-request-1', name: 'Refresh Auth', method: 'POST', url: 'https://auth.example.test/token' }),
+          refreshTokenRequest: requestModel({ id: 'refresh-token-request-1', name: 'Rotate Refresh', method: 'POST', url: 'https://old-auth.example.test/refresh-token' })
+        }
+      }
+    ]
+  });
+
+  const savedWorkspace = applyRequestSaveToWorkspace(workspace, {
+    authRefreshOwnerType: 'performance',
+    performanceTestId: 'performance-1',
+    requestId: 'refresh-token-request-1',
+    request: requestModel({ id: 'refresh-token-request-1', name: 'Rotate Refresh Edited', method: 'PATCH', url: 'https://new-auth.example.test/refresh-token' }),
+    authRefresh: workspace.performanceTests[0].authRefresh,
+    performanceShell: workspace.performanceTests[0]
+  });
+
+  assert.equal(savedWorkspace.performanceTests[0].authRefresh.request.url, 'https://auth.example.test/token');
+  assert.equal(savedWorkspace.performanceTests[0].authRefresh.refreshTokenRequest.method, 'PATCH');
+  assert.equal(savedWorkspace.performanceTests[0].authRefresh.refreshTokenRequest.url, 'https://new-auth.example.test/refresh-token');
 });
 
 test('applies environment saves by replacing or appending the selected environment only', () => {

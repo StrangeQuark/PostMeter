@@ -43,6 +43,36 @@ function findWorkspaceRunnerRequestContext(workspace, runnerId, requestId) {
   return request ? { runner, request } : null;
 }
 
+function findWorkspaceAuthRefreshRequestContext(workspace, ownerType, ownerId, requestId) {
+  const owner = ownerType === 'runner'
+    ? (workspace?.runners || []).find((candidate) => candidate.id === ownerId)
+    : ownerType === 'performance'
+      ? (workspace?.performanceTests || []).find((candidate) => candidate.id === ownerId)
+      : null;
+  const property = authRefreshRequestPropertyForId(owner?.authRefresh, requestId);
+  return property ? { owner, request: owner.authRefresh[property], requestProperty: property } : null;
+}
+
+function authRefreshRequestPropertyForId(authRefresh, requestId) {
+  if (!authRefresh || !requestId) {
+    return '';
+  }
+  if (authRefresh.request?.id === requestId) {
+    return 'request';
+  }
+  if (authRefresh.refreshTokenRequest?.id === requestId) {
+    return 'refreshTokenRequest';
+  }
+  return '';
+}
+
+function authRefreshRequestPropertyForSave(authRefresh, payload) {
+  return authRefreshRequestPropertyForId(authRefresh, payload?.requestId)
+    || authRefreshRequestPropertyForId(payload?.authRefresh, payload?.requestId)
+    || authRefreshRequestPropertyForId(payload?.runnerShell?.authRefresh, payload?.requestId)
+    || authRefreshRequestPropertyForId(payload?.performanceShell?.authRefresh, payload?.requestId);
+}
+
 function findRequestInCollection(collection, requestId) {
   let match = null;
   walkRequests(collection, (request, _collection, folder, folders = []) => {
@@ -280,6 +310,9 @@ function removeDuplicateCookiesByIdentity(cookies, identity, keepIndex) {
 }
 
 function applyRequestSaveToWorkspace(workspace, payload) {
+  if (payload?.authRefreshOwnerType) {
+    return applyAuthRefreshRequestSaveToWorkspace(workspace, payload);
+  }
   if (payload?.runnerId) {
     return applyRunnerRequestSaveToWorkspace(workspace, payload);
   }
@@ -336,6 +369,90 @@ function applyRequestSaveToWorkspace(workspace, payload) {
 
   if (payload?.settings && typeof payload.settings === 'object') {
     nextWorkspace.settings = normalizeSettings(mergeWorkspaceSettingsForSave(workspace?.settings, payload.settings));
+  }
+
+  return nextWorkspace;
+}
+
+function applyAuthRefreshRequestSaveToWorkspace(workspace, payload) {
+  return payload.authRefreshOwnerType === 'performance'
+    ? applyPerformanceAuthRefreshRequestSaveToWorkspace(workspace, payload)
+    : applyRunnerAuthRefreshRequestSaveToWorkspace(workspace, payload);
+}
+
+function applyRunnerAuthRefreshRequestSaveToWorkspace(workspace, payload) {
+  const nextWorkspace = {
+    ...workspace,
+    runners: Array.isArray(workspace?.runners) ? [...workspace.runners] : []
+  };
+  const runnerId = payload?.runnerId || '';
+  let runnerIndex = nextWorkspace.runners.findIndex((runner) => runner.id === runnerId);
+  let runner = runnerIndex >= 0 ? cloneJson(nextWorkspace.runners[runnerIndex]) : null;
+
+  if (!runner) {
+    if (!payload?.runnerShell) {
+      throw new Error(`Runner "${runnerId}" was not found.`);
+    }
+    runner = {
+      id: runnerId,
+      name: payload.runnerShell.name || 'Untitled Runner',
+      environmentId: payload.runnerShell.environmentId || 'none',
+      stopOnFailure: payload.runnerShell.stopOnFailure === true,
+      allowEnvironmentMutation: payload.runnerShell.allowEnvironmentMutation === true,
+      authRefresh: cloneJson(payload.runnerShell.authRefresh || payload.authRefresh || {}),
+      requests: Array.isArray(payload.runnerShell.requests) ? cloneJson(payload.runnerShell.requests) : []
+    };
+    runnerIndex = nextWorkspace.runners.length;
+  }
+
+  const requestProperty = authRefreshRequestPropertyForSave(runner.authRefresh, payload) || 'request';
+  runner.authRefresh = {
+    ...(runner.authRefresh && typeof runner.authRefresh === 'object' ? runner.authRefresh : {}),
+    [requestProperty]: cloneJson(payload.request)
+  };
+  nextWorkspace.runners[runnerIndex] = runner;
+
+  if (payload?.settings && typeof payload.settings === 'object') {
+    nextWorkspace.settings = normalizeSettings(mergeWorkspaceSettingsForSave(workspace?.settings, payload.settings));
+  }
+
+  if (Array.isArray(payload.cookies)) {
+    nextWorkspace.cookies = cloneJson(payload.cookies);
+  }
+
+  return nextWorkspace;
+}
+
+function applyPerformanceAuthRefreshRequestSaveToWorkspace(workspace, payload) {
+  const nextWorkspace = {
+    ...workspace,
+    performanceTests: Array.isArray(workspace?.performanceTests) ? [...workspace.performanceTests] : []
+  };
+  const performanceTestId = payload?.performanceTestId || '';
+  let testIndex = nextWorkspace.performanceTests.findIndex((test) => test.id === performanceTestId);
+  let test = testIndex >= 0 ? cloneJson(nextWorkspace.performanceTests[testIndex]) : null;
+
+  if (!test) {
+    if (!payload?.performanceShell) {
+      throw new Error(`Performance test "${performanceTestId}" was not found.`);
+    }
+    test = cloneJson(payload.performanceShell);
+    testIndex = nextWorkspace.performanceTests.length;
+  }
+
+  const requestProperty = authRefreshRequestPropertyForSave(test.authRefresh, payload) || 'request';
+  test.authRefresh = {
+    ...(test.authRefresh && typeof test.authRefresh === 'object' ? test.authRefresh : {}),
+    [requestProperty]: cloneJson(payload.request)
+  };
+  nextWorkspace.performanceTests[testIndex] = test;
+
+  if (payload?.settings && typeof payload.settings === 'object') {
+    nextWorkspace.settings = normalizeSettings(mergeWorkspaceSettingsForSave(workspace?.settings, payload.settings));
+  }
+
+  if (Array.isArray(payload.cookies)) {
+    nextWorkspace.cookies = cloneJson(payload.cookies);
   }
 
   return nextWorkspace;
@@ -616,6 +733,7 @@ module.exports = {
   applyRequestSaveToWorkspace,
   applyWorkspaceSettingsSaveToWorkspace,
   applyScriptVariableMutationsToWorkspace,
+  findWorkspaceAuthRefreshRequestContext,
   findWorkspaceRunnerRequestContext,
   findWorkspaceRequestContext,
   mergeCookieJarByDelta,

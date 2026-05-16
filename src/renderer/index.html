@@ -725,6 +725,87 @@
                 <label class="checkbox-line"><input id="runnerCaptureLocalVariablesInput" type="checkbox"><span>Local variables</span></label>
               </div>
             </div>
+            <div class="capture-settings-menu-group">
+              <button id="runnerAuthRefreshButton" class="capture-settings-trigger" type="button" aria-expanded="false" aria-controls="runnerAuthRefreshPanel">Refreshing Auth: Off</button>
+              <div id="runnerAuthRefreshPanel" class="capture-settings-panel auth-refresh-panel" role="group" aria-label="Runner refreshing auth settings" hidden>
+                <label class="field compact auth-refresh-full"><span>Auth Used By Requests</span><select id="runnerAuthRefreshTypeSelect"><option value="bearer">Bearer / JWT</option><option value="oauth2">OAuth 2</option><option value="apiKey">API Key</option><option value="cookie">Cookie</option><option value="aws">AWS Temporary Credentials</option><option value="custom">Custom Header</option></select></label>
+                <datalist id="runnerAuthRefreshVariableList"></datalist>
+                <div class="auth-refresh-intro">
+                  <label class="checkbox-line"><input id="runnerAuthRefreshEnabledInput" type="checkbox"><span>Refresh auth during run</span></label>
+                  <p id="runnerAuthRefreshHelpText">The auth request uses this runner's selected Environment, saves refreshed values to variables, and repeats on the interval below.</p>
+                </div>
+                <div class="auth-refresh-request-card">
+                  <div class="auth-refresh-request-copy">
+                    <span>Auth request</span>
+                    <strong id="runnerAuthRefreshRequestSummary" class="auth-refresh-request-summary">No auth request selected</strong>
+                  </div>
+                  <div class="auth-refresh-request-actions">
+                    <button id="runnerAuthRefreshOpenRequestButton" type="button">Open</button>
+                    <button id="runnerAuthRefreshNewRequestButton" type="button">New Request</button>
+                    <button id="runnerAuthRefreshImportButton" type="button">Import</button>
+                  </div>
+                </div>
+                <div class="auth-refresh-type-panel" data-auth-refresh-types="bearer oauth2">
+                  <div class="auth-refresh-field-grid">
+                    <label class="field compact"><span id="runnerAuthRefreshAccessTokenVariableLabel">Save Access Token To</span><input id="runnerAuthRefreshAccessTokenVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="ACCESS_TOKEN"></label>
+                    <label class="field compact"><span id="runnerAuthRefreshAccessTokenPathLabel">Access Token Response Path</span><input id="runnerAuthRefreshAccessTokenPathInput" autocomplete="off" placeholder="access_token"></label>
+                  </div>
+                </div>
+                <div class="auth-refresh-type-panel" data-auth-refresh-types="apiKey">
+                  <div class="auth-refresh-field-grid">
+                    <label class="field compact"><span>Save API Key To</span><input id="runnerAuthRefreshApiKeyVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="API_KEY"></label>
+                    <label class="field compact"><span>API Key Response Path</span><input id="runnerAuthRefreshApiKeyPathInput" autocomplete="off" placeholder="api_key"></label>
+                  </div>
+                </div>
+                <div class="auth-refresh-type-panel" data-auth-refresh-types="cookie">
+                  <div class="auth-refresh-field-grid">
+                    <label class="field compact"><span>Cookie Name</span><input id="runnerAuthRefreshCookieNameInput" autocomplete="off" placeholder="session"></label>
+                    <label class="field compact"><span>Save Cookie Value To</span><input id="runnerAuthRefreshCookieVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="SESSION_COOKIE"></label>
+                  </div>
+                  <p class="auth-refresh-panel-note">Response cookies are stored when the auth request has response cookie storage enabled.</p>
+                </div>
+                <div class="auth-refresh-type-panel" data-auth-refresh-types="aws">
+                  <div class="auth-refresh-field-grid">
+                    <label class="field compact"><span>Save Access Key To</span><input id="runnerAuthRefreshAwsAccessKeyVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="AWS_ACCESS_KEY_ID"></label>
+                    <label class="field compact"><span>Access Key Response Path</span><input id="runnerAuthRefreshAwsAccessKeyPathInput" autocomplete="off" placeholder="credentials.accessKeyId"></label>
+                    <label class="field compact"><span>Save Secret Key To</span><input id="runnerAuthRefreshAwsSecretKeyVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="AWS_SECRET_ACCESS_KEY"></label>
+                    <label class="field compact"><span>Secret Key Response Path</span><input id="runnerAuthRefreshAwsSecretKeyPathInput" autocomplete="off" placeholder="credentials.secretAccessKey"></label>
+                    <label class="field compact"><span>Save Session Token To</span><input id="runnerAuthRefreshAwsSessionTokenVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="AWS_SESSION_TOKEN"></label>
+                    <label class="field compact"><span>Session Token Response Path</span><input id="runnerAuthRefreshAwsSessionTokenPathInput" autocomplete="off" placeholder="credentials.sessionToken"></label>
+                  </div>
+                </div>
+                <div class="auth-refresh-type-panel" data-auth-refresh-types="custom">
+                  <div class="auth-refresh-field-grid">
+                    <label class="field compact"><span>Save Header Value To</span><input id="runnerAuthRefreshCustomVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off" placeholder="AUTH_VALUE"></label>
+                    <label class="field compact"><span>Header Value Response Path</span><input id="runnerAuthRefreshCustomPathInput" autocomplete="off" placeholder="token"></label>
+                  </div>
+                </div>
+                <div class="auth-refresh-field-grid auth-refresh-schedule-grid">
+                  <label class="field compact-number-field"><span>Refresh Every (s)</span><input id="runnerAuthRefreshIntervalSecondsInput" type="number" min="1" max="86400" step="1"></label>
+                  <label class="checkbox-line auth-refresh-before-run"><input id="runnerAuthRefreshBeforeRunInput" type="checkbox"><span>Refresh before run starts</span></label>
+                </div>
+                <details class="auth-refresh-advanced">
+                  <summary>Refresh Token</summary>
+                  <p>Use these only when a separate request rotates the refresh token or the run should continue after refresh failure.</p>
+                  <div class="auth-refresh-request-card" data-auth-refresh-types="bearer oauth2">
+                    <div class="auth-refresh-request-copy">
+                      <span>Refresh token request</span>
+                      <strong id="runnerAuthRefreshTokenRequestSummary" class="auth-refresh-request-summary">No refresh token request selected</strong>
+                    </div>
+                    <div class="auth-refresh-request-actions">
+                      <button id="runnerAuthRefreshTokenOpenRequestButton" type="button">Open</button>
+                      <button id="runnerAuthRefreshTokenNewRequestButton" type="button">New Request</button>
+                      <button id="runnerAuthRefreshTokenImportButton" type="button">Import</button>
+                    </div>
+                  </div>
+                  <div class="auth-refresh-field-grid">
+                    <label class="field compact" data-auth-refresh-types="bearer oauth2"><span>Save New Refresh Token To</span><input id="runnerAuthRefreshRefreshTokenVariableInput" list="runnerAuthRefreshVariableList" autocomplete="off"></label>
+                    <label class="field compact" data-auth-refresh-types="bearer oauth2"><span>Refresh Token Response Path</span><input id="runnerAuthRefreshRefreshTokenPathInput" autocomplete="off"></label>
+                    <label class="field compact"><span>On Failure</span><select id="runnerAuthRefreshFailurePolicySelect"><option value="abort">Abort run</option><option value="continue">Continue</option></select></label>
+                  </div>
+                </details>
+              </div>
+            </div>
           </div>
           <div class="runner-request-actions">
             <button id="addRunnerRequestButton" type="button" aria-haspopup="menu" aria-expanded="false">Add Request</button>
@@ -813,6 +894,87 @@
                   <label class="checkbox-line"><input id="performanceCaptureLocalVariablesInput" type="checkbox"><span>Local variables</span></label>
                   <label class="checkbox-line"><input id="performanceCaptureHeadersInput" type="checkbox"><span>Response headers</span></label>
                   <label class="checkbox-line"><input id="performanceCaptureTimingsInput" type="checkbox"><span>Transport timings</span></label>
+                </div>
+              </div>
+              <div class="capture-settings-menu-group">
+                <button id="performanceAuthRefreshButton" class="capture-settings-trigger" type="button" aria-expanded="false" aria-controls="performanceAuthRefreshPanel">Refreshing Auth: Off</button>
+                <div id="performanceAuthRefreshPanel" class="capture-settings-panel auth-refresh-panel" role="group" aria-label="Performance refreshing auth settings" hidden>
+                  <label class="field compact auth-refresh-full"><span>Auth Used By Requests</span><select id="performanceAuthRefreshTypeSelect"><option value="bearer">Bearer / JWT</option><option value="oauth2">OAuth 2</option><option value="apiKey">API Key</option><option value="cookie">Cookie</option><option value="aws">AWS Temporary Credentials</option><option value="custom">Custom Header</option></select></label>
+                  <datalist id="performanceAuthRefreshVariableList"></datalist>
+                  <div class="auth-refresh-intro">
+                    <label class="checkbox-line"><input id="performanceAuthRefreshEnabledInput" type="checkbox"><span>Refresh auth during run</span></label>
+                    <p id="performanceAuthRefreshHelpText">The auth request uses this performance test's selected Environment, saves refreshed values to variables, and repeats on the interval below.</p>
+                  </div>
+                  <div class="auth-refresh-request-card">
+                    <div class="auth-refresh-request-copy">
+                      <span>Auth request</span>
+                      <strong id="performanceAuthRefreshRequestSummary" class="auth-refresh-request-summary">No auth request selected</strong>
+                    </div>
+                    <div class="auth-refresh-request-actions">
+                      <button id="performanceAuthRefreshOpenRequestButton" type="button">Open</button>
+                      <button id="performanceAuthRefreshNewRequestButton" type="button">New Request</button>
+                      <button id="performanceAuthRefreshImportButton" type="button">Import</button>
+                    </div>
+                  </div>
+                  <div class="auth-refresh-type-panel" data-auth-refresh-types="bearer oauth2">
+                    <div class="auth-refresh-field-grid">
+                      <label class="field compact"><span id="performanceAuthRefreshAccessTokenVariableLabel">Save Access Token To</span><input id="performanceAuthRefreshAccessTokenVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="ACCESS_TOKEN"></label>
+                      <label class="field compact"><span id="performanceAuthRefreshAccessTokenPathLabel">Access Token Response Path</span><input id="performanceAuthRefreshAccessTokenPathInput" autocomplete="off" placeholder="access_token"></label>
+                    </div>
+                  </div>
+                  <div class="auth-refresh-type-panel" data-auth-refresh-types="apiKey">
+                    <div class="auth-refresh-field-grid">
+                      <label class="field compact"><span>Save API Key To</span><input id="performanceAuthRefreshApiKeyVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="API_KEY"></label>
+                      <label class="field compact"><span>API Key Response Path</span><input id="performanceAuthRefreshApiKeyPathInput" autocomplete="off" placeholder="api_key"></label>
+                    </div>
+                  </div>
+                  <div class="auth-refresh-type-panel" data-auth-refresh-types="cookie">
+                    <div class="auth-refresh-field-grid">
+                      <label class="field compact"><span>Cookie Name</span><input id="performanceAuthRefreshCookieNameInput" autocomplete="off" placeholder="session"></label>
+                      <label class="field compact"><span>Save Cookie Value To</span><input id="performanceAuthRefreshCookieVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="SESSION_COOKIE"></label>
+                    </div>
+                    <p class="auth-refresh-panel-note">Response cookies are stored when the auth request has response cookie storage enabled.</p>
+                  </div>
+                  <div class="auth-refresh-type-panel" data-auth-refresh-types="aws">
+                    <div class="auth-refresh-field-grid">
+                      <label class="field compact"><span>Save Access Key To</span><input id="performanceAuthRefreshAwsAccessKeyVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="AWS_ACCESS_KEY_ID"></label>
+                      <label class="field compact"><span>Access Key Response Path</span><input id="performanceAuthRefreshAwsAccessKeyPathInput" autocomplete="off" placeholder="credentials.accessKeyId"></label>
+                      <label class="field compact"><span>Save Secret Key To</span><input id="performanceAuthRefreshAwsSecretKeyVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="AWS_SECRET_ACCESS_KEY"></label>
+                      <label class="field compact"><span>Secret Key Response Path</span><input id="performanceAuthRefreshAwsSecretKeyPathInput" autocomplete="off" placeholder="credentials.secretAccessKey"></label>
+                      <label class="field compact"><span>Save Session Token To</span><input id="performanceAuthRefreshAwsSessionTokenVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="AWS_SESSION_TOKEN"></label>
+                      <label class="field compact"><span>Session Token Response Path</span><input id="performanceAuthRefreshAwsSessionTokenPathInput" autocomplete="off" placeholder="credentials.sessionToken"></label>
+                    </div>
+                  </div>
+                  <div class="auth-refresh-type-panel" data-auth-refresh-types="custom">
+                    <div class="auth-refresh-field-grid">
+                      <label class="field compact"><span>Save Header Value To</span><input id="performanceAuthRefreshCustomVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off" placeholder="AUTH_VALUE"></label>
+                      <label class="field compact"><span>Header Value Response Path</span><input id="performanceAuthRefreshCustomPathInput" autocomplete="off" placeholder="token"></label>
+                    </div>
+                  </div>
+                  <div class="auth-refresh-field-grid auth-refresh-schedule-grid">
+                    <label class="field compact-number-field"><span>Refresh Every (s)</span><input id="performanceAuthRefreshIntervalSecondsInput" type="number" min="1" max="86400" step="1"></label>
+                    <label class="checkbox-line auth-refresh-before-run"><input id="performanceAuthRefreshBeforeRunInput" type="checkbox"><span>Refresh before run starts</span></label>
+                  </div>
+                  <details class="auth-refresh-advanced">
+                    <summary>Refresh Token</summary>
+                    <p>Use these only when a separate request rotates the refresh token or the run should continue after refresh failure.</p>
+                    <div class="auth-refresh-request-card" data-auth-refresh-types="bearer oauth2">
+                      <div class="auth-refresh-request-copy">
+                        <span>Refresh token request</span>
+                        <strong id="performanceAuthRefreshTokenRequestSummary" class="auth-refresh-request-summary">No refresh token request selected</strong>
+                      </div>
+                      <div class="auth-refresh-request-actions">
+                        <button id="performanceAuthRefreshTokenOpenRequestButton" type="button">Open</button>
+                        <button id="performanceAuthRefreshTokenNewRequestButton" type="button">New Request</button>
+                        <button id="performanceAuthRefreshTokenImportButton" type="button">Import</button>
+                      </div>
+                    </div>
+                    <div class="auth-refresh-field-grid">
+                      <label class="field compact" data-auth-refresh-types="bearer oauth2"><span>Save New Refresh Token To</span><input id="performanceAuthRefreshRefreshTokenVariableInput" list="performanceAuthRefreshVariableList" autocomplete="off"></label>
+                      <label class="field compact" data-auth-refresh-types="bearer oauth2"><span>Refresh Token Response Path</span><input id="performanceAuthRefreshRefreshTokenPathInput" autocomplete="off"></label>
+                      <label class="field compact"><span>On Failure</span><select id="performanceAuthRefreshFailurePolicySelect"><option value="abort">Abort run</option><option value="continue">Continue</option></select></label>
+                    </div>
+                  </details>
                 </div>
               </div>
               <div class="toolbar-group menu-group result-export-menu-group" aria-label="Performance result export">

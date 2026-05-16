@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const { resolveEnvironmentValue } = require('./environmentResolver');
+const { createAuthRefreshManager } = require('./authRefresh');
 const { sendRequest } = require('./httpClient');
 const { normalizeRunnerRequestIterations, runnerModel, walkRequests } = require('./models');
 const {
@@ -48,6 +49,30 @@ async function runCollection(collection, environment, options = {}) {
   const runnerCollectionVariables = cloneVariables(collection?.variables || []);
   const runnerGlobals = cloneVariables(options.globals || []);
   let runnerCookies = Array.isArray(options.cookieJar) ? structuredClone(options.cookieJar) : [];
+  const authRefreshManager = createAuthRefreshManager(collection?.authRefresh, {
+    sendRequest: send,
+    recordDiagnosticEvent: options.recordDiagnosticEvent || options.scriptOptions?.recordDiagnosticEvent
+  });
+  const authRefreshScope = (overrides = {}) => ({
+    environment: runnerEnvironment,
+    collectionVariables: runnerCollectionVariables,
+    globals: runnerGlobals,
+    cookies: runnerCookies,
+    signal: options.signal,
+    clientCertificates: collection?.certificates || [],
+    tlsSettings: options.tlsSettings || options.scriptOptions?.tlsSettings || {},
+    fileBindings: options.fileBindings || options.scriptOptions?.fileBindings || [],
+    sandboxPackages: options.sandboxPackages || options.scriptOptions?.sandboxPackages || [],
+    vault: options.vault || options.scriptOptions?.vault,
+    vaultPrompt: options.vaultPrompt || options.scriptOptions?.vaultPrompt,
+    recordDiagnosticEvent: options.recordDiagnosticEvent || options.scriptOptions?.recordDiagnosticEvent,
+    ...overrides
+  });
+  const applyAuthRefreshSnapshot = (snapshot = {}) => {
+    if (Array.isArray(snapshot.cookies)) {
+      runnerCookies = snapshot.cookies;
+    }
+  };
   const results = [];
   const retainResults = options.retainResults !== false;
   const resultWriter = typeof options.resultWriter?.recordRunnerResult === 'function' ? options.resultWriter : null;
@@ -87,6 +112,15 @@ async function runCollection(collection, environment, options = {}) {
       runnerGlobals,
       runnerCookies
     );
+    const authRefreshSnapshot = await authRefreshManager.ensureFresh(authRefreshScope({
+      environment: scopeState.environment,
+      collectionVariables: scopeState.collectionVariables,
+      globals: scopeState.globals,
+      cookies: scopeState.cookies
+    }));
+    if (Array.isArray(authRefreshSnapshot.cookies)) {
+      scopeState.cookies = authRefreshSnapshot.cookies;
+    }
     const targetState = createScriptedRequestState(targetRequest, runnerEnvironment, {
       collectionAuth: collection?.auth || { type: 'none' },
       collectionScripts: collection?.scripts || {},
@@ -159,6 +193,7 @@ async function runCollection(collection, environment, options = {}) {
   };
   let index = 0;
   let steps = 0;
+  applyAuthRefreshSnapshot(await authRefreshManager.beforeRun(authRefreshScope()));
 
   while (index < requests.length) {
     if (options.signal?.aborted) {
@@ -175,6 +210,7 @@ async function runCollection(collection, environment, options = {}) {
     const folderScope = folderScopeForEntry(entry);
     const startedAt = new Date().toISOString();
     try {
+      applyAuthRefreshSnapshot(await authRefreshManager.ensureFresh(authRefreshScope()));
       const scriptedRequest = await runScriptedRequestLifecycle(
         createScriptedRequestState(requestForExecution, runnerEnvironment, {
           collectionAuth: collection?.auth || { type: 'none' },
@@ -333,7 +369,8 @@ async function runCollection(collection, environment, options = {}) {
     environment: runnerEnvironment,
     collectionVariables: runnerCollectionVariables,
     globals: runnerGlobals,
-    cookies: runnerCookies
+    cookies: runnerCookies,
+    authRefresh: authRefreshManager.stats()
   };
   attachInternalAuthUpdates(result, refreshedAuthByRequestId);
   return result;
@@ -391,7 +428,8 @@ async function runRunner(runner, environment, options = {}) {
     variables: [],
     certificates: [],
     requests,
-    folders: []
+    folders: [],
+    authRefresh: normalizedRunner.authRefresh
   };
   const result = await runCollection(runnerCollection, environment, {
     ...options,

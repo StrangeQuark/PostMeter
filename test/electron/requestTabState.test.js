@@ -310,6 +310,94 @@ test('request tab state opens and selects runner-owned request tabs independentl
   assert.equal(tabRenders, 2);
 });
 
+test('request tab state opens and selects auth refresh request tabs independently from collections', () => {
+  const state = createRendererState();
+  const runnerAuthRequest = { id: 'runner-auth-request-1', name: 'Runner Refresh Auth', method: 'POST', url: 'https://runner.example.test/token' };
+  const runnerRefreshTokenRequest = { id: 'runner-refresh-token-request-1', name: 'Runner Refresh Token', method: 'POST', url: 'https://runner.example.test/refresh-token' };
+  const performanceAuthRequest = { id: 'performance-auth-request-1', name: 'Performance Refresh Auth', method: 'GET', url: 'https://perf.example.test/token' };
+  state.workspace = {
+    collections: [
+      {
+        id: 'collection-1',
+        requests: [{ id: 'request-1', name: 'Collection Request' }],
+        folders: []
+      }
+    ],
+    environments: [],
+    runners: [{ id: 'runner-1', name: 'Runner', authRefresh: { request: runnerAuthRequest, refreshTokenRequest: runnerRefreshTokenRequest }, requests: [] }],
+    performanceTests: [{ id: 'performance-1', name: 'Performance', authRefresh: { request: performanceAuthRequest } }]
+  };
+  state.activeMainPanel = 'request';
+  state.activeRunnerConfigId = 'runner-1';
+  state.activeAuthRefreshRequestOwnerType = 'runner';
+  state.activeAuthRefreshRequestOwnerId = 'runner-1';
+  state.activeRequestId = runnerAuthRequest.id;
+  let renders = 0;
+  let tabRenders = 0;
+
+  const tabState = createRequestTabState({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => runnerAuthRequest,
+    activeRunner: () => state.workspace.runners[0],
+    activeWorkspaceItem: () => null,
+    findRequest: () => null,
+    renderAll: () => { renders += 1; },
+    renderRequestTabs: () => { tabRenders += 1; },
+    workspaceListItems: () => []
+  });
+
+  const runnerTab = tabState.ensureOpenRequestTabForActive();
+
+  assert.equal(runnerTab.key, 'auth-request:runner:runner-1:runner-auth-request-1');
+  assert.equal(runnerTab.authRefreshRequest, true);
+  assert.equal(runnerTab.authRefreshOwnerType, 'runner');
+  assert.equal(runnerTab.authRefreshOwnerId, 'runner-1');
+  assert.equal(runnerTab.runnerRequest, false);
+  assert.equal(runnerTab.collectionId, null);
+  assert.equal(runnerTab.draft, false);
+  assert.equal(runnerTab.snapshot, JSON.stringify(runnerAuthRequest));
+  assert.equal(tabState.requestForTab(runnerTab), runnerAuthRequest);
+  assert.equal(tabState.canOpenAuthRefreshRequestTabFor('performance', 'performance-1', performanceAuthRequest.id), true);
+  const runnerRefreshTokenTab = {
+    key: 'auth-request:runner:runner-1:runner-refresh-token-request-1',
+    requestId: runnerRefreshTokenRequest.id,
+    authRefreshRequest: true,
+    authRefreshOwnerType: 'runner',
+    authRefreshOwnerId: 'runner-1'
+  };
+  assert.equal(tabState.requestForTab(runnerRefreshTokenTab), runnerRefreshTokenRequest);
+  assert.equal(tabState.canOpenAuthRefreshRequestTabFor('runner', 'runner-1', runnerRefreshTokenRequest.id), true);
+
+  const performanceTab = {
+    key: 'auth-request:performance:performance-1:performance-auth-request-1',
+    requestId: performanceAuthRequest.id,
+    authRefreshRequest: true,
+    authRefreshOwnerType: 'performance',
+    authRefreshOwnerId: 'performance-1'
+  };
+  state.openRequestTabs.push(performanceTab);
+  state.activeAuthRefreshRequestOwnerType = '';
+  state.activeAuthRefreshRequestOwnerId = null;
+  state.activeRunnerConfigId = null;
+  state.activePerformanceTestId = null;
+  state.activeRequestId = null;
+
+  tabState.selectRequestTab(performanceTab, { collect: false });
+
+  assert.equal(state.activeSidebarPanel, 'performance');
+  assert.equal(state.activeMainPanel, 'request');
+  assert.equal(state.activePerformanceTestId, 'performance-1');
+  assert.equal(state.activeAuthRefreshRequestOwnerType, 'performance');
+  assert.equal(state.activeAuthRefreshRequestOwnerId, 'performance-1');
+  assert.equal(state.activeRunnerRequestRunnerId, null);
+  assert.equal(state.activeCollectionId, null);
+  assert.equal(state.activeRequestId, 'performance-auth-request-1');
+  assert.equal(renders, 1);
+  assert.equal(tabRenders, 2);
+});
+
 test('request tab state keeps more than the old twelve-tab threshold open', () => {
   const state = createRendererState();
   const requests = Array.from({ length: 16 }, (_value, index) => ({
@@ -1125,6 +1213,59 @@ test('request tab state saves dirty runner-owned request tabs with a targeted re
   await tabState.closeRequestTab(state.openRequestTabs[0]);
 
   assert.deepEqual(persistCalls, [{ showStatus: false, config: { requestTabKey: 'runner-request:runner-1:runner-request-1', collectEditors: false } }]);
+  assert.deepEqual(state.openRequestTabs, []);
+  assert.equal(collectionRenders, 1);
+  assert.equal(tabRenders, 1);
+});
+
+test('request tab state saves dirty auth refresh request tabs with a targeted request save', async () => {
+  const state = createRendererState();
+  const authRequest = { id: 'auth-request-1', name: 'Refresh Auth', method: 'POST', url: 'https://auth.example.test/token' };
+  state.workspace = {
+    collections: [],
+    environments: [],
+    runners: [{ id: 'runner-1', name: 'Runner', authRefresh: { request: authRequest }, requests: [] }]
+  };
+  state.activeMainPanel = 'runner';
+  state.openRequestTabs = [
+    {
+      key: 'auth-request:runner:runner-1:auth-request-1',
+      requestId: 'auth-request-1',
+      authRefreshRequest: true,
+      authRefreshOwnerType: 'runner',
+      authRefreshOwnerId: 'runner-1',
+      dirty: true,
+      createdUnsaved: false,
+      draft: false,
+      snapshot: JSON.stringify(authRequest)
+    }
+  ];
+  const persistCalls = [];
+  let collectionRenders = 0;
+  let tabRenders = 0;
+
+  const tabState = createRequestTabState({
+    state,
+    activeCollection: () => null,
+    activeEnvironment: () => null,
+    activeRequest: () => null,
+    activeRunner: () => state.workspace.runners[0],
+    activeWorkspaceItem: () => null,
+    persistWorkspace: async (showStatus, config) => {
+      persistCalls.push({ showStatus, config });
+      state.openRequestTabs[0].dirty = false;
+      return true;
+    },
+    promptUnsavedRequestClose: async () => 'save',
+    renderAll: () => {},
+    renderCollections: () => { collectionRenders += 1; },
+    renderRequestTabs: () => { tabRenders += 1; },
+    workspaceListItems: () => []
+  });
+
+  await tabState.closeRequestTab(state.openRequestTabs[0]);
+
+  assert.deepEqual(persistCalls, [{ showStatus: false, config: { requestTabKey: 'auth-request:runner:runner-1:auth-request-1', collectEditors: false } }]);
   assert.deepEqual(state.openRequestTabs, []);
   assert.equal(collectionRenders, 1);
   assert.equal(tabRenders, 1);

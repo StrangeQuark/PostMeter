@@ -312,14 +312,208 @@ test('renderer session persistence serializes and restores runner-owned request 
       collectionId: null,
       folderId: null,
       runnerId: 'runner-1',
+      authRefreshOwnerType: '',
+      authRefreshOwnerId: null,
       requestId: 'runner-request-1',
       draft: false,
       runnerRequest: true,
+      authRefreshRequest: false,
       dirty: true,
       createdUnsaved: false,
       snapshot: JSON.stringify({ ...runnerRequest, url: 'https://saved-runner.test' })
     }
   ]);
+});
+
+test('renderer session persistence serializes and restores auth refresh request tabs', () => {
+  const state = createRendererState();
+  const authRequest = {
+    id: 'auth-request-1',
+    name: 'Refresh Auth',
+    method: 'PATCH',
+    url: 'https://edited-auth.test/token'
+  };
+  state.activeWorkspaceId = 'Local Workspace.json';
+  state.selectedWorkspaceId = 'Local Workspace.json';
+  state.activeMainPanel = 'request';
+  state.activeSidebarPanel = 'performance';
+  state.activePerformanceTestId = 'performance-1';
+  state.activeAuthRefreshRequestOwnerType = 'performance';
+  state.activeAuthRefreshRequestOwnerId = 'performance-1';
+  state.activeRequestId = authRequest.id;
+  state.workspace = {
+    collections: [],
+    environments: [],
+    performanceTests: [
+      {
+        id: 'performance-1',
+        name: 'Performance',
+        request: { id: 'performance-request-1', name: 'Performance Request', method: 'GET', url: 'https://api.test' },
+        authRefresh: { request: authRequest }
+      }
+    ]
+  };
+  state.openRequestTabs = [
+    {
+      key: 'auth-request:performance:performance-1:auth-request-1',
+      requestId: authRequest.id,
+      authRefreshRequest: true,
+      authRefreshOwnerType: 'performance',
+      authRefreshOwnerId: 'performance-1',
+      dirty: true,
+      snapshot: JSON.stringify({ ...authRequest, url: 'https://saved-auth.test/token' })
+    }
+  ];
+
+  const session = buildRendererSession({
+    state,
+    doc: { querySelector: () => null },
+    requestForTab: () => authRequest,
+    environmentForTab: () => null
+  });
+
+  assert.equal(session.activeAuthRefreshRequestOwnerType, 'performance');
+  assert.equal(session.activeAuthRefreshRequestOwnerId, 'performance-1');
+  assert.equal(session.openRequestTabs[0].key, 'auth-request:performance:performance-1:auth-request-1');
+  assert.equal(session.openRequestTabs[0].authRefreshRequest, true);
+  assert.equal(session.openRequestTabs[0].authRefreshOwnerType, 'performance');
+  assert.equal(session.openRequestTabs[0].authRefreshOwnerId, 'performance-1');
+  assert.equal(session.openRequestTabs[0].runnerId, '');
+  assert.equal(session.openRequestTabs[0].currentState.url, 'https://edited-auth.test/token');
+
+  const restoredState = createRendererState();
+  restoredState.workspace = {
+    collections: [],
+    environments: [],
+    performanceTests: [
+      {
+        id: 'performance-1',
+        name: 'Performance',
+        request: { id: 'performance-request-1', name: 'Performance Request', method: 'GET', url: 'https://api.test' },
+        authRefresh: {
+          request: {
+            id: 'auth-request-1',
+            name: 'Refresh Auth',
+            method: 'POST',
+            url: 'https://saved-auth.test/token'
+          }
+        }
+      }
+    ]
+  };
+
+  restoreRendererSession({
+    state: restoredState,
+    session,
+    workspaceListItems: () => [
+      { id: 'Local Workspace.json', name: 'Local Workspace', path: '/tmp/Local Workspace.json', current: true, deletable: false }
+    ],
+    findFolder,
+    findRequest
+  });
+
+  assert.equal(restoredState.workspace.performanceTests[0].authRefresh.request.method, 'PATCH');
+  assert.equal(restoredState.workspace.performanceTests[0].authRefresh.request.url, 'https://edited-auth.test/token');
+  assert.equal(restoredState.activeSidebarPanel, 'performance');
+  assert.equal(restoredState.activeMainPanel, 'request');
+  assert.equal(restoredState.activePerformanceTestId, 'performance-1');
+  assert.equal(restoredState.activeAuthRefreshRequestOwnerType, 'performance');
+  assert.equal(restoredState.activeAuthRefreshRequestOwnerId, 'performance-1');
+  assert.equal(restoredState.activeRunnerRequestRunnerId, null);
+  assert.equal(restoredState.activeCollectionId, null);
+  assert.equal(restoredState.activeRequestId, 'auth-request-1');
+  assert.deepEqual(restoredState.openRequestTabs, [
+    {
+      key: 'auth-request:performance:performance-1:auth-request-1',
+      collectionId: null,
+      folderId: null,
+      runnerId: null,
+      authRefreshOwnerType: 'performance',
+      authRefreshOwnerId: 'performance-1',
+      requestId: 'auth-request-1',
+      draft: false,
+      runnerRequest: false,
+      authRefreshRequest: true,
+      dirty: true,
+      createdUnsaved: false,
+      snapshot: JSON.stringify({ ...authRequest, url: 'https://saved-auth.test/token' })
+    }
+  ]);
+});
+
+test('renderer session persistence serializes and restores refresh-token request tabs', () => {
+  const state = createRendererState();
+  const authRequest = { id: 'auth-request-1', name: 'Refresh Auth', method: 'POST', url: 'https://auth.test/token' };
+  const refreshTokenRequest = {
+    id: 'refresh-token-request-1',
+    name: 'Refresh Token',
+    method: 'PATCH',
+    url: 'https://auth.test/refresh-token'
+  };
+  state.activeWorkspaceId = 'Local Workspace.json';
+  state.selectedWorkspaceId = 'Local Workspace.json';
+  state.activeMainPanel = 'request';
+  state.activeSidebarPanel = 'performance';
+  state.activePerformanceTestId = 'performance-1';
+  state.activeAuthRefreshRequestOwnerType = 'performance';
+  state.activeAuthRefreshRequestOwnerId = 'performance-1';
+  state.activeRequestId = refreshTokenRequest.id;
+  state.workspace = {
+    collections: [],
+    environments: [],
+    performanceTests: [{
+      id: 'performance-1',
+      name: 'Performance',
+      request: { id: 'performance-request-1', name: 'Performance Request', method: 'GET', url: 'https://api.test' },
+      authRefresh: { request: authRequest, refreshTokenRequest }
+    }]
+  };
+  state.openRequestTabs = [{
+    key: 'auth-request:performance:performance-1:refresh-token-request-1',
+    requestId: refreshTokenRequest.id,
+    authRefreshRequest: true,
+    authRefreshOwnerType: 'performance',
+    authRefreshOwnerId: 'performance-1',
+    dirty: true,
+    snapshot: JSON.stringify({ ...refreshTokenRequest, url: 'https://saved-auth.test/refresh-token' })
+  }];
+
+  const session = buildRendererSession({
+    state,
+    doc: { querySelector: () => null },
+    requestForTab: () => refreshTokenRequest,
+    environmentForTab: () => null
+  });
+  const restoredState = createRendererState();
+  restoredState.workspace = {
+    collections: [],
+    environments: [],
+    performanceTests: [{
+      id: 'performance-1',
+      name: 'Performance',
+      request: { id: 'performance-request-1', name: 'Performance Request', method: 'GET', url: 'https://api.test' },
+      authRefresh: {
+        request: authRequest,
+        refreshTokenRequest: { ...refreshTokenRequest, method: 'POST', url: 'https://saved-auth.test/refresh-token' }
+      }
+    }]
+  };
+
+  restoreRendererSession({
+    state: restoredState,
+    session,
+    workspaceListItems: () => [
+      { id: 'Local Workspace.json', name: 'Local Workspace', path: '/tmp/Local Workspace.json', current: true, deletable: false }
+    ],
+    findFolder,
+    findRequest
+  });
+
+  assert.equal(restoredState.workspace.performanceTests[0].authRefresh.request.url, 'https://auth.test/token');
+  assert.equal(restoredState.workspace.performanceTests[0].authRefresh.refreshTokenRequest.method, 'PATCH');
+  assert.equal(restoredState.workspace.performanceTests[0].authRefresh.refreshTokenRequest.url, 'https://auth.test/refresh-token');
+  assert.equal(restoredState.activeRequestId, 'refresh-token-request-1');
+  assert.equal(restoredState.openRequestTabs[0].authRefreshRequest, true);
 });
 
 test('renderer session persistence preserves an empty workspace selection after closing the workspace tab', () => {

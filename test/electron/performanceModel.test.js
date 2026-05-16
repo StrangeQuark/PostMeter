@@ -90,6 +90,7 @@ test('Performance model preserves independent settings for each V1 type', () => 
   assert.equal(performanceTest.config.iterations, 13);
   assert.equal(performanceTest.environmentId, 'env-throughput');
   assert.equal(performanceTest.allowEnvironmentMutation, true);
+  assert.equal(performanceTest.authRefresh.enabled, false);
   assert.doesNotThrow(() => assertPerformanceTestPayload(performanceTest));
   assert.throws(
     () => assertPerformanceTestPayload({
@@ -115,6 +116,50 @@ test('Performance model preserves independent settings for each V1 type', () => 
     }),
     /typeSettings\.latency\.config\.iterations exceeds safetyLimits\.maxTotalRequests/
   );
+});
+
+test('Performance model persists auth refresh definitions through export/import', () => {
+  const performanceTest = performanceTestModel({
+    type: 'throughput',
+    request: { method: 'GET', url: 'https://example.test/performance' },
+    authRefresh: {
+      enabled: true,
+      mode: 'interval',
+      authType: 'apiKey',
+      targetScope: 'environment',
+      accessTokenVariable: 'ACCESS_TOKEN',
+      refreshIntervalSeconds: 300,
+      outputs: [{ slot: 'apiKey', source: 'body', path: 'api_key', variable: 'API_KEY' }],
+      request: {
+        name: 'Refresh Auth',
+        method: 'POST',
+        url: 'https://auth.example.test/token',
+        headers: [{ enabled: true, key: 'Content-Type', value: 'application/json' }],
+        bodyType: 'RAW_JSON',
+        body: '{"refresh":"{{REFRESH_TOKEN}}"}'
+      },
+      refreshTokenRequest: {
+        name: 'Rotate Refresh Token',
+        method: 'PUT',
+        url: 'https://auth.example.test/refresh-token',
+        headers: [{ enabled: true, key: 'X-Refresh', value: '{{REFRESH_TOKEN}}' }]
+      }
+    }
+  });
+
+  assert.doesNotThrow(() => assertPerformanceTestPayload(performanceTest));
+  const imported = importPerformanceTestFromText(exportPerformanceTestToJson(performanceTest));
+  assert.equal(imported.authRefresh.enabled, true);
+  assert.equal(imported.authRefresh.mode, 'interval');
+  assert.equal(imported.authRefresh.authType, 'apiKey');
+  assert.deepEqual(imported.authRefresh.outputs.map((item) => [item.slot, item.path, item.variable]), [
+    ['apiKey', 'api_key', 'API_KEY']
+  ]);
+  assert.equal(imported.authRefresh.request.url, 'https://auth.example.test/token');
+  assert.equal(imported.authRefresh.request.headers[0].key, 'Content-Type');
+  assert.equal(imported.authRefresh.refreshTokenRequest.name, 'Rotate Refresh Token');
+  assert.equal(imported.authRefresh.refreshTokenRequest.method, 'PUT');
+  assert.equal(imported.authRefresh.refreshTokenRequest.headers[0].key, 'X-Refresh');
 });
 
 test('Performance diagnosis scope controls planned samples and duration safety', () => {

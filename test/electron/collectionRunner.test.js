@@ -6,6 +6,7 @@ const test = require('node:test');
 const { collectionRunResultToCsv, runCollection, runRunner } = require('../../src/core/collectionRunner');
 const { resolveEnvironmentValue } = require('../../src/core/environmentResolver');
 const { collectionModel, requestModel } = require('../../src/core/models');
+const { AUTH_TYPE_VALUES } = require('../../src/core/payloadSchemas');
 const { importPostmanCollection } = require('../../src/core/postmanImporter');
 const { runRequestWithScripts } = require('../../src/core/requestScriptRunner');
 const { MemoryVaultStore } = require('../../src/core/vaultStore');
@@ -160,6 +161,325 @@ test('carries refreshed OAuth auth forward during collection runs', async () => 
   assert.equal(Object.prototype.propertyIsEnumerable.call(result.results[0], 'updatedAuth'), false);
   assert.equal(JSON.stringify(result).includes('fresh-token'), false);
   assert.equal(result.authUpdates.get('oauth-request').accessToken, 'fresh-token');
+});
+
+test('runner auth refresh updates variables before runner requests', async () => {
+  const runner = {
+    id: 'runner-refresh',
+    name: 'Runner Refresh',
+    environmentId: 'env',
+    authRefresh: {
+      enabled: true,
+      mode: 'lifetime',
+      targetScope: 'environment',
+      accessTokenVariable: 'ACCESS_TOKEN',
+      refreshTokenVariable: 'REFRESH_TOKEN',
+      expiresAtVariable: 'ACCESS_TOKEN_EXPIRES_AT',
+      tokenLifetimeSeconds: 600,
+      refreshWindowSeconds: 120,
+      request: {
+        id: 'refresh-auth',
+        name: 'Refresh Auth',
+        method: 'POST',
+        url: 'https://auth.example.test/token',
+        bodyType: 'RAW_JSON',
+        body: '{"refresh":"{{REFRESH_TOKEN}}"}'
+      }
+    },
+    requests: [
+      {
+        ...requestModel({
+        id: 'resource',
+        name: 'Resource',
+        method: 'GET',
+        url: 'https://api.example.test/resource',
+        headers: [{ enabled: true, key: 'Authorization', value: 'Bearer {{ACCESS_TOKEN}}' }]
+      }),
+        iterations: 2
+      }
+    ]
+  };
+  const observed = [];
+  let refreshCalls = 0;
+  const result = await runRunner(runner, {
+    id: 'env',
+    name: 'Env',
+    variables: [{ enabled: true, key: 'REFRESH_TOKEN', value: 'refresh-1' }]
+  }, {
+    sendRequest: async (request, environment) => {
+      if (request.id === 'refresh-auth') {
+        refreshCalls += 1;
+        return response(200, JSON.stringify({
+          access_token: 'fresh-runner-token',
+          refresh_token: 'refresh-2',
+          expires_in: 600
+        }));
+      }
+      observed.push(resolveEnvironmentValue('{{ACCESS_TOKEN}}', environment));
+      return response(200, '{}');
+    }
+  });
+
+  assert.equal(result.passed, true);
+  assert.equal(result.totalRequests, 2);
+  assert.equal(refreshCalls, 1);
+  assert.deepEqual(observed, ['fresh-runner-token', 'fresh-runner-token']);
+  assert.equal(result.environment.variables.find((item) => item.key === 'ACCESS_TOKEN').value, 'fresh-runner-token');
+  assert.equal(result.environment.variables.find((item) => item.key === 'REFRESH_TOKEN').value, 'refresh-2');
+  assert.equal(result.authRefresh.refreshCount, 1);
+});
+
+test('runner auth refresh can rotate refresh tokens with a separate request before getting access tokens', async () => {
+  const runner = {
+    id: 'runner-refresh-token-request',
+    name: 'Runner Refresh Token Request',
+    environmentId: 'env',
+    authRefresh: {
+      enabled: true,
+      mode: 'interval',
+      targetScope: 'environment',
+      accessTokenVariable: 'ACCESS_TOKEN',
+      refreshTokenVariable: 'REFRESH_TOKEN',
+      refreshBeforeRun: true,
+      outputs: [
+        { slot: 'accessToken', source: 'body', path: 'access_token', variable: 'ACCESS_TOKEN' },
+        { slot: 'refreshToken', source: 'body', path: 'refresh_token', variable: 'REFRESH_TOKEN' }
+      ],
+      refreshTokenRequest: {
+        id: 'rotate-refresh-token',
+        name: 'Rotate Refresh Token',
+        method: 'POST',
+        url: 'https://auth.example.test/refresh-token'
+      },
+      request: {
+        id: 'get-access-token',
+        name: 'Get Access Token',
+        method: 'POST',
+        url: 'https://auth.example.test/access'
+      }
+    },
+    requests: [
+      requestModel({
+        id: 'resource',
+        name: 'Resource',
+        method: 'GET',
+        url: 'https://api.example.test/resource',
+        headers: [{ enabled: true, key: 'Authorization', value: 'Bearer {{ACCESS_TOKEN}}' }]
+      })
+    ]
+  };
+  const sends = [];
+
+  const result = await runRunner(runner, {
+    id: 'env',
+    name: 'Env',
+    variables: [{ enabled: true, key: 'REFRESH_TOKEN', value: 'refresh-1' }]
+  }, {
+    sendRequest: async (request, environment) => {
+      sends.push({
+        id: request.id,
+        accessToken: (environment.variables || []).find((item) => item.key === 'ACCESS_TOKEN')?.value || '',
+        refreshToken: (environment.variables || []).find((item) => item.key === 'REFRESH_TOKEN')?.value || ''
+      });
+      if (request.id === 'rotate-refresh-token') {
+        return response(200, JSON.stringify({ refresh_token: 'refresh-2' }));
+      }
+      if (request.id === 'get-access-token') {
+        return response(200, JSON.stringify({ access_token: 'access-2', expires_in: 600 }));
+      }
+      return response(200, '{}');
+    }
+  });
+
+  assert.equal(result.passed, true);
+  assert.deepEqual(sends, [
+    { id: 'rotate-refresh-token', accessToken: '', refreshToken: 'refresh-1' },
+    { id: 'get-access-token', accessToken: '', refreshToken: 'refresh-2' },
+    { id: 'resource', accessToken: 'access-2', refreshToken: 'refresh-2' }
+  ]);
+  assert.equal(result.environment.variables.find((item) => item.key === 'REFRESH_TOKEN').value, 'refresh-2');
+  assert.equal(result.environment.variables.find((item) => item.key === 'ACCESS_TOKEN').value, 'access-2');
+  assert.equal(result.authRefresh.refreshCount, 1);
+});
+
+test('runner auth refresh executes refresh requests with every supported auth type', async () => {
+  for (const type of AUTH_TYPE_VALUES) {
+    const runner = {
+      id: `runner-refresh-auth-${type}`,
+      name: `Runner Refresh ${type}`,
+      environmentId: 'env',
+      authRefresh: {
+        enabled: true,
+        mode: 'lifetime',
+        targetScope: 'environment',
+        accessTokenVariable: 'ACCESS_TOKEN',
+        refreshBeforeRun: true,
+        request: {
+          id: `refresh-auth-${type}`,
+          name: `${type} Refresh Auth`,
+          method: 'POST',
+          url: 'https://auth.example.test/token',
+          auth: authForType(type)
+        }
+      },
+      requests: [
+        {
+          ...requestModel({
+            id: `resource-${type}`,
+            name: `${type} Resource`,
+            method: 'GET',
+            url: 'https://api.example.test/resource',
+            headers: [{ enabled: true, key: 'Authorization', value: 'Bearer {{ACCESS_TOKEN}}' }]
+          }),
+          iterations: 1
+        }
+      ]
+    };
+    const observedRefreshAuthTypes = [];
+    const observedResourceTokens = [];
+
+    const result = await runRunner(runner, { id: 'env', name: 'Env', variables: [] }, {
+      sendRequest: async (request, environment) => {
+        if (request.id === `refresh-auth-${type}`) {
+          observedRefreshAuthTypes.push(request.auth?.type || 'none');
+          assert.equal((environment.variables || []).some((variable) => variable.key === 'ACCESS_TOKEN'), false, type);
+          return response(200, JSON.stringify({ access_token: `fresh-${type}`, expires_in: 600 }));
+        }
+        observedResourceTokens.push(resolveEnvironmentValue('{{ACCESS_TOKEN}}', environment));
+        return response(200, '{}');
+      }
+    });
+
+    assert.equal(result.passed, true, `${type} runner should pass`);
+    assert.deepEqual(observedRefreshAuthTypes, [type], `${type} refresh request auth should be preserved`);
+    assert.deepEqual(observedResourceTokens, [`fresh-${type}`], `${type} should refresh before resource request`);
+    assert.equal(result.authRefresh.refreshCount, 1, `${type} should refresh once`);
+  }
+});
+
+test('runner auth refresh saves multiple typed outputs for temporary AWS credentials', async () => {
+  const runner = {
+    id: 'runner-refresh-aws-outputs',
+    name: 'Runner Refresh AWS Outputs',
+    environmentId: 'env',
+    authRefresh: {
+      enabled: true,
+      mode: 'interval',
+      authType: 'aws',
+      targetScope: 'environment',
+      accessTokenVariable: 'AWS_ACCESS_KEY_ID',
+      refreshBeforeRun: true,
+      outputs: [
+        { slot: 'awsAccessKey', source: 'body', path: 'credentials.accessKeyId', variable: 'AWS_ACCESS_KEY_ID' },
+        { slot: 'awsSecretKey', source: 'body', path: 'credentials.secretAccessKey', variable: 'AWS_SECRET_ACCESS_KEY' },
+        { slot: 'awsSessionToken', source: 'body', path: 'credentials.sessionToken', variable: 'AWS_SESSION_TOKEN' }
+      ],
+      request: {
+        id: 'refresh-aws',
+        name: 'Refresh AWS',
+        method: 'POST',
+        url: 'https://auth.example.test/aws'
+      }
+    },
+    requests: [
+      {
+        ...requestModel({
+          id: 'aws-resource',
+          name: 'AWS Resource',
+          method: 'GET',
+          url: 'https://api.example.test/resource',
+          auth: {
+            type: 'aws',
+            accessKey: '{{AWS_ACCESS_KEY_ID}}',
+            secretKey: '{{AWS_SECRET_ACCESS_KEY}}',
+            sessionToken: '{{AWS_SESSION_TOKEN}}',
+            region: 'us-east-1',
+            service: 'execute-api'
+          }
+        }),
+        iterations: 1
+      }
+    ]
+  };
+  const observed = [];
+  const result = await runRunner(runner, { id: 'env', name: 'Env', variables: [] }, {
+    sendRequest: async (request, environment) => {
+      if (request.id === 'refresh-aws') {
+        return response(200, JSON.stringify({
+          credentials: {
+            accessKeyId: 'AKIA_REFRESHED',
+            secretAccessKey: 'secret-refreshed',
+            sessionToken: 'session-refreshed'
+          }
+        }));
+      }
+      observed.push({
+        accessKey: resolveEnvironmentValue(request.auth.accessKey, environment),
+        secretKey: resolveEnvironmentValue(request.auth.secretKey, environment),
+        sessionToken: resolveEnvironmentValue(request.auth.sessionToken, environment)
+      });
+      return response(200, '{}');
+    }
+  });
+
+  assert.equal(result.passed, true);
+  assert.deepEqual(observed, [{
+    accessKey: 'AKIA_REFRESHED',
+    secretKey: 'secret-refreshed',
+    sessionToken: 'session-refreshed'
+  }]);
+  assert.equal(result.environment.variables.find((item) => item.key === 'AWS_SESSION_TOKEN').value, 'session-refreshed');
+});
+
+test('auth refresh coexists with every supported runner request auth type', async () => {
+  for (const type of AUTH_TYPE_VALUES) {
+    const collection = {
+      ...collectionModel({
+      id: `collection-${type}`,
+      name: `Refresh ${type}`,
+      requests: [
+        requestModel({
+          id: `request-${type}`,
+          name: `${type} request`,
+          method: 'GET',
+          url: 'https://api.example.test/resource',
+          headers: [{ enabled: true, key: 'X-Refresh-Token', value: '{{AUTH_SECRET}}' }],
+          auth: authForType(type)
+        })
+      ]
+    }),
+      authRefresh: {
+        enabled: true,
+        mode: 'interval',
+        targetScope: 'environment',
+        accessTokenVariable: 'AUTH_SECRET',
+        refreshBeforeRun: true,
+        request: {
+          id: 'refresh-auth',
+          name: 'Refresh Auth',
+          method: 'POST',
+          url: 'https://auth.example.test/token'
+        }
+      }
+    };
+    const observed = [];
+    const result = await runCollection(collection, { id: 'env', name: 'Env', variables: [] }, {
+      sendRequest: async (request, environment) => {
+        if (request.id === 'refresh-auth') {
+          return response(200, JSON.stringify({ access_token: `fresh-${type}`, expires_in: 600 }));
+        }
+        observed.push({
+          authType: request.auth?.type || 'none',
+          token: resolveEnvironmentValue('{{AUTH_SECRET}}', environment)
+        });
+        return response(200, '{}');
+      }
+    });
+
+    assert.equal(result.passed, true, `${type} runner should pass`);
+    assert.deepEqual(observed, [{ authType: type, token: `fresh-${type}` }], `${type} should see refreshed token`);
+    assert.equal(result.authRefresh.refreshCount, 1, `${type} should refresh once`);
+  }
 });
 
 test('exports collection runner results to CSV', () => {
@@ -1490,4 +1810,41 @@ function response(statusCode, body) {
     responseBytes: Buffer.byteLength(body),
     finalUrl: 'https://api.example.test'
   };
+}
+
+function authForType(type) {
+  switch (type) {
+    case 'none':
+      return { type: 'none' };
+    case 'bearer':
+      return { type, token: '{{AUTH_SECRET}}' };
+    case 'basic':
+      return { type, username: 'runner-user', password: '{{AUTH_SECRET}}' };
+    case 'apiKey':
+      return { type, location: 'header', key: 'X-API-Key', value: '{{AUTH_SECRET}}' };
+    case 'cookie':
+      return { type, value: 'sid={{AUTH_SECRET}}' };
+    case 'oauth2':
+      return { type, accessToken: '{{AUTH_SECRET}}', tokenType: 'Bearer' };
+    case 'clientCertificate':
+      return { type, certificateId: 'cert-1' };
+    case 'digest':
+      return { type, username: 'runner-user', password: '{{AUTH_SECRET}}' };
+    case 'hawk':
+      return { type, authId: 'hawk-id', authKey: '{{AUTH_SECRET}}', nonce: 'nonce', algorithm: 'sha256' };
+    case 'aws':
+      return { type, accessKey: 'AKIDEXAMPLE', secretKey: '{{AUTH_SECRET}}', region: 'us-east-1', service: 'execute-api' };
+    case 'oauth1':
+      return { type, consumerKey: 'consumer', consumerSecret: '{{AUTH_SECRET}}', token: 'token', tokenSecret: 'token-secret' };
+    case 'ntlm':
+      return { type, username: 'runner-user', password: '{{AUTH_SECRET}}', domain: 'POSTMETER', workstation: 'WORKSTATION' };
+    case 'akamaiEdgeGrid':
+      return { type, accessToken: '{{AUTH_SECRET}}', clientToken: 'client', clientSecret: 'secret', nonce: 'nonce' };
+    case 'jwtBearer':
+      return { type, algorithm: 'HS256', secret: '{{AUTH_SECRET}}', issuer: 'issuer', audience: 'audience' };
+    case 'asap':
+      return { type, algorithm: 'HS256', secret: '{{AUTH_SECRET}}', issuer: 'issuer', audience: 'audience' };
+    default:
+      throw new Error(`Unhandled auth type in refresh matrix: ${type}`);
+  }
 }

@@ -62,6 +62,8 @@ function assertSessionPayload(value, field = 'session') {
     'activeCollectionId',
     'activeFolderId',
     'activeRequestId',
+    'activeAuthRefreshRequestOwnerType',
+    'activeAuthRefreshRequestOwnerId',
     'activeRunnerRequestRunnerId',
     'activeRunnerConfigId',
     'activePerformanceTestId'
@@ -172,10 +174,12 @@ function assertRequestPayload(value, field = 'request') {
 function assertRunnerPayload(value, field = 'runner') {
   assertSchemaFields('runner', value, field);
   assertNoUnexpectedFields('runner', value, field, [
+    'authRefresh',
     'capturePolicy',
     'csvVariables',
     'requests'
   ]);
+  assertAuthRefreshPayload(value.authRefresh || {}, `${field}.authRefresh`);
   if (value.capturePolicy != null) {
     assertCapturePolicyPayload(value.capturePolicy, `${field}.capturePolicy`);
   }
@@ -226,6 +230,31 @@ function assertRunnerRequestPayload(value, field = 'request') {
 function assertRequestAutoHeaders(value, field = 'autoHeaders') {
   assertSchemaFields('requestAutoHeaders', value || {}, field);
   assertNoUnexpectedFields('requestAutoHeaders', value || {}, field);
+}
+
+function assertAuthRefreshPayload(value, field = 'authRefresh') {
+  assertSchemaFields('authRefresh', value || {}, field);
+  assertNoUnexpectedFields('authRefresh', value || {}, field, [
+    'outputs',
+    'request',
+    'refreshTokenRequest'
+  ]);
+  for (const name of ['refreshWindowSeconds', 'tokenLifetimeSeconds', 'refreshIntervalSeconds']) {
+    assertOptionalInteger(value?.[name], `${field}.${name}`, name === 'refreshWindowSeconds' ? 0 : 1);
+  }
+  if (value?.outputs != null) {
+    array(value.outputs, `${field}.outputs`, 20).forEach((output, index) => {
+      const outputField = `${field}.outputs[${index}]`;
+      assertSchemaFields('authRefreshOutput', output || {}, outputField);
+      assertNoUnexpectedFields('authRefreshOutput', output || {}, outputField);
+    });
+  }
+  if (value?.request != null) {
+    assertRequestPayload(value.request, `${field}.request`);
+  }
+  if (value?.refreshTokenRequest != null) {
+    assertRequestPayload(value.refreshTokenRequest, `${field}.refreshTokenRequest`);
+  }
 }
 
 function assertRequestSettings(value, field = 'settings') {
@@ -317,6 +346,7 @@ function assertRunnerRequestSourcePayload(value, field = 'source') {
 function assertPerformanceTestPayload(value, field = 'performanceTest') {
   assertSchemaFields('performanceTest', value, field);
   assertNoUnexpectedFields('performanceTest', value, field, [
+    'authRefresh',
     'capturePolicy',
     'config',
     'csvVariables',
@@ -326,6 +356,7 @@ function assertPerformanceTestPayload(value, field = 'performanceTest') {
     'source',
     'typeSettings'
   ]);
+  assertAuthRefreshPayload(value.authRefresh || {}, `${field}.authRefresh`);
   assertCsvVariablesPayload(value.csvVariables || {}, `${field}.csvVariables`);
   assertRequestPayload(value.request, `${field}.request`);
   assertPerformanceTestSourcePayload(value.source || { sourceType: 'manual' }, `${field}.source`);
@@ -749,19 +780,28 @@ function assertEnvironmentPayload(value, field = 'environment') {
 
 function assertWorkspaceRequestSavePayload(value, field = 'payload') {
   object(value, field);
+  const authRefreshOwnerType = typeof value.authRefreshOwnerType === 'string' ? value.authRefreshOwnerType : '';
+  const hasAuthRefreshTarget = ['runner', 'performance'].includes(authRefreshOwnerType);
   const hasCollectionTarget = typeof value.collectionId === 'string' && value.collectionId.length > 0;
-  const hasRunnerTarget = typeof value.runnerId === 'string' && value.runnerId.length > 0;
-  if (!hasCollectionTarget && !hasRunnerTarget) {
-    fail(`${field} must include collectionId or runnerId.`);
+  const hasRunnerTarget = !hasAuthRefreshTarget && typeof value.runnerId === 'string' && value.runnerId.length > 0;
+  const targetCount = [hasCollectionTarget, hasRunnerTarget, hasAuthRefreshTarget].filter(Boolean).length;
+  if (targetCount === 0) {
+    fail(`${field} must include collectionId, runnerId, or authRefreshOwnerType.`);
   }
-  if (hasCollectionTarget && hasRunnerTarget) {
-    fail(`${field} must target either collectionId or runnerId, not both.`);
+  if (targetCount > 1) {
+    fail(`${field} must target only one request owner.`);
   }
   if (hasCollectionTarget) {
     string(value.collectionId, `${field}.collectionId`, LIMITS.name);
   }
-  if (hasRunnerTarget) {
+  if (hasRunnerTarget || (hasAuthRefreshTarget && authRefreshOwnerType === 'runner')) {
     string(value.runnerId, `${field}.runnerId`, LIMITS.name);
+  }
+  if (hasAuthRefreshTarget) {
+    string(value.authRefreshOwnerType, `${field}.authRefreshOwnerType`, LIMITS.short);
+    if (authRefreshOwnerType === 'performance') {
+      string(value.performanceTestId, `${field}.performanceTestId`, LIMITS.name);
+    }
   }
   string(value.requestId, `${field}.requestId`, LIMITS.name);
   if (hasRunnerTarget) {
@@ -787,6 +827,18 @@ function assertWorkspaceRequestSavePayload(value, field = 'payload') {
     optionalString(value.runnerShell.environmentId, `${field}.runnerShell.environmentId`, LIMITS.name);
     optionalBoolean(value.runnerShell.stopOnFailure, `${field}.runnerShell.stopOnFailure`);
     optionalBoolean(value.runnerShell.allowEnvironmentMutation, `${field}.runnerShell.allowEnvironmentMutation`);
+    if (value.runnerShell.authRefresh != null) {
+      assertAuthRefreshPayload(value.runnerShell.authRefresh, `${field}.runnerShell.authRefresh`);
+    }
+    if (value.runnerShell.requests != null) {
+      assertRunnerRequestArray(value.runnerShell.requests, `${field}.runnerShell.requests`);
+    }
+  }
+  if (value.performanceShell != null) {
+    assertPerformanceTestPayload(value.performanceShell, `${field}.performanceShell`);
+  }
+  if (value.authRefresh != null) {
+    assertAuthRefreshPayload(value.authRefresh, `${field}.authRefresh`);
   }
   if (value.folderPath != null) {
     array(value.folderPath, `${field}.folderPath`, LIMITS.folderDepth).forEach((folder, index) => {
@@ -912,6 +964,7 @@ function assertCollectionRunResultPayload(value, field = 'result') {
   }
   assertSchemaFields('collectionRunResult', value, field);
   assertNoUnexpectedFields('collectionRunResult', value, field, [
+    'authRefresh',
     'capturePolicy',
     'collectionVariables',
     'cookies',
@@ -927,6 +980,9 @@ function assertCollectionRunResultPayload(value, field = 'result') {
     'storeBacked',
     'results'
   ]);
+  if (value.authRefresh != null) {
+    optionalJsonObject(value.authRefresh, `${field}.authRefresh`, LIMITS.value);
+  }
   if (value.results != null) {
     array(value.results, `${field}.results`, LIMITS.history).forEach((result, index) => {
       const itemField = `${field}.results[${index}]`;
@@ -1037,6 +1093,7 @@ function assertPerformanceResultPayload(value, field = 'result') {
   }
   assertSchemaFields('performanceResult', value, field);
   assertNoUnexpectedFields('performanceResult', value, field, [
+    'authRefresh',
     'capturePolicy',
     'config',
     'cookies',
@@ -1051,6 +1108,9 @@ function assertPerformanceResultPayload(value, field = 'result') {
     'storeBacked',
     'summary'
   ]);
+  if (value.authRefresh != null) {
+    optionalJsonObject(value.authRefresh, `${field}.authRefresh`, LIMITS.value);
+  }
   if (value.summary != null) {
     optionalJsonObject(value.summary, `${field}.summary`, LIMITS.body);
   }
@@ -1573,11 +1633,12 @@ function assertSessionRequestTabs(values, field) {
   array(values, field, MAX_OPEN_TABS).forEach((tab, index) => {
     const itemField = `${field}[${index}]`;
     object(tab, itemField);
-    for (const name of ['key', 'collectionId', 'runnerId', 'requestId', 'folderId']) {
+    for (const name of ['key', 'collectionId', 'runnerId', 'requestId', 'folderId', 'authRefreshOwnerType', 'authRefreshOwnerId']) {
       optionalString(tab[name], `${itemField}.${name}`, LIMITS.value);
     }
     optionalBoolean(tab.draft, `${itemField}.draft`);
     optionalBoolean(tab.runnerRequest, `${itemField}.runnerRequest`);
+    optionalBoolean(tab.authRefreshRequest, `${itemField}.authRefreshRequest`);
     optionalBoolean(tab.dirty, `${itemField}.dirty`);
     optionalBoolean(tab.createdUnsaved, `${itemField}.createdUnsaved`);
     optionalString(tab.snapshot, `${itemField}.snapshot`, LIMITS.body);
@@ -2028,6 +2089,7 @@ function fail(message) {
 
 module.exports = {
   LIMITS,
+  assertAuthRefreshPayload,
   assertAuthPayload,
   assertCollectionPayload,
   assertCollectionRunResultPayload,

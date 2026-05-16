@@ -57,6 +57,29 @@ const MAX_PERFORMANCE_TOTAL_REQUESTS = 1000000;
 const MAX_PERFORMANCE_CONCURRENCY = 25;
 const MAX_PERFORMANCE_DURATION_SECONDS = 60 * 60;
 const MAX_RUNNER_REQUEST_ITERATIONS = 1000000;
+const MAX_AUTH_REFRESH_INTERVAL_SECONDS = 24 * 60 * 60;
+const MAX_AUTH_REFRESH_WINDOW_SECONDS = 60 * 60;
+const DEFAULT_AUTH_REFRESH_REQUEST_ID = 'auth-refresh-request';
+const DEFAULT_AUTH_REFRESH_TOKEN_REQUEST_ID = 'auth-refresh-token-request';
+const DEFAULT_AUTH_REFRESH = Object.freeze({
+  enabled: false,
+  mode: 'interval',
+  authType: 'bearer',
+  targetScope: 'environment',
+  accessTokenVariable: 'ACCESS_TOKEN',
+  refreshTokenVariable: 'REFRESH_TOKEN',
+  expiresAtVariable: '',
+  accessTokenPath: 'access_token',
+  refreshTokenPath: 'refresh_token',
+  expiresInPath: 'expires_in',
+  expiresAtPath: 'expires_at',
+  refreshWindowSeconds: 120,
+  tokenLifetimeSeconds: 900,
+  refreshIntervalSeconds: 600,
+  refreshBeforeRun: true,
+  failurePolicy: 'abort',
+  outputs: []
+});
 
 function newId() {
   return crypto.randomUUID();
@@ -138,6 +161,7 @@ function runnerModel({
   allowEnvironmentMutation,
   stopOnFailure,
   capturePolicy,
+  authRefresh,
   csvVariables,
   requests
 } = {}) {
@@ -148,6 +172,7 @@ function runnerModel({
     allowEnvironmentMutation: allowEnvironmentMutation === true,
     stopOnFailure: stopOnFailure === true,
     capturePolicy: normalizeCapturePolicy(capturePolicy, 'runner'),
+    authRefresh: normalizeAuthRefreshConfig(authRefresh),
     csvVariables: normalizeCsvVariableData(csvVariables),
     requests: Array.isArray(requests) ? requests.map(runnerRequestModel) : []
   };
@@ -174,6 +199,7 @@ function performanceTestModel({
   config,
   safetyLimits,
   capturePolicy,
+  authRefresh,
   typeSettings,
   csvVariables,
   resultsMetadata
@@ -197,10 +223,145 @@ function performanceTestModel({
     config: activeSettings.config,
     safetyLimits: activeSettings.safetyLimits,
     capturePolicy: normalizeCapturePolicy(capturePolicy, 'performance', { diagnostic: normalizedType === DIAGNOSIS_TYPE }),
+    authRefresh: normalizeAuthRefreshConfig(authRefresh),
     typeSettings: normalizedTypeSettings,
     csvVariables: normalizeCsvVariableData(csvVariables),
     resultsMetadata: normalizePerformanceResultsMetadata(resultsMetadata)
   };
+}
+
+function normalizeAuthRefreshConfig(authRefresh = {}) {
+  const input = authRefresh && typeof authRefresh === 'object' && !Array.isArray(authRefresh) ? authRefresh : {};
+  const requestInput = input.request && typeof input.request === 'object' && !Array.isArray(input.request)
+    ? input.request
+    : {};
+  const refreshTokenRequestInput = input.refreshTokenRequest && typeof input.refreshTokenRequest === 'object' && !Array.isArray(input.refreshTokenRequest)
+    ? input.refreshTokenRequest
+    : {};
+  const normalized = {
+    enabled: input.enabled === true,
+    mode: normalizeSchemaEnumValue('authRefreshModes', input.mode, DEFAULT_AUTH_REFRESH.mode),
+    authType: normalizeSchemaEnumValue('authRefreshTypes', input.authType, DEFAULT_AUTH_REFRESH.authType),
+    targetScope: normalizeSchemaEnumValue('authRefreshScopes', input.targetScope, DEFAULT_AUTH_REFRESH.targetScope),
+    accessTokenVariable: normalizeAuthRefreshKey(input.accessTokenVariable, DEFAULT_AUTH_REFRESH.accessTokenVariable),
+    refreshTokenVariable: normalizeAuthRefreshKey(input.refreshTokenVariable, DEFAULT_AUTH_REFRESH.refreshTokenVariable),
+    expiresAtVariable: normalizeAuthRefreshKey(input.expiresAtVariable, DEFAULT_AUTH_REFRESH.expiresAtVariable),
+    accessTokenPath: normalizeAuthRefreshPath(input.accessTokenPath, DEFAULT_AUTH_REFRESH.accessTokenPath),
+    refreshTokenPath: normalizeAuthRefreshPath(input.refreshTokenPath, DEFAULT_AUTH_REFRESH.refreshTokenPath),
+    expiresInPath: normalizeAuthRefreshPath(input.expiresInPath, DEFAULT_AUTH_REFRESH.expiresInPath),
+    expiresAtPath: normalizeAuthRefreshPath(input.expiresAtPath, DEFAULT_AUTH_REFRESH.expiresAtPath),
+    refreshWindowSeconds: boundedInteger(input.refreshWindowSeconds, DEFAULT_AUTH_REFRESH.refreshWindowSeconds, 0, MAX_AUTH_REFRESH_WINDOW_SECONDS),
+    tokenLifetimeSeconds: boundedInteger(input.tokenLifetimeSeconds, DEFAULT_AUTH_REFRESH.tokenLifetimeSeconds, 1, MAX_AUTH_REFRESH_INTERVAL_SECONDS),
+    refreshIntervalSeconds: boundedInteger(input.refreshIntervalSeconds, DEFAULT_AUTH_REFRESH.refreshIntervalSeconds, 1, MAX_AUTH_REFRESH_INTERVAL_SECONDS),
+    refreshBeforeRun: input.refreshBeforeRun !== false,
+    failurePolicy: normalizeSchemaEnumValue('authRefreshFailurePolicies', input.failurePolicy, DEFAULT_AUTH_REFRESH.failurePolicy),
+    request: authRefreshRequestModel(requestInput, {
+      id: DEFAULT_AUTH_REFRESH_REQUEST_ID,
+      name: 'Refresh Auth'
+    }),
+    refreshTokenRequest: authRefreshRequestModel(refreshTokenRequestInput, {
+      id: DEFAULT_AUTH_REFRESH_TOKEN_REQUEST_ID,
+      name: 'Refresh Token'
+    })
+  };
+  normalized.outputs = normalizeAuthRefreshOutputs(input.outputs, normalized);
+  return normalized;
+}
+
+function authRefreshRequestModel(requestInput = {}, defaults = {}) {
+  return requestModel({
+    id: requestInput.id || defaults.id,
+    name: requestInput.name || defaults.name || 'Refresh Auth',
+    method: requestInput.method || 'POST',
+    url: requestInput.url || '',
+    queryParams: requestInput.queryParams,
+    headers: requestInput.headers,
+    bodyType: requestInput.bodyType,
+    body: requestInput.body,
+    auth: requestInput.auth,
+    scripts: requestInput.scripts,
+    variables: requestInput.variables,
+    docs: requestInput.docs,
+    cookieJar: requestInput.cookieJar,
+    autoHeaders: requestInput.autoHeaders,
+    protocol: requestInput.protocol,
+    protocolProfile: requestInput.protocolProfile,
+    postmanBody: requestInput.postmanBody,
+    graphql: requestInput.graphql,
+    grpc: requestInput.grpc,
+    websocket: requestInput.websocket,
+    settings: requestInput.settings,
+    metadata: requestInput.metadata,
+    postman: requestInput.postman,
+    messages: requestInput.messages,
+    methodPath: requestInput.methodPath
+  });
+}
+
+function normalizeAuthRefreshKey(value, fallback = '') {
+  if (value == null) {
+    return String(fallback || '').slice(0, 512);
+  }
+  return String(value).trim().slice(0, 512);
+}
+
+function normalizeAuthRefreshPath(value, fallback = '') {
+  if (value == null) {
+    return String(fallback || '').slice(0, 32768);
+  }
+  return String(value).trim().slice(0, 32768);
+}
+
+function normalizeAuthRefreshOutputs(outputs, fallbackConfig = DEFAULT_AUTH_REFRESH) {
+  const source = Array.isArray(outputs)
+    ? outputs
+    : legacyAuthRefreshOutputs(fallbackConfig);
+  const normalized = [];
+  const seen = new Set();
+  for (const output of source.slice(0, 20)) {
+    const item = normalizeAuthRefreshOutput(output);
+    if (!item.variable || !item.path) {
+      continue;
+    }
+    const key = `${item.slot}:${item.source}:${item.path}:${item.variable}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    normalized.push(item);
+  }
+  return normalized;
+}
+
+function normalizeAuthRefreshOutput(output = {}) {
+  const input = output && typeof output === 'object' && !Array.isArray(output) ? output : {};
+  return {
+    slot: normalizeSchemaEnumValue('authRefreshOutputSlots', input.slot, 'custom'),
+    source: normalizeSchemaEnumValue('authRefreshOutputSources', input.source, 'body'),
+    path: normalizeAuthRefreshPath(input.path, ''),
+    variable: normalizeAuthRefreshKey(input.variable, '')
+  };
+}
+
+function legacyAuthRefreshOutputs(config = {}) {
+  const outputs = [];
+  if (config.accessTokenVariable && config.accessTokenPath) {
+    outputs.push({
+      slot: 'accessToken',
+      source: 'body',
+      path: config.accessTokenPath,
+      variable: config.accessTokenVariable
+    });
+  }
+  if (config.refreshTokenVariable && config.refreshTokenPath) {
+    outputs.push({
+      slot: 'refreshToken',
+      source: 'body',
+      path: config.refreshTokenPath,
+      variable: config.refreshTokenVariable
+    });
+  }
+  return outputs;
 }
 
 function performanceRequestModel(request = {}, source = {}) {
@@ -970,6 +1131,7 @@ module.exports = {
   BODY_TYPES,
   CURRENT_SCHEMA_VERSION,
   DEFAULT_PERFORMANCE_SAFETY_LIMITS,
+  DEFAULT_AUTH_REFRESH,
   MIN_SUPPORTED_SCHEMA_VERSION,
   MAX_RUNNER_REQUEST_ITERATIONS,
   PERFORMANCE_TEST_TYPES,
@@ -985,6 +1147,7 @@ module.exports = {
   keyValue,
   newId,
   normalizeCookies,
+  normalizeAuthRefreshConfig,
   normalizePerformanceConfig,
   normalizePerformanceSafetyLimits,
   normalizePerformanceSource,

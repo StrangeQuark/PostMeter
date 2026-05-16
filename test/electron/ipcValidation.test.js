@@ -382,6 +382,77 @@ test('accepts structurally valid IPC payloads', () => {
     },
     settings: { updates: { includePrereleases: true } }
   }));
+  assert.doesNotThrow(() => assertWorkspaceRequestSavePayload({
+    authRefreshOwnerType: 'performance',
+    performanceTestId: 'performance-1',
+    requestId: 'auth-request-1',
+    request: {
+      id: 'auth-request-1',
+      name: 'Refresh Auth',
+      method: 'POST',
+      url: 'https://auth.example.test/token',
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      auth: { type: 'oauth2', grantType: 'clientCredentials', accessTokenUrl: 'https://auth.example.test/token' }
+    },
+    authRefresh: {
+      enabled: true,
+      mode: 'interval',
+      authType: 'apiKey',
+      targetScope: 'environment',
+      accessTokenVariable: 'token',
+      refreshIntervalSeconds: 600,
+      outputs: [{ slot: 'apiKey', source: 'body', path: 'api_key', variable: 'API_KEY' }],
+      request: {
+        id: 'auth-request-1',
+        method: 'POST',
+        url: 'https://auth.example.test/token',
+        queryParams: [],
+        headers: [],
+        bodyType: 'NONE'
+      },
+      refreshTokenRequest: {
+        id: 'refresh-token-request-1',
+        method: 'POST',
+        url: 'https://auth.example.test/refresh-token',
+        queryParams: [],
+        headers: [],
+        bodyType: 'NONE'
+      }
+    },
+    performanceShell: {
+      id: 'performance-1',
+      name: 'Performance',
+      request: {
+        id: 'request-1',
+        method: 'GET',
+        url: 'https://api.example.test',
+        queryParams: [],
+        headers: [],
+        bodyType: 'NONE'
+      },
+      authRefresh: {
+        request: {
+          id: 'auth-request-1',
+          method: 'POST',
+          url: 'https://auth.example.test/token',
+          queryParams: [],
+          headers: [],
+          bodyType: 'NONE'
+        },
+        refreshTokenRequest: {
+          id: 'refresh-token-request-1',
+          method: 'POST',
+          url: 'https://auth.example.test/refresh-token',
+          queryParams: [],
+          headers: [],
+          bodyType: 'NONE'
+        }
+      }
+    },
+    settings: { updates: { includePrereleases: true } }
+  }));
   assert.doesNotThrow(() => assertWorkspaceRequestSaveResultPayload({
     request: {
       id: 'r1',
@@ -708,8 +779,8 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: '{}', durationMillis: 1, responseBytes: 2, finalUrl: 'https://example.test', headers: {}, accessToken: 'raw-token' }), /response.accessToken is not allowed in public IPC payloads/);
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: '{}', durationMillis: 1, responseBytes: 2, finalUrl: 'https://example.test', headers: {}, testScriptResult: { tests: [{ passed: 'yes' }] } }), /response.testScriptResult.tests\[0\].passed must be a boolean/);
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: '{}', durationMillis: 1, responseBytes: 2, finalUrl: 'https://example.test', headers: {}, testScriptResult: { visualizer: { html: 42 } } }), /response.testScriptResult.visualizer.html must be a string/);
-  assert.throws(() => assertWorkspaceRequestSavePayload({ requestId: 'r1', request: { method: 'GET', queryParams: [], headers: [], bodyType: 'NONE' } }), /payload must include collectionId or runnerId/);
-  assert.throws(() => assertWorkspaceRequestSavePayload({ collectionId: 'c1', runnerId: 'runner-1', requestId: 'r1', request: { method: 'GET', queryParams: [], headers: [], bodyType: 'NONE' } }), /payload must target either collectionId or runnerId/);
+  assert.throws(() => assertWorkspaceRequestSavePayload({ requestId: 'r1', request: { method: 'GET', queryParams: [], headers: [], bodyType: 'NONE' } }), /payload must include collectionId, runnerId, or authRefreshOwnerType/);
+  assert.throws(() => assertWorkspaceRequestSavePayload({ collectionId: 'c1', authRefreshOwnerType: 'runner', runnerId: 'runner-1', requestId: 'r1', request: { method: 'GET', queryParams: [], headers: [], bodyType: 'NONE' } }), /payload must target only one request owner/);
   assert.throws(() => assertWorkspaceRequestSavePayload({ collectionId: 'c1', requestId: 'r1', request: { method: 'GET', queryParams: [], headers: [], bodyType: 'NONE' }, folderPath: 'bad' }), /payload.folderPath must be an array/);
   assert.throws(() => assertWorkspaceCollectionSavePayload({ collection: { id: 'c1', requests: [], folders: [] } }), /payload.collectionId must be a string/);
   assert.throws(() => assertWorkspaceCollectionSavePayload({ collectionId: 'c1', collection: { id: 'c1', scripts: { tests: 42 }, requests: [], folders: [] } }), /payload.collection.scripts.tests must be a string/);
