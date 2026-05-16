@@ -13,6 +13,8 @@
     assertUiSmoke(baseUrl, 'UI workflow smoke requires a fixture base URL.');
     assertUiSmoke(workspace.collections.length === 0, 'New workspace should start without default collections.');
 
+    await assertTutorialsSmoke(global);
+
     selectSidebarPanel('workspaces');
     newCollection();
     const collection = activeCollection();
@@ -580,6 +582,32 @@
   function assertPerformanceClamp(type, kind, name, value, expected, message) {
     const input = setPerformanceNumber(type, kind, name, value);
     assertUiSmoke(input.value === expected, `${message} Expected ${expected}, saw ${input.value}.`);
+  }
+
+  async function assertTutorialsSmoke(runtimeGlobal) {
+    assertUiSmoke(runtimeGlobal.PostMeterTutorials, 'Tutorials API should be exposed for UI smoke coverage.');
+    const modalPromise = runtimeGlobal.PostMeterTutorials.openTutorialsModal();
+    await waitForUiSmoke(() => !$('modalBackdrop').hidden && !$('tutorialsModal').hidden, 'Tutorials modal should open from the renderer API.');
+    const tutorialItems = Array.from($('tutorialList').querySelectorAll('.tutorial-list-item'));
+    assertUiSmoke(tutorialItems.length >= 3, 'Tutorials modal should offer at least three basic tutorials.');
+    for (const tutorialTitle of ['Send a Basic Request', 'Use Environment Variables', 'Run a Request Series']) {
+      const item = tutorialItems.find((button) => button.textContent.includes(tutorialTitle));
+      assertUiSmoke(item, `Tutorials modal should include ${tutorialTitle}.`);
+      item.click();
+      assertUiSmoke($('tutorialDetailTitle').textContent === tutorialTitle, `${tutorialTitle} should render in the tutorial detail pane.`);
+      assertUiSmoke($('tutorialDetailSteps').querySelectorAll('li').length >= 4, `${tutorialTitle} should render a useful step list.`);
+    }
+    tutorialItems.find((button) => button.textContent.includes('Send a Basic Request')).click();
+    $('startTutorialButton').click();
+    await waitForUiSmoke(() => $('modalBackdrop').hidden && !$('tutorialOverlay').hidden, 'Starting a tutorial should close the modal and show the overlay.');
+    await waitForUiSmoke(() => !$('tutorialTargetFrame').hidden && $('tutorialCoachTitle').textContent === 'Start from New', 'Tutorial overlay should highlight the first target.');
+    const state = runtimeGlobal.PostMeterTutorials.activeState();
+    assertUiSmoke(state.activeTutorialId === 'request-basics', 'Starting the default tutorial should activate request basics.');
+    assertUiSmoke(state.activeTutorialStepIndex === 0, 'Tutorial should start on the first step.');
+    assertUiSmoke($('tutorialCoachProgress').textContent === 'Step 1 of 5', 'Tutorial overlay should display step progress.');
+    $('endTutorialButton').click();
+    await waitForUiSmoke(() => $('tutorialOverlay').hidden, 'Ending a tutorial should hide the overlay.');
+    await modalPromise;
   }
 
   function setPerformanceNumber(type, kind, name, value) {

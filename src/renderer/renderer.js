@@ -96,6 +96,124 @@ const TAB_PANEL_IDS = {
   performance: ['diagnosisTab', 'latencyTab', 'throughputTab', 'concurrencyTab', 'stressTab', 'spikeTab', 'soakTab', 'rampTab'],
   performanceOutput: ['performanceOutputResultsTab', 'performanceOutputRequestsTab', 'performanceOutputGraphsTab']
 };
+const TUTORIALS = Object.freeze([
+  {
+    id: 'request-basics',
+    title: 'Send a Basic Request',
+    level: 'Beginner',
+    duration: '2 minutes',
+    summary: 'Create a request, choose a method, add a URL, add query params, and send it.',
+    steps: Object.freeze([
+      {
+        selector: '#newMenuButton',
+        title: 'Start from New',
+        body: 'Use New to create requests, collections, environments, runners, and performance tests.',
+        hint: 'This first step does not create anything.'
+      },
+      {
+        selector: '#methodSelect',
+        title: 'Choose the HTTP method',
+        body: 'The method selector controls whether the request is GET, POST, PUT, PATCH, DELETE, HEAD, or OPTIONS.',
+        beforeStep: tutorialEnsureRequestContext
+      },
+      {
+        selector: '#urlInput',
+        title: 'Enter the request URL',
+        body: 'Type the full endpoint URL here. Environment variables like {{baseUrl}} can be used in this field.',
+        beforeStep: tutorialEnsureRequestContext
+      },
+      {
+        selector: '#addParamButton',
+        title: 'Add query parameters',
+        body: 'Use Params for query string values instead of manually editing long URLs.',
+        beforeStep: () => tutorialEnsureRequestContext('params')
+      },
+      {
+        selector: '#sendButton',
+        title: 'Send the request',
+        body: 'Send runs the active request and shows the response, headers, cookies, network details, tests, and visualizer below.',
+        beforeStep: tutorialEnsureRequestContext
+      }
+    ])
+  },
+  {
+    id: 'environment-variables',
+    title: 'Use Environment Variables',
+    level: 'Beginner',
+    duration: '3 minutes',
+    summary: 'Create an environment, add variables, select it globally, and reference values in requests.',
+    steps: Object.freeze([
+      {
+        selector: '#environmentsPanelTab',
+        title: 'Open Environments',
+        body: 'Environments keep reusable values like base URLs, tokens, and account IDs separate from requests.',
+        hint: 'The next step opens or creates an environment.'
+      },
+      {
+        selector: '#environmentTable',
+        title: 'Edit variables',
+        body: 'Each enabled row defines one variable key and value. New environments start with a baseUrl example.',
+        beforeStep: tutorialEnsureEnvironmentContext
+      },
+      {
+        selector: '#addVariableButton',
+        title: 'Add more values',
+        body: 'Use Add Variable for additional values such as tokens, IDs, or host names.',
+        beforeStep: tutorialEnsureEnvironmentContext
+      },
+      {
+        selector: '#environmentSelect',
+        title: 'Select the active environment',
+        body: 'The top-bar Environment selector controls which environment values requests and runs resolve.',
+        beforeStep: tutorialEnsureEnvironmentContext
+      },
+      {
+        selector: '#urlInput',
+        title: 'Reference variables in requests',
+        body: 'Use double braces in request fields, for example {{baseUrl}}/users. PostMeter highlights valid variables as you type.',
+        beforeStep: tutorialEnsureRequestContext
+      }
+    ])
+  },
+  {
+    id: 'runner-basics',
+    title: 'Run a Request Series',
+    level: 'Beginner',
+    duration: '3 minutes',
+    summary: 'Create a runner, add request copies, choose an environment, and review the controls before running.',
+    steps: Object.freeze([
+      {
+        selector: '#runnersPanelTab',
+        title: 'Open Runners',
+        body: 'Runners execute a saved sequence of request copies for repeatable workflows.'
+      },
+      {
+        selector: '#addRunnerRequestButton',
+        title: 'Add requests to the runner',
+        body: 'Use Add Request to create a new runner request or import copies from a collection.',
+        beforeStep: tutorialEnsureRunnerContext
+      },
+      {
+        selector: '#runnerEnvironmentSelect',
+        title: 'Choose the run environment',
+        body: 'Runner requests use the selected environment when resolving variables during the run.',
+        beforeStep: tutorialEnsureRunnerContext
+      },
+      {
+        selector: '#runnerCaptureSettingsButton',
+        title: 'Tune captured details',
+        body: 'Capture Settings control how much request and response evidence PostMeter keeps while the runner executes.',
+        beforeStep: tutorialEnsureRunnerContext
+      },
+      {
+        selector: '#runCollectionButton',
+        title: 'Start the runner',
+        body: 'Run starts the sequence and streams request results into the lower results panel.',
+        beforeStep: tutorialEnsureRunnerContext
+      }
+    ])
+  }
+]);
 
 let workspace = RENDERER_STATE_DEFAULTS.workspace;
 let workspacePath = RENDERER_STATE_DEFAULTS.workspacePath;
@@ -189,6 +307,10 @@ let performanceTitleEditOriginal = '';
 let pendingDiagnosticsSettingsSave = null;
 let sidebarTreeDragPayload = null;
 const pendingNotificationModals = [];
+let selectedTutorialId = TUTORIALS[0]?.id || '';
+let activeTutorialId = '';
+let activeTutorialStepIndex = 0;
+let tutorialOverlayPositionHandler = null;
 
 const $ = (id) => document.getElementById(id);
 const {
@@ -645,6 +767,10 @@ function bindUi() {
     onExportPostmanEnvironment: () => { void exportEnvironmentFromPicker('postman'); },
     onExportRunnerDefinition: () => { void exportRunnerDefinitionFromPicker(); },
     onOpenSettings: () => { openSettingsModalSafely(); },
+    onStartSelectedTutorial: startSelectedTutorial,
+    onPreviousTutorialStep: previousTutorialStep,
+    onNextTutorialStep: nextTutorialStep,
+    onEndTutorial: endTutorial,
     onSelectSettingsSection: selectSettingsSection,
     onSelectTheme: (themeOption) => setThemePreference(themeOption, { save: true }),
     onInterfaceTypographyChange: () => setInterfaceTypographyFromControls({ save: true }),
@@ -1669,6 +1795,9 @@ async function handleAppMenuAction(action) {
         break;
       case 'settings':
         await openSettingsModal();
+        break;
+      case 'tutorials':
+        await openTutorialsModal();
         break;
       case 'import-workspace':
         await importWorkspace();
@@ -2993,6 +3122,333 @@ function cancelActiveModal() {
   }
   resolveActiveModal(state.activeModalCancelValue);
 }
+
+function openTutorialsModalSafely() {
+  void openTutorialsModal().catch((error) => {
+    const message = error?.message || String(error);
+    setStatus(`Could not open tutorials: ${message}`);
+    notifyUser('Tutorials Failed', message);
+  });
+}
+
+async function openTutorialsModal() {
+  if (!tutorialById(selectedTutorialId)) {
+    selectedTutorialId = TUTORIALS[0]?.id || '';
+  }
+  renderTutorialsModal();
+  return showModal('tutorialsModal', null);
+}
+
+function renderTutorialsModal() {
+  const list = $('tutorialList');
+  const detailTitle = $('tutorialDetailTitle');
+  const detailLevel = $('tutorialDetailLevel');
+  const detailSummary = $('tutorialDetailSummary');
+  const detailSteps = $('tutorialDetailSteps');
+  const startButton = $('startTutorialButton');
+  if (!list || !detailTitle || !detailLevel || !detailSummary || !detailSteps || !startButton) {
+    return;
+  }
+  const selectedTutorial = tutorialById(selectedTutorialId) || TUTORIALS[0] || null;
+  if (selectedTutorial) {
+    selectedTutorialId = selectedTutorial.id;
+  }
+  list.textContent = '';
+  for (const tutorial of TUTORIALS) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'tutorial-list-item';
+    button.setAttribute('role', 'option');
+    button.setAttribute('aria-selected', tutorial.id === selectedTutorialId ? 'true' : 'false');
+    button.dataset.tutorialId = tutorial.id;
+    const title = document.createElement('strong');
+    title.textContent = tutorial.title;
+    const meta = document.createElement('span');
+    meta.textContent = `${tutorial.level} - ${tutorial.duration}`;
+    button.append(title, meta);
+    button.addEventListener('click', () => selectTutorial(tutorial.id));
+    list.append(button);
+  }
+  detailSteps.textContent = '';
+  if (!selectedTutorial) {
+    detailTitle.textContent = 'Select a tutorial';
+    detailLevel.textContent = '';
+    detailSummary.textContent = 'Choose a tutorial from the list.';
+    startButton.disabled = true;
+    return;
+  }
+  detailTitle.textContent = selectedTutorial.title;
+  detailLevel.textContent = `${selectedTutorial.level} - ${selectedTutorial.duration}`;
+  detailSummary.textContent = selectedTutorial.summary;
+  for (const step of selectedTutorial.steps) {
+    const item = document.createElement('li');
+    item.textContent = step.title;
+    detailSteps.append(item);
+  }
+  startButton.disabled = false;
+}
+
+function selectTutorial(tutorialId) {
+  if (!tutorialById(tutorialId)) {
+    return;
+  }
+  selectedTutorialId = tutorialId;
+  renderTutorialsModal();
+}
+
+function startSelectedTutorial() {
+  if (!tutorialById(selectedTutorialId)) {
+    return;
+  }
+  resolveActiveModal(null, { flushNotifications: false });
+  startTutorial(selectedTutorialId);
+}
+
+function startTutorial(tutorialId) {
+  const tutorial = tutorialById(tutorialId);
+  if (!tutorial) {
+    return false;
+  }
+  endTutorial({ silent: true });
+  activeTutorialId = tutorial.id;
+  activeTutorialStepIndex = 0;
+  attachTutorialOverlayListeners();
+  showTutorialStep(0);
+  return true;
+}
+
+function previousTutorialStep() {
+  if (!activeTutorial()) {
+    return;
+  }
+  showTutorialStep(Math.max(0, activeTutorialStepIndex - 1));
+}
+
+function nextTutorialStep() {
+  const tutorial = activeTutorial();
+  if (!tutorial) {
+    return;
+  }
+  if (activeTutorialStepIndex >= tutorial.steps.length - 1) {
+    endTutorial();
+    return;
+  }
+  showTutorialStep(activeTutorialStepIndex + 1);
+}
+
+function endTutorial(options = {}) {
+  const overlay = $('tutorialOverlay');
+  if (overlay) {
+    overlay.hidden = true;
+  }
+  const frame = $('tutorialTargetFrame');
+  if (frame) {
+    frame.hidden = true;
+  }
+  detachTutorialOverlayListeners();
+  activeTutorialId = '';
+  activeTutorialStepIndex = 0;
+  if (!options.silent) {
+    setStatus('Tutorial ended.');
+  }
+}
+
+function showTutorialStep(index) {
+  const tutorial = activeTutorial();
+  const overlay = $('tutorialOverlay');
+  if (!tutorial || !overlay) {
+    return;
+  }
+  const nextIndex = Math.min(Math.max(0, Number(index) || 0), tutorial.steps.length - 1);
+  const step = tutorial.steps[nextIndex];
+  activeTutorialStepIndex = nextIndex;
+  step.beforeStep?.();
+  overlay.hidden = false;
+  $('tutorialCoachProgress').textContent = `Step ${nextIndex + 1} of ${tutorial.steps.length}`;
+  $('tutorialCoachTitle').textContent = step.title;
+  $('tutorialCoachBody').textContent = step.body;
+  $('tutorialCoachHint').textContent = step.hint || '';
+  $('previousTutorialStepButton').disabled = nextIndex === 0;
+  $('nextTutorialStepButton').textContent = nextIndex === tutorial.steps.length - 1 ? 'Finish' : 'Next';
+  const target = tutorialTargetElement(step);
+  target?.scrollIntoView?.({ block: 'center', inline: 'center', behavior: 'smooth' });
+  requestAnimationFrame(() => positionTutorialOverlay());
+}
+
+function tutorialById(tutorialId) {
+  return TUTORIALS.find((tutorial) => tutorial.id === tutorialId) || null;
+}
+
+function activeTutorial() {
+  return tutorialById(activeTutorialId);
+}
+
+function tutorialTargetElement(step) {
+  if (!step?.selector) {
+    return null;
+  }
+  try {
+    return document.querySelector(step.selector);
+  } catch {
+    return null;
+  }
+}
+
+function attachTutorialOverlayListeners() {
+  detachTutorialOverlayListeners();
+  tutorialOverlayPositionHandler = () => positionTutorialOverlay();
+  window.addEventListener('resize', tutorialOverlayPositionHandler);
+  document.addEventListener('scroll', tutorialOverlayPositionHandler, true);
+}
+
+function detachTutorialOverlayListeners() {
+  if (!tutorialOverlayPositionHandler) {
+    return;
+  }
+  window.removeEventListener('resize', tutorialOverlayPositionHandler);
+  document.removeEventListener('scroll', tutorialOverlayPositionHandler, true);
+  tutorialOverlayPositionHandler = null;
+}
+
+function positionTutorialOverlay() {
+  const tutorial = activeTutorial();
+  const overlay = $('tutorialOverlay');
+  const frame = $('tutorialTargetFrame');
+  const coach = $('tutorialCoach');
+  if (!tutorial || overlay?.hidden || !frame || !coach) {
+    return;
+  }
+  const step = tutorial.steps[activeTutorialStepIndex];
+  const target = tutorialTargetElement(step);
+  const targetRect = visibleTutorialTargetRect(target);
+  if (targetRect) {
+    positionTutorialFrame(frame, targetRect);
+    positionTutorialCoach(coach, targetRect);
+  } else {
+    frame.hidden = true;
+    positionTutorialCoach(coach, null);
+  }
+}
+
+function visibleTutorialTargetRect(target) {
+  if (!(target instanceof HTMLElement)) {
+    return null;
+  }
+  const rect = target.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0 || rect.bottom <= 0 || rect.right <= 0 || rect.top >= window.innerHeight || rect.left >= window.innerWidth) {
+    return null;
+  }
+  return rect;
+}
+
+function positionTutorialFrame(frame, rect) {
+  const padding = 6;
+  const left = clampNumber(rect.left - padding, 6, window.innerWidth - 12);
+  const top = clampNumber(rect.top - padding, 6, window.innerHeight - 12);
+  const right = clampNumber(rect.right + padding, 12, window.innerWidth - 6);
+  const bottom = clampNumber(rect.bottom + padding, 12, window.innerHeight - 6);
+  frame.hidden = false;
+  frame.style.left = `${left}px`;
+  frame.style.top = `${top}px`;
+  frame.style.width = `${Math.max(24, right - left)}px`;
+  frame.style.height = `${Math.max(24, bottom - top)}px`;
+}
+
+function positionTutorialCoach(coach, targetRect) {
+  const margin = 16;
+  const gap = 14;
+  coach.style.left = `${margin}px`;
+  coach.style.top = `${margin}px`;
+  const rect = coach.getBoundingClientRect();
+  const width = rect.width || Math.min(360, window.innerWidth - margin * 2);
+  const height = rect.height || 180;
+  let left;
+  let top;
+  if (!targetRect) {
+    left = (window.innerWidth - width) / 2;
+    top = (window.innerHeight - height) / 2;
+  } else if (targetRect.right + gap + width <= window.innerWidth - margin) {
+    left = targetRect.right + gap;
+    top = targetRect.top;
+  } else if (targetRect.left - gap - width >= margin) {
+    left = targetRect.left - gap - width;
+    top = targetRect.top;
+  } else if (targetRect.bottom + gap + height <= window.innerHeight - margin) {
+    left = targetRect.left;
+    top = targetRect.bottom + gap;
+  } else {
+    left = targetRect.left;
+    top = targetRect.top - gap - height;
+  }
+  coach.style.left = `${clampNumber(left, margin, window.innerWidth - width - margin)}px`;
+  coach.style.top = `${clampNumber(top, margin, window.innerHeight - height - margin)}px`;
+}
+
+function clampNumber(value, min, max) {
+  const safeMin = Number.isFinite(min) ? min : 0;
+  const safeMax = Number.isFinite(max) ? Math.max(safeMin, max) : safeMin;
+  const safeValue = Number.isFinite(value) ? value : safeMin;
+  return Math.min(Math.max(safeValue, safeMin), safeMax);
+}
+
+function tutorialEnsureRequestContext(tabName = 'params') {
+  if (activeMainPanel !== 'request' || activeRunnerRequestRunnerId || activeAuthRefreshRequestOwnerType || !activeRequest()) {
+    newRequest(null, null);
+  } else {
+    activeSidebarPanel = 'collections';
+    activeMainPanel = 'request';
+    renderAll();
+  }
+  if (tabName) {
+    activateTab('request', tabName);
+  }
+}
+
+function tutorialEnsureEnvironmentContext() {
+  workspace.environments ||= [];
+  if (!activeEnvironment() && workspace.environments.length) {
+    activeEnvironmentId = workspace.environments[0].id;
+  }
+  if (!activeEnvironment()) {
+    newEnvironment();
+    return;
+  }
+  activeSidebarPanel = 'environments';
+  activeMainPanel = 'environment';
+  ensureOpenEnvironmentTabForActive();
+  renderAll();
+}
+
+function tutorialEnsureRunnerContext() {
+  ensureWorkspaceRunners();
+  if (!activeRunner() && workspace.runners.length) {
+    activeRunnerConfigId = workspace.runners[0].id;
+  }
+  if (!activeRunner()) {
+    newRunner();
+    return;
+  }
+  activeSidebarPanel = 'runners';
+  activeMainPanel = 'runner';
+  activeRunnerRequestRunnerId = null;
+  activeAuthRefreshRequestOwnerType = '';
+  activeAuthRefreshRequestOwnerId = null;
+  ensureOpenRunnerTabForActive();
+  renderAll();
+}
+
+window.PostMeterTutorials = {
+  activeState: () => ({
+    activeTutorialId,
+    activeTutorialStepIndex,
+    selectedTutorialId
+  }),
+  endTutorial,
+  openTutorialsModal,
+  selectTutorial,
+  startTutorial,
+  tutorials: TUTORIALS
+};
 
 function canResolveLocalFilePaths() {
   return typeof window.postmeter?.files?.pathForFile === 'function';

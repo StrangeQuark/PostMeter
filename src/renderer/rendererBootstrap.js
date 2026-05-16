@@ -466,6 +466,11 @@
     bindClick(doc, 'closeNotificationModalButton', () => options.onResolveActiveModal?.(true));
     bindClick(doc, 'closeSettingsModalButton', () => options.onResolveActiveModal?.(true));
     bindClick(doc, 'closeSettingsModalFooterButton', () => options.onResolveActiveModal?.(true));
+    bindClick(doc, 'closeTutorialsModalButton', () => options.onResolveActiveModal?.(null));
+    bindClick(doc, 'startTutorialButton', options.onStartSelectedTutorial);
+    bindClick(doc, 'previousTutorialStepButton', options.onPreviousTutorialStep);
+    bindClick(doc, 'nextTutorialStepButton', options.onNextTutorialStep);
+    bindClick(doc, 'endTutorialButton', options.onEndTutorial);
     bindClick(doc, 'closePerformanceCalibrationModalButton', options.onClosePerformanceCalibration);
     bindClick(doc, 'denyVaultPromptButton', () => options.onResolveVaultPrompt?.({ granted: false, scope: 'request' }));
     bindClick(doc, 'allowVaultPromptRequestButton', () => options.onResolveVaultPrompt?.({ granted: true, scope: 'request' }));

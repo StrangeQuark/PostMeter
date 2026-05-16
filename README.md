@@ -11,6 +11,7 @@ PostMeter is a local-first desktop API client for building, sending, and testing
 - Use first-class desktop runners or the CI-friendly CLI runner.
 - Work with OAuth 2.0, HTTPS client certificates, cookies, and GitHub Releases update checks.
 - Save and run local Performance tests for full endpoint diagnosis, latency, throughput, concurrency, stress, spike, soak, and ramp checks.
+- Follow in-app Tutorials from the Help menu for guided request, environment, and runner workflows.
 
 ## Quick Start
 
@@ -61,6 +62,10 @@ Performance runs use the same reusable temp result database and expose Capture S
 
 The legacy Load Test panel has been removed. Distributed/cloud load execution, JMeter import/export/execution, and hosted load agents are not part of the current production claim.
 
+## Tutorials
+
+Use `Help > Tutorials` in the desktop app to open guided walkthroughs. The current tutorials cover sending a basic request, using environment variables, and running a request series. Each tutorial highlights the relevant controls in the app and advances at your pace.
+
 ## Data And Privacy
 
 PostMeter stores managed workspaces as local JSON files under:
@@ -96,6 +101,7 @@ Diagnostics are local and user-initiated. See [Troubleshooting](docs/TROUBLESHOO
 | [docs/TECH_SPECS.md](docs/TECH_SPECS.md) | Full product and implementation reference. |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Renderer, Electron, and core ownership boundaries. |
 | [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) | Import/export, scripting, auth, and compatibility boundaries. |
+| [TUTORIALS.md](TUTORIALS.md) | Internal implementation notes for the in-app Tutorials system. |
 | [docs/SANDBOX_CONTRACT.md](docs/SANDBOX_CONTRACT.md) | Request-script sandbox behavior and security contract. |
 | [docs/RELEASE_READINESS.md](docs/RELEASE_READINESS.md) | Release gates, validation policy, and readiness status. |
 | [docs/SECURITY.md](docs/SECURITY.md) | Security boundaries and vulnerability reporting. |

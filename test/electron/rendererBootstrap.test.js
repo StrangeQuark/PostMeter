@@ -746,6 +746,51 @@ test('renderer bootstrap binds settings menu, category, theme, and setting contr
   ]);
 });
 
+test('renderer bootstrap binds tutorial modal and overlay controls', () => {
+  const calls = [];
+  const elements = new Map([
+    ['closeTutorialsModalButton', createElement()],
+    ['startTutorialButton', createElement()],
+    ['previousTutorialStepButton', createElement()],
+    ['nextTutorialStepButton', createElement()],
+    ['endTutorialButton', createElement()],
+    ['contextMenu', createElement()],
+    ['modalBackdrop', createElement()]
+  ]);
+
+  bindUi({
+    doc: {
+      getElementById(id) {
+        return elements.get(id) || null;
+      },
+      querySelectorAll() {
+        return [];
+      },
+      addEventListener() {}
+    },
+    windowObject: { addEventListener() {} },
+    onResolveActiveModal: (value) => calls.push(`resolve:${value}`),
+    onStartSelectedTutorial: () => calls.push('start-tutorial'),
+    onPreviousTutorialStep: () => calls.push('previous-step'),
+    onNextTutorialStep: () => calls.push('next-step'),
+    onEndTutorial: () => calls.push('end-tutorial')
+  });
+
+  elements.get('closeTutorialsModalButton').dispatch('click');
+  elements.get('startTutorialButton').dispatch('click');
+  elements.get('previousTutorialStepButton').dispatch('click');
+  elements.get('nextTutorialStepButton').dispatch('click');
+  elements.get('endTutorialButton').dispatch('click');
+
+  assert.deepEqual(calls, [
+    'resolve:null',
+    'start-tutorial',
+    'previous-step',
+    'next-step',
+    'end-tutorial'
+  ]);
+});
+
 test('renderer bootstrap keeps active modals open when the backdrop is clicked by default', () => {
   let cancelCount = 0;
   const elements = new Map([

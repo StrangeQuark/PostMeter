@@ -1843,6 +1843,26 @@
       </div>
     </section>
 
+    <section id="tutorialsModal" class="modal tutorials-modal" role="dialog" aria-modal="true" aria-labelledby="tutorialsModalTitle" aria-describedby="tutorialsModalMessage" hidden>
+      <div class="modal-title-row">
+        <h2 id="tutorialsModalTitle">Tutorials</h2>
+        <button id="closeTutorialsModalButton" type="button" class="modal-close-button" aria-label="Close tutorials">X</button>
+      </div>
+      <p id="tutorialsModalMessage">Pick a guided walkthrough. Tutorials highlight the controls in PostMeter and let you move at your own pace.</p>
+      <div class="tutorials-layout">
+        <div id="tutorialList" class="tutorial-list" role="listbox" aria-label="Tutorials"></div>
+        <section class="tutorial-detail" aria-labelledby="tutorialDetailTitle">
+          <p id="tutorialDetailLevel" class="tutorial-kicker"></p>
+          <h3 id="tutorialDetailTitle">Select a tutorial</h3>
+          <p id="tutorialDetailSummary">Choose a tutorial from the list.</p>
+          <ol id="tutorialDetailSteps" class="tutorial-step-list"></ol>
+        </section>
+      </div>
+      <div class="modal-actions">
+        <button id="startTutorialButton" type="button" class="primary">Start Tutorial</button>
+      </div>
+    </section>
+
     <section id="unsavedRequestModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="unsavedRequestTitle" aria-describedby="unsavedRequestMessage" hidden>
       <h2 id="unsavedRequestTitle">Close unsaved request?</h2>
       <p id="unsavedRequestMessage">This request has unsaved changes. Save it before closing?</p>
@@ -2235,6 +2255,21 @@
   <div id="contextMenu" class="context-menu" role="menu" aria-label="Item actions" hidden></div>
   <div id="fileSourceMenu" class="context-menu file-source-menu" role="menu" aria-label="File source actions" hidden>
     <button id="fileSourceChooseButton" type="button" role="menuitem">Choose File...</button>
+  </div>
+
+  <div id="tutorialOverlay" class="tutorial-overlay" hidden>
+    <div id="tutorialTargetFrame" class="tutorial-target-frame" aria-hidden="true"></div>
+    <section id="tutorialCoach" class="tutorial-coach" role="dialog" aria-live="polite" aria-labelledby="tutorialCoachTitle">
+      <p id="tutorialCoachProgress" class="tutorial-coach-progress"></p>
+      <h2 id="tutorialCoachTitle">Tutorial</h2>
+      <p id="tutorialCoachBody">Step details</p>
+      <p id="tutorialCoachHint" class="tutorial-coach-hint"></p>
+      <div class="tutorial-coach-actions">
+        <button id="endTutorialButton" type="button">End</button>
+        <button id="previousTutorialStepButton" type="button">Back</button>
+        <button id="nextTutorialStepButton" type="button" class="primary">Next</button>
+      </div>
+    </section>
   </div>
 
   <script src="responseFormatting.js"></script>

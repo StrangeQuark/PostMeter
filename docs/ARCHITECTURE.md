@@ -14,7 +14,7 @@ The main rule is that product behavior belongs in the lowest layer that can own 
 
 Renderer files are loaded directly from `src/renderer/index.html`.
 
-- `renderer.js` is the renderer shell/orchestrator. It should compose focused helpers rather than owning tab state, workflows, or editor subpanels inline, while still hosting shared modal rendering helpers used by flows such as draft-save, collection export selection, runner request import, history clearing, and draggable sidebar-tree placement.
+- `renderer.js` is the renderer shell/orchestrator. It should compose focused helpers rather than owning tab state, workflows, or editor subpanels inline, while still hosting shared modal rendering helpers used by flows such as draft-save, collection export selection, runner request import, in-app Tutorials, history clearing, and draggable sidebar-tree placement.
 - `cookieModel.js` owns renderer-side cookie validation, Postman cookie metadata import, and thin adapters over the shared core cookie model.
 - `contextMenu.js` owns renderer context-menu display and positioning.
 - `layoutControls.js` owns resizable pane wiring and persisted layout CSS variables.
@@ -35,7 +35,7 @@ Renderer files are loaded directly from `src/renderer/index.html`.
 - `base.css` owns element defaults and common control states.
 - `chrome.css` owns application chrome, sidebar, tree, drag/drop insertion bars, workspace framing, runner framing, and request-tab layout rules.
 - `editorPanels.css` owns request, response, auth, cookie, docs, and editor component rules.
-- `overlays.css` owns modal and context-menu presentation.
+- `overlays.css` owns modal, context-menu, and guided tutorial overlay presentation.
 - `styles.css` is the renderer stylesheet entry point and imports the modular CSS slices.
 
 Keep DOM IDs stable unless tests and IPC-facing workflows are migrated at the same time. The planned behavior-preserving renderer split is complete enough that new work should usually extend the existing helper modules instead of growing `renderer.js` again.

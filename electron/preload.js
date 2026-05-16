@@ -19,6 +19,7 @@ const postmeterApi = {
         'new-performance-test',
         'save-active-tab',
         'settings',
+        'tutorials',
         'import-workspace',
         'import-request',
         'import-collection',
