@@ -32,6 +32,7 @@ const FILE_ACTIONS = new Map([
 ]);
 
 const HELP_ACTIONS = new Map([
+  ['Help > Tutorials', 'tutorials'],
   ['Help > Export Local Diagnostics...', 'export-diagnostics'],
   ['Help > Check for Updates', 'check-updates']
 ]);

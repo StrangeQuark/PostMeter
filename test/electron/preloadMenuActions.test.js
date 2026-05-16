@@ -14,6 +14,7 @@ const ALLOWED_MENU_ACTIONS = [
   'new-performance-test',
   'save-active-tab',
   'settings',
+  'tutorials',
   'import-workspace',
   'import-request',
   'import-collection',

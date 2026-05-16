@@ -88,6 +88,8 @@ function createApplicationMenuTemplate(options = {}) {
     {
       label: 'Help',
       submenu: [
+        actionItem('Tutorials', 'tutorials'),
+        { type: 'separator' },
         {
           label: 'PostMeter Documentation',
           click: () => openExternal('https://github.com/StrangeQuark/PostMeter#readme')

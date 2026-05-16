@@ -447,9 +447,201 @@
   padding-bottom: 12px;
 }
 
+.tutorials-modal {
+  width: min(780px, 100%);
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.tutorials-layout {
+  display: grid;
+  grid-template-columns: minmax(210px, 260px) minmax(0, 1fr);
+  min-height: 330px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.tutorial-list {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px;
+  border-right: 1px solid var(--line);
+  background: var(--surface-muted);
+}
+
+.tutorial-list-item {
+  display: grid;
+  gap: 3px;
+  justify-items: start;
+  width: 100%;
+  min-height: 52px;
+  padding: 9px 10px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.tutorial-list-item:hover,
+.tutorial-list-item:focus-visible {
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+.tutorial-list-item[aria-selected="true"] {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--primary);
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.tutorial-list-item strong,
+.tutorial-list-item span {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tutorial-list-item span {
+  color: var(--muted);
+  font-size: var(--ui-font-size-xs);
+}
+
+.tutorial-detail {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+}
+
+.tutorial-detail h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--ui-font-size-xl);
+}
+
+.tutorial-detail p {
+  margin: 0;
+}
+
+.tutorial-kicker {
+  color: var(--primary);
+  font-size: var(--ui-font-size-xs);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.tutorial-step-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.tutorial-step-list li::marker {
+  color: var(--primary);
+  font-weight: 800;
+}
+
+.tutorial-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  pointer-events: none;
+}
+
+.tutorial-overlay[hidden] {
+  display: none;
+}
+
+.tutorial-target-frame {
+  position: fixed;
+  border: 2px solid var(--primary);
+  border-radius: 8px;
+  box-shadow: 0 0 0 9999px color-mix(in srgb, black 58%, transparent), 0 0 0 4px color-mix(in srgb, var(--primary) 18%, transparent);
+  pointer-events: none;
+  transition: top 120ms ease, left 120ms ease, width 120ms ease, height 120ms ease;
+}
+
+.tutorial-target-frame[hidden] {
+  display: none;
+}
+
+.tutorial-coach {
+  position: fixed;
+  display: grid;
+  gap: 8px;
+  width: min(360px, calc(100vw - 32px));
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--modal-shadow);
+  pointer-events: auto;
+}
+
+.tutorial-coach h2,
+.tutorial-coach p {
+  margin: 0;
+}
+
+.tutorial-coach h2 {
+  color: var(--text);
+  font-size: var(--ui-font-size-xl);
+}
+
+.tutorial-coach-progress {
+  color: var(--primary);
+  font-size: var(--ui-font-size-xs);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.tutorial-coach-hint {
+  color: var(--muted);
+  font-size: var(--ui-font-size-sm);
+}
+
+.tutorial-coach-hint:empty {
+  display: none;
+}
+
+.tutorial-coach-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+
 @media (max-width: 760px) {
   .settings-layout {
     grid-template-columns: 1fr;
+  }
+
+  .tutorials-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .tutorial-list {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(180px, max-content);
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .tutorial-list-item[aria-selected="true"] {
+    box-shadow: inset 0 -2px 0 var(--primary);
   }
 
   .settings-typography-grid {

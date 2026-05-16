@@ -38,6 +38,7 @@ The migration deliberately does not bridge Electron to the Java services. Core b
 - Record recent request history.
 - Check GitHub Releases for newer PostMeter versions and prompt before opening release pages. Stable releases are checked by default; prereleases are checked only when the user enables the opt-in setting.
 - Save and run local workspace-owned Performance tests separately from distributed/cloud load execution; the legacy Load Test panel, JMeter bridge, worker, policy, and export path have been removed.
+- Open Help > Tutorials to launch guided in-app walkthroughs. The current V1 set covers basic request sending, environment variables, and runner request series. Tutorials are renderer-owned UI guidance only; they are not saved to workspace JSON and do not add runtime/core behavior.
 
 ## Local Performance Scope
 
@@ -91,6 +92,12 @@ OAuth support in PostMeter is only for outbound API request authentication, matc
 - HTML parsing and selector evaluation: `node-html-parser`
 - Packaging: electron-builder with Linux unpacked/AppImage/deb, Windows NSIS, and macOS dmg/zip targets
 - Tests: Node built-in test runner plus Electron startup, UI workflow, UI regression, UI typography, UI OAuth, and UI screenshot smoke scripts
+
+## Guided Tutorials
+
+The desktop Help menu includes a Tutorials action that opens a renderer modal backed by static tutorial definitions in `src/renderer/renderer.js`. The modal is rendered in `src/renderer/index.html`, styled by `src/renderer/overlays.css`, and wired through `src/renderer/rendererBootstrap.js`. Tutorial start/end/step navigation is renderer-only state. The overlay highlights live DOM targets by selector and positions a coach panel beside the target. Step setup callbacks may create unsaved draft requests, environments, or runners so the user can inspect real controls without requiring saved fixture data.
+
+The current tutorial IDs are `request-basics`, `environment-variables`, and `runner-basics`. Future tutorial implementation notes and extension rules live in [TUTORIALS.md](../TUTORIALS.md).
 
 ## Runtime Requirements
 
@@ -1048,7 +1055,7 @@ Node tests cover:
 - CLI collection execution with passing/failing exit codes and JSON/CSV/HTML report output.
 - Release manifest generation, release artifact validation, release workflow metadata, CI workflow validation, and GitHub release update checks.
 - Workspace default creation, schema `2` through `14` migration, corrupt-file recovery, settings normalization, legacy load-test policy removal, native import, Postman folder/script import, and native/Postman/OpenAPI YAML format detection.
-- Electron UI workflow smoke coverage for create/edit/save/reload/send, context menus, pane resizing, collection variables, request variables, request docs, cookie jar capture, environment variables, Help-menu prerelease setting persistence, scripts, collection runner, runtime variable output, first-class runner tabs, runner import/edit/reorder/delete controls, runner export-control state and result export dropdown formats, and the Performance sidebar/pane/tab placement.
+- Electron UI workflow smoke coverage for create/edit/save/reload/send, context menus, pane resizing, collection variables, request variables, request docs, cookie jar capture, environment variables, Help-menu prerelease setting persistence, Help-menu tutorials modal and guided overlay startup, scripts, collection runner, runtime variable output, first-class runner tabs, runner import/edit/reorder/delete controls, runner export-control state and result export dropdown formats, and the Performance sidebar/pane/tab placement.
 - Electron UI regression smoke coverage for toolbar dropdowns, Help-menu update state, import/export menu options/cancellation, invalid-request error rendering, XML/HTML response formatting, mocked OAuth flow completion/failure, cookie/request-docs/request-variable editor coverage, active-host cookie filtering, runner pre-run export state and result export formats, runner empty-pane/sidebar behavior, tab context and tab-cap behavior, history clearing, sidebar drag/drop structural saves, insertion-bar feedback, and no app-account/login language.
 - Electron UI typography smoke coverage for every built-in interface font and supported interface font-size option, every built-in editor font and supported editor font-size option, combined large-font stress pairs, request/editor/result tabs, collection/folder tabs, environment/workspace/runner/performance/history screens, every Settings section, sidebar fit, horizontal overflow, modal viewport fit, and visible sibling overlap.
 - Electron UI OAuth smoke coverage for mocked loopback PKCE success, custom-scheme callback success, wrong-state callback rejection without token persistence, token exchange failure, PKCE cancellation, device-code success, access denial, timeout, and cancellation.
