@@ -3,7 +3,12 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const { SessionStore } = require('../../electron/sessionStore');
+const { SessionStore, defaultSessionPath } = require('../../electron/sessionStore');
+
+test('default session path uses the profile directory', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-session-default-path-'));
+  assert.equal(defaultSessionPath(path.join(temp, 'userData')), path.join(temp, 'userData', 'profile', 'session.json'));
+});
 
 test('session store returns defaults when no session file exists', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-session-store-'));

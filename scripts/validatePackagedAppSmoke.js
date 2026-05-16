@@ -9,6 +9,7 @@ const {
   redactRequestResponseAliasesInText,
   redactTransportReferences
 } = require('../src/core/diagnostics');
+const { postMeterWorkspaceDirectory } = require('../src/core/workspacePersistence');
 
 const PROJECT_ROOT = path.join(__dirname, '..');
 const MAIN_PROCESS_SMOKE_ENV = 'POSTMETER_PACKAGED_SMOKE_MAIN_PROCESS';
@@ -215,7 +216,7 @@ async function validateDefaultPersistenceArtifacts(env, marker = '', platform = 
   if (!stat.isDirectory()) {
     throw new Error(`Default packaged userData path is not a directory: ${userDataPath}`);
   }
-  const workspacePath = path.join(env.USERPROFILE || env.HOME, '.postmeter', 'workspace.json');
+  const workspacePath = path.join(postMeterWorkspaceDirectory(userDataPath), 'workspace.json');
   await loadPersistedSmokeWorkspace(workspacePath, marker);
 }
 
@@ -287,7 +288,8 @@ async function writeDefaultPathDiagnostics(label, root, env, marker, error) {
   try {
     await fs.mkdir(directory, { recursive: true });
     const safeLabel = smokeSafeLabel(label || 'default-path');
-    const workspacePath = path.join(env.USERPROFILE || env.HOME, '.postmeter', 'workspace.json');
+    const userDataPath = await resolveDefaultUserDataPath(env, process.platform);
+    const workspacePath = path.join(postMeterWorkspaceDirectory(userDataPath), 'workspace.json');
     const diagnostics = {
       label: safeLabel,
       platform: process.platform,

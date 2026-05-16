@@ -8,6 +8,7 @@ const { moveFileNoOverwrite, temporaryJsonPath, writeTextFileAtomic } = require(
 const {
   WorkspaceRecoveryError,
   WorkspaceStore,
+  defaultWorkspacePath,
   looksLikeNativeWorkspace
 } = require('../../src/core/workspaceStore');
 
@@ -87,6 +88,31 @@ test('creates a default current-schema workspace when no file exists', async () 
     scriptConsole: false,
     payloadIdentifiers: false
   });
+});
+
+test('default workspace path uses the profile workspace directory unless POSTMETER_DATA_PATH is explicit', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-default-workspace-path-'));
+  const previousDataPath = process.env.POSTMETER_DATA_PATH;
+  const previousUserDataPath = process.env.POSTMETER_USER_DATA_PATH;
+  try {
+    process.env.POSTMETER_USER_DATA_PATH = path.join(temp, 'userData');
+    delete process.env.POSTMETER_DATA_PATH;
+    assert.equal(defaultWorkspacePath(), path.join(temp, 'userData', 'profile', 'workspace', 'workspace.json'));
+
+    process.env.POSTMETER_DATA_PATH = path.join(temp, 'explicit-workspace.json');
+    assert.equal(defaultWorkspacePath(), path.join(temp, 'explicit-workspace.json'));
+  } finally {
+    if (previousDataPath === undefined) {
+      delete process.env.POSTMETER_DATA_PATH;
+    } else {
+      process.env.POSTMETER_DATA_PATH = previousDataPath;
+    }
+    if (previousUserDataPath === undefined) {
+      delete process.env.POSTMETER_USER_DATA_PATH;
+    } else {
+      process.env.POSTMETER_USER_DATA_PATH = previousUserDataPath;
+    }
+  }
 });
 
 test('default workspace creation does not overwrite a file that appears before publish', async () => {

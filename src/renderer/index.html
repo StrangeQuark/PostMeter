@@ -17,30 +17,29 @@
     <div class="toolbar-group menu-group" aria-label="Create">
       <button id="newMenuButton" class="primary menu-trigger" aria-haspopup="menu" aria-expanded="false">New</button>
       <div id="newMenu" class="toolbar-menu" role="menu" aria-labelledby="newMenuButton" hidden>
-        <button id="newWorkspaceMenuButton" role="menuitem">Workspace</button>
         <button id="newRequestButton" role="menuitem">Request</button>
         <button id="newCollectionButton" role="menuitem">Collection</button>
         <button id="newFolderButton" role="menuitem">Folder</button>
         <button id="newEnvironmentMenuButton" role="menuitem">Environment</button>
         <button id="newRunnerMenuButton" role="menuitem">Runner</button>
         <button id="newPerformanceTestMenuButton" role="menuitem">Performance Test</button>
+        <button id="newWorkspaceMenuButton" role="menuitem">Workspace</button>
       </div>
     </div>
     <div class="toolbar-group menu-group" aria-label="Import">
       <button id="importMenuButton" class="menu-trigger" aria-haspopup="menu" aria-expanded="false">Import</button>
       <div id="importMenu" class="toolbar-menu" role="menu" aria-labelledby="importMenuButton" hidden>
-        <button id="importWorkspaceButton" role="menuitem">Workspace</button>
         <button id="importRequestButton" role="menuitem">Request</button>
         <button id="importCollectionButton" role="menuitem">Collection</button>
         <button id="importEnvironmentButton" role="menuitem">Environment</button>
         <button id="importRunnerButton" role="menuitem">Runner</button>
         <button id="importPerformanceTestButton" role="menuitem">Performance Test</button>
+        <button id="importWorkspaceButton" role="menuitem">Workspace</button>
       </div>
     </div>
     <div class="toolbar-group menu-group" aria-label="Export">
       <button id="exportMenuButton" class="menu-trigger" aria-haspopup="menu" aria-expanded="false">Export</button>
       <div id="exportMenu" class="toolbar-menu" role="menu" aria-labelledby="exportMenuButton" hidden>
-        <button id="exportWorkspaceButton" role="menuitem">Workspace</button>
         <div class="toolbar-submenu-row" role="none">
           <button id="exportRequestParentButton" role="menuitem" aria-haspopup="menu">Request</button>
           <div class="toolbar-submenu" role="menu" aria-label="Request export types">
@@ -66,6 +65,7 @@
         </div>
         <button id="exportRunnerDefinitionButton" role="menuitem">Runner</button>
         <button id="exportPerformanceTestMenuButton" role="menuitem">Performance Test</button>
+        <button id="exportWorkspaceButton" role="menuitem">Workspace</button>
       </div>
     </div>
     <label class="field inline environment-control">
@@ -79,9 +79,9 @@
       <nav class="sidebar-tabs" role="tablist" aria-label="Workspace panels" aria-orientation="vertical">
         <button id="collectionsPanelTab" class="sidebar-tab active" type="button" role="tab" data-sidebar-panel="collections" aria-selected="true" aria-controls="collectionsSidebarPanel">Collections</button>
         <button id="environmentsPanelTab" class="sidebar-tab" type="button" role="tab" data-sidebar-panel="environments" aria-selected="false" aria-controls="environmentsSidebarPanel">Environments</button>
-        <button id="workspacesPanelTab" class="sidebar-tab" type="button" role="tab" data-sidebar-panel="workspaces" aria-selected="false" aria-controls="workspacesSidebarPanel">Workspaces</button>
         <button id="runnersPanelTab" class="sidebar-tab" type="button" role="tab" data-sidebar-panel="runners" aria-selected="false" aria-controls="runnersSidebarPanel">Runners</button>
         <button id="performancePanelTab" class="sidebar-tab" type="button" role="tab" data-sidebar-panel="performance" aria-selected="false" aria-controls="performanceSidebarPanel">Performance</button>
+        <button id="workspacesPanelTab" class="sidebar-tab" type="button" role="tab" data-sidebar-panel="workspaces" aria-selected="false" aria-controls="workspacesSidebarPanel">Workspaces</button>
         <button id="historyPanelTab" class="sidebar-tab" type="button" role="tab" data-sidebar-panel="history" aria-selected="false" aria-controls="historySidebarPanel">History</button>
       </nav>
       <div class="sidebar-content">
@@ -99,13 +99,6 @@
           <div id="environmentsList" class="tree environment-list"></div>
         </section>
 
-        <section id="workspacesSidebarPanel" class="sidebar-panel" role="tabpanel" aria-labelledby="workspacesPanelTab" data-sidebar-panel-content="workspaces" hidden>
-          <div class="sidebar-panel-header">
-            <h2>Workspaces</h2>
-          </div>
-          <div id="workspacesList" class="tree workspace-list"></div>
-        </section>
-
         <section id="runnersSidebarPanel" class="sidebar-panel" role="tabpanel" aria-labelledby="runnersPanelTab" data-sidebar-panel-content="runners" hidden>
           <div class="sidebar-panel-header">
             <h2>Runners</h2>
@@ -119,6 +112,13 @@
             <button id="calibratePerformanceButton" type="button" class="sidebar-header-action">Calibrate</button>
           </div>
           <div id="performanceList" class="tree performance-list"></div>
+        </section>
+
+        <section id="workspacesSidebarPanel" class="sidebar-panel" role="tabpanel" aria-labelledby="workspacesPanelTab" data-sidebar-panel-content="workspaces" hidden>
+          <div class="sidebar-panel-header">
+            <h2>Workspaces</h2>
+          </div>
+          <div id="workspacesList" class="tree workspace-list"></div>
         </section>
 
         <section id="historySidebarPanel" class="sidebar-panel" role="tabpanel" aria-labelledby="historyPanelTab" data-sidebar-panel-content="history" hidden>

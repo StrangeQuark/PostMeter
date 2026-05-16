@@ -3,6 +3,7 @@ const path = require('node:path');
 const { defaultSessionState, normalizeSessionState } = require('../src/core/sessionState');
 const {
   pathExists,
+  postMeterProfileDirectory,
   writeJsonFileAtomic,
   writeJsonFileAtomicSync
 } = require('../src/core/workspacePersistence');
@@ -46,7 +47,7 @@ class SessionStore {
 }
 
 function defaultSessionPath(userDataPath) {
-  return path.join(path.resolve(userDataPath), 'session.json');
+  return path.join(postMeterProfileDirectory(userDataPath), 'session.json');
 }
 
 module.exports = {

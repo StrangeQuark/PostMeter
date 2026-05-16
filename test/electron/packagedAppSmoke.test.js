@@ -22,6 +22,7 @@ const {
   validatePersistenceArtifacts,
   writeSmokeLog
 } = require('../../scripts/validatePackagedAppSmoke');
+const { postMeterWorkspaceDirectory } = require('../../src/core/workspacePersistence');
 
 test('packaged smoke validation accepts managed workspace filenames', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-packaged-smoke-test-'));
@@ -51,8 +52,7 @@ test('packaged smoke validates default platform persistence paths in an isolated
   try {
     const env = await isolatedDefaultPathEnv(directory);
     const userDataPath = expectedDefaultUserDataPath(env);
-    const workspacePath = path.join(env.USERPROFILE || env.HOME, '.postmeter', 'workspace.json');
-    await fs.mkdir(userDataPath, { recursive: true });
+    const workspacePath = path.join(postMeterWorkspaceDirectory(userDataPath), 'workspace.json');
     await fs.mkdir(path.dirname(workspacePath), { recursive: true });
     await fs.writeFile(workspacePath, JSON.stringify({
       schemaVersion: 11,

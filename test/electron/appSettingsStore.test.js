@@ -220,14 +220,19 @@ test('app settings store reads legacy workspace maps as transient local fallback
   assert.equal(store.settingsForWorkspace('New Workspace.json').diagnostics.requestResponseLogging.urls, false);
 });
 
-test('default settings path uses settings.json beside POSTMETER_DATA_PATH unless explicitly overridden', async () => {
+test('default settings path uses the profile directory unless explicitly overridden', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-app-settings-path-'));
   const previousSettingsPath = process.env.POSTMETER_SETTINGS_PATH;
   const previousDataPath = process.env.POSTMETER_DATA_PATH;
+  const previousUserDataPath = process.env.POSTMETER_USER_DATA_PATH;
   try {
     delete process.env.POSTMETER_SETTINGS_PATH;
+    process.env.POSTMETER_USER_DATA_PATH = path.join(temp, 'userData');
     process.env.POSTMETER_DATA_PATH = path.join(temp, 'custom-workspace.json');
-    assert.equal(defaultSettingsPath(), path.join(temp, 'settings.json'));
+    assert.equal(defaultSettingsPath(), path.join(temp, 'userData', 'profile', 'settings.json'));
+
+    delete process.env.POSTMETER_USER_DATA_PATH;
+    assert.equal(defaultSettingsPath(), path.join(temp, 'userData', 'profile', 'settings.json'));
 
     process.env.POSTMETER_SETTINGS_PATH = path.join(temp, 'explicit-settings.json');
     assert.equal(defaultSettingsPath(), path.join(temp, 'explicit-settings.json'));
@@ -241,6 +246,11 @@ test('default settings path uses settings.json beside POSTMETER_DATA_PATH unless
       delete process.env.POSTMETER_DATA_PATH;
     } else {
       process.env.POSTMETER_DATA_PATH = previousDataPath;
+    }
+    if (previousUserDataPath === undefined) {
+      delete process.env.POSTMETER_USER_DATA_PATH;
+    } else {
+      process.env.POSTMETER_USER_DATA_PATH = previousUserDataPath;
     }
   }
 });
