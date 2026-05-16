@@ -39,6 +39,7 @@ test('Performance model accepts the eight V1 types and rejects unsafe limits for
       request: { method: 'GET', url: 'https://example.test/performance' }
     });
     assert.equal(candidate.type, type);
+    assert.equal(candidate.csvVariables.enabled, false);
     assert.doesNotThrow(() => assertPerformanceTestPayload(candidate));
 
     const unsafe = type === 'diagnosis'
@@ -60,6 +61,38 @@ test('Performance model accepts the eight V1 types and rejects unsafe limits for
       type === 'soak' ? /maxDurationSeconds/ : /maxTotalRequests/
     );
   }
+});
+
+test('Performance model defaults CSV variables off but preserves legacy configured CSV data', () => {
+  assert.equal(performanceTestModel({
+    request: { method: 'GET', url: 'https://example.test/performance' }
+  }).csvVariables.enabled, false);
+  assert.equal(performanceTestModel({
+    request: { method: 'GET', url: 'https://example.test/performance' },
+    csvVariables: {}
+  }).csvVariables.enabled, false);
+  assert.equal(performanceTestModel({
+    request: { method: 'GET', url: 'https://example.test/performance' },
+    csvVariables: { schema: 'name', values: 'alice' }
+  }).csvVariables.enabled, true);
+});
+
+test('Performance model preserves original auth for auto-refreshing request auth', () => {
+  const performanceTest = performanceTestModel({
+    request: {
+      method: 'GET',
+      url: 'https://example.test/performance',
+      auth: { type: 'autoRefresh' },
+      refreshingAuthOriginalAuth: { type: 'bearer', token: '{{ACCESS_TOKEN}}' }
+    }
+  });
+
+  assert.deepEqual(performanceTest.request.auth, { type: 'autoRefresh' });
+  assert.deepEqual(performanceTest.request.refreshingAuthOriginalAuth, {
+    type: 'bearer',
+    token: '{{ACCESS_TOKEN}}'
+  });
+  assert.doesNotThrow(() => assertPerformanceTestPayload(performanceTest));
 });
 
 test('Performance model preserves independent settings for each V1 type', () => {

@@ -7,6 +7,7 @@ const {
 } = require('./variableScope');
 
 const MILLIS_PER_SECOND = 1000;
+const AUTO_REFRESH_AUTH_TYPES = new Set(['bearer', 'cookie']);
 
 function createAuthRefreshManager(authRefresh, options = {}) {
   return new AuthRefreshManager(authRefresh, options);
@@ -29,6 +30,10 @@ class AuthRefreshManager {
     this.expiresAtMillis = 0;
     this.refreshCount = 0;
     this.lastError = '';
+    this.lastAccessToken = '';
+    this.lastRefreshToken = '';
+    this.lastCookieName = '';
+    this.lastCookieValue = '';
   }
 
   get enabled() {
@@ -46,25 +51,25 @@ class AuthRefreshManager {
 
   async beforeRun(scope = {}) {
     if (!this.enabled || this.beforeRunChecked) {
-      return refreshSnapshot(scope, this.stats());
+      return refreshSnapshot(scope, this.stats(), {}, this.autoRefreshAuth());
     }
     const now = this.markStarted();
     this.beforeRunChecked = true;
     if (!this.shouldRefreshBeforeRun(scope, now)) {
-      return refreshSnapshot(scope, this.stats());
+      return refreshSnapshot(scope, this.stats(), {}, this.autoRefreshAuth());
     }
     return this.ensureFresh(scope, { force: true, reason: 'before-run' });
   }
 
   async ensureFresh(scope = {}, options = {}) {
     if (!this.enabled) {
-      return refreshSnapshot(scope, this.stats());
+      return refreshSnapshot(scope, this.stats(), {}, this.autoRefreshAuth());
     }
     const now = Number(options.now || this.now());
     this.markStarted(now);
     const force = options.force === true;
     if (!force && !this.shouldRefresh(scope, now)) {
-      return refreshSnapshot(scope, this.stats());
+      return refreshSnapshot(scope, this.stats(), {}, this.autoRefreshAuth());
     }
     if (this.refreshPromise) {
       return this.refreshPromise;
@@ -151,7 +156,7 @@ class AuthRefreshManager {
           refreshCount: this.refreshCount
         }
       });
-      return refreshSnapshot(scope, this.stats(), result);
+      return refreshSnapshot(scope, this.stats(), result, this.autoRefreshAuth());
     } catch (error) {
       this.lastError = error?.message || String(error);
       await this.recordDiagnosticEvent({
@@ -167,7 +172,7 @@ class AuthRefreshManager {
         }
       });
       if (this.config.failurePolicy === 'continue') {
-        return refreshSnapshot(scope, this.stats(), { refreshed: false, error: this.lastError });
+        return refreshSnapshot(scope, this.stats(), { refreshed: false, error: this.lastError }, this.autoRefreshAuth());
       }
       throw error;
     }
@@ -195,7 +200,7 @@ class AuthRefreshManager {
       });
     }
 
-    const mainStep = await this.sendRefreshRequest(this.config.request, scope, now);
+    const mainStep = await this.sendRefreshRequest(this.requestWithAutoRefreshRefreshTokenAuth(this.config.request), scope, now);
     tokenForExpiry = this.applyRefreshOutputs(mainOutputs, mainStep, scope, variables, {
       tokenForExpiry,
       requireRefreshToken: false
@@ -250,7 +255,7 @@ class AuthRefreshManager {
   applyRefreshOutputs(outputs = [], step = {}, scope = {}, variables = [], options = {}) {
     let tokenForExpiry = options.tokenForExpiry || '';
     for (const output of outputs || []) {
-      if (!output?.variable || !output?.path) {
+      if (!output?.path) {
         continue;
       }
       const value = extractRefreshOutput(output, step.payload, step.response, scope);
@@ -261,12 +266,50 @@ class AuthRefreshManager {
         throw new Error(missingRefreshPathMessage(output.path, step.response, step.payload, output.source));
       }
       const text = String(value);
-      setVariable(variables, output.variable, text);
+      if (output.variable) {
+        setVariable(variables, output.variable, text);
+      }
+      this.rememberAutoRefreshOutput(output, text);
       if (output.slot === 'accessToken' || output.variable === this.config.accessTokenVariable) {
         tokenForExpiry = text;
       }
     }
     return tokenForExpiry;
+  }
+
+  rememberAutoRefreshOutput(output = {}, value = '') {
+    if (output.slot === 'accessToken') {
+      this.lastAccessToken = value;
+    } else if (output.slot === 'refreshToken') {
+      this.lastRefreshToken = value;
+    } else if (output.slot === 'cookie') {
+      this.lastCookieName = String(output.path || '').trim();
+      this.lastCookieValue = value;
+    }
+  }
+
+  requestWithAutoRefreshRefreshTokenAuth(request = {}) {
+    if (request?.auth?.type !== 'autoRefreshRefreshToken' || !this.lastRefreshToken) {
+      return request;
+    }
+    return {
+      ...request,
+      auth: { type: 'bearer', token: this.lastRefreshToken }
+    };
+  }
+
+  autoRefreshAuth() {
+    const authType = String(this.config.authType || '').trim();
+    if (!AUTO_REFRESH_AUTH_TYPES.has(authType)) {
+      return null;
+    }
+    if (authType === 'bearer' && this.lastAccessToken) {
+      return { type: 'bearer', token: this.lastAccessToken };
+    }
+    if (authType === 'cookie' && this.lastCookieName && this.lastCookieValue) {
+      return { type: 'cookie', value: `${this.lastCookieName}=${this.lastCookieValue}` };
+    }
+    return null;
   }
 }
 
@@ -357,31 +400,15 @@ function extractCookie(cookies = [], name = '') {
 }
 
 function missingRefreshPathMessage(path, response = {}, payload = {}, source = 'body') {
-  const status = Number(response?.statusCode || response?.status || 0);
-  const statusText = status ? ` Status ${status}.` : '';
   const keys = payload && typeof payload === 'object' && !Array.isArray(payload)
     ? Object.keys(payload).filter(Boolean).slice(0, 8)
     : [];
-  const keysText = keys.length ? ` Response keys: ${keys.join(', ')}.` : '';
-  const bodyPreview = refreshBodyPreview(response?.body);
-  const bodyText = bodyPreview ? ` Body preview: ${bodyPreview}` : '';
   const sourceText = source && source !== 'body' ? ` ${source} ` : ' ';
-  return `Auth refresh response did not include${sourceText}"${path}".${statusText}${keysText}${bodyText}`;
-}
-
-function refreshBodyPreview(body) {
-  const text = String(body == null ? '' : body).replace(/\s+/g, ' ').trim();
-  if (!text) {
-    return '';
+  const lines = [`Auth refresh response did not include${sourceText}"${path}".`];
+  if (keys.length) {
+    lines.push('', 'Response keys:', ...keys);
   }
-  return redactRefreshBodyPreview(text.slice(0, 240));
-}
-
-function redactRefreshBodyPreview(text) {
-  return String(text || '')
-    .replace(/\beyJ[A-Za-z0-9_-]+?\.[A-Za-z0-9_-]+?(?:\.[A-Za-z0-9_-]+)?\b/g, '[jwt]')
-    .replace(/("(?:access|refresh|id)?_?token"\s*:\s*")[^"]+"/gi, '$1[redacted]"')
-    .replace(/("(?:jwtToken|accessToken|refreshToken|idToken)"\s*:\s*")[^"]+"/gi, '$1[redacted]"');
+  return lines.join('\n');
 }
 
 function extractPath(source, path) {
@@ -450,15 +477,44 @@ function jwtExpiresAtMillis(token) {
   return 0;
 }
 
-function refreshSnapshot(scope, stats, result = {}) {
+function refreshSnapshot(scope, stats, result = {}, autoRefreshAuth = null) {
   return {
     ...result,
     environment: scope.environment,
     collectionVariables: scope.collectionVariables,
     globals: scope.globals,
     cookies: scope.cookies,
+    autoRefreshAuth,
     stats
   };
+}
+
+function requestWithAutoRefreshAuth(request = {}, authRefresh = {}, autoRefreshAuth = null, options = {}) {
+  if (!autoRefreshAuth || authRefresh?.enabled !== true) {
+    return request;
+  }
+  const configuredType = String(authRefresh.authType || '').trim();
+  const requestType = String(request?.auth?.type || 'none').trim();
+  if (!AUTO_REFRESH_AUTH_TYPES.has(configuredType)) {
+    return request;
+  }
+  const matchConfiguredAuthType = options.matchConfiguredAuthType !== false;
+  if (requestType !== 'autoRefresh' && (!matchConfiguredAuthType || requestType !== configuredType)) {
+    return request;
+  }
+  if (configuredType === 'bearer' && autoRefreshAuth.type === 'bearer' && autoRefreshAuth.token) {
+    return {
+      ...request,
+      auth: { type: 'bearer', token: autoRefreshAuth.token }
+    };
+  }
+  if (configuredType === 'cookie' && autoRefreshAuth.type === 'cookie' && autoRefreshAuth.value) {
+    return {
+      ...request,
+      auth: { type: 'cookie', value: autoRefreshAuth.value }
+    };
+  }
+  return request;
 }
 
 module.exports = {
@@ -467,5 +523,6 @@ module.exports = {
   jwtExpiresAtMillis,
   missingRefreshPathMessage,
   normalizeAuthRefreshConfig,
+  requestWithAutoRefreshAuth,
   refreshExpiresAtMillis
 };

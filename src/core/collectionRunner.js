@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const { resolveEnvironmentValue } = require('./environmentResolver');
-const { createAuthRefreshManager } = require('./authRefresh');
+const { createAuthRefreshManager, requestWithAutoRefreshAuth } = require('./authRefresh');
 const { sendRequest } = require('./httpClient');
 const { normalizeRunnerRequestIterations, runnerModel, walkRequests } = require('./models');
 const {
@@ -72,6 +72,9 @@ async function runCollection(collection, environment, options = {}) {
     if (Array.isArray(snapshot.cookies)) {
       runnerCookies = snapshot.cookies;
     }
+    if (snapshot.autoRefreshAuth) {
+      autoRefreshAuth = snapshot.autoRefreshAuth;
+    }
   };
   const results = [];
   const retainResults = options.retainResults !== false;
@@ -80,6 +83,7 @@ async function runCollection(collection, environment, options = {}) {
   let recordedFailures = 0;
   const progress = typeof options.onProgress === 'function' ? options.onProgress : () => {};
   const refreshedAuthByRequestId = new Map();
+  let autoRefreshAuth = null;
   const runRequestBudget = {
     calls: 0,
     max: Math.min(
@@ -102,7 +106,6 @@ async function runCollection(collection, environment, options = {}) {
     if (!targetEntry) {
       throw new Error(`pm.execution.runRequest target was not found: ${payload?.target || ''}.`);
     }
-    const targetRequest = requestWithRefreshedAuth(targetEntry.request, refreshedAuthByRequestId);
     const targetFolderScope = folderScopeForEntry(targetEntry);
     const scopeState = runRequestScopeState(
       payload,
@@ -121,6 +124,15 @@ async function runCollection(collection, environment, options = {}) {
     if (Array.isArray(authRefreshSnapshot.cookies)) {
       scopeState.cookies = authRefreshSnapshot.cookies;
     }
+    if (authRefreshSnapshot.autoRefreshAuth) {
+      autoRefreshAuth = authRefreshSnapshot.autoRefreshAuth;
+    }
+    const targetRequest = requestWithAutoRefreshAuth(
+      requestWithRefreshedAuth(targetEntry.request, refreshedAuthByRequestId),
+      authRefreshManager.config,
+      authRefreshSnapshot.autoRefreshAuth || autoRefreshAuth,
+      { matchConfiguredAuthType: options.autoRefreshMatchingAuthTypes !== false }
+    );
     const targetState = createScriptedRequestState(targetRequest, runnerEnvironment, {
       collectionAuth: collection?.auth || { type: 'none' },
       collectionScripts: collection?.scripts || {},
@@ -206,11 +218,17 @@ async function runCollection(collection, environment, options = {}) {
     const iterationData = Array.isArray(entry.request?.iterationData)
       ? entry.request.iterationData
       : (options.iterationData || []);
-    const requestForExecution = requestWithRefreshedAuth(entry.request, refreshedAuthByRequestId);
+    let requestForExecution = requestWithRefreshedAuth(entry.request, refreshedAuthByRequestId);
     const folderScope = folderScopeForEntry(entry);
     const startedAt = new Date().toISOString();
     try {
       applyAuthRefreshSnapshot(await authRefreshManager.ensureFresh(authRefreshScope()));
+      requestForExecution = requestWithAutoRefreshAuth(
+        requestWithRefreshedAuth(entry.request, refreshedAuthByRequestId),
+        authRefreshManager.config,
+        autoRefreshAuth,
+        { matchConfiguredAuthType: options.autoRefreshMatchingAuthTypes !== false }
+      );
       const scriptedRequest = await runScriptedRequestLifecycle(
         createScriptedRequestState(requestForExecution, runnerEnvironment, {
           collectionAuth: collection?.auth || { type: 'none' },
@@ -433,6 +451,7 @@ async function runRunner(runner, environment, options = {}) {
   };
   const result = await runCollection(runnerCollection, environment, {
     ...options,
+    autoRefreshMatchingAuthTypes: false,
     plannedRequests: options.plannedRequests || requests.length,
     stopOnFailure: options.stopOnFailure ?? normalizedRunner.stopOnFailure
   });

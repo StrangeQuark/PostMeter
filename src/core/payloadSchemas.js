@@ -20,6 +20,8 @@ const AUTH_TYPE_VALUES = [
   'basic',
   'apiKey',
   'cookie',
+  'autoRefresh',
+  'autoRefreshRefreshToken',
   'oauth2',
   'clientCertificate',
   'digest',

@@ -36,6 +36,12 @@
     if (type === 'cookie') {
       return { type, value: auth.value ?? '' };
     }
+    if (type === 'autoRefresh') {
+      return { type };
+    }
+    if (type === 'autoRefreshRefreshToken') {
+      return { type };
+    }
     if (type === 'oauth2') {
       return {
         type,
@@ -184,6 +190,15 @@
     if (lowered === 'apikey') {
       return 'apiKey';
     }
+    if (lowered === 'autorefresh' || lowered === 'autorefreshtoken') {
+      return 'autoRefresh';
+    }
+    if (lowered === 'autorefreshrefreshtoken' || lowered === 'refreshingauthrefreshtoken') {
+      return 'autoRefreshRefreshToken';
+    }
+    if (lowered === 'refreshingauthaccesstoken' || lowered === 'userefreshingaccesstoken') {
+      return 'autoRefresh';
+    }
     if (lowered === 'clientcertificate' || lowered === 'clientcert' || lowered === 'clientcertificateauth') {
       return 'clientCertificate';
     }
@@ -325,6 +340,12 @@
         type,
         value: state.cookieValue ?? ''
       });
+    }
+    if (type === 'autoRefresh') {
+      return { type };
+    }
+    if (type === 'autoRefreshRefreshToken') {
+      return { type };
     }
     if (type === 'oauth2') {
       const grantType = normalizeSchemaEnumValue('oauth2GrantTypes', state.oauthGrantType, 'authorizationCode');

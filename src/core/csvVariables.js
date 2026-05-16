@@ -24,6 +24,14 @@
     };
   }
 
+  function normalizeCsvVariableDataDefaultOff(value = undefined) {
+    const input = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    if (!Object.keys(input).length) {
+      return normalizeCsvVariableData({ enabled: false });
+    }
+    return normalizeCsvVariableData(input);
+  }
+
   function normalizeCsvVariableActiveSource(source, values, filePath) {
     const hasValues = Boolean(String(values || '').trim());
     const hasFile = Boolean(String(filePath || '').trim());
@@ -209,6 +217,7 @@
     csvVariablesEnabled,
     csvVariablesToIterationRows,
     normalizeCsvVariableData,
+    normalizeCsvVariableDataDefaultOff,
     parseCsvRecords,
     parseCsvVariableSchema
   };

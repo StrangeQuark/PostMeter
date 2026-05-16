@@ -368,6 +368,8 @@ test('accepts structurally valid IPC payloads', () => {
       queryParams: [],
       headers: [],
       bodyType: 'NONE',
+      auth: { type: 'autoRefresh' },
+      refreshingAuthOriginalAuth: { type: 'bearer', token: '{{ACCESS_TOKEN}}' },
       source: {
         collectionId: 'c1',
         requestId: 'r1'

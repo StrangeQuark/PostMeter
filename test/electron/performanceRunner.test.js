@@ -93,6 +93,103 @@ test('performance auth refresh is shared across concurrent workers', async () =>
   assert.equal(result.authRefresh.refreshCount, 1);
 });
 
+test('performance auth refresh injects bearer tokens into matching request auth automatically', async () => {
+  const performanceTest = performanceTestModel({
+    id: 'perf-auto-bearer-refresh',
+    name: 'Auto Bearer Performance',
+    type: 'throughput',
+    request: {
+      id: 'auto-bearer-resource',
+      name: 'Auto Bearer Resource',
+      method: 'GET',
+      url: 'https://api.example.test/resource',
+      auth: { type: 'bearer', token: 'stale-token' }
+    },
+    config: { iterations: 1, concurrency: 1, durationSeconds: 0, rampSteps: 1, spikeMultiplier: 1 },
+    safetyLimits: { maxTotalRequests: 1, maxConcurrency: 1, maxDurationSeconds: 10 },
+    authRefresh: {
+      enabled: true,
+      mode: 'interval',
+      authType: 'bearer',
+      accessTokenVariable: '',
+      refreshBeforeRun: true,
+      outputs: [{ slot: 'accessToken', source: 'body', path: 'access_token', variable: '' }],
+      request: {
+        id: 'refresh-auth',
+        name: 'Refresh Auth',
+        method: 'POST',
+        url: 'https://auth.example.test/token'
+      }
+    }
+  });
+  const observed = [];
+
+  const result = await runPerformanceTest(performanceTest, { id: 'env', name: 'Env', variables: [] }, {
+    sendRequest: async (request) => {
+      if (request.id === 'refresh-auth') {
+        return response(200, '{"access_token":"perf-auto-bearer","expires_in":600}');
+      }
+      observed.push(request.auth);
+      return response();
+    }
+  });
+
+  assert.equal(result.completedRequests, 1);
+  assert.equal(result.failedRequests, 0);
+  assert.deepEqual(observed, [{ type: 'bearer', token: 'perf-auto-bearer' }]);
+  assert.equal(result.authRefresh.refreshCount, 1);
+});
+
+test('performance auth refresh injects refreshed cookies into matching request auth automatically', async () => {
+  const performanceTest = performanceTestModel({
+    id: 'perf-auto-cookie-refresh',
+    name: 'Auto Cookie Performance',
+    type: 'throughput',
+    request: {
+      id: 'auto-cookie-resource',
+      name: 'Auto Cookie Resource',
+      method: 'GET',
+      url: 'https://api.example.test/resource',
+      auth: { type: 'autoRefresh' }
+    },
+    config: { iterations: 1, concurrency: 1, durationSeconds: 0, rampSteps: 1, spikeMultiplier: 1 },
+    safetyLimits: { maxTotalRequests: 1, maxConcurrency: 1, maxDurationSeconds: 10 },
+    authRefresh: {
+      enabled: true,
+      mode: 'interval',
+      authType: 'cookie',
+      accessTokenVariable: '',
+      refreshBeforeRun: true,
+      outputs: [{ slot: 'cookie', source: 'cookie', path: 'sid', variable: '' }],
+      request: {
+        id: 'refresh-cookie',
+        name: 'Refresh Cookie',
+        method: 'POST',
+        url: 'https://auth.example.test/session'
+      }
+    }
+  });
+  const observed = [];
+
+  const result = await runPerformanceTest(performanceTest, { id: 'env', name: 'Env', variables: [] }, {
+    sendRequest: async (request) => {
+      if (request.id === 'refresh-cookie') {
+        return {
+          ...response(200, '{}'),
+          updatedCookies: [{ enabled: true, name: 'sid', value: 'perf-cookie', domain: 'example.test', path: '/' }]
+        };
+      }
+      observed.push(request.auth);
+      return response();
+    }
+  });
+
+  assert.equal(result.completedRequests, 1);
+  assert.equal(result.failedRequests, 0);
+  assert.deepEqual(observed, [{ type: 'cookie', value: 'sid=perf-cookie' }]);
+  assert.equal(result.authRefresh.refreshCount, 1);
+});
+
 test('performance auth refresh can rotate refresh tokens with a separate request before getting access tokens', async () => {
   const performanceTest = performanceTestModel({
     id: 'perf-refresh-token-request',
@@ -169,7 +266,7 @@ test('performance auth refresh can rotate refresh tokens with a separate request
 });
 
 test('performance auth refresh executes refresh requests with every supported auth type', async () => {
-  for (const type of AUTH_TYPE_VALUES) {
+  for (const type of AUTH_TYPE_VALUES.filter((value) => !value.startsWith('autoRefresh'))) {
     const performanceTest = performanceTestModel({
       id: `perf-refresh-auth-${type}`,
       name: `Refresh Performance ${type}`,

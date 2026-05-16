@@ -59,10 +59,34 @@ test('normalizes workspace-owned runners with request clones and none environmen
   assert.equal(runner.authRefresh.refreshTokenRequest.name, 'Rotate Refresh');
   assert.equal(runner.authRefresh.refreshTokenRequest.method, 'PUT');
   assert.equal(runner.authRefresh.refreshTokenRequest.url, 'https://auth.example.test/refresh-token');
+  assert.equal(runner.csvVariables.enabled, false);
   assert.equal(runner.requests[0].id, 'runner-request-1');
   assert.equal(runner.requests[0].iterations, 5);
   assert.equal(runner.requests[0].source.requestId, 'source-request');
   assert.deepEqual(runner.requests[0].source.folderPath, ['Folder']);
+});
+
+test('runner model defaults CSV variables off but preserves legacy configured CSV data', () => {
+  assert.equal(runnerModel().csvVariables.enabled, false);
+  assert.equal(runnerModel({ csvVariables: {} }).csvVariables.enabled, false);
+  assert.equal(runnerModel({ csvVariables: { schema: 'name', values: 'alice' } }).csvVariables.enabled, true);
+});
+
+test('runner model preserves original auth for runner requests using refreshing auth', () => {
+  const runner = runnerModel({
+    requests: [{
+      name: 'Uses Refreshing Auth',
+      url: 'https://api.example.test/protected',
+      auth: { type: 'autoRefresh' },
+      refreshingAuthOriginalAuth: { type: 'bearer', token: '{{ACCESS_TOKEN}}' }
+    }]
+  });
+
+  assert.deepEqual(runner.requests[0].auth, { type: 'autoRefresh' });
+  assert.deepEqual(runner.requests[0].refreshingAuthOriginalAuth, {
+    type: 'bearer',
+    token: '{{ACCESS_TOKEN}}'
+  });
 });
 
 test('normalizes runner request iterations to a bounded positive integer', () => {

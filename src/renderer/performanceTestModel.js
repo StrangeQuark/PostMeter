@@ -1,17 +1,5 @@
 (function attachPerformanceTestModel(global) {
-  const CSV_VARIABLES = global.PostMeterCsvVariables || {
-    normalizeCsvVariableData: () => ({
-      enabled: true,
-      schema: '',
-      values: '',
-      filePath: '',
-      sourceName: '',
-      activeSource: '',
-      reuseFirstRow: false,
-      loopRows: false,
-      continueWithoutRows: false
-    })
-  };
+  const CSV_VARIABLES = global.PostMeterCsvVariables || fallbackCsvVariablesApi();
   const CAPTURE_POLICY = global.PostMeterResultCapturePolicy || {
     normalizeCapturePolicy: (value = {}) => ({
       responseBody: value.responseBody || 'all',
@@ -124,6 +112,33 @@
     'BINARY'
   ];
 
+  function fallbackCsvVariablesApi() {
+    const normalizeCsvVariableData = (value = {}) => {
+      const input = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+      const values = String(input.values || '');
+      const filePath = String(input.filePath || '');
+      return {
+        enabled: input.enabled !== false,
+        schema: String(input.schema || ''),
+        values,
+        filePath,
+        sourceName: String(input.sourceName || ''),
+        activeSource: input.activeSource === 'inline' && values.trim() ? 'inline' : (filePath.trim() ? 'file' : (values.trim() ? 'inline' : '')),
+        reuseFirstRow: input.reuseFirstRow === true,
+        loopRows: input.reuseFirstRow !== true && input.loopRows === true,
+        continueWithoutRows: input.reuseFirstRow !== true && input.loopRows !== true && input.continueWithoutRows === true
+      };
+    };
+    const normalizeCsvVariableDataDefaultOff = (value = undefined) => {
+      const input = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+      if (!Object.keys(input).length) {
+        return normalizeCsvVariableData({ enabled: false });
+      }
+      return normalizeCsvVariableData(input);
+    };
+    return { normalizeCsvVariableData, normalizeCsvVariableDataDefaultOff };
+  }
+
   function newPerformanceTestObject(name = 'New Performance Test') {
     return normalizePerformanceTest({
       id: randomId(),
@@ -138,7 +153,7 @@
       capturePolicy: CAPTURE_POLICY.normalizeCapturePolicy({}, 'performance'),
       authRefresh: normalizeAuthRefreshConfig(),
       typeSettings: defaultPerformanceTypeSettings(),
-      csvVariables: CSV_VARIABLES.normalizeCsvVariableData(),
+      csvVariables: CSV_VARIABLES.normalizeCsvVariableDataDefaultOff(),
       resultsMetadata: {}
     });
   }
@@ -172,7 +187,7 @@
       safetyLimits: legacySafetyLimits
     }, workspace);
     syncPerformanceActiveTypeSettings(test);
-    test.csvVariables = CSV_VARIABLES.normalizeCsvVariableData(test.csvVariables);
+    test.csvVariables = CSV_VARIABLES.normalizeCsvVariableDataDefaultOff(test.csvVariables);
     test.capturePolicy = CAPTURE_POLICY.normalizeCapturePolicy(test.capturePolicy, 'performance', { diagnostic: test.type === 'diagnosis' });
     test.authRefresh = normalizeAuthRefreshConfig(test.authRefresh);
     test.resultsMetadata = normalizePerformanceResultsMetadata(test.resultsMetadata);
@@ -181,7 +196,7 @@
 
   function normalizePerformanceRequest(request = {}) {
     const method = String(request.method || 'GET').toUpperCase();
-    return {
+    const normalized = {
       id: String(request.id || randomId()),
       name: String(request.name || 'Performance Request'),
       protocol: String(request.protocol || 'http'),
@@ -206,6 +221,10 @@
         : { enabled: false, storeResponses: true },
       autoHeaders: normalizeRequestAutoHeaders(request.autoHeaders)
     };
+    if (normalized.auth?.type === 'autoRefresh' && request.refreshingAuthOriginalAuth && typeof request.refreshingAuthOriginalAuth === 'object') {
+      normalized.refreshingAuthOriginalAuth = cloneJson(request.refreshingAuthOriginalAuth) || { type: 'none' };
+    }
+    return normalized;
   }
 
   function normalizeRequestAutoHeaders(autoHeaders = {}) {
@@ -287,7 +306,7 @@
     const seen = new Set();
     for (const output of source.slice(0, 20)) {
       const item = normalizeAuthRefreshOutput(output);
-      if (!item.variable || !item.path) {
+      if (!item.path) {
         continue;
       }
       const key = `${item.slot}:${item.source}:${item.path}:${item.variable}`;

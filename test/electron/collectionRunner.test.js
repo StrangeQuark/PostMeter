@@ -229,6 +229,93 @@ test('runner auth refresh updates variables before runner requests', async () =>
   assert.equal(result.authRefresh.refreshCount, 1);
 });
 
+test('runner auth refresh injects bearer tokens only into requests using refreshing auth', async () => {
+  const runner = {
+    id: 'runner-auto-bearer-refresh',
+    name: 'Runner Auto Bearer Refresh',
+    authRefresh: {
+      enabled: true,
+      mode: 'interval',
+      authType: 'bearer',
+      accessTokenVariable: '',
+      refreshBeforeRun: true,
+      outputs: [{ slot: 'accessToken', source: 'body', path: 'access_token', variable: '' }],
+      request: {
+        id: 'refresh-auth',
+        name: 'Refresh Auth',
+        method: 'POST',
+        url: 'https://auth.example.test/token'
+      }
+    },
+    requests: [
+      { ...requestModel({ id: 'bearer-resource', name: 'Bearer Resource', url: 'https://api.example.test/bearer', auth: { type: 'bearer', token: 'stale-token' } }), iterations: 1 },
+      { ...requestModel({ id: 'auto-resource', name: 'Auto Resource', url: 'https://api.example.test/auto', auth: { type: 'autoRefresh' } }), iterations: 1 }
+    ]
+  };
+  const observed = [];
+  const result = await runRunner(runner, { id: 'env', name: 'Env', variables: [] }, {
+    sendRequest: async (request) => {
+      if (request.id === 'refresh-auth') {
+        return response(200, JSON.stringify({ access_token: 'fresh-auto-bearer', expires_in: 600 }));
+      }
+      observed.push({ id: request.id, auth: request.auth });
+      return response(200, '{}');
+    }
+  });
+
+  assert.equal(result.passed, true);
+  assert.deepEqual(observed, [
+    { id: 'bearer-resource', auth: { type: 'bearer', token: 'stale-token' } },
+    { id: 'auto-resource', auth: { type: 'bearer', token: 'fresh-auto-bearer' } }
+  ]);
+  assert.equal(result.authRefresh.refreshCount, 1);
+});
+
+test('runner auth refresh injects refreshed cookies only into requests using refreshing auth', async () => {
+  const runner = {
+    id: 'runner-auto-cookie-refresh',
+    name: 'Runner Auto Cookie Refresh',
+    authRefresh: {
+      enabled: true,
+      mode: 'interval',
+      authType: 'cookie',
+      accessTokenVariable: '',
+      refreshBeforeRun: true,
+      outputs: [{ slot: 'cookie', source: 'cookie', path: 'sid', variable: '' }],
+      request: {
+        id: 'refresh-cookie',
+        name: 'Refresh Cookie',
+        method: 'POST',
+        url: 'https://auth.example.test/session'
+      }
+    },
+    requests: [
+      { ...requestModel({ id: 'cookie-resource', name: 'Cookie Resource', url: 'https://api.example.test/cookie', auth: { type: 'cookie', value: 'sid=stale' } }), iterations: 1 },
+      { ...requestModel({ id: 'auto-cookie-resource', name: 'Auto Cookie Resource', url: 'https://api.example.test/auto-cookie', auth: { type: 'autoRefresh' } }), iterations: 1 }
+    ]
+  };
+  const observed = [];
+  const result = await runRunner(runner, { id: 'env', name: 'Env', variables: [] }, {
+    sendRequest: async (request) => {
+      if (request.id === 'refresh-cookie') {
+        return {
+          ...response(200, '{}'),
+          updatedCookies: [{ enabled: true, name: 'sid', value: 'fresh-cookie', domain: 'example.test', path: '/' }]
+        };
+      }
+      observed.push({ id: request.id, auth: request.auth });
+      return response(200, '{}');
+    }
+  });
+
+  assert.equal(result.passed, true);
+  assert.deepEqual(observed, [
+    { id: 'cookie-resource', auth: { type: 'cookie', value: 'sid=stale' } },
+    { id: 'auto-cookie-resource', auth: { type: 'cookie', value: 'sid=fresh-cookie' } }
+  ]);
+  assert.equal(result.authRefresh.refreshCount, 1);
+});
+
 test('runner auth refresh can rotate refresh tokens with a separate request before getting access tokens', async () => {
   const runner = {
     id: 'runner-refresh-token-request',
@@ -303,7 +390,7 @@ test('runner auth refresh can rotate refresh tokens with a separate request befo
 });
 
 test('runner auth refresh executes refresh requests with every supported auth type', async () => {
-  for (const type of AUTH_TYPE_VALUES) {
+  for (const type of AUTH_TYPE_VALUES.filter((value) => !value.startsWith('autoRefresh'))) {
     const runner = {
       id: `runner-refresh-auth-${type}`,
       name: `Runner Refresh ${type}`,
@@ -432,7 +519,7 @@ test('runner auth refresh saves multiple typed outputs for temporary AWS credent
 });
 
 test('auth refresh coexists with every supported runner request auth type', async () => {
-  for (const type of AUTH_TYPE_VALUES) {
+  for (const type of AUTH_TYPE_VALUES.filter((value) => !value.startsWith('autoRefresh'))) {
     const collection = {
       ...collectionModel({
       id: `collection-${type}`,

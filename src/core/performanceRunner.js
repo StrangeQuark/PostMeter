@@ -4,7 +4,7 @@ const https = require('node:https');
 const { monitorEventLoopDelay } = require('node:perf_hooks');
 const { csvVariableIterationRows, runRunner } = require('./collectionRunner');
 const { csvVariablesEnabled } = require('./csvVariables');
-const { createAuthRefreshManager } = require('./authRefresh');
+const { createAuthRefreshManager, requestWithAutoRefreshAuth } = require('./authRefresh');
 const { buildUrl, sendRequest } = require('./httpClient');
 const {
   performanceTestModel
@@ -48,6 +48,7 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
     sendRequest: options.sendRequest || sendRequest,
     recordDiagnosticEvent: options.recordDiagnosticEvent || options.scriptOptions?.recordDiagnosticEvent
   });
+  let autoRefreshAuth = null;
   const authRefreshScope = () => ({
     environment: currentEnvironment,
     collectionVariables: [],
@@ -68,6 +69,9 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
     }
     if (Array.isArray(snapshot.cookies)) {
       currentCookies = snapshot.cookies;
+    }
+    if (snapshot.autoRefreshAuth) {
+      autoRefreshAuth = snapshot.autoRefreshAuth;
     }
   };
   let nextIteration = 0;
@@ -115,6 +119,7 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
             diagnosisContext,
             performanceContext,
             requestTimeoutMillis,
+            autoRefreshAuth,
             iterationData: useCsvVariables ? (iterationRows[iteration] || []) : (options.iterationData || [])
           }, {
             stage,
@@ -215,7 +220,11 @@ async function executeIteration(performanceTest, environment, cookies, iteration
   const startedAt = new Date().toISOString();
   const startedMillis = Date.now();
   const stage = execution.stage || {};
-  const request = requestForPerformanceStage(performanceTest.request, stage);
+  const request = requestWithAutoRefreshAuth(
+    requestForPerformanceStage(performanceTest.request, stage),
+    performanceTest.authRefresh,
+    options.autoRefreshAuth
+  );
   const runner = {
     id: `${performanceTest.id}:iteration:${iteration + 1}`,
     name: performanceTest.name,

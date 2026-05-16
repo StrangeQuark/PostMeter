@@ -15,6 +15,10 @@ test('shared auth model normalizes runtime auth values by type', () => {
     key: 'X-API-Key',
     value: ''
   });
+  assert.deepEqual(normalizeAuth({ type: 'auto refresh token', token: 'ignored' }), { type: 'autoRefresh' });
+  assert.deepEqual(normalizeAuth({ type: 'Refreshing Auth Access Token', token: 'ignored' }), { type: 'autoRefresh' });
+  assert.deepEqual(normalizeAuth({ type: 'Use Refreshing Access Token', token: 'ignored' }), { type: 'autoRefresh' });
+  assert.deepEqual(normalizeAuth({ type: 'Refreshing Auth Refresh Token', token: 'ignored' }), { type: 'autoRefreshRefreshToken' });
   assert.deepEqual(normalizeAuth({ type: 'oauth2', tokenType: 'Unknown', grantType: 'bad', redirectStrategy: 'bad' }), {
     type: 'oauth2',
     tokenType: 'Bearer',
@@ -43,6 +47,10 @@ test('shared auth model keeps persisted auth shallow for workspace compatibility
   assert.deepEqual(normalizePersistedAuth({ type: 'basic', username: 'alice' }), {
     type: 'basic',
     username: 'alice'
+  });
+  assert.deepEqual(normalizePersistedAuth({ type: 'autoRefresh', token: 'ignored' }), {
+    type: 'autoRefresh',
+    token: 'ignored'
   });
   assert.deepEqual(normalizePersistedAuth({ type: 'unsupported', token: 'secret' }), { type: 'none' });
 });
@@ -83,6 +91,13 @@ test('shared auth model maps runtime auth to renderer editor fields', () => {
     clientCaPath: '',
     clientPassphrase: ''
   });
+});
+
+test('shared auth model preserves auto refresh auth from editor state', () => {
+  assert.deepEqual(authEditorState({ type: 'autoRefresh' }).type, 'autoRefresh');
+  assert.deepEqual(authFromEditorState({ type: 'autoRefresh' }), { type: 'autoRefresh' });
+  assert.deepEqual(authEditorState({ type: 'autoRefreshRefreshToken' }).type, 'autoRefreshRefreshToken');
+  assert.deepEqual(authFromEditorState({ type: 'autoRefreshRefreshToken' }), { type: 'autoRefreshRefreshToken' });
 });
 
 test('shared auth model rebuilds OAuth editor state while preserving runtime-only device values', () => {

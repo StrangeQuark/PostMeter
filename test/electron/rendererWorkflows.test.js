@@ -1228,7 +1228,7 @@ test('renderer workflows persist performance auth refresh request edits with a t
 });
 
 test('renderer workflows sends auth refresh request tabs like normal requests for every auth type', async () => {
-  for (const authType of AUTH_TYPE_VALUES) {
+  for (const authType of AUTH_TYPE_VALUES.filter((value) => !value.startsWith('autoRefresh'))) {
     const state = createRendererState();
     const authRequest = {
       id: `auth-request-${authType}`,

@@ -814,6 +814,52 @@
     return wrapper;
   }
 
+  function syncRefreshingAuthSelectOptions(select, options = {}) {
+    if (!select) {
+      return;
+    }
+    syncRefreshingAuthSelectOption(select, {
+      value: options.accessTokenValue || 'autoRefresh',
+      label: options.accessTokenLabel || 'Use Refreshing Access Token',
+      available: options.accessTokenAvailable === true
+    });
+    syncRefreshingAuthSelectOption(select, {
+      value: options.refreshTokenValue || 'autoRefreshRefreshToken',
+      label: options.refreshTokenLabel || 'Refreshing Auth Refresh Token',
+      available: options.refreshTokenAvailable === true
+    });
+    if (!authSelectOptionAvailable(select, select.value)) {
+      select.value = 'none';
+    }
+  }
+
+  function syncRefreshingAuthSelectOption(select, options = {}) {
+    let option = select.querySelector?.(`option[value="${options.value}"]`) || null;
+    if (options.available && !option) {
+      option = select.ownerDocument?.createElement
+        ? select.ownerDocument.createElement('option')
+        : { dataset: {}, setAttribute() {}, removeAttribute() {} };
+      option.value = options.value;
+      option.dataset ||= {};
+      option.dataset.authAutoRefreshOption = 'true';
+      select.append?.(option);
+    }
+    if (!option) {
+      return;
+    }
+    option.textContent = options.label;
+    option.hidden = !options.available;
+    option.disabled = !options.available;
+  }
+
+  function authSelectOptionAvailable(select, value) {
+    const option = select.querySelector?.(`option[value="${value}"]`) || null;
+    if (!option && ['autoRefresh', 'autoRefreshRefreshToken'].includes(String(value || ''))) {
+      return false;
+    }
+    return !option || (option.hidden !== true && option.disabled !== true);
+  }
+
   const exported = {
     beautifyBodyText,
     bodyTypeCodeLanguage,
@@ -822,6 +868,7 @@
     renderAuthEditor,
     renderCookieJarEditor,
     renderRequestPairs,
+    syncRefreshingAuthSelectOptions,
     renderVariablePairs,
     renderVariablePreview
   };

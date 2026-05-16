@@ -21,6 +21,8 @@ test('defines shared payload schema metadata for IPC and contributors', () => {
   assert.ok(HTTP_METHODS.includes('PATCH'));
   assert.ok(BODY_TYPE_VALUES.includes('RAW_JSON'));
   assert.ok(AUTH_TYPE_VALUES.includes('oauth2'));
+  assert.ok(AUTH_TYPE_VALUES.includes('autoRefresh'));
+  assert.ok(AUTH_TYPE_VALUES.includes('autoRefreshRefreshToken'));
   assert.equal(payloadSchemas.fields.keyValue.value.limit, 'value');
   assert.equal(payloadSchemas.fields.appearance.theme.enum, 'themeValues');
   assert.equal(payloadSchemas.fields.appearance.interfaceFont.enum, 'interfaceFontValues');
