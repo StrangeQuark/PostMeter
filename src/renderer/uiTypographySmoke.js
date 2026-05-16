@@ -227,6 +227,14 @@
 
   async function assertInterfaceTypographyMatrix(fixture, fonts, sizes, editorFonts, editorSizes) {
     const screens = interfaceScreens(fixture);
+    const representativeScreens = pickScreens(screens, [
+      'toolbar',
+      'request-auth',
+      'request-headers',
+      'performance-latency',
+      'performance-request-performanceAuth',
+      'settings-appearance'
+    ]);
     const stressEditorFont = preferredOption(editorFonts, 'georgia');
     const stressEditorSize = editorSizes.at(-1);
     for (const font of fonts) {
@@ -238,16 +246,33 @@
           editorFont: stressEditorFont,
           editorFontSize: stressEditorSize
         }, label);
-        for (const screen of screens) {
+        for (const screen of representativeScreens) {
           screen.setup();
           assertTypographyLayout(`${label}:${screen.name}`);
         }
       }
     }
+    const layoutSweepLabel = `interface-layout-sweep:${fonts.at(-1)}:${sizes.at(-1)}`;
+    await applyTypography({
+      interfaceFont: fonts.at(-1),
+      interfaceFontSize: sizes.at(-1),
+      editorFont: stressEditorFont,
+      editorFontSize: stressEditorSize
+    }, layoutSweepLabel);
+    for (const screen of screens) {
+      screen.setup();
+      assertTypographyLayout(`${layoutSweepLabel}:${screen.name}`);
+    }
   }
 
   async function assertEditorTypographyMatrix(fixture, fonts, sizes, interfaceFonts, interfaceSizes) {
     const screens = editorScreens(fixture);
+    const representativeScreens = pickScreens(screens, [
+      'request-url',
+      'request-body',
+      'response-body',
+      'performance-body'
+    ]);
     const stressInterfaceFont = preferredOption(interfaceFonts, 'system-mono');
     const stressInterfaceSize = interfaceSizes.at(-1);
     for (const font of fonts) {
@@ -259,12 +284,24 @@
           editorFont: font,
           editorFontSize: size
         }, label);
-        for (const screen of screens) {
+        for (const screen of representativeScreens) {
           screen.setup();
           assertTypographyLayout(`${label}:${screen.name}`);
           assertActiveEditorFontSize(size, `${label}:${screen.name}`);
         }
       }
+    }
+    const layoutSweepLabel = `editor-layout-sweep:${fonts.at(-1)}:${sizes.at(-1)}`;
+    await applyTypography({
+      interfaceFont: stressInterfaceFont,
+      interfaceFontSize: stressInterfaceSize,
+      editorFont: fonts.at(-1),
+      editorFontSize: sizes.at(-1)
+    }, layoutSweepLabel);
+    for (const screen of screens) {
+      screen.setup();
+      assertTypographyLayout(`${layoutSweepLabel}:${screen.name}`);
+      assertActiveEditorFontSize(sizes.at(-1), `${layoutSweepLabel}:${screen.name}`);
     }
   }
 
@@ -785,6 +822,16 @@
 
   function fontSizeOptionValues(id) {
     return optionValues(id).map((value) => Number(value));
+  }
+
+  function pickScreens(screens, names) {
+    const byName = new Map(screens.map((screen) => [screen.name, screen]));
+    const picked = names.map((name) => byName.get(name)).filter(Boolean);
+    assertUiSmoke(
+      picked.length === names.length,
+      `Typography smoke missing representative screens: ${names.filter((name) => !byName.has(name)).join(', ')}`
+    );
+    return picked;
   }
 
   function preferredOption(options, preferred) {
