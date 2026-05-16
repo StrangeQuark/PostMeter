@@ -50,6 +50,10 @@ class RuntimeResultStore {
       PRAGMA journal_mode=DELETE;
       PRAGMA synchronous=NORMAL;
       PRAGMA temp_store=MEMORY;
+      DROP INDEX IF EXISTS samples_kind_status_index;
+      DROP INDEX IF EXISTS samples_kind_index;
+      DROP TABLE IF EXISTS samples;
+      DROP TABLE IF EXISTS metadata;
       CREATE TABLE metadata (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL

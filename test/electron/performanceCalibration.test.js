@@ -54,7 +54,7 @@ test('performance calibration confirms a repeatable target-rate local cap', asyn
   assert.ok(result.summary.repeatabilityPercent >= 0);
   assert.ok(result.summary.p95StartLagMillis >= 0);
   assert.ok(result.summary.p95EventLoopDelayMillis >= 0);
-  assert.match(result.summary.notes.join(' '), /target-rate confirmation/);
+  assert.match(result.summary.notes.join(' '), /confirmed this machine can sustain/);
   assert.equal(progress.some((event) => event.kind === 'calibration' && event.phase === 'warmup'), true);
   assert.equal(progress.some((event) => event.kind === 'calibration' && event.phase === 'confirm'), true);
   assert.equal(progress.at(-1).percent, 100);

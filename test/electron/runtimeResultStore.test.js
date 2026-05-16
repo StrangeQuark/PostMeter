@@ -112,6 +112,31 @@ test('runtime result store cleanup removes SQLite files and sidecars', async () 
   }
 });
 
+test('runtime result store reset replaces stale SQLite schema if file removal is skipped', async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-result-stale-schema-'));
+  const storePath = path.join(temp, 'current.sqlite');
+  const originalRm = fs.rm;
+  try {
+    const firstStore = createRuntimeResultStore(storePath);
+    await firstStore.reset();
+    firstStore.close();
+
+    fs.rm = async () => {};
+    const secondStore = createRuntimeResultStore(storePath);
+    try {
+      await secondStore.reset();
+      secondStore.beginRun({ id: 'stale-reset', kind: 'runner', plannedRequests: 1, capturePolicy: {}, metadata: {} });
+      secondStore.finishRun({});
+      assert.equal(secondStore.metadata().runId, 'stale-reset');
+    } finally {
+      secondStore.close();
+    }
+  } finally {
+    fs.rm = originalRm;
+    await fs.rm(temp, { recursive: true, force: true });
+  }
+});
+
 test('runtime result store honors explicit zero result indexes', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'postmeter-result-zero-index-'));
   const storePath = path.join(temp, 'current.sqlite');

@@ -99,7 +99,7 @@ test('packaged startup smoke writes failure logs and screenshots when configured
 });
 
 test('UI regression smoke title watcher has enough CI headroom', () => {
-  assert.equal(UI_REGRESSION_SMOKE_TITLE_TIMEOUT_MILLIS, 30_000);
+  assert.equal(UI_REGRESSION_SMOKE_TITLE_TIMEOUT_MILLIS, 90_000);
 });
 
 test('startup smoke load-failure hooks fail fast with redacted artifacts before renderer load', async () => {
