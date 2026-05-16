@@ -78,7 +78,7 @@ test('accepts structurally valid IPC payloads', () => {
     schemaVersion: 11,
     name: 'Workspace',
     settings: {
-      appearance: { theme: 'dark', interfaceFont: 'system', interfaceFontSize: 14, editorFont: 'system-mono', editorFontSize: 15 },
+      appearance: { theme: 'dark', interfaceFont: 'system', interfaceFontSize: 16, editorFont: 'system-mono', editorFontSize: 19 },
       editor: { lineNumbers: false, variableTooltipHints: false },
       tabs: { saveOnForceClose: true },
       sandbox: {
@@ -382,6 +382,77 @@ test('accepts structurally valid IPC payloads', () => {
     },
     settings: { updates: { includePrereleases: true } }
   }));
+  assert.doesNotThrow(() => assertWorkspaceRequestSavePayload({
+    authRefreshOwnerType: 'performance',
+    performanceTestId: 'performance-1',
+    requestId: 'auth-request-1',
+    request: {
+      id: 'auth-request-1',
+      name: 'Refresh Auth',
+      method: 'POST',
+      url: 'https://auth.example.test/token',
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE',
+      auth: { type: 'oauth2', grantType: 'clientCredentials', accessTokenUrl: 'https://auth.example.test/token' }
+    },
+    authRefresh: {
+      enabled: true,
+      mode: 'interval',
+      authType: 'apiKey',
+      targetScope: 'environment',
+      accessTokenVariable: 'token',
+      refreshIntervalSeconds: 600,
+      outputs: [{ slot: 'apiKey', source: 'body', path: 'api_key', variable: 'API_KEY' }],
+      request: {
+        id: 'auth-request-1',
+        method: 'POST',
+        url: 'https://auth.example.test/token',
+        queryParams: [],
+        headers: [],
+        bodyType: 'NONE'
+      },
+      refreshTokenRequest: {
+        id: 'refresh-token-request-1',
+        method: 'POST',
+        url: 'https://auth.example.test/refresh-token',
+        queryParams: [],
+        headers: [],
+        bodyType: 'NONE'
+      }
+    },
+    performanceShell: {
+      id: 'performance-1',
+      name: 'Performance',
+      request: {
+        id: 'request-1',
+        method: 'GET',
+        url: 'https://api.example.test',
+        queryParams: [],
+        headers: [],
+        bodyType: 'NONE'
+      },
+      authRefresh: {
+        request: {
+          id: 'auth-request-1',
+          method: 'POST',
+          url: 'https://auth.example.test/token',
+          queryParams: [],
+          headers: [],
+          bodyType: 'NONE'
+        },
+        refreshTokenRequest: {
+          id: 'refresh-token-request-1',
+          method: 'POST',
+          url: 'https://auth.example.test/refresh-token',
+          queryParams: [],
+          headers: [],
+          bodyType: 'NONE'
+        }
+      }
+    },
+    settings: { updates: { includePrereleases: true } }
+  }));
   assert.doesNotThrow(() => assertWorkspaceRequestSaveResultPayload({
     request: {
       id: 'r1',
@@ -654,9 +725,9 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertWorkspaceSettingsSavePayload({ editor: { variableTooltipHints: 'yes' } }), /settings.editor.variableTooltipHints must be a boolean/);
   assert.throws(() => assertWorkspacePayload({ settings: { appearance: { theme: 'sepia' } }, collections: [], environments: [], history: [] }), /workspace.settings.appearance.theme must be one of/);
   assert.throws(() => assertWorkspacePayload({ settings: { appearance: { interfaceFont: 'papyrus' } }, collections: [], environments: [], history: [] }), /workspace.settings.appearance.interfaceFont must be one of/);
-  assert.throws(() => assertWorkspacePayload({ settings: { appearance: { interfaceFontSize: 99 } }, collections: [], environments: [], history: [] }), /workspace.settings.appearance.interfaceFontSize must be between 11 and 18/);
+  assert.throws(() => assertWorkspacePayload({ settings: { appearance: { interfaceFontSize: 99 } }, collections: [], environments: [], history: [] }), /workspace.settings.appearance.interfaceFontSize must be one of 10, 13, 16, 19/);
   assert.throws(() => assertWorkspacePayload({ settings: { appearance: { editorFont: 'comic-sans' } }, collections: [], environments: [], history: [] }), /workspace.settings.appearance.editorFont must be one of/);
-  assert.throws(() => assertWorkspacePayload({ settings: { appearance: { editorFontSize: 9 } }, collections: [], environments: [], history: [] }), /workspace.settings.appearance.editorFontSize must be between 11 and 20/);
+  assert.throws(() => assertWorkspacePayload({ settings: { appearance: { editorFontSize: 9 } }, collections: [], environments: [], history: [] }), /workspace.settings.appearance.editorFontSize must be one of 10, 13, 16, 19/);
   assert.throws(() => assertWorkspacePayload({ settings: { diagnostics: { requestResponseLogging: { bodies: 'yes' } } }, collections: [], environments: [], history: [] }), /workspace.settings.diagnostics.requestResponseLogging.bodies must be a boolean/);
   assert.throws(() => assertWorkspacePayload({ settings: { diagnostics: { logging: { level: 'trace' } } }, collections: [], environments: [], history: [] }), /workspace.settings.diagnostics.logging.level must be one of/);
   assert.throws(() => assertWorkspacePayload({ settings: { diagnostics: { uploadUrl: 'https://example.test' } }, collections: [], environments: [], history: [] }), /workspace.settings.diagnostics.uploadUrl is not allowed/);
@@ -708,15 +779,15 @@ test('rejects malformed IPC payloads before they reach core services', () => {
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: '{}', durationMillis: 1, responseBytes: 2, finalUrl: 'https://example.test', headers: {}, accessToken: 'raw-token' }), /response.accessToken is not allowed in public IPC payloads/);
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: '{}', durationMillis: 1, responseBytes: 2, finalUrl: 'https://example.test', headers: {}, testScriptResult: { tests: [{ passed: 'yes' }] } }), /response.testScriptResult.tests\[0\].passed must be a boolean/);
   assert.throws(() => assertResponsePayload({ statusCode: 200, body: '{}', durationMillis: 1, responseBytes: 2, finalUrl: 'https://example.test', headers: {}, testScriptResult: { visualizer: { html: 42 } } }), /response.testScriptResult.visualizer.html must be a string/);
-  assert.throws(() => assertWorkspaceRequestSavePayload({ requestId: 'r1', request: { method: 'GET', queryParams: [], headers: [], bodyType: 'NONE' } }), /payload must include collectionId or runnerId/);
-  assert.throws(() => assertWorkspaceRequestSavePayload({ collectionId: 'c1', runnerId: 'runner-1', requestId: 'r1', request: { method: 'GET', queryParams: [], headers: [], bodyType: 'NONE' } }), /payload must target either collectionId or runnerId/);
+  assert.throws(() => assertWorkspaceRequestSavePayload({ requestId: 'r1', request: { method: 'GET', queryParams: [], headers: [], bodyType: 'NONE' } }), /payload must include collectionId, runnerId, or authRefreshOwnerType/);
+  assert.throws(() => assertWorkspaceRequestSavePayload({ collectionId: 'c1', authRefreshOwnerType: 'runner', runnerId: 'runner-1', requestId: 'r1', request: { method: 'GET', queryParams: [], headers: [], bodyType: 'NONE' } }), /payload must target only one request owner/);
   assert.throws(() => assertWorkspaceRequestSavePayload({ collectionId: 'c1', requestId: 'r1', request: { method: 'GET', queryParams: [], headers: [], bodyType: 'NONE' }, folderPath: 'bad' }), /payload.folderPath must be an array/);
   assert.throws(() => assertWorkspaceCollectionSavePayload({ collection: { id: 'c1', requests: [], folders: [] } }), /payload.collectionId must be a string/);
   assert.throws(() => assertWorkspaceCollectionSavePayload({ collectionId: 'c1', collection: { id: 'c1', scripts: { tests: 42 }, requests: [], folders: [] } }), /payload.collection.scripts.tests must be a string/);
   assert.throws(() => assertWorkspaceCollectionSaveResultPayload({ collection: { id: 'c1', variables: 'bad', requests: [], folders: [] } }), /result.collection.variables must be an array/);
   assert.throws(() => assertWorkspaceEnvironmentSavePayload({ environment: { id: 'e1', name: 'Env', variables: [] } }), /payload.environmentId must be a string/);
   assert.throws(() => assertWorkspaceSettingsSavePayload({ appearance: { theme: 'sepia' } }), /settings.appearance.theme must be one of/);
-  assert.throws(() => assertWorkspaceSettingsSavePayload({ appearance: { editorFontSize: 30 } }), /settings.appearance.editorFontSize must be between 11 and 20/);
+  assert.throws(() => assertWorkspaceSettingsSavePayload({ appearance: { editorFontSize: 30 } }), /settings.appearance.editorFontSize must be one of 10, 13, 16, 19/);
   assert.throws(() => assertWorkspaceSettingsSavePayload({ appearance: { unknown: true } }), /settings.appearance.unknown is not allowed/);
   assert.throws(() => assertWorkspaceSettingsSavePayload({ tabs: { saveOnForceClose: 'yes' } }), /settings.tabs.saveOnForceClose must be a boolean/);
   assert.throws(() => assertWorkspaceSettingsSavePayload({ modals: { closeOnBackdropClick: 'yes' } }), /settings.modals.closeOnBackdropClick must be a boolean/);

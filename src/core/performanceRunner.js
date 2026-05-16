@@ -4,6 +4,7 @@ const https = require('node:https');
 const { monitorEventLoopDelay } = require('node:perf_hooks');
 const { csvVariableIterationRows, runRunner } = require('./collectionRunner');
 const { csvVariablesEnabled } = require('./csvVariables');
+const { createAuthRefreshManager } = require('./authRefresh');
 const { buildUrl, sendRequest } = require('./httpClient');
 const {
   performanceTestModel
@@ -43,6 +44,32 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
   const iterationRows = await csvVariableIterationRows(normalized.csvVariables, plan.totalRequests);
   let currentEnvironment = cloneJson(environment) || { id: 'runtime', name: 'Runtime', variables: [] };
   let currentCookies = Array.isArray(options.cookieJar) ? cloneJson(options.cookieJar) : [];
+  const authRefreshManager = createAuthRefreshManager(normalized.authRefresh, {
+    sendRequest: options.sendRequest || sendRequest,
+    recordDiagnosticEvent: options.recordDiagnosticEvent || options.scriptOptions?.recordDiagnosticEvent
+  });
+  const authRefreshScope = () => ({
+    environment: currentEnvironment,
+    collectionVariables: [],
+    globals: options.globals || [],
+    cookies: currentCookies,
+    signal: options.signal,
+    clientCertificates: [],
+    tlsSettings: options.tlsSettings || options.scriptOptions?.tlsSettings || {},
+    fileBindings: options.fileBindings || options.scriptOptions?.fileBindings || [],
+    sandboxPackages: options.sandboxPackages || options.scriptOptions?.sandboxPackages || [],
+    vault: options.vault || options.scriptOptions?.vault,
+    vaultPrompt: options.vaultPrompt || options.scriptOptions?.vaultPrompt,
+    recordDiagnosticEvent: options.recordDiagnosticEvent || options.scriptOptions?.recordDiagnosticEvent
+  });
+  const applyAuthRefreshSnapshot = (snapshot = {}) => {
+    if (snapshot.environment) {
+      currentEnvironment = snapshot.environment;
+    }
+    if (Array.isArray(snapshot.cookies)) {
+      currentCookies = snapshot.cookies;
+    }
+  };
   let nextIteration = 0;
   let activeRequests = 0;
   let maxActiveRequests = 0;
@@ -56,6 +83,7 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
   eventLoopMonitor?.enable();
 
   try {
+    applyAuthRefreshSnapshot(await authRefreshManager.beforeRun(authRefreshScope()));
     for (const [stageIndex, stage] of plan.stages.entries()) {
       if (options.signal?.aborted === true || (endsAtMillis > 0 && Date.now() >= endsAtMillis)) {
         break;
@@ -78,6 +106,7 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
           const iteration = nextIteration;
           nextIteration += 1;
           const scheduledAtMillis = Date.now();
+          applyAuthRefreshSnapshot(await authRefreshManager.ensureFresh(authRefreshScope()));
           activeRequests += 1;
           maxActiveRequests = Math.max(maxActiveRequests, activeRequests);
           const sample = await executeIteration(normalized, currentEnvironment, currentCookies, iteration, {
@@ -173,7 +202,8 @@ async function runPerformanceTest(performanceTest, environment, options = {}) {
     summary,
     samples: retainSamples ? samples.sort((left, right) => left.iteration - right.iteration) : [],
     environment: currentEnvironment,
-    cookies: currentCookies
+    cookies: currentCookies,
+    authRefresh: authRefreshManager.stats()
   };
   if (normalized.allowEnvironmentMutation === true) {
     result.mutatedEnvironment = currentEnvironment;

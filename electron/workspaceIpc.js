@@ -52,6 +52,7 @@ const {
   applyFolderSaveToWorkspace,
   applyRequestSaveToWorkspace,
   applyWorkspaceSettingsSaveToWorkspace,
+  findWorkspaceAuthRefreshRequestContext,
   findWorkspaceRunnerRequestContext,
   findWorkspaceRequestContext
 } = require('./workspaceMutations');
@@ -123,9 +124,16 @@ function registerWorkspaceIpc(options = {}) {
     assertWorkspaceRequestSavePayload(payload);
     const workspace = await mutateWorkspace(async (currentWorkspace) => applyRequestSaveToWorkspace(currentWorkspace, payload));
     refreshApplicationMenu();
-    const requestContext = payload.runnerId
-      ? findWorkspaceRunnerRequestContext(workspace, payload.runnerId, payload.requestId)
-      : findWorkspaceRequestContext(workspace, payload.requestId);
+    const requestContext = payload.authRefreshOwnerType
+      ? findWorkspaceAuthRefreshRequestContext(
+          workspace,
+          payload.authRefreshOwnerType,
+          payload.authRefreshOwnerType === 'performance' ? payload.performanceTestId : payload.runnerId,
+          payload.requestId
+        )
+      : payload.runnerId
+        ? findWorkspaceRunnerRequestContext(workspace, payload.runnerId, payload.requestId)
+        : findWorkspaceRequestContext(workspace, payload.requestId);
     const result = {
       request: requestContext?.request || payload.request
     };

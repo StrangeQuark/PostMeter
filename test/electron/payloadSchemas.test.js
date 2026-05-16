@@ -47,6 +47,12 @@ test('defines shared payload schema metadata for IPC and contributors', () => {
   assert.equal(payloadSchemas.fields.modalSettings.closeOnBackdropClick.type, 'boolean');
   assert.equal(payloadSchemas.fields.runnerConfig.stopOnFailure.type, 'boolean');
   assert.equal(payloadSchemas.fields.runner.allowEnvironmentMutation.type, 'boolean');
+  assert.equal(payloadSchemas.fields.authRefresh.mode.enum, 'authRefreshModes');
+  assert.equal(payloadSchemas.fields.authRefresh.authType.enum, 'authRefreshTypes');
+  assert.equal(payloadSchemas.fields.authRefresh.targetScope.enum, 'authRefreshScopes');
+  assert.equal(payloadSchemas.fields.authRefreshOutput.source.enum, 'authRefreshOutputSources');
+  assert.ok(payloadSchemas.auth.refreshModes.includes('interval'));
+  assert.ok(payloadSchemas.auth.refreshTypes.includes('aws'));
   assert.equal(payloadSchemas.fields.csvVariables.schema.limit, 'value');
   assert.equal(payloadSchemas.fields.csvVariables.values.limit, 'body');
   assert.equal(payloadSchemas.fields.csvVariables.filePath.limit, 'url');
@@ -69,8 +75,9 @@ test('defines shared payload schema metadata for IPC and contributors', () => {
   assert.equal(payloadSchemas.entities.request.nested[0], 'auth');
   assert.ok(payloadSchemas.entities.workspace.arrays.includes('runners'));
   assert.deepEqual(payloadSchemas.entities.runner.arrays, ['requests']);
-  assert.deepEqual(payloadSchemas.entities.runner.nested, ['csvVariables']);
+  assert.deepEqual(payloadSchemas.entities.runner.nested, ['authRefresh', 'csvVariables']);
   assert.ok(payloadSchemas.entities.performanceTest.nested.includes('csvVariables'));
+  assert.ok(payloadSchemas.entities.performanceTest.nested.includes('authRefresh'));
   assert.equal(payloadSchemas.auth.oauth2GrantTypes[0], 'authorizationCode');
   assert.deepEqual(payloadSchemas.enums.diagnosticLogLevels, ['debug', 'info', 'warn', 'error']);
   assert.deepEqual(payloadSchemas.enums.sameSiteValues, ['', 'Lax', 'Strict', 'None']);

@@ -47,14 +47,11 @@ const FILE_EXTENSION_CONTENT_TYPES = new Map(Object.entries({
 }));
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 const THEME_OPTIONS = ['system', 'light', 'dark'];
+const TYPOGRAPHY_FONT_SIZE_OPTIONS = Object.freeze([10, 13, 16, 19]);
 const DEFAULT_INTERFACE_FONT = 'default';
 const DEFAULT_INTERFACE_FONT_SIZE = 13;
-const MIN_INTERFACE_FONT_SIZE = 11;
-const MAX_INTERFACE_FONT_SIZE = 18;
 const DEFAULT_EDITOR_FONT = 'default';
-const DEFAULT_EDITOR_FONT_SIZE = 12;
-const MIN_EDITOR_FONT_SIZE = 11;
-const MAX_EDITOR_FONT_SIZE = 20;
+const DEFAULT_EDITOR_FONT_SIZE = 13;
 const DEFAULT_INTERFACE_FONT_STACK = 'Inter, "Segoe UI", Arial, sans-serif';
 const DEFAULT_EDITOR_FONT_STACK = '"JetBrains Mono", "SFMono-Regular", Consolas, monospace';
 const TYPOGRAPHY_FONT_STACKS = Object.freeze({
@@ -102,6 +99,8 @@ let selectedWorkspaceId = RENDERER_STATE_DEFAULTS.selectedWorkspaceId;
 let activeCollectionId = RENDERER_STATE_DEFAULTS.activeCollectionId;
 let activeFolderId = RENDERER_STATE_DEFAULTS.activeFolderId;
 let activeRequestId = RENDERER_STATE_DEFAULTS.activeRequestId;
+let activeAuthRefreshRequestOwnerType = RENDERER_STATE_DEFAULTS.activeAuthRefreshRequestOwnerType;
+let activeAuthRefreshRequestOwnerId = RENDERER_STATE_DEFAULTS.activeAuthRefreshRequestOwnerId;
 let activeRunnerRequestRunnerId = RENDERER_STATE_DEFAULTS.activeRunnerRequestRunnerId;
 let activeRunnerConfigId = RENDERER_STATE_DEFAULTS.activeRunnerConfigId;
 let activePerformanceTestId = RENDERER_STATE_DEFAULTS.activePerformanceTestId;
@@ -193,6 +192,7 @@ const {
   DIAGNOSIS_SCOPE_PROFILES,
   cloneRequestForPerformanceTest,
   newPerformanceTestObject,
+  normalizeAuthRefreshConfig,
   normalizePerformanceTest,
   normalizePerformanceTypeSettings,
   normalizeWorkspacePerformanceTests,
@@ -324,6 +324,10 @@ const state = {
   set activeFolderId(value) { activeFolderId = value; },
   get activeRequestId() { return activeRequestId; },
   set activeRequestId(value) { activeRequestId = value; },
+  get activeAuthRefreshRequestOwnerType() { return activeAuthRefreshRequestOwnerType; },
+  set activeAuthRefreshRequestOwnerType(value) { activeAuthRefreshRequestOwnerType = value; },
+  get activeAuthRefreshRequestOwnerId() { return activeAuthRefreshRequestOwnerId; },
+  set activeAuthRefreshRequestOwnerId(value) { activeAuthRefreshRequestOwnerId = value; },
   get activeRunnerRequestRunnerId() { return activeRunnerRequestRunnerId; },
   set activeRunnerRequestRunnerId(value) { activeRunnerRequestRunnerId = value; },
   get activeRunnerConfigId() { return activeRunnerConfigId; },
@@ -491,6 +495,7 @@ initializeRenderer({
   onReady: async ({ registerCleanup }) => {
     markUiWorkflowStartupStep('ready-start');
     bindUi();
+    registerCleanup(bindCaptureSettingsDropdownDismissal());
     CodeEditor.enhanceCodeTextareas?.(document);
     registerCleanup(VariableHighlighter.install?.(document, {
       getVariables: variableHighlightVariablesForTarget,
@@ -684,12 +689,26 @@ function bindUi() {
     onExportRunnerJson: () => exportRunnerResult('json'),
     onExportRunnerCsv: () => exportRunnerResult('csv'),
     onToggleRunnerCsvVariables: toggleActiveRunnerCsvVariables,
-    onToggleRunnerCaptureSettings: () => toggleCaptureSettingsPanel('runner'),
+    onToggleRunnerCaptureSettings: (event) => toggleCaptureSettingsPanel('runner', event),
+    onToggleRunnerAuthRefresh: (event) => toggleAuthRefreshPanel('runner', event),
+    onOpenRunnerAuthRefreshRequest: () => openExistingAuthRefreshRequest('runner'),
+    onNewRunnerAuthRefreshRequest: () => openNewAuthRefreshRequest('runner'),
+    onImportRunnerAuthRefreshRequest: () => { void promptAndImportAuthRefreshRequest('runner'); },
+    onOpenRunnerAuthRefreshTokenRequest: () => openExistingAuthRefreshRequest('runner', 'refreshToken'),
+    onNewRunnerAuthRefreshTokenRequest: () => openNewAuthRefreshRequest('runner', 'refreshToken'),
+    onImportRunnerAuthRefreshTokenRequest: () => { void promptAndImportAuthRefreshRequest('runner', 'refreshToken'); },
     onSaveRunner: () => { void saveRunnerFromPane(); },
     onDeleteRunner: () => { void deleteRunner(); },
     onAddRunnerRequest: (event) => showAddRunnerRequestMenu(event),
     onTogglePerformanceCsvVariables: toggleActivePerformanceCsvVariables,
-    onTogglePerformanceCaptureSettings: () => toggleCaptureSettingsPanel('performance'),
+    onTogglePerformanceCaptureSettings: (event) => toggleCaptureSettingsPanel('performance', event),
+    onTogglePerformanceAuthRefresh: (event) => toggleAuthRefreshPanel('performance', event),
+    onOpenPerformanceAuthRefreshRequest: () => openExistingAuthRefreshRequest('performance'),
+    onNewPerformanceAuthRefreshRequest: () => openNewAuthRefreshRequest('performance'),
+    onImportPerformanceAuthRefreshRequest: () => { void promptAndImportAuthRefreshRequest('performance'); },
+    onOpenPerformanceAuthRefreshTokenRequest: () => openExistingAuthRefreshRequest('performance', 'refreshToken'),
+    onNewPerformanceAuthRefreshTokenRequest: () => openNewAuthRefreshRequest('performance', 'refreshToken'),
+    onImportPerformanceAuthRefreshTokenRequest: () => { void promptAndImportAuthRefreshRequest('performance', 'refreshToken'); },
     onSavePerformanceTest: () => { void savePerformanceTestFromPane(); },
     onDeletePerformanceTest: () => { void deletePerformanceTest(); },
     onRunPerformanceTest: () => { void runActivePerformanceTest(); },
@@ -1876,10 +1895,16 @@ function renderRequestTabs() {
 
 function requestTabMethodText(request, tab = {}) {
   const method = requestMethodText(request);
+  if (isAuthRefreshRequestTab(tab)) {
+    return `AUTH - ${method}`;
+  }
   return isRunnerRequestTab(tab) ? `RUN - ${method}` : method;
 }
 
 function requestTabMethodClassName(request, tab = {}) {
+  if (isAuthRefreshRequestTab(tab)) {
+    return tagClassName(tab.authRefreshOwnerType === 'performance' ? 'PERF' : 'RUN');
+  }
   return isRunnerRequestTab(tab)
     ? tagClassName('RUN')
     : methodClassName(requestMethodText(request));
@@ -1891,6 +1916,10 @@ function requestMethodText(request) {
 
 function isRunnerRequestTab(tab = {}) {
   return tab.runnerRequest === true || Boolean(tab.runnerId);
+}
+
+function isAuthRefreshRequestTab(tab = {}) {
+  return tab.authRefreshRequest === true;
 }
 
 function ensureOpenCollectionTabForActive(options = {}) {
@@ -1935,6 +1964,10 @@ function canOpenRequestTabFor(collectionId, requestId, options = {}) {
 
 function canOpenRunnerRequestTabFor(runnerId, requestId, options = {}) {
   return requestTabState.canOpenRunnerRequestTabFor(runnerId, requestId, options);
+}
+
+function canOpenAuthRefreshRequestTabFor(ownerType, ownerId, requestId, options = {}) {
+  return requestTabState.canOpenAuthRefreshRequestTabFor(ownerType, ownerId, requestId, options);
 }
 
 function canOpenAdditionalEnvironmentTab(options = {}) {
@@ -4438,8 +4471,8 @@ function selectSidebarPanel(panel) {
   activeSidebarPanel = panel;
   if (panel === 'collections') {
     activeMainPanel = 'request';
-    if (activeRunnerRequestRunnerId) {
-      const fallbackTab = [...openRequestTabs].reverse().find((tab) => tab.runnerRequest !== true && !tab.runnerId);
+    if (activeRunnerRequestRunnerId || activeAuthRefreshRequestOwnerType) {
+      const fallbackTab = [...openRequestTabs].reverse().find((tab) => tab.runnerRequest !== true && !tab.runnerId && tab.authRefreshRequest !== true);
       if (fallbackTab) {
         selectRequestTabWithoutCollect(fallbackTab);
         return;
@@ -4454,6 +4487,8 @@ function selectSidebarPanel(panel) {
       return;
     }
     activeRunnerRequestRunnerId = null;
+    activeAuthRefreshRequestOwnerType = '';
+    activeAuthRefreshRequestOwnerId = null;
     activeEnvironmentId = 'none';
     activeMainPanel = 'environment';
   } else if (panel === 'workspaces') {
@@ -4464,6 +4499,8 @@ function selectSidebarPanel(panel) {
       return;
     }
     selectedWorkspaceId = '';
+    activeAuthRefreshRequestOwnerType = '';
+    activeAuthRefreshRequestOwnerId = null;
     activeMainPanel = 'workspace';
   } else if (panel === 'runners') {
     const activeTab = openRunnerTabs.find((tab) => tab.key === activeRunnerTabKey());
@@ -4474,6 +4511,8 @@ function selectSidebarPanel(panel) {
     }
     activeRunnerConfigId = null;
     activeRunnerRequestRunnerId = null;
+    activeAuthRefreshRequestOwnerType = '';
+    activeAuthRefreshRequestOwnerId = null;
     activeMainPanel = 'runner';
   } else if (panel === 'performance') {
     const activeTab = openPerformanceTabs.find((tab) => tab.key === activePerformanceTabKey());
@@ -4484,6 +4523,8 @@ function selectSidebarPanel(panel) {
     }
     activePerformanceTestId = null;
     activeRunnerRequestRunnerId = null;
+    activeAuthRefreshRequestOwnerType = '';
+    activeAuthRefreshRequestOwnerId = null;
     activeMainPanel = 'performance';
   }
   renderAll();
@@ -5080,19 +5121,16 @@ function normalizeTypographyFontOption(value, fallback) {
 }
 
 function normalizeInterfaceFontSize(value) {
-  return normalizeFontSize(value, DEFAULT_INTERFACE_FONT_SIZE, MIN_INTERFACE_FONT_SIZE, MAX_INTERFACE_FONT_SIZE);
+  return normalizeFontSize(value, DEFAULT_INTERFACE_FONT_SIZE);
 }
 
 function normalizeEditorFontSize(value) {
-  return normalizeFontSize(value, DEFAULT_EDITOR_FONT_SIZE, MIN_EDITOR_FONT_SIZE, MAX_EDITOR_FONT_SIZE);
+  return normalizeFontSize(value, DEFAULT_EDITOR_FONT_SIZE);
 }
 
-function normalizeFontSize(value, fallback, min, max) {
+function normalizeFontSize(value, fallback) {
   const numeric = Number(value);
-  if (!Number.isFinite(numeric)) {
-    return fallback;
-  }
-  return Math.min(max, Math.max(min, Math.round(numeric)));
+  return TYPOGRAPHY_FONT_SIZE_OPTIONS.includes(numeric) ? numeric : fallback;
 }
 
 function applyThemePreference(theme) {
@@ -5156,7 +5194,7 @@ function applyTypographyPreferences() {
   document.documentElement.style.setProperty('--ui-font-size', `${appearance.interfaceFontSize}px`);
   document.documentElement.style.setProperty('--editor-font', typographyFontStack(appearance.editorFont, DEFAULT_EDITOR_FONT_STACK));
   document.documentElement.style.setProperty('--editor-font-size', `${appearance.editorFontSize}px`);
-  CodeEditor.refreshCodeEditors?.(document);
+  refreshVariableHighlights(document);
 }
 
 function typographyFontStack(font, defaultStack) {
@@ -7204,6 +7242,7 @@ function renderRunnerEditor() {
   $('runnerAllowEnvironmentMutation').checked = runner?.allowEnvironmentMutation === true;
   $('runnerAllowEnvironmentMutation').disabled = !runner;
   renderCapturePolicyControls('runner', runner?.capturePolicy, Boolean(runner));
+  renderAuthRefreshControls('runner', runner?.authRefresh, Boolean(runner));
   $('addRunnerRequestButton').disabled = !runner;
   renderRunnerRequestList(runner);
   syncRunnerResultExportButtons(runner);
@@ -7257,6 +7296,7 @@ function renderPerformanceEditor() {
   renderPerformanceMutationControls(test);
   renderCapturePolicyControls('performance', test?.capturePolicy, Boolean(test));
   renderPerformanceRequestEditor(test);
+  renderAuthRefreshControls('performance', test?.authRefresh, Boolean(test));
   syncPerformanceResultExportButtons(test);
 }
 
@@ -7656,6 +7696,58 @@ function applyResponseBodyOptionGuardrails(select, state) {
   }
 }
 
+function closeCaptureSettingsPanels(options = {}) {
+  const exceptPanel = options.exceptPanel || null;
+  for (const panel of document.querySelectorAll('.capture-settings-panel')) {
+    if (panel === exceptPanel) {
+      continue;
+    }
+    panel.hidden = true;
+    panel.style.left = '';
+    panel.style.top = '';
+    const button = panel.id ? document.querySelector(`[aria-controls="${cssEscapeAttributeValue(panel.id)}"]`) : null;
+    button?.setAttribute('aria-expanded', 'false');
+  }
+}
+
+function bindCaptureSettingsDropdownDismissal() {
+  const onDocumentClick = (event) => {
+    if (event.target?.closest?.('.capture-settings-menu-group')) {
+      return;
+    }
+    closeCaptureSettingsPanels();
+  };
+  const onKeyDown = (event) => {
+    if (event.key !== 'Escape') {
+      return;
+    }
+    const activePanel = event.target?.closest?.('.capture-settings-panel');
+    closeCaptureSettingsPanels();
+    if (activePanel?.id) {
+      document.querySelector(`[aria-controls="${cssEscapeAttributeValue(activePanel.id)}"]`)?.focus?.();
+    }
+  };
+  const closeAll = () => closeCaptureSettingsPanels();
+  const onScroll = (event) => {
+    if (event.target?.closest?.('.capture-settings-panel')) {
+      return;
+    }
+    closeAll();
+  };
+  document.addEventListener('click', onDocumentClick);
+  document.addEventListener('keydown', onKeyDown);
+  document.addEventListener('scroll', onScroll, true);
+  window.addEventListener('blur', closeAll);
+  window.addEventListener('resize', closeAll);
+  return () => {
+    document.removeEventListener('click', onDocumentClick);
+    document.removeEventListener('keydown', onKeyDown);
+    document.removeEventListener('scroll', onScroll, true);
+    window.removeEventListener('blur', closeAll);
+    window.removeEventListener('resize', closeAll);
+  };
+}
+
 function renderCapturePolicyControls(prefix, policy, enabled) {
   const state = capturePolicyGuardrailState(prefix, policy);
   const normalized = state.effective;
@@ -7713,6 +7805,9 @@ function renderCapturePolicyControls(prefix, policy, enabled) {
   if (button) {
     button.disabled = !enabled;
   }
+  if (!enabled) {
+    closeCaptureSettingsPanel(prefix);
+  }
 }
 
 function collectCapturePolicyFromControls(prefix, fallback = {}) {
@@ -7758,15 +7853,430 @@ function collectCapturePolicyFromControls(prefix, fallback = {}) {
   return normalizeResultCapturePolicy(next, state.kind, { diagnostic: state.context.diagnostic });
 }
 
-function toggleCaptureSettingsPanel(prefix) {
+function closeCaptureSettingsPanel(prefix) {
   const panel = $(`${prefix}CaptureSettingsPanel`);
   const button = $(`${prefix}CaptureSettingsButton`);
   if (!panel || !button) {
     return;
   }
-  const hidden = panel.hidden !== false;
-  panel.hidden = !hidden;
-  button.setAttribute('aria-expanded', hidden ? 'true' : 'false');
+  panel.hidden = true;
+  panel.style.left = '';
+  panel.style.top = '';
+  button.setAttribute('aria-expanded', 'false');
+}
+
+function positionCaptureSettingsPanel(prefix) {
+  const panel = $(`${prefix}CaptureSettingsPanel`);
+  const button = $(`${prefix}CaptureSettingsButton`);
+  if (!panel || !button || panel.hidden) {
+    return;
+  }
+  const margin = 12;
+  const gap = 6;
+  const buttonRect = button.getBoundingClientRect();
+  const viewportWidth = Number(window.innerWidth) || document.documentElement?.clientWidth || 1024;
+  const viewportHeight = Number(window.innerHeight) || document.documentElement?.clientHeight || 768;
+  const panelWidth = Math.min(panel.offsetWidth || 360, Math.max(0, viewportWidth - margin * 2));
+  const panelHeight = Math.min(panel.offsetHeight || 0, Math.max(0, viewportHeight - margin * 2));
+  const maxLeft = Math.max(margin, viewportWidth - panelWidth - margin);
+  const preferredLeft = prefix === 'runner' ? buttonRect.left : buttonRect.right - panelWidth;
+  const left = Math.min(Math.max(margin, preferredLeft), maxLeft);
+  const preferredTop = buttonRect.bottom + gap;
+  const maxTop = Math.max(margin, viewportHeight - panelHeight - margin);
+  const top = Math.min(Math.max(margin, preferredTop), maxTop);
+  panel.style.left = `${left}px`;
+  panel.style.top = `${top}px`;
+}
+
+function toggleCaptureSettingsPanel(prefix, event) {
+  event?.stopPropagation?.();
+  const panel = $(`${prefix}CaptureSettingsPanel`);
+  const button = $(`${prefix}CaptureSettingsButton`);
+  if (!panel || !button || button.disabled) {
+    return;
+  }
+  const shouldOpen = panel.hidden !== false;
+  closeToolbarMenus();
+  closeContextMenu();
+  closeFileSourceMenu();
+  closeCaptureSettingsPanels({ exceptPanel: shouldOpen ? panel : null });
+  panel.hidden = !shouldOpen;
+  button.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+  if (shouldOpen) {
+    positionCaptureSettingsPanel(prefix);
+    panel.querySelector('select, input, button, textarea')?.focus?.();
+  }
+}
+
+function positionAuthRefreshPanel(prefix) {
+  const panel = $(`${prefix}AuthRefreshPanel`);
+  const button = $(`${prefix}AuthRefreshButton`);
+  if (!panel || !button || panel.hidden) {
+    return;
+  }
+  const margin = 12;
+  const gap = 6;
+  const buttonRect = button.getBoundingClientRect();
+  const viewportWidth = Number(window.innerWidth) || document.documentElement?.clientWidth || 1024;
+  const viewportHeight = Number(window.innerHeight) || document.documentElement?.clientHeight || 768;
+  const panelWidth = Math.min(panel.offsetWidth || 640, Math.max(0, viewportWidth - margin * 2));
+  const panelHeight = Math.min(panel.offsetHeight || 0, Math.max(0, viewportHeight - margin * 2));
+  const maxLeft = Math.max(margin, viewportWidth - panelWidth - margin);
+  const left = Math.min(Math.max(margin, buttonRect.right - panelWidth), maxLeft);
+  const preferredTop = buttonRect.bottom + gap;
+  const maxTop = Math.max(margin, viewportHeight - panelHeight - margin);
+  const top = Math.min(Math.max(margin, preferredTop), maxTop);
+  panel.style.left = `${left}px`;
+  panel.style.top = `${top}px`;
+}
+
+function toggleAuthRefreshPanel(prefix, event) {
+  event?.stopPropagation?.();
+  const panel = $(`${prefix}AuthRefreshPanel`);
+  const button = $(`${prefix}AuthRefreshButton`);
+  if (!panel || !button || button.disabled) {
+    return;
+  }
+  const shouldOpen = panel.hidden !== false;
+  closeToolbarMenus();
+  closeContextMenu();
+  closeFileSourceMenu();
+  closeCaptureSettingsPanels({ exceptPanel: shouldOpen ? panel : null });
+  panel.hidden = !shouldOpen;
+  button.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+  if (shouldOpen) {
+    positionAuthRefreshPanel(prefix);
+    panel.querySelector('select, input, button, textarea')?.focus?.();
+  }
+}
+
+function renderAuthRefreshControls(prefix, authRefresh, enabled) {
+  const normalized = normalizeAuthRefreshConfig(authRefresh || {});
+  const authType = normalizeAuthRefreshUiType(normalized.authType);
+  setValue(`${prefix}AuthRefreshTypeSelect`, authType);
+  setChecked(`${prefix}AuthRefreshEnabledInput`, normalized.enabled === true);
+  const accessTokenOutput = authRefreshOutputForSlot(normalized, 'accessToken', {
+    source: 'body',
+    path: normalized.accessTokenPath,
+    variable: normalized.accessTokenVariable
+  });
+  const refreshTokenOutput = authRefreshOutputForSlot(normalized, 'refreshToken', {
+    source: 'body',
+    path: normalized.refreshTokenPath,
+    variable: normalized.refreshTokenVariable
+  });
+  const apiKeyOutput = authRefreshOutputForSlot(normalized, 'apiKey', authRefreshDefaultOutput('apiKey'));
+  const cookieOutput = authRefreshOutputForSlot(normalized, 'cookie', authRefreshDefaultOutput('cookie'));
+  const awsAccessKeyOutput = authRefreshOutputForSlot(normalized, 'awsAccessKey', authRefreshDefaultOutput('awsAccessKey'));
+  const awsSecretKeyOutput = authRefreshOutputForSlot(normalized, 'awsSecretKey', authRefreshDefaultOutput('awsSecretKey'));
+  const awsSessionTokenOutput = authRefreshOutputForSlot(normalized, 'awsSessionToken', authRefreshDefaultOutput('awsSessionToken'));
+  const customOutput = authRefreshOutputForSlot(normalized, 'custom', authRefreshDefaultOutput('custom'));
+  setValue(`${prefix}AuthRefreshAccessTokenVariableInput`, accessTokenOutput.variable);
+  setValue(`${prefix}AuthRefreshRefreshTokenVariableInput`, refreshTokenOutput.variable);
+  renderAuthRefreshRequestSummary(prefix, normalized.request);
+  renderAuthRefreshTokenRequestSummary(prefix, normalized.refreshTokenRequest);
+  setValue(`${prefix}AuthRefreshAccessTokenPathInput`, accessTokenOutput.path);
+  setValue(`${prefix}AuthRefreshRefreshTokenPathInput`, refreshTokenOutput.path);
+  setValue(`${prefix}AuthRefreshApiKeyVariableInput`, apiKeyOutput.variable);
+  setValue(`${prefix}AuthRefreshApiKeyPathInput`, apiKeyOutput.path);
+  setValue(`${prefix}AuthRefreshCookieNameInput`, cookieOutput.path);
+  setValue(`${prefix}AuthRefreshCookieVariableInput`, cookieOutput.variable);
+  setValue(`${prefix}AuthRefreshAwsAccessKeyVariableInput`, awsAccessKeyOutput.variable);
+  setValue(`${prefix}AuthRefreshAwsAccessKeyPathInput`, awsAccessKeyOutput.path);
+  setValue(`${prefix}AuthRefreshAwsSecretKeyVariableInput`, awsSecretKeyOutput.variable);
+  setValue(`${prefix}AuthRefreshAwsSecretKeyPathInput`, awsSecretKeyOutput.path);
+  setValue(`${prefix}AuthRefreshAwsSessionTokenVariableInput`, awsSessionTokenOutput.variable);
+  setValue(`${prefix}AuthRefreshAwsSessionTokenPathInput`, awsSessionTokenOutput.path);
+  setValue(`${prefix}AuthRefreshCustomVariableInput`, customOutput.variable);
+  setValue(`${prefix}AuthRefreshCustomPathInput`, customOutput.path);
+  setValue(`${prefix}AuthRefreshIntervalSecondsInput`, normalized.refreshIntervalSeconds);
+  setValue(`${prefix}AuthRefreshFailurePolicySelect`, normalized.failurePolicy);
+  setChecked(`${prefix}AuthRefreshBeforeRunInput`, normalized.refreshBeforeRun === true);
+  renderAuthRefreshVariableSuggestions(prefix);
+  applyAuthRefreshTypeVisibility(prefix, authType);
+  const button = $(`${prefix}AuthRefreshButton`);
+  if (button) {
+    const active = enabled && normalized.enabled === true;
+    button.disabled = !enabled;
+    button.textContent = `Refreshing Auth: ${active ? 'On' : 'Off'}`;
+    button.classList.toggle('auth-refresh-active', active);
+  }
+  for (const control of document.querySelectorAll(`#${prefix}AuthRefreshPanel input, #${prefix}AuthRefreshPanel select, #${prefix}AuthRefreshPanel textarea`)) {
+    control.disabled = !enabled;
+  }
+  for (const control of document.querySelectorAll(`#${prefix}AuthRefreshPanel button`)) {
+    if (control.id !== `${prefix}AuthRefreshButton`) {
+      control.disabled = !enabled;
+    }
+  }
+  const openButton = $(`${prefix}AuthRefreshOpenRequestButton`);
+  if (openButton) {
+    openButton.disabled = !enabled || !authRefreshRequestConfigured(authRefresh?.request);
+  }
+  const refreshTokenOpenButton = $(`${prefix}AuthRefreshTokenOpenRequestButton`);
+  if (refreshTokenOpenButton) {
+    refreshTokenOpenButton.disabled = !enabled || !authRefreshRequestConfigured(authRefresh?.refreshTokenRequest);
+  }
+  positionVisibleAuthRefreshPanel(prefix);
+  if (!enabled) {
+    const panel = $(`${prefix}AuthRefreshPanel`);
+    if (panel) {
+      panel.hidden = true;
+    }
+    button?.setAttribute('aria-expanded', 'false');
+  }
+}
+
+function renderAuthRefreshRequestSummary(prefix, request) {
+  const summary = $(`${prefix}AuthRefreshRequestSummary`);
+  renderAuthRefreshRequestSummaryElement(summary, request, 'No auth request selected', 'Refresh Auth');
+}
+
+function renderAuthRefreshTokenRequestSummary(prefix, request) {
+  const summary = $(`${prefix}AuthRefreshTokenRequestSummary`);
+  renderAuthRefreshRequestSummaryElement(summary, request, 'No refresh token request selected', 'Refresh Token');
+}
+
+function renderAuthRefreshRequestSummaryElement(summary, request, emptyText, fallbackName) {
+  if (!summary) {
+    return;
+  }
+  if (!authRefreshRequestConfigured(request)) {
+    summary.textContent = emptyText;
+    summary.title = summary.textContent;
+    return;
+  }
+  const method = requestMethodText(request);
+  const name = String(request?.name || '').trim() || fallbackName;
+  const url = String(request?.url || '').trim();
+  summary.textContent = url ? `${method} ${name} - ${url}` : `${method} ${name}`;
+  summary.title = summary.textContent;
+}
+
+function authRefreshRequestConfigured(request = {}) {
+  const id = String(request?.id || '').trim();
+  return Boolean(String(request?.url || '').trim() || (id && !authRefreshDefaultRequestIds().has(id)));
+}
+
+function authRefreshDefaultRequestIds() {
+  return new Set(['auth-refresh-request', 'auth-refresh-token-request']);
+}
+
+function positionVisibleAuthRefreshPanel(prefix) {
+  const panel = $(`${prefix}AuthRefreshPanel`);
+  if (!panel) {
+    return;
+  }
+  if (!panel.hidden) {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => positionAuthRefreshPanel(prefix));
+    } else {
+      positionAuthRefreshPanel(prefix);
+    }
+  }
+}
+
+function syncAuthRefreshButton(prefix, authRefresh, enabled = true) {
+  const button = $(`${prefix}AuthRefreshButton`);
+  if (!button) {
+    return;
+  }
+  const active = enabled && authRefresh?.enabled === true;
+  button.textContent = `Refreshing Auth: ${active ? 'On' : 'Off'}`;
+  button.classList.toggle('auth-refresh-active', active);
+  button.disabled = !enabled;
+}
+
+function collectAuthRefreshFromControls(prefix, fallback = {}) {
+  const existing = normalizeAuthRefreshConfig(fallback || {});
+  const authType = normalizeAuthRefreshUiType($(`${prefix}AuthRefreshTypeSelect`)?.value || existing.authType);
+  const outputs = collectAuthRefreshOutputsFromControls(prefix, authType);
+  const primaryOutput = authRefreshPrimaryOutput(authType, outputs);
+  const next = normalizeAuthRefreshConfig({
+    ...existing,
+    enabled: $(`${prefix}AuthRefreshEnabledInput`)?.checked === true,
+    mode: 'interval',
+    authType,
+    targetScope: 'environment',
+    accessTokenVariable: primaryOutput?.variable || '',
+    refreshTokenVariable: authType === 'bearer' || authType === 'oauth2'
+      ? ($(`${prefix}AuthRefreshRefreshTokenVariableInput`)?.value || '')
+      : '',
+    expiresAtVariable: '',
+    accessTokenPath: primaryOutput?.path || '',
+    refreshTokenPath: authType === 'bearer' || authType === 'oauth2'
+      ? ($(`${prefix}AuthRefreshRefreshTokenPathInput`)?.value || '')
+      : '',
+    expiresInPath: '',
+    expiresAtPath: '',
+    refreshWindowSeconds: existing.refreshWindowSeconds,
+    tokenLifetimeSeconds: existing.tokenLifetimeSeconds,
+    refreshIntervalSeconds: $(`${prefix}AuthRefreshIntervalSecondsInput`)?.value || existing.refreshIntervalSeconds,
+    refreshBeforeRun: $(`${prefix}AuthRefreshBeforeRunInput`)?.checked === true,
+    failurePolicy: $(`${prefix}AuthRefreshFailurePolicySelect`)?.value || existing.failurePolicy,
+    outputs,
+    request: existing.request,
+    refreshTokenRequest: existing.refreshTokenRequest
+  });
+  renderAuthRefreshVariableSuggestions(prefix);
+  applyAuthRefreshTypeVisibility(prefix, next.authType);
+  positionVisibleAuthRefreshPanel(prefix);
+  renderAuthRefreshRequestSummary(prefix, next.request);
+  renderAuthRefreshTokenRequestSummary(prefix, next.refreshTokenRequest);
+  return next;
+}
+
+function normalizeAuthRefreshUiType(value) {
+  const text = String(value || '').trim();
+  return ['bearer', 'oauth2', 'apiKey', 'cookie', 'aws', 'custom'].includes(text) ? text : 'bearer';
+}
+
+function authRefreshDefaultOutput(slot) {
+  const defaults = {
+    accessToken: { slot: 'accessToken', source: 'body', path: 'access_token', variable: 'ACCESS_TOKEN' },
+    refreshToken: { slot: 'refreshToken', source: 'body', path: 'refresh_token', variable: 'REFRESH_TOKEN' },
+    apiKey: { slot: 'apiKey', source: 'body', path: 'api_key', variable: 'API_KEY' },
+    cookie: { slot: 'cookie', source: 'cookie', path: '', variable: '' },
+    awsAccessKey: { slot: 'awsAccessKey', source: 'body', path: 'credentials.accessKeyId', variable: 'AWS_ACCESS_KEY_ID' },
+    awsSecretKey: { slot: 'awsSecretKey', source: 'body', path: 'credentials.secretAccessKey', variable: 'AWS_SECRET_ACCESS_KEY' },
+    awsSessionToken: { slot: 'awsSessionToken', source: 'body', path: 'credentials.sessionToken', variable: 'AWS_SESSION_TOKEN' },
+    custom: { slot: 'custom', source: 'body', path: 'token', variable: 'AUTH_VALUE' }
+  };
+  return { ...(defaults[slot] || defaults.custom) };
+}
+
+function authRefreshOutputForSlot(config = {}, slot, fallback = {}) {
+  const output = (config.outputs || []).find((item) => item?.slot === slot);
+  return {
+    ...fallback,
+    ...(output || {})
+  };
+}
+
+function collectAuthRefreshOutputsFromControls(prefix, authType) {
+  if (authType === 'apiKey') {
+    return [authRefreshOutputFromControls(prefix, 'apiKey', 'body', 'ApiKeyVariableInput', 'ApiKeyPathInput')];
+  }
+  if (authType === 'cookie') {
+    return [authRefreshOutputFromControls(prefix, 'cookie', 'cookie', 'CookieVariableInput', 'CookieNameInput')];
+  }
+  if (authType === 'aws') {
+    return [
+      authRefreshOutputFromControls(prefix, 'awsAccessKey', 'body', 'AwsAccessKeyVariableInput', 'AwsAccessKeyPathInput'),
+      authRefreshOutputFromControls(prefix, 'awsSecretKey', 'body', 'AwsSecretKeyVariableInput', 'AwsSecretKeyPathInput'),
+      authRefreshOutputFromControls(prefix, 'awsSessionToken', 'body', 'AwsSessionTokenVariableInput', 'AwsSessionTokenPathInput')
+    ];
+  }
+  if (authType === 'custom') {
+    return [authRefreshOutputFromControls(prefix, 'custom', 'body', 'CustomVariableInput', 'CustomPathInput')];
+  }
+  return [
+    authRefreshOutputFromControls(prefix, 'accessToken', 'body', 'AccessTokenVariableInput', 'AccessTokenPathInput'),
+    authRefreshOutputFromControls(prefix, 'refreshToken', 'body', 'RefreshTokenVariableInput', 'RefreshTokenPathInput')
+  ];
+}
+
+function authRefreshOutputFromControls(prefix, slot, source, variableSuffix, pathSuffix) {
+  const fallback = authRefreshDefaultOutput(slot);
+  return {
+    slot,
+    source,
+    variable: $(`${prefix}AuthRefresh${variableSuffix}`)?.value || fallback.variable,
+    path: $(`${prefix}AuthRefresh${pathSuffix}`)?.value || fallback.path
+  };
+}
+
+function authRefreshPrimaryOutput(authType, outputs = []) {
+  const primarySlots = {
+    bearer: 'accessToken',
+    oauth2: 'accessToken',
+    apiKey: 'apiKey',
+    cookie: 'cookie',
+    aws: 'awsAccessKey',
+    custom: 'custom'
+  };
+  return outputs.find((output) => output?.slot === primarySlots[authType]) || outputs[0] || null;
+}
+
+function applyAuthRefreshTypeVisibility(prefix, authType) {
+  const normalizedType = normalizeAuthRefreshUiType(authType);
+  const panel = $(`${prefix}AuthRefreshPanel`);
+  if (!panel) {
+    return;
+  }
+  for (const section of panel.querySelectorAll('[data-auth-refresh-types]')) {
+    const types = String(section.dataset.authRefreshTypes || '').split(/\s+/).filter(Boolean);
+    section.hidden = Boolean(types.length) && !types.includes(normalizedType);
+  }
+  const labels = authRefreshTypeLabels(normalizedType);
+  setText(`${prefix}AuthRefreshHelpText`, labels.help);
+  setText(`${prefix}AuthRefreshAccessTokenVariableLabel`, labels.variableLabel);
+  setText(`${prefix}AuthRefreshAccessTokenPathLabel`, labels.pathLabel);
+}
+
+function authRefreshTypeLabels(authType) {
+  if (authType === 'oauth2') {
+    return {
+      variableLabel: 'Save OAuth Access Token To',
+      pathLabel: 'OAuth Access Token Response Path',
+      help: 'The auth request uses this run environment, saves the OAuth access token to a variable, and repeats on the interval below.'
+    };
+  }
+  if (authType === 'apiKey') {
+    return {
+      variableLabel: 'Save API Key To',
+      pathLabel: 'API Key Response Path',
+      help: 'The auth request uses this run environment, saves the API key to a variable, and repeats on the interval below.'
+    };
+  }
+  if (authType === 'cookie') {
+    return {
+      variableLabel: 'Save Cookie Value To',
+      pathLabel: 'Cookie Name',
+      help: 'The auth request uses this run environment and refreshes cookies for requests that use the cookie jar or a cookie variable.'
+    };
+  }
+  if (authType === 'aws') {
+    return {
+      variableLabel: 'Save AWS Access Key To',
+      pathLabel: 'AWS Access Key Response Path',
+      help: 'The auth request uses this run environment and saves temporary AWS credentials to variables.'
+    };
+  }
+  if (authType === 'custom') {
+    return {
+      variableLabel: 'Save Header Value To',
+      pathLabel: 'Header Value Response Path',
+      help: 'The auth request uses this run environment and saves a custom auth value to a variable.'
+    };
+  }
+  return {
+    variableLabel: 'Save Access Token To',
+    pathLabel: 'Access Token Response Path',
+    help: 'The auth request uses this run environment, saves the bearer token to a variable, and repeats on the interval below.'
+  };
+}
+
+function renderAuthRefreshVariableSuggestions(prefix) {
+  const list = $(`${prefix}AuthRefreshVariableList`);
+  if (!list) {
+    return;
+  }
+  const environment = prefix === 'runner'
+    ? environmentById($('runnerEnvironmentSelect')?.value || activeRunner()?.environmentId)
+    : performanceSelectedEnvironment(activePerformanceTest());
+  list.textContent = '';
+  const seen = new Set();
+  for (const variable of environment?.variables || []) {
+    const key = String(variable?.key || '').trim();
+    if (!key || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    const option = document.createElement('option');
+    option.value = key;
+    list.append(option);
+  }
 }
 
 function setPerformancePanelControlValue(panel, kind, name, value) {
@@ -8562,6 +9072,182 @@ async function promptAndImportPerformanceRequest() {
     return null;
   }
   return importPerformanceRequestSelection(Array.isArray(target) ? target[0] : target);
+}
+
+function openNewAuthRefreshRequest(ownerType, requestKind = 'access') {
+  const owner = activeAuthRefreshOwnerForType(ownerType);
+  if (!owner) {
+    return null;
+  }
+  collectActiveEditorState();
+  const property = authRefreshRequestProperty(requestKind);
+  owner.authRefresh = normalizeAuthRefreshConfig({
+    ...(owner.authRefresh || {}),
+    [property]: newAuthRefreshRequest(requestKind)
+  });
+  markAuthRefreshOwnerDirty(ownerType);
+  renderAuthRefreshControls(ownerType, owner.authRefresh, true);
+  return openAuthRefreshRequest(ownerType, owner, `${authRefreshRequestLabel(requestKind)} created.`, requestKind);
+}
+
+async function promptAndImportAuthRefreshRequest(ownerType, requestKind = 'access') {
+  const target = await promptRunnerRequestImport({ mode: 'performance' });
+  if (!target) {
+    return null;
+  }
+  return importAuthRefreshRequestSelection(ownerType, Array.isArray(target) ? target[0] : target, requestKind);
+}
+
+function importAuthRefreshRequestSelection(ownerType, target, requestKind = 'access') {
+  const owner = activeAuthRefreshOwnerForType(ownerType);
+  const normalized = normalizeRunnerImportTarget(target);
+  if (!owner || normalized.type !== 'request' || !normalized.collectionId || !normalized.requestId) {
+    return null;
+  }
+  const collection = (workspace.collections || []).find((item) => item.id === normalized.collectionId);
+  const entry = collectionRequestEntries(collection).find((candidate) => candidate.request?.id === normalized.requestId
+    && (!normalized.folderId || candidate.folder?.id === normalized.folderId));
+  if (!entry?.request) {
+    setStatus('No request was selected to import.');
+    return null;
+  }
+  const property = authRefreshRequestProperty(requestKind);
+  owner.authRefresh = normalizeAuthRefreshConfig({
+    ...(owner.authRefresh || {}),
+    [property]: cloneRequestForAuthRefresh(entry.request, requestKind)
+  });
+  markAuthRefreshOwnerDirty(ownerType);
+  renderAuthRefreshControls(ownerType, owner.authRefresh, true);
+  setStatus(`${authRefreshRequestLabel(requestKind)} imported into refreshing auth.`);
+  return openAuthRefreshRequest(ownerType, owner, `Opened ${authRefreshRequestLabel(requestKind).toLowerCase()} for editing.`, requestKind);
+}
+
+function openExistingAuthRefreshRequest(ownerType, requestKind = 'access') {
+  const owner = activeAuthRefreshOwnerForType(ownerType);
+  if (!owner) {
+    return null;
+  }
+  collectActiveEditorState();
+  const request = owner.authRefresh?.[authRefreshRequestProperty(requestKind)] || null;
+  if (!authRefreshRequestConfigured(request)) {
+    setStatus(`Create or import ${authRefreshRequestArticle(requestKind)} ${authRefreshRequestLabel(requestKind).toLowerCase()} first.`);
+    renderAuthRefreshControls(ownerType, owner.authRefresh, true);
+    return null;
+  }
+  return openAuthRefreshRequest(ownerType, owner, `Opened ${authRefreshRequestLabel(requestKind).toLowerCase()} for editing.`, requestKind);
+}
+
+function activeAuthRefreshOwnerForType(ownerType) {
+  if (ownerType === 'runner') {
+    return activeRunner();
+  }
+  if (ownerType === 'performance') {
+    return activePerformanceTest();
+  }
+  return null;
+}
+
+function markAuthRefreshOwnerDirty(ownerType) {
+  if (ownerType === 'runner') {
+    markActiveRunnerDirty();
+  } else if (ownerType === 'performance') {
+    markActivePerformanceDirty();
+  }
+}
+
+function openAuthRefreshRequest(ownerType, owner, statusMessage = 'Opened refreshing auth request for editing.', requestKind = 'access') {
+  const request = ensureAuthRefreshRequest(owner, requestKind);
+  if (!request || !canOpenAuthRefreshRequestTabFor(ownerType, owner.id, request.id)) {
+    return null;
+  }
+  activeCollectionId = null;
+  activeFolderId = null;
+  activeRequestId = request.id;
+  activeRunnerRequestRunnerId = null;
+  activeAuthRefreshRequestOwnerType = ownerType;
+  activeAuthRefreshRequestOwnerId = owner.id;
+  if (ownerType === 'runner') {
+    activeRunnerConfigId = owner.id;
+    activeSidebarPanel = 'runners';
+  } else {
+    activePerformanceTestId = owner.id;
+    activeSidebarPanel = 'performance';
+  }
+  activeMainPanel = 'request';
+  ensureOpenRequestTabForActive();
+  closeCaptureSettingsPanels();
+  renderAll();
+  setStatus(statusMessage);
+  return request;
+}
+
+function ensureAuthRefreshRequest(owner, requestKind = 'access') {
+  if (!owner) {
+    return null;
+  }
+  owner.authRefresh = normalizeAuthRefreshConfig(owner.authRefresh || {});
+  const property = authRefreshRequestProperty(requestKind);
+  owner.authRefresh[property] = normalizeAuthRefreshRequest(owner.authRefresh[property] || newAuthRefreshRequest(requestKind), requestKind);
+  return owner.authRefresh[property];
+}
+
+function newAuthRefreshRequest(requestKind = 'access') {
+  return normalizeAuthRefreshRequest({
+    ...newRequestObject(authRefreshRequestDefaultName(requestKind)),
+    method: 'POST'
+  }, requestKind);
+}
+
+function cloneRequestForAuthRefresh(request, requestKind = 'access') {
+  const clone = cloneJson(request) || newAuthRefreshRequest(requestKind);
+  return normalizeAuthRefreshRequest({
+    ...clone,
+    id: crypto.randomUUID(),
+    name: String(clone.name || request?.name || authRefreshRequestDefaultName(requestKind))
+  }, requestKind);
+}
+
+function normalizeAuthRefreshRequest(request = {}, requestKind = 'access') {
+  const normalized = {
+    ...newRequestObject(request.name || authRefreshRequestDefaultName(requestKind)),
+    ...request
+  };
+  normalized.id = String(request.id || crypto.randomUUID());
+  normalized.name = String(normalized.name || authRefreshRequestDefaultName(requestKind));
+  normalized.method = METHODS.includes(String(normalized.method || '').toUpperCase()) ? String(normalized.method).toUpperCase() : 'POST';
+  normalized.url = String(normalized.url || '');
+  normalized.queryParams = Array.isArray(normalized.queryParams) ? normalized.queryParams : [];
+  normalized.headers = Array.isArray(normalized.headers) ? normalized.headers : [];
+  normalized.variables = Array.isArray(normalized.variables) ? normalized.variables : [];
+  normalized.docs = normalized.docs == null ? '' : String(normalized.docs);
+  normalized.scripts = normalized.scripts && typeof normalized.scripts === 'object' ? normalized.scripts : { preRequest: '', tests: '' };
+  normalized.auth = normalized.auth && typeof normalized.auth === 'object' ? normalized.auth : { type: 'none' };
+  normalized.cookieJar = normalized.cookieJar && typeof normalized.cookieJar === 'object'
+    ? normalized.cookieJar
+    : { enabled: false, storeResponses: true };
+  normalized.autoHeaders = normalized.autoHeaders && typeof normalized.autoHeaders === 'object'
+    ? normalized.autoHeaders
+    : { sendPostMeterToken: false, showGeneratedHeaders: false };
+  normalized.settings = normalizeRendererRequestTlsSettings(normalized.settings || {});
+  delete normalized.iterations;
+  delete normalized.source;
+  return normalized;
+}
+
+function authRefreshRequestProperty(requestKind = 'access') {
+  return requestKind === 'refreshToken' ? 'refreshTokenRequest' : 'request';
+}
+
+function authRefreshRequestDefaultName(requestKind = 'access') {
+  return requestKind === 'refreshToken' ? 'Refresh Token' : 'Refresh Auth';
+}
+
+function authRefreshRequestLabel(requestKind = 'access') {
+  return requestKind === 'refreshToken' ? 'Refresh token request' : 'Auth refresh request';
+}
+
+function authRefreshRequestArticle(requestKind = 'access') {
+  return requestKind === 'refreshToken' ? 'a' : 'an';
 }
 
 function importPerformanceRequestSelection(target) {
@@ -11071,6 +11757,7 @@ function normalizeRunner(runner) {
   runner.stopOnFailure = runner.stopOnFailure === true;
   runner.allowEnvironmentMutation = runner.allowEnvironmentMutation === true;
   runner.capturePolicy = normalizeResultCapturePolicy(runner.capturePolicy || {}, 'runner');
+  runner.authRefresh = normalizeAuthRefreshConfig(runner.authRefresh || {});
   runner.csvVariables = normalizeCsvVariableData(runner.csvVariables);
   runner.requests = normalizeRunnerRequests(runner.requests);
   if (runner.environmentId !== 'none' && !(workspace.environments || []).some((environment) => environment.id === runner.environmentId)) {
@@ -11208,6 +11895,13 @@ function setValue(id, value) {
   if (input) {
     input.value = String(value || '');
     refreshCodeEditorIfTextarea(input);
+  }
+}
+
+function setText(id, value) {
+  const element = $(id);
+  if (element) {
+    element.textContent = String(value || '');
   }
 }
 
@@ -11571,6 +12265,7 @@ function newRunnerObject(name) {
     environmentId: 'none',
     stopOnFailure: false,
     allowEnvironmentMutation: false,
+    authRefresh: normalizeAuthRefreshConfig(),
     csvVariables: normalizeCsvVariableData(),
     requests: []
   };
@@ -12824,6 +13519,16 @@ function restoreDirtyRequestsForStructuralSave(payload) {
     if (!snapshot) {
       continue;
     }
+    if (tab.authRefreshRequest === true) {
+      const owner = tab.authRefreshOwnerType === 'performance'
+        ? (payload.performanceTests || []).find((item) => item.id === tab.authRefreshOwnerId)
+        : (payload.runners || []).find((item) => item.id === tab.authRefreshOwnerId);
+      const property = authRefreshRequestPropertyForId(owner?.authRefresh, tab.requestId);
+      if (property) {
+        owner.authRefresh[property] = snapshot;
+      }
+      continue;
+    }
     if (tab.runnerRequest === true || tab.runnerId) {
       const runner = (payload.runners || []).find((item) => item.id === tab.runnerId);
       const index = (runner?.requests || []).findIndex((request) => request.id === tab.requestId);
@@ -12896,6 +13601,16 @@ function restoreDirtySharedStateForStructuralSave(payload) {
 }
 
 function removeRequestFromStructuralPayload(payload, tab) {
+  if (tab.authRefreshRequest === true) {
+    const owner = tab.authRefreshOwnerType === 'performance'
+      ? (payload.performanceTests || []).find((item) => item.id === tab.authRefreshOwnerId)
+      : (payload.runners || []).find((item) => item.id === tab.authRefreshOwnerId);
+    const property = authRefreshRequestPropertyForId(owner?.authRefresh, tab.requestId);
+    if (property) {
+      delete owner.authRefresh[property];
+    }
+    return;
+  }
   if (tab.runnerRequest === true || tab.runnerId) {
     const runner = (payload.runners || []).find((item) => item.id === tab.runnerId);
     if (runner) {
@@ -15885,6 +16600,13 @@ async function saveRequestFromPane() {
     return false;
   }
   try {
+    if (activeAuthRefreshRequestOwnerType) {
+      const saved = await saveWorkspace(false);
+      if (saved) {
+        setStatus('Refreshing auth request saved.');
+      }
+      return saved;
+    }
     if (activeRunnerRequestRunnerId) {
       const saved = await saveWorkspace(false);
       if (saved) {
@@ -17616,6 +18338,8 @@ function clearActiveWorkspaceItem() {
   activeFolderId = null;
   activeRequestId = null;
   activeRunnerRequestRunnerId = null;
+  activeAuthRefreshRequestOwnerType = '';
+  activeAuthRefreshRequestOwnerId = null;
 }
 
 async function deleteRequest(collection, folder, request) {
@@ -17768,7 +18492,10 @@ function collectRequestNameFromTitle(options = {}) {
     markActiveRequestDirty();
   }
   if (options.render !== false && changed) {
-    if (activeRunnerRequestRunnerId) {
+    if (activeAuthRefreshRequestOwnerType) {
+      const owner = authRefreshOwner(activeAuthRefreshRequestOwnerType, activeAuthRefreshRequestOwnerId);
+      renderAuthRefreshControls(activeAuthRefreshRequestOwnerType, owner?.authRefresh, Boolean(owner));
+    } else if (activeRunnerRequestRunnerId) {
       renderRunnerEditor();
     } else {
       renderCollections();
@@ -17864,6 +18591,8 @@ function collectRunnerFromEditor() {
   runner.stopOnFailure = $('runnerStopOnFailure')?.checked === true;
   runner.allowEnvironmentMutation = $('runnerAllowEnvironmentMutation')?.checked === true;
   runner.capturePolicy = collectCapturePolicyFromControls('runner', runner.capturePolicy || {});
+  runner.authRefresh = collectAuthRefreshFromControls('runner', runner.authRefresh || {});
+  syncAuthRefreshButton('runner', runner.authRefresh, true);
   runner.csvVariables = normalizeCsvVariableData(runner.csvVariables || {});
   const iterationsChanged = collectRunnerRequestIterationsFromEditor(runner);
   runner.requests = normalizeRunnerRequests(runner.requests);
@@ -17890,6 +18619,8 @@ function collectPerformanceTestFromEditor(editedElement = null) {
   syncPerformanceActiveTypeSettings(test);
   test.csvVariables = normalizeCsvVariableData(test.csvVariables || {});
   test.capturePolicy = collectCapturePolicyFromControls('performance', test.capturePolicy || {});
+  test.authRefresh = collectAuthRefreshFromControls('performance', test.authRefresh || {});
+  syncAuthRefreshButton('performance', test.authRefresh, true);
   test.request ||= {};
   test.request.id ||= crypto.randomUUID();
   test.request.name ||= 'Performance Request';
@@ -18400,6 +19131,10 @@ function activeEnvironment() {
 }
 
 function activeRequest() {
+  if (!activeCollectionId && !activeRunnerRequestRunnerId && activeAuthRefreshRequestOwnerType && activeAuthRefreshRequestOwnerId && activeRequestId) {
+    const owner = authRefreshOwner(activeAuthRefreshRequestOwnerType, activeAuthRefreshRequestOwnerId);
+    return authRefreshOwnedRequest(owner?.authRefresh, activeRequestId);
+  }
   if (activeRunnerRequestRunnerId && activeRequestId) {
     const runner = (workspace?.runners || []).find((item) => item.id === activeRunnerRequestRunnerId);
     return (runner?.requests || []).find((request) => request.id === activeRequestId) || null;
@@ -18412,6 +19147,34 @@ function activeRequest() {
     return null;
   }
   return findRequest(collection, activeRequestId)?.request || null;
+}
+
+function authRefreshOwner(ownerType, ownerId) {
+  if (ownerType === 'runner') {
+    return (workspace?.runners || []).find((runner) => runner.id === ownerId) || null;
+  }
+  if (ownerType === 'performance') {
+    return (workspace?.performanceTests || []).find((test) => test.id === ownerId) || null;
+  }
+  return null;
+}
+
+function authRefreshOwnedRequest(authRefresh, requestId) {
+  const property = authRefreshRequestPropertyForId(authRefresh, requestId);
+  return property ? authRefresh[property] : null;
+}
+
+function authRefreshRequestPropertyForId(authRefresh, requestId) {
+  if (!authRefresh || !requestId) {
+    return '';
+  }
+  if (authRefresh.request?.id === requestId) {
+    return 'request';
+  }
+  if (authRefresh.refreshTokenRequest?.id === requestId) {
+    return 'refreshTokenRequest';
+  }
+  return '';
 }
 
 function activateTab(groupName, tabName) {

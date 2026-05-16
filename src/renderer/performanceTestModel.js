@@ -74,6 +74,42 @@
     maxConcurrency: 25,
     maxDurationSeconds: 60 * 60
   };
+  const AUTH_REFRESH_MODES = ['auto', 'lifetime', 'interval'];
+  const AUTH_REFRESH_SCOPES = ['environment', 'collection', 'globals'];
+  const AUTH_REFRESH_FAILURE_POLICIES = ['abort', 'continue'];
+  const AUTH_REFRESH_TYPES = ['bearer', 'oauth2', 'apiKey', 'cookie', 'aws', 'custom'];
+  const AUTH_REFRESH_OUTPUT_SOURCES = ['body', 'header', 'cookie'];
+  const AUTH_REFRESH_OUTPUT_SLOTS = [
+    'accessToken',
+    'refreshToken',
+    'apiKey',
+    'cookie',
+    'awsAccessKey',
+    'awsSecretKey',
+    'awsSessionToken',
+    'custom'
+  ];
+  const DEFAULT_AUTH_REFRESH_REQUEST_ID = 'auth-refresh-request';
+  const DEFAULT_AUTH_REFRESH_TOKEN_REQUEST_ID = 'auth-refresh-token-request';
+  const DEFAULT_AUTH_REFRESH = {
+    enabled: false,
+    mode: 'interval',
+    authType: 'bearer',
+    targetScope: 'environment',
+    accessTokenVariable: 'ACCESS_TOKEN',
+    refreshTokenVariable: 'REFRESH_TOKEN',
+    expiresAtVariable: '',
+    accessTokenPath: 'access_token',
+    refreshTokenPath: 'refresh_token',
+    expiresInPath: 'expires_in',
+    expiresAtPath: 'expires_at',
+    refreshWindowSeconds: 120,
+    tokenLifetimeSeconds: 900,
+    refreshIntervalSeconds: 600,
+    refreshBeforeRun: true,
+    failurePolicy: 'abort',
+    outputs: []
+  };
 
   const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
   const BODY_TYPES = [
@@ -100,6 +136,7 @@
       config: DEFAULT_PERFORMANCE_CONFIG.diagnosis,
       safetyLimits: DEFAULT_SAFETY_LIMITS,
       capturePolicy: CAPTURE_POLICY.normalizeCapturePolicy({}, 'performance'),
+      authRefresh: normalizeAuthRefreshConfig(),
       typeSettings: defaultPerformanceTypeSettings(),
       csvVariables: CSV_VARIABLES.normalizeCsvVariableData(),
       resultsMetadata: {}
@@ -137,6 +174,7 @@
     syncPerformanceActiveTypeSettings(test);
     test.csvVariables = CSV_VARIABLES.normalizeCsvVariableData(test.csvVariables);
     test.capturePolicy = CAPTURE_POLICY.normalizeCapturePolicy(test.capturePolicy, 'performance', { diagnostic: test.type === 'diagnosis' });
+    test.authRefresh = normalizeAuthRefreshConfig(test.authRefresh);
     test.resultsMetadata = normalizePerformanceResultsMetadata(test.resultsMetadata);
     return test;
   }
@@ -160,6 +198,9 @@
       scripts: request.scripts && typeof request.scripts === 'object' ? cloneJson(request.scripts) || { preRequest: '', tests: '' } : { preRequest: '', tests: '' },
       variables: Array.isArray(request.variables) ? cloneJson(request.variables) || [] : [],
       docs: request.docs == null ? '' : String(request.docs),
+      settings: request.settings && typeof request.settings === 'object'
+        ? cloneJson(request.settings) || { sslCertificateVerification: 'inherit' }
+        : { sslCertificateVerification: 'inherit' },
       cookieJar: request.cookieJar && typeof request.cookieJar === 'object'
         ? cloneJson(request.cookieJar) || { enabled: false, storeResponses: true }
         : { enabled: false, storeResponses: true },
@@ -172,6 +213,124 @@
       sendPostMeterToken: autoHeaders?.sendPostMeterToken === true,
       showGeneratedHeaders: autoHeaders?.showGeneratedHeaders === true
     };
+  }
+
+  function normalizeAuthRefreshConfig(authRefresh = {}) {
+    const input = authRefresh && typeof authRefresh === 'object' && !Array.isArray(authRefresh) ? authRefresh : {};
+    const requestInput = input.request && typeof input.request === 'object' && !Array.isArray(input.request)
+      ? input.request
+      : {};
+    const refreshTokenRequestInput = input.refreshTokenRequest && typeof input.refreshTokenRequest === 'object' && !Array.isArray(input.refreshTokenRequest)
+      ? input.refreshTokenRequest
+      : {};
+    const request = normalizeAuthRefreshRequest(requestInput, {
+      id: DEFAULT_AUTH_REFRESH_REQUEST_ID,
+      name: 'Refresh Auth'
+    });
+    const refreshTokenRequest = normalizeAuthRefreshRequest(refreshTokenRequestInput, {
+      id: DEFAULT_AUTH_REFRESH_TOKEN_REQUEST_ID,
+      name: 'Refresh Token'
+    });
+    return {
+      enabled: input.enabled === true,
+      mode: AUTH_REFRESH_MODES.includes(String(input.mode || '')) ? String(input.mode) : DEFAULT_AUTH_REFRESH.mode,
+      authType: AUTH_REFRESH_TYPES.includes(String(input.authType || '')) ? String(input.authType) : DEFAULT_AUTH_REFRESH.authType,
+      targetScope: AUTH_REFRESH_SCOPES.includes(String(input.targetScope || '')) ? String(input.targetScope) : DEFAULT_AUTH_REFRESH.targetScope,
+      accessTokenVariable: normalizeAuthRefreshText(input.accessTokenVariable, DEFAULT_AUTH_REFRESH.accessTokenVariable, 512),
+      refreshTokenVariable: normalizeAuthRefreshText(input.refreshTokenVariable, DEFAULT_AUTH_REFRESH.refreshTokenVariable, 512),
+      expiresAtVariable: normalizeAuthRefreshText(input.expiresAtVariable, DEFAULT_AUTH_REFRESH.expiresAtVariable, 512),
+      accessTokenPath: normalizeAuthRefreshText(input.accessTokenPath, DEFAULT_AUTH_REFRESH.accessTokenPath, 32768),
+      refreshTokenPath: normalizeAuthRefreshText(input.refreshTokenPath, DEFAULT_AUTH_REFRESH.refreshTokenPath, 32768),
+      expiresInPath: normalizeAuthRefreshText(input.expiresInPath, DEFAULT_AUTH_REFRESH.expiresInPath, 32768),
+      expiresAtPath: normalizeAuthRefreshText(input.expiresAtPath, DEFAULT_AUTH_REFRESH.expiresAtPath, 32768),
+      refreshWindowSeconds: clampInteger(input.refreshWindowSeconds, 0, 3600, DEFAULT_AUTH_REFRESH.refreshWindowSeconds),
+      tokenLifetimeSeconds: clampInteger(input.tokenLifetimeSeconds, 1, 86400, DEFAULT_AUTH_REFRESH.tokenLifetimeSeconds),
+      refreshIntervalSeconds: clampInteger(input.refreshIntervalSeconds, 1, 86400, DEFAULT_AUTH_REFRESH.refreshIntervalSeconds),
+      refreshBeforeRun: input.refreshBeforeRun !== false,
+      failurePolicy: AUTH_REFRESH_FAILURE_POLICIES.includes(String(input.failurePolicy || '')) ? String(input.failurePolicy) : DEFAULT_AUTH_REFRESH.failurePolicy,
+      request,
+      refreshTokenRequest,
+      outputs: normalizeAuthRefreshOutputs(input.outputs, {
+        accessTokenVariable: normalizeAuthRefreshText(input.accessTokenVariable, DEFAULT_AUTH_REFRESH.accessTokenVariable, 512),
+        refreshTokenVariable: normalizeAuthRefreshText(input.refreshTokenVariable, DEFAULT_AUTH_REFRESH.refreshTokenVariable, 512),
+        accessTokenPath: normalizeAuthRefreshText(input.accessTokenPath, DEFAULT_AUTH_REFRESH.accessTokenPath, 32768),
+        refreshTokenPath: normalizeAuthRefreshText(input.refreshTokenPath, DEFAULT_AUTH_REFRESH.refreshTokenPath, 32768)
+      })
+    };
+  }
+
+  function normalizeAuthRefreshRequest(input = {}, defaults = {}) {
+    const request = normalizePerformanceRequest({
+      ...input,
+      id: input.id || defaults.id,
+      name: input.name || defaults.name || 'Refresh Auth',
+      method: input.method || 'POST',
+      url: input.url || ''
+    });
+    request.id = String(input.id || defaults.id);
+    request.name = String(input.name || request.name || defaults.name || 'Refresh Auth');
+    return request;
+  }
+
+  function normalizeAuthRefreshText(value, fallback, maxLength) {
+    if (value == null) {
+      return String(fallback || '').slice(0, maxLength);
+    }
+    return String(value).trim().slice(0, maxLength);
+  }
+
+  function normalizeAuthRefreshOutputs(outputs, fallbackConfig = DEFAULT_AUTH_REFRESH) {
+    const source = Array.isArray(outputs)
+      ? outputs
+      : legacyAuthRefreshOutputs(fallbackConfig);
+    const normalized = [];
+    const seen = new Set();
+    for (const output of source.slice(0, 20)) {
+      const item = normalizeAuthRefreshOutput(output);
+      if (!item.variable || !item.path) {
+        continue;
+      }
+      const key = `${item.slot}:${item.source}:${item.path}:${item.variable}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      normalized.push(item);
+    }
+    return normalized;
+  }
+
+  function normalizeAuthRefreshOutput(output = {}) {
+    const input = output && typeof output === 'object' && !Array.isArray(output) ? output : {};
+    const slot = String(input.slot || '');
+    const source = String(input.source || '');
+    return {
+      slot: AUTH_REFRESH_OUTPUT_SLOTS.includes(slot) ? slot : 'custom',
+      source: AUTH_REFRESH_OUTPUT_SOURCES.includes(source) ? source : 'body',
+      path: normalizeAuthRefreshText(input.path, '', 32768),
+      variable: normalizeAuthRefreshText(input.variable, '', 512)
+    };
+  }
+
+  function legacyAuthRefreshOutputs(config = {}) {
+    const outputs = [];
+    if (config.accessTokenVariable && config.accessTokenPath) {
+      outputs.push({
+        slot: 'accessToken',
+        source: 'body',
+        path: config.accessTokenPath,
+        variable: config.accessTokenVariable
+      });
+    }
+    if (config.refreshTokenVariable && config.refreshTokenPath) {
+      outputs.push({
+        slot: 'refreshToken',
+        source: 'body',
+        path: config.refreshTokenPath,
+        variable: config.refreshTokenVariable
+      });
+    }
+    return outputs;
   }
 
   function cloneRequestForPerformanceTest(request, source = {}) {
@@ -404,6 +563,7 @@
 
   const exported = {
     DEFAULT_PERFORMANCE_CONFIG,
+    DEFAULT_AUTH_REFRESH,
     DEFAULT_SAFETY_LIMITS,
     DIAGNOSIS_SCOPE_PROFILES,
     MAX_SAFETY_LIMITS,
@@ -418,6 +578,7 @@
     normalizePerformanceSource,
     normalizePerformanceTest,
     normalizePerformanceTypeSettings,
+    normalizeAuthRefreshConfig,
     syncPerformanceActiveTypeSettings,
     normalizeWorkspacePerformanceTests,
     performanceTestSnapshot,

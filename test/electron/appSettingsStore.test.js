@@ -31,7 +31,7 @@ test('app settings store creates local settings.json without looking like a work
   assert.equal(workspaceSettings.appearance.interfaceFont, 'default');
   assert.equal(workspaceSettings.appearance.interfaceFontSize, 13);
   assert.equal(workspaceSettings.appearance.editorFont, 'default');
-  assert.equal(workspaceSettings.appearance.editorFontSize, 12);
+  assert.equal(workspaceSettings.appearance.editorFontSize, 13);
   assert.equal(workspaceSettings.editor.lineNumbers, true);
   assert.equal(workspaceSettings.tabs.saveOnForceClose, false);
   assert.equal(workspaceSettings.modals.closeOnBackdropClick, false);
@@ -50,7 +50,7 @@ test('app settings store persists only app-wide settings and merges workspace-lo
   await store.load();
 
   await store.mergeWorkspaceSettings('Workspace A.json', {
-    appearance: { theme: 'dark', interfaceFont: 'system', interfaceFontSize: 14, editorFont: 'system-mono', editorFontSize: 15 },
+    appearance: { theme: 'dark', interfaceFont: 'system', interfaceFontSize: 16, editorFont: 'system-mono', editorFontSize: 19 },
     editor: { lineNumbers: false, variableTooltipHints: false },
     tabs: { saveOnForceClose: true },
     modals: { closeOnBackdropClick: true },
@@ -89,9 +89,9 @@ test('app settings store persists only app-wide settings and merges workspace-lo
   const persisted = JSON.parse(await fs.readFile(settingsPath, 'utf8'));
   assert.equal(persisted.app.appearance.theme, 'dark');
   assert.equal(persisted.app.appearance.interfaceFont, 'system');
-  assert.equal(persisted.app.appearance.interfaceFontSize, 14);
+  assert.equal(persisted.app.appearance.interfaceFontSize, 16);
   assert.equal(persisted.app.appearance.editorFont, 'system-mono');
-  assert.equal(persisted.app.appearance.editorFontSize, 15);
+  assert.equal(persisted.app.appearance.editorFontSize, 19);
   assert.equal(persisted.app.editor.lineNumbers, false);
   assert.equal(persisted.app.editor.variableTooltipHints, false);
   assert.equal(persisted.app.tabs.saveOnForceClose, true);
@@ -132,7 +132,7 @@ test('app settings store persists only app-wide settings and merges workspace-lo
   });
   assert.equal(workspaceASettings.appearance.theme, 'dark');
   assert.equal(workspaceASettings.appearance.interfaceFont, 'system');
-  assert.equal(workspaceASettings.appearance.editorFontSize, 15);
+  assert.equal(workspaceASettings.appearance.editorFontSize, 19);
   assert.equal(workspaceASettings.editor.lineNumbers, false);
   assert.equal(workspaceASettings.editor.variableTooltipHints, false);
   assert.equal(workspaceASettings.diagnostics.requestResponseLogging.urls, true);
@@ -144,7 +144,7 @@ test('app settings store persists only app-wide settings and merges workspace-lo
 
   const workspaceBSettings = store.settingsForWorkspace('Workspace B.json');
   assert.equal(workspaceBSettings.appearance.theme, 'dark');
-  assert.equal(workspaceBSettings.appearance.interfaceFontSize, 14);
+  assert.equal(workspaceBSettings.appearance.interfaceFontSize, 16);
   assert.equal(workspaceBSettings.appearance.editorFont, 'system-mono');
   assert.equal(workspaceBSettings.editor.lineNumbers, false);
   assert.equal(workspaceBSettings.editor.variableTooltipHints, false);

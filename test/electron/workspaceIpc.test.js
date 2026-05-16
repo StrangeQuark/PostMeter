@@ -1354,6 +1354,200 @@ test('workspace IPC saves only the selected runner request payload through targe
   assert.equal(syncHandlers.has('workspace:saveSync'), true);
 });
 
+test('workspace IPC saves auth refresh requests through targeted request save', async () => {
+  const handlers = new Map();
+  const syncHandlers = new Map();
+  const currentWorkspace = {
+    schemaVersion: 11,
+    collections: [{
+      id: 'collection-1',
+      name: 'Collection',
+      description: '',
+      variables: [],
+      certificates: [],
+      requests: [{ id: 'source-request', name: 'Source Auth', method: 'POST', url: 'https://source.example.test/token', queryParams: [], headers: [], bodyType: 'NONE' }],
+      folders: []
+    }],
+    runners: [{
+      id: 'runner-1',
+      name: 'Runner',
+      environmentId: 'none',
+      stopOnFailure: false,
+      allowEnvironmentMutation: false,
+      authRefresh: {
+        request: { id: 'auth-request-1', name: 'Refresh Auth', method: 'POST', url: 'https://old-auth.example.test/token', queryParams: [], headers: [], bodyType: 'NONE' }
+      },
+      requests: [{ id: 'runner-request-1', name: 'Runner Request', method: 'GET', url: 'https://runner.example.test', queryParams: [], headers: [], bodyType: 'NONE' }]
+    }],
+    environments: [],
+    history: [],
+    cookies: [],
+    settings: { updates: { includePrereleases: false } }
+  };
+  let savedWorkspace = null;
+  let appliedWorkspace = null;
+  let refreshCalls = 0;
+
+  registerWorkspaceIpc({
+    dialog: {
+      showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+      showSaveDialog: async () => ({ canceled: true })
+    },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => currentWorkspace,
+    getWorkspaceStore: () => ({
+      describeCurrent: async (workspace) => ({ workspace, path: '/tmp/Local Workspace.json', activeWorkspaceId: 'Local Workspace.json', workspaces: [] })
+    }),
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      },
+      on(channel, handler) {
+        syncHandlers.set(channel, handler);
+      }
+    },
+    refreshApplicationMenu: () => { refreshCalls += 1; },
+    saveWorkspace: async (workspace) => {
+      savedWorkspace = workspace;
+      return workspace;
+    },
+    saveWorkspaceSync: (workspace) => workspace,
+    setWorkspace: (workspace) => {
+      appliedWorkspace = workspace;
+    }
+  });
+
+  const result = await handlers.get('workspace:saveRequest')(null, {
+    authRefreshOwnerType: 'runner',
+    runnerId: 'runner-1',
+    requestId: 'auth-request-1',
+    request: {
+      id: 'auth-request-1',
+      name: 'Saved Refresh Auth',
+      method: 'PATCH',
+      url: 'https://saved-auth.example.test/token',
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE'
+    },
+    runnerShell: {
+      id: 'runner-1',
+      name: 'Unsaved Renderer Runner Name',
+      environmentId: 'environment-2',
+      stopOnFailure: true,
+      allowEnvironmentMutation: true,
+      authRefresh: {
+        request: {
+          id: 'auth-request-1',
+          name: 'Unsaved Refresh Auth',
+          method: 'POST',
+          url: 'https://unsaved-auth.example.test/token',
+          queryParams: [],
+          headers: [],
+          bodyType: 'NONE'
+        }
+      },
+      requests: []
+    },
+    settings: { updates: { includePrereleases: true } }
+  });
+
+  assert.equal(savedWorkspace.runners[0].name, 'Runner');
+  assert.equal(savedWorkspace.collections[0].requests[0].url, 'https://source.example.test/token');
+  assert.equal(savedWorkspace.runners[0].requests[0].url, 'https://runner.example.test');
+  assert.equal(savedWorkspace.runners[0].authRefresh.request.method, 'PATCH');
+  assert.equal(savedWorkspace.runners[0].authRefresh.request.url, 'https://saved-auth.example.test/token');
+  assert.equal(appliedWorkspace.runners[0].authRefresh.request.name, 'Saved Refresh Auth');
+  assert.equal(refreshCalls, 1);
+  assert.deepEqual(result, {
+    request: appliedWorkspace.runners[0].authRefresh.request
+  });
+  assert.equal(syncHandlers.has('workspace:saveSync'), true);
+});
+
+test('workspace IPC saves refresh-token auth requests through targeted request save', async () => {
+  const handlers = new Map();
+  const currentWorkspace = {
+    schemaVersion: 11,
+    collections: [],
+    runners: [{
+      id: 'runner-1',
+      name: 'Runner',
+      environmentId: 'none',
+      stopOnFailure: false,
+      allowEnvironmentMutation: false,
+      authRefresh: {
+        request: { id: 'auth-request-1', name: 'Refresh Auth', method: 'POST', url: 'https://auth.example.test/token', queryParams: [], headers: [], bodyType: 'NONE' },
+        refreshTokenRequest: { id: 'refresh-token-request-1', name: 'Refresh Token', method: 'POST', url: 'https://old-auth.example.test/refresh-token', queryParams: [], headers: [], bodyType: 'NONE' }
+      },
+      requests: []
+    }],
+    environments: [],
+    history: [],
+    cookies: [],
+    settings: {}
+  };
+  let savedWorkspace = null;
+
+  registerWorkspaceIpc({
+    dialog: {
+      showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+      showSaveDialog: async () => ({ canceled: true })
+    },
+    fileOperationResult: (result) => result,
+    getMainWindow: () => null,
+    getWorkspace: () => currentWorkspace,
+    getWorkspaceStore: () => ({
+      describeCurrent: async (workspace) => ({ workspace, path: '/tmp/Local Workspace.json', activeWorkspaceId: 'Local Workspace.json', workspaces: [] })
+    }),
+    ipcMain: {
+      handle(channel, handler) {
+        handlers.set(channel, handler);
+      },
+      on() {}
+    },
+    refreshApplicationMenu: () => {},
+    saveWorkspace: async (workspace) => {
+      savedWorkspace = workspace;
+      return workspace;
+    },
+    saveWorkspaceSync: (workspace) => workspace,
+    setWorkspace: () => {}
+  });
+
+  const result = await handlers.get('workspace:saveRequest')(null, {
+    authRefreshOwnerType: 'runner',
+    runnerId: 'runner-1',
+    requestId: 'refresh-token-request-1',
+    request: {
+      id: 'refresh-token-request-1',
+      name: 'Saved Refresh Token',
+      method: 'PATCH',
+      url: 'https://saved-auth.example.test/refresh-token',
+      queryParams: [],
+      headers: [],
+      bodyType: 'NONE'
+    },
+    authRefresh: currentWorkspace.runners[0].authRefresh,
+    runnerShell: {
+      id: 'runner-1',
+      name: 'Runner Shell',
+      environmentId: 'none',
+      stopOnFailure: false,
+      allowEnvironmentMutation: false,
+      authRefresh: currentWorkspace.runners[0].authRefresh,
+      requests: []
+    }
+  });
+
+  assert.equal(savedWorkspace.runners[0].authRefresh.request.url, 'https://auth.example.test/token');
+  assert.equal(savedWorkspace.runners[0].authRefresh.refreshTokenRequest.method, 'PATCH');
+  assert.deepEqual(result, {
+    request: savedWorkspace.runners[0].authRefresh.refreshTokenRequest
+  });
+});
+
 test('workspace IPC saves only the selected environment payload through targeted environment save', async () => {
   const handlers = new Map();
   const syncHandlers = new Map();

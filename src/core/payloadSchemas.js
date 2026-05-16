@@ -32,6 +32,21 @@ const AUTH_TYPE_VALUES = [
   'asap'
 ];
 const API_KEY_LOCATIONS = ['header', 'query'];
+const AUTH_REFRESH_MODES = ['auto', 'lifetime', 'interval'];
+const AUTH_REFRESH_SCOPES = ['environment', 'collection', 'globals'];
+const AUTH_REFRESH_FAILURE_POLICIES = ['abort', 'continue'];
+const AUTH_REFRESH_TYPES = ['bearer', 'oauth2', 'apiKey', 'cookie', 'aws', 'custom'];
+const AUTH_REFRESH_OUTPUT_SOURCES = ['body', 'header', 'cookie'];
+const AUTH_REFRESH_OUTPUT_SLOTS = [
+  'accessToken',
+  'refreshToken',
+  'apiKey',
+  'cookie',
+  'awsAccessKey',
+  'awsSecretKey',
+  'awsSessionToken',
+  'custom'
+];
 const OAUTH2_TOKEN_TYPES = ['Bearer', 'MAC'];
 const OAUTH2_GRANT_TYPES = ['authorizationCode', 'clientCredentials', 'deviceCode'];
 const OAUTH2_REDIRECT_STRATEGIES = ['loopback', 'customScheme'];
@@ -98,6 +113,12 @@ const LIMITS = {
 };
 const SCHEMA_ENUMS = {
   apiKeyLocations: API_KEY_LOCATIONS,
+  authRefreshFailurePolicies: AUTH_REFRESH_FAILURE_POLICIES,
+  authRefreshModes: AUTH_REFRESH_MODES,
+  authRefreshOutputSlots: AUTH_REFRESH_OUTPUT_SLOTS,
+  authRefreshOutputSources: AUTH_REFRESH_OUTPUT_SOURCES,
+  authRefreshScopes: AUTH_REFRESH_SCOPES,
+  authRefreshTypes: AUTH_REFRESH_TYPES,
   authTypes: AUTH_TYPE_VALUES,
   bodyMethods: BODY_METHODS,
   bodyTypes: BODY_TYPE_VALUES,
@@ -239,6 +260,30 @@ const FIELD_SCHEMAS = {
   runnerConfig: {
     allowEnvironmentMutation: { type: 'boolean', optional: true },
     stopOnFailure: { type: 'boolean', optional: true }
+  },
+  authRefresh: {
+    enabled: { type: 'boolean', optional: true },
+    mode: { type: 'string', limit: 'short', enum: 'authRefreshModes', optional: true },
+    authType: { type: 'string', limit: 'short', enum: 'authRefreshTypes', optional: true },
+    targetScope: { type: 'string', limit: 'short', enum: 'authRefreshScopes', optional: true },
+    accessTokenVariable: { type: 'string', limit: 'key', optional: true },
+    refreshTokenVariable: { type: 'string', limit: 'key', optional: true },
+    expiresAtVariable: { type: 'string', limit: 'key', optional: true },
+    accessTokenPath: { type: 'string', limit: 'value', optional: true },
+    refreshTokenPath: { type: 'string', limit: 'value', optional: true },
+    expiresInPath: { type: 'string', limit: 'value', optional: true },
+    expiresAtPath: { type: 'string', limit: 'value', optional: true },
+    refreshWindowSeconds: { type: 'number', optional: true },
+    tokenLifetimeSeconds: { type: 'number', optional: true },
+    refreshIntervalSeconds: { type: 'number', optional: true },
+    refreshBeforeRun: { type: 'boolean', optional: true },
+    failurePolicy: { type: 'string', limit: 'short', enum: 'authRefreshFailurePolicies', optional: true }
+  },
+  authRefreshOutput: {
+    slot: { type: 'string', limit: 'short', enum: 'authRefreshOutputSlots', optional: true },
+    source: { type: 'string', limit: 'short', enum: 'authRefreshOutputSources', optional: true },
+    path: { type: 'string', limit: 'value', optional: true },
+    variable: { type: 'string', limit: 'key', optional: true }
   },
   csvVariables: {
     enabled: { type: 'boolean', optional: true },
@@ -509,6 +554,12 @@ const payloadSchemas = {
     bodyTypes: BODY_TYPE_VALUES
   },
   auth: {
+    refreshFailurePolicies: AUTH_REFRESH_FAILURE_POLICIES,
+    refreshModes: AUTH_REFRESH_MODES,
+    refreshOutputSlots: AUTH_REFRESH_OUTPUT_SLOTS,
+    refreshOutputSources: AUTH_REFRESH_OUTPUT_SOURCES,
+    refreshScopes: AUTH_REFRESH_SCOPES,
+    refreshTypes: AUTH_REFRESH_TYPES,
     types: AUTH_TYPE_VALUES,
     apiKeyLocations: API_KEY_LOCATIONS,
     oauth2TokenTypes: OAUTH2_TOKEN_TYPES,
@@ -538,10 +589,10 @@ const payloadSchemas = {
     },
     runner: {
       arrays: ['requests'],
-      nested: ['csvVariables']
+      nested: ['authRefresh', 'csvVariables']
     },
     performanceTest: {
-      nested: ['request', 'source', 'config', 'safetyLimits', 'csvVariables', 'resultsMetadata']
+      nested: ['request', 'source', 'config', 'safetyLimits', 'authRefresh', 'csvVariables', 'resultsMetadata']
     },
     runnerResult: {
       required: ['collectionId', 'collectionName', 'totalRequests', 'passedRequests', 'failedRequests', 'passed', 'cancelled', 'results']
@@ -596,6 +647,12 @@ function normalizeSchemaString(value, options = {}) {
 
 const exported = {
   API_KEY_LOCATIONS,
+  AUTH_REFRESH_FAILURE_POLICIES,
+  AUTH_REFRESH_MODES,
+  AUTH_REFRESH_OUTPUT_SLOTS,
+  AUTH_REFRESH_OUTPUT_SOURCES,
+  AUTH_REFRESH_SCOPES,
+  AUTH_REFRESH_TYPES,
   AUTH_TYPE_VALUES,
   BODY_METHODS,
   BODY_TYPE_VALUES,

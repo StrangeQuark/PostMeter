@@ -44,12 +44,43 @@
       if (tab.draft) {
         return state.draftRequests.get(tab.requestId) || null;
       }
+      if (tab.authRefreshRequest === true) {
+        return authRefreshRequestForTab(tab);
+      }
       if (tab.runnerRequest || tab.runnerId) {
         const runner = state.workspace?.runners?.find((item) => item.id === tab.runnerId);
         return (runner?.requests || []).find((request) => request.id === tab.requestId) || null;
       }
       const collection = state.workspace?.collections?.find((item) => item.id === tab.collectionId);
       return collection ? findRequest(collection, tab.requestId)?.request || null : null;
+    }
+
+    function authRefreshRequestForTab(tab) {
+      if (!tab?.authRefreshOwnerType || !tab?.authRefreshOwnerId) {
+        return null;
+      }
+      if (tab.authRefreshOwnerType === 'runner') {
+        const runner = state.workspace?.runners?.find((item) => item.id === tab.authRefreshOwnerId);
+        return authRefreshOwnedRequest(runner?.authRefresh, tab.requestId);
+      }
+      if (tab.authRefreshOwnerType === 'performance') {
+        const test = state.workspace?.performanceTests?.find((item) => item.id === tab.authRefreshOwnerId);
+        return authRefreshOwnedRequest(test?.authRefresh, tab.requestId);
+      }
+      return null;
+    }
+
+    function authRefreshOwnedRequest(authRefresh, requestId) {
+      if (!authRefresh || !requestId) {
+        return null;
+      }
+      if (authRefresh.request?.id === requestId) {
+        return authRefresh.request;
+      }
+      if (authRefresh.refreshTokenRequest?.id === requestId) {
+        return authRefresh.refreshTokenRequest;
+      }
+      return null;
     }
 
     function collectionForTab(tab) {
@@ -230,6 +261,13 @@
         return false;
       }
       return canOpenTab(state.openRequestTabs, `runner-request:${runnerId}:${requestId}`, options);
+    }
+
+    function canOpenAuthRefreshRequestTabFor(ownerType, ownerId, requestId, options = {}) {
+      if (!['runner', 'performance'].includes(ownerType) || !ownerId || !requestId) {
+        return false;
+      }
+      return canOpenTab(state.openRequestTabs, `auth-request:${ownerType}:${ownerId}:${requestId}`, options);
     }
 
     function canOpenEnvironmentTabFor(environmentId, options = {}) {
@@ -471,11 +509,28 @@
       }
       const key = rendererState.activeRequestTabKey(state);
       let tab = state.openRequestTabs.find((candidate) => candidate.key === key);
+      const activeAuthRefreshRequest = activeAuthRefreshRequestForCurrentState();
       if (!tab) {
         if (!canOpenTab(state.openRequestTabs, key)) {
           return null;
         }
-        tab = state.activeRunnerRequestRunnerId
+        tab = activeAuthRefreshRequest
+          ? {
+              key,
+              collectionId: null,
+              folderId: null,
+              runnerId: null,
+              requestId: state.activeRequestId,
+              authRefreshRequest: true,
+              authRefreshOwnerType: state.activeAuthRefreshRequestOwnerType,
+              authRefreshOwnerId: state.activeAuthRefreshRequestOwnerId,
+              runnerRequest: false,
+              draft: false,
+              dirty: config.dirty === true,
+              createdUnsaved: false,
+              snapshot: rendererState.requestSnapshot(request)
+            }
+          : state.activeRunnerRequestRunnerId
           ? {
               key,
               collectionId: null,
@@ -506,11 +561,24 @@
             };
         state.openRequestTabs.push(tab);
       }
-      if (state.activeRunnerRequestRunnerId) {
+      if (activeAuthRefreshRequest) {
+        tab.collectionId = null;
+        tab.folderId = null;
+        tab.runnerId = null;
+        tab.authRefreshRequest = true;
+        tab.authRefreshOwnerType = state.activeAuthRefreshRequestOwnerType;
+        tab.authRefreshOwnerId = state.activeAuthRefreshRequestOwnerId;
+        tab.runnerRequest = false;
+        tab.draft = false;
+        tab.snapshot ||= rendererState.requestSnapshot(request);
+      } else if (state.activeRunnerRequestRunnerId) {
         tab.collectionId = null;
         tab.folderId = null;
         tab.runnerId = state.activeRunnerRequestRunnerId;
         tab.runnerRequest = true;
+        tab.authRefreshRequest = false;
+        tab.authRefreshOwnerType = '';
+        tab.authRefreshOwnerId = null;
         tab.draft = false;
         tab.snapshot ||= rendererState.requestSnapshot(request);
       } else if (state.activeCollectionId) {
@@ -519,6 +587,9 @@
         tab.folderId = found?.folder?.id || null;
         tab.runnerId = null;
         tab.runnerRequest = false;
+        tab.authRefreshRequest = false;
+        tab.authRefreshOwnerType = '';
+        tab.authRefreshOwnerId = null;
         tab.draft = false;
         tab.snapshot ||= rendererState.requestSnapshot(request);
         if (config.createdUnsaved === true) {
@@ -529,6 +600,9 @@
         tab.folderId = null;
         tab.runnerId = null;
         tab.runnerRequest = false;
+        tab.authRefreshRequest = false;
+        tab.authRefreshOwnerType = '';
+        tab.authRefreshOwnerId = null;
         tab.draft = true;
       }
       if (config.dirty === true || tab.draft) {
@@ -536,6 +610,18 @@
       }
       renderRequestTabs();
       return tab;
+    }
+
+    function activeAuthRefreshRequestForCurrentState() {
+      if (state.activeCollectionId || state.activeRunnerRequestRunnerId || !state.activeAuthRefreshRequestOwnerType || !state.activeAuthRefreshRequestOwnerId || !state.activeRequestId) {
+        return null;
+      }
+      const tab = {
+        authRefreshOwnerType: state.activeAuthRefreshRequestOwnerType,
+        authRefreshOwnerId: state.activeAuthRefreshRequestOwnerId,
+        requestId: state.activeRequestId
+      };
+      return authRefreshRequestForTab(tab);
     }
 
     function selectRequestTab(tab, options = {}) {
@@ -550,6 +636,30 @@
       }
       state.activeSidebarPanel = 'collections';
       state.activeMainPanel = 'request';
+      if (tab.authRefreshRequest === true) {
+        const request = requestForTab(tab);
+        if (!request) {
+          removeOpenRequestTab(tab.key);
+          renderAll();
+          return;
+        }
+        state.activeCollectionId = null;
+        state.activeFolderId = null;
+        state.activeRequestId = request.id;
+        state.activeRunnerRequestRunnerId = null;
+        state.activeAuthRefreshRequestOwnerType = tab.authRefreshOwnerType;
+        state.activeAuthRefreshRequestOwnerId = tab.authRefreshOwnerId;
+        if (tab.authRefreshOwnerType === 'runner') {
+          state.activeRunnerConfigId = tab.authRefreshOwnerId;
+          state.activeSidebarPanel = 'runners';
+        } else if (tab.authRefreshOwnerType === 'performance') {
+          state.activePerformanceTestId = tab.authRefreshOwnerId;
+          state.activeSidebarPanel = 'performance';
+        }
+        ensureOpenRequestTabForActive();
+        renderAll();
+        return;
+      }
       if (tab.runnerRequest || tab.runnerId) {
         const request = requestForTab(tab);
         if (!request) {
@@ -561,6 +671,8 @@
         state.activeFolderId = null;
         state.activeRequestId = request.id;
         state.activeRunnerRequestRunnerId = tab.runnerId;
+        state.activeAuthRefreshRequestOwnerType = '';
+        state.activeAuthRefreshRequestOwnerId = null;
         state.activeRunnerConfigId = tab.runnerId;
         state.activeSidebarPanel = 'runners';
         ensureOpenRequestTabForActive();
@@ -568,6 +680,8 @@
         return;
       }
       state.activeRunnerRequestRunnerId = null;
+      state.activeAuthRefreshRequestOwnerType = '';
+      state.activeAuthRefreshRequestOwnerId = null;
       if (tab.draft) {
         const draft = state.draftRequests.get(tab.requestId);
         if (!draft) {
@@ -592,6 +706,8 @@
       state.activeFolderId = found.folder?.id || null;
       state.activeRequestId = found.request.id;
       state.activeRunnerRequestRunnerId = null;
+      state.activeAuthRefreshRequestOwnerType = '';
+      state.activeAuthRefreshRequestOwnerId = null;
       ensureOpenRequestTabForActive();
       renderAll();
     }
@@ -615,6 +731,8 @@
       state.activeSidebarPanel = 'collections';
       state.activeMainPanel = 'request';
       state.activeRunnerRequestRunnerId = null;
+      state.activeAuthRefreshRequestOwnerType = '';
+      state.activeAuthRefreshRequestOwnerId = null;
       state.activeCollectionId = collection.id;
       state.activeFolderId = null;
       state.activeRequestId = null;
@@ -642,6 +760,8 @@
       state.activeSidebarPanel = 'collections';
       state.activeMainPanel = 'request';
       state.activeRunnerRequestRunnerId = null;
+      state.activeAuthRefreshRequestOwnerType = '';
+      state.activeAuthRefreshRequestOwnerId = null;
       state.activeCollectionId = collection.id;
       state.activeFolderId = folder.id;
       state.activeRequestId = null;
@@ -658,6 +778,8 @@
       }
       state.activeEnvironmentId = environment.id;
       state.activeRunnerRequestRunnerId = null;
+      state.activeAuthRefreshRequestOwnerType = '';
+      state.activeAuthRefreshRequestOwnerId = null;
       state.activeSidebarPanel = 'environments';
       state.activeMainPanel = 'environment';
       ensureOpenEnvironmentTabForActive();
@@ -673,6 +795,8 @@
       }
       state.selectedWorkspaceId = workspaceItem.id;
       state.activeRunnerRequestRunnerId = null;
+      state.activeAuthRefreshRequestOwnerType = '';
+      state.activeAuthRefreshRequestOwnerId = null;
       state.activeSidebarPanel = 'workspaces';
       state.activeMainPanel = 'workspace';
       ensureOpenWorkspaceTabForActive();
@@ -688,6 +812,8 @@
       }
       state.activeRunnerConfigId = runner.id;
       state.activeRunnerRequestRunnerId = null;
+      state.activeAuthRefreshRequestOwnerType = '';
+      state.activeAuthRefreshRequestOwnerId = null;
       state.activeSidebarPanel = 'runners';
       state.activeMainPanel = 'runner';
       ensureOpenRunnerTabForActive();
@@ -703,6 +829,8 @@
       }
       state.activePerformanceTestId = test.id;
       state.activeRunnerRequestRunnerId = null;
+      state.activeAuthRefreshRequestOwnerType = '';
+      state.activeAuthRefreshRequestOwnerId = null;
       state.activeSidebarPanel = 'performance';
       state.activeMainPanel = 'performance';
       ensureOpenPerformanceTabForActive();
@@ -1006,6 +1134,8 @@
       state.activeFolderId = null;
       state.activeRequestId = null;
       state.activeRunnerRequestRunnerId = null;
+      state.activeAuthRefreshRequestOwnerType = '';
+      state.activeAuthRefreshRequestOwnerId = null;
       state.activeSidebarPanel = 'collections';
       state.activeMainPanel = 'request';
       renderAll();
@@ -1042,6 +1172,8 @@
       state.activeFolderId = null;
       state.activeRequestId = null;
       state.activeRunnerRequestRunnerId = null;
+      state.activeAuthRefreshRequestOwnerType = '';
+      state.activeAuthRefreshRequestOwnerId = null;
       state.activeSidebarPanel = 'collections';
       state.activeMainPanel = 'request';
       renderAll();
@@ -1548,7 +1680,7 @@
             }
           } else {
             try {
-              const config = tab.runnerRequest === true
+              const config = tab.runnerRequest === true || tab.authRefreshRequest === true
                 ? { requestTabKey: tab.key, collectEditors: false }
                 : { requestTabKey: tab.key };
               await persistWorkspace(false, config);
@@ -1627,6 +1759,8 @@
         return;
       }
       state.activeRunnerRequestRunnerId = null;
+      state.activeAuthRefreshRequestOwnerType = '';
+      state.activeAuthRefreshRequestOwnerId = null;
       clearActiveWorkspaceItem();
       renderAll();
     }
@@ -1638,6 +1772,9 @@
         return restoredSharedState;
       }
       if (tab.runnerRequest || tab.runnerId) {
+        return restoreRequestFromSnapshot(tab) || restoredSharedState;
+      }
+      if (tab.authRefreshRequest === true) {
         return restoreRequestFromSnapshot(tab) || restoredSharedState;
       }
       const collection = state.workspace?.collections?.find((item) => item.id === tab.collectionId);
@@ -1675,6 +1812,7 @@
       canOpenAdditionalRequestTab,
       canOpenAdditionalRunnerTab,
       canOpenAdditionalWorkspaceTab,
+      canOpenAuthRefreshRequestTabFor,
       canOpenCollectionTabFor,
       canOpenEnvironmentTabFor,
       canOpenFolderTabFor,

@@ -132,6 +132,18 @@
   background: color-mix(in srgb, var(--green) 26%, var(--surface));
 }
 
+.capture-settings-menu-group > .capture-settings-trigger.auth-refresh-active {
+  border-color: var(--green);
+  background: color-mix(in srgb, var(--green) 18%, var(--surface));
+  color: var(--green);
+  font-weight: 700;
+}
+
+.capture-settings-menu-group > .capture-settings-trigger.auth-refresh-active:hover:not(:disabled) {
+  border-color: var(--green);
+  background: color-mix(in srgb, var(--green) 26%, var(--surface));
+}
+
 .toolbar-menu button {
   justify-content: flex-start;
   width: 100%;
@@ -1042,18 +1054,185 @@ h2 {
   margin-top: 12px;
 }
 
+.capture-settings-menu-group {
+  position: relative;
+  display: inline-flex;
+  overflow: visible;
+}
+
+.capture-settings-trigger::after {
+  content: "";
+  display: inline-block;
+  width: 0;
+  height: 0;
+  margin-left: 8px;
+  border-top: 4px solid currentColor;
+  border-right: 4px solid transparent;
+  border-left: 4px solid transparent;
+  vertical-align: middle;
+}
+
 .capture-settings-panel {
-  display: flex;
-  flex-wrap: wrap;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 950;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px 14px;
   align-items: center;
-  padding: 8px 0;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(420px, calc(100vh - 24px));
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
 }
 
 .capture-settings-panel[hidden] {
   display: none;
+}
+
+.capture-settings-panel .field {
+  min-width: 0;
+}
+
+.capture-settings-panel .checkbox-line {
+  min-width: 0;
+}
+
+.capture-settings-panel.auth-refresh-panel {
+  grid-template-columns: minmax(0, 1fr);
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(560px, calc(100vh - 24px));
+  align-items: stretch;
+}
+
+.auth-refresh-panel .auth-refresh-full {
+  grid-column: 1 / -1;
+}
+
+.auth-refresh-intro {
+  display: grid;
+  gap: 6px;
+}
+
+.auth-refresh-intro p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.auth-refresh-request-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-muted);
+}
+
+.auth-refresh-request-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.auth-refresh-request-copy > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.auth-refresh-request-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.auth-refresh-request-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.auth-refresh-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+  min-width: 0;
+}
+
+.auth-refresh-type-panel {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.auth-refresh-panel-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.auth-refresh-before-run {
+  align-self: end;
+  min-height: 30px;
+}
+
+.auth-refresh-advanced {
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.auth-refresh-advanced summary {
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.auth-refresh-advanced p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.auth-refresh-advanced .auth-refresh-field-grid {
+  margin-top: 10px;
+}
+
+.auth-refresh-panel textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+@media (max-width: 640px) {
+  .auth-refresh-request-card {
+    display: grid;
+  }
+
+  .auth-refresh-request-actions {
+    justify-content: flex-start;
+  }
+
+  .auth-refresh-field-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .capture-settings-panel .capture-guardrail-disabled {

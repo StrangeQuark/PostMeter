@@ -23,6 +23,16 @@ test('renderer performance model uses the same eight V1 types and defaults as th
   assert.equal(created.name, 'UI Test');
   assert.equal(created.type, 'diagnosis');
   assert.equal(created.source.sourceType, 'manual');
+  assert.equal(created.authRefresh.enabled, false);
+  assert.equal(created.authRefresh.mode, 'interval');
+  assert.equal(created.authRefresh.authType, 'bearer');
+  assert.equal(created.authRefresh.accessTokenVariable, 'ACCESS_TOKEN');
+  assert.equal(created.authRefresh.refreshTokenVariable, 'REFRESH_TOKEN');
+  assert.ok(created.authRefresh.outputs.some((item) => item.slot === 'accessToken' && item.variable === 'ACCESS_TOKEN'));
+  assert.equal(created.authRefresh.request.id, 'auth-refresh-request');
+  assert.equal(created.authRefresh.request.name, 'Refresh Auth');
+  assert.equal(created.authRefresh.refreshTokenRequest.id, 'auth-refresh-token-request');
+  assert.equal(created.authRefresh.refreshTokenRequest.name, 'Refresh Token');
   assert.equal(created.config.iterations, 44);
   assert.equal(created.config.startConcurrency, 1);
   assert.equal(created.config.concurrency, 5);
@@ -137,4 +147,49 @@ test('renderer performance import deep-copies request-owned data from collection
   imported.request.cookieJar.enabled = false;
 
   assert.deepEqual(source, original);
+});
+
+test('renderer performance normalization preserves auth refresh settings', () => {
+  const normalized = normalizePerformanceTest({
+    id: 'perf-refresh-ui',
+    name: 'Refresh UI',
+    type: 'throughput',
+    request: { method: 'GET', url: 'https://example.test' },
+    authRefresh: {
+      enabled: true,
+      mode: 'interval',
+      targetScope: 'globals',
+      accessTokenVariable: 'ACCESS_TOKEN',
+      refreshTokenVariable: '',
+      refreshIntervalSeconds: 300,
+      request: {
+        name: 'Custom Refresh',
+        method: 'POST',
+        url: 'https://auth.example.test/token',
+        headers: [{ enabled: true, key: 'X-Auth', value: '{{REFRESH_TOKEN}}' }],
+        bodyType: 'RAW_JSON',
+        body: '{"refresh":"{{REFRESH_TOKEN}}"}',
+        settings: { sslCertificateVerification: 'disabled' }
+      },
+      refreshTokenRequest: {
+        name: 'Custom Refresh Token',
+        method: 'PATCH',
+        url: 'https://auth.example.test/refresh-token',
+        headers: [{ enabled: true, key: 'X-Refresh', value: '{{REFRESH_TOKEN}}' }]
+      }
+    }
+  });
+
+  assert.equal(normalized.authRefresh.enabled, true);
+  assert.equal(normalized.authRefresh.mode, 'interval');
+  assert.equal(normalized.authRefresh.targetScope, 'globals');
+  assert.equal(normalized.authRefresh.refreshTokenVariable, '');
+  assert.equal(normalized.authRefresh.refreshIntervalSeconds, 300);
+  assert.ok(normalized.authRefresh.outputs.some((item) => item.slot === 'accessToken' && item.variable === 'ACCESS_TOKEN'));
+  assert.equal(normalized.authRefresh.request.name, 'Custom Refresh');
+  assert.equal(normalized.authRefresh.request.headers[0].key, 'X-Auth');
+  assert.equal(normalized.authRefresh.request.settings.sslCertificateVerification, 'disabled');
+  assert.equal(normalized.authRefresh.refreshTokenRequest.name, 'Custom Refresh Token');
+  assert.equal(normalized.authRefresh.refreshTokenRequest.method, 'PATCH');
+  assert.equal(normalized.authRefresh.refreshTokenRequest.headers[0].key, 'X-Refresh');
 });

@@ -111,13 +111,22 @@
       JSON.stringify(interfaceFonts) === JSON.stringify(editorFonts),
       `Interface and editor font lists should match. interface=${interfaceFonts.join(',')} editor=${editorFonts.join(',')}`
     );
-    const interfaceSizes = numericInputRange('interfaceFontSizeInput');
-    const editorSizes = numericInputRange('editorFontSizeInput');
+    const interfaceSizes = fontSizeOptionValues('interfaceFontSizeInput');
+    const editorSizes = fontSizeOptionValues('editorFontSizeInput');
+    assertUiSmoke(
+      JSON.stringify(interfaceSizes) === JSON.stringify([10, 13, 16, 19]),
+      `Interface font size selector should expose the four supported sizes. sizes=${interfaceSizes.join(',')}`
+    );
+    assertUiSmoke(
+      JSON.stringify(editorSizes) === JSON.stringify([10, 13, 16, 19]),
+      `Editor font size selector should expose the four supported sizes. sizes=${editorSizes.join(',')}`
+    );
 
     await assertInterfaceTypographyMatrix(fixture, interfaceFonts, interfaceSizes, editorFonts, editorSizes);
     await assertEditorTypographyMatrix(fixture, editorFonts, editorSizes, interfaceFonts, interfaceSizes);
     await assertCrossControlStressPairs(fixture, interfaceFonts, interfaceSizes, editorFonts, editorSizes);
-    await applyTypography({ interfaceFont: 'default', interfaceFontSize: 13, editorFont: 'default', editorFontSize: 12 }, 'restore-defaults');
+    await assertLiveTextInputTypographyRefresh(fixture, interfaceFonts, interfaceSizes, editorFonts, editorSizes);
+    await applyTypography({ interfaceFont: 'default', interfaceFontSize: 13, editorFont: 'default', editorFontSize: 13 }, 'restore-defaults');
     hideTransientUi();
   }
 
@@ -128,6 +137,7 @@
     collection.variables = [{ enabled: true, key: 'baseUrl', value: 'https://api.example.test' }];
     const folder = newFolder(collection.id, null);
     folder.name = 'Billing';
+    folder.variables = [{ enabled: true, key: 'folderToken', value: 'folder-value' }];
     const request = newRequest(collection.id, null);
     request.name = 'Customer Lookup';
     request.url = '{{baseUrl}}/v1/customers';
@@ -162,12 +172,15 @@
     performance.request = {
       ...newRequestObject('Performance Probe'),
       url: 'https://api.example.test/performance',
+      queryParams: [{ enabled: true, key: 'probe', value: 'latency' }],
+      headers: [{ enabled: true, key: 'X-PostMeter-Performance', value: 'typography' }],
       bodyType: 'RAW_JSON',
       body: JSON.stringify({ probe: true }, null, 2),
       scripts: {
         preRequest: "pm.variables.set('performanceTypography', 'ok');",
         tests: "pm.test('performance typography', function () { pm.expect(true).to.equal(true); });"
       },
+      variables: [{ enabled: true, key: 'performanceToken', value: 'perf-value' }],
       docs: 'Performance request documentation.'
     };
     performance.type = 'latency';
@@ -290,6 +303,39 @@
     }
   }
 
+  async function assertLiveTextInputTypographyRefresh(fixture, interfaceFonts, interfaceSizes, editorFonts, editorSizes) {
+    const screens = textInputRefreshScreens(fixture);
+    const baseline = {
+      interfaceFont: 'default',
+      interfaceFontSize: 13,
+      editorFont: 'default',
+      editorFontSize: 13
+    };
+    const patches = [
+      {
+        interfaceFont: preferredOption(interfaceFonts, 'system-mono'),
+        interfaceFontSize: interfaceSizes.at(-1),
+        editorFont: preferredOption(editorFonts, 'georgia'),
+        editorFontSize: editorSizes.at(-1)
+      },
+      {
+        interfaceFont: preferredOption(interfaceFonts, 'georgia'),
+        interfaceFontSize: interfaceSizes[0],
+        editorFont: preferredOption(editorFonts, 'system-mono'),
+        editorFontSize: editorSizes[0]
+      }
+    ];
+    for (const [index, screen] of screens.entries()) {
+      await applyTypography(baseline, `live-refresh-baseline:${screen.name}`);
+      screen.setup();
+      await nextPaint(global);
+      assertVisibleVariableHighlightMetricsSynced(`live-refresh-baseline:${screen.name}`, { requireVisible: screen.requireVisible !== false });
+      const patch = patches[index % patches.length];
+      await applyTypography(patch, `live-refresh:${screen.name}`);
+      assertVisibleVariableHighlightMetricsSynced(`live-refresh:${screen.name}`, { requireVisible: screen.requireVisible !== false });
+    }
+  }
+
   function interfaceScreens(fixture) {
     return [
       { name: 'toolbar', setup: () => showRequest(fixture, 'params') },
@@ -321,6 +367,20 @@
       { name: 'performance-body', setup: () => showPerformance(fixture, 'latency', 'performanceBody') },
       { name: 'performance-scripts', setup: () => showPerformance(fixture, 'latency', 'performanceScripts') },
       { name: 'performance-docs', setup: () => showPerformance(fixture, 'latency', 'performanceDocs') }
+    ];
+  }
+
+  function textInputRefreshScreens(fixture) {
+    return [
+      { name: 'request-params', setup: () => showRequest(fixture, 'params') },
+      { name: 'request-headers', setup: () => showRequest(fixture, 'headers') },
+      { name: 'request-variables', setup: () => showRequest(fixture, 'collectionVariables') },
+      { name: 'collection-variables', requireVisible: false, setup: () => showCollection(fixture, 'collectionLevelVariables') },
+      { name: 'folder-variables', requireVisible: false, setup: () => showFolder(fixture, 'folderLevelVariables') },
+      { name: 'environment', setup: () => showEnvironment(fixture) },
+      { name: 'performance-params', setup: () => showPerformance(fixture, 'latency', 'performanceParams') },
+      { name: 'performance-headers', setup: () => showPerformance(fixture, 'latency', 'performanceHeaders') },
+      { name: 'performance-variables', setup: () => showPerformance(fixture, 'latency', 'performanceVariables') }
     ];
   }
 
@@ -466,6 +526,7 @@
     assertHorizontalContainersFit(context);
     assertNoSiblingOverlaps(context);
     assertLineNumberEditorsAligned(context);
+    assertVisibleVariableHighlightMetricsSynced(context);
     assertSingleLineVariableOverlaysAligned(context);
     assertVisibleModalFitsViewport(context);
   }
@@ -594,6 +655,30 @@
     );
   }
 
+  function assertVisibleVariableHighlightMetricsSynced(context, options = {}) {
+    let checked = 0;
+    for (const textbox of document.querySelectorAll('.variable-highlight-editor .variable-highlight-input')) {
+      const wrapper = textbox.closest('.variable-highlight-editor');
+      const overlay = wrapper?.querySelector('.variable-highlight-overlay');
+      if (!isVisible(wrapper) || !isVisible(textbox) || !isVisible(overlay)) {
+        continue;
+      }
+      checked += 1;
+      assertTextMetricMatches(textbox, overlay, 'fontSize', `${context}: variable-highlight overlay font size should match ${textbox.id || textbox.name || textbox.tagName}.`);
+      assertTextMetricMatches(textbox, overlay, 'fontFamily', `${context}: variable-highlight overlay font family should match ${textbox.id || textbox.name || textbox.tagName}.`);
+    }
+    if (options.requireVisible) {
+      assertUiSmoke(checked > 0, `${context}: at least one visible variable-aware text input should be covered.`);
+    }
+  }
+
+  function assertTextMetricMatches(source, target, property, message) {
+    assertUiSmoke(
+      getComputedStyle(target)[property] === getComputedStyle(source)[property],
+      `${message} expected=${getComputedStyle(source)[property]} actual=${getComputedStyle(target)[property]}`
+    );
+  }
+
   function assertSingleLineVariableOverlaysAligned(context) {
     for (const wrapper of document.querySelectorAll('.variable-highlight-editor.is-input')) {
       if (!isVisible(wrapper)) {
@@ -685,6 +770,10 @@
         getComputedStyle(element).fontSize === `${expectedSize}px`,
         `${context}: ${element.id} should use editor font size ${expectedSize}px, got ${getComputedStyle(element).fontSize}.`
       );
+      const overlay = element.closest?.('.variable-highlight-editor')?.querySelector('.variable-highlight-overlay');
+      if (overlay && isVisible(overlay)) {
+        assertTextMetricMatches(element, overlay, 'fontSize', `${context}: ${element.id} visible text overlay should update with editor font size.`);
+      }
     }
   }
 
@@ -694,13 +783,8 @@
     return Array.from(select.options).map((option) => option.value);
   }
 
-  function numericInputRange(id) {
-    const input = $(id);
-    assertUiSmoke(input, `${id} should exist.`);
-    const min = Number(input.min);
-    const max = Number(input.max);
-    assertUiSmoke(Number.isInteger(min) && Number.isInteger(max) && min <= max, `${id} should expose a valid integer range.`);
-    return Array.from({ length: max - min + 1 }, (_unused, index) => min + index);
+  function fontSizeOptionValues(id) {
+    return optionValues(id).map((value) => Number(value));
   }
 
   function preferredOption(options, preferred) {
