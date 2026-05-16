@@ -7996,8 +7996,10 @@ function renderAuthRefreshControls(prefix, authRefresh, enabled) {
   applyAuthRefreshTypeVisibility(prefix, authType);
   const button = $(`${prefix}AuthRefreshButton`);
   if (button) {
+    const active = enabled && normalized.enabled === true;
     button.disabled = !enabled;
-    button.textContent = `Refreshing Auth: ${normalized.enabled ? 'On' : 'Off'}`;
+    button.textContent = `Refreshing Auth: ${active ? 'On' : 'Off'}`;
+    button.classList.toggle('auth-refresh-active', active);
   }
   for (const control of document.querySelectorAll(`#${prefix}AuthRefreshPanel input, #${prefix}AuthRefreshPanel select, #${prefix}AuthRefreshPanel textarea`)) {
     control.disabled = !enabled;
@@ -8079,7 +8081,9 @@ function syncAuthRefreshButton(prefix, authRefresh, enabled = true) {
   if (!button) {
     return;
   }
-  button.textContent = `Refreshing Auth: ${authRefresh?.enabled === true ? 'On' : 'Off'}`;
+  const active = enabled && authRefresh?.enabled === true;
+  button.textContent = `Refreshing Auth: ${active ? 'On' : 'Off'}`;
+  button.classList.toggle('auth-refresh-active', active);
   button.disabled = !enabled;
 }
 

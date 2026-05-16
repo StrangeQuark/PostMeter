@@ -132,6 +132,18 @@
   background: color-mix(in srgb, var(--green) 26%, var(--surface));
 }
 
+.capture-settings-menu-group > .capture-settings-trigger.auth-refresh-active {
+  border-color: var(--green);
+  background: color-mix(in srgb, var(--green) 18%, var(--surface));
+  color: var(--green);
+  font-weight: 700;
+}
+
+.capture-settings-menu-group > .capture-settings-trigger.auth-refresh-active:hover:not(:disabled) {
+  border-color: var(--green);
+  background: color-mix(in srgb, var(--green) 26%, var(--surface));
+}
+
 .toolbar-menu button {
   justify-content: flex-start;
   width: 100%;

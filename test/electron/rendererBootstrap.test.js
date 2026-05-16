@@ -126,6 +126,8 @@ test('renderer accessibility source keeps splitters body editor and pane save re
   assert.match(indexSource, /id="runnerEditCsvVariablesButton"/);
   assert.match(indexSource, /id="runnerAuthRefreshOpenRequestButton"[^>]*>Open<\/button>/);
   assert.match(indexSource, /id="runnerAuthRefreshTokenOpenRequestButton"[^>]*>Open<\/button>/);
+  assert.match(chromeSource, /\.capture-settings-menu-group > \.capture-settings-trigger\.auth-refresh-active[\s\S]*border-color:\s*var\(--green\)/);
+  assert.match(rendererSource, /classList\.toggle\('auth-refresh-active', active\)/);
   assert.match(indexSource, /Refresh token request/);
   assert.match(indexSource, /id="runnerAuthRefreshTypeSelect"[\s\S]*Bearer \/ JWT[\s\S]*AWS Temporary Credentials/);
   assert.match(indexSource, /id="performanceAuthRefreshTypeSelect"[\s\S]*API Key[\s\S]*Custom Header/);
